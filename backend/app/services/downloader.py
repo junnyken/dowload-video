@@ -429,18 +429,19 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 tikwm_formats = []
                 if tikwm_res.get("hdplay_url"):
                     tikwm_formats.append({
-                        "type": "video", "label": "HD No Watermark",
+                        "type": "video", "label": "H.265 (Dung lượng nhỏ)",
                         "resolution": "HD", "height": 1080, "ext": "mp4",
                         "url": tikwm_res["hdplay_url"],
-                        "filesize_mb": tikwm_res.get("file_size_mb", 0),
+                        "filesize_mb": tikwm_res.get("hd_size_mb", 0),
                         "requires_merge": False,
                     })
                 if tikwm_res.get("play_url"):
                     tikwm_formats.append({
-                        "type": "video", "label": "SD No Watermark",
-                        "resolution": "SD", "height": 540, "ext": "mp4",
+                        "type": "video", "label": "H.264 (Chất lượng gốc)",
+                        "resolution": "SD", "height": 720, "ext": "mp4",
                         "url": tikwm_res["play_url"],
-                        "filesize_mb": 0, "requires_merge": False,
+                        "filesize_mb": tikwm_res.get("size_mb", 0),
+                        "requires_merge": False,
                     })
                 if tikwm_res.get("wmplay_url"):
                     tikwm_formats.append({

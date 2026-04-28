@@ -202,7 +202,7 @@ def delete_local_file(self, filepath: str):
 
 @celery_app.task(name="periodic_cleanup_downloads", bind=True)
 def periodic_cleanup_downloads(self):
-    """Scan the downloads directory and delete files/folders older than 15 minutes."""
+    """Scan the downloads directory and delete files/folders older than 20 minutes."""
     print("[Cron] Starting periodic cleanup of downloads directory...")
     DOWNLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "downloads")
     if not os.path.exists(DOWNLOAD_DIR):
@@ -210,7 +210,7 @@ def periodic_cleanup_downloads(self):
 
     import time
     current_time = time.time()
-    expiry_seconds = 15 * 60  # 15 minutes
+    expiry_seconds = 20 * 60  # 20 minutes
     
     deleted_count = 0
     

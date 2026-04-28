@@ -118,7 +118,7 @@ async def fetch_link(payload: FetchLinkRequest, request: Request):
         if info.get("local_file_path") or info.get("local_mp3_path"):
             path_to_delete = info.get("local_file_path") or info.get("local_mp3_path")
             from app.tasks.video_tasks import delete_local_file
-            delete_local_file.apply_async((path_to_delete,), countdown=15 * 60)
+            delete_local_file.apply_async((path_to_delete,), countdown=20 * 60)
             
         return {
             "success": True,

@@ -320,8 +320,11 @@ async def _try_tikwm(url: str, quality: str = "video") -> Optional[Dict[str, Any
             title     = data.get("title", "TikTok Video")
             thumbnail = data.get("cover") or data.get("origin_cover") or ""
 
-            file_size    = data.get("hd_size", 0) or data.get("size", 0)
-            file_size_mb = round(file_size / (1024 * 1024), 2) if file_size else 0
+            hd_size = data.get("hd_size", 0)
+            size = data.get("size", 0)
+            file_size_mb = round((hd_size or size) / (1024 * 1024), 2)
+            hd_size_mb = round(hd_size / (1024 * 1024), 2) if hd_size else 0
+            size_mb = round(size / (1024 * 1024), 2) if size else 0
             duration     = int(data.get("duration", 0))
 
             _safe_print(f"[TikWM] Success: {title[:60]} ({duration}s)")
@@ -334,6 +337,8 @@ async def _try_tikwm(url: str, quality: str = "video") -> Optional[Dict[str, Any
                 "wmplay_url":    wmplay_url,
                 "audio_url":     audio_url,
                 "file_size_mb":  file_size_mb,
+                "hd_size_mb":    hd_size_mb,
+                "size_mb":       size_mb,
                 "duration":      duration,
                 "quality":       quality,
                 "original_url":  url,
