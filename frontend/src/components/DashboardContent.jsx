@@ -10,7 +10,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 
 // ── Toast ───────────────────────────────────────────────────
 const Toast = ({ message, show }) => (
-  <div className={`fixed top-20 left-1/2 -translate-x-1/2 px-5 py-3 rounded-full shadow-xl bg-white/[0.08] backdrop-blur-xl border border-white/[0.12] text-white font-medium text-sm flex items-center gap-2 transition-all duration-300 z-[60] ${show ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0 pointer-events-none'}`}>
+  <div className={`fixed top-20 left-1/2 -translate-x-1/2 px-5 py-3 rounded-full shadow-xl bg-slate-800 text-white font-medium text-sm flex items-center gap-2 transition-all duration-300 z-[60] ${show ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0 pointer-events-none'}`}>
     <CheckCircle2 className="w-5 h-5 text-emerald-400" />
     {message}
   </div>
@@ -19,10 +19,10 @@ const Toast = ({ message, show }) => (
 // ── Resolution Badge ────────────────────────────────────────
 const ResBadge = ({ label, height }) => {
   let colors = 'bg-slate-700 text-slate-300';
-  if (height >= 2160) colors = 'bg-gradient-to-r from-[#FBBF24] to-[#F59E0B] text-[#0a0a0a]';
+  if (height >= 2160) colors = 'bg-gradient-to-r from-[#FBBF24] to-[#F59E0B] text-[#012622]';
   else if (height >= 1440) colors = 'bg-gradient-to-r from-[#a78bfa] to-[#7c3aed] text-white';
   else if (height >= 1080) colors = 'bg-gradient-to-r from-[#10b981] to-[#059669] text-white';
-  else if (height >= 720) colors = 'bg-slate-600 text-slate-200';
+  else if (height >= 720) colors = 'bg-[#0ea5e9] text-white';
   return (
     <span className={`px-2.5 py-0.5 rounded-lg text-xs font-black tracking-wide ${colors}`}>
       {label}
@@ -35,8 +35,8 @@ export default function DashboardContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [videoInfo, setVideoInfo] = useState(null);
-  const [spotifyData, setSpotifyData] = useState(null);
-  const [trackDownloads, setTrackDownloads] = useState({});
+  const [spotifyData, setSpotifyData] = useState(null); // playlist / album track list
+  const [trackDownloads, setTrackDownloads] = useState({}); // { search_query: 'loading' | 'done' | 'error' }
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [downloadingId, setDownloadingId] = useState(null);
   const [formatTab, setFormatTab] = useState('video');
@@ -86,6 +86,7 @@ export default function DashboardContent() {
     if (!url.trim()) { setError('Vui lòng nhập liên kết hợp lệ.'); return; }
     setIsLoading(true); setError(''); setVideoInfo(null); setSpotifyData(null); setFormatTab('video');
 
+    // Route Spotify playlist / album to dedicated endpoint
     if (isSpotifyPlaylistOrAlbum(url.trim())) {
       try {
         const response = await fetch(`${API_BASE}/api/v1/fetch-spotify`, {
@@ -129,6 +130,7 @@ export default function DashboardContent() {
     } finally { setIsLoading(false); }
   };
 
+  // Download a single Spotify track by search query
   const handleSpotifyTrackDownload = async (track) => {
     const key = track.search_query;
     setTrackDownloads(prev => ({ ...prev, [key]: 'loading' }));
@@ -162,6 +164,7 @@ export default function DashboardContent() {
     }
   };
 
+  // Direct download a format via proxy
   const handleFormatDownload = (fmt) => {
     const title = videoInfo?.title || 'video';
     const ext = fmt.ext || 'mp4';
@@ -172,11 +175,14 @@ export default function DashboardContent() {
     showToast('Bắt đầu tải về!');
   };
 
+  // Download "best" (the default direct_mp4_url)
   const handleDefaultDownload = () => {
     if (!videoInfo) {
       setError("Không có thông tin video.");
       return;
     }
+    
+    // Prioritize local file path if backend downloaded it automatically
     const localPath = videoInfo.local_file_path || videoInfo.local_mp3_path;
     if (localPath) {
       const fileExt = localPath.split('.').pop() || 'mp4';
@@ -187,6 +193,7 @@ export default function DashboardContent() {
       showToast('Bắt đầu tải về!');
       return;
     }
+
     if (!videoInfo.direct_mp4_url) {
       setError("Không tìm thấy link tải video gốc.");
       return;
@@ -194,6 +201,7 @@ export default function DashboardContent() {
     handleFormatDownload({ url: videoInfo.direct_mp4_url, ext: 'mp4' });
   };
 
+  // Merge via backend re-fetch (4K, specific resolution, or audio extraction)
   const handleMergeDownload = async (param = null) => {
     let qualityReq = 'video_4k';
     const isAudioParam = param === 'm4a' || param === 'webm' || param === 'mp3' || param === 'ogg';
@@ -221,6 +229,7 @@ export default function DashboardContent() {
         throw new Error(data.detail || 'Không thể xử lý ghép tệp video');
       }
       if (data.success) {
+        // Determine file path and extension from the actual file
         const localPath = data.local_mp3_path || data.local_file_path;
         if (localPath) {
           const fileExt = localPath.split('.').pop() || (isAudioParam ? 'mp3' : 'mp4');
@@ -238,6 +247,7 @@ export default function DashboardContent() {
     } finally { setDownloadingId(null); }
   };
 
+  // Audio via backend re-fetch (fallback when direct audio formats aren't present)
   const handleAudioDownload = async () => {
     setDownloadingId('audio_mp3');
     try {
@@ -273,6 +283,7 @@ export default function DashboardContent() {
     } finally { setDownloadingId(null); }
   };
 
+  // Split formats
   const videoFormats = (videoInfo?.available_formats || []).filter(f => f.type === 'video');
   const audioFormats = (videoInfo?.available_formats || []).filter(f => f.type === 'audio');
   const hasFormats = videoFormats.length > 0 || audioFormats.length > 0;
@@ -281,33 +292,33 @@ export default function DashboardContent() {
   const showMergeOption = maxMergeHeight > maxCombinedHeight;
 
   return (
-    <div className="w-full flex flex-col items-center">
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <Toast message={toastMessage} show={!!toastMessage} />
       <UpgradeModal isOpen={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />
 
       {/* ── Input Area ──────────────────────────────────── */}
-      <div className="relative group w-full max-w-3xl mb-10">
-        <div className="absolute -inset-1.5 bg-gradient-to-r from-[#4F46E5]/25 to-[#7C3AED]/25 rounded-3xl blur-xl opacity-50 group-hover:opacity-80 transition duration-500" />
-        <div className="relative bg-white/[0.06] border border-white/[0.10] flex flex-col md:flex-row items-center gap-2 p-2 rounded-3xl">
-          <div className="flex-1 flex items-center gap-3 w-full px-4">
-            <Link2 className="w-5 h-5 text-slate-500 flex-shrink-0" />
+      <div className="relative group" style={{ width: '100%', maxWidth: '768px', marginBottom: '40px' }}>
+        <div className="absolute -inset-2 bg-gradient-to-r from-[#FDE047]/30 to-[#4ADE80]/30 rounded-[2rem] md:rounded-full blur-xl opacity-60 group-hover:opacity-100 transition duration-500" />
+        <div className="relative bg-white flex flex-col md:flex-row items-center p-2.5 rounded-3xl md:rounded-full shadow-2xl shadow-[#FDE047]/10 border border-slate-100/80">
+          <div className="flex-1 flex items-center gap-3 w-full px-5 md:px-6">
+            <Link2 className="w-6 h-6 text-slate-600 flex-shrink-0" />
             <input
               type="text"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               onPaste={handleInputPaste}
               onKeyDown={(e) => e.key === 'Enter' && handleFetchLink()}
-              placeholder="Dán liên kết video hoặc kênh vào đây..."
+              placeholder="🔗 Dán liên kết video hoặc kênh vào đây..."
               disabled={isLoading}
-              className="w-full bg-transparent text-white placeholder-slate-500 text-base font-semibold focus:outline-none disabled:opacity-50 h-12"
+              className="w-full bg-transparent text-slate-900 placeholder-slate-500 text-base md:text-lg font-semibold focus:outline-none disabled:opacity-50 h-14"
             />
           </div>
           <button
             onClick={handleFetchLink}
             disabled={isLoading || !url.trim()}
-            className="w-full md:w-auto h-12 px-8 rounded-2xl bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] hover:from-[#4338CA] hover:to-[#6D28D9] text-white font-black shadow-[0_0_24px_rgba(79,70,229,0.4)] hover:shadow-[0_0_36px_rgba(79,70,229,0.6)] active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 whitespace-nowrap text-sm uppercase tracking-wider"
+            className="w-full md:w-auto mt-3 md:mt-0 h-14 md:h-16 px-10 rounded-2xl md:rounded-full bg-gradient-to-r from-[#FB923C] to-[#FBBF24] hover:from-[#F97316] hover:to-[#F59E0B] text-[#012622] font-black shadow-2xl shadow-[#FBBF24]/40 active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 whitespace-nowrap text-base md:text-lg uppercase tracking-wider drop-shadow-md"
           >
-            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-6 h-6 fill-white" />}
+            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-6 h-6 fill-[#012622]" />}
             <span>{isLoading ? 'ĐANG XỬ LÝ...' : 'BÓC TÁCH NGAY'}</span>
           </button>
         </div>
@@ -325,12 +336,12 @@ export default function DashboardContent() {
 
       {/* ── Result Card ──────────────────────────────────── */}
       {videoInfo && (
-        <div className="w-full max-w-3xl mb-12">
-          <div className="bg-white/[0.04] border border-indigo-500/20 backdrop-blur-xl rounded-3xl p-6 shadow-2xl overflow-hidden">
+        <div style={{ width: '100%', maxWidth: '768px', marginBottom: '48px' }}>
+          <div className="bg-[#012622]/50 border border-slate-700/50 backdrop-blur-md rounded-3xl p-6 md:p-8 shadow-2xl shadow-[#FDE047]/5 overflow-hidden">
 
             {/* Thumbnail & Title */}
             <div className="flex flex-col sm:flex-row gap-5 items-center sm:items-start w-full mb-6">
-              <div className="w-44 sm:w-52 aspect-video rounded-2xl overflow-hidden bg-white/[0.06] flex-shrink-0 border border-white/[0.08] shadow-lg">
+              <div className="w-44 sm:w-52 aspect-video rounded-2xl overflow-hidden bg-slate-800 flex-shrink-0 border border-slate-700/50 shadow-lg">
                 {videoInfo.thumbnail_url ? (
                   <img src={videoInfo.thumbnail_url} alt="Thumbnail" className="w-full h-full object-cover" />
                 ) : (
@@ -340,16 +351,16 @@ export default function DashboardContent() {
               <div className="flex-1 text-center sm:text-left min-w-0">
                 <h4 className="text-white font-bold text-lg md:text-xl line-clamp-3 mb-3 leading-snug">{videoInfo.title || 'Video tải về'}</h4>
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-xs font-medium text-slate-300">
-                  <span className="bg-white/[0.06] border border-white/[0.08] px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                  <span className="bg-slate-800/80 border border-slate-700/50 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
                     <Link2 className="w-3.5 h-3.5" /> {(() => {
                       try { return new URL(videoInfo.original_url || url).hostname.replace('www.',''); }
                       catch { return 'Liên kết'; }
                     })()}
                   </span>
                   {videoInfo.duration > 0 && (
-                    <span className="bg-white/[0.06] border border-white/[0.08] px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-indigo-400" />
-                      {videoInfo.duration >= 3600 ?
+                    <span className="bg-slate-800/80 border border-slate-700/50 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-blue-400" />
+                      {videoInfo.duration >= 3600 ? 
                         `${Math.floor(videoInfo.duration / 3600)}:${String(Math.floor((videoInfo.duration % 3600) / 60)).padStart(2, '0')}:${String(videoInfo.duration % 60).padStart(2, '0')}`
                         :
                         `${Math.floor(videoInfo.duration / 60)}:${String(videoInfo.duration % 60).padStart(2, '0')}`
@@ -357,7 +368,7 @@ export default function DashboardContent() {
                     </span>
                   )}
                   {videoInfo.file_size_mb > 0 && (
-                    <span className="bg-white/[0.06] border border-white/[0.08] px-3 py-1.5 rounded-lg">
+                    <span className="bg-slate-800/80 border border-slate-700/50 px-3 py-1.5 rounded-lg">
                       {videoInfo.file_size_mb.toFixed(1)} MB
                     </span>
                   )}
@@ -369,16 +380,16 @@ export default function DashboardContent() {
             {hasFormats ? (
               <>
                 {/* Tab Switcher */}
-                <div className="flex gap-1 p-1 bg-white/[0.04] border border-white/[0.08] rounded-xl mb-4 max-w-xs">
+                <div className="flex gap-1 p-1 bg-slate-800/60 rounded-xl mb-4 max-w-xs">
                   <button
                     onClick={() => setFormatTab('video')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${formatTab === 'video' ? 'bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${formatTab === 'video' ? 'bg-gradient-to-r from-[#10b981] to-[#059669] text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
                   >
                     <Video className="w-4 h-4" /> Video ({videoFormats.length + (showMergeOption ? 1 : 0)})
                   </button>
                   <button
                     onClick={() => setFormatTab('audio')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${formatTab === 'audio' ? 'bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${formatTab === 'audio' ? 'bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
                   >
                     <Music className="w-4 h-4" /> Âm thanh ({audioFormats.length})
                   </button>
@@ -388,12 +399,12 @@ export default function DashboardContent() {
                 <div className="flex flex-col gap-2.5">
                   {formatTab === 'video' && (
                     <>
-                      {/* 4K Merge Option */}
+                      {/* 4K Merge Option (if available) */}
                       {showMergeOption && (
                         <button
                           onClick={handleMergeDownload}
                           disabled={downloadingId === 'merge_4k'}
-                          className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-gradient-to-r from-[#FBBF24]/15 to-[#F59E0B]/15 border border-[#FBBF24]/40 hover:border-[#FBBF24]/70 text-white transition-all disabled:opacity-60 active:scale-[0.99] group"
+                          className="w-full flex items-center justify-between px-5 py-3.5 rounded-2xl bg-gradient-to-r from-[#FBBF24]/15 to-[#F59E0B]/15 border border-[#FBBF24]/40 hover:border-[#FBBF24]/70 text-white transition-all disabled:opacity-60 active:scale-[0.99] group"
                         >
                           <div className="flex items-center gap-3">
                             <Crown className="w-5 h-5 text-[#FBBF24]" />
@@ -409,22 +420,23 @@ export default function DashboardContent() {
                         </button>
                       )}
 
+                      {/* Combined video+audio formats and Video-only formats (Requires merge) */}
                       {videoFormats.map((fmt, i) => (
                         <button
                           key={`v-${i}`}
                           onClick={() => fmt.requires_merge ? handleMergeDownload(fmt.height) : handleFormatDownload(fmt)}
                           disabled={downloadingId === `merge_${fmt.height}`}
-                          className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] hover:border-indigo-500/30 hover:bg-white/[0.07] text-white transition-all duration-300 disabled:opacity-60 active:scale-[0.99] group"
+                          className="w-full flex items-center justify-between px-5 py-3.5 rounded-2xl bg-slate-800/50 border border-slate-700/40 hover:border-emerald-500/50 hover:bg-slate-800/80 text-white transition-all disabled:opacity-60 active:scale-[0.99] group"
                         >
                           <div className="flex items-center gap-3">
-                            <Video className="w-5 h-5 text-indigo-400" />
+                            <Video className="w-5 h-5 text-emerald-400" />
                             <div className="text-left">
                               <div className="flex items-center gap-2">
                                 <ResBadge label={fmt.label} height={fmt.height} />
                                 <span className="text-sm font-bold">{fmt.resolution}</span>
                                 <span className="text-xs text-slate-500 uppercase">{fmt.ext}</span>
                                 {fmt.requires_merge && (
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
                                     GHÉP TỆP
                                   </span>
                                 )}
@@ -443,9 +455,9 @@ export default function DashboardContent() {
                             </div>
                           </div>
                           {downloadingId === `merge_${fmt.height}` ? (
-                            <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
+                            <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
                           ) : (
-                            <Download className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
+                            <Download className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
                           )}
                         </button>
                       ))}
@@ -453,7 +465,7 @@ export default function DashboardContent() {
                       {videoFormats.length === 0 && !showMergeOption && (
                         <div className="text-center py-6 text-slate-400 text-sm">
                           Không tìm thấy định dạng video riêng lẻ.
-                          <button onClick={handleDefaultDownload} className="block mx-auto mt-3 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white font-bold text-sm">
+                          <button onClick={handleDefaultDownload} className="block mx-auto mt-3 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#10b981] to-[#059669] text-white font-bold text-sm">
                             <Download className="w-4 h-4 inline mr-1.5" />Tải video mặc định
                           </button>
                         </div>
@@ -468,19 +480,19 @@ export default function DashboardContent() {
                           key={`a-${i}`}
                           onClick={() => fmt.requires_merge ? handleMergeDownload(fmt.ext) : handleFormatDownload(fmt)}
                           disabled={downloadingId === `merge_${fmt.ext}`}
-                          className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] hover:border-indigo-500/30 hover:bg-white/[0.07] text-white transition-all duration-300 disabled:opacity-60 active:scale-[0.99] group"
+                          className="w-full flex items-center justify-between px-5 py-3.5 rounded-2xl bg-slate-800/50 border border-slate-700/40 hover:border-blue-500/50 hover:bg-slate-800/80 text-white transition-all disabled:opacity-60 active:scale-[0.99] group"
                         >
                           <div className="flex items-center gap-3">
-                            <Music className="w-5 h-5 text-violet-400" />
+                            <Music className="w-5 h-5 text-blue-400" />
                             <div className="text-left">
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="text-sm font-bold text-white">Âm thanh</span>
                               </div>
                               <div className="flex items-center gap-2">
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 uppercase">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-blue-500/20 text-blue-300 border border-blue-500/30 uppercase">
                                   {fmt.ext}
                                 </span>
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-violet-500/20 text-violet-300 border border-violet-500/30 uppercase">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-purple-500/20 text-purple-300 border border-purple-500/30 uppercase">
                                   CHỈ ÂM THANH
                                 </span>
                                 <span className="text-xs font-semibold text-slate-400">{fmt.label}</span>
@@ -488,9 +500,9 @@ export default function DashboardContent() {
                             </div>
                           </div>
                           {downloadingId === `merge_${fmt.ext}` ? (
-                            <Loader2 className="w-5 h-5 animate-spin text-violet-400" />
+                            <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
                           ) : (
-                            <Download className="w-5 h-5 text-violet-400 group-hover:scale-110 transition-transform" />
+                            <Download className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />
                           )}
                         </button>
                       ))}
@@ -500,10 +512,10 @@ export default function DashboardContent() {
                           <button
                             onClick={handleAudioDownload}
                             disabled={downloadingId === 'audio_mp3'}
-                            className="w-full flex items-center justify-between px-6 py-4 rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.08] text-white font-bold shadow-lg transition-all disabled:opacity-70 active:scale-[0.98]"
+                            className="w-full flex items-center justify-between px-6 py-4 rounded-2xl bg-[#1e293b] hover:bg-[#334155] border border-slate-700/50 text-white font-bold shadow-lg transition-all disabled:opacity-70 active:scale-[0.98]"
                           >
                             <div className="flex items-center gap-3">
-                              <Music className="w-6 h-6 text-indigo-400" />
+                              <Music className="w-6 h-6 text-[#38bdf8]" />
                               <span className="text-base sm:text-lg">Tải Âm Thanh (MP3 320kbps)</span>
                             </div>
                             {downloadingId === 'audio_mp3' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
@@ -527,7 +539,7 @@ export default function DashboardContent() {
                 <button
                   onClick={handleMergeDownload}
                   disabled={downloadingId === 'merge_4k'}
-                  className="w-full flex items-center justify-between px-6 py-4 rounded-2xl bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] hover:from-[#4338CA] hover:to-[#6D28D9] text-white font-bold shadow-lg shadow-[#4F46E5]/30 transition-all disabled:opacity-70 active:scale-[0.98]"
+                  className="w-full flex items-center justify-between px-6 py-4 rounded-2xl bg-gradient-to-r from-[#FBBF24] to-[#F59E0B] hover:from-[#F59E0B] hover:to-[#D97706] text-[#012622] font-bold shadow-lg transition-all disabled:opacity-70 active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-3">
                     <Crown className="w-6 h-6" />
@@ -538,10 +550,10 @@ export default function DashboardContent() {
                 <button
                   onClick={handleAudioDownload}
                   disabled={downloadingId === 'audio_mp3'}
-                  className="w-full flex items-center justify-between px-6 py-4 rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.08] text-white font-bold shadow-lg transition-all disabled:opacity-70 active:scale-[0.98]"
+                  className="w-full flex items-center justify-between px-6 py-4 rounded-2xl bg-[#1e293b] hover:bg-[#334155] border border-slate-700/50 text-white font-bold shadow-lg transition-all disabled:opacity-70 active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-3">
-                    <Music className="w-6 h-6 text-indigo-400" />
+                    <Music className="w-6 h-6 text-[#38bdf8]" />
                     <span className="text-base">Tải Âm Thanh (MP3 320kbps)</span>
                   </div>
                   {downloadingId === 'audio_mp3' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
@@ -551,7 +563,7 @@ export default function DashboardContent() {
 
             {/* Cancel/Reset */}
             <div className="text-center mt-6">
-              <button onClick={() => setVideoInfo(null)} className="px-8 py-2.5 rounded-full text-slate-400 font-semibold hover:text-white hover:bg-white/10 transition-colors text-sm border border-transparent hover:border-white/[0.08]">
+              <button onClick={() => setVideoInfo(null)} className="px-8 py-2.5 rounded-full text-slate-400 font-semibold hover:text-white hover:bg-white/10 transition-colors text-sm border border-transparent hover:border-slate-700">
                 Tải video khác
               </button>
             </div>
@@ -561,13 +573,13 @@ export default function DashboardContent() {
 
       {/* ── Spotify Playlist / Album Track List ─────────── */}
       {spotifyData && (
-        <div className="w-full max-w-3xl mb-12">
-          <div className="bg-white/[0.04] border border-[#1DB954]/30 backdrop-blur-xl rounded-3xl p-6 shadow-2xl overflow-hidden">
+        <div style={{ width: '100%', maxWidth: '768px', marginBottom: '48px' }}>
+          <div className="bg-[#012622]/50 border border-[#1DB954]/30 backdrop-blur-md rounded-3xl p-6 md:p-8 shadow-2xl overflow-hidden">
             {/* Header */}
             <div className="flex items-center gap-4 mb-6">
               {spotifyData.thumbnail && (
                 <img src={spotifyData.thumbnail} alt="cover"
-                  className="w-20 h-20 rounded-2xl object-cover flex-shrink-0 border border-white/[0.08] shadow-lg" />
+                  className="w-20 h-20 rounded-2xl object-cover flex-shrink-0 border border-slate-700/50 shadow-lg" />
               )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
@@ -596,7 +608,8 @@ export default function DashboardContent() {
                 const dlState = trackDownloads[key];
                 return (
                   <div key={i}
-                    className="flex items-center gap-3 p-3 rounded-2xl bg-white/[0.04] border border-white/[0.07] hover:bg-white/[0.07] transition-all group">
+                    className="flex items-center gap-3 p-3 rounded-2xl bg-slate-800/40 border border-slate-700/30 hover:bg-slate-800/70 transition-all group">
+                    {/* Track thumbnail */}
                     {track.thumbnail ? (
                       <img src={track.thumbnail} alt=""
                         className="w-10 h-10 rounded-lg object-cover flex-shrink-0 opacity-90" />
@@ -605,15 +618,18 @@ export default function DashboardContent() {
                         <Music className="w-5 h-5 text-[#1DB954]" />
                       </div>
                     )}
+                    {/* Track info */}
                     <div className="flex-1 min-w-0">
                       <p className="text-white text-sm font-semibold truncate">{track.name}</p>
                       <p className="text-slate-400 text-xs truncate">{track.artist_str}</p>
                     </div>
+                    {/* Duration */}
                     {track.duration > 0 && (
                       <span className="text-slate-500 text-xs flex-shrink-0">
                         {Math.floor(track.duration / 60)}:{String(track.duration % 60).padStart(2, '0')}
                       </span>
                     )}
+                    {/* Download button */}
                     <button
                       onClick={() => handleSpotifyTrackDownload(track)}
                       disabled={dlState === 'loading' || dlState === 'done'}
@@ -623,7 +639,7 @@ export default function DashboardContent() {
                           : dlState === 'error'
                           ? 'bg-red-500/20 text-red-300 border-red-500/30'
                           : dlState === 'loading'
-                          ? 'bg-white/[0.06] text-slate-400 border-white/[0.08] cursor-wait'
+                          ? 'bg-slate-700 text-slate-400 border-slate-600 cursor-wait'
                           : 'bg-[#1DB954]/10 text-[#1DB954] border-[#1DB954]/30 hover:bg-[#1DB954]/20'
                       }`}
                     >
@@ -646,33 +662,33 @@ export default function DashboardContent() {
 
       {/* ── Recent Downloads ─────────────────────────────── */}
       {recentDownloads.length > 0 && (
-        <div className="w-full max-w-3xl">
-          <h3 className="text-sm font-bold text-slate-400 mb-3 px-1">Tải gần đây</h3>
+        <div style={{ width: '100%', maxWidth: '768px' }}>
+          <h3 className="text-sm font-bold text-slate-300 mb-3 px-1">Tải gần đây</h3>
           <div className="space-y-2.5">
             {recentDownloads.map((job) => (
-              <div key={job.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.07] backdrop-blur-sm shadow-sm hover:bg-white/[0.05] transition-colors">
+              <div key={job.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3.5 md:p-4 rounded-2xl bg-[#012622]/50 border border-slate-700/50 backdrop-blur-sm shadow-sm hover:bg-[#012622]/80 transition-colors">
                 <div className="flex-1 min-w-0 w-full">
                   <h5 className="text-sm font-bold text-white truncate mb-1">{job.title || job.slugified_name || '...'}</h5>
                   <div className="flex items-center gap-2 text-xs font-medium">
                     {job.status === 'success' ? (
-                      <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> OK</span>
+                      <span className="text-[#4ADE80] flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> OK</span>
                     ) : job.status === 'failed' ? (
                       <span className="text-red-400 flex items-center gap-1"><XCircle className="w-3 h-3" /> Lỗi</span>
                     ) : (
-                      <span className="text-amber-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> ...</span>
+                      <span className="text-[#FBBF24] flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> ...</span>
                     )}
                   </div>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
                   {job.status === 'success' && job.direct_mp4_url ? (
                     <a href={`${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(job.direct_mp4_url)}&filename=${encodeURIComponent(job.title || 'video')}`}
-                      className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-500/10 text-indigo-300 font-bold hover:bg-indigo-500/20 transition-colors border border-indigo-500/30 text-xs">
+                      className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#FDE047]/10 text-[#FDE047] font-bold hover:bg-[#FDE047]/20 transition-colors border border-[#FDE047]/30 text-xs">
                       <Download className="w-3.5 h-3.5" /> Tải lại
                     </a>
                   ) : (
-                    <button disabled className="flex-1 sm:flex-none px-3 py-2 rounded-xl bg-white/[0.04] text-slate-500 font-bold cursor-not-allowed border border-white/[0.07] text-xs">Chờ</button>
+                    <button disabled className="flex-1 sm:flex-none px-3 py-2 rounded-xl bg-slate-800 text-slate-500 font-bold cursor-not-allowed border border-slate-700 text-xs">Chờ</button>
                   )}
-                  <button onClick={() => handleDeleteJob(job.id)} className="px-2.5 py-2 rounded-xl bg-white/[0.04] hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-white/[0.07] hover:border-red-500/30 transition-colors">
+                  <button onClick={() => handleDeleteJob(job.id)} className="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-700 hover:border-red-500/30 transition-colors">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -684,12 +700,12 @@ export default function DashboardContent() {
 
       {/* Empty State */}
       {!videoInfo && !spotifyData && recentDownloads.length === 0 && !isLoading && (
-        <div className="w-full max-w-3xl mt-8">
-          <div className="flex flex-col items-center justify-center py-12 px-6 bg-white/[0.04] border border-white/[0.08] backdrop-blur-xl rounded-3xl shadow-sm text-center">
-            <div className="w-16 h-16 rounded-full bg-white/[0.06] flex items-center justify-center mb-5 border border-white/[0.08]">
-              <Clock className="w-8 h-8 text-slate-500" />
+        <div style={{ width: '100%', maxWidth: '768px', marginTop: '32px' }}>
+          <div className="flex flex-col items-center justify-center py-16 px-6 bg-[#012622]/50 border border-slate-700/50 backdrop-blur-md rounded-[2rem] shadow-sm text-center">
+            <div className="w-16 h-16 rounded-full bg-[#012622] flex items-center justify-center mb-5 border border-slate-700/50">
+              <Clock className="w-8 h-8 text-slate-400" />
             </div>
-            <p className="text-slate-400 font-medium text-base">Dán link và bấm "Bóc tách ngay" để bắt đầu!</p>
+            <p className="text-slate-300 font-medium text-base">Dán link và bấm "Bóc tách ngay" để bắt đầu!</p>
           </div>
         </div>
       )}

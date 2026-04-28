@@ -8,17 +8,17 @@ function App() {
   const [view, setView] = useState('landing');
 
   return (
-    <div className="min-h-screen bg-[#000000] text-slate-100">
+    <div className="min-h-screen bg-[#012622] text-slate-100">
       {/* ── Top Navbar (Glassmorphism) ──────────────────── */}
-      <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-2xl bg-black/60 border-b border-white/[0.08]">
+      <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-xl bg-[#012622]/70 border-b border-slate-700/50">
         <div className="max-w-6xl mx-auto h-14 md:h-16 px-4 md:px-8 flex items-center justify-between">
           {/* Logo */}
           <button
             onClick={() => setView('landing')}
             className="flex items-center gap-2.5 group cursor-pointer"
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#4F46E5] to-[#7C3AED] flex items-center justify-center shadow-md shadow-[#4F46E5]/20 group-hover:shadow-lg transition-shadow">
-              <Video className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FBBF24] to-[#FB923C] flex items-center justify-center shadow-md shadow-[#FBBF24]/20 group-hover:shadow-lg transition-shadow">
+              <Video className="w-5 h-5 text-[#012622]" />
             </div>
             <span className="text-lg font-extrabold text-white tracking-tight">
               VidGrab
