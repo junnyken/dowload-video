@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import UpgradeModal from './UpgradeModal';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 // ── Toast ───────────────────────────────────────────────────
 const Toast = ({ message, show }) => (
   <div className={`fixed top-20 left-1/2 -translate-x-1/2 px-5 py-3 rounded-full shadow-xl bg-slate-800 text-white font-medium text-sm flex items-center gap-2 transition-all duration-300 z-[60] ${show ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0 pointer-events-none'}`}>
@@ -45,7 +47,7 @@ export default function DashboardContent() {
   };
 
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/v1/history?limit=5')
+    fetch(`${API_BASE}/api/v1/history?limit=5`)
       .then(res => res.json())
       .then(data => {
         if (data.success && data.jobs) setRecentDownloads(data.jobs);
@@ -54,7 +56,7 @@ export default function DashboardContent() {
 
   const handleDeleteJob = async (jobId) => {
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/history/${jobId}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/api/v1/history/${jobId}`, { method: 'DELETE' });
       if (res.ok) {
         setRecentDownloads(prev => prev.filter(j => j.id !== jobId));
         showToast('Đã xóa thành công!');
@@ -79,7 +81,7 @@ export default function DashboardContent() {
     if (!url.trim()) { setError('Vui lòng nhập liên kết hợp lệ.'); return; }
     setIsLoading(true); setError(''); setVideoInfo(null); setFormatTab('video');
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/v1/fetch-link', {
+      const response = await fetch(`${API_BASE}/api/v1/fetch-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: url.trim(), quality: 'video', remove_watermark: true }),
@@ -105,7 +107,7 @@ export default function DashboardContent() {
   const handleFormatDownload = (fmt) => {
     const title = videoInfo?.title || 'video';
     const ext = fmt.ext || 'mp4';
-    const downloadUrl = `http://127.0.0.1:8000/api/v1/proxy-download?url=${encodeURIComponent(fmt.url)}&filename=${encodeURIComponent(title)}&ext=${encodeURIComponent(ext)}`;
+    const downloadUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(fmt.url)}&filename=${encodeURIComponent(title)}&ext=${encodeURIComponent(ext)}`;
     const a = document.createElement('a');
     a.href = downloadUrl; a.setAttribute('download', '');
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -123,7 +125,7 @@ export default function DashboardContent() {
     const localPath = videoInfo.local_file_path || videoInfo.local_mp3_path;
     if (localPath) {
       const fileExt = localPath.split('.').pop() || 'mp4';
-      const downloadUrl = `http://127.0.0.1:8000/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=${encodeURIComponent(videoInfo.title || 'video')}.${fileExt}`;
+      const downloadUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=${encodeURIComponent(videoInfo.title || 'video')}.${fileExt}`;
       const a = document.createElement('a');
       a.href = downloadUrl; a.setAttribute('download', '');
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -149,7 +151,7 @@ export default function DashboardContent() {
     }
     setDownloadingId(`merge_${param || '4k'}`);
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/v1/fetch-link', {
+      const response = await fetch(`${API_BASE}/api/v1/fetch-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -170,7 +172,7 @@ export default function DashboardContent() {
         const localPath = data.local_mp3_path || data.local_file_path;
         if (localPath) {
           const fileExt = localPath.split('.').pop() || (isAudioParam ? 'mp3' : 'mp4');
-          const downloadUrl = `http://127.0.0.1:8000/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=${encodeURIComponent(data.title || 'video')}.${fileExt}`;
+          const downloadUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=${encodeURIComponent(data.title || 'video')}.${fileExt}`;
           const a = document.createElement('a');
           a.href = downloadUrl; a.setAttribute('download', '');
           document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -188,7 +190,7 @@ export default function DashboardContent() {
   const handleAudioDownload = async () => {
     setDownloadingId('audio_mp3');
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/v1/fetch-link', {
+      const response = await fetch(`${API_BASE}/api/v1/fetch-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -207,7 +209,7 @@ export default function DashboardContent() {
       if (data.success) {
         if (data.local_mp3_path || data.local_file_path) {
           const path = data.local_mp3_path || data.local_file_path;
-          const downloadUrl = `http://127.0.0.1:8000/api/v1/download-local?filepath=${encodeURIComponent(path)}&filename=${encodeURIComponent(data.title || 'audio')}.mp3`;
+          const downloadUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(path)}&filename=${encodeURIComponent(data.title || 'audio')}.mp3`;
           const a = document.createElement('a');
           a.href = downloadUrl; a.setAttribute('download', '');
           document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -377,6 +379,16 @@ export default function DashboardContent() {
                                     GHÉP TỆP
                                   </span>
                                 )}
+                                {fmt.label?.includes('No Watermark') && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                    KHÔNG LOGO
+                                  </span>
+                                )}
+                                {fmt.label?.includes('With Watermark') && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                                    CÓ LOGO
+                                  </span>
+                                )}
                               </div>
                               {fmt.filesize_mb > 0 && <p className="text-xs text-slate-400 mt-0.5">{fmt.filesize_mb.toFixed(1)} MB</p>}
                             </div>
@@ -519,7 +531,7 @@ export default function DashboardContent() {
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
                   {job.status === 'success' && job.direct_mp4_url ? (
-                    <a href={`http://127.0.0.1:8000/api/v1/proxy-download?url=${encodeURIComponent(job.direct_mp4_url)}&filename=${encodeURIComponent(job.title || 'video')}`}
+                    <a href={`${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(job.direct_mp4_url)}&filename=${encodeURIComponent(job.title || 'video')}`}
                       className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#FDE047]/10 text-[#FDE047] font-bold hover:bg-[#FDE047]/20 transition-colors border border-[#FDE047]/30 text-xs">
                       <Download className="w-3.5 h-3.5" /> Tải lại
                     </a>
