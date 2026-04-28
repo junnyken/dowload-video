@@ -49,7 +49,7 @@ export default function AdminDashboard() {
   }
 
   const zenrowsCredits = stats.providers?.zenrows || 0;
-  const scraperAPIcredits = stats.providers?.scraperapi || 0;
+  const scraperAPIcredits = stats.providers?.ScraperAPI ?? stats.providers?.scraperapi ?? 0;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">

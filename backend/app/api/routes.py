@@ -87,7 +87,7 @@ async def fetch_link(payload: FetchLinkRequest, request: Request):
     if not payload.url:
         raise HTTPException(status_code=400, detail="URL is required")
         
-    user_id = request.client.host
+    user_id = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
     
     # 1. Check Quotas
     quota_info = check_user_quota(user_id)
@@ -151,7 +151,7 @@ async def bulk_download(payload: BulkDownloadRequest, request: Request):
     # if len(payload.urls) > 50:
     #     raise HTTPException(status_code=400, detail="Maximum 50 URLs allowed per batch to prevent abuse.")
 
-    user_id = request.client.host
+    user_id = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
     batch_id = str(uuid.uuid4())
     supabase = get_supabase_client()
 
@@ -251,7 +251,7 @@ async def bulk_zip(payload: BulkZipRequest, request: Request):
 
 @router.get("/quota")
 async def get_quota(req: Request):
-    user_id = req.client.host
+    user_id = req.headers.get("x-forwarded-for", req.client.host).split(",")[0].strip()
     try:
         info = check_user_quota(user_id)
         return {
