@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Download, CheckCircle2, XCircle,
   Loader2, AlertCircle, Link2,
-  Zap, Music, Video, Crown, Trash2, Clock
+  Zap, Music, Video, Crown, Trash2, Clock, X
 } from 'lucide-react';
 import UpgradeModal from './UpgradeModal';
 import JSZip from 'jszip';
@@ -46,6 +46,7 @@ export default function DashboardContent() {
   const [toastMessage, setToastMessage] = useState('');
   const [isZipping, setIsZipping] = useState(false);
   const [zipProgress, setZipProgress] = useState(0);
+  const cancelZipRef = useRef(false);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -172,12 +173,18 @@ export default function DashboardContent() {
     if (!spotifyData || !spotifyData.tracks) return;
     setIsZipping(true);
     setZipProgress(0);
+    cancelZipRef.current = false;
     const zip = new JSZip();
     const tracks = spotifyData.tracks;
     
     try {
       showToast("Đang bắt đầu tải và nén ZIP...");
       for (let i = 0; i < tracks.length; i++) {
+        if (cancelZipRef.current) {
+          showToast("Đã hủy quá trình tải ZIP.");
+          break;
+        }
+        
         const track = tracks[i];
         setZipProgress(Math.round(((i) / tracks.length) * 100));
         
@@ -204,6 +211,11 @@ export default function DashboardContent() {
           }
         }
         
+        if (cancelZipRef.current) {
+          showToast("Đã hủy quá trình tải ZIP.");
+          break;
+        }
+
         if (downloadUrl) {
           const response = await fetch(downloadUrl);
           if (response.ok) {
@@ -219,18 +231,25 @@ export default function DashboardContent() {
         }
       }
       
-      setZipProgress(100);
-      showToast("Đang tạo file ZIP, vui lòng chờ...");
-      const content = await zip.generateAsync({ type: "blob" });
-      const safePlaylistName = (spotifyData.playlist_name || spotifyData.album_name || "Playlist").replace(/[/\\?%*:|"<>]/g, '-');
-      saveAs(content, `${safePlaylistName}.zip`);
-      showToast("Tải ZIP thành công!");
+      if (!cancelZipRef.current) {
+        setZipProgress(100);
+        showToast("Đang tạo file ZIP, vui lòng chờ...");
+        const content = await zip.generateAsync({ type: "blob" });
+        const safePlaylistName = (spotifyData.playlist_name || spotifyData.album_name || "Playlist").replace(/[/\\?%*:|"<>]/g, '-');
+        saveAs(content, `${safePlaylistName}.zip`);
+        showToast("Tải ZIP thành công!");
+      }
     } catch (err) {
       showToast(`Lỗi tạo ZIP: ${err.message}`);
     } finally {
       setIsZipping(false);
       setZipProgress(0);
+      cancelZipRef.current = false;
     }
+  };
+
+  const handleCancelZip = () => {
+    cancelZipRef.current = true;
   };
 
   // Direct download a format via proxy
@@ -672,15 +691,24 @@ export default function DashboardContent() {
             
             {/* Download All (ZIP) Button */}
             {(spotifyData.tracks && spotifyData.tracks.length > 0) && (
-              <div className="flex justify-end px-2 mb-2">
+              <div className="flex justify-end px-2 mb-2 gap-2">
                 <button
                   onClick={handleDownloadAllZip}
                   disabled={isZipping}
                   className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] text-sm font-bold rounded-xl shadow-lg hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100"
                 >
-                  <Download className="w-4 h-4" />
+                  {isZipping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                   {isZipping ? `Đang tải & Nén... ${zipProgress}%` : `Tải tất cả (.ZIP)`}
                 </button>
+                {isZipping && (
+                  <button
+                    onClick={handleCancelZip}
+                    className="flex items-center justify-center w-9 h-9 bg-red-500/20 text-red-400 hover:bg-red-500/40 hover:text-white rounded-xl transition-all"
+                    title="Hủy nén ZIP"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
               </div>
             )}
 
