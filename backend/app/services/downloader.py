@@ -22,6 +22,7 @@ import re
 import signal
 import concurrent.futures
 from typing import Dict, Any, List
+import httpx
 
 from app.core.proxy_manager import get_proxy_config_for_phase, dispatch_scraping_request
 from app.utils.link_resolver import resolve_short_url, is_douyin_url
@@ -659,6 +660,128 @@ async def extract_video_info(url: str, quality: str = "video", remove_watermark:
 
 # ── Channel / Playlist Scraping ──────────────────────────────────────
 
+
+def _scrape_douyin_channel(channel_url: str, max_videos: int = 20) -> Dict[str, Any]:
+    """
+    Dedicated Douyin channel/user scraper.
+    Douyin's anti-bot JS VM prevents yt-dlp from scraping user profiles.
+    
+    Strategy:
+      1. Extract sec_uid from the URL
+      2. Use ScraperAPI (render=true, country_code=cn) to render the JS page
+      3. Parse RENDER_DATA or regex-extract video IDs from the rendered HTML
+      4. Return video URLs for the existing single-video pipeline
+    """
+    print(f"[Downloader] Using dedicated Douyin channel scraper for: {channel_url}")
+
+    # Extract sec_uid from URL
+    sec_uid_match = re.search(r'/user/([A-Za-z0-9_-]+)', channel_url)
+    if not sec_uid_match:
+        raise ValueError("Không thể xác định sec_uid từ URL Douyin. Vui lòng dùng link dạng: douyin.com/user/...")
+    
+    sec_uid = sec_uid_match.group(1)
+    canonical_url = f"https://www.douyin.com/user/{sec_uid}"
+
+    # ── Method 1: ScraperAPI with JS rendering ──────────────
+    scraperapi_key = os.getenv("SCRAPERAPI_API_KEY", "")
+    video_ids = []
+
+    if scraperapi_key:
+        print(f"[Douyin Channel] Trying ScraperAPI render for {canonical_url}")
+        try:
+            resp = None
+            with httpx.Client(timeout=60.0) as client:
+                resp = client.get(
+                    "http://api.scraperapi.com/",
+                    params={
+                        "api_key": scraperapi_key,
+                        "url": canonical_url,
+                        "render": "true",
+                        "country_code": "cn",
+                        "wait_for_selector": ".video-card",
+                    },
+                )
+
+            if resp and resp.status_code == 200:
+                html = resp.text
+                print(f"[Douyin Channel] ScraperAPI returned {len(html)} bytes")
+
+                # Extract video IDs from rendered page
+                # Pattern 1: /video/XXXXXXXXXXX links
+                found_ids = re.findall(r'/video/(\d{15,25})', html)
+                # Pattern 2: aweme_id in JSON data
+                aweme_ids = re.findall(r'"aweme_id"\s*:\s*"(\d{15,25})"', html)
+                # Pattern 3: From data attributes or href
+                href_ids = re.findall(r'href="[^"]*?/video/(\d{15,25})', html)
+
+                all_ids = found_ids + aweme_ids + href_ids
+                # Deduplicate while preserving order
+                seen = set()
+                for vid in all_ids:
+                    if vid not in seen:
+                        seen.add(vid)
+                        video_ids.append(vid)
+
+                print(f"[Douyin Channel] Found {len(video_ids)} unique video IDs via ScraperAPI")
+            else:
+                print(f"[Douyin Channel] ScraperAPI returned status {resp.status_code if resp else 'None'}")
+        except Exception as e:
+            print(f"[Douyin Channel] ScraperAPI error: {e}")
+
+    # ── Method 2: iesdouyin share user page (free fallback) ──
+    if not video_ids:
+        print(f"[Douyin Channel] Trying iesdouyin share user page fallback")
+        try:
+            share_url = f"https://www.iesdouyin.com/share/user/{sec_uid}/"
+            mobile_ua = (
+                "Mozilla/5.0 (Linux; Android 12; Pixel 6) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Mobile Safari/537.36"
+            )
+            with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+                resp = client.get(share_url, headers={
+                    "User-Agent": mobile_ua,
+                    "Accept-Language": "zh-CN,zh;q=0.9",
+                })
+                if resp.status_code == 200:
+                    html = resp.text
+                    found_ids = re.findall(r'/video/(\d{15,25})', html)
+                    aweme_ids = re.findall(r'"aweme_id"\s*:\s*"(\d{15,25})"', html)
+                    all_ids = found_ids + aweme_ids
+                    seen = set()
+                    for vid in all_ids:
+                        if vid not in seen:
+                            seen.add(vid)
+                            video_ids.append(vid)
+                    print(f"[Douyin Channel] iesdouyin found {len(video_ids)} video IDs")
+        except Exception as e:
+            print(f"[Douyin Channel] iesdouyin fallback error: {e}")
+
+    if not video_ids:
+        raise ValueError(
+            "Không thể quét kênh Douyin. Douyin sử dụng hệ thống chống bot rất mạnh "
+            "(JS VM + Captcha) khiến việc quét danh sách video từ trang cá nhân bị chặn. "
+            "Vui lòng copy từng link video riêng lẻ và dán vào ô nhập liệu."
+        )
+
+    # Limit to max_videos
+    video_ids = video_ids[:max_videos]
+
+    entries = []
+    for vid in video_ids:
+        entries.append({
+            "url": f"https://www.douyin.com/video/{vid}",
+            "title": f"Douyin Video {vid[-6:]}",
+        })
+
+    return {
+        "channel_title": f"Douyin User {sec_uid[:12]}...",
+        "entries": entries,
+        "total_found": len(video_ids),
+        "total_queued": len(entries),
+    }
+
+
 def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 20, min_views: int = 0) -> Dict[str, Any]:
     """
     Scrape a channel or playlist URL to get a flat list of video entries
@@ -670,6 +793,10 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 20, min_vie
     channel_url = resolve_short_url(channel_url)
     if channel_url != original_channel_url:
         print(f"[Downloader] Unshortened channel URL: {original_channel_url} -> {channel_url}")
+
+    # ── Douyin: Route to dedicated scraper ────────────────────
+    if is_douyin_url(channel_url) or is_douyin_url(original_channel_url):
+        return _scrape_douyin_channel(channel_url, max_videos)
 
     # Clean TikTok URLs to avoid yt-dlp extraction errors caused by tracking params
     if "tiktok.com" in channel_url.lower() and "?" in channel_url:
@@ -771,14 +898,17 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 20, min_vie
 def scrape_channel_entries_sync(channel_url: str, max_videos: int = 20, min_views: int = 0) -> Dict[str, Any]:
     """
     Public entry point with HARD TIMEOUT for channel scraping.
-    Wraps the actual scraping in a thread with a 30-second cap
-    (channels need more time than single videos).
+    Wraps the actual scraping in a thread with a 90-second cap
+    (Douyin channels need ScraperAPI JS rendering which is slow).
     """
     try:
+        # Douyin channels need longer timeout due to ScraperAPI JS rendering
+        is_douyin = "douyin.com" in channel_url.lower()
+        timeout = 90 if is_douyin else 45
         return _run_with_timeout(
             _scrape_channel_entries_impl,
             args=(channel_url, max_videos, min_views),
-            timeout=30,  # channels get a longer timeout
+            timeout=timeout,
         )
     except TimeoutError as e:
         print(f"[Downloader] CHANNEL TIMEOUT: {channel_url}")
