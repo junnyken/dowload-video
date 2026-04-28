@@ -160,7 +160,7 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
     # Ensure output is saved to temp if we are going to download it locally
     is_tiktok = "tiktok.com" in url.lower()
     if quality.startswith("mp3") or quality.startswith("audio_") or (quality.startswith("video_") and quality != "video") or is_tiktok:
-        opts["outtmpl"] = "downloads/%(id)s_%(format_id)s.%(ext)s"
+        opts["outtmpl"] = os.path.join(DOWNLOAD_DIR, "%(id)s_%(format_id)s.%(ext)s")
 
     # ── Hybrid Proxy Logic ───────────────────────────────────────
     proxy = get_proxy_config_for_phase(url, phase=phase)
@@ -507,6 +507,11 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=should_download)
+        # ytsearch returns a playlist container — unwrap to the actual video entry
+        if info and info.get("entries") and not info.get("formats") and not info.get("url"):
+            entries = [e for e in info["entries"] if e]
+            if entries:
+                info = entries[0]
     except Exception as primary_err:
         print(f"[Downloader] Primary extraction failed for {url}: {primary_err}")
 
