@@ -57,7 +57,7 @@ export default function LandingPage() {
           <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tighter leading-tight text-white mb-6">
             Bắt trọn video.{' '}
             <span className="bg-gradient-to-r from-[#FBBF24] to-[#FB923C] bg-clip-text text-transparent">
-              Nét căng 4K.
+              Nét căng
             </span>
           </h1>
 

@@ -57,6 +57,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     restart: unless-stopped
+    ports:
+      - "3000:80"
     expose:
       - "80"
     depends_on:
