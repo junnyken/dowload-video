@@ -1,0 +1,28 @@
+services:
+  cobalt-api:
+    image: ghcr.io/imputnet/cobalt:11
+    container_name: cobalt-api
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      - API_URL=http://localhost:9000
+      - API_PORT=9000
+      # No authentication required for local use
+      - CORS_WILDCARD=1
+      - PROCESSING_PRIORITY=10
+    labels:
+      - com.centurylinklabs.watchtower.scope=cobalt
+
+  redis:
+    image: redis:7-alpine
+    container_name: vidgrab-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+volumes:
+  redis-data:

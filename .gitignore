@@ -1,0 +1,16 @@
+# Redis
+dump.rdb
+redis.zip
+redis/
+
+# Python venv
+.venv/
+
+# Downloaded media files
+backend/downloads/
+
+# Sensitive cookies
+douyin_cookies.txt
+
+# OS
+.DS_Store
