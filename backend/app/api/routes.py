@@ -45,7 +45,12 @@ class BulkDownloadRequest(BaseModel):
 
 # ── POST /fetch-spotify ──────────────────────────────────────────────
 
-from app.services.spotify_service import get_playlist_tracks, get_album_tracks, is_spotify_url
+from app.services.spotify_service import (
+    is_spotify_url,
+    _extract_spotify_type_and_id,
+    get_playlist_tracks_async,
+    get_album_tracks_async,
+)
 
 class SpotifyFetchRequest(BaseModel):
     url: str
@@ -56,17 +61,21 @@ async def fetch_spotify(payload: SpotifyFetchRequest, request: Request):
     if not is_spotify_url(payload.url):
         raise HTTPException(status_code=400, detail="Invalid Spotify URL")
     try:
-        if "playlist" in payload.url:
-            tracks = get_playlist_tracks(payload.url)
-        elif "album" in payload.url:
-            tracks = get_album_tracks(payload.url)
+        sp_type, _ = _extract_spotify_type_and_id(payload.url)
+
+        if sp_type == "playlist":
+            result = await get_playlist_tracks_async(payload.url)
+            return {"success": True, "type": "playlist", **result}
+        elif sp_type == "album":
+            result = await get_album_tracks_async(payload.url)
+            return {"success": True, "type": "album", **result}
         else:
-            raise HTTPException(status_code=400, detail="Unsupported Spotify URL format")
-            
-        return {
-            "success": True,
-            "tracks": tracks
-        }
+            raise HTTPException(
+                status_code=400,
+                detail="Dán link track riêng lẻ vào ô nhập URL chính để tải nhạc đơn.",
+            )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -476,16 +476,23 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
 
 
 
-    # ── Spotify: Convert to YouTube search ────────
+    # ── Spotify: Resolve to YouTube search (no API key needed for tracks) ──
+    _spotify_title = ""
+    _spotify_artist = ""
+    _spotify_thumbnail = ""
     if "open.spotify.com" in url:
-        from app.services.spotify_service import get_track_info
+        from app.services.spotify_service import get_track_info_async
         try:
-            url = get_track_info(url)
-            print(f"[Downloader] Spotify detected -> transformed to {url}")
-            quality = "mp3_320" if "320" in quality else "mp3_128" # Force audio
+            sp_info = asyncio.run(get_track_info_async(url))
+            _spotify_title = sp_info.get("name", "")
+            _spotify_artist = sp_info.get("artist_str", "")
+            _spotify_thumbnail = sp_info.get("thumbnail", "")
+            url = sp_info["search_query"]
+            quality = "mp3_128"  # Force audio-only for Spotify
+            print(f"[Downloader] Spotify -> {_spotify_artist} - {_spotify_title} -> {url}")
         except Exception as sp_err:
-            print(f"[Downloader] Spotify transform failed: {sp_err}")
-            raise ValueError("Không thể tải nhạc Spotify. Vui lòng kiểm tra lại link hoặc cấu hình API Spotify.")
+            print(f"[Downloader] Spotify error: {sp_err}")
+            raise ValueError(f"Không thể tải nhạc Spotify: {sp_err}")
 
     # ── Phase 1: Metadata extraction (and download if needed) ──────
     opts = _get_base_opts(url, phase="metadata", quality=quality)
@@ -599,7 +606,13 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         "available_formats": fmt_info["video_formats"] + fmt_info["audio_formats"],
         "max_merge_height": fmt_info["max_video_only_height"],
     }
-    
+
+    # Override with Spotify metadata for better title/thumbnail accuracy
+    if _spotify_title:
+        result["title"] = f"{_spotify_artist} - {_spotify_title}" if _spotify_artist else _spotify_title
+    if _spotify_thumbnail:
+        result["thumbnail_url"] = _spotify_thumbnail
+
     # Add local file path logic if a file was downloaded locally
     local_path = info.get("filepath")
     if not local_path and info.get("requested_downloads"):

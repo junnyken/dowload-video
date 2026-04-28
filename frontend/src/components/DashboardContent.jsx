@@ -35,6 +35,8 @@ export default function DashboardContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [videoInfo, setVideoInfo] = useState(null);
+  const [spotifyData, setSpotifyData] = useState(null); // playlist / album track list
+  const [trackDownloads, setTrackDownloads] = useState({}); // { search_query: 'loading' | 'done' | 'error' }
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [downloadingId, setDownloadingId] = useState(null);
   const [formatTab, setFormatTab] = useState('video');
@@ -77,9 +79,34 @@ export default function DashboardContent() {
     if (cleanUrl !== pasted.trim()) showToast('Đã tự động trích xuất URL!');
   };
 
+  const isSpotifyPlaylistOrAlbum = (u) =>
+    u.includes('open.spotify.com/playlist') || u.includes('open.spotify.com/album');
+
   const handleFetchLink = async () => {
     if (!url.trim()) { setError('Vui lòng nhập liên kết hợp lệ.'); return; }
-    setIsLoading(true); setError(''); setVideoInfo(null); setFormatTab('video');
+    setIsLoading(true); setError(''); setVideoInfo(null); setSpotifyData(null); setFormatTab('video');
+
+    // Route Spotify playlist / album to dedicated endpoint
+    if (isSpotifyPlaylistOrAlbum(url.trim())) {
+      try {
+        const response = await fetch(`${API_BASE}/api/v1/fetch-spotify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: url.trim() }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Không thể tải danh sách nhạc Spotify');
+        if (data.success) {
+          setSpotifyData(data);
+          setTrackDownloads({});
+          showToast(`Tìm thấy ${data.tracks?.length || 0} bài nhạc!`);
+        } else throw new Error('Không thể tải danh sách nhạc.');
+      } catch (err) {
+        setError(err.message || 'Lỗi khi tải danh sách Spotify.');
+      } finally { setIsLoading(false); }
+      return;
+    }
+
     try {
       const response = await fetch(`${API_BASE}/api/v1/fetch-link`, {
         method: 'POST',
@@ -101,6 +128,40 @@ export default function DashboardContent() {
     } catch (err) {
       setError(err.message || 'Đã xảy ra lỗi khi xử lý link.');
     } finally { setIsLoading(false); }
+  };
+
+  // Download a single Spotify track by search query
+  const handleSpotifyTrackDownload = async (track) => {
+    const key = track.search_query;
+    setTrackDownloads(prev => ({ ...prev, [key]: 'loading' }));
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/fetch-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: key, quality: 'mp3_128' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Lỗi tải nhạc');
+      if (data.success) {
+        const localPath = data.local_mp3_path || data.local_file_path;
+        const title = track.title || data.title || 'audio';
+        if (localPath) {
+          const ext = localPath.split('.').pop() || 'mp3';
+          const a = document.createElement('a');
+          a.href = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=${encodeURIComponent(title)}.${ext}`;
+          a.setAttribute('download', ''); document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        } else if (data.direct_mp4_url) {
+          const a = document.createElement('a');
+          a.href = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(data.direct_mp4_url)}&filename=${encodeURIComponent(title)}&ext=mp3`;
+          a.setAttribute('download', ''); document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        }
+        setTrackDownloads(prev => ({ ...prev, [key]: 'done' }));
+        showToast(`Đang tải: ${track.name || title}`);
+      }
+    } catch (err) {
+      setTrackDownloads(prev => ({ ...prev, [key]: 'error' }));
+      showToast(`Lỗi: ${err.message}`);
+    }
   };
 
   // Direct download a format via proxy
@@ -510,6 +571,95 @@ export default function DashboardContent() {
         </div>
       )}
 
+      {/* ── Spotify Playlist / Album Track List ─────────── */}
+      {spotifyData && (
+        <div style={{ width: '100%', maxWidth: '768px', marginBottom: '48px' }}>
+          <div className="bg-[#012622]/50 border border-[#1DB954]/30 backdrop-blur-md rounded-3xl p-6 md:p-8 shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center gap-4 mb-6">
+              {spotifyData.thumbnail && (
+                <img src={spotifyData.thumbnail} alt="cover"
+                  className="w-20 h-20 rounded-2xl object-cover flex-shrink-0 border border-slate-700/50 shadow-lg" />
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-[#1DB954]/20 text-[#1DB954] border border-[#1DB954]/40 uppercase tracking-wider">
+                    {spotifyData.type === 'album' ? 'Album' : 'Playlist'} • Spotify
+                  </span>
+                </div>
+                <h3 className="text-white font-bold text-xl line-clamp-1">
+                  {spotifyData.playlist_name || spotifyData.album_name}
+                </h3>
+                {spotifyData.artist && (
+                  <p className="text-slate-400 text-sm mt-0.5">{spotifyData.artist}</p>
+                )}
+                <p className="text-slate-500 text-xs mt-1">{spotifyData.tracks?.length || 0} bài nhạc</p>
+              </div>
+              <button onClick={() => setSpotifyData(null)}
+                className="text-slate-500 hover:text-white transition-colors text-sm px-3 py-1.5 rounded-lg hover:bg-white/10">
+                ✕
+              </button>
+            </div>
+
+            {/* Track list */}
+            <div className="flex flex-col gap-2 max-h-[480px] overflow-y-auto pr-1 custom-scrollbar">
+              {(spotifyData.tracks || []).map((track, i) => {
+                const key = track.search_query;
+                const dlState = trackDownloads[key];
+                return (
+                  <div key={i}
+                    className="flex items-center gap-3 p-3 rounded-2xl bg-slate-800/40 border border-slate-700/30 hover:bg-slate-800/70 transition-all group">
+                    {/* Track thumbnail */}
+                    {track.thumbnail ? (
+                      <img src={track.thumbnail} alt=""
+                        className="w-10 h-10 rounded-lg object-cover flex-shrink-0 opacity-90" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg bg-[#1DB954]/20 flex items-center justify-center flex-shrink-0">
+                        <Music className="w-5 h-5 text-[#1DB954]" />
+                      </div>
+                    )}
+                    {/* Track info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-semibold truncate">{track.name}</p>
+                      <p className="text-slate-400 text-xs truncate">{track.artist_str}</p>
+                    </div>
+                    {/* Duration */}
+                    {track.duration > 0 && (
+                      <span className="text-slate-500 text-xs flex-shrink-0">
+                        {Math.floor(track.duration / 60)}:{String(track.duration % 60).padStart(2, '0')}
+                      </span>
+                    )}
+                    {/* Download button */}
+                    <button
+                      onClick={() => handleSpotifyTrackDownload(track)}
+                      disabled={dlState === 'loading' || dlState === 'done'}
+                      className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                        dlState === 'done'
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 cursor-default'
+                          : dlState === 'error'
+                          ? 'bg-red-500/20 text-red-300 border-red-500/30'
+                          : dlState === 'loading'
+                          ? 'bg-slate-700 text-slate-400 border-slate-600 cursor-wait'
+                          : 'bg-[#1DB954]/10 text-[#1DB954] border-[#1DB954]/30 hover:bg-[#1DB954]/20'
+                      }`}
+                    >
+                      {dlState === 'loading' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : dlState === 'done' ? (
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      ) : (
+                        <Download className="w-3.5 h-3.5" />
+                      )}
+                      {dlState === 'done' ? 'Xong' : dlState === 'error' ? 'Thử lại' : 'MP3'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Recent Downloads ─────────────────────────────── */}
       {recentDownloads.length > 0 && (
         <div style={{ width: '100%', maxWidth: '768px' }}>
@@ -549,7 +699,7 @@ export default function DashboardContent() {
       )}
 
       {/* Empty State */}
-      {!videoInfo && recentDownloads.length === 0 && !isLoading && (
+      {!videoInfo && !spotifyData && recentDownloads.length === 0 && !isLoading && (
         <div style={{ width: '100%', maxWidth: '768px', marginTop: '32px' }}>
           <div className="flex flex-col items-center justify-center py-16 px-6 bg-[#012622]/50 border border-slate-700/50 backdrop-blur-md rounded-[2rem] shadow-sm text-center">
             <div className="w-16 h-16 rounded-full bg-[#012622] flex items-center justify-center mb-5 border border-slate-700/50">
