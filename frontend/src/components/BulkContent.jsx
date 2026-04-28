@@ -428,31 +428,31 @@ export default function BulkContent() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <Layers className="w-5 h-5 text-accent-light" />
-            <h2 className="text-2xl font-bold text-text-primary tracking-tight">
+            <Layers className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-2xl font-bold text-white tracking-tight">
               Bulk Download
             </h2>
           </div>
-          <p className="text-sm text-text-muted ml-8">
+          <p className="text-sm text-slate-500 ml-8">
             Process multiple videos or entire channels concurrently
           </p>
         </div>
         {quotaInfo && ['pro', 'vip'].includes(quotaInfo.plan) && (
-          <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30 rounded-xl shadow-lg shadow-primary/10 animate-in fade-in zoom-in slide-in-from-right-8 duration-500">
-            <Crown className="w-4 h-4 text-primary" />
-            <span className="text-xs font-bold text-primary uppercase tracking-wider">{quotaInfo.plan} ACTIVE</span>
+          <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500/20 to-violet-500/20 border border-indigo-500/30 rounded-xl shadow-lg shadow-indigo-500/10 animate-in fade-in zoom-in slide-in-from-right-8 duration-500">
+            <Crown className="w-4 h-4 text-indigo-400" />
+            <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider">{quotaInfo.plan} ACTIVE</span>
           </div>
         )}
       </div>
 
       {/* ── Input Area ────────────────────────────────── */}
-      <div className="p-6 rounded-2xl bg-surface-card border border-border shadow-lg">
+      <div className="p-6 rounded-2xl bg-white/[0.04] border border-white/[0.08] shadow-lg backdrop-blur-xl">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
           <div>
-            <h3 className="text-base font-semibold text-text-primary">
+            <h3 className="text-base font-semibold text-white">
               Paste URLs
             </h3>
-            <p className="text-xs text-text-muted mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5">
               Video links, channel profiles, or playlist URLs — one per line
             </p>
           </div>
@@ -462,7 +462,7 @@ export default function BulkContent() {
             <select
               value={quality}
               onChange={(e) => setQuality(e.target.value)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold border bg-surface border-border text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="px-4 py-2 rounded-xl text-xs font-semibold border bg-white/[0.06] border-white/[0.10] text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50"
             >
               <option value="video">MP4 Video</option>
               <option value="mp3_128">MP3 Audio (128kbps)</option>
@@ -481,8 +481,8 @@ export default function BulkContent() {
                 border transition-all duration-200 cursor-pointer
                 ${
                   autoDownload
-                    ? 'bg-success/15 border-success/30 text-success'
-                    : 'bg-surface border-border text-text-muted hover:text-text-secondary'
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                    : 'bg-white/[0.04] border-white/[0.08] text-slate-500 hover:text-slate-300'
                 }
               `}
             >
@@ -493,7 +493,7 @@ export default function BulkContent() {
               )}
               Tự động tải khi xong
             </button>
-            
+
             {/* Channel Mode Toggle */}
             <button
               onClick={() => setChannelMode(!channelMode)}
@@ -502,8 +502,8 @@ export default function BulkContent() {
                 border transition-all duration-200 cursor-pointer
                 ${
                   channelMode
-                    ? 'bg-accent/15 border-accent/30 text-accent-light'
-                    : 'bg-surface border-border text-text-muted hover:text-text-secondary'
+                    ? 'bg-violet-500/15 border-violet-500/30 text-violet-300'
+                    : 'bg-white/[0.04] border-white/[0.08] text-slate-500 hover:text-slate-300'
                 }
               `}
             >
@@ -519,34 +519,34 @@ export default function BulkContent() {
         </div>
 
         {channelMode && (
-          <div className="mb-4 p-4 rounded-xl bg-accent/5 border border-accent/20">
-            <p className="text-xs text-accent-light flex items-center gap-2 mb-3">
+          <div className="mb-4 p-4 rounded-xl bg-violet-500/5 border border-violet-500/20">
+            <p className="text-xs text-violet-300 flex items-center gap-2 mb-3">
               <Tv className="w-4 h-4" />
               <strong>Channel Mode ON:</strong> Tự động bóc tách và lọc video trong kênh
             </p>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-[10px] font-semibold text-text-muted uppercase mb-1">
+                <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">
                   Giới hạn video
                 </label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   min="1"
                   value={maxVideos}
                   onChange={(e) => setMaxVideos(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:border-primary/50"
+                  className="w-full px-3 py-2 bg-white/[0.06] border border-white/[0.10] rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/50"
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-semibold text-text-muted uppercase mb-1">
+                <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">
                   Lượt xem tối thiểu
                 </label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   min="0"
                   value={minViews}
                   onChange={(e) => setMinViews(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:border-primary/50"
+                  className="w-full px-3 py-2 bg-white/[0.06] border border-white/[0.10] rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/50"
                   placeholder="Ví dụ: 10000"
                 />
               </div>
@@ -566,11 +566,11 @@ export default function BulkContent() {
           }
           className="
             w-full px-4 py-3 rounded-xl
-            bg-surface border border-border
-            text-text-primary placeholder-text-muted
+            bg-white/[0.06] border border-white/[0.10]
+            text-white placeholder-slate-500
             text-sm leading-relaxed cursor-text
-            resize-none
-            focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50
+            resize-none shadow-inner shadow-black/20
+            focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50
             transition-all duration-200
           "
           disabled={isSubmitting}
@@ -583,10 +583,10 @@ export default function BulkContent() {
             className="
               flex items-center gap-2
               px-5 py-2.5 rounded-xl
-              bg-gradient-to-r from-primary to-primary-dark
+              bg-gradient-to-r from-[#4F46E5] to-[#7C3AED]
               text-white text-sm font-semibold cursor-pointer
-              shadow-lg shadow-primary/25
-              hover:shadow-xl hover:shadow-primary/30
+              shadow-lg shadow-indigo-500/25
+              hover:shadow-xl hover:shadow-indigo-500/30
               active:scale-[0.98]
               transition-all duration-200
               disabled:opacity-50 disabled:cursor-not-allowed
@@ -604,44 +604,44 @@ export default function BulkContent() {
 
       {/* ── Progress Summary Bar ──────────────────────── */}
       {summary && totalData.total > 0 && (
-        <div className="p-5 rounded-2xl bg-surface-card border border-border shadow-lg">
+        <div className="p-5 rounded-2xl bg-white/[0.04] border border-white/[0.08] shadow-lg backdrop-blur-xl">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text-primary">
+            <h3 className="text-sm font-semibold text-white">
               Batch Progress
             </h3>
-            <span className="text-xs text-text-muted">
+            <span className="text-xs text-slate-500">
               {totalData.success + totalData.failed} / {totalData.total} completed
             </span>
           </div>
 
           {/* Progress Bar */}
-          <div className="w-full h-2.5 bg-surface rounded-full overflow-hidden mb-4">
+          <div className="w-full h-2.5 bg-white/[0.06] rounded-full overflow-hidden mb-4">
             <div
-              className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-500 rounded-full"
+              className="h-full bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] transition-all duration-500 rounded-full"
               style={{ width: `${progressPct}%` }}
             />
           </div>
 
           {/* Stat Pills */}
           <div className="flex flex-wrap gap-3">
-            <span className="text-xs px-3 py-1.5 rounded-lg bg-surface font-medium text-text-secondary">
-              Total: <strong className="text-text-primary">{totalData.total}</strong>
+            <span className="text-xs px-3 py-1.5 rounded-lg bg-white/[0.04] font-medium text-slate-300">
+              Total: <strong className="text-white">{totalData.total}</strong>
             </span>
             {totalData.pending > 0 && (
-              <span className="text-xs px-3 py-1.5 rounded-lg bg-surface font-medium text-text-muted">
+              <span className="text-xs px-3 py-1.5 rounded-lg bg-white/[0.04] font-medium text-slate-500">
                 Pending: {totalData.pending}
               </span>
             )}
             {totalData.processing > 0 && (
-              <span className="text-xs px-3 py-1.5 rounded-lg bg-warning/10 font-medium text-warning">
+              <span className="text-xs px-3 py-1.5 rounded-lg bg-amber-500/10 font-medium text-amber-400">
                 Processing: {totalData.processing}
               </span>
             )}
-            <span className="text-xs px-3 py-1.5 rounded-lg bg-success/10 font-medium text-success">
+            <span className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/10 font-medium text-emerald-400">
               Success: {totalData.success}
             </span>
             {totalData.failed > 0 && (
-              <span className="text-xs px-3 py-1.5 rounded-lg bg-error/10 font-medium text-error">
+              <span className="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 font-medium text-red-400">
                 Failed: {totalData.failed}
               </span>
             )}
@@ -649,13 +649,13 @@ export default function BulkContent() {
 
           {/* Download All Buttons */}
           {successJobs.length > 0 && (
-            <div className="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-border/50">
+            <div className="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-white/[0.06]">
               {totalData.total === totalData.success && (
                 <div className="mr-auto">
                     {zipJob && zipJob.status === "success" ? (
                        <JobActionCell job={zipJob} onDownload={handleSmartDownload} />
                     ) : (zipJob && zipJob.status === "processing") || isZipping ? (
-                        <button disabled className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary/50 text-white text-xs font-bold uppercase tracking-wider cursor-not-allowed">
+                        <button disabled className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-500/50 text-white text-xs font-bold uppercase tracking-wider cursor-not-allowed">
                           <Loader2 className="w-4 h-4 animate-spin" />
                           Đang tạo file ZIP...
                         </button>
@@ -668,22 +668,22 @@ export default function BulkContent() {
                             }
                             handleCreateZip();
                           }}
-                          className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-primary to-primary-dark shadow-lg hover:shadow-xl text-white text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer"
+                          className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] shadow-lg hover:shadow-xl text-white text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer"
                         >
                           <FileDown className="w-4 h-4" />
                           Tải tất cả (ZIP) {zipJob?.error_message ? " (Thử lại)" : ""}
                         </button>
                     )}
-                    {zipJob?.status === "failed" && <p className="text-[10px] text-error mt-1">{zipJob.error_message}</p>}
+                    {zipJob?.status === "failed" && <p className="text-[10px] text-red-400 mt-1">{zipJob.error_message}</p>}
                 </div>
               )}
-              
+
               <button
                 onClick={handleDownloadAll}
                 className="
                   flex items-center gap-2 px-4 py-2.5 rounded-xl
-                  bg-success/10 hover:bg-success/20 border border-success/20
-                  text-success text-xs font-semibold
+                  bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20
+                  text-emerald-400 text-xs font-semibold
                   transition-all duration-200 cursor-pointer
                 "
               >
@@ -695,7 +695,7 @@ export default function BulkContent() {
                 className="
                   flex items-center gap-2 px-4 py-2.5 rounded-xl
                   bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20
-                  text-emerald-500 text-xs font-semibold
+                  text-emerald-400 text-xs font-semibold
                   transition-all duration-200 cursor-pointer
                 "
               >
@@ -706,8 +706,8 @@ export default function BulkContent() {
                 onClick={handleCopyAll}
                 className="
                   flex items-center gap-2 px-4 py-2.5 rounded-xl
-                  bg-accent/10 hover:bg-accent/20 border border-accent/20
-                  text-accent-light text-xs font-semibold
+                  bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20
+                  text-violet-300 text-xs font-semibold
                   transition-all duration-200 cursor-pointer
                 "
               >
@@ -718,8 +718,8 @@ export default function BulkContent() {
                 onClick={handleOpenAll}
                 className="
                   flex items-center gap-2 px-4 py-2.5 rounded-xl
-                  bg-primary/10 hover:bg-primary/20 border border-primary/20
-                  text-primary-light text-xs font-semibold
+                  bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20
+                  text-indigo-300 text-xs font-semibold
                   transition-all duration-200 cursor-pointer
                 "
               >
@@ -733,19 +733,19 @@ export default function BulkContent() {
 
       {/* ── Jobs Table ────────────────────────────────── */}
       {(batchId || jobs.length > 0) && (
-        <div className="rounded-2xl bg-surface-card border border-border shadow-lg overflow-hidden">
-          <div className="px-6 py-4 border-b border-border bg-surface-lighter/30 flex justify-between items-center">
-            <h3 className="font-semibold text-text-primary">
+        <div className="rounded-2xl bg-white/[0.04] border border-white/[0.08] shadow-lg overflow-hidden backdrop-blur-xl">
+          <div className="px-6 py-4 border-b border-white/[0.08] bg-white/[0.03] flex justify-between items-center">
+            <h3 className="font-semibold text-white">
               Jobs ({jobs.length})
             </h3>
-            <span className="text-xs text-text-muted bg-surface px-2.5 py-1 rounded-md font-mono">
+            <span className="text-xs text-slate-500 bg-white/[0.04] px-2.5 py-1 rounded-md font-mono">
               {batchId ? batchId.slice(0, 8) + '...' : 'Loading...'}
             </span>
           </div>
 
           {displayJobs.length === 0 ? (
-            <div className="p-10 text-center text-text-muted text-sm flex flex-col items-center gap-2">
-              <Loader2 className="w-5 h-5 animate-spin text-primary" />
+            <div className="p-10 text-center text-slate-500 text-sm flex flex-col items-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
               {channelMode
                 ? 'Discovering videos from channel...'
                 : 'Initializing batch jobs...'}
@@ -753,12 +753,12 @@ export default function BulkContent() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="bg-surface-lighter/50 text-xs uppercase text-text-muted">
+                <thead className="bg-white/[0.04] text-xs uppercase text-slate-500">
                   <tr>
                     <th className="px-6 py-3 font-medium w-8">
-                      <input 
-                        type="checkbox" 
-                        className="rounded border-border bg-surface text-primary focus:ring-primary/50"
+                      <input
+                        type="checkbox"
+                        className="rounded border-white/[0.10] bg-white/[0.06] text-indigo-500 focus:ring-indigo-500/50"
                         checked={successJobs.length > 0 && selectedJobIds.size === successJobs.length}
                         onChange={(e) => {
                           if (e.target.checked) {
@@ -775,17 +775,17 @@ export default function BulkContent() {
                     <th className="px-6 py-3 font-medium text-right">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/50">
+                <tbody className="divide-y divide-white/[0.05]">
                   {displayJobs.map((job, idx) => (
                     <tr
                       key={job.id}
-                      className="hover:bg-surface-lighter/20 transition-colors"
+                      className="hover:bg-white/[0.03] transition-colors"
                     >
                       <td className="px-6 py-3">
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           disabled={job.status !== 'success'}
-                          className="rounded border-border bg-surface text-primary focus:ring-primary/50 disabled:opacity-50"
+                          className="rounded border-white/[0.10] bg-white/[0.06] text-indigo-500 focus:ring-indigo-500/50 disabled:opacity-50"
                           checked={selectedJobIds.has(job.id)}
                           onChange={(e) => {
                             const next = new Set(selectedJobIds);
@@ -795,43 +795,43 @@ export default function BulkContent() {
                           }}
                         />
                       </td>
-                      <td className="px-6 py-3 text-text-muted text-xs">
+                      <td className="px-6 py-3 text-slate-500 text-xs">
                         {idx + 1}
                       </td>
                       <td className="px-6 py-3 max-w-[320px]">
                         <div className="flex items-start gap-2">
                           <div className="mt-0.5">
                             {job.local_mp3_path ? (
-                              <Music className="w-4 h-4 text-accent-light flex-shrink-0" />
+                              <Music className="w-4 h-4 text-violet-400 flex-shrink-0" />
                             ) : (
-                              <Video className="w-4 h-4 text-primary flex-shrink-0" />
+                              <Video className="w-4 h-4 text-indigo-400 flex-shrink-0" />
                             )}
                           </div>
                           <div className="flex-1 overflow-hidden">
-                            <span className="block truncate text-text-primary" title={job.original_url}>
+                            <span className="block truncate text-white" title={job.original_url}>
                               {job.original_url}
                             </span>
                             {job.file_size_mb > 0 && job.status === 'success' && (
-                              <span className="text-[10px] text-text-muted mt-1 font-medium px-1.5 py-0.5 bg-surface rounded inline-block">
+                              <span className="text-[10px] text-slate-500 mt-1 font-medium px-1.5 py-0.5 bg-white/[0.04] rounded inline-block">
                                 {job.file_size_mb} MB
                               </span>
                             )}
-                            
+
                             {/* Error message handling */}
                         {job.error_message && job.status === 'failed' && (
-                          <p className="text-[10px] text-error mt-0.5 truncate" title={job.error_message}>
+                          <p className="text-[10px] text-red-400 mt-0.5 truncate" title={job.error_message}>
                             {job.error_message}
                           </p>
                         )}
                         {/* Processing message (Scraping...) */}
                         {job.error_message && job.status === 'processing' && (
-                          <p className="text-[10px] text-warning mt-0.5 truncate">
+                          <p className="text-[10px] text-amber-400 mt-0.5 truncate">
                             {job.error_message}
                           </p>
                         )}
                         {/* Success Note / Filter Summary for channels */}
                         {job.error_message && job.status === 'success' && !job.direct_mp4_url && (
-                          <p className="text-[11px] font-medium text-success mt-1" title={job.error_message}>
+                          <p className="text-[11px] font-medium text-emerald-400 mt-1" title={job.error_message}>
                             <CheckCircle2 className="inline w-3 h-3 mr-1" />
                             {job.error_message}
                           </p>

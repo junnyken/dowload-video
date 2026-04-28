@@ -16,8 +16,8 @@ const YouTubeIcon = () => <svg viewBox="0 0 24 24" className="w-6 h-6" fill="cur
 const SpotifyIcon = () => <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.84.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.02.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.6.18-1.2.72-1.38 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.239.54-.959.72-1.56.3z"/></svg>;
 
 const platforms = [
-  { icon: TikTokIcon, label: 'TikTok', bg: 'bg-[#00f2fe]/10 text-black border-[#00f2fe]/20' },
-  { icon: XIcon, label: 'X', bg: 'bg-black text-white border-black' },
+  { icon: TikTokIcon, label: 'TikTok', bg: 'bg-[#00f2fe]/10 text-[#00f2fe] border-[#00f2fe]/20' },
+  { icon: XIcon, label: 'X', bg: 'bg-white/10 text-white border-white/20' },
   { icon: FacebookIcon, label: 'Facebook', bg: 'bg-[#1877F2]/10 text-[#1877F2] border-[#1877F2]/20' },
   { icon: InstagramIcon, label: 'Instagram', bg: 'bg-gradient-to-tr from-[#f09433] via-[#e6683c] to-[#bc1888] text-white border-transparent' },
   { icon: YouTubeIcon, label: 'YouTube', bg: 'bg-[#FF0000]/10 text-[#FF0000] border-[#FF0000]/20' },
@@ -38,45 +38,45 @@ export default function LandingPage() {
       {/* ── Floating Support Button ─────────────────────── */}
       <a
         href="#"
-        className="fixed bottom-6 right-4 md:right-8 bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] px-5 py-2.5 rounded-full shadow-xl flex items-center gap-2 hover:scale-105 hover:shadow-[#FBBF24]/40 transition-all duration-300 z-50 font-bold text-sm"
+        className="fixed bottom-6 right-4 md:right-8 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white px-5 py-2.5 rounded-full shadow-xl shadow-[#4F46E5]/40 flex items-center gap-2 hover:scale-105 hover:shadow-[#4F46E5]/60 transition-all duration-300 z-50 font-bold text-sm"
       >
-        <Heart className="w-4 h-4 fill-[#012622]" />
+        <Heart className="w-4 h-4 fill-white" />
         Ủng hộ
       </a>
 
       {/* ── Background Glows ────────────────────────────── */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-[900px] h-[500px] bg-gradient-to-br from-[#FDE047]/10 via-[#4ADE80]/10 to-[#FB923C]/10 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute top-[500px] right-0 w-[300px] h-[300px] bg-[#A3E635]/10 blur-[100px] rounded-full pointer-events-none" />
+      <div className="absolute top-[-200px] left-1/2 -translate-x-1/2 w-[900px] h-[600px] bg-gradient-to-br from-indigo-600/20 via-violet-600/15 to-purple-600/10 blur-[140px] rounded-full pointer-events-none" />
+      <div className="absolute top-[400px] right-[-200px] w-[500px] h-[500px] bg-indigo-500/10 blur-[120px] rounded-full pointer-events-none" />
 
       {/* ── MAIN CONTAINER ──────────────────────────────── */}
-      <div 
-        className="relative z-10" 
+      <div
+        className="relative z-10"
         style={{ width: '100%', maxWidth: '1024px', margin: '0 auto', padding: '0 16px', paddingTop: '120px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
       >
-        
+
         {/* ── Hero Section ────────────────────────────────── */}
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '80px' }}>
-          <div className="inline-flex items-center gap-2.5 px-6 py-3 rounded-full bg-[#012622] border border-[#A3E635]/50 shadow-md text-base md:text-lg font-black text-[#A3E635] uppercase tracking-widest" style={{ marginBottom: '32px' }}>
-            <Zap className="w-6 h-6 text-[#A3E635] fill-[#A3E635]" /> VŨ KHÍ TỐI THƯỢNG CHO CONTENT CREATOR
+          <div className="inline-flex items-center gap-2.5 px-6 py-3 rounded-full bg-indigo-950/80 border border-indigo-500/40 shadow-md text-base md:text-lg font-black text-indigo-300 uppercase tracking-widest" style={{ marginBottom: '32px' }}>
+            <Zap className="w-6 h-6 text-indigo-300 fill-indigo-300" /> VŨ KHÍ TỐI THƯỢNG CHO CONTENT CREATOR
           </div>
-          
+
           <h1 className="text-5xl md:text-7xl font-black text-center tracking-tighter leading-tight text-white" style={{ marginBottom: '24px' }}>
-            Bắt trọn video. <span className="bg-gradient-to-r from-[#FBBF24] to-[#FB923C] bg-clip-text text-transparent">Nét căng 4K.</span>
+            Bắt trọn video. <span className="bg-gradient-to-r from-[#818CF8] to-[#C084FC] bg-clip-text text-transparent">Nét căng 4K.</span>
           </h1>
-          
+
           <p className="text-base md:text-lg text-slate-300 text-center font-medium leading-relaxed" style={{ marginBottom: '40px', maxWidth: '672px' }}>
             Bóc tách video không logo và nhạc nền 320kbps từ TikTok, Douyin, YouTube chỉ trong 1 click. Giữ nguyên chất lượng gốc, sẵn sàng cho bạn sáng tạo.
           </p>
 
           {/* Feature Badges */}
           <div className="flex flex-wrap items-center justify-center gap-3" style={{ marginBottom: '40px' }}>
-            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#4ADE80]/10 text-[#4ADE80] text-sm font-semibold border border-[#4ADE80]/30 shadow-sm">
+            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-500/10 text-emerald-400 text-sm font-semibold border border-emerald-500/30 shadow-sm">
               <Ban className="w-4 h-4" /> Không quảng cáo
             </span>
-            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#FDE047]/10 text-[#FDE047] text-sm font-semibold border border-[#FDE047]/30 shadow-sm">
+            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-indigo-500/10 text-indigo-300 text-sm font-semibold border border-indigo-500/30 shadow-sm">
               <ShieldCheck className="w-4 h-4" /> An toàn & Bảo mật
             </span>
-            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#A3E635]/10 text-[#A3E635] text-sm font-semibold border border-[#A3E635]/30 shadow-sm">
+            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-violet-500/10 text-violet-300 text-sm font-semibold border border-violet-500/30 shadow-sm">
               <Zap className="w-4 h-4" /> Siêu tốc
             </span>
           </div>
@@ -84,7 +84,7 @@ export default function LandingPage() {
           {/* Platform Icons */}
           <div className="flex flex-wrap items-center justify-center gap-4">
             {platforms.map((p, i) => (
-              <div key={i} className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(253,224,71,0.15)] border ${p.bg} hover:scale-110 transition-transform cursor-pointer`}>
+              <div key={i} className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(99,102,241,0.15)] border ${p.bg} hover:scale-110 transition-transform cursor-pointer`}>
                 <p.icon />
               </div>
             ))}
@@ -93,7 +93,7 @@ export default function LandingPage() {
 
         {/* ── Tab Switcher ────────────────────────────────── */}
         <div style={{ width: '100%', display: 'flex', justifyContent: 'center', marginBottom: '60px' }}>
-          <div className="inline-flex bg-[#012622]/50 rounded-2xl p-2 shadow-md border border-slate-700/50 gap-2 backdrop-blur-md">
+          <div className="inline-flex bg-white/[0.04] rounded-2xl p-2 shadow-md border border-white/[0.08] gap-2 backdrop-blur-xl">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -105,8 +105,8 @@ export default function LandingPage() {
                     flex items-center gap-2.5 px-8 py-4 rounded-xl text-base md:text-lg font-bold
                     transition-all duration-200 cursor-pointer whitespace-nowrap
                     ${isActive
-                      ? 'bg-gradient-to-r from-[#FB923C] to-[#FBBF24] text-[#012622] shadow-md shadow-[#FBBF24]/30'
-                      : 'text-slate-300 hover:text-white hover:bg-white/10'
+                      ? 'bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white shadow-lg'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
                     }
                   `}
                 >
