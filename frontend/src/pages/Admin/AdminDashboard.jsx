@@ -169,7 +169,7 @@ export default function AdminDashboard() {
             <CreditCard 
               provider="ScraperAPI" 
               credits={scraperAPIcredits} 
-              threshold={100} 
+              threshold={10} 
               apiKey={stats.api_keys?.ScraperAPI}
             />
             <CreditCard 
@@ -184,7 +184,7 @@ export default function AdminDashboard() {
           <div className="p-6 bg-surface-card border border-border shadow-lg rounded-2xl">
             <h3 className="text-base font-semibold mb-2 text-text-primary flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-warning"/> Cảnh báo</h3>
             <p className="text-sm text-text-muted">
-              Tính năng này chỉ dành cho Admin. Khi API key hết Credits (Credit &lt; 100), hệ thống sẽ gửi cảnh báo tới Telegram.
+              Tính năng này chỉ dành cho Admin. Khi API key hết Credits (Credit &lt; 10), hệ thống sẽ gửi cảnh báo tới Telegram.
               Bạn có thể cập nhật các key này trong file <code>backend/.env</code>, sau đó khởi động lại tiến trình FastAPI (backend).
             </p>
           </div>

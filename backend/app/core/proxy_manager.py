@@ -102,7 +102,7 @@ async def update_provider_credits(provider: str, credits: int):
         else:
             supabase.table("provider_status").insert({"provider_name": provider, "remaining_credits": credits}).execute()
             
-        if credits < 100:
+        if credits < 10:
             from app.core.notifications import send_telegram_alert
             await send_telegram_alert(f"⚠️ *Low Credits Alert*\nProvider: {provider}\nRemaining: {credits}")
     except Exception as e:

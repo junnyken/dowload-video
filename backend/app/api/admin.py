@@ -34,7 +34,29 @@ async def get_admin_stats(request: Request):
         # Recent users
         recent_users_res = supabase.table("user_usage").select("*").order("last_reset_at", desc=True).limit(20).execute()
         
+        import httpx
         import os
+        
+        # Real-time ScraperAPI credits fetch
+        scraper_api_key = os.getenv("SCRAPERAPI_API_KEY", os.getenv("SCRAPERAPI_KEY", ""))
+        if scraper_api_key:
+            try:
+                # ScraperAPI account info endpoint
+                resp = httpx.get(f"http://api.scraperapi.com/account?api_key={scraper_api_key}", timeout=5.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    remaining = data.get("requestLimit", 0) - data.get("requestCount", 0)
+                    providers["ScraperAPI"] = remaining
+                    
+                    # Update DB for background sync
+                    supabase.table("provider_status").upsert({
+                        "provider_name": "ScraperAPI", 
+                        "remaining_credits": remaining
+                    }).execute()
+            except Exception as e:
+                print(f"ScraperAPI fetch error: {e}")
+                
+        total_users = len(usage_res.data) if usage_res.data else 0
         return {
             "success": True,
             "total_downloads_today": total_downloads,
