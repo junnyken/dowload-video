@@ -34,49 +34,45 @@ export default function LandingPage() {
   const [activeTab, setActiveTab] = useState('single');
 
   return (
-    <div className="font-['Inter',sans-serif] min-h-screen relative overflow-x-hidden pb-24">
-      {/* ── Floating Support Button ─────────────────────── */}
+    <div className="min-h-screen pb-24">
+      {/* Floating Support Button */}
       <a
         href="#"
-        className="fixed bottom-6 right-4 md:right-8 bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] px-5 py-2.5 rounded-full shadow-xl flex items-center gap-2 hover:scale-105 hover:shadow-[#FBBF24]/40 transition-all duration-300 z-50 font-bold text-sm"
+        className="fixed bottom-6 right-4 md:right-8 bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] px-5 py-2.5 rounded-full shadow-xl flex items-center gap-2 hover:scale-105 transition-all duration-300 z-50 font-bold text-sm"
       >
         <Heart className="w-4 h-4 fill-[#012622]" />
         Ủng hộ
       </a>
 
-      {/* ── Background Glows ────────────────────────────── */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-[900px] h-[500px] bg-gradient-to-br from-[#FDE047]/10 via-[#4ADE80]/10 to-[#FB923C]/10 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute top-[500px] right-0 w-[300px] h-[300px] bg-[#A3E635]/10 blur-[100px] rounded-full pointer-events-none" />
+      {/* Main container */}
+      <div className="w-full max-w-4xl mx-auto px-4 pt-28 flex flex-col items-center">
 
-      {/* ── MAIN CONTAINER ──────────────────────────────── */}
-      <div 
-        className="relative z-10" 
-        style={{ width: '100%', maxWidth: '1024px', margin: '0 auto', padding: '0 16px', paddingTop: '120px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
-      >
-        
-        {/* ── Hero Section ────────────────────────────────── */}
-        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '80px' }}>
-          <div className="inline-flex items-center gap-2.5 px-6 py-3 rounded-full bg-[#012622] border border-[#A3E635]/50 shadow-md text-base md:text-lg font-black text-[#A3E635] uppercase tracking-widest" style={{ marginBottom: '32px' }}>
-            <Zap className="w-6 h-6 text-[#A3E635] fill-[#A3E635]" /> VŨ KHÍ TỐI THƯỢNG CHO CONTENT CREATOR
+        {/* Hero Section */}
+        <section className="w-full flex flex-col items-center text-center mb-20">
+          <div className="inline-flex items-center gap-2.5 px-6 py-3 mb-8 rounded-full bg-[#012622] border border-[#A3E635]/50 shadow-md text-sm font-black text-[#A3E635] uppercase tracking-widest">
+            <Zap className="w-5 h-5 text-[#A3E635] fill-[#A3E635]" /> VŨ KHÍ TỐI THƯỢNG CHO CONTENT CREATOR
           </div>
-          
-          <h1 className="text-5xl md:text-7xl font-black text-center tracking-tighter leading-tight text-white" style={{ marginBottom: '24px' }}>
-            Bắt trọn video. <span className="bg-gradient-to-r from-[#FBBF24] to-[#FB923C] bg-clip-text text-transparent">Nét căng 4K.</span>
+
+          <h1 className="text-5xl md:text-7xl font-black tracking-tighter leading-tight text-white mb-6">
+            Bắt trọn video.{' '}
+            <span className="bg-gradient-to-r from-[#FBBF24] to-[#FB923C] bg-clip-text text-transparent">
+              Nét căng 4K.
+            </span>
           </h1>
-          
-          <p className="text-base md:text-lg text-slate-300 text-center font-medium leading-relaxed" style={{ marginBottom: '40px', maxWidth: '672px' }}>
+
+          <p className="max-w-2xl text-base md:text-lg text-slate-300 font-medium leading-relaxed mb-10">
             Bóc tách video không logo và nhạc nền 320kbps từ TikTok, Douyin, YouTube chỉ trong 1 click. Giữ nguyên chất lượng gốc, sẵn sàng cho bạn sáng tạo.
           </p>
 
           {/* Feature Badges */}
-          <div className="flex flex-wrap items-center justify-center gap-3" style={{ marginBottom: '40px' }}>
-            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#4ADE80]/10 text-[#4ADE80] text-sm font-semibold border border-[#4ADE80]/30 shadow-sm">
+          <div className="flex flex-wrap items-center justify-center gap-3 mb-10">
+            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#4ADE80]/10 text-[#4ADE80] text-sm font-semibold border border-[#4ADE80]/30">
               <Ban className="w-4 h-4" /> Không quảng cáo
             </span>
-            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#FDE047]/10 text-[#FDE047] text-sm font-semibold border border-[#FDE047]/30 shadow-sm">
+            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#FDE047]/10 text-[#FDE047] text-sm font-semibold border border-[#FDE047]/30">
               <ShieldCheck className="w-4 h-4" /> An toàn & Bảo mật
             </span>
-            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#A3E635]/10 text-[#A3E635] text-sm font-semibold border border-[#A3E635]/30 shadow-sm">
+            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#A3E635]/10 text-[#A3E635] text-sm font-semibold border border-[#A3E635]/30">
               <Zap className="w-4 h-4" /> Siêu tốc
             </span>
           </div>
@@ -84,15 +80,15 @@ export default function LandingPage() {
           {/* Platform Icons */}
           <div className="flex flex-wrap items-center justify-center gap-4">
             {platforms.map((p, i) => (
-              <div key={i} className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(253,224,71,0.15)] border ${p.bg} hover:scale-110 transition-transform cursor-pointer`}>
+              <div key={i} className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center border ${p.bg} hover:scale-110 transition-transform cursor-pointer`}>
                 <p.icon />
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* ── Tab Switcher ────────────────────────────────── */}
-        <div style={{ width: '100%', display: 'flex', justifyContent: 'center', marginBottom: '60px' }}>
+        {/* Tab Switcher */}
+        <div className="w-full flex justify-center mb-12">
           <div className="inline-flex bg-[#012622]/50 rounded-2xl p-2 shadow-md border border-slate-700/50 gap-2 backdrop-blur-md">
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -101,14 +97,11 @@ export default function LandingPage() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`
-                    flex items-center gap-2.5 px-8 py-4 rounded-xl text-base md:text-lg font-bold
-                    transition-all duration-200 cursor-pointer whitespace-nowrap
-                    ${isActive
+                  className={`flex items-center gap-2.5 px-8 py-4 rounded-xl text-base md:text-lg font-bold transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                    isActive
                       ? 'bg-gradient-to-r from-[#FB923C] to-[#FBBF24] text-[#012622] shadow-md shadow-[#FBBF24]/30'
                       : 'text-slate-300 hover:text-white hover:bg-white/10'
-                    }
-                  `}
+                  }`}
                 >
                   <Icon className="w-5 h-5" />
                   <span className="hidden sm:inline">{tab.label}</span>
@@ -119,13 +112,11 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* ── Tab Content ─────────────────────────────────── */}
-        <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-          <div style={{ width: '100%', maxWidth: '896px' }}>
-            {activeTab === 'single' && <DashboardContent />}
-            {activeTab === 'bulk' && <BulkContent />}
-            {activeTab === 'history' && <HistoryContent />}
-          </div>
+        {/* Tab Content */}
+        <div className="w-full">
+          {activeTab === 'single' && <DashboardContent />}
+          {activeTab === 'bulk' && <BulkContent />}
+          {activeTab === 'history' && <HistoryContent />}
         </div>
 
       </div>
