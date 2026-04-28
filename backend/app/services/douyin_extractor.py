@@ -298,37 +298,46 @@ async def _try_tikwm(url: str, quality: str = "video") -> Optional[Dict[str, Any
 
             data = body["data"]
 
-            direct_url = data.get("hdplay") or data.get("play") or ""
+            play_url   = data.get("play", "") or ""
+            hdplay_url = data.get("hdplay", "") or ""
+            wmplay_url = data.get("wmplay", "") or ""
+            audio_url  = data.get("music", "") or ""
+
+            for field in [play_url, hdplay_url, wmplay_url, audio_url]:
+                if field and field.startswith("//"):
+                    field = "https:" + field
+
+            # Pick best video URL based on quality
+            if quality.startswith("mp3"):
+                direct_url = audio_url or play_url
+            else:
+                direct_url = hdplay_url or play_url
+
             if not direct_url:
                 _safe_print("[TikWM] No video URL in response")
                 return None
 
-            if direct_url.startswith("//"):
-                direct_url = "https:" + direct_url
-
-            title = data.get("title", "Douyin Video")
+            title     = data.get("title", "TikTok Video")
             thumbnail = data.get("cover") or data.get("origin_cover") or ""
-            audio_url = data.get("music") or ""
 
-            if quality.startswith("mp3") and audio_url:
-                direct_url = audio_url
-
-            file_size = data.get("size", 0) or data.get("hd_size", 0)
+            file_size    = data.get("hd_size", 0) or data.get("size", 0)
             file_size_mb = round(file_size / (1024 * 1024), 2) if file_size else 0
-            
-            duration = int(data.get("duration", 0))
+            duration     = int(data.get("duration", 0))
 
             _safe_print(f"[TikWM] Success: {title[:60]} ({duration}s)")
             return {
-                "title": title,
+                "title":         title,
                 "thumbnail_url": thumbnail,
                 "direct_mp4_url": direct_url,
-                "audio_url": audio_url,
-                "file_size_mb": file_size_mb,
-                "duration": duration,
-                "quality": quality,
-                "original_url": url,
-                "provider": "tikwm",
+                "play_url":      play_url,
+                "hdplay_url":    hdplay_url,
+                "wmplay_url":    wmplay_url,
+                "audio_url":     audio_url,
+                "file_size_mb":  file_size_mb,
+                "duration":      duration,
+                "quality":       quality,
+                "original_url":  url,
+                "provider":      "tikwm",
             }
 
     except httpx.TimeoutException:

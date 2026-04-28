@@ -25,7 +25,7 @@ from typing import Dict, Any, List
 
 from app.core.proxy_manager import get_proxy_config_for_phase, dispatch_scraping_request
 from app.utils.link_resolver import resolve_short_url, is_douyin_url
-from app.services.douyin_extractor import extract_douyin_video_sync
+from app.services.douyin_extractor import extract_douyin_video_sync, _try_tikwm
 from app.services.cobalt_service import is_cobalt_available, extract_youtube_formats_via_cobalt
 
 # Ensure Deno is discoverable for yt-dlp JS challenges
@@ -382,17 +382,16 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     if is_douyin_url(url) or is_douyin_url(original_input_url):
         try:
             result = extract_douyin_video_sync(original_input_url, quality)
-            
+
             # Force server-side download for Douyin to prevent proxy-download 403s
             if result.get("direct_mp4_url") and not result.get("local_file_path"):
                 import uuid
                 import httpx
-                
+
                 os.makedirs("downloads", exist_ok=True)
                 ext = "mp3" if quality.startswith("mp3") else "mp4"
                 local_path = f"downloads/douyin_{uuid.uuid4().hex[:8]}.{ext}"
-                
-                # Download using httpx
+
                 try:
                     with httpx.Client(follow_redirects=True, timeout=120.0) as client:
                         with client.stream("GET", result["direct_mp4_url"]) as resp:
@@ -400,7 +399,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                             with open(local_path, "wb") as f:
                                 for chunk in resp.iter_bytes(chunk_size=65536):
                                     f.write(chunk)
-                                    
+
                     if os.path.exists(local_path):
                         result["local_file_path"] = local_path
                         result["file_size_mb"] = round(os.path.getsize(local_path) / (1024 * 1024), 2)
@@ -409,15 +408,70 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                             result["local_mp3_path"] = local_path
                 except Exception as dl_err:
                     print(f"[Downloader] Failed to download Douyin file locally: {dl_err}")
-                    # Fallback: keep direct_mp4_url and let frontend try proxy-download
-                    
+
             return result
         except Exception as dy_err:
             print(f"[Downloader] Douyin extractor failed: {dy_err}")
             raise ValueError(f"Không thể tải video Douyin: {dy_err}")
 
-    # Clean TikTok URLs to avoid yt-dlp extraction errors caused by tracking params
-    if "tiktok.com" in url.lower() and "?" in url:
+    # ── TikTok VN: TikWM first (fast, no local download needed) ────────
+    # TikWM returns signed CDN URLs directly — proxy-download streams them.
+    # yt-dlp is kept only as fallback in case TikWM fails.
+    is_tiktok = "tiktok.com" in url.lower()
+    if is_tiktok:
+        # Clean tracking params before calling TikWM
+        clean_url = url.split("?")[0] if "?" in url else url
+        try:
+            tikwm_res = asyncio.run(_try_tikwm(clean_url, quality))
+            if tikwm_res and tikwm_res.get("direct_mp4_url"):
+                print(f"[Downloader] TikWM success for {clean_url}")
+                # Build multi-format list so frontend can show HD / SD / Watermark / MP3 buttons
+                tikwm_formats = []
+                if tikwm_res.get("hdplay_url"):
+                    tikwm_formats.append({
+                        "type": "video", "label": "HD No Watermark",
+                        "resolution": "HD", "height": 1080, "ext": "mp4",
+                        "url": tikwm_res["hdplay_url"],
+                        "filesize_mb": tikwm_res.get("file_size_mb", 0),
+                        "requires_merge": False,
+                    })
+                if tikwm_res.get("play_url"):
+                    tikwm_formats.append({
+                        "type": "video", "label": "SD No Watermark",
+                        "resolution": "SD", "height": 540, "ext": "mp4",
+                        "url": tikwm_res["play_url"],
+                        "filesize_mb": 0, "requires_merge": False,
+                    })
+                if tikwm_res.get("wmplay_url"):
+                    tikwm_formats.append({
+                        "type": "video", "label": "With Watermark",
+                        "resolution": "SD", "height": 540, "ext": "mp4",
+                        "url": tikwm_res["wmplay_url"],
+                        "filesize_mb": 0, "requires_merge": False,
+                    })
+                if tikwm_res.get("audio_url"):
+                    tikwm_formats.append({
+                        "type": "audio", "label": "Music MP3",
+                        "ext": "mp3", "filesize_mb": 0, "bitrate": 128,
+                        "url": tikwm_res["audio_url"],
+                    })
+                return {
+                    "title":             tikwm_res["title"],
+                    "thumbnail_url":     tikwm_res["thumbnail_url"],
+                    "direct_mp4_url":    tikwm_res["direct_mp4_url"],
+                    "file_size_mb":      tikwm_res.get("file_size_mb", 0),
+                    "quality":           quality,
+                    "original_url":      clean_url,
+                    "duration":          tikwm_res.get("duration", 0),
+                    "available_formats": tikwm_formats,
+                    "max_merge_height":  0,
+                    "provider":          "tikwm",
+                }
+        except Exception as tw_err:
+            print(f"[Downloader] TikWM failed: {tw_err} — falling back to yt-dlp")
+
+    # Clean TikTok URLs before yt-dlp
+    if is_tiktok and "?" in url:
         url = url.split("?")[0]
 
 
@@ -449,50 +503,25 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     except Exception as primary_err:
         print(f"[Downloader] Primary extraction failed for {url}: {primary_err}")
 
-    # ── Phase 1.5: TikWM API fallback for TikTok ─────────────────
+    # ── Phase 1.5: TikWM fallback (yt-dlp failed, TikWM not yet tried) ─
+    # Reaches here only if TikWM was skipped (non-tiktok) or yt-dlp failed
+    # for a TikTok URL that somehow bypassed the early-return above.
     if info is None and is_tiktok:
-        print(f"[Downloader] Primary extraction failed, trying TikWM API for {url}")
-        from app.services.douyin_extractor import _try_tikwm
+        print(f"[Downloader] yt-dlp failed, retrying TikWM for {url}")
         tikwm_res = asyncio.run(_try_tikwm(url, quality))
         if tikwm_res and tikwm_res.get("direct_mp4_url"):
-            # Mock the 'info' dict structure so the rest of the code works
-            info = {
-                "id": url.split("/")[-1] if "/" in url else "tiktok",
-                "title": tikwm_res.get("title", "TikTok Video"),
-                "thumbnail": tikwm_res.get("thumbnail_url", ""),
-                "duration": tikwm_res.get("duration", 0),
-                "url": tikwm_res["direct_mp4_url"],
-                "ext": "mp4",
-                "filesize": tikwm_res.get("file_size_mb", 0) * 1024 * 1024 if tikwm_res.get("file_size_mb") else 0,
+            return {
+                "title":          tikwm_res.get("title", "TikTok Video"),
+                "thumbnail_url":  tikwm_res.get("thumbnail_url", ""),
+                "direct_mp4_url": tikwm_res["direct_mp4_url"],
+                "file_size_mb":   tikwm_res.get("file_size_mb", 0),
+                "quality":        quality,
+                "original_url":   url,
+                "duration":       tikwm_res.get("duration", 0),
+                "available_formats": [],
+                "max_merge_height":  0,
+                "provider":       "tikwm",
             }
-            if tikwm_res.get("audio_url"):
-                info["formats"] = [
-                    {"url": tikwm_res["audio_url"], "ext": "mp3", "vcodec": "none", "acodec": "mp3", "format_id": "audio", "type": "audio"}
-                ]
-            
-            # Since TikWM gives a direct link, if should_download=True, we must download it manually 
-            # because yt-dlp didn't run it!
-            if should_download:
-                import uuid
-                import httpx
-                
-                os.makedirs("downloads", exist_ok=True)
-                ext_dl = "mp3" if quality.startswith("mp3") else "mp4"
-                dl_url = tikwm_res["audio_url"] if ext_dl == "mp3" and tikwm_res.get("audio_url") else tikwm_res["direct_mp4_url"]
-                local_path = f"downloads/tiktok_{uuid.uuid4().hex[:8]}.{ext_dl}"
-                
-                try:
-                    with httpx.Client(follow_redirects=True, timeout=120.0) as client:
-                        with client.stream("GET", dl_url) as resp:
-                            resp.raise_for_status()
-                            with open(local_path, "wb") as f:
-                                for chunk in resp.iter_bytes(chunk_size=65536):
-                                    f.write(chunk)
-                    if os.path.exists(local_path):
-                        info["filepath"] = local_path
-                        info["filesize"] = os.path.getsize(local_path)
-                except Exception as dl_err:
-                    print(f"[Downloader] Failed to download TikTok file locally via TikWM: {dl_err}")
 
     # ── Phase 2: Scraping API fallback ───────────────────────────
     if info is None:
