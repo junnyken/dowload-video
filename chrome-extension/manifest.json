@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "VidGrab - One Click Downloader",
+  "version": "1.0.0",
+  "description": "Tải video không logo siêu tốc qua máy chủ VidGrab",
+  "permissions": [
+    "activeTab",
+    "downloads"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Tải bằng VidGrab"
+  },
+  "icons": {
+    "16": "assets/icon.png",
+    "48": "assets/icon.png",
+    "128": "assets/icon.png"
+  }
+}
