@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Download, CheckCircle2, XCircle,
   Loader2, AlertCircle, Link2,
-  Zap, Music, Video, Crown, Trash2, Clock, X
+  Zap, Music, Video, Crown, Trash2, Clock, X,
+  ClipboardPaste
 } from 'lucide-react';
 import UpgradeModal from './UpgradeModal';
 import JSZip from 'jszip';
@@ -400,6 +401,22 @@ export default function DashboardContent() {
               disabled={isLoading}
               className="w-full bg-transparent text-slate-900 placeholder-slate-500 text-sm sm:text-base md:text-lg font-semibold focus:outline-none disabled:opacity-50 h-14"
             />
+            {navigator.clipboard && (
+              <button
+                onClick={async () => {
+                  try {
+                    const text = await navigator.clipboard.readText();
+                    if (text) setUrl(text);
+                  } catch (err) {
+                    console.error("Failed to read clipboard contents: ", err);
+                  }
+                }}
+                className="p-2 text-slate-400 hover:text-orange-500 transition-colors"
+                title="Dán từ bộ nhớ tạm"
+              >
+                <ClipboardPaste className="w-5 h-5" />
+              </button>
+            )}
           </div>
           <button
             onClick={handleFetchLink}

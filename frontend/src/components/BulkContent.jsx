@@ -15,7 +15,8 @@ import {
   Table as TableIcon,
   Music,
   Video,
-  Crown
+  Crown,
+  ClipboardPaste
 } from 'lucide-react';
 
 import UpgradeModal from './UpgradeModal';
@@ -556,27 +557,48 @@ export default function BulkContent() {
           </div>
         )}
 
-        <textarea
-          rows={5}
-          value={urls}
-          onChange={handleUrlsChange}
-          onPaste={handleUrlsPaste}
-          placeholder={
-            channelMode
-              ? 'https://www.douyin.com/user/MS4wLjABAAAA...\nhttps://www.tiktok.com/@username\nhttps://www.youtube.com/playlist?list=...'
-              : 'https://www.youtube.com/watch?v=...\nhttps://www.tiktok.com/@user/video/...\nhttps://...'
-          }
-          className="
-            w-full px-4 py-3 rounded-xl
-            bg-surface border border-border
-            text-text-primary placeholder-text-muted
-            text-sm leading-relaxed cursor-text
-            resize-none
-            focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50
-            transition-all duration-200
-          "
-          disabled={isSubmitting}
-        />
+        <div className="relative">
+          <textarea
+            rows={5}
+            value={urls}
+            onChange={handleUrlsChange}
+            onPaste={handleUrlsPaste}
+            placeholder={
+              channelMode
+                ? 'https://www.douyin.com/user/MS4wLjABAAAA...\nhttps://www.tiktok.com/@username\nhttps://www.youtube.com/playlist?list=...'
+                : 'https://www.youtube.com/watch?v=...\nhttps://www.tiktok.com/@user/video/...\nhttps://...'
+            }
+            className="
+              w-full px-4 py-3 rounded-xl
+              bg-surface border border-border
+              text-text-primary placeholder-text-muted
+              text-sm leading-relaxed cursor-text
+              resize-none
+              focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50
+              transition-all duration-200
+            "
+            disabled={isSubmitting}
+          />
+          {navigator.clipboard && (
+            <button
+              onClick={async () => {
+                try {
+                  const text = await navigator.clipboard.readText();
+                  if (text) {
+                    const cleaned = cleanProfileUrls(text);
+                    setUrls(prev => prev ? prev + '\n' + cleaned : cleaned);
+                  }
+                } catch (err) {
+                  console.error("Failed to read clipboard: ", err);
+                }
+              }}
+              className="absolute top-2 right-2 p-1.5 bg-surface-lighter text-text-muted hover:text-primary border border-border rounded-lg transition-colors shadow-sm"
+              title="Dán từ bộ nhớ tạm"
+            >
+              <ClipboardPaste className="w-4 h-4" />
+            </button>
+          )}
+        </div>
 
         <div className="flex justify-end mt-4">
           <button
