@@ -292,12 +292,12 @@ export default function DashboardContent() {
   const showMergeOption = maxMergeHeight > maxCombinedHeight;
 
   return (
-    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+    <div className="w-full flex flex-col items-center">
       <Toast message={toastMessage} show={!!toastMessage} />
       <UpgradeModal isOpen={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />
 
       {/* ── Input Area ──────────────────────────────────── */}
-      <div className="relative group" style={{ width: '100%', maxWidth: '768px', marginBottom: '40px' }}>
+      <div className="relative group w-full max-w-3xl mb-10">
         <div className="absolute -inset-2 bg-gradient-to-r from-[#FDE047]/30 to-[#4ADE80]/30 rounded-[2rem] md:rounded-full blur-xl opacity-60 group-hover:opacity-100 transition duration-500" />
         <div className="relative bg-white flex flex-col md:flex-row items-center p-2.5 rounded-3xl md:rounded-full shadow-2xl shadow-[#FDE047]/10 border border-slate-100/80">
           <div className="flex-1 flex items-center gap-3 w-full px-5 md:px-6">
@@ -310,13 +310,13 @@ export default function DashboardContent() {
               onKeyDown={(e) => e.key === 'Enter' && handleFetchLink()}
               placeholder="🔗 Dán liên kết video hoặc kênh vào đây..."
               disabled={isLoading}
-              className="w-full bg-transparent text-slate-900 placeholder-slate-500 text-base md:text-lg font-semibold focus:outline-none disabled:opacity-50 h-14"
+              className="w-full bg-transparent text-slate-900 placeholder-slate-500 text-sm sm:text-base md:text-lg font-semibold focus:outline-none disabled:opacity-50 h-14"
             />
           </div>
           <button
             onClick={handleFetchLink}
             disabled={isLoading || !url.trim()}
-            className="w-full md:w-auto mt-3 md:mt-0 h-14 md:h-16 px-10 rounded-2xl md:rounded-full bg-gradient-to-r from-[#FB923C] to-[#FBBF24] hover:from-[#F97316] hover:to-[#F59E0B] text-[#012622] font-black shadow-2xl shadow-[#FBBF24]/40 active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 whitespace-nowrap text-base md:text-lg uppercase tracking-wider drop-shadow-md"
+            className="w-full md:w-auto mt-3 md:mt-0 h-14 md:h-16 px-6 sm:px-10 rounded-2xl md:rounded-full bg-gradient-to-r from-[#FB923C] to-[#FBBF24] hover:from-[#F97316] hover:to-[#F59E0B] text-[#012622] font-black shadow-2xl shadow-[#FBBF24]/40 active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 whitespace-nowrap text-base md:text-lg uppercase tracking-wider drop-shadow-md"
           >
             {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-6 h-6 fill-[#012622]" />}
             <span>{isLoading ? 'ĐANG XỬ LÝ...' : 'BÓC TÁCH NGAY'}</span>
@@ -336,8 +336,8 @@ export default function DashboardContent() {
 
       {/* ── Result Card ──────────────────────────────────── */}
       {videoInfo && (
-        <div style={{ width: '100%', maxWidth: '768px', marginBottom: '48px' }}>
-          <div className="bg-[#012622]/50 border border-slate-700/50 backdrop-blur-md rounded-3xl p-6 md:p-8 shadow-2xl shadow-[#FDE047]/5 overflow-hidden">
+        <div className="w-full max-w-3xl mb-12">
+          <div className="bg-[#012622]/50 border border-slate-700/50 backdrop-blur-md rounded-3xl p-5 sm:p-6 shadow-2xl shadow-[#FDE047]/5 overflow-hidden">
 
             {/* Thumbnail & Title */}
             <div className="flex flex-col sm:flex-row gap-5 items-center sm:items-start w-full mb-6">
@@ -573,8 +573,8 @@ export default function DashboardContent() {
 
       {/* ── Spotify Playlist / Album Track List ─────────── */}
       {spotifyData && (
-        <div style={{ width: '100%', maxWidth: '768px', marginBottom: '48px' }}>
-          <div className="bg-[#012622]/50 border border-[#1DB954]/30 backdrop-blur-md rounded-3xl p-6 md:p-8 shadow-2xl overflow-hidden">
+        <div className="w-full max-w-3xl mb-12">
+          <div className="bg-[#012622]/50 border border-[#1DB954]/30 backdrop-blur-md rounded-3xl p-5 sm:p-6 shadow-2xl overflow-hidden">
             {/* Header */}
             <div className="flex items-center gap-4 mb-6">
               {spotifyData.thumbnail && (
@@ -662,7 +662,7 @@ export default function DashboardContent() {
 
       {/* ── Recent Downloads ─────────────────────────────── */}
       {recentDownloads.length > 0 && (
-        <div style={{ width: '100%', maxWidth: '768px' }}>
+        <div className="w-full max-w-3xl">
           <h3 className="text-sm font-bold text-slate-300 mb-3 px-1">Tải gần đây</h3>
           <div className="space-y-2.5">
             {recentDownloads.map((job) => (
@@ -700,7 +700,7 @@ export default function DashboardContent() {
 
       {/* Empty State */}
       {!videoInfo && !spotifyData && recentDownloads.length === 0 && !isLoading && (
-        <div style={{ width: '100%', maxWidth: '768px', marginTop: '32px' }}>
+        <div className="w-full max-w-3xl mt-8">
           <div className="flex flex-col items-center justify-center py-16 px-6 bg-[#012622]/50 border border-slate-700/50 backdrop-blur-md rounded-[2rem] shadow-sm text-center">
             <div className="w-16 h-16 rounded-full bg-[#012622] flex items-center justify-center mb-5 border border-slate-700/50">
               <Clock className="w-8 h-8 text-slate-400" />

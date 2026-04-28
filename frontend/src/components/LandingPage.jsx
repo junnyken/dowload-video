@@ -45,22 +45,23 @@ export default function LandingPage() {
       </a>
 
       {/* Main container */}
-      <div className="w-full max-w-4xl mx-auto px-4 pt-28 flex flex-col items-center">
+      <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 pt-20 md:pt-28 flex flex-col items-center">
 
         {/* Hero Section */}
-        <section className="w-full flex flex-col items-center text-center mb-20">
-          <div className="inline-flex items-center gap-2.5 px-6 py-3 mb-8 rounded-full bg-[#012622] border border-[#A3E635]/50 shadow-md text-sm font-black text-[#A3E635] uppercase tracking-widest">
-            <Zap className="w-5 h-5 text-[#A3E635] fill-[#A3E635]" /> VŨ KHÍ TỐI THƯỢNG CHO CONTENT CREATOR
+        <section className="w-full flex flex-col items-center text-center mb-12 md:mb-20">
+          <div className="inline-flex items-center gap-2.5 px-6 py-3 mb-8 rounded-full bg-[#012622] border border-[#A3E635]/50 shadow-md text-sm font-black text-[#A3E635] uppercase tracking-widest max-w-full">
+            <Zap className="w-5 h-5 text-[#A3E635] fill-[#A3E635] flex-shrink-0" />
+            <span className="truncate">VŨ KHÍ TỐI THƯỢNG CHO CONTENT CREATOR</span>
           </div>
 
-          <h1 className="text-5xl md:text-7xl font-black tracking-tighter leading-tight text-white mb-6">
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tighter leading-tight text-white mb-6">
             Bắt trọn video.{' '}
             <span className="bg-gradient-to-r from-[#FBBF24] to-[#FB923C] bg-clip-text text-transparent">
               Nét căng 4K.
             </span>
           </h1>
 
-          <p className="max-w-2xl text-base md:text-lg text-slate-300 font-medium leading-relaxed mb-10">
+          <p className="max-w-2xl text-sm sm:text-base md:text-lg text-slate-300 font-medium leading-relaxed mb-10">
             Bóc tách video không logo và nhạc nền 320kbps từ TikTok, Douyin, YouTube chỉ trong 1 click. Giữ nguyên chất lượng gốc, sẵn sàng cho bạn sáng tạo.
           </p>
 
@@ -88,8 +89,8 @@ export default function LandingPage() {
         </section>
 
         {/* Tab Switcher */}
-        <div className="w-full flex justify-center mb-12">
-          <div className="inline-flex bg-[#012622]/50 rounded-2xl p-2 shadow-md border border-slate-700/50 gap-2 backdrop-blur-md">
+        <div className="w-full flex justify-center mb-8 md:mb-12">
+          <div className="inline-flex bg-[#012622]/50 rounded-2xl p-1.5 sm:p-2 shadow-md border border-slate-700/50 gap-1 sm:gap-2 backdrop-blur-md">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -97,7 +98,7 @@ export default function LandingPage() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2.5 px-8 py-4 rounded-xl text-base md:text-lg font-bold transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                  className={`flex items-center gap-2.5 px-4 py-3 sm:px-8 sm:py-4 rounded-xl text-sm sm:text-base md:text-lg font-bold transition-all duration-200 cursor-pointer whitespace-nowrap ${
                     isActive
                       ? 'bg-gradient-to-r from-[#FB923C] to-[#FBBF24] text-[#012622] shadow-md shadow-[#FBBF24]/30'
                       : 'text-slate-300 hover:text-white hover:bg-white/10'
