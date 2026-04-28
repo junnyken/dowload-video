@@ -34,7 +34,7 @@ export default function LandingPage() {
   const [activeTab, setActiveTab] = useState('single');
 
   return (
-    <div className="min-h-screen pb-24">
+    <div className="min-h-screen relative overflow-hidden pb-24">
       {/* Floating Support Button */}
       <a
         href="#"
@@ -45,7 +45,7 @@ export default function LandingPage() {
       </a>
 
       {/* Main container */}
-      <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 pt-20 md:pt-28 flex flex-col items-center">
+      <div className="relative z-10 w-full max-w-4xl mx-auto px-4 sm:px-6 pt-20 md:pt-28 flex flex-col items-center">
 
         {/* Hero Section */}
         <section className="w-full flex flex-col items-center text-center mb-12 md:mb-20">
