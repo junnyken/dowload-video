@@ -14,6 +14,23 @@
     />
   </head>
   <body>
+    <!-- Security: DevTools Detection Overlay -->
+    <div id="security-overlay" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.95);align-items:center;justify-content:center;flex-direction:column;gap:16px;color:#fff;font-family:'Be Vietnam Pro',sans-serif;">
+      <div style="font-size:48px;">🛡️</div>
+      <h2 style="font-size:24px;font-weight:800;color:#FBBF24;">Phát hiện Developer Tools</h2>
+      <p style="font-size:14px;color:#94a3b8;max-width:400px;text-align:center;line-height:1.6;">
+        Vui lòng đóng Developer Tools để tiếp tục sử dụng VidGrab.<br/>
+        Hành vi phân tích mã nguồn vi phạm Điều khoản sử dụng.
+      </p>
+      <button onclick="document.getElementById('security-overlay').style.display='none'" style="margin-top:12px;padding:10px 32px;border-radius:12px;background:linear-gradient(to right,#FBBF24,#F59E0B);color:#012622;font-weight:800;border:none;cursor:pointer;font-size:14px;">
+        Tôi đã đóng DevTools
+      </button>
+    </div>
+    <noscript>
+      <div style="padding:40px;text-align:center;font-family:sans-serif;color:#fff;background:#012622;min-height:100vh;display:flex;align-items:center;justify-content:center;">
+        <p>VidGrab yêu cầu JavaScript để hoạt động. Vui lòng bật JavaScript trong trình duyệt.</p>
+      </div>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

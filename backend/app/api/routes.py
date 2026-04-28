@@ -56,7 +56,7 @@ class SpotifyFetchRequest(BaseModel):
     url: str
 
 @router.post("/fetch-spotify")
-@limiter.limit("10000/minute")
+@limiter.limit("30/minute")
 async def fetch_spotify(payload: SpotifyFetchRequest, request: Request):
     if not is_spotify_url(payload.url):
         raise HTTPException(status_code=400, detail="Invalid Spotify URL")
@@ -82,7 +82,7 @@ async def fetch_spotify(payload: SpotifyFetchRequest, request: Request):
 # ── POST /fetch-link  (single, instant) ──────────────────────────────
 
 @router.post("/fetch-link")
-@limiter.limit("10000/minute")
+@limiter.limit("30/minute")
 async def fetch_link(payload: FetchLinkRequest, request: Request):
     if not payload.url:
         raise HTTPException(status_code=400, detail="URL is required")
@@ -142,7 +142,7 @@ async def fetch_link(payload: FetchLinkRequest, request: Request):
 # ── POST /bulk-download  (videos + channels) ────────────────────────
 
 @router.post("/bulk-download")
-@limiter.limit("10000/minute")
+@limiter.limit("30/minute")
 async def bulk_download(payload: BulkDownloadRequest, request: Request):
     if not payload.urls or len(payload.urls) == 0:
         raise HTTPException(status_code=400, detail="No URLs provided")
@@ -223,7 +223,7 @@ class BulkZipRequest(BaseModel):
     batch_id: str
 
 @router.post("/bulk-zip")
-@limiter.limit("10000/minute")
+@limiter.limit("30/minute")
 async def bulk_zip(payload: BulkZipRequest, request: Request):
     if not payload.batch_id:
         raise HTTPException(status_code=400, detail="Batch ID required")
