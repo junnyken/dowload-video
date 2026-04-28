@@ -98,6 +98,7 @@ export default function BulkContent() {
   const [quotaInfo, setQuotaInfo] = useState(null);
   const [selectedJobIds, setSelectedJobIds] = useState(new Set());
   const autoDownloadedRefs = useRef(new Set());
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
     fetch(`${API}/quota`)
@@ -317,7 +318,7 @@ export default function BulkContent() {
     }
 
     return () => clearInterval(intervalId);
-  }, [batchId, autoDownload, handleSmartDownload]);
+  }, [batchId, autoDownload, handleSmartDownload, refreshTrigger]);
 
   // ── Status Badge ───────────────────────────────────────────────────
   const getStatusBadge = (status) => {
@@ -379,6 +380,7 @@ export default function BulkContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ batch_id: batchId })
       });
+      setRefreshTrigger(prev => prev + 1);
     } catch (e) {
       console.error(e);
       alert('Không thể tạo file ZIP.');
