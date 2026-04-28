@@ -281,16 +281,16 @@ export default function DashboardContent() {
   const showMergeOption = maxMergeHeight > maxCombinedHeight;
 
   return (
-    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+    <div className="w-full flex flex-col items-center">
       <Toast message={toastMessage} show={!!toastMessage} />
       <UpgradeModal isOpen={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />
 
       {/* ── Input Area ──────────────────────────────────── */}
-      <div className="relative group" style={{ width: '100%', maxWidth: '768px', marginBottom: '40px' }}>
-        <div className="absolute -inset-2 bg-gradient-to-r from-[#4F46E5]/30 to-[#7C3AED]/30 rounded-[2rem] blur-xl opacity-60 group-hover:opacity-100 transition duration-500" />
-        <div className="relative bg-white/[0.06] border border-white/[0.10] flex flex-col md:flex-row items-center p-2.5 rounded-3xl shadow-inner shadow-black/20">
-          <div className="flex-1 flex items-center gap-3 w-full px-5 md:px-6">
-            <Link2 className="w-6 h-6 text-slate-400 flex-shrink-0" />
+      <div className="relative group w-full max-w-3xl mb-10">
+        <div className="absolute -inset-1.5 bg-gradient-to-r from-[#4F46E5]/25 to-[#7C3AED]/25 rounded-3xl blur-xl opacity-50 group-hover:opacity-80 transition duration-500" />
+        <div className="relative bg-white/[0.06] border border-white/[0.10] flex flex-col md:flex-row items-center gap-2 p-2 rounded-3xl">
+          <div className="flex-1 flex items-center gap-3 w-full px-4">
+            <Link2 className="w-5 h-5 text-slate-500 flex-shrink-0" />
             <input
               type="text"
               value={url}
@@ -299,13 +299,13 @@ export default function DashboardContent() {
               onKeyDown={(e) => e.key === 'Enter' && handleFetchLink()}
               placeholder="Dán liên kết video hoặc kênh vào đây..."
               disabled={isLoading}
-              className="w-full bg-transparent text-white placeholder-slate-500 text-base md:text-lg font-semibold focus:outline-none focus:ring-0 disabled:opacity-50 h-14"
+              className="w-full bg-transparent text-white placeholder-slate-500 text-base font-semibold focus:outline-none disabled:opacity-50 h-12"
             />
           </div>
           <button
             onClick={handleFetchLink}
             disabled={isLoading || !url.trim()}
-            className="w-full md:w-auto mt-3 md:mt-0 h-14 md:h-16 px-10 rounded-2xl md:rounded-full bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] hover:from-[#4338CA] hover:to-[#6D28D9] text-white font-black shadow-[0_0_30px_rgba(79,70,229,0.4)] hover:shadow-[0_0_40px_rgba(79,70,229,0.6)] active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 whitespace-nowrap text-base md:text-lg uppercase tracking-wider"
+            className="w-full md:w-auto h-12 px-8 rounded-2xl bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] hover:from-[#4338CA] hover:to-[#6D28D9] text-white font-black shadow-[0_0_24px_rgba(79,70,229,0.4)] hover:shadow-[0_0_36px_rgba(79,70,229,0.6)] active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 whitespace-nowrap text-sm uppercase tracking-wider"
           >
             {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-6 h-6 fill-white" />}
             <span>{isLoading ? 'ĐANG XỬ LÝ...' : 'BÓC TÁCH NGAY'}</span>
@@ -325,8 +325,8 @@ export default function DashboardContent() {
 
       {/* ── Result Card ──────────────────────────────────── */}
       {videoInfo && (
-        <div style={{ width: '100%', maxWidth: '768px', marginBottom: '48px' }}>
-          <div className="bg-white/[0.04] border border-indigo-500/20 backdrop-blur-xl rounded-3xl p-6 md:p-8 shadow-2xl overflow-hidden">
+        <div className="w-full max-w-3xl mb-12">
+          <div className="bg-white/[0.04] border border-indigo-500/20 backdrop-blur-xl rounded-3xl p-6 shadow-2xl overflow-hidden">
 
             {/* Thumbnail & Title */}
             <div className="flex flex-col sm:flex-row gap-5 items-center sm:items-start w-full mb-6">
@@ -393,7 +393,7 @@ export default function DashboardContent() {
                         <button
                           onClick={handleMergeDownload}
                           disabled={downloadingId === 'merge_4k'}
-                          className="w-full flex items-center justify-between px-5 py-3.5 rounded-2xl bg-gradient-to-r from-[#FBBF24]/15 to-[#F59E0B]/15 border border-[#FBBF24]/40 hover:border-[#FBBF24]/70 text-white transition-all disabled:opacity-60 active:scale-[0.99] group"
+                          className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-gradient-to-r from-[#FBBF24]/15 to-[#F59E0B]/15 border border-[#FBBF24]/40 hover:border-[#FBBF24]/70 text-white transition-all disabled:opacity-60 active:scale-[0.99] group"
                         >
                           <div className="flex items-center gap-3">
                             <Crown className="w-5 h-5 text-[#FBBF24]" />
@@ -414,7 +414,7 @@ export default function DashboardContent() {
                           key={`v-${i}`}
                           onClick={() => fmt.requires_merge ? handleMergeDownload(fmt.height) : handleFormatDownload(fmt)}
                           disabled={downloadingId === `merge_${fmt.height}`}
-                          className="w-full flex items-center justify-between px-5 py-3.5 rounded-2xl bg-white/[0.04] border border-white/[0.08] hover:border-indigo-500/30 hover:bg-white/[0.07] text-white transition-all duration-300 disabled:opacity-60 active:scale-[0.99] group"
+                          className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] hover:border-indigo-500/30 hover:bg-white/[0.07] text-white transition-all duration-300 disabled:opacity-60 active:scale-[0.99] group"
                         >
                           <div className="flex items-center gap-3">
                             <Video className="w-5 h-5 text-indigo-400" />
@@ -468,7 +468,7 @@ export default function DashboardContent() {
                           key={`a-${i}`}
                           onClick={() => fmt.requires_merge ? handleMergeDownload(fmt.ext) : handleFormatDownload(fmt)}
                           disabled={downloadingId === `merge_${fmt.ext}`}
-                          className="w-full flex items-center justify-between px-5 py-3.5 rounded-2xl bg-white/[0.04] border border-white/[0.08] hover:border-indigo-500/30 hover:bg-white/[0.07] text-white transition-all duration-300 disabled:opacity-60 active:scale-[0.99] group"
+                          className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] hover:border-indigo-500/30 hover:bg-white/[0.07] text-white transition-all duration-300 disabled:opacity-60 active:scale-[0.99] group"
                         >
                           <div className="flex items-center gap-3">
                             <Music className="w-5 h-5 text-violet-400" />
@@ -561,8 +561,8 @@ export default function DashboardContent() {
 
       {/* ── Spotify Playlist / Album Track List ─────────── */}
       {spotifyData && (
-        <div style={{ width: '100%', maxWidth: '768px', marginBottom: '48px' }}>
-          <div className="bg-white/[0.04] border border-[#1DB954]/30 backdrop-blur-xl rounded-3xl p-6 md:p-8 shadow-2xl overflow-hidden">
+        <div className="w-full max-w-3xl mb-12">
+          <div className="bg-white/[0.04] border border-[#1DB954]/30 backdrop-blur-xl rounded-3xl p-6 shadow-2xl overflow-hidden">
             {/* Header */}
             <div className="flex items-center gap-4 mb-6">
               {spotifyData.thumbnail && (
@@ -646,11 +646,11 @@ export default function DashboardContent() {
 
       {/* ── Recent Downloads ─────────────────────────────── */}
       {recentDownloads.length > 0 && (
-        <div style={{ width: '100%', maxWidth: '768px' }}>
+        <div className="w-full max-w-3xl">
           <h3 className="text-sm font-bold text-slate-400 mb-3 px-1">Tải gần đây</h3>
           <div className="space-y-2.5">
             {recentDownloads.map((job) => (
-              <div key={job.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3.5 md:p-4 rounded-2xl bg-white/[0.03] border border-white/[0.07] backdrop-blur-sm shadow-sm hover:bg-white/[0.05] transition-colors">
+              <div key={job.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.07] backdrop-blur-sm shadow-sm hover:bg-white/[0.05] transition-colors">
                 <div className="flex-1 min-w-0 w-full">
                   <h5 className="text-sm font-bold text-white truncate mb-1">{job.title || job.slugified_name || '...'}</h5>
                   <div className="flex items-center gap-2 text-xs font-medium">
@@ -684,8 +684,8 @@ export default function DashboardContent() {
 
       {/* Empty State */}
       {!videoInfo && !spotifyData && recentDownloads.length === 0 && !isLoading && (
-        <div style={{ width: '100%', maxWidth: '768px', marginTop: '32px' }}>
-          <div className="flex flex-col items-center justify-center py-16 px-6 bg-white/[0.04] border border-white/[0.08] backdrop-blur-xl rounded-3xl shadow-sm text-center">
+        <div className="w-full max-w-3xl mt-8">
+          <div className="flex flex-col items-center justify-center py-12 px-6 bg-white/[0.04] border border-white/[0.08] backdrop-blur-xl rounded-3xl shadow-sm text-center">
             <div className="w-16 h-16 rounded-full bg-white/[0.06] flex items-center justify-center mb-5 border border-white/[0.08]">
               <Clock className="w-8 h-8 text-slate-500" />
             </div>

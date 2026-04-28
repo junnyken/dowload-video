@@ -582,9 +582,9 @@ export default function BulkContent() {
             disabled={isSubmitting || !urls.trim()}
             className="
               flex items-center gap-2
-              px-5 py-2.5 rounded-xl
+              py-3 px-8 rounded-xl
               bg-gradient-to-r from-[#4F46E5] to-[#7C3AED]
-              text-white text-sm font-semibold cursor-pointer
+              text-white text-sm font-bold cursor-pointer
               shadow-lg shadow-indigo-500/25
               hover:shadow-xl hover:shadow-indigo-500/30
               active:scale-[0.98]
@@ -604,7 +604,7 @@ export default function BulkContent() {
 
       {/* ── Progress Summary Bar ──────────────────────── */}
       {summary && totalData.total > 0 && (
-        <div className="p-5 rounded-2xl bg-white/[0.04] border border-white/[0.08] shadow-lg backdrop-blur-xl">
+        <div className="p-6 rounded-2xl bg-white/[0.04] border border-white/[0.08] shadow-lg backdrop-blur-xl">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-white">
               Batch Progress
@@ -655,7 +655,7 @@ export default function BulkContent() {
                     {zipJob && zipJob.status === "success" ? (
                        <JobActionCell job={zipJob} onDownload={handleSmartDownload} />
                     ) : (zipJob && zipJob.status === "processing") || isZipping ? (
-                        <button disabled className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-500/50 text-white text-xs font-bold uppercase tracking-wider cursor-not-allowed">
+                        <button disabled className="flex items-center gap-2 py-2.5 px-5 rounded-xl bg-indigo-500/50 text-white text-xs font-bold uppercase tracking-wider cursor-not-allowed">
                           <Loader2 className="w-4 h-4 animate-spin" />
                           Đang tạo file ZIP...
                         </button>
@@ -668,7 +668,7 @@ export default function BulkContent() {
                             }
                             handleCreateZip();
                           }}
-                          className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] shadow-lg hover:shadow-xl text-white text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer"
+                          className="flex items-center gap-2 py-2.5 px-5 rounded-xl bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] shadow-lg hover:shadow-xl text-white text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer"
                         >
                           <FileDown className="w-4 h-4" />
                           Tải tất cả (ZIP) {zipJob?.error_message ? " (Thử lại)" : ""}
@@ -681,7 +681,7 @@ export default function BulkContent() {
               <button
                 onClick={handleDownloadAll}
                 className="
-                  flex items-center gap-2 px-4 py-2.5 rounded-xl
+                  flex items-center gap-2 py-2.5 px-5 rounded-xl
                   bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20
                   text-emerald-400 text-xs font-semibold
                   transition-all duration-200 cursor-pointer
@@ -693,7 +693,7 @@ export default function BulkContent() {
               <button
                 onClick={handleExportCSV}
                 className="
-                  flex items-center gap-2 px-4 py-2.5 rounded-xl
+                  flex items-center gap-2 py-2.5 px-5 rounded-xl
                   bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20
                   text-emerald-400 text-xs font-semibold
                   transition-all duration-200 cursor-pointer
@@ -705,7 +705,7 @@ export default function BulkContent() {
               <button
                 onClick={handleCopyAll}
                 className="
-                  flex items-center gap-2 px-4 py-2.5 rounded-xl
+                  flex items-center gap-2 py-2.5 px-5 rounded-xl
                   bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20
                   text-violet-300 text-xs font-semibold
                   transition-all duration-200 cursor-pointer
@@ -717,7 +717,7 @@ export default function BulkContent() {
               <button
                 onClick={handleOpenAll}
                 className="
-                  flex items-center gap-2 px-4 py-2.5 rounded-xl
+                  flex items-center gap-2 py-2.5 px-5 rounded-xl
                   bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20
                   text-indigo-300 text-xs font-semibold
                   transition-all duration-200 cursor-pointer

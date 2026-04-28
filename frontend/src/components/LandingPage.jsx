@@ -1,13 +1,9 @@
 import { useState } from 'react';
-import {
-  Download, Layers, History, Heart,
-  Zap, Ban, ShieldCheck
-} from 'lucide-react';
+import { Download, Layers, History, Heart, Zap, Ban, ShieldCheck } from 'lucide-react';
 import DashboardContent from './DashboardContent';
 import BulkContent from './BulkContent';
 import HistoryContent from './HistoryContent';
 
-// ── Platform Icons ──────────────────────────────────────────
 const TikTokIcon = () => <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 0010.86 4.46V13.2a8.16 8.16 0 005.58 2.2v-3.45a4.85 4.85 0 01-3.77-1.49V6.69h3.77z"/></svg>;
 const XIcon = () => <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>;
 const FacebookIcon = () => <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor"><path d="M24 12.07C24 5.41 18.63 0 12 0S0 5.41 0 12.07c0 6.02 4.39 11.01 10.13 11.93v-8.44H7.08v-3.49h3.04V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.69.24 2.69.24v2.97h-1.51c-1.49 0-1.96.93-1.96 1.89v2.26h3.33l-.53 3.49h-2.8v8.44C19.61 23.08 24 18.09 24 12.07z"/></svg>;
@@ -16,12 +12,12 @@ const YouTubeIcon = () => <svg viewBox="0 0 24 24" className="w-6 h-6" fill="cur
 const SpotifyIcon = () => <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.84.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.02.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.6.18-1.2.72-1.38 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.239.54-.959.72-1.56.3z"/></svg>;
 
 const platforms = [
-  { icon: TikTokIcon, label: 'TikTok', bg: 'bg-[#00f2fe]/10 text-[#00f2fe] border-[#00f2fe]/20' },
-  { icon: XIcon, label: 'X', bg: 'bg-white/10 text-white border-white/20' },
-  { icon: FacebookIcon, label: 'Facebook', bg: 'bg-[#1877F2]/10 text-[#1877F2] border-[#1877F2]/20' },
-  { icon: InstagramIcon, label: 'Instagram', bg: 'bg-gradient-to-tr from-[#f09433] via-[#e6683c] to-[#bc1888] text-white border-transparent' },
-  { icon: YouTubeIcon, label: 'YouTube', bg: 'bg-[#FF0000]/10 text-[#FF0000] border-[#FF0000]/20' },
-  { icon: SpotifyIcon, label: 'Spotify', bg: 'bg-[#1DB954]/10 text-[#1DB954] border-[#1DB954]/20' },
+  { icon: TikTokIcon, bg: 'bg-[#00f2fe]/10 text-[#00f2fe] border-[#00f2fe]/20' },
+  { icon: XIcon, bg: 'bg-white/10 text-white border-white/20' },
+  { icon: FacebookIcon, bg: 'bg-[#1877F2]/10 text-[#1877F2] border-[#1877F2]/20' },
+  { icon: InstagramIcon, bg: 'bg-gradient-to-tr from-[#f09433] via-[#e6683c] to-[#bc1888] text-white border-transparent' },
+  { icon: YouTubeIcon, bg: 'bg-[#FF0000]/10 text-[#FF0000] border-[#FF0000]/20' },
+  { icon: SpotifyIcon, bg: 'bg-[#1DB954]/10 text-[#1DB954] border-[#1DB954]/20' },
 ];
 
 const tabs = [
@@ -34,66 +30,70 @@ export default function LandingPage() {
   const [activeTab, setActiveTab] = useState('single');
 
   return (
-    <div className="font-['Inter',sans-serif] min-h-screen relative overflow-x-hidden pb-24">
-      {/* ── Floating Support Button ─────────────────────── */}
+    <div className="min-h-screen relative overflow-x-hidden pb-24">
+      {/* Floating Support Button */}
       <a
         href="#"
-        className="fixed bottom-6 right-4 md:right-8 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white px-5 py-2.5 rounded-full shadow-xl shadow-[#4F46E5]/40 flex items-center gap-2 hover:scale-105 hover:shadow-[#4F46E5]/60 transition-all duration-300 z-50 font-bold text-sm"
+        className="fixed bottom-6 right-4 md:right-8 z-50 flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white text-sm font-bold shadow-lg shadow-[#4F46E5]/40 hover:shadow-[#4F46E5]/60 hover:scale-105 transition-all duration-300"
       >
         <Heart className="w-4 h-4 fill-white" />
         Ủng hộ
       </a>
 
-      {/* ── Background Glows ────────────────────────────── */}
+      {/* Background Glows */}
       <div className="absolute top-[-200px] left-1/2 -translate-x-1/2 w-[900px] h-[600px] bg-gradient-to-br from-indigo-600/20 via-violet-600/15 to-purple-600/10 blur-[140px] rounded-full pointer-events-none" />
       <div className="absolute top-[400px] right-[-200px] w-[500px] h-[500px] bg-indigo-500/10 blur-[120px] rounded-full pointer-events-none" />
 
-      {/* ── MAIN CONTAINER ──────────────────────────────── */}
-      <div
-        className="relative z-10"
-        style={{ width: '100%', maxWidth: '1024px', margin: '0 auto', padding: '0 16px', paddingTop: '120px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
-      >
+      {/* Main container */}
+      <div className="relative z-10 w-full max-w-4xl mx-auto px-4 pt-28 flex flex-col items-center">
 
-        {/* ── Hero Section ────────────────────────────────── */}
-        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '80px' }}>
-          <div className="inline-flex items-center gap-2.5 px-6 py-3 rounded-full bg-indigo-950/80 border border-indigo-500/40 shadow-md text-base md:text-lg font-black text-indigo-300 uppercase tracking-widest" style={{ marginBottom: '32px' }}>
-            <Zap className="w-6 h-6 text-indigo-300 fill-indigo-300" /> VŨ KHÍ TỐI THƯỢNG CHO CONTENT CREATOR
+        {/* ── Hero ── */}
+        <section className="w-full flex flex-col items-center text-center mb-16">
+          <div className="inline-flex items-center gap-2 px-5 py-2.5 mb-8 rounded-full bg-indigo-950/80 border border-indigo-500/40 text-sm font-black text-indigo-300 uppercase tracking-widest">
+            <Zap className="w-4 h-4 fill-indigo-300" />
+            VŨ KHÍ TỐI THƯỢNG CHO CONTENT CREATOR
           </div>
 
-          <h1 className="text-5xl md:text-7xl font-black text-center tracking-tighter leading-tight text-white" style={{ marginBottom: '24px' }}>
-            Bắt trọn video. <span className="bg-gradient-to-r from-[#818CF8] to-[#C084FC] bg-clip-text text-transparent">Nét căng 4K.</span>
+          <h1 className="text-5xl md:text-7xl font-black tracking-tighter leading-[1.1] text-white mb-6">
+            Bắt trọn video.{' '}
+            <span className="bg-gradient-to-r from-[#818CF8] to-[#C084FC] bg-clip-text text-transparent">
+              Nét căng 4K.
+            </span>
           </h1>
 
-          <p className="text-base md:text-lg text-slate-300 text-center font-medium leading-relaxed" style={{ marginBottom: '40px', maxWidth: '672px' }}>
+          <p className="max-w-xl text-base md:text-lg text-slate-300 font-medium leading-relaxed mb-8">
             Bóc tách video không logo và nhạc nền 320kbps từ TikTok, Douyin, YouTube chỉ trong 1 click. Giữ nguyên chất lượng gốc, sẵn sàng cho bạn sáng tạo.
           </p>
 
-          {/* Feature Badges */}
-          <div className="flex flex-wrap items-center justify-center gap-3" style={{ marginBottom: '40px' }}>
-            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-500/10 text-emerald-400 text-sm font-semibold border border-emerald-500/30 shadow-sm">
+          {/* Feature badges */}
+          <div className="flex flex-wrap items-center justify-center gap-3 mb-10">
+            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-500/10 text-emerald-400 text-sm font-semibold border border-emerald-500/30">
               <Ban className="w-4 h-4" /> Không quảng cáo
             </span>
-            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-indigo-500/10 text-indigo-300 text-sm font-semibold border border-indigo-500/30 shadow-sm">
+            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-indigo-500/10 text-indigo-300 text-sm font-semibold border border-indigo-500/30">
               <ShieldCheck className="w-4 h-4" /> An toàn & Bảo mật
             </span>
-            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-violet-500/10 text-violet-300 text-sm font-semibold border border-violet-500/30 shadow-sm">
+            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-violet-500/10 text-violet-300 text-sm font-semibold border border-violet-500/30">
               <Zap className="w-4 h-4" /> Siêu tốc
             </span>
           </div>
 
-          {/* Platform Icons */}
-          <div className="flex flex-wrap items-center justify-center gap-4">
+          {/* Platform icons */}
+          <div className="flex flex-wrap items-center justify-center gap-3">
             {platforms.map((p, i) => (
-              <div key={i} className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(99,102,241,0.15)] border ${p.bg} hover:scale-110 transition-transform cursor-pointer`}>
+              <div
+                key={i}
+                className={`w-12 h-12 rounded-full flex items-center justify-center border ${p.bg} hover:scale-110 transition-transform cursor-pointer`}
+              >
                 <p.icon />
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* ── Tab Switcher ────────────────────────────────── */}
-        <div style={{ width: '100%', display: 'flex', justifyContent: 'center', marginBottom: '60px' }}>
-          <div className="inline-flex bg-white/[0.04] rounded-2xl p-2 shadow-md border border-white/[0.08] gap-2 backdrop-blur-xl">
+        {/* ── Tab Switcher ── */}
+        <div className="w-full flex justify-center mb-12">
+          <div className="inline-flex items-center gap-1 p-1.5 bg-white/[0.04] border border-white/[0.08] rounded-2xl backdrop-blur-xl">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -101,16 +101,13 @@ export default function LandingPage() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`
-                    flex items-center gap-2.5 px-8 py-4 rounded-xl text-base md:text-lg font-bold
-                    transition-all duration-200 cursor-pointer whitespace-nowrap
-                    ${isActive
+                  className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 whitespace-nowrap ${
+                    isActive
                       ? 'bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white shadow-lg'
-                      : 'text-slate-400 hover:text-white hover:bg-white/5'
-                    }
-                  `}
+                      : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
+                  }`}
                 >
-                  <Icon className="w-5 h-5" />
+                  <Icon className="w-4 h-4" />
                   <span className="hidden sm:inline">{tab.label}</span>
                   <span className="sm:hidden">{tab.shortLabel}</span>
                 </button>
@@ -119,13 +116,11 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* ── Tab Content ─────────────────────────────────── */}
-        <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-          <div style={{ width: '100%', maxWidth: '896px' }}>
-            {activeTab === 'single' && <DashboardContent />}
-            {activeTab === 'bulk' && <BulkContent />}
-            {activeTab === 'history' && <HistoryContent />}
-          </div>
+        {/* ── Tab Content ── */}
+        <div className="w-full">
+          {activeTab === 'single' && <DashboardContent />}
+          {activeTab === 'bulk' && <BulkContent />}
+          {activeTab === 'history' && <HistoryContent />}
         </div>
 
       </div>
