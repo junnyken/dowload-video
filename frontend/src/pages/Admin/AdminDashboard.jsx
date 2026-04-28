@@ -121,13 +121,13 @@ export default function AdminDashboard() {
                     <td className="px-4 py-3 text-text-secondary">{u.downloads_today}</td>
                     <td className="px-4 py-3 text-right">
                       <button 
-                        onClick={() => toggleUserPlan(u.user_id, u.plan)}
+                        onClick={() => toggleUserPlan(u.user_id, u.plan || 'free')}
                         className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold text-xs transition-colors ${
-                          u.plan === 'pro' ? 'bg-success/20 text-success hover:bg-success/30' : 'bg-surface border border-border text-text-muted hover:text-text-primary'
+                          (u.plan || 'free') === 'pro' ? 'bg-success/20 text-success hover:bg-success/30' : 'bg-surface border border-border text-text-muted hover:text-text-primary'
                         }`}
                       >
-                        {u.plan === 'pro' ? <ToggleRight className="w-4 h-4"/> : <ToggleLeft className="w-4 h-4"/>}
-                        {u.plan.toUpperCase()}
+                        {(u.plan || 'free') === 'pro' ? <ToggleRight className="w-4 h-4"/> : <ToggleLeft className="w-4 h-4"/>}
+                        {(u.plan || 'free').toUpperCase()}
                       </button>
                     </td>
                   </tr>

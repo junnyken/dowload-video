@@ -63,20 +63,6 @@ function App() {
 
           {/* Right Nav - Hidden from normal users! Only show Settings if they are Admin */}
           <div className="flex items-center gap-1">
-            {isAuthenticated && (
-              <button
-                onClick={() => setView(view === 'settings' ? 'admin' : 'settings')}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  view === 'settings'
-                    ? 'bg-white/10 text-white'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <Settings className="w-4 h-4" />
-                <span className="hidden sm:inline">Cài đặt API</span>
-              </button>
-            )}
-            
             {/* If authenticated and not on admin view, show link to go back */}
             {isAuthenticated && view !== 'admin' && (
               <button
