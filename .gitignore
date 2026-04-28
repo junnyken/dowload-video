@@ -9,6 +9,9 @@ redis/
 # Downloaded media files
 backend/downloads/
 
+# Celery beat schedule (runtime generated)
+celerybeat-schedule.*
+
 # Sensitive cookies
 douyin_cookies.txt
 
