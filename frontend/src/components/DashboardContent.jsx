@@ -5,6 +5,8 @@ import {
   Zap, Music, Video, Crown, Trash2, Clock
 } from 'lucide-react';
 import UpgradeModal from './UpgradeModal';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -42,6 +44,8 @@ export default function DashboardContent() {
   const [formatTab, setFormatTab] = useState('video');
   const [recentDownloads, setRecentDownloads] = useState([]);
   const [toastMessage, setToastMessage] = useState('');
+  const [isZipping, setIsZipping] = useState(false);
+  const [zipProgress, setZipProgress] = useState(0);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -161,6 +165,71 @@ export default function DashboardContent() {
     } catch (err) {
       setTrackDownloads(prev => ({ ...prev, [key]: 'error' }));
       showToast(`Lỗi: ${err.message}`);
+    }
+  };
+
+  const handleDownloadAllZip = async () => {
+    if (!spotifyData || !spotifyData.tracks) return;
+    setIsZipping(true);
+    setZipProgress(0);
+    const zip = new JSZip();
+    const tracks = spotifyData.tracks;
+    
+    try {
+      showToast("Đang bắt đầu tải và nén ZIP...");
+      for (let i = 0; i < tracks.length; i++) {
+        const track = tracks[i];
+        setZipProgress(Math.round(((i) / tracks.length) * 100));
+        
+        let downloadUrl = null;
+        const ext = 'mp3';
+        
+        if (track.direct_mp4_url) {
+          downloadUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(track.direct_mp4_url)}&filename=temp&ext=mp3`;
+        } else {
+          // Fetch link if missing
+          const res = await fetch(`${API_BASE}/api/v1/fetch-link`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: track.search_query, quality: 'mp3_320', remove_watermark: true }),
+          });
+          const data = await res.json();
+          if (data.success) {
+            const localPath = data.local_mp3_path || data.local_file_path;
+            if (localPath) {
+              downloadUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=temp.mp3`;
+            } else if (data.direct_mp4_url) {
+              downloadUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(data.direct_mp4_url)}&filename=temp&ext=mp3`;
+            }
+          }
+        }
+        
+        if (downloadUrl) {
+          const response = await fetch(downloadUrl);
+          if (response.ok) {
+            const blob = await response.blob();
+            const safeName = `${track.name} - ${track.artist_str}`.replace(/[/\\?%*:|"<>]/g, '-');
+            zip.file(`${safeName}.${ext}`, blob);
+            setTrackDownloads(prev => ({ ...prev, [track.search_query]: 'done' }));
+          } else {
+            setTrackDownloads(prev => ({ ...prev, [track.search_query]: 'error' }));
+          }
+        } else {
+          setTrackDownloads(prev => ({ ...prev, [track.search_query]: 'error' }));
+        }
+      }
+      
+      setZipProgress(100);
+      showToast("Đang tạo file ZIP, vui lòng chờ...");
+      const content = await zip.generateAsync({ type: "blob" });
+      const safePlaylistName = (spotifyData.playlist_name || spotifyData.album_name || "Playlist").replace(/[/\\?%*:|"<>]/g, '-');
+      saveAs(content, `${safePlaylistName}.zip`);
+      showToast("Tải ZIP thành công!");
+    } catch (err) {
+      showToast(`Lỗi tạo ZIP: ${err.message}`);
+    } finally {
+      setIsZipping(false);
+      setZipProgress(0);
     }
   };
 
@@ -600,6 +669,20 @@ export default function DashboardContent() {
                 ✕
               </button>
             </div>
+            
+            {/* Download All (ZIP) Button */}
+            {(spotifyData.tracks && spotifyData.tracks.length > 0) && (
+              <div className="flex justify-end px-2 mb-2">
+                <button
+                  onClick={handleDownloadAllZip}
+                  disabled={isZipping}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] text-sm font-bold rounded-xl shadow-lg hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100"
+                >
+                  <Download className="w-4 h-4" />
+                  {isZipping ? `Đang tải & Nén... ${zipProgress}%` : `Tải tất cả (.ZIP)`}
+                </button>
+              </div>
+            )}
 
             {/* Track list */}
             <div className="flex flex-col gap-2 max-h-[480px] overflow-y-auto pr-1 custom-scrollbar">
