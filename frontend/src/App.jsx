@@ -1,11 +1,47 @@
-import { useState } from 'react';
-import { Video, Settings, Shield } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Video, Settings } from 'lucide-react';
 import LandingPage from './components/LandingPage';
 import SettingsContent from './components/SettingsContent';
 import AdminDashboard from './pages/Admin/AdminDashboard';
+import AdminLogin from './components/AdminLogin';
 
 function App() {
   const [view, setView] = useState('landing');
+  const [isAdminRoute, setIsAdminRoute] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Check URL path on mount
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path === '/vid-admin') {
+      setIsAdminRoute(true);
+      setView('admin');
+    }
+    
+    // Listen for history changes if needed
+    const handlePopState = () => {
+      if (window.location.pathname === '/vid-admin') {
+        setIsAdminRoute(true);
+        setView('admin');
+      } else {
+        setIsAdminRoute(false);
+        setView('landing');
+      }
+    };
+    
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigateTo = (newView, path = '/') => {
+    setView(newView);
+    window.history.pushState({}, '', path);
+    if (path === '/vid-admin') {
+      setIsAdminRoute(true);
+    } else {
+      setIsAdminRoute(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#012622] text-slate-100">
@@ -14,7 +50,7 @@ function App() {
         <div className="max-w-6xl mx-auto h-14 md:h-16 px-4 md:px-8 flex items-center justify-between">
           {/* Logo */}
           <button
-            onClick={() => setView('landing')}
+            onClick={() => navigateTo('landing', '/')}
             className="flex items-center gap-2.5 group cursor-pointer"
           >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FBBF24] to-[#FB923C] flex items-center justify-center shadow-md shadow-[#FBBF24]/20 group-hover:shadow-lg transition-shadow">
@@ -25,30 +61,31 @@ function App() {
             </span>
           </button>
 
-          {/* Right Nav */}
+          {/* Right Nav - Hidden from normal users! Only show Settings if they are Admin */}
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setView(view === 'settings' ? 'landing' : 'settings')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                view === 'settings'
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Settings className="w-4 h-4" />
-              <span className="hidden sm:inline">Cài đặt</span>
-            </button>
-            <button
-              onClick={() => setView(view === 'admin' ? 'landing' : 'admin')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                view === 'admin'
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Shield className="w-4 h-4" />
-              <span className="hidden sm:inline">Admin</span>
-            </button>
+            {isAuthenticated && (
+              <button
+                onClick={() => setView(view === 'settings' ? 'admin' : 'settings')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  view === 'settings'
+                    ? 'bg-white/10 text-white'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Settings className="w-4 h-4" />
+                <span className="hidden sm:inline">Cài đặt API</span>
+              </button>
+            )}
+            
+            {/* If authenticated and not on admin view, show link to go back */}
+            {isAuthenticated && view !== 'admin' && (
+              <button
+                onClick={() => navigateTo('admin', '/vid-admin')}
+                className="ml-2 bg-primary hover:bg-primary-hover text-[#012622] px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+              >
+                Trở về Admin
+              </button>
+            )}
           </div>
         </div>
       </nav>
@@ -56,14 +93,20 @@ function App() {
       {/* ── Main Content ────────────────────────────────── */}
       <main className="pt-14 md:pt-16">
         {view === 'landing' && <LandingPage />}
-        {view === 'settings' && (
+        
+        {view === 'settings' && isAuthenticated && (
           <div className="max-w-4xl mx-auto px-4 md:px-8 py-8 md:py-12">
             <SettingsContent />
           </div>
         )}
+        
         {view === 'admin' && (
           <div className="max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12">
-            <AdminDashboard />
+            {!isAuthenticated ? (
+              <AdminLogin onLogin={() => setIsAuthenticated(true)} />
+            ) : (
+              <AdminDashboard />
+            )}
           </div>
         )}
       </main>
