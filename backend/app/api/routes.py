@@ -276,6 +276,186 @@ async def download_local_file(filepath: str, filename: str):
     return FileResponse(filepath, filename=filename, media_type="audio/mpeg")
 
 
+# ── GET /download-thumbnail  (proxy thumbnail image) ────────────────
+
+@router.get("/download-thumbnail")
+async def download_thumbnail(url: str, filename: str = "thumbnail"):
+    """
+    Proxy-download a video thumbnail image through the backend.
+    This bypasses CORS restrictions so the browser can save the image.
+    """
+    if not url:
+        raise HTTPException(status_code=400, detail="URL is required")
+
+    try:
+        import re
+        import unicodedata
+
+        # Sanitize filename
+        normalized = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')
+        cleaned = re.sub(r'[^\w\s-]', '', normalized).strip()
+        slugified = re.sub(r'[\s]+', '-', cleaned)
+        slugified = re.sub(r'-+', '-', slugified)
+        if not slugified:
+            slugified = "thumbnail"
+
+        # Detect image extension from URL
+        ext = "jpg"
+        url_lower = url.lower()
+        if ".png" in url_lower:
+            ext = "png"
+        elif ".webp" in url_lower:
+            ext = "webp"
+
+        content_types = {
+            "jpg": "image/jpeg", "png": "image/png", "webp": "image/webp",
+        }
+        content_type = content_types.get(ext, "image/jpeg")
+
+        async def stream_image():
+            async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+                async with client.stream("GET", url) as resp:
+                    resp.raise_for_status()
+                    async for chunk in resp.aiter_bytes(chunk_size=65536):
+                        yield chunk
+
+        return StreamingResponse(
+            stream_image(),
+            media_type=content_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{slugified}.{ext}"',
+                "Access-Control-Expose-Headers": "Content-Disposition",
+            },
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Thumbnail download failed: {str(e)}")
+
+
+# ── POST /trim  (cut video/audio segment with FFmpeg) ────────────────
+
+import subprocess
+import tempfile
+
+class TrimRequest(BaseModel):
+    url: str
+    start_time: float  # seconds
+    end_time: float    # seconds
+    filename: Optional[str] = "trimmed_video"
+    is_audio: Optional[bool] = False
+
+@router.post("/trim")
+@limiter.limit("10/minute")
+async def trim_media(payload: TrimRequest, request: Request):
+    """
+    Download a video/audio, trim it using FFmpeg (-ss to -to with -c copy),
+    and return the trimmed file for download.
+    """
+    if payload.start_time < 0 or payload.end_time <= payload.start_time:
+        raise HTTPException(status_code=400, detail="Invalid time range")
+    if payload.end_time - payload.start_time > 600:
+        raise HTTPException(status_code=400, detail="Maximum trim duration is 10 minutes")
+
+    try:
+        import uuid as _uuid
+
+        ext = "mp3" if payload.is_audio else "mp4"
+        download_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "downloads")
+        os.makedirs(download_dir, exist_ok=True)
+
+        input_path = os.path.join(download_dir, f"trim_input_{_uuid.uuid4().hex[:8]}.{ext}")
+        output_path = os.path.join(download_dir, f"trim_output_{_uuid.uuid4().hex[:8]}.{ext}")
+
+        # Download the source file
+        async with httpx.AsyncClient(follow_redirects=True, timeout=120.0, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://www.tiktok.com/",
+        }) as client:
+            async with client.stream("GET", payload.url) as resp:
+                resp.raise_for_status()
+                with open(input_path, "wb") as f:
+                    async for chunk in resp.aiter_bytes(chunk_size=65536):
+                        f.write(chunk)
+
+        # FFmpeg trim with copy mode (fast, lossless)
+        start_str = f"{payload.start_time:.2f}"
+        end_str = f"{payload.end_time:.2f}"
+
+        ffmpeg_cmd = [
+            "ffmpeg", "-y",
+            "-ss", start_str,
+            "-to", end_str,
+            "-i", input_path,
+            "-c", "copy",
+            "-avoid_negative_ts", "make_zero",
+            output_path,
+        ]
+
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=120)
+        if result.returncode != 0:
+            # Fallback: re-encode if copy mode fails (some formats need it)
+            if payload.is_audio:
+                ffmpeg_cmd = [
+                    "ffmpeg", "-y",
+                    "-ss", start_str, "-to", end_str,
+                    "-i", input_path,
+                    "-acodec", "libmp3lame", "-b:a", "320k",
+                    output_path,
+                ]
+            else:
+                ffmpeg_cmd = [
+                    "ffmpeg", "-y",
+                    "-ss", start_str, "-to", end_str,
+                    "-i", input_path,
+                    "-c:v", "libx264", "-c:a", "aac", "-preset", "fast",
+                    output_path,
+                ]
+            result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=300)
+            if result.returncode != 0:
+                raise ValueError(f"FFmpeg error: {result.stderr.decode()[-200:]}")
+
+        if not os.path.exists(output_path):
+            raise ValueError("Trimmed file was not created")
+
+        # Clean up input file
+        try:
+            os.remove(input_path)
+        except:
+            pass
+
+        # Schedule cleanup of output file after 15 minutes
+        from app.tasks.video_tasks import delete_local_file
+        delete_local_file.apply_async((output_path,), countdown=15 * 60)
+
+        # Sanitize filename
+        import re
+        import unicodedata
+        normalized = unicodedata.normalize('NFKD', payload.filename).encode('ascii', 'ignore').decode('ascii')
+        cleaned = re.sub(r'[^\w\s-]', '', normalized).strip()
+        slugified = re.sub(r'[\s]+', '-', cleaned) or "trimmed"
+
+        file_size_mb = round(os.path.getsize(output_path) / (1024 * 1024), 2)
+
+        return {
+            "success": True,
+            "trimmed_file_path": output_path,
+            "filename": f"{slugified}_trimmed.{ext}",
+            "file_size_mb": file_size_mb,
+            "duration": round(payload.end_time - payload.start_time, 2),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Clean up on error
+        for p in [input_path if 'input_path' in dir() else None, output_path if 'output_path' in dir() else None]:
+            if p and os.path.exists(p):
+                try:
+                    os.remove(p)
+                except:
+                    pass
+        raise HTTPException(status_code=500, detail=f"Trim failed: {str(e)}")
+
+
 # ── GET /jobs/{batch_id}  (polling) ──────────────────────────────────
 
 @router.get("/history")

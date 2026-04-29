@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Download, CheckCircle2, XCircle,
   Loader2, AlertCircle, Link2,
   Zap, Music, Video, Crown, Trash2, Clock, X,
-  ClipboardPaste
+  ClipboardPaste, Play, Pause, Scissors, ImageDown,
+  Upload, ExternalLink, SkipBack, SkipForward
 } from 'lucide-react';
 import UpgradeModal from './UpgradeModal';
 import JSZip from 'jszip';
@@ -50,6 +51,14 @@ export default function DashboardContent() {
   const [removeWatermark, setRemoveWatermark] = useState(true);
   const [downloadSubs, setDownloadSubs] = useState(true);
   const cancelZipRef = useRef(false);
+  const previewRef = useRef(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [showTrimmer, setShowTrimmer] = useState(false);
+  const [trimStart, setTrimStart] = useState(0);
+  const [trimEnd, setTrimEnd] = useState(0);
+  const [isTrimming, setIsTrimming] = useState(false);
+  const [showCloudMenu, setShowCloudMenu] = useState(false);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -391,6 +400,124 @@ export default function DashboardContent() {
     } finally { setDownloadingId(null); }
   };
 
+  // ── Thumbnail Download ───────────────────────────────────────
+  const handleThumbnailDownload = () => {
+    if (!videoInfo?.thumbnail_url) return;
+    const title = videoInfo?.title || 'thumbnail';
+    const downloadUrl = `${API_BASE}/api/v1/download-thumbnail?url=${encodeURIComponent(videoInfo.thumbnail_url)}&filename=${encodeURIComponent(title)}`;
+    const a = document.createElement('a');
+    a.href = downloadUrl; a.setAttribute('download', '');
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    showToast('Đang tải ảnh bìa...');
+  };
+
+  // ── Preview Player ───────────────────────────────────────────
+  const togglePreview = () => {
+    setShowPreview(prev => !prev);
+    setIsPlaying(false);
+  };
+
+  const getPreviewUrl = () => {
+    if (!videoInfo) return null;
+    const localPath = videoInfo.local_file_path || videoInfo.local_mp3_path;
+    if (localPath) {
+      return `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=preview`;
+    }
+    if (videoInfo.direct_mp4_url) {
+      return `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(videoInfo.direct_mp4_url)}&filename=preview&ext=mp4`;
+    }
+    return null;
+  };
+
+  const handlePlayPause = () => {
+    if (!previewRef.current) return;
+    if (previewRef.current.paused) {
+      previewRef.current.play();
+      setIsPlaying(true);
+    } else {
+      previewRef.current.pause();
+      setIsPlaying(false);
+    }
+  };
+
+  // ── Media Trimmer ────────────────────────────────────────────
+  const handleOpenTrimmer = () => {
+    const dur = videoInfo?.duration || 0;
+    setTrimStart(0);
+    setTrimEnd(Math.min(dur, 30));
+    setShowTrimmer(true);
+  };
+
+  const handleTrimDownload = async () => {
+    if (!videoInfo) return;
+    setIsTrimming(true);
+    try {
+      const sourceUrl = videoInfo.direct_mp4_url;
+      if (!sourceUrl) { showToast('Không có nguồn để cắt.'); return; }
+
+      const response = await fetch(`${API_BASE}/api/v1/trim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: sourceUrl,
+          start_time: trimStart,
+          end_time: trimEnd,
+          filename: videoInfo.title || 'video',
+          is_audio: videoInfo.is_audio_only || false,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Trim failed');
+      if (data.success && data.trimmed_file_path) {
+        const a = document.createElement('a');
+        a.href = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(data.trimmed_file_path)}&filename=${encodeURIComponent(data.filename)}`;
+        a.setAttribute('download', '');
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        showToast(`Đã cắt thành công! (${data.file_size_mb} MB)`);
+      }
+    } catch (err) {
+      setError(err.message || 'Lỗi khi cắt video.');
+    } finally { setIsTrimming(false); }
+  };
+
+  const formatTime = (s) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2, '0')}`;
+  };
+
+  // ── Cloud Save ───────────────────────────────────────────────
+  const getDownloadUrl = () => {
+    if (!videoInfo) return null;
+    const localPath = videoInfo.local_file_path || videoInfo.local_mp3_path;
+    if (localPath) {
+      const ext = localPath.split('.').pop() || 'mp4';
+      return `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=${encodeURIComponent(videoInfo.title || 'video')}.${ext}`;
+    }
+    if (videoInfo.direct_mp4_url) {
+      return `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(videoInfo.direct_mp4_url)}&filename=${encodeURIComponent(videoInfo.title || 'video')}&ext=mp4`;
+    }
+    return null;
+  };
+
+  const handleSaveToGDrive = () => {
+    const fileUrl = getDownloadUrl();
+    if (!fileUrl) { showToast('Không có link tải.'); return; }
+    const fullUrl = fileUrl.startsWith('http') ? fileUrl : `${window.location.origin}${fileUrl}`;
+    window.open(`https://drive.google.com/viewer?url=${encodeURIComponent(fullUrl)}`, '_blank');
+    showToast('Đang mở Google Drive...');
+    setShowCloudMenu(false);
+  };
+
+  const handleSaveToDropbox = () => {
+    const fileUrl = getDownloadUrl();
+    if (!fileUrl) { showToast('Không có link tải.'); return; }
+    const fullUrl = fileUrl.startsWith('http') ? fileUrl : `${window.location.origin}${fileUrl}`;
+    window.open(`https://www.dropbox.com/save?url=${encodeURIComponent(fullUrl)}&filename=${encodeURIComponent(videoInfo?.title || 'video')}`, '_blank');
+    showToast('Đang mở Dropbox...');
+    setShowCloudMenu(false);
+  };
+
   // Split formats
   const videoFormats = (videoInfo?.available_formats || []).filter(f => f.type === 'video');
   const audioFormats = (videoInfo?.available_formats || []).filter(f => f.type === 'audio');
@@ -510,6 +637,202 @@ export default function DashboardContent() {
                 </div>
               </div>
             </div>
+
+            {/* ── Feature Action Bar ─────────────────────────── */}
+            <div className="flex flex-wrap items-center gap-2 mb-5">
+              {/* Preview Button */}
+              {getPreviewUrl() && (
+                <button
+                  onClick={togglePreview}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+                    showPreview 
+                      ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                      : 'bg-slate-800/60 text-slate-300 border-slate-700/50 hover:border-purple-500/40 hover:text-purple-300'
+                  }`}
+                >
+                  {showPreview ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                  {showPreview ? 'Ẩn xem trước' : 'Xem trước'}
+                </button>
+              )}
+
+              {/* Thumbnail Download */}
+              {videoInfo.thumbnail_url && (
+                <button
+                  onClick={handleThumbnailDownload}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800/60 text-slate-300 border border-slate-700/50 hover:border-cyan-500/40 hover:text-cyan-300 transition-all"
+                >
+                  <ImageDown className="w-3.5 h-3.5" />
+                  Tải ảnh bìa
+                </button>
+              )}
+
+              {/* Trim Button */}
+              {videoInfo.duration > 0 && videoInfo.direct_mp4_url && (
+                <button
+                  onClick={handleOpenTrimmer}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+                    showTrimmer
+                      ? 'bg-orange-500/20 text-orange-300 border-orange-500/40'
+                      : 'bg-slate-800/60 text-slate-300 border-slate-700/50 hover:border-orange-500/40 hover:text-orange-300'
+                  }`}
+                >
+                  <Scissors className="w-3.5 h-3.5" />
+                  Cắt đoạn
+                </button>
+              )}
+
+              {/* Cloud Save */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowCloudMenu(prev => !prev)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800/60 text-slate-300 border border-slate-700/50 hover:border-sky-500/40 hover:text-sky-300 transition-all"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Lưu Cloud
+                </button>
+                {showCloudMenu && (
+                  <div className="absolute top-full left-0 mt-2 w-52 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-30 overflow-hidden animate-in fade-in duration-200">
+                    <button
+                      onClick={handleSaveToGDrive}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-700/70 transition-colors"
+                    >
+                      <img src="https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg" className="w-5 h-5" alt="GDrive" />
+                      Google Drive
+                      <ExternalLink className="w-3 h-3 ml-auto text-slate-500" />
+                    </button>
+                    <button
+                      onClick={handleSaveToDropbox}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-700/70 transition-colors"
+                    >
+                      <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Dropbox_Icon.svg" className="w-5 h-5" alt="Dropbox" />
+                      Dropbox
+                      <ExternalLink className="w-3 h-3 ml-auto text-slate-500" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── Preview Player ──────────────────────────────── */}
+            {showPreview && getPreviewUrl() && (
+              <div className="mb-5 rounded-2xl overflow-hidden bg-black/40 border border-slate-700/50 shadow-lg">
+                {videoInfo.is_audio_only ? (
+                  <div className="p-5 flex flex-col items-center gap-3">
+                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500/30 to-blue-500/30 flex items-center justify-center border border-purple-500/30">
+                      <Music className="w-10 h-10 text-purple-300" />
+                    </div>
+                    <audio
+                      ref={previewRef}
+                      src={getPreviewUrl()}
+                      controls
+                      className="w-full max-w-md"
+                      onPlay={() => setIsPlaying(true)}
+                      onPause={() => setIsPlaying(false)}
+                      onEnded={() => setIsPlaying(false)}
+                    />
+                  </div>
+                ) : (
+                  <video
+                    ref={previewRef}
+                    src={getPreviewUrl()}
+                    controls
+                    className="w-full max-h-[360px] object-contain"
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onEnded={() => setIsPlaying(false)}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* ── Trimmer UI ─────────────────────────────────── */}
+            {showTrimmer && videoInfo.duration > 0 && (
+              <div className="mb-5 p-4 rounded-2xl bg-slate-800/50 border border-orange-500/30 shadow-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <h5 className="text-white font-bold text-sm flex items-center gap-2">
+                    <Scissors className="w-4 h-4 text-orange-400" />
+                    Cắt đoạn Video / Nhạc
+                  </h5>
+                  <button onClick={() => setShowTrimmer(false)} className="text-slate-400 hover:text-white transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                
+                {/* Time Display */}
+                <div className="flex items-center justify-between mb-3 text-sm">
+                  <span className="bg-slate-900 px-3 py-1.5 rounded-lg text-emerald-400 font-mono font-bold border border-slate-700/50">
+                    {formatTime(trimStart)}
+                  </span>
+                  <span className="text-slate-500 text-xs">→ Thời lượng: {formatTime(trimEnd - trimStart)}</span>
+                  <span className="bg-slate-900 px-3 py-1.5 rounded-lg text-orange-400 font-mono font-bold border border-slate-700/50">
+                    {formatTime(trimEnd)}
+                  </span>
+                </div>
+
+                {/* Range Sliders */}
+                <div className="space-y-3 mb-4">
+                  <div>
+                    <label className="text-xs text-slate-400 font-medium mb-1 block">Bắt đầu</label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={videoInfo.duration}
+                      step={1}
+                      value={trimStart}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        if (v < trimEnd) setTrimStart(v);
+                      }}
+                      className="w-full accent-emerald-500 h-2 bg-slate-700 rounded-full cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 font-medium mb-1 block">Kết thúc</label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={videoInfo.duration}
+                      step={1}
+                      value={trimEnd}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        if (v > trimStart) setTrimEnd(v);
+                      }}
+                      className="w-full accent-orange-500 h-2 bg-slate-700 rounded-full cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {[15, 30, 60].map(sec => (
+                    <button
+                      key={sec}
+                      onClick={() => { setTrimStart(0); setTrimEnd(Math.min(sec, videoInfo.duration)); }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-700/50 text-slate-300 border border-slate-600/50 hover:border-orange-500/40 hover:text-orange-300 transition-all"
+                    >
+                      {sec}s đầu
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => { setTrimStart(0); setTrimEnd(videoInfo.duration); }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-700/50 text-slate-300 border border-slate-600/50 hover:border-emerald-500/40 hover:text-emerald-300 transition-all"
+                  >
+                    Toàn bộ
+                  </button>
+                </div>
+
+                {/* Trim Action */}
+                <button
+                  onClick={handleTrimDownload}
+                  disabled={isTrimming || trimEnd <= trimStart}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-[#FB923C] to-[#FBBF24] text-[#012622] font-bold text-sm shadow-lg hover:shadow-xl transition-all disabled:opacity-60 active:scale-[0.98]"
+                >
+                  {isTrimming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
+                  {isTrimming ? 'Đang cắt và xử lý...' : `Cắt & Tải về (${formatTime(trimStart)} → ${formatTime(trimEnd)})`}
+                </button>
+              </div>
+            )}
 
             {/* ── Format Tabs or Fallback ──────────────────── */}
             {hasFormats ? (
