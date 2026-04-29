@@ -18,6 +18,7 @@
     if (
       /tiktok\.com\/@[^/]+\/video\//.test(url) ||
       /youtube\.com\/watch/.test(url) ||
+      /youtube\.com\/shorts\//.test(url) ||
       /facebook\.com\/.+\/videos\//.test(url) ||
       /facebook\.com\/watch/.test(url) ||
       /facebook\.com\/reel\//.test(url) ||
@@ -164,7 +165,7 @@
         if (data.success) {
           const targetUrl = data.direct_mp4_url || data.local_file_path;
           let ext = 'mp4';
-          if (targetUrl && (targetUrl.endsWith('.mp3') || targetUrl.endsWith('.m4a'))) {
+          if (data.is_audio_only || (targetUrl && (targetUrl.endsWith('.mp3') || targetUrl.endsWith('.m4a')))) {
              ext = 'mp3';
           }
           const dlUrl = buildProxyUrl(targetUrl, data.title, ext);

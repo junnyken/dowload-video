@@ -210,7 +210,7 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
       } else {
         dlUrl = data.direct_mp4_url || data.local_file_path || data.local_mp3_path;
       }
-      if (dlUrl && (dlUrl.endsWith('.mp3') || dlUrl.endsWith('.m4a'))) {
+      if (data.is_audio_only || (dlUrl && (dlUrl.endsWith('.mp3') || dlUrl.endsWith('.m4a')))) {
           ext = 'mp3';
       }
       const safeName = (data.title || 'video').replace(/[/\\?%*:|"<>]/g, '-');

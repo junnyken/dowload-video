@@ -120,7 +120,9 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         # Audio only extraction
         fmt = "bestaudio[ext=m4a]/bestaudio/best"
     else:
-        fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+        # For 'video' quality (instant download via browser)
+        # We MUST use a pre-merged format because the browser cannot merge DASH streams!
+        fmt = "b[ext=mp4]/best[ext=mp4]/best"
 
     opts = {
         "format": fmt,
@@ -602,6 +604,14 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         except Exception as cobalt_err:
             print(f"[Downloader] Cobalt fallback error: {cobalt_err}")
 
+    # ── Check if best url has no video (e.g. TikTok photo slides) ──
+    is_audio_only = False
+    for f in info.get("formats", []):
+        if f.get("url") == direct_url:
+            if f.get("vcodec") == "none":
+                is_audio_only = True
+            break
+
     result = {
         "title": info.get("title", "Unknown Title"),
         "thumbnail_url": info.get("thumbnail", ""),
@@ -612,6 +622,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         "duration": info.get("duration", 0),
         "available_formats": fmt_info["video_formats"] + fmt_info["audio_formats"],
         "max_merge_height": fmt_info["max_video_only_height"],
+        "is_audio_only": is_audio_only,
     }
 
     # Override with Spotify metadata for better title/thumbnail accuracy
