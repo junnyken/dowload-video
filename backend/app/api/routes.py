@@ -90,17 +90,13 @@ async def fetch_link(payload: FetchLinkRequest, request: Request):
         
     user_id = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
     
-    # 1. Check Quotas
-    quota_info = check_user_quota(user_id)
-    if not quota_info["allowed"]:
-        raise HTTPException(status_code=403, detail="QUOTA_EXCEEDED")
+    # 1. Quotas disabled (100% Free)
 
     try:
         # 2. Check Cache
         cached = get_cached_result(payload.url)
         if cached:
             print(f"[Cache Hit] API - URL: {payload.url}")
-            increment_usage(user_id)
             return {
                 "success": True,
                 "title": cached.get("title"),
@@ -118,9 +114,7 @@ async def fetch_link(payload: FetchLinkRequest, request: Request):
             download_subs=payload.download_subs
         )
         
-        # 4. Increment usage
-        increment_usage(user_id)
-        
+
         if info.get("local_file_path") or info.get("local_mp3_path"):
             path_to_delete = info.get("local_file_path") or info.get("local_mp3_path")
             from app.tasks.video_tasks import delete_local_file

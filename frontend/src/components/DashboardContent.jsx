@@ -47,6 +47,8 @@ export default function DashboardContent() {
   const [toastMessage, setToastMessage] = useState('');
   const [isZipping, setIsZipping] = useState(false);
   const [zipProgress, setZipProgress] = useState(0);
+  const [removeWatermark, setRemoveWatermark] = useState(true);
+  const [downloadSubs, setDownloadSubs] = useState(true);
   const cancelZipRef = useRef(false);
 
   const showToast = (msg) => {
@@ -128,7 +130,7 @@ export default function DashboardContent() {
       const response = await fetch(`${API_BASE}/api/v1/fetch-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim(), quality: 'video', remove_watermark: true }),
+        body: JSON.stringify({ url: url.trim(), quality: 'video', remove_watermark: removeWatermark, download_subs: downloadSubs }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -141,6 +143,12 @@ export default function DashboardContent() {
       if (data.success) {
         setVideoInfo(data);
         showToast('Trích xuất thành công!');
+        if (data.subtitle_url) {
+           const a = document.createElement('a');
+           a.href = data.subtitle_url; a.setAttribute('download', '');
+           document.body.appendChild(a); a.click(); document.body.removeChild(a);
+           showToast('Đang tải phụ đề...');
+        }
       } else throw new Error('Không thể trích xuất thông tin video.');
     } catch (err) {
       setError(err.message || 'Đã xảy ra lỗi khi xử lý link.');
@@ -438,6 +446,17 @@ export default function DashboardContent() {
             <span>{isLoading ? 'ĐANG XỬ LÝ...' : 'BÓC TÁCH NGAY'}</span>
           </button>
         </div>
+      </div>
+
+      <div className="w-full max-w-3xl mb-8 flex flex-col sm:flex-row justify-center items-center gap-4 sm:gap-8 text-sm text-slate-300">
+         <label className="flex items-center gap-2 cursor-pointer hover:text-white transition-colors">
+            <input type="checkbox" checked={removeWatermark} onChange={e => setRemoveWatermark(e.target.checked)} className="w-4 h-4 accent-emerald-500 bg-slate-800 border-slate-600 rounded"/>
+            <span className="font-medium">Xoá Logo (TikTok / Douyin)</span>
+         </label>
+         <label className="flex items-center gap-2 cursor-pointer hover:text-white transition-colors">
+            <input type="checkbox" checked={downloadSubs} onChange={e => setDownloadSubs(e.target.checked)} className="w-4 h-4 accent-emerald-500 bg-slate-800 border-slate-600 rounded"/>
+            <span className="font-medium">Tải Phụ Đề (.srt) nếu có</span>
+         </label>
       </div>
 
       {/* ── Error ────────────────────────────────────────── */}
@@ -740,60 +759,71 @@ export default function DashboardContent() {
               </div>
             )}
 
-            {/* Track list */}
-            <div className="flex flex-col gap-2 max-h-[480px] overflow-y-auto pr-1 custom-scrollbar">
-              {(spotifyData.tracks || []).map((track, i) => {
-                const key = track.search_query;
-                const dlState = trackDownloads[key];
-                return (
-                  <div key={i}
-                    className="flex items-center gap-3 p-3 rounded-2xl bg-slate-800/40 border border-slate-700/30 hover:bg-slate-800/70 transition-all group">
-                    {/* Track thumbnail */}
-                    {track.thumbnail ? (
-                      <img src={track.thumbnail} alt=""
-                        className="w-10 h-10 rounded-lg object-cover flex-shrink-0 opacity-90" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-lg bg-[#1DB954]/20 flex items-center justify-center flex-shrink-0">
-                        <Music className="w-5 h-5 text-[#1DB954]" />
-                      </div>
-                    )}
-                    {/* Track info */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-semibold truncate">{track.name}</p>
-                      <p className="text-slate-400 text-xs truncate">{track.artist_str}</p>
-                    </div>
-                    {/* Duration */}
-                    {track.duration > 0 && (
-                      <span className="text-slate-500 text-xs flex-shrink-0">
-                        {Math.floor(track.duration / 60)}:{String(track.duration % 60).padStart(2, '0')}
-                      </span>
-                    )}
-                    {/* Download button */}
-                    <button
-                      onClick={() => handleSpotifyTrackDownload(track)}
-                      disabled={dlState === 'loading' || dlState === 'done'}
-                      className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                        dlState === 'done'
-                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 cursor-default'
-                          : dlState === 'error'
-                          ? 'bg-red-500/20 text-red-300 border-red-500/30'
-                          : dlState === 'loading'
-                          ? 'bg-slate-700 text-slate-400 border-slate-600 cursor-wait'
-                          : 'bg-[#1DB954]/10 text-[#1DB954] border-[#1DB954]/30 hover:bg-[#1DB954]/20'
-                      }`}
-                    >
-                      {dlState === 'loading' ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : dlState === 'done' ? (
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                      ) : (
-                        <Download className="w-3.5 h-3.5" />
-                      )}
-                      {dlState === 'done' ? 'Xong' : dlState === 'error' ? 'Thử lại' : 'MP3'}
-                    </button>
-                  </div>
-                );
-              })}
+            {/* Track list as Table */}
+            <div className="max-h-[480px] overflow-y-auto pr-1 custom-scrollbar bg-slate-800/40 rounded-xl border border-slate-700/30">
+              <table className="w-full text-left text-sm whitespace-nowrap">
+                <thead className="sticky top-0 bg-slate-900/90 backdrop-blur-md text-slate-400 text-xs font-semibold uppercase tracking-wider z-10">
+                  <tr>
+                    <th className="px-4 py-3 w-12">#</th>
+                    <th className="px-4 py-3">Bài hát</th>
+                    <th className="px-4 py-3">Ca sĩ</th>
+                    <th className="px-4 py-3 w-20 text-center">Thời lượng</th>
+                    <th className="px-4 py-3 w-28 text-right">Hành động</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700/30">
+                  {(spotifyData.tracks || []).map((track, i) => {
+                    const key = track.search_query;
+                    const dlState = trackDownloads[key];
+                    return (
+                      <tr key={i} className="hover:bg-slate-700/30 transition-colors group">
+                        <td className="px-4 py-3 text-slate-500 font-medium">
+                          {track.thumbnail ? (
+                            <img src={track.thumbnail} alt="" className="w-8 h-8 rounded object-cover shadow-sm" />
+                          ) : (
+                            <div className="w-8 h-8 rounded bg-[#1DB954]/20 flex items-center justify-center">
+                              <Music className="w-4 h-4 text-[#1DB954]" />
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-white font-medium max-w-[200px] truncate" title={track.name}>
+                          {track.name}
+                        </td>
+                        <td className="px-4 py-3 text-slate-400 max-w-[150px] truncate" title={track.artist_str}>
+                          {track.artist_str}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 text-center">
+                          {track.duration > 0 ? `${Math.floor(track.duration / 60)}:${String(track.duration % 60).padStart(2, '0')}` : '--:--'}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => handleSpotifyTrackDownload(track)}
+                            disabled={dlState === 'loading' || dlState === 'done'}
+                            className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                              dlState === 'done'
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 cursor-default'
+                                : dlState === 'error'
+                                ? 'bg-red-500/20 text-red-300 border-red-500/30'
+                                : dlState === 'loading'
+                                ? 'bg-slate-700 text-slate-400 border-slate-600 cursor-wait'
+                                : 'bg-[#1DB954]/10 text-[#1DB954] border-[#1DB954]/30 hover:bg-[#1DB954]/20'
+                            }`}
+                          >
+                            {dlState === 'loading' ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : dlState === 'done' ? (
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            ) : (
+                              <Download className="w-3.5 h-3.5" />
+                            )}
+                            {dlState === 'done' ? 'Xong' : dlState === 'error' ? 'Lỗi' : 'Tải MP3'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
