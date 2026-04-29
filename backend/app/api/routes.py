@@ -231,10 +231,26 @@ async def bulk_zip(payload: BulkZipRequest, request: Request):
         raise HTTPException(status_code=400, detail="Batch ID required")
     
     supabase = get_supabase_client()
-    # Check if a zip job already exists to avoid duplicates
-    existing = supabase.table("download_jobs").select("id").eq("batch_id", payload.batch_id).eq("original_url", "batch_zip").execute()
+    existing = supabase.table("download_jobs").select("id", "status").eq("batch_id", payload.batch_id).eq("original_url", "batch_zip").execute()
+    
+    from app.tasks.video_tasks import create_zip_task
+    
     if existing.data:
-        return {"success": True, "job_id": existing.data[0]["id"]}
+        job = existing.data[0]
+        zip_job_id = job["id"]
+        status = job.get("status")
+        
+        if status == "processing":
+            return {"success": True, "job_id": zip_job_id}
+            
+        # If pending or failed, we requeue it to ensure it runs
+        supabase.table("download_jobs").update({
+            "status": "pending",
+            "error_message": ""
+        }).eq("id", zip_job_id).execute()
+        
+        create_zip_task.delay(payload.batch_id, zip_job_id)
+        return {"success": True, "job_id": zip_job_id}
         
     response = supabase.table("download_jobs").insert({
         "batch_id": payload.batch_id,
@@ -243,7 +259,6 @@ async def bulk_zip(payload: BulkZipRequest, request: Request):
     }).execute()
     
     zip_job_id = response.data[0]["id"]
-    from app.tasks.video_tasks import create_zip_task
     create_zip_task.delay(payload.batch_id, zip_job_id)
     
     return {"success": True, "job_id": zip_job_id}
