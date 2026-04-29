@@ -294,6 +294,15 @@ async def get_history(limit: int = 5):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.delete("/history/all")
+async def delete_all_history():
+    try:
+        supabase = get_supabase_client()
+        supabase.table("download_jobs").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.delete("/history/{job_id}")
 async def delete_history_job(job_id: str):
     try:

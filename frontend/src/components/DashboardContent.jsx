@@ -72,6 +72,17 @@ export default function DashboardContent() {
     } catch { showToast('Lỗi khi xóa!'); }
   };
 
+  const handleClearAllHistory = async () => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa tất cả lịch sử tải gần đây không?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/history/all`, { method: 'DELETE' });
+      if (res.ok) {
+        setRecentDownloads([]);
+        showToast('Đã xóa tất cả lịch sử!');
+      }
+    } catch { showToast('Lỗi khi xóa!'); }
+  };
+
   const extractUrl = (text) => {
     const match = text.match(/(https?:\/\/[^\s]+)/);
     return match ? match[1].replace(/[）》」】'"]+$/, '') : text.trim();
@@ -791,7 +802,15 @@ export default function DashboardContent() {
       {/* ── Recent Downloads ─────────────────────────────── */}
       {recentDownloads.length > 0 && (
         <div className="w-full max-w-3xl">
-          <h3 className="text-sm font-bold text-slate-300 mb-3 px-1">Tải gần đây</h3>
+          <div className="flex items-center justify-between mb-3 px-1">
+            <h3 className="text-sm font-bold text-slate-300">Tải gần đây</h3>
+            <button
+              onClick={handleClearAllHistory}
+              className="text-xs font-semibold text-red-400 hover:text-red-300 transition-colors"
+            >
+              Xóa tất cả
+            </button>
+          </div>
           <div className="space-y-2.5">
             {recentDownloads.map((job) => (
               <div key={job.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3.5 md:p-4 rounded-2xl bg-[#012622]/50 border border-slate-700/50 backdrop-blur-sm shadow-sm hover:bg-[#012622]/80 transition-colors">
