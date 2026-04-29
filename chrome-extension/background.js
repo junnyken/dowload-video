@@ -326,9 +326,102 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.storage.local.remove(HISTORY_KEY).then(() => sendResponse({ ok: true }));
     return true;
   }
+
+  // Multi-format fetch — get all available qualities for popup display
+  if (msg.type === 'VG_FETCH_FORMATS') {
+    (async () => {
+      try {
+        const resp = await fetch(`${API_BASE}/api/v1/fetch-link`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: msg.url, quality: 'video', remove_watermark: true }),
+        });
+        const data = await resp.json();
+        sendResponse({ ok: resp.ok, data });
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+    })();
+    return true;
+  }
 });
 
 // ── Dọn storage khi tab đóng ─────────────────────────────────────
 chrome.tabs.onRemoved.addListener((tabId) => {
   clearStore(tabId);
+});
+
+// ── Right-click Context Menu ─────────────────────────────────────
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: 'vg-download-video',
+    title: '⬇ Tải với VidGrab',
+    contexts: ['page', 'link', 'video', 'audio'],
+    documentUrlPatterns: [
+      '*://*.tiktok.com/*',
+      '*://*.youtube.com/*',
+      '*://*.facebook.com/*',
+      '*://*.douyin.com/*',
+      '*://*.instagram.com/*',
+      '*://open.spotify.com/*',
+    ],
+  });
+  chrome.contextMenus.create({
+    id: 'vg-download-mp3',
+    title: '🎵 Tải MP3 với VidGrab',
+    contexts: ['page', 'link', 'video', 'audio'],
+    documentUrlPatterns: [
+      '*://*.tiktok.com/*',
+      '*://*.youtube.com/*',
+      '*://*.facebook.com/*',
+      '*://*.douyin.com/*',
+      '*://*.instagram.com/*',
+      '*://open.spotify.com/*',
+    ],
+  });
+});
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (!tab?.url) return;
+  const targetUrl = info.linkUrl || tab.url;
+  const isMP3 = info.menuItemId === 'vg-download-mp3';
+
+  chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '⚡ VidGrab: Đang xử lý...' }).catch(() => {});
+
+  try {
+    const resp = await fetch(`${API_BASE}/api/v1/fetch-link`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: targetUrl,
+        quality: isMP3 ? 'mp3_320' : 'video',
+        remove_watermark: true,
+      }),
+    });
+    const data = await resp.json();
+
+    if (resp.ok && data.success) {
+      const targetDlUrl = data.direct_mp4_url || data.local_file_path;
+      let ext = isMP3 ? 'mp3' : 'mp4';
+      if (data.is_audio_only) ext = 'mp3';
+      const safeName = (data.title || 'video').replace(/[/\\?%*:|"<>]/g, '-');
+
+      let dlUrl;
+      if (targetDlUrl && !targetDlUrl.includes('matbao.ai')) {
+        dlUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(targetDlUrl)}&filename=${encodeURIComponent(safeName)}&ext=${ext}`;
+      } else if (targetDlUrl?.startsWith('/app/downloads/')) {
+        dlUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(targetDlUrl)}&filename=${encodeURIComponent(safeName)}.${ext}`;
+      } else {
+        dlUrl = targetDlUrl;
+      }
+
+      chrome.downloads.download({ url: dlUrl, filename: `VidGrab/${safeName}.${ext}`, saveAs: true });
+      addToHistory({ title: data.title || 'Video', thumbnail: data.thumbnail_url || '', url: targetUrl, quality: isMP3 ? 'MP3' : 'HD', fileSize: data.file_size_mb ? `${data.file_size_mb} MB` : '' });
+      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '✅ Đang tải xuống!' }).catch(() => {});
+    } else {
+      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '❌ ' + (data.detail || 'Lỗi') }).catch(() => {});
+    }
+  } catch (err) {
+    chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '❌ Lỗi kết nối' }).catch(() => {});
+  }
 });

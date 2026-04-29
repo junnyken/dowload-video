@@ -157,6 +157,7 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
     if (res.ok && data.success) {
       // Show preview card
       showPreviewCard(data);
+      showMultiFormat(data);
 
       statusMsg.textContent = 'Thành công! Đang tải file...';
       statusMsg.className = 'mt-2 text-xs text-center text-green-400 min-h-[18px]';
@@ -396,3 +397,79 @@ async function downloadSingleTrack(track, btn) {
     } else throw new Error();
   } catch { btn.innerHTML = '❌'; btn.classList.replace('bg-green-600','bg-red-600'); }
 }
+
+// ══════════════════════════════════════════════════════════════════
+// DARK / LIGHT MODE TOGGLE
+// ══════════════════════════════════════════════════════════════════
+const themeBtn = document.getElementById('theme-toggle');
+chrome.storage.local.get('vg_theme', (res) => {
+  if (res.vg_theme === 'light') {
+    document.body.classList.add('light-mode');
+    themeBtn.textContent = '☀️';
+  }
+});
+themeBtn.addEventListener('click', () => {
+  const isLight = document.body.classList.toggle('light-mode');
+  themeBtn.textContent = isLight ? '☀️' : '🌙';
+  chrome.storage.local.set({ vg_theme: isLight ? 'light' : 'dark' });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// MULTI-FORMAT POPUP — Show all available qualities
+// ══════════════════════════════════════════════════════════════════
+function showMultiFormat(data) {
+  const panel = document.getElementById('formats-panel');
+  const list = document.getElementById('formats-list');
+  if (!panel || !list) return;
+
+  const formats = data.available_formats || [];
+  if (formats.length === 0) return;
+
+  list.innerHTML = '';
+  formats.forEach((fmt) => {
+    const row = document.createElement('div');
+    row.className = 'fmt-item';
+
+    const isVideo = fmt.type === 'video';
+    const icon = isVideo ? '🎬' : '🎵';
+    const label = fmt.label || (isVideo ? `${fmt.height}p` : 'Audio');
+    const codecBadge = fmt.codec ? `<span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">${fmt.codec}</span>` : '';
+    const sizeBadge = fmt.file_size_mb ? `<span class="text-[10px] text-orange-400 font-bold">${fmt.file_size_mb} MB</span>` : '';
+
+    row.innerHTML = `
+      <div class="flex items-center gap-2">
+        <span class="text-sm">${icon}</span>
+        <div>
+          <div class="text-[11px] font-bold text-white">${label}</div>
+          <div class="flex gap-1 mt-0.5">${codecBadge} ${sizeBadge}</div>
+        </div>
+      </div>
+      <span class="text-[10px] text-orange-400 font-bold hover:text-orange-300">⬇</span>
+    `;
+
+    row.addEventListener('click', () => {
+      const dlUrl = fmt.url;
+      const safeName = (data.title || 'video').replace(/[/\\?%*:|"<>]/g, '-');
+      const ext = isVideo ? 'mp4' : 'mp3';
+      let finalUrl;
+      if (dlUrl && !dlUrl.includes('matbao.ai')) {
+        finalUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}&ext=${ext}`;
+      } else if (dlUrl?.startsWith('/app/downloads/')) {
+        finalUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}.${ext}`;
+      } else {
+        finalUrl = dlUrl;
+      }
+      chrome.downloads.download({ url: finalUrl, filename: `VidGrab/${safeName}_${label}.${ext}`, saveAs: true });
+      row.querySelector('span:last-child').textContent = '✅';
+    });
+
+    list.appendChild(row);
+  });
+
+  panel.classList.remove('hidden');
+}
+
+// Close formats panel
+document.getElementById('formats-close')?.addEventListener('click', () => {
+  document.getElementById('formats-panel')?.classList.add('hidden');
+});
