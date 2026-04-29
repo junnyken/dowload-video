@@ -5,7 +5,7 @@
   <title>VidGrab</title>
   <link rel="stylesheet" href="tailwind.css">
   <style>
-    body { width: 340px; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { width: 360px; font-family: 'Segoe UI', system-ui, sans-serif; }
     .spinner {
       border: 3px solid rgba(255,255,255,0.25);
       border-radius: 50%;
@@ -25,6 +25,8 @@
     #channel-section { display: none; }
     #channel-section.visible { display: block; }
 
+    #history-section { display: none; }
+
     .progress-bar-inner {
       height: 100%;
       background: linear-gradient(90deg, #f97316, #eab308);
@@ -34,6 +36,65 @@
     .custom-scrollbar::-webkit-scrollbar { width: 4px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+
+    /* Download progress */
+    .dl-progress-wrap {
+      background: #111827;
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin-top: 8px;
+      border: 1px solid #374151;
+    }
+    .dl-progress-bar {
+      height: 4px;
+      background: #1f2937;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+    .dl-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #f97316, #22c55e);
+      border-radius: 999px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    /* History item */
+    .history-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px; border-radius: 8px;
+      background: #1f2937; border: 1px solid transparent;
+      transition: all 0.15s;
+    }
+    .history-item:hover {
+      border-color: #374151; background: #111827;
+    }
+
+    /* Preview card */
+    .preview-card {
+      background: #111827;
+      border: 1px solid #374151;
+      border-radius: 12px;
+      padding: 10px;
+      margin-top: 8px;
+      animation: fadeIn 0.3s;
+    }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+
+    /* Shortcut hint */
+    .shortcut-hint {
+      font-size: 9px;
+      color: #6b7280;
+      text-align: center;
+      padding: 4px 0;
+      border-top: 1px solid #1f2937;
+    }
+    .shortcut-hint kbd {
+      background: #1f2937; padding: 1px 4px; border-radius: 3px;
+      font-family: monospace; font-size: 9px; color: #9ca3af;
+      border: 1px solid #374151;
+    }
   </style>
 </head>
 <body class="bg-gray-900 text-white p-4">
@@ -49,19 +110,22 @@
   <!-- Header -->
   <div class="flex items-center gap-2 mb-3 pb-3 border-b border-gray-700">
     <div class="bg-gradient-to-br from-orange-500 to-yellow-400 text-gray-900 font-extrabold px-2 py-0.5 rounded-lg text-sm">VG</div>
-    <h1 class="text-base font-bold text-orange-400 flex-1">VidGrab</h1>
+    <h1 class="text-base font-bold text-orange-400 flex-1">VidGrab <span class="text-[9px] text-gray-500 font-normal">v3.0</span></h1>
     <div id="page-badge" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 border border-gray-700">
       Đang nhận diện...
     </div>
   </div>
 
-  <!-- Tab switcher -->
+  <!-- Tab switcher (3 tabs) -->
   <div class="flex gap-1 mb-3 bg-gray-800 p-1 rounded-lg">
     <button id="tab-single" class="tab-btn active flex-1 rounded-md py-1.5 text-xs font-bold text-gray-900">
-      Video đơn
+      ⬇ Tải
     </button>
     <button id="tab-channel" class="tab-btn flex-1 rounded-md py-1.5 text-xs font-bold text-gray-400 hover:text-white">
-      Playlist / Kênh
+      📡 Kênh
+    </button>
+    <button id="tab-history" class="tab-btn flex-1 rounded-md py-1.5 text-xs font-bold text-gray-400 hover:text-white">
+      📋 Lịch sử
     </button>
   </div>
 
@@ -100,9 +164,35 @@
     <div id="statusMsg" class="mt-2 text-xs text-center text-gray-500 min-h-[18px]">
       Hệ thống server sẽ xử lý và xoá logo tự động.
     </div>
+
+    <!-- Preview Card (ẩn mặc định) -->
+    <div id="preview-card" class="preview-card hidden">
+      <div class="flex gap-3 items-center">
+        <img id="preview-thumb" src="" class="w-16 h-12 rounded-lg object-cover bg-gray-800 shadow-sm">
+        <div class="flex-1 overflow-hidden">
+          <div id="preview-title" class="text-xs font-bold text-white truncate">—</div>
+          <div class="flex items-center gap-2 mt-1">
+            <span id="preview-duration" class="text-[10px] text-gray-400">0:00</span>
+            <span id="preview-size" class="text-[10px] text-orange-400 font-bold"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Download Progress (ẩn mặc định) -->
+    <div id="dl-progress" class="dl-progress-wrap hidden">
+      <div class="flex justify-between items-center">
+        <span class="text-[10px] text-gray-400">Đang tải...</span>
+        <span id="dl-progress-pct" class="text-[10px] text-orange-400 font-bold">0%</span>
+      </div>
+      <div class="dl-progress-bar">
+        <div id="dl-progress-fill" class="dl-progress-fill"></div>
+      </div>
+      <div id="dl-progress-info" class="text-[9px] text-gray-500 mt-1 text-right"></div>
+    </div>
   </div>
 
-  <!-- ── CHANNEL SECTION (Douyin) ── -->
+  <!-- ── CHANNEL SECTION (Douyin / Generic / Spotify) ── -->
   <div id="channel-section">
     <div class="bg-gray-800 rounded-xl p-3 mb-3 border border-gray-700">
       <div class="text-xs text-gray-400 mb-1">Kênh đang mở</div>
@@ -156,6 +246,26 @@
     <div id="sp-tracklist-container" class="hidden mt-3 max-h-[300px] overflow-y-auto pr-1 space-y-1.5 custom-scrollbar">
        <!-- Tracks render here -->
     </div>
+  </div>
+
+  <!-- ── HISTORY SECTION (NEW) ── -->
+  <div id="history-section">
+    <div class="flex justify-between items-center mb-3">
+      <span class="text-xs text-gray-400">Các video đã tải gần đây</span>
+      <button id="clear-history-btn" class="text-[10px] text-red-400 hover:text-red-300 font-bold transition-colors">
+        🗑 Xoá tất cả
+      </button>
+    </div>
+    <div id="history-list" class="space-y-2 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar">
+      <div id="history-empty" class="text-center text-gray-500 text-xs py-6">
+        Chưa có lịch sử tải. Tải video đầu tiên ngay!
+      </div>
+    </div>
+  </div>
+
+  <!-- Shortcut hint -->
+  <div class="shortcut-hint mt-3">
+    Phím tắt: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> để tải nhanh
   </div>
 
   <script src="popup.js"></script>

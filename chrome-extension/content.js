@@ -10,7 +10,7 @@
   if (window.__vidgrab_injected) return;
   window.__vidgrab_injected = true;
 
-  const API_BASE = 'https://dowload-video-trieunt.dev.matbao.ai';
+  const API_BASE = 'https://dowload-video.mk.dev.matbao.ai';
 
   // ── Page type ─────────────────────────────────────────────────────
   function getPageType() {
@@ -25,7 +25,9 @@
       /facebook\.com\/share\/r\//.test(url) ||
       /douyin\.com\/(video|note)\//.test(url) ||
       /douyin\.com\/.*modal_id=/.test(url) ||
-      /open\.spotify\.com\/track\//.test(url)
+      /open\.spotify\.com\/track\//.test(url) ||
+      /instagram\.com\/(p|reel|reels)\//.test(url) ||
+      /instagram\.com\/stories\//.test(url)
     ) return 'video';
     
     if (/douyin\.com\/(user\/|@)/.test(url) && !url.includes('modal_id=')) return 'channel';
@@ -425,6 +427,10 @@
     if (msg.type === 'VG_GET_URLS') {
       sendResponse({ urls: Array.from(videoSet) });
     }
+    // Toast notification from keyboard shortcut
+    if (msg.type === 'VG_SHOW_TOAST') {
+      showVGToast(msg.text);
+    }
     return true;
   });
 
@@ -446,6 +452,30 @@
 
   // ── Init ────────────────────────────────────────────────────────────
   const type = getPageType();
-  if (type === 'video' || window.location.href.includes('spotify.com')) injectVideoButton();
+  if (type === 'video' || window.location.href.includes('spotify.com') || window.location.href.includes('instagram.com')) injectVideoButton();
   if (type === 'channel' || type === 'spotify_playlist' || type === 'generic_channel') injectChannelPanel();
+
+  // ── Toast notification helper (for keyboard shortcut feedback) ───
+  function showVGToast(text) {
+    let toast = document.getElementById('vg-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'vg-toast';
+      Object.assign(toast.style, {
+        position: 'fixed', top: '20px', right: '20px', zIndex: '2147483647',
+        background: '#1f2937', color: '#fff', padding: '10px 18px',
+        borderRadius: '12px', fontSize: '13px', fontWeight: '600',
+        fontFamily: 'system-ui, sans-serif', boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+        border: '1px solid #374151', transition: 'opacity 0.3s, transform 0.3s',
+        opacity: '0', transform: 'translateY(-10px)',
+      });
+      document.body.appendChild(toast);
+    }
+    toast.textContent = text;
+    toast.style.opacity = '1'; toast.style.transform = 'translateY(0)';
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+      toast.style.opacity = '0'; toast.style.transform = 'translateY(-10px)';
+    }, 3000);
+  }
 })();

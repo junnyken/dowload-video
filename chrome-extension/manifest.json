@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "VidGrab - One Click Downloader",
-  "version": "2.1.0",
-  "description": "Tải video không logo siêu tốc — TikTok, YouTube, Facebook, Douyin. Channel scraper chống bot.",
+  "version": "3.0.0",
+  "description": "Tải video không logo siêu tốc — TikTok, YouTube, Facebook, Instagram, Douyin, Spotify. Channel scraper chống bot.",
   "permissions": [
     "activeTab",
     "tabs",
     "downloads",
     "storage",
-    "scripting"
+    "scripting",
+    "notifications"
   ],
   "host_permissions": [
     "*://*.tiktok.com/*",
@@ -16,7 +17,8 @@
     "*://*.facebook.com/*",
     "*://*.douyin.com/*",
     "*://*.iesdouyin.com/*",
-    "https://dowload-video-trieunt.dev.matbao.ai/*"
+    "*://*.instagram.com/*",
+    "https://dowload-video.mk.dev.matbao.ai/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -30,6 +32,15 @@
     "48": "assets/icon.png",
     "128": "assets/icon.png"
   },
+  "commands": {
+    "quick-download": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+D",
+        "mac": "Command+Shift+D"
+      },
+      "description": "Tải nhanh video trên trang hiện tại"
+    }
+  },
   "content_scripts": [
     {
       "matches": ["*://*.douyin.com/*"],
@@ -42,7 +53,8 @@
         "*://*.tiktok.com/*",
         "*://*.youtube.com/*",
         "*://*.facebook.com/*",
-        "*://*.douyin.com/*"
+        "*://*.douyin.com/*",
+        "*://*.instagram.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
