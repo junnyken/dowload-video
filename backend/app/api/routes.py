@@ -32,6 +32,7 @@ class FetchLinkRequest(BaseModel):
     url: str
     quality: Optional[str] = "video"
     remove_watermark: Optional[bool] = False
+    download_subs: Optional[bool] = False
 
 
 class BulkDownloadRequest(BaseModel):
@@ -110,7 +111,12 @@ async def fetch_link(payload: FetchLinkRequest, request: Request):
 
         print(f"[Cache Miss] API - URL: {payload.url} - Fetching fresh link")
         # 3. Extract info
-        info = await extract_video_info(payload.url, payload.quality, payload.remove_watermark)
+        info = await extract_video_info(
+            payload.url, 
+            payload.quality, 
+            payload.remove_watermark,
+            download_subs=payload.download_subs
+        )
         
         # 4. Increment usage
         increment_usage(user_id)
@@ -133,6 +139,8 @@ async def fetch_link(payload: FetchLinkRequest, request: Request):
             "file_size_mb": info.get("file_size_mb", 0),
             "available_formats": info.get("available_formats", []),
             "max_merge_height": info.get("max_merge_height", 0),
+            "subtitle_url": info.get("subtitle_url"),
+            "is_audio_only": info.get("is_audio_only"),
             "cached": False
         }
     except Exception as e:

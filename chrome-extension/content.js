@@ -153,7 +153,7 @@
             url: `${API_BASE}/api/v1/fetch-link`,
             method: 'POST',
             body: { 
-               url: window.location.href, 
+               url: window.location.href.includes('spotify.com') ? (document.querySelector('a[data-testid="context-item-info-title"]')?.href || document.querySelector('a[data-testid="context-item-link"]')?.href || window.location.href) : window.location.href, 
                quality: window.location.href.includes('spotify.com') ? 'mp3_320' : 'video', 
                remove_watermark: true 
             },
@@ -439,13 +439,13 @@
     videoSet.clear();
     setTimeout(() => {
       const t = getPageType();
-      if (t === 'video') injectVideoButton();
-      if (t === 'channel') injectChannelPanel();
+      if (t === 'video' || window.location.href.includes('spotify.com')) injectVideoButton();
+      if (t === 'channel' || t === 'spotify_playlist' || t === 'generic_channel') injectChannelPanel();
     }, 1200);
   }).observe(document.documentElement, { childList: true, subtree: true });
 
   // ── Init ────────────────────────────────────────────────────────────
   const type = getPageType();
-  if (type === 'video') injectVideoButton();
-  if (type === 'channel') injectChannelPanel();
+  if (type === 'video' || window.location.href.includes('spotify.com')) injectVideoButton();
+  if (type === 'channel' || type === 'spotify_playlist' || type === 'generic_channel') injectChannelPanel();
 })();

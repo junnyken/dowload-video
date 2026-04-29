@@ -178,6 +178,7 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
   const btn       = document.getElementById('downloadBtn');
   const quality   = document.getElementById('qualitySelect').value;
   const noWm      = document.getElementById('removeWatermark').checked;
+  const dlSubs    = document.getElementById('downloadSubs').checked;
 
   btn.disabled = true;
   btn.classList.add('opacity-70');
@@ -195,7 +196,7 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
     const res = await fetch(`${API_BASE}/api/v1/fetch-link`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: tab.url, quality, remove_watermark: noWm }),
+      body: JSON.stringify({ url: tab.url, quality, remove_watermark: noWm, download_subs: dlSubs }),
     });
     const data = await res.json();
 
@@ -222,6 +223,10 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
       }
 
       chrome.downloads.download({ url: dlUrl, filename: `VidGrab/${safeName}.${ext}`, saveAs: true });
+      
+      if (data.subtitle_url) {
+        chrome.downloads.download({ url: data.subtitle_url, filename: `VidGrab/${safeName}.srt`, saveAs: false });
+      }
     } else {
       throw new Error(data.detail || 'Server báo lỗi.');
     }

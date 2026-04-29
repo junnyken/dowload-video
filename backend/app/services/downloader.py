@@ -363,7 +363,7 @@ def _extract_available_formats(info: dict) -> dict:
     }
 
 
-def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark: bool = False) -> Dict[str, Any]:
+def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False) -> Dict[str, Any]:
     """
     Extract info for a single video URL (synchronous).
     Returns title, thumbnail, and direct MP4 URL.
@@ -612,6 +612,19 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 is_audio_only = True
             break
 
+    subtitle_url = None
+    if download_subs:
+        subs = info.get("subtitles") or info.get("automatic_captions") or {}
+        if subs:
+            target_lang = next((l for l in ["vi", "en", "en-US", "vi-VN"] if l in subs), None)
+            if not target_lang and subs:
+                target_lang = list(subs.keys())[0]
+            if target_lang:
+                sub_tracks = subs[target_lang]
+                best_sub = next((st for st in sub_tracks if st.get("ext") in ["srt", "vtt"]), sub_tracks[0] if sub_tracks else None)
+                if best_sub:
+                    subtitle_url = best_sub.get("url")
+
     result = {
         "title": info.get("title", "Unknown Title"),
         "thumbnail_url": info.get("thumbnail", ""),
@@ -623,6 +636,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         "available_formats": fmt_info["video_formats"] + fmt_info["audio_formats"],
         "max_merge_height": fmt_info["max_video_only_height"],
         "is_audio_only": is_audio_only,
+        "subtitle_url": subtitle_url,
     }
 
     # Override with Spotify metadata for better title/thumbnail accuracy
@@ -646,7 +660,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     return result
 
 
-def extract_video_info_sync(url: str, quality: str = "video", remove_watermark: bool = False) -> Dict[str, Any]:
+def extract_video_info_sync(url: str, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False) -> Dict[str, Any]:
     """
     Public entry point with HARD TIMEOUT.
     Wraps the actual extraction in a thread.
@@ -656,7 +670,7 @@ def extract_video_info_sync(url: str, quality: str = "video", remove_watermark: 
         timeout = 600 if quality != "video" else EXTRACTION_TIMEOUT_SECONDS
         return _run_with_timeout(
             _extract_video_info_impl,
-            args=(url, quality, remove_watermark),
+            args=(url, quality, remove_watermark, download_subs),
             timeout=timeout,
         )
     except TimeoutError as e:
@@ -664,9 +678,9 @@ def extract_video_info_sync(url: str, quality: str = "video", remove_watermark: 
         raise ValueError(str(e))
 
 
-async def extract_video_info(url: str, quality: str = "video", remove_watermark: bool = False) -> Dict[str, Any]:
+async def extract_video_info(url: str, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False) -> Dict[str, Any]:
     """Async wrapper for single video extraction."""
-    return await asyncio.to_thread(extract_video_info_sync, url, quality, remove_watermark)
+    return await asyncio.to_thread(extract_video_info_sync, url, quality, remove_watermark, download_subs)
 
 
 # ── Channel / Playlist Scraping ──────────────────────────────────────
