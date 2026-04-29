@@ -278,6 +278,6 @@ document.getElementById('ch-send-btn').addEventListener('click', async () => {
     status.textContent = `❌ Lỗi: ${err.message}`;
     status.style.color = '#f87171';
     sendBtn.disabled = false;
-    sendText.textContent = `📤 Thử lại (${videos.length} video)`;
+    sendText.textContent = `📤 Thử lại (${urls.length} video)`;
   }
 });

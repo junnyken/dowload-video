@@ -100,6 +100,8 @@ if prod_domain and prod_domain not in origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    # Allow Chrome Extension origins (chrome-extension://...)
+    allow_origin_regex=r"^chrome-extension://.*$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE"],  # Only methods we actually use
     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
