@@ -27,8 +27,10 @@ async function getActiveTab() {
 
 // ── Page detection + populate channel UI ──────────────────────────
 const BADGE_MAP = {
-  video:   { label: '▶ Video', cls: 'bg-green-900 text-green-400 border-green-800' },
+  video:   { label: '▶ Video / Nhạc', cls: 'bg-green-900 text-green-400 border-green-800' },
   channel: { label: '📡 Kênh Douyin', cls: 'bg-orange-900 text-orange-400 border-orange-800' },
+  generic_channel: { label: '📺 Kênh / Playlist', cls: 'bg-orange-900 text-orange-400 border-orange-800' },
+  spotify_playlist: { label: '🎵 Spotify Playlist', cls: 'bg-green-900 text-green-400 border-green-800' },
 };
 
 async function tryGetPageInfo(tabId) {
@@ -85,28 +87,48 @@ async function initPopup() {
       pageBadge.className = `text-xs px-2 py-0.5 rounded-full border ${bm.cls}`;
     }
 
-    if (pageInfo.pageType === 'channel') {
+    if (pageInfo.pageType === 'channel' || pageInfo.pageType === 'spotify_playlist' || pageInfo.pageType === 'generic_channel') {
       showTab('channel');
       document.getElementById('ch-url').textContent = pageInfo.url;
-
-      // Lấy count trực tiếp từ content script (videoSet trong DOM)
-      const countResp = await new Promise((r) =>
-        chrome.tabs.sendMessage(tab.id, { type: 'VG_GET_COUNT' }, r)
-      );
-      const count = countResp?.count || 0;
-      document.getElementById('ch-count').textContent = count;
-      if (count > 0) {
-        document.getElementById('ch-send-btn').classList.remove('hidden');
-        document.getElementById('ch-send-text').textContent = `Gửi tải ${count} video`;
-        document.getElementById('ch-status').textContent =
-          `Đã thu thập ${count} video. Cuộn thêm hoặc gửi ngay.`;
-        document.getElementById('ch-status').style.color = '#34d399';
-      } else {
-        document.getElementById('ch-status').textContent =
-          'Panel live đang theo dõi DOM — cuộn trang để load video.';
+      
+      if (pageInfo.pageType === 'spotify_playlist') {
+         document.getElementById('ch-btn-text').textContent = 'Lấy danh sách Spotify';
+         document.getElementById('ch-status').textContent = 'Nhấn nút để lấy danh sách bài hát từ Spotify.';
+         if (document.getElementById('vg-source-badge')) {
+            document.getElementById('vg-source-badge').textContent = 'Spotify API';
+         }
+      } else if (pageInfo.pageType === 'generic_channel') {
+         document.getElementById('ch-btn-text').textContent = 'Quét toàn bộ Kênh/Playlist này';
+         document.getElementById('ch-status').textContent = 'Hệ thống sẽ tự động tìm tất cả video trong kênh này.';
+         document.getElementById('ch-count').textContent = '∞';
+         document.getElementById('ch-send-btn').classList.remove('hidden');
+         document.getElementById('ch-send-text').textContent = `Tải tất cả Video của Kênh`;
+         if (document.getElementById('vg-source-badge')) {
+            document.getElementById('vg-source-badge').textContent = 'Server Scraper';
+         }
+      } else if (pageInfo.pageType === 'channel') {
+        // Lấy count trực tiếp từ content script (videoSet trong DOM)
+        const countResp = await new Promise((r) =>
+          chrome.tabs.sendMessage(tab.id, { type: 'VG_GET_COUNT' }, r)
+        );
+        const count = countResp?.count || 0;
+        document.getElementById('ch-count').textContent = count;
+        if (count > 0) {
+          document.getElementById('ch-send-btn').classList.remove('hidden');
+          document.getElementById('ch-send-text').textContent = `Gửi tải ${count} video`;
+          document.getElementById('ch-status').textContent =
+            `Đã thu thập ${count} video. Cuộn thêm hoặc gửi ngay.`;
+          document.getElementById('ch-status').style.color = '#34d399';
+        } else {
+          document.getElementById('ch-status').textContent =
+            'Panel live đang theo dõi DOM — cuộn trang để load video.';
+        }
       }
     } else {
       showTab('single');
+      if (pageInfo?.url?.includes('spotify.com/track/')) {
+         document.getElementById('qualitySelect').value = 'mp3_320';
+      }
     }
   } catch {
     pageBadge.textContent = 'Mở trang hỗ trợ';
@@ -119,13 +141,17 @@ initPopup();
 // ── Live count polling khi đang ở tab Kênh ────────────────────────
 let pollTimer = null;
 
-document.getElementById('tab-channel').addEventListener('click', () => {
+document.getElementById('tab-channel').addEventListener('click', async () => {
   clearInterval(pollTimer);
+  const tab = await getActiveTab();
+  const pageInfo = await tryGetPageInfo(tab.id).catch(() => null);
+  if (pageInfo?.pageType === 'spotify_playlist' || pageInfo?.pageType === 'generic_channel') return;
+
   pollTimer = setInterval(async () => {
     if (!_activeTabId) return;
     const res = await new Promise((r) =>
       chrome.tabs.sendMessage(_activeTabId, { type: 'VG_GET_COUNT' }, r)
-    );
+    ).catch(() => null);
     const count = res?.count || 0;
     document.getElementById('ch-count').textContent = count;
     if (count > 0) {
@@ -177,8 +203,16 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
       statusMsg.textContent = 'Thành công! Đang tải file...';
       statusMsg.className = 'mt-2 text-xs text-center text-green-400 min-h-[18px]';
 
-      let dlUrl = data.direct_mp4_url || data.local_mp3_path || data.local_file_path;
-      const ext = quality.includes('mp3') ? 'mp3' : 'mp4';
+      let dlUrl;
+      let ext = quality.includes('mp3') ? 'mp3' : 'mp4';
+      if (ext === 'mp3') {
+        dlUrl = data.local_mp3_path || data.direct_mp3_url || data.direct_mp4_url || data.local_file_path;
+      } else {
+        dlUrl = data.direct_mp4_url || data.local_file_path || data.local_mp3_path;
+      }
+      if (dlUrl && (dlUrl.endsWith('.mp3') || dlUrl.endsWith('.m4a'))) {
+          ext = 'mp3';
+      }
       const safeName = (data.title || 'video').replace(/[/\\?%*:|"<>]/g, '-');
 
       if (!dlUrl.includes('matbao.ai')) {
@@ -204,16 +238,61 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
 });
 
 // ══════════════════════════════════════════════════════════════════
-// CHANNEL — Trigger scroll + Send to backend
+// CHANNEL — Trigger scroll / Fetch Spotify + Send to backend
 // ══════════════════════════════════════════════════════════════════
+let _spotifyTracksCache = [];
+
 document.getElementById('ch-scrape-btn').addEventListener('click', async () => {
   if (!_activeTabId) return;
   const btn = document.getElementById('ch-scrape-btn');
   const status = document.getElementById('ch-status');
+  
+  const tab = await getActiveTab();
+  const pageInfo = await tryGetPageInfo(tab.id).catch(() => null);
 
   btn.disabled = true;
-  document.getElementById('ch-btn-text').textContent = 'Đang cuộn...';
   document.getElementById('ch-spinner').style.display = 'block';
+  
+  if (pageInfo?.pageType === 'spotify_playlist') {
+     document.getElementById('ch-btn-text').textContent = 'Đang lấy dữ liệu Spotify...';
+     status.textContent = 'Đang gọi API Spotify...';
+     try {
+       const res = await fetch(`${API_BASE}/api/v1/fetch-spotify`, {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ url: tab.url }),
+       });
+       const data = await res.json();
+       if (data.success && data.tracks) {
+         _spotifyTracksCache = data.tracks.map(t => t.search_query);
+         document.getElementById('ch-count').textContent = _spotifyTracksCache.length;
+         status.textContent = `Thành công! Đã lấy ${_spotifyTracksCache.length} bài hát.`;
+         status.style.color = '#34d399';
+         document.getElementById('ch-send-btn').classList.remove('hidden');
+         document.getElementById('ch-send-text').textContent = `Gửi tải ${_spotifyTracksCache.length} bài (MP3)`;
+       } else {
+         throw new Error(data.detail || 'Lỗi server');
+       }
+     } catch (e) {
+       status.textContent = `Lỗi: ${e.message}`;
+       status.style.color = '#f87171';
+     } finally {
+       btn.disabled = false;
+       document.getElementById('ch-btn-text').textContent = 'Lấy danh sách Spotify';
+       document.getElementById('ch-spinner').style.display = 'none';
+     }
+     return;
+  }
+  
+  if (pageInfo?.pageType === 'generic_channel') {
+     // Trigger the bulk download directly for the channel URL
+     document.getElementById('ch-send-btn').click();
+     btn.disabled = false;
+     document.getElementById('ch-spinner').style.display = 'none';
+     return;
+  }
+
+  document.getElementById('ch-btn-text').textContent = 'Đang cuộn...';
   status.textContent = 'Panel đang auto-scroll và intercept API Douyin...';
 
   try {
@@ -239,14 +318,26 @@ document.getElementById('ch-send-btn').addEventListener('click', async () => {
   const status   = document.getElementById('ch-status');
   const batchDiv = document.getElementById('ch-batch-info');
 
-  // Lấy URLs trực tiếp từ content script (videoSet - DOM based)
-  const res = await new Promise((r) =>
-    chrome.tabs.sendMessage(_activeTabId, { type: 'VG_GET_URLS' }, r)
-  );
-  const urls = res?.urls || [];
+  const tab = await getActiveTab();
+  const pageInfo = await tryGetPageInfo(tab.id).catch(() => null);
+  let urls = [];
+  let isSpotify = pageInfo?.pageType === 'spotify_playlist';
+  let isGeneric = pageInfo?.pageType === 'generic_channel';
+  
+  if (isSpotify) {
+     urls = _spotifyTracksCache;
+  } else if (isGeneric) {
+     urls = [tab.url];
+  } else {
+     // Lấy URLs trực tiếp từ content script (videoSet - DOM based)
+     const res = await new Promise((r) =>
+       chrome.tabs.sendMessage(_activeTabId, { type: 'VG_GET_URLS' }, r)
+     ).catch(() => null);
+     urls = res?.urls || [];
+  }
 
   if (urls.length === 0) {
-    status.textContent = 'Chưa có video. Cuộn trang kênh trước.';
+    status.textContent = isSpotify ? 'Chưa lấy danh sách Spotify.' : 'Chưa có video. Cuộn trang kênh trước.';
     return;
   }
 
@@ -258,7 +349,12 @@ document.getElementById('ch-send-btn').addEventListener('click', async () => {
     const resp = await fetch(`${API_BASE}/api/v1/bulk-download`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ urls, quality: 'video', remove_watermark: true }),
+      body: JSON.stringify({ 
+         urls, 
+         quality: isSpotify ? 'mp3_320' : 'video', 
+         remove_watermark: true,
+         channel_mode: isGeneric 
+      }),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();

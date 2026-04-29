@@ -20,9 +20,23 @@
       /youtube\.com\/watch/.test(url) ||
       /facebook\.com\/.+\/videos\//.test(url) ||
       /facebook\.com\/watch/.test(url) ||
-      /douyin\.com\/(video|note)\//.test(url)
+      /facebook\.com\/reel\//.test(url) ||
+      /facebook\.com\/share\/r\//.test(url) ||
+      /douyin\.com\/(video|note)\//.test(url) ||
+      /douyin\.com\/.*modal_id=/.test(url) ||
+      /open\.spotify\.com\/track\//.test(url)
     ) return 'video';
-    if (/douyin\.com\/(user\/|@)/.test(url)) return 'channel';
+    
+    if (/douyin\.com\/(user\/|@)/.test(url) && !url.includes('modal_id=')) return 'channel';
+    
+    if (
+      /tiktok\.com\/@/.test(url) ||
+      /youtube\.com\/(c|channel|user|@)/.test(url) ||
+      /youtube\.com\/playlist\?list=/.test(url) ||
+      /facebook\.com\/[^/]+\/?$/.test(url)
+    ) return 'generic_channel';
+
+    if (/open\.spotify\.com\/(playlist|album)\//.test(url)) return 'spotify_playlist';
     return null;
   }
 
@@ -137,14 +151,23 @@
             type: 'VG_API_FETCH',
             url: `${API_BASE}/api/v1/fetch-link`,
             method: 'POST',
-            body: { url: window.location.href, quality: 'video', remove_watermark: true },
+            body: { 
+               url: window.location.href, 
+               quality: window.location.href.includes('spotify.com') ? 'mp3_320' : 'video', 
+               remove_watermark: true 
+            },
           }, resolve)
         );
         if (!resp || !resp.ok) throw new Error(resp?.data?.detail || resp?.error || 'Server lỗi');
         const data = resp.data;
 
         if (data.success) {
-          const dlUrl = buildProxyUrl(data.direct_mp4_url || data.local_file_path, data.title, 'mp4');
+          const targetUrl = data.direct_mp4_url || data.local_file_path;
+          let ext = 'mp4';
+          if (targetUrl && (targetUrl.endsWith('.mp3') || targetUrl.endsWith('.m4a'))) {
+             ext = 'mp3';
+          }
+          const dlUrl = buildProxyUrl(targetUrl, data.title, ext);
           if (dlUrl) {
             window.open(dlUrl, '_blank');
             label.textContent = 'Thành công!';

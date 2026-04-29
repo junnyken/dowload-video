@@ -101,6 +101,7 @@ def _extract_video_id(url: str) -> Optional[str]:
         r'/note/(\d{15,25})',
         r'item_ids=(\d{15,25})',
         r'aweme_id=(\d{15,25})',
+        r'modal_id=(\d{15,25})',
     ]
     for pat in patterns:
         m = re.search(pat, url)
