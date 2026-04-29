@@ -1,6 +1,7 @@
 /**
  * VidGrab Background Service Worker
  * Nhận dữ liệu từ content.js, lưu vào storage, broadcast live count lại tab.
+ * Proxy API calls cho content script (bypass CORS).
  */
 
 const STORAGE_KEY = (tabId) => `vg_videos_${tabId}`;
@@ -23,6 +24,26 @@ async function clearStore(tabId) {
 // ── Message handler ───────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const tabId = sender.tab?.id;
+
+  // ════════════════════════════════════════════════════════════════
+  // API PROXY — content script & popup gửi qua đây để bypass CORS
+  // ════════════════════════════════════════════════════════════════
+  if (msg.type === 'VG_API_FETCH') {
+    (async () => {
+      try {
+        const resp = await fetch(msg.url, {
+          method: msg.method || 'POST',
+          headers: msg.headers || { 'Content-Type': 'application/json' },
+          body: msg.body ? JSON.stringify(msg.body) : undefined,
+        });
+        const data = await resp.json();
+        sendResponse({ ok: resp.ok, status: resp.status, data });
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+    })();
+    return true;
+  }
 
   // Content script gửi videos vừa intercept được
   if (msg.type === 'VG_STORE_VIDEOS' && tabId) {

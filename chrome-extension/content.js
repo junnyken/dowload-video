@@ -131,12 +131,17 @@
       btn.disabled = true;
 
       try {
-        const res = await fetch(`${API_BASE}/api/v1/fetch-link`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: window.location.href, quality: 'video', remove_watermark: true }),
-        });
-        const data = await res.json();
+        // Gọi API qua background service worker để bypass CORS
+        const resp = await new Promise((resolve) =>
+          chrome.runtime.sendMessage({
+            type: 'VG_API_FETCH',
+            url: `${API_BASE}/api/v1/fetch-link`,
+            method: 'POST',
+            body: { url: window.location.href, quality: 'video', remove_watermark: true },
+          }, resolve)
+        );
+        if (!resp || !resp.ok) throw new Error(resp?.data?.detail || resp?.error || 'Server lỗi');
+        const data = resp.data;
 
         if (data.success) {
           const dlUrl = buildProxyUrl(data.direct_mp4_url || data.local_file_path, data.title, 'mp4');
@@ -341,13 +346,17 @@
       sendText.textContent = `⏳ Đang gửi ${urls.length} video...`;
 
       try {
-        const res = await fetch(`${API_BASE}/api/v1/bulk-download`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ urls, quality: 'video', remove_watermark: true }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        // Gọi API qua background service worker để bypass CORS
+        const resp = await new Promise((resolve) =>
+          chrome.runtime.sendMessage({
+            type: 'VG_API_FETCH',
+            url: `${API_BASE}/api/v1/bulk-download`,
+            method: 'POST',
+            body: { urls, quality: 'video', remove_watermark: true },
+          }, resolve)
+        );
+        if (!resp || !resp.ok) throw new Error(resp?.data?.detail || resp?.error || `HTTP ${resp?.status || 'unknown'}`);
+        const data = resp.data;
 
         if (data.success) {
           statusEl.style.color = '#34d399';
