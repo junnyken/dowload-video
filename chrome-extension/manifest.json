@@ -1,19 +1,51 @@
 {
   "manifest_version": 3,
   "name": "VidGrab - One Click Downloader",
-  "version": "1.0.0",
-  "description": "Tải video không logo siêu tốc qua máy chủ VidGrab",
+  "version": "2.1.0",
+  "description": "Tải video không logo siêu tốc — TikTok, YouTube, Facebook, Douyin. Channel scraper chống bot.",
   "permissions": [
     "activeTab",
-    "downloads"
+    "tabs",
+    "downloads",
+    "storage",
+    "scripting"
   ],
+  "host_permissions": [
+    "*://*.tiktok.com/*",
+    "*://*.youtube.com/*",
+    "*://*.facebook.com/*",
+    "*://*.douyin.com/*",
+    "*://*.iesdouyin.com/*",
+    "https://dowload-video-trieunt.dev.matbao.ai/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Tải bằng VidGrab"
+    "default_title": "VidGrab Downloader"
   },
   "icons": {
     "16": "assets/icon.png",
     "48": "assets/icon.png",
     "128": "assets/icon.png"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.douyin.com/*"],
+      "js": ["interceptor.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "*://*.tiktok.com/*",
+        "*://*.youtube.com/*",
+        "*://*.facebook.com/*",
+        "*://*.douyin.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
 }
