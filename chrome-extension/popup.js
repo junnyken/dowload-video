@@ -265,11 +265,7 @@ document.getElementById('ch-scrape-btn').addEventListener('click', async () => {
        const data = await res.json();
        if (data.success && data.tracks) {
          _spotifyTracksCache = data.tracks.map(t => t.search_query);
-         document.getElementById('ch-count').textContent = _spotifyTracksCache.length;
-         status.textContent = `Thành công! Đã lấy ${_spotifyTracksCache.length} bài hát.`;
-         status.style.color = '#34d399';
-         document.getElementById('ch-send-btn').classList.remove('hidden');
-         document.getElementById('ch-send-text').textContent = `Gửi tải ${_spotifyTracksCache.length} bài (MP3)`;
+         renderSpotifyPlaylist(data);
        } else {
          throw new Error(data.detail || 'Lỗi server');
        }
@@ -377,3 +373,100 @@ document.getElementById('ch-send-btn').addEventListener('click', async () => {
     sendText.textContent = `📤 Thử lại (${urls.length} video)`;
   }
 });
+
+// ── SPOTIFY INLINE UI HELPERS ──
+function formatTime(sec) {
+  if (!sec) return '0:00';
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function renderSpotifyPlaylist(data) {
+  // Hide generic elements
+  document.getElementById('ch-count').parentElement.parentElement.style.display = 'none';
+  document.getElementById('ch-url').parentElement.style.display = 'none';
+  document.getElementById('ch-status').style.display = 'none';
+  document.getElementById('ch-scrape-btn').style.display = 'none';
+  
+  // Update header
+  const header = document.getElementById('sp-header');
+  const tracklist = document.getElementById('sp-tracklist-container');
+  
+  document.getElementById('sp-thumb').src = data.thumbnail || 'https://via.placeholder.com/150?text=Spotify';
+  document.getElementById('sp-title').textContent = data.playlist_name || data.album_name || 'Spotify Music';
+  document.getElementById('sp-count').textContent = `${data.tracks.length} bài nhạc`;
+  document.getElementById('sp-type-label').textContent = data.type === 'album' ? 'ALBUM • SPOTIFY' : 'PLAYLIST • SPOTIFY';
+  
+  header.classList.remove('hidden');
+  tracklist.classList.remove('hidden');
+  
+  // Show Zip download button
+  const sendBtn = document.getElementById('ch-send-btn');
+  sendBtn.classList.remove('hidden', 'bg-green-600', 'hover:bg-green-500', 'text-white');
+  sendBtn.classList.add('bg-gradient-to-r', 'from-orange-500', 'to-yellow-400', 'hover:from-orange-600', 'hover:to-yellow-500', 'text-gray-900');
+  document.getElementById('ch-send-text').textContent = 'Tải tất cả (.ZIP)';
+  
+  tracklist.innerHTML = '';
+  data.tracks.forEach((track, idx) => {
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-3 bg-gray-800 p-2 rounded-lg hover:bg-gray-700 transition-colors group border border-transparent hover:border-gray-600';
+    
+    const thumbUrl = track.thumbnail || data.thumbnail || '';
+    
+    row.innerHTML = `
+      <img src="${thumbUrl}" class="w-10 h-10 rounded object-cover shadow-sm">
+      <div class="flex-1 overflow-hidden">
+         <div class="text-[13px] font-bold text-white truncate group-hover:text-green-400 transition-colors">${track.name}</div>
+         <div class="text-[11px] text-gray-400 truncate">${track.artist_str || 'Unknown Artist'}</div>
+      </div>
+      <div class="text-[11px] text-gray-500 font-mono">${formatTime(track.duration)}</div>
+      <button class="bg-green-600 hover:bg-green-500 text-white text-[10px] font-bold px-2 py-1.5 rounded flex items-center gap-1 transition-all" id="sp-dl-${idx}">
+         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+         MP3
+      </button>
+    `;
+    tracklist.appendChild(row);
+    
+    document.getElementById(`sp-dl-${idx}`).addEventListener('click', (e) => {
+       downloadSingleTrack(track, e.currentTarget);
+    });
+  });
+}
+
+async function downloadSingleTrack(track, btn) {
+  const originalHtml = btn.innerHTML;
+  btn.innerHTML = '<div class="spinner !inline-block !w-3 !h-3 !border-2" style="display:inline-block"></div>';
+  btn.disabled = true;
+  
+  try {
+    const resp = await fetch(`${API_BASE}/api/v1/fetch-link`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: track.search_query, quality: 'mp3_320', remove_watermark: true }),
+    });
+    const data = await resp.json();
+    if (resp.ok && data.success) {
+      let dlUrl = data.local_mp3_path || data.direct_mp3_url || data.direct_mp4_url || data.local_file_path;
+      const safeName = (data.title || track.name).replace(/[/\\?%*:|"<>]/g, '-');
+      
+      if (dlUrl && !dlUrl.includes('matbao.ai')) {
+        dlUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}&ext=mp3`;
+      } else if (dlUrl && dlUrl.startsWith('/app/downloads/')) {
+        dlUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}.mp3`;
+      }
+      
+      chrome.downloads.download({ url: dlUrl, filename: `VidGrab/${safeName}.mp3`, saveAs: false });
+      btn.innerHTML = '✅';
+      btn.classList.replace('bg-green-600', 'bg-gray-600');
+      btn.classList.replace('hover:bg-green-500', 'hover:bg-gray-500');
+    } else {
+      throw new Error('Lỗi');
+    }
+  } catch (err) {
+    btn.innerHTML = '❌';
+    btn.classList.replace('bg-green-600', 'bg-red-600');
+    btn.classList.replace('hover:bg-green-500', 'hover:bg-red-500');
+  }
+}
+

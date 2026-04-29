@@ -31,6 +31,9 @@
       border-radius: 999px;
       transition: width 0.4s ease;
     }
+    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
   </style>
 </head>
 <body class="bg-gray-900 text-white p-4">
@@ -113,6 +116,16 @@
       </div>
     </div>
 
+    <!-- ── SPOTIFY INLINE UI ── -->
+    <div id="sp-header" class="hidden bg-gray-800/80 rounded-xl p-3 mb-3 border border-gray-700 flex gap-3 items-center">
+       <img id="sp-thumb" src="" class="w-14 h-14 rounded-lg object-cover shadow-lg border border-gray-600">
+       <div class="flex-1 overflow-hidden">
+         <div class="text-[10px] text-green-400 font-bold mb-0.5 tracking-wider uppercase" id="sp-type-label">PLAYLIST • SPOTIFY</div>
+         <div id="sp-title" class="text-sm font-bold text-white truncate">Title</div>
+         <div id="sp-count" class="text-xs text-gray-400">0 bài nhạc</div>
+       </div>
+    </div>
+
     <div id="ch-status" class="text-xs text-gray-400 mb-3 text-center min-h-[16px]">
       Panel VidGrab đã được mở trên trang kênh.
     </div>
@@ -133,6 +146,10 @@
     </button>
 
     <div id="ch-batch-info" class="text-xs text-center text-gray-500 mt-2 hidden"></div>
+
+    <div id="sp-tracklist-container" class="hidden mt-3 max-h-[300px] overflow-y-auto pr-1 space-y-1.5 custom-scrollbar">
+       <!-- Tracks render here -->
+    </div>
   </div>
 
   <script src="popup.js"></script>
