@@ -31,7 +31,10 @@ const tabs = [
 ];
 
 export default function LandingPage() {
-  const [activeTab, setActiveTab] = useState('single');
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.has('batch') ? 'bulk' : 'single';
+  });
 
   return (
     <div className="min-h-screen relative overflow-hidden pb-24">

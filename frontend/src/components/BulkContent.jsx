@@ -83,7 +83,10 @@ const JobActionCell = ({ job, onDownload }) => {
 
 export default function BulkContent() {
   const [urls, setUrls] = useState('');
-  const [batchId, setBatchId] = useState(null);
+  const [batchId, setBatchId] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('batch') || null;
+  });
   const [jobs, setJobs] = useState([]);
   const [summary, setSummary] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
