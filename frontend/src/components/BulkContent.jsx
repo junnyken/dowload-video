@@ -379,15 +379,19 @@ export default function BulkContent() {
     if (!batchId) return;
     setIsZipping(true);
     try {
-      await fetch(`${API}/bulk-zip`, {
+      const res = await fetch(`${API}/bulk-zip`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ batch_id: batchId })
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || `Server error: ${res.status}`);
+      }
       setRefreshTrigger(prev => prev + 1);
     } catch (e) {
       console.error(e);
-      alert('Không thể tạo file ZIP.');
+      alert('Không thể tạo file ZIP: ' + e.message);
     } finally {
       setIsZipping(false);
     }
@@ -681,7 +685,7 @@ export default function BulkContent() {
                 <div className="mr-auto">
                     {zipJob && zipJob.status === "success" ? (
                        <JobActionCell job={zipJob} onDownload={handleSmartDownload} />
-                    ) : (zipJob && zipJob.status === "processing") || isZipping ? (
+                    ) : (zipJob && (zipJob.status === "processing" || zipJob.status === "pending")) || isZipping ? (
                         <button disabled className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary/50 text-white text-xs font-bold uppercase tracking-wider cursor-not-allowed">
                           <Loader2 className="w-4 h-4 animate-spin" />
                           Đang tạo file ZIP...
