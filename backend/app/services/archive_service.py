@@ -10,20 +10,32 @@ from datetime import datetime, timezone
 DOWNLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "downloads")
 MAX_ZIP_SIZE = 500 * 1024 * 1024  # 500 MB
 
-async def download_file_to_disk(url: str, dest_path: str):
-    """Download a remote file to local disk using asyncio/aiohttp."""
-    timeout = aiohttp.ClientTimeout(total=60)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+async def download_file_to_disk(url: str, dest_path: str, max_retries: int = 3):
+    """Download a remote file to local disk using asyncio/aiohttp with retry."""
+    timeout = aiohttp.ClientTimeout(total=180)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://www.tiktok.com/",
+    }
+    for attempt in range(max_retries):
         try:
-            async with session.get(url, allow_redirects=True) as response:
-                with open(dest_path, 'wb') as f:
-                    while True:
-                        chunk = await response.content.read(8192)
-                        if not chunk:
-                            break
-                        f.write(chunk)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url, allow_redirects=True, headers=headers) as response:
+                    if response.status != 200:
+                        print(f"[ZIP] Download attempt {attempt+1} failed with status {response.status}: {url}")
+                        continue
+                    with open(dest_path, 'wb') as f:
+                        while True:
+                            chunk = await response.content.read(65536)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                    return  # Success
         except Exception as e:
-            print(f"Failed to download {url}: {e}")
+            print(f"[ZIP] Download attempt {attempt+1}/{max_retries} failed for {url}: {e}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(2 ** attempt)  # Exponential backoff
+    print(f"[ZIP] All {max_retries} download attempts failed for {url}")
 
 async def create_batch_zip(batch_id: str) -> Dict[str, Any]:
     """
@@ -107,7 +119,8 @@ async def create_batch_zip(batch_id: str) -> Dict[str, Any]:
     return {
         "success": True, 
         "zip_path": zip_path,
-        "zip_size_mb": zip_size_mb
+        "zip_size_mb": zip_size_mb,
+        "total_files": len(valid_files)
     }
 
 def create_batch_zip_sync(batch_id: str) -> Dict[str, Any]:

@@ -77,11 +77,21 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
             "title": title,
             "slugified_name": slug,
             "direct_mp4_url": best_url,
+            "file_size_mb": info.get("file_size_mb", 0),
             "created_at": now_iso
         }).eq("id", job_id).execute()
 
     except Exception as e:
         error_msg = str(e)[:500]
+        # Translate common errors to user-friendly Vietnamese
+        if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+            error_msg = "⏱ Quá thời gian chờ. Video có thể bị chặn bởi captcha. Vui lòng thử lại."
+        elif "private" in error_msg.lower() or "riêng tư" in error_msg.lower():
+            error_msg = "🔒 Video ở chế độ riêng tư, không thể tải."
+        elif "not found" in error_msg.lower() or "404" in error_msg:
+            error_msg = "🚫 Video không tồn tại hoặc đã bị xóa."
+        elif "403" in error_msg or "forbidden" in error_msg.lower():
+            error_msg = "🛡 Server bị chặn tạm thời. Vui lòng thử lại sau 1 phút."
         supabase.table("download_jobs").update({
             "status": "failed",
             "error_message": error_msg,
@@ -154,11 +164,14 @@ def create_zip_task(self, batch_id: str, zip_job_id: str):
         
         now_iso = datetime.now(timezone.utc).isoformat()
         if result.get("success"):
+            zip_size = result.get("zip_size_mb", 0)
+            total_files = result.get("total_files", 0)
             supabase.table("download_jobs").update({
                 "status": "success",
-                "title": f"Batch {batch_id[:8]}",
+                "title": f"Batch {batch_id[:8]} — {total_files} files",
                 "slugified_name": f"batch_{batch_id}",
                 "direct_mp4_url": result.get("zip_path"),
+                "file_size_mb": zip_size,
                 "created_at": now_iso
             }).eq("id", zip_job_id).execute()
         else:

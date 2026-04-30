@@ -1,10 +1,10 @@
 /**
- * VidGrab Content Script v2.2
+ * VidGrab Content Script v4.0
  *
  * CHANNEL SCRAPER: dùng MutationObserver theo dõi DOM real-time (primary)
  * + interceptor.js network data (bonus nếu hoạt động)
  *
- * SINGLE VIDEO: nút floating download
+ * SINGLE VIDEO: nút floating download + file size preview
  */
 (function () {
   if (window.__vidgrab_injected) return;
@@ -173,17 +173,19 @@
           const dlUrl = buildProxyUrl(targetUrl, data.title, ext);
           if (dlUrl) {
             window.open(dlUrl, '_blank');
-            label.textContent = 'Thành công!';
+            const sizeInfo = data.file_size_mb ? ` (${data.file_size_mb} MB)` : '';
+            label.textContent = `✅ Đang tải${sizeInfo}`;
             btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
           } else throw new Error('Không lấy được link tải');
         } else throw new Error(data.detail || 'Server báo lỗi');
       } catch (err) {
-        label.textContent = 'Lỗi!';
+        label.textContent = '❌ Thử lại';
         btn.style.background = '#ef4444';
         console.error('[VidGrab]', err.message);
+        showVGToast(`❌ ${err.message}`);
       }
 
-      await sleep(3000);
+      await sleep(4000);
       label.textContent = 'VidGrab';
       btn.style.opacity = '1';
       btn.style.background = 'linear-gradient(135deg,#f97316,#eab308)';

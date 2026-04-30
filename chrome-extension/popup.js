@@ -1,4 +1,5 @@
 const API_BASE = 'https://dowload-video.mk.dev.matbao.ai';
+let _lastDownloadData = null; // Store last successful fetch for copy/retry
 
 // ── Tab switcher (3 tabs) ──────────────────────────────────────────
 function showTab(tab) {
@@ -155,9 +156,14 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
     const data = await res.json();
 
     if (res.ok && data.success) {
+      _lastDownloadData = data;
       // Show preview card
-      showPreviewCard(data);
+      showPreviewCard(data, tab.url);
       showMultiFormat(data);
+
+      // Hide error card if visible
+      const errCard = document.getElementById('error-card');
+      if (errCard) errCard.classList.add('hidden');
 
       statusMsg.textContent = 'Thành công! Đang tải file...';
       statusMsg.className = 'mt-2 text-xs text-center text-green-400 min-h-[18px]';
@@ -173,6 +179,10 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
       } else if (dlUrl.startsWith('/app/downloads/')) {
         dlUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}.${ext}`;
       }
+
+      _lastDownloadData._resolvedUrl = dlUrl;
+      _lastDownloadData._ext = ext;
+      _lastDownloadData._safeName = safeName;
 
       // Show progress bar
       document.getElementById('dl-progress').classList.remove('hidden');
@@ -190,20 +200,45 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
   } catch (err) {
     statusMsg.textContent = `Lỗi: ${err.message}`;
     statusMsg.className = 'mt-2 text-xs text-center text-red-400 min-h-[18px]';
+    // Show error card with retry
+    const errCard = document.getElementById('error-card');
+    const errText = document.getElementById('error-text');
+    if (errCard && errText) {
+      errText.textContent = err.message;
+      errCard.classList.remove('hidden');
+    }
   } finally {
     btn.disabled = false; btn.classList.remove('opacity-70'); iconDl.style.display = 'block';
     spinner.style.display = 'none'; btnText.textContent = 'Tải Video Ngay';
   }
 });
 
+// ── Retry button ───────────────────────────────────────────────────
+document.getElementById('retry-btn')?.addEventListener('click', () => {
+  document.getElementById('error-card')?.classList.add('hidden');
+  document.getElementById('downloadBtn')?.click();
+});
+
 // ── Preview Card ───────────────────────────────────────────────────
-function showPreviewCard(data) {
+function detectPlatform(url) {
+  if (!url) return '';
+  if (url.includes('tiktok.com')) return 'TikTok';
+  if (url.includes('youtube.com') || url.includes('youtu.be')) return 'YouTube';
+  if (url.includes('facebook.com')) return 'Facebook';
+  if (url.includes('instagram.com')) return 'Instagram';
+  if (url.includes('douyin.com')) return 'Douyin';
+  if (url.includes('spotify.com')) return 'Spotify';
+  return '';
+}
+
+function showPreviewCard(data, pageUrl) {
   const card = document.getElementById('preview-card');
   if (!card) return;
   const thumb = document.getElementById('preview-thumb');
   const title = document.getElementById('preview-title');
   const dur = document.getElementById('preview-duration');
   const size = document.getElementById('preview-size');
+  const platform = document.getElementById('preview-platform');
 
   if (data.thumbnail_url) thumb.src = data.thumbnail_url;
   title.textContent = data.title || 'Video';
@@ -212,31 +247,79 @@ function showPreviewCard(data) {
     dur.textContent = `${m}:${String(s).padStart(2,'0')}`;
   }
   if (data.file_size_mb) size.textContent = `${data.file_size_mb} MB`;
+  if (platform) platform.textContent = detectPlatform(pageUrl || data.original_url);
   card.classList.remove('hidden');
 }
 
-// ── Download Progress Listener ─────────────────────────────────────
+// ── Action buttons (Copy link, thumbnail, open web) ────────────────
+document.getElementById('action-copy-link')?.addEventListener('click', async () => {
+  const btn = document.getElementById('action-copy-link');
+  if (!_lastDownloadData?._resolvedUrl) return;
+  try {
+    await navigator.clipboard.writeText(_lastDownloadData._resolvedUrl);
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => { btn.textContent = '📋 Copy link'; }, 2000);
+  } catch { btn.textContent = '❌ Lỗi'; setTimeout(() => { btn.textContent = '📋 Copy link'; }, 2000); }
+});
+
+document.getElementById('action-open-web')?.addEventListener('click', async () => {
+  const tab = await getActiveTab();
+  if (tab?.url) chrome.tabs.create({ url: `${API_BASE}?url=${encodeURIComponent(tab.url)}` });
+});
+
+document.getElementById('action-dl-thumb')?.addEventListener('click', () => {
+  if (!_lastDownloadData?.thumbnail_url) return;
+  const safeName = (_lastDownloadData.title || 'thumbnail').replace(/[/\\?%*:|"<>]/g, '-');
+  chrome.downloads.download({ url: _lastDownloadData.thumbnail_url, filename: `VidGrab/${safeName}_thumb.jpg`, saveAs: true });
+  const btn = document.getElementById('action-dl-thumb');
+  btn.textContent = '✅ Đang tải'; setTimeout(() => { btn.textContent = '🖼️ Ảnh bìa'; }, 2000);
+});
+
+// ── Download Progress Listener (with speed) ───────────────────────
+let _dlStartTime = 0;
+let _dlLastReceived = 0;
+let _dlLastTime = 0;
+
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type !== 'VG_DOWNLOAD_PROGRESS') return;
   const wrap = document.getElementById('dl-progress');
   const fill = document.getElementById('dl-progress-fill');
-  const pct = document.getElementById('dl-progress-pct');
+  const pctEl = document.getElementById('dl-progress-pct');
   const info = document.getElementById('dl-progress-info');
+  const speedEl = document.getElementById('dl-progress-speed');
   if (!wrap) return;
 
   if (msg.state === 'complete') {
-    fill.style.width = '100%'; pct.textContent = '✅ Xong!';
-    info.textContent = ''; wrap.style.borderColor = '#22c55e';
-    setTimeout(() => { wrap.classList.add('hidden'); wrap.style.borderColor = ''; }, 3000);
+    fill.style.width = '100%'; pctEl.textContent = '✅ Xong!';
+    info.textContent = ''; if (speedEl) speedEl.textContent = '';
+    wrap.style.borderColor = '#22c55e';
+    // Show success animation
+    const successCheck = document.getElementById('success-check');
+    if (successCheck) { successCheck.classList.add('show'); setTimeout(() => successCheck.classList.remove('show'), 3000); }
+    setTimeout(() => { wrap.classList.add('hidden'); wrap.style.borderColor = ''; }, 4000);
   } else if (msg.state === 'downloading' && msg.progress >= 0) {
-    fill.style.width = msg.progress + '%'; pct.textContent = msg.progress + '%';
+    fill.style.width = msg.progress + '%'; pctEl.textContent = msg.progress + '%';
+    const now = Date.now();
+    if (!_dlStartTime) { _dlStartTime = now; _dlLastReceived = 0; _dlLastTime = now; }
     if (msg.total > 0) {
       const mb = (msg.received / 1048576).toFixed(1);
       const totalMb = (msg.total / 1048576).toFixed(1);
       info.textContent = `${mb} / ${totalMb} MB`;
     }
+    // Calculate speed (MB/s)
+    if (speedEl && msg.received > 0 && now - _dlLastTime > 400) {
+      const deltaBytes = msg.received - _dlLastReceived;
+      const deltaSec = (now - _dlLastTime) / 1000;
+      if (deltaSec > 0) {
+        const speedMBs = (deltaBytes / 1048576 / deltaSec).toFixed(1);
+        speedEl.textContent = `${speedMBs} MB/s`;
+      }
+      _dlLastReceived = msg.received;
+      _dlLastTime = now;
+    }
   } else if (msg.state === 'error') {
-    pct.textContent = '❌ Lỗi'; fill.style.background = '#ef4444';
+    pctEl.textContent = '❌ Lỗi'; fill.style.background = '#ef4444';
+    _dlStartTime = 0;
   }
 });
 

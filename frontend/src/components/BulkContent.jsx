@@ -684,26 +684,45 @@ export default function BulkContent() {
               {totalData.total === totalData.success && (
                 <div className="mr-auto">
                     {zipJob && zipJob.status === "success" ? (
-                       <JobActionCell job={zipJob} onDownload={handleSmartDownload} />
+                       <div className="flex flex-col items-start gap-1.5">
+                         <JobActionCell job={zipJob} onDownload={handleSmartDownload} />
+                         {zipJob.file_size_mb > 0 && (
+                           <span className="text-[11px] font-semibold text-accent-light bg-accent/10 px-2.5 py-1 rounded-lg border border-accent/20 flex items-center gap-1.5">
+                             <FileDown className="w-3 h-3" />
+                             ZIP: {zipJob.file_size_mb} MB
+                             {zipJob.title && zipJob.title.includes('files') && (
+                               <span className="text-text-muted">• {zipJob.title.split('—')[1]?.trim()}</span>
+                             )}
+                           </span>
+                         )}
+                       </div>
                     ) : (zipJob && (zipJob.status === "processing" || zipJob.status === "pending")) || isZipping ? (
                         <button disabled className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary/50 text-white text-xs font-bold uppercase tracking-wider cursor-not-allowed">
                           <Loader2 className="w-4 h-4 animate-spin" />
                           Đang tạo file ZIP...
                         </button>
                     ) : (
-                        <button
-                          onClick={() => {
-                            if (quotaInfo && !quotaInfo.permissions?.can_zip) {
-                              setShowUpgradeModal(true);
-                              return;
-                            }
-                            handleCreateZip();
-                          }}
-                          className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-primary to-primary-dark shadow-lg hover:shadow-xl text-white text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer"
-                        >
-                          <FileDown className="w-4 h-4" />
-                          Tải tất cả (ZIP) {zipJob?.error_message ? " (Thử lại)" : ""}
-                        </button>
+                        <div className="flex flex-col items-start gap-1.5">
+                          <button
+                            onClick={() => {
+                              if (quotaInfo && !quotaInfo.permissions?.can_zip) {
+                                setShowUpgradeModal(true);
+                                return;
+                              }
+                              handleCreateZip();
+                            }}
+                            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-primary to-primary-dark shadow-lg hover:shadow-xl text-white text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer"
+                          >
+                            <FileDown className="w-4 h-4" />
+                            Tải tất cả (ZIP) {zipJob?.error_message ? " (Thử lại)" : ""}
+                          </button>
+                          {/* Show estimated total size before zipping */}
+                          {successJobs.length > 0 && (
+                            <span className="text-[10px] text-text-muted ml-1">
+                              Ước tính: {successJobs.reduce((sum, j) => sum + (j.file_size_mb || 0), 0).toFixed(1)} MB • {successJobs.length} files
+                            </span>
+                          )}
+                        </div>
                     )}
                     {zipJob?.status === "failed" && <p className="text-[10px] text-error mt-1">{zipJob.error_message}</p>}
                 </div>

@@ -78,12 +78,35 @@ def get_cached_result(url: str) -> Optional[Dict[str, Any]]:
 def _normalize_url(url: str) -> str:
     """
     Normalize a URL for consistent cache lookups.
-    Strips tracking parameters and trailing slashes for TikTok.
+    Strips tracking parameters and trailing slashes for all platforms.
     """
     url = url.strip()
 
     # TikTok: strip tracking params
     if "tiktok.com" in url.lower() and "?" in url:
+        url = url.split("?")[0]
+
+    # Douyin: strip tracking params
+    if "douyin.com" in url.lower() and "?" in url:
+        url = url.split("?")[0]
+
+    # YouTube: keep only video ID param
+    if "youtube.com/watch" in url.lower() and "?" in url:
+        import re
+        vid_match = re.search(r'[?&]v=([a-zA-Z0-9_-]{11})', url)
+        if vid_match:
+            url = f"https://www.youtube.com/watch?v={vid_match.group(1)}"
+
+    # YouTube Shorts: strip query
+    if "youtube.com/shorts/" in url.lower() and "?" in url:
+        url = url.split("?")[0]
+
+    # Instagram: strip query params
+    if "instagram.com" in url.lower() and "?" in url:
+        url = url.split("?")[0]
+
+    # Facebook: strip tracking (fbclid etc)
+    if "facebook.com" in url.lower() and "fbclid" in url:
         url = url.split("?")[0]
 
     # Strip trailing slash

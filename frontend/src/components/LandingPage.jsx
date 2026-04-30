@@ -22,6 +22,7 @@ const platforms = [
   { icon: FacebookIcon, label: 'Facebook', bg: 'bg-[#1877F2]/10 text-[#1877F2] border-[#1877F2]/20' },
   { icon: InstagramIcon, label: 'Instagram', bg: 'bg-gradient-to-tr from-[#f09433] via-[#e6683c] to-[#bc1888] text-white border-transparent' },
   { icon: YouTubeIcon, label: 'YouTube', bg: 'bg-[#FF0000]/10 text-[#FF0000] border-[#FF0000]/20' },
+  { icon: SpotifyIcon, label: 'Spotify', bg: 'bg-[#1DB954]/10 text-[#1DB954] border-[#1DB954]/20' },
   { icon: DouyinIcon, label: 'Douyin', bg: 'bg-[#ff0050]/10 text-[#ff0050] border-[#ff0050]/20' },
 ];
 
@@ -66,7 +67,7 @@ export default function LandingPage() {
           </h1>
 
           <p className="max-w-2xl text-sm sm:text-base md:text-lg text-slate-300 font-medium leading-relaxed mb-10">
-            Bóc tách video không logo và nhạc nền 320kbps từ TikTok, Douyin, YouTube chỉ trong 1 click. Giữ nguyên chất lượng gốc, sẵn sàng cho bạn sáng tạo.
+            Bóc tách video không logo và nhạc nền 320kbps từ TikTok, Douyin, YouTube, Facebook, Instagram, Spotify chỉ trong 1 click. Giữ nguyên chất lượng gốc, cắt video, tải hàng loạt ZIP.
           </p>
 
           {/* Feature Badges */}

@@ -22,6 +22,14 @@
 - [x] Proxy stream endpoint (bypass CORS)
 - [x] Supabase schema (download_jobs, user_usage, user_credits)
 - [x] Docker setup (Redis + Cobalt)
+- [x] ZIP enhancement: hiển thị dung lượng ZIP + tổng files + ước tính size trước khi nén
+- [x] Archive service: retry download 3 lần + exponential backoff + timeout 180s
+- [x] Bulk job lưu file_size_mb vào DB cho từng video
+- [x] Chrome Extension v4.0: download speed, copy link, retry, success animation, Spotify support
+- [x] Content script v4.0: file size preview trên floating button, toast notification
+- [x] Cache normalize URL mở rộng (YouTube, Douyin, Instagram, Facebook)
+- [x] User-friendly Vietnamese error messages trong Celery tasks
+- [x] Landing page: thêm Spotify platform, cập nhật mô tả đầy đủ
 
 ## Backlog
 <!-- TODO: tính năng tương lai -->
@@ -29,3 +37,6 @@
 - [ ] Dashboard analytics cho admin
 - [ ] Hỗ trợ thêm nền tảng (Pinterest, Twitter/X)
 - [ ] Webhook notification (Telegram) khi batch xong
+- [ ] Resumable batch download (tải lại batch đã expire)
+- [ ] ZIP compression level option (ZIP_STORED vs ZIP_DEFLATED)
+- [ ] Proxy xoay vòng (rotating proxy) cho anti-bot bypass

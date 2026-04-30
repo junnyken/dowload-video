@@ -1,5 +1,5 @@
 /**
- * VidGrab Background Service Worker v3.0
+ * VidGrab Background Service Worker v4.0
  * - API proxy (bypass CORS)
  * - Badge count on extension icon
  * - Keyboard shortcut handler (Ctrl+Shift+D)

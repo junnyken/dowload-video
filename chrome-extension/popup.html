@@ -2,10 +2,10 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <title>VidGrab</title>
+  <title>VidGrab v4.0</title>
   <link rel="stylesheet" href="tailwind.css">
   <style>
-    body { width: 360px; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { width: 380px; font-family: 'Segoe UI', system-ui, sans-serif; }
     .spinner {
       border: 3px solid rgba(255,255,255,0.25);
       border-radius: 50%;
@@ -15,6 +15,9 @@
       display: none;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+    @keyframes pulse-glow { 0%,100% { box-shadow: 0 0 0 0 rgba(249,115,22,0.4); } 50% { box-shadow: 0 0 12px 4px rgba(249,115,22,0.15); } }
+    @keyframes checkmark { 0% { transform: scale(0); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
 
     .tab-btn { transition: all 0.2s; }
     .tab-btn.active {
@@ -24,7 +27,6 @@
 
     #channel-section { display: none; }
     #channel-section.visible { display: block; }
-
     #history-section { display: none; }
 
     .progress-bar-inner {
@@ -40,13 +42,14 @@
     /* Download progress */
     .dl-progress-wrap {
       background: #111827;
-      border-radius: 8px;
-      padding: 8px 12px;
+      border-radius: 10px;
+      padding: 10px 14px;
       margin-top: 8px;
       border: 1px solid #374151;
+      animation: fadeIn 0.3s;
     }
     .dl-progress-bar {
-      height: 4px;
+      height: 5px;
       background: #1f2937;
       border-radius: 999px;
       overflow: hidden;
@@ -63,7 +66,7 @@
     /* History item */
     .history-item {
       display: flex; align-items: center; gap: 8px;
-      padding: 6px 8px; border-radius: 8px;
+      padding: 6px 10px; border-radius: 10px;
       background: #1f2937; border: 1px solid transparent;
       transition: all 0.15s;
     }
@@ -75,23 +78,22 @@
     .preview-card {
       background: #111827;
       border: 1px solid #374151;
-      border-radius: 12px;
-      padding: 10px;
-      margin-top: 8px;
+      border-radius: 14px;
+      padding: 12px;
+      margin-top: 10px;
       animation: fadeIn 0.3s;
     }
-    @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
 
     /* Shortcut hint */
     .shortcut-hint {
       font-size: 9px;
       color: #6b7280;
       text-align: center;
-      padding: 4px 0;
+      padding: 6px 0 2px;
       border-top: 1px solid #1f2937;
     }
     .shortcut-hint kbd {
-      background: #1f2937; padding: 1px 4px; border-radius: 3px;
+      background: #1f2937; padding: 1px 5px; border-radius: 3px;
       font-family: monospace; font-size: 9px; color: #9ca3af;
       border: 1px solid #374151;
     }
@@ -99,11 +101,30 @@
     /* Format item */
     .fmt-item {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 6px 10px; border-radius: 8px;
+      padding: 7px 12px; border-radius: 10px;
       background: #1f2937; border: 1px solid #374151;
       transition: all 0.15s; cursor: pointer;
     }
     .fmt-item:hover { border-color: #f97316; background: #111827; }
+
+    /* Action buttons row */
+    .action-btn {
+      display: flex; align-items: center; gap: 4px;
+      padding: 5px 10px; border-radius: 8px; border: 1px solid #374151;
+      background: #1f2937; color: #9ca3af; font-size: 10px; font-weight: 600;
+      cursor: pointer; transition: all 0.15s; white-space: nowrap;
+    }
+    .action-btn:hover { border-color: #f97316; color: #f97316; background: #111827; }
+    .action-btn:active { transform: scale(0.96); }
+
+    /* Success check */
+    .success-check {
+      display: none; width: 48px; height: 48px; margin: 12px auto 8px;
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      border-radius: 50%; align-items: center; justify-content: center;
+      animation: checkmark 0.4s ease-out;
+    }
+    .success-check.show { display: flex; }
 
     /* Light mode */
     body.light-mode { background: #f8fafc; color: #1e293b; }
@@ -111,6 +132,7 @@
     body.light-mode .bg-gray-800 { background: #e2e8f0; }
     body.light-mode .bg-gray-800\/60 { background: rgba(226,232,240,0.6); }
     body.light-mode .border-gray-700 { border-color: #cbd5e1; }
+    body.light-mode .border-gray-800 { border-color: #cbd5e1; }
     body.light-mode .text-white { color: #1e293b; }
     body.light-mode .text-gray-400 { color: #64748b; }
     body.light-mode .text-gray-500 { color: #94a3b8; }
@@ -123,6 +145,8 @@
     body.light-mode .fmt-item:hover { background: #cbd5e1; }
     body.light-mode .shortcut-hint { border-color: #e2e8f0; color: #94a3b8; }
     body.light-mode .shortcut-hint kbd { background: #e2e8f0; border-color: #cbd5e1; color: #64748b; }
+    body.light-mode .action-btn { background: #e2e8f0; border-color: #cbd5e1; color: #64748b; }
+    body.light-mode .action-btn:hover { background: #cbd5e1; border-color: #f97316; color: #f97316; }
 
     /* Theme toggle button */
     .theme-toggle {
@@ -144,9 +168,14 @@
 
   <!-- Header -->
   <div class="flex items-center gap-2 mb-3 pb-3 border-b border-gray-700">
-    <div class="bg-gradient-to-br from-orange-500 to-yellow-400 text-gray-900 font-extrabold px-2 py-0.5 rounded-lg text-sm">VG</div>
-    <h1 class="text-base font-bold text-orange-400 flex-1">VidGrab <span class="text-[9px] text-gray-500 font-normal">v3.0</span></h1>
+    <div class="bg-gradient-to-br from-orange-500 to-yellow-400 text-gray-900 font-extrabold px-2.5 py-1 rounded-lg text-sm shadow-md">VG</div>
+    <h1 class="text-base font-bold text-orange-400 flex-1">VidGrab <span class="text-[9px] text-gray-500 font-normal">v4.0</span></h1>
     <button id="theme-toggle" class="theme-toggle" title="Chuyển giao diện Sáng/Tối">🌙</button>
+    <a id="open-web-btn" href="https://dowload-video.mk.dev.matbao.ai" target="_blank"
+       class="text-[9px] px-2 py-1 rounded-full bg-gray-800 text-gray-400 border border-gray-700 hover:border-orange-500 hover:text-orange-400 transition-all cursor-pointer no-underline"
+       title="Mở VidGrab trên web">
+      🌐 Web
+    </a>
     <div id="page-badge" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 border border-gray-700">
       Đang nhận diện...
     </div>
@@ -169,7 +198,7 @@
   <div id="single-section">
     <div class="mb-3">
       <label class="block text-xs text-gray-400 mb-1">Chất lượng tải</label>
-      <select id="qualitySelect" class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-500">
+      <select id="qualitySelect" class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-500 transition-colors">
         <option value="video">MP4 (Video HD)</option>
         <option value="video_4k">MP4 (4K / Tốt nhất)</option>
         <option value="mp3_320">MP3 (Âm thanh 320kbps)</option>
@@ -187,7 +216,7 @@
       </div>
     </div>
 
-    <button id="downloadBtn" class="w-full bg-gradient-to-r from-orange-500 to-yellow-400 hover:from-orange-600 hover:to-yellow-500 text-gray-900 font-bold py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 transition-all">
+    <button id="downloadBtn" class="w-full bg-gradient-to-r from-orange-500 to-yellow-400 hover:from-orange-600 hover:to-yellow-500 text-gray-900 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-orange-500/20 active:scale-[0.98]" style="animation: pulse-glow 3s infinite;">
       <svg id="icon-download" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
         <polyline points="7 10 12 15 17 10"/>
@@ -198,7 +227,22 @@
     </button>
 
     <div id="statusMsg" class="mt-2 text-xs text-center text-gray-500 min-h-[18px]">
-      Hệ thống server sẽ xử lý và xoá logo tự động.
+      Server xử lý và xoá logo tự động. Miễn phí 100%.
+    </div>
+
+    <!-- Error with Retry -->
+    <div id="error-card" class="hidden mt-2 bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-center">
+      <div id="error-text" class="text-xs text-red-400 font-medium mb-2"></div>
+      <button id="retry-btn" class="text-[10px] px-4 py-1.5 bg-red-500/20 text-red-400 rounded-lg border border-red-500/30 hover:bg-red-500/30 font-bold transition-all">
+        🔄 Thử lại
+      </button>
+    </div>
+
+    <!-- Success Animation -->
+    <div id="success-check" class="success-check">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
     </div>
 
     <!-- Preview Card (ẩn mặc định) -->
@@ -210,8 +254,21 @@
           <div class="flex items-center gap-2 mt-1">
             <span id="preview-duration" class="text-[10px] text-gray-400">0:00</span>
             <span id="preview-size" class="text-[10px] text-orange-400 font-bold"></span>
+            <span id="preview-platform" class="text-[10px] text-gray-500"></span>
           </div>
         </div>
+      </div>
+      <!-- Action buttons -->
+      <div class="flex gap-1.5 mt-3 flex-wrap">
+        <button id="action-copy-link" class="action-btn" title="Copy link tải">
+          📋 Copy link
+        </button>
+        <button id="action-open-web" class="action-btn" title="Mở trên web VidGrab">
+          🌐 Mở trên web
+        </button>
+        <button id="action-dl-thumb" class="action-btn" title="Tải ảnh bìa">
+          🖼️ Ảnh bìa
+        </button>
       </div>
     </div>
 
@@ -219,7 +276,7 @@
     <div id="formats-panel" class="hidden mt-3">
       <div class="flex items-center justify-between mb-2">
         <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Tất cả chất lượng</span>
-        <button id="formats-close" class="text-gray-500 hover:text-white text-xs">✕</button>
+        <button id="formats-close" class="text-gray-500 hover:text-white text-xs transition-colors">✕</button>
       </div>
       <div id="formats-list" class="space-y-1.5 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar"></div>
     </div>
@@ -233,7 +290,10 @@
       <div class="dl-progress-bar">
         <div id="dl-progress-fill" class="dl-progress-fill"></div>
       </div>
-      <div id="dl-progress-info" class="text-[9px] text-gray-500 mt-1 text-right"></div>
+      <div class="flex justify-between mt-1">
+        <span id="dl-progress-info" class="text-[9px] text-gray-500"></span>
+        <span id="dl-progress-speed" class="text-[9px] text-emerald-400 font-mono"></span>
+      </div>
     </div>
   </div>
 
@@ -271,7 +331,7 @@
       Panel VidGrab đã được mở trên trang kênh.
     </div>
 
-    <button id="ch-scrape-btn" class="w-full bg-gradient-to-r from-orange-500 to-yellow-400 hover:from-orange-600 hover:to-yellow-500 text-gray-900 font-bold py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 transition-all mb-2">
+    <button id="ch-scrape-btn" class="w-full bg-gradient-to-r from-orange-500 to-yellow-400 hover:from-orange-600 hover:to-yellow-500 text-gray-900 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all mb-2 shadow-lg shadow-orange-500/20 active:scale-[0.98]">
       <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
@@ -279,7 +339,7 @@
       <span id="ch-btn-text">Bắt đầu Quét Kênh</span>
     </button>
 
-    <button id="ch-send-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 transition-all hidden">
+    <button id="ch-send-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all hidden shadow-lg shadow-green-500/20 active:scale-[0.98]">
       <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
       </svg>
@@ -293,7 +353,7 @@
     </div>
   </div>
 
-  <!-- ── HISTORY SECTION (NEW) ── -->
+  <!-- ── HISTORY SECTION ── -->
   <div id="history-section">
     <div class="flex justify-between items-center mb-3">
       <span class="text-xs text-gray-400">Các video đã tải gần đây</span>
@@ -308,9 +368,9 @@
     </div>
   </div>
 
-  <!-- Shortcut hint -->
+  <!-- Footer -->
   <div class="shortcut-hint mt-3">
-    Phím tắt: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> để tải nhanh
+    Phím tắt: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> để tải nhanh • <a href="https://dowload-video.mk.dev.matbao.ai" target="_blank" class="text-orange-400 hover:text-orange-300">vidgrab.vn</a>
   </div>
 
   <script src="popup.js"></script>

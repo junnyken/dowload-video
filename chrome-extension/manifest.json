@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "VidGrab - One Click Downloader",
-  "version": "3.0.0",
-  "description": "Tải video không logo siêu tốc — TikTok, YouTube, Facebook, Instagram, Douyin, Spotify. Channel scraper chống bot.",
+  "version": "4.0.0",
+  "description": "Tải video không logo siêu tốc — TikTok, YouTube, Facebook, Instagram, Douyin, Spotify. Hỗ trợ kênh, playlist, ZIP, cắt video.",
   "permissions": [
     "activeTab",
     "tabs",
@@ -19,6 +19,7 @@
     "*://*.douyin.com/*",
     "*://*.iesdouyin.com/*",
     "*://*.instagram.com/*",
+    "*://open.spotify.com/*",
     "https://dowload-video.mk.dev.matbao.ai/*"
   ],
   "background": {
@@ -55,7 +56,8 @@
         "*://*.youtube.com/*",
         "*://*.facebook.com/*",
         "*://*.douyin.com/*",
-        "*://*.instagram.com/*"
+        "*://*.instagram.com/*",
+        "*://open.spotify.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
