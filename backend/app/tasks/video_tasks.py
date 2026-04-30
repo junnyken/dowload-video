@@ -72,14 +72,21 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
         # we pass the local path via the direct_mp4_url column since Supabase schema lacks local path columns.
         best_url = info.get("local_file_path") or info.get("local_mp3_path") or info.get("direct_mp4_url")
         
-        supabase.table("download_jobs").update({
+        update_data = {
             "status": "success",
             "title": title,
             "slugified_name": slug,
             "direct_mp4_url": best_url,
-            "file_size_mb": info.get("file_size_mb", 0),
             "created_at": now_iso
-        }).eq("id", job_id).execute()
+        }
+        # Try with file_size_mb first (column may not exist yet)
+        try:
+            update_data["file_size_mb"] = info.get("file_size_mb", 0)
+            supabase.table("download_jobs").update(update_data).eq("id", job_id).execute()
+        except Exception:
+            # Fallback: update without file_size_mb if column missing
+            update_data.pop("file_size_mb", None)
+            supabase.table("download_jobs").update(update_data).eq("id", job_id).execute()
 
     except Exception as e:
         error_msg = str(e)[:500]
@@ -166,14 +173,19 @@ def create_zip_task(self, batch_id: str, zip_job_id: str):
         if result.get("success"):
             zip_size = result.get("zip_size_mb", 0)
             total_files = result.get("total_files", 0)
-            supabase.table("download_jobs").update({
+            zip_update = {
                 "status": "success",
                 "title": f"Batch {batch_id[:8]} — {total_files} files",
                 "slugified_name": f"batch_{batch_id}",
                 "direct_mp4_url": result.get("zip_path"),
-                "file_size_mb": zip_size,
                 "created_at": now_iso
-            }).eq("id", zip_job_id).execute()
+            }
+            try:
+                zip_update["file_size_mb"] = zip_size
+                supabase.table("download_jobs").update(zip_update).eq("id", zip_job_id).execute()
+            except Exception:
+                zip_update.pop("file_size_mb", None)
+                supabase.table("download_jobs").update(zip_update).eq("id", zip_job_id).execute()
         else:
             supabase.table("download_jobs").update({
                 "status": "failed",
