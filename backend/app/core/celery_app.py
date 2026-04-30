@@ -34,7 +34,7 @@ celery_app.conf.update(
         'queue_order_strategy': 'priority',
     },
     task_routes={
-        'create_zip_task': {'queue': 'heavy'},
+        'create_zip_task': {'queue': 'celery'},
         'process_video_task': {'queue': 'celery'},
         'scrape_channel_task': {'queue': 'celery'},
         '*': {'queue': 'celery'},
