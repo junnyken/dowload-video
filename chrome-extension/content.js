@@ -54,14 +54,23 @@
   }
 
   // ── Shared video store (DOM + interceptor) ────────────────────────
-  const videoSet = new Set(); // canonical douyin.com/video/xxx URLs
+  const videoSet = new Set(); // canonical video URLs
 
   function scanDOM() {
     document.querySelectorAll('a[href]').forEach((a) => {
-      // href có thể là relative (/video/xxx) hoặc absolute
       const href = a.href || '';
-      const m = href.match(/douyin\.com\/(video|note)\/(\d{15,25})/);
-      if (m) videoSet.add(`https://www.douyin.com/${m[1]}/${m[2]}`);
+      // Douyin: /video/xxx or /note/xxx
+      const dyMatch = href.match(/douyin\.com\/(video|note)\/(\d{15,25})/);
+      if (dyMatch) {
+        videoSet.add(`https://www.douyin.com/${dyMatch[1]}/${dyMatch[2]}`);
+        return;
+      }
+      // TikTok: /@user/video/xxx
+      const tkMatch = href.match(/tiktok\.com\/@[\w.-]+\/video\/(\d{15,25})/);
+      if (tkMatch) {
+        videoSet.add(href.split('?')[0]); // clean tracking params
+        return;
+      }
     });
     return videoSet.size;
   }

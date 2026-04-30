@@ -453,12 +453,12 @@ function renderSpotifyPlaylist(data) {
   tracklist.innerHTML = '';
   data.tracks.forEach((track, idx) => {
     const row = document.createElement('div');
-    row.className = 'flex items-center gap-3 bg-gray-800 p-2 rounded-lg hover:bg-gray-700 transition-colors group border border-transparent hover:border-gray-600';
-    row.innerHTML = `<img src="${track.thumbnail || data.thumbnail || ''}" class="w-10 h-10 rounded object-cover shadow-sm">
-      <div class="flex-1 overflow-hidden"><div class="text-[13px] font-bold text-white truncate group-hover:text-green-400 transition-colors">${track.name}</div>
-      <div class="text-[11px] text-gray-400 truncate">${track.artist_str || 'Unknown'}</div></div>
-      <div class="text-[11px] text-gray-500 font-mono">${formatTime(track.duration)}</div>
-      <button class="bg-green-600 hover:bg-green-500 text-white text-[10px] font-bold px-2 py-1.5 rounded flex items-center gap-1 transition-all" id="sp-dl-${idx}">MP3</button>`;
+    row.className = 'flex items-center gap-2 bg-gray-800 p-1.5 rounded-lg hover:bg-gray-700 transition-colors group border border-transparent hover:border-gray-600';
+    row.innerHTML = `<img src="${track.thumbnail || data.thumbnail || ''}" class="w-8 h-8 rounded object-cover shadow-sm flex-shrink-0">
+      <div class="flex-1 overflow-hidden min-w-0"><div class="text-[11px] font-bold text-white truncate group-hover:text-green-400 transition-colors">${track.name}</div>
+      <div class="text-[10px] text-gray-400 truncate">${track.artist_str || 'Unknown'}</div></div>
+      <div class="text-[10px] text-gray-500 font-mono flex-shrink-0">${formatTime(track.duration)}</div>
+      <button class="bg-green-600 hover:bg-green-500 text-white text-[9px] font-bold px-2 py-1 rounded flex-shrink-0 transition-all" id="sp-dl-${idx}">MP3</button>`;
     tracklist.appendChild(row);
     document.getElementById(`sp-dl-${idx}`).addEventListener('click', (e) => downloadSingleTrack(track, e.currentTarget));
   });
@@ -471,14 +471,29 @@ async function downloadSingleTrack(track, btn) {
       body: JSON.stringify({ url: track.search_query, quality: 'mp3_320', remove_watermark: true }) });
     const data = await resp.json();
     if (resp.ok && data.success) {
-      let dlUrl = data.local_mp3_path || data.direct_mp3_url || data.direct_mp4_url || data.local_file_path;
+      let dlUrl = data.local_file_path || data.local_mp3_path || data.direct_mp3_url || data.direct_mp4_url;
+      if (!dlUrl) throw new Error('No download URL');
       const safeName = (data.title || track.name).replace(/[/\\?%*:|"<>]/g, '-');
-      if (dlUrl && !dlUrl.includes('matbao.ai')) dlUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}&ext=mp3`;
-      else if (dlUrl?.startsWith('/app/downloads/')) dlUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}.mp3`;
+      
+      // Local file on server (starts with downloads/ or /app/downloads/)
+      if (dlUrl.startsWith('downloads/') || dlUrl.startsWith('/app/downloads/')) {
+        dlUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}.mp3`;
+      }
+      // Remote URL — proxy it
+      else if (dlUrl.startsWith('http') && !dlUrl.includes('matbao.ai')) {
+        dlUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}&ext=mp3`;
+      }
+      
       chrome.downloads.download({ url: dlUrl, filename: `VidGrab/${safeName}.mp3`, saveAs: false });
       btn.innerHTML = '✅'; btn.classList.replace('bg-green-600','bg-gray-600');
-    } else throw new Error();
-  } catch { btn.innerHTML = '❌'; btn.classList.replace('bg-green-600','bg-red-600'); }
+      
+      // Save to history
+      chrome.runtime.sendMessage({ type: 'VG_SAVE_HISTORY', record: {
+        title: data.title || track.name, thumbnail: track.thumbnail || '', url: track.search_query,
+        quality: 'MP3', fileSize: data.file_size_mb ? `${data.file_size_mb} MB` : '',
+      }});
+    } else throw new Error(data.detail || 'Server error');
+  } catch(e) { btn.innerHTML = '❌'; btn.title = e.message; btn.classList.replace('bg-green-600','bg-red-600'); }
 }
 
 // ══════════════════════════════════════════════════════════════════

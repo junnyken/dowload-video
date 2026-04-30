@@ -68,19 +68,34 @@ async def create_batch_zip(batch_id: str) -> Dict[str, Any]:
         
         file_name = f"{job.get('slugified_name') or 'video'}"
         
-        # If it's local mp3
-        local_path = job.get("local_mp3_path")
-        if local_path and os.path.exists(local_path):
-            files_to_zip.append((local_path, f"{file_name}.mp3"))
-            continue
+        # direct_mp4_url may hold: a local file path OR a remote URL
+        url_or_path = job.get("direct_mp4_url") or ""
+        
+        # Case 1: Local file path (starts with downloads/ or /app/downloads/)
+        if url_or_path and not url_or_path.startswith("http"):
+            # Normalize path
+            local_path = url_or_path
+            if not os.path.isabs(local_path):
+                local_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), local_path)
             
-        # If it's remote mp4
-        direct_url = job.get("direct_mp4_url")
-        if direct_url:
-            dest_mp4 = os.path.join(batch_dir, f"{file_name}.mp4")
-            if not os.path.exists(dest_mp4):
-                tasks.append(download_file_to_disk(direct_url, dest_mp4))
-            files_to_zip.append((dest_mp4, f"{file_name}.mp4"))
+            if os.path.exists(local_path):
+                ext = os.path.splitext(local_path)[1] or ".mp4"
+                files_to_zip.append((local_path, f"{file_name}{ext}"))
+                print(f"[ZIP] Local file: {local_path}")
+                continue
+            else:
+                print(f"[ZIP] Local path not found: {local_path}")
+        
+        # Case 2: Remote URL
+        if url_or_path and url_or_path.startswith("http"):
+            ext = ".mp3" if ".mp3" in url_or_path or ".m4a" in url_or_path else ".mp4"
+            dest_file = os.path.join(batch_dir, f"{file_name}{ext}")
+            if not os.path.exists(dest_file):
+                tasks.append(download_file_to_disk(url_or_path, dest_file))
+            files_to_zip.append((dest_file, f"{file_name}{ext}"))
+            print(f"[ZIP] Remote URL queued: {url_or_path[:80]}...")
+        else:
+            print(f"[ZIP] Skipping job {job.get('id')}: no valid URL or path")
             
     # Check limit before downloading
     if total_estimated_size > MAX_ZIP_SIZE:

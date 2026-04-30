@@ -286,9 +286,20 @@ import os
 
 @router.get("/download-local")
 async def download_local_file(filepath: str, filename: str):
+    # Resolve relative paths (e.g. "downloads/xxx.mp3") to absolute
+    if not os.path.isabs(filepath):
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        filepath = os.path.join(base_dir, filepath)
+    
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="File expired or not found.")
-    return FileResponse(filepath, filename=filename, media_type="audio/mpeg")
+    
+    # Detect media type from extension
+    ext = os.path.splitext(filepath)[1].lower()
+    media_types = {".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".mp4": "video/mp4", ".zip": "application/zip"}
+    media_type = media_types.get(ext, "application/octet-stream")
+    
+    return FileResponse(filepath, filename=filename, media_type=media_type)
 
 
 # ── GET /download-thumbnail  (proxy thumbnail image) ────────────────
