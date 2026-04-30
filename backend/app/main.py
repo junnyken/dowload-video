@@ -90,6 +90,7 @@ origins = [
     "http://127.0.0.1:5173",
     "http://127.0.0.1:3000",
     "https://dowload-video-trieunt.dev.matbao.ai",  # Production preview
+    "https://dowload-video.mk.dev.matbao.ai",
 ]
 
 # Also allow any configured production domain
