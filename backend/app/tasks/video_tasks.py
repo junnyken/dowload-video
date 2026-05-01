@@ -115,37 +115,55 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
 
 
 @celery_app.task(name="scrape_channel_task", bind=True)
-def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: str, max_videos: int = 20, min_views: int = 0, user_id: Optional[str] = None):
+def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: str, max_videos: int = 100, min_views: int = 0, user_id: Optional[str] = None):
     """
-    Scrape a channel/playlist URL:
-    1. Discover all video entries.
+    Scrape a channel/playlist URL with wave-based processing:
+    
+    1. Discover all video entries (yt-dlp handles pagination).
     2. Filter them according to limits.
-    3. Insert each as a pending job in Supabase.
-    4. Dispatch process_video_task for each.
-    5. Update the placeholder channel_job_id with results.
+    3. Insert ALL as pending jobs in Supabase immediately (frontend sees them).
+    4. Dispatch process_video_task in WAVES of WAVE_SIZE.
+       - Wave 1: videos 1-10 (immediate)
+       - Wave 2: videos 11-20 (countdown=5s)
+       - Wave 3: videos 21-30 (countdown=10s)
+       This prevents flooding the Celery queue while keeping throughput high.
+    5. Update the placeholder channel_job_id with summary.
     """
+    WAVE_SIZE = 10          # Videos per wave
+    WAVE_DELAY_SECONDS = 3  # Seconds between each wave's start
+
     supabase = get_supabase_client()
 
     try:
+        # ── Phase 1: Discover videos ─────────────────────
+        supabase.table("download_jobs").update({
+            "error_message": f"Đang quét kênh — tìm kiếm tối đa {max_videos} video...",
+        }).eq("id", channel_job_id).execute()
+
         result = scrape_channel_entries_sync(channel_url, max_videos, min_views)
         entries = result.get("entries", [])
         total_found = result.get("total_found", 0)
         total_queued = result.get("total_queued", 0)
 
         if not entries:
-            # Insert a single failed record to notify the user
             supabase.table("download_jobs").update({
                 "status": "failed",
-                "error_message": f"Đã quét 0/0 videos. Không tìm thấy video hợp lệ nào.",
+                "error_message": f"Đã quét {total_found} videos nhưng không có video nào đạt điều kiện lọc.",
             }).eq("id", channel_job_id).execute()
             return
 
+        # ── Phase 2: Insert ALL jobs as "pending" immediately ─
+        # This lets the frontend show the full list with progress
+        supabase.table("download_jobs").update({
+            "error_message": f"Đã tìm thấy {total_found} video. Đang tạo {len(entries)} jobs...",
+        }).eq("id", channel_job_id).execute()
+
+        job_entries = []  # list of (job_id, video_url) pairs
         for entry in entries:
             video_url = entry.get("url", "")
             if not video_url:
                 continue
 
-            # Create pending job
             response = supabase.table("download_jobs").insert({
                 "batch_id": batch_id,
                 "original_url": video_url,
@@ -153,12 +171,32 @@ def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: s
             }).execute()
 
             job_id = response.data[0]["id"]
+            job_entries.append((job_id, video_url))
 
-            # Dispatch extraction task
-            process_video_task.delay(job_id, video_url, user_id)
+        # ── Phase 3: Dispatch in waves ───────────────────
+        total_waves = (len(job_entries) + WAVE_SIZE - 1) // WAVE_SIZE
 
-        # Update the placeholder job with the summary! We mark it as success but no direct_url.
-        summary_msg = f"Đã tìm thấy {total_found} video, {total_queued} video đạt điều kiện lọc và đang được đưa vào hàng chờ."
+        for wave_idx in range(total_waves):
+            start = wave_idx * WAVE_SIZE
+            end = min(start + WAVE_SIZE, len(job_entries))
+            wave = job_entries[start:end]
+
+            # Calculate countdown delay for this wave
+            # Wave 0 = immediate, Wave 1 = 3s delay, Wave 2 = 6s, etc.
+            countdown = wave_idx * WAVE_DELAY_SECONDS
+
+            for job_id, video_url in wave:
+                process_video_task.apply_async(
+                    args=[job_id, video_url, user_id],
+                    countdown=countdown,
+                )
+
+        # ── Phase 4: Update summary ──────────────────────
+        wave_info = f" ({total_waves} đợt x {WAVE_SIZE} video)" if total_waves > 1 else ""
+        summary_msg = (
+            f"✅ Đã tìm thấy {total_found} video, "
+            f"{total_queued} video đạt điều kiện lọc và đang xử lý{wave_info}."
+        )
         supabase.table("download_jobs").update({
             "status": "success",
             "error_message": summary_msg, 

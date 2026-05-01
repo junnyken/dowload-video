@@ -536,21 +536,37 @@ export default function BulkContent() {
               <Tv className="w-4 h-4" />
               <strong>Channel Mode ON:</strong> Tự động bóc tách và lọc video trong kênh
             </p>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[10px] font-semibold text-text-muted uppercase mb-1">
-                  Giới hạn video
+                <label className="block text-[10px] font-semibold text-text-muted uppercase mb-2">
+                  Số lượng video tối đa
                 </label>
-                <input 
-                  type="number" 
-                  min="1"
-                  value={maxVideos}
-                  onChange={(e) => setMaxVideos(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:border-primary/50"
-                />
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: 50, label: '50' },
+                    { value: 100, label: '100' },
+                    { value: 200, label: '200' },
+                    { value: 500, label: '500' },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setMaxVideos(opt.value)}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold border transition-all duration-200 cursor-pointer ${
+                        parseInt(maxVideos) === opt.value
+                          ? 'bg-accent/20 border-accent/40 text-accent-light shadow-sm'
+                          : 'bg-surface border-border text-text-muted hover:text-text-secondary hover:border-border/80'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-text-muted mt-2 leading-relaxed">
+                  💡 Video được xử lý theo đợt (10 video/đợt) để tối ưu hiệu suất
+                </p>
               </div>
               <div>
-                <label className="block text-[10px] font-semibold text-text-muted uppercase mb-1">
+                <label className="block text-[10px] font-semibold text-text-muted uppercase mb-2">
                   Lượt xem tối thiểu
                 </label>
                 <input 
@@ -559,8 +575,11 @@ export default function BulkContent() {
                   value={minViews}
                   onChange={(e) => setMinViews(e.target.value)}
                   className="w-full px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:border-primary/50"
-                  placeholder="Ví dụ: 10000"
+                  placeholder="Ví dụ: 10000 (0 = lấy tất cả)"
                 />
+                <p className="text-[10px] text-text-muted mt-1.5">
+                  Chỉ lấy video có lượt xem ≥ giá trị này
+                </p>
               </div>
             </div>
           </div>
