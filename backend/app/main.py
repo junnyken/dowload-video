@@ -55,6 +55,14 @@ async def lifespan(app: FastAPI):
     # --- Startup ---
     print("Starting Video Downloader API...")
     init_db()
+
+    # Send Telegram startup notification (non-blocking, failure is OK)
+    try:
+        from app.core.notifications import notify_system_startup
+        await notify_system_startup()
+    except Exception as e:
+        print(f"[Startup] Telegram notification failed (non-critical): {e}")
+
     yield
     # --- Shutdown ---
     print("Shutting down Video Downloader API...")

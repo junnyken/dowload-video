@@ -40,9 +40,20 @@ celery_app.conf.update(
         '*': {'queue': 'celery'},
     },
     beat_schedule={
+        # Cleanup temp downloads every 60 minutes
         'cleanup-downloads-every-60-minutes': {
             'task': 'periodic_cleanup_downloads',
             'schedule': 3600.0,
+        },
+        # Daily summary report at 23:00 UTC (6:00 AM UTC+7)
+        'daily-summary-report': {
+            'task': 'daily_summary_report',
+            'schedule': crontab(hour=23, minute=0),
+        },
+        # Check API credits every 6 hours
+        'check-api-credits-every-6h': {
+            'task': 'check_api_credits',
+            'schedule': crontab(hour='*/6', minute=15),
         },
     }
 )

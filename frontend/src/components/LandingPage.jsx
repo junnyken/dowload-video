@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Download, Layers, History, Heart,
-  Zap, Ban, ShieldCheck
+  Zap, Ban, ShieldCheck, Smartphone, X
 } from 'lucide-react';
 import DashboardContent from './DashboardContent';
 import BulkContent from './BulkContent';
@@ -38,8 +38,71 @@ export default function LandingPage() {
     return params.has('batch') ? 'bulk' : 'single';
   });
 
+  // ── PWA Install Prompt ────────────────────────────────────
+  const [showInstall, setShowInstall] = useState(false);
+  const [installDismissed, setInstallDismissed] = useState(
+    () => sessionStorage.getItem('pwa-install-dismissed') === 'true'
+  );
+
+  useEffect(() => {
+    const handleAvailable = () => {
+      if (!installDismissed) setShowInstall(true);
+    };
+    const handleInstalled = () => setShowInstall(false);
+
+    // Check if prompt is already available
+    if (window.__pwaInstallPrompt && !installDismissed) setShowInstall(true);
+
+    window.addEventListener('pwa-install-available', handleAvailable);
+    window.addEventListener('pwa-installed', handleInstalled);
+    return () => {
+      window.removeEventListener('pwa-install-available', handleAvailable);
+      window.removeEventListener('pwa-installed', handleInstalled);
+    };
+  }, [installDismissed]);
+
+  const handleInstall = async () => {
+    const prompt = window.__pwaInstallPrompt;
+    if (!prompt) return;
+    prompt.prompt();
+    const result = await prompt.userChoice;
+    if (result.outcome === 'accepted') {
+      setShowInstall(false);
+    }
+    window.__pwaInstallPrompt = null;
+  };
+
+  const dismissInstall = () => {
+    setShowInstall(false);
+    setInstallDismissed(true);
+    sessionStorage.setItem('pwa-install-dismissed', 'true');
+  };
+
   return (
     <div className="min-h-screen relative overflow-hidden pb-24">
+      {/* ── PWA Install Banner ──────────────────────────── */}
+      {showInstall && (
+        <div className="fixed top-16 inset-x-0 z-40 flex justify-center px-4 animate-in slide-in-from-top duration-300">
+          <div className="max-w-lg w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-[#012622] to-[#0a2a25] border border-[#A3E635]/40 rounded-2xl shadow-2xl backdrop-blur-xl">
+            <div className="p-2 bg-[#A3E635]/10 rounded-xl">
+              <Smartphone className="w-5 h-5 text-[#A3E635]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-white">Cài đặt VidGrab</p>
+              <p className="text-xs text-slate-400 truncate">Truy cập nhanh từ màn hình chính</p>
+            </div>
+            <button
+              onClick={handleInstall}
+              className="px-4 py-2 bg-[#A3E635] text-[#012622] text-xs font-extrabold rounded-xl hover:bg-[#bef264] transition-colors cursor-pointer whitespace-nowrap"
+            >
+              Cài đặt
+            </button>
+            <button onClick={dismissInstall} className="p-1.5 text-slate-500 hover:text-white transition-colors cursor-pointer">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
       {/* Floating Support Button */}
       <a
         href="#"

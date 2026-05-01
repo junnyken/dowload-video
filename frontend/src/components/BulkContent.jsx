@@ -16,7 +16,9 @@ import {
   Music,
   Video,
   Crown,
-  ClipboardPaste
+  ClipboardPaste,
+  CheckSquare,
+  X
 } from 'lucide-react';
 
 import UpgradeModal from './UpgradeModal';
@@ -730,15 +732,18 @@ export default function BulkContent() {
               
               <button
                 onClick={handleDownloadAll}
-                className="
+                disabled={selectedJobIds.size === 0}
+                className={`
                   flex items-center gap-2 px-4 py-2.5 rounded-xl
-                  bg-success/10 hover:bg-success/20 border border-success/20
-                  text-success text-xs font-semibold
-                  transition-all duration-200 cursor-pointer
-                "
+                  border text-xs font-semibold
+                  transition-all duration-200
+                  ${selectedJobIds.size > 0 
+                    ? 'bg-success/10 hover:bg-success/20 border-success/20 text-success cursor-pointer' 
+                    : 'bg-surface border-border text-text-muted opacity-50 cursor-not-allowed'}
+                `}
               >
                 <FileDown className="w-4 h-4" />
-                Tải từng file
+                Tải {selectedJobIds.size} đã chọn
               </button>
               <button
                 onClick={handleExportCSV}
@@ -785,9 +790,17 @@ export default function BulkContent() {
       {(batchId || jobs.length > 0) && (
         <div className="rounded-2xl bg-surface-card border border-border shadow-lg overflow-hidden">
           <div className="px-6 py-4 border-b border-border bg-surface-lighter/30 flex justify-between items-center">
-            <h3 className="font-semibold text-text-primary">
-              Danh sách ({jobs.length})
-            </h3>
+            <div className="flex items-center gap-3">
+              <h3 className="font-semibold text-text-primary">
+                Danh sách ({displayJobs.length})
+              </h3>
+              {selectedJobIds.size > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-lg bg-primary/15 text-primary border border-primary/25 animate-in fade-in duration-200">
+                  <CheckSquare className="w-3 h-3" />
+                  Đã chọn {selectedJobIds.size}
+                </span>
+              )}
+            </div>
             <span className="text-xs text-text-muted bg-surface px-2.5 py-1 rounded-md font-mono">
               {batchId ? batchId.slice(0, 8) + '...' : 'Loading...'}
             </span>
@@ -899,6 +912,35 @@ export default function BulkContent() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Floating Selection Action Bar ─────────────── */}
+      {selectedJobIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 fade-in duration-300">
+          <div className="flex items-center gap-3 px-5 py-3 bg-[#0a1a17]/95 border border-primary/30 rounded-2xl shadow-2xl shadow-black/40 backdrop-blur-xl">
+            <div className="flex items-center gap-2 pr-3 border-r border-border">
+              <CheckSquare className="w-4 h-4 text-primary" />
+              <span className="text-sm font-bold text-white">{selectedJobIds.size}</span>
+              <span className="text-xs text-text-muted">video đã chọn</span>
+            </div>
+
+            <button
+              onClick={handleDownloadAll}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] text-sm font-extrabold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              Tải {selectedJobIds.size} video
+            </button>
+
+            <button
+              onClick={() => setSelectedJobIds(new Set())}
+              className="p-2 rounded-xl text-text-muted hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title="Bỏ chọn tất cả"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -3,6 +3,8 @@ Celery Background Tasks
 ========================
 process_video_task  — extract direct link for a single video job
 scrape_channel_task — discover videos from a channel/playlist, create jobs, dispatch
+create_zip_task     — create ZIP file from batch downloads + send Telegram notification
+daily_summary_task  — send daily operations report via Telegram
 """
 
 from app.core.celery_app import celery_app
@@ -104,6 +106,13 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
             "error_message": error_msg,
         }).eq("id", job_id).execute()
 
+        # ── Telegram: Notify job failure ─────────────────
+        try:
+            from app.core.notifications import notify_job_failed_sync
+            notify_job_failed_sync(job_id, url, error_msg)
+        except Exception as tg_err:
+            print(f"[Telegram] Failed to send job failure notification: {tg_err}")
+
 
 @celery_app.task(name="scrape_channel_task", bind=True)
 def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: str, max_videos: int = 20, min_views: int = 0, user_id: Optional[str] = None):
@@ -162,6 +171,14 @@ def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: s
             "error_message": f"Channel scrape failed: {error_msg}",
         }).eq("id", channel_job_id).execute()
 
+        # ── Telegram: Notify channel scrape failure ──────
+        try:
+            from app.core.notifications import notify_job_failed_sync
+            notify_job_failed_sync(channel_job_id, channel_url, f"Channel scrape failed: {error_msg}")
+        except Exception as tg_err:
+            print(f"[Telegram] Failed to send scrape failure notification: {tg_err}")
+
+
 @celery_app.task(name="create_zip_task", bind=True)
 def create_zip_task(self, batch_id: str, zip_job_id: str):
     supabase = get_supabase_client()
@@ -186,17 +203,61 @@ def create_zip_task(self, batch_id: str, zip_job_id: str):
             except Exception:
                 zip_update.pop("file_size_mb", None)
                 supabase.table("download_jobs").update(zip_update).eq("id", zip_job_id).execute()
+
+            # ── Telegram: Notify batch complete ──────────
+            try:
+                from app.core.notifications import notify_batch_complete_sync
+
+                # Count success/failed in this batch for the notification
+                batch_jobs_res = (
+                    supabase.table("download_jobs")
+                    .select("status")
+                    .eq("batch_id", batch_id)
+                    .neq("original_url", "batch_zip")
+                    .execute()
+                )
+                batch_jobs = batch_jobs_res.data if batch_jobs_res.data else []
+                success_count = sum(1 for j in batch_jobs if j.get("status") == "success")
+                failed_count = sum(1 for j in batch_jobs if j.get("status") == "failed")
+
+                notify_batch_complete_sync(
+                    batch_id=batch_id,
+                    total_files=total_files,
+                    zip_size_mb=zip_size,
+                    success_count=success_count,
+                    failed_count=failed_count,
+                )
+            except Exception as tg_err:
+                print(f"[Telegram] Failed to send batch complete notification: {tg_err}")
+
         else:
+            error_msg = result.get("error", "Unknown zip error")
             supabase.table("download_jobs").update({
                 "status": "failed",
-                "error_message": result.get("error", "Unknown zip error"),
+                "error_message": error_msg,
             }).eq("id", zip_job_id).execute()
+
+            # ── Telegram: Notify ZIP creation failure ────
+            try:
+                from app.core.notifications import notify_job_failed_sync
+                notify_job_failed_sync(zip_job_id, f"batch_zip:{batch_id[:8]}", f"ZIP creation failed: {error_msg}")
+            except Exception as tg_err:
+                print(f"[Telegram] Failed to send zip failure notification: {tg_err}")
+
     except Exception as e:
         error_msg = str(e)[:500]
         supabase.table("download_jobs").update({
             "status": "failed",
             "error_message": f"Zip creation failed: {error_msg}",
         }).eq("id", zip_job_id).execute()
+
+        # ── Telegram: Notify ZIP exception ───────────────
+        try:
+            from app.core.notifications import notify_job_failed_sync
+            notify_job_failed_sync(zip_job_id, f"batch_zip:{batch_id[:8]}", f"Zip exception: {error_msg}")
+        except Exception:
+            pass
+
 
 @celery_app.task(name="delete_batch_resources", bind=True)
 def delete_batch_resources(self, batch_id: str):
@@ -256,3 +317,66 @@ def periodic_cleanup_downloads(self):
             print(f"[Cron] Failed to process {item_path}: {e}")
             
     print(f"[Cron] Periodic cleanup finished. Deleted {deleted_count} items.")
+
+
+# ═════════════════════════════════════════════════════════════════════
+# NEW: Daily Summary Report Task (Celery Beat)
+# ═════════════════════════════════════════════════════════════════════
+
+@celery_app.task(name="daily_summary_report", bind=True)
+def daily_summary_report(self):
+    """
+    Celery Beat task: Send a daily operations summary to Telegram.
+    Runs every day at 23:00 UTC (6:00 AM UTC+7 next day).
+    """
+    print("[Cron] Generating daily summary report...")
+    try:
+        from app.core.notifications import send_daily_summary_sync
+        result = send_daily_summary_sync()
+        if result:
+            print("[Cron] Daily summary sent to Telegram successfully.")
+        else:
+            print("[Cron] Daily summary failed to send.")
+    except Exception as e:
+        print(f"[Cron] Daily summary error: {e}")
+
+
+# ═════════════════════════════════════════════════════════════════════
+# NEW: Credits Check Task (Celery Beat — every 6 hours)
+# ═════════════════════════════════════════════════════════════════════
+
+@celery_app.task(name="check_api_credits", bind=True)
+def check_api_credits(self):
+    """
+    Celery Beat task: Check API credits and send alerts if low.
+    Runs every 6 hours.
+    """
+    print("[Cron] Checking API credits...")
+    try:
+        import httpx
+
+        from app.core.notifications import (
+            notify_credits_low_sync,
+            CREDITS_WARNING_THRESHOLD,
+        )
+
+        # Check ScraperAPI
+        scraper_key = os.getenv("SCRAPERAPI_API_KEY", os.getenv("SCRAPERAPI_KEY", ""))
+        if scraper_key:
+            try:
+                resp = httpx.get(
+                    f"http://api.scraperapi.com/account?api_key={scraper_key}",
+                    timeout=5.0,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    remaining = data.get("requestLimit", 0) - data.get("requestCount", 0)
+                    print(f"[Cron] ScraperAPI credits remaining: {remaining}")
+                    if remaining < CREDITS_WARNING_THRESHOLD:
+                        notify_credits_low_sync("ScraperAPI", remaining)
+            except Exception as e:
+                print(f"[Cron] ScraperAPI check failed: {e}")
+
+        print("[Cron] API credits check finished.")
+    except Exception as e:
+        print(f"[Cron] Credits check error: {e}")
