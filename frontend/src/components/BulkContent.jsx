@@ -50,7 +50,7 @@ const JobActionCell = ({ job, onDownload }) => {
   }, [job]);
 
   if (job.status === 'failed') return <span className="text-xs text-text-muted">-</span>;
-  if (job.status !== 'success') return <span className="text-xs text-text-muted">Waiting...</span>;
+  if (job.status !== 'success') return <span className="text-xs text-text-muted">Đang chờ...</span>;
 
   const hasLink = job.direct_mp4_url || job.local_mp3_path || job.local_file_path;
   if (!hasLink) return <span className="text-xs text-text-muted">-</span>;
@@ -330,25 +330,25 @@ export default function BulkContent() {
       case 'pending':
         return (
           <span className="inline-flex items-center gap-1 text-text-muted bg-surface/50 px-2.5 py-1 rounded-lg text-xs font-medium">
-            <Clock className="w-3 h-3" /> Pending
+            <Clock className="w-3 h-3" /> Chờ xử lý
           </span>
         );
       case 'processing':
         return (
           <span className="inline-flex items-center gap-1 text-warning bg-warning/10 px-2.5 py-1 rounded-lg text-xs font-medium">
-            <Loader2 className="w-3 h-3 animate-spin" /> Processing
+            <Loader2 className="w-3 h-3 animate-spin" /> Đang xử lý
           </span>
         );
       case 'success':
         return (
           <span className="inline-flex items-center gap-1 text-success bg-success/10 px-2.5 py-1 rounded-lg text-xs font-medium">
-            <CheckCircle2 className="w-3 h-3" /> Success
+            <CheckCircle2 className="w-3 h-3" /> Thành công
           </span>
         );
       case 'failed':
         return (
           <span className="inline-flex items-center gap-1 text-error bg-error/10 px-2.5 py-1 rounded-lg text-xs font-medium">
-            <XCircle className="w-3 h-3" /> Failed
+            <XCircle className="w-3 h-3" /> Thất bại
           </span>
         );
       default:
@@ -440,11 +440,11 @@ export default function BulkContent() {
           <div className="flex items-center gap-3 mb-1">
             <Layers className="w-5 h-5 text-accent-light" />
             <h2 className="text-2xl font-bold text-text-primary tracking-tight">
-              Bulk Download
+              Tải Hàng Loạt
             </h2>
           </div>
           <p className="text-sm text-text-muted ml-8">
-            Process multiple videos or entire channels concurrently
+            Xử lý đồng thời nhiều video hoặc toàn bộ kênh
           </p>
         </div>
         {quotaInfo && ['pro', 'vip'].includes(quotaInfo.plan) && (
@@ -460,10 +460,10 @@ export default function BulkContent() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
           <div>
             <h3 className="text-base font-semibold text-text-primary">
-              Paste URLs
+              Dán URL vào đây
             </h3>
             <p className="text-xs text-text-muted mt-0.5">
-              Video links, channel profiles, or playlist URLs — one per line
+              Link video, kênh, hoặc playlist — mỗi dòng một link
             </p>
           </div>
 
@@ -628,7 +628,7 @@ export default function BulkContent() {
             ) : (
               <Play className="w-4 h-4" />
             )}
-            {isSubmitting ? 'Submitting...' : 'Start Bulk Download'}
+            {isSubmitting ? 'Đang gửi...' : 'Bắt Đầu Tải Hàng Loạt'}
           </button>
         </div>
       </div>
@@ -638,10 +638,10 @@ export default function BulkContent() {
         <div className="p-5 rounded-2xl bg-surface-card border border-border shadow-lg">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-text-primary">
-              Batch Progress
+              Tiến độ xử lý
             </h3>
             <span className="text-xs text-text-muted">
-              {totalData.success + totalData.failed} / {totalData.total} completed
+              {totalData.success + totalData.failed} / {totalData.total} hoàn tất
             </span>
           </div>
 
@@ -656,24 +656,24 @@ export default function BulkContent() {
           {/* Stat Pills */}
           <div className="flex flex-wrap gap-3">
             <span className="text-xs px-3 py-1.5 rounded-lg bg-surface font-medium text-text-secondary">
-              Total: <strong className="text-text-primary">{totalData.total}</strong>
+              Tổng: <strong className="text-text-primary">{totalData.total}</strong>
             </span>
             {totalData.pending > 0 && (
               <span className="text-xs px-3 py-1.5 rounded-lg bg-surface font-medium text-text-muted">
-                Pending: {totalData.pending}
+                Chờ: {totalData.pending}
               </span>
             )}
             {totalData.processing > 0 && (
               <span className="text-xs px-3 py-1.5 rounded-lg bg-warning/10 font-medium text-warning">
-                Processing: {totalData.processing}
+                Đang xử lý: {totalData.processing}
               </span>
             )}
             <span className="text-xs px-3 py-1.5 rounded-lg bg-success/10 font-medium text-success">
-              Success: {totalData.success}
+              Thành công: {totalData.success}
             </span>
             {totalData.failed > 0 && (
               <span className="text-xs px-3 py-1.5 rounded-lg bg-error/10 font-medium text-error">
-                Failed: {totalData.failed}
+                Thất bại: {totalData.failed}
               </span>
             )}
           </div>
@@ -750,7 +750,7 @@ export default function BulkContent() {
                 "
               >
                 <TableIcon className="w-4 h-4" />
-                Export CSV
+                Xuất CSV
               </button>
               <button
                 onClick={handleCopyAll}
@@ -762,7 +762,7 @@ export default function BulkContent() {
                 "
               >
                 <Layers className="w-4 h-4" />
-                Copy All Links
+                Sao chép link
               </button>
               <button
                 onClick={handleOpenAll}
@@ -774,7 +774,7 @@ export default function BulkContent() {
                 "
               >
                 <ExternalLink className="w-4 h-4" />
-                Open All in Browser ({successJobs.length})
+                Mở trong trình duyệt ({successJobs.length})
               </button>
             </div>
           )}
@@ -786,7 +786,7 @@ export default function BulkContent() {
         <div className="rounded-2xl bg-surface-card border border-border shadow-lg overflow-hidden">
           <div className="px-6 py-4 border-b border-border bg-surface-lighter/30 flex justify-between items-center">
             <h3 className="font-semibold text-text-primary">
-              Jobs ({jobs.length})
+              Danh sách ({jobs.length})
             </h3>
             <span className="text-xs text-text-muted bg-surface px-2.5 py-1 rounded-md font-mono">
               {batchId ? batchId.slice(0, 8) + '...' : 'Loading...'}
@@ -820,9 +820,9 @@ export default function BulkContent() {
                       />
                     </th>
                     <th className="px-6 py-3 font-medium w-8">#</th>
-                    <th className="px-6 py-3 font-medium">Original URL</th>
-                    <th className="px-6 py-3 font-medium">Status</th>
-                    <th className="px-6 py-3 font-medium text-right">Action</th>
+                    <th className="px-6 py-3 font-medium">URL gốc</th>
+                    <th className="px-6 py-3 font-medium">Trạng thái</th>
+                    <th className="px-6 py-3 font-medium text-right">Hành động</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">

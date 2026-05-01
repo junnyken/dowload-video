@@ -1,10 +1,11 @@
 # Tasks: Video Downloader (VidGrab)
 
 ## Đang làm
-- [ ] Verify webhook signature cho payments (`backend/app/api/payments.py:21`)
-- [ ] Thiết lập Spotify credentials (`SPOTIPY_CLIENT_ID`, `SPOTIPY_CLIENT_SECRET`) trong .env
+<!-- Hết việc trong Đang làm -->
 
 ## Đã xong
+- [x] Verify webhook signature cho payments
+- [x] Thiết lập Spotify credentials trong .env
 - [x] Initial commit — scaffold toàn bộ backend + frontend
 - [x] FastAPI backend với rate limiting và CORS
 - [x] Celery worker với Redis broker
