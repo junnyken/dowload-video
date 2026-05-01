@@ -119,10 +119,16 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
     elif quality.startswith("mp3"):
         # Audio only extraction
         fmt = "bestaudio[ext=m4a]/bestaudio/best"
-    else:
-        # For 'video' quality (instant download via browser)
-        # We MUST use a pre-merged format because the browser cannot merge DASH streams!
+    elif quality == "video_fast":
+        # Fast mode: pre-merged only (no FFmpeg merge needed) — lower quality but instant
+        # This is the OLD "video" behavior, kept for backward compatibility
         fmt = "b[ext=mp4]/best[ext=mp4]/best"
+    else:
+        # Default "video" quality — BEST quality with FFmpeg merge
+        # YouTube separates HD/4K video and audio into DASH adaptive streams.
+        # Pre-merged streams (progressive) are only 360p or 720p max.
+        # By requesting bestvideo+bestaudio, yt-dlp downloads both and merges via FFmpeg.
+        fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best"
 
     opts = {
         "format": fmt,
@@ -139,7 +145,7 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         opts["merge_output_format"] = "mp4"
 
     # FFmpeg postprocessor for merging (4K or specific resolutions)
-    if quality.startswith("video_") and quality != "video":
+    if quality.startswith("video_") and quality not in ("video", "video_fast"):
         opts["postprocessors"] = [{
             "key": "FFmpegVideoConvertor",
             "preferedformat": "mp4",
@@ -160,9 +166,17 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
             "preferredquality": "128",
         }]
 
-    # Ensure output is saved to temp if we are going to download it locally
+    # Ensure output is saved to temp for server-side download + merge
+    # This is needed for ANY quality that requires FFmpeg merging (which is most of them now)
     is_tiktok = "tiktok.com" in url.lower()
-    if quality.startswith("mp3") or quality.startswith("audio_") or (quality.startswith("video_") and quality != "video") or is_tiktok:
+    needs_local_download = (
+        quality.startswith("mp3") or 
+        quality.startswith("audio_") or 
+        (quality.startswith("video_") and quality != "video_fast") or 
+        quality == "video" or  # Default quality now uses merge → needs local download
+        is_tiktok
+    )
+    if needs_local_download:
         opts["outtmpl"] = os.path.join(DOWNLOAD_DIR, "%(id)s_%(format_id)s.%(ext)s")
 
     # ── Hybrid Proxy Logic ───────────────────────────────────────
@@ -503,9 +517,10 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     opts["extract_flat"] = False
     opts = _apply_tiktok_opts(opts, url, remove_watermark)
 
-    # Force server-side download for TikTok to prevent CDN dropping connection
+    # Force server-side download for FFmpeg merging (HD/4K quality)
+    # Only "video_fast" mode skips download (returns direct pre-merged URL for browser)
     is_tiktok = "tiktok.com" in url.lower()
-    should_download = quality != "video" or is_tiktok
+    should_download = quality != "video_fast" or is_tiktok
 
     info = None
     try:
@@ -667,7 +682,8 @@ def extract_video_info_sync(url: str, quality: str = "video", remove_watermark: 
     Use a much longer timeout if the quality requires downloading and merging/converting.
     """
     try:
-        timeout = 600 if quality != "video" else EXTRACTION_TIMEOUT_SECONDS
+        # All quality modes now download+merge server-side except video_fast
+        timeout = EXTRACTION_TIMEOUT_SECONDS if quality == "video_fast" else 600
         return _run_with_timeout(
             _extract_video_info_impl,
             args=(url, quality, remove_watermark, download_subs),
