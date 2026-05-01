@@ -807,11 +807,15 @@ def _scrape_douyin_channel(channel_url: str, max_videos: int = 20) -> Dict[str, 
     }
 
 
-def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 20, min_views: int = 0) -> Dict[str, Any]:
+def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 100, min_views: int = 0) -> Dict[str, Any]:
     """
     Scrape a channel or playlist URL to get a flat list of video entries
     WITHOUT downloading or fully processing each video.
     Filters by view_count and limits to max_videos.
+    
+    NOTE: process=True is REQUIRED for YouTube channels to trigger 
+    InnerTube continuation token pagination. With process=False, 
+    yt-dlp only returns the first ~20 items from the initial page load.
     """
     # ── Step 0: Unshorten short links ────────────────────────
     original_channel_url = channel_url
@@ -827,17 +831,23 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 20, min_vie
     if "tiktok.com" in channel_url.lower() and "?" in channel_url:
         channel_url = channel_url.split("?")[0]
 
-
-
     opts = _get_base_opts(channel_url, phase="metadata")
-    # extract_flat gives us the video list without resolving each video
+    # extract_flat gives us the video list without resolving each video's streams
     opts["extract_flat"] = "in_playlist"
-    # To get views we might need to be careful, as extract_flat might not return it for all platforms,
-    # but it usually does for YouTube and TikTok.
+    # Limit how many entries yt-dlp fetches to avoid excessive API calls
+    # playlistend caps pagination so we don't fetch thousands of videos
+    opts["playlistend"] = max_videos + 50  # fetch extra to allow for view filtering
+    opts["ignoreerrors"] = True  # skip private/deleted videos without crashing
     opts = _apply_tiktok_opts(opts, channel_url)
 
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(channel_url, download=False, process=False)
+    info = None
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            # process=True is CRITICAL: it triggers YouTube InnerTube continuation
+            # token pagination. Without it, only the first ~20 videos are returned.
+            info = ydl.extract_info(channel_url, download=False, process=True)
+    except Exception as extract_err:
+        print(f"[Downloader] Channel extraction error (continuing with partial): {extract_err}")
 
     if info is None:
         import tempfile
@@ -855,12 +865,13 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 20, min_vie
                 fallback_opts = _get_base_opts(channel_url, phase="download")  # no proxy for API
                 fallback_opts["extract_flat"] = "in_playlist"
                 fallback_opts["enable_file_urls"] = True
+                fallback_opts["playlistend"] = max_videos + 50
                 fallback_opts = _apply_tiktok_opts(fallback_opts, channel_url)
 
                 # Fix for Windows paths in yt-dlp
                 file_url = f"file:///{tmp_path.replace(chr(92), '/')}"
                 with yt_dlp.YoutubeDL(fallback_opts) as ydl:
-                    info = ydl.extract_info(file_url, download=False, process=False)
+                    info = ydl.extract_info(file_url, download=False, process=True)
                     
             except Exception as fallback_err:
                 print(f"[Downloader] Scraping API fallback parse failed: {fallback_err}")
@@ -876,7 +887,12 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 20, min_vie
     entries = []
     channel_title = info.get("title") or info.get("uploader") or "Unknown Channel"
 
+    # yt-dlp returns entries as a generator or list depending on process flag
     raw_entries = info.get("entries", [])
+    # If it's a generator, convert to list (needed for counting)
+    if not isinstance(raw_entries, list):
+        raw_entries = list(raw_entries)
+
     total_found = 0
     total_queued = 0
 
@@ -912,6 +928,8 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 20, min_vie
             })
             total_queued += 1
 
+    print(f"[Downloader] Channel '{channel_title}': found {total_found} videos, queued {total_queued} (max={max_videos}, min_views={min_views})")
+
     return {
         "channel_title": channel_title,
         "entries": entries,
@@ -920,16 +938,16 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 20, min_vie
     }
 
 
-def scrape_channel_entries_sync(channel_url: str, max_videos: int = 20, min_views: int = 0) -> Dict[str, Any]:
+def scrape_channel_entries_sync(channel_url: str, max_videos: int = 100, min_views: int = 0) -> Dict[str, Any]:
     """
     Public entry point with HARD TIMEOUT for channel scraping.
-    Wraps the actual scraping in a thread with a 90-second cap
-    (Douyin channels need ScraperAPI JS rendering which is slow).
+    Wraps the actual scraping in a thread with a timeout cap.
+    YouTube pagination for large channels may need 60-90s.
     """
     try:
         # Douyin channels need longer timeout due to ScraperAPI JS rendering
         is_douyin = "douyin.com" in channel_url.lower()
-        timeout = 90 if is_douyin else 45
+        timeout = 90 if is_douyin else 120  # YouTube pagination needs more time for large channels
         return _run_with_timeout(
             _scrape_channel_entries_impl,
             args=(channel_url, max_videos, min_views),
@@ -940,7 +958,7 @@ def scrape_channel_entries_sync(channel_url: str, max_videos: int = 20, min_view
         raise ValueError(str(e))
 
 
-async def scrape_channel_entries(channel_url: str, max_videos: int = 20, min_views: int = 0) -> Dict[str, Any]:
+async def scrape_channel_entries(channel_url: str, max_videos: int = 100, min_views: int = 0) -> Dict[str, Any]:
     """Async wrapper for channel scraping."""
     return await asyncio.to_thread(scrape_channel_entries_sync, channel_url, max_videos, min_views)
 

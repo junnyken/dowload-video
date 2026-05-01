@@ -97,7 +97,7 @@ export default function BulkContent() {
   const [isZipping, setIsZipping] = useState(false);
   
   // New States
-  const [maxVideos, setMaxVideos] = useState(20);
+  const [maxVideos, setMaxVideos] = useState(100);
   const [minViews, setMinViews] = useState(0);
   const [autoDownload, setAutoDownload] = useState(false);
   const [quality, setQuality] = useState('video');
