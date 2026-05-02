@@ -108,14 +108,23 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
     """
     if quality == "video_4k":
         # 4K/2K: request highest quality video+audio, merge with FFmpeg
-        fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best"
+        # WebM fallback added: YouTube often serves WebM DASH even when MP4 DASH is SABR-blocked
+        fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=webm]+bestaudio[ext=webm]/bestvideo+bestaudio/best[ext=mp4]/best"
     elif quality.startswith("video_") and quality != "video":
         # Specific resolution merge, e.g., video_1080
+        # Fallback chain: prefer target height → try WebM → relax to bestvideo → avoid progressive-only
         try:
             height = int(quality.split("_")[1])
-            fmt = f"bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={height}]+bestaudio/best[height<={height}]"
+            fmt = (
+                f"bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]"
+                f"/bestvideo[height<={height}][ext=webm]+bestaudio[ext=webm]"
+                f"/bestvideo[height<={height}]+bestaudio"
+                f"/bestvideo[ext=mp4]+bestaudio[ext=m4a]"
+                f"/bestvideo+bestaudio"
+                f"/best[height<={height}][ext=mp4]/best[height<={height}]"
+            )
         except:
-            fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best"
+            fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=webm]+bestaudio[ext=webm]/bestvideo+bestaudio/best[ext=mp4]/best"
     elif quality.startswith("mp3"):
         # Audio only extraction
         fmt = "bestaudio[ext=m4a]/bestaudio/best"
@@ -128,7 +137,8 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         # YouTube separates HD/4K video and audio into DASH adaptive streams.
         # Pre-merged streams (progressive) are only 360p or 720p max.
         # By requesting bestvideo+bestaudio, yt-dlp downloads both and merges via FFmpeg.
-        fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best"
+        # WebM fallback: YouTube DASH WebM streams are less restricted by SABR than MP4.
+        fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=webm]+bestaudio[ext=webm]/bestvideo+bestaudio/best[ext=mp4]/best"
 
     opts = {
         "format": fmt,
@@ -185,11 +195,15 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         opts["proxy"] = proxy
 
     if "youtube.com" in url.lower() or "youtu.be" in url.lower():
+        # tv_embedded bypasses SABR (different consent flow than web/android clients).
+        # web_creator is another SABR bypass path. ios/mweb as fallbacks.
         opts["extractor_args"] = {
             "youtube": {
-                "player_client": ["web", "mweb", "android", "ios"]
+                "player_client": ["tv_embedded", "ios", "web_creator", "mweb", "web"]
             }
         }
+        # Prioritize resolution, then codec compatibility, then bitrate
+        opts["format_sort"] = ["res", "ext:mp4:m4a", "tbr", "vbr", "abr", "asr"]
 
     return opts
 
@@ -531,6 +545,12 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             entries = [e for e in info["entries"] if e]
             if entries:
                 info = entries[0]
+        # Log actual downloaded quality to verify SABR bypass
+        if should_download and info and info.get("requested_downloads"):
+            dl = info["requested_downloads"][0]
+            actual_h = dl.get("height") or info.get("height", 0)
+            actual_mb = (dl.get("filesize") or 0) / (1024 * 1024)
+            print(f"[Downloader] Downloaded: {actual_h}p, {actual_mb:.1f}MB, format={dl.get('format_id','?')}")
     except Exception as primary_err:
         print(f"[Downloader] Primary extraction failed for {url}: {primary_err}")
 

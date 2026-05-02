@@ -34,15 +34,7 @@
     "48": "assets/icon.png",
     "128": "assets/icon.png"
   },
-  "commands": {
-    "quick-download": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+D",
-        "mac": "Command+Shift+D"
-      },
-      "description": "Tải nhanh video trên trang hiện tại"
-    }
-  },
+
   "content_scripts": [
     {
       "matches": ["*://*.douyin.com/*"],

@@ -84,64 +84,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === 'complete') updateBadgeForTab(tabId);
 });
 
-// ── Keyboard Shortcut Handler ─────────────────────────────────────
-chrome.commands.onCommand.addListener(async (command) => {
-  if (command !== 'quick-download') return;
 
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.url || tab.url.startsWith('chrome://')) return;
-
-  try {
-    // Send toast notification to page
-    chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '⚡ VidGrab: Đang tải...' }).catch(() => {});
-
-    const resp = await fetch(`${API_BASE}/api/v1/fetch-link`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: tab.url,
-        quality: tab.url.includes('spotify.com') ? 'mp3_320' : 'video',
-        remove_watermark: true,
-      }),
-    });
-    const data = await resp.json();
-
-    if (resp.ok && data.success) {
-      const targetUrl = data.direct_mp4_url || data.local_file_path;
-      let ext = 'mp4';
-      if (data.is_audio_only || (targetUrl && (targetUrl.endsWith('.mp3') || targetUrl.endsWith('.m4a')))) {
-        ext = 'mp3';
-      }
-      const safeName = (data.title || 'video').replace(/[/\\?%*:|"<>]/g, '-');
-
-      let dlUrl;
-      if (targetUrl && !targetUrl.includes('matbao.ai')) {
-        dlUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(targetUrl)}&filename=${encodeURIComponent(safeName)}&ext=${ext}`;
-      } else if (targetUrl && targetUrl.startsWith('/app/downloads/')) {
-        dlUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(targetUrl)}&filename=${encodeURIComponent(safeName)}.${ext}`;
-      } else {
-        dlUrl = targetUrl;
-      }
-
-      chrome.downloads.download({ url: dlUrl, filename: `VidGrab/${safeName}.${ext}`, saveAs: false });
-
-      // Save to history
-      addToHistory({
-        title: data.title || 'Video',
-        thumbnail: data.thumbnail_url || '',
-        url: tab.url,
-        quality: ext === 'mp3' ? 'MP3' : 'Video HD',
-        fileSize: data.file_size_mb ? `${data.file_size_mb} MB` : '',
-      });
-
-      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '✅ Đang tải xuống!' }).catch(() => {});
-    } else {
-      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '❌ Lỗi: ' + (data.detail || 'Server lỗi') }).catch(() => {});
-    }
-  } catch (err) {
-    chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '❌ Lỗi kết nối server' }).catch(() => {});
-  }
-});
 
 // ── Download Progress & Notification ──────────────────────────────
 const activeDownloads = new Map();

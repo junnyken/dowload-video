@@ -456,14 +456,14 @@
     videoSet.clear();
     setTimeout(() => {
       const t = getPageType();
-      if (t === 'video' || window.location.href.includes('spotify.com')) injectVideoButton();
+      // if (t === 'video' || window.location.href.includes('spotify.com')) injectVideoButton();
       if (t === 'channel' || t === 'spotify_playlist' || t === 'generic_channel') injectChannelPanel();
     }, 1200);
   }).observe(document.documentElement, { childList: true, subtree: true });
 
   // ── Init ────────────────────────────────────────────────────────────
   const type = getPageType();
-  if (type === 'video' || window.location.href.includes('spotify.com') || window.location.href.includes('instagram.com')) injectVideoButton();
+  // if (type === 'video' || window.location.href.includes('spotify.com') || window.location.href.includes('instagram.com')) injectVideoButton();
   if (type === 'channel' || type === 'spotify_playlist' || type === 'generic_channel') injectChannelPanel();
 
   // ── Toast notification helper (for keyboard shortcut feedback) ───
