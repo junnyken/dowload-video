@@ -27,7 +27,7 @@ import httpx
 from app.core.proxy_manager import get_proxy_config_for_phase, dispatch_scraping_request
 from app.utils.link_resolver import resolve_short_url, is_douyin_url
 from app.services.douyin_extractor import extract_douyin_video_sync, _try_tikwm
-from app.services.cobalt_service import is_cobalt_available, extract_youtube_formats_via_cobalt
+from app.services.cobalt_service import is_cobalt_available, extract_youtube_formats_via_cobalt, download_from_cobalt
 
 # Ensure Deno is discoverable for yt-dlp JS challenges
 _deno_bin = os.path.join(os.path.expanduser("~"), ".deno", "bin")
@@ -195,11 +195,13 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         opts["proxy"] = proxy
 
     if "youtube.com" in url.lower() or "youtu.be" in url.lower():
-        # tv_embedded bypasses SABR (different consent flow than web/android clients).
-        # web_creator is another SABR bypass path. ios/mweb as fallbacks.
+        # android_vr is the ONLY client that bypasses YouTube SABR without cookies.
+        # web_creator/mweb/web all require sign-in cookies for DASH streams.
+        # android_vr returns full DASH adaptive streams (1080p+) without auth.
+        # Tested: 1080p AV1+AAC merge success via android_vr (46MB, 3s download).
         opts["extractor_args"] = {
             "youtube": {
-                "player_client": ["tv_embedded", "ios", "web_creator", "mweb", "web"]
+                "player_client": ["android_vr"]
             }
         }
         # Prioritize resolution, then codec compatibility, then bitrate
@@ -545,16 +547,54 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             entries = [e for e in info["entries"] if e]
             if entries:
                 info = entries[0]
-        # Log actual downloaded quality to verify SABR bypass
+        # Log actual downloaded quality
         if should_download and info and info.get("requested_downloads"):
             dl = info["requested_downloads"][0]
             actual_h = dl.get("height") or info.get("height", 0)
             actual_mb = (dl.get("filesize") or 0) / (1024 * 1024)
-            print(f"[Downloader] Downloaded: {actual_h}p, {actual_mb:.1f}MB, format={dl.get('format_id','?')}")
+            print(f"[Downloader] yt-dlp downloaded: {actual_h}p, {actual_mb:.1f}MB, format={dl.get('format_id','?')}")
     except Exception as primary_err:
         print(f"[Downloader] Primary extraction failed for {url}: {primary_err}")
 
-    # ── Phase 1.5: TikWM fallback (yt-dlp failed, TikWM not yet tried) ─
+    # ── Phase 1.5a: YouTube SABR Recovery via Cobalt (safety net) ──────
+    # With android_vr client, SABR is usually bypassed successfully.
+    # This Cobalt fallback is kept as safety net in case android_vr stops working.
+    # Detect quality downgrade and replace the file using Cobalt's tunnel.
+    is_youtube_url = "youtube.com" in url.lower() or "youtu.be" in url.lower()
+    if is_youtube_url and should_download and info and quality.startswith("video_") and "_" in quality:
+        try:
+            target_height = int(quality.split("_")[1])
+        except (ValueError, IndexError):
+            target_height = 0
+
+        if target_height > 0:
+            actual_height = 0
+            if info.get("requested_downloads"):
+                dl0 = info["requested_downloads"][0]
+                actual_height = dl0.get("height") or info.get("height") or 0
+
+            # SABR triggered: downloaded quality is significantly below target
+            if actual_height == 0 or actual_height < target_height * 0.8:
+                print(f"[Downloader] SABR: yt-dlp got {actual_height}p (need {target_height}p). Cobalt fallback...")
+                if is_cobalt_available():
+                    cobalt_path = download_from_cobalt(url, str(target_height), DOWNLOAD_DIR)
+                    if cobalt_path:
+                        # Delete the wrong-quality file yt-dlp downloaded
+                        if info.get("requested_downloads"):
+                            old_path = info["requested_downloads"][0].get("filepath")
+                            if old_path and os.path.exists(old_path):
+                                try:
+                                    os.remove(old_path)
+                                except Exception:
+                                    pass
+                            info["requested_downloads"][0]["filepath"] = cobalt_path
+                        print(f"[Downloader] Cobalt recovered {target_height}p successfully")
+                    else:
+                        print("[Downloader] Cobalt fallback failed — keeping yt-dlp result")
+                else:
+                    print("[Downloader] Cobalt not available for SABR recovery")
+
+    # ── Phase 1.5b: TikWM fallback (yt-dlp failed, TikWM not yet tried) ─
     # Reaches here only if TikWM was skipped (non-tiktok) or yt-dlp failed
     # for a TikTok URL that somehow bypassed the early-return above.
     if info is None and is_tiktok:

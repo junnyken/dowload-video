@@ -1,12 +1,12 @@
 """
-Cobalt API Service — YouTube HD Format Discovery
-Uses a local Cobalt instance to DISCOVER which YouTube qualities are available,
-bypassing SABR restrictions. Actual downloading is done by yt-dlp on the server.
+Cobalt API Service — YouTube HD Download via Cobalt
+Uses a local Cobalt instance to bypass YouTube SABR restrictions.
 
-NOTE: Cobalt tunnel URLs do NOT work for proxying (Content-Length: 0 due to
-Docker network isolation). So we only use Cobalt for metadata/availability
-detection, and mark all formats as requires_merge=True so that the backend
-downloads them via yt-dlp + ffmpeg.
+Cobalt handles YouTube's anti-bot protections (SABR, n-challenge, PO tokens)
+internally. We use it for both format discovery AND server-side downloading.
+
+Tunnel URLs returned by Cobalt (http://cobalt-api:9000/tunnel?...) are
+accessible from the backend container via the Docker internal network.
 """
 import os
 import httpx
@@ -181,3 +181,60 @@ def extract_youtube_formats_via_cobalt(url: str) -> Dict[str, Any]:
         "audio_formats": audio_formats[:4],
         "max_video_only_height": max_video_only_height,
     }
+
+
+def download_from_cobalt(url: str, quality: str, output_dir: str) -> Optional[str]:
+    """
+    Download a YouTube video via Cobalt, saving to output_dir.
+    Returns local file path on success, None on failure.
+
+    Cobalt tunnel URLs (http://cobalt-api:9000/tunnel?...) are accessible
+    from the backend container within the Docker internal network.
+    """
+    result = fetch_cobalt_stream(url, video_quality=quality, download_mode="auto")
+    status = result.get("status", "error")
+
+    if status == "error":
+        error_code = result.get("error", {}).get("code", "unknown")
+        print(f"[Cobalt] Download request failed for {quality}p: {error_code}")
+        return None
+
+    stream_url = result.get("url")
+    if not stream_url:
+        print(f"[Cobalt] No stream URL in response for {quality}p (status={status})")
+        return None
+
+    filename = result.get("filename", f"cobalt_{quality}p.mp4")
+    filename = os.path.basename(filename)
+    if not filename.lower().endswith(".mp4"):
+        filename = filename.rsplit(".", 1)[0] + ".mp4"
+
+    output_path = os.path.join(output_dir, filename)
+
+    try:
+        print(f"[Cobalt] Downloading {quality}p via {status}: {stream_url[:80]}...")
+        with httpx.Client(timeout=600.0, follow_redirects=True) as client:
+            with client.stream("GET", stream_url) as resp:
+                resp.raise_for_status()
+                with open(output_path, "wb") as f:
+                    for chunk in resp.iter_bytes(chunk_size=65536):
+                        if chunk:
+                            f.write(chunk)
+
+        file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+        if file_size > 0:
+            print(f"[Cobalt] Downloaded {quality}p: {file_size / (1024*1024):.1f}MB → {output_path}")
+            return output_path
+
+        print(f"[Cobalt] Downloaded file is empty for {quality}p")
+        if os.path.exists(output_path):
+            os.remove(output_path)
+    except Exception as e:
+        print(f"[Cobalt] Download error for {quality}p: {e}")
+        if os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except Exception:
+                pass
+
+    return None
