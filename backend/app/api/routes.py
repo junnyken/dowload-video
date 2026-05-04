@@ -18,7 +18,6 @@ from pydantic import BaseModel
 
 from app.services.downloader import extract_video_info, classify_url
 from app.core.database import get_supabase_client
-from app.core.cache import get_cached_result
 from app.core.quotas import check_user_quota, increment_usage
 from app.tasks.video_tasks import process_video_task, scrape_channel_task
 from app.main import limiter
@@ -93,20 +92,7 @@ async def fetch_link(payload: FetchLinkRequest, request: Request):
     # 1. Quotas disabled (100% Free)
 
     try:
-        # 2. Check Cache
-        cached = get_cached_result(payload.url)
-        if cached:
-            print(f"[Cache Hit] API - URL: {payload.url}")
-            return {
-                "success": True,
-                "title": cached.get("title"),
-                "thumbnail_url": cached.get("thumbnail_url"),
-                "direct_mp4_url": cached.get("direct_mp4_url"),
-                "cached": True
-            }
-
-        print(f"[Cache Miss] API - URL: {payload.url} - Fetching fresh link")
-        # 3. Extract info
+        # 2. Extract info
         info = await extract_video_info(
             payload.url, 
             payload.quality, 
