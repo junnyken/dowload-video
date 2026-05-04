@@ -295,75 +295,95 @@ def _extract_available_formats(info: dict) -> dict:
 
     video_formats = []
     audio_formats = []
-    seen_video = set()
+    seen_video_heights = set()
     seen_audio = set()
     max_video_only_height = 0
 
-    for f in reversed(raw_formats):  # highest quality first
+    def _make_video_entry(f, height, ext, requires_merge):
+        filesize = f.get("filesize") or f.get("filesize_approx") or 0
+        filesize_mb = round(filesize / (1024 * 1024), 2) if filesize else 0
+        if height >= 2160:
+            label = "4K"
+        elif height >= 1440:
+            label = "2K"
+        elif height >= 1080:
+            label = "Full HD"
+        elif height >= 720:
+            label = "HD"
+        elif height >= 480:
+            label = "SD"
+        else:
+            label = f"{height}p"
+        return {
+            "type": "video",
+            "label": label,
+            "resolution": f"{height}p",
+            "height": height,
+            "ext": ext,
+            "filesize_mb": filesize_mb,
+            "url": f.get("url"),
+            "requires_merge": requires_merge
+        }
+
+    # ── Pass 1: Collect pre-merged (V+A) formats (like 360p progressive) ──
+    for f in reversed(raw_formats):
         f_url = f.get("url")
         if not f_url:
             continue
-
         ext = f.get("ext", "")
         vcodec = (f.get("vcodec") or "none")
         acodec = (f.get("acodec") or "none")
         has_video = vcodec != "none"
         has_audio = acodec != "none"
 
-        # ── Video streams ────────────────────────────────────────
-        if has_video:
+        if has_video and has_audio and ext in ("mp4", "webm"):
             height = f.get("height") or 0
             if not height:
                 continue
+            if height in seen_video_heights:
+                continue
+            seen_video_heights.add(height)
+            video_formats.append(_make_video_entry(f, height, ext, False))
 
-            # Track highest video-only resolution for fallback merge logic
-            if not has_audio and height > max_video_only_height:
+    # ── Pass 2: Add video-only (requires_merge) formats at new heights ──
+    for f in reversed(raw_formats):
+        f_url = f.get("url")
+        if not f_url:
+            continue
+        ext = f.get("ext", "")
+        vcodec = (f.get("vcodec") or "none")
+        acodec = (f.get("acodec") or "none")
+        has_video = vcodec != "none"
+        has_audio = acodec != "none"
+
+        if has_video and not has_audio:
+            height = f.get("height") or 0
+            if not height:
+                continue
+            if height > max_video_only_height:
                 max_video_only_height = height
-
             if ext not in ("mp4", "webm"):
                 continue
-
-            # Identify if this stream needs merging (no audio included natively)
-            requires_merge = not has_audio
-
-            # Dedup key now includes requires_merge to show both direct and merge options
-            dedup_key = f"{height}_{requires_merge}"
-            if dedup_key in seen_video:
+            if height in seen_video_heights:
                 continue
-            seen_video.add(dedup_key)
+            seen_video_heights.add(height)
+            video_formats.append(_make_video_entry(f, height, ext, True))
 
-            filesize = f.get("filesize") or f.get("filesize_approx") or 0
-            filesize_mb = round(filesize / (1024 * 1024), 2) if filesize else 0
+    # ── Audio-only streams ───────────────────────────────────
+    for f in reversed(raw_formats):
+        f_url = f.get("url")
+        if not f_url:
+            continue
+        ext = f.get("ext", "")
+        vcodec = (f.get("vcodec") or "none")
+        acodec = (f.get("acodec") or "none")
+        has_video = vcodec != "none"
+        has_audio = acodec != "none"
 
-            if height >= 2160:
-                label = "4K"
-            elif height >= 1440:
-                label = "2K"
-            elif height >= 1080:
-                label = "Full HD"
-            elif height >= 720:
-                label = "HD"
-            elif height >= 480:
-                label = "SD"
-            else:
-                label = f"{height}p"
-
-            video_formats.append({
-                "type": "video",
-                "label": label,
-                "resolution": f"{height}p",
-                "height": height,
-                "ext": ext,
-                "filesize_mb": filesize_mb,
-                "url": f_url,
-                "requires_merge": requires_merge
-            })
-
-        # ── Audio-only streams ───────────────────────────────────
-        elif has_audio and not has_video:
+        if has_audio and not has_video:
             abr = int(f.get("abr") or f.get("tbr") or 0)
             if not abr:
-                abr = 128  # default fallback if yt-dlp doesn't provide bitrate
+                abr = 128
 
             dedup_key = f"{abr}_{ext}"
             if dedup_key in seen_audio:
@@ -731,6 +751,16 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         # For backward compatibility with the frontend that might expect local_mp3_path
         if local_path.endswith(".mp3") or local_path.endswith(".m4a"):
             result["local_mp3_path"] = local_path
+
+    # Add the actual downloaded video height so frontend knows
+    # what quality is already available locally (avoids re-downloading)
+    downloaded_height = 0
+    if info.get("requested_downloads"):
+        dl0 = info["requested_downloads"][0]
+        downloaded_height = dl0.get("height") or info.get("height") or 0
+    elif info.get("height"):
+        downloaded_height = info["height"]
+    result["downloaded_height"] = downloaded_height
             
     return result
 

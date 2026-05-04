@@ -119,6 +119,7 @@ async def fetch_link(payload: FetchLinkRequest, request: Request):
             "file_size_mb": info.get("file_size_mb", 0),
             "available_formats": info.get("available_formats", []),
             "max_merge_height": info.get("max_merge_height", 0),
+            "downloaded_height": info.get("downloaded_height", 0),
             "subtitle_url": info.get("subtitle_url"),
             "is_audio_only": info.get("is_audio_only"),
             "cached": False

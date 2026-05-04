@@ -319,6 +319,8 @@ export default function DashboardContent() {
   };
 
   // Merge via backend re-fetch (4K, specific resolution, or audio extraction)
+  // OPTIMIZATION: If the initial fetch already downloaded at the requested quality (or better),
+  // serve the already-downloaded local file instead of making another request.
   const handleMergeDownload = async (param = null) => {
     let qualityReq = 'video_4k';
     const isAudioParam = param === 'm4a' || param === 'webm' || param === 'mp3' || param === 'ogg';
@@ -327,6 +329,23 @@ export default function DashboardContent() {
     } else if (param) {
       qualityReq = `video_${param}`;
     }
+
+    // Check if the initial download already has this quality available locally
+    const requestedHeight = isAudioParam ? 0 : (typeof param === 'number' ? param : 0);
+    const downloadedHeight = videoInfo?.downloaded_height || 0;
+    const localPath = videoInfo?.local_file_path;
+
+    if (!isAudioParam && localPath && requestedHeight > 0 && downloadedHeight >= requestedHeight) {
+      // The initial fetch already downloaded at this quality or better — serve directly
+      const fileExt = localPath.split('.').pop() || 'mp4';
+      const downloadUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=${encodeURIComponent(videoInfo.title || 'video')}.${fileExt}`;
+      const a = document.createElement('a');
+      a.href = downloadUrl; a.setAttribute('download', '');
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      showToast(`Bắt đầu tải ${downloadedHeight}p!`);
+      return;
+    }
+
     setDownloadingId(`merge_${param || '4k'}`);
     try {
       const response = await fetch(`${API_BASE}/api/v1/fetch-link`, {
@@ -347,10 +366,10 @@ export default function DashboardContent() {
       }
       if (data.success) {
         // Determine file path and extension from the actual file
-        const localPath = data.local_mp3_path || data.local_file_path;
-        if (localPath) {
-          const fileExt = localPath.split('.').pop() || (isAudioParam ? 'mp3' : 'mp4');
-          const downloadUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=${encodeURIComponent(data.title || 'video')}.${fileExt}`;
+        const dlPath = data.local_mp3_path || data.local_file_path;
+        if (dlPath) {
+          const fileExt = dlPath.split('.').pop() || (isAudioParam ? 'mp3' : 'mp4');
+          const downloadUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(dlPath)}&filename=${encodeURIComponent(data.title || 'video')}.${fileExt}`;
           const a = document.createElement('a');
           a.href = downloadUrl; a.setAttribute('download', '');
           document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -879,12 +898,21 @@ export default function DashboardContent() {
                       )}
 
                       {/* Combined video+audio formats and Video-only formats (Requires merge) */}
-                      {videoFormats.map((fmt, i) => (
+                      {videoFormats.map((fmt, i) => {
+                        // Check if this format is already available from the initial download
+                        const isAlreadyDownloaded = fmt.requires_merge && videoInfo?.local_file_path && videoInfo?.downloaded_height >= fmt.height;
+                        const displaySize = isAlreadyDownloaded && fmt.height === videoInfo?.downloaded_height ? videoInfo.file_size_mb : fmt.filesize_mb;
+                        
+                        return (
                         <button
                           key={`v-${i}`}
                           onClick={() => fmt.requires_merge ? handleMergeDownload(fmt.height) : handleFormatDownload(fmt)}
                           disabled={downloadingId === `merge_${fmt.height}`}
-                          className="w-full flex items-center justify-between px-5 py-3.5 rounded-2xl bg-slate-800/50 border border-slate-700/40 hover:border-emerald-500/50 hover:bg-slate-800/80 text-white transition-all disabled:opacity-60 active:scale-[0.99] group"
+                          className={`w-full flex items-center justify-between px-5 py-3.5 rounded-2xl ${
+                            isAlreadyDownloaded
+                              ? 'bg-emerald-500/10 border border-emerald-500/40 hover:border-emerald-400/70'
+                              : 'bg-slate-800/50 border border-slate-700/40 hover:border-emerald-500/50 hover:bg-slate-800/80'
+                          } text-white transition-all disabled:opacity-60 active:scale-[0.99] group`}
                         >
                           <div className="flex items-center gap-3">
                             <Video className="w-5 h-5 text-emerald-400" />
@@ -893,7 +921,11 @@ export default function DashboardContent() {
                                 <ResBadge label={fmt.label} height={fmt.height} />
                                 <span className="text-sm font-bold">{fmt.resolution}</span>
                                 <span className="text-xs text-slate-500 uppercase">{fmt.ext}</span>
-                                {fmt.requires_merge && (
+                                {isAlreadyDownloaded ? (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                    SẴN SÀNG
+                                  </span>
+                                ) : fmt.requires_merge && (
                                   <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
                                     GHÉP TỆP
                                   </span>
@@ -909,7 +941,7 @@ export default function DashboardContent() {
                                   </span>
                                 )}
                               </div>
-                              {fmt.filesize_mb > 0 && <p className="text-xs text-slate-400 mt-0.5">{fmt.filesize_mb.toFixed(1)} MB</p>}
+                              {displaySize > 0 && <p className="text-xs text-slate-400 mt-0.5">{displaySize.toFixed(1)} MB{isAlreadyDownloaded ? ' (đã tải)' : ''}</p>}
                             </div>
                           </div>
                           {downloadingId === `merge_${fmt.height}` ? (
@@ -918,7 +950,7 @@ export default function DashboardContent() {
                             <Download className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
                           )}
                         </button>
-                      ))}
+                      ); })}
 
                       {videoFormats.length === 0 && !showMergeOption && (
                         <div className="text-center py-6 text-slate-400 text-sm">
