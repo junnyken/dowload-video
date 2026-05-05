@@ -25,6 +25,8 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - COBALT_API_URL=http://cobalt-api:9000
+    env_file:
+      - .env
     depends_on:
       - redis
       - cobalt-api
@@ -42,6 +44,8 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - COBALT_API_URL=http://cobalt-api:9000
+    env_file:
+      - .env
     depends_on:
       - redis
       - backend
