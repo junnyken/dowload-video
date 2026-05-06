@@ -9,7 +9,9 @@ Endpoints for admin dashboard:
   POST /send-test-notification — Send test Telegram message
 """
 
-from fastapi import APIRouter, HTTPException, Request
+import os
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from app.core.database import get_supabase_client
@@ -17,10 +19,18 @@ from datetime import datetime, timezone, timedelta
 
 router = APIRouter()
 
+# ── Server-side admin auth ───────────────────────────────────────────
+_ADMIN_TOKEN_HEADER = APIKeyHeader(name="X-Admin-Token", auto_error=False)
+_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "matbaosupport")
+
+async def verify_admin(token: Optional[str] = Depends(_ADMIN_TOKEN_HEADER)):
+    if not token or token != _ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
 
 class UpdateUserRequest(BaseModel):
-    user_id: str  # Normally email/ID, here using IP/identifier
-    plan: str     # 'free' or 'pro'
+    user_id: str
+    plan: str  # 'free' or 'pro'
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -28,7 +38,7 @@ class UpdateUserRequest(BaseModel):
 # ═════════════════════════════════════════════════════════════════════
 
 @router.get("/stats")
-async def get_admin_stats(request: Request):
+async def get_admin_stats(_=Depends(verify_admin)):
     supabase = get_supabase_client()
     try:
         # Sum of downloads_today
@@ -90,10 +100,6 @@ async def get_admin_stats(request: Request):
             "providers": providers,
             "failed_jobs": failed_jobs_res.data if failed_jobs_res.data else [],
             "recent_users": recent_users_res.data if recent_users_res.data else [],
-            "api_keys": {
-                "ScraperAPI": os.getenv("SCRAPERAPI_API_KEY", os.getenv("SCRAPERAPI_KEY", "Not Set")),
-                "IPRoyal": os.getenv("IPROYAL_PROXY", "Not Set")
-            }
         }
     except Exception as e:
         print(f"Admin Stats Error: {e}")
@@ -107,7 +113,7 @@ async def get_admin_stats(request: Request):
 # ═════════════════════════════════════════════════════════════════════
 
 @router.get("/analytics")
-async def get_admin_analytics(days: int = 7):
+async def get_admin_analytics(days: int = 7, _=Depends(verify_admin)):
     """
     Returns daily aggregated data for the admin charts.
     Query parameter: days (default: 7, max: 30)
@@ -224,7 +230,7 @@ async def get_admin_analytics(days: int = 7):
 # ═════════════════════════════════════════════════════════════════════
 
 @router.get("/active-jobs")
-async def get_active_jobs():
+async def get_active_jobs(_=Depends(verify_admin)):
     """Get currently processing and pending jobs for real-time monitoring."""
     supabase = get_supabase_client()
 
@@ -269,7 +275,7 @@ async def get_active_jobs():
 # ═════════════════════════════════════════════════════════════════════
 
 @router.post("/send-test-notification")
-async def send_test_notification():
+async def send_test_notification(_=Depends(verify_admin)):
     """Send a test notification to Telegram to verify configuration."""
     try:
         from app.core.notifications import send_telegram_message
@@ -294,7 +300,7 @@ async def send_test_notification():
 # ═════════════════════════════════════════════════════════════════════
 
 @router.post("/update-user")
-async def update_user(req: UpdateUserRequest):
+async def update_user(req: UpdateUserRequest, _=Depends(verify_admin)):
     supabase = get_supabase_client()
     try:
         if req.plan not in ["free", "pro"]:
@@ -320,7 +326,7 @@ async def update_user(req: UpdateUserRequest):
 # ═════════════════════════════════════════════════════════════════════
 
 @router.get("/errors")
-async def get_error_monitor():
+async def get_error_monitor(_=Depends(verify_admin)):
     """
     Detailed error analysis:
     - Recent 50 failed jobs
@@ -427,7 +433,7 @@ async def get_error_monitor():
 # ═════════════════════════════════════════════════════════════════════
 
 @router.get("/users")
-async def get_user_analytics():
+async def get_user_analytics(_=Depends(verify_admin)):
     """
     User behavior analysis:
     - Top IPs by download count (abuse detection)
@@ -497,7 +503,7 @@ async def get_user_analytics():
 # ═════════════════════════════════════════════════════════════════════
 
 @router.get("/system-health")
-async def get_system_health():
+async def get_system_health(_=Depends(verify_admin)):
     """
     Infrastructure health check:
     - Disk usage (downloads folder)

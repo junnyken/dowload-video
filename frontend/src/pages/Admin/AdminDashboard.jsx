@@ -8,6 +8,12 @@ import {
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1/admin`;
 
+const adminFetch = (path, opts = {}) =>
+  fetch(`${API}${path}`, {
+    ...opts,
+    headers: { 'X-Admin-Token': sessionStorage.getItem('admin_token') || '', ...opts.headers },
+  });
+
 // ── SVG Circular Gauge ──────────────────────────────────────────────
 function Gauge({ pct = 0, label, sublabel, colorClass = 'text-amber-400', strokeColor = '#f59e0b' }) {
   const r = 36;
@@ -130,7 +136,7 @@ export default function AdminDashboard() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/stats`);
+      const res = await adminFetch('/stats');
       const data = await res.json();
       if (data.success) setStats(data);
     } catch (e) { console.error('Stats fetch failed', e); }
@@ -139,7 +145,7 @@ export default function AdminDashboard() {
 
   const fetchAnalytics = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/analytics?days=${chartDays}`);
+      const res = await adminFetch(`/analytics?days=${chartDays}`);
       const data = await res.json();
       if (data.success) setAnalytics(data);
     } catch (e) { console.error('Analytics fetch failed', e); }
@@ -147,7 +153,7 @@ export default function AdminDashboard() {
 
   const fetchActiveJobs = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/active-jobs`);
+      const res = await adminFetch('/active-jobs');
       const data = await res.json();
       if (data.success) setActiveJobs(data);
     } catch (e) { console.error('Active jobs fetch failed', e); }
@@ -155,7 +161,7 @@ export default function AdminDashboard() {
 
   const fetchErrors = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/errors`);
+      const res = await adminFetch('/errors');
       const data = await res.json();
       if (data.success) setErrors(data);
     } catch (e) { console.error('Errors fetch failed', e); }
@@ -163,7 +169,7 @@ export default function AdminDashboard() {
 
   const fetchUsers = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/users`);
+      const res = await adminFetch('/users');
       const data = await res.json();
       if (data.success) setUsers(data);
     } catch (e) { console.error('Users fetch failed', e); }
@@ -171,7 +177,7 @@ export default function AdminDashboard() {
 
   const fetchHealth = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/system-health`);
+      const res = await adminFetch('/system-health');
       const data = await res.json();
       if (data.success) setHealth(data);
     } catch (e) { console.error('Health fetch failed', e); }
@@ -197,7 +203,7 @@ export default function AdminDashboard() {
   const toggleUserPlan = async (user_id, currentPlan) => {
     const newPlan = currentPlan === 'pro' ? 'free' : 'pro';
     try {
-      await fetch(`${API}/update-user`, {
+      await adminFetch('/update-user', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id, plan: newPlan }),
       });
@@ -209,7 +215,7 @@ export default function AdminDashboard() {
     setTestingNotif(true);
     setNotifResult(null);
     try {
-      const res = await fetch(`${API}/send-test-notification`, { method: 'POST' });
+      const res = await adminFetch('/send-test-notification', { method: 'POST' });
       const data = await res.json();
       setNotifResult(data.success ? '✅ Đã gửi!' : '❌ Thất bại');
     } catch { setNotifResult('❌ Lỗi kết nối'); }
@@ -489,7 +495,7 @@ export default function AdminDashboard() {
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                 <MiniStatCard label="Tổng Người Dùng" value={users.total_users ?? 0} />
                 <MiniStatCard label="Người Dùng Đáng Ngờ" value={users.flagged_users?.length ?? 0} color="text-red-400" />
-                <MiniStatCard label="Batches 48h" value={users.batch_stats?.total_batches_48h ?? 0} />
+                <MiniStatCard label="Batches 48h" value={users.total_batches_48h ?? 0} />
               </div>
 
               {/* Flagged Users */}
@@ -545,11 +551,11 @@ export default function AdminDashboard() {
               </div>
 
               {/* Batch Size Distribution */}
-              {users.batch_stats?.size_distribution && (
+              {users.batch_distribution?.length > 0 && (
                 <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
                   <h3 className="text-sm font-bold mb-4 text-white flex items-center gap-2"><BarChart2 className="w-4 h-4 text-violet-400" /> Phân Bố Kích Thước Batch (48h)</h3>
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    {Object.entries(users.batch_stats.size_distribution).map(([range, count]) => (
+                    {users.batch_distribution.map(({ range, count }) => (
                       <div key={range} className="bg-[#012622] rounded-xl p-3 text-center border border-slate-700/30">
                         <p className="text-xl font-bold text-violet-400">{count}</p>
                         <p className="text-[10px] text-slate-400 mt-1">{range} URLs</p>

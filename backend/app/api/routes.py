@@ -7,14 +7,43 @@ GET  /jobs/{batch_id}  — poll job progress for a batch
 GET  /proxy-download   — proxy video stream to bypass CORS
 """
 
+import ipaddress
 import uuid
 from typing import List, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from fastapi.security import APIKeyHeader as _APIKeyHeader
+
+_admin_header = _APIKeyHeader(name="X-Admin-Token", auto_error=False)
+import os as _os
+
+async def _require_admin(token: Optional[str] = Depends(_admin_header)):
+    if not token or token != _os.getenv("ADMIN_PASSWORD", "matbaosupport"):
+        raise HTTPException(status_code=401, detail="Unauthorized")
 from pydantic import BaseModel
+
+
+def _assert_safe_url(url: str) -> None:
+    """Reject non-http(s) schemes and private/loopback IP ranges (SSRF guard)."""
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid URL")
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="Invalid URL scheme")
+    hostname = parsed.hostname or ""
+    try:
+        addr = ipaddress.ip_address(hostname)
+        if addr.is_private or addr.is_loopback or addr.is_link_local:
+            raise HTTPException(status_code=400, detail="URL not allowed")
+    except ValueError:
+        # hostname is a domain name, not an IP — check common internal names
+        blocked = ("localhost", "redis", "cobalt-api", "backend", "celery")
+        if any(hostname == b or hostname.endswith(f".{b}") for b in blocked):
+            raise HTTPException(status_code=400, detail="URL not allowed")
 
 from app.services.downloader import extract_video_info, classify_url
 from app.core.database import get_supabase_client
@@ -310,6 +339,7 @@ async def download_thumbnail(url: str, filename: str = "thumbnail"):
     """
     if not url:
         raise HTTPException(status_code=400, detail="URL is required")
+    _assert_safe_url(url)
 
     try:
         import re
@@ -500,7 +530,7 @@ async def get_history(limit: int = 5):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/history/all")
-async def delete_all_history():
+async def delete_all_history(_=Depends(_require_admin)):
     try:
         supabase = get_supabase_client()
         supabase.table("download_jobs").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
@@ -561,11 +591,12 @@ async def proxy_download(url: str, filename: str = "video", ext: str = "mp4"):
     """
     if not url:
         raise HTTPException(status_code=400, detail="URL is required")
+    _assert_safe_url(url)
 
     try:
         import re
         import unicodedata
-        
+
         # Remove accents
         normalized = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')
         # Remove punctuation, keep letters, numbers, spaces, hyphens

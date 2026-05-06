@@ -5,13 +5,21 @@ export default function AdminLogin({ onLogin }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Simple frontend password check - better than nothing for a quick fix
-    // Password: "matbaosupport"
-    if (password === 'matbaosupport') {
+    // Verify password against backend — fails fast if wrong
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/admin/stats`, {
+        headers: { 'X-Admin-Token': password },
+      });
+      if (res.status === 401) {
+        setError(true);
+        setTimeout(() => setError(false), 2000);
+        return;
+      }
+      sessionStorage.setItem('admin_token', password);
       onLogin();
-    } else {
+    } catch {
       setError(true);
       setTimeout(() => setError(false), 2000);
     }

@@ -27,6 +27,8 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
+    task_time_limit=720,        # hard kill after 12 min
+    task_soft_time_limit=660,   # soft signal at 11 min so task can clean up
     worker_concurrency=4,  # Prevent CPU overload from FFmpeg
     broker_transport_options={
         'priority_steps': list(range(10)),
