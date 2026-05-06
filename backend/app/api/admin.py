@@ -316,6 +316,282 @@ async def update_user(req: UpdateUserRequest):
 
 
 # ═════════════════════════════════════════════════════════════════════
+# GET /errors — Error Monitor (Tab 2)
+# ═════════════════════════════════════════════════════════════════════
+
+@router.get("/errors")
+async def get_error_monitor():
+    """
+    Detailed error analysis:
+    - Recent 50 failed jobs
+    - Error pattern grouping (timeout / private / 403 / captcha / etc.)
+    - Per-platform failure rates
+    """
+    supabase = get_supabase_client()
+    try:
+        # Recent 50 failed jobs
+        failed_res = (
+            supabase.table("download_jobs")
+            .select("id, original_url, error_message, created_at")
+            .eq("status", "failed")
+            .order("created_at", desc=True)
+            .limit(50)
+            .execute()
+        )
+        failed_jobs = failed_res.data or []
+
+        # All jobs last 24h for failure rate calculation
+        since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        recent_res = (
+            supabase.table("download_jobs")
+            .select("status, original_url, error_message")
+            .gte("created_at", since)
+            .neq("original_url", "batch_zip")
+            .limit(2000)
+            .execute()
+        )
+        recent = recent_res.data or []
+
+        # Error pattern grouping
+        pattern_map: Dict[str, int] = {}
+        platform_fail: Dict[str, Dict[str, int]] = {}
+
+        for job in recent:
+            platform = _classify_platform(job.get("original_url", ""))
+            if platform not in platform_fail:
+                platform_fail[platform] = {"total": 0, "failed": 0}
+            platform_fail[platform]["total"] += 1
+            if job.get("status") == "failed":
+                platform_fail[platform]["failed"] += 1
+
+                msg = (job.get("error_message") or "").lower()
+                if "timeout" in msg or "quá thời gian" in msg:
+                    key = "⏱ Timeout / Captcha"
+                elif "private" in msg or "riêng tư" in msg:
+                    key = "🔒 Video riêng tư"
+                elif "not found" in msg or "không tồn tại" in msg or "404" in msg:
+                    key = "🚫 Video đã xóa / 404"
+                elif "403" in msg or "forbidden" in msg or "bị chặn" in msg:
+                    key = "🛡 IP bị block / 403"
+                elif "sabr" in msg or "cobalt" in msg:
+                    key = "🎬 YouTube SABR"
+                elif "captcha" in msg:
+                    key = "🤖 Captcha"
+                elif "extract" in msg or "trích xuất" in msg:
+                    key = "❌ Extract thất bại"
+                else:
+                    key = "❓ Lỗi khác"
+                pattern_map[key] = pattern_map.get(key, 0) + 1
+
+        # Build platform failure rate list
+        platform_rates = []
+        for platform, counts in platform_fail.items():
+            if platform in ("ZIP", "Other") or counts["total"] == 0:
+                continue
+            rate = round(counts["failed"] / counts["total"] * 100, 1)
+            platform_rates.append({
+                "platform": platform,
+                "total": counts["total"],
+                "failed": counts["failed"],
+                "fail_rate": rate,
+            })
+        platform_rates.sort(key=lambda x: x["fail_rate"], reverse=True)
+
+        # Sort error patterns
+        error_patterns = sorted(
+            [{"pattern": k, "count": v} for k, v in pattern_map.items()],
+            key=lambda x: x["count"],
+            reverse=True,
+        )
+
+        total_24h = len(recent)
+        total_failed_24h = sum(1 for j in recent if j.get("status") == "failed")
+
+        return {
+            "success": True,
+            "recent_errors": failed_jobs,
+            "error_patterns": error_patterns,
+            "platform_fail_rates": platform_rates,
+            "summary_24h": {
+                "total": total_24h,
+                "failed": total_failed_24h,
+                "fail_rate": round(total_failed_24h / total_24h * 100, 1) if total_24h > 0 else 0,
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════
+# GET /users — User Analytics (Tab 3)
+# ═════════════════════════════════════════════════════════════════════
+
+@router.get("/users")
+async def get_user_analytics():
+    """
+    User behavior analysis:
+    - Top IPs by download count (abuse detection)
+    - Batch size distribution
+    - Users flagged for high usage
+    """
+    supabase = get_supabase_client()
+    try:
+        # All user usage
+        users_res = supabase.table("user_usage").select("*").order("downloads_today", desc=True).limit(100).execute()
+        users = users_res.data or []
+
+        # Batch jobs from last 48h — group by batch_id to get batch sizes
+        since = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
+        batch_res = (
+            supabase.table("download_jobs")
+            .select("batch_id, original_url")
+            .gte("created_at", since)
+            .neq("original_url", "batch_zip")
+            .limit(5000)
+            .execute()
+        )
+        batch_jobs = batch_res.data or []
+
+        # Count jobs per batch
+        batch_counts: Dict[str, int] = {}
+        for job in batch_jobs:
+            bid = job.get("batch_id", "")
+            if bid:
+                batch_counts[bid] = batch_counts.get(bid, 0) + 1
+
+        # Batch size distribution buckets
+        dist = {"1-5": 0, "6-20": 0, "21-50": 0, "51-200": 0, "200+": 0}
+        for count in batch_counts.values():
+            if count <= 5:
+                dist["1-5"] += 1
+            elif count <= 20:
+                dist["6-20"] += 1
+            elif count <= 50:
+                dist["21-50"] += 1
+            elif count <= 200:
+                dist["51-200"] += 1
+            else:
+                dist["200+"] += 1
+
+        # Flag heavy users (>= 50 downloads today)
+        ABUSE_THRESHOLD = 50
+        flagged = [u for u in users if (u.get("downloads_today") or 0) >= ABUSE_THRESHOLD]
+
+        batch_distribution = [{"range": k, "count": v} for k, v in dist.items()]
+
+        return {
+            "success": True,
+            "top_users": users[:30],
+            "flagged_users": flagged,
+            "batch_distribution": batch_distribution,
+            "total_users": len(users),
+            "total_batches_48h": len(batch_counts),
+            "abuse_threshold": ABUSE_THRESHOLD,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════
+# GET /system-health — System Health (Tab 4)
+# ═════════════════════════════════════════════════════════════════════
+
+@router.get("/system-health")
+async def get_system_health():
+    """
+    Infrastructure health check:
+    - Disk usage (downloads folder)
+    - Redis memory
+    - Celery queue depth
+    - Cobalt API ping
+    - yt-dlp version
+    - Proxy status
+    """
+    import shutil
+    import httpx
+    import os
+    import time
+
+    result: Dict[str, Any] = {"success": True}
+
+    # ── Disk usage ───────────────────────────────────────
+    try:
+        dl_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "downloads")
+        os.makedirs(dl_dir, exist_ok=True)
+        total, used, free = shutil.disk_usage(dl_dir)
+        folder_size = sum(
+            os.path.getsize(os.path.join(dl_dir, f))
+            for f in os.listdir(dl_dir)
+            if os.path.isfile(os.path.join(dl_dir, f))
+        )
+        result["disk"] = {
+            "total_gb": round(total / (1024**3), 1),
+            "used_gb": round(used / (1024**3), 1),
+            "free_gb": round(free / (1024**3), 1),
+            "downloads_folder_mb": round(folder_size / (1024**2), 1),
+            "downloads_file_count": len(os.listdir(dl_dir)),
+            "used_pct": round(used / total * 100, 1),
+        }
+    except Exception as e:
+        result["disk"] = {"error": str(e)}
+
+    # ── Redis memory ─────────────────────────────────────
+    try:
+        import redis as redis_lib
+        r = redis_lib.from_url(os.getenv("REDIS_URL", "redis://redis:6379/0"), socket_connect_timeout=3)
+        info = r.info("memory")
+        result["redis"] = {
+            "status": "ok",
+            "used_mb": round(info["used_memory"] / (1024**2), 1),
+            "peak_mb": round(info["used_memory_peak"] / (1024**2), 1),
+            "max_mb": 256,
+            "used_pct": round(info["used_memory"] / (256 * 1024**2) * 100, 1),
+        }
+        # Queue depth
+        celery_queues = r.llen("celery")
+        result["redis"]["celery_queue_depth"] = celery_queues
+    except Exception as e:
+        result["redis"] = {"status": "error", "error": str(e)}
+
+    # ── Cobalt API ping ──────────────────────────────────
+    cobalt_url = os.getenv("COBALT_API_URL", "http://cobalt-api:9000")
+    try:
+        t0 = time.time()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{cobalt_url}/")
+        latency = round((time.time() - t0) * 1000)
+        result["cobalt"] = {
+            "status": "ok" if resp.status_code < 500 else "degraded",
+            "latency_ms": latency,
+            "http_code": resp.status_code,
+        }
+    except Exception as e:
+        result["cobalt"] = {"status": "down", "error": str(e)}
+
+    # ── yt-dlp version ───────────────────────────────────
+    try:
+        import yt_dlp
+        result["ytdlp"] = {"version": yt_dlp.version.__version__}
+    except Exception:
+        result["ytdlp"] = {"version": "unknown"}
+
+    # ── Proxy status ─────────────────────────────────────
+    from app.core.proxy_manager import get_proxy_stats
+    result["proxy"] = get_proxy_stats()
+
+    # ── Supabase ping ────────────────────────────────────
+    try:
+        supabase = get_supabase_client()
+        t0 = time.time()
+        supabase.table("download_jobs").select("id").limit(1).execute()
+        result["supabase"] = {"status": "ok", "latency_ms": round((time.time() - t0) * 1000)}
+    except Exception as e:
+        result["supabase"] = {"status": "error", "error": str(e)}
+
+    return result
+
+
+# ═════════════════════════════════════════════════════════════════════
 # HELPERS
 # ═════════════════════════════════════════════════════════════════════
 

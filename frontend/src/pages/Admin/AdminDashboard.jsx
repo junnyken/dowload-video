@@ -2,17 +2,55 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Shield, CheckCircle, XCircle, AlertTriangle, Users, Download, Activity,
   ToggleLeft, ToggleRight, Key, Copy, TrendingUp, BarChart3, Bell,
-  RefreshCw, Zap, Clock, Loader2, Send, ChevronDown
+  RefreshCw, Zap, Clock, Loader2, Send, HardDrive, Server, Wifi,
+  WifiOff, Database, Globe, Flag, Bug, BarChart2
 } from 'lucide-react';
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1/admin`;
 
+// ── SVG Circular Gauge ──────────────────────────────────────────────
+function Gauge({ pct = 0, label, sublabel, colorClass = 'text-amber-400', strokeColor = '#f59e0b' }) {
+  const r = 36;
+  const circ = 2 * Math.PI * r;
+  const dash = ((Math.min(pct, 100) / 100) * circ).toFixed(1);
+  const color = pct >= 85 ? '#ef4444' : pct >= 60 ? '#f59e0b' : strokeColor;
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <svg width="96" height="96" viewBox="0 0 96 96">
+        <circle cx="48" cy="48" r={r} fill="none" stroke="#1e3a35" strokeWidth="8" />
+        <circle
+          cx="48" cy="48" r={r} fill="none"
+          stroke={color} strokeWidth="8"
+          strokeDasharray={`${dash} ${circ}`}
+          strokeLinecap="round"
+          transform="rotate(-90 48 48)"
+          style={{ transition: 'stroke-dasharray 0.6s ease' }}
+        />
+        <text x="48" y="48" textAnchor="middle" dominantBaseline="central" fill="white" fontSize="15" fontWeight="bold">
+          {Math.round(pct)}%
+        </text>
+      </svg>
+      <p className="text-xs font-semibold text-white">{label}</p>
+      {sublabel && <p className="text-[10px] text-slate-400">{sublabel}</p>}
+    </div>
+  );
+}
+
+// ── Status Dot ──────────────────────────────────────────────────────
+function StatusDot({ ok, label, detail }) {
+  return (
+    <div className="flex items-center gap-3 py-2 border-b border-slate-700/30 last:border-0">
+      <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${ok ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-red-400 shadow-[0_0_6px_#f87171]'}`} />
+      <span className="text-sm text-slate-200 flex-1">{label}</span>
+      {detail && <span className="text-xs text-slate-400">{detail}</span>}
+    </div>
+  );
+}
+
 // ── Pure CSS Mini Bar Chart ─────────────────────────────────────────
 function MiniBarChart({ data, labelKey = 'date', valueKey = 'total', successKey = 'success', failedKey = 'failed', height = 200 }) {
-  if (!data || data.length === 0) return <p className="text-text-muted text-sm">Không có dữ liệu</p>;
-
+  if (!data || data.length === 0) return <p className="text-slate-500 text-sm">Không có dữ liệu</p>;
   const maxVal = Math.max(...data.map(d => d[valueKey] || 0), 1);
-
   return (
     <div className="flex items-end gap-1.5 w-full" style={{ height }}>
       {data.map((d, i) => {
@@ -22,19 +60,16 @@ function MiniBarChart({ data, labelKey = 'date', valueKey = 'total', successKey 
         const successH = maxVal > 0 ? (success / maxVal) * 100 : 0;
         const failedH = maxVal > 0 ? (failed / maxVal) * 100 : 0;
         const dateLabel = d[labelKey]?.slice(5) || '';
-
         return (
           <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative">
-            {/* Tooltip */}
             <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-[#0a0a0a] text-white text-[10px] px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none border border-slate-700">
               {dateLabel}: {total} ({success}✓ {failed}✗)
             </div>
-            {/* Bars stacked */}
             <div className="w-full flex flex-col justify-end" style={{ height: height - 24 }}>
               <div className="w-full rounded-t-sm bg-red-500/80 transition-all duration-500" style={{ height: `${failedH}%`, minHeight: failed > 0 ? 2 : 0 }} />
               <div className="w-full bg-emerald-500/80 transition-all duration-500 rounded-t-sm" style={{ height: `${successH}%`, minHeight: success > 0 ? 2 : 0 }} />
             </div>
-            <span className="text-[9px] text-text-muted truncate w-full text-center">{dateLabel}</span>
+            <span className="text-[9px] text-slate-500 truncate w-full text-center">{dateLabel}</span>
           </div>
         );
       })}
@@ -52,11 +87,11 @@ function PlatformBar({ platform, count, maxCount }) {
   };
   return (
     <div className="flex items-center gap-3">
-      <span className="text-xs text-text-secondary w-20 truncate">{platform}</span>
-      <div className="flex-1 bg-surface rounded-full h-3 overflow-hidden">
+      <span className="text-xs text-slate-300 w-20 truncate">{platform}</span>
+      <div className="flex-1 bg-[#012622] rounded-full h-3 overflow-hidden">
         <div className={`h-full rounded-full transition-all duration-700 ${colors[platform] || 'bg-slate-400'}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs font-bold text-text-primary w-10 text-right">{count}</span>
+      <span className="text-xs font-bold text-white w-10 text-right">{count}</span>
     </div>
   );
 }
@@ -68,10 +103,10 @@ function ActiveJobItem({ job }) {
   const shortUrl = url.length > 50 ? url.slice(0, 50) + '...' : url;
   const time = job.created_at ? new Date(job.created_at).toLocaleTimeString('vi-VN') : '';
   return (
-    <div className={`flex items-center gap-3 px-3 py-2 rounded-xl border transition-colors ${isProcessing ? 'bg-amber-500/5 border-amber-500/20' : 'bg-surface border-border/50'}`}>
-      {isProcessing ? <Loader2 className="w-4 h-4 text-amber-400 animate-spin flex-shrink-0" /> : <Clock className="w-4 h-4 text-text-muted flex-shrink-0" />}
-      <span className="text-xs text-text-secondary truncate flex-1">{shortUrl}</span>
-      <span className="text-[10px] text-text-muted">{time}</span>
+    <div className={`flex items-center gap-3 px-3 py-2 rounded-xl border transition-colors ${isProcessing ? 'bg-amber-500/5 border-amber-500/20' : 'bg-[#012622]/50 border-slate-700/30'}`}>
+      {isProcessing ? <Loader2 className="w-4 h-4 text-amber-400 animate-spin flex-shrink-0" /> : <Clock className="w-4 h-4 text-slate-500 flex-shrink-0" />}
+      <span className="text-xs text-slate-400 truncate flex-1">{shortUrl}</span>
+      <span className="text-[10px] text-slate-500">{time}</span>
     </div>
   );
 }
@@ -81,14 +116,17 @@ function ActiveJobItem({ job }) {
 // ═════════════════════════════════════════════════════════════════════
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState(null);
-  const [analytics, setAnalytics] = useState(null);
+  const [stats, setStats]           = useState(null);
+  const [analytics, setAnalytics]   = useState(null);
   const [activeJobs, setActiveJobs] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview');
-  const [chartDays, setChartDays] = useState(7);
+  const [errors, setErrors]         = useState(null);
+  const [users, setUsers]           = useState(null);
+  const [health, setHealth]         = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [activeTab, setActiveTab]   = useState('overview');
+  const [chartDays, setChartDays]   = useState(7);
   const [testingNotif, setTestingNotif] = useState(false);
-  const [notifResult, setNotifResult] = useState(null);
+  const [notifResult, setNotifResult]   = useState(null);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -115,6 +153,30 @@ export default function AdminDashboard() {
     } catch (e) { console.error('Active jobs fetch failed', e); }
   }, []);
 
+  const fetchErrors = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/errors`);
+      const data = await res.json();
+      if (data.success) setErrors(data);
+    } catch (e) { console.error('Errors fetch failed', e); }
+  }, []);
+
+  const fetchUsers = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/users`);
+      const data = await res.json();
+      if (data.success) setUsers(data);
+    } catch (e) { console.error('Users fetch failed', e); }
+  }, []);
+
+  const fetchHealth = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/system-health`);
+      const data = await res.json();
+      if (data.success) setHealth(data);
+    } catch (e) { console.error('Health fetch failed', e); }
+  }, []);
+
   useEffect(() => {
     fetchStats();
     fetchAnalytics();
@@ -125,15 +187,22 @@ export default function AdminDashboard() {
 
   useEffect(() => { fetchAnalytics(); }, [chartDays, fetchAnalytics]);
 
+  // Lazy-load tab data on first visit
+  useEffect(() => {
+    if (activeTab === 'errors' && !errors) fetchErrors();
+    if (activeTab === 'users' && !users) fetchUsers();
+    if (activeTab === 'health' && !health) fetchHealth();
+  }, [activeTab, errors, users, health, fetchErrors, fetchUsers, fetchHealth]);
+
   const toggleUserPlan = async (user_id, currentPlan) => {
     const newPlan = currentPlan === 'pro' ? 'free' : 'pro';
     try {
       await fetch(`${API}/update-user`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id, plan: newPlan })
+        body: JSON.stringify({ user_id, plan: newPlan }),
       });
       fetchStats();
-    } catch { alert("Failed to update user"); }
+    } catch { alert('Failed to update user'); }
   };
 
   const sendTestNotification = async () => {
@@ -147,8 +216,15 @@ export default function AdminDashboard() {
     finally { setTestingNotif(false); setTimeout(() => setNotifResult(null), 4000); }
   };
 
+  const refreshAll = () => {
+    fetchStats(); fetchAnalytics(); fetchActiveJobs();
+    if (activeTab === 'errors') fetchErrors();
+    if (activeTab === 'users') fetchUsers();
+    if (activeTab === 'health') fetchHealth();
+  };
+
   if (loading || !stats) {
-    return <div className="p-8 text-text-muted flex gap-2"><Activity className="animate-pulse" /> Đang tải Admin Center...</div>;
+    return <div className="p-8 text-slate-400 flex gap-2"><Activity className="animate-pulse" /> Đang tải Admin Center...</div>;
   }
 
   const scraperAPIcredits = stats.providers?.ScraperAPI ?? stats.providers?.scraperapi ?? 0;
@@ -156,14 +232,17 @@ export default function AdminDashboard() {
   const totalActive = (activeJobs?.processing_count || 0) + (activeJobs?.pending_count || 0);
 
   const tabs = [
-    { id: 'overview', label: 'Tổng Quan', icon: BarChart3 },
-    { id: 'analytics', label: 'Phân Tích', icon: TrendingUp },
-    { id: 'apikeys', label: 'API & Credits', icon: Key },
+    { id: 'overview', label: 'Tổng Quan',       icon: BarChart3 },
+    { id: 'analytics', label: 'Phân Tích',       icon: TrendingUp },
+    { id: 'errors',    label: 'Lỗi & Cảnh Báo',  icon: Bug },
+    { id: 'users',     label: 'Người Dùng',       icon: Users },
+    { id: 'health',    label: 'Hệ Thống',         icon: Server },
+    { id: 'apikeys',   label: 'API & Credits',    icon: Key },
   ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* ── Header ────────────────────────────────────── */}
+      {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 mb-1">
@@ -173,7 +252,6 @@ export default function AdminDashboard() {
           <p className="text-sm text-slate-400 ml-9">Quản lý hệ thống, theo dõi hiệu suất & cảnh báo.</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Telegram Test */}
           <button
             onClick={sendTestNotification}
             disabled={testingNotif}
@@ -183,15 +261,14 @@ export default function AdminDashboard() {
             Test Telegram
           </button>
           {notifResult && <span className="text-xs font-bold animate-in fade-in">{notifResult}</span>}
-          {/* Refresh */}
-          <button onClick={() => { fetchStats(); fetchAnalytics(); fetchActiveJobs(); }} className="p-2 rounded-xl bg-surface border border-border text-text-muted hover:text-white transition-colors cursor-pointer">
+          <button onClick={refreshAll} className="p-2 rounded-xl bg-[#0a1a17] border border-slate-700/50 text-slate-400 hover:text-white transition-colors cursor-pointer">
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* ── Tab Navigation ────────────────────────────── */}
-      <div className="flex bg-[#012622]/50 rounded-xl p-1 border border-slate-700/50 gap-1 backdrop-blur-md">
+      {/* ── Tab Navigation ── */}
+      <div className="flex flex-wrap bg-[#012622]/50 rounded-xl p-1 border border-slate-700/50 gap-1 backdrop-blur-md">
         {tabs.map(tab => {
           const Icon = tab.icon;
           return (
@@ -199,7 +276,9 @@ export default function AdminDashboard() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg transition-colors cursor-pointer ${
-                activeTab === tab.id ? 'bg-gradient-to-r from-[#FB923C] to-[#FBBF24] text-[#012622] shadow-md' : 'text-slate-300 hover:text-white hover:bg-white/10'
+                activeTab === tab.id
+                  ? 'bg-gradient-to-r from-[#FB923C] to-[#FBBF24] text-[#012622] shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-white/10'
               }`}
             >
               <Icon className="w-4 h-4" /> {tab.label}
@@ -208,23 +287,21 @@ export default function AdminDashboard() {
         })}
       </div>
 
-      {/* ══════════════════════════════════════════════════ */}
-      {/* TAB: OVERVIEW                                     */}
-      {/* ══════════════════════════════════════════════════ */}
+      {/* ══ TAB: OVERVIEW ══ */}
       {activeTab === 'overview' && (
         <div className="space-y-6 animate-in fade-in duration-300">
-          {/* Stat Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard icon={Download} label="Downloads Hôm Nay" value={stats.total_downloads_today} color="text-amber-400" bgColor="bg-amber-400/10" />
             <StatCard icon={Users} label="Người Dùng" value={stats.total_users} color="text-cyan-400" bgColor="bg-cyan-400/10" />
-            <StatCard icon={TrendingUp} label="Tỷ Lệ Thành Công" value={`${successRate}%`} color={successRate >= 90 ? 'text-emerald-400' : successRate >= 70 ? 'text-amber-400' : 'text-red-400'} bgColor={successRate >= 90 ? 'bg-emerald-400/10' : successRate >= 70 ? 'bg-amber-400/10' : 'bg-red-400/10'} />
+            <StatCard icon={TrendingUp} label="Tỷ Lệ Thành Công" value={`${successRate}%`}
+              color={successRate >= 90 ? 'text-emerald-400' : successRate >= 70 ? 'text-amber-400' : 'text-red-400'}
+              bgColor={successRate >= 90 ? 'bg-emerald-400/10' : successRate >= 70 ? 'bg-amber-400/10' : 'bg-red-400/10'} />
             <StatCard icon={Zap} label="Jobs Đang Chạy" value={totalActive} color="text-violet-400" bgColor="bg-violet-400/10" />
           </div>
 
-          {/* Two Columns: Users + Logs */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* User Table */}
-            <div className="p-5 bg-[#0a1a17] border border-slate-700/50 shadow-lg rounded-2xl">
+            <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
               <h3 className="text-sm font-bold mb-3 text-white flex items-center gap-2"><Users className="w-4 h-4 text-cyan-400" /> Người Dùng Gần Đây</h3>
               <div className="overflow-auto max-h-[350px]">
                 <table className="w-full text-sm text-left">
@@ -237,7 +314,8 @@ export default function AdminDashboard() {
                         <td className="px-3 py-2 text-slate-300 truncate max-w-[140px] text-xs">{u.user_id}</td>
                         <td className="px-3 py-2 text-slate-400 text-xs">{u.downloads_today}</td>
                         <td className="px-3 py-2 text-right">
-                          <button onClick={() => toggleUserPlan(u.user_id, u.plan || 'free')} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-[10px] transition-colors cursor-pointer ${(u.plan || 'free') === 'pro' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700/50 text-slate-400 hover:text-white'}`}>
+                          <button onClick={() => toggleUserPlan(u.user_id, u.plan || 'free')}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-[10px] transition-colors cursor-pointer ${(u.plan || 'free') === 'pro' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700/50 text-slate-400 hover:text-white'}`}>
                             {(u.plan || 'free') === 'pro' ? <ToggleRight className="w-3 h-3" /> : <ToggleLeft className="w-3 h-3" />}
                             {(u.plan || 'free').toUpperCase()}
                           </button>
@@ -250,8 +328,8 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* System Logs */}
-            <div className="p-5 bg-[#0a1a17] border border-slate-700/50 shadow-lg rounded-2xl flex flex-col">
+            {/* Recent Error Log */}
+            <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl flex flex-col">
               <h3 className="text-sm font-bold mb-3 text-white flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-amber-400" /> Lỗi Gần Đây</h3>
               <div className="flex-1 overflow-auto max-h-[350px] space-y-2 bg-[#012622] p-3 rounded-xl font-mono text-xs text-slate-400 border border-slate-700/30">
                 {stats.failed_jobs.map(job => (
@@ -261,14 +339,13 @@ export default function AdminDashboard() {
                     <p className="mt-1 text-red-400/70 break-words">{job.error_message}</p>
                   </div>
                 ))}
-                {stats.failed_jobs.length === 0 && <p className="text-emerald-400 flex items-center gap-2"><CheckCircle className="w-4 h-4" /> Không có lỗi. Hệ thống hoạt động tốt.</p>}
+                {stats.failed_jobs.length === 0 && <p className="text-emerald-400 flex items-center gap-2"><CheckCircle className="w-4 h-4" /> Không có lỗi. Hệ thống ổn.</p>}
               </div>
             </div>
           </div>
 
-          {/* Active Jobs */}
           {totalActive > 0 && (
-            <div className="p-5 bg-[#0a1a17] border border-slate-700/50 shadow-lg rounded-2xl">
+            <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
               <h3 className="text-sm font-bold mb-3 text-white flex items-center gap-2">
                 <Loader2 className="w-4 h-4 text-amber-400 animate-spin" /> Jobs Đang Xử Lý ({totalActive})
               </h3>
@@ -281,28 +358,21 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════ */}
-      {/* TAB: ANALYTICS                                    */}
-      {/* ══════════════════════════════════════════════════ */}
+      {/* ══ TAB: ANALYTICS ══ */}
       {activeTab === 'analytics' && (
         <div className="space-y-6 animate-in fade-in duration-300">
-          {/* Chart Period Selector */}
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-white flex items-center gap-2"><TrendingUp className="w-5 h-5 text-amber-400" /> Xu Hướng Download</h3>
             <div className="flex gap-1 bg-[#012622]/50 rounded-lg p-1 border border-slate-700/50">
               {[7, 14, 30].map(d => (
-                <button
-                  key={d}
-                  onClick={() => setChartDays(d)}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors cursor-pointer ${chartDays === d ? 'bg-amber-400 text-[#012622]' : 'text-slate-400 hover:text-white'}`}
-                >
+                <button key={d} onClick={() => setChartDays(d)}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors cursor-pointer ${chartDays === d ? 'bg-amber-400 text-[#012622]' : 'text-slate-400 hover:text-white'}`}>
                   {d}D
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Summary Cards */}
           {analytics?.summary && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <MiniStatCard label="Tổng Jobs" value={analytics.summary.total_jobs} />
@@ -312,19 +382,15 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* Chart */}
-          <div className="p-5 bg-[#0a1a17] border border-slate-700/50 shadow-lg rounded-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-xs text-slate-400">
-                <span className="inline-block w-3 h-3 bg-emerald-500/80 rounded-sm mr-1 align-middle" /> Thành công
-                <span className="inline-block w-3 h-3 bg-red-500/80 rounded-sm mr-1 ml-3 align-middle" /> Thất bại
-              </p>
-            </div>
+          <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
+            <p className="text-xs text-slate-400 mb-4">
+              <span className="inline-block w-3 h-3 bg-emerald-500/80 rounded-sm mr-1 align-middle" /> Thành công
+              <span className="inline-block w-3 h-3 bg-red-500/80 rounded-sm mr-1 ml-3 align-middle" /> Thất bại
+            </p>
             <MiniBarChart data={analytics?.daily_stats || []} height={180} />
           </div>
 
-          {/* Platform Distribution */}
-          <div className="p-5 bg-[#0a1a17] border border-slate-700/50 shadow-lg rounded-2xl">
+          <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
             <h3 className="text-sm font-bold mb-4 text-white flex items-center gap-2"><BarChart3 className="w-4 h-4 text-cyan-400" /> Nền Tảng Phổ Biến</h3>
             {analytics?.platform_stats?.length > 0 ? (
               <div className="space-y-3">
@@ -332,21 +398,269 @@ export default function AdminDashboard() {
                   <PlatformBar key={p.platform} platform={p.platform} count={p.count} maxCount={analytics.platform_stats[0]?.count || 1} />
                 ))}
               </div>
-            ) : (
-              <p className="text-xs text-slate-500">Chưa có dữ liệu.</p>
-            )}
+            ) : <p className="text-xs text-slate-500">Chưa có dữ liệu.</p>}
           </div>
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════ */}
-      {/* TAB: API KEYS & CREDITS                           */}
-      {/* ══════════════════════════════════════════════════ */}
+      {/* ══ TAB: ERRORS ══ */}
+      {activeTab === 'errors' && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {!errors ? (
+            <div className="flex items-center gap-2 text-slate-400"><Loader2 className="animate-spin w-4 h-4" /> Đang tải dữ liệu lỗi...</div>
+          ) : (
+            <>
+              {/* 24h Summary */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <MiniStatCard label="Tổng Jobs 24h" value={errors.summary?.total_24h ?? 0} />
+                <MiniStatCard label="Thất Bại 24h" value={errors.summary?.failed_24h ?? 0} color="text-red-400" />
+                <MiniStatCard label="Tỷ Lệ Lỗi" value={`${errors.summary?.fail_rate_24h ?? 0}%`} color={(errors.summary?.fail_rate_24h ?? 0) > 20 ? 'text-red-400' : 'text-amber-400'} />
+                <MiniStatCard label="Lỗi Phân Tích" value={errors.recent_errors?.length ?? 0} />
+              </div>
+
+              {/* Error Pattern Breakdown */}
+              {errors.error_patterns && Object.keys(errors.error_patterns).length > 0 && (
+                <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
+                  <h3 className="text-sm font-bold mb-4 text-white flex items-center gap-2"><Bug className="w-4 h-4 text-red-400" /> Phân Loại Lỗi</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {Object.entries(errors.error_patterns).map(([type, count]) => (
+                      <div key={type} className="bg-[#012622] rounded-xl p-3 text-center border border-slate-700/30">
+                        <p className="text-xl font-bold text-red-400">{count}</p>
+                        <p className="text-[10px] text-slate-400 capitalize mt-1">{type}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Per-Platform Fail Rate */}
+              {errors.platform_fail_rates?.length > 0 && (
+                <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
+                  <h3 className="text-sm font-bold mb-4 text-white flex items-center gap-2"><BarChart2 className="w-4 h-4 text-amber-400" /> Tỷ Lệ Lỗi Theo Nền Tảng</h3>
+                  <div className="space-y-3">
+                    {errors.platform_fail_rates.map(p => {
+                      const failPct = p.total > 0 ? Math.round((p.failed / p.total) * 100) : 0;
+                      return (
+                        <div key={p.platform} className="flex items-center gap-3">
+                          <span className="text-xs text-slate-300 w-20 truncate">{p.platform}</span>
+                          <div className="flex-1 bg-[#012622] rounded-full h-3 overflow-hidden">
+                            <div className={`h-full rounded-full transition-all duration-700 ${failPct > 30 ? 'bg-red-500' : failPct > 10 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                              style={{ width: `${failPct}%` }} />
+                          </div>
+                          <span className="text-xs font-bold text-white w-14 text-right">{failPct}% ({p.failed}/{p.total})</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Error Feed */}
+              <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
+                <h3 className="text-sm font-bold mb-3 text-white flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-amber-400" /> Log Lỗi Gần Nhất</h3>
+                <div className="space-y-2 max-h-[400px] overflow-auto font-mono text-xs">
+                  {(errors.recent_errors || []).map(job => (
+                    <div key={job.id} className="bg-[#012622] rounded-xl p-3 border border-red-500/10">
+                      <div className="flex items-center gap-2 mb-1">
+                        <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                        <span className="text-slate-300 truncate flex-1">{(job.original_url || '').slice(0, 70)}</span>
+                        <span className="text-slate-500 text-[10px] flex-shrink-0">{job.created_at ? new Date(job.created_at).toLocaleString('vi-VN') : ''}</span>
+                      </div>
+                      <p className="text-red-400/80 pl-5 break-words">{job.error_message || 'Unknown error'}</p>
+                    </div>
+                  ))}
+                  {(errors.recent_errors || []).length === 0 && (
+                    <p className="text-emerald-400 flex items-center gap-2 p-3"><CheckCircle className="w-4 h-4" /> Không có lỗi gần đây. Hệ thống hoạt động tốt.</p>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ══ TAB: USERS ══ */}
+      {activeTab === 'users' && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {!users ? (
+            <div className="flex items-center gap-2 text-slate-400"><Loader2 className="animate-spin w-4 h-4" /> Đang tải dữ liệu người dùng...</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                <MiniStatCard label="Tổng Người Dùng" value={users.total_users ?? 0} />
+                <MiniStatCard label="Người Dùng Đáng Ngờ" value={users.flagged_users?.length ?? 0} color="text-red-400" />
+                <MiniStatCard label="Batches 48h" value={users.batch_stats?.total_batches_48h ?? 0} />
+              </div>
+
+              {/* Flagged Users */}
+              {users.flagged_users?.length > 0 && (
+                <div className="p-5 bg-[#0a1a17] border border-red-500/20 rounded-2xl">
+                  <h3 className="text-sm font-bold mb-3 text-white flex items-center gap-2"><Flag className="w-4 h-4 text-red-400" /> Người Dùng Đáng Ngờ (≥50 DL/ngày)</h3>
+                  <div className="space-y-2">
+                    {users.flagged_users.map(u => (
+                      <div key={u.user_id} className="flex items-center gap-3 bg-red-500/5 border border-red-500/20 rounded-xl px-4 py-3">
+                        <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                        <span className="text-sm text-slate-300 flex-1 truncate font-mono">{u.user_id}</span>
+                        <span className="text-sm font-bold text-red-400">{u.downloads_today} DL hôm nay</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Top Users */}
+              <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
+                <h3 className="text-sm font-bold mb-3 text-white flex items-center gap-2"><Users className="w-4 h-4 text-cyan-400" /> Top 20 Người Dùng Hôm Nay</h3>
+                <div className="overflow-auto max-h-[400px]">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-[#012622] sticky top-0 text-[10px] uppercase text-slate-400">
+                      <tr>
+                        <th className="px-3 py-2">#</th>
+                        <th className="px-3 py-2">User ID</th>
+                        <th className="px-3 py-2 text-right">DL Hôm Nay</th>
+                        <th className="px-3 py-2 text-right">Plan</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700/30">
+                      {(users.top_users || []).slice(0, 20).map((u, i) => (
+                        <tr key={u.user_id} className={`hover:bg-white/5 transition-colors ${u.downloads_today >= 50 ? 'bg-red-500/5' : ''}`}>
+                          <td className="px-3 py-2 text-slate-500 text-xs">{i + 1}</td>
+                          <td className="px-3 py-2 text-slate-300 text-xs font-mono truncate max-w-[200px]">{u.user_id}</td>
+                          <td className="px-3 py-2 text-right">
+                            <span className={`text-xs font-bold ${u.downloads_today >= 50 ? 'text-red-400' : 'text-white'}`}>{u.downloads_today}</span>
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${(u.plan || 'free') === 'pro' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700/50 text-slate-400'}`}>
+                              {(u.plan || 'free').toUpperCase()}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {(users.top_users || []).length === 0 && (
+                        <tr><td colSpan="4" className="text-center py-6 text-slate-500 text-xs">Chưa có dữ liệu.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Batch Size Distribution */}
+              {users.batch_stats?.size_distribution && (
+                <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
+                  <h3 className="text-sm font-bold mb-4 text-white flex items-center gap-2"><BarChart2 className="w-4 h-4 text-violet-400" /> Phân Bố Kích Thước Batch (48h)</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    {Object.entries(users.batch_stats.size_distribution).map(([range, count]) => (
+                      <div key={range} className="bg-[#012622] rounded-xl p-3 text-center border border-slate-700/30">
+                        <p className="text-xl font-bold text-violet-400">{count}</p>
+                        <p className="text-[10px] text-slate-400 mt-1">{range} URLs</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ══ TAB: SYSTEM HEALTH ══ */}
+      {activeTab === 'health' && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {!health ? (
+            <div className="flex items-center gap-2 text-slate-400"><Loader2 className="animate-spin w-4 h-4" /> Đang kiểm tra hệ thống...</div>
+          ) : (
+            <>
+              {/* Disk + Redis Gauges */}
+              <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
+                <h3 className="text-sm font-bold mb-6 text-white flex items-center gap-2"><HardDrive className="w-4 h-4 text-amber-400" /> Tài Nguyên Hệ Thống</h3>
+                <div className="flex flex-wrap justify-around gap-6">
+                  <Gauge
+                    pct={health.disk?.used_pct ?? 0}
+                    label="Disk"
+                    sublabel={`${health.disk?.used_gb ?? '?'} / ${health.disk?.total_gb ?? '?'} GB`}
+                    strokeColor="#f59e0b"
+                  />
+                  <Gauge
+                    pct={health.redis?.used_pct ?? 0}
+                    label="Redis RAM"
+                    sublabel={`${health.redis?.used_mb ?? '?'} / ${health.redis?.max_mb ?? 256} MB`}
+                    strokeColor="#818cf8"
+                  />
+                  <div className="flex flex-col items-center gap-2 justify-center">
+                    <div className="bg-[#012622] rounded-2xl p-5 text-center border border-slate-700/30">
+                      <p className="text-3xl font-bold text-amber-400">{health.redis?.celery_queue_depth ?? 0}</p>
+                      <p className="text-xs text-slate-400 mt-1">Celery Queue</p>
+                    </div>
+                    <div className="bg-[#012622] rounded-2xl p-3 text-center border border-slate-700/30 w-full">
+                      <p className="text-sm font-bold text-slate-200">{health.disk?.downloads_files ?? 0} files</p>
+                      <p className="text-[10px] text-slate-400">Downloads ({health.disk?.downloads_size_mb ?? 0} MB)</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Service Status */}
+              <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
+                <h3 className="text-sm font-bold mb-4 text-white flex items-center gap-2"><Wifi className="w-4 h-4 text-emerald-400" /> Trạng Thái Dịch Vụ</h3>
+                <div>
+                  <StatusDot ok={health.services?.redis ?? false} label="Redis" detail={health.redis?.used_mb ? `${health.redis.used_mb} MB used` : ''} />
+                  <StatusDot ok={health.services?.cobalt_api ?? false} label="Cobalt API" detail={health.services?.cobalt_latency_ms ? `${health.services.cobalt_latency_ms} ms` : 'timeout'} />
+                  <StatusDot ok={health.services?.supabase ?? false} label="Supabase" detail={health.services?.supabase_latency_ms ? `${health.services.supabase_latency_ms} ms` : 'timeout'} />
+                  <StatusDot ok={true} label="yt-dlp" detail={health.ytdlp_version ?? 'unknown'} />
+                </div>
+              </div>
+
+              {/* Proxy Chain */}
+              <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
+                <h3 className="text-sm font-bold mb-4 text-white flex items-center gap-2"><Globe className="w-4 h-4 text-blue-400" /> Cấu Hình Proxy</h3>
+                {health.proxy ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className={`rounded-xl p-3 border ${health.proxy.iproyal_configured ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-slate-800/50 border-slate-700/30'}`}>
+                        <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">IPRoyal Global</p>
+                        <p className={`text-sm font-semibold ${health.proxy.iproyal_configured ? 'text-emerald-400' : 'text-slate-500'}`}>
+                          {health.proxy.iproyal_configured ? '✓ Đã cấu hình' : '✗ Chưa cấu hình'}
+                        </p>
+                        <p className="text-[10px] text-slate-500 mt-1">TikTok / Instagram</p>
+                      </div>
+                      <div className={`rounded-xl p-3 border ${health.proxy.iproyal_cn_configured ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-slate-800/50 border-slate-700/30'}`}>
+                        <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">IPRoyal CN</p>
+                        <p className={`text-sm font-semibold ${health.proxy.iproyal_cn_configured ? 'text-emerald-400' : 'text-slate-500'}`}>
+                          {health.proxy.iproyal_cn_configured ? '✓ Đã cấu hình' : '✗ Chưa cấu hình'}
+                        </p>
+                        <p className="text-[10px] text-slate-500 mt-1">Douyin (CN IP)</p>
+                      </div>
+                    </div>
+                    <div className={`rounded-xl p-3 border ${health.proxy.scraperapi_configured ? 'bg-blue-500/5 border-blue-500/20' : 'bg-slate-800/50 border-slate-700/30'}`}>
+                      <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">ScraperAPI (Fallback miễn phí)</p>
+                      <p className={`text-sm font-semibold ${health.proxy.scraperapi_configured ? 'text-blue-400' : 'text-slate-500'}`}>
+                        {health.proxy.scraperapi_configured ? `✓ Active ${health.proxy.scraperapi_proxy_active ? '— đang dùng làm proxy chính' : ''}` : '✗ Chưa cấu hình'}
+                      </p>
+                    </div>
+                    <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <div className="bg-[#012622] rounded-xl p-3 border border-slate-700/30">
+                        <p className="text-[10px] text-slate-500 mb-1">TikTok/IG Route</p>
+                        <p className="text-xs text-slate-300 font-mono break-all">{health.proxy.tiktok_proxy}</p>
+                      </div>
+                      <div className="bg-[#012622] rounded-xl p-3 border border-slate-700/30">
+                        <p className="text-[10px] text-slate-500 mb-1">Douyin Route</p>
+                        <p className="text-xs text-slate-300 font-mono break-all">{health.proxy.douyin_proxy}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : <p className="text-xs text-slate-500">Không có dữ liệu proxy.</p>}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ══ TAB: API & CREDITS ══ */}
       {activeTab === 'apikeys' && (
         <div className="space-y-6 animate-in fade-in duration-300">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <CreditCard provider="ScraperAPI" credits={scraperAPIcredits} threshold={10} apiKey={stats.api_keys?.ScraperAPI} />
-            <CreditCard provider="IPRoyal" credits={"N/A"} threshold={0} apiKey={stats.api_keys?.IPRoyal} isProxy={true} />
+            <CreditCard provider="IPRoyal" credits="N/A" threshold={0} apiKey={stats.api_keys?.IPRoyal} isProxy />
           </div>
 
           <div className="p-5 bg-[#0a1a17] border border-amber-500/20 rounded-2xl">
@@ -354,7 +668,7 @@ export default function AdminDashboard() {
             <ul className="text-xs text-slate-400 space-y-1.5 ml-1">
               <li>📨 Telegram thông báo khi <b>batch download hoàn tất</b></li>
               <li>🚨 Telegram alert khi <b>job thất bại</b></li>
-              <li>⚠️ Telegram cảnh báo khi <b>API credits &lt; 50</b></li>
+              <li>⚠️ Telegram cảnh báo khi <b>API credits &lt; 10</b></li>
               <li>📊 Báo cáo ngày tự động lúc <b>6:00 AM (UTC+7)</b></li>
               <li>🔄 Kiểm tra credits tự động mỗi <b>6 giờ</b></li>
             </ul>
@@ -389,7 +703,7 @@ function MiniStatCard({ label, value, color = 'text-white' }) {
 }
 
 function CreditCard({ provider, credits, threshold, apiKey, isProxy }) {
-  const isLow = credits !== "N/A" && credits < threshold;
+  const isLow = credits !== 'N/A' && credits < threshold;
   return (
     <div className={`relative overflow-hidden p-5 rounded-2xl border shadow-lg transition-all duration-300 ${isLow ? 'bg-red-500/5 border-red-500/30' : 'bg-[#0a1a17] border-slate-700/50'}`}>
       <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">{provider} {isProxy ? 'Proxy' : 'Provider'}</h4>
@@ -405,14 +719,14 @@ function CreditCard({ provider, credits, threshold, apiKey, isProxy }) {
             <p className="text-[9px] text-slate-500 uppercase font-bold mb-0.5">Key</p>
             <p className="text-xs text-slate-300 font-mono truncate">{apiKey.length > 30 ? apiKey.substring(0, 30) + '...' : apiKey}</p>
           </div>
-          <button onClick={() => { navigator.clipboard.writeText(apiKey); }} className="p-1.5 text-slate-500 hover:text-amber-400 transition-colors cursor-pointer" title="Copy">
+          <button onClick={() => navigator.clipboard.writeText(apiKey)} className="p-1.5 text-slate-500 hover:text-amber-400 transition-colors cursor-pointer" title="Copy">
             <Copy className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
       {isLow && !isProxy && <div className="mt-3 flex items-center gap-2 text-xs font-bold text-red-400 bg-red-400/10 px-3 py-2 rounded-xl"><AlertTriangle className="w-4 h-4" /> Credits thấp! Cần nạp thêm.</div>}
       {!isLow && !isProxy && <div className="mt-3 flex items-center gap-2 text-xs text-emerald-400"><CheckCircle className="w-4 h-4" /> Ổn định</div>}
-      {isProxy && apiKey && apiKey !== "Not Set" && <div className="mt-3 flex items-center gap-2 text-xs text-emerald-400"><CheckCircle className="w-4 h-4" /> Đã cấu hình</div>}
+      {isProxy && apiKey && apiKey !== 'Not Set' && <div className="mt-3 flex items-center gap-2 text-xs text-emerald-400"><CheckCircle className="w-4 h-4" /> Đã cấu hình</div>}
     </div>
   );
 }
