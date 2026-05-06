@@ -195,13 +195,28 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         opts["proxy"] = proxy
 
     if "youtube.com" in url.lower() or "youtu.be" in url.lower():
-        # android_vr is the ONLY client that bypasses YouTube SABR without cookies.
-        # web_creator/mweb/web all require sign-in cookies for DASH streams.
-        # android_vr returns full DASH adaptive streams (1080p+) without auth.
-        # Tested: 1080p AV1+AAC merge success via android_vr (46MB, 3s download).
+        # Multi-client fallback chain — yt-dlp tries each in order, stops at first success:
+        #
+        # 1. android_vr   — Primary. Bypasses SABR without cookies; returns full DASH
+        #                   adaptive streams (1080p–4K). Vulnerable when YouTube updates
+        #                   signature algo or deprecates VR API endpoint.
+        #
+        # 2. ios          — Secondary. iOS app client; Apple ecosystem gets different CDN
+        #                   routing and separate rate-limit buckets from Android. Good
+        #                   fallback when android_vr is throttled or signature-broken.
+        #
+        # 3. tv_embedded  — Tertiary. Smart TV embedded player endpoint; entirely separate
+        #                   from mobile/web APIs. Bypasses most SABR rules because TV
+        #                   embeds are expected to stream high-res without auth.
+        #
+        # 4. web_embedded — Last resort before Cobalt. Embedded iframe player; less
+        #                   restricted than web_creator/mweb but requires more overhead.
+        #                   Still returns DASH streams for most content.
+        #
+        # Cobalt API (cobalt_service.py) is the final safety net beyond this chain.
         opts["extractor_args"] = {
             "youtube": {
-                "player_client": ["android_vr"]
+                "player_client": ["android_vr", "ios", "tv_embedded", "web_embedded"]
             }
         }
         # Prioritize resolution, then codec compatibility, then bitrate

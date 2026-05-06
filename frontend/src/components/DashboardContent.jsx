@@ -110,6 +110,8 @@ export default function DashboardContent() {
   const isSpotifyPlaylistOrAlbum = (u) =>
     u.includes('open.spotify.com/playlist') || u.includes('open.spotify.com/album');
 
+  const isSpotifyTrack = (u) => u.includes('open.spotify.com/track');
+
   const handleFetchLink = async () => {
     if (!url.trim()) { setError('Vui lòng nhập liên kết hợp lệ.'); return; }
     setIsLoading(true); setError(''); setVideoInfo(null); setSpotifyData(null); setFormatTab('video');
@@ -593,6 +595,28 @@ export default function DashboardContent() {
           </button>
         </div>
       </div>
+
+      {/* ── Spotify Track Hint ───────────────────────────── */}
+      {isSpotifyTrack(url) && (
+        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
+          <Music className="w-4 h-4 flex-shrink-0" />
+          <span>
+            Nhạc Spotify đơn — sẽ tự động tìm trên YouTube và tải dạng{' '}
+            <strong className="text-emerald-300">MP3 128kbps</strong>.
+            Nhấn <strong className="text-emerald-300">BÓC TÁCH NGAY</strong> để bắt đầu.
+          </span>
+        </div>
+      )}
+
+      {isSpotifyPlaylistOrAlbum(url) && (
+        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
+          <Music className="w-4 h-4 flex-shrink-0" />
+          <span>
+            Playlist / Album Spotify — sẽ hiển thị danh sách bài nhạc để tải từng bài hoặc tải tất cả dạng{' '}
+            <strong className="text-emerald-300">ZIP MP3</strong>.
+          </span>
+        </div>
+      )}
 
       <div className="w-full max-w-3xl mb-8 flex flex-col sm:flex-row justify-center items-center gap-4 sm:gap-8 text-sm text-slate-300">
          <label className="flex items-center gap-2 cursor-pointer hover:text-white transition-colors">

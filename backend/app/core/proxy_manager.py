@@ -4,10 +4,10 @@ Proxy Manager — Hybrid Proxy Router
 Decides whether to route a request through a residential proxy,
 use the server's own IP, or fall back to a Scraping API.
 
-Cost optimization rules:
-  • YouTube / Facebook  -> None (server IP — these rarely block)
-  • TikTok / Douyin / Instagram -> IPROYAL_PROXY  (residential)
-  • Fallback -> ScraperAPI free-trial endpoint
+Priority chain:
+  • YouTube / Facebook  -> None (server IP)
+  • TikTok / Instagram  -> IPROYAL_PROXY → ScraperAPI proxy (free fallback)
+  • Douyin              -> IPROYAL_PROXY_CN (CN IP) → ScraperAPI CN → ScraperAPI global
 """
 
 import os
@@ -24,9 +24,26 @@ load_dotenv()
 
 # ── Env vars ────────────────────────────────────────────────────────
 IPROYAL_PROXY: str = os.getenv("IPROYAL_PROXY", "")
+# Douyin requires a Chinese IP. IPROYAL_PROXY_CN uses the same account
+# but with _country-cn appended to the username (IPRoyal country targeting).
+# Falls back to IPROYAL_PROXY if not set.
+IPROYAL_PROXY_CN: str = os.getenv("IPROYAL_PROXY_CN", "") or IPROYAL_PROXY
 SCRAPERAPI_API_KEY: str = os.getenv("SCRAPERAPI_API_KEY", "")
 TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
+
+# ── ScraperAPI proxy endpoints (free fallback when IPRoyal not configured) ──
+# ScraperAPI doubles as an HTTP proxy for yt-dlp — same API key, no extra cost.
+# Global rotating: http://scraperapi:KEY@proxy-server.scraperapi.com:8011
+# Country-specific: http://scraperapi.country_code=CN:KEY@proxy-server.scraperapi.com:8011
+_SCRAPERAPI_HOST = "proxy-server.scraperapi.com:8011"
+
+def _scraperapi_proxy(country_code: str = "") -> str:
+    """Build a ScraperAPI HTTP proxy URL for yt-dlp, optionally with country targeting."""
+    if not SCRAPERAPI_API_KEY:
+        return ""
+    user = f"scraperapi.country_code={country_code}" if country_code else "scraperapi"
+    return f"http://{user}:{SCRAPERAPI_API_KEY}@{_SCRAPERAPI_HOST}"
 
 
 # ── Platform classification ─────────────────────────────────────────
@@ -69,9 +86,10 @@ def get_proxy_config(url: str) -> Optional[str]:
     """
     Return the proxy string for yt-dlp based on the target URL.
 
-    Returns:
-        None   — use server IP (YouTube, Facebook, unknown sites)
-        str    — IPROYAL_PROXY connection string (TikTok, Douyin, IG)
+    Priority chain per platform:
+      Douyin  : IPROYAL_PROXY_CN → ScraperAPI(CN) → ScraperAPI(global) → None
+      TikTok/IG: IPROYAL_PROXY   → ScraperAPI(global) → None
+      Others  : None (server IP)
     """
     tier = _classify_platform(url)
 
@@ -79,10 +97,19 @@ def get_proxy_config(url: str) -> Optional[str]:
         return None
 
     if tier == ProxyTier.RESIDENTIAL:
-        if IPROYAL_PROXY:
-            return IPROYAL_PROXY
-        # IPRoyal not configured — fall through to direct
-        return None
+        is_douyin = bool(re.search(r"douyin\.com", url, re.IGNORECASE))
+
+        if is_douyin:
+            # Chinese IP required for Douyin
+            return (
+                IPROYAL_PROXY_CN
+                or _scraperapi_proxy("CN")
+                or _scraperapi_proxy()
+                or None
+            )
+
+        # TikTok / Instagram — global rotating
+        return IPROYAL_PROXY or _scraperapi_proxy() or None
 
     return None
 
@@ -149,23 +176,11 @@ async def _fetch_with_api(api_name: str, target_url: str) -> Tuple[bool, Optiona
 
 async def dispatch_scraping_request(target_url: str) -> Optional[str]:
     """
-    Dual-Provider Proxy Logic:
-    1. Determine Primary API.
-    2. Fallback to Secondary API on Error.
-    Returns HTML of the page.
+    Scraping API dispatcher — currently uses ScraperAPI as sole provider.
+    Returns rendered HTML of the page, or None on failure.
     """
-    is_tiktok_douyin = bool(re.search(r"(tiktok\.com|douyin\.com)", target_url, re.IGNORECASE))
-    primary = "scraperapi"
-    secondary = None
-    
-    # Try primary
-    success, html = await _fetch_with_api(primary, target_url)
-    if success:
-        return html
-        
-    # Failover not needed since we only use scraperapi for fallback now
-    # Both exhausted
-    return None
+    success, html = await _fetch_with_api("scraperapi", target_url)
+    return html if success else None
 
 
 def get_proxy_config_for_phase(url: str, phase: str = "metadata") -> Optional[str]:
@@ -192,8 +207,14 @@ def get_proxy_config_for_phase(url: str, phase: str = "metadata") -> Optional[st
 
 def get_proxy_stats() -> Dict[str, Any]:
     """Return proxy configuration status for health-check / debugging."""
+    tiktok_proxy = IPROYAL_PROXY or _scraperapi_proxy() or "server IP (no proxy)"
+    douyin_proxy = IPROYAL_PROXY_CN or _scraperapi_proxy("CN") or _scraperapi_proxy() or "server IP (no proxy)"
     return {
         "iproyal_configured": bool(IPROYAL_PROXY),
+        "iproyal_cn_configured": bool(os.getenv("IPROYAL_PROXY_CN", "")),
         "scraperapi_configured": bool(SCRAPERAPI_API_KEY),
+        "scraperapi_proxy_active": not IPROYAL_PROXY and bool(SCRAPERAPI_API_KEY),
+        "tiktok_proxy": tiktok_proxy[:40] + "..." if len(tiktok_proxy) > 40 else tiktok_proxy,
+        "douyin_proxy": douyin_proxy[:40] + "..." if len(douyin_proxy) > 40 else douyin_proxy,
         "platform_rules_count": len(_PLATFORM_RULES),
     }

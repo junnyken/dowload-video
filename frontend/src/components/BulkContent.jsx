@@ -33,8 +33,9 @@ const JobActionCell = ({ job, onDownload }) => {
   useEffect(() => {
     if (job.status !== 'success' || !job.created_at) return;
     
-    // expiry is created_at + 15 minutes
-    const expiryTime = new Date(job.created_at).getTime() + 15 * 60 * 1000;
+    // expiry is 15 min from batch creation; the batch cleanup runs at that point.
+    // We show 20 min (conservative buffer) to avoid showing "expired" while file still exists.
+    const expiryTime = new Date(job.created_at).getTime() + 20 * 60 * 1000;
     
     const tick = () => {
       const diff = expiryTime - Date.now();

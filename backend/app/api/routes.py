@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from app.services.downloader import extract_video_info, classify_url
 from app.core.database import get_supabase_client
-from app.core.quotas import check_user_quota, increment_usage
+from app.core.quotas import check_user_quota
 from app.tasks.video_tasks import process_video_task, scrape_channel_task
 from app.main import limiter
 
@@ -83,12 +83,10 @@ async def fetch_spotify(payload: SpotifyFetchRequest, request: Request):
 
 @router.post("/fetch-link")
 @limiter.limit("30/minute")
-async def fetch_link(payload: FetchLinkRequest, request: Request):
+async def fetch_link(payload: FetchLinkRequest, request: Request):  # noqa: ARG001 — SlowAPI uses `request` for IP-based rate limiting
     if not payload.url:
         raise HTTPException(status_code=400, detail="URL is required")
         
-    user_id = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
-    
     # 1. Quotas disabled (100% Free)
 
     try:
@@ -135,10 +133,16 @@ async def fetch_link(payload: FetchLinkRequest, request: Request):
 async def bulk_download(payload: BulkDownloadRequest, request: Request):
     if not payload.urls or len(payload.urls) == 0:
         raise HTTPException(status_code=400, detail="No URLs provided")
-        
-    # LIMIT TEMPORARILY DISABLED
-    # if len(payload.urls) > 50:
-    #     raise HTTPException(status_code=400, detail="Maximum 50 URLs allowed per batch to prevent abuse.")
+
+    # Hard cap: 200 URLs per request.
+    # Channel mode: each channel URL can expand to max_videos (capped at 500),
+    # so 200 channel URLs would already mean up to 100,000 jobs — keep this low.
+    MAX_URLS_PER_REQUEST = 200
+    if len(payload.urls) > MAX_URLS_PER_REQUEST:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tối đa {MAX_URLS_PER_REQUEST} URL mỗi lần gửi. Vui lòng chia nhỏ danh sách."
+        )
 
     user_id = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
     batch_id = str(uuid.uuid4())
@@ -274,12 +278,19 @@ import os
 @router.get("/download-local")
 async def download_local_file(filepath: str, filename: str):
     # Resolve relative paths (e.g. "downloads/xxx.mp3") to absolute
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     if not os.path.isabs(filepath):
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         filepath = os.path.join(base_dir, filepath)
-    
-    if not os.path.exists(filepath):
+
+    # Prevent path traversal: ensure the file is inside the downloads directory
+    allowed_dir = os.path.realpath(os.path.join(base_dir, "downloads"))
+    real_path = os.path.realpath(filepath)
+    if not real_path.startswith(allowed_dir + os.sep) and real_path != allowed_dir:
+        raise HTTPException(status_code=403, detail="Access denied.")
+
+    if not os.path.exists(real_path):
         raise HTTPException(status_code=404, detail="File expired or not found.")
+    filepath = real_path
     
     # Detect media type from extension
     ext = os.path.splitext(filepath)[1].lower()
@@ -347,7 +358,6 @@ async def download_thumbnail(url: str, filename: str = "thumbnail"):
 # ── POST /trim  (cut video/audio segment with FFmpeg) ────────────────
 
 import subprocess
-import tempfile
 
 class TrimRequest(BaseModel):
     url: str
