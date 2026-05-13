@@ -67,6 +67,8 @@ _PLATFORM_RULES: list[tuple[str, ProxyTier]] = [
     (r"v\.douyin\.com", ProxyTier.RESIDENTIAL),   # short links
     (r"(www\.)?douyin\.com", ProxyTier.RESIDENTIAL),  # canonical
     (r"instagram\.com", ProxyTier.RESIDENTIAL),
+    (r"(twitter|x)\.com", ProxyTier.RESIDENTIAL),   # X/Twitter — geo-restricted
+    (r"pinterest\.(com|co\.uk)", ProxyTier.RESIDENTIAL),  # Pinterest
 ]
 
 

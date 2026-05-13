@@ -4,7 +4,8 @@ import {
   Loader2, AlertCircle, Link2,
   Zap, Music, Video, Crown, Trash2, Clock, X,
   ClipboardPaste, Play, Pause, Scissors, ImageDown,
-  Upload, ExternalLink, SkipBack, SkipForward
+  Upload, ExternalLink, SkipBack, SkipForward,
+  Clapperboard, List, Sparkles
 } from 'lucide-react';
 import UpgradeModal from './UpgradeModal';
 import JSZip from 'jszip';
@@ -59,6 +60,16 @@ export default function DashboardContent() {
   const [trimEnd, setTrimEnd] = useState(0);
   const [isTrimming, setIsTrimming] = useState(false);
   const [showCloudMenu, setShowCloudMenu] = useState(false);
+  // ── GIF Converter state ──────────────────────────────────
+  const [showGifPanel, setShowGifPanel] = useState(false);
+  const [gifStart, setGifStart] = useState(0);
+  const [gifEnd, setGifEnd] = useState(10);
+  const [gifWidth, setGifWidth] = useState(480);
+  const [gifFps, setGifFps] = useState(15);
+  const [isConverting, setIsConverting] = useState(false);
+  // ── Chapters state ───────────────────────────────────────
+  const [showChapters, setShowChapters] = useState(false);
+  const [downloadingChapter, setDownloadingChapter] = useState(null);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -473,7 +484,11 @@ export default function DashboardContent() {
     if (!videoInfo) return;
     setIsTrimming(true);
     try {
-      const sourceUrl = videoInfo.direct_mp4_url;
+      // Prefer local file (YouTube merge, TikTok, etc.) served via download-local endpoint
+      const localPath = videoInfo.local_file_path || videoInfo.local_mp3_path;
+      const sourceUrl = localPath
+        ? `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=trim_source`
+        : videoInfo.direct_mp4_url;
       if (!sourceUrl) { showToast('Không có nguồn để cắt.'); return; }
 
       const response = await fetch(`${API_BASE}/api/v1/trim`, {
@@ -507,6 +522,87 @@ export default function DashboardContent() {
     return `${m}:${String(sec).padStart(2, '0')}`;
   };
 
+  // ── GIF Converter ────────────────────────────────────────
+  const handleOpenGif = () => {
+    const dur = videoInfo?.duration || 30;
+    setGifStart(0);
+    setGifEnd(Math.min(dur, 10));
+    setShowGifPanel(p => !p);
+  };
+
+  const handleConvertGif = async () => {
+    if (!videoInfo) return;
+    const localPath = videoInfo.local_file_path || videoInfo.local_mp3_path;
+    const sourceUrl = localPath
+      ? `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=gif_source`
+      : videoInfo.direct_mp4_url;
+    if (!sourceUrl) { showToast('Không có nguồn để chuyển GIF.'); return; }
+    if (gifEnd - gifStart > 30) { showToast('Giới hạn 30 giây cho GIF.'); return; }
+
+    setIsConverting(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/to-gif`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: sourceUrl,
+          start_time: gifStart,
+          end_time: gifEnd,
+          width: gifWidth,
+          fps: gifFps,
+          filename: videoInfo.title || 'animation',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'GIF conversion failed');
+      if (data.success && data.gif_path) {
+        const a = document.createElement('a');
+        a.href = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(data.gif_path)}&filename=${encodeURIComponent(data.filename)}`;
+        a.setAttribute('download', '');
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        showToast(`GIF tạo thành công! ${data.file_size_mb} MB · ${data.width}px · ${data.fps}fps`);
+        setShowGifPanel(false);
+      }
+    } catch (err) {
+      setError(err.message || 'Lỗi khi tạo GIF.');
+    } finally { setIsConverting(false); }
+  };
+
+  // ── Chapter Download (reuses /trim endpoint) ─────────────
+  const handleChapterDownload = async (chapter) => {
+    const localPath = videoInfo?.local_file_path;
+    const sourceUrl = localPath
+      ? `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=chapter_source`
+      : videoInfo?.direct_mp4_url;
+    if (!sourceUrl) { showToast('Không có nguồn để tải chapter.'); return; }
+
+    setDownloadingChapter(chapter.title);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/trim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: sourceUrl,
+          start_time: chapter.start_time,
+          end_time: chapter.end_time,
+          filename: chapter.title,
+          is_audio: videoInfo?.is_audio_only || false,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Chapter download failed');
+      if (data.success && data.trimmed_file_path) {
+        const a = document.createElement('a');
+        a.href = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(data.trimmed_file_path)}&filename=${encodeURIComponent(data.filename)}`;
+        a.setAttribute('download', '');
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        showToast(`Đã tải chapter: ${chapter.title}`);
+      }
+    } catch (err) {
+      showToast(`Lỗi tải chapter: ${err.message}`);
+    } finally { setDownloadingChapter(null); }
+  };
+
   // ── Cloud Save ───────────────────────────────────────────────
   const getDownloadUrl = () => {
     if (!videoInfo) return null;
@@ -525,8 +621,13 @@ export default function DashboardContent() {
     const fileUrl = getDownloadUrl();
     if (!fileUrl) { showToast('Không có link tải.'); return; }
     const fullUrl = fileUrl.startsWith('http') ? fileUrl : `${window.location.origin}${fileUrl}`;
-    window.open(`https://drive.google.com/viewer?url=${encodeURIComponent(fullUrl)}`, '_blank');
-    showToast('Đang mở Google Drive...');
+    // Google Drive không hỗ trợ upload từ URL trực tiếp — tải file về máy trước,
+    // sau đó mở Drive để upload thủ công
+    const a = document.createElement('a');
+    a.href = fullUrl; a.setAttribute('download', '');
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => window.open('https://drive.google.com/drive/my-drive', '_blank'), 800);
+    showToast('Tải file xong → kéo vào Google Drive đang mở!');
     setShowCloudMenu(false);
   };
 
@@ -724,6 +825,36 @@ export default function DashboardContent() {
                 </button>
               )}
 
+              {/* GIF Converter */}
+              {videoInfo.duration > 0 && !videoInfo.is_audio_only && (videoInfo.direct_mp4_url || videoInfo.local_file_path) && (
+                <button
+                  onClick={handleOpenGif}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+                    showGifPanel
+                      ? 'bg-pink-500/20 text-pink-300 border-pink-500/40'
+                      : 'bg-slate-800/60 text-slate-300 border-slate-700/50 hover:border-pink-500/40 hover:text-pink-300'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Tạo GIF
+                </button>
+              )}
+
+              {/* Chapters */}
+              {(videoInfo.chapters?.length > 0) && (
+                <button
+                  onClick={() => setShowChapters(p => !p)}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+                    showChapters
+                      ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                      : 'bg-slate-800/60 text-slate-300 border-slate-700/50 hover:border-indigo-500/40 hover:text-indigo-300'
+                  }`}
+                >
+                  <List className="w-3.5 h-3.5" />
+                  Chapters ({videoInfo.chapters.length})
+                </button>
+              )}
+
               {/* Cloud Save */}
               <div className="relative">
                 <button
@@ -874,6 +1005,110 @@ export default function DashboardContent() {
                   {isTrimming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
                   {isTrimming ? 'Đang cắt và xử lý...' : `Cắt & Tải về (${formatTime(trimStart)} → ${formatTime(trimEnd)})`}
                 </button>
+              </div>
+            )}
+
+            {/* ── GIF Converter Panel ─────────────────────────── */}
+            {showGifPanel && (
+              <div className="mb-5 p-4 rounded-2xl bg-slate-800/50 border border-pink-500/30 shadow-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <h5 className="text-white font-bold text-sm flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-pink-400" />
+                    Chuyển đổi sang GIF
+                  </h5>
+                  <button onClick={() => setShowGifPanel(false)} className="text-slate-400 hover:text-white transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Time range */}
+                <div className="flex items-center justify-between mb-2 text-sm">
+                  <span className="bg-slate-900 px-3 py-1.5 rounded-lg text-pink-400 font-mono font-bold border border-slate-700/50">{formatTime(gifStart)}</span>
+                  <span className="text-slate-500 text-xs">→ {formatTime(gifEnd - gifStart)} (tối đa 30s)</span>
+                  <span className="bg-slate-900 px-3 py-1.5 rounded-lg text-orange-400 font-mono font-bold border border-slate-700/50">{formatTime(gifEnd)}</span>
+                </div>
+                <div className="space-y-2 mb-4">
+                  <div>
+                    <label className="text-xs text-slate-400 font-medium mb-1 block">Bắt đầu</label>
+                    <input type="range" min={0} max={videoInfo.duration} step={1} value={gifStart}
+                      onChange={e => { const v = Number(e.target.value); if (v < gifEnd) setGifStart(v); }}
+                      className="w-full accent-pink-500 h-2 bg-slate-700 rounded-full cursor-pointer" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 font-medium mb-1 block">Kết thúc (tối đa +30s)</label>
+                    <input type="range" min={0} max={videoInfo.duration} step={1} value={gifEnd}
+                      onChange={e => { const v = Number(e.target.value); if (v > gifStart && v - gifStart <= 30) setGifEnd(v); }}
+                      className="w-full accent-orange-500 h-2 bg-slate-700 rounded-full cursor-pointer" />
+                  </div>
+                </div>
+
+                {/* GIF options */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div>
+                    <label className="text-xs text-slate-400 font-medium mb-1 block">Chiều rộng (px)</label>
+                    <div className="flex flex-wrap gap-1">
+                      {[320, 480, 640, 1080].map(w => (
+                        <button key={w} onClick={() => setGifWidth(w)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${gifWidth === w ? 'bg-pink-500/20 border-pink-500/40 text-pink-300' : 'bg-slate-700/50 border-slate-600/50 text-slate-400 hover:text-white'}`}>
+                          {w}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 font-medium mb-1 block">FPS</label>
+                    <div className="flex flex-wrap gap-1">
+                      {[10, 15, 20, 30].map(f => (
+                        <button key={f} onClick={() => setGifFps(f)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${gifFps === f ? 'bg-pink-500/20 border-pink-500/40 text-pink-300' : 'bg-slate-700/50 border-slate-600/50 text-slate-400 hover:text-white'}`}>
+                          {f}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <button onClick={handleConvertGif} disabled={isConverting || gifEnd <= gifStart || gifEnd - gifStart > 30}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold text-sm shadow-lg transition-all disabled:opacity-60 active:scale-[0.98]">
+                  {isConverting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  {isConverting ? 'Đang tạo GIF...' : `Tạo GIF · ${gifWidth}px · ${gifFps}fps · ${formatTime(gifEnd - gifStart)}`}
+                </button>
+              </div>
+            )}
+
+            {/* ── Chapters Panel ──────────────────────────────── */}
+            {showChapters && videoInfo.chapters?.length > 0 && (
+              <div className="mb-5 rounded-2xl overflow-hidden border border-indigo-500/30 shadow-lg">
+                <div className="flex items-center justify-between px-4 py-3 bg-indigo-500/10 border-b border-indigo-500/20">
+                  <h5 className="text-white font-bold text-sm flex items-center gap-2">
+                    <List className="w-4 h-4 text-indigo-400" />
+                    Chapters ({videoInfo.chapters.length})
+                  </h5>
+                  <button onClick={() => setShowChapters(false)} className="text-slate-400 hover:text-white transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="max-h-64 overflow-y-auto divide-y divide-slate-700/40">
+                  {videoInfo.chapters.map((ch, i) => (
+                    <div key={i} className="flex items-center gap-3 px-4 py-2.5 bg-slate-800/40 hover:bg-slate-800/70 transition-colors">
+                      <span className="text-slate-500 text-xs font-mono w-6 text-right flex-shrink-0">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-semibold truncate">{ch.title}</p>
+                        <p className="text-slate-400 text-xs font-mono">{formatTime(ch.start_time)} → {formatTime(ch.end_time)} · {formatTime(ch.duration)}</p>
+                      </div>
+                      <button
+                        onClick={() => handleChapterDownload(ch)}
+                        disabled={downloadingChapter === ch.title}
+                        className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/20 transition-all disabled:opacity-50"
+                      >
+                        {downloadingChapter === ch.title
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Download className="w-3.5 h-3.5" />}
+                        Tải
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

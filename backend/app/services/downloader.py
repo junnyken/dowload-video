@@ -82,10 +82,21 @@ CHANNEL_PATTERNS = [
     r"youtube\.com/(c|channel|user|@)[\w.-]+",
     r"youtube\.com/playlist\?list=",
     r"youtu\.be/.*[?&]list=",
-    # Instagram profiles
-    r"instagram\.com/[\w.-]+/?$",
+    # Instagram profiles (exclude single post/reel/tv but include stories & highlights as "channel" batch)
+    r"instagram\.com/(?!p/|reel/|tv/)[\w.-]+/?$",
+    r"instagram\.com/stories/[\w.-]+/?$",
+    r"instagram\.com/[\w.-]+/highlights/",
     # Facebook video pages
     r"facebook\.com/[\w.-]+/videos",
+    # X (Twitter) timelines / lists
+    r"(twitter|x)\.com/[\w.-]+/?$",
+    r"(twitter|x)\.com/[\w.-]+/media",
+    r"(twitter|x)\.com/i/lists/",
+    # Reddit subreddits / user pages
+    r"reddit\.com/r/[\w.-]+/?$",
+    r"reddit\.com/user/[\w.-]+/?$",
+    # Pinterest boards
+    r"pinterest\.(com|co\.uk)/[\w.-]+/[\w.-]+/?$",
 ]
 
 
@@ -776,7 +787,24 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     elif info.get("height"):
         downloaded_height = info["height"]
     result["downloaded_height"] = downloaded_height
-            
+
+    # ── YouTube Chapters ─────────────────────────────────────
+    # yt-dlp exposes chapters as a list of {title, start_time, end_time} dicts.
+    # Only populated for YouTube and a few other platforms that embed chapter markers.
+    raw_chapters = info.get("chapters") or []
+    chapters = []
+    for ch in raw_chapters:
+        start = ch.get("start_time", 0)
+        end   = ch.get("end_time",   0)
+        if end > start:
+            chapters.append({
+                "title":      ch.get("title", f"Chapter {len(chapters) + 1}"),
+                "start_time": round(start, 2),
+                "end_time":   round(end,   2),
+                "duration":   round(end - start, 2),
+            })
+    result["chapters"] = chapters
+
     return result
 
 

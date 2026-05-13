@@ -304,9 +304,10 @@ async def _try_tikwm(url: str, quality: str = "video") -> Optional[Dict[str, Any
             wmplay_url = data.get("wmplay", "") or ""
             audio_url  = data.get("music", "") or ""
 
-            for field in [play_url, hdplay_url, wmplay_url, audio_url]:
-                if field and field.startswith("//"):
-                    field = "https:" + field
+            if play_url.startswith("//"):   play_url   = "https:" + play_url
+            if hdplay_url.startswith("//"): hdplay_url = "https:" + hdplay_url
+            if wmplay_url.startswith("//"): wmplay_url = "https:" + wmplay_url
+            if audio_url.startswith("//"):  audio_url  = "https:" + audio_url
 
             # Pick best video URL based on quality
             if quality.startswith("mp3"):

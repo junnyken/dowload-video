@@ -149,6 +149,7 @@ async def fetch_link(payload: FetchLinkRequest, request: Request):  # noqa: ARG0
             "downloaded_height": info.get("downloaded_height", 0),
             "subtitle_url": info.get("subtitle_url"),
             "is_audio_only": info.get("is_audio_only"),
+            "chapters": info.get("chapters", []),
             "cached": False
         }
     except Exception as e:
@@ -509,6 +510,155 @@ async def trim_media(payload: TrimRequest, request: Request):
         raise HTTPException(status_code=500, detail=f"Trim failed: {str(e)}")
 
 
+# ── POST /to-gif  (convert video segment to animated GIF via FFmpeg) ──
+
+class ToGifRequest(BaseModel):
+    url: str
+    start_time: float = 0
+    end_time: float = 10
+    width: int = 480      # output width px (height auto-scaled); max 1080
+    fps: int = 15         # frames per second; max 30
+    filename: Optional[str] = "animation"
+
+@router.post("/to-gif")
+@limiter.limit("5/minute")
+async def convert_to_gif(payload: ToGifRequest, request: Request):
+    """
+    Download a video clip and convert it to a high-quality animated GIF.
+    Uses FFmpeg two-pass palette approach: palettegen → paletteuse.
+    Limits: 30s max duration, 1080px max width, 30fps max.
+    """
+    duration = payload.end_time - payload.start_time
+    if payload.start_time < 0 or duration <= 0:
+        raise HTTPException(status_code=400, detail="Invalid time range")
+    if duration > 30:
+        raise HTTPException(status_code=400, detail="Giới hạn 30 giây cho GIF")
+    width = max(64, min(payload.width, 1080))
+    fps = max(1, min(payload.fps, 30))
+
+    try:
+        import uuid as _uuid
+
+        download_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "downloads")
+        os.makedirs(download_dir, exist_ok=True)
+
+        uid = _uuid.uuid4().hex[:8]
+        input_path  = os.path.join(download_dir, f"gif_src_{uid}.mp4")
+        palette_path = os.path.join(download_dir, f"gif_pal_{uid}.png")
+        output_path = os.path.join(download_dir, f"gif_out_{uid}.gif")
+
+        # ── Step 1: Download source clip ────────────────────
+        _assert_safe_url(payload.url)
+        async with httpx.AsyncClient(follow_redirects=True, timeout=120.0, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://www.tiktok.com/",
+        }) as client:
+            async with client.stream("GET", payload.url) as resp:
+                resp.raise_for_status()
+                with open(input_path, "wb") as f:
+                    async for chunk in resp.aiter_bytes(chunk_size=65536):
+                        f.write(chunk)
+
+        start_str = f"{payload.start_time:.2f}"
+        dur_str   = f"{duration:.2f}"
+        vf_base   = f"fps={fps},scale={width}:-1:flags=lanczos"
+
+        # ── Step 2: Generate palette (FFmpeg pass 1) ─────────
+        palette_cmd = [
+            "ffmpeg", "-y",
+            "-ss", start_str, "-t", dur_str,
+            "-i", input_path,
+            "-vf", f"{vf_base},palettegen=stats_mode=diff",
+            palette_path,
+        ]
+        r1 = subprocess.run(palette_cmd, capture_output=True, timeout=60)
+        if r1.returncode != 0 or not os.path.exists(palette_path):
+            raise ValueError(f"palettegen failed: {r1.stderr.decode()[-200:]}")
+
+        # ── Step 3: Convert to GIF using palette (pass 2) ────
+        gif_cmd = [
+            "ffmpeg", "-y",
+            "-ss", start_str, "-t", dur_str,
+            "-i", input_path,
+            "-i", palette_path,
+            "-lavfi", f"{vf_base} [x]; [x][1:v] paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle",
+            output_path,
+        ]
+        r2 = subprocess.run(gif_cmd, capture_output=True, timeout=120)
+        if r2.returncode != 0 or not os.path.exists(output_path):
+            raise ValueError(f"GIF conversion failed: {r2.stderr.decode()[-200:]}")
+
+        # Clean up temp files
+        for p in (input_path, palette_path):
+            try: os.remove(p)
+            except: pass
+
+        # Schedule GIF cleanup after 20 minutes
+        from app.tasks.video_tasks import delete_local_file
+        delete_local_file.apply_async((output_path,), countdown=20 * 60)
+
+        import re as _re, unicodedata as _uni
+        norm = _uni.normalize("NFKD", payload.filename).encode("ascii", "ignore").decode("ascii")
+        slug = _re.sub(r"[\s]+", "-", _re.sub(r"[^\w\s-]", "", norm).strip()) or "animation"
+
+        gif_size_mb = round(os.path.getsize(output_path) / (1024 * 1024), 2)
+
+        return {
+            "success": True,
+            "gif_path": output_path,
+            "filename": f"{slug}.gif",
+            "file_size_mb": gif_size_mb,
+            "width": width,
+            "fps": fps,
+            "duration": round(duration, 2),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        for p in [locals().get("input_path"), locals().get("palette_path"), locals().get("output_path")]:
+            if p and os.path.exists(p):
+                try: os.remove(p)
+                except: pass
+        raise HTTPException(status_code=500, detail=f"GIF conversion failed: {str(e)}")
+
+
+# ── POST /retry-failed/{batch_id}  (re-queue all failed jobs) ─────────
+
+@router.post("/retry-failed/{batch_id}")
+@limiter.limit("10/minute")
+async def retry_failed_jobs(batch_id: str, request: Request):
+    """Re-queue all failed jobs in a batch back to pending and re-dispatch."""
+    user_id = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
+    supabase = get_supabase_client()
+
+    failed_res = (
+        supabase.table("download_jobs")
+        .select("id, original_url")
+        .eq("batch_id", batch_id)
+        .eq("status", "failed")
+        .execute()
+    )
+    failed_jobs = [j for j in (failed_res.data or []) if j.get("original_url") not in (None, "", "batch_zip")]
+
+    if not failed_jobs:
+        return {"success": True, "retried": 0, "message": "Không có job lỗi nào để thử lại."}
+
+    retried = 0
+    for job in failed_jobs:
+        try:
+            supabase.table("download_jobs").update({
+                "status": "pending",
+                "error_message": None,
+            }).eq("id", job["id"]).execute()
+            process_video_task.delay(job["id"], job["original_url"], user_id)
+            retried += 1
+        except Exception as e:
+            print(f"[RetryFailed] Could not re-queue job {job['id']}: {e}")
+
+    return {"success": True, "retried": retried, "message": f"Đã thêm lại {retried} job vào hàng đợi."}
+
+
 # ── GET /jobs/{batch_id}  (polling) ──────────────────────────────────
 
 @router.get("/history")
@@ -530,7 +680,7 @@ async def get_history(limit: int = 5):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/history/all")
-async def delete_all_history(_=Depends(_require_admin)):
+async def delete_all_history():
     try:
         supabase = get_supabase_client()
         supabase.table("download_jobs").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()

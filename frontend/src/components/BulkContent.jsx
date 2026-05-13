@@ -106,6 +106,7 @@ export default function BulkContent() {
   const [selectedJobIds, setSelectedJobIds] = useState(new Set());
   const autoDownloadedRefs = useRef(new Set());
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetch(`${API}/quota`)
@@ -152,6 +153,21 @@ export default function BulkContent() {
 
   const handleUrlsChange = useCallback((e) => {
     setUrls(cleanProfileUrls(e.target.value));
+  }, [cleanProfileUrls]);
+
+  const handleFileImport = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target.result || '';
+      // Extract all URLs from file (one per line, or comma-separated in CSV)
+      const lines = text.split(/[\n,;]+/).map(l => l.trim()).filter(l => l.startsWith('http'));
+      const cleaned = cleanProfileUrls(lines.join('\n'));
+      setUrls(prev => prev ? prev + '\n' + cleaned : cleaned);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   }, [cleanProfileUrls]);
 
   const handleUrlsPaste = useCallback((e) => {
@@ -377,7 +393,23 @@ export default function BulkContent() {
       : 0;
 
   // ── Handlers for bulk actions ──────────────────────────────────────────
-  
+
+  const [isRetrying, setIsRetrying] = useState(false);
+  const handleRetryFailed = async () => {
+    if (!batchId) return;
+    setIsRetrying(true);
+    try {
+      const res = await fetch(`${API}/retry-failed/${batchId}`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Retry failed');
+      setRefreshTrigger(prev => prev + 1);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
   const handleCreateZip = async () => {
     if (!batchId) return;
     setIsZipping(true);
@@ -586,6 +618,15 @@ export default function BulkContent() {
           </div>
         )}
 
+        {/* Hidden file input for import */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".txt,.csv"
+          className="hidden"
+          onChange={handleFileImport}
+        />
+
         <div className="relative">
           <textarea
             rows={5}
@@ -608,25 +649,34 @@ export default function BulkContent() {
             "
             disabled={isSubmitting}
           />
-          {navigator.clipboard && (
+          <div className="absolute top-2 right-2 flex gap-1">
             <button
-              onClick={async () => {
-                try {
-                  const text = await navigator.clipboard.readText();
-                  if (text) {
-                    const cleaned = cleanProfileUrls(text);
-                    setUrls(prev => prev ? prev + '\n' + cleaned : cleaned);
-                  }
-                } catch (err) {
-                  console.error("Failed to read clipboard: ", err);
-                }
-              }}
-              className="absolute top-2 right-2 p-1.5 bg-surface-lighter text-text-muted hover:text-primary border border-border rounded-lg transition-colors shadow-sm"
-              title="Dán từ bộ nhớ tạm"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-1.5 bg-surface-lighter text-text-muted hover:text-accent-light border border-border rounded-lg transition-colors shadow-sm"
+              title="Import URL từ file .txt hoặc .csv"
             >
-              <ClipboardPaste className="w-4 h-4" />
+              <FileDown className="w-4 h-4" />
             </button>
-          )}
+            {navigator.clipboard && (
+              <button
+                onClick={async () => {
+                  try {
+                    const text = await navigator.clipboard.readText();
+                    if (text) {
+                      const cleaned = cleanProfileUrls(text);
+                      setUrls(prev => prev ? prev + '\n' + cleaned : cleaned);
+                    }
+                  } catch (err) {
+                    console.error("Failed to read clipboard: ", err);
+                  }
+                }}
+                className="p-1.5 bg-surface-lighter text-text-muted hover:text-primary border border-border rounded-lg transition-colors shadow-sm"
+                title="Dán từ bộ nhớ tạm"
+              >
+                <ClipboardPaste className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex justify-end mt-4">
@@ -699,6 +749,20 @@ export default function BulkContent() {
               </span>
             )}
           </div>
+
+          {/* Retry Failed Button */}
+          {totalData.failed > 0 && (
+            <div className="mt-3">
+              <button
+                onClick={handleRetryFailed}
+                disabled={isRetrying}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-error/10 text-error border border-error/30 hover:bg-error/20 transition-all disabled:opacity-50"
+              >
+                {isRetrying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                {isRetrying ? 'Đang thêm lại hàng đợi...' : `Thử lại ${totalData.failed} job lỗi`}
+              </button>
+            </div>
+          )}
 
           {/* Download All Buttons */}
           {successJobs.length > 0 && (
