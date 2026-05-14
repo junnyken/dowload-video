@@ -265,9 +265,13 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
 
     if "instagram.com" in url.lower():
         opts["http_headers"] = {"User-Agent": _INSTAGRAM_MOBILE_UA}
-        # Fail fast: Instagram often blocks without cookies — don't wait 10×60s
         opts["retries"] = 2
         opts["socket_timeout"] = 15
+        # Skip proxy for Instagram when only ScraperAPI is available —
+        # ScraperAPI blocks yt-dlp protocol; server IP works fine for public Reels
+        from app.core.proxy_manager import IPROYAL_PROXY
+        if not IPROYAL_PROXY and "proxy" in opts:
+            del opts["proxy"]
         ig_cookies = _get_instagram_cookies_file()
         if ig_cookies:
             opts["cookiefile"] = ig_cookies
