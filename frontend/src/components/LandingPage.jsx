@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Download, Layers, History, Heart,
-  Zap, Ban, ShieldCheck, Smartphone, X
+  Zap, ShieldCheck, Smartphone, X
 } from 'lucide-react';
 import DashboardContent from './DashboardContent';
 import BulkContent from './BulkContent';
@@ -139,10 +139,7 @@ export default function LandingPage() {
 
           {/* Feature Badges */}
           <div className="flex flex-wrap items-center justify-center gap-3 mb-10">
-            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#4ADE80]/10 text-[#4ADE80] text-sm font-semibold border border-[#4ADE80]/30">
-              <Ban className="w-4 h-4" /> Không quảng cáo
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#FDE047]/10 text-[#FDE047] text-sm font-semibold border border-[#FDE047]/30">
+<span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#FDE047]/10 text-[#FDE047] text-sm font-semibold border border-[#FDE047]/30">
               <ShieldCheck className="w-4 h-4" /> An toàn & Bảo mật
             </span>
             <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#A3E635]/10 text-[#A3E635] text-sm font-semibold border border-[#A3E635]/30">
