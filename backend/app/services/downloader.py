@@ -964,8 +964,43 @@ def extract_video_info_sync(url: str, quality: str = "video", remove_watermark: 
 
 
 async def extract_video_info(url: str, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False) -> Dict[str, Any]:
-    """Async wrapper for single video extraction."""
-    return await asyncio.to_thread(extract_video_info_sync, url, quality, remove_watermark, download_subs)
+    """Async wrapper for single video extraction with Redis caching."""
+    import json as _json
+    import hashlib as _hashlib
+
+    # Only cache metadata-only calls (video_fast) — not server-side downloads,
+    # since those produce local files that expire and can't be reused across workers.
+    _CACHEABLE = quality in ("video_fast",)
+    _CACHE_TTL = int(os.getenv("VIDEO_INFO_CACHE_TTL", "600"))  # default 10 min
+
+    cache_key = None
+    if _CACHEABLE:
+        raw_key = f"vidinfo:{url}:{quality}:{int(remove_watermark)}"
+        cache_key = "vidcache:" + _hashlib.md5(raw_key.encode()).hexdigest()
+        try:
+            import redis as _redis
+            _rc = _redis.from_url(os.getenv("REDIS_URL", "redis://redis:6379/0"), decode_responses=True)
+            cached = _rc.get(cache_key)
+            if cached:
+                print(f"[Cache] HIT {cache_key}")
+                return _json.loads(cached)
+        except Exception as _ce:
+            print(f"[Cache] Redis unavailable: {_ce}")
+
+    result = await asyncio.to_thread(extract_video_info_sync, url, quality, remove_watermark, download_subs)
+
+    if _CACHEABLE and cache_key and result:
+        try:
+            import redis as _redis2
+            _rc2 = _redis2.from_url(os.getenv("REDIS_URL", "redis://redis:6379/0"), decode_responses=True)
+            # Don't cache if result has local file (path expires after 20 min)
+            if not result.get("local_file_path") and not result.get("local_mp3_path"):
+                _rc2.setex(cache_key, _CACHE_TTL, _json.dumps(result))
+                print(f"[Cache] SET {cache_key} TTL={_CACHE_TTL}s")
+        except Exception as _ce2:
+            print(f"[Cache] Failed to store: {_ce2}")
+
+    return result
 
 
 # ── Channel / Playlist Scraping ──────────────────────────────────────

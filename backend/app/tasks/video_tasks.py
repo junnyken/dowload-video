@@ -326,35 +326,57 @@ def delete_local_file(self, filepath: str):
 
 @celery_app.task(name="periodic_cleanup_downloads", bind=True)
 def periodic_cleanup_downloads(self):
-    """Scan the downloads directory and delete files/folders older than 20 minutes."""
-    print("[Cron] Starting periodic cleanup of downloads directory...")
+    """
+    Scan downloads dir: delete files older than 20 min.
+    Also enforce DOWNLOADS_MAX_GB disk quota by evicting oldest files first.
+    """
+    import time
     DOWNLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "downloads")
     if not os.path.exists(DOWNLOAD_DIR):
         return
 
-    import time
-    current_time = time.time()
-    expiry_seconds = 20 * 60  # 20 minutes
-    
-    deleted_count = 0
-    
+    MAX_GB   = float(os.getenv("DOWNLOADS_MAX_GB", "10"))
+    MAX_BYTES = MAX_GB * 1024 ** 3
+    now      = time.time()
+    expiry   = 20 * 60  # 20 minutes
+
+    # Pass 1: delete expired files
+    deleted = 0
     for item in os.listdir(DOWNLOAD_DIR):
-        item_path = os.path.join(DOWNLOAD_DIR, item)
+        path = os.path.join(DOWNLOAD_DIR, item)
         try:
-            # Get modified time
-            mtime = os.path.getmtime(item_path)
-            
-            if current_time - mtime > expiry_seconds:
-                if os.path.isdir(item_path):
-                    shutil.rmtree(item_path)
-                else:
-                    os.remove(item_path)
-                deleted_count += 1
-                print(f"[Cron] Deleted expired resource: {item_path}")
+            if now - os.path.getmtime(path) > expiry:
+                shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
+                deleted += 1
         except Exception as e:
-            print(f"[Cron] Failed to process {item_path}: {e}")
-            
-    print(f"[Cron] Periodic cleanup finished. Deleted {deleted_count} items.")
+            print(f"[Cron] cleanup error {path}: {e}")
+
+    # Pass 2: enforce disk quota — evict oldest first
+    all_files = []
+    for item in os.listdir(DOWNLOAD_DIR):
+        path = os.path.join(DOWNLOAD_DIR, item)
+        try:
+            all_files.append((os.path.getmtime(path), os.path.getsize(path), path))
+        except Exception:
+            pass
+
+    total_bytes = sum(s for _, s, _ in all_files)
+    if total_bytes > MAX_BYTES:
+        print(f"[Cron] Disk quota exceeded: {total_bytes/(1024**3):.2f}GB > {MAX_GB}GB — evicting oldest files")
+        all_files.sort()  # oldest first
+        for mtime, size, path in all_files:
+            if total_bytes <= MAX_BYTES * 0.8:  # free to 80% of quota
+                break
+            try:
+                shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
+                total_bytes -= size
+                deleted += 1
+                print(f"[Cron] Quota evict: {path}")
+            except Exception as e:
+                print(f"[Cron] evict error {path}: {e}")
+
+    remaining_gb = total_bytes / (1024 ** 3)
+    print(f"[Cron] Cleanup done. Deleted {deleted} items. Disk: {remaining_gb:.2f}GB / {MAX_GB}GB")
 
 
 # ═════════════════════════════════════════════════════════════════════

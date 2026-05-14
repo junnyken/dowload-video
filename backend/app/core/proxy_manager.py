@@ -110,8 +110,10 @@ def get_proxy_config(url: str) -> Optional[str]:
                 or None
             )
 
-        # TikTok / Instagram — global rotating
-        return IPROYAL_PROXY or _scraperapi_proxy() or None
+        # TikTok / Instagram — only use residential proxy if IPROYAL is configured.
+        # ScraperAPI blocks yt-dlp protocol for these platforms; server IP works
+        # fine for public content and saves API credits.
+        return IPROYAL_PROXY or None
 
     return None
 

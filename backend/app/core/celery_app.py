@@ -42,10 +42,10 @@ celery_app.conf.update(
         '*': {'queue': 'celery'},
     },
     beat_schedule={
-        # Cleanup temp downloads every 60 minutes
-        'cleanup-downloads-every-60-minutes': {
+        # Cleanup temp downloads every 30 minutes (+ enforce disk quota)
+        'cleanup-downloads-every-30-minutes': {
             'task': 'periodic_cleanup_downloads',
-            'schedule': 3600.0,
+            'schedule': 1800.0,
         },
         # Daily summary report at 23:00 UTC (6:00 AM UTC+7)
         'daily-summary-report': {

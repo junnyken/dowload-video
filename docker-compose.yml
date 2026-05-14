@@ -2,7 +2,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
     volumes:
       - redis-data:/data
 
@@ -25,7 +25,8 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - COBALT_API_URL=http://cobalt-api:9000
-
+      - VIDEO_INFO_CACHE_TTL=600
+      - DOWNLOADS_MAX_GB=10
     depends_on:
       - redis
       - cobalt-api
@@ -37,13 +38,13 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
-    command: celery -A app.core.celery_app.celery_app worker --loglevel=info --concurrency=4
+    command: celery -A app.core.celery_app.celery_app worker --loglevel=info --concurrency=8 --max-tasks-per-child=50
     environment:
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - COBALT_API_URL=http://cobalt-api:9000
-
+      - DOWNLOADS_MAX_GB=10
     depends_on:
       - redis
       - backend
