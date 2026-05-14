@@ -964,38 +964,61 @@ def extract_video_info_sync(url: str, quality: str = "video", remove_watermark: 
 
 
 async def extract_video_info(url: str, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False) -> Dict[str, Any]:
-    """Async wrapper for single video extraction with Redis caching."""
+    """Async wrapper for single video extraction with Redis caching and dedup lock."""
     import json as _json
     import hashlib as _hashlib
+    from app.core.redis_client import get_redis
 
-    # Only cache metadata-only calls (video_fast) — not server-side downloads,
-    # since those produce local files that expire and can't be reused across workers.
     _CACHEABLE = quality in ("video_fast",)
-    _CACHE_TTL = int(os.getenv("VIDEO_INFO_CACHE_TTL", "600"))  # default 10 min
+    _CACHE_TTL = int(os.getenv("VIDEO_INFO_CACHE_TTL", "600"))
 
     cache_key = None
+    lock_acquired = False
+
     if _CACHEABLE:
         raw_key = f"vidinfo:{url}:{quality}:{int(remove_watermark)}"
         cache_key = "vidcache:" + _hashlib.md5(raw_key.encode()).hexdigest()
+        lock_key  = f"lock:{cache_key}"
+
         try:
-            import redis as _redis
-            _rc = _redis.from_url(os.getenv("REDIS_URL", "redis://redis:6379/0"), decode_responses=True)
-            cached = _rc.get(cache_key)
+            rc = get_redis()
+            cached = rc.get(cache_key)
             if cached:
                 print(f"[Cache] HIT {cache_key}")
                 return _json.loads(cached)
+
+            # Try to acquire extraction lock (60s expiry = hard cap)
+            lock_acquired = bool(rc.set(lock_key, "1", nx=True, ex=60))
+            if not lock_acquired:
+                # Another worker is already extracting this URL — wait for result
+                print(f"[Dedup] Waiting for in-flight extraction: {cache_key}")
+                for _ in range(60):   # max 30 s
+                    await asyncio.sleep(0.5)
+                    cached = rc.get(cache_key)
+                    if cached:
+                        print(f"[Dedup] Got result from in-flight extraction")
+                        return _json.loads(cached)
+                # Timed out — fall through and extract ourselves (lock may have expired)
+                print(f"[Dedup] Wait timeout; proceeding with own extraction")
+
         except Exception as _ce:
             print(f"[Cache] Redis unavailable: {_ce}")
 
-    result = await asyncio.to_thread(extract_video_info_sync, url, quality, remove_watermark, download_subs)
+    try:
+        result = await asyncio.to_thread(extract_video_info_sync, url, quality, remove_watermark, download_subs)
+    finally:
+        # Always release the lock after extraction (success or failure)
+        if lock_acquired and cache_key:
+            try:
+                get_redis().delete(f"lock:{cache_key}")
+            except Exception:
+                pass
 
     if _CACHEABLE and cache_key and result:
         try:
-            import redis as _redis2
-            _rc2 = _redis2.from_url(os.getenv("REDIS_URL", "redis://redis:6379/0"), decode_responses=True)
-            # Don't cache if result has local file (path expires after 20 min)
+            rc = get_redis()
             if not result.get("local_file_path") and not result.get("local_mp3_path"):
-                _rc2.setex(cache_key, _CACHE_TTL, _json.dumps(result))
+                rc.setex(cache_key, _CACHE_TTL, _json.dumps(result))
                 print(f"[Cache] SET {cache_key} TTL={_CACHE_TTL}s")
         except Exception as _ce2:
             print(f"[Cache] Failed to store: {_ce2}")

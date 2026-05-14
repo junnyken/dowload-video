@@ -223,7 +223,32 @@ async def bulk_download(payload: BulkDownloadRequest, request: Request):
                 }).execute()
 
                 job_id = response.data[0]["id"]
-                process_video_task.delay(job_id, url, user_id, payload.quality, payload.remove_watermark)
+
+                # Dedup: if video info is already cached in Redis, resolve job immediately
+                # instead of spawning a Celery task (saves worker slots for new URLs).
+                _dedup_resolved = False
+                if payload.quality in ("video_fast",):
+                    try:
+                        import hashlib as _hl, json as _js
+                        from app.core.redis_client import get_redis
+                        _rkey = "vidcache:" + _hl.md5(
+                            f"vidinfo:{url}:{payload.quality}:{int(payload.remove_watermark)}".encode()
+                        ).hexdigest()
+                        _cached = get_redis().get(_rkey)
+                        if _cached:
+                            _ci = _js.loads(_cached)
+                            supabase.table("download_jobs").update({
+                                "status": "success",
+                                "title": _ci.get("title", "Unknown"),
+                                "direct_mp4_url": _ci.get("direct_mp4_url"),
+                                "error_message": "Tải từ bộ nhớ đệm thành công",
+                            }).eq("id", job_id).execute()
+                            _dedup_resolved = True
+                    except Exception:
+                        pass
+
+                if not _dedup_resolved:
+                    process_video_task.delay(job_id, url, user_id, payload.quality, payload.remove_watermark)
                 video_count += 1
 
         except Exception as e:

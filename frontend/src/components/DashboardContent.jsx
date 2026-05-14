@@ -156,6 +156,9 @@ export default function DashboardContent() {
       });
       const data = await response.json();
       if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error('⏳ Bạn đã gửi quá nhiều yêu cầu. Vui lòng chờ 1 phút rồi thử lại.');
+        }
         if (response.status === 403 && data.detail === 'QUOTA_EXCEEDED') {
           setShowUpgradeModal(true);
           throw new Error('Đã đạt giới hạn tải. Vui lòng nâng cấp VIP.');
@@ -372,6 +375,9 @@ export default function DashboardContent() {
       });
       const data = await response.json();
       if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error('⏳ Quá nhiều yêu cầu. Vui lòng chờ 1 phút rồi thử lại.');
+        }
         if (response.status === 403 && data.detail === 'QUOTA_EXCEEDED') {
           setShowUpgradeModal(true); return;
         }
