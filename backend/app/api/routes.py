@@ -513,7 +513,8 @@ async def trim_media(payload: TrimRequest, request: Request):
 # ── POST /to-gif  (convert video segment to animated GIF via FFmpeg) ──
 
 class ToGifRequest(BaseModel):
-    url: str
+    url: Optional[str] = None        # remote video URL (http/https)
+    local_path: Optional[str] = None # server-side local file path (already downloaded)
     start_time: float = 0
     end_time: float = 10
     width: int = 480      # output width px (height auto-scaled); max 1080
@@ -527,7 +528,11 @@ async def convert_to_gif(payload: ToGifRequest, request: Request):
     Download a video clip and convert it to a high-quality animated GIF.
     Uses FFmpeg two-pass palette approach: palettegen → paletteuse.
     Limits: 30s max duration, 1080px max width, 30fps max.
+    Accepts either a remote `url` OR a server-side `local_path`.
     """
+    if not payload.url and not payload.local_path:
+        raise HTTPException(status_code=400, detail="url or local_path is required")
+
     duration = payload.end_time - payload.start_time
     if payload.start_time < 0 or duration <= 0:
         raise HTTPException(status_code=400, detail="Invalid time range")
@@ -543,21 +548,31 @@ async def convert_to_gif(payload: ToGifRequest, request: Request):
         os.makedirs(download_dir, exist_ok=True)
 
         uid = _uuid.uuid4().hex[:8]
-        input_path  = os.path.join(download_dir, f"gif_src_{uid}.mp4")
         palette_path = os.path.join(download_dir, f"gif_pal_{uid}.png")
         output_path = os.path.join(download_dir, f"gif_out_{uid}.gif")
 
-        # ── Step 1: Download source clip ────────────────────
-        _assert_safe_url(payload.url)
-        async with httpx.AsyncClient(follow_redirects=True, timeout=120.0, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Referer": "https://www.tiktok.com/",
-        }) as client:
-            async with client.stream("GET", payload.url) as resp:
-                resp.raise_for_status()
-                with open(input_path, "wb") as f:
-                    async for chunk in resp.aiter_bytes(chunk_size=65536):
-                        f.write(chunk)
+        # ── Step 1: Resolve input file ───────────────────────
+        if payload.local_path:
+            # Sanitise: must be inside downloads dir (path traversal guard)
+            abs_path = os.path.realpath(payload.local_path)
+            abs_dl   = os.path.realpath(download_dir)
+            if not abs_path.startswith(abs_dl):
+                raise HTTPException(status_code=400, detail="Invalid local_path")
+            if not os.path.exists(abs_path):
+                raise HTTPException(status_code=404, detail="Local file not found")
+            input_path = abs_path
+        else:
+            input_path = os.path.join(download_dir, f"gif_src_{uid}.mp4")
+            _assert_safe_url(payload.url)
+            async with httpx.AsyncClient(follow_redirects=True, timeout=120.0, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Referer": "https://www.tiktok.com/",
+            }) as client:
+                async with client.stream("GET", payload.url) as resp:
+                    resp.raise_for_status()
+                    with open(input_path, "wb") as f:
+                        async for chunk in resp.aiter_bytes(chunk_size=65536):
+                            f.write(chunk)
 
         start_str = f"{payload.start_time:.2f}"
         dur_str   = f"{duration:.2f}"

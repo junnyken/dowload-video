@@ -50,7 +50,7 @@ export default function DashboardContent() {
   const [isZipping, setIsZipping] = useState(false);
   const [zipProgress, setZipProgress] = useState(0);
   const [removeWatermark, setRemoveWatermark] = useState(true);
-  const [downloadSubs, setDownloadSubs] = useState(true);
+  const [downloadSubs, setDownloadSubs] = useState(false);
   const cancelZipRef = useRef(false);
   const previewRef = useRef(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -533,25 +533,27 @@ export default function DashboardContent() {
   const handleConvertGif = async () => {
     if (!videoInfo) return;
     const localPath = videoInfo.local_file_path || videoInfo.local_mp3_path;
-    const sourceUrl = localPath
-      ? `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=gif_source`
-      : videoInfo.direct_mp4_url;
-    if (!sourceUrl) { showToast('Không có nguồn để chuyển GIF.'); return; }
+    const sourceUrl = videoInfo.direct_mp4_url;
+    if (!localPath && !sourceUrl) { showToast('Không có nguồn để chuyển GIF.'); return; }
     if (gifEnd - gifStart > 30) { showToast('Giới hạn 30 giây cho GIF.'); return; }
 
     setIsConverting(true);
     try {
+      const body = {
+        start_time: gifStart,
+        end_time: gifEnd,
+        width: gifWidth,
+        fps: gifFps,
+        filename: videoInfo.title || 'animation',
+      };
+      // Prefer local_path to avoid SSRF-guard rejection on relative URLs
+      if (localPath) body.local_path = localPath;
+      else body.url = sourceUrl;
+
       const res = await fetch(`${API_BASE}/api/v1/to-gif`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: sourceUrl,
-          start_time: gifStart,
-          end_time: gifEnd,
-          width: gifWidth,
-          fps: gifFps,
-          filename: videoInfo.title || 'animation',
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'GIF conversion failed');

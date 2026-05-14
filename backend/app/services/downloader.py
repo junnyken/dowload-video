@@ -265,11 +265,13 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
 
     if "instagram.com" in url.lower():
         opts["http_headers"] = {"User-Agent": _INSTAGRAM_MOBILE_UA}
+        # Fail fast: Instagram often blocks without cookies — don't wait 10×60s
+        opts["retries"] = 2
+        opts["socket_timeout"] = 15
         ig_cookies = _get_instagram_cookies_file()
         if ig_cookies:
             opts["cookiefile"] = ig_cookies
         else:
-            # Without cookies, use extractor_args to try the app client
             opts["extractor_args"] = {"instagram": {"api": ["1"]}}
 
     return opts
