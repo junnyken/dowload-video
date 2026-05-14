@@ -594,6 +594,18 @@ async def get_system_health(_=Depends(verify_admin)):
     except Exception as e:
         result["supabase"] = {"status": "error", "error": str(e)}
 
+    # ── Flatten for frontend compatibility ───────────────
+    # Frontend reads health.services.redis, health.services.cobalt_api, etc.
+    result["services"] = {
+        "redis":               result.get("redis",    {}).get("status") == "ok",
+        "cobalt_api":          result.get("cobalt",   {}).get("status") == "ok",
+        "cobalt_latency_ms":   result.get("cobalt",   {}).get("latency_ms"),
+        "supabase":            result.get("supabase", {}).get("status") == "ok",
+        "supabase_latency_ms": result.get("supabase", {}).get("latency_ms"),
+    }
+    # Frontend reads health.ytdlp_version (flat), not health.ytdlp.version
+    result["ytdlp_version"] = result.get("ytdlp", {}).get("version", "unknown")
+
     return result
 
 
