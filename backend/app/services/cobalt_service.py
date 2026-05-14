@@ -238,3 +238,62 @@ def download_from_cobalt(url: str, quality: str, output_dir: str) -> Optional[st
                 pass
 
     return None
+
+
+def download_instagram_via_cobalt(url: str, output_dir: str) -> "dict | None":
+    """
+    Download an Instagram Reel/Post via Cobalt.
+    Returns minimal info dict compatible with downloader.py, or None on failure.
+    """
+    result = fetch_cobalt_stream(url, video_quality="1080", download_mode="auto")
+    status = result.get("status", "error")
+
+    if status == "error":
+        print(f"[Cobalt/IG] Request failed: {result.get('error', {}).get('code', 'unknown')}")
+        return None
+
+    stream_url = result.get("url")
+    if not stream_url:
+        print(f"[Cobalt/IG] No stream URL (status={status})")
+        return None
+
+    import uuid as _uuid
+    filename = result.get("filename") or f"instagram_{_uuid.uuid4().hex[:8]}.mp4"
+    filename = os.path.basename(filename)
+    if not filename.lower().endswith(".mp4"):
+        filename = filename.rsplit(".", 1)[0] + ".mp4"
+    output_path = os.path.join(output_dir, filename)
+
+    try:
+        print(f"[Cobalt/IG] Downloading via {status}: {stream_url[:80]}...")
+        with httpx.Client(timeout=300.0, follow_redirects=True) as client:
+            with client.stream("GET", stream_url) as resp:
+                resp.raise_for_status()
+                with open(output_path, "wb") as f:
+                    for chunk in resp.iter_bytes(chunk_size=65536):
+                        if chunk:
+                            f.write(chunk)
+
+        file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+        if file_size == 0:
+            print("[Cobalt/IG] Downloaded file is empty")
+            if os.path.exists(output_path): os.remove(output_path)
+            return None
+
+        print(f"[Cobalt/IG] Downloaded {file_size/(1024*1024):.1f}MB → {output_path}")
+        import uuid as _uuid2
+        return {
+            "url": None,
+            "title": filename.rsplit(".", 1)[0],
+            "thumbnail": "",
+            "ext": "mp4",
+            "id": _uuid2.uuid4().hex[:8],
+            "extractor": "cobalt_instagram",
+            "filepath": output_path,
+        }
+    except Exception as e:
+        print(f"[Cobalt/IG] Download error: {e}")
+        if os.path.exists(output_path):
+            try: os.remove(output_path)
+            except Exception: pass
+        return None

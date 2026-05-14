@@ -57,7 +57,7 @@ _INSTAGRAM_MOBILE_UA = (
 from app.core.proxy_manager import get_proxy_config_for_phase, dispatch_scraping_request
 from app.utils.link_resolver import resolve_short_url, is_douyin_url
 from app.services.douyin_extractor import extract_douyin_video_sync, _try_tikwm
-from app.services.cobalt_service import is_cobalt_available, extract_youtube_formats_via_cobalt, download_from_cobalt
+from app.services.cobalt_service import is_cobalt_available, extract_youtube_formats_via_cobalt, download_from_cobalt, download_instagram_via_cobalt
 
 # Ensure Deno is discoverable for yt-dlp JS challenges
 _deno_bin = os.path.join(os.path.expanduser("~"), ".deno", "bin")
@@ -812,10 +812,16 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                         os.remove(tmp_path)
                     except: pass
 
-    # ── Phase 3: Instagram embed scraper (last resort, no-auth) ─────
+    # ── Phase 3: Instagram fallbacks (Cobalt → embed scraper) ──────
     is_instagram = "instagram.com" in url.lower()
     if info is None and is_instagram:
-        info = asyncio.run(_try_instagram_embed(url))
+        print(f"[Downloader] Trying Cobalt for Instagram: {url}")
+        cobalt_info = download_instagram_via_cobalt(url, DOWNLOAD_DIR)
+        if cobalt_info:
+            info = cobalt_info
+        else:
+            print(f"[Downloader] Cobalt failed, trying embed scraper for Instagram")
+            info = asyncio.run(_try_instagram_embed(url))
 
     if info is None:
         raise ValueError("Không thể trích xuất thông tin. Vui lòng kiểm tra lại xem link có bị thiếu chữ/số, sai định dạng hoặc video bị cài đặt riêng tư không.")
