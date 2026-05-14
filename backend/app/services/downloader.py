@@ -16,6 +16,8 @@ Proxy strategy:
 
 import os
 import asyncio
+import base64
+import tempfile
 from time import sleep
 import yt_dlp
 import re
@@ -23,6 +25,34 @@ import signal
 import concurrent.futures
 from typing import Dict, Any, List
 import httpx
+
+# ── Instagram cookies (optional) ─────────────────────────────────────
+# Set INSTAGRAM_COOKIES_B64 env var to a base64-encoded Netscape cookies.txt
+# from a logged-in Instagram session. This unblocks Reels/Posts extraction.
+_INSTAGRAM_COOKIES_B64 = os.getenv("INSTAGRAM_COOKIES_B64", "")
+_instagram_cookies_file: str | None = None
+
+def _get_instagram_cookies_file() -> str | None:
+    global _instagram_cookies_file
+    if _instagram_cookies_file and os.path.exists(_instagram_cookies_file):
+        return _instagram_cookies_file
+    if not _INSTAGRAM_COOKIES_B64:
+        return None
+    try:
+        decoded = base64.b64decode(_INSTAGRAM_COOKIES_B64).decode("utf-8")
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, prefix="ig_cookies_")
+        tmp.write(decoded)
+        tmp.close()
+        _instagram_cookies_file = tmp.name
+        return _instagram_cookies_file
+    except Exception as e:
+        print(f"[Instagram] Failed to decode cookies: {e}")
+        return None
+
+_INSTAGRAM_MOBILE_UA = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
+)
 
 from app.core.proxy_manager import get_proxy_config_for_phase, dispatch_scraping_request
 from app.utils.link_resolver import resolve_short_url, is_douyin_url
@@ -233,6 +263,15 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         # Prioritize resolution, then codec compatibility, then bitrate
         opts["format_sort"] = ["res", "ext:mp4:m4a", "tbr", "vbr", "abr", "asr"]
 
+    if "instagram.com" in url.lower():
+        opts["http_headers"] = {"User-Agent": _INSTAGRAM_MOBILE_UA}
+        ig_cookies = _get_instagram_cookies_file()
+        if ig_cookies:
+            opts["cookiefile"] = ig_cookies
+        else:
+            # Without cookies, use extractor_args to try the app client
+            opts["extractor_args"] = {"instagram": {"api": ["1"]}}
+
     return opts
 
 
@@ -437,6 +476,86 @@ def _extract_available_formats(info: dict) -> dict:
         "audio_formats": audio_formats[:4],
         "max_video_only_height": max_video_only_height,
     }
+
+
+async def _try_instagram_embed(url: str) -> dict | None:
+    """
+    Last-resort Instagram extractor: scrapes the /embed/ page HTML for video src.
+    Works for public Reels/Posts without login cookies.
+    Returns a minimal yt-dlp-compatible info dict or None.
+    """
+    import json as _json
+    try:
+        # Extract shortcode from URL: /reel/CODE/ or /p/CODE/
+        m = re.search(r"/(?:reel|p|tv)/([A-Za-z0-9_-]+)", url)
+        if not m:
+            return None
+        shortcode = m.group(1)
+        embed_url = f"https://www.instagram.com/p/{shortcode}/embed/captioned/"
+        headers = {
+            "User-Agent": _INSTAGRAM_MOBILE_UA,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Referer": "https://www.instagram.com/",
+        }
+        async with httpx.AsyncClient(follow_redirects=True, timeout=20.0, headers=headers) as client:
+            resp = await client.get(embed_url)
+            html = resp.text
+
+        # Try to find video URL in embed HTML
+        video_url = None
+        # Pattern 1: direct src in <video>
+        vm = re.search(r'<video[^>]+src="([^"]+\.mp4[^"]*)"', html)
+        if vm:
+            video_url = vm.group(1).replace("&amp;", "&")
+
+        # Pattern 2: JSON blob with video_url
+        if not video_url:
+            jm = re.search(r'"video_url"\s*:\s*"([^"]+)"', html)
+            if jm:
+                video_url = jm.group(1).replace("\\u0026", "&").replace("\\/", "/")
+
+        # Pattern 3: EmbedHelper JSON
+        if not video_url:
+            jm = re.search(r'window\.__additionalDataLoaded\([^,]+,\s*(\{.+?\})\s*\)', html)
+            if jm:
+                try:
+                    d = _json.loads(jm.group(1))
+                    video_url = (
+                        d.get("shortcode_media", {}).get("video_url") or
+                        d.get("media", {}).get("video_url")
+                    )
+                except Exception:
+                    pass
+
+        if not video_url:
+            print("[Instagram] embed scraper: no video URL found in embed page")
+            return None
+
+        # Extract thumbnail
+        thumb = ""
+        tm = re.search(r'"display_url"\s*:\s*"([^"]+)"', html)
+        if tm:
+            thumb = tm.group(1).replace("\\u0026", "&").replace("\\/", "/")
+
+        # Extract title
+        title = "Instagram Video"
+        titm = re.search(r'<title>([^<]+)</title>', html)
+        if titm:
+            title = titm.group(1).strip()
+
+        print(f"[Instagram] embed scraper success: {video_url[:60]}...")
+        return {
+            "url": video_url,
+            "title": title,
+            "thumbnail": thumb,
+            "ext": "mp4",
+            "id": shortcode,
+            "extractor": "instagram_embed",
+        }
+    except Exception as e:
+        print(f"[Instagram] embed scraper failed: {e}")
+        return None
 
 
 def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False) -> Dict[str, Any]:
@@ -690,6 +809,11 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                     try:
                         os.remove(tmp_path)
                     except: pass
+
+    # ── Phase 3: Instagram embed scraper (last resort, no-auth) ─────
+    is_instagram = "instagram.com" in url.lower()
+    if info is None and is_instagram:
+        info = asyncio.run(_try_instagram_embed(url))
 
     if info is None:
         raise ValueError("Không thể trích xuất thông tin. Vui lòng kiểm tra lại xem link có bị thiếu chữ/số, sai định dạng hoặc video bị cài đặt riêng tư không.")
