@@ -29,7 +29,7 @@ celery_app.conf.update(
     enable_utc=True,
     task_time_limit=720,        # hard kill after 12 min
     task_soft_time_limit=660,   # soft signal at 11 min so task can clean up
-    worker_concurrency=4,  # Prevent CPU overload from FFmpeg
+    worker_concurrency=8,
     broker_transport_options={
         'priority_steps': list(range(10)),
         'sep': ':',
@@ -56,6 +56,11 @@ celery_app.conf.update(
         'check-api-credits-every-6h': {
             'task': 'check_api_credits',
             'schedule': crontab(hour='*/6', minute=15),
+        },
+        # Auto-update yt-dlp daily at 3 AM UTC (10 AM UTC+7)
+        'ytdlp-auto-update-daily': {
+            'task': 'ytdlp_auto_update',
+            'schedule': crontab(hour=3, minute=0),
         },
     }
 )

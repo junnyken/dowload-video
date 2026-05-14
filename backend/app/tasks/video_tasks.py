@@ -440,3 +440,56 @@ def check_api_credits(self):
         print("[Cron] API credits check finished.")
     except Exception as e:
         print(f"[Cron] Credits check error: {e}")
+
+
+# ═════════════════════════════════════════════════════════════════════
+# yt-dlp Auto-Update (daily at 3 AM UTC)
+# ═════════════════════════════════════════════════════════════════════
+
+@celery_app.task(name="ytdlp_auto_update", bind=True)
+def ytdlp_auto_update(self):
+    """
+    Upgrade yt-dlp to latest version daily.
+    yt-dlp breaks frequently when platforms update their APIs.
+    Auto-updating prevents silent download failures.
+    """
+    import subprocess
+    import importlib.metadata
+
+    try:
+        before = importlib.metadata.version("yt-dlp")
+    except Exception:
+        before = "unknown"
+
+    print(f"[ytdlp-update] Current version: {before}")
+    try:
+        result = subprocess.run(
+            ["pip", "install", "-q", "--upgrade", "yt-dlp"],
+            capture_output=True, text=True, timeout=120
+        )
+        if result.returncode != 0:
+            print(f"[ytdlp-update] pip upgrade failed: {result.stderr[:200]}")
+            return
+
+        # Force reload cached version info
+        try:
+            import importlib
+            import yt_dlp as _ytdlp
+            importlib.reload(_ytdlp)
+        except Exception:
+            pass
+
+        try:
+            after = importlib.metadata.version("yt-dlp")
+        except Exception:
+            after = "unknown"
+
+        if before != after:
+            print(f"[ytdlp-update] ✓ Updated: {before} → {after}")
+        else:
+            print(f"[ytdlp-update] Already latest: {before}")
+
+    except subprocess.TimeoutExpired:
+        print("[ytdlp-update] pip upgrade timed out")
+    except Exception as e:
+        print(f"[ytdlp-update] Error: {e}")

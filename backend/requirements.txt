@@ -9,3 +9,4 @@ httpx
 aiohttp
 slowapi
 spotipy
+sentry-sdk[fastapi]
