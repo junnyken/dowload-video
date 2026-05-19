@@ -261,7 +261,7 @@ export default function DashboardContent() {
         const res = await fetch(`${API_BASE}/api/v1/fetch-link`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: key, quality: 'mp3_128' }),
+          body: JSON.stringify({ url: key, quality: 'mp3_320' }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.detail || 'Fetch thất bại');
