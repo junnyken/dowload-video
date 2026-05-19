@@ -104,9 +104,6 @@ export default function BulkContent() {
   const [quality, setQuality] = useState('video');
   const [quotaInfo, setQuotaInfo] = useState(null);
   const [selectedJobIds, setSelectedJobIds] = useState(new Set());
-  // channelContext tracks the channel URL + pagination state for "Load More"
-  // { url: string, nextStart: number, maxVideos: number, batchDone: boolean }
-  const [channelContext, setChannelContext] = useState(null);
   const autoDownloadedRefs = useRef(new Set());
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const fileInputRef = useRef(null);
@@ -202,7 +199,6 @@ export default function BulkContent() {
     setSelectedJobIds(new Set());
     setSummary(null);
     setBatchId(null);
-    setChannelContext(null);
 
     try {
       // Intercept Spotify URLs to expand them into ytsearch queries
@@ -231,21 +227,19 @@ export default function BulkContent() {
       }
       urlList = expandedUrls;
 
-      const parsedMaxVideos = parseInt(maxVideos) || 20;
       const res = await fetch(`${API}/bulk-download`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          urls: urlList,
+        body: JSON.stringify({ 
+          urls: urlList, 
           channel_mode: channelMode,
-          max_videos: parsedMaxVideos,
+          max_videos: parseInt(maxVideos) || 20,
           min_views: parseInt(minViews) || 0,
-          playlist_start: 1,
           quality: quality
         }),
       });
       const data = await res.json();
-
+      
       if (!res.ok) {
         if (res.status === 403 && data.detail === 'QUOTA_EXCEEDED') {
           setShowUpgradeModal(true);
@@ -253,68 +247,13 @@ export default function BulkContent() {
         }
         throw new Error(data.detail || 'Failed to submit bulk jobs');
       }
-
+      
       if (data.batch_id) {
         setBatchId(data.batch_id);
-      }
-
-      // Enable "Load More" pagination when a single channel URL is submitted
-      if (channelMode && urlList.length === 1) {
-        setChannelContext({
-          url: urlList[0],
-          nextStart: parsedMaxVideos + 1,
-          maxVideos: parsedMaxVideos,
-        });
       }
     } catch (err) {
       console.error(err);
       alert('Failed to submit bulk jobs');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // ── Load More (channel pagination) ───────────────────────────────────
-  const handleLoadMore = async () => {
-    if (!channelContext) return;
-    const { url, nextStart, maxVideos: ctxMax } = channelContext;
-
-    setIsSubmitting(true);
-    setJobs([]);
-    setSelectedJobIds(new Set());
-    setSummary(null);
-    setBatchId(null);
-
-    try {
-      const res = await fetch(`${API}/bulk-download`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          urls: [url],
-          channel_mode: true,
-          max_videos: ctxMax,
-          min_views: parseInt(minViews) || 0,
-          playlist_start: nextStart,
-          quality: quality,
-        }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        if (res.status === 403 && data.detail === 'QUOTA_EXCEEDED') {
-          setShowUpgradeModal(true);
-          return;
-        }
-        throw new Error(data.detail || 'Failed to load more videos');
-      }
-
-      if (data.batch_id) {
-        setBatchId(data.batch_id);
-      }
-      setChannelContext(prev => prev ? { ...prev, nextStart: prev.nextStart + ctxMax } : null);
-    } catch (err) {
-      console.error(err);
-      alert('Failed to load more videos');
     } finally {
       setIsSubmitting(false);
     }
@@ -438,9 +377,8 @@ export default function BulkContent() {
 
   const displayJobs = jobs.filter(j => j.original_url !== 'batch_zip');
   const zipJob = jobs.find(j => j.original_url === 'batch_zip');
-
+  
   const successJobs = displayJobs.filter(j => j.status === 'success' && (j.direct_mp4_url || j.local_mp3_path || j.local_file_path));
-  const allDone = displayJobs.length > 0 && displayJobs.every(j => j.status === 'success' || j.status === 'failed');
   
   // Progress computation (excluding zip job)
   let totalData = summary ? { ...summary } : { total: 0, success: 0, failed: 0, pending: 0, processing: 0 };
@@ -636,32 +574,28 @@ export default function BulkContent() {
                 <label className="block text-[10px] font-semibold text-text-muted uppercase mb-2">
                   Số lượng video tối đa
                 </label>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {[20, 50, 100, 200, 500].map(opt => (
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: 50, label: '50' },
+                    { value: 100, label: '100' },
+                    { value: 200, label: '200' },
+                    { value: 500, label: '500' },
+                  ].map(opt => (
                     <button
-                      key={opt}
-                      onClick={() => setMaxVideos(opt)}
+                      key={opt.value}
+                      onClick={() => setMaxVideos(opt.value)}
                       className={`px-3.5 py-1.5 rounded-lg text-xs font-bold border transition-all duration-200 cursor-pointer ${
-                        parseInt(maxVideos) === opt
+                        parseInt(maxVideos) === opt.value
                           ? 'bg-accent/20 border-accent/40 text-accent-light shadow-sm'
                           : 'bg-surface border-border text-text-muted hover:text-text-secondary hover:border-border/80'
                       }`}
                     >
-                      {opt}
+                      {opt.label}
                     </button>
                   ))}
                 </div>
-                <input
-                  type="number"
-                  min="1"
-                  max="500"
-                  value={maxVideos}
-                  onChange={(e) => setMaxVideos(Math.min(500, Math.max(1, parseInt(e.target.value) || 1)))}
-                  className="w-full px-3 py-1.5 bg-surface border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent/50"
-                  placeholder="Hoặc nhập số tuỳ ý (tối đa 500)"
-                />
-                <p className="text-[10px] text-text-muted mt-1.5 leading-relaxed">
-                  Video xử lý theo đợt 10/đợt. Dùng "Tải thêm" để lấy tiếp sau khi xong.
+                <p className="text-[10px] text-text-muted mt-2 leading-relaxed">
+                  💡 Video được xử lý theo đợt (10 video/đợt) để tối ưu hiệu suất
                 </p>
               </div>
               <div>
@@ -827,25 +761,6 @@ export default function BulkContent() {
                 {isRetrying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
                 {isRetrying ? 'Đang thêm lại hàng đợi...' : `Thử lại ${totalData.failed} job lỗi`}
               </button>
-            </div>
-          )}
-
-          {/* Load More Button — channel pagination */}
-          {allDone && channelContext && (
-            <div className="mt-3 flex items-center gap-3">
-              <button
-                onClick={handleLoadMore}
-                disabled={isSubmitting}
-                className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold bg-accent/10 text-accent-light border border-accent/30 hover:bg-accent/20 transition-all disabled:opacity-50 cursor-pointer"
-              >
-                {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-                {isSubmitting
-                  ? 'Đang tải...'
-                  : `Tải thêm ${channelContext.maxVideos} video tiếp theo (từ #${channelContext.nextStart})`}
-              </button>
-              <span className="text-[10px] text-text-muted">
-                Đã tải: video 1 – {channelContext.nextStart - 1}
-              </span>
             </div>
           )}
 

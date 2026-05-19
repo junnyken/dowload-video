@@ -68,7 +68,6 @@ class BulkDownloadRequest(BaseModel):
     channel_mode: Optional[bool] = False
     max_videos: Optional[int] = 100
     min_views: Optional[int] = 0
-    playlist_start: Optional[int] = 1
     quality: Optional[str] = "video"
     remove_watermark: Optional[bool] = False
 
@@ -212,8 +211,7 @@ async def bulk_download(payload: BulkDownloadRequest, request: Request):
                 # Dispatch scraping to Celery background
                 # Hard limit max_videos to prevent scraping abuse (max 500)
                 safe_max_videos = min(payload.max_videos or 100, 500)
-                safe_playlist_start = max(payload.playlist_start or 1, 1)
-                scrape_channel_task.delay(url, batch_id, channel_job_id, safe_max_videos, payload.min_views, user_id, safe_playlist_start)
+                scrape_channel_task.delay(url, batch_id, channel_job_id, safe_max_videos, payload.min_views, user_id)
                 channel_count += 1
 
             else:

@@ -1150,15 +1150,14 @@ def _scrape_douyin_channel(channel_url: str, max_videos: int = 20) -> Dict[str, 
     }
 
 
-def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 100, min_views: int = 0, playlist_start: int = 1) -> Dict[str, Any]:
+def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 100, min_views: int = 0) -> Dict[str, Any]:
     """
     Scrape a channel or playlist URL to get a flat list of video entries
     WITHOUT downloading or fully processing each video.
     Filters by view_count and limits to max_videos.
-    playlist_start: 1-based index of the first video to fetch (for pagination).
-
-    NOTE: process=True is REQUIRED for YouTube channels to trigger
-    InnerTube continuation token pagination. With process=False,
+    
+    NOTE: process=True is REQUIRED for YouTube channels to trigger 
+    InnerTube continuation token pagination. With process=False, 
     yt-dlp only returns the first ~20 items from the initial page load.
     """
     # ── Step 0: Unshorten short links ────────────────────────
@@ -1178,10 +1177,9 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 100, min_vi
     opts = _get_base_opts(channel_url, phase="metadata")
     # extract_flat gives us the video list without resolving each video's streams
     opts["extract_flat"] = "in_playlist"
-    # playliststart/end implement pagination: fetch exactly the requested window
-    # plus a small buffer to survive view-count filtering dropping some entries
-    opts["playliststart"] = playlist_start
-    opts["playlistend"] = playlist_start + max_videos + 49  # +49 buffer for view filtering
+    # Limit how many entries yt-dlp fetches to avoid excessive API calls
+    # playlistend caps pagination so we don't fetch thousands of videos
+    opts["playlistend"] = max_videos + 50  # fetch extra to allow for view filtering
     opts["ignoreerrors"] = True  # skip private/deleted videos without crashing
     opts = _apply_tiktok_opts(opts, channel_url)
 
@@ -1210,8 +1208,7 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 100, min_vi
                 fallback_opts = _get_base_opts(channel_url, phase="download")  # no proxy for API
                 fallback_opts["extract_flat"] = "in_playlist"
                 fallback_opts["enable_file_urls"] = True
-                fallback_opts["playliststart"] = playlist_start
-                fallback_opts["playlistend"] = playlist_start + max_videos + 49
+                fallback_opts["playlistend"] = max_videos + 50
                 fallback_opts = _apply_tiktok_opts(fallback_opts, channel_url)
 
                 # Fix for Windows paths in yt-dlp
@@ -1284,12 +1281,11 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 100, min_vi
     }
 
 
-def scrape_channel_entries_sync(channel_url: str, max_videos: int = 100, min_views: int = 0, playlist_start: int = 1) -> Dict[str, Any]:
+def scrape_channel_entries_sync(channel_url: str, max_videos: int = 100, min_views: int = 0) -> Dict[str, Any]:
     """
     Public entry point with HARD TIMEOUT for channel scraping.
     Wraps the actual scraping in a thread with a timeout cap.
     YouTube pagination for large channels may need 60-90s.
-    playlist_start: 1-based index for pagination ("load more" batches).
     """
     try:
         # Douyin channels need longer timeout due to ScraperAPI JS rendering
@@ -1297,7 +1293,7 @@ def scrape_channel_entries_sync(channel_url: str, max_videos: int = 100, min_vie
         timeout = 90 if is_douyin else 120  # YouTube pagination needs more time for large channels
         return _run_with_timeout(
             _scrape_channel_entries_impl,
-            args=(channel_url, max_videos, min_views, playlist_start),
+            args=(channel_url, max_videos, min_views),
             timeout=timeout,
         )
     except TimeoutError as e:
@@ -1305,9 +1301,9 @@ def scrape_channel_entries_sync(channel_url: str, max_videos: int = 100, min_vie
         raise ValueError(str(e))
 
 
-async def scrape_channel_entries(channel_url: str, max_videos: int = 100, min_views: int = 0, playlist_start: int = 1) -> Dict[str, Any]:
+async def scrape_channel_entries(channel_url: str, max_videos: int = 100, min_views: int = 0) -> Dict[str, Any]:
     """Async wrapper for channel scraping."""
-    return await asyncio.to_thread(scrape_channel_entries_sync, channel_url, max_videos, min_views, playlist_start)
+    return await asyncio.to_thread(scrape_channel_entries_sync, channel_url, max_videos, min_views)
 
 
 # ── URL Classification Helper ───────────────────────────────────────
