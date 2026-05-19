@@ -51,6 +51,7 @@ export default function DashboardContent() {
   const [zipProgress, setZipProgress] = useState(0);
   const [removeWatermark, setRemoveWatermark] = useState(true);
   const [downloadSubs, setDownloadSubs] = useState(false);
+  const [selectedTracks, setSelectedTracks] = useState(new Set());
   const cancelZipRef = useRef(false);
   const previewRef = useRef(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -83,6 +84,28 @@ export default function DashboardContent() {
         if (data.success && data.jobs) setRecentDownloads(data.jobs);
       }).catch(() => {});
   }, []);
+
+  // Reset track selection when the Spotify album/playlist changes
+  useEffect(() => {
+    setSelectedTracks(new Set());
+  }, [spotifyData]);
+
+  const handleToggleTrack = (key) => {
+    setSelectedTracks(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const handleToggleAll = () => {
+    if (!spotifyData?.tracks) return;
+    const allKeys = spotifyData.tracks.map(t => t.search_query);
+    setSelectedTracks(prev =>
+      prev.size === allKeys.length ? new Set() : new Set(allKeys)
+    );
+  };
 
   const handleDeleteJob = async (jobId) => {
     try {
@@ -215,74 +238,84 @@ export default function DashboardContent() {
   };
 
   const handleDownloadAllZip = async () => {
-    if (!spotifyData || !spotifyData.tracks) return;
+    if (!spotifyData?.tracks) return;
+
+    const allTracks = spotifyData.tracks;
+    const tracksToDownload = selectedTracks.size > 0
+      ? allTracks.filter(t => selectedTracks.has(t.search_query))
+      : allTracks;
+    if (tracksToDownload.length === 0) return;
+
     setIsZipping(true);
     setZipProgress(0);
     cancelZipRef.current = false;
     const zip = new JSZip();
-    const tracks = spotifyData.tracks;
-    
-    try {
-      showToast("Đang bắt đầu tải và nén ZIP...");
-      for (let i = 0; i < tracks.length; i++) {
-        if (cancelZipRef.current) {
-          showToast("Đã hủy quá trình tải ZIP.");
-          break;
-        }
-        
-        const track = tracks[i];
-        setZipProgress(Math.round(((i) / tracks.length) * 100));
-        
-        let downloadUrl = null;
-        const ext = 'mp3';
-        
-        if (track.direct_mp4_url) {
-          downloadUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(track.direct_mp4_url)}&filename=temp&ext=mp3`;
+    let done = 0;
+    let failed = 0;
+
+    const downloadTrack = async (track, idx) => {
+      if (cancelZipRef.current) return;
+      const key = track.search_query;
+      setTrackDownloads(prev => ({ ...prev, [key]: 'loading' }));
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/fetch-link`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: key, quality: 'mp3_128' }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.detail || 'Fetch thất bại');
+
+        const localPath = data.local_mp3_path || data.local_file_path;
+        let downloadUrl;
+        if (localPath) {
+          downloadUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=temp.mp3`;
+        } else if (data.direct_mp4_url) {
+          downloadUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(data.direct_mp4_url)}&filename=temp&ext=mp3`;
         } else {
-          // Fetch link if missing
-          const res = await fetch(`${API_BASE}/api/v1/fetch-link`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: track.search_query, quality: 'mp3_320', remove_watermark: true }),
-          });
-          const data = await res.json();
-          if (data.success) {
-            const localPath = data.local_mp3_path || data.local_file_path;
-            if (localPath) {
-              downloadUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=temp.mp3`;
-            } else if (data.direct_mp4_url) {
-              downloadUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(data.direct_mp4_url)}&filename=temp&ext=mp3`;
-            }
-          }
-        }
-        
-        if (cancelZipRef.current) {
-          showToast("Đã hủy quá trình tải ZIP.");
-          break;
+          throw new Error('Không có URL tải');
         }
 
-        if (downloadUrl) {
-          const response = await fetch(downloadUrl);
-          if (response.ok) {
-            const blob = await response.blob();
-            const safeName = `${track.name} - ${track.artist_str}`.replace(/[/\\?%*:|"<>]/g, '-');
-            zip.file(`${safeName}.${ext}`, blob);
-            setTrackDownloads(prev => ({ ...prev, [track.search_query]: 'done' }));
-          } else {
-            setTrackDownloads(prev => ({ ...prev, [track.search_query]: 'error' }));
-          }
-        } else {
-          setTrackDownloads(prev => ({ ...prev, [track.search_query]: 'error' }));
-        }
+        const fileResp = await fetch(downloadUrl);
+        if (!fileResp.ok) throw new Error('Tải file thất bại');
+        const blob = await fileResp.blob();
+
+        const num = String(idx + 1).padStart(2, '0');
+        const safeName = `${num}. ${track.name} - ${track.artist_str}`.replace(/[/\\?%*:|"<>]/g, '-');
+        zip.file(`${safeName}.mp3`, blob);
+        setTrackDownloads(prev => ({ ...prev, [key]: 'done' }));
+        done++;
+      } catch {
+        setTrackDownloads(prev => ({ ...prev, [key]: 'error' }));
+        failed++;
       }
-      
+      setZipProgress(Math.round(((done + failed) / tracksToDownload.length) * 100));
+    };
+
+    try {
+      showToast(`Đang tải ${tracksToDownload.length} bài nhạc...`);
+
+      // Process 2 tracks concurrently
+      for (let i = 0; i < tracksToDownload.length; i += 2) {
+        if (cancelZipRef.current) { showToast('Đã hủy quá trình tải ZIP.'); break; }
+        const batch = tracksToDownload.slice(i, i + 2);
+        await Promise.allSettled(batch.map((t, j) => downloadTrack(t, i + j)));
+      }
+
       if (!cancelZipRef.current) {
+        if (done === 0) {
+          showToast('Không có bài nào tải được. Vui lòng thử lại.');
+          return;
+        }
         setZipProgress(100);
-        showToast("Đang tạo file ZIP, vui lòng chờ...");
-        const content = await zip.generateAsync({ type: "blob" });
-        const safePlaylistName = (spotifyData.playlist_name || spotifyData.album_name || "Playlist").replace(/[/\\?%*:|"<>]/g, '-');
+        showToast('Đang nén ZIP, vui lòng chờ...');
+        const content = await zip.generateAsync({ type: 'blob' });
+        const safePlaylistName = (spotifyData.playlist_name || spotifyData.album_name || 'Playlist').replace(/[/\\?%*:|"<>]/g, '-');
         saveAs(content, `${safePlaylistName}.zip`);
-        showToast("Tải ZIP thành công!");
+        showToast(failed > 0
+          ? `Xong! ${done}/${tracksToDownload.length} bài (${failed} bài lỗi).`
+          : `Tải ZIP thành công! ${done} bài nhạc.`
+        );
       }
     } catch (err) {
       showToast(`Lỗi tạo ZIP: ${err.message}`);
@@ -1358,26 +1391,40 @@ export default function DashboardContent() {
               </button>
             </div>
             
-            {/* Download All (ZIP) Button */}
+            {/* Download All / Selected (ZIP) Button */}
             {(spotifyData.tracks && spotifyData.tracks.length > 0) && (
-              <div className="flex justify-end px-2 mb-2 gap-2">
-                <button
-                  onClick={handleDownloadAllZip}
-                  disabled={isZipping}
-                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] text-sm font-bold rounded-xl shadow-lg hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100"
-                >
-                  {isZipping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                  {isZipping ? `Đang tải & Nén... ${zipProgress}%` : `Tải tất cả (.ZIP)`}
-                </button>
-                {isZipping && (
-                  <button
-                    onClick={handleCancelZip}
-                    className="flex items-center justify-center w-9 h-9 bg-red-500/20 text-red-400 hover:bg-red-500/40 hover:text-white rounded-xl transition-all"
-                    title="Hủy nén ZIP"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
+              <div className="flex justify-between items-center px-2 mb-2 gap-2">
+                {selectedTracks.size > 0 ? (
+                  <span className="text-xs text-emerald-400 font-medium">
+                    Đã chọn {selectedTracks.size}/{spotifyData.tracks.length} bài
+                  </span>
+                ) : (
+                  <span className="text-xs text-slate-500">Chọn bài hoặc tải tất cả</span>
                 )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleDownloadAllZip}
+                    disabled={isZipping}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] text-sm font-bold rounded-xl shadow-lg hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100"
+                  >
+                    {isZipping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    {isZipping
+                      ? `Đang tải & Nén... ${zipProgress}%`
+                      : selectedTracks.size > 0
+                        ? `Tải ${selectedTracks.size} bài (.ZIP)`
+                        : `Tải tất cả (.ZIP)`
+                    }
+                  </button>
+                  {isZipping && (
+                    <button
+                      onClick={handleCancelZip}
+                      className="flex items-center justify-center w-9 h-9 bg-red-500/20 text-red-400 hover:bg-red-500/40 hover:text-white rounded-xl transition-all"
+                      title="Hủy nén ZIP"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1386,6 +1433,15 @@ export default function DashboardContent() {
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="sticky top-0 bg-slate-900/90 backdrop-blur-md text-slate-400 text-xs font-semibold uppercase tracking-wider z-10">
                   <tr>
+                    <th className="px-3 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={spotifyData.tracks?.length > 0 && selectedTracks.size === spotifyData.tracks.length}
+                        onChange={handleToggleAll}
+                        className="w-4 h-4 accent-emerald-500 rounded cursor-pointer"
+                        title="Chọn tất cả"
+                      />
+                    </th>
                     <th className="px-4 py-3 w-12">#</th>
                     <th className="px-4 py-3">Bài hát</th>
                     <th className="px-4 py-3">Ca sĩ</th>
@@ -1397,8 +1453,17 @@ export default function DashboardContent() {
                   {(spotifyData.tracks || []).map((track, i) => {
                     const key = track.search_query;
                     const dlState = trackDownloads[key];
+                    const isSelected = selectedTracks.has(key);
                     return (
-                      <tr key={i} className="hover:bg-slate-700/30 transition-colors group">
+                      <tr key={i} className={`hover:bg-slate-700/30 transition-colors group ${isSelected ? 'bg-emerald-900/20' : ''}`}>
+                        <td className="px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleTrack(key)}
+                            className="w-4 h-4 accent-emerald-500 rounded cursor-pointer"
+                          />
+                        </td>
                         <td className="px-4 py-3 text-slate-500 font-medium">
                           {track.thumbnail ? (
                             <img src={track.thumbnail} alt="" className="w-8 h-8 rounded object-cover shadow-sm" />
