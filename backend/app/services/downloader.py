@@ -236,33 +236,39 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         opts["proxy"] = proxy
 
     if "youtube.com" in url.lower() or "youtu.be" in url.lower():
-        # Multi-client fallback chain — yt-dlp tries each in order, stops at first success:
+        # ── PO Token Provider Config ──────────────────────────────────
+        # YouTube requires Proof-of-Origin tokens since 2025.
+        # bgutil-pot sidecar (Docker) generates these automatically.
+        # Without PO tokens, ALL player clients return LOGIN_REQUIRED.
+        bgutil_url = os.getenv("BGUTIL_POT_URL", "")
+        
+        # Player client chain — order matters, yt-dlp tries each in sequence:
         #
-        # 1. android_vr   — Primary. Bypasses SABR without cookies; returns full DASH
-        #                   adaptive streams (1080p–4K). Vulnerable when YouTube updates
-        #                   signature algo or deprecates VR API endpoint.
+        # 1. web         — Primary. With PO Token, web client returns full DASH
+        #                  adaptive streams (1080p–4K). PO tokens work best here.
         #
-        # 2. ios          — Secondary. iOS app client; Apple ecosystem gets different CDN
-        #                   routing and separate rate-limit buckets from Android. Good
-        #                   fallback when android_vr is throttled or signature-broken.
+        # 2. web_safari  — Secondary. Safari-specific web player; separate n-challenge
+        #                  path, sometimes bypasses detection that blocks standard web.
         #
-        # 3. tv_embedded  — Tertiary. Smart TV embedded player endpoint; entirely separate
-        #                   from mobile/web APIs. Bypasses most SABR rules because TV
-        #                   embeds are expected to stream high-res without auth.
+        # 3. android_vr  — Tertiary. Android VR app client; used to be the best
+        #                  SABR bypass but now usually blocked without PO token.
         #
-        # 4. web_embedded — Last resort before Cobalt. Embedded iframe player; less
-        #                   restricted than web_creator/mweb but requires more overhead.
-        #                   Still returns DASH streams for most content.
+        # 4. mweb        — Last resort. Mobile web client; minimal but still
+        #                  returns DASH streams for most content.
         #
         # Cobalt API (cobalt_service.py) is the final safety net beyond this chain.
-        opts["extractor_args"] = {
-            "youtube": {
-                # Full fallback chain: android_vr bypasses SABR best; tv is a separate
-                # endpoint that sometimes avoids bot detection; web_safari bypasses n-challenge
-                # differently; web_embedded and mweb as last yt-dlp resorts before Cobalt.
-                "player_client": ["android_vr", "tv", "ios", "web_safari", "tv_embedded", "web_embedded", "mweb"]
-            }
+        yt_extractor_args = {
+            "player_client": ["web", "web_safari", "android_vr", "mweb"]
         }
+        
+        # Configure PO Token provider if bgutil-pot sidecar is available
+        opts["extractor_args"] = {"youtube": yt_extractor_args}
+        if bgutil_url:
+            # bgutil HTTP plugin reads base_url from 'youtubepot-bgutilhttp' extractor args
+            opts["extractor_args"]["youtubepot-bgutilhttp"] = {
+                "base_url": [bgutil_url]
+            }
+            print(f"[Downloader] PO Token provider: bgutil-pot @ {bgutil_url}")
         # Prioritize resolution, then codec compatibility, then bitrate
         opts["format_sort"] = ["res", "ext:mp4:m4a", "tbr", "vbr", "abr", "asr"]
 
@@ -728,7 +734,11 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             actual_mb = (dl.get("filesize") or 0) / (1024 * 1024)
             print(f"[Downloader] yt-dlp downloaded: {actual_h}p, {actual_mb:.1f}MB, format={dl.get('format_id','?')}")
     except Exception as primary_err:
-        print(f"[Downloader] Primary extraction failed for {url}: {primary_err}")
+        primary_err_str = str(primary_err)
+        print(f"[Downloader] Primary extraction failed for {url}: {primary_err_str}")
+        # Detect YouTube bot detection specifically for better logging
+        if is_youtube_url and ("Sign in to confirm" in primary_err_str or "LOGIN_REQUIRED" in primary_err_str):
+            print("[Downloader] YouTube bot detection confirmed — PO Token may be missing or expired")
 
     # ── Phase 1.5a: YouTube SABR Recovery via Cobalt (safety net) ──────
     # With android_vr client, SABR is usually bypassed successfully.
@@ -927,6 +937,14 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             info = asyncio.run(_try_instagram_embed(url))
 
     if info is None:
+        # Provide more specific error messages based on platform
+        if is_youtube_url:
+            raise ValueError(
+                "Không thể tải video YouTube. YouTube đang chặn bot — "
+                "vui lòng thử lại sau 30 giây. "
+                "Nếu lỗi tiếp tục, video có thể bị xoá, giới hạn vùng (geo-block), "
+                "hoặc yêu cầu đăng nhập."
+            )
         raise ValueError("Không thể trích xuất thông tin. Vui lòng kiểm tra lại xem link có bị thiếu chữ/số, sai định dạng hoặc video bị cài đặt riêng tư không.")
 
     direct_url, filesize = _extract_best_url(info)

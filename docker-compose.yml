@@ -6,8 +6,15 @@ services:
     volumes:
       - redis-data:/data
 
+  # PO Token provider — generates YouTube Proof-of-Origin tokens
+  # Required since May 2025: YouTube blocks ALL yt-dlp player clients
+  # without a valid PO token (LOGIN_REQUIRED / bot detection).
+  bgutil-pot:
+    image: ghcr.io/jim60105/bgutil-pot:latest
+    restart: unless-stopped
+
   cobalt-api:
-    image: ghcr.io/imputnet/cobalt:11
+    image: ghcr.io/imputnet/cobalt:latest
     restart: unless-stopped
     environment:
       - API_URL=http://cobalt-api:9000
@@ -25,12 +32,14 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - COBALT_API_URL=http://cobalt-api:9000
+      - BGUTIL_POT_URL=http://bgutil-pot:4416
       - VIDEO_INFO_CACHE_TTL=600
       - DOWNLOADS_MAX_GB=10
       - DAILY_QUOTA_PER_IP=50
     depends_on:
       - redis
       - cobalt-api
+      - bgutil-pot
     volumes:
       - downloads:/app/downloads
 
@@ -45,10 +54,12 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - COBALT_API_URL=http://cobalt-api:9000
+      - BGUTIL_POT_URL=http://bgutil-pot:4416
       - DOWNLOADS_MAX_GB=10
     depends_on:
       - redis
       - backend
+      - bgutil-pot
     volumes:
       - downloads:/app/downloads
 

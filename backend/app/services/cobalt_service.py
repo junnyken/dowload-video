@@ -31,20 +31,23 @@ AUDIO_PRESETS = [
 
 
 def is_cobalt_available() -> bool:
-    """Check if local Cobalt instance is running."""
+    """Check if local Cobalt instance is running and responsive."""
     try:
-        r = httpx.get(COBALT_API_URL, timeout=3.0)
+        r = httpx.get(COBALT_API_URL, timeout=5.0)
         if r.status_code != 200:
             return False
-        data = r.json()
-        # Cobalt v11: {"cobalt": {"services": ["youtube", ...]}, ...}
-        # Permissive check: accept if services list includes youtube OR if response is valid JSON (Cobalt is up)
-        services = data.get("cobalt", {}).get("services", [])
-        if services:
-            return "youtube" in services
-        # Fallback: any valid JSON response from Cobalt means it's running
-        return "cobalt" in data or "version" in data or r.status_code == 200
-    except Exception:
+        # Accept any valid JSON response from Cobalt as "available"
+        # Cobalt v10+: {"cobalt": {"services": [...]}, ...}
+        # Cobalt latest: may have different structure
+        try:
+            data = r.json()
+            # If we got valid JSON from the Cobalt URL, it's running
+            return True
+        except Exception:
+            # Non-JSON response but HTTP 200 — still consider it available
+            return True
+    except Exception as e:
+        print(f"[Cobalt] Health check failed: {e}")
         return False
 
 
