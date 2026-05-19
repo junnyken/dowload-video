@@ -34,8 +34,16 @@ def is_cobalt_available() -> bool:
     """Check if local Cobalt instance is running."""
     try:
         r = httpx.get(COBALT_API_URL, timeout=3.0)
+        if r.status_code != 200:
+            return False
         data = r.json()
-        return "cobalt" in data and "youtube" in data.get("cobalt", {}).get("services", [])
+        # Cobalt v11: {"cobalt": {"services": ["youtube", ...]}, ...}
+        # Permissive check: accept if services list includes youtube OR if response is valid JSON (Cobalt is up)
+        services = data.get("cobalt", {}).get("services", [])
+        if services:
+            return "youtube" in services
+        # Fallback: any valid JSON response from Cobalt means it's running
+        return "cobalt" in data or "version" in data or r.status_code == 200
     except Exception:
         return False
 

@@ -257,7 +257,10 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         # Cobalt API (cobalt_service.py) is the final safety net beyond this chain.
         opts["extractor_args"] = {
             "youtube": {
-                "player_client": ["android_vr", "ios", "tv_embedded", "web_embedded"]
+                # Full fallback chain: android_vr bypasses SABR best; tv is a separate
+                # endpoint that sometimes avoids bot detection; web_safari bypasses n-challenge
+                # differently; web_embedded and mweb as last yt-dlp resorts before Cobalt.
+                "player_client": ["android_vr", "tv", "ios", "web_safari", "tv_embedded", "web_embedded", "mweb"]
             }
         }
         # Prioritize resolution, then codec compatibility, then bitrate

@@ -153,7 +153,14 @@ async def fetch_link(payload: FetchLinkRequest, request: Request):  # noqa: ARG0
             "cached": False
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        msg = str(e)
+        if "video unavailable" in msg.lower() or "unavailable" in msg.lower():
+            msg = "🚫 Video không khả dụng — có thể đã bị xóa, giới hạn vùng (geo-block), hoặc bị ẩn."
+        elif "sign in" in msg.lower() or "bot" in msg.lower():
+            msg = "🤖 YouTube yêu cầu xác thực. Đang thử kênh dự phòng... Vui lòng thử lại sau 30 giây."
+        elif "private" in msg.lower():
+            msg = "🔒 Video ở chế độ riêng tư, không thể tải."
+        raise HTTPException(status_code=500, detail=msg)
 
 
 # ── POST /bulk-download  (videos + channels) ────────────────────────
