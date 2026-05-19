@@ -115,7 +115,7 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
 
 
 @celery_app.task(name="scrape_channel_task", bind=True)
-def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: str, max_videos: int = 100, min_views: int = 0, user_id: Optional[str] = None):
+def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: str, max_videos: int = 100, min_views: int = 0, user_id: Optional[str] = None, playlist_start: int = 1):
     """
     Scrape a channel/playlist URL with wave-based processing:
     
@@ -140,7 +140,7 @@ def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: s
             "error_message": f"Đang quét kênh — tìm kiếm tối đa {max_videos} video...",
         }).eq("id", channel_job_id).execute()
 
-        result = scrape_channel_entries_sync(channel_url, max_videos, min_views)
+        result = scrape_channel_entries_sync(channel_url, max_videos, min_views, playlist_start)
         entries = result.get("entries", [])
         total_found = result.get("total_found", 0)
         total_queued = result.get("total_queued", 0)
