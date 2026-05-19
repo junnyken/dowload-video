@@ -57,7 +57,7 @@ _INSTAGRAM_MOBILE_UA = (
 from app.core.proxy_manager import get_proxy_config_for_phase, dispatch_scraping_request
 from app.utils.link_resolver import resolve_short_url, is_douyin_url
 from app.services.douyin_extractor import extract_douyin_video_sync, _try_tikwm
-from app.services.cobalt_service import is_cobalt_available, extract_youtube_formats_via_cobalt, download_from_cobalt, download_instagram_via_cobalt
+from app.services.cobalt_service import is_cobalt_available, extract_youtube_formats_via_cobalt, download_from_cobalt, download_instagram_via_cobalt, fetch_cobalt_stream
 
 # Ensure Deno is discoverable for yt-dlp JS challenges
 _deno_bin = os.path.join(os.path.expanduser("~"), ".deno", "bin")
@@ -764,6 +764,102 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                         print("[Downloader] Cobalt fallback failed — keeping yt-dlp result")
                 else:
                     print("[Downloader] Cobalt not available for SABR recovery")
+
+    # ── Phase 1.5b-YT: YouTube total bot-block → Cobalt primary download ─
+    # yt-dlp is fully blocked by YouTube bot detection (all clients failed).
+    # Cobalt manages its own PO tokens internally and can bypass detection.
+    # This fires when info is None AND url is YouTube.
+    if info is None and is_youtube_url:
+        print("[Downloader] YouTube bot detection — trying Cobalt as primary downloader...")
+        if is_cobalt_available():
+            # Pick Cobalt download mode & quality based on requested quality
+            if quality.startswith("mp3") or quality.startswith("audio_"):
+                cobalt_resp = fetch_cobalt_stream(url, download_mode="audio", audio_format="mp3", audio_bitrate="128")
+                cobalt_ext = "mp3"
+            elif quality == "video_4k":
+                cobalt_resp = fetch_cobalt_stream(url, video_quality="2160", download_mode="auto")
+                cobalt_ext = "mp4"
+                if cobalt_resp.get("status") == "error":
+                    cobalt_resp = fetch_cobalt_stream(url, video_quality="1080", download_mode="auto")
+            elif quality.startswith("video_") and "_" in quality:
+                try:
+                    h = quality.split("_")[1]
+                    cobalt_resp = fetch_cobalt_stream(url, video_quality=h, download_mode="auto")
+                except Exception:
+                    cobalt_resp = fetch_cobalt_stream(url, video_quality="1080", download_mode="auto")
+                cobalt_ext = "mp4"
+            else:
+                cobalt_resp = fetch_cobalt_stream(url, video_quality="1080", download_mode="auto")
+                cobalt_ext = "mp4"
+
+            cobalt_status = cobalt_resp.get("status", "error")
+            cobalt_stream_url = cobalt_resp.get("url")
+
+            if cobalt_status != "error" and cobalt_stream_url:
+                import uuid as _uuid
+                raw_name = cobalt_resp.get("filename", f"cobalt_{_uuid.uuid4().hex[:8]}.{cobalt_ext}")
+                cobalt_path = os.path.join(DOWNLOAD_DIR, os.path.basename(raw_name))
+                try:
+                    with httpx.Client(timeout=600.0, follow_redirects=True) as _client:
+                        with _client.stream("GET", cobalt_stream_url) as _resp:
+                            _resp.raise_for_status()
+                            with open(cobalt_path, "wb") as _f:
+                                for _chunk in _resp.iter_bytes(chunk_size=65536):
+                                    if _chunk:
+                                        _f.write(_chunk)
+
+                    file_size = os.path.getsize(cobalt_path) if os.path.exists(cobalt_path) else 0
+                    if file_size > 0:
+                        print(f"[Cobalt] Primary download OK: {file_size/(1024*1024):.1f}MB → {cobalt_path}")
+
+                        # Title + thumbnail via YouTube oEmbed (no bot-protection)
+                        _title = "YouTube Video"
+                        _thumb = ""
+                        try:
+                            _vid_m = re.search(r"(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})", url)
+                            if _vid_m:
+                                _oe = httpx.get(
+                                    f"https://www.youtube.com/oembed?url=https://youtu.be/{_vid_m.group(1)}&format=json",
+                                    timeout=5.0,
+                                )
+                                if _oe.status_code == 200:
+                                    _oe_data = _oe.json()
+                                    _title = _oe_data.get("title", _title)
+                                    _thumb = _oe_data.get("thumbnail_url", "")
+                        except Exception:
+                            pass
+
+                        _cobalt_result = {
+                            "title": _title,
+                            "thumbnail_url": _thumb,
+                            "direct_mp4_url": None,
+                            "local_file_path": cobalt_path,
+                            "file_size_mb": round(file_size / (1024 * 1024), 2),
+                            "quality": quality,
+                            "original_url": url,
+                            "duration": 0,
+                            "available_formats": [],
+                            "max_merge_height": 0,
+                            "downloaded_height": 1080 if cobalt_ext == "mp4" else 0,
+                            "chapters": [],
+                        }
+                        if cobalt_ext == "mp3":
+                            _cobalt_result["local_mp3_path"] = cobalt_path
+                        return _cobalt_result
+                    else:
+                        print("[Cobalt] Primary download: file empty, skipping")
+                        if os.path.exists(cobalt_path):
+                            try: os.remove(cobalt_path)
+                            except: pass
+                except Exception as _ce:
+                    print(f"[Cobalt] Primary download error: {_ce}")
+                    if os.path.exists(cobalt_path):
+                        try: os.remove(cobalt_path)
+                        except: pass
+            else:
+                print(f"[Cobalt] Primary fallback failed: status={cobalt_status}, err={cobalt_resp.get('error', {})}")
+        else:
+            print("[Downloader] Cobalt not available for YouTube bot recovery")
 
     # ── Phase 1.5b: TikWM fallback (yt-dlp failed, TikWM not yet tried) ─
     # Reaches here only if TikWM was skipped (non-tiktok) or yt-dlp failed
