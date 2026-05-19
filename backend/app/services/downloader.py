@@ -716,6 +716,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     # Force server-side download for FFmpeg merging (HD/4K quality)
     # Only "video_fast" mode skips download (returns direct pre-merged URL for browser)
     is_tiktok = "tiktok.com" in url.lower()
+    is_youtube_url = "youtube.com" in url.lower() or "youtu.be" in url.lower()
     should_download = quality != "video_fast" or is_tiktok
 
     info = None
@@ -736,7 +737,6 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     except Exception as primary_err:
         primary_err_str = str(primary_err)
         print(f"[Downloader] Primary extraction failed for {url}: {primary_err_str}")
-        # Detect YouTube bot detection specifically for better logging
         if is_youtube_url and ("Sign in to confirm" in primary_err_str or "LOGIN_REQUIRED" in primary_err_str):
             print("[Downloader] YouTube bot detection confirmed — PO Token may be missing or expired")
 
@@ -744,7 +744,6 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     # With android_vr client, SABR is usually bypassed successfully.
     # This Cobalt fallback is kept as safety net in case android_vr stops working.
     # Detect quality downgrade and replace the file using Cobalt's tunnel.
-    is_youtube_url = "youtube.com" in url.lower() or "youtu.be" in url.lower()
     if is_youtube_url and should_download and info and quality.startswith("video_") and "_" in quality:
         try:
             target_height = int(quality.split("_")[1])
