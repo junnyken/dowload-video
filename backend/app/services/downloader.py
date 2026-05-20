@@ -27,37 +27,82 @@ import concurrent.futures
 from typing import Dict, Any, List
 import httpx
 
-# ── Platform cookies (optional) ──────────────────────────────────────
-# Set <PLATFORM>_COOKIES_B64 env var to a base64-encoded Netscape cookies.txt
-# from a logged-in session. Drastically reduces bot detection and rate limiting.
+# ── Platform cookies ─────────────────────────────────────────────────
+# Source priority: Redis cookie pool → env var (single cookie fallback)
+# Pool: add via POST /admin/cookies/add  (multiple accounts, auto-rotate)
+# Env:  YOUTUBE_COOKIES_B64, TIKTOK_COOKIES_B64, etc. (single fallback)
 _INSTAGRAM_COOKIES_B64 = os.getenv("INSTAGRAM_COOKIES_B64", "")
 _YOUTUBE_COOKIES_B64   = os.getenv("YOUTUBE_COOKIES_B64", "")
 _TIKTOK_COOKIES_B64    = os.getenv("TIKTOK_COOKIES_B64", "")
 _FACEBOOK_COOKIES_B64  = os.getenv("FACEBOOK_COOKIES_B64", "")
 
+# Per-process cache: {platform: (cookie_b64, tmp_file_path)}
 _cookies_cache: dict[str, str | None] = {}
+_active_cookie_b64: dict[str, str] = {}
 
-def _get_cookies_file(platform: str, b64_value: str) -> str | None:
-    """Decode a base64 cookies string to a temp file, cached per platform."""
+
+def _get_cookies_file(platform: str, env_b64: str) -> str | None:
+    """
+    Get cookies temp file for a platform.
+    Tries Redis pool first (rotating), falls back to env var.
+    Result is cached per worker process — clears on block detection.
+    """
     if platform in _cookies_cache:
         path = _cookies_cache[platform]
         if path and os.path.exists(path):
             return path
-    if not b64_value:
+        # Stale cache entry — reset
+        _cookies_cache.pop(platform, None)
+        _active_cookie_b64.pop(platform, None)
+
+    # Pick cookie: pool first, env var fallback
+    b64_to_use = None
+    try:
+        from app.core.cookie_pool import get_cookie_from_pool
+        b64_to_use = get_cookie_from_pool(platform)
+    except Exception:
+        pass
+    if not b64_to_use:
+        b64_to_use = env_b64
+
+    if not b64_to_use:
         _cookies_cache[platform] = None
         return None
+
     try:
-        decoded = base64.b64decode(b64_value).decode("utf-8")
-        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, prefix=f"{platform}_cookies_")
+        decoded = base64.b64decode(b64_to_use).decode("utf-8")
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False, prefix=f"{platform}_cookies_"
+        )
         tmp.write(decoded)
         tmp.close()
         _cookies_cache[platform] = tmp.name
-        print(f"[Cookies] Loaded {platform} cookies → {tmp.name}")
+        _active_cookie_b64[platform] = b64_to_use
+        src = "pool" if b64_to_use != env_b64 else "env"
+        print(f"[Cookies] Loaded {platform} cookies ({src}) → {tmp.name}")
         return tmp.name
     except Exception as e:
         print(f"[Cookies] Failed to decode {platform} cookies: {e}")
         _cookies_cache[platform] = None
         return None
+
+
+def _rotate_cookie(platform: str) -> None:
+    """
+    Mark current cookie blocked, clear local cache.
+    Next request picks a fresh cookie from the pool.
+    """
+    b64 = _active_cookie_b64.get(platform)
+    if b64:
+        try:
+            from app.core.cookie_pool import mark_cookie_blocked
+            mark_cookie_blocked(platform, b64)
+        except Exception:
+            pass
+    _cookies_cache.pop(platform, None)
+    _active_cookie_b64.pop(platform, None)
+    print(f"[Cookies] Rotated {platform} cookie (block detected)")
+
 
 def _get_instagram_cookies_file() -> str | None:
     return _get_cookies_file("instagram", _INSTAGRAM_COOKIES_B64)
@@ -253,8 +298,24 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
     if needs_local_download:
         opts["outtmpl"] = os.path.join(DOWNLOAD_DIR, "%(id)s_%(format_id)s.%(ext)s")
 
-    # ── Hybrid Proxy Logic ───────────────────────────────────────
-    proxy = get_proxy_config_for_phase(url, phase=phase)
+    # ── Proxy: pool first (random residential), then existing proxy manager ──
+    proxy = None
+    try:
+        from app.core.proxy_pool import get_proxy_from_pool
+        _platform = (
+            "youtube"   if ("youtube.com" in url or "youtu.be" in url) else
+            "tiktok"    if "tiktok.com"   in url else
+            "facebook"  if "facebook.com" in url or "fb.watch" in url else
+            "instagram" if "instagram.com" in url else
+            "douyin"    if "douyin.com"   in url else
+            "twitter"   if "twitter.com"  in url or "x.com" in url else
+            "default"
+        )
+        proxy = get_proxy_from_pool(_platform)
+    except Exception:
+        pass
+    if not proxy:
+        proxy = get_proxy_config_for_phase(url, phase=phase)
     if proxy:
         opts["proxy"] = proxy
 
@@ -798,6 +859,18 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     except Exception as primary_err:
         primary_err_str = str(primary_err)
         print(f"[Downloader] Primary extraction failed for {url}: {primary_err_str}")
+        # Detect block signals → rotate cookie for this platform
+        _block_signals = ["sign in to confirm", "login_required", "rate limit",
+                          "too many requests", "429", "403", "bot", "captcha"]
+        if any(s in primary_err_str.lower() for s in _block_signals):
+            _platform_name = (
+                "youtube"   if is_youtube_url else
+                "tiktok"    if "tiktok.com"   in url else
+                "facebook"  if "facebook.com" in url else
+                "instagram" if "instagram.com" in url else None
+            )
+            if _platform_name:
+                _rotate_cookie(_platform_name)
         if is_youtube_url and ("Sign in to confirm" in primary_err_str or "LOGIN_REQUIRED" in primary_err_str):
             print("[Downloader] YouTube bot detection confirmed — PO Token may be missing or expired")
 

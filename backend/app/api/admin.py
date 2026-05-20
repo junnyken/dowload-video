@@ -638,3 +638,102 @@ def _classify_platform(url: str) -> str:
         return "ZIP"
     else:
         return "Other"
+
+
+# ═════════════════════════════════════════════════════════════════════
+# Cookie Pool Management
+# ═════════════════════════════════════════════════════════════════════
+
+class CookieAddRequest(BaseModel):
+    platform: str   # youtube | tiktok | facebook | instagram
+    cookies_b64: str  # base64-encoded Netscape cookies.txt
+
+class CookieRemoveRequest(BaseModel):
+    platform: str
+    index: int  # position in pool (0-based)
+
+
+@router.get("/cookies/status")
+async def cookie_pool_status(_=Depends(verify_admin)):
+    """Show healthy/blocked count per platform."""
+    try:
+        from app.core.cookie_pool import get_pool_status
+        return {"success": True, "pools": get_pool_status()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/cookies/add")
+async def cookie_pool_add(req: CookieAddRequest, _=Depends(verify_admin)):
+    """Add a cookie to the rotating pool for a platform."""
+    valid_platforms = {"youtube", "tiktok", "facebook", "instagram"}
+    if req.platform not in valid_platforms:
+        raise HTTPException(status_code=400, detail=f"Platform must be one of: {valid_platforms}")
+    if not req.cookies_b64.strip():
+        raise HTTPException(status_code=400, detail="cookies_b64 is required")
+    try:
+        from app.core.cookie_pool import add_cookie
+        new_size = add_cookie(req.platform, req.cookies_b64.strip())
+        return {"success": True, "platform": req.platform, "pool_size": new_size}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/cookies/remove")
+async def cookie_pool_remove(req: CookieRemoveRequest, _=Depends(verify_admin)):
+    """Remove a cookie by index from the pool."""
+    try:
+        from app.core.cookie_pool import remove_cookie
+        new_size = remove_cookie(req.platform, req.index)
+        return {"success": True, "platform": req.platform, "pool_size": new_size}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════
+# Proxy Pool Management
+# ═════════════════════════════════════════════════════════════════════
+
+class ProxyAddRequest(BaseModel):
+    platform: str   # youtube | tiktok | facebook | instagram | douyin | twitter | default
+    proxy_url: str  # http://user:pass@host:port
+
+class ProxyRemoveRequest(BaseModel):
+    platform: str
+    index: int
+
+
+@router.get("/proxies/status")
+async def proxy_pool_status(_=Depends(verify_admin)):
+    """Show proxy counts per platform (Redis + env fallback)."""
+    try:
+        from app.core.proxy_pool import get_pool_status
+        return {"success": True, "pools": get_pool_status()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/proxies/add")
+async def proxy_pool_add(req: ProxyAddRequest, _=Depends(verify_admin)):
+    """Add a proxy URL to the pool for a platform."""
+    if not req.proxy_url.strip():
+        raise HTTPException(status_code=400, detail="proxy_url is required")
+    if not req.proxy_url.startswith(("http://", "https://", "socks5://")):
+        raise HTTPException(status_code=400, detail="proxy_url must start with http://, https://, or socks5://")
+    try:
+        from app.core.proxy_pool import add_proxy
+        new_size = add_proxy(req.platform, req.proxy_url.strip())
+        return {"success": True, "platform": req.platform, "pool_size": new_size}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/proxies/remove")
+async def proxy_pool_remove(req: ProxyRemoveRequest, _=Depends(verify_admin)):
+    """Remove a proxy by index."""
+    try:
+        from app.core.proxy_pool import remove_proxy
+        new_size = remove_proxy(req.platform, req.index)
+        return {"success": True, "platform": req.platform, "pool_size": new_size}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
