@@ -55,8 +55,52 @@ FIVESIM_API_KEY = os.getenv("FIVESIM_API_KEY", "")
 TWOCAPTCHA_API_KEY = os.getenv("TWOCAPTCHA_API_KEY", "")
 ADMIN_API_URL = os.getenv("ADMIN_API_URL", "http://localhost:8000")
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
-# Residential proxy for phone verification (data-center IPs get QR code instead of SMS)
+
+# ── Proxy configuration (chọn 1 trong 3 mode) ─────────────────
+# Mode 1 — Webshare.io (đăng ký free tại webshare.io)
+WEBSHARE_USERNAME = os.getenv("WEBSHARE_USERNAME", "")
+WEBSHARE_PASSWORD = os.getenv("WEBSHARE_PASSWORD", "")
+
+# Mode 2 — SSH tunnel về nhà: chạy `ssh -D 1080 -N user@home-ip` trước
+# Để trống nếu không dùng, hoặc set: socks5://localhost:1080
+HOME_SSH_PROXY = os.getenv("HOME_SSH_PROXY", "")
+
+# Mode 3 — Custom proxy URL (ghi đè tất cả)
 THROWAWAY_PROXY = os.getenv("THROWAWAY_PROXY", "")
+
+
+def resolve_proxy(cli_proxy: Optional[str] = None) -> Optional[str]:
+    """
+    Tự động chọn proxy theo priority:
+      1. --proxy CLI arg (cao nhất)
+      2. THROWAWAY_PROXY env var
+      3. WEBSHARE_USERNAME + WEBSHARE_PASSWORD → rotating endpoint
+      4. HOME_SSH_PROXY env var (sau khi chạy ssh -D 1080)
+      5. None → dùng IP trực tiếp (phải là IP nhà / residential)
+    """
+    if cli_proxy:
+        return cli_proxy
+    if THROWAWAY_PROXY:
+        return THROWAWAY_PROXY
+    if WEBSHARE_USERNAME and WEBSHARE_PASSWORD:
+        # Webshare rotating residential proxy endpoint
+        return f"http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80"
+    if HOME_SSH_PROXY:
+        return HOME_SSH_PROXY
+    return None
+
+
+def proxy_label(proxy: Optional[str]) -> str:
+    """Hiển thị proxy label an toàn (ẩn password)."""
+    if not proxy:
+        return "không — chạy trực tiếp (cần IP nhà/residential)"
+    if "webshare.io" in proxy:
+        host = proxy.split("@")[-1] if "@" in proxy else proxy
+        return f"Webshare.io ({host})"
+    if "localhost" in proxy or "127.0.0.1" in proxy:
+        return f"SSH tunnel về nhà ({proxy})"
+    host = proxy.split("@")[-1] if "@" in proxy else proxy
+    return f"Custom ({host})"
 
 fake = Faker("en_US")
 
@@ -1078,16 +1122,16 @@ def main():
 
     # ── Tạo tài khoản ────────────────────────────────────────
     bal = fivesim.get_balance()
+    active_proxy = resolve_proxy(args.proxy)
     captcha_mode = "CapSolver (auto)" if args.captcha_key and args.captcha_key.startswith("CAP-") \
         else "2captcha (auto)" if args.captcha_key \
         else "bỏ qua (nếu CAPTCHA xuất hiện sẽ fail)"
-    proxy_display = args.proxy.split("@")[-1] if args.proxy and "@" in args.proxy else (args.proxy or "không (cần residential IP để nhận SMS)")
     print(f"💰 Số dư 5sim.net: ${bal:.4f}")
     print(f"🎯 Nền tảng: {args.platform}")
     print(f"🔢 Số tài khoản: {args.count}")
     print(f"🌍 Country: {args.country}")
     print(f"🤖 CAPTCHA: {captcha_mode}")
-    print(f"🌐 Proxy: {proxy_display}")
+    print(f"🌐 Proxy: {proxy_label(active_proxy)}")
     print(f"👀 Browser: {'headless (ẩn)' if args.headless else 'hiện (có màn hình)'}")
     print()
 
@@ -1101,7 +1145,7 @@ def main():
             captcha_key=args.captcha_key,
             headless=args.headless,
             country=args.country,
-            proxy=args.proxy,
+            proxy=active_proxy,
         )
         if success:
             ok += 1
