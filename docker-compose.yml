@@ -36,6 +36,14 @@ services:
       - VIDEO_INFO_CACHE_TTL=600
       - DOWNLOADS_MAX_GB=10
       - DAILY_QUOTA_PER_IP=50
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - ENV=${ENV:-production}
+      - YOUTUBE_COOKIES_B64=${YOUTUBE_COOKIES_B64}
+      - TIKTOK_COOKIES_B64=${TIKTOK_COOKIES_B64}
+      - FACEBOOK_COOKIES_B64=${FACEBOOK_COOKIES_B64}
     depends_on:
       - redis
       - cobalt-api
@@ -62,6 +70,8 @@ services:
       - COBALT_API_URL=http://cobalt-api:9000
       - BGUTIL_POT_URL=http://bgutil-pot:4416
       - DOWNLOADS_MAX_GB=10
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
     depends_on:
       - redis
       - backend
