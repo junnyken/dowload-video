@@ -26,7 +26,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    restart: unless-stopped
+    restart: always
     environment:
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -42,6 +42,14 @@ services:
       - bgutil-pot
     volumes:
       - downloads:/app/downloads
+    mem_limit: 2g
+    memswap_limit: 2g
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   celery:
     build:
@@ -84,11 +92,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    restart: unless-stopped
+    restart: always
     expose:
       - "80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   redis-data:
