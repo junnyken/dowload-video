@@ -17,9 +17,61 @@ from app.services.archive_service import create_batch_zip_sync
 from typing import Optional
 from datetime import datetime, timezone
 import os
+import time
+import random
 import shutil
 
-@celery_app.task(name="process_video_task", bind=True, max_retries=2)
+# ── Block signal patterns (triggers backoff + retry) ─────────────────
+_BLOCK_SIGNALS = [
+    "sign in to confirm", "login_required", "rate limit", "too many requests",
+    "429", "403", "bot", "captcha", "please try again", "temporarily unavailable",
+    "quota exceeded", "bị chặn", "xác thực",
+]
+
+def _is_block_signal(error_msg: str) -> bool:
+    msg = error_msg.lower()
+    return any(sig in msg for sig in _BLOCK_SIGNALS)
+
+def _get_platform(url: str) -> str:
+    url = url.lower()
+    if "youtube.com" in url or "youtu.be" in url: return "youtube"
+    if "facebook.com" in url or "fb.watch" in url: return "facebook"
+    if "tiktok.com" in url:  return "tiktok"
+    if "instagram.com" in url: return "instagram"
+    if "douyin.com" in url:  return "douyin"
+    if "twitter.com" in url or "x.com" in url: return "twitter"
+    return "other"
+
+# Per-platform request delay range (seconds) — prevents triggering rate limits
+_PLATFORM_DELAYS = {
+    "youtube":   (3, 8),
+    "facebook":  (5, 12),
+    "tiktok":    (1, 4),
+    "instagram": (3, 7),
+    "douyin":    (2, 5),
+    "twitter":   (8, 15),
+    "other":     (1, 3),
+}
+
+# Per-platform wave delay (seconds between waves in bulk download)
+_PLATFORM_WAVE_DELAYS = {
+    "youtube":  5,
+    "facebook": 8,
+    "tiktok":   3,
+    "instagram": 5,
+    "douyin":   4,
+    "twitter":  10,
+    "other":    3,
+}
+
+def _platform_sleep(url: str):
+    """Sleep a random amount based on platform before making a request."""
+    platform = _get_platform(url)
+    lo, hi = _PLATFORM_DELAYS.get(platform, (1, 3))
+    delay = random.uniform(lo, hi)
+    time.sleep(delay)
+
+@celery_app.task(name="process_video_task", bind=True, max_retries=3)
 def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = None, quality: str = "video", remove_watermark: bool = False):
     """Extract the direct MP4 link for a single video and update Supabase."""
     supabase = get_supabase_client()
@@ -49,7 +101,7 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
                 "error_message": "Tải từ bộ nhớ đệm thành công"
             }).eq("id", job_id).execute()
             return
-            
+
         print(f"[Cache Miss] Task - URL: {url} - Proceeding to extraction")
 
         # 2. Mark as processing
@@ -57,7 +109,10 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
             {"status": "processing"}
         ).eq("id", job_id).execute()
 
-        # 3. Extract video info
+        # 3. Per-platform delay to avoid rate limiting on bulk downloads
+        _platform_sleep(url)
+
+        # 4. Extract video info
         info = extract_video_info_sync(url, quality, remove_watermark)
 
         # Generate slugified name
@@ -92,6 +147,17 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
 
     except Exception as e:
         error_msg = str(e)[:500]
+
+        # ── Block signal: retry with exponential backoff ──
+        if _is_block_signal(error_msg) and self.request.retries < self.max_retries:
+            backoff = (2 ** self.request.retries) * 30  # 30s, 60s, 120s
+            platform = _get_platform(url)
+            print(f"[RateLimit] {platform} block detected on retry {self.request.retries}. Backoff {backoff}s")
+            supabase.table("download_jobs").update({
+                "error_message": f"⏳ Bị giới hạn tốc độ — tự động thử lại sau {backoff}s (lần {self.request.retries + 1}/3)..."
+            }).eq("id", job_id).execute()
+            raise self.retry(countdown=backoff, exc=e)
+
         # Translate common errors to user-friendly Vietnamese
         if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
             error_msg = "⏱ Quá thời gian chờ. Video có thể bị chặn bởi captcha. Vui lòng thử lại."
@@ -129,8 +195,10 @@ def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: s
        This prevents flooding the Celery queue while keeping throughput high.
     5. Update the placeholder channel_job_id with summary.
     """
-    WAVE_SIZE = 10          # Videos per wave
-    WAVE_DELAY_SECONDS = 3  # Seconds between each wave's start
+    WAVE_SIZE = 10  # Videos per wave
+    # Per-platform wave delay — faster platforms get shorter delays
+    platform = _get_platform(channel_url)
+    WAVE_DELAY_SECONDS = _PLATFORM_WAVE_DELAYS.get(platform, 3)
 
     supabase = get_supabase_client()
 
