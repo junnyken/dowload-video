@@ -17,6 +17,7 @@ Proxy strategy:
 import os
 import asyncio
 import base64
+import hashlib
 import tempfile
 from time import sleep
 import yt_dlp
@@ -76,6 +77,7 @@ _INSTAGRAM_MOBILE_UA = (
 )
 
 from app.core.proxy_manager import get_proxy_config_for_phase, dispatch_scraping_request
+from app.core.redis_client import get_redis
 from app.utils.link_resolver import resolve_short_url, is_douyin_url
 from app.services.douyin_extractor import extract_douyin_video_sync, _try_tikwm
 from app.services.cobalt_service import is_cobalt_available, extract_youtube_formats_via_cobalt, download_from_cobalt, download_instagram_via_cobalt, fetch_cobalt_stream
@@ -624,10 +626,20 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
 
     # ── Douyin: Bypass yt-dlp entirely ─────────────────────────
     # yt-dlp cannot handle Douyin's anti-bot (JS VM + captcha).
-    # Route through the dedicated multi-provider API extractor.
+    # Route through Apify (cloud) when token available, else multi-provider extractor.
     if is_douyin_url(url) or is_douyin_url(original_input_url):
         try:
-            result = extract_douyin_video_sync(original_input_url, quality)
+            result = None
+            if os.getenv("APIFY_TOKEN", ""):
+                try:
+                    from app.services.apify_service import extract_douyin_apify_sync
+                    result = extract_douyin_apify_sync(original_input_url, quality)
+                    print(f"[Downloader] Douyin via Apify: {result.get('title','')[:60]}")
+                except Exception as apify_err:
+                    print(f"[Downloader] Apify Douyin failed, falling back: {apify_err}")
+                    result = None
+            if result is None:
+                result = extract_douyin_video_sync(original_input_url, quality)
 
             # Force server-side download for Douyin to prevent proxy-download 403s
             if result.get("direct_mp4_url") and not result.get("local_file_path"):
@@ -727,6 +739,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     _spotify_title = ""
     _spotify_artist = ""
     _spotify_thumbnail = ""
+    _spotify_search_key = None
     if "open.spotify.com" in url:
         from app.services.spotify_service import get_track_info_async
         try:
@@ -734,9 +747,24 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             _spotify_title = sp_info.get("name", "")
             _spotify_artist = sp_info.get("artist_str", "")
             _spotify_thumbnail = sp_info.get("thumbnail", "")
-            url = sp_info["search_query"]
+            search_query = sp_info["search_query"]
+
+            # Check Redis cache: search_query → direct YouTube URL (7-day TTL)
+            _spotify_search_key = f"spotify_yt:{hashlib.md5(search_query.encode()).hexdigest()}"
+            cached_yt = None
+            try:
+                cached_yt = get_redis().get(_spotify_search_key)
+            except Exception:
+                pass
+
+            if cached_yt:
+                print(f"[Spotify Cache HIT] {_spotify_artist} - {_spotify_title} -> {cached_yt[:60]}")
+                url = cached_yt
+            else:
+                url = search_query
+
             quality = "mp3_128"  # Force audio-only for Spotify
-            print(f"[Downloader] Spotify -> {_spotify_artist} - {_spotify_title} -> {url}")
+            print(f"[Downloader] Spotify -> {_spotify_artist} - {_spotify_title} -> {url[:80]}")
         except Exception as sp_err:
             print(f"[Downloader] Spotify error: {sp_err}")
             raise ValueError(f"Không thể tải nhạc Spotify: {sp_err}")
@@ -1051,6 +1079,16 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     if _spotify_thumbnail:
         result["thumbnail_url"] = _spotify_thumbnail
 
+    # Cache Spotify search_query → YouTube URL for 7 days (avoids repeat YouTube searches)
+    if _spotify_search_key:
+        try:
+            yt_url = info.get("webpage_url", "") or info.get("original_url", "")
+            if yt_url and "youtube.com" in yt_url:
+                get_redis().setex(_spotify_search_key, 7 * 24 * 3600, yt_url)
+                print(f"[Spotify Cache SET] {_spotify_artist} - {_spotify_title}")
+        except Exception:
+            pass
+
     # Add local file path logic if a file was downloaded locally
     local_path = info.get("filepath")
     if not local_path and info.get("requested_downloads"):
@@ -1195,9 +1233,21 @@ def _scrape_douyin_channel(channel_url: str, max_videos: int = 20) -> Dict[str, 
     sec_uid_match = re.search(r'/user/([A-Za-z0-9_-]+)', channel_url)
     if not sec_uid_match:
         raise ValueError("Không thể xác định sec_uid từ URL Douyin. Vui lòng dùng link dạng: douyin.com/user/...")
-    
+
     sec_uid = sec_uid_match.group(1)
     canonical_url = f"https://www.douyin.com/user/{sec_uid}"
+
+    # ── Method 0: Apify cloud scraper (best reliability, needs APIFY_TOKEN) ──
+    if os.getenv("APIFY_TOKEN", ""):
+        print(f"[Douyin Channel] Trying Apify for {canonical_url}")
+        try:
+            from app.services.apify_service import scrape_douyin_user_apify_sync
+            result = scrape_douyin_user_apify_sync(channel_url, max_videos=max_videos)
+            if result and result.get("total_queued", 0) > 0:
+                print(f"[Douyin Channel] Apify returned {result['total_queued']} videos")
+                return result
+        except Exception as apify_err:
+            print(f"[Douyin Channel] Apify failed, falling back: {apify_err}")
 
     # ── Method 1: ScraperAPI with JS rendering ──────────────
     scraperapi_key = os.getenv("SCRAPERAPI_API_KEY", "")
