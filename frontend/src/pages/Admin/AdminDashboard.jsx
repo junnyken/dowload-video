@@ -704,6 +704,8 @@ function CookiePoolTab() {
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState('');
   const [dragging, setDragging] = useState(false);
+  const [throwAccounts, setThrowAccounts] = useState(null);
+  const [throwLoading, setThrowLoading] = useState(false);
 
   const fetchStatus = async () => {
     try {
@@ -721,7 +723,17 @@ function CookiePoolTab() {
     } catch {}
   };
 
-  useEffect(() => { fetchStatus(); }, []);
+  const fetchThrowaway = async () => {
+    setThrowLoading(true);
+    try {
+      const r = await adminFetch('/throwaway/accounts');
+      const d = await r.json();
+      if (d.success) setThrowAccounts(d);
+    } catch {}
+    finally { setThrowLoading(false); }
+  };
+
+  useEffect(() => { fetchStatus(); fetchThrowaway(); }, []);
   useEffect(() => { setCookieList([]); fetchList(activePlat); }, [activePlat]);
 
   const detectPlatformFromFile = (filename) => {
@@ -917,22 +929,91 @@ function CookiePoolTab() {
           <h4 className="text-sm font-bold text-white flex items-center gap-2">
             <Users className="w-4 h-4 text-violet-400" /> Throwaway Accounts Log
           </h4>
-          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-slate-700/50 text-slate-400 border border-slate-700/50">
-            Coming Soon
-          </span>
+          <button onClick={fetchThrowaway} disabled={throwLoading} className="text-xs text-slate-400 hover:text-white cursor-pointer transition-colors disabled:opacity-50">
+            {throwLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          </button>
         </div>
-        <div className="flex flex-col items-center justify-center py-10 gap-3 bg-[#012622]/50 rounded-xl border border-dashed border-slate-700/40">
-          <div className="w-12 h-12 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
-            <Users className="w-6 h-6 text-violet-400/60" />
+
+        {throwLoading && !throwAccounts && (
+          <div className="flex items-center gap-2 text-slate-400 text-sm py-6 justify-center">
+            <Loader2 className="w-4 h-4 animate-spin" /> Đang tải danh sách tài khoản...
           </div>
-          <div className="text-center">
-            <p className="text-sm font-semibold text-slate-300">Chức năng đang phát triển</p>
-            <p className="text-xs text-slate-500 mt-1 max-w-xs">
-              Log danh sách tài khoản throwaway đã sử dụng, trạng thái sống/chết, và lịch sử rotate.
-              API endpoint <code className="text-violet-400 bg-violet-500/10 px-1 rounded">/api/v1/admin/throwaway/accounts</code> chưa sẵn sàng.
+        )}
+
+        {throwAccounts && (
+          <>
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="bg-[#012622] rounded-xl p-3 text-center border border-slate-700/30">
+                <p className="text-xl font-bold text-white">{throwAccounts.total}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Tổng</p>
+              </div>
+              <div className="bg-[#012622] rounded-xl p-3 text-center border border-emerald-500/20">
+                <p className="text-xl font-bold text-emerald-400">{throwAccounts.success_count}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Thành công</p>
+              </div>
+              <div className="bg-[#012622] rounded-xl p-3 text-center border border-red-500/20">
+                <p className="text-xl font-bold text-red-400">{throwAccounts.fail_count}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Thất bại</p>
+              </div>
+            </div>
+
+            {throwAccounts.accounts.length === 0 ? (
+              <div className="text-center py-8 text-slate-500 text-sm">
+                Chưa có tài khoản nào được tạo.<br />
+                <span className="text-xs">Chạy script <code className="text-violet-400 bg-violet-500/10 px-1 rounded">python create_throwaway.py</code> từ máy tính cá nhân.</span>
+              </div>
+            ) : (
+              <div className="overflow-auto max-h-[400px]">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-[#012622] sticky top-0 text-[10px] uppercase text-slate-400">
+                    <tr>
+                      <th className="px-3 py-2">#</th>
+                      <th className="px-3 py-2">Email</th>
+                      <th className="px-3 py-2">Password</th>
+                      <th className="px-3 py-2">Phone</th>
+                      <th className="px-3 py-2">IP / Quốc gia</th>
+                      <th className="px-3 py-2">Thời gian</th>
+                      <th className="px-3 py-2 text-center">Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700/30">
+                    {throwAccounts.accounts.map((acc, i) => (
+                      <tr key={i} className={`hover:bg-white/5 transition-colors ${acc.success === false ? 'opacity-60' : ''}`}>
+                        <td className="px-3 py-2 text-slate-500">{i + 1}</td>
+                        <td className="px-3 py-2 text-slate-200 font-mono truncate max-w-[160px]">{acc.email || '—'}</td>
+                        <td className="px-3 py-2 text-slate-400 font-mono">{acc.password || '—'}</td>
+                        <td className="px-3 py-2 text-slate-400">{acc.phone || '—'}</td>
+                        <td className="px-3 py-2 text-slate-400">
+                          {acc.exit_ip ? <span className="font-mono">{acc.exit_ip}</span> : ''}
+                          {acc.exit_country ? <span className="ml-1 text-slate-500">({acc.exit_country})</span> : ''}
+                          {!acc.exit_ip && !acc.exit_country ? '—' : ''}
+                        </td>
+                        <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{acc.created_at ? acc.created_at.slice(0, 16) : '—'}</td>
+                        <td className="px-3 py-2 text-center">
+                          {acc.success === true && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400"><CheckCircle className="w-3 h-3" /> OK</span>}
+                          {acc.success === false && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/15 text-red-400"><XCircle className="w-3 h-3" /> Fail</span>}
+                          {acc.success === null || acc.success === undefined ? <span className="text-slate-600">—</span> : ''}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <p className="text-[10px] text-slate-500 mt-3">
+              Tài khoản được tạo bằng script CLI từ máy tính cá nhân (home IP).
+              Mật khẩu hiển thị đã ẩn 3 ký tự cuối.
             </p>
+          </>
+        )}
+
+        {!throwLoading && !throwAccounts && (
+          <div className="text-center py-8 text-slate-500 text-sm">
+            <p>Không thể tải dữ liệu. Backend có thể chưa khởi động.</p>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
