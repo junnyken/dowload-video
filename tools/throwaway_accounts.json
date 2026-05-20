@@ -115,5 +115,185 @@
     "birthday": "16/7/1997",
     "success": true,
     "created_at": "2026-05-20 05:16:23"
+  },
+  {
+    "platform": "youtube",
+    "email": "gregoryclark7432@gmail.com",
+    "password": "vxmC@xewdNlS5A1!",
+    "phone": "+84342764203",
+    "birthday": "23/12/1987",
+    "success": true,
+    "created_at": "2026-05-20 05:20:55"
+  },
+  {
+    "platform": "youtube",
+    "email": "nicoleevans6963@gmail.com",
+    "password": "J5e%7TFITUfh8A1!",
+    "phone": "+84364236608",
+    "birthday": "14/4/1992",
+    "success": false,
+    "created_at": "2026-05-20 05:29:08"
+  },
+  {
+    "platform": "youtube",
+    "email": "kimberlyvalenzuela2375@gmail.com",
+    "password": "v9a7Z0hzK5mTzA1!",
+    "phone": "+84339607942",
+    "birthday": "4/11/1994",
+    "success": false,
+    "created_at": "2026-05-20 05:32:07"
+  },
+  {
+    "platform": "youtube",
+    "email": "kristinmartinez4610@gmail.com",
+    "password": "i4wFJ6FlJaVNCA1!",
+    "phone": "+84363856743",
+    "birthday": "10/1/1992",
+    "success": false,
+    "created_at": "2026-05-20 05:35:02"
+  },
+  {
+    "platform": "youtube",
+    "email": "davidreynolds2597@gmail.com",
+    "password": "sU4wHUFon7hqfA1!",
+    "phone": "+84349982324",
+    "birthday": "13/2/2000",
+    "success": false,
+    "created_at": "2026-05-20 05:41:30"
+  },
+  {
+    "platform": "youtube",
+    "email": "andreswang9139@gmail.com",
+    "password": "o$iedf2RT4e@tA1!",
+    "phone": "+84325094092",
+    "birthday": "23/6/1987",
+    "success": false,
+    "created_at": "2026-05-20 05:45:01"
+  },
+  {
+    "platform": "youtube",
+    "email": "veronicareid2666@gmail.com",
+    "password": "mtlDJ9NVuFpzfA1!",
+    "phone": "+84827278341",
+    "birthday": "28/2/1988",
+    "success": false,
+    "created_at": "2026-05-20 06:28:27"
+  },
+  {
+    "platform": "youtube",
+    "email": "melaniebray715@gmail.com",
+    "password": "!BUAqMrFK3$uwA1!",
+    "phone": "+84829078794",
+    "birthday": "17/3/1987",
+    "success": false,
+    "created_at": "2026-05-20 06:31:48"
+  },
+  {
+    "platform": "youtube",
+    "email": "stephaniemedina3974@gmail.com",
+    "password": "ige5okH3tDV2gA1!",
+    "phone": "+84914382629",
+    "birthday": "17/11/1993",
+    "success": false,
+    "created_at": "2026-05-20 08:24:38",
+    "exit_ip": "?",
+    "exit_country": "?",
+    "exit_city": "?"
+  },
+  {
+    "platform": "youtube",
+    "email": "monicamcdowell8013@gmail.com",
+    "password": "0DR#Pm8#YDsHnA1!",
+    "phone": "+84914378365",
+    "birthday": "10/5/1999",
+    "success": false,
+    "created_at": "2026-05-20 08:29:14",
+    "exit_ip": "?",
+    "exit_country": "?",
+    "exit_city": "?"
+  },
+  {
+    "platform": "youtube",
+    "email": "markjohnson9824@gmail.com",
+    "password": "DpYkNQTc7dV6CA1!",
+    "phone": "+84914376744",
+    "birthday": "26/6/1987",
+    "success": false,
+    "created_at": "2026-05-20 08:30:48",
+    "exit_ip": "?",
+    "exit_country": "?",
+    "exit_city": "?"
+  },
+  {
+    "platform": "youtube",
+    "email": "elizabethwallace5538@gmail.com",
+    "password": "npKUr1YG0S6d3A1!",
+    "phone": "+84914378072",
+    "birthday": "18/1/1997",
+    "success": false,
+    "created_at": "2026-05-20 08:34:33",
+    "exit_ip": "?",
+    "exit_country": "?",
+    "exit_city": "?"
+  },
+  {
+    "platform": "youtube",
+    "email": "brandonjackson9867@gmail.com",
+    "password": "B0lZK4DjK$AJ4A1!",
+    "phone": "+84914382309",
+    "birthday": "22/8/1992",
+    "success": false,
+    "created_at": "2026-05-20 08:38:07",
+    "exit_ip": "?",
+    "exit_country": "?",
+    "exit_city": "?"
+  },
+  {
+    "platform": "youtube",
+    "email": "stephaniehubbard8540@gmail.com",
+    "password": "HIpaA!6DvsE9LA1!",
+    "phone": "+84914376791",
+    "birthday": "6/2/1986",
+    "success": false,
+    "created_at": "2026-05-20 08:40:45",
+    "exit_ip": "?",
+    "exit_country": "?",
+    "exit_city": "?"
+  },
+  {
+    "platform": "youtube",
+    "email": "jeffreybrooks3932@gmail.com",
+    "password": "8UH0X1Mf#gH9hA1!",
+    "phone": "+84914380650",
+    "birthday": "25/3/1998",
+    "success": false,
+    "created_at": "2026-05-20 08:44:14",
+    "exit_ip": "?",
+    "exit_country": "?",
+    "exit_city": "?"
+  },
+  {
+    "platform": "youtube",
+    "email": "jamierichardson8126@gmail.com",
+    "password": "w3MgVvnTA1XEZA1!",
+    "phone": "+84914380677",
+    "birthday": "12/10/1985",
+    "success": false,
+    "created_at": "2026-05-20 08:48:38",
+    "exit_ip": "?",
+    "exit_country": "?",
+    "exit_city": "?"
+  },
+  {
+    "platform": "youtube",
+    "email": "eileenrichardson4724@gmail.com",
+    "password": "WarmSpark71@",
+    "phone": "+6285804113594",
+    "birthday": "27/7/1996",
+    "success": false,
+    "created_at": "2026-05-20 09:09:31",
+    "exit_ip": "?",
+    "exit_country": "?",
+    "exit_city": "?"
   }
 ]

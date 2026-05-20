@@ -85,12 +85,14 @@ DISPLAY=:99 python3 create_throwaway.py --platform youtube \
 
 ---
 
-### Mode C — Webshare.io (có phí, thử free trước)
+### Mode C — Webshare.io Residential (có phí)
 
-Webshare.io có **10 proxy miễn phí** để test. Đăng ký tại [webshare.io](https://webshare.io).
+> **⚠️ Kết quả thực tế**: Webshare **free tier / datacenter proxy** bị chặn hoàn toàn
+> tới `accounts.google.com` — Chromium không thể tải trang đăng ký. Đây là chính sách
+> anti-abuse của Webshare, không phải lỗi script.  
+> **Phải mua gói Residential** (~$4/GB) để vượt qua giới hạn này.
 
-> **Lưu ý**: Free tier của Webshare là **datacenter proxy**, không phải residential.
-> Có thể vẫn bị Google block SMS. Nên test thử trước khi mua gói residential ($4/GB).
+Webshare.io có **10 proxy miễn phí** nhưng là **datacenter**. Chạy `--test-proxy` để kiểm tra trước:
 
 **Bước 1: Đăng ký Webshare.io**
 
@@ -141,6 +143,10 @@ ADMIN_API_KEY=your_admin_key
 ### Chạy script
 
 ```bash
+# ✅ Làm trước tiên: kiểm tra proxy có kết nối được Google không
+python3 create_throwaway.py --test-proxy
+# Exit 0 = OK, Exit 1 = bị chặn → cần đổi proxy
+
 # Xem số dư 5sim + giá proxy
 python3 create_throwaway.py --list-balance
 
@@ -195,11 +201,13 @@ DISPLAY=:99 python3 create_throwaway.py --platform youtube \
 
 | Lỗi | Nguyên nhân | Fix |
 |-----|-------------|-----|
-| `Google yêu cầu xác minh QR code` | IP data-center | Dùng Mode A/B/C |
-| `Google restarted flow sau password` | IP bị đánh giá thấp | Dùng proxy residential |
+| `--test-proxy` exit 1 (Webshare) | Webshare datacenter chặn accounts.google.com | Mua Webshare Residential hoặc dùng Mode A/B |
+| `Google yêu cầu xác minh QR code` | IP data-center | Dùng Mode A (nhà) hoặc Mode B (SSH tunnel) |
+| `Google restarted flow sau password` | IP bị đánh giá thấp | Dùng residential proxy |
 | `Không nhận được OTP` | Số bị block hoặc timeout | 5sim tự hoàn tiền |
 | `Timeout khi load page` | Proxy chậm | Thử proxy khác |
 | `Session cookies missing` | Flow chưa hoàn tất | Xem screenshot tại `/tmp/throwaway_debug_*` |
+| `Browser does not support socks5 proxy authentication` | Chromium không hỗ trợ SOCKS5 auth | Dùng `http://` proxy thay vì `socks5://` |
 
 ### Lưu ý bảo mật
 
