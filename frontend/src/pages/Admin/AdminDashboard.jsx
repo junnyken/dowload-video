@@ -244,7 +244,7 @@ export default function AdminDashboard() {
     { id: 'users',     label: 'Người Dùng',       icon: Users },
     { id: 'health',    label: 'Hệ Thống',         icon: Server },
     { id: 'apikeys',   label: 'API & Credits',    icon: Key },
-    { id: 'cookies',   label: 'Cookie Pool',      icon: Shield },
+    { id: 'cookies',   label: 'Cookie Pool',      icon: Key },
   ];
 
   return (
@@ -704,7 +704,6 @@ function CookiePoolTab() {
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState('');
   const [dragging, setDragging] = useState(false);
-  const fileRef = useState(null);
 
   const fetchStatus = async () => {
     try {
@@ -723,7 +722,7 @@ function CookiePoolTab() {
   };
 
   useEffect(() => { fetchStatus(); }, []);
-  useEffect(() => { fetchList(activePlat); setCookieList([]); }, [activePlat]);
+  useEffect(() => { setCookieList([]); fetchList(activePlat); }, [activePlat]);
 
   const uploadFile = async (file) => {
     if (!file) return;
@@ -887,6 +886,30 @@ function CookiePoolTab() {
           <li>Mở tab youtube.com → click extension → <b className="text-white">Export cookies.txt</b></li>
           <li>Upload file vào ô trên — xong! Worker tự rotate giữa các tài khoản</li>
         </ol>
+      </div>
+
+      {/* Throwaway Accounts Log */}
+      <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-sm font-bold text-white flex items-center gap-2">
+            <Users className="w-4 h-4 text-violet-400" /> Throwaway Accounts Log
+          </h4>
+          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-slate-700/50 text-slate-400 border border-slate-700/50">
+            Coming Soon
+          </span>
+        </div>
+        <div className="flex flex-col items-center justify-center py-10 gap-3 bg-[#012622]/50 rounded-xl border border-dashed border-slate-700/40">
+          <div className="w-12 h-12 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
+            <Users className="w-6 h-6 text-violet-400/60" />
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-semibold text-slate-300">Chức năng đang phát triển</p>
+            <p className="text-xs text-slate-500 mt-1 max-w-xs">
+              Log danh sách tài khoản throwaway đã sử dụng, trạng thái sống/chết, và lịch sử rotate.
+              API endpoint <code className="text-violet-400 bg-violet-500/10 px-1 rounded">/api/v1/admin/throwaway/accounts</code> chưa sẵn sàng.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

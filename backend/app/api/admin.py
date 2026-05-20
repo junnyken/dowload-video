@@ -791,3 +791,142 @@ async def proxy_pool_remove(req: ProxyRemoveRequest, _=Depends(verify_admin)):
         return {"success": True, "platform": req.platform, "pool_size": new_size}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════
+# Throwaway Account Management
+# ═════════════════════════════════════════════════════════════════════
+
+_THROWAWAY_REDIS_KEY = "throwaway:accounts"
+_THROWAWAY_MAX_ENTRIES = 1000
+
+# Default path inside Docker container; override via THROWAWAY_LOG_PATH env var
+_THROWAWAY_LOG_PATH = os.getenv("THROWAWAY_LOG_PATH", "/app/throwaway_accounts.json")
+
+
+def _mask_password(password: Optional[str]) -> str:
+    """Show first 3 chars then *** for security."""
+    if not password:
+        return "***"
+    prefix = password[:3]
+    return f"{prefix}***"
+
+
+def _format_account(raw: dict) -> dict:
+    """Normalize an account dict and mask the password."""
+    return {
+        "platform": raw.get("platform"),
+        "email": raw.get("email"),
+        "password": _mask_password(raw.get("password")),
+        "phone": raw.get("phone"),
+        "birthday": raw.get("birthday"),
+        "success": raw.get("success"),
+        "created_at": raw.get("created_at"),
+        "exit_ip": raw.get("exit_ip"),
+        "exit_country": raw.get("exit_country"),
+    }
+
+
+class ThrowawayAccountPayload(BaseModel):
+    platform: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
+    phone: Optional[str] = None
+    birthday: Optional[str] = None
+    success: Optional[bool] = None
+    created_at: Optional[str] = None
+    exit_ip: Optional[str] = None
+    exit_country: Optional[str] = None
+    exit_city: Optional[str] = None
+
+
+@router.get("/throwaway/accounts")
+async def get_throwaway_accounts(_=Depends(verify_admin)):
+    """
+    Return throwaway account log merged from:
+      1. Redis key  throwaway:accounts  (primary, written by POST endpoint)
+      2. Local JSON file at THROWAWAY_LOG_PATH  (fallback / legacy)
+    Passwords are masked in the response.
+    """
+    import json as _json
+
+    accounts: List[dict] = []
+    seen_emails: set = set()
+
+    # ── 1. Redis source ──────────────────────────────────
+    try:
+        from app.core.redis_client import get_redis
+        rc = get_redis()
+        raw_list = rc.lrange(_THROWAWAY_REDIS_KEY, 0, -1)
+        for raw_str in raw_list:
+            try:
+                obj = _json.loads(raw_str)
+                accounts.append(obj)
+                if obj.get("email"):
+                    seen_emails.add(obj["email"])
+            except Exception:
+                pass
+    except Exception as redis_err:
+        print(f"[throwaway] Redis read error: {redis_err}")
+
+    # ── 2. JSON file source (fallback) ───────────────────
+    try:
+        if os.path.exists(_THROWAWAY_LOG_PATH):
+            with open(_THROWAWAY_LOG_PATH, "r", encoding="utf-8") as fh:
+                file_data = _json.load(fh)
+            if isinstance(file_data, list):
+                for obj in file_data:
+                    email = obj.get("email")
+                    if email and email in seen_emails:
+                        continue  # already have it from Redis
+                    accounts.append(obj)
+                    if email:
+                        seen_emails.add(email)
+    except Exception as file_err:
+        print(f"[throwaway] File read error ({_THROWAWAY_LOG_PATH}): {file_err}")
+
+    # ── Format + stats ────────────────────────────────────
+    formatted = [_format_account(a) for a in accounts]
+    success_count = sum(1 for a in accounts if a.get("success") is True)
+    fail_count = sum(1 for a in accounts if a.get("success") is False)
+
+    return {
+        "success": True,
+        "accounts": formatted,
+        "total": len(formatted),
+        "success_count": success_count,
+        "fail_count": fail_count,
+    }
+
+
+@router.post("/throwaway/accounts")
+async def post_throwaway_account(
+    payload: ThrowawayAccountPayload,
+    _=Depends(verify_admin),
+):
+    """
+    Store a throwaway account result in Redis (centralised).
+    Called by the throwaway script after each account attempt.
+    Stores up to THROWAWAY_MAX_ENTRIES entries (LPUSH + LTRIM).
+    """
+    import json as _json
+
+    try:
+        from app.core.redis_client import get_redis
+        rc = get_redis()
+
+        entry = payload.model_dump(exclude_none=False)
+        # Fill created_at if missing
+        if not entry.get("created_at"):
+            entry["created_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+        serialized = _json.dumps(entry, ensure_ascii=False)
+        pipe = rc.pipeline()
+        pipe.lpush(_THROWAWAY_REDIS_KEY, serialized)
+        pipe.ltrim(_THROWAWAY_REDIS_KEY, 0, _THROWAWAY_MAX_ENTRIES - 1)
+        pipe.execute()
+
+        return {"success": True, "message": "Account stored in Redis"}
+    except Exception as e:
+        print(f"[throwaway] POST store error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

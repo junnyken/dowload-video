@@ -83,8 +83,8 @@ def resolve_proxy(cli_proxy: Optional[str] = None) -> Optional[str]:
     if THROWAWAY_PROXY:
         return THROWAWAY_PROXY
     if WEBSHARE_USERNAME and WEBSHARE_PASSWORD:
-        # Webshare rotating residential proxy endpoint
-        return f"http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80"
+        # Webshare rotating proxy — HTTP port 80 (Chromium doesn't support authenticated SOCKS5)
+        return f"http://{WEBSHARE_USERNAME}-rotate:{WEBSHARE_PASSWORD}@p.webshare.io:80"
     if HOME_SSH_PROXY:
         return HOME_SSH_PROXY
     return None
@@ -101,6 +101,93 @@ def proxy_label(proxy: Optional[str]) -> str:
         return f"SSH tunnel về nhà ({proxy})"
     host = proxy.split("@")[-1] if "@" in proxy else proxy
     return f"Custom ({host})"
+
+
+def _build_playwright_proxy(proxy: str, sticky_session: Optional[str] = None) -> dict:
+    """Chuyển proxy URL thành Playwright proxy dict.
+    sticky_session: nếu có, thêm _session-TOKEN vào username (IPRoyal sticky IP).
+    """
+    import urllib.parse as _urlparse
+    _p = _urlparse.urlparse(proxy)
+    _default_port = 1080 if _p.scheme in ("socks5", "socks4") else 80
+    cfg: dict = {"server": f"{_p.scheme}://{_p.hostname}:{_p.port or _default_port}"}
+    if _p.username:
+        username = _urlparse.unquote(_p.username)
+        if sticky_session and "iproyal" in (proxy.lower()):
+            # IPRoyal sticky session: username_session-TOKEN_lifetime-10m
+            username = f"{username}_session-{sticky_session}_lifetime-10m"
+        cfg["username"] = username
+    if _p.password:
+        cfg["password"] = _urlparse.unquote(_p.password)
+    return cfg
+
+
+def _make_sticky_token() -> str:
+    """Tạo random sticky session token cho IPRoyal."""
+    import random, string
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+
+
+def test_proxy_connectivity(proxy: Optional[str]) -> bool:
+    """
+    Kiểm tra proxy có kết nối được tới accounts.google.com không.
+    Webshare datacenter proxy thường bị chặn bởi Google/Webshare.
+    Returns True nếu kết nối OK.
+    """
+    try:
+        from patchright.sync_api import sync_playwright
+    except ImportError:
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            return True  # không test được, giả sử OK
+
+    print(f"\n🔍 Kiểm tra kết nối proxy → accounts.google.com...")
+    if proxy:
+        print(f"   Proxy: {proxy_label(proxy)}")
+
+    _unsupported_msg = "socks5 proxy authentication"
+
+    try:
+        with sync_playwright() as pw:
+            launch_kwargs: dict = {
+                "headless": True,
+                "args": ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+                         "--disable-quic", "--disable-http2"],
+            }
+            if proxy:
+                launch_kwargs["proxy"] = _build_playwright_proxy(proxy)
+
+            try:
+                browser = pw.chromium.launch(**launch_kwargs)
+            except Exception as e:
+                err = str(e)
+                if _unsupported_msg in err:
+                    print(f"   ❌ Chromium không hỗ trợ SOCKS5 proxy có xác thực")
+                    print(f"      → Dùng HTTP proxy: thay socks5:// thành http://")
+                    return False
+                raise
+
+            ctx = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            )
+            page = ctx.new_page()
+            try:
+                page.goto("https://accounts.google.com", wait_until="commit", timeout=20_000)
+                print(f"   ✅ Kết nối OK — URL: {page.url[:60]}")
+                browser.close()
+                return True
+            except Exception:
+                print(f"   ❌ Không kết nối được accounts.google.com qua proxy này")
+                if proxy and "webshare.io" in proxy:
+                    print(f"   ℹ️  Webshare datacenter proxy chặn kết nối Google accounts.")
+                    print(f"      → Nâng cấp lên Webshare Residential ($4/GB trở lên)")
+                    print(f"      → Hoặc dùng SSH tunnel về nhà (Mode B, miễn phí)")
+                browser.close()
+                return False
+    except Exception as e:
+        print(f"   ⚠️  Không thể khởi động trình duyệt để test: {e}")
+        return False
 
 fake = Faker("en_US")
 
@@ -140,7 +227,10 @@ class FiveSimClient:
 
     def get_all_country_prices(self, service: str) -> list:
         """Lấy giá của service từ tất cả country, sort theo giá."""
-        countries = ["vietnam", "russia", "ukraine", "philippines", "india", "indonesia"]
+        countries = [
+            "vietnam", "indonesia", "philippines", "india", "russia",
+            "ukraine", "kenya", "myanmar", "cambodia", "thailand",
+        ]
         rows = []
         for c in countries:
             try:
@@ -218,6 +308,34 @@ class FiveSimClient:
             pass
         return "vietnam"
 
+    def find_best_country(self, service: str) -> tuple:
+        """
+        Chọn country tốt nhất để tránh device verification.
+        Ưu tiên Indonesia/Philippines (ASEAN, hay nhận SMS OTP thay vì QR code).
+        Trả về (country_name, price, qty).
+        """
+        # Thứ tự ưu tiên: non-Vietnam trước để thử trigger SMS OTP thật
+        priority = ["indonesia", "philippines", "india", "myanmar",
+                    "cambodia", "kenya", "ukraine", "russia", "vietnam"]
+        try:
+            rows = self.get_all_country_prices(service)
+            price_map = {c: (cost, qty) for c, cost, qty in rows if qty > 0}
+
+            for country in priority:
+                if country in price_map:
+                    cost, qty = price_map[country]
+                    print(f"  🌍 Country được chọn: {country} (${cost:.3f}, {qty} available)")
+                    return country, cost, qty
+
+            # fallback: cheapest available
+            for c, cost, qty in rows:
+                if qty > 0:
+                    print(f"  🌍 Country fallback: {c} (${cost:.3f}, {qty} available)")
+                    return c, cost, qty
+        except Exception:
+            pass
+        return "vietnam", 0.08, 0
+
 
 def _extract_otp(text: str) -> Optional[str]:
     """Trích OTP từ nội dung SMS."""
@@ -239,6 +357,15 @@ def _extract_otp(text: str) -> Optional[str]:
 # Profile generator
 # ─────────────────────────────────────────────
 
+_PW_ADJ  = ["Blue","Red","Dark","Fast","Bright","Cool","Wild","Sharp","Smart","Deep",
+             "Bold","Calm","Keen","Pure","Warm","Soft","Lone","High","Free","Long",
+             "Iron","Gold","Star","Clay","Jade","Ash","Oak","Elm","Bay","Zen"]
+_PW_NOUN = ["Tiger","Eagle","Ocean","Cloud","River","Storm","Forest","Moon","Fire","Stone",
+             "Arrow","Bridge","Castle","Dragon","Empire","Falcon","Garden","Harbor","Island","Jungle",
+             "Knight","Legend","Marble","Nebula","Oracle","Pillar","Quest","Ranger","Spark","Tower"]
+_PW_SYM  = ["!", "@", "#", "$", "%"]
+
+
 def generate_profile() -> dict:
     """Tạo thông tin người dùng ngẫu nhiên."""
     first = fake.first_name()
@@ -251,11 +378,13 @@ def generate_profile() -> dict:
     username_base = f"{first.lower()}{last.lower()}{random.randint(100, 9999)}"
     username_base = re.sub(r"[^a-z0-9]", "", username_base)
 
-    # Password mạnh
-    chars = string.ascii_letters + string.digits + "!@#$%"
-    password = "".join(random.choices(chars, k=16))
-    # Đảm bảo có chữ hoa, số, ký tự đặc biệt
-    password = password[:13] + "A1!"
+    # Password: AdjectiveNoun + 2-digit + symbol — dễ nhớ, trông người thật
+    # Ví dụ: BlueTiger47!, DarkOcean83@, WildEagle12#
+    adj = random.choice(_PW_ADJ)
+    noun = random.choice(_PW_NOUN)
+    num = random.randint(10, 99)
+    sym = random.choice(_PW_SYM)
+    password = f"{adj}{noun}{num}{sym}"
 
     return {
         "first_name": first,
@@ -285,18 +414,30 @@ def solve_captcha(site_key: str, page_url: str, api_key: str, service: str = "ca
 
 def _solve_capsolver(site_key: str, page_url: str, api_key: str,
                      is_enterprise: bool = False) -> Optional[str]:
-    """Giải reCAPTCHA v2/Enterprise qua CapSolver API."""
+    """Giải reCAPTCHA v3 Enterprise qua CapSolver API."""
     try:
-        task_type = "ReCaptchaV2EnterpriseTaskProxyless" if is_enterprise else "ReCaptchaV2TaskProxyless"
-        print(f"  🤖 CapSolver: tạo task ({task_type})...")
-        r = requests.post("https://api.capsolver.com/createTask", json={
-            "clientKey": api_key,
-            "task": {
+        # Google signup dùng reCAPTCHA v3 Enterprise — dùng ReCaptchaV3TaskProxyless
+        # với pageAction="signup" để CapSolver worker generate token với risk score thật
+        if is_enterprise:
+            task_type = "ReCaptchaV3TaskProxyless"
+            task_payload = {
                 "type": task_type,
                 "websiteURL": page_url,
                 "websiteKey": site_key,
-                "isInvisible": is_enterprise,
-            },
+                "pageAction": "signup",
+                "isEnterprise": True,
+            }
+        else:
+            task_type = "ReCaptchaV2TaskProxyless"
+            task_payload = {
+                "type": task_type,
+                "websiteURL": page_url,
+                "websiteKey": site_key,
+            }
+        print(f"  🤖 CapSolver: tạo task ({task_type})...")
+        r = requests.post("https://api.capsolver.com/createTask", json={
+            "clientKey": api_key,
+            "task": task_payload,
         }, timeout=15)
         data = r.json()
         if data.get("errorId", 0) != 0:
@@ -401,17 +542,27 @@ def create_google_account(
         if not _use_headless and not _display:
             _use_headless = True  # không có display, buộc headless
 
-        browser = pw.chromium.launch(
-            headless=_use_headless,
-            args=[
+        launch_kwargs: dict = {
+            "headless": _use_headless,
+            "args": [
                 "--no-sandbox",
                 "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",
                 "--disable-dev-shm-usage",
+                "--disable-quic",
+                "--disable-http2",           # required for HTTP proxy CONNECT tunnels
+                "--disable-background-networking",
+                "--disable-sync",
+                "--no-first-run",
                 "--disable-gpu" if _use_headless else "",
             ],
-        )
-        ctx_kwargs: dict = dict(
+        }
+        if proxy:
+            _proxy_cfg = _build_playwright_proxy(proxy)
+            launch_kwargs["proxy"] = _proxy_cfg
+            print(f"  🌐 Proxy: {_proxy_cfg['server']}")
+        browser = pw.chromium.launch(**launch_kwargs)
+        context = browser.new_context(
             viewport={"width": 1280, "height": 800},
             locale="en-US",
             user_agent=(
@@ -420,16 +571,35 @@ def create_google_account(
                 "Chrome/124.0.0.0 Safari/537.36"
             ),
         )
-        if proxy:
-            ctx_kwargs["proxy"] = {"server": proxy}
-            print(f"  🌐 Proxy: {proxy.split('@')[-1] if '@' in proxy else proxy}")
-        context = browser.new_context(**ctx_kwargs)
-        # Stealth: ẩn webdriver fingerprint
+        # Stealth: patch all known Playwright/Chromium automation signals
         context.add_init_script("""
+            // navigator.webdriver
             Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-            Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3]});
+            // plugins — headless Chrome has 0 plugins, real browsers have some
+            Object.defineProperty(navigator, 'plugins', {get: () => {
+                const arr = [
+                    {name:'Chrome PDF Plugin',filename:'internal-pdf-viewer',description:'Portable Document Format'},
+                    {name:'Chrome PDF Viewer',filename:'mhjfbmdgcfjbbpaeojofohoefgiehjai',description:''},
+                    {name:'Native Client',filename:'internal-nacl-plugin',description:''},
+                ];
+                arr.__proto__ = PluginArray.prototype;
+                return arr;
+            }});
+            // languages
             Object.defineProperty(navigator, 'languages', {get: () => ['en-US','en']});
-            window.chrome = {runtime: {}};
+            // chrome runtime — headless missing this
+            if (!window.chrome) window.chrome = {};
+            if (!window.chrome.runtime) window.chrome.runtime = {};
+            // permissions — headless returns 'denied' for notifications
+            const origQuery = window.navigator.permissions.query.bind(window.navigator.permissions);
+            window.navigator.permissions.query = (params) =>
+                params.name === 'notifications'
+                    ? Promise.resolve({state: Notification.permission})
+                    : origQuery(params);
+            // hide automation-specific properties
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
         """)
         page = context.new_page()
 
@@ -438,10 +608,18 @@ def create_google_account(
             debug_dir.mkdir(exist_ok=True)
 
             # Warm-up: visit google.com để build session signals trước khi signup
+            # Dùng timeout dài hơn khi có proxy (proxy có thể chậm hơn direct)
+            _goto_timeout = 45_000 if proxy else 20_000
             print("  🌡️  Warm-up session...")
-            page.goto("https://www.google.com", wait_until="networkidle", timeout=20_000)
+            try:
+                page.goto("https://www.google.com", wait_until="domcontentloaded", timeout=_goto_timeout)
+            except Exception:
+                pass  # warm-up không bắt buộc phải thành công
             time.sleep(random.uniform(2, 4))
-            page.goto("https://accounts.google.com", wait_until="networkidle", timeout=20_000)
+            try:
+                page.goto("https://accounts.google.com", wait_until="domcontentloaded", timeout=_goto_timeout)
+            except Exception:
+                pass
             time.sleep(random.uniform(1, 2))
 
             def snap(label: str) -> None:
@@ -512,40 +690,61 @@ def create_google_account(
                     print(f"  ⚠️  grecaptcha.execute() thất bại: {e}")
                     token = None
 
-                # ── Phương án 2: CapSolver ProxylessTask (fallback) ──
+                def _inject_and_submit(t: str) -> bool:
+                    """Inject token vào form, click Next nếu cần, trả về True nếu URL thay đổi."""
+                    page.evaluate("""(t) => {
+                        document.querySelectorAll('[name="g-recaptcha-response"]').forEach(el => {
+                            el.value = t;
+                            el.dispatchEvent(new Event('input', {bubbles: true}));
+                        });
+                        try {
+                            let clients = window.___grecaptcha_cfg.clients;
+                            Object.values(clients).forEach(c => {
+                                Object.values(c).forEach(obj => {
+                                    if (obj && typeof obj.callback === 'function') obj.callback(t);
+                                });
+                            });
+                        } catch(e) {}
+                    }""", t)
+                    # Đợi page tự transition sau callback (Google thường tự submit)
+                    time.sleep(3)
+                    # Nếu URL đã thay đổi (callback tự submit), không cần click
+                    if page.url != before_url:
+                        wait_stable(8_000)
+                        snap(f"{step_label}_after_captcha")
+                        return True
+                    # URL chưa thay đổi → click Next
+                    try:
+                        click_next()
+                    except Exception:
+                        pass  # button có thể bị detached nếu transition đang xảy ra
+                    wait_stable(12_000)
+                    snap(f"{step_label}_after_captcha")
+                    return page.url != before_url
+
+                # ── Phương án 2: CapSolver ProxylessTask (nếu không có browser token) ──
                 if not token and captcha_key:
-                    print(f"  🤖 Fallback sang CapSolver...")
+                    print(f"  🤖 Fallback sang CapSolver API...")
                     token = solve_captcha(detected_key, page.url, captcha_key, is_enterprise=is_enterprise)
 
                 if not token:
                     print(f"  ✗ Không lấy được token tại {step_label}")
                     return False
 
-                # Inject token vào form + submit
-                page.evaluate("""(t) => {
-                    document.querySelectorAll('[name="g-recaptcha-response"]').forEach(el => {
-                        el.value = t;
-                        el.dispatchEvent(new Event('input', {bubbles: true}));
-                    });
-                    try {
-                        let clients = window.___grecaptcha_cfg.clients;
-                        Object.values(clients).forEach(c => {
-                            Object.values(c).forEach(obj => {
-                                if (obj && typeof obj.callback === 'function') obj.callback(t);
-                            });
-                        });
-                    } catch(e) {}
-                }""", token)
-                time.sleep(2)
-                click_next()
-                wait_stable(12_000)
-                snap(f"{step_label}_after_captcha")
-
-                if page.url != before_url:
+                # Thử browser token trước
+                if _inject_and_submit(token):
                     print(f"  ✓ Bypass thành công!")
                     return True
 
-                print(f"  ✗ Vẫn bị chặn sau token inject tại {step_label}")
+                # Browser token bị Google reject → thử CapSolver API token (risk score cao hơn)
+                if captcha_key:
+                    print(f"  ⚠️  Browser token bị reject, thử CapSolver API (risk score thật)...")
+                    api_token = solve_captcha(detected_key, page.url, captcha_key, is_enterprise=is_enterprise)
+                    if api_token and _inject_and_submit(api_token):
+                        print(f"  ✓ CapSolver bypass thành công!")
+                        return True
+
+                print(f"  ✗ Vẫn bị chặn sau cả 2 token tại {step_label}")
                 return False
 
             # ─── Helpers: step-specific fill actions ───────────
@@ -636,14 +835,21 @@ def create_google_account(
                         return "skip"
                 return "unknown"
 
-            # ─── Open signup page ────────────────────────────
+            # ─── Open signup page (retry on tunnel errors — proxy IP rotation) ─
             print(f"\n  🌐 Mở Google account creation...")
-            page.goto(
-                "https://accounts.google.com/signup/v2/createaccount"
-                "?flowName=GlifWebSignIn&flowEntry=SignUp",
-                wait_until="networkidle",
-                timeout=30_000,
-            )
+            # Mobile entry point → Google dùng SMS verification thay vì QR code
+            _signup_url = ("https://accounts.google.com/signup/v2/createaccount"
+                           "?flowName=GlifWebSignIn&flowEntry=SignUp&service=mail")
+            for _goto_try in range(3):
+                try:
+                    page.goto(_signup_url, wait_until="domcontentloaded", timeout=_goto_timeout)
+                    break
+                except Exception as _ge:
+                    if "ERR_TUNNEL_CONNECTION_FAILED" in str(_ge) and _goto_try < 2:
+                        print(f"  ⚠️  Proxy tunnel failed (lần {_goto_try+1}/3), thử lại...")
+                        time.sleep(3)
+                    else:
+                        raise
             snap("01_start")
             time.sleep(2)  # let JS-triggered redirects settle
             wait_stable(5_000)
@@ -665,13 +871,18 @@ def create_google_account(
                     print(f"  ✅ Tài khoản tạo thành công!")
                     break
 
-                # Abort on flow restart: Google reset to name/birthday AFTER password bypass.
-                # Continuing through multiple loops causes Google to escalate to QR-code
-                # verification (requires physical device). Abort early instead.
+                # Flow restart detection: Google reset to name/birthday AFTER password.
+                # Allow 1 restart attempt (sometimes succeeds on 2nd pass with stealth browser).
+                # If restarted twice → escalated to QR verification, abort.
                 if passed_password and step in ("name", "birthday"):
-                    print(f"  ⚠️  Google restarted flow tại '{step}' sau password")
-                    print(f"  💡  Cần residential proxy: --proxy http://user:pass@host:port")
-                    return None
+                    restart_count = step_counts.get("_restart", 0) + 1
+                    step_counts["_restart"] = restart_count
+                    if restart_count >= 2:
+                        print(f"  ✗ Google reset flow {restart_count} lần — bot detection nặng")
+                        print(f"     Thử chạy lại sau vài phút hoặc đổi session IPRoyal")
+                        return None
+                    print(f"  ⚠️  Google restarted flow tại '{step}' (lần {restart_count}) — thử tiếp...")
+                    passed_password = False  # reset, cho phép đi lại qua password step
 
                 # Abort if stuck at the same step too many times
                 if step_counts[step] > 3:
@@ -744,11 +955,22 @@ def create_google_account(
 
                 elif step == "phone" and not phone_done:
                     phone_done = True
-                    # Convert to local format: +84363856743 → 0363856743
+                    # Convert international → local format for common ASEAN prefixes
+                    _cc_map = {
+                        "+84": "0",   # Vietnam
+                        "+62": "0",   # Indonesia
+                        "+63": "0",   # Philippines
+                        "+91": "0",   # India
+                        "+95": "0",   # Myanmar
+                        "+855": "0",  # Cambodia
+                        "+66": "0",   # Thailand
+                    }
                     phone_local = phone
-                    if phone_local.startswith("+84"):
-                        phone_local = "0" + phone_local[3:]
-                    print(f"  📞 Nhập số điện thoại: {phone_local}")
+                    for prefix, local_prefix in _cc_map.items():
+                        if phone_local.startswith(prefix):
+                            phone_local = local_prefix + phone_local[len(prefix):]
+                            break
+                    print(f"  📞 Nhập số điện thoại: {phone_local} (gốc: {phone})")
                     try:
                         page.wait_for_selector(
                             'input[name="phoneNumberId"]',
@@ -764,13 +986,27 @@ def create_google_account(
                         page.keyboard.type(phone_local)
                         time.sleep(0.5)
                     else:
-                        # No phone input found — Google showing QR code or other challenge
-                        # This happens with data-center IPs; residential proxy fixes it
+                        # QR code page — thử click "Use phone number" để chuyển sang SMS flow
                         snap(f"step_{_iter:02d}_no_phone_input")
-                        print(f"  ✗ Google yêu cầu xác minh QR code (không hỗ trợ tự động)")
-                        print(f"  💡 Cần residential proxy: --proxy http://user:pass@host:port")
-                        print(f"     hoặc set THROWAWAY_PROXY trong .env")
-                        return None
+                        switched = False
+                        for switch_text in ["Use phone number", "phone number", "Send SMS",
+                                            "Verify by SMS", "Enter phone number"]:
+                            el = page.locator(f"text={switch_text}")
+                            if el.count() > 0:
+                                el.first.click()
+                                time.sleep(2)
+                                # Kiểm tra lại nếu đã có input
+                                pf2 = page.locator('input[name="phoneNumberId"]')
+                                if pf2.count() > 0:
+                                    pf2.first.click()
+                                    page.keyboard.press("Control+a")
+                                    page.keyboard.type(phone_local)
+                                    switched = True
+                                    break
+                        if not switched:
+                            print(f"  ✗ Google yêu cầu QR code — không thể bypass tự động")
+                            print(f"     (Google phát hiện headless browser, cần session sạch hơn)")
+                            return None
                     # Click Next/Send directly (not via captcha retry)
                     for btn_sel in ['button:has-text("Next")', 'button:has-text("Send")',
                                     'button:has-text("Get code")', 'button[type="submit"]']:
@@ -843,6 +1079,17 @@ def create_google_account(
                         print(f"  ⚠️  Không tìm thấy nút tiếp theo, dừng lại")
                         break
 
+            # ─── Navigate to YouTube để lấy đủ SID/HSID/SAPISID ──────
+            # accounts.google.com chỉ có __Host-GAPS, thiếu SID/HSID
+            # yt-dlp cần SID/__Secure-1PSID — chỉ set khi visit youtube.com
+            print(f"  🎬 Navigate sang YouTube để lấy full session cookies...")
+            try:
+                page.goto("https://www.youtube.com", wait_until="domcontentloaded", timeout=30_000)
+                time.sleep(3)
+                snap("youtube_session")
+            except Exception as e:
+                print(f"  ⚠️  YouTube navigate lỗi (vẫn tiếp tục): {e}")
+
             # ─── Check session cookies (confirm account created) ──
             playwright_cookies = context.cookies()
             session_names = {"SID", "HSID", "SSID", "APISID", "SAPISID",
@@ -855,7 +1102,10 @@ def create_google_account(
 
             current_url = page.url
             print(f"  📍 URL cuối: {current_url[:80]}")
-            if not has_session:
+            if has_session:
+                yt_cookies = [c["name"] for c in playwright_cookies if c["name"] in session_names]
+                print(f"  ✅ Session cookies OK: {yt_cookies}")
+            else:
                 print(f"  ⚠️  Không có session cookies — tài khoản chưa tạo xong")
 
             if not _use_headless:
@@ -951,7 +1201,45 @@ def upload_cookie_to_pool(cookie_file: Path, platform: str) -> bool:
 # Save profile log
 # ─────────────────────────────────────────────
 
-def save_profile_log(profile: dict, phone: str, platform: str, success: bool) -> None:
+def _detect_exit_ip(proxy: Optional[str] = None) -> dict:
+    """Lấy exit IP + country từ ipinfo.io qua proxy."""
+    try:
+        import urllib.request as _req
+        _url = "https://ipinfo.io/json"
+        if proxy:
+            _handler = __import__("urllib.request", fromlist=["ProxyHandler"]).ProxyHandler(
+                {"http": proxy, "https": proxy}
+            )
+            _opener = _req.build_opener(_handler)
+            resp = _opener.open(_url, timeout=10).read().decode()
+        else:
+            resp = _req.urlopen(_url, timeout=10).read().decode()
+        info = json.loads(resp)
+        return {"ip": info.get("ip", "?"), "country": info.get("country", "?"), "city": info.get("city", "?")}
+    except Exception:
+        return {"ip": "?", "country": "?", "city": "?"}
+
+
+def _push_account_to_backend(entry: dict) -> None:
+    """Fire-and-forget: push account entry to backend POST /throwaway/accounts."""
+    if not ADMIN_API_URL:
+        return
+    try:
+        headers = {"Content-Type": "application/json"}
+        if ADMIN_API_KEY:
+            headers["X-Admin-Token"] = ADMIN_API_KEY
+        requests.post(
+            f"{ADMIN_API_URL}/api/v1/admin/throwaway/accounts",
+            json=entry,
+            headers=headers,
+            timeout=5,
+        )
+    except Exception:
+        pass  # non-blocking — local JSON file is the fallback
+
+
+def save_profile_log(profile: dict, phone: str, platform: str, success: bool,
+                     proxy: Optional[str] = None) -> None:
     log_path = Path(__file__).parent / "throwaway_accounts.json"
     entries = []
     if log_path.exists():
@@ -960,7 +1248,11 @@ def save_profile_log(profile: dict, phone: str, platform: str, success: bool) ->
         except Exception:
             entries = []
 
-    entries.append({
+    exit_ip_info = _detect_exit_ip(proxy) if success else {"ip": "?", "country": "?", "city": "?"}
+    if success and exit_ip_info["ip"] != "?":
+        print(f"  🌐 Exit IP: {exit_ip_info['ip']} ({exit_ip_info['country']}, {exit_ip_info['city']})")
+
+    entry = {
         "platform": platform,
         "email": f"{profile['username']}@gmail.com",
         "password": profile["password"],
@@ -968,14 +1260,112 @@ def save_profile_log(profile: dict, phone: str, platform: str, success: bool) ->
         "birthday": f"{profile['birthday_day']}/{profile['birthday_month']}/{profile['birthday_year']}",
         "success": success,
         "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-    })
+        "exit_ip": exit_ip_info["ip"],
+        "exit_country": exit_ip_info["country"],
+        "exit_city": exit_ip_info["city"],
+    }
+    entries.append(entry)
     log_path.write_text(json.dumps(entries, indent=2, ensure_ascii=False))
     print(f"  📝 Lưu thông tin vào {log_path}")
+
+    # Also push to backend Redis store (fire and forget — non-blocking)
+    _push_account_to_backend(entry)
 
 
 # ─────────────────────────────────────────────
 # Main flow
 # ─────────────────────────────────────────────
+
+def _verify_account_login(email: str, password: str, proxy: Optional[str] = None) -> bool:
+    """
+    Thử login bằng email/password để xác minh account thật sự tồn tại.
+    Google có thể silently delete accounts tạo bằng bot/datacenter IP.
+    Returns True nếu login thành công.
+    """
+    try:
+        from patchright.sync_api import sync_playwright
+    except ImportError:
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            return True  # không verify được, giả sử OK
+
+    try:
+        with sync_playwright() as pw:
+            launch_kwargs: dict = {
+                "headless": True,
+                "args": ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+                         "--disable-quic", "--disable-http2"],
+            }
+            if proxy:
+                launch_kwargs["proxy"] = _build_playwright_proxy(proxy)
+            browser = pw.chromium.launch(**launch_kwargs)
+            ctx = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                locale="en-US",
+            )
+            page = ctx.new_page()
+
+            try:
+                page.goto("https://accounts.google.com/signin", wait_until="domcontentloaded", timeout=30_000)
+                time.sleep(1)
+
+                # Nhập email
+                email_field = page.locator('input[type="email"]')
+                if email_field.count() == 0:
+                    browser.close()
+                    return False
+                email_field.first.fill(email)
+                page.keyboard.press("Enter")
+                time.sleep(2)
+
+                # Kiểm tra "Couldn't find your Google Account"
+                error_texts = ["Couldn't find", "couldn't find", "No account found",
+                               "Không tìm thấy", "không tìm thấy"]
+                for txt in error_texts:
+                    if page.locator(f"text={txt}").count() > 0 or txt.lower() in page.content().lower():
+                        print(f"  ✗ Google: tài khoản không tồn tại")
+                        browser.close()
+                        return False
+
+                # Nhập password nếu có field
+                pwd_field = page.locator('input[type="password"]')
+                if pwd_field.count() > 0:
+                    pwd_field.first.fill(password)
+                    page.keyboard.press("Enter")
+                    time.sleep(3)
+
+                    # Kiểm tra login thành công
+                    success_indicators = ["myaccount.google.com", "mail.google.com",
+                                          "youtube.com", "ManageAccount"]
+                    if any(s in page.url for s in success_indicators):
+                        print(f"  ✅ Login thành công!")
+                        browser.close()
+                        return True
+
+                    # Kiểm tra wrong password (account tồn tại nhưng pw sai)
+                    wrong_pw_texts = ["Wrong password", "wrong password", "Sai mật khẩu"]
+                    for txt in wrong_pw_texts:
+                        if txt.lower() in page.content().lower():
+                            print(f"  ⚠️  Password sai — nhưng account CÓ tồn tại")
+                            browser.close()
+                            return True  # account tồn tại
+
+                # Nếu vẫn ở trang login — account có tồn tại (chỉ chưa điền đủ)
+                if "accounts.google.com" in page.url and "error" not in page.url.lower():
+                    browser.close()
+                    return True
+
+                browser.close()
+                return False
+
+            except Exception as e:
+                print(f"  ⚠️  Verify lỗi: {e}")
+                browser.close()
+                return False
+    except Exception:
+        return True  # không verify được, giả sử OK
+
 
 def create_one_account(
     platform: str,
@@ -984,6 +1374,7 @@ def create_one_account(
     headless: bool,
     country: str = "auto",
     proxy: Optional[str] = None,
+    rotate_country: bool = False,
 ) -> bool:
     service = PLATFORM_TO_FIVESIM.get(platform, "google")
     profile = generate_profile()
@@ -995,38 +1386,134 @@ def create_one_account(
     print(f"  Sinh: {profile['birthday_day']}/{profile['birthday_month']}/{profile['birthday_year']}")
     print(f"{'='*55}")
 
-    # Tìm country rẻ nhất nếu auto
-    if country == "auto":
-        country = fivesim.find_cheapest_country(service)
-
-    # Mua số điện thoại
-    print(f"\n  📱 Mua số điện thoại ({service}, {country})...")
-    try:
-        order = fivesim.buy_number(service, country)
-    except Exception as e:
-        print(f"  ✗ Không mua được số: {e}")
+    # Kiểm tra proxy trước khi mua số (tránh mất tiền 5sim)
+    if not test_proxy_connectivity(proxy):
+        print(f"\n  ❌ Proxy không kết nối được Google — hủy, không mua số điện thoại")
         return False
 
-    order_id = order["id"]
-    phone = order.get("phone", "")
-    print(f"  ✓ Số điện thoại: {phone} (order: {order_id})")
+    # ── Country rotation priority list (same as find_best_country) ──
+    _ROTATE_PRIORITY = [
+        "indonesia", "philippines", "india", "myanmar",
+        "cambodia", "kenya", "ukraine", "russia", "vietnam",
+    ]
 
-    # Tạo tài khoản
-    cookie_file = create_google_account(
-        profile=profile,
-        phone=phone,
-        fivesim=fivesim,
-        order_id=order_id,
-        captcha_key=captcha_key,
-        headless=headless,
-        proxy=proxy,
-    )
+    def _resolve_country_list() -> list:
+        """Build ordered list of countries to try."""
+        if country == "auto" or rotate_country:
+            # Fetch all prices once, build map of available countries
+            try:
+                rows = fivesim.get_all_country_prices(service)
+                price_map = {c: (cost, qty) for c, cost, qty in rows if qty > 0}
+            except Exception:
+                price_map = {}
 
-    success = cookie_file is not None and cookie_file.exists()
-    save_profile_log(profile, phone, platform, success)
+            if country == "auto" or country not in price_map:
+                # Priority order, skip zero-qty countries
+                ordered = [(c, *price_map[c]) for c in _ROTATE_PRIORITY if c in price_map]
+                # Append any remaining available countries not in priority list
+                for c, cost, qty in (rows if 'rows' in dir() else []):
+                    if c not in _ROTATE_PRIORITY and qty > 0:
+                        ordered.append((c, cost, qty))
+                return ordered if ordered else [("vietnam", 0.08, 0)]
+            else:
+                # Specific country requested — still rotate if flag set
+                first = price_map.get(country, (0.08, 0))
+                others = [(c, *price_map[c]) for c in _ROTATE_PRIORITY
+                          if c in price_map and c != country]
+                return [(country, first[0], first[1])] + others
+        elif country == "cheapest":
+            try:
+                rows = fivesim.get_all_country_prices(service)
+                return [(c, cost, qty) for c, cost, qty in rows if qty > 0]
+            except Exception:
+                return [("vietnam", 0.08, 0)]
+        else:
+            # Fixed country
+            return [(country, 0.08, 1)]
+
+    country_list = _resolve_country_list()
+    max_country_attempts = 3 if rotate_country else 1
+
+    last_order_id: Optional[int] = None
+    cookie_file = None
+    chosen_country = country_list[0][0] if country_list else "vietnam"
+    chosen_phone = ""
+
+    for attempt_idx, country_entry in enumerate(country_list[:max_country_attempts]):
+        chosen_country, chosen_cost, _chosen_qty = country_entry
+
+        if attempt_idx == 0:
+            print(f"  🌍 Country được chọn: {chosen_country} (${chosen_cost:.3f})")
+        else:
+            print(f"  ⟳ Thử country tiếp theo: {chosen_country} (${chosen_cost:.3f})...")
+
+        # Cancel previous order if we're rotating after a phone-step failure
+        if last_order_id is not None:
+            fivesim.cancel_order(last_order_id)
+            last_order_id = None
+
+        # Mua số điện thoại
+        print(f"\n  📱 Mua số điện thoại ({service}, {chosen_country})...")
+        try:
+            order = fivesim.buy_number(service, chosen_country)
+        except Exception as e:
+            print(f"  ✗ Không mua được số tại {chosen_country}: {e}")
+            if rotate_country and attempt_idx < max_country_attempts - 1:
+                continue
+            return False
+
+        last_order_id = order["id"]
+        chosen_phone = order.get("phone", "")
+        print(f"  ✓ Số điện thoại: {chosen_phone} (order: {last_order_id})")
+
+        # Tạo tài khoản
+        cookie_file = create_google_account(
+            profile=profile,
+            phone=chosen_phone,
+            fivesim=fivesim,
+            order_id=last_order_id,
+            captcha_key=captcha_key,
+            headless=headless,
+            proxy=proxy,
+        )
+
+        if cookie_file is not None:
+            # Success or at least passed phone step — stop rotating
+            break
+
+        # cookie_file is None: browser failed (possibly at/before phone step)
+        if rotate_country and attempt_idx < max_country_attempts - 1:
+            # Order was already cancelled/finished inside create_google_account
+            # but cancel again to be safe
+            fivesim.cancel_order(last_order_id)
+            last_order_id = None
+            continue
+        # No more rotations
+        break
+
+    phone = chosen_phone
+    cookie_exists = cookie_file is not None and cookie_file.exists()
+
+    # Verify account thật: thử login lại bằng email/password
+    # Tránh false-positive khi Google silently delete account sau signup
+    account_verified = False
+    if cookie_exists:
+        print(f"\n  🔍 Xác minh tài khoản tồn tại thật...")
+        account_verified = _verify_account_login(
+            email=f"{profile['username']}@gmail.com",
+            password=profile["password"],
+            proxy=proxy,
+        )
+        if not account_verified:
+            print(f"  ❌ Tài khoản không login được — Google đã xóa (bot detection)")
+            print(f"     Cần proxy residential chất lượng cao hơn hoặc thử lại sau")
+            cookie_exists = False
+
+    success = cookie_exists and account_verified
+    save_profile_log(profile, phone, platform, success, proxy=proxy)
 
     if success:
-        print(f"\n  🎉 Tài khoản tạo thành công!")
+        print(f"\n  🎉 Tài khoản tạo + xác minh thành công!")
 
         # Upload vào pool
         print(f"  ☁️  Upload cookies vào {platform} pool...")
@@ -1038,7 +1525,8 @@ def create_one_account(
         print(f"  💾 Backup: {backup}")
     else:
         print(f"\n  ✗ Tạo tài khoản thất bại")
-        fivesim.cancel_order(order_id)
+        if last_order_id is not None:
+            fivesim.cancel_order(last_order_id)
 
     return success
 
@@ -1058,87 +1546,279 @@ def upload_cookie_manual(cookie_path: str, platform: str) -> None:
 
 
 # ─────────────────────────────────────────────
+# Throwaway log viewer
+# ─────────────────────────────────────────────
+
+def print_throwaway_log() -> None:
+    """In bảng throwaway_accounts.json ra stdout."""
+    log_path = Path(__file__).parent / "throwaway_accounts.json"
+    if not log_path.exists():
+        print(f"⚠️  Chưa có file log: {log_path}")
+        return
+
+    try:
+        entries = json.loads(log_path.read_text())
+    except Exception as e:
+        print(f"❌ Không đọc được log: {e}")
+        return
+
+    if not entries:
+        print("(Chưa có tài khoản nào được ghi log)")
+        return
+
+    # Column widths
+    col_email    = max(len("email"),    max(len(e.get("email", "") or "")    for e in entries))
+    col_password = max(len("password"), max(len(e.get("password", "") or "") for e in entries))
+    col_phone    = max(len("phone"),    max(len(e.get("phone", "") or "")    for e in entries))
+    col_success  = len("success")
+    col_created  = max(len("created_at"), max(len(e.get("created_at", "") or "") for e in entries))
+    col_ip       = max(len("exit_ip"),  max(len(e.get("exit_ip", "") or "")  for e in entries))
+
+    sep = (f"+-{'-'*col_email}-+-{'-'*col_password}-+-{'-'*col_phone}-+"
+           f"-{'-'*col_success}-+-{'-'*col_created}-+-{'-'*col_ip}-+")
+
+    header = (f"| {'email':<{col_email}} | {'password':<{col_password}} |"
+              f" {'phone':<{col_phone}} | {'success':<{col_success}} |"
+              f" {'created_at':<{col_created}} | {'exit_ip':<{col_ip}} |")
+
+    print(sep)
+    print(header)
+    print(sep)
+
+    for e in entries:
+        email    = e.get("email", "") or ""
+        password = e.get("password", "") or ""
+        phone    = e.get("phone", "") or ""
+        success  = "yes" if e.get("success") else "no"
+        created  = e.get("created_at", "") or ""
+        exit_ip  = e.get("exit_ip", "") or ""
+        row = (f"| {email:<{col_email}} | {password:<{col_password}} |"
+               f" {phone:<{col_phone}} | {success:<{col_success}} |"
+               f" {created:<{col_created}} | {exit_ip:<{col_ip}} |")
+        print(row)
+
+    print(sep)
+    print(f"\nTong cong: {len(entries)} ban ghi  |  Log: {log_path}")
+
+
+# ─────────────────────────────────────────────
+# Daily daemon
+# ─────────────────────────────────────────────
+
+def _seconds_to_next_midnight(random_offset_max: int = 3600) -> tuple:
+    """
+    Tinh so giay den nua dem hom nay + random offset (0..random_offset_max giay).
+    Tra ve (seconds_to_sleep, next_run_time_str).
+    """
+    import datetime
+    now = time.time()
+    dt_now = datetime.datetime.fromtimestamp(now)
+    # Nua dem hom nay (00:00:00 ngay mai)
+    dt_midnight = (dt_now + datetime.timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    offset = random.randint(0, random_offset_max)
+    dt_next_run = dt_midnight + datetime.timedelta(seconds=offset)
+    secs = max(0, (dt_next_run - dt_now).total_seconds())
+    return secs, dt_next_run.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def run_daily_daemon(
+    platform: str,
+    count: int,
+    fivesim: FiveSimClient,
+    captcha_key: Optional[str],
+    headless: bool,
+    country: str,
+    proxy: Optional[str],
+    rotate_country: bool,
+) -> None:
+    """
+    Daemon mode: tao N tai khoan moi ngay lien tuc den khi bi huy.
+    Sau moi batch thanh cong, ngu den nua dem + random offset 0-3600s.
+    Khi batch that bai hoan toan, thu lai sau 6h.
+    """
+    RETRY_INTERVAL_SECS = 6 * 3600  # 6 gio khi that bai
+
+    iteration = 0
+    while True:
+        iteration += 1
+        print(f"\n{'='*55}")
+        print(f"  [Ngay {iteration}] Bat dau tao {count} tai khoan {platform}...")
+        print(f"{'='*55}")
+
+        ok = 0
+        fail = 0
+        for i in range(count):
+            print(f"\n[{i+1}/{count}] Bat dau tao tai khoan...")
+            success = create_one_account(
+                platform=platform,
+                fivesim=fivesim,
+                captcha_key=captcha_key,
+                headless=headless,
+                country=country,
+                proxy=proxy,
+                rotate_country=rotate_country,
+            )
+            if success:
+                ok += 1
+            else:
+                fail += 1
+
+            if i < count - 1:
+                delay = random.randint(30, 60)
+                print(f"\n  Doi {delay}s truoc tai khoan tiep theo...")
+                time.sleep(delay)
+
+        print(f"\n  Ket qua batch: {ok} thanh cong | {fail} that bai")
+
+        if ok == 0:
+            # Toan bo that bai -> thu lai sau 6h
+            retry_dt = time.strftime(
+                "%Y-%m-%d %H:%M:%S",
+                time.localtime(time.time() + RETRY_INTERVAL_SECS)
+            )
+            hours = RETRY_INTERVAL_SECS // 3600
+            minutes = (RETRY_INTERVAL_SECS % 3600) // 60
+            print(f"  Toan bo that bai — thu lai sau {hours}h. Hen: {retry_dt}")
+            time.sleep(RETRY_INTERVAL_SECS)
+        else:
+            # It nhat 1 thanh cong -> ngu den nua dem + random
+            sleep_secs, next_run_str = _seconds_to_next_midnight(random_offset_max=3600)
+            hours = int(sleep_secs) // 3600
+            minutes = (int(sleep_secs) % 3600) // 60
+            print(f"  Nghi den {next_run_str} ({hours}h {minutes}m)...")
+            time.sleep(sleep_secs)
+
+
+# ─────────────────────────────────────────────
 # CLI
 # ─────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Tự động tạo tài khoản throwaway + upload vào Cookie Pool"
+        description="Tu dong tao tai khoan throwaway + upload vao Cookie Pool"
     )
     parser.add_argument("--platform", default="youtube",
                         choices=list(PLATFORM_TO_FIVESIM.keys()),
-                        help="Nền tảng cần tạo tài khoản (default: youtube)")
+                        help="Nen tang can tao tai khoan (default: youtube)")
     parser.add_argument("--count", type=int, default=1,
-                        help="Số tài khoản cần tạo")
+                        help="So tai khoan can tao")
     parser.add_argument("--country", default="auto",
-                        help="Country cho 5sim (auto=chọn rẻ nhất, vd: vietnam, russia)")
+                        help="Country cho 5sim. 'auto'=uu tien Indonesia/non-VN (SMS OTP), "
+                             "'cheapest'=re nhat, hoac ten nuoc: vietnam, indonesia, philippines")
     parser.add_argument("--captcha-key", default=TWOCAPTCHA_API_KEY or None,
-                        help="2captcha.com API key (bỏ trống = giải CAPTCHA thủ công)")
+                        help="2captcha.com API key (bo trong = giai CAPTCHA thu cong)")
     parser.add_argument("--headless", action="store_true",
-                        help="Chạy browser ẩn (cần --captcha-key)")
+                        help="Chay browser an (can --captcha-key)")
     parser.add_argument("--list-balance", action="store_true",
-                        help="Xem số dư 5sim.net")
+                        help="Xem so du 5sim.net")
     parser.add_argument("--upload-cookie",
-                        help="Upload cookie file thủ công (dùng với --platform)")
+                        help="Upload cookie file thu cong (dung voi --platform)")
     parser.add_argument("--fivesim-key", default=FIVESIM_API_KEY,
-                        help="5sim.net API key (hoặc set FIVESIM_API_KEY)")
+                        help="5sim.net API key (hoac set FIVESIM_API_KEY)")
     parser.add_argument("--proxy", default=THROWAWAY_PROXY or None,
                         help="Residential proxy URL (vd: http://user:pass@host:port). "
-                             "Bắt buộc nếu IP data-center bị Google chặn SMS.")
+                             "Bat buoc neu IP data-center bi Google chan SMS.")
+    parser.add_argument("--test-proxy", action="store_true",
+                        help="Chi kiem tra proxy co ket noi duoc accounts.google.com khong, roi thoat.")
+    parser.add_argument("--rotate-country", action="store_true",
+                        help="Khi tao that bai o buoc phone, tu dong thu country tiep theo "
+                             "trong danh sach uu tien (toi da 3 country / tai khoan).")
+    parser.add_argument("--daily", type=int, default=0, metavar="N",
+                        help="Daemon mode: tao N tai khoan moi ngay lien tuc. "
+                             "Nghi den nua dem sau moi batch thanh cong.")
+    parser.add_argument("--throwaway-log", action="store_true",
+                        help="In bang throwaway_accounts.json va thoat (danh cho admin UI).")
     args = parser.parse_args()
 
-    # ── Upload thủ công ───────────────────────────────────────
+    # ── In log va thoat ───────────────────────────────────────
+    if args.throwaway_log:
+        print_throwaway_log()
+        return
+
+    # ── Upload thu cong ───────────────────────────────────────
     if args.upload_cookie:
         upload_cookie_manual(args.upload_cookie, args.platform)
         return
 
-    # ── Kiểm tra API key ──────────────────────────────────────
+    # ── Test proxy connectivity ────────────────────────────────
+    if args.test_proxy:
+        active_proxy = resolve_proxy(args.proxy)
+        ok = test_proxy_connectivity(active_proxy)
+        sys.exit(0 if ok else 1)
+
+    # ── Kiem tra API key ──────────────────────────────────────
     if not args.fivesim_key:
-        print("❌ Cần FIVESIM_API_KEY. Set trong .env hoặc --fivesim-key")
-        print("   Đăng ký tại: https://5sim.net")
+        print("Can FIVESIM_API_KEY. Set trong .env hoac --fivesim-key")
+        print("   Dang ky tai: https://5sim.net")
         sys.exit(1)
 
     fivesim = FiveSimClient(args.fivesim_key)
 
-    # ── Xem số dư ────────────────────────────────────────────
+    # ── Xem so du ────────────────────────────────────────────
     if args.list_balance:
         try:
             bal = fivesim.get_balance()
-            print(f"💰 Số dư 5sim.net: ${bal:.4f}")
+            print(f"So du 5sim.net: ${bal:.4f}")
 
-            print("\nGiá số điện thoại Google (top countries):")
+            print("\nGia so dien thoai Google (top countries):")
             rows = fivesim.get_all_country_prices("google")
             for country, cost, count in rows[:15]:
                 print(f"  {country:<15} ${cost:.3f}  ({count} available)")
         except Exception as e:
-            print(f"❌ Lỗi: {e}")
+            print(f"Loi: {e}")
         return
 
-    # ── Auto-detect headless: server không có display → bắt buộc headless ────
+    # ── Auto-detect headless: server khong co display -> bat buoc headless ────
     has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
     if not has_display and not args.headless:
-        print("ℹ️  Không có màn hình, tự chuyển sang headless mode.")
+        print("Khong co man hinh, tu chuyen sang headless mode.")
         args.headless = True
 
-    # ── Tạo tài khoản ────────────────────────────────────────
-    bal = fivesim.get_balance()
     active_proxy = resolve_proxy(args.proxy)
     captcha_mode = "CapSolver (auto)" if args.captcha_key and args.captcha_key.startswith("CAP-") \
         else "2captcha (auto)" if args.captcha_key \
-        else "bỏ qua (nếu CAPTCHA xuất hiện sẽ fail)"
-    print(f"💰 Số dư 5sim.net: ${bal:.4f}")
-    print(f"🎯 Nền tảng: {args.platform}")
-    print(f"🔢 Số tài khoản: {args.count}")
-    print(f"🌍 Country: {args.country}")
-    print(f"🤖 CAPTCHA: {captcha_mode}")
-    print(f"🌐 Proxy: {proxy_label(active_proxy)}")
-    print(f"👀 Browser: {'headless (ẩn)' if args.headless else 'hiện (có màn hình)'}")
+        else "bo qua (neu CAPTCHA xuat hien se fail)"
+
+    # ── Daemon mode (--daily N) ───────────────────────────────
+    if args.daily > 0:
+        try:
+            bal = fivesim.get_balance()
+        except Exception:
+            bal = 0.0
+        print(f"So du 5sim.net: ${bal:.4f}")
+        print(f"Nen tang: {args.platform} | So TK/ngay: {args.daily} | Country: {args.country}")
+        print(f"Rotate country: {'bat' if args.rotate_country else 'tat'} | Proxy: {proxy_label(active_proxy)}")
+        print(f"Bat dau daemon mode... (Ctrl+C de dung)")
+        run_daily_daemon(
+            platform=args.platform,
+            count=args.daily,
+            fivesim=fivesim,
+            captcha_key=args.captcha_key,
+            headless=args.headless,
+            country=args.country,
+            proxy=active_proxy,
+            rotate_country=args.rotate_country,
+        )
+        return
+
+    # ── Tao tai khoan ────────────────────────────────────────
+    bal = fivesim.get_balance()
+    print(f"So du 5sim.net: ${bal:.4f}")
+    print(f"Nen tang: {args.platform}")
+    print(f"So tai khoan: {args.count}")
+    print(f"Country: {args.country}")
+    print(f"CAPTCHA: {captcha_mode}")
+    print(f"Proxy: {proxy_label(active_proxy)}")
+    print(f"Browser: {'headless (an)' if args.headless else 'hien (co man hinh)'}")
+    print(f"Rotate country: {'bat' if args.rotate_country else 'tat'}")
     print()
 
     ok = 0
     fail = 0
     for i in range(args.count):
-        print(f"\n[{i+1}/{args.count}] Bắt đầu tạo tài khoản...")
+        print(f"\n[{i+1}/{args.count}] Bat dau tao tai khoan...")
         success = create_one_account(
             platform=args.platform,
             fivesim=fivesim,
@@ -1146,6 +1826,7 @@ def main():
             headless=args.headless,
             country=args.country,
             proxy=active_proxy,
+            rotate_country=args.rotate_country,
         )
         if success:
             ok += 1
@@ -1154,11 +1835,11 @@ def main():
 
         if i < args.count - 1:
             delay = random.randint(30, 60)
-            print(f"\n  ⏸  Đợi {delay}s trước tài khoản tiếp theo...")
+            print(f"\n  Doi {delay}s truoc tai khoan tiep theo...")
             time.sleep(delay)
 
     print(f"\n{'='*55}")
-    print(f"  Kết quả: ✅ {ok} thành công | ❌ {fail} thất bại")
+    print(f"  Ket qua: {ok} thanh cong | {fail} that bai")
     print(f"  Xem log: {Path(__file__).parent / 'throwaway_accounts.json'}")
     print(f"{'='*55}\n")
 
