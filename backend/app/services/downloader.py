@@ -26,28 +26,49 @@ import concurrent.futures
 from typing import Dict, Any, List
 import httpx
 
-# ── Instagram cookies (optional) ─────────────────────────────────────
-# Set INSTAGRAM_COOKIES_B64 env var to a base64-encoded Netscape cookies.txt
-# from a logged-in Instagram session. This unblocks Reels/Posts extraction.
+# ── Platform cookies (optional) ──────────────────────────────────────
+# Set <PLATFORM>_COOKIES_B64 env var to a base64-encoded Netscape cookies.txt
+# from a logged-in session. Drastically reduces bot detection and rate limiting.
 _INSTAGRAM_COOKIES_B64 = os.getenv("INSTAGRAM_COOKIES_B64", "")
-_instagram_cookies_file: str | None = None
+_YOUTUBE_COOKIES_B64   = os.getenv("YOUTUBE_COOKIES_B64", "")
+_TIKTOK_COOKIES_B64    = os.getenv("TIKTOK_COOKIES_B64", "")
+_FACEBOOK_COOKIES_B64  = os.getenv("FACEBOOK_COOKIES_B64", "")
 
-def _get_instagram_cookies_file() -> str | None:
-    global _instagram_cookies_file
-    if _instagram_cookies_file and os.path.exists(_instagram_cookies_file):
-        return _instagram_cookies_file
-    if not _INSTAGRAM_COOKIES_B64:
+_cookies_cache: dict[str, str | None] = {}
+
+def _get_cookies_file(platform: str, b64_value: str) -> str | None:
+    """Decode a base64 cookies string to a temp file, cached per platform."""
+    if platform in _cookies_cache:
+        path = _cookies_cache[platform]
+        if path and os.path.exists(path):
+            return path
+    if not b64_value:
+        _cookies_cache[platform] = None
         return None
     try:
-        decoded = base64.b64decode(_INSTAGRAM_COOKIES_B64).decode("utf-8")
-        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, prefix="ig_cookies_")
+        decoded = base64.b64decode(b64_value).decode("utf-8")
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, prefix=f"{platform}_cookies_")
         tmp.write(decoded)
         tmp.close()
-        _instagram_cookies_file = tmp.name
-        return _instagram_cookies_file
+        _cookies_cache[platform] = tmp.name
+        print(f"[Cookies] Loaded {platform} cookies → {tmp.name}")
+        return tmp.name
     except Exception as e:
-        print(f"[Instagram] Failed to decode cookies: {e}")
+        print(f"[Cookies] Failed to decode {platform} cookies: {e}")
+        _cookies_cache[platform] = None
         return None
+
+def _get_instagram_cookies_file() -> str | None:
+    return _get_cookies_file("instagram", _INSTAGRAM_COOKIES_B64)
+
+def _get_youtube_cookies_file() -> str | None:
+    return _get_cookies_file("youtube", _YOUTUBE_COOKIES_B64)
+
+def _get_tiktok_cookies_file() -> str | None:
+    return _get_cookies_file("tiktok", _TIKTOK_COOKIES_B64)
+
+def _get_facebook_cookies_file() -> str | None:
+    return _get_cookies_file("facebook", _FACEBOOK_COOKIES_B64)
 
 _INSTAGRAM_MOBILE_UA = (
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
@@ -264,20 +285,28 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         # Configure PO Token provider if bgutil-pot sidecar is available
         opts["extractor_args"] = {"youtube": yt_extractor_args}
         if bgutil_url:
-            # bgutil HTTP plugin reads base_url from 'youtubepot-bgutilhttp' extractor args
             opts["extractor_args"]["youtubepot-bgutilhttp"] = {
                 "base_url": [bgutil_url]
             }
             print(f"[Downloader] PO Token provider: bgutil-pot @ {bgutil_url}")
+        # Inject YouTube cookies — logged-in session bypasses bot detection completely
+        yt_cookies = _get_youtube_cookies_file()
+        if yt_cookies:
+            opts["cookiefile"] = yt_cookies
+            print("[Downloader] YouTube cookies loaded")
         # Prioritize resolution, then codec compatibility, then bitrate
         opts["format_sort"] = ["res", "ext:mp4:m4a", "tbr", "vbr", "abr", "asr"]
+
+    if "facebook.com" in url.lower():
+        fb_cookies = _get_facebook_cookies_file()
+        if fb_cookies:
+            opts["cookiefile"] = fb_cookies
+            print("[Downloader] Facebook cookies loaded")
 
     if "instagram.com" in url.lower():
         opts["http_headers"] = {"User-Agent": _INSTAGRAM_MOBILE_UA}
         opts["retries"] = 2
         opts["socket_timeout"] = 15
-        # Skip proxy for Instagram when only ScraperAPI is available —
-        # ScraperAPI blocks yt-dlp protocol; server IP works fine for public Reels
         from app.core.proxy_manager import IPROYAL_PROXY
         if not IPROYAL_PROXY and "proxy" in opts:
             del opts["proxy"]
@@ -297,12 +326,16 @@ def _apply_tiktok_opts(opts: dict, url: str, remove_watermark: bool = True) -> d
     """
     if "tiktok.com" in url.lower() or "douyin.com" in url.lower():
         opts["http_headers"] = {"User-Agent": TIKTOK_USER_AGENT}
-        # Use TikTok API endpoint that returns non-watermarked streams
         opts["extractor_args"] = {
             "tiktok": {
                 "api_hostname": ["api16-normal-c-useast1a.tiktokv.com"],
             }
         }
+        # Inject TikTok cookies — reduces rate limiting on bulk downloads
+        tt_cookies = _get_tiktok_cookies_file()
+        if tt_cookies and "tiktok.com" in url.lower():
+            opts["cookiefile"] = tt_cookies
+            print("[Downloader] TikTok cookies loaded")
         if remove_watermark:
             opts["format"] = "bestvideo[format_id!~=watermark]/bestvideo/best"
         else:
