@@ -10,7 +10,8 @@ Endpoints for admin dashboard:
 """
 
 import os
-from fastapi import APIRouter, HTTPException, Depends
+import base64
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
@@ -653,6 +654,9 @@ class CookieRemoveRequest(BaseModel):
     index: int  # position in pool (0-based)
 
 
+_VALID_PLATFORMS = {"youtube", "tiktok", "facebook", "instagram"}
+
+
 @router.get("/cookies/status")
 async def cookie_pool_status(_=Depends(verify_admin)):
     """Show healthy/blocked count per platform."""
@@ -663,12 +667,62 @@ async def cookie_pool_status(_=Depends(verify_admin)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/cookies/list/{platform}")
+async def cookie_pool_list(platform: str, _=Depends(verify_admin)):
+    """List all cookies in pool with hash + health status."""
+    if platform not in _VALID_PLATFORMS:
+        raise HTTPException(status_code=400, detail=f"Platform must be one of: {_VALID_PLATFORMS}")
+    try:
+        from app.core.cookie_pool import _hash
+        from app.core.redis_client import get_redis
+        rc = get_redis()
+        cookies = rc.lrange(f"cookie_pool:{platform}", 0, -1)
+        items = []
+        for i, c in enumerate(cookies):
+            h = _hash(c)
+            blocked = rc.get(f"cookie_health:{platform}:{h}") == "blocked"
+            ttl = rc.ttl(f"cookie_health:{platform}:{h}") if blocked else None
+            items.append({
+                "index": i,
+                "hash": h,
+                "status": "blocked" if blocked else "healthy",
+                "blocked_ttl_s": ttl,
+                "preview": c[:20] + "...",  # first 20 chars as hint
+            })
+        return {"success": True, "platform": platform, "total": len(items), "cookies": items}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/cookies/upload")
+async def cookie_pool_upload(
+    platform: str = Form(...),
+    file: UploadFile = File(...),
+    _=Depends(verify_admin),
+):
+    """
+    Upload cookies.txt file directly — no base64 needed.
+    Accepts Netscape format cookies.txt from browser extension.
+    Supports multiple files in one session (call multiple times).
+    """
+    if platform not in _VALID_PLATFORMS:
+        raise HTTPException(status_code=400, detail=f"Platform must be one of: {_VALID_PLATFORMS}")
+    try:
+        content = await file.read()
+        cookies_b64 = base64.b64encode(content).decode("utf-8")
+        from app.core.cookie_pool import add_cookie
+        new_size = add_cookie(platform, cookies_b64)
+        return {"success": True, "platform": platform, "pool_size": new_size,
+                "message": f"Cookie added to {platform} pool (total: {new_size})"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/cookies/add")
 async def cookie_pool_add(req: CookieAddRequest, _=Depends(verify_admin)):
-    """Add a cookie to the rotating pool for a platform."""
-    valid_platforms = {"youtube", "tiktok", "facebook", "instagram"}
-    if req.platform not in valid_platforms:
-        raise HTTPException(status_code=400, detail=f"Platform must be one of: {valid_platforms}")
+    """Add a cookie (base64) to the rotating pool. Use /cookies/upload for file upload."""
+    if req.platform not in _VALID_PLATFORMS:
+        raise HTTPException(status_code=400, detail=f"Platform must be one of: {_VALID_PLATFORMS}")
     if not req.cookies_b64.strip():
         raise HTTPException(status_code=400, detail="cookies_b64 is required")
     try:

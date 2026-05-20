@@ -244,6 +244,7 @@ export default function AdminDashboard() {
     { id: 'users',     label: 'Người Dùng',       icon: Users },
     { id: 'health',    label: 'Hệ Thống',         icon: Server },
     { id: 'apikeys',   label: 'API & Credits',    icon: Key },
+    { id: 'cookies',   label: 'Cookie Pool',      icon: Shield },
   ];
 
   return (
@@ -681,6 +682,212 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {activeTab === 'cookies' && <CookiePoolTab />}
+    </div>
+  );
+}
+
+// ── Cookie Pool Tab ─────────────────────────────────────────────────
+const PLATFORMS = ['youtube', 'tiktok', 'facebook', 'instagram'];
+const PLATFORM_COLORS = {
+  youtube:   'text-red-400 border-red-500/30 bg-red-500/10',
+  tiktok:    'text-pink-400 border-pink-500/30 bg-pink-500/10',
+  facebook:  'text-blue-400 border-blue-500/30 bg-blue-500/10',
+  instagram: 'text-purple-400 border-purple-500/30 bg-purple-500/10',
+};
+
+function CookiePoolTab() {
+  const [activePlat, setActivePlat] = useState('youtube');
+  const [poolStatus, setPoolStatus] = useState({});
+  const [cookieList, setCookieList] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [dragging, setDragging] = useState(false);
+  const fileRef = useState(null);
+
+  const fetchStatus = async () => {
+    try {
+      const r = await adminFetch('/cookies/status');
+      const d = await r.json();
+      if (d.success) setPoolStatus(d.pools || {});
+    } catch {}
+  };
+
+  const fetchList = async (platform) => {
+    try {
+      const r = await adminFetch(`/cookies/list/${platform}`);
+      const d = await r.json();
+      if (d.success) setCookieList(d.cookies || []);
+    } catch {}
+  };
+
+  useEffect(() => { fetchStatus(); }, []);
+  useEffect(() => { fetchList(activePlat); setCookieList([]); }, [activePlat]);
+
+  const uploadFile = async (file) => {
+    if (!file) return;
+    setUploading(true); setMsg('');
+    try {
+      const form = new FormData();
+      form.append('platform', activePlat);
+      form.append('file', file);
+      const r = await adminFetch('/cookies/upload', { method: 'POST', body: form });
+      const d = await r.json();
+      if (d.success) {
+        setMsg(`✅ Đã thêm vào pool ${activePlat} (tổng: ${d.pool_size} tài khoản)`);
+        fetchStatus(); fetchList(activePlat);
+      } else {
+        setMsg(`❌ Lỗi: ${d.detail || 'Unknown error'}`);
+      }
+    } catch (e) { setMsg(`❌ ${e.message}`); }
+    finally { setUploading(false); }
+  };
+
+  const removeCookie = async (index) => {
+    if (!confirm(`Xóa tài khoản #${index + 1} khỏi pool ${activePlat}?`)) return;
+    try {
+      await adminFetch('/cookies/remove', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: activePlat, index }),
+      });
+      setMsg(`🗑 Đã xóa tài khoản #${index + 1}`);
+      fetchStatus(); fetchList(activePlat);
+    } catch (e) { setMsg(`❌ ${e.message}`); }
+  };
+
+  const onDrop = (e) => {
+    e.preventDefault(); setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) uploadFile(file);
+  };
+
+  const platInfo = poolStatus[activePlat] || { total: 0, healthy: 0, blocked: 0 };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      {/* Header */}
+      <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
+        <h3 className="text-base font-bold text-white mb-1 flex items-center gap-2">
+          <Shield className="w-4 h-4 text-emerald-400" /> Cookie Pool — Tài Khoản Xoay Vòng
+        </h3>
+        <p className="text-xs text-slate-400">
+          Mỗi Celery worker tự động lấy 1 cookie từ pool. Khi bị block → tự rotate sang tài khoản tiếp theo.
+          Thêm 3-5 tài khoản mỗi platform để tránh bị chặn khi public.
+        </p>
+        {/* Summary pills */}
+        <div className="flex flex-wrap gap-2 mt-3">
+          {PLATFORMS.map(p => {
+            const s = poolStatus[p] || { total: 0, healthy: 0 };
+            return (
+              <button key={p} onClick={() => setActivePlat(p)}
+                className={`px-3 py-1 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+                  activePlat === p ? PLATFORM_COLORS[p] : 'text-slate-400 border-slate-700/50 bg-slate-800/50'
+                }`}>
+                {p.charAt(0).toUpperCase() + p.slice(1)}&nbsp;
+                <span className={s.healthy > 0 ? 'text-emerald-400' : 'text-red-400'}>
+                  {s.healthy}/{s.total}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Upload zone */}
+      <div
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={onDrop}
+        className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all ${
+          dragging ? 'border-emerald-400 bg-emerald-400/5' : 'border-slate-600 bg-[#0a1a17]'
+        }`}
+      >
+        <Database className="w-8 h-8 text-slate-500 mx-auto mb-3" />
+        <p className="text-sm font-semibold text-white mb-1">
+          Thêm cookies.txt cho <span className={`capitalize font-bold ${PLATFORM_COLORS[activePlat].split(' ')[0]}`}>{activePlat}</span>
+        </p>
+        <p className="text-xs text-slate-400 mb-4">Kéo thả file cookies.txt vào đây, hoặc click chọn file</p>
+        <label className="cursor-pointer">
+          <span className="px-4 py-2 bg-emerald-600/20 border border-emerald-500/40 text-emerald-400 text-sm font-bold rounded-xl hover:bg-emerald-600/30 transition-colors">
+            {uploading ? '⏳ Đang upload...' : '📂 Chọn file cookies.txt'}
+          </span>
+          <input
+            type="file"
+            accept=".txt"
+            className="hidden"
+            disabled={uploading}
+            onChange={e => uploadFile(e.target.files[0])}
+          />
+        </label>
+        <p className="text-[10px] text-slate-500 mt-3">
+          Xuất từ Chrome: Cài "Get cookies.txt LOCALLY" → youtube.com → Export
+        </p>
+      </div>
+
+      {msg && (
+        <div className={`px-4 py-3 rounded-xl text-sm font-medium ${
+          msg.startsWith('✅') ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border border-red-500/30 text-red-300'
+        }`}>{msg}</div>
+      )}
+
+      {/* Cookie list */}
+      <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-sm font-bold text-white capitalize flex items-center gap-2">
+            <span className={`px-2 py-0.5 rounded-full text-xs ${PLATFORM_COLORS[activePlat]}`}>{activePlat}</span>
+            Pool — {platInfo.healthy} healthy · {platInfo.blocked} blocked · {platInfo.total} total
+          </h4>
+          <button onClick={() => fetchList(activePlat)} className="text-xs text-slate-400 hover:text-white cursor-pointer transition-colors">
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {cookieList.length === 0 ? (
+          <div className="text-center py-8 text-slate-500 text-sm">
+            Chưa có tài khoản nào trong pool {activePlat}.<br />
+            Upload cookies.txt ở trên để bắt đầu.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {cookieList.map((item, i) => (
+              <div key={i} className="flex items-center justify-between px-4 py-2.5 bg-[#012622]/60 rounded-xl border border-slate-700/30">
+                <div className="flex items-center gap-3">
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                    item.status === 'healthy' ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-red-400 shadow-[0_0_6px_#f87171]'
+                  }`} />
+                  <div>
+                    <p className="text-xs font-mono text-slate-300">Tài khoản #{item.index + 1} · <span className="text-slate-500">{item.hash}</span></p>
+                    {item.status === 'blocked' && item.blocked_ttl_s > 0 && (
+                      <p className="text-[10px] text-red-400">Blocked · tự mở lại sau {Math.ceil(item.blocked_ttl_s / 60)} phút</p>
+                    )}
+                    {item.status === 'healthy' && <p className="text-[10px] text-emerald-400">Đang hoạt động</p>}
+                  </div>
+                </div>
+                <button
+                  onClick={() => removeCookie(item.index)}
+                  className="text-xs text-red-400 hover:text-red-300 cursor-pointer transition-colors px-2 py-1 rounded hover:bg-red-500/10"
+                >
+                  Xóa
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* How-to guide */}
+      <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-2xl">
+        <p className="text-xs font-bold text-amber-400 mb-2">📖 Hướng dẫn thêm tài khoản vào pool</p>
+        <ol className="text-xs text-slate-400 space-y-1 list-decimal list-inside">
+          <li>Tạo tài khoản Gmail throwaway (dùng số điện thoại, tối đa 4 tài khoản/số)</li>
+          <li>Đăng nhập YouTube/TikTok/Facebook trong Chrome</li>
+          <li>Cài extension <b className="text-white">"Get cookies.txt LOCALLY"</b> (Chrome Web Store)</li>
+          <li>Mở tab youtube.com → click extension → <b className="text-white">Export cookies.txt</b></li>
+          <li>Upload file vào ô trên — xong! Worker tự rotate giữa các tài khoản</li>
+        </ol>
+      </div>
     </div>
   );
 }
