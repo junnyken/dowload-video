@@ -23,7 +23,6 @@ Biến môi trường (.env):
 """
 
 import argparse
-import base64
 import json
 import os
 import random
@@ -86,14 +85,29 @@ class FiveSimClient:
         r.raise_for_status()
         return float(r.json().get("balance", 0))
 
-    def get_prices(self, service: str, country: str = "any") -> dict:
-        """Lấy giá và số lượng available cho service."""
-        r = self.session.get(f"{self.BASE}/guest/prices", params={
-            "country": country,
-            "product": service,
-        })
+    def get_prices(self, service: str, country: str = "vietnam") -> dict:
+        """Lấy giá và số lượng available cho service tại country."""
+        r = self.session.get(f"{self.BASE}/guest/products/{country}/any")
         r.raise_for_status()
-        return r.json()
+        data = r.json()
+        return {country: {service: data.get(service, {})}} if service in data else {}
+
+    def get_all_country_prices(self, service: str) -> list:
+        """Lấy giá của service từ tất cả country, sort theo giá."""
+        countries = ["vietnam", "russia", "ukraine", "philippines", "india", "indonesia"]
+        rows = []
+        for c in countries:
+            try:
+                r = self.session.get(f"{self.BASE}/guest/products/{c}/any")
+                r.raise_for_status()
+                data = r.json()
+                if service in data:
+                    info = data[service]
+                    rows.append((c, float(info.get("Price", 999)), int(info.get("Qty", 0))))
+            except Exception:
+                pass
+        rows.sort(key=lambda x: x[1])
+        return rows
 
     def buy_number(self, service: str, country: str = "vietnam") -> dict:
         """
@@ -149,23 +163,14 @@ class FiveSimClient:
     def find_cheapest_country(self, service: str) -> str:
         """Tìm country rẻ nhất có sẵn số."""
         try:
-            prices = self.get_prices(service)
-            best_country = "any"
-            best_price = 9999
-            for country, services in prices.items():
-                for svc_name, info in services.items():
-                    if svc_name != service:
-                        continue
-                    cost = float(info.get("Cost", 9999))
-                    count = int(info.get("Count", 0))
-                    if count > 0 and cost < best_price:
-                        best_price = cost
-                        best_country = country
-            if best_country != "any":
-                print(f"  🌍 Country rẻ nhất: {best_country} (${best_price:.2f})")
-            return best_country
+            rows = self.get_all_country_prices(service)
+            for country, cost, qty in rows:
+                if qty > 0:
+                    print(f"  🌍 Country rẻ nhất: {country} (${cost:.3f}, {qty} available)")
+                    return country
         except Exception:
-            return "any"
+            pass
+        return "vietnam"
 
 
 def _extract_otp(text: str) -> Optional[str]:
@@ -655,13 +660,7 @@ def main():
             print(f"💰 Số dư 5sim.net: ${bal:.4f}")
 
             print("\nGiá số điện thoại Google (top countries):")
-            prices = fivesim.get_prices("google")
-            rows = []
-            for country, services in prices.items():
-                for svc, info in services.items():
-                    if svc == "google":
-                        rows.append((country, float(info.get("Cost", 999)), int(info.get("Count", 0))))
-            rows.sort(key=lambda x: x[1])
+            rows = fivesim.get_all_country_prices("google")
             for country, cost, count in rows[:15]:
                 print(f"  {country:<15} ${cost:.3f}  ({count} available)")
         except Exception as e:
