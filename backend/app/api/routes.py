@@ -706,6 +706,63 @@ async def retry_failed_jobs(batch_id: str, request: Request):
     return {"success": True, "retried": retried, "message": f"Đã thêm lại {retried} job vào hàng đợi."}
 
 
+# ── POST /resume-batch/{batch_id}  (resume interrupted batches) ────────
+
+@router.post("/resume-batch/{batch_id}")
+@limiter.limit("10/minute")
+async def resume_batch(batch_id: str, request: Request):
+    """
+    Resume a batch where jobs got stuck:
+    - pending: never dispatched (e.g. worker restart before Celery picked them up)
+    - processing: stuck > 10 min (worker died mid-task)
+    """
+    from datetime import datetime, timezone, timedelta
+    user_id = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
+    supabase = get_supabase_client()
+
+    stuck_cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
+
+    candidates_res = (
+        supabase.table("download_jobs")
+        .select("id, original_url, status, created_at")
+        .eq("batch_id", batch_id)
+        .in_("status", ["pending", "processing"])
+        .execute()
+    )
+
+    stuck_jobs = []
+    for job in (candidates_res.data or []):
+        url = job.get("original_url", "")
+        if url in (None, "", "batch_zip"):
+            continue
+        if job["status"] == "pending":
+            stuck_jobs.append(job)
+        elif job["status"] == "processing":
+            try:
+                created = datetime.fromisoformat(job["created_at"].replace("Z", "+00:00"))
+                if created < stuck_cutoff:
+                    stuck_jobs.append(job)
+            except Exception:
+                stuck_jobs.append(job)
+
+    if not stuck_jobs:
+        return {"success": True, "resumed": 0, "message": "Không có job nào bị kẹt."}
+
+    resumed = 0
+    for job in stuck_jobs:
+        try:
+            supabase.table("download_jobs").update({
+                "status": "pending",
+                "error_message": "♻ Đang khởi động lại...",
+            }).eq("id", job["id"]).execute()
+            process_video_task.delay(job["id"], job["original_url"], user_id)
+            resumed += 1
+        except Exception as e:
+            print(f"[ResumeBatch] Could not re-queue job {job['id']}: {e}")
+
+    return {"success": True, "resumed": resumed, "message": f"Đã khởi động lại {resumed} job."}
+
+
 # ── GET /jobs/{batch_id}  (polling) ──────────────────────────────────
 
 @router.get("/history")
@@ -756,12 +813,29 @@ async def get_jobs_by_batch(batch_id: str):
             .execute()
         )
 
+        from datetime import datetime, timezone
         jobs = response.data
         total = len(jobs)
         success = sum(1 for j in jobs if j["status"] == "success")
         failed = sum(1 for j in jobs if j["status"] == "failed")
         processing = sum(1 for j in jobs if j["status"] == "processing")
         pending = sum(1 for j in jobs if j["status"] == "pending")
+
+        # ETA estimate: (elapsed / completed) * remaining
+        eta_seconds = None
+        completed = success + failed
+        remaining = pending + processing
+        if completed > 0 and remaining > 0:
+            try:
+                timestamps = [j["created_at"] for j in jobs if j.get("created_at")]
+                if timestamps:
+                    oldest = min(timestamps)
+                    batch_start = datetime.fromisoformat(oldest.replace("Z", "+00:00"))
+                    elapsed = (datetime.now(timezone.utc) - batch_start).total_seconds()
+                    avg_per_video = elapsed / completed
+                    eta_seconds = int(avg_per_video * remaining)
+            except Exception:
+                pass
 
         return {
             "jobs": jobs,
@@ -771,6 +845,7 @@ async def get_jobs_by_batch(batch_id: str):
                 "failed": failed,
                 "processing": processing,
                 "pending": pending,
+                "eta_seconds": eta_seconds,
             },
         }
     except Exception as e:
