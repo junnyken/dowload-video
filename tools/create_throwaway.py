@@ -223,20 +223,78 @@ def generate_profile() -> dict:
 
 
 # ─────────────────────────────────────────────
-# 2captcha solver (optional)
+# CAPTCHA solvers
 # ─────────────────────────────────────────────
 
-def solve_recaptcha_v2(site_key: str, page_url: str, api_key: str) -> Optional[str]:
-    """Giải reCAPTCHA v2 qua 2captcha.com API."""
+GOOGLE_ENTERPRISE_KEY = "6Lf-_ekqAAAAAO4AXrJISaHw4_bW76NcfwhLN7Is"
+
+
+def solve_captcha(site_key: str, page_url: str, api_key: str, service: str = "capsolver",
+                  is_enterprise: bool = False) -> Optional[str]:
+    """Giải reCAPTCHA — tự động chọn service."""
+    if service == "capsolver" or (api_key and api_key.startswith("CAP-")):
+        return _solve_capsolver(site_key, page_url, api_key, is_enterprise)
+    return _solve_2captcha(site_key, page_url, api_key, is_enterprise)
+
+
+def _solve_capsolver(site_key: str, page_url: str, api_key: str,
+                     is_enterprise: bool = False) -> Optional[str]:
+    """Giải reCAPTCHA v2/Enterprise qua CapSolver API."""
     try:
-        # Submit
+        task_type = "ReCaptchaV2EnterpriseTaskProxyless" if is_enterprise else "ReCaptchaV2TaskProxyless"
+        print(f"  🤖 CapSolver: tạo task ({task_type})...")
+        r = requests.post("https://api.capsolver.com/createTask", json={
+            "clientKey": api_key,
+            "task": {
+                "type": task_type,
+                "websiteURL": page_url,
+                "websiteKey": site_key,
+                "isInvisible": is_enterprise,
+            },
+        }, timeout=15)
+        data = r.json()
+        if data.get("errorId", 0) != 0:
+            print(f"  ✗ CapSolver error: {data.get('errorDescription')}")
+            return None
+
+        task_id = data["taskId"]
+        print(f"  🤖 CapSolver taskId: {task_id}, đang giải...")
+
+        for _ in range(30):  # max 150s
+            time.sleep(5)
+            r2 = requests.post("https://api.capsolver.com/getTaskResult", json={
+                "clientKey": api_key,
+                "taskId": task_id,
+            }, timeout=15)
+            d2 = r2.json()
+            status = d2.get("status", "")
+            if status == "ready":
+                token = d2["solution"]["gRecaptchaResponse"]
+                print("  ✓ CapSolver: giải thành công!")
+                return token
+            if d2.get("errorId", 0) != 0:
+                print(f"  ✗ CapSolver failed: {d2.get('errorDescription')}")
+                return None
+
+        print("  ✗ CapSolver timeout")
+        return None
+    except Exception as e:
+        print(f"  ✗ CapSolver exception: {e}")
+        return None
+
+
+def _solve_2captcha(site_key: str, page_url: str, api_key: str,
+                    is_enterprise: bool = False) -> Optional[str]:
+    """Giải reCAPTCHA v2 qua 2captcha.com API (~$3/1000, người ~20s)."""
+    try:
         r = requests.post("https://2captcha.com/in.php", data={
             "key": api_key,
             "method": "userrecaptcha",
             "googlekey": site_key,
             "pageurl": page_url,
+            "enterprise": 1 if is_enterprise else 0,
             "json": 1,
-        })
+        }, timeout=15)
         data = r.json()
         if data.get("status") != 1:
             print(f"  ✗ 2captcha submit lỗi: {data}")
@@ -245,15 +303,11 @@ def solve_recaptcha_v2(site_key: str, page_url: str, api_key: str) -> Optional[s
         task_id = data["request"]
         print(f"  🤖 2captcha task ID: {task_id}, chờ giải...")
 
-        # Poll result
         for _ in range(24):  # max 120s
             time.sleep(5)
             r2 = requests.get("https://2captcha.com/res.php", params={
-                "key": api_key,
-                "action": "get",
-                "id": task_id,
-                "json": 1,
-            })
+                "key": api_key, "action": "get", "id": task_id, "json": 1,
+            }, timeout=15)
             d2 = r2.json()
             if d2.get("status") == 1:
                 return d2["request"]
@@ -300,18 +354,57 @@ def create_google_account(
                 "--no-sandbox",
                 "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",
-                f"--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                f"AppleWebKit/537.36 (KHTML, like Gecko) "
-                f"Chrome/124.0.0.0 Safari/537.36",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
             ],
         )
         context = browser.new_context(
             viewport={"width": 1280, "height": 800},
             locale="en-US",
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
         )
+        # Stealth: ẩn webdriver fingerprint
+        context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3]});
+            Object.defineProperty(navigator, 'languages', {get: () => ['en-US','en']});
+            window.chrome = {runtime: {}};
+        """)
         page = context.new_page()
 
         try:
+            debug_dir = Path(f"/tmp/throwaway_debug_{profile['username']}")
+            debug_dir.mkdir(exist_ok=True)
+
+            def snap(label: str) -> None:
+                """Chụp screenshot + lưu HTML để debug."""
+                try:
+                    path = debug_dir / f"{label}.png"
+                    page.screenshot(path=str(path), full_page=True)
+                    (debug_dir / f"{label}.html").write_text(page.content())
+                    print(f"    📸 {path}")
+                except Exception:
+                    pass
+
+            def click_next() -> None:
+                """Click nút Next/Continue."""
+                for sel in ['button:has-text("Next")', 'button:has-text("Continue")',
+                             'button[type="submit"]']:
+                    btn = page.locator(sel)
+                    if btn.count() > 0:
+                        btn.first.click()
+                        return
+
+            def wait_stable(timeout: int = 8000) -> None:
+                try:
+                    page.wait_for_load_state("networkidle", timeout=timeout)
+                except Exception:
+                    time.sleep(1)
+
             print(f"\n  🌐 Mở Google account creation...")
             page.goto(
                 "https://accounts.google.com/signup/v2/createaccount"
@@ -319,113 +412,217 @@ def create_google_account(
                 wait_until="networkidle",
                 timeout=30_000,
             )
+            snap("01_start")
 
             # ── Bước 1: Tên ──────────────────────────────────
             print(f"  ✏  Nhập tên: {profile['first_name']} {profile['last_name']}")
             page.fill('input[name="firstName"]', profile["first_name"])
             page.fill('input[name="lastName"]', profile["last_name"])
-            page.click('button:has-text("Next")')
-            page.wait_for_load_state("networkidle", timeout=10_000)
+            click_next()
+            wait_stable()
+            snap("02_after_name")
 
             # ── Bước 2: Ngày sinh & giới tính ────────────────
             print(f"  🎂 Nhập ngày sinh: {profile['birthday_day']}/{profile['birthday_month']}/{profile['birthday_year']}")
+
+            # Month: Material Design dropdown — click, chọn option, Escape đóng overlay
             try:
-                page.select_option('select#month', str(profile["birthday_month"]))
-                page.fill('input#day', profile["birthday_day"])
-                page.fill('input#year', profile["birthday_year"])
-                page.select_option('select#gender', "1")  # Male
+                page.locator('div[id="month"]').click(timeout=5000)
+                time.sleep(0.8)
+                page.locator(f'li[data-value="{profile["birthday_month"]}"]').click(
+                    force=True, timeout=5000
+                )
+                time.sleep(0.3)
+                page.keyboard.press("Escape")
+                time.sleep(0.3)
             except Exception:
                 pass
-            page.click('button:has-text("Next")')
-            page.wait_for_load_state("networkidle", timeout=10_000)
+
+            # Day và Year: input bình thường
+            for sel in ['input[name="day"]', 'input[aria-label="Day"]', 'input#day']:
+                try:
+                    f = page.locator(sel)
+                    if f.count() > 0:
+                        f.first.triple_click()
+                        f.first.fill(profile["birthday_day"])
+                        break
+                except Exception:
+                    pass
+
+            for sel in ['input[name="year"]', 'input[aria-label="Year"]', 'input#year']:
+                try:
+                    f = page.locator(sel)
+                    if f.count() > 0:
+                        f.first.triple_click()
+                        f.first.fill(profile["birthday_year"])
+                        break
+                except Exception:
+                    pass
+
+            # Gender: text input — nhập "Male" hoặc skip
+            try:
+                g = page.locator('input[aria-label*="gender" i]').first
+                if g.count() > 0:
+                    g.fill("Male")
+            except Exception:
+                pass
+
+            snap("02b_birthday_filled")
+            click_next()
+            wait_stable(12_000)
+            snap("03_after_birthday")
 
             # ── Bước 3: Username ──────────────────────────────
             print(f"  👤 Chọn username: {profile['username']}")
             try:
-                # Nếu có option "Create your own Gmail address"
-                create_own = page.locator("text=Create your own Gmail address")
-                if create_own.count() > 0:
-                    create_own.click()
+                for txt in ["Create your own Gmail address", "Create your own"]:
+                    el = page.locator(f"text={txt}")
+                    if el.count() > 0:
+                        el.first.click()
+                        time.sleep(0.5)
+                        break
             except Exception:
                 pass
 
-            try:
-                page.fill('input[name="Username"]', profile["username"])
-            except Exception:
+            for sel in ['input[name="Username"]', 'input[aria-label*="username" i]',
+                         'input[autocomplete="username"]']:
                 try:
-                    page.fill('input[type="email"]', profile["username"])
+                    field = page.locator(sel)
+                    if field.count() > 0:
+                        field.first.fill(profile["username"])
+                        break
                 except Exception:
                     pass
-            page.click('button:has-text("Next")')
-            page.wait_for_load_state("networkidle", timeout=10_000)
+
+            click_next()
+            wait_stable(12_000)
+            snap("04_after_username")
 
             # ── Bước 4: Password ──────────────────────────────
             print(f"  🔐 Nhập password...")
-            page.fill('input[name="Passwd"]', profile["password"])
-            page.fill('input[name="PasswdAgain"]', profile["password"])
-            page.click('button:has-text("Next")')
-            page.wait_for_load_state("networkidle", timeout=10_000)
+            pwd_filled = False
+            for sel in ['input[name="Passwd"]', 'input[name="password"]',
+                         'input[type="password"]', 'input[aria-label*="password" i]']:
+                try:
+                    field = page.locator(sel)
+                    if field.count() > 0:
+                        field.first.fill(profile["password"])
+                        # Confirm field
+                        try:
+                            for csel in ['input[name="PasswdAgain"]', 'input[name="confirm"]']:
+                                cf = page.locator(csel)
+                                if cf.count() > 0:
+                                    cf.first.fill(profile["password"])
+                                    break
+                        except Exception:
+                            pass
+                        pwd_filled = True
+                        break
+                except Exception:
+                    pass
+
+            if not pwd_filled:
+                snap("04_password_not_found")
+                print(f"  ✗ Không tìm thấy ô password. Debug: {debug_dir}")
+                return None
+
+            click_next()
+            wait_stable()
+            snap("05_after_password")
 
             # ── Bước 5: Số điện thoại ─────────────────────────
-            # Google có thể yêu cầu hoặc skip tuỳ IP/flow
             phone_field = page.locator('input[name="phoneNumberId"], input[type="tel"]')
             if phone_field.count() > 0:
                 print(f"  📞 Nhập số điện thoại: {phone}")
                 phone_field.first.fill(phone)
-                page.click('button:has-text("Next")')
-                page.wait_for_load_state("networkidle", timeout=15_000)
+                click_next()
+                wait_stable(15_000)
+                snap("06_after_phone")
 
-                # ── Bước 6: Nhập OTP ──────────────────────────
+                # ── Bước 6: OTP ───────────────────────────────
                 print(f"  ⏳ Đợi OTP từ 5sim...")
                 otp = fivesim.check_sms(order_id, timeout=120)
                 if not otp:
+                    snap("06b_otp_timeout")
                     print("  ✗ Không nhận được OTP")
                     return None
 
-                otp_field = page.locator('input[name="code"], input[id*="code"]')
-                if otp_field.count() > 0:
-                    otp_field.first.fill(otp)
-                    page.click('button:has-text("Next"), button:has-text("Verify")')
-                    page.wait_for_load_state("networkidle", timeout=15_000)
-                    fivesim.finish_order(order_id)
+                for csel in ['input[name="code"]', 'input[id*="code"]', 'input[type="tel"]']:
+                    try:
+                        otp_f = page.locator(csel)
+                        if otp_f.count() > 0:
+                            otp_f.first.fill(otp)
+                            break
+                    except Exception:
+                        pass
+                click_next()
+                wait_stable(15_000)
+                fivesim.finish_order(order_id)
+                snap("07_after_otp")
 
-            # ── Bước 7: CAPTCHA (nếu có) ──────────────────────
+            # ── Bước 7: CAPTCHA (có thể xuất hiện ở bất kỳ bước nào) ────
             recaptcha = page.locator('iframe[src*="recaptcha"]')
             if recaptcha.count() > 0:
+                snap("07_captcha_found")
+                # Detect site key từ iframe src
+                iframe_src = recaptcha.first.get_attribute("src") or ""
+                import urllib.parse as _up
+                _qs = _up.parse_qs(_up.urlparse(iframe_src).query)
+                detected_key = (_qs.get("k") or [GOOGLE_ENTERPRISE_KEY])[0]
+                is_enterprise = "enterprise" in iframe_src
+
                 if captcha_key:
-                    print("  🤖 Phát hiện reCAPTCHA, đang giải tự động...")
-                    token = solve_recaptcha_v2(
-                        site_key="6Le-wvkSAAAAAPBMRTvw0Q4Muexq9bi0DJwx_mJ-",
+                    print(f"  🤖 Phát hiện {'Enterprise ' if is_enterprise else ''}reCAPTCHA, giải tự động...")
+                    token = solve_captcha(
+                        site_key=detected_key,
                         page_url=page.url,
                         api_key=captcha_key,
+                        is_enterprise=is_enterprise,
                     )
                     if token:
-                        page.evaluate(f'document.getElementById("g-recaptcha-response").innerHTML = "{token}"')
-                        page.click('button:has-text("Next")')
-                        page.wait_for_load_state("networkidle", timeout=15_000)
+                        page.evaluate(
+                            "document.querySelectorAll('[name=\"g-recaptcha-response\"]')"
+                            ".forEach(el => el.value = arguments[0])", token
+                        )
+                        click_next()
+                        wait_stable()
+                        snap("07b_after_captcha")
                 else:
-                    print("  ⚠️  Phát hiện CAPTCHA! Vui lòng giải thủ công trong browser...")
-                    print("     Sau khi giải xong, nhấn Enter để tiếp tục...")
+                    if headless:
+                        print(f"  ✗ CAPTCHA xuất hiện nhưng không có captcha_key.")
+                        print(f"     Thêm --captcha-key CAP-xxxx (từ capsolver.com)")
+                        print(f"     Debug screenshots: {debug_dir}")
+                        return None
+                    print("  ⚠️  Phát hiện CAPTCHA! Giải thủ công rồi nhấn Enter...")
                     input()
 
             # ── Bước 8: Đồng ý Terms ──────────────────────────
-            try:
-                agree_btn = page.locator('button:has-text("I agree"), button:has-text("Agree")')
-                if agree_btn.count() > 0:
-                    agree_btn.first.click()
-                    page.wait_for_load_state("networkidle", timeout=10_000)
-            except Exception:
-                pass
+            for agree_sel in ['button:has-text("I agree")', 'button:has-text("Agree")',
+                               'button:has-text("Accept")']:
+                try:
+                    btn = page.locator(agree_sel)
+                    if btn.count() > 0:
+                        btn.first.click()
+                        wait_stable()
+                        break
+                except Exception:
+                    pass
+            snap("08_after_agree")
 
             # ── Kiểm tra thành công ───────────────────────────
-            # Nếu URL chứa myaccount.google.com hoặc mail.google.com → thành công
             current_url = page.url
             print(f"  📍 URL hiện tại: {current_url}")
 
+            success_domains = ("myaccount.google.com", "mail.google.com",
+                                "accounts.google.com/v3/signin/complete",
+                                "accounts.google.com/signin/v2/challenge/complete")
+            if not any(d in current_url for d in success_domains):
+                snap("09_maybe_success_or_error")
+                print(f"  ⚠️  URL không rõ ràng. Kiểm tra screenshot: {debug_dir}")
+
             if not headless:
-                print("\n  ⏸  Kiểm tra tài khoản đã tạo chưa.")
-                print("     Nếu cần thêm bước gì, làm thủ công rồi nhấn Enter...")
-                input()
+                print("\n  ⏸  Kiểm tra tài khoản đã tạo chưa. Nhấn Enter để export cookies...")
+                input()  # chỉ dừng khi có màn hình thật
 
             # ── Export cookies ────────────────────────────────
             print("  🍪 Export cookies...")
@@ -444,6 +641,7 @@ def create_google_account(
             if not headless:
                 print("     Nhấn Enter để đóng browser...")
                 input()
+            return None
             return None
         finally:
             context.close()
@@ -667,20 +865,23 @@ def main():
             print(f"❌ Lỗi: {e}")
         return
 
-    # ── Headless check ────────────────────────────────────────
-    if args.headless and not args.captcha_key:
-        print("⚠️  --headless cần --captcha-key để giải CAPTCHA tự động.")
-        print("   Tiếp tục với headless=False (browser hiện lên).")
-        args.headless = False
+    # ── Auto-detect headless: server không có display → bắt buộc headless ────
+    has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    if not has_display and not args.headless:
+        print("ℹ️  Không có màn hình, tự chuyển sang headless mode.")
+        args.headless = True
 
     # ── Tạo tài khoản ────────────────────────────────────────
     bal = fivesim.get_balance()
+    captcha_mode = "CapSolver (auto)" if args.captcha_key and args.captcha_key.startswith("CAP-") \
+        else "2captcha (auto)" if args.captcha_key \
+        else "bỏ qua (nếu CAPTCHA xuất hiện sẽ fail)"
     print(f"💰 Số dư 5sim.net: ${bal:.4f}")
     print(f"🎯 Nền tảng: {args.platform}")
     print(f"🔢 Số tài khoản: {args.count}")
     print(f"🌍 Country: {args.country}")
-    print(f"🤖 CAPTCHA: {'tự động (2captcha)' if args.captcha_key else 'thủ công'}")
-    print(f"👀 Browser: {'ẩn' if args.headless else 'hiện'}")
+    print(f"🤖 CAPTCHA: {captcha_mode}")
+    print(f"👀 Browser: {'headless (ẩn)' if args.headless else 'hiện (có màn hình)'}")
     print()
 
     ok = 0
