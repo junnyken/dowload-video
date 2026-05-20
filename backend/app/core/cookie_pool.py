@@ -23,7 +23,7 @@ BLOCK_TTL = 3600  # seconds before a blocked cookie is auto-retried
 
 
 def _hash(cookie_b64: str) -> str:
-    return hashlib.md5(cookie_b64[:32].encode()).hexdigest()[:16]
+    return hashlib.md5(cookie_b64.encode()).hexdigest()[:16]
 
 
 def get_cookie_from_pool(platform: str) -> Optional[str]:

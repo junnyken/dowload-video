@@ -724,18 +724,35 @@ function CookiePoolTab() {
   useEffect(() => { fetchStatus(); }, []);
   useEffect(() => { setCookieList([]); fetchList(activePlat); }, [activePlat]);
 
+  const detectPlatformFromFile = (filename) => {
+    const name = filename.toLowerCase();
+    if (name.includes('tiktok')) return 'tiktok';
+    if (name.includes('youtube') || name.includes('google')) return 'youtube';
+    if (name.includes('facebook') || name.includes('fb.com')) return 'facebook';
+    if (name.includes('instagram')) return 'instagram';
+    return null;
+  };
+
   const uploadFile = async (file) => {
     if (!file) return;
     setUploading(true); setMsg('');
     try {
+      // Auto-detect platform from filename
+      const detected = detectPlatformFromFile(file.name);
+      const targetPlat = detected || activePlat;
+      if (detected && detected !== activePlat) {
+        setActivePlat(detected);
+        setMsg(`🔍 Tự động nhận diện: ${detected} từ tên file`);
+      }
+
       const form = new FormData();
-      form.append('platform', activePlat);
+      form.append('platform', targetPlat);
       form.append('file', file);
       const r = await adminFetch('/cookies/upload', { method: 'POST', body: form });
       const d = await r.json();
       if (d.success) {
-        setMsg(`✅ Đã thêm vào pool ${activePlat} (tổng: ${d.pool_size} tài khoản)`);
-        fetchStatus(); fetchList(activePlat);
+        setMsg(`✅ Đã thêm vào pool ${targetPlat} (tổng: ${d.pool_size} tài khoản)`);
+        fetchStatus(); fetchList(targetPlat);
       } else {
         setMsg(`❌ Lỗi: ${d.detail || 'Unknown error'}`);
       }
@@ -758,8 +775,9 @@ function CookiePoolTab() {
 
   const onDrop = (e) => {
     e.preventDefault(); setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) uploadFile(file);
+    const files = Array.from(e.dataTransfer.files);
+    // Upload all dropped files sequentially (each auto-detects platform)
+    files.reduce((p, file) => p.then(() => uploadFile(file)), Promise.resolve());
   };
 
   const platInfo = poolStatus[activePlat] || { total: 0, healthy: 0, blocked: 0 };
@@ -807,7 +825,7 @@ function CookiePoolTab() {
         <p className="text-sm font-semibold text-white mb-1">
           Thêm cookies.txt cho <span className={`capitalize font-bold ${PLATFORM_COLORS[activePlat].split(' ')[0]}`}>{activePlat}</span>
         </p>
-        <p className="text-xs text-slate-400 mb-4">Kéo thả file cookies.txt vào đây, hoặc click chọn file</p>
+        <p className="text-xs text-slate-400 mb-4">Kéo thả nhiều file cùng lúc — tự nhận diện platform từ tên file</p>
         <label className="cursor-pointer">
           <span className="px-4 py-2 bg-emerald-600/20 border border-emerald-500/40 text-emerald-400 text-sm font-bold rounded-xl hover:bg-emerald-600/30 transition-colors">
             {uploading ? '⏳ Đang upload...' : '📂 Chọn file cookies.txt'}
@@ -815,13 +833,18 @@ function CookiePoolTab() {
           <input
             type="file"
             accept=".txt"
+            multiple
             className="hidden"
             disabled={uploading}
-            onChange={e => uploadFile(e.target.files[0])}
+            onChange={e => {
+              const files = Array.from(e.target.files);
+              files.reduce((p, file) => p.then(() => uploadFile(file)), Promise.resolve());
+              e.target.value = '';
+            }}
           />
         </label>
         <p className="text-[10px] text-slate-500 mt-3">
-          Xuất từ Chrome: Cài "Get cookies.txt LOCALLY" → youtube.com → Export
+          Tên file chứa "youtube", "tiktok", "facebook", "instagram" → tự vào đúng pool
         </p>
       </div>
 
