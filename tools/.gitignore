@@ -1,0 +1,3 @@
+# Sensitive files — contain credentials
+throwaway_accounts.json
+cookies_*.txt

@@ -55,6 +55,8 @@ FIVESIM_API_KEY = os.getenv("FIVESIM_API_KEY", "")
 TWOCAPTCHA_API_KEY = os.getenv("TWOCAPTCHA_API_KEY", "")
 ADMIN_API_URL = os.getenv("ADMIN_API_URL", "http://localhost:8000")
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
+# Residential proxy for phone verification (data-center IPs get QR code instead of SMS)
+THROWAWAY_PROXY = os.getenv("THROWAWAY_PROXY", "")
 
 fake = Faker("en_US")
 
@@ -333,6 +335,7 @@ def create_google_account(
     order_id: int,
     captcha_key: Optional[str] = None,
     headless: bool = False,
+    proxy: Optional[str] = None,
 ) -> Optional[Path]:
     """
     Mở trình duyệt, tạo tài khoản Google, trả về Path của cookies.txt.
@@ -364,7 +367,7 @@ def create_google_account(
                 "--disable-gpu" if _use_headless else "",
             ],
         )
-        context = browser.new_context(
+        ctx_kwargs: dict = dict(
             viewport={"width": 1280, "height": 800},
             locale="en-US",
             user_agent=(
@@ -373,6 +376,10 @@ def create_google_account(
                 "Chrome/124.0.0.0 Safari/537.36"
             ),
         )
+        if proxy:
+            ctx_kwargs["proxy"] = {"server": proxy}
+            print(f"  🌐 Proxy: {proxy.split('@')[-1] if '@' in proxy else proxy}")
+        context = browser.new_context(**ctx_kwargs)
         # Stealth: ẩn webdriver fingerprint
         context.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
@@ -497,6 +504,95 @@ def create_google_account(
                 print(f"  ✗ Vẫn bị chặn sau token inject tại {step_label}")
                 return False
 
+            # ─── Helpers: step-specific fill actions ───────────
+            month_names = ["January","February","March","April","May","June",
+                           "July","August","September","October","November","December"]
+
+            def fill_birthday_fields() -> None:
+                try:
+                    page.wait_for_selector('input[name="day"]', state="visible", timeout=8_000)
+                    time.sleep(1)
+                except Exception:
+                    pass
+                try:
+                    month_num = int(profile["birthday_month"])
+                    page.locator('div[id="month"]').click(timeout=5000)
+                    time.sleep(1.2)
+                    for sel in [f'li[data-value="{month_num}"]',
+                                f'li:has-text("{month_names[month_num-1]}")']:
+                        opt = page.locator(sel)
+                        if opt.count() > 0:
+                            opt.first.click(force=True, timeout=3000)
+                            break
+                    time.sleep(0.5)
+                except Exception:
+                    pass
+                for name_attr, val in [("day", profile["birthday_day"]),
+                                       ("year", profile["birthday_year"])]:
+                    try:
+                        f = page.locator(f'input[name="{name_attr}"]').first
+                        f.click()
+                        time.sleep(0.3)
+                        page.keyboard.press("Control+a")
+                        page.keyboard.type(val)
+                        time.sleep(0.3)
+                    except Exception:
+                        pass
+                try:
+                    gender_div = page.locator('div[id="gender"]')
+                    if gender_div.count() > 0:
+                        gender_div.click(timeout=3000)
+                        time.sleep(0.8)
+                        for g_sel in ['li:has-text("Rather not say")', 'li:has-text("Male")',
+                                      'li[data-value="1"]']:
+                            go = page.locator(g_sel)
+                            if go.count() > 0:
+                                go.first.click(force=True, timeout=2000)
+                                break
+                        time.sleep(0.3)
+                except Exception:
+                    pass
+
+            SUCCESS_DOMAINS = (
+                "myaccount.google.com", "mail.google.com",
+                "accounts.google.com/ManageAccount",
+                "accounts.google.com/v3/signin/complete",
+                "accounts.google.com/signin/v2/challenge/complete",
+            )
+
+            def detect_step() -> str:
+                """Detect current signup step from URL and DOM."""
+                url = page.url
+                # "done" only if we're NOT still inside the signup/lifecycle flow
+                if (any(d in url for d in SUCCESS_DOMAINS)
+                        and "signup" not in url.lower()
+                        and "lifecycle" not in url.lower()):
+                    return "done"
+                # OTP input check before phone (both may have tel input)
+                if page.locator('input[name="code"]').count() > 0:
+                    return "otp"
+                if ("phoneverification" in url.lower() or
+                        "crossflowverification" in url.lower() or
+                        page.locator('input[name="phoneNumberId"]').count() > 0):
+                    return "phone"
+                for agree_text in ("I agree", "Agree", "Accept"):
+                    if page.locator(f'button:has-text("{agree_text}")').count() > 0:
+                        return "agree"
+                if page.locator('input[name="day"]').count() > 0:
+                    return "birthday"
+                if (page.locator('input[name="Passwd"]').count() > 0 or
+                        page.locator('input[name="PasswdAgain"]').count() > 0):
+                    return "password"
+                if page.locator('input[name="Username"]').count() > 0:
+                    return "username"
+                if page.locator('input[name="firstName"]').count() > 0:
+                    return "name"
+                for skip_text in ("Skip", "Not now", "No thanks"):
+                    if page.locator(f'button:has-text("{skip_text}")').count() > 0:
+                        return "skip"
+                return "unknown"
+
+            # ─── Open signup page ────────────────────────────
             print(f"\n  🌐 Mở Google account creation...")
             page.goto(
                 "https://accounts.google.com/signup/v2/createaccount"
@@ -505,201 +601,152 @@ def create_google_account(
                 timeout=30_000,
             )
             snap("01_start")
+            time.sleep(2)  # let JS-triggered redirects settle
+            wait_stable(5_000)
 
-            # ── Bước 1: Tên ──────────────────────────────────
-            print(f"  ✏  Nhập tên: {profile['first_name']} {profile['last_name']}")
-            page.fill('input[name="firstName"]', profile["first_name"])
-            page.fill('input[name="lastName"]', profile["last_name"])
-            click_next()
-            wait_stable()
-            snap("02_after_name")
+            # ─── State machine: handles Google's flow restarts ──
+            # Google sometimes resets back to earlier steps (e.g. name) after
+            # password bypass; the state machine detects & re-fills as needed.
+            step_counts: dict = {}
+            phone_done = False
+            otp_done = False
+            passed_password = False  # detect loop restart
 
-            # ── Bước 2: Ngày sinh & giới tính ────────────────
-            print(f"  🎂 Nhập ngày sinh: {profile['birthday_day']}/{profile['birthday_month']}/{profile['birthday_year']}")
+            for _iter in range(20):
+                step = detect_step()
+                step_counts[step] = step_counts.get(step, 0) + 1
+                snap(f"step_{_iter:02d}_{step}")
 
-            # Đợi birthday page load xong
-            try:
-                page.wait_for_selector('input[name="day"], input[aria-label="Day"]',
-                                       state="visible", timeout=10_000)
-                time.sleep(1.5)
-            except Exception:
-                pass
+                if step == "done":
+                    print(f"  ✅ Tài khoản tạo thành công!")
+                    break
 
-            # Month: Material Design dropdown — click, chờ list mở, click option
-            month_names = ["January","February","March","April","May","June",
-                           "July","August","September","October","November","December"]
-            try:
-                month_num = int(profile["birthday_month"])
-                # Click dropdown để mở
-                page.locator('div[id="month"]').click(timeout=5000)
-                time.sleep(1.2)
-                # Thử click option theo data-value, fallback theo text
-                done = False
-                for sel in [f'li[data-value="{month_num}"]',
-                             f'li:has-text("{month_names[month_num-1]}")']:
-                    opt = page.locator(sel)
-                    if opt.count() > 0:
-                        opt.first.click(force=True, timeout=3000)
-                        done = True
-                        break
-                if not done:
-                    page.keyboard.press("Escape")
-                else:
-                    time.sleep(0.5)
-            except Exception:
-                pass
+                # Abort on flow restart: Google reset to name/birthday AFTER password bypass.
+                # Continuing through multiple loops causes Google to escalate to QR-code
+                # verification (requires physical device). Abort early instead.
+                if passed_password and step in ("name", "birthday"):
+                    print(f"  ⚠️  Google restarted flow tại '{step}' sau password")
+                    print(f"  💡  Cần residential proxy: --proxy http://user:pass@host:port")
+                    return None
 
-            # Day: click + type (không dùng fill vì Google component có custom binding)
-            try:
-                day_field = page.locator('input[name="day"]').first
-                day_field.click()
-                time.sleep(0.3)
-                page.keyboard.press("Control+a")
-                page.keyboard.type(profile["birthday_day"])
-                time.sleep(0.3)
-            except Exception:
-                try:
-                    page.locator('input[aria-label="Day"]').first.type(profile["birthday_day"])
-                except Exception:
-                    pass
+                # Abort if stuck at the same step too many times
+                if step_counts[step] > 3:
+                    print(f"  ✗ Stuck tại bước '{step}' — dừng lại")
+                    return None
 
-            # Year: click + type
-            try:
-                year_field = page.locator('input[name="year"]').first
-                year_field.click()
-                time.sleep(0.3)
-                page.keyboard.press("Control+a")
-                page.keyboard.type(profile["birthday_year"])
-                time.sleep(0.3)
-            except Exception:
-                try:
-                    page.locator('input[aria-label="Year"]').first.type(profile["birthday_year"])
-                except Exception:
-                    pass
-
-            # Gender: Material dropdown — click "Rather not say" hoặc "Male"
-            try:
-                gender_div = page.locator('div[id="gender"]')
-                if gender_div.count() > 0:
-                    gender_div.click(timeout=3000)
-                    time.sleep(0.8)
-                    # Chọn "Rather not say" (data-value thường là 9 hoặc "other")
-                    for g_sel in ['li:has-text("Rather not say")', 'li:has-text("Male")',
-                                  'li[data-value="1"]']:
-                        go = page.locator(g_sel)
-                        if go.count() > 0:
-                            go.first.click(force=True, timeout=2000)
-                            break
-                    time.sleep(0.3)
-            except Exception:
-                pass
-
-            snap("02b_birthday_filled")
-
-            # Submit birthday — retry với CapSolver token nếu bị invisible reCAPTCHA chặn
-            if not submit_with_captcha_retry("birthday"):
-                return None
-
-            # ── Bước 3: Username ──────────────────────────────
-            print(f"  👤 Chọn username: {profile['username']}")
-            try:
-                for txt in ["Create your own Gmail address", "Create your own"]:
-                    el = page.locator(f"text={txt}")
-                    if el.count() > 0:
-                        el.first.click()
-                        time.sleep(0.5)
-                        break
-            except Exception:
-                pass
-
-            for sel in ['input[name="Username"]', 'input[aria-label*="username" i]',
-                         'input[autocomplete="username"]']:
-                try:
-                    field = page.locator(sel)
-                    if field.count() > 0:
-                        field.first.fill(profile["username"])
-                        break
-                except Exception:
-                    pass
-
-            snap("04_before_username_submit")
-            if not submit_with_captcha_retry("username"):
-                return None
-
-            # ── Bước 4: Password ──────────────────────────────
-            print(f"  🔐 Nhập password...")
-            pwd_filled = False
-            for sel in ['input[name="Passwd"]', 'input[name="password"]',
-                         'input[type="password"]', 'input[aria-label*="password" i]']:
-                try:
-                    field = page.locator(sel)
-                    if field.count() > 0:
-                        field.first.fill(profile["password"])
+                if step == "name":
+                    print(f"  ✏  Nhập tên: {profile['first_name']} {profile['last_name']}")
+                    for name_attr, val in [("firstName", profile["first_name"]),
+                                           ("lastName", profile["last_name"])]:
                         try:
-                            for csel in ['input[name="PasswdAgain"]', 'input[name="confirm"]']:
-                                cf = page.locator(csel)
-                                if cf.count() > 0:
-                                    cf.first.fill(profile["password"])
-                                    break
+                            f = page.locator(f'input[name="{name_attr}"]')
+                            if f.count() > 0:
+                                f.first.fill(val)
                         except Exception:
                             pass
-                        pwd_filled = True
-                        break
-                except Exception:
-                    pass
+                    submit_with_captcha_retry(f"name_{_iter}")
 
-            if not pwd_filled:
-                snap("04_password_not_found")
-                print(f"  ✗ Không tìm thấy ô password. Debug: {debug_dir}")
-                return None
+                elif step == "birthday":
+                    print(f"  🎂 Ngày sinh: {profile['birthday_day']}/{profile['birthday_month']}/{profile['birthday_year']}")
+                    fill_birthday_fields()
+                    submit_with_captcha_retry(f"birthday_{_iter}")
 
-            if not submit_with_captcha_retry("password"):
-                return None
-
-            # ── Bước 5: Số điện thoại (nhiều dạng URL) ───────────
-            # Google dùng mophoneverification hoặc crossflowverification
-            snap("05_check_phone_step")
-            phone_needed = (
-                "phoneverification" in page.url.lower() or
-                "crossflow" in page.url.lower() or
-                page.locator('input[name="phoneNumberId"], input[type="tel"]').count() > 0
-            )
-            if phone_needed:
-                # Scroll để tìm input điện thoại
-                try:
-                    page.wait_for_selector(
-                        'input[name="phoneNumberId"], input[type="tel"]',
-                        state="visible", timeout=8_000
-                    )
-                except Exception:
-                    pass
-                phone_field = page.locator('input[name="phoneNumberId"], input[type="tel"]')
-                if phone_field.count() > 0:
-                    print(f"  📞 Nhập số điện thoại: {phone}")
-                    phone_field.first.click()
-                    time.sleep(0.3)
-                    page.keyboard.type(phone)
-                    if not submit_with_captcha_retry("phone"):
-                        # Thử click Send / Get code
-                        for btn_sel in ['button:has-text("Send")', 'button:has-text("Get code")',
-                                        'button:has-text("Next")']:
-                            b = page.locator(btn_sel)
-                            if b.count() > 0:
-                                b.first.click()
-                                wait_stable(15_000)
+                elif step == "username":
+                    print(f"  👤 Username: {profile['username']}")
+                    for txt in ["Create your own Gmail address", "Create your own"]:
+                        try:
+                            el = page.locator(f"text={txt}")
+                            if el.count() > 0:
+                                el.first.click()
+                                time.sleep(0.5)
                                 break
-                    snap("06_after_phone")
+                        except Exception:
+                            pass
+                    for sel in ['input[name="Username"]', 'input[aria-label*="username" i]',
+                                'input[autocomplete="username"]']:
+                        try:
+                            f = page.locator(sel)
+                            if f.count() > 0:
+                                f.first.fill(profile["username"])
+                                break
+                        except Exception:
+                            pass
+                    submit_with_captcha_retry(f"username_{_iter}")
 
-                    # ── Bước 6: OTP ───────────────────────────────
+                elif step == "password":
+                    print(f"  🔐 Nhập password...")
+                    filled = False
+                    for sel in ['input[name="Passwd"]', 'input[name="password"]',
+                                'input[type="password"]', 'input[aria-label*="password" i]']:
+                        try:
+                            f = page.locator(sel)
+                            if f.count() > 0:
+                                f.first.fill(profile["password"])
+                                for csel in ['input[name="PasswdAgain"]', 'input[name="confirm"]']:
+                                    cf = page.locator(csel)
+                                    if cf.count() > 0:
+                                        cf.first.fill(profile["password"])
+                                        break
+                                filled = True
+                                break
+                        except Exception:
+                            pass
+                    if not filled:
+                        snap(f"step_{_iter:02d}_pwd_not_found")
+                        print(f"  ✗ Không tìm thấy ô password")
+                        return None
+                    passed_password = True
+                    submit_with_captcha_retry(f"password_{_iter}")
+
+                elif step == "phone" and not phone_done:
+                    phone_done = True
+                    # Convert to local format: +84363856743 → 0363856743
+                    phone_local = phone
+                    if phone_local.startswith("+84"):
+                        phone_local = "0" + phone_local[3:]
+                    print(f"  📞 Nhập số điện thoại: {phone_local}")
+                    try:
+                        page.wait_for_selector(
+                            'input[name="phoneNumberId"]',
+                            state="visible", timeout=8_000
+                        )
+                    except Exception:
+                        pass
+                    pf = page.locator('input[name="phoneNumberId"]')
+                    if pf.count() > 0:
+                        pf.first.click()
+                        time.sleep(0.5)
+                        page.keyboard.press("Control+a")
+                        page.keyboard.type(phone_local)
+                        time.sleep(0.5)
+                    else:
+                        # No phone input found — Google showing QR code or other challenge
+                        # This happens with data-center IPs; residential proxy fixes it
+                        snap(f"step_{_iter:02d}_no_phone_input")
+                        print(f"  ✗ Google yêu cầu xác minh QR code (không hỗ trợ tự động)")
+                        print(f"  💡 Cần residential proxy: --proxy http://user:pass@host:port")
+                        print(f"     hoặc set THROWAWAY_PROXY trong .env")
+                        return None
+                    # Click Next/Send directly (not via captcha retry)
+                    for btn_sel in ['button:has-text("Next")', 'button:has-text("Send")',
+                                    'button:has-text("Get code")', 'button[type="submit"]']:
+                        b = page.locator(btn_sel)
+                        if b.count() > 0:
+                            b.first.click()
+                            break
+                    wait_stable(15_000)
+
+                elif step == "otp" and not otp_done:
+                    otp_done = True
                     print(f"  ⏳ Đợi OTP từ 5sim...")
                     otp = fivesim.check_sms(order_id, timeout=120)
                     if not otp:
-                        snap("06b_otp_timeout")
+                        snap(f"step_{_iter:02d}_otp_timeout")
                         print("  ✗ Không nhận được OTP")
                         return None
-
+                    print(f"  ✓ OTP: {otp}")
                     for csel in ['input[name="code"]', 'input[id="code"]',
-                                 'input[aria-label*="code" i]', 'input[type="tel"]']:
+                                 'input[aria-label*="code" i]']:
                         try:
                             otp_f = page.locator(csel)
                             if otp_f.count() > 0:
@@ -708,49 +755,81 @@ def create_google_account(
                                 break
                         except Exception:
                             pass
-                    if not submit_with_captcha_retry("otp"):
+                    if not submit_with_captcha_retry(f"otp_{_iter}"):
                         click_next()
                         wait_stable(15_000)
                     fivesim.finish_order(order_id)
-                    snap("07_after_otp")
 
-            # ── Bước 8: Đồng ý Terms ──────────────────────────
-            for agree_sel in ['button:has-text("I agree")', 'button:has-text("Agree")',
-                               'button:has-text("Accept")']:
-                try:
-                    btn = page.locator(agree_sel)
-                    if btn.count() > 0:
-                        btn.first.click()
-                        wait_stable()
+                elif step == "agree":
+                    print(f"  ✅ Đồng ý terms...")
+                    for agree_sel in ['button:has-text("I agree")', 'button:has-text("Agree")',
+                                      'button:has-text("Accept")']:
+                        try:
+                            btn = page.locator(agree_sel)
+                            if btn.count() > 0:
+                                btn.first.click()
+                                wait_stable()
+                                break
+                        except Exception:
+                            pass
+
+                elif step == "skip":
+                    for skip_sel in ['button:has-text("Skip")', 'button:has-text("Not now")',
+                                     'button:has-text("No thanks")']:
+                        try:
+                            btn = page.locator(skip_sel)
+                            if btn.count() > 0:
+                                btn.first.click()
+                                wait_stable()
+                                break
+                        except Exception:
+                            pass
+
+                else:  # unknown
+                    print(f"  ❓ Bước không xác định, thử Next... URL: {page.url[:60]}")
+                    advanced = False
+                    for sel in ['button:has-text("Next")', 'button:has-text("Continue")',
+                                'button[type="submit"]']:
+                        if page.locator(sel).count() > 0:
+                            page.locator(sel).first.click()
+                            wait_stable(8_000)
+                            advanced = True
+                            break
+                    if not advanced:
+                        print(f"  ⚠️  Không tìm thấy nút tiếp theo, dừng lại")
                         break
-                except Exception:
-                    pass
-            snap("08_after_agree")
 
-            # ── Kiểm tra thành công ───────────────────────────
+            # ─── Check session cookies (confirm account created) ──
+            playwright_cookies = context.cookies()
+            session_names = {"SID", "HSID", "SSID", "APISID", "SAPISID",
+                             "__Secure-1PSID", "__Secure-3PSID"}
+            has_session = any(
+                c.get("name", "").upper() in session_names or
+                c.get("name", "") in session_names
+                for c in playwright_cookies
+            )
+
             current_url = page.url
-            print(f"  📍 URL hiện tại: {current_url}")
-
-            success_domains = ("myaccount.google.com", "mail.google.com",
-                                "accounts.google.com/v3/signin/complete",
-                                "accounts.google.com/signin/v2/challenge/complete")
-            if not any(d in current_url for d in success_domains):
-                snap("09_maybe_success_or_error")
-                print(f"  ⚠️  URL không rõ ràng. Kiểm tra screenshot: {debug_dir}")
+            print(f"  📍 URL cuối: {current_url[:80]}")
+            if not has_session:
+                print(f"  ⚠️  Không có session cookies — tài khoản chưa tạo xong")
 
             if not _use_headless:
                 try:
-                    print("\n  ⏸  Kiểm tra tài khoản đã tạo chưa. Nhấn Enter để export cookies...")
+                    status = "✓ đăng nhập" if has_session else "✗ chưa đăng nhập"
+                    print(f"\n  ⏸  Trạng thái: {status}. Nhấn Enter để export cookies...")
                     input()
                 except EOFError:
-                    time.sleep(3)  # không có stdin, chờ 3s rồi tiếp
+                    time.sleep(3)
 
-            # ── Export cookies ────────────────────────────────
+            # ─── Export cookies ───────────────────────────────
             print("  🍪 Export cookies...")
-            playwright_cookies = context.cookies()
             netscape_cookies = _playwright_cookies_to_netscape(playwright_cookies)
             cookie_file.write_text(netscape_cookies)
             print(f"  ✓ Cookies lưu tại: {cookie_file}")
+
+            if not has_session:
+                return None  # mark as failed — no usable session
 
             return cookie_file
 
@@ -860,6 +939,7 @@ def create_one_account(
     captcha_key: Optional[str],
     headless: bool,
     country: str = "auto",
+    proxy: Optional[str] = None,
 ) -> bool:
     service = PLATFORM_TO_FIVESIM.get(platform, "google")
     profile = generate_profile()
@@ -895,6 +975,7 @@ def create_one_account(
         order_id=order_id,
         captcha_key=captcha_key,
         headless=headless,
+        proxy=proxy,
     )
 
     success = cookie_file is not None and cookie_file.exists()
@@ -957,6 +1038,9 @@ def main():
                         help="Upload cookie file thủ công (dùng với --platform)")
     parser.add_argument("--fivesim-key", default=FIVESIM_API_KEY,
                         help="5sim.net API key (hoặc set FIVESIM_API_KEY)")
+    parser.add_argument("--proxy", default=THROWAWAY_PROXY or None,
+                        help="Residential proxy URL (vd: http://user:pass@host:port). "
+                             "Bắt buộc nếu IP data-center bị Google chặn SMS.")
     args = parser.parse_args()
 
     # ── Upload thủ công ───────────────────────────────────────
@@ -997,11 +1081,13 @@ def main():
     captcha_mode = "CapSolver (auto)" if args.captcha_key and args.captcha_key.startswith("CAP-") \
         else "2captcha (auto)" if args.captcha_key \
         else "bỏ qua (nếu CAPTCHA xuất hiện sẽ fail)"
+    proxy_display = args.proxy.split("@")[-1] if args.proxy and "@" in args.proxy else (args.proxy or "không (cần residential IP để nhận SMS)")
     print(f"💰 Số dư 5sim.net: ${bal:.4f}")
     print(f"🎯 Nền tảng: {args.platform}")
     print(f"🔢 Số tài khoản: {args.count}")
     print(f"🌍 Country: {args.country}")
     print(f"🤖 CAPTCHA: {captcha_mode}")
+    print(f"🌐 Proxy: {proxy_display}")
     print(f"👀 Browser: {'headless (ẩn)' if args.headless else 'hiện (có màn hình)'}")
     print()
 
@@ -1015,6 +1101,7 @@ def main():
             captcha_key=args.captcha_key,
             headless=args.headless,
             country=args.country,
+            proxy=args.proxy,
         )
         if success:
             ok += 1
