@@ -1,0 +1,3 @@
+dowloadvideo.io.vn {
+    reverse_proxy frontend:80
+}

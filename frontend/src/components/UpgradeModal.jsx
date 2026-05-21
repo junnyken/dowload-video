@@ -101,7 +101,7 @@ export default function UpgradeModal({ isOpen, onClose }) {
                 onClick={async () => {
                    // Mock payment webhook trigger for testing
                    try {
-                     await fetch('http://localhost:8000/api/v1/payments/webhook', {
+                     await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/payments/webhook`, {
                        method: 'POST',
                        headers: { 'Content-Type': 'application/json' },
                        body: JSON.stringify({ user_id: '127.0.0.1', tier: 'vip', duration_days: 30, transaction_id: 'test_demo_123' })
