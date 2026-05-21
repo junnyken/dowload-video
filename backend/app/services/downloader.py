@@ -851,8 +851,21 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
 
     info = None
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=should_download)
+        if is_youtube_url and should_download:
+            # YouTube two-phase: proxy for auth/metadata only, direct CDN for download
+            # Phase A: extract info (signed CDN URLs) via residential proxy
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+            # Phase B: download using already-resolved CDN URLs, no proxy needed
+            if info:
+                dl_opts = _get_base_opts(url, phase="download", quality=quality)
+                dl_opts["extract_flat"] = False
+                print(f"[Downloader] YouTube: info via proxy OK, downloading CDN direct (no proxy)")
+                with yt_dlp.YoutubeDL(dl_opts) as ydl:
+                    info = ydl.process_ie_result(info, download=True)
+        else:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=should_download)
         # ytsearch returns a playlist container — unwrap to the actual video entry
         if info and info.get("entries") and not info.get("formats") and not info.get("url"):
             entries = [e for e in info["entries"] if e]
