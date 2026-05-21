@@ -339,14 +339,9 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         opts["proxy"] = proxy
 
     if "youtube.com" in url.lower() or "youtu.be" in url.lower():
-        # Logger captures yt-dlp warnings/errors even with quiet+no_warnings
         opts["logger"] = _YTDLPLogger("/YT")
-
-        # Inject YouTube cookies — logged-in session bypasses bot detection completely
-        yt_cookies = _get_youtube_cookies_file()
-        if yt_cookies:
-            opts["cookiefile"] = yt_cookies
-            print("[Downloader] YouTube cookies loaded")
+        # yt-dlp 2025.5+ defaults to deno; tell it to use node (installed in Docker image)
+        opts["js_runtimes"] = ["node"]
         # Prioritize resolution, then codec compatibility, then bitrate
         opts["format_sort"] = ["res", "ext:mp4:m4a", "tbr", "vbr", "abr", "asr"]
 
