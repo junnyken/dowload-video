@@ -672,32 +672,65 @@ export default function AdminDashboard() {
 
 // ── API Keys Tab ────────────────────────────────────────────────────
 function ApiKeysTab({ scraperAPIcredits, stats }) {
-  const [keyPool, setKeyPool]         = useState(null);
-  const [loadingPool, setLoadingPool] = useState(false);
-  const [rotating, setRotating]       = useState(false);
-  const [refreshing, setRefreshing]   = useState(false);
-  const [msg, setMsg]                 = useState('');
+  const [keyPool, setKeyPool]       = useState(null);
+  const [loading, setLoading]       = useState(false);
+  const [rotating, setRotating]     = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [adding, setAdding]         = useState(false);
+  const [newKey, setNewKey]         = useState('');
+  const [showAdd, setShowAdd]       = useState(false);
+  const [msg, setMsg]               = useState('');
+
+  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 5000); };
 
   const fetchPool = async (force = false) => {
-    setLoadingPool(true);
+    setLoading(true);
     try {
       const path = force ? '/scraperapi/refresh-credits' : '/scraperapi/keys';
-      const method = force ? 'POST' : 'GET';
-      const r = await adminFetch(path, { method });
+      const r = await adminFetch(path, { method: force ? 'POST' : 'GET' });
       const d = await r.json();
       if (d.success) setKeyPool(d);
-    } catch (e) { setMsg(`❌ ${e.message}`); }
-    finally { setLoadingPool(false); setRefreshing(false); }
+    } catch (e) { flash(`❌ ${e.message}`); }
+    finally { setLoading(false); setRefreshing(false); }
+  };
+
+  const addKey = async () => {
+    if (!newKey.trim()) return;
+    setAdding(true);
+    try {
+      const r = await adminFetch('/scraperapi/keys/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: newKey.trim() }),
+      });
+      const d = await r.json();
+      if (d.success) {
+        flash(`✅ Đã thêm key ${d.key_prefix} — ${d.credits?.toLocaleString()} credits`);
+        setNewKey(''); setShowAdd(false); fetchPool();
+      } else {
+        flash(`❌ ${d.detail || 'Thêm key thất bại'}`);
+      }
+    } catch (e) { flash(`❌ ${e.message}`); }
+    finally { setAdding(false); }
+  };
+
+  const removeKey = async (index, prefix) => {
+    if (!confirm(`Xóa key ${prefix} khỏi pool?`)) return;
+    try {
+      const r = await adminFetch(`/scraperapi/keys/remove?index=${index}`, { method: 'DELETE' });
+      const d = await r.json();
+      if (d.success) { flash(`🗑 Đã xóa key ${prefix}`); fetchPool(); }
+      else flash(`❌ ${d.detail}`);
+    } catch (e) { flash(`❌ ${e.message}`); }
   };
 
   const rotateKey = async () => {
-    setRotating(true); setMsg('');
+    setRotating(true);
     try {
       const r = await adminFetch('/scraperapi/rotate', { method: 'POST' });
       const d = await r.json();
-      if (d.success) { setMsg(`✅ ${d.message} — active: ${d.active_key_prefix}`); fetchPool(); }
-      else setMsg(`❌ Rotate thất bại`);
-    } catch (e) { setMsg(`❌ ${e.message}`); }
+      if (d.success) { flash(`✅ Đã chuyển sang key tiếp theo (active: ${d.active_key_prefix})`); fetchPool(); }
+    } catch (e) { flash(`❌ ${e.message}`); }
     finally { setRotating(false); }
   };
 
@@ -715,22 +748,46 @@ function ApiKeysTab({ scraperAPIcredits, stats }) {
             {keyPool && <span className="text-xs font-normal text-slate-400">({keyPool.key_count} keys)</span>}
           </h3>
           <div className="flex items-center gap-2">
-            <button
-              onClick={rotateKey} disabled={rotating}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-colors cursor-pointer disabled:opacity-50"
-            >
-              {rotating ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-              Rotate key
+            <button onClick={() => setShowAdd(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition-colors cursor-pointer">
+              + Thêm key
             </button>
-            <button
-              onClick={() => { setRefreshing(true); fetchPool(true); }} disabled={refreshing || loadingPool}
-              className="p-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer disabled:opacity-50"
-              title="Refresh credits (bypass cache)"
-            >
+            <button onClick={rotateKey} disabled={rotating}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-colors cursor-pointer disabled:opacity-50">
+              {rotating ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              Rotate
+            </button>
+            <button onClick={() => { setRefreshing(true); fetchPool(true); }} disabled={refreshing || loading}
+              className="p-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer disabled:opacity-50" title="Refresh credits">
               {refreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
             </button>
           </div>
         </div>
+
+        {/* Add key form */}
+        {showAdd && (
+          <div className="mb-4 p-4 bg-[#012622] rounded-xl border border-emerald-500/20 animate-in fade-in duration-200">
+            <p className="text-xs font-bold text-emerald-400 mb-2">Thêm ScraperAPI Key mới</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newKey}
+                onChange={e => setNewKey(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addKey()}
+                placeholder="Paste API key tại đây..."
+                className="flex-1 bg-[#0a1a17] border border-slate-600 text-white text-xs font-mono rounded-lg px-3 py-2 outline-none focus:border-emerald-500 transition-colors"
+              />
+              <button onClick={addKey} disabled={adding || !newKey.trim()}
+                className="px-4 py-2 text-xs font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5">
+                {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                {adding ? 'Đang kiểm tra...' : 'Thêm'}
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-500 mt-2">
+              Key sẽ được xác minh trước khi thêm. Không cần sửa .env.
+            </p>
+          </div>
+        )}
 
         {/* Total credits banner */}
         <div className="flex items-center gap-4 mb-4 p-3 bg-[#012622] rounded-xl border border-slate-700/30">
@@ -741,7 +798,7 @@ function ApiKeysTab({ scraperAPIcredits, stats }) {
             </p>
           </div>
           {keyPool && (
-            <div className="flex gap-3 ml-4">
+            <div className="flex gap-4 ml-4">
               <div className="text-center">
                 <p className="text-lg font-bold text-emerald-400">{keyPool.keys.filter(k => k.active).length}</p>
                 <p className="text-[10px] text-slate-500">Active</p>
@@ -750,21 +807,25 @@ function ApiKeysTab({ scraperAPIcredits, stats }) {
                 <p className="text-lg font-bold text-red-400">{keyPool.keys.filter(k => k.exhausted).length}</p>
                 <p className="text-[10px] text-slate-500">Exhausted</p>
               </div>
+              <div className="text-center">
+                <p className="text-lg font-bold text-slate-300">{keyPool.key_count}</p>
+                <p className="text-[10px] text-slate-500">Total</p>
+              </div>
             </div>
           )}
         </div>
 
         {/* Key list */}
-        {loadingPool && !keyPool ? (
+        {loading && !keyPool ? (
           <div className="flex items-center gap-2 text-slate-400 text-sm py-4"><Loader2 className="w-4 h-4 animate-spin" /> Đang tải...</div>
         ) : keyPool?.keys?.length > 0 ? (
           <div className="space-y-2">
             {keyPool.keys.map((k) => {
-              const pct = k.credits != null ? Math.min(100, Math.round(k.credits / 50)) : 0;
-              const bar = k.credits == null ? 'bg-slate-600' : k.credits < 50 ? 'bg-red-500' : k.credits < 200 ? 'bg-amber-500' : 'bg-emerald-500';
+              const pct  = k.credits != null ? Math.min(100, Math.round(k.credits / 50)) : 0;
+              const bar  = k.credits == null ? 'bg-slate-600' : k.credits < 50 ? 'bg-red-500' : k.credits < 500 ? 'bg-amber-500' : 'bg-emerald-500';
               return (
                 <div key={k.index} className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors ${
-                  k.active ? 'bg-emerald-500/5 border-emerald-500/20' :
+                  k.active   ? 'bg-emerald-500/5 border-emerald-500/20' :
                   k.exhausted ? 'bg-red-500/5 border-red-500/20 opacity-60' :
                   'bg-[#012622]/50 border-slate-700/30'
                 }`}>
@@ -772,38 +833,41 @@ function ApiKeysTab({ scraperAPIcredits, stats }) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-xs font-mono text-slate-300">{k.key_prefix}</span>
-                      {k.active && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold">ACTIVE</span>}
+                      {k.active    && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold">ACTIVE</span>}
                       {k.exhausted && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold">EXHAUSTED</span>}
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 bg-[#012622] rounded-full h-1.5 overflow-hidden">
-                        <div className={`h-full rounded-full transition-all ${bar}`} style={{ width: `${pct}%` }} />
+                        <div className={`h-full rounded-full transition-all duration-500 ${bar}`} style={{ width: `${pct}%` }} />
                       </div>
-                      <span className={`text-xs font-bold w-16 text-right ${k.credits == null ? 'text-slate-500' : k.credits < 50 ? 'text-red-400' : 'text-white'}`}>
-                        {k.credits != null ? k.credits.toLocaleString() : '—'} cr
+                      <span className={`text-xs font-bold w-20 text-right ${k.credits == null ? 'text-slate-500' : k.credits < 50 ? 'text-red-400' : 'text-white'}`}>
+                        {k.credits != null ? k.credits.toLocaleString() : '—'} credits
                       </span>
                     </div>
                   </div>
+                  <button onClick={() => removeKey(k.index, k.key_prefix)}
+                    className="text-xs text-red-400 hover:text-red-300 cursor-pointer transition-colors px-2 py-1 rounded hover:bg-red-500/10 flex-shrink-0">
+                    Xóa
+                  </button>
                 </div>
               );
             })}
           </div>
         ) : (
-          <p className="text-sm text-slate-500 py-4">
-            Chưa cấu hình ScraperAPI key. Thêm vào <code className="text-amber-400 bg-amber-500/10 px-1 rounded">SCRAPERAPI_API_KEY</code> (nhiều key cách nhau bằng dấu phẩy).
-          </p>
-        )}
-
-        {msg && (
-          <div className={`mt-3 px-3 py-2 rounded-lg text-xs font-medium ${msg.startsWith('✅') ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'}`}>
-            {msg}
+          <div className="text-center py-8">
+            <p className="text-sm text-slate-400 mb-2">Chưa có key nào trong pool.</p>
+            <button onClick={() => setShowAdd(true)}
+              className="text-xs text-emerald-400 underline cursor-pointer">
+              Bấm "+ Thêm key" để bắt đầu
+            </button>
           </div>
         )}
 
-        <p className="text-[10px] text-slate-500 mt-3">
-          Thêm nhiều key vào <code className="text-slate-400">.env</code>: <code className="text-amber-400">SCRAPERAPI_API_KEY=key1,key2,key3</code>
-          <br />Tự động chuyển sang key tiếp theo khi credits &lt; 50 hoặc nhận 429.
-        </p>
+        {msg && (
+          <div className={`mt-3 px-3 py-2 rounded-lg text-xs font-medium animate-in fade-in ${msg.startsWith('✅') || msg.startsWith('🗑') ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'}`}>
+            {msg}
+          </div>
+        )}
       </div>
 
       {/* IPRoyal */}
@@ -815,7 +879,7 @@ function ApiKeysTab({ scraperAPIcredits, stats }) {
         <ul className="text-xs text-slate-400 space-y-1.5 ml-1">
           <li>📨 Telegram thông báo khi <b>batch download hoàn tất</b></li>
           <li>🚨 Telegram alert khi <b>job thất bại</b></li>
-          <li>⚠️ Telegram cảnh báo khi <b>API credits &lt; 50</b> (mỗi key)</li>
+          <li>⚠️ Telegram cảnh báo khi <b>credits &lt; 50</b> (mỗi key)</li>
           <li>📊 Báo cáo ngày tự động lúc <b>6:00 AM (UTC+7)</b></li>
           <li>🔄 Kiểm tra credits tự động mỗi <b>6 giờ</b></li>
         </ul>

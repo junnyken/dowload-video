@@ -799,11 +799,41 @@ async def scraperapi_keys(_=Depends(verify_admin)):
     return {"success": True, "keys": keys, "total_credits": total, "key_count": len(keys)}
 
 
+class ScraperAPIKeyRequest(BaseModel):
+    key: str
+
+
+@router.post("/scraperapi/keys/add")
+async def scraperapi_add_key(req: ScraperAPIKeyRequest, _=Depends(verify_admin)):
+    """Add a ScraperAPI key to the pool (stored in Redis, no .env needed)."""
+    from app.core.scraperapi_pool import add_key, fetch_credits
+    key = req.key.strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="key is required")
+    # Validate key against ScraperAPI account endpoint
+    credits = fetch_credits(key, use_cache=False)
+    if credits is None:
+        raise HTTPException(status_code=400, detail="Invalid key or ScraperAPI unreachable")
+    pool_size = add_key(key)
+    return {"success": True, "pool_size": pool_size, "credits": credits, "key_prefix": key[:8] + "***"}
+
+
+@router.delete("/scraperapi/keys/remove")
+async def scraperapi_remove_key(index: int, _=Depends(verify_admin)):
+    """Remove a ScraperAPI key by index from the pool."""
+    from app.core.scraperapi_pool import remove_key, get_all_keys
+    keys = get_all_keys()
+    if index < 0 or index >= len(keys):
+        raise HTTPException(status_code=400, detail=f"Index {index} out of range (pool size: {len(keys)})")
+    pool_size = remove_key(index)
+    return {"success": True, "pool_size": pool_size}
+
+
 @router.post("/scraperapi/rotate")
 async def scraperapi_rotate(_=Depends(verify_admin)):
     """Manually rotate to the next ScraperAPI key."""
     from app.core.scraperapi_pool import rotate_key, get_active_key
-    new_key_hash = rotate_key(reason="manual-admin")
+    rotate_key(reason="manual-admin")
     active = get_active_key()
     return {"success": True, "message": "Rotated to next key", "active_key_prefix": (active[:8] + "***") if active else "none"}
 

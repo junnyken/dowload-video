@@ -1,20 +1,22 @@
 """
 ScraperAPI Key Pool
 ===================
-Manages multiple ScraperAPI keys with automatic rotation and credit tracking.
+Redis-backed key pool. Keys can be added/removed from the admin UI
+without touching .env.
 
-Set multiple keys in .env (comma-separated):
-    SCRAPERAPI_API_KEY=key1,key2,key3
+On first boot (Redis list empty), keys are imported from SCRAPERAPI_API_KEY
+env var (comma-separated) so existing setups keep working.
 
 Redis keys:
-    scraperapi:active_idx            — index of current active key
-    scraperapi:credits:{hash}        — cached credit balance (TTL 10 min)
-    scraperapi:exhausted:{hash}      — key marked exhausted (TTL 24h, auto-recover)
+    scraperapi:keys              — LIST of API key strings (source of truth)
+    scraperapi:active_idx        — index of current active key
+    scraperapi:credits:{hash}    — cached credit balance (TTL 10 min)
+    scraperapi:exhausted:{hash}  — key marked exhausted (TTL 24h, auto-recover)
 
 Rotation triggers:
-    • credits < EXHAUST_THRESHOLD (default 50) on a request response header
-    • explicit rotate_key() call from admin
-    • credits = 0 on account API check
+    • credits < EXHAUST_THRESHOLD (50) on response header
+    • HTTP 429 from ScraperAPI
+    • explicit rotate_key() / admin button
 """
 
 import hashlib
@@ -25,93 +27,146 @@ import httpx
 
 from app.core.redis_client import get_redis
 
-_CREDITS_TTL    = 600       # 10 min cache for credits
-_EXHAUSTED_TTL  = 86_400    # 24h before auto-retrying an exhausted key
-EXHAUST_THRESHOLD = 50      # rotate when credits drop below this
+_KEYS_KEY       = "scraperapi:keys"
+_CREDITS_TTL    = 600
+_EXHAUSTED_TTL  = 86_400
+EXHAUST_THRESHOLD = 50
 _SCRAPERAPI_HOST  = "proxy-server.scraperapi.com:8011"
-
-
-def _parse_keys() -> list[str]:
-    raw = os.getenv("SCRAPERAPI_API_KEY", "")
-    return [k.strip() for k in raw.split(",") if k.strip()]
 
 
 def _hash(key: str) -> str:
     return hashlib.md5(key.encode()).hexdigest()[:12]
 
 
+# ── Key list (Redis-backed, env-seeded) ───────────────────────────
+
+def _ensure_seeded(rc) -> None:
+    """Import env var keys into Redis if pool is empty."""
+    if rc.llen(_KEYS_KEY) == 0:
+        raw = os.getenv("SCRAPERAPI_API_KEY", "")
+        for k in [x.strip() for x in raw.split(",") if x.strip()]:
+            if k not in rc.lrange(_KEYS_KEY, 0, -1):
+                rc.rpush(_KEYS_KEY, k)
+
+
+def get_all_keys() -> list[str]:
+    """Return all keys currently in the pool."""
+    try:
+        rc = get_redis()
+        _ensure_seeded(rc)
+        raw = rc.lrange(_KEYS_KEY, 0, -1)
+        return [k if isinstance(k, str) else k.decode() for k in raw]
+    except Exception as e:
+        print(f"[ScraperAPIPool] get_all_keys failed: {e}")
+        # Fallback to env var
+        raw = os.getenv("SCRAPERAPI_API_KEY", "")
+        return [k.strip() for k in raw.split(",") if k.strip()]
+
+
+def add_key(key: str) -> int:
+    """Add a key to the pool. Returns new pool size. Skips duplicates."""
+    key = key.strip()
+    if not key:
+        return len(get_all_keys())
+    try:
+        rc = get_redis()
+        _ensure_seeded(rc)
+        existing = rc.lrange(_KEYS_KEY, 0, -1)
+        existing_str = [k if isinstance(k, str) else k.decode() for k in existing]
+        if key in existing_str:
+            return len(existing_str)
+        rc.rpush(_KEYS_KEY, key)
+        # Clear exhausted flag if re-adding a previously removed key
+        rc.delete(f"scraperapi:exhausted:{_hash(key)}")
+        print(f"[ScraperAPIPool] Added key {_hash(key)}")
+        return rc.llen(_KEYS_KEY)
+    except Exception as e:
+        print(f"[ScraperAPIPool] add_key failed: {e}")
+        return 0
+
+
+def remove_key(index: int) -> int:
+    """Remove key at index. Returns remaining pool size."""
+    try:
+        rc = get_redis()
+        keys = get_all_keys()
+        if index < 0 or index >= len(keys):
+            raise ValueError(f"Index {index} out of range")
+        key = keys[index]
+        sentinel = f"__del_{index}__"
+        rc.lset(_KEYS_KEY, index, sentinel)
+        rc.lrem(_KEYS_KEY, 0, sentinel)
+        # Clean up related Redis state
+        h = _hash(key)
+        rc.delete(f"scraperapi:credits:{h}", f"scraperapi:exhausted:{h}")
+        # Reset active index if needed
+        size = rc.llen(_KEYS_KEY)
+        if size > 0:
+            cur_idx = int(rc.get("scraperapi:active_idx") or 0)
+            rc.set("scraperapi:active_idx", cur_idx % size)
+        else:
+            rc.delete("scraperapi:active_idx")
+        print(f"[ScraperAPIPool] Removed key {h}")
+        return size
+    except Exception as e:
+        print(f"[ScraperAPIPool] remove_key failed: {e}")
+        return len(get_all_keys())
+
+
 # ── Active key selection ───────────────────────────────────────────
 
 def get_active_key() -> str:
-    """Return the current active (non-exhausted) key, or "" if none."""
-    keys = _parse_keys()
-    if not keys:
-        return ""
-    if len(keys) == 1:
-        return keys[0]
-
+    """Return current active (non-exhausted) key, or '' if none."""
     try:
         rc = get_redis()
+        _ensure_seeded(rc)
+        keys = get_all_keys()
+        if not keys:
+            return ""
+        if len(keys) == 1:
+            return keys[0]
+
         idx = int(rc.get("scraperapi:active_idx") or 0) % len(keys)
-        # Walk forward until we find a non-exhausted key
         for offset in range(len(keys)):
             candidate = keys[(idx + offset) % len(keys)]
             if not rc.get(f"scraperapi:exhausted:{_hash(candidate)}"):
                 if offset > 0:
-                    # Update index to skip the exhausted key(s)
                     rc.set("scraperapi:active_idx", (idx + offset) % len(keys))
                 return candidate
     except Exception as e:
-        print(f"[ScraperAPIPool] Redis error in get_active_key: {e}")
+        print(f"[ScraperAPIPool] get_active_key error: {e}")
 
-    # Redis unavailable — return first key as fallback
-    return keys[0]
+    keys = get_all_keys()
+    return keys[0] if keys else ""
 
 
 def rotate_key(reason: str = "manual") -> str:
-    """
-    Advance to the next key in the pool.
-    Marks the current key exhausted for EXHAUSTED_TTL seconds.
-    Returns the new active key (or "" if all exhausted).
-    """
-    keys = _parse_keys()
-    if not keys:
-        return ""
-
+    """Advance to next key, mark current exhausted. Returns new active key."""
     try:
         rc = get_redis()
+        keys = get_all_keys()
+        if not keys:
+            return ""
         idx = int(rc.get("scraperapi:active_idx") or 0) % len(keys)
         current_key = keys[idx]
-
-        # Mark current key exhausted
         rc.setex(f"scraperapi:exhausted:{_hash(current_key)}", _EXHAUSTED_TTL, "1")
-        print(f"[ScraperAPIPool] Key {_hash(current_key)} exhausted ({reason}), rotating...")
-
-        # Advance index
-        new_idx = (idx + 1) % len(keys)
-        rc.set("scraperapi:active_idx", new_idx)
-
+        print(f"[ScraperAPIPool] Key {_hash(current_key)} exhausted ({reason})")
+        rc.set("scraperapi:active_idx", (idx + 1) % len(keys))
         return get_active_key()
     except Exception as e:
-        print(f"[ScraperAPIPool] Rotate failed: {e}")
-        return keys[0] if keys else ""
+        print(f"[ScraperAPIPool] rotate_key failed: {e}")
+        return ""
 
 
 def check_response_and_rotate(credits_left: Optional[int]) -> None:
-    """
-    Called after each ScraperAPI request with the X-Rest-Api-Credits-Left header.
-    Caches credits and rotates if below threshold.
-    """
+    """Update credit cache; rotate if below threshold."""
     key = get_active_key()
     if not key or credits_left is None:
         return
-
-    h = _hash(key)
     try:
-        get_redis().setex(f"scraperapi:credits:{h}", _CREDITS_TTL, str(credits_left))
+        get_redis().setex(f"scraperapi:credits:{_hash(key)}", _CREDITS_TTL, str(credits_left))
     except Exception:
         pass
-
     if credits_left < EXHAUST_THRESHOLD:
         rotate_key(reason=f"low credits ({credits_left})")
 
@@ -119,7 +174,7 @@ def check_response_and_rotate(credits_left: Optional[int]) -> None:
 # ── Credit queries ─────────────────────────────────────────────────
 
 def fetch_credits(key: str, use_cache: bool = True) -> Optional[int]:
-    """Fetch remaining credits for a single key (cached in Redis)."""
+    """Fetch remaining credits for one key (Redis-cached)."""
     h = _hash(key)
     if use_cache:
         try:
@@ -128,7 +183,6 @@ def fetch_credits(key: str, use_cache: bool = True) -> Optional[int]:
                 return int(cached)
         except Exception:
             pass
-
     try:
         resp = httpx.get(
             f"http://api.scraperapi.com/account?api_key={key}",
@@ -143,23 +197,28 @@ def fetch_credits(key: str, use_cache: bool = True) -> Optional[int]:
                 pass
             return remaining
     except Exception as e:
-        print(f"[ScraperAPIPool] fetch_credits({h}) failed: {e}")
+        print(f"[ScraperAPIPool] fetch_credits({h}) error: {e}")
     return None
 
 
 def fetch_all_credits(use_cache: bool = True) -> list[dict]:
-    """Return credit info for every configured key."""
-    keys = _parse_keys()
+    """Return credit status for every key in the pool."""
+    keys = get_all_keys()
+    if not keys:
+        return []
+    try:
+        rc = get_redis()
+        active_idx = int(rc.get("scraperapi:active_idx") or 0) % max(len(keys), 1)
+    except Exception:
+        active_idx = 0
+
     result = []
     for i, key in enumerate(keys):
         h = _hash(key)
         try:
             is_exhausted = bool(get_redis().get(f"scraperapi:exhausted:{h}"))
-            active_idx = int(get_redis().get("scraperapi:active_idx") or 0) % max(len(keys), 1)
         except Exception:
             is_exhausted = False
-            active_idx = 0
-
         credits = fetch_credits(key, use_cache=use_cache)
         result.append({
             "index":      i,
@@ -175,7 +234,6 @@ def fetch_all_credits(use_cache: bool = True) -> list[dict]:
 # ── Proxy URL helpers ──────────────────────────────────────────────
 
 def scraperapi_proxy(country_code: str = "") -> str:
-    """Build an HTTP proxy URL using the current active key."""
     key = get_active_key()
     if not key:
         return ""
@@ -184,7 +242,6 @@ def scraperapi_proxy(country_code: str = "") -> str:
 
 
 def scraperapi_url(target_url: str, render: bool = False) -> str:
-    """Build a direct ScraperAPI fetch URL."""
     from urllib.parse import urlencode
     key = get_active_key()
     if not key:
