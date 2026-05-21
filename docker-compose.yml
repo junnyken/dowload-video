@@ -16,20 +16,20 @@ services:
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:4416/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
+      interval: 60s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
 
   bgutil-pot-2:
     image: ghcr.io/jim60105/bgutil-pot:latest
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:4416/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
+      interval: 60s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
 
   cobalt-api:
     image: ghcr.io/imputnet/cobalt:latest

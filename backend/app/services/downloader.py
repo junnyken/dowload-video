@@ -324,7 +324,10 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         # YouTube requires Proof-of-Origin tokens since 2025.
         # Tokens cached in Redis (TTL 3.5h) — all workers share one token
         # instead of each hitting bgutil-pot's headless Chrome per request.
-        bgutil_url = os.getenv("BGUTIL_POT_URL", "")
+        # po_token_cache.py handles the full comma-separated URL internally.
+        # Plugin fallback needs a single valid URL, so take the first one.
+        _bgutil_raw = os.getenv("BGUTIL_POT_URL", "")
+        bgutil_url = _bgutil_raw.split(",")[0].strip() if _bgutil_raw else ""
 
         # Player client chain — order matters, yt-dlp tries each in sequence:
         # 1. web        — Primary. Full DASH adaptive (1080p–4K) with PO token.
