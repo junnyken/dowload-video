@@ -873,8 +873,11 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
 
             if info is None:
                 # Phase A: use ignoreerrors=False so proxy 402 raises instead of silently returning None
+                # Reduce retries to 1 so proxy failure is detected fast (not 3x wait)
                 _phase_a_opts = opts.copy()
                 _phase_a_opts["ignoreerrors"] = False
+                _phase_a_opts["retries"] = 1
+                _phase_a_opts["extractor_retries"] = 1
                 try:
                     with yt_dlp.YoutubeDL(_phase_a_opts) as ydl:
                         info = ydl.extract_info(url, download=False)
@@ -931,6 +934,8 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             if info is None:
                 _pa2_opts = opts.copy()
                 _pa2_opts["ignoreerrors"] = False
+                _pa2_opts["retries"] = 1
+                _pa2_opts["extractor_retries"] = 1
                 try:
                     with yt_dlp.YoutubeDL(_pa2_opts) as ydl:
                         info = ydl.extract_info(url, download=False)
