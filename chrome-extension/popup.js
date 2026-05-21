@@ -1,12 +1,19 @@
-const API_BASE = 'https://dowload-video.mk.dev.matbao.ai';
-let _lastDownloadData = null; // Store last successful fetch for copy/retry
+const DEFAULT_API_BASE = 'https://dowload-video.mk.dev.matbao.ai';
+let API_BASE = DEFAULT_API_BASE;
+let _lastDownloadData = null;
 
-// ── Tab switcher (3 tabs) ──────────────────────────────────────────
+// Khởi tạo API_BASE từ storage ngay khi popup mở
+chrome.storage.sync.get('vg_api_base', (r) => {
+  if (r.vg_api_base?.trim()) API_BASE = r.vg_api_base.trim();
+});
+
+// ── Tab switcher ──────────────────────────────────────────────────
 function showTab(tab) {
   document.getElementById('single-section').style.display = tab === 'single' ? 'block' : 'none';
   document.getElementById('channel-section').classList.toggle('visible', tab === 'channel');
   document.getElementById('channel-section').style.display = tab === 'channel' ? 'block' : 'none';
   document.getElementById('history-section').style.display = tab === 'history' ? 'block' : 'none';
+  document.getElementById('settings-panel').style.display = tab === 'settings' ? 'block' : 'none';
 
   ['tab-single','tab-channel','tab-history'].forEach(id => {
     const el = document.getElementById(id);
@@ -28,6 +35,31 @@ async function getActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   _activeTabId = tab?.id;
   return tab;
+}
+
+// ── Server health check ───────────────────────────────────────────
+async function checkServerHealth() {
+  const dot = document.getElementById('server-health-dot');
+  if (!dot) return;
+  dot.style.background = '#6b7280'; // grey = checking
+  dot.title = 'Đang kiểm tra server...';
+
+  const result = await new Promise((resolve) =>
+    chrome.runtime.sendMessage({ type: 'VG_HEALTH_CHECK' }, resolve)
+  );
+
+  if (result?.ok) {
+    dot.style.background = '#22c55e';
+    dot.title = 'Server hoạt động bình thường';
+  } else {
+    dot.style.background = '#ef4444';
+    dot.title = 'Không kết nối được server — kiểm tra lại URL hoặc mạng';
+    const statusEl = document.getElementById('statusMsg');
+    if (statusEl) {
+      statusEl.textContent = '⚠ Không kết nối được server';
+      statusEl.className = 'mt-2 text-xs text-center text-yellow-400 min-h-[18px]';
+    }
+  }
 }
 
 // ── Page detection ─────────────────────────────────────────────────
@@ -62,6 +94,9 @@ function showReloadBanner(tabId) {
 }
 
 async function initPopup() {
+  // Chạy health check song song với page detection
+  checkServerHealth();
+
   const pageBadge = document.getElementById('page-badge');
   try {
     const tab = await getActiveTab();
@@ -71,8 +106,12 @@ async function initPopup() {
     try { pageInfo = await tryGetPageInfo(tab.id); }
     catch {
       try { await injectContentScript(tab.id); pageInfo = await tryGetPageInfo(tab.id); }
-      catch { showReloadBanner(tab.id); pageBadge.textContent = 'Cần reload trang';
-        pageBadge.className = 'text-xs px-2 py-0.5 rounded-full bg-yellow-900 text-yellow-400 border border-yellow-700'; return; }
+      catch {
+        showReloadBanner(tab.id);
+        pageBadge.textContent = 'Cần reload trang';
+        pageBadge.className = 'text-xs px-2 py-0.5 rounded-full bg-yellow-900 text-yellow-400 border border-yellow-700';
+        return;
+      }
     }
 
     const bm = BADGE_MAP[pageInfo.pageType];
@@ -132,6 +171,63 @@ document.getElementById('tab-channel').addEventListener('click', async () => {
 document.getElementById('tab-single').addEventListener('click', () => clearInterval(pollTimer));
 window.addEventListener('unload', () => clearInterval(pollTimer));
 
+// ── Elapsed timer (hiển thị số giây đang xử lý) ──────────────────
+let _elapsedTimer = null;
+let _elapsedSec = 0;
+
+function startElapsedTimer(statusEl) {
+  _elapsedSec = 0;
+  clearInterval(_elapsedTimer);
+  _elapsedTimer = setInterval(() => {
+    _elapsedSec++;
+    statusEl.textContent = `⏳ Server đang xử lý... ${_elapsedSec}s`;
+  }, 1000);
+}
+
+function stopElapsedTimer() {
+  clearInterval(_elapsedTimer);
+  _elapsedTimer = null;
+}
+
+// Sync elapsed từ background (backup nếu timer popup lệch)
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === 'VG_FETCH_PROGRESS') {
+    _elapsedSec = msg.elapsed;
+    const statusEl = document.getElementById('statusMsg');
+    if (statusEl && _elapsedTimer) {
+      statusEl.textContent = `⏳ Server đang xử lý... ${msg.elapsed}s`;
+    }
+  }
+  if (msg.type === 'VG_DOWNLOAD_PROGRESS') handleDownloadProgress(msg);
+});
+
+// ── Helper: gọi fetch-link qua background ─────────────────────────
+async function apiFetchLink(payload) {
+  return new Promise((resolve) =>
+    chrome.runtime.sendMessage({ type: 'VG_FETCH_LINK', payload }, resolve)
+  );
+}
+
+// ── Helper: resolve download URL ──────────────────────────────────
+function resolveDownloadUrl(data, ext, base) {
+  const apiBase = base || API_BASE;
+  let dlUrl = ext === 'mp3'
+    ? (data.local_mp3_path || data.direct_mp3_url || data.direct_mp4_url || data.local_file_path)
+    : (data.direct_mp4_url || data.local_file_path || data.local_mp3_path);
+  if (!dlUrl) return null;
+
+  if (data.is_audio_only || (dlUrl.endsWith('.mp3') || dlUrl.endsWith('.m4a'))) ext = 'mp3';
+
+  const safeName = (data.title || 'video').replace(/[/\\?%*:|"<>]/g, '-');
+
+  if (!dlUrl.includes('matbao.ai')) {
+    dlUrl = `${apiBase}/api/v1/proxy-download?url=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}&ext=${ext}`;
+  } else if (dlUrl.startsWith('/app/downloads/')) {
+    dlUrl = `${apiBase}/api/v1/download-local?filepath=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}.${ext}`;
+  }
+  return { dlUrl, safeName, ext };
+}
+
 // ══════════════════════════════════════════════════════════════════
 // SINGLE VIDEO — Download + Preview + Progress
 // ══════════════════════════════════════════════════════════════════
@@ -141,75 +237,65 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
     btn = document.getElementById('downloadBtn'), quality = document.getElementById('qualitySelect').value,
     noWm = document.getElementById('removeWatermark').checked, dlSubs = document.getElementById('downloadSubs').checked;
 
-  btn.disabled = true; btn.classList.add('opacity-70'); iconDl.style.display = 'none'; spinner.style.display = 'block';
-  btnText.textContent = 'Đang bóc tách...'; statusMsg.textContent = 'Server đang xử lý...';
+  btn.disabled = true; btn.classList.add('opacity-70');
+  iconDl.style.display = 'none'; spinner.style.display = 'block';
+  btnText.textContent = 'Đang bóc tách...';
+  statusMsg.textContent = '⏳ Server đang xử lý... 0s';
   statusMsg.className = 'mt-2 text-xs text-center text-orange-400 min-h-[18px]';
+
+  startElapsedTimer(statusMsg);
 
   try {
     const tab = await getActiveTab();
     if (!tab?.url || tab.url.startsWith('chrome://')) throw new Error('Không thể lấy link ở trang này.');
 
-    const res = await fetch(`${API_BASE}/api/v1/fetch-link`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: tab.url, quality, remove_watermark: noWm, download_subs: dlSubs }),
-    });
-    const data = await res.json();
+    const result = await apiFetchLink({ url: tab.url, quality, remove_watermark: noWm, download_subs: dlSubs });
 
-    if (res.ok && data.success) {
-      _lastDownloadData = data;
-      // Show preview card
-      showPreviewCard(data, tab.url);
-      showMultiFormat(data);
+    if (!result) throw new Error('Mất kết nối với background worker. Thử reload extension.');
+    if (result.timeout) throw new Error(result.error || 'Timeout 120s.');
+    if (!result.ok) throw new Error(result.data?.detail || result.error || 'Server báo lỗi.');
 
-      // Hide error card if visible
-      const errCard = document.getElementById('error-card');
-      if (errCard) errCard.classList.add('hidden');
+    const data = result.data;
+    if (!data?.success) throw new Error(data?.detail || 'Server không trả về kết quả.');
 
-      statusMsg.textContent = 'Thành công! Đang tải file...';
-      statusMsg.className = 'mt-2 text-xs text-center text-green-400 min-h-[18px]';
+    _lastDownloadData = data;
+    showPreviewCard(data, tab.url);
+    showMultiFormat(data);
 
-      let dlUrl, ext = quality.includes('mp3') ? 'mp3' : 'mp4';
-      if (ext === 'mp3') { dlUrl = data.local_mp3_path || data.direct_mp3_url || data.direct_mp4_url || data.local_file_path; }
-      else { dlUrl = data.direct_mp4_url || data.local_file_path || data.local_mp3_path; }
-      if (data.is_audio_only || (dlUrl && (dlUrl.endsWith('.mp3') || dlUrl.endsWith('.m4a')))) ext = 'mp3';
-      const safeName = (data.title || 'video').replace(/[/\\?%*:|"<>]/g, '-');
+    document.getElementById('error-card')?.classList.add('hidden');
+    statusMsg.textContent = '✅ Thành công! Đang tải file...';
+    statusMsg.className = 'mt-2 text-xs text-center text-green-400 min-h-[18px]';
 
-      if (!dlUrl.includes('matbao.ai')) {
-        dlUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}&ext=${ext}`;
-      } else if (dlUrl.startsWith('/app/downloads/')) {
-        dlUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}.${ext}`;
-      }
+    const ext = quality.includes('mp3') ? 'mp3' : 'mp4';
+    const resolved = resolveDownloadUrl(data, ext);
+    if (!resolved) throw new Error('Không lấy được link tải.');
 
-      _lastDownloadData._resolvedUrl = dlUrl;
-      _lastDownloadData._ext = ext;
-      _lastDownloadData._safeName = safeName;
+    const { dlUrl, safeName, ext: finalExt } = resolved;
+    _lastDownloadData._resolvedUrl = dlUrl;
+    _lastDownloadData._ext = finalExt;
+    _lastDownloadData._safeName = safeName;
 
-      // Show progress bar
-      document.getElementById('dl-progress').classList.remove('hidden');
-      chrome.downloads.download({ url: dlUrl, filename: `VidGrab/${safeName}.${ext}`, saveAs: true });
+    document.getElementById('dl-progress').classList.remove('hidden');
+    chrome.downloads.download({ url: dlUrl, filename: `VidGrab/${safeName}.${finalExt}`, saveAs: true });
 
-      if (data.subtitle_url) chrome.downloads.download({ url: data.subtitle_url, filename: `VidGrab/${safeName}.srt`, saveAs: false });
+    if (data.subtitle_url) chrome.downloads.download({ url: data.subtitle_url, filename: `VidGrab/${safeName}.srt`, saveAs: false });
 
-      // Save to history
-      chrome.runtime.sendMessage({ type: 'VG_SAVE_HISTORY', record: {
-        title: data.title || 'Video', thumbnail: data.thumbnail_url || '', url: tab.url,
-        quality: ext === 'mp3' ? 'MP3 320k' : quality.replace('video_','').toUpperCase() || 'HD',
-        fileSize: data.file_size_mb ? `${data.file_size_mb} MB` : '',
-      }});
-    } else { throw new Error(data.detail || 'Server báo lỗi.'); }
+    chrome.runtime.sendMessage({ type: 'VG_SAVE_HISTORY', record: {
+      title: data.title || 'Video', thumbnail: data.thumbnail_url || '', url: tab.url,
+      quality: finalExt === 'mp3' ? 'MP3 320k' : quality.replace('video_','').toUpperCase() || 'HD',
+      fileSize: data.file_size_mb ? `${data.file_size_mb} MB` : '',
+    }});
   } catch (err) {
     statusMsg.textContent = `Lỗi: ${err.message}`;
     statusMsg.className = 'mt-2 text-xs text-center text-red-400 min-h-[18px]';
-    // Show error card with retry
     const errCard = document.getElementById('error-card');
     const errText = document.getElementById('error-text');
-    if (errCard && errText) {
-      errText.textContent = err.message;
-      errCard.classList.remove('hidden');
-    }
+    if (errCard && errText) { errText.textContent = err.message; errCard.classList.remove('hidden'); }
   } finally {
-    btn.disabled = false; btn.classList.remove('opacity-70'); iconDl.style.display = 'block';
-    spinner.style.display = 'none'; btnText.textContent = 'Tải Video Ngay';
+    stopElapsedTimer();
+    btn.disabled = false; btn.classList.remove('opacity-70');
+    iconDl.style.display = 'block'; spinner.style.display = 'none';
+    btnText.textContent = 'Tải Video Ngay';
   }
 });
 
@@ -251,7 +337,7 @@ function showPreviewCard(data, pageUrl) {
   card.classList.remove('hidden');
 }
 
-// ── Action buttons (Copy link, thumbnail, open web) ────────────────
+// ── Action buttons ────────────────────────────────────────────────
 document.getElementById('action-copy-link')?.addEventListener('click', async () => {
   const btn = document.getElementById('action-copy-link');
   if (!_lastDownloadData?._resolvedUrl) return;
@@ -275,13 +361,10 @@ document.getElementById('action-dl-thumb')?.addEventListener('click', () => {
   btn.textContent = '✅ Đang tải'; setTimeout(() => { btn.textContent = '🖼️ Ảnh bìa'; }, 2000);
 });
 
-// ── Download Progress Listener (with speed) ───────────────────────
-let _dlStartTime = 0;
-let _dlLastReceived = 0;
-let _dlLastTime = 0;
+// ── Download Progress ─────────────────────────────────────────────
+let _dlStartTime = 0, _dlLastReceived = 0, _dlLastTime = 0;
 
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type !== 'VG_DOWNLOAD_PROGRESS') return;
+function handleDownloadProgress(msg) {
   const wrap = document.getElementById('dl-progress');
   const fill = document.getElementById('dl-progress-fill');
   const pctEl = document.getElementById('dl-progress-pct');
@@ -293,7 +376,6 @@ chrome.runtime.onMessage.addListener((msg) => {
     fill.style.width = '100%'; pctEl.textContent = '✅ Xong!';
     info.textContent = ''; if (speedEl) speedEl.textContent = '';
     wrap.style.borderColor = '#22c55e';
-    // Show success animation
     const successCheck = document.getElementById('success-check');
     if (successCheck) { successCheck.classList.add('show'); setTimeout(() => successCheck.classList.remove('show'), 3000); }
     setTimeout(() => { wrap.classList.add('hidden'); wrap.style.borderColor = ''; }, 4000);
@@ -306,22 +388,16 @@ chrome.runtime.onMessage.addListener((msg) => {
       const totalMb = (msg.total / 1048576).toFixed(1);
       info.textContent = `${mb} / ${totalMb} MB`;
     }
-    // Calculate speed (MB/s)
     if (speedEl && msg.received > 0 && now - _dlLastTime > 400) {
       const deltaBytes = msg.received - _dlLastReceived;
       const deltaSec = (now - _dlLastTime) / 1000;
-      if (deltaSec > 0) {
-        const speedMBs = (deltaBytes / 1048576 / deltaSec).toFixed(1);
-        speedEl.textContent = `${speedMBs} MB/s`;
-      }
-      _dlLastReceived = msg.received;
-      _dlLastTime = now;
+      if (deltaSec > 0) speedEl.textContent = `${(deltaBytes / 1048576 / deltaSec).toFixed(1)} MB/s`;
+      _dlLastReceived = msg.received; _dlLastTime = now;
     }
   } else if (msg.state === 'error') {
-    pctEl.textContent = '❌ Lỗi'; fill.style.background = '#ef4444';
-    _dlStartTime = 0;
+    pctEl.textContent = '❌ Lỗi'; fill.style.background = '#ef4444'; _dlStartTime = 0;
   }
-});
+}
 
 // ══════════════════════════════════════════════════════════════════
 // HISTORY TAB
@@ -361,6 +437,51 @@ function getTimeAgo(ts) {
 
 document.getElementById('clear-history-btn').addEventListener('click', () => {
   chrome.runtime.sendMessage({ type: 'VG_CLEAR_HISTORY' }, () => loadHistory());
+});
+
+// ══════════════════════════════════════════════════════════════════
+// SETTINGS PANEL
+// ══════════════════════════════════════════════════════════════════
+const settingsBtn = document.getElementById('settings-btn');
+const settingsPanel = document.getElementById('settings-panel');
+const settingsApiUrl = document.getElementById('settings-api-url');
+const settingsSave = document.getElementById('settings-save');
+const settingsReset = document.getElementById('settings-reset');
+
+// Load current value vào input khi mở
+settingsBtn?.addEventListener('click', () => {
+  const isOpen = settingsPanel.style.display === 'block';
+  settingsPanel.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) {
+    chrome.storage.sync.get('vg_api_base', (r) => {
+      settingsApiUrl.value = r.vg_api_base || DEFAULT_API_BASE;
+    });
+  }
+});
+
+settingsSave?.addEventListener('click', () => {
+  const val = settingsApiUrl.value.trim().replace(/\/$/, '');
+  if (!val.startsWith('http')) {
+    settingsSave.textContent = '❌ URL không hợp lệ';
+    setTimeout(() => { settingsSave.textContent = 'Lưu'; }, 2000);
+    return;
+  }
+  chrome.storage.sync.set({ vg_api_base: val }, () => {
+    API_BASE = val;
+    settingsSave.textContent = '✅ Đã lưu';
+    setTimeout(() => { settingsSave.textContent = 'Lưu'; settingsPanel.style.display = 'none'; }, 1500);
+    checkServerHealth(); // re-check với URL mới
+  });
+});
+
+settingsReset?.addEventListener('click', () => {
+  chrome.storage.sync.remove('vg_api_base', () => {
+    API_BASE = DEFAULT_API_BASE;
+    settingsApiUrl.value = DEFAULT_API_BASE;
+    settingsReset.textContent = '✅ Đã reset';
+    setTimeout(() => { settingsReset.textContent = 'Đặt lại mặc định'; }, 1500);
+    checkServerHealth();
+  });
 });
 
 // ══════════════════════════════════════════════════════════════════
@@ -465,34 +586,29 @@ function renderSpotifyPlaylist(data) {
 }
 
 async function downloadSingleTrack(track, btn) {
-  const originalHtml = btn.innerHTML; btn.innerHTML = '⏳'; btn.disabled = true;
+  btn.innerHTML = '⏳'; btn.disabled = true;
   try {
-    const resp = await fetch(`${API_BASE}/api/v1/fetch-link`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: track.search_query, quality: 'mp3_320', remove_watermark: true }) });
-    const data = await resp.json();
-    if (resp.ok && data.success) {
-      let dlUrl = data.local_file_path || data.local_mp3_path || data.direct_mp3_url || data.direct_mp4_url;
-      if (!dlUrl) throw new Error('No download URL');
-      const safeName = (data.title || track.name).replace(/[/\\?%*:|"<>]/g, '-');
-      
-      // Local file on server (starts with downloads/ or /app/downloads/)
-      if (dlUrl.startsWith('downloads/') || dlUrl.startsWith('/app/downloads/')) {
-        dlUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}.mp3`;
-      }
-      // Remote URL — proxy it
-      else if (dlUrl.startsWith('http') && !dlUrl.includes('matbao.ai')) {
-        dlUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}&ext=mp3`;
-      }
-      
-      chrome.downloads.download({ url: dlUrl, filename: `VidGrab/${safeName}.mp3`, saveAs: false });
-      btn.innerHTML = '✅'; btn.classList.replace('bg-green-600','bg-gray-600');
-      
-      // Save to history
-      chrome.runtime.sendMessage({ type: 'VG_SAVE_HISTORY', record: {
-        title: data.title || track.name, thumbnail: track.thumbnail || '', url: track.search_query,
-        quality: 'MP3', fileSize: data.file_size_mb ? `${data.file_size_mb} MB` : '',
-      }});
-    } else throw new Error(data.detail || 'Server error');
+    // Route qua background để có timeout 120s
+    const result = await apiFetchLink({ url: track.search_query, quality: 'mp3_320', remove_watermark: true });
+    if (!result?.ok || !result.data?.success) throw new Error(result?.data?.detail || result?.error || 'Server error');
+
+    const data = result.data;
+    let dlUrl = data.local_file_path || data.local_mp3_path || data.direct_mp3_url || data.direct_mp4_url;
+    if (!dlUrl) throw new Error('No download URL');
+    const safeName = (data.title || track.name).replace(/[/\\?%*:|"<>]/g, '-');
+
+    if (dlUrl.startsWith('downloads/') || dlUrl.startsWith('/app/downloads/')) {
+      dlUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}.mp3`;
+    } else if (dlUrl.startsWith('http') && !dlUrl.includes('matbao.ai')) {
+      dlUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}&ext=mp3`;
+    }
+
+    chrome.downloads.download({ url: dlUrl, filename: `VidGrab/${safeName}.mp3`, saveAs: false });
+    btn.innerHTML = '✅'; btn.classList.replace('bg-green-600','bg-gray-600');
+    chrome.runtime.sendMessage({ type: 'VG_SAVE_HISTORY', record: {
+      title: data.title || track.name, thumbnail: track.thumbnail || '', url: track.search_query,
+      quality: 'MP3', fileSize: data.file_size_mb ? `${data.file_size_mb} MB` : '',
+    }});
   } catch(e) { btn.innerHTML = '❌'; btn.title = e.message; btn.classList.replace('bg-green-600','bg-red-600'); }
 }
 
@@ -501,10 +617,7 @@ async function downloadSingleTrack(track, btn) {
 // ══════════════════════════════════════════════════════════════════
 const themeBtn = document.getElementById('theme-toggle');
 chrome.storage.local.get('vg_theme', (res) => {
-  if (res.vg_theme === 'light') {
-    document.body.classList.add('light-mode');
-    themeBtn.textContent = '☀️';
-  }
+  if (res.vg_theme === 'light') { document.body.classList.add('light-mode'); themeBtn.textContent = '☀️'; }
 });
 themeBtn.addEventListener('click', () => {
   const isLight = document.body.classList.toggle('light-mode');
@@ -513,7 +626,7 @@ themeBtn.addEventListener('click', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════
-// MULTI-FORMAT POPUP — Show all available qualities
+// MULTI-FORMAT POPUP
 // ══════════════════════════════════════════════════════════════════
 function showMultiFormat(data) {
   const panel = document.getElementById('formats-panel');
@@ -523,10 +636,9 @@ function showMultiFormat(data) {
   const formats = data.available_formats || [];
   if (formats.length === 0) return;
 
-  // original_url is the YouTube/platform URL used to re-fetch for server-side merge
   const videoUrl = data.original_url || '';
-
   list.innerHTML = '';
+
   formats.forEach((fmt) => {
     const row = document.createElement('div');
     row.className = 'fmt-item';
@@ -534,11 +646,9 @@ function showMultiFormat(data) {
     const isVideo = fmt.type === 'video';
     const icon = isVideo ? '🎬' : '🎵';
     const label = fmt.label || (isVideo ? `${fmt.height}p` : 'Audio');
-    // requires_merge: true means no direct URL — server must download+merge
     const needsMerge = fmt.requires_merge || !fmt.url;
     const mergeBadge = needsMerge ? `<span class="text-[9px] px-1.5 py-0.5 rounded bg-blue-800 text-blue-200">GHÉP TỆP</span>` : '';
     const codecBadge = fmt.codec ? `<span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">${fmt.codec}</span>` : '';
-    // Backend returns filesize_mb (not file_size_mb)
     const sizeMB = fmt.filesize_mb || fmt.file_size_mb || 0;
     const sizeBadge = sizeMB ? `<span class="text-[10px] text-orange-400 font-bold">${sizeMB} MB</span>` : '';
 
@@ -559,39 +669,25 @@ function showMultiFormat(data) {
       const ext = isVideo ? 'mp4' : 'mp3';
 
       if (needsMerge) {
-        // Trigger server-side download: backend downloads+merges the HD stream
         dlBtn.textContent = '⏳';
         try {
           const quality = isVideo ? `video_${fmt.height}` : 'mp3_320';
-          const resp = await fetch(`${API_BASE}/api/v1/fetch-link`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: videoUrl, quality, remove_watermark: true }),
-          });
-          const result = await resp.json();
-          if (result.success) {
-            let finalUrl;
-            if (result.local_file_path) {
-              finalUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(result.local_file_path)}&filename=${encodeURIComponent(safeName)}.${ext}`;
-            } else if (result.direct_mp4_url) {
-              finalUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(result.direct_mp4_url)}&filename=${encodeURIComponent(safeName)}&ext=${ext}`;
-            }
-            if (finalUrl) {
-              chrome.downloads.download({ url: finalUrl, filename: `VidGrab/${safeName}_${label}.${ext}`, saveAs: true });
-              dlBtn.textContent = '✅';
-            } else {
-              dlBtn.textContent = '❌';
-            }
-          } else {
-            dlBtn.textContent = '❌';
+          const result = await apiFetchLink({ url: videoUrl, quality, remove_watermark: true });
+          if (!result?.ok || !result.data?.success) { dlBtn.textContent = '❌'; return; }
+
+          const r = result.data;
+          let finalUrl;
+          if (r.local_file_path) {
+            finalUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(r.local_file_path)}&filename=${encodeURIComponent(safeName)}.${ext}`;
+          } else if (r.direct_mp4_url) {
+            finalUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(r.direct_mp4_url)}&filename=${encodeURIComponent(safeName)}&ext=${ext}`;
           }
-        } catch {
-          dlBtn.textContent = '❌';
-        }
+          if (finalUrl) { chrome.downloads.download({ url: finalUrl, filename: `VidGrab/${safeName}_${label}.${ext}`, saveAs: true }); dlBtn.textContent = '✅'; }
+          else dlBtn.textContent = '❌';
+        } catch { dlBtn.textContent = '❌'; }
         return;
       }
 
-      // Direct URL download (non-merge formats)
       const dlUrl = fmt.url;
       let finalUrl;
       if (dlUrl && !dlUrl.includes('matbao.ai')) {
@@ -601,10 +697,7 @@ function showMultiFormat(data) {
       } else {
         finalUrl = dlUrl;
       }
-      if (finalUrl) {
-        chrome.downloads.download({ url: finalUrl, filename: `VidGrab/${safeName}_${label}.${ext}`, saveAs: true });
-        dlBtn.textContent = '✅';
-      }
+      if (finalUrl) { chrome.downloads.download({ url: finalUrl, filename: `VidGrab/${safeName}_${label}.${ext}`, saveAs: true }); dlBtn.textContent = '✅'; }
     });
 
     list.appendChild(row);
@@ -613,7 +706,6 @@ function showMultiFormat(data) {
   panel.classList.remove('hidden');
 }
 
-// Close formats panel
 document.getElementById('formats-close')?.addEventListener('click', () => {
   document.getElementById('formats-panel')?.classList.add('hidden');
 });

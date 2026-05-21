@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "VidGrab - One Click Downloader",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "Tải video không logo siêu tốc — TikTok, YouTube, Facebook, Instagram, Douyin, Spotify. Hỗ trợ kênh, playlist, ZIP, cắt video.",
   "permissions": [
     "activeTab",

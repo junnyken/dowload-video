@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <title>VidGrab v4.0</title>
+  <title>VidGrab v4.1</title>
   <link rel="stylesheet" href="tailwind.css">
   <style>
     body { width: 380px; font-family: 'Segoe UI', system-ui, sans-serif; }
@@ -154,6 +154,38 @@
       font-size: 14px; line-height: 1; transition: transform 0.2s;
     }
     .theme-toggle:hover { transform: scale(1.2); }
+
+    /* Health dot */
+    .health-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: #6b7280;
+      flex-shrink: 0; cursor: help; transition: background 0.4s;
+    }
+
+    /* Settings button */
+    .settings-btn {
+      background: none; border: none; cursor: pointer; padding: 2px 4px;
+      font-size: 13px; line-height: 1; color: #6b7280; transition: color 0.2s;
+    }
+    .settings-btn:hover { color: #f97316; }
+
+    /* Settings panel */
+    #settings-panel {
+      display: none;
+      margin-top: 8px;
+      background: #111827;
+      border: 1px solid #374151;
+      border-radius: 12px;
+      padding: 12px;
+      animation: fadeIn 0.2s;
+    }
+    #settings-api-url {
+      flex: 1; background: #1f2937; border: 1px solid #4b5563;
+      border-radius: 8px; padding: 5px 10px; font-size: 11px;
+      color: #fff; outline: none;
+    }
+    #settings-api-url:focus { border-color: #f97316; }
+    body.light-mode #settings-panel { background: #e2e8f0; border-color: #cbd5e1; }
+    body.light-mode #settings-api-url { background: #f8fafc; border-color: #cbd5e1; color: #1e293b; }
   </style>
 </head>
 <body class="bg-gray-900 text-white p-4">
@@ -169,8 +201,12 @@
   <!-- Header -->
   <div class="flex items-center gap-2 mb-3 pb-3 border-b border-gray-700">
     <div class="bg-gradient-to-br from-orange-500 to-yellow-400 text-gray-900 font-extrabold px-2.5 py-1 rounded-lg text-sm shadow-md">VG</div>
-    <h1 class="text-base font-bold text-orange-400 flex-1">VidGrab <span class="text-[9px] text-gray-500 font-normal">v4.0</span></h1>
+    <h1 class="text-base font-bold text-orange-400 flex-1 flex items-center gap-1.5">
+      VidGrab <span class="text-[9px] text-gray-500 font-normal">v4.1</span>
+      <span id="server-health-dot" class="health-dot" title="Đang kiểm tra server..."></span>
+    </h1>
     <button id="theme-toggle" class="theme-toggle" title="Chuyển giao diện Sáng/Tối">🌙</button>
+    <button id="settings-btn" class="settings-btn" title="Cài đặt server URL">⚙</button>
     <a id="open-web-btn" href="https://dowload-video.mk.dev.matbao.ai" target="_blank"
        class="text-[9px] px-2 py-1 rounded-full bg-gray-800 text-gray-400 border border-gray-700 hover:border-orange-500 hover:text-orange-400 transition-all cursor-pointer no-underline"
        title="Mở VidGrab trên web">
@@ -179,6 +215,17 @@
     <div id="page-badge" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 border border-gray-700">
       Đang nhận diện...
     </div>
+  </div>
+
+  <!-- Settings panel (ẩn mặc định) -->
+  <div id="settings-panel">
+    <div class="text-[11px] text-gray-400 font-bold mb-2">⚙ Cài đặt server</div>
+    <label class="text-[10px] text-gray-500 block mb-1">Server URL</label>
+    <div class="flex gap-1 mb-1">
+      <input id="settings-api-url" type="text" placeholder="https://...">
+      <button id="settings-save" class="text-[10px] px-3 py-1 bg-orange-500 hover:bg-orange-400 text-gray-900 rounded-lg font-bold transition-all flex-shrink-0">Lưu</button>
+    </div>
+    <button id="settings-reset" class="text-[10px] text-gray-500 hover:text-gray-300 transition-colors">Đặt lại mặc định</button>
   </div>
 
   <!-- Tab switcher (3 tabs) -->

@@ -54,6 +54,11 @@ from app.main import limiter
 router = APIRouter()
 
 
+@router.get("/ping")
+async def ping():
+    return {"ok": True}
+
+
 # ── Request / Response Models ────────────────────────────────────────
 
 class FetchLinkRequest(BaseModel):

@@ -1,17 +1,40 @@
 /**
- * VidGrab Background Service Worker v4.0
+ * VidGrab Background Service Worker v4.1
  * - API proxy (bypass CORS)
+ * - VG_FETCH_LINK: fetch-link với 120s timeout + không bị abort khi popup đóng
  * - Badge count on extension icon
- * - Keyboard shortcut handler (Ctrl+Shift+D)
  * - Download progress tracking
  * - Notifications on download complete
  * - Download history storage
+ * - API_BASE configurable via chrome.storage.sync
  */
 
-const API_BASE = 'https://dowload-video.mk.dev.matbao.ai';
+const DEFAULT_API_BASE = 'https://dowload-video.mk.dev.matbao.ai';
 const STORAGE_KEY = (tabId) => `vg_videos_${tabId}`;
 const HISTORY_KEY = 'vg_download_history';
 const MAX_HISTORY = 100;
+
+// ── API Base (configurable) ───────────────────────────────────────
+let _apiBase = DEFAULT_API_BASE;
+
+async function getApiBase() {
+  try {
+    const r = await chrome.storage.sync.get('vg_api_base');
+    return (r.vg_api_base && r.vg_api_base.trim()) ? r.vg_api_base.trim() : DEFAULT_API_BASE;
+  } catch {
+    return _apiBase;
+  }
+}
+
+// Keep cached value updated
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync' && changes.vg_api_base) {
+    _apiBase = changes.vg_api_base.newValue || DEFAULT_API_BASE;
+  }
+});
+
+// Warm cache on startup
+getApiBase().then((v) => { _apiBase = v; });
 
 // ── Helpers ───────────────────────────────────────────────────────
 async function loadStore(tabId) {
@@ -37,7 +60,6 @@ async function addToHistory(record) {
     timestamp: Date.now(),
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
   });
-  // Keep only last MAX_HISTORY
   if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
   await chrome.storage.local.set({ [HISTORY_KEY]: history });
 }
@@ -48,19 +70,14 @@ async function updateBadgeForTab(tabId) {
     const tab = tabId
       ? await chrome.tabs.get(tabId).catch(() => null)
       : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
-    if (!tab?.url) {
-      chrome.action.setBadgeText({ text: '' });
-      return;
-    }
+    if (!tab?.url) { chrome.action.setBadgeText({ text: '' }); return; }
 
     const url = tab.url;
     const isSupported = /tiktok\.com|youtube\.com|facebook\.com|douyin\.com|instagram\.com|spotify\.com/i.test(url);
 
     if (isSupported) {
-      // Check if it's a video page
       const isVideo = /\/(video|watch|shorts|reel|reels|stories|p)\//i.test(url)
-        || /\/watch\?/.test(url)
-        || /spotify\.com\/track\//.test(url);
+        || /\/watch\?/.test(url) || /spotify\.com\/track\//.test(url);
       const isChannel = /\/@|\/user\/|\/channel\/|\/c\/|\/playlist\?|spotify\.com\/(playlist|album)\//.test(url);
 
       if (isVideo) {
@@ -75,16 +92,13 @@ async function updateBadgeForTab(tabId) {
     } else {
       chrome.action.setBadgeText({ tabId: tab.id, text: '' });
     }
-  } catch (e) { /* ignore */ }
+  } catch { /* ignore */ }
 }
 
-// Update badge when tab changes
 chrome.tabs.onActivated.addListener(({ tabId }) => updateBadgeForTab(tabId));
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === 'complete') updateBadgeForTab(tabId);
 });
-
-
 
 // ── Download Progress & Notification ──────────────────────────────
 const activeDownloads = new Map();
@@ -102,57 +116,33 @@ chrome.downloads.onCreated.addListener((item) => {
 chrome.downloads.onChanged.addListener((delta) => {
   if (!activeDownloads.has(delta.id)) return;
 
-  // Track progress
   if (delta.state?.current === 'complete') {
     const info = activeDownloads.get(delta.id);
     activeDownloads.delete(delta.id);
-
-    // Send notification
     const filename = info.filename?.split('/').pop() || 'Video';
     chrome.notifications.create(`vg-dl-${delta.id}`, {
-      type: 'basic',
-      iconUrl: 'assets/icon.png',
-      title: '✅ VidGrab — Tải thành công!',
-      message: `${filename}`,
-      priority: 1,
+      type: 'basic', iconUrl: 'assets/icon.png',
+      title: '✅ VidGrab — Tải thành công!', message: filename, priority: 1,
     });
-
-    // Broadcast progress complete to popup
-    chrome.runtime.sendMessage({
-      type: 'VG_DOWNLOAD_PROGRESS',
-      downloadId: delta.id,
-      state: 'complete',
-      progress: 100,
-    }).catch(() => {});
+    chrome.runtime.sendMessage({ type: 'VG_DOWNLOAD_PROGRESS', downloadId: delta.id, state: 'complete', progress: 100 }).catch(() => {});
   }
 
   if (delta.state?.current === 'interrupted') {
     activeDownloads.delete(delta.id);
-    chrome.runtime.sendMessage({
-      type: 'VG_DOWNLOAD_PROGRESS',
-      downloadId: delta.id,
-      state: 'error',
-    }).catch(() => {});
+    chrome.runtime.sendMessage({ type: 'VG_DOWNLOAD_PROGRESS', downloadId: delta.id, state: 'error' }).catch(() => {});
   }
 });
 
-// Periodic progress polling for active downloads
 setInterval(async () => {
   if (activeDownloads.size === 0) return;
   for (const [id] of activeDownloads) {
     try {
       const [item] = await chrome.downloads.search({ id });
       if (!item) continue;
-      const pct = item.totalBytes > 0
-        ? Math.round((item.bytesReceived / item.totalBytes) * 100)
-        : -1;
+      const pct = item.totalBytes > 0 ? Math.round((item.bytesReceived / item.totalBytes) * 100) : -1;
       chrome.runtime.sendMessage({
-        type: 'VG_DOWNLOAD_PROGRESS',
-        downloadId: id,
-        state: 'downloading',
-        progress: pct,
-        received: item.bytesReceived,
-        total: item.totalBytes,
+        type: 'VG_DOWNLOAD_PROGRESS', downloadId: id, state: 'downloading',
+        progress: pct, received: item.bytesReceived, total: item.totalBytes,
       }).catch(() => {});
     } catch { /* ignore */ }
   }
@@ -162,7 +152,62 @@ setInterval(async () => {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const tabId = sender.tab?.id;
 
-  // API PROXY — content script & popup gửi qua đây để bypass CORS
+  // ── VG_FETCH_LINK: fetch-link qua background (không abort khi popup đóng, có 120s timeout)
+  if (msg.type === 'VG_FETCH_LINK') {
+    (async () => {
+      const base = await getApiBase();
+      const controller = new AbortController();
+      const abortTimer = setTimeout(() => controller.abort(), 120_000);
+
+      // Ping elapsed seconds back to popup every 2 seconds
+      const startTime = Date.now();
+      const pingInterval = setInterval(() => {
+        const elapsed = Math.round((Date.now() - startTime) / 1000);
+        chrome.runtime.sendMessage({ type: 'VG_FETCH_PROGRESS', elapsed }).catch(() => {});
+      }, 2000);
+
+      try {
+        const resp = await fetch(`${base}/api/v1/fetch-link`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(msg.payload),
+          signal: controller.signal,
+        });
+        const data = await resp.json();
+        sendResponse({ ok: resp.ok, status: resp.status, data });
+      } catch (err) {
+        sendResponse({
+          ok: false,
+          timeout: err.name === 'AbortError',
+          error: err.name === 'AbortError'
+            ? 'Server xử lý quá 120s. Thử chất lượng thấp hơn hoặc mở web.'
+            : err.message,
+        });
+      } finally {
+        clearTimeout(abortTimer);
+        clearInterval(pingInterval);
+      }
+    })();
+    return true; // giữ channel mở để sendResponse async
+  }
+
+  // ── VG_HEALTH_CHECK: ping server để kiểm tra kết nối
+  if (msg.type === 'VG_HEALTH_CHECK') {
+    (async () => {
+      const base = await getApiBase();
+      try {
+        const controller = new AbortController();
+        setTimeout(() => controller.abort(), 5000);
+        const r = await fetch(`${base}/api/v1/ping`, { signal: controller.signal, cache: 'no-store' });
+        sendResponse({ ok: r.ok, status: r.status });
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+
+  // ── VG_API_FETCH: generic proxy (content script & popup)
   if (msg.type === 'VG_API_FETCH') {
     (async () => {
       try {
@@ -185,22 +230,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       const store = await loadStore(tabId);
       let added = 0;
-
       for (const v of msg.videos || []) {
-        if (!store[v.aweme_id]) {
-          store[v.aweme_id] = v;
-          added++;
-        }
+        if (!store[v.aweme_id]) { store[v.aweme_id] = v; added++; }
       }
-
       if (added > 0) {
         await saveStore(tabId, store);
         const count = Object.keys(store).length;
-        chrome.tabs.sendMessage(tabId, {
-          type: 'VG_LIVE_COUNT',
-          count,
-          latest_added: added,
-        }).catch(() => {});
+        chrome.tabs.sendMessage(tabId, { type: 'VG_LIVE_COUNT', count, latest_added: added }).catch(() => {});
         sendResponse({ ok: true, count, added });
       } else {
         sendResponse({ ok: true, count: Object.keys(store).length, added: 0 });
@@ -209,7 +245,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  // Popup hỏi danh sách video
   if (msg.type === 'VG_GET_VIDEOS') {
     (async () => {
       let targetTabId = msg.tabId || tabId;
@@ -219,13 +254,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       if (!targetTabId) { sendResponse({ videos: [], count: 0 }); return; }
       const store = await loadStore(targetTabId);
-      const videos = Object.values(store);
-      sendResponse({ videos, count: videos.length });
+      sendResponse({ videos: Object.values(store), count: Object.keys(store).length });
     })();
     return true;
   }
 
-  // Popup hỏi số lượng
   if (msg.type === 'VG_GET_COUNT') {
     (async () => {
       let targetTabId = msg.tabId || tabId;
@@ -240,7 +273,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  // Clear store
   if (msg.type === 'VG_CLEAR_VIDEOS') {
     (async () => {
       const targetTabId = msg.tabId || tabId;
@@ -250,13 +282,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  // Save to history (from popup)
   if (msg.type === 'VG_SAVE_HISTORY') {
     addToHistory(msg.record).then(() => sendResponse({ ok: true }));
     return true;
   }
 
-  // Get history
   if (msg.type === 'VG_GET_HISTORY') {
     chrome.storage.local.get(HISTORY_KEY).then((res) => {
       sendResponse({ history: res[HISTORY_KEY] || [] });
@@ -264,17 +294,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  // Clear history
   if (msg.type === 'VG_CLEAR_HISTORY') {
     chrome.storage.local.remove(HISTORY_KEY).then(() => sendResponse({ ok: true }));
     return true;
   }
 
-  // Multi-format fetch — get all available qualities for popup display
   if (msg.type === 'VG_FETCH_FORMATS') {
     (async () => {
       try {
-        const resp = await fetch(`${API_BASE}/api/v1/fetch-link`, {
+        const base = await getApiBase();
+        const resp = await fetch(`${base}/api/v1/fetch-link`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: msg.url, quality: 'video', remove_watermark: true }),
@@ -290,56 +319,33 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 // ── Dọn storage khi tab đóng ─────────────────────────────────────
-chrome.tabs.onRemoved.addListener((tabId) => {
-  clearStore(tabId);
-});
+chrome.tabs.onRemoved.addListener((tabId) => { clearStore(tabId); });
 
 // ── Right-click Context Menu ─────────────────────────────────────
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: 'vg-download-video',
-    title: '⬇ Tải với VidGrab',
-    contexts: ['page', 'link', 'video', 'audio'],
-    documentUrlPatterns: [
-      '*://*.tiktok.com/*',
-      '*://*.youtube.com/*',
-      '*://*.facebook.com/*',
-      '*://*.douyin.com/*',
-      '*://*.instagram.com/*',
-      '*://open.spotify.com/*',
-    ],
-  });
-  chrome.contextMenus.create({
-    id: 'vg-download-mp3',
-    title: '🎵 Tải MP3 với VidGrab',
-    contexts: ['page', 'link', 'video', 'audio'],
-    documentUrlPatterns: [
-      '*://*.tiktok.com/*',
-      '*://*.youtube.com/*',
-      '*://*.facebook.com/*',
-      '*://*.douyin.com/*',
-      '*://*.instagram.com/*',
-      '*://open.spotify.com/*',
-    ],
-  });
+  const patterns = [
+    '*://*.tiktok.com/*', '*://*.youtube.com/*', '*://*.facebook.com/*',
+    '*://*.douyin.com/*', '*://*.instagram.com/*', '*://open.spotify.com/*',
+  ];
+  chrome.contextMenus.create({ id: 'vg-download-video', title: '⬇ Tải với VidGrab', contexts: ['page', 'link', 'video', 'audio'], documentUrlPatterns: patterns });
+  chrome.contextMenus.create({ id: 'vg-download-mp3', title: '🎵 Tải MP3 với VidGrab', contexts: ['page', 'link', 'video', 'audio'], documentUrlPatterns: patterns });
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab?.url) return;
+  const base = await getApiBase();
   const targetUrl = info.linkUrl || tab.url;
   const isMP3 = info.menuItemId === 'vg-download-mp3';
-
   chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '⚡ VidGrab: Đang xử lý...' }).catch(() => {});
 
   try {
-    const resp = await fetch(`${API_BASE}/api/v1/fetch-link`, {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 120_000);
+    const resp = await fetch(`${base}/api/v1/fetch-link`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: targetUrl,
-        quality: isMP3 ? 'mp3_320' : 'video',
-        remove_watermark: true,
-      }),
+      body: JSON.stringify({ url: targetUrl, quality: isMP3 ? 'mp3_320' : 'video', remove_watermark: true }),
+      signal: controller.signal,
     });
     const data = await resp.json();
 
@@ -351,9 +357,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
       let dlUrl;
       if (targetDlUrl && !targetDlUrl.includes('matbao.ai')) {
-        dlUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(targetDlUrl)}&filename=${encodeURIComponent(safeName)}&ext=${ext}`;
+        dlUrl = `${base}/api/v1/proxy-download?url=${encodeURIComponent(targetDlUrl)}&filename=${encodeURIComponent(safeName)}&ext=${ext}`;
       } else if (targetDlUrl?.startsWith('/app/downloads/')) {
-        dlUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(targetDlUrl)}&filename=${encodeURIComponent(safeName)}.${ext}`;
+        dlUrl = `${base}/api/v1/download-local?filepath=${encodeURIComponent(targetDlUrl)}&filename=${encodeURIComponent(safeName)}.${ext}`;
       } else {
         dlUrl = targetDlUrl;
       }
@@ -365,6 +371,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '❌ ' + (data.detail || 'Lỗi') }).catch(() => {});
     }
   } catch (err) {
-    chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '❌ Lỗi kết nối' }).catch(() => {});
+    const msg = err.name === 'AbortError' ? 'Xử lý quá lâu' : 'Lỗi kết nối';
+    chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: `❌ ${msg}` }).catch(() => {});
   }
 });
