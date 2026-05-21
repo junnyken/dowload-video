@@ -4,7 +4,6 @@ supabase==2.7.2
 python-dotenv==1.0.1
 python-multipart==0.0.12
 yt-dlp>=2025.5.1
-bgutil-ytdlp-pot-provider==0.8.1
 celery
 redis
 httpx
