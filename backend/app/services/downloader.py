@@ -340,37 +340,15 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
 
     if "youtube.com" in url.lower() or "youtu.be" in url.lower():
         # ── PO Token Provider Config ──────────────────────────────────
-        _bgutil_raw = os.getenv("BGUTIL_POT_URL", "")
-        bgutil_url = _bgutil_raw.split(",")[0].strip() if _bgutil_raw else ""
-
         # Player client chain (yt-dlp 2025.5+):
-        # 1. web — Primary DASH client, needs PO token (provided by plugin).
-        # 2. ios — iOS app client; different bot-detection path, works without PO token sometimes.
-        # NOTE: tv_embedded is NOT valid in recent yt-dlp and is silently skipped.
+        # - mweb: mobile web client, does NOT require GVS PO tokens (unlike web/ios).
+        #   Works with cookies alone for authenticated sessions.
+        # - web: fallback DASH client; needs GVS PO token (bgutil 0.8.x doesn't support gvs).
+        # bgutil 0.8.x only supports player PO tokens, not gvs PO tokens.
+        # bgutil 1.x supports gvs but has no Docker image yet (server stuck at 0.8.1).
         yt_extractor_args = {
-            "player_client": ["web", "ios"]
+            "player_client": ["mweb", "web"]
         }
-
-        # PO token requires BOTH token AND visitor_data to bypass YouTube bot detection.
-        # Without visitor_data the cached token is rejected and causes LOGIN_REQUIRED.
-        # Only inject both if available; otherwise fall through to plugin.
-        from app.core.po_token_cache import get_po_token, get_po_visitor_data
-        cached_pot = get_po_token()
-        visitor_data = get_po_visitor_data()
-        if cached_pot and visitor_data:
-            yt_extractor_args["po_token"] = [f"WEB+{cached_pot}"]
-            yt_extractor_args["visitor_data"] = [visitor_data]
-            print(f"[Downloader] PO Token: cache hit + visitor_data ({cached_pot[:16]}...)")
-        elif cached_pot:
-            print(f"[Downloader] PO Token: cache hit but NO visitor_data — using plugin only")
-        else:
-            print(f"[Downloader] PO Token: cache miss — using plugin only")
-
-        # bgutil-ytdlp-pot-provider 0.8.x uses "youtube:getpot_bgutil_baseurl" extractor arg.
-        # (1.x used "youtubepot-bgutilhttp:base_url" — different key, incompatible.)
-        if bgutil_url:
-            yt_extractor_args["getpot_bgutil_baseurl"] = [bgutil_url]
-            print(f"[Downloader] bgutil plugin @ {bgutil_url}")
 
         opts["extractor_args"] = {"youtube": yt_extractor_args}
 
