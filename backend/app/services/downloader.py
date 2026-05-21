@@ -343,13 +343,12 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         _bgutil_raw = os.getenv("BGUTIL_POT_URL", "")
         bgutil_url = _bgutil_raw.split(",")[0].strip() if _bgutil_raw else ""
 
-        # Player client chain:
-        # 1. tv_embedded — TV embed client, often bypasses bot detection without PO token.
-        # 2. web         — Full DASH (1080p–4K) with WEB PO token.
-        # Only clients with matching PO tokens are listed — mismatched clients
-        # fail silently and waste time.
+        # Player client chain (yt-dlp 2025.5+):
+        # 1. web — Primary DASH client, needs PO token (provided by plugin).
+        # 2. ios — iOS app client; different bot-detection path, works without PO token sometimes.
+        # NOTE: tv_embedded is NOT valid in recent yt-dlp and is silently skipped.
         yt_extractor_args = {
-            "player_client": ["tv_embedded", "web"]
+            "player_client": ["web", "ios"]
         }
 
         # PO token requires BOTH token AND visitor_data to bypass YouTube bot detection.
