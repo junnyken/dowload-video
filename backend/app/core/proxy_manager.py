@@ -61,8 +61,8 @@ _PLATFORM_RULES: list[tuple[str, ProxyTier]] = [
     (r"facebook\.com", ProxyTier.DIRECT),
     (r"fb\.watch", ProxyTier.DIRECT),
 
-    # ─── YouTube: direct (server IP + cookies) — proxy as manual fallback ──
-    (r"(youtube\.com|youtu\.be)", ProxyTier.DIRECT),
+    # ─── YouTube: residential proxy + cookies (residential IP prevents cookie invalidation) ──
+    (r"(youtube\.com|youtu\.be)", ProxyTier.RESIDENTIAL),
 
     # ─── Residential proxy platforms ───────────────────────
     (r"tiktok\.com", ProxyTier.RESIDENTIAL),
