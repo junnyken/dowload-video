@@ -13,6 +13,7 @@ services:
   # is almost never called during real requests (only pre-warm every 3h).
   bgutil-pot:
     image: ghcr.io/jim60105/bgutil-pot:latest
+    pull_policy: always
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:4416/ || exit 1"]
@@ -23,6 +24,7 @@ services:
 
   bgutil-pot-2:
     image: ghcr.io/jim60105/bgutil-pot:latest
+    pull_policy: always
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:4416/ || exit 1"]

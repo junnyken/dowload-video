@@ -18,10 +18,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends wget xz-utils \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# PO Token provider plugin — yt-dlp needs this to bypass YouTube bot detection
-# Works with bgutil-pot sidecar container (HTTP server on port 4416)
-RUN pip install --no-cache-dir bgutil-ytdlp-pot-provider
-
 # Copy toàn bộ code backend
 COPY . .
 
