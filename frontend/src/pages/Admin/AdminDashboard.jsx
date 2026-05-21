@@ -663,27 +663,163 @@ export default function AdminDashboard() {
       )}
 
       {/* ══ TAB: API & CREDITS ══ */}
-      {activeTab === 'apikeys' && (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <CreditCard provider="ScraperAPI" credits={scraperAPIcredits} threshold={10} apiKey={stats.api_keys?.ScraperAPI} />
-            <CreditCard provider="IPRoyal" credits="N/A" threshold={0} apiKey={stats.api_keys?.IPRoyal} isProxy />
-          </div>
-
-          <div className="p-5 bg-[#0a1a17] border border-amber-500/20 rounded-2xl">
-            <h3 className="text-sm font-bold mb-2 text-white flex items-center gap-2"><Bell className="w-4 h-4 text-amber-400" /> Cảnh Báo Tự Động</h3>
-            <ul className="text-xs text-slate-400 space-y-1.5 ml-1">
-              <li>📨 Telegram thông báo khi <b>batch download hoàn tất</b></li>
-              <li>🚨 Telegram alert khi <b>job thất bại</b></li>
-              <li>⚠️ Telegram cảnh báo khi <b>API credits &lt; 10</b></li>
-              <li>📊 Báo cáo ngày tự động lúc <b>6:00 AM (UTC+7)</b></li>
-              <li>🔄 Kiểm tra credits tự động mỗi <b>6 giờ</b></li>
-            </ul>
-          </div>
-        </div>
-      )}
+      {activeTab === 'apikeys' && <ApiKeysTab scraperAPIcredits={scraperAPIcredits} stats={stats} />}
 
       {activeTab === 'cookies' && <CookiePoolTab />}
+    </div>
+  );
+}
+
+// ── API Keys Tab ────────────────────────────────────────────────────
+function ApiKeysTab({ scraperAPIcredits, stats }) {
+  const [keyPool, setKeyPool]         = useState(null);
+  const [loadingPool, setLoadingPool] = useState(false);
+  const [rotating, setRotating]       = useState(false);
+  const [refreshing, setRefreshing]   = useState(false);
+  const [msg, setMsg]                 = useState('');
+
+  const fetchPool = async (force = false) => {
+    setLoadingPool(true);
+    try {
+      const path = force ? '/scraperapi/refresh-credits' : '/scraperapi/keys';
+      const method = force ? 'POST' : 'GET';
+      const r = await adminFetch(path, { method });
+      const d = await r.json();
+      if (d.success) setKeyPool(d);
+    } catch (e) { setMsg(`❌ ${e.message}`); }
+    finally { setLoadingPool(false); setRefreshing(false); }
+  };
+
+  const rotateKey = async () => {
+    setRotating(true); setMsg('');
+    try {
+      const r = await adminFetch('/scraperapi/rotate', { method: 'POST' });
+      const d = await r.json();
+      if (d.success) { setMsg(`✅ ${d.message} — active: ${d.active_key_prefix}`); fetchPool(); }
+      else setMsg(`❌ Rotate thất bại`);
+    } catch (e) { setMsg(`❌ ${e.message}`); }
+    finally { setRotating(false); }
+  };
+
+  useEffect(() => { fetchPool(); }, []);
+
+  const totalCredits = keyPool?.total_credits ?? scraperAPIcredits;
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      {/* ScraperAPI Key Pool */}
+      <div className="p-5 bg-[#0a1a17] border border-slate-700/50 rounded-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <Key className="w-4 h-4 text-amber-400" /> ScraperAPI Key Pool
+            {keyPool && <span className="text-xs font-normal text-slate-400">({keyPool.key_count} keys)</span>}
+          </h3>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={rotateKey} disabled={rotating}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {rotating ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              Rotate key
+            </button>
+            <button
+              onClick={() => { setRefreshing(true); fetchPool(true); }} disabled={refreshing || loadingPool}
+              className="p-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer disabled:opacity-50"
+              title="Refresh credits (bypass cache)"
+            >
+              {refreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Total credits banner */}
+        <div className="flex items-center gap-4 mb-4 p-3 bg-[#012622] rounded-xl border border-slate-700/30">
+          <div>
+            <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">Tổng Credits</p>
+            <p className={`text-3xl font-bold tracking-tight ${(totalCredits ?? 0) < 100 ? 'text-red-400' : 'text-white'}`}>
+              {typeof totalCredits === 'number' ? totalCredits.toLocaleString() : '—'}
+            </p>
+          </div>
+          {keyPool && (
+            <div className="flex gap-3 ml-4">
+              <div className="text-center">
+                <p className="text-lg font-bold text-emerald-400">{keyPool.keys.filter(k => k.active).length}</p>
+                <p className="text-[10px] text-slate-500">Active</p>
+              </div>
+              <div className="text-center">
+                <p className="text-lg font-bold text-red-400">{keyPool.keys.filter(k => k.exhausted).length}</p>
+                <p className="text-[10px] text-slate-500">Exhausted</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Key list */}
+        {loadingPool && !keyPool ? (
+          <div className="flex items-center gap-2 text-slate-400 text-sm py-4"><Loader2 className="w-4 h-4 animate-spin" /> Đang tải...</div>
+        ) : keyPool?.keys?.length > 0 ? (
+          <div className="space-y-2">
+            {keyPool.keys.map((k) => {
+              const pct = k.credits != null ? Math.min(100, Math.round(k.credits / 50)) : 0;
+              const bar = k.credits == null ? 'bg-slate-600' : k.credits < 50 ? 'bg-red-500' : k.credits < 200 ? 'bg-amber-500' : 'bg-emerald-500';
+              return (
+                <div key={k.index} className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors ${
+                  k.active ? 'bg-emerald-500/5 border-emerald-500/20' :
+                  k.exhausted ? 'bg-red-500/5 border-red-500/20 opacity-60' :
+                  'bg-[#012622]/50 border-slate-700/30'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${k.active ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : k.exhausted ? 'bg-red-400' : 'bg-slate-500'}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-mono text-slate-300">{k.key_prefix}</span>
+                      {k.active && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold">ACTIVE</span>}
+                      {k.exhausted && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold">EXHAUSTED</span>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-[#012622] rounded-full h-1.5 overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${bar}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className={`text-xs font-bold w-16 text-right ${k.credits == null ? 'text-slate-500' : k.credits < 50 ? 'text-red-400' : 'text-white'}`}>
+                        {k.credits != null ? k.credits.toLocaleString() : '—'} cr
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500 py-4">
+            Chưa cấu hình ScraperAPI key. Thêm vào <code className="text-amber-400 bg-amber-500/10 px-1 rounded">SCRAPERAPI_API_KEY</code> (nhiều key cách nhau bằng dấu phẩy).
+          </p>
+        )}
+
+        {msg && (
+          <div className={`mt-3 px-3 py-2 rounded-lg text-xs font-medium ${msg.startsWith('✅') ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'}`}>
+            {msg}
+          </div>
+        )}
+
+        <p className="text-[10px] text-slate-500 mt-3">
+          Thêm nhiều key vào <code className="text-slate-400">.env</code>: <code className="text-amber-400">SCRAPERAPI_API_KEY=key1,key2,key3</code>
+          <br />Tự động chuyển sang key tiếp theo khi credits &lt; 50 hoặc nhận 429.
+        </p>
+      </div>
+
+      {/* IPRoyal */}
+      <CreditCard provider="IPRoyal" credits="N/A" threshold={0} apiKey={stats.api_keys?.IPRoyal} isProxy />
+
+      {/* Alerts info */}
+      <div className="p-5 bg-[#0a1a17] border border-amber-500/20 rounded-2xl">
+        <h3 className="text-sm font-bold mb-2 text-white flex items-center gap-2"><Bell className="w-4 h-4 text-amber-400" /> Cảnh Báo Tự Động</h3>
+        <ul className="text-xs text-slate-400 space-y-1.5 ml-1">
+          <li>📨 Telegram thông báo khi <b>batch download hoàn tất</b></li>
+          <li>🚨 Telegram alert khi <b>job thất bại</b></li>
+          <li>⚠️ Telegram cảnh báo khi <b>API credits &lt; 50</b> (mỗi key)</li>
+          <li>📊 Báo cáo ngày tự động lúc <b>6:00 AM (UTC+7)</b></li>
+          <li>🔄 Kiểm tra credits tự động mỗi <b>6 giờ</b></li>
+        </ul>
+      </div>
     </div>
   );
 }

@@ -14,7 +14,7 @@ import os
 import re
 from enum import Enum
 from typing import Optional, Dict, Any, Tuple
-from urllib.parse import urlencode
+
 import httpx
 import asyncio
 
@@ -32,18 +32,17 @@ SCRAPERAPI_API_KEY: str = os.getenv("SCRAPERAPI_API_KEY", "")
 TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# ── ScraperAPI proxy endpoints (free fallback when IPRoyal not configured) ──
-# ScraperAPI doubles as an HTTP proxy for yt-dlp — same API key, no extra cost.
-# Global rotating: http://scraperapi:KEY@proxy-server.scraperapi.com:8011
-# Country-specific: http://scraperapi.country_code=CN:KEY@proxy-server.scraperapi.com:8011
-_SCRAPERAPI_HOST = "proxy-server.scraperapi.com:8011"
+# ── ScraperAPI key pool (multi-key rotation via scraperapi_pool) ────
+from app.core.scraperapi_pool import (
+    scraperapi_proxy as _pool_proxy,
+    scraperapi_url as _pool_url,
+    get_active_key as _pool_active_key,
+    check_response_and_rotate as _pool_check_credits,
+)
 
 def _scraperapi_proxy(country_code: str = "") -> str:
-    """Build a ScraperAPI HTTP proxy URL for yt-dlp, optionally with country targeting."""
-    if not SCRAPERAPI_API_KEY:
-        return ""
-    user = f"scraperapi.country_code={country_code}" if country_code else "scraperapi"
-    return f"http://{user}:{SCRAPERAPI_API_KEY}@{_SCRAPERAPI_HOST}"
+    """Build ScraperAPI HTTP proxy URL using the current active key."""
+    return _pool_proxy(country_code)
 
 
 # ── Platform classification ─────────────────────────────────────────
@@ -144,39 +143,52 @@ async def update_provider_credits(provider: str, credits: int):
 async def _fetch_with_api(api_name: str, target_url: str) -> Tuple[bool, Optional[str]]:
     """
     Fetch the target URL using a specific scraping API.
+    Uses the active key from the pool; auto-rotates on low credits / 429.
     Returns (Success, Extracted_HTML_or_None)
     """
-    url = ""
-    if api_name == "scraperapi" and SCRAPERAPI_API_KEY:
-        params = urlencode({"api_key": SCRAPERAPI_API_KEY, "url": target_url, "render": "false"})
-        url = f"http://api.scraperapi.com/?{params}"
-    else:
+    if api_name != "scraperapi":
+        return False, None
+
+    active_key = _pool_active_key()
+    if not active_key:
+        return False, None
+
+    api_url = _pool_url(target_url)
+    if not api_url:
         return False, None
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(url)
-            
-            # Extract credits
-            credits = None
-            if api_name == "scraperapi" and "X-Rest-Api-Credits-Left" in resp.headers:
-                credits = int(resp.headers.get("X-Rest-Api-Credits-Left", "0"))
-                
-            if credits is not None:
-                # Fire and forget update
-                asyncio.create_task(update_provider_credits(api_name, credits))
-                
-            if resp.status_code in [403, 429, 500]:
+            resp = await client.get(api_url)
+
+            # Extract remaining credits and update pool (may trigger rotation)
+            credits_left: Optional[int] = None
+            if "X-Rest-Api-Credits-Left" in resp.headers:
+                try:
+                    credits_left = int(resp.headers["X-Rest-Api-Credits-Left"])
+                except ValueError:
+                    pass
+
+            if credits_left is not None:
+                _pool_check_credits(credits_left)
+                asyncio.create_task(update_provider_credits(api_name, credits_left))
+
+            if resp.status_code == 429:
+                # Hard rate-limit — rotate key immediately
+                from app.core.scraperapi_pool import rotate_key
+                rotate_key(reason="429 rate-limit")
+                print(f"[Dispatcher] ScraperAPI 429 — key rotated")
+                return False, None
+
+            if resp.status_code in [403, 500]:
                 print(f"[Dispatcher] {api_name} failed with {resp.status_code}")
                 return False, None
-                
+
             resp.raise_for_status()
             return True, resp.text
     except Exception as e:
         print(f"[Dispatcher] {api_name} error: {e}")
         return False, None
-        
-    return False, None
 
 async def dispatch_scraping_request(target_url: str) -> Optional[str]:
     """

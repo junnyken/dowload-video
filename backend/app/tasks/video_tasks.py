@@ -488,22 +488,21 @@ def check_api_credits(self):
             CREDITS_WARNING_THRESHOLD,
         )
 
-        # Check ScraperAPI
-        scraper_key = os.getenv("SCRAPERAPI_API_KEY", os.getenv("SCRAPERAPI_KEY", ""))
-        if scraper_key:
-            try:
-                resp = httpx.get(
-                    f"http://api.scraperapi.com/account?api_key={scraper_key}",
-                    timeout=5.0,
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    remaining = data.get("requestLimit", 0) - data.get("requestCount", 0)
-                    print(f"[Cron] ScraperAPI credits remaining: {remaining}")
-                    if remaining < CREDITS_WARNING_THRESHOLD:
-                        notify_credits_low_sync("ScraperAPI", remaining)
-            except Exception as e:
-                print(f"[Cron] ScraperAPI check failed: {e}")
+        # Check ScraperAPI — all keys in pool
+        try:
+            from app.core.scraperapi_pool import fetch_all_credits
+            key_stats = fetch_all_credits(use_cache=False)
+            for ks in key_stats:
+                credits = ks.get("credits")
+                label = f"ScraperAPI [{ks['key_prefix']}]"
+                if credits is None:
+                    print(f"[Cron] {label}: fetch failed")
+                    continue
+                print(f"[Cron] {label}: {credits} credits remaining (active={ks['active']})")
+                if credits < CREDITS_WARNING_THRESHOLD:
+                    notify_credits_low_sync(label, credits)
+        except Exception as e:
+            print(f"[Cron] ScraperAPI check failed: {e}")
 
         print("[Cron] API credits check finished.")
     except Exception as e:

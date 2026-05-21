@@ -15,7 +15,7 @@ Usage:
   result = await extract_douyin_video("https://v.douyin.com/xxxxx/")
 """
 
-import os
+
 import re
 import sys
 import json
@@ -364,7 +364,8 @@ async def _try_scraperapi_ssr(url: str, quality: str = "video") -> Optional[Dict
     Use ScraperAPI to fetch the Douyin page HTML with JS rendering,
     then parse RENDER_DATA or _ROUTER_DATA for video info.
     """
-    api_key = os.getenv("SCRAPERAPI_API_KEY", "")
+    from app.core.scraperapi_pool import get_active_key
+    api_key = get_active_key()
     if not api_key:
         return None
 

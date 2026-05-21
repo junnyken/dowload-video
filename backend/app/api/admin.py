@@ -62,36 +62,29 @@ async def get_admin_stats(_=Depends(verify_admin)):
         # Recent users
         recent_users_res = supabase.table("user_usage").select("*").order("last_reset_at", desc=True).limit(20).execute()
         
-        import httpx
-        import os
-        
-        # Real-time ScraperAPI credits fetch
-        scraper_api_key = os.getenv("SCRAPERAPI_API_KEY", os.getenv("SCRAPERAPI_KEY", ""))
-        if scraper_api_key:
-            try:
-                # ScraperAPI account info endpoint
-                resp = httpx.get(f"http://api.scraperapi.com/account?api_key={scraper_api_key}", timeout=5.0)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    remaining = data.get("requestLimit", 0) - data.get("requestCount", 0)
-                    providers["ScraperAPI"] = remaining
-                    
-                    # Update DB for background sync
-                    supabase.table("provider_status").upsert({
-                        "provider_name": "ScraperAPI", 
-                        "remaining_credits": remaining
-                    }).execute()
-
-                    # Trigger Telegram alert if credits are low
+        # Real-time ScraperAPI credits — active key only (for legacy providers dict)
+        try:
+            from app.core.scraperapi_pool import fetch_credits, get_active_key
+            _active_key = get_active_key()
+            if _active_key:
+                _credits = fetch_credits(_active_key, use_cache=True)
+                if _credits is not None:
+                    providers["ScraperAPI"] = _credits
+                    try:
+                        supabase.table("provider_status").upsert({
+                            "provider_name": "ScraperAPI",
+                            "remaining_credits": _credits
+                        }).execute()
+                    except Exception:
+                        pass
                     try:
                         from app.core.notifications import notify_credits_low, CREDITS_WARNING_THRESHOLD
-                        if remaining < CREDITS_WARNING_THRESHOLD:
-                            await notify_credits_low("ScraperAPI", remaining)
+                        if _credits < CREDITS_WARNING_THRESHOLD:
+                            await notify_credits_low("ScraperAPI", _credits)
                     except Exception:
-                        pass  # Non-critical, don't break admin stats
-
-            except Exception as e:
-                print(f"ScraperAPI fetch error: {e}")
+                        pass
+        except Exception as e:
+            print(f"ScraperAPI fetch error: {e}")
                 
         total_users = len(usage_res.data) if usage_res.data else 0
         return {
@@ -791,6 +784,37 @@ async def proxy_pool_remove(req: ProxyRemoveRequest, _=Depends(verify_admin)):
         return {"success": True, "platform": req.platform, "pool_size": new_size}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════
+# ScraperAPI Key Pool
+# ═════════════════════════════════════════════════════════════════════
+
+@router.get("/scraperapi/keys")
+async def scraperapi_keys(_=Depends(verify_admin)):
+    """Return credit status for all configured ScraperAPI keys."""
+    from app.core.scraperapi_pool import fetch_all_credits
+    keys = fetch_all_credits(use_cache=True)
+    total = sum(k["credits"] or 0 for k in keys)
+    return {"success": True, "keys": keys, "total_credits": total, "key_count": len(keys)}
+
+
+@router.post("/scraperapi/rotate")
+async def scraperapi_rotate(_=Depends(verify_admin)):
+    """Manually rotate to the next ScraperAPI key."""
+    from app.core.scraperapi_pool import rotate_key, get_active_key
+    new_key_hash = rotate_key(reason="manual-admin")
+    active = get_active_key()
+    return {"success": True, "message": "Rotated to next key", "active_key_prefix": (active[:8] + "***") if active else "none"}
+
+
+@router.post("/scraperapi/refresh-credits")
+async def scraperapi_refresh_credits(_=Depends(verify_admin)):
+    """Force-refresh credits for all keys (bypass cache)."""
+    from app.core.scraperapi_pool import fetch_all_credits
+    keys = fetch_all_credits(use_cache=False)
+    total = sum(k["credits"] or 0 for k in keys)
+    return {"success": True, "keys": keys, "total_credits": total}
 
 
 # ═════════════════════════════════════════════════════════════════════

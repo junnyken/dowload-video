@@ -1354,7 +1354,8 @@ def _scrape_douyin_channel(channel_url: str, max_videos: int = 20) -> Dict[str, 
             print(f"[Douyin Channel] Apify failed, falling back: {apify_err}")
 
     # ── Method 1: ScraperAPI with JS rendering ──────────────
-    scraperapi_key = os.getenv("SCRAPERAPI_API_KEY", "")
+    from app.core.scraperapi_pool import get_active_key as _sa_key
+    scraperapi_key = _sa_key()
     video_ids = []
 
     if scraperapi_key:

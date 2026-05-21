@@ -401,20 +401,14 @@ def send_daily_summary_sync() -> bool:
         try:
             import httpx as _httpx
 
-            scraper_key = os.getenv("SCRAPERAPI_API_KEY", os.getenv("SCRAPERAPI_KEY", ""))
-            if scraper_key:
-                resp = _httpx.get(
-                    f"http://api.scraperapi.com/account?api_key={scraper_key}",
-                    timeout=5.0,
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    remaining = data.get("requestLimit", 0) - data.get("requestCount", 0)
-                    credits_info.append(f"  • ScraperAPI: <b>{remaining}</b> credits")
-
-                    # Trigger credit alert if low
-                    if remaining < CREDITS_WARNING_THRESHOLD:
-                        notify_credits_low_sync("ScraperAPI", remaining)
+            from app.core.scraperapi_pool import fetch_all_credits
+            key_stats = fetch_all_credits(use_cache=True)
+            for ks in key_stats:
+                cr = ks.get("credits", "?")
+                status = "✅" if ks["active"] else ("🚫" if ks["exhausted"] else "⏸")
+                credits_info.append(f"  • ScraperAPI [{ks['key_prefix']}] {status}: <b>{cr}</b> credits")
+                if isinstance(cr, int) and cr < CREDITS_WARNING_THRESHOLD:
+                    notify_credits_low_sync(f"ScraperAPI [{ks['key_prefix']}]", cr)
         except Exception:
             credits_info.append("  • ScraperAPI: ❓ Không thể kiểm tra")
 
