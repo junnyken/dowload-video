@@ -121,6 +121,25 @@ _INSTAGRAM_MOBILE_UA = (
     "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
 )
 
+
+class _YTDLPLogger:
+    """Captures yt-dlp warnings/errors regardless of quiet/no_warnings settings."""
+    def __init__(self, prefix: str = ""):
+        self._prefix = prefix
+
+    def debug(self, msg: str) -> None:
+        if not msg.startswith("[debug] "):
+            print(f"[yt-dlp{self._prefix}] {msg}")
+
+    def info(self, msg: str) -> None:
+        print(f"[yt-dlp{self._prefix}] {msg}")
+
+    def warning(self, msg: str) -> None:
+        print(f"[yt-dlp{self._prefix} WARN] {msg}")
+
+    def error(self, msg: str) -> None:
+        print(f"[yt-dlp{self._prefix} ERROR] {msg}")
+
 from app.core.proxy_manager import get_proxy_config_for_phase, dispatch_scraping_request
 from app.core.redis_client import get_redis
 from app.utils.link_resolver import resolve_short_url, is_douyin_url
@@ -321,44 +340,40 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
 
     if "youtube.com" in url.lower() or "youtu.be" in url.lower():
         # ── PO Token Provider Config ──────────────────────────────────
-        # YouTube requires Proof-of-Origin tokens since 2025.
-        # Tokens cached in Redis (TTL 3.5h) — all workers share one token
-        # instead of each hitting bgutil-pot's headless Chrome per request.
-        # po_token_cache.py handles the full comma-separated URL internally.
-        # Plugin fallback needs a single valid URL, so take the first one.
         _bgutil_raw = os.getenv("BGUTIL_POT_URL", "")
         bgutil_url = _bgutil_raw.split(",")[0].strip() if _bgutil_raw else ""
 
-        # Player client chain — order matters, yt-dlp tries each in sequence:
-        # 1. web        — Primary. Full DASH adaptive (1080p–4K) with PO token.
-        # 2. web_safari — Safari-specific path, sometimes bypasses bot detection.
-        # 3. android_vr — VR app client, good SABR bypass.
-        # 4. mweb       — Mobile web, last resort, still returns DASH.
+        # Player client chain:
+        # 1. tv_embedded — TV embed client, often bypasses bot detection without PO token.
+        # 2. web         — Full DASH (1080p–4K) with WEB PO token.
+        # Only clients with matching PO tokens are listed — mismatched clients
+        # fail silently and waste time.
         yt_extractor_args = {
-            "player_client": ["web", "web_safari", "android_vr", "mweb"]
+            "player_client": ["tv_embedded", "web"]
         }
 
         # Try Redis-cached PO token first (avoids per-request Chrome call)
         from app.core.po_token_cache import get_po_token, get_po_visitor_data
         cached_pot = get_po_token()
         if cached_pot:
-            # Pass token directly — yt-dlp skips bgutil-pot plugin entirely
             yt_extractor_args["po_token"] = [f"WEB+{cached_pot}"]
             visitor_data = get_po_visitor_data()
             if visitor_data:
                 yt_extractor_args["visitor_data"] = [visitor_data]
-            print(f"[Downloader] PO Token: Redis cache hit ({cached_pot[:16]}...)")
-        elif bgutil_url:
-            # Cache miss — fall back to per-request plugin (original behavior)
-            opts["extractor_args"] = opts.get("extractor_args", {})
-            opts["extractor_args"]["youtubepot-bgutilhttp"] = {
-                "base_url": [bgutil_url]
-            }
-            print(f"[Downloader] PO Token: cache miss, using plugin @ {bgutil_url}")
+            print(f"[Downloader] PO Token: cache hit ({cached_pot[:16]}...)")
 
         opts["extractor_args"] = {"youtube": yt_extractor_args}
-        if bgutil_url and not cached_pot:
+        # Always register plugin — handles per-request token when cache misses
+        # or when the cached token is rejected by YouTube for a specific video.
+        if bgutil_url:
             opts["extractor_args"]["youtubepot-bgutilhttp"] = {"base_url": [bgutil_url]}
+            if not cached_pot:
+                print(f"[Downloader] PO Token: cache miss, plugin only @ {bgutil_url}")
+            else:
+                print(f"[Downloader] PO Token: cache hit + plugin fallback @ {bgutil_url}")
+
+        # Logger captures yt-dlp warnings/errors even with quiet+no_warnings
+        opts["logger"] = _YTDLPLogger("/YT")
 
         # Inject YouTube cookies — logged-in session bypasses bot detection completely
         yt_cookies = _get_youtube_cookies_file()

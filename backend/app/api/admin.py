@@ -1028,3 +1028,112 @@ async def post_throwaway_account(
     except Exception as e:
         print(f"[throwaway] POST store error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═════════════════════════════════════════════════════════════════════
+# POST /debug-youtube — Full YouTube extraction diagnostic
+# ═════════════════════════════════════════════════════════════════════
+
+class DebugYouTubeRequest(BaseModel):
+    url: str
+    quality: str = "video_fast"
+
+
+@router.post("/debug-youtube")
+async def debug_youtube(payload: DebugYouTubeRequest, _=Depends(verify_admin)):
+    """
+    Run yt-dlp extraction with verbose logging and return all captured output.
+    Useful for diagnosing YouTube bot detection / PO token issues.
+    """
+    import os
+    import yt_dlp
+    import httpx
+    from app.core.po_token_cache import get_po_token, get_po_visitor_data, get_cache_ttl
+    from app.services.cobalt_service import is_cobalt_available, fetch_cobalt_stream
+
+    captured_logs: list = []
+
+    class _CapturingLogger:
+        def debug(self, msg: str) -> None:
+            if not msg.startswith("[debug] "):
+                captured_logs.append(f"[debug] {msg}")
+        def info(self, msg: str) -> None:
+            captured_logs.append(f"[info] {msg}")
+        def warning(self, msg: str) -> None:
+            captured_logs.append(f"[WARN] {msg}")
+        def error(self, msg: str) -> None:
+            captured_logs.append(f"[ERROR] {msg}")
+
+    result: Dict[str, Any] = {"url": payload.url}
+
+    # ── PO token state ──────────────────────────────────────
+    cached_pot = get_po_token()
+    visitor_data = get_po_visitor_data()
+    result["po_token"] = {
+        "present": bool(cached_pot),
+        "prefix": (cached_pot[:20] + "...") if cached_pot else None,
+        "ttl_seconds": get_cache_ttl(),
+        "visitor_data_present": bool(visitor_data),
+    }
+
+    # ── Cobalt check ────────────────────────────────────────
+    cobalt_available = is_cobalt_available()
+    result["cobalt"] = {"available": cobalt_available}
+    if cobalt_available:
+        try:
+            cobalt_resp = fetch_cobalt_stream(payload.url, video_quality="720", download_mode="auto")
+            result["cobalt"]["response"] = {
+                "status": cobalt_resp.get("status"),
+                "has_url": bool(cobalt_resp.get("url")),
+                "error": cobalt_resp.get("error"),
+            }
+        except Exception as ce:
+            result["cobalt"]["error"] = str(ce)
+
+    # ── yt-dlp extraction ───────────────────────────────────
+    _bgutil_raw = os.getenv("BGUTIL_POT_URL", "")
+    bgutil_url = _bgutil_raw.split(",")[0].strip() if _bgutil_raw else ""
+
+    yt_extractor_args: Dict[str, Any] = {
+        "player_client": ["tv_embedded", "web"]
+    }
+    if cached_pot:
+        yt_extractor_args["po_token"] = [f"WEB+{cached_pot}"]
+        if visitor_data:
+            yt_extractor_args["visitor_data"] = [visitor_data]
+
+    opts: Dict[str, Any] = {
+        "format": "best[height<=720]",
+        "quiet": False,
+        "no_warnings": False,
+        "ignoreerrors": False,
+        "no_color": True,
+        "socket_timeout": 30,
+        "retries": 2,
+        "logger": _CapturingLogger(),
+        "extractor_args": {"youtube": yt_extractor_args},
+    }
+    if bgutil_url:
+        opts["extractor_args"]["youtubepot-bgutilhttp"] = {"base_url": [bgutil_url]}
+
+    try:
+        import asyncio
+        def _run():
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                return ydl.extract_info(payload.url, download=False)
+        info = await asyncio.to_thread(_run)
+        if info:
+            result["yt_dlp"] = {
+                "success": True,
+                "title": info.get("title"),
+                "formats_count": len(info.get("formats", [])),
+                "extractor": info.get("extractor"),
+                "height": info.get("height"),
+            }
+        else:
+            result["yt_dlp"] = {"success": False, "info_is_none": True}
+    except Exception as e:
+        result["yt_dlp"] = {"success": False, "exception": str(e)[:500]}
+
+    result["yt_dlp_logs"] = captured_logs[-50:]  # last 50 log lines
+    return result
