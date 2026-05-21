@@ -366,13 +366,13 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         else:
             print(f"[Downloader] PO Token: cache miss — using plugin only")
 
-        opts["extractor_args"] = {"youtube": yt_extractor_args}
-        # Always register plugin — it provides token+visitor_data correctly per request.
-        # When both are cached above, the plugin acts as a fallback.
-        # When visitor_data is missing (common case), the plugin is the primary path.
+        # bgutil-ytdlp-pot-provider 0.8.x uses "youtube:getpot_bgutil_baseurl" extractor arg.
+        # (1.x used "youtubepot-bgutilhttp:base_url" — different key, incompatible.)
         if bgutil_url:
-            opts["extractor_args"]["youtubepot-bgutilhttp"] = {"base_url": [bgutil_url]}
+            yt_extractor_args["getpot_bgutil_baseurl"] = [bgutil_url]
             print(f"[Downloader] bgutil plugin @ {bgutil_url}")
+
+        opts["extractor_args"] = {"youtube": yt_extractor_args}
 
         # Logger captures yt-dlp warnings/errors even with quiet+no_warnings
         opts["logger"] = _YTDLPLogger("/YT")
