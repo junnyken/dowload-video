@@ -340,8 +340,9 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
 
     if "youtube.com" in url.lower() or "youtu.be" in url.lower():
         opts["logger"] = _YTDLPLogger("/YT")
-        # yt-dlp 2025.5+ defaults to deno; use node (installed in Docker image)
+        # yt-dlp 2025.5+: use node for JS challenges + enable EJS remote solver script
         opts["js_runtimes"] = {"node": {}}
+        opts["remote_components"] = ["ejs:github"]
         # Prioritize resolution, then codec compatibility, then bitrate
         opts["format_sort"] = ["res", "ext:mp4:m4a", "tbr", "vbr", "abr", "asr"]
 
