@@ -890,6 +890,46 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 print(f"[Downloader] YouTube: info via proxy OK, downloading CDN direct (no proxy)")
                 with yt_dlp.YoutubeDL(dl_opts) as ydl:
                     info = ydl.process_ie_result(info, download=True)
+        elif should_download and (is_tiktok or is_instagram or "twitter.com" in url.lower() or "x.com" in url.lower()):
+            # Two-phase for proxy platforms: metadata via proxy, CDN download direct
+            # CDN URLs for TikTok/Instagram/X are IP-independent once obtained
+            import json as _json_dl2
+            _PHASE_A_TTL = 1200  # 20 min
+            _platform_tag = (
+                "tiktok"  if is_tiktok    else
+                "ig"      if is_instagram else
+                "twitter"
+            )
+            _pa_key = f"phaseA:{_platform_tag}:{hashlib.md5(url.encode()).hexdigest()}"
+            info = None
+            try:
+                from app.core.redis_client import get_redis
+                _rc2 = get_redis()
+                _hit = _rc2.get(_pa_key)
+                if _hit:
+                    info = _json_dl2.loads(_hit)
+                    print(f"[Cache] {_platform_tag} Phase A HIT — skip proxy")
+            except Exception:
+                pass
+
+            if info is None:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                if info:
+                    try:
+                        _rc2 = get_redis()
+                        _rc2.setex(_pa_key, _PHASE_A_TTL, _json_dl2.dumps(info, default=str))
+                        print(f"[Cache] {_platform_tag} Phase A cached {_PHASE_A_TTL}s")
+                    except Exception:
+                        pass
+
+            if info:
+                dl_opts = _get_base_opts(url, phase="download", quality=quality)
+                dl_opts = _apply_tiktok_opts(dl_opts, url, remove_watermark)
+                dl_opts["extract_flat"] = False
+                print(f"[Downloader] {_platform_tag}: CDN download direct (no proxy)")
+                with yt_dlp.YoutubeDL(dl_opts) as ydl:
+                    info = ydl.process_ie_result(info, download=True)
         else:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=should_download)
