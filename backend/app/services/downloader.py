@@ -352,25 +352,28 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
             "player_client": ["tv_embedded", "web"]
         }
 
-        # Try Redis-cached PO token first (avoids per-request Chrome call)
+        # PO token requires BOTH token AND visitor_data to bypass YouTube bot detection.
+        # Without visitor_data the cached token is rejected and causes LOGIN_REQUIRED.
+        # Only inject both if available; otherwise fall through to plugin.
         from app.core.po_token_cache import get_po_token, get_po_visitor_data
         cached_pot = get_po_token()
-        if cached_pot:
+        visitor_data = get_po_visitor_data()
+        if cached_pot and visitor_data:
             yt_extractor_args["po_token"] = [f"WEB+{cached_pot}"]
-            visitor_data = get_po_visitor_data()
-            if visitor_data:
-                yt_extractor_args["visitor_data"] = [visitor_data]
-            print(f"[Downloader] PO Token: cache hit ({cached_pot[:16]}...)")
+            yt_extractor_args["visitor_data"] = [visitor_data]
+            print(f"[Downloader] PO Token: cache hit + visitor_data ({cached_pot[:16]}...)")
+        elif cached_pot:
+            print(f"[Downloader] PO Token: cache hit but NO visitor_data — using plugin only")
+        else:
+            print(f"[Downloader] PO Token: cache miss — using plugin only")
 
         opts["extractor_args"] = {"youtube": yt_extractor_args}
-        # Always register plugin — handles per-request token when cache misses
-        # or when the cached token is rejected by YouTube for a specific video.
+        # Always register plugin — it provides token+visitor_data correctly per request.
+        # When both are cached above, the plugin acts as a fallback.
+        # When visitor_data is missing (common case), the plugin is the primary path.
         if bgutil_url:
             opts["extractor_args"]["youtubepot-bgutilhttp"] = {"base_url": [bgutil_url]}
-            if not cached_pot:
-                print(f"[Downloader] PO Token: cache miss, plugin only @ {bgutil_url}")
-            else:
-                print(f"[Downloader] PO Token: cache hit + plugin fallback @ {bgutil_url}")
+            print(f"[Downloader] bgutil plugin @ {bgutil_url}")
 
         # Logger captures yt-dlp warnings/errors even with quiet+no_warnings
         opts["logger"] = _YTDLPLogger("/YT")

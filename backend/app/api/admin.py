@@ -517,21 +517,63 @@ async def test_po_token(_=Depends(verify_admin)):
         ttl = -1
     result["cache"] = {"token_present": bool(cached_token), "token_prefix": (cached_token[:16] + "...") if cached_token else None, "ttl_seconds": ttl}
 
-    # 2. Ping each bgutil-pot instance directly
+    # 2. Ping each bgutil-pot instance AND call /get_pot to see raw response
     bgutil_urls = [u.strip() for u in os.getenv("BGUTIL_POT_URL", "").split(",") if u.strip()]
     instances = []
     for url in bgutil_urls:
+        info: Dict[str, Any] = {"url": url}
         try:
             r = httpx.get(url, timeout=10.0)
-            instances.append({"url": url, "reachable": True, "status": r.status_code})
+            info["reachable"] = True
+            info["status"] = r.status_code
         except Exception as e:
-            instances.append({"url": url, "reachable": False, "error": str(e)[:100]})
+            info["reachable"] = False
+            info["error"] = str(e)[:100]
+            instances.append(info)
+            continue
+        # Call /get_pot to see actual raw response keys
+        try:
+            pr = httpx.post(f"{url}/get_pot", json={"videoId": "dQw4w9WgXcQ"}, timeout=30.0)
+            pr.raise_for_status()
+            raw_data = pr.json()
+            info["get_pot_keys"] = list(raw_data.keys())
+            info["has_visitor_data"] = bool(
+                raw_data.get("visitor_data") or raw_data.get("visitorData")
+            )
+            info["visitor_data_prefix"] = (
+                (raw_data.get("visitor_data") or raw_data.get("visitorData") or "")[:20] + "..."
+            )
+        except Exception as pe:
+            info["get_pot_error"] = str(pe)[:100]
+        instances.append(info)
     result["bgutil_instances"] = instances
 
-    # 3. Force refresh (call /get_pot on each instance)
+    # 3. Also check visitor_data in Redis
+    try:
+        from app.core.redis_client import get_redis
+        rc2 = get_redis()
+        vd_raw = rc2.get("youtube:po_visitor_data")
+        cached_vd = vd_raw.decode() if isinstance(vd_raw, bytes) else vd_raw
+        result["cache"]["visitor_data_present"] = bool(cached_vd)
+        result["cache"]["visitor_data_prefix"] = (cached_vd[:20] + "...") if cached_vd else None
+    except Exception:
+        pass
+
+    # 4. Force refresh (call /get_pot on each instance)
     invalidate_po_token()
     new_token = refresh_po_token()
     result["refresh"] = {"ok": bool(new_token), "token_prefix": (new_token[:16] + "...") if new_token else None}
+
+    # 5. Check visitor_data after refresh
+    try:
+        from app.core.redis_client import get_redis
+        rc3 = get_redis()
+        vd_after = rc3.get("youtube:po_visitor_data")
+        vd_after_str = vd_after.decode() if isinstance(vd_after, bytes) else vd_after
+        result["refresh"]["visitor_data_after"] = bool(vd_after_str)
+        result["refresh"]["visitor_data_prefix"] = (vd_after_str[:20] + "...") if vd_after_str else None
+    except Exception:
+        pass
 
     return result
 
