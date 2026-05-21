@@ -1132,19 +1132,11 @@ async def debug_youtube(payload: DebugYouTubeRequest, _=Depends(verify_admin)):
         except Exception as ce:
             result["cobalt"]["error"] = str(ce)
 
-    # ── yt-dlp extraction ───────────────────────────────────
-    _bgutil_raw = os.getenv("BGUTIL_POT_URL", "")
-    bgutil_url = _bgutil_raw.split(",")[0].strip() if _bgutil_raw else ""
+    # ── yt-dlp extraction — use real downloader opts (proxy + cookies included) ──
+    from app.services.downloader import _get_base_opts
 
-    yt_extractor_args: Dict[str, Any] = {
-        "player_client": ["tv_embedded", "web"]
-    }
-    if cached_pot:
-        yt_extractor_args["po_token"] = [f"WEB+{cached_pot}"]
-        if visitor_data:
-            yt_extractor_args["visitor_data"] = [visitor_data]
-
-    opts: Dict[str, Any] = {
+    opts = _get_base_opts(payload.url, phase="metadata")
+    opts.update({
         "format": "best[height<=720]",
         "quiet": False,
         "no_warnings": False,
@@ -1153,10 +1145,9 @@ async def debug_youtube(payload: DebugYouTubeRequest, _=Depends(verify_admin)):
         "socket_timeout": 30,
         "retries": 2,
         "logger": _CapturingLogger(),
-        "extractor_args": {"youtube": yt_extractor_args},
-    }
-    if bgutil_url:
-        opts["extractor_args"]["youtubepot-bgutilhttp"] = {"base_url": [bgutil_url]}
+    })
+    result["proxy_used"] = opts.get("proxy", "none (server IP)")
+    result["cookiefile_set"] = bool(opts.get("cookiefile"))
 
     try:
         import asyncio
