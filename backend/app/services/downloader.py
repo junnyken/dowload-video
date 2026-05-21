@@ -345,6 +345,10 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         opts["remote_components"] = ["ejs:github"]
         # Prioritize resolution, then codec compatibility, then bitrate
         opts["format_sort"] = ["res", "ext:mp4:m4a", "tbr", "vbr", "abr", "asr"]
+        yt_cookies = _get_youtube_cookies_file()
+        if yt_cookies:
+            opts["cookiefile"] = yt_cookies
+            print("[Downloader] YouTube cookies loaded")
 
     if "facebook.com" in url.lower():
         fb_cookies = _get_facebook_cookies_file()
