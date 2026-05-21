@@ -6,7 +6,7 @@ WORKDIR /app
 
 # Cài đặt FFmpeg via static binary — tránh apt-get install hàng trăm packages (~15 phút)
 # Static binary: không cần lib dependencies, build time ~2 phút
-RUN apt-get update && apt-get install -y --no-install-recommends wget xz-utils \
+RUN apt-get update && apt-get install -y --no-install-recommends wget xz-utils nodejs \
     && wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz \
     && tar xf ffmpeg-release-amd64-static.tar.xz \
     && mv ffmpeg-*-amd64-static/ffmpeg /usr/local/bin/ \

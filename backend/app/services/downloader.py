@@ -339,19 +339,6 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         opts["proxy"] = proxy
 
     if "youtube.com" in url.lower() or "youtu.be" in url.lower():
-        # ── PO Token Provider Config ──────────────────────────────────
-        # Player client chain (yt-dlp 2025.5+):
-        # - mweb: mobile web client, does NOT require GVS PO tokens (unlike web/ios).
-        #   Works with cookies alone for authenticated sessions.
-        # - web: fallback DASH client; needs GVS PO token (bgutil 0.8.x doesn't support gvs).
-        # bgutil 0.8.x only supports player PO tokens, not gvs PO tokens.
-        # bgutil 1.x supports gvs but has no Docker image yet (server stuck at 0.8.1).
-        yt_extractor_args = {
-            "player_client": ["mweb", "web"]
-        }
-
-        opts["extractor_args"] = {"youtube": yt_extractor_args}
-
         # Logger captures yt-dlp warnings/errors even with quiet+no_warnings
         opts["logger"] = _YTDLPLogger("/YT")
 
