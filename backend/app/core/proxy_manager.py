@@ -5,7 +5,8 @@ Decides whether to route a request through a residential proxy,
 use the server's own IP, or fall back to a Scraping API.
 
 Priority chain:
-  • YouTube / Facebook  -> None (server IP)
+  • Facebook            -> None (server IP)
+  • YouTube             -> IPROYAL_PROXY (residential, metadata only)
   • TikTok / Instagram  -> IPROYAL_PROXY → ScraperAPI proxy (free fallback)
   • Douyin              -> IPROYAL_PROXY_CN (CN IP) → ScraperAPI CN → ScraperAPI global
 """
@@ -57,9 +58,11 @@ class ProxyTier(str, Enum):
 # Pattern -> Tier mapping (order matters: first match wins)
 _PLATFORM_RULES: list[tuple[str, ProxyTier]] = [
     # ─── Direct (free) platforms ───────────────────────────
-    (r"(youtube\.com|youtu\.be)", ProxyTier.DIRECT),
     (r"facebook\.com", ProxyTier.DIRECT),
     (r"fb\.watch", ProxyTier.DIRECT),
+
+    # ─── YouTube: residential proxy for metadata (IP-level bot detection) ──
+    (r"(youtube\.com|youtu\.be)", ProxyTier.RESIDENTIAL),
 
     # ─── Residential proxy platforms ───────────────────────
     (r"tiktok\.com", ProxyTier.RESIDENTIAL),
@@ -225,11 +228,13 @@ def get_proxy_stats() -> Dict[str, Any]:
     """Return proxy configuration status for health-check / debugging."""
     tiktok_proxy = IPROYAL_PROXY or _scraperapi_proxy() or "server IP (no proxy)"
     douyin_proxy = IPROYAL_PROXY_CN or _scraperapi_proxy("CN") or _scraperapi_proxy() or "server IP (no proxy)"
+    yt_proxy = IPROYAL_PROXY or "server IP (no proxy — bot detection risk)"
     return {
         "iproyal_configured": bool(IPROYAL_PROXY),
         "iproyal_cn_configured": bool(os.getenv("IPROYAL_PROXY_CN", "")),
         "scraperapi_configured": bool(SCRAPERAPI_API_KEY),
         "scraperapi_proxy_active": not IPROYAL_PROXY and bool(SCRAPERAPI_API_KEY),
+        "youtube_proxy": yt_proxy[:40] + "..." if len(yt_proxy) > 40 else yt_proxy,
         "tiktok_proxy": tiktok_proxy[:40] + "..." if len(tiktok_proxy) > 40 else tiktok_proxy,
         "douyin_proxy": douyin_proxy[:40] + "..." if len(douyin_proxy) > 40 else douyin_proxy,
         "platform_rules_count": len(_PLATFORM_RULES),
