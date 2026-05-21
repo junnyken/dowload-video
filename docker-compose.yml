@@ -9,9 +9,27 @@ services:
   # PO Token provider — generates YouTube Proof-of-Origin tokens
   # Required since May 2025: YouTube blocks ALL yt-dlp player clients
   # without a valid PO token (LOGIN_REQUIRED / bot detection).
+  # Two instances for redundancy — tokens are cached in Redis so Chrome
+  # is almost never called during real requests (only pre-warm every 3h).
   bgutil-pot:
     image: ghcr.io/jim60105/bgutil-pot:latest
-    restart: unless-stopped
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4416/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  bgutil-pot-2:
+    image: ghcr.io/jim60105/bgutil-pot:latest
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4416/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   cobalt-api:
     image: ghcr.io/imputnet/cobalt:latest
@@ -32,7 +50,7 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - COBALT_API_URL=http://cobalt-api:9000
-      - BGUTIL_POT_URL=http://bgutil-pot:4416
+      - BGUTIL_POT_URL=http://bgutil-pot:4416,http://bgutil-pot-2:4416
       - VIDEO_INFO_CACHE_TTL=600
       - DOWNLOADS_MAX_GB=10
       - DAILY_QUOTA_PER_IP=50
@@ -48,6 +66,7 @@ services:
       - redis
       - cobalt-api
       - bgutil-pot
+      - bgutil-pot-2
     volumes:
       - downloads:/app/downloads
     healthcheck:
@@ -68,7 +87,7 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - COBALT_API_URL=http://cobalt-api:9000
-      - BGUTIL_POT_URL=http://bgutil-pot:4416
+      - BGUTIL_POT_URL=http://bgutil-pot:4416,http://bgutil-pot-2:4416
       - DOWNLOADS_MAX_GB=10
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
@@ -76,6 +95,7 @@ services:
       - redis
       - backend
       - bgutil-pot
+      - bgutil-pot-2
     volumes:
       - downloads:/app/downloads
 

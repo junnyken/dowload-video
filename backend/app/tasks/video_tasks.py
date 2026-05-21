@@ -561,3 +561,23 @@ def ytdlp_auto_update(self):
         print("[ytdlp-update] pip upgrade timed out")
     except Exception as e:
         print(f"[ytdlp-update] Error: {e}")
+
+
+@celery_app.task(name="refresh_po_token", bind=True)
+def refresh_po_token(self):
+    """
+    Pre-warm YouTube PO token every 3 hours.
+    Keeps the Redis cache hot so no worker ever waits on bgutil-pot's
+    headless Chrome during an actual download request.
+    """
+    from app.core.po_token_cache import refresh_po_token as _refresh, get_cache_ttl
+
+    ttl_before = get_cache_ttl()
+    print(f"[POToken-prewarm] TTL before refresh: {ttl_before}s")
+
+    token = _refresh()
+    if token:
+        ttl_after = get_cache_ttl()
+        print(f"[POToken-prewarm] ✓ Token refreshed, new TTL: {ttl_after}s ({token[:16]}...)")
+    else:
+        print("[POToken-prewarm] ✗ Failed to refresh — bgutil-pot may be down")

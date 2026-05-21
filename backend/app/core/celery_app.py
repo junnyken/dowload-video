@@ -62,5 +62,11 @@ celery_app.conf.update(
             'task': 'ytdlp_auto_update',
             'schedule': crontab(hour=3, minute=0),
         },
+        # Pre-warm YouTube PO token every 3 hours (token valid ~6h, TTL 3.5h)
+        # Ensures no worker waits on bgutil-pot Chrome during real downloads
+        'refresh-po-token-every-3h': {
+            'task': 'refresh_po_token',
+            'schedule': crontab(minute=5, hour='*/3'),
+        },
     }
 )

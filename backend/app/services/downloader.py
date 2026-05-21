@@ -322,36 +322,41 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
     if "youtube.com" in url.lower() or "youtu.be" in url.lower():
         # ── PO Token Provider Config ──────────────────────────────────
         # YouTube requires Proof-of-Origin tokens since 2025.
-        # bgutil-pot sidecar (Docker) generates these automatically.
-        # Without PO tokens, ALL player clients return LOGIN_REQUIRED.
+        # Tokens cached in Redis (TTL 3.5h) — all workers share one token
+        # instead of each hitting bgutil-pot's headless Chrome per request.
         bgutil_url = os.getenv("BGUTIL_POT_URL", "")
-        
+
         # Player client chain — order matters, yt-dlp tries each in sequence:
-        #
-        # 1. web         — Primary. With PO Token, web client returns full DASH
-        #                  adaptive streams (1080p–4K). PO tokens work best here.
-        #
-        # 2. web_safari  — Secondary. Safari-specific web player; separate n-challenge
-        #                  path, sometimes bypasses detection that blocks standard web.
-        #
-        # 3. android_vr  — Tertiary. Android VR app client; used to be the best
-        #                  SABR bypass but now usually blocked without PO token.
-        #
-        # 4. mweb        — Last resort. Mobile web client; minimal but still
-        #                  returns DASH streams for most content.
-        #
-        # Cobalt API (cobalt_service.py) is the final safety net beyond this chain.
+        # 1. web        — Primary. Full DASH adaptive (1080p–4K) with PO token.
+        # 2. web_safari — Safari-specific path, sometimes bypasses bot detection.
+        # 3. android_vr — VR app client, good SABR bypass.
+        # 4. mweb       — Mobile web, last resort, still returns DASH.
         yt_extractor_args = {
             "player_client": ["web", "web_safari", "android_vr", "mweb"]
         }
-        
-        # Configure PO Token provider if bgutil-pot sidecar is available
-        opts["extractor_args"] = {"youtube": yt_extractor_args}
-        if bgutil_url:
+
+        # Try Redis-cached PO token first (avoids per-request Chrome call)
+        from app.core.po_token_cache import get_po_token, get_po_visitor_data
+        cached_pot = get_po_token()
+        if cached_pot:
+            # Pass token directly — yt-dlp skips bgutil-pot plugin entirely
+            yt_extractor_args["po_token"] = [f"WEB+{cached_pot}"]
+            visitor_data = get_po_visitor_data()
+            if visitor_data:
+                yt_extractor_args["visitor_data"] = [visitor_data]
+            print(f"[Downloader] PO Token: Redis cache hit ({cached_pot[:16]}...)")
+        elif bgutil_url:
+            # Cache miss — fall back to per-request plugin (original behavior)
+            opts["extractor_args"] = opts.get("extractor_args", {})
             opts["extractor_args"]["youtubepot-bgutilhttp"] = {
                 "base_url": [bgutil_url]
             }
-            print(f"[Downloader] PO Token provider: bgutil-pot @ {bgutil_url}")
+            print(f"[Downloader] PO Token: cache miss, using plugin @ {bgutil_url}")
+
+        opts["extractor_args"] = {"youtube": yt_extractor_args}
+        if bgutil_url and not cached_pot:
+            opts["extractor_args"]["youtubepot-bgutilhttp"] = {"base_url": [bgutil_url]}
+
         # Inject YouTube cookies — logged-in session bypasses bot detection completely
         yt_cookies = _get_youtube_cookies_file()
         if yt_cookies:
@@ -839,7 +844,25 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     # Only "video_fast" mode skips download (returns direct pre-merged URL for browser)
     is_tiktok = "tiktok.com" in url.lower()
     is_youtube_url = "youtube.com" in url.lower() or "youtu.be" in url.lower()
+    is_instagram = "instagram.com" in url.lower()
+    is_facebook  = "facebook.com" in url.lower()
     should_download = quality != "video_fast" or is_tiktok
+
+    # ── Per-platform rate limiter (sliding window, Redis-backed) ────
+    # Prevents 8 workers from bursting the same platform simultaneously.
+    # TikTok/Instagram are throttled most aggressively (10-20 req/min).
+    _throttle_platform = (
+        "youtube"   if is_youtube_url else
+        "tiktok"    if is_tiktok      else
+        "facebook"  if is_facebook    else
+        "instagram" if is_instagram   else None
+    )
+    if _throttle_platform:
+        try:
+            from app.core.platform_throttle import check_and_acquire, PlatformThrottleError
+            check_and_acquire(_throttle_platform)
+        except Exception as _te:
+            print(f"[Throttle] {_throttle_platform}: {_te}")
 
     info = None
     try:
@@ -859,20 +882,28 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     except Exception as primary_err:
         primary_err_str = str(primary_err)
         print(f"[Downloader] Primary extraction failed for {url}: {primary_err_str}")
-        # Detect block signals → rotate cookie for this platform
+        # Detect block signals → rotate cookie + invalidate PO token if YouTube
         _block_signals = ["sign in to confirm", "login_required", "rate limit",
                           "too many requests", "429", "403", "bot", "captcha"]
         if any(s in primary_err_str.lower() for s in _block_signals):
             _platform_name = (
                 "youtube"   if is_youtube_url else
-                "tiktok"    if "tiktok.com"   in url else
-                "facebook"  if "facebook.com" in url else
-                "instagram" if "instagram.com" in url else None
+                "tiktok"    if is_tiktok      else
+                "facebook"  if is_facebook    else
+                "instagram" if is_instagram   else None
             )
             if _platform_name:
                 _rotate_cookie(_platform_name)
+            if is_youtube_url:
+                # Invalidate cached PO token so next request gets a fresh one
+                try:
+                    from app.core.po_token_cache import invalidate_po_token
+                    invalidate_po_token()
+                    print("[Downloader] PO Token cache invalidated after YouTube block")
+                except Exception:
+                    pass
         if is_youtube_url and ("Sign in to confirm" in primary_err_str or "LOGIN_REQUIRED" in primary_err_str):
-            print("[Downloader] YouTube bot detection confirmed — PO Token may be missing or expired")
+            print("[Downloader] YouTube bot detection confirmed — PO Token invalidated, will refresh on next request")
 
     # ── Phase 1.5a: YouTube SABR Recovery via Cobalt (safety net) ──────
     # With android_vr client, SABR is usually bypassed successfully.
