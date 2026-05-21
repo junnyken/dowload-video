@@ -343,6 +343,8 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         # yt-dlp 2025.5+: use node for JS challenges + enable EJS remote solver script
         opts["js_runtimes"] = {"node": {}}
         opts["remote_components"] = ["ejs:github"]
+        # Cache EJS solver + extractor data on disk — avoids re-downloading through proxy each request
+        opts["cachedir"] = "/tmp/ytdlp_cache"
         # Prioritize resolution, then codec compatibility, then bitrate
         opts["format_sort"] = ["res", "ext:mp4:m4a", "tbr", "vbr", "abr", "asr"]
         yt_cookies = _get_youtube_cookies_file()
@@ -854,8 +856,33 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         if is_youtube_url and should_download:
             # YouTube two-phase: proxy for auth/metadata only, direct CDN for download
             # Phase A: extract info (signed CDN URLs) via residential proxy
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=False)
+            # Cache Phase A result in Redis — same URL within TTL skips proxy entirely
+            import json as _json_dl
+            _YT_PHASE_A_TTL = 1800  # 30 min — YouTube signed URLs valid ~6 hours
+            _yt_phase_a_key = f"yt_phaseA:{hashlib.md5(url.encode()).hexdigest()}"
+            info = None
+            try:
+                from app.core.redis_client import get_redis
+                _rc = get_redis()
+                _cached_raw = _rc.get(_yt_phase_a_key)
+                if _cached_raw:
+                    info = _json_dl.loads(_cached_raw)
+                    print(f"[Cache] YouTube Phase A HIT — skipping proxy ({_yt_phase_a_key[-8:]})")
+            except Exception:
+                pass
+
+            if info is None:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                # Cache the Phase A result so next request within 30 min skips proxy
+                if info:
+                    try:
+                        _rc = get_redis()
+                        _rc.setex(_yt_phase_a_key, _YT_PHASE_A_TTL, _json_dl.dumps(info, default=str))
+                        print(f"[Cache] YouTube Phase A cached {_YT_PHASE_A_TTL}s")
+                    except Exception as _ce:
+                        print(f"[Cache] Phase A cache write failed: {_ce}")
+
             # Phase B: download using already-resolved CDN URLs, no proxy needed
             if info:
                 dl_opts = _get_base_opts(url, phase="download", quality=quality)
