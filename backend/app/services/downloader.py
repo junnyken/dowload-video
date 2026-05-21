@@ -872,16 +872,20 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 pass
 
             if info is None:
+                # Phase A: use ignoreerrors=False so proxy 402 raises instead of silently returning None
+                _phase_a_opts = opts.copy()
+                _phase_a_opts["ignoreerrors"] = False
                 try:
-                    with yt_dlp.YoutubeDL(opts) as ydl:
+                    with yt_dlp.YoutubeDL(_phase_a_opts) as ydl:
                         info = ydl.extract_info(url, download=False)
                 except Exception as _phase_a_err:
                     _pa_err_str = str(_phase_a_err)
                     # Proxy out of credit (402) or unreachable → fallback to direct + cookies
-                    if "402" in _pa_err_str or "payment required" in _pa_err_str.lower() or "proxy" in _pa_err_str.lower():
-                        print(f"[Downloader] IPRoyal unavailable ({_pa_err_str[:60]}) — fallback to direct+cookies")
+                    if "402" in _pa_err_str or "payment required" in _pa_err_str.lower() or "proxyerror" in _pa_err_str.lower() or "tunnel connection" in _pa_err_str.lower():
+                        print(f"[Downloader] IPRoyal unavailable — fallback to direct+cookies")
                         _direct_opts = opts.copy()
                         _direct_opts.pop("proxy", None)
+                        _direct_opts["ignoreerrors"] = True
                         with yt_dlp.YoutubeDL(_direct_opts) as ydl:
                             info = ydl.extract_info(url, download=False)
                     else:
@@ -925,12 +929,14 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 pass
 
             if info is None:
+                _pa2_opts = opts.copy()
+                _pa2_opts["ignoreerrors"] = False
                 try:
-                    with yt_dlp.YoutubeDL(opts) as ydl:
+                    with yt_dlp.YoutubeDL(_pa2_opts) as ydl:
                         info = ydl.extract_info(url, download=False)
                 except Exception as _pa2_err:
                     _pa2_str = str(_pa2_err)
-                    if "402" in _pa2_str or "payment required" in _pa2_str.lower() or "proxy" in _pa2_str.lower():
+                    if "402" in _pa2_str or "payment required" in _pa2_str.lower() or "tunnel connection" in _pa2_str.lower():
                         print(f"[Downloader] {_platform_tag}: proxy unavailable — fallback direct")
                         _direct_opts2 = opts.copy()
                         _direct_opts2.pop("proxy", None)
