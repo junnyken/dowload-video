@@ -493,6 +493,50 @@ async def get_user_analytics(_=Depends(verify_admin)):
 
 
 # ═════════════════════════════════════════════════════════════════════
+# POST /po-token/test — Test bgutil-pot + PO token cache
+# ═════════════════════════════════════════════════════════════════════
+
+@router.post("/po-token/test")
+async def test_po_token(_=Depends(verify_admin)):
+    """Test bgutil-pot connectivity and force-refresh PO token cache."""
+    import os, httpx
+    from app.core.po_token_cache import get_po_token, get_cache_ttl, refresh_po_token, invalidate_po_token
+
+    result: Dict[str, Any] = {"success": True}
+
+    # 1. Current cache state
+    cached = get_po_token.__wrapped__() if hasattr(get_po_token, '__wrapped__') else None
+    try:
+        from app.core.redis_client import get_redis
+        rc = get_redis()
+        raw = rc.get("youtube:po_token")
+        cached_token = raw.decode() if isinstance(raw, bytes) else raw
+        ttl = rc.ttl("youtube:po_token")
+    except Exception as e:
+        cached_token = None
+        ttl = -1
+    result["cache"] = {"token_present": bool(cached_token), "token_prefix": (cached_token[:16] + "...") if cached_token else None, "ttl_seconds": ttl}
+
+    # 2. Ping each bgutil-pot instance directly
+    bgutil_urls = [u.strip() for u in os.getenv("BGUTIL_POT_URL", "").split(",") if u.strip()]
+    instances = []
+    for url in bgutil_urls:
+        try:
+            r = httpx.get(url, timeout=10.0)
+            instances.append({"url": url, "reachable": True, "status": r.status_code})
+        except Exception as e:
+            instances.append({"url": url, "reachable": False, "error": str(e)[:100]})
+    result["bgutil_instances"] = instances
+
+    # 3. Force refresh (call /get_pot on each instance)
+    invalidate_po_token()
+    new_token = refresh_po_token()
+    result["refresh"] = {"ok": bool(new_token), "token_prefix": (new_token[:16] + "...") if new_token else None}
+
+    return result
+
+
+# ═════════════════════════════════════════════════════════════════════
 # GET /system-health — System Health (Tab 4)
 # ═════════════════════════════════════════════════════════════════════
 
