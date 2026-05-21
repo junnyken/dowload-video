@@ -340,8 +340,8 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
 
     if "youtube.com" in url.lower() or "youtu.be" in url.lower():
         opts["logger"] = _YTDLPLogger("/YT")
-        # yt-dlp 2025.5+ defaults to deno; tell it to use node (installed in Docker image)
-        opts["js_runtimes"] = ["node"]
+        # yt-dlp 2025.5+ defaults to deno; use node (installed in Docker image)
+        opts["js_runtimes"] = {"node": {}}
         # Prioritize resolution, then codec compatibility, then bitrate
         opts["format_sort"] = ["res", "ext:mp4:m4a", "tbr", "vbr", "abr", "asr"]
 
