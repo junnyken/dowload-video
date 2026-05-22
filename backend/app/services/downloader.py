@@ -276,7 +276,10 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         "no_color": True,
         "socket_timeout": 60,
         "retries": 10,
-        "fragment_retries": 10
+        "fragment_retries": 10,
+        "keepvideo": False,
+        "nopart": False,          # allow .part files (default)
+        "concurrent_fragment_downloads": 4,  # parallel fragment download — faster
     }
     
     if not quality.startswith("mp3"):
