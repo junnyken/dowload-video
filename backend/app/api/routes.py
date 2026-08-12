@@ -1056,7 +1056,6 @@ async def bulk_download(
     channel_count = 0
     video_count = 0
 
-    print(f"[DIAG-bulk] payload.urls={payload.urls!r} len={len(payload.urls)}")
     for raw_url in payload.urls:
         url = raw_url.strip()
         if not url:
@@ -1065,7 +1064,6 @@ async def bulk_download(
         from app.utils.link_resolver import resolve_short_url
         resolved_url = resolve_short_url(url)
         url_type = classify_url(resolved_url)
-        print(f"[DIAG-bulk] url={url!r} resolved={resolved_url!r} url_type={url_type!r}")
 
         # Force channel mode from frontend toggle
         if payload.channel_mode:
@@ -1158,8 +1156,8 @@ async def bulk_download(
 
         except Exception as e:
             import traceback as _tb
-            print(f"[DIAG-bulk] Error creating job for {url}: {type(e).__name__}: {e}")
-            print(f"[DIAG-bulk] traceback:\n{_tb.format_exc()}")
+            print(f"Error creating job for {url}: {type(e).__name__}: {e}")
+            print(_tb.format_exc())
 
     # Set exact 60-minute scheduled cleanup for this entire batch folder and zip
     from app.tasks.video_tasks import delete_batch_resources
