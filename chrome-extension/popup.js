@@ -48,16 +48,28 @@ function stopChannelDiscovery() {
 
 function startJobPolling(batchId, maxVideos) {
   _chBatchId = batchId;
-  clearInterval(_chJobPollTimer);
+  clearTimeout(_chJobPollTimer);
   const webLink = document.getElementById('ch-open-web');
   webLink.href = `${API_BASE}?batch=${batchId}`;
   webLink.classList.remove('hidden');
 
-  _chJobPollTimer = setInterval(async () => {
+  // Adaptive polling: fast (2s) while a batch is fresh so short jobs feel
+  // snappy, backing off to 5s after 30s and 10s after 2min — a channel
+  // pulling 100+ videos can run for many minutes, and hammering the server
+  // every 2s for the whole duration wastes requests for no visible benefit
+  // once progress has been slow for a while.
+  const pollStartedAt = Date.now();
+  const nextDelay = () => {
+    const elapsed = Date.now() - pollStartedAt;
+    if (elapsed > 120_000) return 10_000;
+    if (elapsed > 30_000) return 5_000;
+    return 2_000;
+  };
+
+  const poll = async () => {
     try {
-      const base = await new Promise(r => chrome.runtime.sendMessage({ type: 'VG_HEALTH_CHECK' }, () => r(API_BASE)));
       const resp = await fetch(`${API_BASE}/api/v1/jobs/${batchId}`);
-      if (!resp.ok) return;
+      if (!resp.ok) { _chJobPollTimer = setTimeout(poll, nextDelay()); return; }
       const data = await resp.json();
       const jobs = (data.jobs || []).filter(j => j.original_url !== 'batch_zip');
 
@@ -66,6 +78,7 @@ function startJobPolling(batchId, maxVideos) {
       if (isDiscovering) {
         const msg = jobs[0]?.error_message;
         if (msg) document.getElementById('ch-discovery-msg').textContent = msg;
+        _chJobPollTimer = setTimeout(poll, nextDelay());
         return;
       }
 
@@ -88,11 +101,13 @@ function startJobPolling(batchId, maxVideos) {
 
       document.getElementById('ch-count').textContent = total;
 
-      if (success === total && total > 0) {
-        clearInterval(_chJobPollTimer);
+      if (success !== total || total === 0) {
+        _chJobPollTimer = setTimeout(poll, nextDelay());
       }
-    } catch { /* ignore */ }
-  }, 2000);
+    } catch { _chJobPollTimer = setTimeout(poll, nextDelay()); }
+  };
+
+  _chJobPollTimer = setTimeout(poll, 2_000);
 }
 
 // Khởi tạo API_BASE từ storage ngay khi popup mở
@@ -1053,6 +1068,7 @@ document.getElementById('ch-scrape-btn').addEventListener('click', async () => {
         btn.disabled = true;
         startChannelDiscovery();
         startJobPolling(data.batch_id, _chMaxVideos);
+        chrome.runtime.sendMessage({ type: 'VG_TRACK_BATCH', batchId: data.batch_id, sourceUrl: tab.url }).catch(() => {});
       } else throw new Error(data.detail || 'Lỗi không xác định');
     } catch (err) {
       status.textContent = `❌ Lỗi: ${err.message}`; status.style.color = '#f87171';
@@ -1106,9 +1122,11 @@ document.getElementById('ch-send-btn').addEventListener('click', async () => {
         sendText.textContent = '⏳ Đang quét...';
         startChannelDiscovery();
         startJobPolling(data.batch_id, _chMaxVideos);
+        chrome.runtime.sendMessage({ type: 'VG_TRACK_BATCH', batchId: data.batch_id, sourceUrl: tab.url }).catch(() => {});
       } else {
         status.textContent = `✅ Đã xếp hàng ${urls.length} video thành công!`; status.style.color = '#4ade80';
         sendText.textContent = '✅ Đã gửi';
+        chrome.runtime.sendMessage({ type: 'VG_TRACK_BATCH', batchId: data.batch_id, sourceUrl: tab.url }).catch(() => {});
         chrome.tabs.create({ url: `${API_BASE}?batch=${data.batch_id}` });
       }
     } else throw new Error(data.detail || 'Lỗi không xác định');

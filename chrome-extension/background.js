@@ -284,9 +284,87 @@ setInterval(async () => {
   }
 }, 500);
 
+// ── Batch/channel background tracking ───────────────────────────────
+// The popup's live polling (see popup.js startJobPolling, every 2s) only
+// runs while the popup is open — closing it kills that setInterval and the
+// user loses all progress visibility even though the batch keeps running
+// server-side. This registers the batch for a coarser (1 min, the practical
+// floor for chrome.alarms) background check that survives popup close and
+// SW suspension, and fires a native notification when the whole batch is
+// actually done.
+const BATCH_TRACK_KEY = 'vg_active_batches';
+const BATCH_MAX_AGE_MS = 2 * 60 * 60 * 1000; // give up tracking after 2h (stuck job)
+
+async function getActiveBatches() {
+  const res = await chrome.storage.local.get(BATCH_TRACK_KEY);
+  return res[BATCH_TRACK_KEY] || {};
+}
+
+async function saveActiveBatches(batches) {
+  await chrome.storage.local.set({ [BATCH_TRACK_KEY]: batches });
+}
+
+async function trackBatch(batchId, sourceUrl) {
+  const batches = await getActiveBatches();
+  batches[batchId] = { startedAt: Date.now(), sourceUrl: sourceUrl || '' };
+  await saveActiveBatches(batches);
+}
+
+chrome.alarms.create('vg-batch-poll', { periodInMinutes: 1 });
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name !== 'vg-batch-poll') return;
+
+  const batches = await getActiveBatches();
+  const ids = Object.keys(batches);
+  if (ids.length === 0) return;
+
+  const base = await getApiBase();
+  let changed = false;
+
+  for (const batchId of ids) {
+    const meta = batches[batchId];
+    if (Date.now() - meta.startedAt > BATCH_MAX_AGE_MS) {
+      delete batches[batchId];
+      changed = true;
+      continue;
+    }
+    try {
+      const resp = await fetch(`${base}/api/v1/jobs/${batchId}`);
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      const jobs = (data.jobs || []).filter((j) => j.original_url !== 'batch_zip');
+      if (jobs.length === 0) continue; // still discovering channel videos
+
+      const success = jobs.filter((j) => j.status === 'success').length;
+      const failed = jobs.filter((j) => j.status === 'failed').length;
+      const total = jobs.length;
+      const stillRunning = jobs.some((j) => j.status === 'processing' || j.status === 'pending');
+      if (stillRunning) continue;
+
+      // Batch reached a terminal state (all done or failed) — notify + stop tracking.
+      chrome.notifications.create(`vg-batch-${batchId}`, {
+        type: 'basic',
+        iconUrl: 'assets/icon.png',
+        title: failed > 0 ? `⚠️ Batch hoàn tất (${success}/${total} thành công)` : `✅ Batch hoàn tất (${total} video)`,
+        message: meta.sourceUrl ? new URL(meta.sourceUrl).hostname : 'VidGrab',
+        priority: 1,
+      });
+      delete batches[batchId];
+      changed = true;
+    } catch { /* transient network error — retry next alarm tick */ }
+  }
+
+  if (changed) await saveActiveBatches(batches);
+});
+
 // ── Message handler ───────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const tabId = sender.tab?.id;
+
+  if (msg.type === 'VG_TRACK_BATCH') {
+    trackBatch(msg.batchId, msg.sourceUrl).then(() => sendResponse({ ok: true }));
+    return true;
+  }
 
   // ── Auth token management ─────────────────────────────────────────────────────────────────
   if (msg.type === 'VG_SET_AUTH_TOKEN') {
