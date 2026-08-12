@@ -7,19 +7,26 @@ _optional_llm_summary). Centralised here so new features (e.g. transcript
 translation) don't duplicate the same provider-fallback logic a third time.
 
 Env vars:
-  GEMINI_API_KEY — primary provider (gemini-1.5-flash)
+  GEMINI_API_KEY — primary provider (gemini-flash-latest)
   OPENAI_API_KEY — fallback provider (gpt-4o-mini)
 """
 from __future__ import annotations
 
 import os
 
+# "-latest" alias, not a pinned version: Google retires specific dated/numbered
+# Gemini models over time (gemini-1.5-flash returned 404 "not found for
+# generateContent" once retired), and this alias always resolves to whatever
+# the current recommended flash model is, so this stops breaking every time
+# Google rotates versions.
+_GEMINI_MODEL = "gemini-flash-latest"
+
 
 def call_llm(prompt: str, max_output_tokens: int = 2048) -> str | None:
     """
-    Call Gemini (gemini-1.5-flash) first, falling back to OpenAI (gpt-4o-mini)
-    if Gemini is unavailable or fails. Returns None if both are unavailable
-    or fail (never raises).
+    Call Gemini (gemini-flash-latest) first, falling back to OpenAI
+    (gpt-4o-mini) if Gemini is unavailable or fails. Returns None if both are
+    unavailable or fail (never raises).
     """
     # --- Try Gemini ---
     gemini_key = os.environ.get("GEMINI_API_KEY", "")
@@ -29,23 +36,15 @@ def call_llm(prompt: str, max_output_tokens: int = 2048) -> str | None:
 
             genai.configure(api_key=gemini_key)
             model = genai.GenerativeModel(
-                model_name="gemini-1.5-flash",
-                # NOTE: "thinking_budget" is not a valid key for this SDK — that
-                # only exists in the newer unified google-genai SDK's
-                # ThinkingConfig (Gemini 2.x+). This is the older
-                # google-generativeai package, and gemini-1.5-flash has no
-                # thinking mode to budget in the first place.
+                model_name=_GEMINI_MODEL,
                 generation_config={"max_output_tokens": max_output_tokens},
             )
             response = model.generate_content(prompt)
             text = response.text.strip() if response.text else ""
             if text:
                 return text
-            print(f"[DIAG-llm] Gemini returned empty text. response={response!r}")
-        except Exception as exc:
-            import traceback as _tb
-            print(f"[DIAG-llm] Gemini call failed: {type(exc).__name__}: {exc}")
-            print(_tb.format_exc())
+        except Exception:
+            pass
 
     # --- Try OpenAI ---
     openai_key = os.environ.get("OPENAI_API_KEY", "")
