@@ -115,9 +115,26 @@ Lưu ý trung thực: VAYS dùng blue-green deploy (container mới lên trướ
 
 ---
 
+## R27 (tiếp) — Full-pilot flow: 5 bug liên hoàn, 4 đã fix, 1 gap kiến trúc còn lại
+
+User (`shopheiyo@gmail.com`) tự đăng ký tài khoản thật, tôi xác thực qua Supabase Auth API (giống hệt frontend) lấy session token thật, rồi test toàn bộ chuỗi tạo-key→gọi-API:
+
+| # | Bug | Root cause | Trạng thái |
+|---|---|---|---|
+| 1 | `POST /partner/api-keys` → 500 | `_get_user_tenant` order theo `workspace_memberships.created_at` — **cột không tồn tại** (tên thật: `joined_at`) | ✅ Fixed |
+| 2 | Vẫn 500 sau fix #1 | Insert `rate_limit_per_min/day = None` khi caller không chỉ định, đè mất `NOT NULL DEFAULT` của Postgres | ✅ Fixed |
+| 3 | Key tạo được nhưng gọi API nào cũng bị chặn `ip_not_allowed` | `CreateKeyRequest.ip_allowlist` default `[]` (mảng rỗng) thay vì `None` — code check `if ip_allowlist is not None` nên mảng rỗng bị hiểu nhầm là "chặn tất cả" thay vì "không giới hạn" | ✅ Fixed |
+| 4 | `POST /partner/jobs` → 500 `db_error` | Cột `partner_jobs.priority` là TEXT enum (`low/normal/high`) nhưng code insert số nguyên Celery priority (1/3/5) — sai kiểu dữ liệu hoàn toàn | ✅ Fixed (thêm hàm convert 2 chiều, giữ nguyên số cho Celery) |
+| 5 | Job submit thành công nhưng `status` mãi mãi `"queued"`, không bao giờ tiến triển | `process_video_task` (Celery) được thiết kế để cập nhật bảng `download_jobs`, **không biết gì về bảng `partner_jobs`** riêng của Phase 16 — job Partner API dispatch xong sẽ ghi kết quả vào 1 row `download_jobs` ma (không ai query), còn `partner_jobs` bị bỏ quên vĩnh viễn | ❌ **Chưa fix — gap kiến trúc, cần MINI-SPEC riêng (R30)** |
+
+**Đã verify sống, xác nhận chuỗi:** user thật → `POST /workspaces/ensure-personal` (self-service, hoạt động tốt) → tenant tạo thủ công (bước duy nhất chưa self-service, xác nhận đúng gap đã ghi ban đầu) → `POST /partner/api-keys` trả `vgp_...` thật → `GET /partner/usage` trả dữ liệu thật → `POST /partner/jobs` nhận job thật — **4/5 lớp của full-pilot đã thông**, chỉ còn việc job có thực sự "chạy xong và báo lại" hay không.
+
+### R30 (chưa làm) — Cầu nối Partner Job ⇄ Celery kết quả thật
+Cần 1 task Celery riêng cho partner (hoặc sửa `process_video_task` nhận thêm tham số `target_table`) để sau khi tải xong, cập nhật đúng `partner_jobs.status/result` thay vì chỉ `download_jobs`. Kèm theo: bắn `webhook` khi job done (đã có `webhook_dispatcher.py` nhưng chưa test — xem finding cũ "Webhook HMAC có code, 0 test che phủ"). Đây là việc thực sự cần thiết để Partner API "launch được" chứ không chỉ "tạo key được".
+
 ## Tổng kết phiên làm việc 12/08/2026
 
-Tất cả 3 MINI-SPEC gốc (R25, R26, R27-audit) + 1 hotfix phát sinh (R28) đã hoàn thành và live-verify. Việc còn lại duy nhất: **R27 giai đoạn full-pilot** (tạo `vgp_` key thật → gọi → nhận webhook) cần 1 tài khoản user đã đăng nhập thật trên production — không tự tạo được vì tránh chèn tài khoản giả vào Supabase production. Cần Thiên Triều đăng nhập 1 tài khoản thật (hoặc tạo tài khoản test) và cấp session/API key để tiếp tục bước này.
+Tất cả 3 MINI-SPEC gốc (R25, R26, R27) + 3 hotfix phát sinh (R28 bulk-download, R29 worker tuning, và 5 bug rời rạc trong R27 full-pilot) đã hoàn thành và live-verify — trừ đúng 1 gap kiến trúc còn lại (R30, đã ghi rõ ở trên). Toàn bộ đã push GitHub + deploy sống trên VAYS.
 
 ---
 
