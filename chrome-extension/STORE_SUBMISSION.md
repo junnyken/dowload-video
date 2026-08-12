@@ -1,6 +1,6 @@
 # VidGrab Chrome Web Store — Submission Package
 
-Version: **5.1.0** | Manifest V3 | Last updated: 2026-07-07
+Version: **5.1.2** | Manifest V3 | Last updated: 2026-08-13
 
 ---
 
@@ -117,7 +117,7 @@ Primary: English | Secondary: Vietnamese
 
 ## 3. Privacy Policy
 
-*(Host this at a public URL before submitting — e.g. https://dowloadvideo.io.vn/privacy)*
+**Live, publicly reachable at: https://dvid.cmc-1.vibenode.matbao.ai/privacy** (verified 200 OK — use this exact URL in the Developer Dashboard's Privacy Policy field.)
 
 ---
 
@@ -232,7 +232,7 @@ The `update_url` in manifest.json points to Google's update service — auto-pop
 ### Before submitting
 
 **Code**
-- [x] Version bumped in `manifest.json` (4.9.0)
+- [x] Version bumped in `manifest.json` (5.1.2)
 - [x] `minimum_chrome_version` set to `"102"`
 - [x] `alarms` permission added (for SW keepalive)
 - [x] No `eval()`, `new Function()`, or `document.write()` in any JS file
@@ -240,8 +240,8 @@ The `update_url` in manifest.json points to Google's update service — auto-pop
 - [x] All permissions used and justified in Section 2
 
 **Store assets**
-- [ ] Privacy Policy published at a public URL
-- [ ] Privacy Policy URL entered in Developer Dashboard
+- [x] Privacy Policy published at a public URL (https://dvid.cmc-1.vibenode.matbao.ai/privacy)
+- [ ] Privacy Policy URL entered in Developer Dashboard (manual step, do this at submission time)
 - [ ] Screenshots uploaded (min 3 × 1280×800 PNG) — see Section 6.1
 - [ ] Promotional tile uploaded (440×280 PNG)
 - [ ] Store listing description filled (copy from Section 1)
@@ -274,10 +274,19 @@ The `update_url` in manifest.json points to Google's update service — auto-pop
 |---|---|---|
 | `POST /api/v1/fetch-link` | `{url, quality, remove_watermark, download_subs}` | `{success, direct_mp4_url, local_file_path, local_mp3_path, title, thumbnail_url, ...}` |
 | `POST /api/v1/bulk-download` | `{urls, quality, channel_mode, max_videos}` | `{success, batch_id}` |
+| `GET /api/v1/jobs/{batch_id}` | — | batch job status (polled by the background batch tracker, see below) |
+| `POST /api/v1/analyze-media` | `{url, media_path, analyses[], duration_hint_s}` | `{job_id, status}` |
+| `GET /api/v1/analyze/{job_id}` | — | `{status, trim_suggestions[], clip_suggestions[], gif_suggestions[], ...}` |
 | `GET /api/v1/ping` | — | `{status: "ok"}` |
 | `GET /health` | — | `{status, ytdlp_version, disk}` |
 
 If backend changes field names, bump extension MINOR version and update this table.
+
+### AI Smart Suggestions (added 5.1.2)
+After a single download that produced a server-local file (`local_file_path` starting with `/app/downloads/`), the popup's "🤖 AI Gợi ý" button calls `analyze-media` and polls `analyze/{job_id}` (same contract the web app's `SmartActionsPanel` uses) to show top trim/highlight/GIF suggestions inline. The button stays hidden for stream-only downloads (no local file to `ffprobe`) — those still work via the "Xem chi tiết & áp dụng trên Web →" link, which opens the full web app. A separate "💬 Dịch phụ đề" button opens the web app's `/transcript-translate` page directly (`chrome.tabs.create`, no new host_permission needed — `tabs` already covers it).
+
+### Batch tracking (added 5.1.1 → hardened in 5.1.2 lineage)
+The background service worker tracks in-flight `bulk-download` batches (`chrome.storage.local`, keyed by `batch_id`) and polls `GET /api/v1/jobs/{batch_id}` on a `chrome.alarms` 1-minute tick, firing a `chrome.notifications` toast when a batch reaches a terminal state — this works even if the popup is closed. `popup.js`'s own foreground poller uses adaptive backoff (2s → 5s after 30s → 10s after 2min) instead of a fixed interval to reduce request volume on long batches.
 
 ### Auth bridge
 The `connect_extension=1` login flow is opt-in. Extension works without login.
@@ -288,8 +297,8 @@ The `connect_extension=1` login flow is opt-in. Extension works without login.
 
 | Item | Priority | Notes |
 |---|---|---|
-| Privacy Policy page not yet live | **HIGH** | Required before store submission; deploy to backend or static page |
-| Screenshots not yet captured | **HIGH** | Required for submission |
+| ~~Privacy Policy page not yet live~~ | ~~HIGH~~ | **Resolved 2026-08-13** — live at https://dvid.cmc-1.vibenode.matbao.ai/privacy (verified: real `PrivacyPolicy.jsx` page, not a stub; curl 200) |
+| Screenshots not yet captured | **HIGH** | Still open — needs a real Chrome session (popup UI, live download in progress, bulk mode, settings) to capture; can't be done headlessly from this environment |
 | Promotional tile not created | Medium | Required for featured placement |
 | Download progress setInterval is best-effort in MV3 | Low | Chrome can suspend SW mid-interval; fine progress (500ms) stays as-is — alarm keepalive (1 min) is the practical fix |
 | Offscreen document for persistent SW | Low | Alternative to alarms keepalive; adds `offscreen` permission; defer |
