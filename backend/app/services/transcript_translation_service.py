@@ -42,7 +42,7 @@ def detect_source_language(cues: list[Cue]) -> str:
         f"{sample_text[:2000]}"
     )
 
-    result = call_llm(prompt, max_output_tokens=16)
+    result = call_llm(prompt, max_output_tokens=32)
     if not result:
         return "Unknown"
 
