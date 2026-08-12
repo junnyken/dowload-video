@@ -74,12 +74,12 @@ def _require_admin_or_owner(user_id: str, workspace_id: str) -> None:
         .select("role")
         .eq("user_id", user_id)
         .eq("workspace_id", workspace_id)
-        .maybe_single()
+        .limit(1)
         .execute()
     )
     if not result.data:
         raise HTTPException(status_code=403, detail="Not a member of this workspace.")
-    role = result.data.get("role", "")
+    role = result.data[0].get("role", "")
     if role not in ("admin", "owner"):
         raise HTTPException(
             status_code=403,
@@ -98,20 +98,19 @@ def _get_user_tenant(user_id: str) -> Dict[str, Any]:
         .eq("user_id", user_id)
         .order("created_at")
         .limit(1)
-        .maybe_single()
         .execute()
     )
     if not membership.data:
         raise HTTPException(status_code=404, detail="No workspace found for this user.")
 
-    workspace_id = membership.data["workspace_id"]
+    workspace_id = membership.data[0]["workspace_id"]
 
     # Find the tenant linked to that workspace
     tenant_res = (
         db.table("tenants")
         .select("*")
         .eq("workspace_id", workspace_id)
-        .maybe_single()
+        .limit(1)
         .execute()
     )
     if not tenant_res.data:
@@ -120,7 +119,7 @@ def _get_user_tenant(user_id: str) -> Dict[str, Any]:
             detail="No tenant configuration found for this workspace.",
         )
 
-    tenant = tenant_res.data
+    tenant = tenant_res.data[0]
     tenant["_workspace_id"] = workspace_id  # carry for role checks
     return tenant
 
@@ -133,12 +132,12 @@ def _get_key_for_tenant(key_id: str, tenant_id: str) -> Dict[str, Any]:
         .select("*")
         .eq("id", key_id)
         .eq("tenant_id", tenant_id)
-        .maybe_single()
+        .limit(1)
         .execute()
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="API key not found.")
-    return result.data
+    return result.data[0]
 
 
 def _strip_hash(row: Dict[str, Any]) -> Dict[str, Any]:
