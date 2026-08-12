@@ -84,9 +84,18 @@ def _get_gif_task():
 
 
 def _get_metadata_utils():
-    """Return (clean_filename, suggest_tags) callables. Import lazily."""
+    """Return (clean_filename, suggest_tags) callables, normalized to the
+    (title, metadata=None) -> str / (title, platform="", description="") -> list[str]
+    contract this module's endpoints expect. Import lazily."""
     try:
-        from app.services.metadata_cleaner import clean_filename, suggest_tags  # noqa: PLC0415
+        from app.services.smart_metadata import clean_filename as _clean, suggest_tags as _tags  # noqa: PLC0415
+
+        def clean_filename(title: str, metadata: dict | None = None) -> str:
+            return _clean(title, metadata=metadata or {})["filename"]
+
+        def suggest_tags(title: str, platform: str = "", description: str = "") -> list[str]:
+            return _tags(platform=platform, title=title, description=description)["tags"]
+
         return clean_filename, suggest_tags
     except ImportError:
         # Provide stub implementations so the endpoint degrades gracefully
