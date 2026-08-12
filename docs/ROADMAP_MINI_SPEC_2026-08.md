@@ -85,6 +85,28 @@ Audit thực tế tìm ra **thêm 2 cột thiếu nữa** ngoài `platform`: **`
 
 ---
 
+## R26 (tiếp) — Đào sâu khi thử live-test: pipeline analyze-media hỏng 4 lớp, đã fix toàn bộ
+
+Khi cố live-test `analyze-media` (mục còn thiếu ghi ở bảng đầu file), phát hiện tính năng này **chưa từng chạy được end-to-end ở bất kỳ môi trường nào** — không chỉ riêng do lần deploy VAYS. 4 lớp lỗi chồng nhau, xác nhận bằng log Celery thật (`PGRST116: 0 rows`) chứ không suy đoán:
+
+1. `smart_analysis.py::_get_db()` import `get_db_conn` — **hàm này không tồn tại** trong `database.py` → luôn `ImportError` → job không bao giờ được ghi vào `analysis_jobs`.
+2. Kể cả nếu hàm đó tồn tại, code insert dùng sai tên cột (`url`, `analyses` thay vì `media_url`, `analyses_requested` theo migration `013_phase18_ai_analysis.sql`).
+3. `analysis_tasks.py` import `suggest_all_trim_modes`, `detect_highlights`, `suggest_gif_segments` từ `app.core.media_analyzer` — **sai module**, 3 hàm này thực ra nằm ở `smart_trim.py`/`smart_clips.py`/`smart_gif.py` (cùng loại lỗi với bug `smart_metadata` đã fix trước đó, nhưng ở file khác).
+4. Khi ghi kết quả, `analysis_tasks.py` upsert 1 field `results` JSONB gộp chung — nhưng bảng `analysis_results` thật có các cột **typed riêng** (`trim_suggestions`, `clip_suggestions`, `gif_suggestions`, `metadata_suggestions`, `summary_suggestions`, `signals_used`, `warnings`, `fallback_used`, `processing_time_ms`) — insert kiểu cũ sẽ luôn lỗi `PGRST204`.
+
+**Đã fix cả 4 lớp** (commit `0e4baa7`) + set thêm `SUPABASE_SERVICE_KEY` trên VAYS (bug 1 fallback về anon key, giờ dùng đúng service-role như thiết kế). **Verify sống thật:**
+
+```
+POST /analyze-media {media_path:"/app/downloads/jNQXAC9IVRw_133+140.mp4", analyses:[trim,gif,metadata]}
+→ {"job_id":"136b632c...", "status":"queued"}
+GET /analyze/136b632c...
+→ {"status":"done", "trim_suggestions":[...], "metadata_suggestions":{...}, "processing_time_ms":26, "warnings":[]}
+```
+
+Pipeline chạy trọn: API → Celery `analysis` queue → 3 module phân tích thật → ghi kết quả đúng schema → trả về UI. **R26 giờ đã hoàn thành thật sự** (trước đó chỉ mới fix được `smart-metadata` standalone endpoint, phần lõi `analyze-media` vẫn hỏng — nay đã thông toàn bộ).
+
+---
+
 ## 1. Trạng thái xác thực hôm nay (live trên VAYS)
 
 Đã verify trực tiếp (không suy đoán) trên `dvid-api.cmc-1.vibenode.matbao.ai` + `dvid.cmc-1.vibenode.matbao.ai`:
