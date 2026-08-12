@@ -80,9 +80,9 @@ def init_db() -> Client:
 
 # Columns that MUST exist — code will silently fail if they're absent
 _REQUIRED_COLUMNS = {
-    "download_jobs": ["id", "url", "status", "quality", "file_size_mb",
+    "download_jobs": ["id", "original_url", "status", "quality", "file_size_mb",
                       "local_file_path", "local_mp3_path", "thumbnail_url",
-                      "downloaded_height", "is_audio_only"],
+                      "downloaded_height", "is_audio_only", "platform", "source"],
 }
 
 
