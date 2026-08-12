@@ -111,7 +111,7 @@ Primary: English | Secondary: Vietnamese
 | `*://*.dailymotion.com/*` | Detect video pages; inject content script |
 | `*://*.soundcloud.com/*` | Detect track/playlist pages; inject content script (audio download) |
 
-**Note on the backend domain:** the API server (default `https://dowload-video.mk.dev.matbao.ai`, user-configurable in Settings → Server URL) is intentionally **not** declared in `host_permissions`. The service worker's `fetch()` calls to it rely on the backend's own CORS headers rather than a static permission grant, keeping the permission footprint limited to exact platform domains with no wildcard or backend-domain access.
+**Note on the backend domain:** the API server (default `https://dvid-api.cmc-1.vibenode.matbao.ai`, user-configurable in Settings → Server URL) is covered by the `*://*.matbao.ai/*` entry in `host_permissions`, added alongside the R32 domain migration so the extension can talk to the backend without relying solely on the backend's own CORS headers.
 
 ---
 

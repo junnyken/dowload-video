@@ -10,7 +10,7 @@
   if (window.__vidgrab_injected) return;
   window.__vidgrab_injected = true;
 
-  let API_BASE = 'https://dowload-video.mk.dev.matbao.ai';
+  let API_BASE = 'https://dvid-api.cmc-1.vibenode.matbao.ai';
   // Load custom server URL từ storage (nếu có)
   chrome.storage.sync.get('vg_api_base', (r) => { if (r.vg_api_base?.trim()) API_BASE = r.vg_api_base.trim(); });
 

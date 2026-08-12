@@ -10,7 +10,7 @@
  * - MV3: alarms-based heartbeat to prevent SW suspension during downloads
  */
 
-const DEFAULT_API_BASE = 'https://dowload-video.mk.dev.matbao.ai';
+const DEFAULT_API_BASE = 'https://dvid-api.cmc-1.vibenode.matbao.ai';
 const STORAGE_KEY = (tabId) => `vg_videos_${tabId}`;
 const HISTORY_KEY = 'vg_download_history';
 const AUTH_TOKEN_KEY = 'vg_auth_token';   // Supabase access_token
