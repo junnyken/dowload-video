@@ -35,7 +35,7 @@ class CreateKeyRequest(BaseModel):
     scopes: List[str] = Field(default_factory=list)
     rate_limit_per_min: Optional[int] = Field(None, ge=1)
     rate_limit_per_day: Optional[int] = Field(None, ge=1)
-    ip_allowlist: Optional[List[str]] = Field(default_factory=list)
+    ip_allowlist: Optional[List[str]] = None  # None = unrestricted (see partner_auth.py)
     expires_at: Optional[datetime] = None
 
 
@@ -209,7 +209,7 @@ async def create_partner_api_key(
             "key_prefix": prefix,
             "label": body.label,
             "scopes": body.scopes,
-            "ip_allowlist": body.ip_allowlist or [],
+            "ip_allowlist": body.ip_allowlist,  # None = unrestricted, matches partner_auth.py check
             "is_active": True,
             "requests_today": 0,
             "requests_total": 0,
