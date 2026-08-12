@@ -69,6 +69,20 @@ Tức là: code (`backend/app/api/routes.py`, cả nhánh bulk lẫn scheduled l
 - `videos_queued` khớp đúng số URL hợp lệ gửi lên, không còn 0 âm thầm.
 - Không còn dòng `[Schema] ⚠` nào trong log khởi động.
 
+### ✅ ĐÃ XONG — verify sống 12/08/2026
+
+Audit thực tế tìm ra **thêm 2 cột thiếu nữa** ngoài `platform`: **`quality`** và **`source`** (dùng phương pháp probe trực tiếp Supabase REST bằng insert thử từng field — chính xác, không suy đoán). User đã chạy 2 lệnh migration qua Supabase SQL Editor:
+1. `ALTER TABLE download_jobs ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'other'` (+ index)
+2. `ALTER TABLE download_jobs ADD COLUMN IF NOT EXISTS quality TEXT, ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'web'`
+
+**Kết quả verify sống cuối cùng:**
+- `POST /bulk-download` với 1 URL YouTube → `videos_queued:1` (trước đó luôn là 0).
+- `GET /jobs/{batch_id}` → job thật, `status:"success"`, `job_stage:"completed"`, file tải thật (`Me at the zoo`, video YouTube đầu tiên, 0.71MB) — đi trọn qua Celery worker + JobLease (gián tiếp verify luôn 1 phần R25).
+- Đã sửa thêm `backend/app/core/database.py::_REQUIRED_COLUMNS` — trước đó check sai tên cột (`url` thay vì `original_url`) và thiếu cả `platform`/`source` trong danh sách kiểm tra, nên lần drift schema tiếp theo (nếu có) sẽ hiện `[Schema] ⚠` ngay lúc khởi động thay vì im lặng gây lỗi production. Verify: log khởi động giờ báo `[Schema] ✓ download_jobs (12 columns OK)`, sạch hoàn toàn.
+- Đã dọn code debug tạm thời, giữ lại phần cải thiện log lỗi (in đủ `type(e).__name__` + traceback thay vì chỉ `str(e)`) vì đây chính là thứ lẽ ra đã giúp phát hiện bug này ngay lập tức thay vì phải điều tra qua nhiều vòng.
+
+**Việc phụ chưa xử lý (không thuộc phạm vi R28):** `--workers` đang tạm ở mức 1 (từ lúc cô lập crash-loop) — cần tune lại (khuyến nghị thử 2) sau khi theo dõi RAM ổn định vài ngày, xem R29 (chưa viết, ghi nhận backlog).
+
 ---
 
 ## 1. Trạng thái xác thực hôm nay (live trên VAYS)
