@@ -30,7 +30,12 @@ def call_llm(prompt: str, max_output_tokens: int = 2048) -> str | None:
             genai.configure(api_key=gemini_key)
             model = genai.GenerativeModel(
                 model_name="gemini-1.5-flash",
-                generation_config={"max_output_tokens": max_output_tokens, "thinking_budget": 0},  # type: ignore[arg-type]
+                # NOTE: "thinking_budget" is not a valid key for this SDK — that
+                # only exists in the newer unified google-genai SDK's
+                # ThinkingConfig (Gemini 2.x+). This is the older
+                # google-generativeai package, and gemini-1.5-flash has no
+                # thinking mode to budget in the first place.
+                generation_config={"max_output_tokens": max_output_tokens},
             )
             response = model.generate_content(prompt)
             text = response.text.strip() if response.text else ""
