@@ -1,0 +1,387 @@
+# =============================================================================
+# VidGrab Enterprise — Self-Hosted Docker Compose
+# =============================================================================
+# Usage:
+#   docker compose -f docker-compose.enterprise.yml --profile enterprise up -d
+#
+# Prerequisites:
+#   1. Copy .env.enterprise.example → .env.enterprise and fill in all values.
+#   2. Place TLS certificates under ./certs/ (fullchain.pem + privkey.pem).
+#   3. Create ./nginx/enterprise.conf (see docs/nginx-enterprise.conf.example).
+#   4. Run `bash scripts/setup-enterprise.sh` to generate secrets + admin hash.
+# =============================================================================
+
+x-backend-env: &backend-env
+  # Core connectivity
+  POSTGRES_URL: ${POSTGRES_URL}
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/0
+
+  # Enterprise identity & licensing
+  ENTERPRISE_MODE: "true"
+  ENTERPRISE_LICENSE_KEY: ${ENTERPRISE_LICENSE_KEY}
+  ENTERPRISE_LICENSE_SECRET: ${ENTERPRISE_LICENSE_SECRET}
+
+  # Auth / security
+  JWT_SECRET: ${JWT_SECRET}
+  WEBHOOK_SECRET_KEY: ${WEBHOOK_SECRET_KEY}
+  ADMIN_EMAIL: ${ADMIN_EMAIL}
+  ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH}
+
+  # Optional Supabase cloud (leave blank if using local Postgres)
+  SUPABASE_URL: ${SUPABASE_URL:-}
+  SUPABASE_KEY: ${SUPABASE_KEY:-}
+  SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-}
+
+  # Application
+  ENV: production
+  APP_VERSION: ${APP_VERSION:-2.0.0-enterprise}
+  FRONTEND_URL: ${FRONTEND_URL}
+  CORS_ORIGINS: ${CORS_ORIGINS}
+
+  # Download settings
+  DOWNLOAD_DIR: /app/downloads
+  MAX_CONCURRENT_DOWNLOADS: ${MAX_CONCURRENT_DOWNLOADS:-8}
+  DAILY_QUOTA_PER_IP: ${DAILY_QUOTA_PER_IP:-0}
+  DOWNLOADS_MAX_GB: ${DOWNLOADS_MAX_GB:-50}
+
+  # Platform cookies (base64-encoded Netscape format)
+  YOUTUBE_COOKIES_B64: ${YOUTUBE_COOKIES_B64:-}
+  INSTAGRAM_COOKIES_B64: ${INSTAGRAM_COOKIES_B64:-}
+  TWITTER_COOKIES_B64: ${TWITTER_COOKIES_B64:-}
+  TIKTOK_COOKIES_B64: ${TIKTOK_COOKIES_B64:-}
+  FACEBOOK_COOKIES_B64: ${FACEBOOK_COOKIES_B64:-}
+
+  # Proxy (DataImpulse residential — required for YouTube)
+  PROXY_URL: ${PROXY_URL:-}
+  DATAIMPULSE_USER: ${DATAIMPULSE_USER:-}
+  DATAIMPULSE_PASS: ${DATAIMPULSE_PASS:-}
+  YOUTUBE_PROXY_DOWNLOAD: ${YOUTUBE_PROXY_DOWNLOAD:-1}
+
+  # Spotify integration (optional)
+  SPOTIPY_CLIENT_ID: ${SPOTIPY_CLIENT_ID:-}
+  SPOTIPY_CLIENT_SECRET: ${SPOTIPY_CLIENT_SECRET:-}
+  SPOTIFY_MARKET: ${SPOTIFY_MARKET:-VN}
+
+  # PO Token provider (internal service)
+  BGUTIL_POT_URL: http://bgutil-pot:4416,http://bgutil-pot-2:4416
+  COBALT_API_URL: http://cobalt-api:9000
+
+  # Observability (optional)
+  SENTRY_DSN: ${SENTRY_DSN:-}
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+  TELEGRAM_BOT_SECRET: ${TELEGRAM_BOT_SECRET:-}
+
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — replaces Supabase cloud for fully self-hosted deployments.
+  # Data is persisted in the named volume `pgdata`. Back this up externally.
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    profiles: ["enterprise"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vidgrab}
+      POSTGRES_USER: ${POSTGRES_USER:-vidgrab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Optional: mount init SQL scripts to auto-create schema on first boot
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vidgrab} -d ${POSTGRES_DB:-vidgrab}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Redis — Celery broker, result backend, and application cache.
+  # volatile-lru only evicts TTL-carrying cache keys, never broker queue lists,
+  # so queued downloads survive memory pressure.
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    profiles: ["enterprise"]
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory ${REDIS_MAXMEMORY:-1gb}
+      --maxmemory-policy volatile-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # PO Token providers — generates YouTube Proof-of-Origin tokens.
+  # Two instances for redundancy; tokens are cached in Redis (~3h TTL).
+  # ---------------------------------------------------------------------------
+  bgutil-pot:
+    image: ghcr.io/jim60105/bgutil-pot:latest
+    pull_policy: always
+    restart: always
+    profiles: ["enterprise"]
+    networks:
+      - internal
+    healthcheck:
+      disable: true
+
+  bgutil-pot-2:
+    image: ghcr.io/jim60105/bgutil-pot:latest
+    pull_policy: always
+    restart: always
+    profiles: ["enterprise"]
+    networks:
+      - internal
+    healthcheck:
+      disable: true
+
+  # ---------------------------------------------------------------------------
+  # Cobalt API — alternate extraction layer for supported platforms.
+  # ---------------------------------------------------------------------------
+  cobalt-api:
+    image: ghcr.io/imputnet/cobalt:latest
+    restart: unless-stopped
+    profiles: ["enterprise"]
+    environment:
+      - API_URL=http://cobalt-api:9000
+      - API_PORT=9000
+      - CORS_WILDCARD=1
+      - PROCESSING_PRIORITY=10
+    networks:
+      - internal
+
+  # ---------------------------------------------------------------------------
+  # Backend — FastAPI application server.
+  # Depends on Redis and Postgres; nginx handles TLS termination upstream.
+  # Not exposed directly — all traffic flows through nginx on the `internal`
+  # network.
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    profiles: ["enterprise"]
+    env_file:
+      - .env.enterprise
+    environment:
+      <<: *backend-env
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      bgutil-pot:
+        condition: service_started
+      bgutil-pot-2:
+        condition: service_started
+      cobalt-api:
+        condition: service_started
+    volumes:
+      # Shared download storage (also mounted by workers)
+      - downloads:/app/downloads
+      # Chrome extension asset served by the API
+      - ./chrome_extension_v4.9.5.zip:/app/extension/VidGrab-extension.zip:ro
+    networks:
+      - internal
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ---------------------------------------------------------------------------
+  # Worker — Celery heavy-download queue (4 concurrent slots by default).
+  # Processes the `downloads` queue only; CPU/IO-bound, so keep concurrency
+  # matched to available cores.  Shares the `downloads` volume with backend.
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    profiles: ["enterprise"]
+    command: >
+      celery -A app.core.celery_app.celery_app worker
+      -Q downloads,default
+      --concurrency=${CELERY_DOWNLOADS_CONCURRENCY:-4}
+      --max-tasks-per-child=50
+      --loglevel=info
+    env_file:
+      - .env.enterprise
+    environment:
+      <<: *backend-env
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    volumes:
+      - downloads:/app/downloads
+    networks:
+      - internal
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+
+  # ---------------------------------------------------------------------------
+  # Worker (light) — handles scrape dispatch, ZIP packaging, and maintenance
+  # tasks so they never wait behind heavy download jobs.
+  # ---------------------------------------------------------------------------
+  worker-light:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    profiles: ["enterprise"]
+    command: >
+      celery -A app.core.celery_app.celery_app worker
+      -Q celery
+      --concurrency=${CELERY_LIGHT_CONCURRENCY:-4}
+      --max-tasks-per-child=100
+      --loglevel=info
+    env_file:
+      - .env.enterprise
+    environment:
+      <<: *backend-env
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    volumes:
+      - downloads:/app/downloads
+    networks:
+      - internal
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+
+  # ---------------------------------------------------------------------------
+  # Celery Beat — periodic task scheduler (cron-equivalent).
+  # Only one instance must run at a time to avoid duplicate jobs.
+  # ---------------------------------------------------------------------------
+  worker-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    profiles: ["enterprise"]
+    command: >
+      celery -A app.core.celery_app.celery_app beat
+      --loglevel=info
+      --scheduler celery.beat:PersistentScheduler
+    env_file:
+      - .env.enterprise
+    environment:
+      <<: *backend-env
+    depends_on:
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    volumes:
+      - downloads:/app/downloads
+    networks:
+      - internal
+
+  # ---------------------------------------------------------------------------
+  # Frontend — pre-built static assets served by an nginx container.
+  # Not exposed on the host; nginx reverse proxy routes /  → this service.
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    profiles: ["enterprise"]
+    expose:
+      - "80"
+    depends_on:
+      - backend
+    networks:
+      - internal
+
+  # ---------------------------------------------------------------------------
+  # Nginx — TLS termination + reverse proxy for both backend and frontend.
+  # Ports 80 and 443 are the ONLY services exposed to the host network.
+  # Mount your own enterprise.conf and TLS certificates before starting.
+  #
+  # Routing (configure in nginx/enterprise.conf):
+  #   /api/*      → http://backend:8000
+  #   /ws/*       → http://backend:8000 (WebSocket upgrade)
+  #   /*          → http://frontend:80
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    restart: always
+    profiles: ["enterprise"]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Enterprise nginx config (API proxy + static file routing)
+      - ./nginx/enterprise.conf:/etc/nginx/conf.d/default.conf:ro
+      # TLS certificates: fullchain.pem + privkey.pem
+      - ./certs:/etc/ssl/certs:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    networks:
+      - internal   # reaches backend/frontend
+      - external   # reachable from the outside world
+
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  # All backend services communicate exclusively on this network.
+  # No host port bindings except through nginx.
+  internal:
+    driver: bridge
+    internal: false   # allow outbound internet (yt-dlp, APIs) from workers
+
+  # Nginx-only outward-facing network
+  external:
+    driver: bridge
+
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  # PostgreSQL data — back this up regularly (pg_dump cron recommended)
+  pgdata:
+    driver: local
+
+  # Shared download scratch space between backend and workers
+  downloads:
+    driver: local
+
+  # Redis AOF persistence
+  redis_data:
+    driver: local

@@ -1,0 +1,370 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # This Redis is BOTH the Celery broker/result-backend AND the app cache.
+    # `allkeys-lru` (the old policy) can evict the Celery broker queue lists
+    # under memory pressure → silent task loss. `volatile-lru` only evicts keys
+    # that carry a TTL (app cache + Celery results), and NEVER the broker queue
+    # lists (which have no TTL) — so queued downloads survive memory pressure
+    # while cache is still bounded. Every cache key the app writes MUST set a TTL.
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy volatile-lru
+    volumes:
+      - redis-data:/data
+
+  # PO Token provider — generates YouTube Proof-of-Origin tokens
+  # Required since May 2025: YouTube blocks ALL yt-dlp player clients
+  # without a valid PO token (LOGIN_REQUIRED / bot detection).
+  # Two instances for redundancy — tokens are cached in Redis so Chrome
+  # is almost never called during real requests (only pre-warm every 3h).
+  bgutil-pot:
+    image: ghcr.io/jim60105/bgutil-pot:latest
+    pull_policy: always
+    restart: always
+    healthcheck:
+      disable: true
+
+  bgutil-pot-2:
+    image: ghcr.io/jim60105/bgutil-pot:latest
+    pull_policy: always
+    restart: always
+    healthcheck:
+      disable: true
+
+  cobalt-api:
+    image: ghcr.io/imputnet/cobalt:latest
+    restart: unless-stopped
+    environment:
+      - API_URL=http://cobalt-api:9000
+      - API_PORT=9000
+      - CORS_WILDCARD=1
+      - PROCESSING_PRIORITY=10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - COBALT_API_URL=http://cobalt-api:9000
+      - BGUTIL_POT_URL=http://bgutil-pot:4416,http://bgutil-pot-2:4416
+      - VIDEO_INFO_CACHE_TTL=${VIDEO_INFO_CACHE_TTL:-600}
+      - DOWNLOADS_MAX_GB=${DOWNLOADS_MAX_GB:-10}
+      - DAILY_QUOTA_PER_IP=${DAILY_QUOTA_PER_IP:-50}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - ENV=${ENV:-production}
+      - IPROYAL_PROXY=${IPROYAL_PROXY:-}
+      - SCRAPERAPI_API_KEY=${SCRAPERAPI_API_KEY:-}
+      - YOUTUBE_PROXY_DOWNLOAD=${YOUTUBE_PROXY_DOWNLOAD:-0}
+      - PROXY_POOL_YT_STATIC=${PROXY_POOL_YT_STATIC:-}
+      - PROXY_POOL_YT=${PROXY_POOL_YT:-}
+      - PROXY_POOL_REDDIT=${PROXY_POOL_REDDIT:-}
+      - PROXY_POOL_DEFAULT=${PROXY_POOL_DEFAULT:-}
+      - YOUTUBE_ENABLED=${YOUTUBE_ENABLED:-false}
+      - YOUTUBE_MAX_PROXY_HEIGHT=${YOUTUBE_MAX_PROXY_HEIGHT:-720}
+      - YOUTUBE_PROXY_DAILY_LIMIT_GB=${YOUTUBE_PROXY_DAILY_LIMIT_GB:-2}
+      - YT_MAX_HEIGHT_USER=${YT_MAX_HEIGHT_USER:-1080}
+      - YT_ANON_AUDIO_ONLY=${YT_ANON_AUDIO_ONLY:-0}
+      - YT_QUOTA_USER=${YT_QUOTA_USER:-5}
+      - YT_GLOBAL_DAILY_CAP=${YT_GLOBAL_DAILY_CAP:-300}
+      - SPOTIPY_CLIENT_ID=${SPOTIPY_CLIENT_ID:-}
+      - SPOTIPY_CLIENT_SECRET=${SPOTIPY_CLIENT_SECRET:-}
+      - SPOTIFY_MARKET=${SPOTIFY_MARKET:-VN}
+      - YOUTUBE_COOKIES_B64=${YOUTUBE_COOKIES_B64:-}
+      - TIKTOK_COOKIES_B64=${TIKTOK_COOKIES_B64:-}
+      - FACEBOOK_COOKIES_B64=${FACEBOOK_COOKIES_B64:-}
+      - TELEGRAM_BOT_SECRET=${TELEGRAM_BOT_SECRET:-}
+      - VIDGRAB_WEB_URL=${VIDGRAB_WEB_URL:-https://vidgrab.io}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - ADMIN_ALLOWED_IPS=${ADMIN_ALLOWED_IPS:-}
+    depends_on:
+      - redis
+      - cobalt-api
+      - bgutil-pot
+      - bgutil-pot-2
+    volumes:
+      - downloads:/app/downloads
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  celery:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    # Heavy worker: consumes the dedicated "downloads" queue only.
+    command: celery -A app.core.celery_app.celery_app worker --loglevel=info -Q downloads --concurrency=${CELERY_DOWNLOADS_CONCURRENCY:-6} --max-tasks-per-child=50
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - COBALT_API_URL=http://cobalt-api:9000
+      - BGUTIL_POT_URL=http://bgutil-pot:4416,http://bgutil-pot-2:4416
+      - DOWNLOADS_MAX_GB=${DOWNLOADS_MAX_GB:-10}
+      - IPROYAL_PROXY=${IPROYAL_PROXY:-}
+      - SCRAPERAPI_API_KEY=${SCRAPERAPI_API_KEY:-}
+      - YOUTUBE_PROXY_DOWNLOAD=${YOUTUBE_PROXY_DOWNLOAD:-0}
+      - PROXY_POOL_YT_STATIC=${PROXY_POOL_YT_STATIC:-}
+      - PROXY_POOL_YT=${PROXY_POOL_YT:-}
+      - PROXY_POOL_REDDIT=${PROXY_POOL_REDDIT:-}
+      - PROXY_POOL_DEFAULT=${PROXY_POOL_DEFAULT:-}
+      - YOUTUBE_ENABLED=${YOUTUBE_ENABLED:-false}
+      - YOUTUBE_MAX_PROXY_HEIGHT=${YOUTUBE_MAX_PROXY_HEIGHT:-720}
+      - YOUTUBE_PROXY_DAILY_LIMIT_GB=${YOUTUBE_PROXY_DAILY_LIMIT_GB:-2}
+      - YT_MAX_HEIGHT_USER=${YT_MAX_HEIGHT_USER:-1080}
+      - YT_ANON_AUDIO_ONLY=${YT_ANON_AUDIO_ONLY:-0}
+      - YT_QUOTA_USER=${YT_QUOTA_USER:-5}
+      - YT_GLOBAL_DAILY_CAP=${YT_GLOBAL_DAILY_CAP:-300}
+      - SPOTIPY_CLIENT_ID=${SPOTIPY_CLIENT_ID:-}
+      - SPOTIPY_CLIENT_SECRET=${SPOTIPY_CLIENT_SECRET:-}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
+      - YOUTUBE_COOKIES_B64=${YOUTUBE_COOKIES_B64:-}
+      - TIKTOK_COOKIES_B64=${TIKTOK_COOKIES_B64:-}
+    depends_on:
+      - redis
+      - backend
+      - bgutil-pot
+      - bgutil-pot-2
+    volumes:
+      - downloads:/app/downloads
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery_app.celery_app inspect ping -d celery@$$HOSTNAME --timeout 10"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Light worker: scrape dispatch, ZIP, periodic/maintenance tasks. Keeps these
+  # off the heavy download queue so they never wait behind big downloads.
+  celery-light:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    command: celery -A app.core.celery_app.celery_app worker --loglevel=info -Q celery --concurrency=${CELERY_LIGHT_CONCURRENCY:-4} --max-tasks-per-child=100
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - COBALT_API_URL=http://cobalt-api:9000
+      - BGUTIL_POT_URL=http://bgutil-pot:4416,http://bgutil-pot-2:4416
+      - DOWNLOADS_MAX_GB=${DOWNLOADS_MAX_GB:-10}
+      - IPROYAL_PROXY=${IPROYAL_PROXY:-}
+      - SCRAPERAPI_API_KEY=${SCRAPERAPI_API_KEY:-}
+      - YOUTUBE_PROXY_DOWNLOAD=${YOUTUBE_PROXY_DOWNLOAD:-0}
+      - PROXY_POOL_YT_STATIC=${PROXY_POOL_YT_STATIC:-}
+      - PROXY_POOL_YT=${PROXY_POOL_YT:-}
+      - PROXY_POOL_REDDIT=${PROXY_POOL_REDDIT:-}
+      - PROXY_POOL_DEFAULT=${PROXY_POOL_DEFAULT:-}
+      - YOUTUBE_ENABLED=${YOUTUBE_ENABLED:-false}
+      - YOUTUBE_MAX_PROXY_HEIGHT=${YOUTUBE_MAX_PROXY_HEIGHT:-720}
+      - YOUTUBE_PROXY_DAILY_LIMIT_GB=${YOUTUBE_PROXY_DAILY_LIMIT_GB:-2}
+      - YT_MAX_HEIGHT_USER=${YT_MAX_HEIGHT_USER:-1080}
+      - YT_ANON_AUDIO_ONLY=${YT_ANON_AUDIO_ONLY:-0}
+      - YT_QUOTA_USER=${YT_QUOTA_USER:-5}
+      - YT_GLOBAL_DAILY_CAP=${YT_GLOBAL_DAILY_CAP:-300}
+      - SPOTIPY_CLIENT_ID=${SPOTIPY_CLIENT_ID:-}
+      - SPOTIPY_CLIENT_SECRET=${SPOTIPY_CLIENT_SECRET:-}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
+      - YOUTUBE_COOKIES_B64=${YOUTUBE_COOKIES_B64:-}
+      - TIKTOK_COOKIES_B64=${TIKTOK_COOKIES_B64:-}
+    depends_on:
+      - redis
+      - backend
+    volumes:
+      - downloads:/app/downloads
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery_app.celery_app inspect ping -d celery@$$HOSTNAME --timeout 10"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    command: celery -A app.core.celery_app.celery_app beat --loglevel=info --scheduler celery.beat:PersistentScheduler --pidfile=/tmp/celerybeat.pid
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DOWNLOADS_MAX_GB=10
+    depends_on:
+      - redis
+      - celery
+    volumes:
+      - downloads:/app/downloads
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os; exit(0 if os.path.exists('/tmp/celerybeat.pid') else 1)"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  telegram-bot:
+    build:
+      context: ./telegram-bot
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    environment:
+      - TELEGRAM_DIST_BOT_TOKEN=${TELEGRAM_DIST_BOT_TOKEN}
+      - VIDGRAB_BACKEND_URL=http://backend:8000
+      - REDIS_URL=redis://redis:6379/1
+      - VIDGRAB_WEB_URL=${VIDGRAB_WEB_URL:-https://vidgrab.io}
+      - TELEGRAM_BOT_SECRET=${TELEGRAM_BOT_SECRET:-}
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Media worker: FFmpeg-heavy tasks (trim, GIF, inpaint, watermark, merge,
+  # render). Isolated so CPU-intensive encoding never starves download workers.
+  celery-media:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    command: celery -A app.core.celery_app.celery_app worker --loglevel=info -Q media --concurrency=${CELERY_MEDIA_CONCURRENCY:-2} --max-tasks-per-child=20
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DOWNLOADS_MAX_GB=${DOWNLOADS_MAX_GB:-10}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
+      - YOUTUBE_COOKIES_B64=${YOUTUBE_COOKIES_B64:-}
+      - TIKTOK_COOKIES_B64=${TIKTOK_COOKIES_B64:-}
+      - FACEBOOK_COOKIES_B64=${FACEBOOK_COOKIES_B64:-}
+    depends_on:
+      - redis
+      - backend
+    volumes:
+      - downloads:/app/downloads
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery_app.celery_app inspect ping -d celery@$$HOSTNAME --timeout 10"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+
+  # Analysis worker: AI heuristic jobs (silence detect, scene change, audio
+  # peaks, motion analysis via FFmpeg). Low concurrency — analysis jobs are
+  # CPU-light but long-running subprocess calls. Never shares queue with
+  # downloads or media transforms to prevent interference.
+  celery-analysis:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    command: celery -A app.core.celery_app.celery_app worker --loglevel=info -Q analysis --concurrency=${CELERY_ANALYSIS_CONCURRENCY:-2} --max-tasks-per-child=30
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DOWNLOADS_MAX_GB=${DOWNLOADS_MAX_GB:-10}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
+      - AI_MAX_ANALYSIS_SECONDS=${AI_MAX_ANALYSIS_SECONDS:-3600}
+      - AI_ANALYSIS_TIMEOUT_S=${AI_ANALYSIS_TIMEOUT_S:-120}
+      - AI_SCENE_THRESHOLD=${AI_SCENE_THRESHOLD:-0.35}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    depends_on:
+      - redis
+      - backend
+    volumes:
+      - downloads:/app/downloads
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery_app.celery_app inspect ping -d celery@$$HOSTNAME --timeout 10"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "30m"
+        max-file: "3"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+    restart: always
+    expose:
+      - "80"
+    depends_on:
+      - backend
+    networks:
+      - default
+      - mb-edge
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=mb-edge
+      - "traefik.http.routers.dowload-video-trieunt.rule=Host(`dowload-video-trieunt.b.matbao.ai`)"
+      - traefik.http.routers.dowload-video-trieunt.entrypoints=websecure
+      - traefik.http.routers.dowload-video-trieunt.tls.certresolver=le
+      - traefik.http.services.dowload-video-trieunt.loadbalancer.server.port=80
+      - traefik.http.routers.dowload-video-trieunt.middlewares=mb-local@file
+
+networks:
+  mb-edge:
+    external: true
+
+volumes:
+  redis-data:
+  downloads:

@@ -1,0 +1,23 @@
+# Redis
+dump.rdb
+redis.zip
+redis/
+
+# Python venv
+.venv/
+
+# Downloaded media files
+backend/downloads/
+
+# Celery beat schedule (runtime generated)
+celerybeat-schedule.*
+
+# Sensitive cookies
+douyin_cookies.txt
+
+# OS
+.DS_Store
+.env
+scripts/.env.local
+scripts/cron.log
+database/_full_rebuild_TEMP_DO_NOT_COMMIT.sql

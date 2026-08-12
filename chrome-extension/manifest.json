@@ -1,0 +1,110 @@
+{
+  "update_url": "https://clients2.google.com/service/update2/crx",
+  "manifest_version": 3,
+  "name": "VidGrab - Video Downloader",
+  "version": "5.1.0",
+  "description": "Download videos from 20+ platforms: YouTube, TikTok, Instagram, Bilibili, Xiaohongshu, VK, Twitch, Facebook, Reddit, Twitter, Snapchat, and more.",
+  "minimum_chrome_version": "102",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "downloads",
+    "storage",
+    "scripting",
+    "notifications",
+    "contextMenus",
+    "alarms",
+    "cookies"
+  ],
+  "host_permissions": [
+    "*://*.tiktok.com/*",
+    "*://*.youtube.com/*",
+    "*://*.youtu.be/*",
+    "*://*.facebook.com/*",
+    "*://*.douyin.com/*",
+    "*://*.instagram.com/*",
+    "*://open.spotify.com/*",
+    "*://*.twitter.com/*",
+    "*://*.x.com/*",
+    "*://*.reddit.com/*",
+    "*://*.pinterest.com/*",
+    "*://*.threads.com/*",
+    "*://*.threads.net/*",
+    "*://*.bilibili.com/*",
+    "*://b23.tv/*",
+    "*://*.xiaohongshu.com/*",
+    "*://*.xhslink.com/*",
+    "*://*.lemon8-app.com/*",
+    "*://*.lemon8.app/*",
+    "*://*.snapchat.com/*",
+    "*://story.snapchat.com/*",
+    "*://*.vk.com/*",
+    "*://*.twitch.tv/*",
+    "*://*.rumble.com/*",
+    "*://*.odysee.com/*",
+    "*://*.dailymotion.com/*",
+    "*://*.soundcloud.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "VidGrab Downloader"
+  },
+  "icons": {
+    "16": "assets/icon16.png",
+    "32": "assets/icon32.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.douyin.com/*",
+        "*://*.facebook.com/*",
+        "*://*.instagram.com/*",
+        "*://*.tiktok.com/*",
+        "*://*.twitter.com/*",
+        "*://*.x.com/*",
+        "*://*.threads.com/*",
+        "*://*.threads.net/*",
+        "*://*.bilibili.com/*",
+        "*://*.xiaohongshu.com/*",
+        "*://*.lemon8-app.com/*"
+      ],
+      "js": ["interceptor.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "*://*.tiktok.com/*",
+        "*://*.youtube.com/*",
+        "*://*.facebook.com/*",
+        "*://*.douyin.com/*",
+        "*://*.instagram.com/*",
+        "*://open.spotify.com/*",
+        "*://*.twitter.com/*",
+        "*://*.x.com/*",
+        "*://*.reddit.com/*",
+        "*://*.pinterest.com/*",
+        "*://*.threads.com/*",
+        "*://*.threads.net/*",
+        "*://*.bilibili.com/*",
+        "*://*.xiaohongshu.com/*",
+        "*://*.xhslink.com/*",
+        "*://*.lemon8-app.com/*",
+        "*://*.snapchat.com/*",
+        "*://*.vk.com/*",
+        "*://*.twitch.tv/*",
+        "*://*.rumble.com/*",
+        "*://*.odysee.com/*",
+        "*://*.dailymotion.com/*",
+        "*://*.soundcloud.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+# Secrets — never bake into image layers
+.env
+.env.*
+!.env.example
+
+# Cookies / session data
+douyin_cookies.txt
+*cookies*.txt
+
+# Local databases / runtime state
+*.db
+*.rdb
+celerybeat-schedule.*
+
+# Downloaded media (runtime volume, not build input)
+downloads/
+
+# Tests / dev-only scripts
+tests/
+test_*.py
+debug_*.py
+
+# VCS / venv / caches
+.git/
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Misc archives (not needed at build time)
+*.zip
+!extension/VidGrab-extension.zip

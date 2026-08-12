@@ -1,0 +1,7 @@
+# Preview override — exposes frontend on host port 8899 for in-workspace testing.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.preview.yml up -d --build \
+#          redis bgutil-pot bgutil-pot-2 cobalt-api backend frontend
+services:
+  frontend:
+    ports:
+      - "8899:80"

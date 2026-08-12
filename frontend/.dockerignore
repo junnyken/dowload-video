@@ -1,0 +1,11 @@
+# Secrets — never bake into image layers
+.env
+.env.*
+!.env.example
+
+# Build artifacts / deps (rebuilt inside the image)
+node_modules/
+dist/
+
+# VCS / caches
+.git/

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#012622" />
+  <title>VidGrab — Offline</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background: #012622;
+      color: #f1f5f9;
+      font-family: 'Be Vietnam Pro', 'Inter', system-ui, -apple-system, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      text-align: center;
+      max-width: 360px;
+      width: 100%;
+    }
+    .icon-wrap {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 24px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, #FBBF24, #FB923C);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .icon-wrap svg { width: 44px; height: 44px; }
+    h1 {
+      font-size: 22px;
+      font-weight: 800;
+      color: #f8fafc;
+      margin-bottom: 10px;
+    }
+    p {
+      font-size: 14px;
+      color: #94a3b8;
+      line-height: 1.6;
+      margin-bottom: 8px;
+    }
+    .note {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 16px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 28px;
+      padding: 12px 28px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #FBBF24, #FB923C);
+      color: #012622;
+      font-weight: 700;
+      font-size: 14px;
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.88; }
+    .divider {
+      width: 40px;
+      height: 2px;
+      background: #1e4a40;
+      margin: 20px auto;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon-wrap">
+      <!-- Download arrow icon -->
+      <svg viewBox="0 0 24 24" fill="none" stroke="#012622" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5v10m0 0l-4-4m4 4l4-4M5 17h14"/>
+      </svg>
+    </div>
+
+    <h1>Đang offline</h1>
+    <p>Bạn chưa kết nối internet.<br/>VidGrab cần mạng để tải video.</p>
+
+    <div class="divider"></div>
+
+    <p>Kiểm tra Wi-Fi hoặc dữ liệu di động, sau đó thử lại.</p>
+    <p class="note">Giao diện sẽ tự khôi phục khi có kết nối.</p>
+
+    <button class="btn" onclick="window.location.reload()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23 4v6h-6M1 20v-6h6"/>
+        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+      </svg>
+      Thử lại
+    </button>
+
+    <div id="cached-history" style="display:none; margin-top:20px; text-align:left; max-width:400px; margin-left:auto; margin-right:auto;">
+      <p style="color:#94a3b8; font-size:13px; margin-bottom:8px;">📋 Lịch sử tải gần đây (đã lưu):</p>
+      <ul id="history-list" style="list-style:none; padding:0; margin:0;"></ul>
+    </div>
+    <script>
+    (async () => {
+      try {
+        if (!('caches' in window)) return;
+        const cache = await caches.open('vidgrab-history-v1');
+        const keys = await cache.keys();
+        const histKey = keys.find(k => k.url.includes('/api/v1/history') || k.url.includes('/api/v1/user/history'));
+        if (!histKey) return;
+        const resp = await cache.match(histKey);
+        if (!resp) return;
+        const data = await resp.json();
+        const items = data.items || data.downloads || data.results || [];
+        if (!items.length) return;
+        const list = document.getElementById('history-list');
+        const section = document.getElementById('cached-history');
+        items.slice(0, 5).forEach(item => {
+          const li = document.createElement('li');
+          li.style = 'padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.1); font-size:12px; color:#94a3b8;';
+          li.textContent = '▸ ' + (item.title || item.url || 'Video');
+          list.appendChild(li);
+        });
+        section.style.display = 'block';
+      } catch(e) {}
+    })();
+    </script>
+  </div>
+</body>
+</html>

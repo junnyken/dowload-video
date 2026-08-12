@@ -1,0 +1,4 @@
+# Test-only deps (CI). Install: pip install -r requirements-dev.txt
+-r requirements.txt
+pytest>=8
+fakeredis>=2.20

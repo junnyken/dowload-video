@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>VidGrab</title>
+  <link rel="stylesheet" href="tailwind.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+    * { box-sizing: border-box; }
+
+    body {
+      width: 380px;
+      min-height: 100px;
+      font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+      background: #0c0e14;
+      color: #e2e8f0;
+      margin: 0;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 4px; }
+
+    /* ── Animations ── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+    @keyframes ping { 75%,100% { transform:scale(2); opacity:0; } }
+    @keyframes checkmark { 0%{transform:scale(0)} 60%{transform:scale(1.2)} 100%{transform:scale(1)} }
+
+    .anim-fade { animation: fadeUp 0.25s ease; }
+
+    /* ── Header gradient ── */
+    .header-bar {
+      background: linear-gradient(135deg, #1a1d2e 0%, #16192a 100%);
+      border-bottom: 1px solid rgba(99,102,241,0.15);
+      padding: 12px 14px 10px;
+    }
+
+    /* ── Logo badge ── */
+    .logo-badge {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-radius: 10px;
+      padding: 5px 9px;
+      font-weight: 800;
+      font-size: 12px;
+      letter-spacing: -0.3px;
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(99,102,241,0.4);
+    }
+
+    /* ── Tabs ── */
+    .tab-bar {
+      background: #13151f;
+      padding: 4px;
+      display: flex;
+      gap: 2px;
+      border-bottom: 1px solid #1e2130;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 7px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      background: none;
+      border: none;
+      cursor: pointer;
+      transition: all 0.18s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+    .tab-btn:hover { color: #94a3b8; background: #1e2130; }
+    .tab-btn.active {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(99,102,241,0.35);
+    }
+
+    /* ── Content area ── */
+    .content { padding: 14px; }
+
+    /* ── Card ── */
+    .card {
+      background: #13151f;
+      border: 1px solid #1e2333;
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }
+    .card-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 8px;
+    }
+
+    /* ── Quality radio pills ── */
+    .quality-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+    .q-pill {
+      flex: 1;
+      min-width: 80px;
+      padding: 7px 6px;
+      border-radius: 10px;
+      border: 1.5px solid #1e2333;
+      background: #0c0e14;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s;
+      position: relative;
+    }
+    .q-pill:hover { border-color: #4f46e5; color: #a5b4fc; }
+    .q-pill.active {
+      border-color: #6366f1;
+      background: rgba(99,102,241,0.1);
+      color: #a5b4fc;
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+    }
+    .q-pill .q-sub { font-size: 9px; color: #475569; font-weight: 400; display: block; margin-top: 1px; }
+    .q-pill.active .q-sub { color: #818cf8; }
+
+    /* ── Toggles ── */
+    .toggle-row { display: flex; gap: 12px; align-items: center; }
+    .toggle-item {
+      display: flex; align-items: center; gap: 6px;
+      cursor: pointer; user-select: none;
+    }
+    .toggle-item input[type=checkbox] {
+      width: 14px; height: 14px;
+      accent-color: #6366f1;
+      cursor: pointer;
+    }
+    .toggle-item span { font-size: 12px; color: #94a3b8; font-weight: 500; }
+
+    /* ── Main CTA button ── */
+    .btn-primary {
+      width: 100%;
+      padding: 11px 16px;
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: all 0.2s;
+      box-shadow: 0 4px 20px rgba(99,102,241,0.35);
+      letter-spacing: 0.1px;
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(99,102,241,0.45); }
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-primary:disabled { opacity: 0.6; transform: none; cursor: not-allowed; }
+
+    .btn-secondary {
+      padding: 8px 14px;
+      border-radius: 10px;
+      border: 1.5px solid #1e2333;
+      background: #13151f;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .btn-secondary:hover { border-color: #6366f1; color: #a5b4fc; background: rgba(99,102,241,0.05); }
+
+    .btn-green {
+      width: 100%;
+      padding: 10px 16px;
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(135deg, #059669, #10b981);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      transition: all 0.2s;
+      box-shadow: 0 4px 16px rgba(16,185,129,0.25);
+    }
+    .btn-green:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(16,185,129,0.35); }
+
+    /* ── Spinner ── */
+    .spinner {
+      width: 15px; height: 15px;
+      border: 2.5px solid rgba(255,255,255,0.2);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+      flex-shrink: 0;
+    }
+
+    /* ── Status message ── */
+    .status-msg {
+      font-size: 11px;
+      text-align: center;
+      color: #475569;
+      margin-top: 8px;
+      min-height: 16px;
+    }
+
+    /* ── Info bar (after download) ── */
+    .info-bar {
+      background: #13151f;
+      border: 1px solid #1e2333;
+      border-radius: 12px;
+      padding: 10px 12px;
+      margin-top: 10px;
+    }
+    .info-bar-title { font-size: 11px; font-weight: 600; color: #e2e8f0; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .info-bar-meta { display: flex; gap: 8px; font-size: 10px; color: #475569; margin-bottom: 8px; }
+    .info-bar-meta .meta-chip { color: #f97316; font-weight: 600; }
+    .action-row { display: flex; gap: 6px; }
+
+    /* ── Format panel ── */
+    .formats-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .formats-label { font-size: 10px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.6px; }
+    .formats-close { background: none; border: none; color: #475569; cursor: pointer; font-size: 14px; padding: 2px; line-height: 1; transition: color 0.15s; }
+    .formats-close:hover { color: #e2e8f0; }
+
+    .fmt-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 12px;
+      border-radius: 10px;
+      background: #13151f;
+      border: 1px solid #1e2333;
+      border-left: 3px solid #6366f1;
+      cursor: pointer;
+      transition: all 0.15s;
+      margin-bottom: 6px;
+    }
+    .fmt-item:hover { border-color: #6366f1; background: rgba(99,102,241,0.07); }
+    .fmt-item:last-child { margin-bottom: 0; }
+    .fmt-label { font-size: 12px; font-weight: 600; color: #e2e8f0; }
+    .fmt-meta { font-size: 10px; color: #475569; margin-top: 1px; display: flex; gap: 5px; align-items: center; }
+    .fmt-badge { padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 600; }
+    .fmt-badge-merge { background: rgba(59,130,246,0.15); color: #60a5fa; }
+    .fmt-dl-btn {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff; font-size: 10px; font-weight: 700;
+      padding: 4px 10px; border-radius: 7px; white-space: nowrap;
+      box-shadow: 0 2px 6px rgba(99,102,241,0.3);
+      flex-shrink: 0;
+    }
+
+    /* ── Download progress ── */
+    .dl-progress-wrap {
+      background: #13151f;
+      border: 1px solid #1e2333;
+      border-radius: 12px;
+      padding: 10px 14px;
+      margin-top: 10px;
+    }
+    .dl-progress-track { height: 4px; background: #1e2333; border-radius: 99px; overflow: hidden; margin: 6px 0; }
+    .dl-progress-fill {
+      height: 100%; width: 0;
+      background: linear-gradient(90deg, #6366f1, #10b981);
+      border-radius: 99px;
+      transition: width 0.3s ease;
+    }
+
+    /* ── Error card ── */
+    .error-card {
+      background: rgba(239,68,68,0.07);
+      border: 1px solid rgba(239,68,68,0.2);
+      border-radius: 12px;
+      padding: 12px;
+      margin-top: 10px;
+      text-align: center;
+    }
+
+    /* ── Success check ── */
+    .success-check {
+      display: none; width: 44px; height: 44px;
+      background: linear-gradient(135deg, #059669, #10b981);
+      border-radius: 50%; align-items: center; justify-content: center;
+      margin: 10px auto 6px;
+      animation: checkmark 0.4s ease-out;
+      box-shadow: 0 4px 16px rgba(16,185,129,0.35);
+    }
+    .success-check.show { display: flex; }
+
+    /* ── Health dot ── */
+    .health-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #374151; flex-shrink: 0; cursor: help; transition: background 0.4s;
+    }
+
+    /* ── Icon button ── */
+    .icon-btn {
+      background: none; border: none; cursor: pointer; padding: 4px;
+      color: #475569; transition: color 0.15s; line-height: 1;
+    }
+    .icon-btn:hover { color: #94a3b8; }
+
+    /* ── Settings panel ── */
+    .settings-panel {
+      background: #13151f;
+      border: 1px solid #1e2333;
+      border-radius: 14px;
+      padding: 14px;
+      margin: 0 14px 10px;
+      animation: fadeUp 0.2s;
+    }
+    #settings-api-url {
+      flex: 1;
+      background: #0c0e14;
+      border: 1px solid #1e2333;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: #e2e8f0;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    #settings-api-url:focus { border-color: #6366f1; }
+
+    /* ── Channel section ── */
+    .ch-url-card { background: #13151f; border: 1px solid #1e2333; border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+    .ch-url-label { font-size: 10px; color: #475569; font-weight: 500; margin-bottom: 3px; }
+    .ch-url-val { font-size: 11px; color: #818cf8; font-weight: 600; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .qty-btn {
+      flex: 1;
+      padding: 7px 4px;
+      border-radius: 9px;
+      border: 1.5px solid #1e2333;
+      background: #0c0e14;
+      color: #475569;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .qty-btn:hover { border-color: #4f46e5; color: #a5b4fc; }
+    .qty-btn.active {
+      border-color: #6366f1;
+      background: rgba(99,102,241,0.12);
+      color: #a5b4fc;
+    }
+
+    /* ── Discovery radar ── */
+    .radar-wrap { display: flex; flex-direction: column; align-items: center; padding: 20px 14px; gap: 10px; }
+    .radar-ring {
+      position: relative; width: 52px; height: 52px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .radar-ping-1, .radar-ping-2 {
+      position: absolute; border-radius: 50%;
+      animation: ping 1.5s cubic-bezier(0,0,0.2,1) infinite;
+    }
+    .radar-ping-1 { width: 52px; height: 52px; background: rgba(99,102,241,0.15); }
+    .radar-ping-2 { width: 36px; height: 36px; background: rgba(99,102,241,0.1); animation-delay: 0.4s; }
+    .radar-icon { position: relative; z-index: 10; color: #818cf8; }
+
+    .timer-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #13151f; border: 1px solid #1e2333;
+      border-radius: 99px; padding: 5px 12px;
+      font-size: 12px; font-weight: 700;
+      color: #818cf8; font-family: monospace;
+    }
+
+    /* ── Job progress bar ── */
+    .job-bar-track { height: 5px; background: #1e2333; border-radius: 99px; overflow: hidden; margin: 6px 0; }
+    .job-bar-fill {
+      height: 100%; width: 0;
+      background: linear-gradient(90deg, #6366f1, #10b981);
+      border-radius: 99px;
+      transition: width 0.4s ease;
+    }
+
+    /* ── History item ── */
+    .history-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 10px;
+      background: #13151f; border: 1px solid transparent;
+      transition: all 0.15s; cursor: default;
+    }
+    .history-item:hover { border-color: #1e2333; }
+
+    /* ── Spotify tracklist ── */
+    .sp-track {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 10px; border-radius: 9px;
+      background: #13151f; border: 1px solid transparent;
+      transition: all 0.15s;
+    }
+    .sp-track:hover { border-color: #1e2333; }
+
+    /* ── Reload banner ── */
+    .reload-banner {
+      background: rgba(251,191,36,0.08);
+      border-bottom: 1px solid rgba(251,191,36,0.2);
+      padding: 10px 14px;
+      text-align: center;
+    }
+
+    /* ── Page badge ── */
+    .page-badge {
+      font-size: 10px; font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 99px;
+      background: rgba(99,102,241,0.1);
+      border: 1px solid rgba(99,102,241,0.2);
+      color: #818cf8;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      padding: 8px 14px;
+      border-top: 1px solid #13151f;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .footer a { font-size: 10px; font-weight: 600; color: #475569; text-decoration: none; transition: color 0.15s; }
+    .footer a:hover { color: #818cf8; }
+
+    /* ── Progress bar inner (generic) ── */
+    .progress-bar-inner {
+      height: 100%;
+      background: linear-gradient(90deg, #6366f1, #10b981);
+      border-radius: 99px;
+      transition: width 0.4s ease;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Reload banner -->
+  <div id="reload-banner" class="reload-banner hidden">
+    <div style="font-size:11px;font-weight:700;color:#fbbf24;margin-bottom:6px;">⚡ VidGrab chưa kích hoạt trên trang này</div>
+    <button id="reload-btn" style="width:100%;padding:6px;border-radius:8px;background:#fbbf24;color:#0c0e14;font-size:11px;font-weight:700;border:none;cursor:pointer;">🔄 Reload trang</button>
+  </div>
+
+  <!-- ── HEADER ── -->
+  <div class="header-bar">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="logo-badge">VG</div>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:800;color:#e2e8f0;letter-spacing:-0.3px;display:flex;align-items:center;gap:6px;">
+          VidGrab
+          <span id="server-health-dot" class="health-dot" title="Đang kiểm tra..."></span>
+        </div>
+        <div id="page-badge" class="page-badge" style="display:inline-block;margin-top:2px;">Đang nhận diện...</div>
+      </div>
+      <button id="theme-toggle" class="icon-btn" title="Giao diện">🌙</button>
+      <button id="settings-btn" class="icon-btn" title="Cài đặt">⚙️</button>
+      <a id="open-web-btn" href="https://dowload-video.mk.dev.matbao.ai" target="_blank" class="icon-btn" title="Mở web" style="text-decoration:none;font-size:13px;">🌐</a>
+    </div>
+  </div>
+
+  <!-- Settings panel -->
+  <div id="settings-panel" class="settings-panel hidden">
+    <div style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:10px;">⚙ Cài đặt Server</div>
+    <div style="font-size:10px;color:#475569;margin-bottom:4px;">Server URL</div>
+    <div style="display:flex;gap:6px;margin-bottom:6px;">
+      <input id="settings-api-url" type="text" placeholder="https://...">
+      <button id="settings-save" style="padding:6px 12px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;font-weight:700;border:none;cursor:pointer;flex-shrink:0;">Lưu</button>
+    </div>
+    <button id="settings-reset" style="font-size:10px;color:#475569;background:none;border:none;cursor:pointer;">↩ Đặt lại mặc định</button>
+
+    <!-- ── Account bridge ── -->
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(148,163,184,0.15);">
+      <div style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:8px;">👤 Tài khoản VidGrab</div>
+      <div id="auth-status-row" style="font-size:10px;color:#64748b;margin-bottom:6px;">Đang kiểm tra...</div>
+      <button id="auth-connect-btn"
+        style="width:100%;padding:7px 10px;border-radius:8px;background:linear-gradient(135deg,#FBBF24,#FB923C);color:#012622;font-size:11px;font-weight:700;border:none;cursor:pointer;">
+        Đăng nhập trên web →
+      </button>
+      <button id="auth-disconnect-btn" style="display:none;width:100%;margin-top:4px;padding:6px 10px;border-radius:8px;background:rgba(239,68,68,0.1);color:#f87171;font-size:10px;font-weight:600;border:1px solid rgba(239,68,68,0.2);cursor:pointer;">
+        Đăng xuất
+      </button>
+    </div>
+  </div>
+
+  <!-- ── TAB BAR ── -->
+  <div class="tab-bar">
+    <button id="tab-single" class="tab-btn active">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Tải Video
+    </button>
+    <button id="tab-channel" class="tab-btn">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.36 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.08 6.08l1.27-1.34a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+      Kênh
+    </button>
+    <button id="tab-history" class="tab-btn">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Lịch sử
+    </button>
+  </div>
+
+  <!-- ══════════════════ SINGLE VIDEO ══════════════════ -->
+  <div id="single-section" class="content">
+
+    <!-- Quality selector -->
+    <div style="margin-bottom:12px;">
+      <div class="card-label">Chất lượng tải</div>
+      <div class="quality-pills">
+        <label class="q-pill active">
+          <input type="radio" name="quality" value="video" style="display:none">
+          🎬 HD
+          <span class="q-sub">MP4 1080p</span>
+        </label>
+        <label class="q-pill">
+          <input type="radio" name="quality" value="video_4k" style="display:none">
+          ✨ 4K
+          <span class="q-sub">Tốt nhất</span>
+        </label>
+        <label class="q-pill">
+          <input type="radio" name="quality" value="mp3_320" style="display:none">
+          🎵 MP3
+          <span class="q-sub">320kbps</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Hidden select for JS compatibility -->
+    <select id="qualitySelect" style="display:none">
+      <option value="video">MP4 (Video HD)</option>
+      <option value="video_4k">MP4 (4K / Tốt nhất)</option>
+      <option value="mp3_320">MP3 (Âm thanh 320kbps)</option>
+    </select>
+
+    <!-- Options -->
+    <div class="toggle-row" style="margin-bottom:10px;">
+      <label class="toggle-item">
+        <input type="checkbox" id="removeWatermark" checked>
+        <span>Bỏ watermark</span>
+        <span id="wm-platform-hint" style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;margin-left:4px;display:none;"></span>
+      </label>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:14px;">
+      <label style="font-size:10px;font-weight:600;color:#64748b;min-width:50px;">Phụ đề:</label>
+      <select id="subtitleModeSelect" style="font-size:10px;padding:3px 6px;border-radius:6px;background:#0f1923;border:1px solid #1e2333;color:#e2e8f0;cursor:pointer;flex:1;">
+        <option value="off">Không có</option>
+        <option value="file">File .srt rời</option>
+        <option value="burned">Đốt vào video</option>
+      </select>
+    </div>
+
+    <!-- Download button -->
+    <button id="downloadBtn" class="btn-primary">
+      <svg id="icon-download" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <div id="spinner" class="spinner"></div>
+      <span id="btnText">Tải Video Ngay</span>
+    </button>
+
+    <div id="statusMsg" class="status-msg">Server xử lý · Miễn phí 100%</div>
+
+    <!-- Error -->
+    <div id="error-card" class="error-card hidden">
+      <div id="error-text" style="font-size:11px;color:#f87171;margin-bottom:8px;"></div>
+      <button id="retry-btn" style="font-size:10px;padding:5px 14px;border-radius:8px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.25);cursor:pointer;font-weight:700;">🔄 Thử lại</button>
+    </div>
+
+    <!-- Success animation -->
+    <div id="success-check" class="success-check">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+
+    <!-- Info bar (after success) -->
+    <div id="preview-card" class="info-bar hidden anim-fade">
+      <div id="preview-title" class="info-bar-title">—</div>
+      <div class="info-bar-meta">
+        <span id="preview-duration"></span>
+        <span id="preview-size" class="meta-chip"></span>
+        <span id="preview-platform"></span>
+        <span id="preview-wm-badge" style="display:none;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.3);">✓ Không WM</span>
+      </div>
+      <div class="action-row">
+        <button id="action-copy-link" class="btn-secondary">📋 Copy link</button>
+        <button id="action-open-web" class="btn-secondary">🌐 Web</button>
+        <button id="action-dl-thumb" class="btn-secondary">🖼️ Ảnh bìa</button>
+      </div>
+    </div>
+
+    <!-- Format panel -->
+    <div id="formats-panel" class="hidden" style="margin-top:12px;">
+      <div class="formats-header">
+        <span class="formats-label">Tất cả chất lượng</span>
+        <button id="formats-close" class="formats-close">✕</button>
+      </div>
+      <div id="formats-list" style="max-height:220px;overflow-y:auto;"></div>
+    </div>
+
+    <!-- Download progress -->
+    <div id="dl-progress" class="dl-progress-wrap hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:10px;color:#475569;">Đang tải xuống...</span>
+        <span id="dl-progress-pct" style="font-size:10px;font-weight:700;color:#818cf8;">0%</span>
+      </div>
+      <div class="dl-progress-track">
+        <div id="dl-progress-fill" class="dl-progress-fill"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:2px;">
+        <span id="dl-progress-info" style="font-size:9px;color:#475569;"></span>
+        <span id="dl-progress-speed" style="font-size:9px;color:#34d399;font-family:monospace;font-weight:600;"></span>
+      </div>
+    </div>
+
+  </div><!-- /single-section -->
+
+  <!-- ══════════════════ CHANNEL ══════════════════ -->
+  <div id="channel-section" style="display:none;">
+    <div class="content">
+
+      <!-- Channel URL -->
+      <div class="ch-url-card">
+        <div class="ch-url-label">Kênh đang mở</div>
+        <div id="ch-url" class="ch-url-val">—</div>
+      </div>
+
+      <!-- Qty selector (generic channel) -->
+      <div id="ch-count-selector" class="hidden" style="margin-bottom:10px;">
+        <div class="card-label">Số lượng video muốn tải</div>
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <button class="ch-qty-btn qty-btn active" data-qty="10">10</button>
+          <button class="ch-qty-btn qty-btn" data-qty="20">20</button>
+          <button class="ch-qty-btn qty-btn" data-qty="50">50</button>
+          <button class="ch-qty-btn qty-btn" data-qty="100">100</button>
+        </div>
+        <input id="ch-qty-custom" type="number" min="1" max="500" placeholder="Hoặc nhập số tuỳ chỉnh..."
+          style="width:100%;background:#0c0e14;border:1.5px solid #1e2333;border-radius:9px;padding:7px 12px;font-size:11px;color:#e2e8f0;outline:none;transition:border-color 0.15s;"
+          onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#1e2333'"/>
+      </div>
+
+      <!-- Collected count -->
+      <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:11px;color:#475569;">Video thu thập được</span>
+        <span id="ch-count" style="font-size:22px;font-weight:800;background:linear-gradient(135deg,#818cf8,#a5b4fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">0</span>
+      </div>
+
+      <!-- Discovery UI -->
+      <div id="ch-discovery" class="hidden card" style="padding:0;">
+        <div class="radar-wrap">
+          <div class="radar-ring">
+            <div class="radar-ping-1"></div>
+            <div class="radar-ping-2"></div>
+            <svg class="radar-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/>
+            </svg>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:12px;font-weight:700;color:#e2e8f0;margin-bottom:4px;">Đang quét danh sách video...</div>
+            <div id="ch-discovery-msg" style="font-size:10px;color:#475569;">Đang kết nối tới server...</div>
+          </div>
+          <div class="timer-chip">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span id="ch-discovery-timer">00:00</span>
+          </div>
+          <div style="font-size:10px;color:#374151;text-align:center;">YouTube cần 30–90 giây để tải danh sách kênh</div>
+        </div>
+      </div>
+
+      <!-- Job results -->
+      <div id="ch-results" class="card hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="font-size:11px;color:#475569;">Tiến độ tải xuống</span>
+          <span id="ch-job-stats" style="font-size:11px;font-weight:700;color:#34d399;">0 / 0</span>
+        </div>
+        <div class="job-bar-track">
+          <div id="ch-job-bar" class="job-bar-fill"></div>
+        </div>
+        <div id="ch-result-msg" style="font-size:10px;color:#475569;margin-top:6px;text-align:center;"></div>
+        <a id="ch-open-web" href="#" target="_blank" class="hidden" style="display:none;margin-top:8px;font-size:10px;color:#818cf8;text-align:center;text-decoration:none;font-weight:600;">
+          📂 Xem đầy đủ trên web →
+        </a>
+      </div>
+
+      <!-- Spotify header -->
+      <div id="sp-header" class="hidden card" style="display:none;flex-direction:row;gap:10px;align-items:center;padding:10px 12px;">
+        <img id="sp-thumb" src="" style="width:52px;height:52px;border-radius:10px;object-fit:cover;flex-shrink:0;">
+        <div style="flex:1;overflow:hidden;">
+          <div id="sp-type-label" style="font-size:9px;font-weight:700;color:#34d399;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:2px;">PLAYLIST • SPOTIFY</div>
+          <div id="sp-title" style="font-size:12px;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Title</div>
+          <div id="sp-count" style="font-size:10px;color:#475569;margin-top:1px;">0 bài nhạc</div>
+        </div>
+      </div>
+
+      <!-- Status text -->
+      <div id="ch-status" style="font-size:11px;color:#475569;text-align:center;margin-bottom:10px;min-height:14px;">
+        Panel VidGrab đã mở trên trang kênh.
+      </div>
+
+      <!-- Scrape button -->
+      <button id="ch-scrape-btn" class="btn-primary" style="margin-bottom:8px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <div id="ch-spinner" class="spinner"></div>
+        <span id="ch-btn-text">Bắt đầu Quét Kênh</span>
+      </button>
+
+      <!-- Send button (Douyin) -->
+      <button id="ch-send-btn" class="btn-green hidden">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        <span id="ch-send-text">Gửi tải xuống server</span>
+      </button>
+
+      <div id="ch-batch-info" class="hidden" style="font-size:10px;text-align:center;color:#475569;margin-top:6px;"></div>
+
+      <!-- Spotify tracklist -->
+      <div id="sp-tracklist-container" class="hidden" style="margin-top:10px;max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;"></div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════ HISTORY / ARCHIVE ══════════════════ -->
+  <div id="history-section" style="display:none;">
+    <div class="content">
+      <!-- Sub-tab switcher -->
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <button id="htab-local" onclick="showHistoryTab('local')"
+          style="flex:1;padding:5px 0;border-radius:8px;border:1px solid #1e2333;font-size:10px;font-weight:700;cursor:pointer;background:#FBBF24;color:#012622;transition:all 0.15s;">
+          📋 Cục Bộ
+        </button>
+        <button id="htab-archive" onclick="showHistoryTab('archive')"
+          style="flex:1;padding:5px 0;border-radius:8px;border:1px solid #1e2333;font-size:10px;font-weight:700;cursor:pointer;background:none;color:#64748b;transition:all 0.15s;">
+          🗄 Archive
+        </button>
+      </div>
+
+      <!-- Local History -->
+      <div id="hpanel-local">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-size:10px;color:#64748b;">Video đã tải gần đây (cục bộ)</span>
+          <button id="clear-history-btn" style="font-size:10px;font-weight:600;color:#ef4444;background:none;border:none;cursor:pointer;opacity:0.7;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">🗑 Xoá</button>
+        </div>
+        <div id="history-list" style="display:flex;flex-direction:column;gap:5px;max-height:310px;overflow-y:auto;">
+          <div id="history-empty" style="text-align:center;color:#374151;font-size:11px;padding:24px 0;">
+            Chưa có lịch sử tải 📭
+          </div>
+        </div>
+      </div>
+
+      <!-- Archive (logged in) -->
+      <div id="hpanel-archive" style="display:none;">
+        <div id="archive-login-prompt" style="display:none;text-align:center;padding:20px 0;">
+          <div style="font-size:11px;color:#64748b;margin-bottom:8px;">Đăng nhập để xem VidGrab Archive</div>
+          <a href="https://dowload-video.mk.dev.matbao.ai" target="_blank"
+            style="display:inline-block;padding:6px 16px;background:linear-gradient(to right,#FBBF24,#FB923C);color:#012622;font-size:11px;font-weight:700;border-radius:8px;text-decoration:none;">
+            Đăng nhập
+          </a>
+        </div>
+        <div id="archive-list" style="display:flex;flex-direction:column;gap:5px;max-height:310px;overflow-y:auto;"></div>
+        <div id="archive-loading" style="text-align:center;color:#64748b;font-size:10px;padding:20px 0;display:none;">Đang tải archive...</div>
+        <div id="archive-empty" style="text-align:center;color:#374151;font-size:11px;padding:24px 0;display:none;">Archive trống 📭</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ONBOARDING OVERLAY (shown on first install) ── -->
+  <div id="onboarding-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:200;align-items:center;justify-content:center;padding:18px;">
+    <div style="background:#13151f;border:1px solid #1e2333;border-radius:16px;padding:20px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+      <!-- Step 1 -->
+      <div id="ob-step-1" class="ob-step">
+        <div style="text-align:center;margin-bottom:16px;">
+          <div style="font-size:32px;margin-bottom:8px;">⬇️</div>
+          <div style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:6px;">Chào mừng đến VidGrab!</div>
+          <div style="font-size:11px;color:#64748b;line-height:1.5;">Tải video từ YouTube, TikTok, Instagram, Facebook và nhiều nền tảng khác — chỉ 1 click.</div>
+        </div>
+        <button onclick="obNext()" style="width:100%;padding:10px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:12px;font-weight:700;border:none;cursor:pointer;">Tiếp theo →</button>
+        <div style="text-align:center;margin-top:8px;font-size:10px;color:#475569;">1 / 3</div>
+      </div>
+      <!-- Step 2 -->
+      <div id="ob-step-2" class="ob-step" style="display:none;">
+        <div style="text-align:center;margin-bottom:16px;">
+          <div style="font-size:32px;margin-bottom:8px;">🌐</div>
+          <div style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:6px;">Cách dùng</div>
+          <div style="font-size:11px;color:#64748b;line-height:1.6;text-align:left;">
+            <div style="margin-bottom:6px;">① Mở trang video cần tải (YouTube, TikTok...)</div>
+            <div style="margin-bottom:6px;">② Nhấn icon VidGrab trên thanh công cụ</div>
+            <div>③ Chọn chất lượng → <b style="color:#a5b4fc;">Tải ngay</b></div>
+          </div>
+        </div>
+        <button onclick="obNext()" style="width:100%;padding:10px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:12px;font-weight:700;border:none;cursor:pointer;">Tiếp theo →</button>
+        <div style="text-align:center;margin-top:8px;font-size:10px;color:#475569;">2 / 3</div>
+      </div>
+      <!-- Step 3 -->
+      <div id="ob-step-3" class="ob-step" style="display:none;">
+        <div style="text-align:center;margin-bottom:16px;">
+          <div style="font-size:32px;margin-bottom:8px;">✨</div>
+          <div style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:6px;">Nền tảng hỗ trợ</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:10px;">
+            <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);">YouTube</span>
+            <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);">TikTok</span>
+            <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);">Instagram</span>
+            <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);">Facebook</span>
+            <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);">Spotify</span>
+            <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);">Twitter / X</span>
+            <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);">Reddit</span>
+            <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);">Pinterest</span>
+          </div>
+        </div>
+        <button onclick="obFinish()" style="width:100%;padding:10px;border-radius:10px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:12px;font-weight:800;border:none;cursor:pointer;">🚀 Bắt đầu tải!</button>
+        <div style="text-align:center;margin-top:8px;font-size:10px;color:#475569;">3 / 3</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── UNSUPPORTED PAGE STATE ── -->
+  <div id="unsupported-page-state" style="display:none;padding:20px 16px;text-align:center;">
+    <div style="font-size:36px;margin-bottom:10px;">🔍</div>
+    <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:6px;">Trang này không hỗ trợ</div>
+    <div style="font-size:11px;color:#64748b;line-height:1.6;margin-bottom:14px;">VidGrab chỉ tải được từ các trang hỗ trợ. Hãy mở một trong số sau:</div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-bottom:14px;">
+      <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);">youtube.com</span>
+      <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);">tiktok.com</span>
+      <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);">instagram.com</span>
+      <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);">facebook.com</span>
+      <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);">open.spotify.com</span>
+      <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);">x.com / twitter.com</span>
+      <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);">reddit.com</span>
+      <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);">pinterest.com</span>
+      <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);">threads.net</span>
+    </div>
+    <a href="https://dowload-video.mk.dev.matbao.ai" target="_blank" style="display:inline-block;padding:8px 20px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;font-weight:700;text-decoration:none;">Mở VidGrab Web →</a>
+  </div>
+
+  <!-- ── FOOTER ── -->
+  <div class="footer">
+    <a href="https://dowload-video.mk.dev.matbao.ai" target="_blank">vidgrab.app</a>
+    <span id="footer-version" style="font-size:9px;color:#1e2333;font-weight:600;">v5.0.0</span>
+  </div>
+
+  <script src="popup.js"></script>
+
+  <!-- Sync quality radio → hidden select -->
+  <script>
+    function updateDownloadBtn(val) {
+      const btnText = document.getElementById('btnText');
+      if (!btnText) return;
+      btnText.textContent = val && val.startsWith('mp3') ? 'Tải Nhạc MP3 Ngay' : 'Tải Video Ngay';
+    }
+
+    document.querySelectorAll('.q-pill').forEach(pill => {
+      pill.addEventListener('click', (e) => {
+        // Prevent double-firing: radio click bubbles up to label → skip
+        if (e.target.tagName === 'INPUT') return;
+        document.querySelectorAll('.q-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        const val = pill.querySelector('input[type=radio]').value;
+        document.getElementById('qualitySelect').value = val;
+        pill.querySelector('input[type=radio]').checked = true;
+        updateDownloadBtn(val);
+      });
+    });
+    // Init select from active pill
+    const activePill = document.querySelector('.q-pill.active input');
+    if (activePill) {
+      document.getElementById('qualitySelect').value = activePill.value;
+      updateDownloadBtn(activePill.value);
+    }
+  </script>
+</body>
+</html>
