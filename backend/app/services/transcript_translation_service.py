@@ -43,6 +43,7 @@ def detect_source_language(cues: list[Cue]) -> str:
     )
 
     result = call_llm(prompt, max_output_tokens=32)
+    print(f"[DIAG-lang] call_llm raw result: {result!r}")
     if not result:
         return "Unknown"
 
