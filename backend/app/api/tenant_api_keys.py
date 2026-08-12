@@ -96,7 +96,7 @@ def _get_user_tenant(user_id: str) -> Dict[str, Any]:
         db.table("workspace_memberships")
         .select("workspace_id")
         .eq("user_id", user_id)
-        .order("created_at")
+        .order("joined_at")
         .limit(1)
         .execute()
     )
@@ -235,9 +235,9 @@ async def create_partner_api_key(
         raise
     except Exception as exc:
         import traceback as _tb
-        print(f"[DIAG-partner] create_partner_api_key failed: {type(exc).__name__}: {exc}")
+        print(f"create_partner_api_key failed: {type(exc).__name__}: {exc}")
         print(_tb.format_exc())
-        raise HTTPException(status_code=500, detail=f"DIAG: {type(exc).__name__}: {exc}") from exc
+        raise HTTPException(status_code=500, detail="Failed to create API key.") from exc
 
 
 @router.patch("/partner/api-keys/{key_id}")
