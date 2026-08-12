@@ -730,11 +730,11 @@
     <div class="content">
       <!-- Sub-tab switcher -->
       <div style="display:flex;gap:6px;margin-bottom:10px;">
-        <button id="htab-local" onclick="showHistoryTab('local')"
+        <button id="htab-local"
           style="flex:1;padding:5px 0;border-radius:8px;border:1px solid #1e2333;font-size:10px;font-weight:700;cursor:pointer;background:#FBBF24;color:#012622;transition:all 0.15s;">
           📋 Cục Bộ
         </button>
-        <button id="htab-archive" onclick="showHistoryTab('archive')"
+        <button id="htab-archive"
           style="flex:1;padding:5px 0;border-radius:8px;border:1px solid #1e2333;font-size:10px;font-weight:700;cursor:pointer;background:none;color:#64748b;transition:all 0.15s;">
           🗄 Archive
         </button>
@@ -779,7 +779,7 @@
           <div style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:6px;">Chào mừng đến VidGrab!</div>
           <div style="font-size:11px;color:#64748b;line-height:1.5;">Tải video từ YouTube, TikTok, Instagram, Facebook và nhiều nền tảng khác — chỉ 1 click.</div>
         </div>
-        <button onclick="obNext()" style="width:100%;padding:10px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:12px;font-weight:700;border:none;cursor:pointer;">Tiếp theo →</button>
+        <button id="ob-next-1" style="width:100%;padding:10px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:12px;font-weight:700;border:none;cursor:pointer;">Tiếp theo →</button>
         <div style="text-align:center;margin-top:8px;font-size:10px;color:#475569;">1 / 3</div>
       </div>
       <!-- Step 2 -->
@@ -793,7 +793,7 @@
             <div>③ Chọn chất lượng → <b style="color:#a5b4fc;">Tải ngay</b></div>
           </div>
         </div>
-        <button onclick="obNext()" style="width:100%;padding:10px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:12px;font-weight:700;border:none;cursor:pointer;">Tiếp theo →</button>
+        <button id="ob-next-2" style="width:100%;padding:10px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:12px;font-weight:700;border:none;cursor:pointer;">Tiếp theo →</button>
         <div style="text-align:center;margin-top:8px;font-size:10px;color:#475569;">2 / 3</div>
       </div>
       <!-- Step 3 -->
@@ -812,7 +812,7 @@
             <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);">Pinterest</span>
           </div>
         </div>
-        <button onclick="obFinish()" style="width:100%;padding:10px;border-radius:10px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:12px;font-weight:800;border:none;cursor:pointer;">🚀 Bắt đầu tải!</button>
+        <button id="ob-finish" style="width:100%;padding:10px;border-radius:10px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:12px;font-weight:800;border:none;cursor:pointer;">🚀 Bắt đầu tải!</button>
         <div style="text-align:center;margin-top:8px;font-size:10px;color:#475569;">3 / 3</div>
       </div>
     </div>

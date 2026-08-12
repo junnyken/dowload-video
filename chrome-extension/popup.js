@@ -302,6 +302,12 @@ function obFinish() {
   hideOnboarding();
 }
 
+// MV3 extension pages enforce script-src 'self' — inline onclick="" attributes
+// are silently dropped (no console error), so these must be wired here instead.
+document.getElementById('ob-next-1')?.addEventListener('click', obNext);
+document.getElementById('ob-next-2')?.addEventListener('click', obNext);
+document.getElementById('ob-finish')?.addEventListener('click', obFinish);
+
 function checkOnboarding() {
   chrome.storage.local.get('vg_onboarding_done', (r) => {
     if (r.vg_onboarding_done === false) {
@@ -737,6 +743,9 @@ function showHistoryTab(tab) {
   if (archiveBtn) { archiveBtn.style.background = isLocal ? 'none' : '#FBBF24'; archiveBtn.style.color = isLocal ? '#64748b' : '#012622'; }
   if (!isLocal) loadArchive();
 }
+
+document.getElementById('htab-local')?.addEventListener('click', () => showHistoryTab('local'));
+document.getElementById('htab-archive')?.addEventListener('click', () => showHistoryTab('archive'));
 
 function loadHistory() {
   chrome.runtime.sendMessage({ type: 'VG_GET_HISTORY' }, (resp) => {
