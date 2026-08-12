@@ -26,6 +26,8 @@ celery_app = Celery(
         "app.tasks.transcript_translation_tasks",
         "app.tasks.transcript_asr_tasks",
         "app.tasks.keepalive_tasks",
+        "app.tasks.container_tasks",
+        "app.tasks.partner_tasks",
     ]
 )
 

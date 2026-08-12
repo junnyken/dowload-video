@@ -29,7 +29,9 @@ from pydantic import BaseModel, Field
 from app.core.database import get_service_client
 from app.core.partner_auth import get_partner_tenant
 from app.core.tenant import TenantContext, TenantPlan
+from app.core.structured_log import get_logger
 
+logger = get_logger(__name__)
 router = APIRouter(tags=["Partner API"])
 
 _PLAN_PRIORITY: dict[str, int] = {
@@ -240,17 +242,41 @@ async def submit_job(
             detail={"code": "db_error", "message": str(exc)},
         ) from exc
 
-    # Dispatch to Celery
+    # Dispatch to Celery. process_video_task only reads/writes download_jobs
+    # (it has no concept of partner_jobs), so we create a shadow download_jobs
+    # row for it to work against, then bridge the result back via
+    # sync_partner_job_task (see app/tasks/partner_tasks.py for why).
     try:
         from app.tasks.video_tasks import process_video_task  # lazy import
+        from app.tasks.partner_tasks import sync_partner_job_task  # lazy import
+
+        download_job_id = str(uuid.uuid4())
+        supabase.table("download_jobs").insert({
+            "id":               download_job_id,
+            "batch_id":         job_id,
+            "original_url":     body.url,
+            "status":           "pending",
+            "source_surface":   "partner",
+            "selected_quality": body.quality,
+            "source":           "partner",
+        }).execute()
+
         process_video_task.apply_async(
-            args=[job_id, body.url],
+            args=[download_job_id, body.url],
             kwargs={"quality": body.quality},
             priority=priority,
         )
-    except Exception:
-        # Celery unavailable — job stays queued and will be picked up on retry
-        pass
+        sync_partner_job_task.apply_async(
+            args=[job_id, download_job_id, tenant.tenant_id],
+            countdown=5,
+        )
+    except Exception as exc:
+        # Celery/DB unavailable — job stays queued; partner can retry via
+        # GET /partner/jobs/{id} but it will not auto-progress past "queued".
+        logger.warning(
+            "submit_job: failed to dispatch download",
+            extra={"partner_job_id": job_id, "error": str(exc)},
+        )
 
     _increment_usage(tenant.tenant_id)
 
