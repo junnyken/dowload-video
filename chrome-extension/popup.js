@@ -1,4 +1,5 @@
 const DEFAULT_API_BASE = 'https://dvid-api.cmc-1.vibenode.matbao.ai';
+const WEB_BASE = 'https://dvid.cmc-1.vibenode.matbao.ai';
 let API_BASE = DEFAULT_API_BASE;
 let _lastDownloadData = null;
 let _lastNoWm = false;
@@ -546,6 +547,17 @@ function showPreviewCard(data, pageUrl) {
   const wmBadge = document.getElementById('preview-wm-badge');
   if (wmBadge) wmBadge.style.display = (isWatermarkPlatform(pageUrl || '') && _lastNoWm) ? 'inline' : 'none';
   card.classList.remove('hidden');
+
+  // AI Gợi ý chỉ khả dụng khi server có file local để ffprobe (không phải stream trực tiếp)
+  const aiBtn = document.getElementById('action-ai-analyze');
+  const aiResults = document.getElementById('ai-analyze-results');
+  if (aiBtn) {
+    const hasLocalFile = !!(data.local_file_path && (data.local_file_path.startsWith('/app/downloads/') || data.local_file_path.startsWith('downloads/')));
+    aiBtn.classList.toggle('hidden', !hasLocalFile);
+    aiBtn.disabled = false;
+    aiBtn.textContent = '🤖 AI Gợi ý';
+  }
+  if (aiResults) aiResults.classList.add('hidden');
 }
 
 // ── Action buttons ────────────────────────────────────────────────
@@ -570,6 +582,104 @@ document.getElementById('action-dl-thumb')?.addEventListener('click', () => {
   chrome.downloads.download({ url: _lastDownloadData.thumbnail_url, filename: `VidGrab/${safeName}_thumb.jpg`, saveAs: true });
   const btn = document.getElementById('action-dl-thumb');
   btn.textContent = '✅ Đang tải'; setTimeout(() => { btn.textContent = '🖼️ Ảnh bìa'; }, 2000);
+});
+
+document.getElementById('action-translate-subs')?.addEventListener('click', () => {
+  chrome.tabs.create({ url: `${WEB_BASE}/transcript-translate` });
+});
+
+// ── AI Smart Actions (trim/highlight/GIF suggestions) ─────────────
+const AI_POLL_INTERVAL_MS = 2000;
+const AI_POLL_MAX_ATTEMPTS = 30; // ~60s timeout, matches web app's SmartActionsPanel
+
+function fmtAiSeconds(s) {
+  if (s == null) return '—';
+  const m = Math.floor(s / 60), sec = Math.round(s % 60);
+  return m > 0 ? `${m}:${String(sec).padStart(2, '0')}` : `${sec}s`;
+}
+
+function renderAiAnalyzeResults(result) {
+  const box = document.getElementById('ai-analyze-results');
+  if (!box) return;
+  const trim = result.trim_suggestions || [];
+  const clips = result.clip_suggestions || [];
+  const gifs = result.gif_suggestions || [];
+  const parts = [];
+  if (trim.length) {
+    const t = trim[0];
+    parts.push(`✂️ <b>Cắt gợi ý:</b> ${fmtAiSeconds(t.start)} → ${fmtAiSeconds(t.end)}${t.reason ? ` — ${t.reason}` : ''}`);
+  }
+  if (clips.length) {
+    parts.push(`🎬 <b>${clips.length} đoạn nổi bật</b> — hay nhất: ${fmtAiSeconds(clips[0].start)} → ${fmtAiSeconds(clips[0].end)}${clips[0].label ? ` (${clips[0].label})` : ''}`);
+  }
+  if (gifs.length) {
+    parts.push(`🖼️ <b>${gifs.length} đoạn GIF gợi ý</b> — bắt đầu ${fmtAiSeconds(gifs[0].start)}`);
+  }
+  if (!parts.length) {
+    parts.push(result.fallback_used
+      ? 'Không đủ dữ liệu để phân tích sâu (fallback mode).'
+      : 'Không tìm thấy gợi ý nào đáng chú ý cho video này.');
+  }
+  parts.push('<div style="margin-top:6px;"><a href="#" id="ai-open-web-link" style="color:#818cf8;font-weight:600;">Xem chi tiết & áp dụng trên Web →</a></div>');
+  box.innerHTML = parts.join('<br>');
+  box.classList.remove('hidden');
+  document.getElementById('ai-open-web-link')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    getActiveTab().then((tab) => {
+      chrome.tabs.create({ url: `${WEB_BASE}?url=${encodeURIComponent(tab?.url || '')}` });
+    });
+  });
+}
+
+async function pollAiAnalysis(jobId, attempt = 0) {
+  const box = document.getElementById('ai-analyze-results');
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/analyze/${jobId}`);
+    const data = await res.json();
+    if (data.status === 'done' || data.status === 'cached') {
+      renderAiAnalyzeResults(data);
+      const aiBtn = document.getElementById('action-ai-analyze');
+      if (aiBtn) { aiBtn.disabled = false; aiBtn.textContent = '🤖 AI Gợi ý'; }
+      return;
+    }
+    if (attempt >= AI_POLL_MAX_ATTEMPTS) {
+      if (box) { box.innerHTML = '⏱️ Phân tích quá lâu, thử lại sau.'; box.classList.remove('hidden'); }
+      const aiBtn = document.getElementById('action-ai-analyze');
+      if (aiBtn) { aiBtn.disabled = false; aiBtn.textContent = '🤖 AI Gợi ý'; }
+      return;
+    }
+    setTimeout(() => pollAiAnalysis(jobId, attempt + 1), AI_POLL_INTERVAL_MS);
+  } catch {
+    if (box) { box.innerHTML = '❌ Lỗi khi lấy kết quả phân tích.'; box.classList.remove('hidden'); }
+    const aiBtn = document.getElementById('action-ai-analyze');
+    if (aiBtn) { aiBtn.disabled = false; aiBtn.textContent = '🤖 AI Gợi ý'; }
+  }
+}
+
+document.getElementById('action-ai-analyze')?.addEventListener('click', async () => {
+  const btn = document.getElementById('action-ai-analyze');
+  const box = document.getElementById('ai-analyze-results');
+  if (!_lastDownloadData?.local_file_path) return;
+  btn.disabled = true; btn.textContent = '⏳ Đang phân tích...';
+  if (box) { box.innerHTML = '⏳ Đang phân tích video (có thể mất vài chục giây)...'; box.classList.remove('hidden'); }
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/analyze-media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: _lastDownloadData.local_file_path,
+        media_path: _lastDownloadData.local_file_path,
+        analyses: ['trim', 'gif', 'metadata', 'clips'],
+        duration_hint_s: _lastDownloadData.duration || null,
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    pollAiAnalysis(data.job_id);
+  } catch {
+    if (box) { box.innerHTML = '❌ Không thể gửi yêu cầu phân tích.'; box.classList.remove('hidden'); }
+    btn.disabled = false; btn.textContent = '🤖 AI Gợi ý';
+  }
 });
 
 // ── Download Progress ─────────────────────────────────────────────
