@@ -320,28 +320,30 @@ async def billing_summary(user: dict = Depends(get_required_user)):
 
     supabase = get_service_client()
 
-    # Fetch tenant_settings for features + branding
+    # Fetch tenant_settings for features + branding (legitimately absent for
+    # tenants created after the one-time migration backfill — limit(1) avoids
+    # maybe_single()'s crash-on-zero-rows behavior in this postgrest-py version)
     settings_resp = (
         supabase.table("tenant_settings")
         .select("features, branding")
         .eq("tenant_id", tenant_id)
-        .maybe_single()
+        .limit(1)
         .execute()
     )
-    tenant_settings = settings_resp.data or {}
+    tenant_settings = (settings_resp.data or [{}])[0]
     features: Dict[str, Any] = tenant_settings.get("features") or {}
 
-    # Today's usage row
+    # Today's usage row (legitimately absent for a tenant with no usage yet today)
     today_str = date.today().isoformat()
     today_resp = (
         supabase.table("tenant_usage_daily")
         .select("api_calls, downloads, batch_jobs, webhook_deliveries")
         .eq("tenant_id", tenant_id)
         .eq("date", today_str)
-        .maybe_single()
+        .limit(1)
         .execute()
     )
-    today_row = today_resp.data or {}
+    today_row = (today_resp.data or [{}])[0]
 
     # Month-to-date aggregates (SUM via PostgREST)
     month_start = date.today().replace(day=1).isoformat()

@@ -20,18 +20,19 @@ def deliver_webhook_task(self, user_id: str, payload: dict):
 
     supabase = get_service_client()
 
-    # Get webhook config
+    # Get webhook config (most users have none registered — that's routine, not an error)
     try:
         res = (
             supabase.table("user_webhooks")
             .select("webhook_url, secret_hash, is_active")
             .eq("user_id", user_id)
-            .single()
+            .limit(1)
             .execute()
         )
-        webhook = res.data
-    except Exception:
-        return  # No webhook registered, skip silently
+        webhook = res.data[0] if res.data else None
+    except Exception as exc:
+        print(f"deliver_webhook_task: failed to load webhook config for user {user_id}: {exc}")
+        return
 
     if not webhook or not webhook.get("is_active"):
         return

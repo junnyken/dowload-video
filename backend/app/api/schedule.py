@@ -190,13 +190,13 @@ async def run_schedule_now(schedule_id: str, user=Depends(get_required_user)):
         .select("*")
         .eq("id", schedule_id)
         .eq("user_id", user_id)
-        .single()
+        .limit(1)
         .execute()
     )
     if not res.data:
         raise HTTPException(404, "Lịch tải không tồn tại.")
 
-    job = res.data
+    job = res.data[0]
     try:
         from app.tasks.schedule_tasks import _trigger_job
         _trigger_job(job)
@@ -221,21 +221,21 @@ async def toggle_schedule(schedule_id: str, user=Depends(get_required_user)):
         .select("is_active, schedule_type, run_at, run_on_weekday")
         .eq("id", schedule_id)
         .eq("user_id", user_id)
-        .single()
+        .limit(1)
         .execute()
     )
     if not res.data:
         raise HTTPException(404, "Lịch tải không tồn tại.")
 
-    current = res.data["is_active"]
+    current = res.data[0]["is_active"]
     new_active = not current
 
     updates: Dict[str, Any] = {"is_active": new_active}
 
     # When resuming a paused recurring job, recompute next_run_at
-    if new_active and res.data.get("schedule_type") != "once":
+    if new_active and res.data[0].get("schedule_type") != "once":
         from app.tasks.schedule_tasks import _compute_next_run
-        next_run = _compute_next_run(res.data)
+        next_run = _compute_next_run(res.data[0])
         if next_run:
             updates["next_run_at"] = next_run
 

@@ -70,21 +70,28 @@ def can(user_role: str | None, capability: str) -> bool:
 # ── Workspace membership resolver ─────────────────────────────────────────────
 
 def get_workspace_role(user_id: str, workspace_id: str) -> str | None:
-    """Return the user's role in a workspace, or None if not a member."""
+    """Return the user's role in a workspace, or None if not a member.
+
+    Uses limit(1), not single(): single() raises on zero rows, which is the
+    routine case for "user is not a member of this workspace" — the single
+    most common way callers reach this function — and would surface as an
+    unhandled 500 instead of the intended 403 "not a member" response.
+    """
     supabase = get_service_client()
     res = (
         supabase.table("workspace_memberships")
         .select("role, status")
         .eq("workspace_id", workspace_id)
         .eq("user_id", user_id)
-        .single()
+        .limit(1)
         .execute()
     )
     if not res.data:
         return None
-    if res.data.get("status") != "active":
+    row = res.data[0]
+    if row.get("status") != "active":
         return None
-    return res.data.get("role")
+    return row.get("role")
 
 
 def get_user_personal_workspace(user_id: str) -> dict | None:

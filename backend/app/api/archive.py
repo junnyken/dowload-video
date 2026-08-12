@@ -315,11 +315,12 @@ async def get_archive_item(item_id: str, user=Depends(get_required_user)):
         .select("*")
         .eq("id", item_id)
         .eq("user_id", user_id)
-        .single()
+        .limit(1)
         .execute()
     )
     if not res.data:
         raise HTTPException(404, "Archive item không tồn tại.")
+    item = res.data[0]
     # Touch last_accessed_at
     try:
         from datetime import datetime, timezone
@@ -328,7 +329,7 @@ async def get_archive_item(item_id: str, user=Depends(get_required_user)):
         }).eq("id", item_id).execute()
     except Exception:
         pass
-    return res.data
+    return item
 
 
 @router.patch("/archive/{item_id}")
@@ -455,13 +456,13 @@ async def re_download_archive_item(item_id: str, user=Depends(get_required_user)
         .select("original_url, platform, title")
         .eq("id", item_id)
         .eq("user_id", user_id)
-        .single()
+        .limit(1)
         .execute()
     )
     if not item_res.data:
         raise HTTPException(404, "Archive item không tồn tại.")
 
-    item = item_res.data
+    item = item_res.data[0]
     url = item["original_url"]
 
     # Create a new download job
@@ -608,13 +609,13 @@ async def add_to_collection(
         .select("collection_ids")
         .eq("id", item_id)
         .eq("user_id", user_id)
-        .single()
+        .limit(1)
         .execute()
     )
     if not item_res.data:
         raise HTTPException(404, "Archive item không tồn tại.")
 
-    current_ids = item_res.data.get("collection_ids") or []
+    current_ids = item_res.data[0].get("collection_ids") or []
     if coll_id not in current_ids:
         current_ids.append(coll_id)
         supabase.table("archive_items").update({
@@ -650,13 +651,13 @@ async def remove_from_collection(
         .select("collection_ids")
         .eq("id", item_id)
         .eq("user_id", user_id)
-        .single()
+        .limit(1)
         .execute()
     )
     if not item_res.data:
         raise HTTPException(404, "Archive item không tồn tại.")
 
-    current_ids = item_res.data.get("collection_ids") or []
+    current_ids = item_res.data[0].get("collection_ids") or []
     new_ids = [c for c in current_ids if c != coll_id]
     supabase.table("archive_items").update({
         "collection_ids": new_ids

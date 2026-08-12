@@ -196,11 +196,11 @@ async def get_notification_preferences(request: Request):
             db.table("notification_preferences")
             .select("*")
             .eq("user_id", user_id)
-            .maybe_single()
+            .limit(1)
             .execute()
         )
         if result.data:
-            return NotificationPreferences(**result.data)
+            return NotificationPreferences(**result.data[0])
     except Exception as exc:
         logger.warning("Failed to load notification preferences: %s", exc)
 

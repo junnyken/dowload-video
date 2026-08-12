@@ -50,8 +50,8 @@ class PreferencesUpdate(BaseModel):
 async def get_me(user: Dict[str, Any] = Depends(get_required_user)):
     supabase = get_supabase_client()
     try:
-        res = supabase.table("profiles").select("*").eq("id", user["id"]).single().execute()
-        profile = res.data or {}
+        res = supabase.table("profiles").select("*").eq("id", user["id"]).limit(1).execute()
+        profile = res.data[0] if res.data else {}
     except Exception:
         profile = {}
 
@@ -75,11 +75,11 @@ async def get_preferences(user: Dict[str, Any] = Depends(get_required_user)):
             supabase.table("user_preferences")
             .select("*")
             .eq("user_id", user["id"])
-            .single()
+            .limit(1)
             .execute()
         )
         if res.data:
-            return res.data
+            return res.data[0]
     except Exception:
         pass
 
@@ -140,10 +140,10 @@ async def get_usage(user: Dict[str, Any] = Depends(get_required_user)):
             supabase.table("user_usage")
             .select("*")
             .eq("user_id", user["id"])
-            .single()
+            .limit(1)
             .execute()
         )
-        usage = res.data or {}
+        usage = res.data[0] if res.data else {}
     except Exception:
         usage = {}
 
@@ -152,10 +152,10 @@ async def get_usage(user: Dict[str, Any] = Depends(get_required_user)):
             supabase.table("profiles")
             .select("tier")
             .eq("id", user["id"])
-            .single()
+            .limit(1)
             .execute()
         )
-        tier = profile_res.data.get("tier", "free") if profile_res.data else "free"
+        tier = profile_res.data[0].get("tier", "free") if profile_res.data else "free"
     except Exception:
         tier = "free"
 
@@ -473,10 +473,10 @@ async def api_key_status(user: Dict[str, Any] = Depends(get_required_user)):
             .select("created_at, last_used_at")
             .eq("user_id", user["id"])
             .eq("is_active", True)
-            .single()
+            .limit(1)
             .execute()
         )
-        row = res.data
+        row = res.data[0] if res.data else None
     except Exception:
         row = None
 

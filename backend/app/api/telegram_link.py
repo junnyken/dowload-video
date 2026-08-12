@@ -133,11 +133,11 @@ def link_status(user: Dict[str, Any] = Depends(get_optional_user)):
         supabase.table("telegram_links")
         .select("telegram_user_id, telegram_username, linked_at")
         .eq("vidgrab_user_id", user["id"])
-        .maybe_single()
+        .limit(1)
         .execute()
     )
     if res.data:
-        return {"linked": True, **res.data}
+        return {"linked": True, **res.data[0]}
     return {"linked": False}
 
 
@@ -158,14 +158,14 @@ def get_tg_user_info(
         supabase.table("telegram_links")
         .select("vidgrab_user_id")
         .eq("telegram_user_id", telegram_id)
-        .maybe_single()
+        .limit(1)
         .execute()
     )
 
     if not link_res.data:
         return {"linked": False}
 
-    user_id = link_res.data["vidgrab_user_id"]
+    user_id = link_res.data[0]["vidgrab_user_id"]
 
     # Fetch profile for tier
     try:
@@ -190,10 +190,10 @@ def get_tg_user_info(
             supabase.table("user_usage")
             .select("downloads_today")
             .eq("user_id", user_id)
-            .maybe_single()
+            .limit(1)
             .execute()
         )
-        downloads_today = (usage_res.data or {}).get("downloads_today", 0)
+        downloads_today = (usage_res.data or [{}])[0].get("downloads_today", 0)
     except Exception:
         downloads_today = 0
 

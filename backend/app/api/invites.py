@@ -61,11 +61,12 @@ async def create_invite(
     if existing.data:
         raise HTTPException(409, "Đã có lời mời đang chờ cho email này.")
 
-    # Check user is not already a member
+    # Check user is not already a member (most invitees aren't registered yet,
+    # so 0 rows here is the common case, not an edge case)
     profile_res = (supabase.table("profiles").select("id")
-                   .eq("email", email).single().execute())
+                   .eq("email", email).limit(1).execute())
     if profile_res.data:
-        existing_member = get_workspace_role(profile_res.data["id"], workspace_id)
+        existing_member = get_workspace_role(profile_res.data[0]["id"], workspace_id)
         if existing_member:
             raise HTTPException(409, "Người dùng này đã là thành viên của workspace.")
 
@@ -145,13 +146,13 @@ async def inspect_invite(token: str, user=Depends(get_required_user)):
         supabase.table("workspace_invites")
         .select("id, workspace_id, email, role, status, expires_at")
         .eq("token", token)
-        .single()
+        .limit(1)
         .execute()
     )
     if not res.data:
         raise HTTPException(404, "Lời mời không hợp lệ.")
 
-    inv = res.data
+    inv = res.data[0]
     now = datetime.now(timezone.utc)
     if inv["status"] != "pending":
         raise HTTPException(410, f"Lời mời đã '{inv['status']}'.")
@@ -184,13 +185,13 @@ async def accept_invite(
         supabase.table("workspace_invites")
         .select("*")
         .eq("token", token)
-        .single()
+        .limit(1)
         .execute()
     )
     if not res.data:
         raise HTTPException(404, "Lời mời không hợp lệ.")
 
-    inv = res.data
+    inv = res.data[0]
     now = datetime.now(timezone.utc)
 
     if inv["status"] != "pending":

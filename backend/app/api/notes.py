@@ -123,7 +123,7 @@ async def update_note(
             q = q.eq("user_id", user_id)
         elif session_id:
             q = q.eq("session_id", session_id)
-        res = q.single().execute()
+        res = q.limit(1).execute()
         if not res.data:
             raise HTTPException(404, detail="Ghi chú không tồn tại.")
     except HTTPException:

@@ -189,10 +189,10 @@ async def update_preset(request: Request, preset_id: str, body: PresetIn):
 
     # Verify ownership
     try:
-        chk = db.table("user_presets").select("id,is_system").eq("id", preset_id).eq("user_id", user_id).maybe_single().execute()
+        chk = db.table("user_presets").select("id,is_system").eq("id", preset_id).eq("user_id", user_id).limit(1).execute()
         if not chk.data:
             raise HTTPException(status_code=404, detail="Preset not found")
-        if chk.data.get("is_system"):
+        if chk.data[0].get("is_system"):
             raise HTTPException(status_code=403, detail="System presets cannot be modified")
     except HTTPException:
         raise
@@ -225,10 +225,10 @@ async def delete_preset(request: Request, preset_id: str):
     db = get_service_client()
 
     try:
-        chk = db.table("user_presets").select("id,is_system").eq("id", preset_id).eq("user_id", user_id).maybe_single().execute()
+        chk = db.table("user_presets").select("id,is_system").eq("id", preset_id).eq("user_id", user_id).limit(1).execute()
         if not chk.data:
             raise HTTPException(status_code=404, detail="Preset not found")
-        if chk.data.get("is_system"):
+        if chk.data[0].get("is_system"):
             raise HTTPException(status_code=403, detail="System presets cannot be deleted")
     except HTTPException:
         raise
@@ -246,10 +246,10 @@ async def set_default_preset(request: Request, preset_id: str):
     db = get_service_client()
 
     try:
-        chk = db.table("user_presets").select("*").eq("id", preset_id).eq("user_id", user_id).maybe_single().execute()
+        chk = db.table("user_presets").select("*").eq("id", preset_id).eq("user_id", user_id).limit(1).execute()
         if not chk.data:
             raise HTTPException(status_code=404, detail="Preset not found")
-        preset = chk.data
+        preset = chk.data[0]
     except HTTPException:
         raise
     except Exception as exc:
@@ -271,8 +271,8 @@ async def create_preset_from_job(request: Request, job_id: str, name: str):
     db = get_service_client()
 
     try:
-        res = db.table("download_jobs").select("download_settings,platform").eq("id", job_id).eq("user_id", user_id).maybe_single().execute()
-        job = res.data
+        res = db.table("download_jobs").select("download_settings,platform").eq("id", job_id).eq("user_id", user_id).limit(1).execute()
+        job = res.data[0] if res.data else None
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
     except HTTPException:

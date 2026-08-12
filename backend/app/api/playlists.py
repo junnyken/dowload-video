@@ -183,10 +183,10 @@ async def refresh_playlist(
             .select("*")
             .eq("id", playlist_id)
             .eq("user_id", user["id"])
-            .single()
+            .limit(1)
             .execute()
         )
-        playlist = res.data
+        playlist = res.data[0] if res.data else None
     except Exception:
         playlist = None
 
