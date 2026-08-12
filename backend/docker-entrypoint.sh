@@ -7,10 +7,12 @@ set -e
 # API server in the foreground so the container's main process is uvicorn.
 celery -A app.core.celery_app worker \
     -Q downloads,bulk,light,media,analysis,celery \
-    --concurrency=2 \
+    --concurrency=1 \
     --loglevel=info &
 
 celery -A app.core.celery_app beat \
     --loglevel=info &
 
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4 --proxy-headers --forwarded-allow-ips '*'
+# DIAGNOSTIC: temporarily --workers 1 (was 4) to isolate a worker crash-loop
+# under investigation — restore to 4 once root cause is confirmed/fixed.
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips '*'
