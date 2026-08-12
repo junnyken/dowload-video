@@ -209,14 +209,18 @@ async def create_partner_api_key(
             "key_prefix": prefix,
             "label": body.label,
             "scopes": body.scopes,
-            "rate_limit_per_min": body.rate_limit_per_min,
-            "rate_limit_per_day": body.rate_limit_per_day,
             "ip_allowlist": body.ip_allowlist or [],
             "is_active": True,
             "requests_today": 0,
             "requests_total": 0,
             "last_used_at": None,
         }
+        # Omit when unset so Postgres applies its NOT NULL DEFAULT (60/10000)
+        # instead of receiving an explicit NULL, which violates the constraint.
+        if body.rate_limit_per_min is not None:
+            payload["rate_limit_per_min"] = body.rate_limit_per_min
+        if body.rate_limit_per_day is not None:
+            payload["rate_limit_per_day"] = body.rate_limit_per_day
         if body.expires_at:
             payload["expires_at"] = body.expires_at.isoformat()
 
