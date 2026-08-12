@@ -3,6 +3,8 @@
 > Sinh theo `MINI_SPEC_PLAYBOOK.md`. Dựa trên: (1) audit kỹ thuật trực tiếp trên bản deploy VAYS hôm nay,
 > (2) gap analysis nội bộ đã có sẵn ở `FEATURES.md` §8-9 (cập nhật 2026-06-30), (3) nghiên cứu đối thủ thị trường 2025-2026.
 
+**Báo cáo tổng kết trực quan (bảng so sánh tính năng + nhật ký sửa lỗi):** https://claude.ai/code/artifact/a5d6ea27-b2e5-4e0c-80b1-0466a0931daa
+
 ---
 
 ## -1. Đợt quét toàn bộ codebase lần cuối (12/08/2026) — sau khi R30 xong
@@ -19,7 +21,7 @@ Dùng 1 agent audit riêng, đối chiếu TOÀN BỘ `.table()` call trong `bac
 
 **Đã verify sống bug #1** (test subtitle YouTube 3 lần, lần đầu `has_subtitles:true` thành công, không còn `UnboundLocalError`). **Bug #2-5 đã fix đúng theo schema thật (đối chiếu migration SQL), chưa live-test riêng từng cái** — vì đây là task nền/route ít người dùng trực tiếp (billing seats, mobile polling, admin intelligence suggestions), rủi ro thấp, nhưng nên bạn tự thử qua UI nếu có dùng các tính năng này.
 
-**Còn lại chưa xử lý (backlog, không chặn gì):** ~30 chỗ dùng `.single()`/`.maybe_single()` trong `archive.py`, `billing.py`, `invites.py`, `mobile.py`, `notes.py`, `presets.py`, `schedule.py`, `telegram_link.py`, `user.py`, `workspace.py`, `playlists.py` + vài task — cùng loại lỗi đã fix ở `tenant_api_keys.py` (raise `PGRST116` thay vì trả `None` khi 0 dòng khớp), nhưng **không phải tất cả đều là bug thật** — chỉ nguy hiểm ở những nơi 0-dòng là tình huống hợp lệ (vd "tìm user chưa có record"). Cần rà từng chỗ theo ngữ cảnh, không nên sửa hàng loạt không suy nghĩ.
+**✅ ĐÃ XỬ LÝ (13/08/2026):** audit riêng rà toàn bộ ~30 chỗ theo đúng nguyên tắc trên (đọc ngữ cảnh, không sửa hàng loạt) — kết quả: **28 điểm là bug thật → đã fix**, 8 điểm an toàn có chủ đích (FK đảm bảo tồn tại) → giữ nguyên, 0 điểm mơ hồ. Phát hiện thêm 1 bug quan trọng ngoài danh sách gốc: `rbac.py::get_workspace_role()` — hàm lõi RBAC được gọi bởi gần như mọi route `workspace.py`/`invites.py`, không có try/except, crash 500 thay vì trả 403 "không phải thành viên" cho MỌI user không thuộc workspace (tình huống rất phổ biến, không phải edge case). Danh sách đầy đủ 12 file đã sửa: `rbac.py`, `archive.py`, `billing.py`, `invites.py`, `schedule.py`, `telegram_link.py`, `presets.py`, `mobile.py`, `notes.py`, `playlists.py`, `user.py`, `webhook_tasks.py`. Verify sống: `/workspaces`, `/user/me`, `/user/preferences` với tài khoản pilot đều trả dữ liệu thật đúng, backend health OK sau deploy.
 
 ---
 
