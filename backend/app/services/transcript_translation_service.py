@@ -42,8 +42,12 @@ def detect_source_language(cues: list[Cue]) -> str:
         f"{sample_text[:2000]}"
     )
 
-    result = call_llm(prompt, max_output_tokens=32)
-    print(f"[DIAG-lang] call_llm raw result: {result!r}")
+    # 256, not a tight ~16-32 budget: gemini-3.5-flash burns some tokens on
+    # internal reasoning before emitting visible output even for a one-word
+    # answer, and too tight a budget hits finish_reason=MAX_TOKENS with no
+    # usable text at all (confirmed via diagnostic logging) rather than a
+    # truncated-but-readable answer.
+    result = call_llm(prompt, max_output_tokens=256)
     if not result:
         return "Unknown"
 

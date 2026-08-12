@@ -42,9 +42,8 @@ def call_llm(prompt: str, max_output_tokens: int = 2048) -> str | None:
             text = response.text.strip() if response.text else ""
             if text:
                 return text
-            print(f"[DIAG-llm2] empty text, max_tokens={max_output_tokens} response={response!r}")
-        except Exception as exc:
-            print(f"[DIAG-llm2] exception max_tokens={max_output_tokens}: {type(exc).__name__}: {exc}")
+        except Exception:
+            pass
 
     # --- Try OpenAI ---
     openai_key = os.environ.get("OPENAI_API_KEY", "")
