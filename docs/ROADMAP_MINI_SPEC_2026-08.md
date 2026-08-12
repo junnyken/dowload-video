@@ -7,6 +7,18 @@
 
 ---
 
+## R31 — Dịch phụ đề (Transcript Translate) hoàn toàn không hoạt động — ĐÃ FIX (13/08/2026)
+
+User báo lỗi thật khi dùng UI: mọi lần dịch đều fail `"Translation alignment failed... expected N lines back from the LLM"`. Điều tra tận gốc qua 3 lớp:
+
+1. **`google-generativeai` chưa có trong `requirements.txt`** — nhánh Gemini trong `call_llm()` luôn `ModuleNotFoundError` (bị nuốt âm thầm), fallback OpenAI cũng chưa có `OPENAI_API_KEY` → `call_llm()` luôn trả `None`. Đã thêm package.
+2. **Model `gemini-1.5-flash` đã bị Google gỡ bỏ** (`404 models/gemini-1.5-flash is not found for generateContent`) — xác nhận bằng cách gọi thẳng `ListModels` API, không suy đoán. Đổi sang `gemini-3.5-flash` (model hiện có thật, theo yêu cầu user) thay vì alias `-latest`.
+3. **`detect_source_language()` dùng ngân sách 16-32 token quá hẹp** — `gemini-3.5-flash` tốn token cho suy luận nội bộ trước khi xuất câu trả lời, kể cả với câu 1 từ, khiến `finish_reason=MAX_TOKENS` và `response.text` raise `ValueError` (cũng bị nuốt âm thầm) → luôn trả "Unknown". Tăng lên 256 token, xác nhận bằng log chẩn đoán trực tiếp trước khi sửa.
+
+**Verify sống hoàn chỉnh:** upload file .srt tiếng Việt thật → `source_lang:"Vietnamese"` (đúng), `status:"done"`, 3/3 dòng dịch tự nhiên đúng nghĩa ("Xin chào các bạn..." → "Hello everyone..."). Đây từng là tính năng ghi trong `FEATURES.md` là "Backend partial, chưa test end-to-end" — giờ đã chạy thật và verify sống lần đầu tiên.
+
+---
+
 ## -1. Đợt quét toàn bộ codebase lần cuối (12/08/2026) — sau khi R30 xong
 
 Dùng 1 agent audit riêng, đối chiếu TOÀN BỘ `.table()` call trong `backend/app/api/`, `backend/app/tasks/`, `backend/app/services/` với schema thật trong `database/migrations/*.sql`, cộng với quét import sai module — cùng 3 loại lỗi đã lặp lại xuyên suốt session này. Kết quả: import sai module — **sạch** (không còn); `.single()`/`.maybe_single()` — liệt kê ~30 chỗ, chưa fix hết (xem ghi chú cuối); cột DB sai — tìm thêm **5 bug xác nhận**, đã fix cả 5:
