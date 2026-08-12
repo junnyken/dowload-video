@@ -5,6 +5,24 @@
 
 ---
 
+## -1. Đợt quét toàn bộ codebase lần cuối (12/08/2026) — sau khi R30 xong
+
+Dùng 1 agent audit riêng, đối chiếu TOÀN BỘ `.table()` call trong `backend/app/api/`, `backend/app/tasks/`, `backend/app/services/` với schema thật trong `database/migrations/*.sql`, cộng với quét import sai module — cùng 3 loại lỗi đã lặp lại xuyên suốt session này. Kết quả: import sai module — **sạch** (không còn); `.single()`/`.maybe_single()` — liệt kê ~30 chỗ, chưa fix hết (xem ghi chú cuối); cột DB sai — tìm thêm **5 bug xác nhận**, đã fix cả 5:
+
+| # | File | Lỗi | Ảnh hưởng trước khi fix |
+|---|---|---|---|
+| 1 | `downloader.py` (`_extract_video_info_impl`, hàm ~1600 dòng) | Local re-import `is_cobalt_available`/`fetch_cobalt_stream`/`get_redis` (đã có ở module level) che khuất tên đó cho **toàn bộ hàm** theo cách Python scoping hoạt động — gây `UnboundLocalError` không cố định tùy nhánh code nào chạy trước | Tải video lỗi ngẫu nhiên tùy thời điểm/nhánh — đã tận mắt thấy khi test subtitle YouTube |
+| 2 | `schedule_tasks.py:141` | Insert `"quality"` vào `download_jobs`, cột thật là `selected_quality` | Job tải đã lên lịch **luôn luôn** fail âm thầm |
+| 3 | `billing.py` (`GET /billing/seats`) | Order/đọc `workspace_memberships.created_at` — cột thật là `joined_at`, **không có try/except** | 500 mỗi lần gọi |
+| 4 | `mobile.py` (`GET /mobile/recent-jobs`) | Select `url`/`thumbnail`/`session_id` — tên thật `original_url`/`thumbnail_url`; `session_id` **chưa từng được migrate** | Luôn trả `[]` âm thầm |
+| 5 | `intelligence_tasks.py` × 2 task | `generate_schedule_suggestions` giả định schema kiểu cron string (`cron_expression`/`name`) — thật ra dùng `schedule_type`/`run_at`/`run_on_weekday`; `archive_intelligence_scan` đọc `description`/`tags`/`created_at` — thật là `description_snippet`/`tags_user`/`archived_at` | 2 task nền chưa từng sinh ra gợi ý nào từ khi viết |
+
+**Đã verify sống bug #1** (test subtitle YouTube 3 lần, lần đầu `has_subtitles:true` thành công, không còn `UnboundLocalError`). **Bug #2-5 đã fix đúng theo schema thật (đối chiếu migration SQL), chưa live-test riêng từng cái** — vì đây là task nền/route ít người dùng trực tiếp (billing seats, mobile polling, admin intelligence suggestions), rủi ro thấp, nhưng nên bạn tự thử qua UI nếu có dùng các tính năng này.
+
+**Còn lại chưa xử lý (backlog, không chặn gì):** ~30 chỗ dùng `.single()`/`.maybe_single()` trong `archive.py`, `billing.py`, `invites.py`, `mobile.py`, `notes.py`, `presets.py`, `schedule.py`, `telegram_link.py`, `user.py`, `workspace.py`, `playlists.py` + vài task — cùng loại lỗi đã fix ở `tenant_api_keys.py` (raise `PGRST116` thay vì trả `None` khi 0 dòng khớp), nhưng **không phải tất cả đều là bug thật** — chỉ nguy hiểm ở những nơi 0-dòng là tình huống hợp lệ (vd "tìm user chưa có record"). Cần rà từng chỗ theo ngữ cảnh, không nên sửa hàng loạt không suy nghĩ.
+
+---
+
 ## 0. Nhật ký triển khai — 12/08/2026 (session thực thi R25/R26/R27)
 
 **Phát hiện quan trọng khi audit sâu (Explore agent, đọc code thật, không suy đoán):** R25 và R26 đã được code **hoàn thiện hơn nhiều** so với `FEATURES.md` ghi nhận (tài liệu đó đã cũ). Việc thực thi vì vậy thiên về *audit + vá lỗi cụ thể + verify sống*, đúng tinh thần Playbook ("chỉ chạm vào gap đã xác nhận"), thay vì build lại.
