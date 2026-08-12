@@ -95,20 +95,34 @@ async def get_recent_jobs(request: Request, limit: int = 5):
         or request.query_params.get("session_id")
     )
 
+    # download_jobs has no session_id column (no migration ever added one), so
+    # a per-session filter can't be applied — return nothing rather than
+    # leaking every user's recent jobs to an unscoped caller.
+    if session_id:
+        return []
+
     try:
         db = get_service_client()
-        query = (
+        result = (
             db.table("download_jobs")
-            .select("id,url,title,thumbnail,platform,status,created_at")
+            .select("id,original_url,title,thumbnail_url,platform,status,created_at")
             .order("created_at", desc=True)
             .limit(limit)
+            .execute()
         )
-        if session_id:
-            query = query.eq("session_id", session_id)
-
-        result = query.execute()
         rows = result.data or []
-        return [RecentJob(**row) for row in rows]
+        return [
+            RecentJob(
+                id=row["id"],
+                url=row.get("original_url"),
+                title=row.get("title"),
+                thumbnail=row.get("thumbnail_url"),
+                platform=row.get("platform"),
+                status=row.get("status"),
+                created_at=row.get("created_at"),
+            )
+            for row in rows
+        ]
     except Exception as exc:
         logger.warning("recent-jobs query failed: %s", exc)
         return []

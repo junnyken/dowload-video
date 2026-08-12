@@ -1201,7 +1201,11 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         elif not _has_tw_cookie:
             # Single tweet without cookie → try Cobalt as cookieless fallback
             try:
-                from app.services.cobalt_service import is_cobalt_available, fetch_cobalt_stream
+                # is_cobalt_available/fetch_cobalt_stream already imported at module level (line ~191) —
+                # a local re-import here previously shadowed them for this entire function's scope
+                # (Python treats a name as local to the whole function if it's assigned/imported
+                # ANYWHERE in the function body), causing UnboundLocalError on any other code path
+                # in this function that reached a bare is_cobalt_available() call first.
                 if is_cobalt_available():
                     _cob = fetch_cobalt_stream(url, video_quality="1080", download_mode="auto")
                     if _cob.get("url"):
@@ -1499,7 +1503,6 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             # Phase A: extract info (signed CDN URLs) via residential proxy
             # Cache Phase A result in Redis — same URL within TTL skips proxy entirely
             import json as _json_dl
-            from app.core.redis_client import get_redis
             _YT_PHASE_A_TTL = 1800  # 30 min — YouTube signed URLs valid ~6 hours
             # Key includes quality: mp3 vs video resolve different formats, so a
             # URL-only key would serve an mp3 result to a video request (and vice versa).
@@ -1957,7 +1960,6 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             _pa_key = f"phaseA:{_platform_tag}:{hashlib.md5(url.encode()).hexdigest()}"
             info = None
             try:
-                from app.core.redis_client import get_redis
                 _rc2 = get_redis()
                 _hit = _rc2.get(_pa_key)
                 if _hit:

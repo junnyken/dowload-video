@@ -273,10 +273,13 @@ def generate_schedule_suggestions(self) -> None:
         logger.exception("[schedule_suggestions] cannot connect to Supabase: %s", exc)
         return
 
-    # Fetch scheduled jobs
+    # Fetch scheduled jobs. scheduled_jobs has no "cron_expression"/"name"
+    # columns — this app's schedules are represented as schedule_type
+    # ('once'/'daily'/'weekly') + run_at (TIME) + run_on_weekday, not cron
+    # strings (see database/migrations/007_phase8.sql).
     try:
         resp = supabase.table("scheduled_jobs").select(
-            "id, cron_expression, last_run_at, last_run_status, name"
+            "id, schedule_type, run_at, run_on_weekday, last_run_at, last_run_status"
         ).execute()
         jobs: list[dict] = resp.data or []
     except Exception as exc:
@@ -286,10 +289,33 @@ def generate_schedule_suggestions(self) -> None:
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=7)
 
+    _WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+    def _describe_schedule(job: dict) -> str:
+        """Human-readable description of a schedule_type/run_at/run_on_weekday row."""
+        schedule_type = job.get("schedule_type") or "once"
+        run_at = job.get("run_at") or "?"
+        if schedule_type == "weekly" and job.get("run_on_weekday") is not None:
+            wd = job["run_on_weekday"]
+            wd_name = _WEEKDAY_NAMES[wd] if 0 <= wd <= 6 else str(wd)
+            return f"weekly on {wd_name} at {run_at}"
+        return f"{schedule_type} at {run_at}"
+
+    def _extract_minute(run_at) -> int | None:
+        """Return integer minute-of-hour from a TIME value (str 'HH:MM:SS' or datetime.time)."""
+        try:
+            if run_at is None:
+                return None
+            if isinstance(run_at, str):
+                return int(run_at.split(":")[1])
+            return run_at.minute
+        except Exception:
+            return None
+
     # --- Check 1: jobs that haven't run successfully in 7 days ---
     for job in jobs:
         job_id = job.get("id")
-        cron = job.get("cron_expression", "")
+        schedule_desc = _describe_schedule(job)
         last_run_at_raw = job.get("last_run_at")
         last_status = job.get("last_run_status", "")
 
@@ -309,11 +335,11 @@ def generate_schedule_suggestions(self) -> None:
             and str(last_status).lower() in ("success", "ok", "done", "completed")
         )
 
-        if not ran_ok_recently and cron:
+        if not ran_ok_recently:
             suggestions.append({
                 "job_id": str(job_id),
-                "current_cron": cron,
-                "suggested_cron": cron,  # unchanged — operator should review
+                "current_cron": schedule_desc,
+                "suggested_cron": schedule_desc,  # unchanged — operator should review
                 "reason": (
                     "Job has not run successfully in the last 7 days. "
                     f"Last status: {last_status!r}, last_run_at: {last_run_at_raw!r}"
@@ -322,43 +348,26 @@ def generate_schedule_suggestions(self) -> None:
             })
 
     # --- Check 2: collision detection (±2 min window on the minute field) ---
-    def _extract_minute(cron: str) -> int | None:
-        """Return integer minute from a standard 5-field cron string, or None."""
-        try:
-            parts = cron.strip().split()
-            if len(parts) >= 2:
-                minute_field = parts[0]
-                if minute_field.isdigit():
-                    return int(minute_field)
-        except Exception:
-            pass
-        return None
-
-    # Build (job_id, minute) pairs for jobs with a fixed minute
-    minute_map: list[tuple[str, str, int]] = []  # (job_id, cron, minute)
+    # Build (job_id, description, minute) triples for jobs with a fixed run_at
+    minute_map: list[tuple[str, str, int]] = []
     for job in jobs:
-        cron = job.get("cron_expression", "")
-        minute = _extract_minute(cron)
+        minute = _extract_minute(job.get("run_at"))
         if minute is not None:
-            minute_map.append((str(job.get("id")), cron, minute))
+            minute_map.append((str(job.get("id")), _describe_schedule(job), minute))
 
     seen_collisions: set[frozenset] = set()
-    for i, (id_a, cron_a, min_a) in enumerate(minute_map):
-        for id_b, cron_b, min_b in minute_map[i + 1:]:
+    for i, (id_a, desc_a, min_a) in enumerate(minute_map):
+        for id_b, desc_b, min_b in minute_map[i + 1:]:
             if abs(min_a - min_b) <= 2:
                 pair = frozenset({id_a, id_b})
                 if pair in seen_collisions:
                     continue
                 seen_collisions.add(pair)
-                # Suggest shifting job_b by +5 minutes
                 new_minute = (min_b + 5) % 60
-                parts = cron_b.strip().split()
-                parts[0] = str(new_minute)
-                suggested = " ".join(parts)
                 suggestions.append({
                     "job_id": id_b,
-                    "current_cron": cron_b,
-                    "suggested_cron": suggested,
+                    "current_cron": desc_b,
+                    "suggested_cron": desc_b.replace(f":{min_b:02d}", f":{new_minute:02d}"),
                     "reason": (
                         f"Potential collision with job {id_a} — both scheduled within "
                         f"±2 minutes (minute {min_a} vs {min_b}). "
@@ -427,8 +436,8 @@ def archive_intelligence_scan(self) -> None:
     cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     try:
         resp = supabase.table("archive_items").select(
-            "id, title, description, tags, created_at"
-        ).gte("created_at", cutoff).limit(200).execute()
+            "id, title, description_snippet, tags_user, archived_at"
+        ).gte("archived_at", cutoff).limit(200).execute()
         items: list[dict] = resp.data or []
     except Exception as exc:
         logger.exception("[archive_scan] failed to fetch archive_items: %s", exc)
@@ -439,13 +448,13 @@ def archive_intelligence_scan(self) -> None:
 
     # --- Pass 1: tag suggestions for untagged items ---
     for item in items:
-        existing_tags = item.get("tags") or []
+        existing_tags = item.get("tags_user") or []
         if existing_tags:
             continue  # already tagged
 
         item_id = str(item.get("id", ""))
         title = item.get("title") or ""
-        description = item.get("description") or ""
+        description = item.get("description_snippet") or ""
         combined = f"{title} {description}"
         suggested = _extract_keywords(combined)
 
@@ -468,7 +477,7 @@ def archive_intelligence_scan(self) -> None:
             continue
         title_map.setdefault(norm, []).append({
             "item_id": str(item.get("id", "")),
-            "created_at": item.get("created_at"),
+            "created_at": item.get("archived_at"),
         })
 
     for norm_title, group in title_map.items():

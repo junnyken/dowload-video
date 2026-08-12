@@ -138,7 +138,7 @@ def _trigger_single(supabase, user_id: str, payload: dict, auto_col_id: str | No
         "original_url": url,
         "status": "queued",
         "user_id": user_id,
-        "quality": quality,
+        "selected_quality": quality,
     }).execute()
     job_id = job.data[0]["id"] if job.data else None
 

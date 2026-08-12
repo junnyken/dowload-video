@@ -470,7 +470,7 @@ async def billing_seats(user: dict = Depends(get_required_user)):
     supabase = get_service_client()
     members_resp = (
         supabase.table("workspace_memberships")
-        .select("user_id, role, created_at")
+        .select("user_id, role, joined_at")
         .eq("workspace_id", tenant["workspace_id"])
         .eq("status", "active")
         .order("role", desc=True)
@@ -487,7 +487,7 @@ async def billing_seats(user: dict = Depends(get_required_user)):
             SeatMember(
                 user_id=m["user_id"],
                 role=m.get("role", "member"),
-                joined_at=m.get("created_at"),
+                joined_at=m.get("joined_at"),
             )
             for m in members
         ],
