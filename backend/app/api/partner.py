@@ -38,6 +38,20 @@ _PLAN_PRIORITY: dict[str, int] = {
     TenantPlan.enterprise: 1,   # highest priority (lower number = higher)
 }
 
+# partner_jobs.priority is a TEXT enum ('low'|'normal'|'high') in the DB, but
+# Celery's apply_async(priority=...) and this API's response both use the
+# numeric 1/3/5 scale — convert between the two at the DB boundary only.
+def _priority_to_label(priority: int) -> str:
+    if priority <= 1:
+        return "high"
+    if priority <= 3:
+        return "normal"
+    return "low"
+
+
+def _priority_from_label(label: str | None) -> int:
+    return {"high": 1, "normal": 3, "low": 5}.get(label or "low", 5)
+
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
@@ -213,7 +227,7 @@ async def submit_job(
         "quality":     body.quality,
         "format":      body.format,
         "options":     body.options,
-        "priority":    priority,
+        "priority":    _priority_to_label(priority),
         "status":      "queued",
     }
 
@@ -287,7 +301,7 @@ async def get_job(
         quality=row.get("quality", "best"),
         format=row.get("format"),
         options=row.get("options") or {},
-        priority=row.get("priority", 5),
+        priority=_priority_from_label(row.get("priority")),
         tenant_id=row.get("tenant_id", tenant.tenant_id),
         api_key_id=row.get("api_key_id"),
         created_at=row.get("created_at", ""),
@@ -331,7 +345,7 @@ async def list_jobs(
             quality=r.get("quality", "best"),
             format=r.get("format"),
             options=r.get("options") or {},
-            priority=r.get("priority", 5),
+            priority=_priority_from_label(r.get("priority")),
             tenant_id=r.get("tenant_id", tenant.tenant_id),
             api_key_id=r.get("api_key_id"),
             created_at=r.get("created_at", ""),
