@@ -13,7 +13,7 @@ Routes:
 import os
 import uuid
 import logging
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -39,10 +39,10 @@ VALID_ANALYSES = {"trim", "gif", "metadata", "clips", "summary"}
 # ---------------------------------------------------------------------------
 
 def _get_db():
-    """Return a DB connection/session. Import lazily to avoid circular deps."""
+    """Return the Supabase service-role client. Import lazily to avoid circular deps."""
     try:
-        from app.core.database import get_db_conn  # noqa: PLC0415
-        return get_db_conn()
+        from app.core.database import get_service_client  # noqa: PLC0415
+        return get_service_client()
     except ImportError:
         return None
 
@@ -305,32 +305,35 @@ def _tier_filter_results(results: dict, tier: str) -> dict:
 
 
 def _load_analysis_result(job_id: str) -> dict | None:
-    """Load analysis result from DB. Returns None if not found."""
+    """Load analysis job + result from Supabase. Returns None if not found."""
     db = _get_db()
     if db is None:
         return None
     try:
-        with db as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT j.status, j.progress_hint, r.result_json, j.created_at
-                    FROM analysis_jobs j
-                    LEFT JOIN analysis_results r ON r.job_id = j.id
-                    WHERE j.id = %s
-                    """,
-                    (job_id,),
-                )
-                row = cur.fetchone()
-                if row is None:
-                    return None
-                status, progress_hint, result_json, created_at = row
-                return {
-                    "status": status,
-                    "progress_hint": progress_hint,
-                    "result": result_json,
-                    "created_at": created_at,
-                }
+        job_resp = db.table("analysis_jobs").select("status, error_message, created_at").eq("id", job_id).execute()
+        if not job_resp.data:
+            return None
+        job = job_resp.data[0]
+
+        result = None
+        if job["status"] == "done":
+            res_resp = (
+                db.table("analysis_results")
+                .select("trim_suggestions, clip_suggestions, gif_suggestions, "
+                        "metadata_suggestions, summary_suggestions, signals_used, "
+                        "warnings, fallback_used, processing_time_ms")
+                .eq("job_id", job_id)
+                .execute()
+            )
+            if res_resp.data:
+                result = res_resp.data[0]
+
+        return {
+            "status": job["status"],
+            "progress_hint": job.get("error_message") or "Processing…",
+            "result": result,
+            "created_at": job["created_at"],
+        }
     except Exception as exc:
         logger.error("DB load analysis result error: %s", exc)
         return None
@@ -368,32 +371,27 @@ async def submit_analyze_media(
     if not allowed:
         raise HTTPException(status_code=429, detail=reason)
 
-    # Check DB cache by media_path fingerprint
+    # Check DB cache by media_path (reuse a still-fresh completed analysis of the same file)
     if body.media_path:
         db = _get_db()
         if db is not None:
             try:
-                with db as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            """
-                            SELECT id FROM analysis_jobs
-                            WHERE media_fingerprint = %s
-                              AND status = 'done'
-                              AND expires_at > NOW()
-                            ORDER BY created_at DESC
-                            LIMIT 1
-                            """,
-                            (body.media_path,),
-                        )
-                        row = cur.fetchone()
-                        if row:
-                            cached_job_id = str(row[0])
-                            return {
-                                "job_id": cached_job_id,
-                                "status": "cached",
-                                "estimated_wait_s": 0,
-                            }
+                cache_resp = (
+                    db.table("analysis_jobs")
+                    .select("id")
+                    .eq("media_path", body.media_path)
+                    .eq("status", "done")
+                    .gt("expires_at", datetime.now(timezone.utc).isoformat())
+                    .order("created_at", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+                if cache_resp.data:
+                    return {
+                        "job_id": cache_resp.data[0]["id"],
+                        "status": "cached",
+                        "estimated_wait_s": 0,
+                    }
             except Exception as exc:
                 logger.warning("Cache lookup failed: %s", exc)
 
@@ -404,23 +402,14 @@ async def submit_analyze_media(
     db = _get_db()
     if db is not None:
         try:
-            with db as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        INSERT INTO analysis_jobs
-                            (id, url, media_fingerprint, analyses, status, user_id, created_at)
-                        VALUES (%s, %s, %s, %s, 'queued', %s, NOW())
-                        """,
-                        (
-                            job_id,
-                            body.url,
-                            body.media_path,
-                            body.analyses,
-                            user_id,
-                        ),
-                    )
-                    conn.commit()
+            db.table("analysis_jobs").insert({
+                "id": job_id,
+                "media_url": body.url,
+                "media_path": body.media_path,
+                "analyses_requested": body.analyses,
+                "duration_seconds": body.duration_hint_s,
+                "user_id": user_id,
+            }).execute()
         except Exception as exc:
             logger.error("Failed to insert analysis_jobs row: %s", exc)
             # Don't block the user — still queue the task

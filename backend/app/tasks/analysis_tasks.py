@@ -153,6 +153,8 @@ def analyze_media_task(job_id: str) -> dict:
             extra={"job_id": job_id, "error": str(exc)},
         )
 
+    _started_at = datetime.now(timezone.utc)
+
     try:
         # ------------------------------------------------------------------
         # 3. Resolve media path + metadata
@@ -213,7 +215,7 @@ def analyze_media_task(job_id: str) -> dict:
 
         if "trim" in analyses_requested:
             try:
-                from app.core.media_analyzer import suggest_all_trim_modes  # type: ignore
+                from app.services.smart_trim import suggest_all_trim_modes  # type: ignore
 
                 results["trim"] = suggest_all_trim_modes(analysis)
             except Exception as exc:
@@ -225,7 +227,7 @@ def analyze_media_task(job_id: str) -> dict:
 
         if "clips" in analyses_requested:
             try:
-                from app.core.media_analyzer import detect_highlights  # type: ignore
+                from app.services.smart_clips import detect_highlights  # type: ignore
 
                 results["clips"] = detect_highlights(analysis)
             except Exception as exc:
@@ -237,7 +239,7 @@ def analyze_media_task(job_id: str) -> dict:
 
         if "gif" in analyses_requested:
             try:
-                from app.core.media_analyzer import suggest_gif_segments  # type: ignore
+                from app.services.smart_gif import suggest_gif_segments  # type: ignore
 
                 results["gif"] = suggest_gif_segments(analysis)
             except Exception as exc:
@@ -288,13 +290,29 @@ def analyze_media_task(job_id: str) -> dict:
                 results["summary"] = {"error": str(exc)}
 
         # ------------------------------------------------------------------
-        # 6. Upsert analysis_results
+        # 6. Upsert analysis_results — map the per-analysis staging dict onto
+        # the typed columns analysis_results actually has (see migration 013).
         # ------------------------------------------------------------------
+        _warnings = [
+            f"{key}: {val['error']}"
+            for key, val in results.items()
+            if isinstance(val, dict) and "error" in val
+        ]
+        _processing_ms = int(
+            (datetime.now(timezone.utc) - _started_at).total_seconds() * 1000
+        )
         try:
             db.table("analysis_results").upsert(
                 {
                     "job_id": job_id,
-                    "results": results,
+                    "trim_suggestions": results.get("trim") if isinstance(results.get("trim"), list) else [],
+                    "clip_suggestions": results.get("clips") if isinstance(results.get("clips"), list) else [],
+                    "gif_suggestions": results.get("gif") if isinstance(results.get("gif"), list) else [],
+                    "metadata_suggestions": results.get("metadata") if isinstance(results.get("metadata"), dict) else {},
+                    "summary_suggestions": results.get("summary") if isinstance(results.get("summary"), dict) else {},
+                    "warnings": _warnings,
+                    "fallback_used": not media_path,
+                    "processing_time_ms": _processing_ms,
                     "created_at": _now_iso(),
                 },
                 on_conflict="job_id",
