@@ -1157,7 +1157,9 @@ async def bulk_download(
                 video_count += 1
 
         except Exception as e:
-            print(f"Error creating job for {url}: {e}")
+            import traceback as _tb
+            print(f"[DIAG-bulk] Error creating job for {url}: {type(e).__name__}: {e}")
+            print(f"[DIAG-bulk] traceback:\n{_tb.format_exc()}")
 
     # Set exact 60-minute scheduled cleanup for this entire batch folder and zip
     from app.tasks.video_tasks import delete_batch_resources
