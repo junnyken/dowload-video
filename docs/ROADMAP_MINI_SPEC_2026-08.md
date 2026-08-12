@@ -15,7 +15,59 @@
 | **R26 AI Media** | `smart_analysis.py` import sai module (`metadata_cleaner` không tồn tại) + gọi sai signature → luôn fallback về stub thô sơ, logic thật trong `smart_metadata.py` là dead code. Đã sửa (commit `6ac06b1`). `SmartActionsPanel.jsx` xác nhận **đã mounted** trong `DashboardContent.jsx` (không phải orphan như roadmap ban đầu giả định). | `POST /api/v1/smart-metadata/clean` test thật: trả tags giàu ngữ nghĩa (`language:en`, `music`, `audio`) + filename đã lọc bracket-suffix — đúng hành vi logic thật, khác hẳn output thô của stub cũ. | `analyze-media` (clip/trim/gif detection qua Celery) mới audit code, **chưa live-test E2E** — cần 1 job đã tải xong để có `job_id` test. Tier gating (`smart_analysis.py`) đang tách riêng khỏi `entitlements.py` — cần quyết định có hợp nhất không. |
 | **R27 Partner API** | Xác nhận đủ 9 endpoint, `partner_auth.py`/`tenant_api_keys.py` code hoàn chỉnh. | `GET /partner/usage` không key / key sai → đúng `401` cả 2 case (biên bảo mật hoạt động thật). | **Xác nhận gap thật**: không có UI self-service cho `vgp_` key (chỉ có admin UI + UI cá nhân `vidgrab_` key khác loại). Webhook HMAC có code, **0 test** che phủ. Full flow (tạo key thật → gọi → nhận webhook) cần 1 user/tenant thật đã đăng nhập — không tự tạo được trong phiên này (tránh tạo tài khoản giả trong Supabase production). |
 
-**Bug mới phát hiện (ngoài phạm vi R25-27, ghi nhận cho backlog):** `POST /api/v1/bulk-download` với 1 URL video đơn (không phải channel) trả về `success:true` nhưng `videos_queued:0`, và `GET /jobs/{batch_id}` sau đó trả rỗng hoàn toàn — không có row nào được tạo trong `download_jobs`, không có log lỗi nào ghi lại (kể cả log `Error creating job for {url}` đã có sẵn trong code cũng không xuất hiện — nghĩa là nhánh single-video còn chưa chắc là nơi bug xảy ra, cần điều tra thêm từ `classify_url`/`resolve_short_url` trở xuống). **Mức độ:** tiềm ẩn cao vì đây là con đường chính của tính năng bulk download — cần 1 MINI-SPEC điều tra riêng trước khi tin tưởng bulk download hoạt động đúng trên production.
+**Bug mới phát hiện — ĐÃ TÌM RA ROOT CAUSE (12/08/2026, điều tra sau khi user yêu cầu ưu tiên):**
+
+Ban đầu nghi do crash-loop (xem bảng dưới), nhưng sau khi cô lập biến (giảm uvicorn 4→1 worker, celery concurrency 2→1) crash-loop dừng hẳn mà bug bulk-download **vẫn còn nguyên** → 2 vấn đề độc lập, không liên quan nhau. Root cause thật, xác nhận bằng cách gọi thẳng Supabase REST API (không qua backend) để loại trừ:
+
+> **`INSERT` trực tiếp vào bảng `download_jobs` với field `platform` → Supabase trả lỗi `PGRST204: Could not find the 'platform' column of 'download_jobs' in the schema cache`.**
+
+Tức là: code (`backend/app/api/routes.py`, cả nhánh bulk lẫn scheduled lẫn channel) đã insert kèm `"platform": _get_platform_key(url)` vào `download_jobs`, nhưng **bảng `download_jobs` trên Supabase production chưa từng được migrate thêm cột `platform`** — không tìm thấy migration nào tạo cột này cho bảng `download_jobs` trong `database/migrations/` (chỉ có bảng `archive_items` có cột `platform`, dễ nhầm). Đây là lỗi **lệch schema code↔DB có thật, tồn tại từ trước**, không phải do lần deploy VAYS hôm nay gây ra — nghĩa là tính năng bulk-download/scheduled-download/channel-download nhiều khả năng đã **âm thầm hỏng trên mọi môi trường** kể từ khi field `platform` được thêm vào code mà chưa kèm migration tương ứng. Đây cũng khớp với 1 dấu hiệu khác từng thấy trong log runtime sớm hơn: `[Schema] ⚠ download_jobs — column 'url' may be missing` — bảng này có **nhiều hơn 1 cột bị lệch** giữa code và DB thật, không chỉ riêng `platform`.
+
+**Tôi CHƯA tự sửa schema** — đây là thay đổi DDL (`ALTER TABLE`) trên database production thật, cần chạy qua Supabase SQL Editor với quyền cao hơn anon key tôi đang có, và nên được review trước khi áp dụng (rủi ro cao/khó hoàn tác nếu sai). Đề xuất fix cụ thể ở mục MINI-SPEC mới bên dưới (R28).
+
+**Việc phụ phát sinh trong lúc điều tra:** phát hiện container VAYS bị crash-loop liên tục (uvicorn worker chết/respawn mỗi 1-2s) do chạy 4 uvicorn worker + celery worker + beat cùng lúc quá tải tài nguyên (kể cả sau khi tăng RAM 512MB→2048MB vẫn crash-loop). Đã hạ tạm `--workers 4→1` + celery `--concurrency 2→1` để ổn định ngay (commit `cb3de31`) — cần tune lại con số hợp lý (khuyến nghị `--workers 2`) sau khi theo dõi RAM thực tế ổn định vài ngày, xem mục R29.
+
+---
+
+## R28 — MINI-SPEC: Vá lệch schema `download_jobs` (code↔DB)
+
+**Name:** Đồng bộ schema `download_jobs` giữa code và Supabase production
+**Parent phase:** Hotfix — chặn hoàn toàn bulk/scheduled/channel download
+**Author:** AI (phối hợp Thiên Triều) · **Date:** 2026-08-12 · **Độ ưu tiên:** 🔴 P0 khẩn — cao hơn cả R25-27
+
+### Context
+- Bắt buộc đọc: `database/migrations/` (toàn bộ, để liệt kê chính xác cột nào từng được migrate cho `download_jobs`), `backend/app/core/database.py` (`_REQUIRED_COLUMNS`), mọi chỗ insert vào `download_jobs` trong `backend/app/api/routes.py`.
+- Bằng chứng đã có: insert trực tiếp qua Supabase REST với `platform` → `PGRST204`. Cảnh báo `[Schema]` cho thấy cột `url` cũng nghi vấn tương tự (code `_REQUIRED_COLUMNS` liệt kê `url` nhưng insert thực tế dùng `original_url` — có thể đây là 2 tên khác nhau cho cùng ý định, cần đối chiếu kỹ chứ không suy đoán).
+- Quyết định giữ nguyên: không đổi tên cột đang được nhiều nơi code khác phụ thuộc (`original_url` đã dùng khắp `recovery.py`) trừ khi audit xác nhận an toàn.
+
+### Goal
+`POST /api/v1/bulk-download`, `/fetch-link` (nhánh scheduled), và channel-scrape insert `download_jobs` thành công 100%, không còn lỗi `PGRST204` hay bất kỳ lỗi schema nào khác.
+
+### Constraints (Guardrails)
+1. Audit đầy đủ TRƯỚC khi viết migration — liệt kê chính xác cột nào code cần mà DB thiếu (không chỉ mỗi `platform`).
+2. Migration mới phải additive (`ADD COLUMN IF NOT EXISTS`), không xoá/đổi tên cột đang có dữ liệu.
+3. Không tự chạy DDL qua anon key — phải dùng Supabase SQL Editor (service_role) hoặc migration pipeline chính thức của dự án, có xác nhận từ Thiên Triều trước khi apply lên production.
+4. Sau khi vá, chạy lại `validate_schema()` xác nhận `[Schema] ✓` cho toàn bộ cột, không chỉ test 1 API.
+5. Test thật trên production (không mock Supabase) trước khi báo done — đúng tinh thần "no fake data".
+
+### Scope
+- **A. Domain model:** liệt kê đủ tập cột `download_jobs` cần cho: single insert (`/fetch-link` scheduled), bulk insert, channel-scrape insert — đối chiếu với cả `_REQUIRED_COLUMNS` trong `database.py`.
+
+  **Đã quét toàn bộ 12 điểm insert vào `download_jobs`** (`routes.py` ×6, `schedule_tasks.py` ×3, `video_tasks.py` ×1, `container.py` ×1, `archive.py` ×1) — tập hợp field thực tế code dùng khi INSERT:
+  `batch_id, downloaded_height, error_message, file_size_mb, id, is_audio_only, job_stage, job_type, original_url, platform, quality, selected_quality, source, source_surface, status, thumbnail_url, title, user_id`.
+
+  **Lưu ý quan trọng:** `_REQUIRED_COLUMNS` trong `database.py` check cột tên **`url`**, nhưng mọi insert thực tế trong code đều dùng **`original_url`** — nhiều khả năng cảnh báo `[Schema] ⚠ column 'url' may be missing` là **false alarm do chính hàm check dùng sai/cũ tên cột**, không phải DB thiếu thật. Cần audit xác nhận: nếu `original_url` đã hoạt động tốt ở mọi nơi khác (đúng — thấy trong log `recovery.py` query `original_url` trả `200 OK` bình thường), thì chỉ cần **sửa `_REQUIRED_COLUMNS` từ `"url"` → `"original_url"`**, không cần đổi DB. Cột thật sự thiếu trên DB (đã xác nhận bằng chứng cứng) chỉ có **`platform`**.
+- **B. Migration:** 1 file SQL mới trong `database/migrations/` (`ADD COLUMN IF NOT EXISTS platform TEXT DEFAULT 'other'`, và bất kỳ cột nào khác audit tìm thấy).
+- **C. Không cần đổi API contract.**
+- **D. Không cần đổi UI.**
+- **E. Tests:** integration test thật gọi `/bulk-download` với 1 URL, verify `videos_queued:1` và có row thật trong `download_jobs`.
+
+### Test Plan
+- Live verification bắt buộc: gọi `/bulk-download` với 1 URL youtube.com/watch — trước khi coi là xong, phải thấy `videos_queued:1` (không phải 0) VÀ `/jobs/{batch_id}` trả về đúng 1 job.
+
+### Success Criteria
+- `videos_queued` khớp đúng số URL hợp lệ gửi lên, không còn 0 âm thầm.
+- Không còn dòng `[Schema] ⚠` nào trong log khởi động.
 
 ---
 
