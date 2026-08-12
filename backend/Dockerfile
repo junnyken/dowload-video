@@ -41,5 +41,6 @@ RUN mkdir -p /app/ytdlp_cache && \
 # Expose port (tuỳ chọn)
 EXPOSE 8000
 
-# Chạy ứng dụng bằng uvicorn
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--proxy-headers", "--forwarded-allow-ips", "*"]
+# Single-container deploy: run celery worker (background) + uvicorn (foreground)
+RUN chmod +x docker-entrypoint.sh
+CMD ["./docker-entrypoint.sh"]
