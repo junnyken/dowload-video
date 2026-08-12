@@ -175,61 +175,69 @@ async def create_partner_api_key(
     user: Dict = Depends(get_required_user),
 ):
     """Create a new partner API key. Returns raw_key ONCE — store it securely."""
-    tenant = _get_user_tenant(user["id"])
-    tenant_id = tenant["id"]
-    workspace_id = tenant["_workspace_id"]
+    try:
+        tenant = _get_user_tenant(user["id"])
+        tenant_id = tenant["id"]
+        workspace_id = tenant["_workspace_id"]
 
-    _require_admin_or_owner(user["id"], workspace_id)
+        _require_admin_or_owner(user["id"], workspace_id)
 
-    db = get_service_client()
+        db = get_service_client()
 
-    # Enforce active-key limit
-    count_res = (
-        db.table("tenant_api_keys")
-        .select("id", count="exact")
-        .eq("tenant_id", tenant_id)
-        .eq("is_active", True)
-        .execute()
-    )
-    active_count = count_res.count or 0
-    if active_count >= MAX_KEYS_PER_TENANT:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Tenant already has {MAX_KEYS_PER_TENANT} active API keys. Revoke one before creating another.",
+        # Enforce active-key limit
+        count_res = (
+            db.table("tenant_api_keys")
+            .select("id", count="exact")
+            .eq("tenant_id", tenant_id)
+            .eq("is_active", True)
+            .execute()
         )
+        active_count = count_res.count or 0
+        if active_count >= MAX_KEYS_PER_TENANT:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Tenant already has {MAX_KEYS_PER_TENANT} active API keys. Revoke one before creating another.",
+            )
 
-    raw_key = _generate_raw_key()
-    key_hash = _hash_key(raw_key)
-    prefix = _key_prefix(raw_key)
+        raw_key = _generate_raw_key()
+        key_hash = _hash_key(raw_key)
+        prefix = _key_prefix(raw_key)
 
-    payload: Dict[str, Any] = {
-        "tenant_id": tenant_id,
-        "key_hash": key_hash,
-        "key_prefix": prefix,
-        "label": body.label,
-        "scopes": body.scopes,
-        "rate_limit_per_min": body.rate_limit_per_min,
-        "rate_limit_per_day": body.rate_limit_per_day,
-        "ip_allowlist": body.ip_allowlist or [],
-        "is_active": True,
-        "requests_today": 0,
-        "requests_total": 0,
-        "last_used_at": None,
-    }
-    if body.expires_at:
-        payload["expires_at"] = body.expires_at.isoformat()
+        payload: Dict[str, Any] = {
+            "tenant_id": tenant_id,
+            "key_hash": key_hash,
+            "key_prefix": prefix,
+            "label": body.label,
+            "scopes": body.scopes,
+            "rate_limit_per_min": body.rate_limit_per_min,
+            "rate_limit_per_day": body.rate_limit_per_day,
+            "ip_allowlist": body.ip_allowlist or [],
+            "is_active": True,
+            "requests_today": 0,
+            "requests_total": 0,
+            "last_used_at": None,
+        }
+        if body.expires_at:
+            payload["expires_at"] = body.expires_at.isoformat()
 
-    insert_res = (
-        db.table("tenant_api_keys")
-        .insert(payload)
-        .execute()
-    )
-    if not insert_res.data:
-        raise HTTPException(status_code=500, detail="Failed to create API key.")
+        insert_res = (
+            db.table("tenant_api_keys")
+            .insert(payload)
+            .execute()
+        )
+        if not insert_res.data:
+            raise HTTPException(status_code=500, detail="Failed to create API key.")
 
-    row = _strip_hash(insert_res.data[0])
-    row["raw_key"] = raw_key  # shown exactly once
-    return row
+        row = _strip_hash(insert_res.data[0])
+        row["raw_key"] = raw_key  # shown exactly once
+        return row
+    except HTTPException:
+        raise
+    except Exception as exc:
+        import traceback as _tb
+        print(f"[DIAG-partner] create_partner_api_key failed: {type(exc).__name__}: {exc}")
+        print(_tb.format_exc())
+        raise HTTPException(status_code=500, detail=f"DIAG: {type(exc).__name__}: {exc}") from exc
 
 
 @router.patch("/partner/api-keys/{key_id}")
