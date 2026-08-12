@@ -107,6 +107,20 @@ Pipeline chạy trọn: API → Celery `analysis` queue → 3 module phân tích
 
 ---
 
+## R25 (tiếp) — Live-test kill-worker: PASS
+
+Submit 5 video (quality `video_4k`, concurrency=1 nên xử lý tuần tự) rồi trigger redeploy VAYS ngay khi 1 job đang ở `status:"processing", job_stage:"extracting"`. Sau khi redeploy xong: **cả 5/5 job đều `status:"success"`, không job nào bị kẹt hay mất**.
+
+Lưu ý trung thực: VAYS dùng blue-green deploy (container mới lên trước, container cũ vẫn phục vụ nốt request đang chạy trước khi bị tắt) — nên không chắc 100% đã bắt được kịch bản "hard-kill giữa task" thật sự (khác với OOM-kill đột ngột từng thấy lúc điều tra R28, khi đó hệ thống cũng tự phục hồi không cần can thiệp). Không có quyền gửi tín hiệu kill trực tiếp vào tiến trình qua VAYS nên đây là bằng chứng tốt nhất có thể thu thập được ở tầng black-box. Kết luận: **R25 đạt** với mức độ tin cậy cao, dựa trên cả live-test này lẫn audit code đã xác nhận `JobLease`/`recovery.py` hoàn chỉnh trước đó.
+
+---
+
+## Tổng kết phiên làm việc 12/08/2026
+
+Tất cả 3 MINI-SPEC gốc (R25, R26, R27-audit) + 1 hotfix phát sinh (R28) đã hoàn thành và live-verify. Việc còn lại duy nhất: **R27 giai đoạn full-pilot** (tạo `vgp_` key thật → gọi → nhận webhook) cần 1 tài khoản user đã đăng nhập thật trên production — không tự tạo được vì tránh chèn tài khoản giả vào Supabase production. Cần Thiên Triều đăng nhập 1 tài khoản thật (hoặc tạo tài khoản test) và cấp session/API key để tiếp tục bước này.
+
+---
+
 ## 1. Trạng thái xác thực hôm nay (live trên VAYS)
 
 Đã verify trực tiếp (không suy đoán) trên `dvid-api.cmc-1.vibenode.matbao.ai` + `dvid.cmc-1.vibenode.matbao.ai`:
