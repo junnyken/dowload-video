@@ -744,12 +744,27 @@ def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: s
             job_entries.append((job_id, video_url))
 
         # ── Phase 3: Dispatch in waves ───────────────────
+        # One apply_async() failing (e.g. a transient broker hiccup) must not
+        # strand the rest of the batch in "pending" forever — scan_stale_jobs
+        # recovers stuck-pending rows periodically as a second safety net, but
+        # dispatch should still try every job before giving up on any of them.
+        dispatch_failed = 0
+
+        def _dispatch(job_id: str, video_url: str, countdown: int = 0):
+            nonlocal dispatch_failed
+            try:
+                process_video_task.apply_async(
+                    args=[job_id, video_url, user_id, quality, remove_watermark, download_subs],
+                    countdown=countdown,
+                )
+            except Exception as dispatch_err:
+                dispatch_failed += 1
+                print(f"[scrape_channel_task] dispatch failed for job {job_id}: {dispatch_err}")
+
         # Tiny batch: skip wave overhead entirely — dispatch all immediately.
         if len(job_entries) <= WAVE_SIZE:
             for job_id, video_url in job_entries:
-                process_video_task.apply_async(
-                    args=[job_id, video_url, user_id, quality, remove_watermark, download_subs],
-                )
+                _dispatch(job_id, video_url)
             total_waves = 1
         else:
             total_waves = (len(job_entries) + WAVE_SIZE - 1) // WAVE_SIZE
@@ -767,10 +782,11 @@ def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: s
                 countdown = wave_idx * adaptive_delay
 
                 for job_id, video_url in wave:
-                    process_video_task.apply_async(
-                        args=[job_id, video_url, user_id, quality, remove_watermark, download_subs],
-                        countdown=countdown,
-                    )
+                    _dispatch(job_id, video_url, countdown=countdown)
+
+        if dispatch_failed:
+            print(f"[scrape_channel_task] {dispatch_failed}/{len(job_entries)} dispatch(es) failed — "
+                  f"scan_stale_jobs will re-queue them within ~2 min")
 
         # ── Phase 4: Update summary ──────────────────────
         wave_info = f" ({total_waves} dot x {WAVE_SIZE} video, mode={_wave_mode})" if total_waves > 1 else ""

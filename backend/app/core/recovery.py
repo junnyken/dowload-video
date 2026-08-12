@@ -535,8 +535,13 @@ def scan_stale_jobs() -> None:
 
     Checks:
       1. `processing` jobs older than STUCK_PROCESSING_MINUTES AND no live heartbeat
-      2. `stale` rows that were marked by a previous cycle
-      3. Redis container discovery snapshots stuck in discovering/resolving/expanding
+      2. `pending` jobs older than STUCK_PENDING_MINUTES with no task ever dispatched
+         (e.g. a wave-dispatch loop that raised partway through a channel-scrape
+         batch, or any other apply_async that silently never reached the broker) —
+         previously this class was only recovered once, at process startup, so a
+         job stuck here between deploys was stuck forever with no self-healing.
+      3. `stale` rows that were marked by a previous cycle
+      4. Redis container discovery snapshots stuck in discovering/resolving/expanding
     """
     from app.core.database import get_service_client
     supabase = get_service_client()
@@ -557,22 +562,43 @@ def scan_stale_jobs() -> None:
         print(f"[Recovery:scan] query failed (migration pending?): {e}")
         stuck = []
 
-    recovered = abandoned = 0
+    recovered = abandoned = succeeded = 0
     for job in stuck:
         outcome = _recover_or_abandon(supabase, job, source="scan")
         if outcome == "recovered":   recovered += 1
         elif outcome == "abandoned": abandoned += 1
 
-    # 2. Scan leftover 'stale' DB rows
+    # 2. Scan stuck 'pending' jobs (never dispatched, or dispatch was lost)
+    try:
+        cutoff_pending = (datetime.now(timezone.utc) - timedelta(minutes=STUCK_PENDING_MINUTES)).isoformat()
+        res_pending = (
+            supabase.table("download_jobs")
+            .select("id, original_url, job_stage, recovery_attempts, selected_quality, direct_mp4_url, updated_at, created_at, last_recovery_at")
+            .eq("status", "pending")
+            .lt("updated_at", cutoff_pending)
+            .execute()
+        )
+        stuck_pending = res_pending.data or []
+    except Exception as e:
+        print(f"[Recovery:scan] pending query failed: {e}")
+        stuck_pending = []
+
+    for job in stuck_pending:
+        outcome = _recover_pending(supabase, job, source="scan")
+        if outcome == "recovered":   recovered += 1
+        elif outcome == "succeeded": succeeded += 1
+        elif outcome == "abandoned": abandoned += 1
+
+    # 3. Scan leftover 'stale' DB rows
     stale_rec, stale_aban = _recover_stale_db_jobs(supabase, source="scan")
     recovered += stale_rec
     abandoned += stale_aban
 
-    # 3. Scan stuck Redis discovery jobs
+    # 4. Scan stuck Redis discovery jobs
     discovery_marked = _recover_stale_discovery_jobs(source="scan")
 
-    if recovered or abandoned or discovery_marked:
-        print(f"[Recovery:scan] {recovered} recovered, {abandoned} abandoned, {discovery_marked} discovery-stale")
+    if recovered or abandoned or succeeded or discovery_marked:
+        print(f"[Recovery:scan] {recovered} recovered, {succeeded} auto-succeeded, {abandoned} abandoned, {discovery_marked} discovery-stale")
 
 
 def refresh_job_link(job_id: str, user_id: Optional[str] = None) -> dict:
