@@ -5,6 +5,20 @@
 
 ---
 
+## 0. Nhật ký triển khai — 12/08/2026 (session thực thi R25/R26/R27)
+
+**Phát hiện quan trọng khi audit sâu (Explore agent, đọc code thật, không suy đoán):** R25 và R26 đã được code **hoàn thiện hơn nhiều** so với `FEATURES.md` ghi nhận (tài liệu đó đã cũ). Việc thực thi vì vậy thiên về *audit + vá lỗi cụ thể + verify sống*, đúng tinh thần Playbook ("chỉ chạm vào gap đã xác nhận"), thay vì build lại.
+
+| MINI-SPEC | Việc đã làm | Bằng chứng verify sống | Còn lại |
+|---|---|---|---|
+| **R25 Job Resume** | Root cause thật = celery beat không chạy trong container VAYS (đã fix ở phần đầu session). `job_lease.py` (heartbeat+lease) và `recovery.py` (`startup_recovery_scan`, `scan_stale_jobs` mỗi 2 phút) **đã hoàn chỉnh, đã wire đúng** vào `process_video_task`. | Log `beat: Starting...` + `[Recovery:startup] clean` chạy mỗi lần container start. | Chưa live-test được kịch bản "kill worker giữa job" — thử qua `/bulk-download` thì phát hiện bug khác chặn đường test (xem dưới). Cần 1 lần test thủ công: submit job dài, redeploy giữa chừng, quan sát `[Recovery:startup]` log số job đã resume. |
+| **R26 AI Media** | `smart_analysis.py` import sai module (`metadata_cleaner` không tồn tại) + gọi sai signature → luôn fallback về stub thô sơ, logic thật trong `smart_metadata.py` là dead code. Đã sửa (commit `6ac06b1`). `SmartActionsPanel.jsx` xác nhận **đã mounted** trong `DashboardContent.jsx` (không phải orphan như roadmap ban đầu giả định). | `POST /api/v1/smart-metadata/clean` test thật: trả tags giàu ngữ nghĩa (`language:en`, `music`, `audio`) + filename đã lọc bracket-suffix — đúng hành vi logic thật, khác hẳn output thô của stub cũ. | `analyze-media` (clip/trim/gif detection qua Celery) mới audit code, **chưa live-test E2E** — cần 1 job đã tải xong để có `job_id` test. Tier gating (`smart_analysis.py`) đang tách riêng khỏi `entitlements.py` — cần quyết định có hợp nhất không. |
+| **R27 Partner API** | Xác nhận đủ 9 endpoint, `partner_auth.py`/`tenant_api_keys.py` code hoàn chỉnh. | `GET /partner/usage` không key / key sai → đúng `401` cả 2 case (biên bảo mật hoạt động thật). | **Xác nhận gap thật**: không có UI self-service cho `vgp_` key (chỉ có admin UI + UI cá nhân `vidgrab_` key khác loại). Webhook HMAC có code, **0 test** che phủ. Full flow (tạo key thật → gọi → nhận webhook) cần 1 user/tenant thật đã đăng nhập — không tự tạo được trong phiên này (tránh tạo tài khoản giả trong Supabase production). |
+
+**Bug mới phát hiện (ngoài phạm vi R25-27, ghi nhận cho backlog):** `POST /api/v1/bulk-download` với 1 URL video đơn (không phải channel) trả về `success:true` nhưng `videos_queued:0`, và `GET /jobs/{batch_id}` sau đó trả rỗng hoàn toàn — không có row nào được tạo trong `download_jobs`, không có log lỗi nào ghi lại (kể cả log `Error creating job for {url}` đã có sẵn trong code cũng không xuất hiện — nghĩa là nhánh single-video còn chưa chắc là nơi bug xảy ra, cần điều tra thêm từ `classify_url`/`resolve_short_url` trở xuống). **Mức độ:** tiềm ẩn cao vì đây là con đường chính của tính năng bulk download — cần 1 MINI-SPEC điều tra riêng trước khi tin tưởng bulk download hoạt động đúng trên production.
+
+---
+
 ## 1. Trạng thái xác thực hôm nay (live trên VAYS)
 
 Đã verify trực tiếp (không suy đoán) trên `dvid-api.cmc-1.vibenode.matbao.ai` + `dvid.cmc-1.vibenode.matbao.ai`:
