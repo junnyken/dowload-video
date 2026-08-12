@@ -7,24 +7,23 @@ _optional_llm_summary). Centralised here so new features (e.g. transcript
 translation) don't duplicate the same provider-fallback logic a third time.
 
 Env vars:
-  GEMINI_API_KEY — primary provider (gemini-flash-latest)
+  GEMINI_API_KEY — primary provider (gemini-3.5-flash)
   OPENAI_API_KEY — fallback provider (gpt-4o-mini)
 """
 from __future__ import annotations
 
 import os
 
-# "-latest" alias, not a pinned version: Google retires specific dated/numbered
-# Gemini models over time (gemini-1.5-flash returned 404 "not found for
-# generateContent" once retired), and this alias always resolves to whatever
-# the current recommended flash model is, so this stops breaking every time
-# Google rotates versions.
-_GEMINI_MODEL = "gemini-flash-latest"
+# Pinned version, not the "-latest" alias — Google retires specific
+# dated/numbered Gemini models over time (gemini-1.5-flash returned 404
+# "not found for generateContent" once retired); confirmed via
+# ListModels that gemini-3.5-flash currently supports generateContent.
+_GEMINI_MODEL = "gemini-3.5-flash"
 
 
 def call_llm(prompt: str, max_output_tokens: int = 2048) -> str | None:
     """
-    Call Gemini (gemini-flash-latest) first, falling back to OpenAI
+    Call Gemini (gemini-3.5-flash) first, falling back to OpenAI
     (gpt-4o-mini) if Gemini is unavailable or fails. Returns None if both are
     unavailable or fail (never raises).
     """
