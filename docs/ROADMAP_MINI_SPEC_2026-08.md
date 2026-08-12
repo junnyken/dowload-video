@@ -129,8 +129,10 @@ User (`shopheiyo@gmail.com`) tự đăng ký tài khoản thật, tôi xác th�
 
 **Đã verify sống, xác nhận chuỗi:** user thật → `POST /workspaces/ensure-personal` (self-service, hoạt động tốt) → tenant tạo thủ công (bước duy nhất chưa self-service, xác nhận đúng gap đã ghi ban đầu) → `POST /partner/api-keys` trả `vgp_...` thật → `GET /partner/usage` trả dữ liệu thật → `POST /partner/jobs` nhận job thật — **4/5 lớp của full-pilot đã thông**, chỉ còn việc job có thực sự "chạy xong và báo lại" hay không.
 
-### R30 (chưa làm) — Cầu nối Partner Job ⇄ Celery kết quả thật
-Cần 1 task Celery riêng cho partner (hoặc sửa `process_video_task` nhận thêm tham số `target_table`) để sau khi tải xong, cập nhật đúng `partner_jobs.status/result` thay vì chỉ `download_jobs`. Kèm theo: bắn `webhook` khi job done (đã có `webhook_dispatcher.py` nhưng chưa test — xem finding cũ "Webhook HMAC có code, 0 test che phủ"). Đây là việc thực sự cần thiết để Partner API "launch được" chứ không chỉ "tạo key được".
+### ✅ R30 — Cầu nối Partner Job ⇄ Celery kết quả thật (ĐÃ XONG 12/08/2026)
+Không sửa `process_video_task` (1800 dòng, rủi ro cao) — thay vào đó `submit_job` tạo 1 row "bóng" (shadow) trong `download_jobs` để `process_video_task` chạy như bình thường (không đổi gì), rồi dispatch task mới `sync_partner_job_task` (file mới `app/tasks/partner_tasks.py`) poll row đó tới khi xong, mirror `status/result` sang `partner_jobs` + bắn webhook `job.completed`/`job.failed` qua `webhook_dispatcher.py` có sẵn. Tiện thể phát hiện + fix luôn: `app.tasks.container_tasks` bị thiếu trong danh sách `include` của Celery app → gây lỗi "unregistered task" mỗi 2 phút (`cleanup_stale_container_jobs`).
+
+**Verify sống:** submit job qua `/partner/jobs` → 12s sau `GET` trả `status:"done"`, `result:{title, file_size_mb, thumbnail_url, direct_mp4_url}` đầy đủ dữ liệu thật.
 
 ## Tổng kết phiên làm việc 12/08/2026
 
