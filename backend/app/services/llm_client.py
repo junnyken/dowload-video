@@ -41,8 +41,11 @@ def call_llm(prompt: str, max_output_tokens: int = 2048) -> str | None:
             text = response.text.strip() if response.text else ""
             if text:
                 return text
-        except Exception:
-            pass
+            print(f"[DIAG-llm] Gemini returned empty text. response={response!r}")
+        except Exception as exc:
+            import traceback as _tb
+            print(f"[DIAG-llm] Gemini call failed: {type(exc).__name__}: {exc}")
+            print(_tb.format_exc())
 
     # --- Try OpenAI ---
     openai_key = os.environ.get("OPENAI_API_KEY", "")
