@@ -14,6 +14,15 @@
   // Load custom server URL từ storage (nếu có)
   chrome.storage.sync.get('vg_api_base', (r) => { if (r.vg_api_base?.trim()) API_BASE = r.vg_api_base.trim(); });
 
+  // Metadata like the "creator" field is scraped from the page's own meta
+  // tags / title — the page (or a compromised/malicious one) controls that
+  // string, so it must be escaped before going into innerHTML.
+  function escapeHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+  }
+
   // ── Page type ─────────────────────────────────────────────────────
   function getPageType() {
     const url = window.location.href;
@@ -128,7 +137,7 @@
     const lines = [];
 
     if (meta.creator) {
-      lines.push(`<div style="color:#9ca3af;font-size:10px;margin-bottom:2px;">@${meta.creator}</div>`);
+      lines.push(`<div style="color:#9ca3af;font-size:10px;margin-bottom:2px;">@${escapeHtml(meta.creator)}</div>`);
     }
 
     const badges = [];

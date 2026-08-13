@@ -330,6 +330,8 @@
       transition: border-color 0.15s;
     }
     #settings-api-url:focus { border-color: #6366f1; }
+    #ch-qty-custom:focus { border-color: #6366f1; }
+    .clear-history-btn:hover { opacity: 1; }
 
     /* ── Channel section ── */
     .ch-url-card { background: #13151f; border: 1px solid #1e2333; border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
@@ -642,8 +644,7 @@
           <button class="ch-qty-btn qty-btn" data-qty="100">100</button>
         </div>
         <input id="ch-qty-custom" type="number" min="1" max="500" placeholder="Hoặc nhập số tuỳ chỉnh..."
-          style="width:100%;background:#0c0e14;border:1.5px solid #1e2333;border-radius:9px;padding:7px 12px;font-size:11px;color:#e2e8f0;outline:none;transition:border-color 0.15s;"
-          onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#1e2333'"/>
+          style="width:100%;background:#0c0e14;border:1.5px solid #1e2333;border-radius:9px;padding:7px 12px;font-size:11px;color:#e2e8f0;outline:none;transition:border-color 0.15s;"/>
       </div>
 
       <!-- Collected count -->
@@ -744,7 +745,7 @@
       <div id="hpanel-local">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <span style="font-size:10px;color:#64748b;">Video đã tải gần đây (cục bộ)</span>
-          <button id="clear-history-btn" style="font-size:10px;font-weight:600;color:#ef4444;background:none;border:none;cursor:pointer;opacity:0.7;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">🗑 Xoá</button>
+          <button id="clear-history-btn" class="clear-history-btn" style="font-size:10px;font-weight:600;color:#ef4444;background:none;border:none;cursor:pointer;opacity:0.7;">🗑 Xoá</button>
         </div>
         <div id="history-list" style="display:flex;flex-direction:column;gap:5px;max-height:310px;overflow-y:auto;">
           <div id="history-empty" style="text-align:center;color:#374151;font-size:11px;padding:24px 0;">
@@ -844,33 +845,5 @@
   </div>
 
   <script src="popup.js"></script>
-
-  <!-- Sync quality radio → hidden select -->
-  <script>
-    function updateDownloadBtn(val) {
-      const btnText = document.getElementById('btnText');
-      if (!btnText) return;
-      btnText.textContent = val && val.startsWith('mp3') ? 'Tải Nhạc MP3 Ngay' : 'Tải Video Ngay';
-    }
-
-    document.querySelectorAll('.q-pill').forEach(pill => {
-      pill.addEventListener('click', (e) => {
-        // Prevent double-firing: radio click bubbles up to label → skip
-        if (e.target.tagName === 'INPUT') return;
-        document.querySelectorAll('.q-pill').forEach(p => p.classList.remove('active'));
-        pill.classList.add('active');
-        const val = pill.querySelector('input[type=radio]').value;
-        document.getElementById('qualitySelect').value = val;
-        pill.querySelector('input[type=radio]').checked = true;
-        updateDownloadBtn(val);
-      });
-    });
-    // Init select from active pill
-    const activePill = document.querySelector('.q-pill.active input');
-    if (activePill) {
-      document.getElementById('qualitySelect').value = activePill.value;
-      updateDownloadBtn(activePill.value);
-    }
-  </script>
 </body>
 </html>

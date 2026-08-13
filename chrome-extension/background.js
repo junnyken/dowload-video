@@ -342,11 +342,16 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       if (stillRunning) continue;
 
       // Batch reached a terminal state (all done or failed) — notify + stop tracking.
+      // Parsing sourceUrl is best-effort: a bad/empty URL must not suppress the
+      // notification or skip un-tracking the batch (it would otherwise sit
+      // tracked, silently retried every minute, until BATCH_MAX_AGE_MS).
+      let hostname = 'VidGrab';
+      try { if (meta.sourceUrl) hostname = new URL(meta.sourceUrl).hostname; } catch { /* keep default */ }
       chrome.notifications.create(`vg-batch-${batchId}`, {
         type: 'basic',
         iconUrl: 'assets/icon.png',
         title: failed > 0 ? `⚠️ Batch hoàn tất (${success}/${total} thành công)` : `✅ Batch hoàn tất (${total} video)`,
-        message: meta.sourceUrl ? new URL(meta.sourceUrl).hostname : 'VidGrab',
+        message: hostname,
         priority: 1,
       });
       delete batches[batchId];

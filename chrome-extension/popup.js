@@ -1,6 +1,16 @@
 const DEFAULT_API_BASE = 'https://dvid-api.cmc-1.vibenode.matbao.ai';
 const WEB_BASE = 'https://dvid.cmc-1.vibenode.matbao.ai';
 let API_BASE = DEFAULT_API_BASE;
+
+// Video titles / creator names / platform strings come from the source
+// platform (anyone can name a public video anything) and get interpolated
+// into innerHTML for history/archive rows — escape them so a malicious
+// title can't run script in the popup (which holds the user's auth token).
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
 let _lastDownloadData = null;
 let _lastNoWm = false;
 
@@ -761,10 +771,10 @@ function loadHistory() {
       const thumbSrc = item.thumbnail || "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='30' fill='%23374151'><rect width='40' height='30' rx='4'/></svg>";
       const timeAgo = getTimeAgo(item.timestamp);
       row.innerHTML = `
-        <img src="${thumbSrc}" style="width:40px;height:28px;border-radius:4px;object-fit:cover;flex-shrink:0;" loading="lazy">
+        <img src="${escapeHtml(thumbSrc)}" style="width:40px;height:28px;border-radius:4px;object-fit:cover;flex-shrink:0;" loading="lazy">
         <div style="flex:1;overflow:hidden;min-width:0;">
-          <div style="font-size:11px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.title || 'Video'}</div>
-          <div style="font-size:9px;color:#6b7280;">${item.noWatermark ? '<span style="color:#34d399;font-weight:700;">✓WM </span>' : ''}${item.hasSubtitle ? '<span style="color:#60a5fa;font-weight:700;">✓SUB </span>' : ''}${item.quality || ''} ${item.fileSize ? '• ' + item.fileSize : ''} • ${timeAgo}</div>
+          <div style="font-size:11px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.title || 'Video')}</div>
+          <div style="font-size:9px;color:#6b7280;">${item.noWatermark ? '<span style="color:#34d399;font-weight:700;">✓WM </span>' : ''}${item.hasSubtitle ? '<span style="color:#60a5fa;font-weight:700;">✓SUB </span>' : ''}${escapeHtml(item.quality || '')} ${item.fileSize ? '• ' + escapeHtml(item.fileSize) : ''} • ${escapeHtml(timeAgo)}</div>
         </div>
         <button class="save-archive-btn" data-url="${encodeURIComponent(item.url || '')}" data-title="${encodeURIComponent(item.title || 'Video')}" data-thumb="${encodeURIComponent(item.thumbnail || '')}"
           style="flex-shrink:0;padding:3px 6px;font-size:9px;font-weight:700;color:#FBBF24;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:5px;cursor:pointer;white-space:nowrap;"
@@ -853,12 +863,12 @@ async function loadArchive() {
       const thumbSrc = item.thumbnail_url || "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='30' fill='%23374151'><rect width='40' height='30' rx='4'/></svg>";
       const dateStr  = item.archived_at ? new Date(item.archived_at).toLocaleDateString('vi-VN') : '';
       row.innerHTML = `
-        <img src="${thumbSrc}" style="width:40px;height:28px;border-radius:4px;object-fit:cover;flex-shrink:0;" loading="lazy">
+        <img src="${escapeHtml(thumbSrc)}" style="width:40px;height:28px;border-radius:4px;object-fit:cover;flex-shrink:0;" loading="lazy">
         <div style="flex:1;overflow:hidden;min-width:0;">
-          <div style="font-size:11px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.title || 'Video'}</div>
-          <div style="font-size:9px;color:#6b7280;">${item.platform || ''} • ${item.creator_name || ''} ${dateStr ? '• ' + dateStr : ''}</div>
+          <div style="font-size:11px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.title || 'Video')}</div>
+          <div style="font-size:9px;color:#6b7280;">${escapeHtml(item.platform || '')} • ${escapeHtml(item.creator_name || '')} ${dateStr ? '• ' + escapeHtml(dateStr) : ''}</div>
         </div>
-        <button class="star-btn" data-id="${item.id}" data-starred="${item.is_starred ? '1':'0'}"
+        <button class="star-btn" data-id="${escapeHtml(item.id)}" data-starred="${item.is_starred ? '1':'0'}"
           style="flex-shrink:0;font-size:13px;background:none;border:none;cursor:pointer;color:${item.is_starred ? '#FBBF24' : '#374151'};"
           title="${item.is_starred ? 'Bỏ gắn sao' : 'Gắn sao'}">★</button>
       `;
@@ -1277,9 +1287,9 @@ function renderSpotifyPlaylist(data) {
   data.tracks.forEach((track, idx) => {
     const row = document.createElement('div');
     row.className = 'flex items-center gap-2 bg-gray-800 p-1.5 rounded-lg hover:bg-gray-700 transition-colors group border border-transparent hover:border-gray-600';
-    row.innerHTML = `<img src="${track.thumbnail || data.thumbnail || ''}" class="w-8 h-8 rounded object-cover shadow-sm flex-shrink-0">
-      <div class="flex-1 overflow-hidden min-w-0"><div class="text-[11px] font-bold text-white truncate group-hover:text-green-400 transition-colors">${track.name}</div>
-      <div class="text-[10px] text-gray-400 truncate">${track.artist_str || 'Unknown'}</div></div>
+    row.innerHTML = `<img src="${escapeHtml(track.thumbnail || data.thumbnail || '')}" class="w-8 h-8 rounded object-cover shadow-sm flex-shrink-0">
+      <div class="flex-1 overflow-hidden min-w-0"><div class="text-[11px] font-bold text-white truncate group-hover:text-green-400 transition-colors">${escapeHtml(track.name)}</div>
+      <div class="text-[10px] text-gray-400 truncate">${escapeHtml(track.artist_str || 'Unknown')}</div></div>
       <div class="text-[10px] text-gray-500 font-mono flex-shrink-0">${formatTime(track.duration)}</div>
       <button class="bg-green-600 hover:bg-green-500 text-white text-[9px] font-bold px-2 py-1 rounded flex-shrink-0 transition-all" id="sp-dl-${idx}">MP3</button>`;
     tracklist.appendChild(row);
@@ -1412,3 +1422,33 @@ function showMultiFormat(data) {
 document.getElementById('formats-close')?.addEventListener('click', () => {
   document.getElementById('formats-panel')?.classList.add('hidden');
 });
+
+// ── Quality pill selector → hidden <select> (was an inline <script> in
+// popup.html, which MV3's script-src 'self' CSP silently drops entirely —
+// every quality pill click was a no-op and downloads always used whatever
+// the <select>'s hardcoded default option was, regardless of what the user
+// visually selected). ──
+function updateDownloadBtn(val) {
+  const btnText = document.getElementById('btnText');
+  if (!btnText) return;
+  btnText.textContent = val && val.startsWith('mp3') ? 'Tải Nhạc MP3 Ngay' : 'Tải Video Ngay';
+}
+
+document.querySelectorAll('.q-pill').forEach(pill => {
+  pill.addEventListener('click', (e) => {
+    // Prevent double-firing: radio click bubbles up to label → skip
+    if (e.target.tagName === 'INPUT') return;
+    document.querySelectorAll('.q-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    const val = pill.querySelector('input[type=radio]').value;
+    document.getElementById('qualitySelect').value = val;
+    pill.querySelector('input[type=radio]').checked = true;
+    updateDownloadBtn(val);
+  });
+});
+// Init select from active pill
+const _activeQPill = document.querySelector('.q-pill.active input');
+if (_activeQPill) {
+  document.getElementById('qualitySelect').value = _activeQPill.value;
+  updateDownloadBtn(_activeQPill.value);
+}
