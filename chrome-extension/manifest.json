@@ -2,7 +2,7 @@
   "update_url": "https://clients2.google.com/service/update2/crx",
   "manifest_version": 3,
   "name": "VidGrab - Video Downloader",
-  "version": "5.1.4",
+  "version": "5.1.5",
   "description": "Download videos from 20+ platforms: YouTube, TikTok, Instagram, Bilibili, Xiaohongshu, VK, Twitch, Facebook, Reddit, Twitter, Snapchat, and more.",
   "minimum_chrome_version": "102",
   "permissions": [

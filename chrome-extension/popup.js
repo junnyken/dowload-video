@@ -11,6 +11,15 @@ function escapeHtml(str) {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
 }
+
+// The footer's real version only used to appear after opening Settings
+// (showVersionInfo() also fires a live backend health check, so it isn't
+// called on every popup open) — leaving the hardcoded "v5.0.0" placeholder
+// from popup.html visible by default, which reads as a stale/old install.
+{
+  const footerVer = document.getElementById('footer-version');
+  if (footerVer) footerVer.textContent = `v${chrome.runtime.getManifest().version}`;
+}
 let _lastDownloadData = null;
 let _lastNoWm = false;
 
@@ -1269,29 +1278,51 @@ document.getElementById('ch-send-btn').addEventListener('click', async () => {
 function formatTime(sec) { if (!sec) return '0:00'; return `${Math.floor(sec/60)}:${(sec%60).toString().padStart(2,'0')}`; }
 
 function renderSpotifyPlaylist(data) {
-  document.getElementById('ch-count').parentElement.parentElement.style.display = 'none';
+  // One .parentElement too many here used to hide the whole .content wrapper
+  // (which sp-header / sp-tracklist-container also live in) instead of just
+  // the "collected count" card — the entire Spotify UI silently rendered
+  // with zero height no matter what its own hidden/display toggles did.
+  document.getElementById('ch-count').parentElement.style.display = 'none';
   document.getElementById('ch-url').parentElement.style.display = 'none';
   document.getElementById('ch-status').style.display = 'none';
   document.getElementById('ch-scrape-btn').style.display = 'none';
   const header = document.getElementById('sp-header'), tracklist = document.getElementById('sp-tracklist-container');
+  // sp-header needs display:flex (not the browser's block default) once un-hidden —
+  // it used to carry a redundant inline display:none that permanently overrode
+  // classList.remove('hidden'), so the whole Spotify header never rendered at all.
+  header.style.display = 'flex';
   document.getElementById('sp-thumb').src = data.thumbnail || '';
   document.getElementById('sp-title').textContent = data.playlist_name || data.album_name || 'Spotify Music';
   document.getElementById('sp-count').textContent = `${data.tracks.length} bài nhạc`;
   document.getElementById('sp-type-label').textContent = data.type === 'album' ? 'ALBUM • SPOTIFY' : 'PLAYLIST • SPOTIFY';
   header.classList.remove('hidden'); tracklist.classList.remove('hidden');
   const sendBtn = document.getElementById('ch-send-btn');
-  sendBtn.classList.remove('hidden','bg-green-600','hover:bg-green-500','text-white');
-  sendBtn.classList.add('bg-gradient-to-r','from-orange-500','to-yellow-400','hover:from-orange-600','hover:to-yellow-500','text-gray-900');
+  sendBtn.classList.remove('hidden');
+  // Spotify's bulk-download CTA is meant to stand out from the plain green
+  // .btn-green send button — the from-orange-500/to-yellow-400 Tailwind
+  // classes this reached for don't exist in the bundled tailwind.css, so it
+  // silently fell back to .btn-green's own gradient (looked fine, just not
+  // the intended distinct color). Set it directly instead.
+  sendBtn.style.background = 'linear-gradient(135deg, #f97316, #eab308)';
+  sendBtn.style.color = '#1a1a1a';
   document.getElementById('ch-send-text').textContent = 'Tải tất cả (.ZIP)';
   tracklist.innerHTML = '';
   data.tracks.forEach((track, idx) => {
     const row = document.createElement('div');
-    row.className = 'flex items-center gap-2 bg-gray-800 p-1.5 rounded-lg hover:bg-gray-700 transition-colors group border border-transparent hover:border-gray-600';
-    row.innerHTML = `<img src="${escapeHtml(track.thumbnail || data.thumbnail || '')}" class="w-8 h-8 rounded object-cover shadow-sm flex-shrink-0">
-      <div class="flex-1 overflow-hidden min-w-0"><div class="text-[11px] font-bold text-white truncate group-hover:text-green-400 transition-colors">${escapeHtml(track.name)}</div>
-      <div class="text-[10px] text-gray-400 truncate">${escapeHtml(track.artist_str || 'Unknown')}</div></div>
-      <div class="text-[10px] text-gray-500 font-mono flex-shrink-0">${formatTime(track.duration)}</div>
-      <button class="bg-green-600 hover:bg-green-500 text-white text-[9px] font-bold px-2 py-1 rounded flex-shrink-0 transition-all" id="sp-dl-${idx}">MP3</button>`;
+    // .sp-track (popup.html) only styles the row container — the Tailwind
+    // utility classes this template used to reach for (bg-gray-800,
+    // hover:bg-gray-700, text-green-400, rounded, px-2 py-1, ...) don't
+    // exist in the bundled tailwind.css (it was never built against this
+    // dynamically-generated markup), so every track rendered as unstyled
+    // black-on-transparent text with a plain "MP3" text button.
+    row.className = 'sp-track';
+    row.innerHTML = `<img src="${escapeHtml(track.thumbnail || data.thumbnail || '')}" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">
+      <div style="flex:1;overflow:hidden;min-width:0;">
+        <div style="font-size:11px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(track.name)}</div>
+        <div style="font-size:10px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(track.artist_str || 'Unknown')}</div>
+      </div>
+      <div style="font-size:10px;color:#475569;font-family:monospace;flex-shrink:0;">${formatTime(track.duration)}</div>
+      <button style="flex-shrink:0;padding:4px 9px;font-size:9px;font-weight:700;color:#fff;background:#16a34a;border:none;border-radius:7px;cursor:pointer;transition:background 0.15s;" id="sp-dl-${idx}">MP3</button>`;
     tracklist.appendChild(row);
     document.getElementById(`sp-dl-${idx}`).addEventListener('click', (e) => downloadSingleTrack(track, e.currentTarget));
   });
