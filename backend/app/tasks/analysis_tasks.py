@@ -197,6 +197,12 @@ def analyze_media_task(job_id: str) -> dict:
                 from app.core.media_analyzer import build_analysis  # type: ignore
 
                 analysis = build_analysis(media_path)
+                print(f"[R34-DEBUG] build_analysis keys={list(analysis.keys())} "
+                      f"probe={analysis.get('probe')} signals_used={analysis.get('signals_used')} "
+                      f"fallback_used={analysis.get('fallback_used')} warnings={analysis.get('warnings')} "
+                      f"scenes_len={len(analysis.get('scenes', []))} "
+                      f"audio_peaks_len={len(analysis.get('audio_peaks', []))} "
+                      f"motion_len={len(analysis.get('motion', []))}")
             except Exception as exc:
                 logger.warning(
                     "analyze_media_task: build_analysis failed",
