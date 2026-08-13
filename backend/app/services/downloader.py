@@ -392,13 +392,26 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         # This is the OLD "video" behavior, kept for backward compatibility
         fmt = "b[ext=mp4]/best[ext=mp4]/best"
     else:
-        # Default "video" quality — BEST quality with FFmpeg merge.
-        # YouTube separates HD/4K video and audio into DASH adaptive streams.
-        # Pre-merged streams (progressive) are only 360p or 720p max.
+        # Default "video" quality == the "HD" pill in the extension/web UI,
+        # which explicitly promises "MP4 1080p". This used to be byte-for-byte
+        # identical to the "video_4k" selector below (fully uncapped
+        # bestvideo+bestaudio) — so picking "HD" silently downloaded whatever
+        # the source's true best was (4K, 8K, ...) instead of the promised
+        # 1080p, and the "HD" vs "4K" pills had no actual effect on each
+        # other. Capped at height<=1080 to match the label.
         # PRIORITISE H.264 (avc1) + AAC (mp4a) so the merged .mp4 plays in
         # QuickTime / Apple devices; only fall back to VP9/webm if AVC is
         # genuinely unavailable (otherwise QuickTime rejects the file).
-        fmt = "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/bestvideo[ext=webm]+bestaudio[ext=webm]/bestvideo+bestaudio/best"
+        fmt = (
+            "bestvideo[height<=1080][vcodec^=avc1]+bestaudio[acodec^=mp4a]"
+            "/bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]"
+            "/best[height<=1080][ext=mp4]"
+            "/bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]"
+            "/bestvideo[height<=1080][ext=webm]+bestaudio[ext=webm]"
+            "/bestvideo[height<=1080]+bestaudio"
+            "/bestvideo+bestaudio"
+            "/best[height<=1080]"
+        )
 
     opts = {
         "format": fmt,
