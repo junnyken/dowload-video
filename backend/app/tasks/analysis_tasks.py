@@ -160,10 +160,6 @@ def analyze_media_task(job_id: str) -> dict:
         # 3. Resolve media path + metadata
         # ------------------------------------------------------------------
         media_path = _get_media_path(job)
-        print(f"[R34-DEBUG] job.media_path={job.get('media_path')!r} "
-              f"job.media_url={job.get('media_url')!r} "
-              f"resolved_media_path={media_path!r} "
-              f"isfile(job.media_path)={os.path.isfile(job.get('media_path') or '')}")
         metadata = _load_media_metadata(job)
 
         # Merge any metadata stored on the job itself
@@ -201,12 +197,6 @@ def analyze_media_task(job_id: str) -> dict:
                 from app.core.media_analyzer import build_analysis  # type: ignore
 
                 analysis = build_analysis(media_path)
-                print(f"[R34-DEBUG] build_analysis keys={list(analysis.keys())} "
-                      f"probe={analysis.get('probe')} signals_used={analysis.get('signals_used')} "
-                      f"fallback_used={analysis.get('fallback_used')} warnings={analysis.get('warnings')} "
-                      f"scenes_len={len(analysis.get('scenes', []))} "
-                      f"audio_peaks_len={len(analysis.get('audio_peaks', []))} "
-                      f"motion_len={len(analysis.get('motion', []))}")
             except Exception as exc:
                 logger.warning(
                     "analyze_media_task: build_analysis failed",
@@ -311,6 +301,16 @@ def analyze_media_task(job_id: str) -> dict:
         _processing_ms = int(
             (datetime.now(timezone.utc) - _started_at).total_seconds() * 1000
         )
+        # `analysis` (build_analysis()'s own probe/signals_used/fallback_used) was
+        # only ever used as INPUT to the per-analysis modules above and then
+        # discarded — analysis_results has no "probe" column (migration 013),
+        # so it's nested under metadata_suggestions._probe instead of adding a
+        # column. signals_used DOES have a real column but was never populated.
+        # fallback_used was also wrongly derived from `not media_path` (only
+        # true when there's no local file at all) instead of build_analysis()'s
+        # own fallback flag (true whenever probing/signal-detection degraded).
+        _metadata_suggestions = results.get("metadata") if isinstance(results.get("metadata"), dict) else {}
+        _metadata_suggestions = {**_metadata_suggestions, "_probe": analysis.get("probe") or {}}
         try:
             db.table("analysis_results").upsert(
                 {
@@ -318,10 +318,11 @@ def analyze_media_task(job_id: str) -> dict:
                     "trim_suggestions": results.get("trim") if isinstance(results.get("trim"), list) else [],
                     "clip_suggestions": results.get("clips") if isinstance(results.get("clips"), list) else [],
                     "gif_suggestions": results.get("gif") if isinstance(results.get("gif"), list) else [],
-                    "metadata_suggestions": results.get("metadata") if isinstance(results.get("metadata"), dict) else {},
+                    "metadata_suggestions": _metadata_suggestions,
                     "summary_suggestions": results.get("summary") if isinstance(results.get("summary"), dict) else {},
+                    "signals_used": analysis.get("signals_used") or [],
                     "warnings": _warnings,
-                    "fallback_used": not media_path,
+                    "fallback_used": (not media_path) or bool(analysis.get("fallback_used", False)),
                     "processing_time_ms": _processing_ms,
                     "created_at": _now_iso(),
                 },

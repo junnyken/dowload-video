@@ -55,7 +55,7 @@ GifSuggestion = dict  # see shape below:
 
 def _get_duration(analysis: dict) -> float:
     probe = analysis.get("probe") or {}
-    return float(probe.get("duration", 0) or 0)
+    return float(probe.get("duration_s", 0) or 0)
 
 
 def _get_height(analysis: dict) -> int:
@@ -193,14 +193,13 @@ def suggest_gif_segments(
     if duration_s < min_duration:
         logger.debug(
             "suggest_gif_segments.skip",
-            reason="video_too_short",
-            duration_s=duration_s,
+            extra={"reason": "video_too_short", "duration_s": duration_s},
         )
         return []
 
     # ── Fallback: no motion data — use audio peaks to find active sections ──
     if not motion:
-        logger.debug("suggest_gif_segments.fallback", reason="no_motion_data")
+        logger.debug("suggest_gif_segments.fallback", extra={"reason": "no_motion_data"})
 
         # Build candidate windows centred on audio peaks
         candidates: list[dict] = []

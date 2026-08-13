@@ -464,14 +464,21 @@ async def get_analysis_result(
     tier = (user or {}).get("tier", "anonymous" if user is None else "free")
     result = _tier_filter_results(result, tier)
 
+    # No dedicated "probe" column on analysis_results (migration 013) — the
+    # analyze task nests it inside metadata_suggestions._probe instead of
+    # adding a column. Pull it back out for the client-facing shape and
+    # keep metadata_suggestions as just {tags, filename, mp3_tags}.
+    _metadata = dict(result.get("metadata_suggestions") or {})
+    _probe = _metadata.pop("_probe", {})
+
     return {
         "job_id": job_id,
         "status": "done",
-        "probe": result.get("probe", {}),
+        "probe": _probe,
         "trim_suggestions": result.get("trim_suggestions", []),
         "clip_suggestions": result.get("clip_suggestions", []),
         "gif_suggestions": result.get("gif_suggestions", []),
-        "metadata_suggestions": result.get("metadata_suggestions", {}),
+        "metadata_suggestions": _metadata,
         "summary_suggestions": result.get("summary_suggestions", {}),
         "signals_used": result.get("signals_used", []),
         "warnings": result.get("warnings", []),

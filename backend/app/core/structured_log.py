@@ -7,7 +7,11 @@ for easy log aggregation (CloudWatch, Loki, Papertrail, etc.).
 Usage:
     from app.core.structured_log import get_logger
     logger = get_logger(__name__)
-    logger.info("job_started", job_id=job_id, platform="youtube", user_id=user_id)
+    # get_logger() returns a real logging.Logger — custom fields MUST go
+    # through extra={...}, not as direct kwargs (that raises
+    # "Logger._log() got an unexpected keyword argument '...'" and the
+    # exception silently swallows whatever the log call was reporting).
+    logger.info("job_started", extra={"job_id": job_id, "platform": "youtube", "user_id": user_id})
 
 In FastAPI routes: correlation_id auto-injected via request.state.request_id.
 In Celery tasks: set_task_context(task_id, job_id, tenant_id) to propagate IDs.

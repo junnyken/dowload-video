@@ -72,13 +72,13 @@ def _run(cmd: list[str], timeout: int = ANALYSIS_TIMEOUT) -> tuple[int, str, str
         )
         return result.returncode, result.stdout.decode("utf-8", errors="replace"), result.stderr.decode("utf-8", errors="replace")
     except subprocess.TimeoutExpired:
-        logger.warning("ffmpeg_timeout", cmd=cmd[0], timeout=timeout)
+        logger.warning("ffmpeg_timeout", extra={"cmd": cmd[0], "timeout": timeout})
         return -1, "", "timeout"
     except FileNotFoundError:
-        logger.error("ffmpeg_not_found", cmd=cmd[0])
+        logger.error("ffmpeg_not_found", extra={"cmd": cmd[0]})
         return -1, "", "not_found"
     except Exception as exc:
-        logger.error("ffmpeg_unexpected_error", error=str(exc))
+        logger.error("ffmpeg_unexpected_error", extra={"error": str(exc)})
         return -1, "", str(exc)
 
 
@@ -132,13 +132,13 @@ def probe_media(path: str) -> dict[str, Any]:
     ]
     rc, stdout, stderr = _run(cmd)
     if rc != 0 or not stdout.strip():
-        logger.warning("probe_failed", path=path, stderr=stderr[:200])
+        logger.warning("probe_failed", extra={"path": path, "stderr": stderr[:200]})
         return _fallback
 
     try:
         data = json.loads(stdout)
     except json.JSONDecodeError as exc:
-        logger.warning("probe_json_error", path=path, error=str(exc))
+        logger.warning("probe_json_error", extra={"path": path, "error": str(exc)})
         return _fallback
 
     fmt = data.get("format", {})
@@ -443,8 +443,7 @@ def compute_motion_score(
     if rc != 0 or not stdout_bytes_str:
         logger.debug(
             "motion_score_fallback",
-            path=path,
-            reason=stderr[:100] if stderr else "no_output",
+            extra={"path": path, "reason": stderr[:100] if stderr else "no_output"},
         )
         return _uniform_motion(duration_s, sample_interval)
 
@@ -514,13 +513,13 @@ def _run_bytes(cmd: list[str], timeout: int = ANALYSIS_TIMEOUT) -> tuple[int, by
         )
         return result.returncode, result.stdout, result.stderr.decode("utf-8", errors="replace")
     except subprocess.TimeoutExpired:
-        logger.warning("motion_score_timeout", cmd=cmd[0], timeout=timeout)
+        logger.warning("motion_score_timeout", extra={"cmd": cmd[0], "timeout": timeout})
         return -1, b"", "timeout"
     except FileNotFoundError:
-        logger.error("ffmpeg_not_found", cmd=cmd[0])
+        logger.error("ffmpeg_not_found", extra={"cmd": cmd[0]})
         return -1, b"", "not_found"
     except Exception as exc:
-        logger.error("motion_score_error", error=str(exc))
+        logger.error("motion_score_error", extra={"error": str(exc)})
         return -1, b"", str(exc)
 
 
@@ -566,7 +565,7 @@ def build_analysis(path: str) -> dict[str, Any]:
     probe = probe_media(path)
     if probe.get("error") == "probe_failed":
         elapsed_ms = int((time.monotonic() - t0) * 1000)
-        logger.warning("analysis_probe_failed", path=path)
+        logger.warning("analysis_probe_failed", extra={"path": path})
         return {
             "error": "probe_failed",
             "fallback_used": True,
@@ -655,11 +654,13 @@ def build_analysis(path: str) -> dict[str, Any]:
     elapsed_ms = int((time.monotonic() - t0) * 1000)
     logger.info(
         "analysis_complete",
-        path=path,
-        duration_s=duration_s,
-        signals=signals_used,
-        warnings_count=len(warnings),
-        processing_time_ms=elapsed_ms,
+        extra={
+            "path": path,
+            "duration_s": duration_s,
+            "signals": signals_used,
+            "warnings_count": len(warnings),
+            "processing_time_ms": elapsed_ms,
+        },
     )
 
     return {
@@ -692,7 +693,7 @@ def compute_media_fingerprint(path: str) -> str:
     try:
         file_size = os.path.getsize(path)
     except OSError as exc:
-        logger.warning("fingerprint_stat_error", path=path, error=str(exc))
+        logger.warning("fingerprint_stat_error", extra={"path": path, "error": str(exc)})
         return ""
 
     h = hashlib.sha256()
@@ -710,7 +711,7 @@ def compute_media_fingerprint(path: str) -> str:
                 tail = fh.read(_FINGERPRINT_CHUNK)
                 h.update(tail)
     except OSError as exc:
-        logger.warning("fingerprint_read_error", path=path, error=str(exc))
+        logger.warning("fingerprint_read_error", extra={"path": path, "error": str(exc)})
         return ""
 
     return h.hexdigest()

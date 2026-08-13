@@ -59,7 +59,7 @@ _MIN_OUTRO_CUT  = 2.0   # seconds — ignore tiny outro cuts
 def _get_duration(analysis: dict) -> float:
     """Extract video duration from probe data."""
     probe = analysis.get("probe") or {}
-    return float(probe.get("duration", 0) or 0)
+    return float(probe.get("duration_s", 0) or 0)
 
 
 def _motion_avg_in_range(motion: list, start: float, end: float) -> float:
@@ -309,7 +309,7 @@ def suggest_trim(
     warnings    = analysis.get("warnings")    or []
     fallback    = bool(analysis.get("fallback_used", False))
 
-    duration_s = float(probe.get("duration", 0) or 0)
+    duration_s = float(probe.get("duration_s", 0) or 0)
 
     signals_used: list[str] = []
     if silence:
@@ -488,7 +488,7 @@ def suggest_all_trim_modes(
         windows for e.g. 24-hour streams).
     """
     probe      = analysis.get("probe") or {}
-    duration_s = float(probe.get("duration", 0) or 0)
+    duration_s = float(probe.get("duration_s", 0) or 0)
 
     results: list[TrimSuggestion] = []
 
@@ -497,9 +497,7 @@ def suggest_all_trim_modes(
         if mode in ("short_clip_15s", "short_clip_30s") and duration_s < 20.0:
             logger.debug(
                 "suggest_all_trim_modes.skip",
-                mode=mode,
-                reason="video_too_short",
-                duration_s=duration_s,
+                extra={"mode": mode, "reason": "video_too_short", "duration_s": duration_s},
             )
             continue
 
@@ -507,9 +505,7 @@ def suggest_all_trim_modes(
         if mode == "loopable_segment" and duration_s < 6.0:
             logger.debug(
                 "suggest_all_trim_modes.skip",
-                mode=mode,
-                reason="video_too_short_for_loop",
-                duration_s=duration_s,
+                extra={"mode": mode, "reason": "video_too_short_for_loop", "duration_s": duration_s},
             )
             continue
 
@@ -523,8 +519,7 @@ def suggest_all_trim_modes(
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "suggest_all_trim_modes.error",
-                mode=mode,
-                error=str(exc),
+                extra={"mode": mode, "error": str(exc)},
             )
 
     return results

@@ -57,7 +57,7 @@ _REASON_MAP: dict[str, str] = {
 
 def _get_duration(analysis: dict) -> float:
     probe = analysis.get("probe") or {}
-    return float(probe.get("duration", 0) or 0)
+    return float(probe.get("duration_s", 0) or 0)
 
 
 def _motion_avg_in_range(motion: list, start: float, end: float) -> float:
@@ -254,9 +254,7 @@ def detect_highlights(
     if duration_s < min_video_length:
         logger.debug(
             "detect_highlights.skip",
-            reason="video_too_short",
-            duration_s=duration_s,
-            min_video_length=min_video_length,
+            extra={"reason": "video_too_short", "duration_s": duration_s, "min_video_length": min_video_length},
         )
         return []
 
