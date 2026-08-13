@@ -70,7 +70,16 @@ function startJobPolling(batchId, maxVideos) {
   _chBatchId = batchId;
   clearTimeout(_chJobPollTimer);
   const webLink = document.getElementById('ch-open-web');
-  webLink.href = `${API_BASE}?batch=${batchId}`;
+  // This is the ONLY way a user gets from "channel scrape complete" to actual
+  // files — the batch is processed server-side, nothing here calls
+  // chrome.downloads.download() for channel/bulk mode. Two bugs made it dead:
+  // (1) it pointed at API_BASE (backend, returns {"status":"ok"}) instead of
+  // WEB_BASE (the frontend, whose BulkContent.jsx reads ?batch= and
+  // auto-downloads each finished video); (2) it carried a redundant inline
+  // display:none alongside class="hidden" so classList.remove() never
+  // actually revealed it — same bug as the earlier Spotify header fix.
+  webLink.href = `${WEB_BASE}/?batch=${batchId}`;
+  webLink.style.display = 'block';
   webLink.classList.remove('hidden');
 
   // Adaptive polling: fast (2s) while a batch is fresh so short jobs feel
