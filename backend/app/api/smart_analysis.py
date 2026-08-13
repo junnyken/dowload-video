@@ -209,11 +209,12 @@ def _check_analysis_quota(
             logger.warning("Redis unavailable — skipping anonymous quota check")
             return True, ""
         key = f"ai_quota:anon:{ip}:{today_str}"
+        anon_limit = int(os.environ.get("AI_ANALYSIS_ANON_DAILY_LIMIT", "2"))
         try:
             count = redis.get(key)
             current = int(count) if count else 0
-            if current >= 2:
-                return False, "Anonymous limit: 2 analyses per day. Sign in for more."
+            if current >= anon_limit:
+                return False, f"Anonymous limit: {anon_limit} analyses per day. Sign in for more."
             redis.incr(key)
             redis.expire(key, 86400)
             return True, ""
