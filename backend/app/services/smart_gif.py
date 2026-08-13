@@ -64,31 +64,38 @@ def _get_height(analysis: dict) -> int:
 
 
 def _motion_scores_in_range(motion: list, start: float, end: float) -> list[float]:
+    # compute_motion_score() yields {start, end, motion_score} segments, not
+    # {"ts", "score"} points.
     return [
-        float(m.get("score", 0) or 0)
+        float(m.get("motion_score", 0) or 0)
         for m in motion
-        if start <= float(m.get("ts", 0) or 0) <= end
+        if float(m.get("start", 0) or 0) < end and float(m.get("end", 0) or 0) > start
     ]
 
 
 def _audio_avg_in_range(audio_peaks: list, start: float, end: float) -> float:
+    # detect_audio_peaks() yields {start, end, rms_db} segments, not
+    # {"ts", "level"} points.
     levels = [
-        float(p.get("level", 0) or 0)
+        float(p.get("rms_db", 0) or 0)
         for p in audio_peaks
-        if start <= float(p.get("ts", 0) or 0) <= end
+        if float(p.get("start", 0) or 0) < end and float(p.get("end", 0) or 0) > start
     ]
     return statistics.mean(levels) if levels else 0.0
 
 
 def _has_scene_cut_in_range(scenes: list, start: float, end: float) -> bool:
-    return any(
-        start <= float(s.get("ts", 0) or 0) <= end
-        for s in scenes
-    )
+    # detect_scenes() yields a plain list[float] of cut timestamps.
+    return any(start <= float(ts or 0) <= end for ts in scenes)
 
 
-def _is_silence_window(audio_peaks: list, start: float, end: float, threshold: float = 0.05) -> bool:
-    """Return True if the window is effectively silent."""
+def _is_silence_window(audio_peaks: list, start: float, end: float, threshold: float = -45.0) -> bool:
+    """Return True if the window is effectively silent.
+
+    threshold is in dB (rms_db from detect_audio_peaks(), typically in the
+    [-60, 0] range) — was previously compared against a 0-1 "level" that
+    the underlying data never actually had.
+    """
     avg = _audio_avg_in_range(audio_peaks, start, end)
     return avg < threshold
 
@@ -203,10 +210,12 @@ def suggest_gif_segments(
 
         # Build candidate windows centred on audio peaks
         candidates: list[dict] = []
-        sorted_peaks = sorted(audio_peaks, key=lambda p: float(p.get("level", 0) or 0), reverse=True)
+        sorted_peaks = sorted(audio_peaks, key=lambda p: float(p.get("rms_db", 0) or 0), reverse=True)
 
         for peak in sorted_peaks:
-            ts  = float(peak.get("ts", 0) or 0)
+            # audio_peaks are {start, end, rms_db} segments — centre on the
+            # segment midpoint since there's no single point timestamp.
+            ts = (float(peak.get("start", 0) or 0) + float(peak.get("end", 0) or 0)) / 2
             half = preferred_duration / 2
             start = max(0.0, ts - half)
             end   = min(duration_s, start + preferred_duration)

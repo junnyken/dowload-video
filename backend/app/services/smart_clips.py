@@ -61,28 +61,33 @@ def _get_duration(analysis: dict) -> float:
 
 
 def _motion_avg_in_range(motion: list, start: float, end: float) -> float:
+    # compute_motion_score() yields {start, end, motion_score} segments, not
+    # point timestamps — .get("ts")/.get("score") never matched a real key,
+    # and crashed outright once "motion" actually held data (item.get() on
+    # whatever shape) instead of silently returning nothing.
     scores = [
-        float(m.get("score", 0) or 0)
+        float(m.get("motion_score", 0) or 0)
         for m in motion
-        if start <= float(m.get("ts", 0) or 0) <= end
+        if float(m.get("start", 0) or 0) < end and float(m.get("end", 0) or 0) > start
     ]
     return statistics.mean(scores) if scores else 0.0
 
 
 def _audio_avg_in_range(audio_peaks: list, start: float, end: float) -> float:
+    # detect_audio_peaks() yields {start, end, rms_db} segments (dB, so
+    # typically negative) — not {"ts", "level"}.
     levels = [
-        float(p.get("level", 0) or 0)
+        float(p.get("rms_db", 0) or 0)
         for p in audio_peaks
-        if start <= float(p.get("ts", 0) or 0) <= end
+        if float(p.get("start", 0) or 0) < end and float(p.get("end", 0) or 0) > start
     ]
     return statistics.mean(levels) if levels else 0.0
 
 
 def _scene_count_in_range(scenes: list, start: float, end: float) -> int:
-    return sum(
-        1 for s in scenes
-        if start <= float(s.get("ts", 0) or 0) <= end
-    )
+    # detect_scenes() yields a plain list[float] of cut timestamps, not
+    # {"ts": ...} dicts — each item IS the timestamp.
+    return sum(1 for ts in scenes if start <= float(ts or 0) <= end)
 
 
 def _signals_list(analysis: dict) -> list[str]:

@@ -66,32 +66,32 @@ def _motion_avg_in_range(motion: list, start: float, end: float) -> float:
     """Average motion score for frames within [start, end]."""
     if not motion:
         return 0.0
+    # compute_motion_score() yields {start, end, motion_score} segments.
     scores = [
-        float(m.get("score", 0) or 0)
+        float(m.get("motion_score", 0) or 0)
         for m in motion
-        if start <= float(m.get("ts", 0) or 0) <= end
+        if float(m.get("start", 0) or 0) < end and float(m.get("end", 0) or 0) > start
     ]
     return statistics.mean(scores) if scores else 0.0
 
 
 def _audio_avg_in_range(audio_peaks: list, start: float, end: float) -> float:
-    """Average audio level for peaks within [start, end]."""
+    """Average audio level (rms_db) for peaks within [start, end]."""
     if not audio_peaks:
         return 0.0
+    # detect_audio_peaks() yields {start, end, rms_db} segments.
     levels = [
-        float(p.get("level", 0) or 0)
+        float(p.get("rms_db", 0) or 0)
         for p in audio_peaks
-        if start <= float(p.get("ts", 0) or 0) <= end
+        if float(p.get("start", 0) or 0) < end and float(p.get("end", 0) or 0) > start
     ]
     return statistics.mean(levels) if levels else 0.0
 
 
 def _scene_count_in_range(scenes: list, start: float, end: float) -> int:
     """Count scene changes within [start, end]."""
-    return sum(
-        1 for s in scenes
-        if start <= float(s.get("ts", 0) or 0) <= end
-    )
+    # detect_scenes() yields a plain list[float] of cut timestamps.
+    return sum(1 for ts in scenes if start <= float(ts or 0) <= end)
 
 
 # ---------------------------------------------------------------------------
@@ -122,9 +122,10 @@ def _find_dead_intro(
             break  # only look at the first silence block
 
     # Rule 2: first scene change before 15 s with very low motion before it
-    sorted_scenes = sorted(scenes, key=lambda s: float(s.get("ts", 0) or 0))
+    # detect_scenes() yields a plain list[float] of cut timestamps.
+    sorted_scenes = sorted(float(s or 0) for s in scenes)
     if sorted_scenes:
-        first_scene_ts = float(sorted_scenes[0].get("ts", 0) or 0)
+        first_scene_ts = sorted_scenes[0]
         if first_scene_ts < 15.0:
             pre_motion = _motion_avg_in_range(motion, 0.0, first_scene_ts)
             if pre_motion < 0.2:
@@ -159,11 +160,12 @@ def _find_dead_outro(
             last_silence_end = seg_start  # activity ended where silence began
             break
 
-    # Find last high-motion frame in final 30 %
+    # Find last high-motion segment in final 30 %
+    # compute_motion_score() yields {start, end, motion_score} segments.
     high_motion_ts: float | None = None
-    for m in sorted(motion, key=lambda m: float(m.get("ts", 0) or 0), reverse=True):
-        ts    = float(m.get("ts", 0)    or 0)
-        score = float(m.get("score", 0) or 0)
+    for m in sorted(motion, key=lambda m: float(m.get("end", 0) or 0), reverse=True):
+        ts    = float(m.get("end", 0) or 0)
+        score = float(m.get("motion_score", 0) or 0)
         if ts >= outro_threshold and score >= 0.2:
             high_motion_ts = ts
             break
@@ -247,9 +249,9 @@ def _find_loopable_segment(
 
         # Motion consistency: low variance = smooth loop
         scores = [
-            float(m.get("score", 0) or 0)
+            float(m.get("motion_score", 0) or 0)
             for m in motion
-            if t <= float(m.get("ts", 0) or 0) <= win_end
+            if float(m.get("start", 0) or 0) < win_end and float(m.get("end", 0) or 0) > t
         ]
         if not scores:
             t += step
