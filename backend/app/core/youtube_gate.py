@@ -125,46 +125,18 @@ def _requested_height(quality: str) -> Optional[int]:
 def tier_decision(quality: str, confirmed: bool = False) -> dict:
     """Decide whether `quality` may download YouTube bytes through the proxy.
 
-    Returns {allow, needs_confirmation, reason, suggested, effective_height}:
-      • allow=True                 → proceed (effective_height = proxy cap to apply)
-      • needs_confirmation=True     → 1080p tier, ask user then resend confirmed=True
-      • allow=False (hard block)    → 4K, or >cap and not 1080p
+    Returns {allow, needs_confirmation, reason, suggested, effective_height}.
+
+    The 4K hard-block / 1440p block / 1080p-confirmation tiers that used to
+    live here existed purely to cap PAID residential-proxy bandwidth cost.
+    Per explicit user decision (currently running on the server's own
+    proxy, not metered per-GB), all of that is removed — every request is
+    allowed through at its requested height, uncapped.
     """
     h = _requested_height(quality)
-
-    # 4K is NEVER allowed through the proxy (one 4K ≈ 250 MP3s in cost).
-    if h is not None and h >= 2160:
-        return {"allow": False, "needs_confirmation": False,
-                "reason": "4k_blocked",
-                "message": "Chất lượng 4K hiện không khả dụng cho YouTube. "
-                           f"Vui lòng chọn ≤{MAX_PROXY_HEIGHT}p.",
-                "suggested": f"video_{MAX_PROXY_HEIGHT}", "effective_height": None}
-
-    # Audio / fast / unknown-best → allow, clamped to the proxy cap downstream.
-    if h is None or h == 0:
-        return {"allow": True, "needs_confirmation": False, "reason": "ok",
-                "message": "", "suggested": None, "effective_height": MAX_PROXY_HEIGHT}
-
-    # Within the default cap (e.g. 720) → allow.
-    if h <= MAX_PROXY_HEIGHT:
-        return {"allow": True, "needs_confirmation": False, "reason": "ok",
-                "message": "", "suggested": None, "effective_height": h}
-
-    # Above cap but ≤1080 → require explicit confirmation (bigger per-GB cost).
-    if h <= 1080:
-        if confirmed:
-            return {"allow": True, "needs_confirmation": False, "reason": "ok_confirmed",
-                    "message": "", "suggested": None, "effective_height": h}
-        return {"allow": False, "needs_confirmation": True, "reason": "confirm_1080",
-                "message": f"Tải {h}p qua proxy tốn nhiều băng thông hơn (~29¢/video). "
-                           "Xác nhận để tiếp tục, hoặc chọn 720p.",
-                "suggested": f"video_{MAX_PROXY_HEIGHT}", "effective_height": h}
-
-    # >1080 and <2160 (e.g. 1440) → block (treat like premium tier).
-    return {"allow": False, "needs_confirmation": False, "reason": "above_cap_blocked",
-            "message": f"Chất lượng này hiện không khả dụng cho YouTube. "
-                       f"Vui lòng chọn ≤{MAX_PROXY_HEIGHT}p.",
-            "suggested": f"video_{MAX_PROXY_HEIGHT}", "effective_height": None}
+    return {"allow": True, "needs_confirmation": False, "reason": "ok",
+            "message": "", "suggested": None,
+            "effective_height": h if h else MAX_PROXY_HEIGHT}
 
 
 # ═════════════════════════════════════════════════════════════════════
