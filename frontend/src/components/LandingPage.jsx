@@ -229,8 +229,8 @@ export default function LandingPage() {
         </section>
 
         {/* Tab Switcher */}
-        <div className="w-full flex justify-center mb-4 md:mb-6">
-          <div className="inline-flex bg-[#012622]/50 rounded-2xl p-1.5 sm:p-2 shadow-md border border-slate-700/50 gap-1 sm:gap-2 backdrop-blur-md">
+        <div className="w-full flex justify-center mb-4 md:mb-6 px-4 sm:px-0">
+          <div className="inline-flex max-w-full overflow-x-auto bg-[#012622]/50 rounded-2xl p-1.5 sm:p-2 shadow-md border border-slate-700/50 gap-1 sm:gap-2 backdrop-blur-md">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
