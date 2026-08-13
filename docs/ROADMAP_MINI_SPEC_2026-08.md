@@ -7,6 +7,42 @@
 
 ---
 
+## R33 — AI Smart Suggestions: pipeline chạy "thành công" nhưng gợi ý luôn rỗng — PHÁT HIỆN, CHƯA FIX (13/08/2026)
+
+Live-test `POST /api/v1/analyze-media` 2 lần với file thật vừa tải (không phải giả lập): task báo `status:"done"`, `fallback_used:false`, xử lý thật ~21-22s (đúng thời gian ffmpeg/ffprobe thật, không phải bị bỏ qua). Nhưng:
+
+- `probe: {}` — rỗng cả 2 lần, dù `build_analysis()` (hàm orchestrator ffprobe/scene/audio-peak/motion thật trong `app/core/media_analyzer.py`) được gọi đúng và không log lỗi nào (`get_runtime_logs` filter `build_analysis`/`analyze_media` không thấy exception).
+- `clip_suggestions: []`, `gif_suggestions: []` — rỗng cả 2 lần.
+- `trim_suggestions` có nội dung nhưng confidence thấp (0.2), lý do `"no_dead_intro_detected"` — tức là có chạy nhưng không tìm thấy gì đáng kể.
+
+**Chẩn đoán sơ bộ (chưa xác nhận 100%, cần thêm 1 vòng debug-print như đã làm với bug dịch phụ đề R31):** nghi vấn `analysis` (kết quả `build_analysis()`, chứa `probe`+`signals`) không được truyền/lưu đúng vào `results["probe"]` trước khi lưu DB — tách biệt với việc `suggest_all_trim_modes(analysis)`/`detect_highlights(analysis)`/`suggest_gif_segments(analysis)` nhận `analysis` rỗng hoặc thiếu field mong đợi, nên trả rỗng đúng theo logic (không phải chúng tự lỗi, mà là input đầu vào rỗng).
+
+**Vì sao đáng chú ý:** đây chính là tính năng "AI Gợi ý" tôi vừa nối dây vào extension phiên này (nút xuất hiện sau khi tải xong 1 video) — nút hoạt động, gọi API đúng, không báo lỗi gì cho user, nhưng **kết quả luôn trống rỗng** → trải nghiệm là "tính năng có nhưng vô dụng", dễ khiến user nghĩ AI của mình yếu trong khi thực ra pipeline chưa nối đúng dây. Đây cũng là gốc rễ định lượng cho R34 bên dưới — không cần "xây AI mới", chỉ cần fix nối dây cái đã build sẵn.
+
+---
+
+## R32 — Đợt sửa lỗi Extension + Frontend + Backend toàn diện — ĐÃ FIX (13/08/2026)
+
+Test trực tiếp bằng Chromium thật (Playwright + xvfb, nạp extension y hệt cách người dùng cài) thay vì chỉ đọc code, cộng với verify sống từng fix trên production. Tổng cộng extension đi từ **v5.1.0 → v5.1.7**, 3 domain (extension, backend, frontend) đều có bug thật:
+
+| Domain | Bug | Ảnh hưởng | Trạng thái |
+|---|---|---|---|
+| Extension | Onboarding + tab Lịch sử dùng `onclick=""` inline — MV3 CSP mặc định (`script-src 'self'`) âm thầm chặn, không log lỗi | Mọi user cài mới bị kẹt ở màn onboarding | Đã fix |
+| Extension | **Toàn bộ bộ chọn chất lượng (HD/4K/MP3) nằm trong `<script>` inline** — cùng lý do CSP, bị chặn hoàn toàn | Mọi lượt tải im lặng dùng mặc định ẩn, bấm pill nào cũng vô tác dụng | Đã fix — nghiêm trọng nhất trong đợt này |
+| Extension | Stored XSS: tiêu đề video/kênh/track Spotify (dữ liệu từ nền tảng nguồn, ai đặt tên video cũng được) chèn thẳng `innerHTML` không escape ở Lịch sử/Archive/panel trên trang | 1 video đặt tên ác ý chạy được JS trong popup — nơi lưu `vg_auth_token` | Đã fix (hàm `escapeHtml()`) |
+| Extension | UI Spotify không hiện ra: lỗi `.parentElement.parentElement` (dư 1 cấp) vô tình ẩn cả khối cha + inline `display:none` đè lên `class="hidden"` | Dán link Spotify → UI trống trơn | Đã fix |
+| Extension | UI Spotify (khi hiện được) dùng class Tailwind không tồn tại trong `tailwind.css` đã build (build chỉ quét HTML tĩnh, không quét chuỗi JS) | Chữ trắng trần không style, nút MP3 không màu | Đã fix (chuyển sang inline style + class `.sp-track` có sẵn nhưng chưa từng dùng) |
+| Extension | Link "Xem đầy đủ trên web" sau khi quét kênh xong: trỏ nhầm domain backend (chỉ trả `{"status":"ok"}`) thay vì frontend, cộng thêm cùng lỗi `display:none` đè `class="hidden"` | Quét kênh "Hoàn tất" nhưng **không có cách nào lấy file** — đúng bug user report | Đã fix |
+| Extension | File ZIP tự host (nút web + bot Telegram) là file tĩnh không ai cập nhật, kẹt ở v4.9.5 | User tải "bản mới nhất" nhưng nhận bản cũ nhiều version | Đã fix, đóng gói lại từ source hiện tại |
+| Backend | Pill "HD" (nhãn "1080p") build format-selector **giống hệt** pill "4K" (không giới hạn độ phân giải) | Chọn HD trên nguồn có 4K → âm thầm tải nguyên 4K, ngược hẳn kỳ vọng dung lượng | Đã fix, cap đúng ≤1080p |
+| Backend | Task định kỳ phục hồi job "pending" bị kẹt chỉ chạy 1 lần lúc khởi động container, không chạy định kỳ | Batch bị lỗi dispatch 1 lần thì kẹt vĩnh viễn tới lần deploy kế tiếp | Đã fix |
+| Frontend | nginx: bộ lọc chặn bot đặt sai vị trí (`if` ở cấp `server{}` chạy trước khi chọn `location`) — chặn luôn health-check của chính VAYS | **Mọi lần deploy frontend đều fail + tự rollback** (phát hiện khi deploy fix UI mobile) | Đã fix |
+| Frontend | Thanh tab chính tràn 2 bên trên mobile (thiếu `overflow-x-auto`) | Đè lên nút "Góp ý", chữ bị cắt | Đã fix |
+
+Theo yêu cầu user, cũng đã: bỏ nút Dark/Light theme (chưa từng có CSS thật đứng sau, chỉ đổi icon không đổi giao diện); gỡ toàn bộ trần chất lượng/quota YouTube theo proxy chi phí (đang chạy proxy server riêng, chưa cần giới hạn) — còn 1 trần kỹ thuật thật từ YouTube (SABR, ~1080p) do thiếu Cobalt sidecar trong kiến trúc VAYS single-container, không sửa được bằng cấu hình.
+
+---
+
 ## R31 — Dịch phụ đề (Transcript Translate) hoàn toàn không hoạt động — ĐÃ FIX (13/08/2026)
 
 User báo lỗi thật khi dùng UI: mọi lần dịch đều fail `"Translation alignment failed... expected N lines back from the LLM"`. Điều tra tận gốc qua 3 lớp:
@@ -368,9 +404,103 @@ Có ít nhất 1 partner/đối tác thật gọi được Partner API thành c�
 
 ---
 
+## 8. Nghiên cứu đối thủ AI-hoá (13/08/2026)
+
+Web research thật (không suy đoán từ kiến thức cũ) về các tool tải/xử lý video có yếu tố AI năm 2025-2026. 2 nhóm sản phẩm khác nhau đang hội tụ vào cùng thị trường:
+
+1. **Nhóm tải-trước (đối thủ trực tiếp của VidGrab)**: 4K Video Downloader+, SnapDownloader, ByClick, VideoDuke — mới bắt đầu gắn AI nhẹ (4K Video Downloader+ vừa thêm xử lý audio AI — tách vocal/khử ồn).
+2. **Nhóm repurposing/editor AI-native**: OpusClip, Vidyo.ai, Munch AI — sản phẩm khác hẳn (editor đầy đủ), nhưng validate nhu cầu thật cho vài tính năng con VidGrab có thể lấy lẻ.
+3. **Nhóm "dán link → AI phân tích ngay"**: ScreenApp, NoteGPT — đúng chính xác vị trí VidGrab đang đứng (tải/trích xuất + transcript + AI phân tích, không cần UI editor).
+
+**Xếp hạng theo giá trị/độ khớp với VidGrab** (đầy đủ 11 mục xem agent report gốc; rút gọn 4 mục ưu tiên nhất — 2 mục đầu thành MINI-SPEC R34/R35 bên dưới, 2 mục sau ghi vào §7 Follow-ups):
+
+| # | Tính năng | Đối thủ validate | Effort | Vì sao ưu tiên |
+|---|---|---|---|---|
+| 1 | Hoàn thiện Smart Clip/Trim thành "Auto-Highlight" thật | OpusClip/Vidyo.ai (core hook) | Nhỏ-Vừa | **Đã build phần lớn, đang gãy ở khâu nối dây (xem R33)** — sửa bug rẻ hơn xây mới |
+| 2 | Dán URL → AI tóm tắt + chapters, không cần tải trước | ScreenApp, NoteGPT | Vừa | Tái dùng nguyên Gemini + pipeline transcript đã có, chỉ thêm prompt + UI |
+| 3 | Điểm "virality/engagement" cho clip gợi ý | OpusClip (differentiator chính) | Nhỏ (sau khi có #1) | Badge + prompt, không cần hạ tầng mới |
+| 4 | Tự tạo phụ đề khi nguồn không có sẵn (ASR), rồi mới dịch | NoteGPT/Vozo/BlipCut | Vừa | Mở rộng tự nhiên từ tính năng dịch phụ đề R31 vừa fix xong |
+
+---
+
+## R34 — MINI-SPEC: Fix + hoàn thiện Smart Clip/Trim/GIF thành "AI Gợi ý" thật
+
+### Context
+Tính năng đã tồn tại (nối dây vào extension phiên này) nhưng **luôn trả kết quả rỗng** — xem R33. Đây không phải "xây tính năng AI mới" mà là fix 1 bug nối dây khiến 1 tính năng đã đầu tư build từ trước (Phase 18 AI Media) vô dụng trên thực tế.
+
+### Goal
+`analyze-media` trả về `probe` có dữ liệu thật (duration/resolution/fps) và ít nhất 1 `clip_suggestions`/`gif_suggestions` có ý nghĩa cho video có nội dung đa dạng (không phải video tĩnh/1 cảnh).
+
+### Constraints (Guardrails)
+- Không viết lại `build_analysis()`/`detect_highlights()`/`suggest_gif_segments()` từ đầu — debug đúng chỗ đứt dây trước, chỉ viết lại nếu xác nhận logic phát hiện tín hiệu (scene/audio-peak/motion) tự nó sai.
+- Dùng đúng phương pháp đã chứng minh hiệu quả trong session này (R31): thêm debug-print tạm thời tại đúng điểm nghi ngờ, deploy, xem log thật, xác nhận nguyên nhân rồi mới sửa — không đoán rồi sửa đại.
+- Test với ít nhất 2 loại video khác nhau (1 video nhiều cảnh/động, 1 video tĩnh) để phân biệt "bug" và "video này thật sự không có gì nổi bật".
+
+### Scope
+- **A.** Debug điểm đứt dây giữa `build_analysis()` → `results["probe"]`/`results["clips"]`/`results["gif"]`.
+- **B.** Fix, verify sống với video thật có nhiều cảnh/audio-peak rõ ràng.
+- **C.** Nếu logic phát hiện tín hiệu quá yếu (không phải bug mà là heuristic kém), quyết định nhỏ: threshold hiện tại có hợp lý không, hay cần Gemini-scored bổ sung (xem R35 §Điểm virality).
+
+### Audit Before Build
+- Đã audit sống trong phiên này (xem R33) — nghi vấn cụ thể là `analysis` dict không truyền đúng vào `results["probe"]`, KHÔNG phải lỗi ở từng module `smart_trim`/`smart_clips`/`smart_gif` (các module này nhận input rỗng thì trả rỗng đúng theo logic).
+
+### Design Choice
+- Ưu tiên fix rẻ (nối dây đúng) trước khi cân nhắc thay đổi thuật toán phát hiện signal.
+
+### Test Plan
+- Live test `analyze-media` với 1 video có cảnh cắt rõ + nhạc có peak rõ → `probe` có `duration_s/width/height`, `clip_suggestions` có ít nhất 1 gợi ý confidence hợp lý.
+- Regression: nút "AI Gợi ý" trong extension (đã nối dây phiên này) hiển thị đúng kết quả thật, không còn "Không tìm thấy gợi ý nào" mặc định.
+
+### Success Criteria
+- `probe` không rỗng trên video thật.
+- Ít nhất 70% video test (đa dạng thể loại) trả về ≥1 gợi ý clip/gif có confidence >0.4.
+
+---
+
+## R35 — MINI-SPEC: Dán URL → AI tóm tắt + Chapters (không cần tải trước)
+
+### Context
+Xu hướng 2025-2026: user dán link → nhận tóm tắt/chapters ngay, không cần chờ tải xong (ScreenApp, NoteGPT). VidGrab đã có: pipeline transcript (dùng cho R31 dịch phụ đề) + Gemini tích hợp sẵn (`call_llm()`) — đây là tính năng **tái dùng hạ tầng có sẵn**, không phải xây provider mới.
+
+### Goal
+User dán 1 URL video có phụ đề/transcript khả dụng (hoặc auto-caption từ nền tảng nguồn) → nhận tóm tắt các ý chính + timestamp chapters, hiển thị trước/độc lập với việc tải video.
+
+### Constraints (Guardrails)
+- Giai đoạn 1: chỉ hỗ trợ video **đã có transcript/caption sẵn từ nguồn** (không tự làm ASR — đó là R-follow-up riêng, effort cao hơn nhiều vì cần model ASR mới, xem §7).
+- Dùng đúng model đã pin theo yêu cầu user (`gemini-3.5-flash`), không đổi sang alias `-latest`.
+- Giới hạn token đầu ra + input theo đúng bài học R31 (model này tốn token suy luận nội bộ — set budget đủ rộng, verify bằng log thật trước khi coi là xong).
+
+### Scope
+- **A. Backend:** endpoint mới (hoặc mở rộng `extract_video_info`) nhận URL → lấy transcript có sẵn → gọi Gemini tóm tắt + tách chapters theo timestamp thật (không bịa timestamp).
+- **B. UI:** ô dán URL hiển thị kết quả tóm tắt + danh sách chapters bấm được (nhảy tới thời điểm nếu đang xem preview).
+- **C. Extension:** nút "Tóm tắt AI" bên cạnh nút tải đơn (tương tự cách đã nối "AI Gợi ý" phiên này).
+
+### Audit Before Build
+- Xác nhận trước: nền tảng nào đã có sẵn caption/transcript có thể lấy được qua yt-dlp mà không cần tải video (YouTube auto-caption khả dụng qua yt-dlp `--write-auto-sub` không cần tải bytes video) — nếu phần lớn nền tảng KHÔNG có transcript sẵn, giá trị tính năng giảm mạnh, cần biết trước khi build.
+
+### Design Choice
+- Tóm tắt + chapters là output độc lập, không phụ thuộc luồng tải — user có thể chỉ dùng tính năng này mà không tải video luôn (mở rộng use-case ngoài "download tool" thuần tuý).
+
+### Test Plan
+- Live test với 1 video YouTube dài (>10 phút) có auto-caption thật → verify chapters có timestamp thật khớp nội dung (nghe/đọc thủ công đối chiếu, không chỉ tin AI).
+- Test video KHÔNG có caption sẵn → phải báo lỗi rõ ràng "Chưa hỗ trợ" thay vì bịa nội dung hoặc lỗi mơ hồ.
+
+### Success Criteria
+- Tóm tắt + chapters đúng nội dung thật (verify thủ công ít nhất 3 video khác nhau).
+- Không tải video cũng dùng được tính năng này (đúng đề xuất "AI-native, không cần editor").
+
+---
+
 ## 7. Follow-ups / Out-of-scope (ghi nhận, chưa làm)
 
 - Cookie pool Twitter/X + Instagram mở rộng — config-only, làm trước khi 3 MINI-SPEC trên nếu cần gấp (effort thấp nhất).
 - Subtitle download hoàn thiện, Billing/Stripe (Phase 20), PWA (Phase 19), Admin RBAC — đã có mô tả đủ trong `FEATURES.md` §9, sinh MINI-SPEC riêng khi tới lượt.
 - Mở rộng platform mới (Vimeo, Weibo, Naver TV...) — chưa có tín hiệu nhu cầu thật từ user, không ưu tiên tới khi có bằng chứng.
 - Chrome Extension lên Chrome Web Store chính thức — effort cao (phải migrate `webRequest` → MV3 `declarativeNetRequest`), cân nhắc riêng.
+- **Từ nghiên cứu đối thủ 13/08/2026 (§8):**
+  - Phụ đề động (word-level animated caption, style TikTok/Reels) trên clip xuất ra — table-stakes ở OpusClip/Vidyo.ai/Munch, nhưng cần thêm bước render burn-in qua ffmpeg (effort Vừa-Lớn, hạ tầng mới ngoài pipeline dịch text hiện có).
+  - AI lồng tiếng đa ngôn ngữ (voice dubbing/clone) — khác hẳn dịch phụ đề chữ, cần provider TTS/voice-clone mới + xử lý lip-sync, effort Lớn, tín hiệu thị trường mạnh (Vozo/BlipCut/Maestra) nhưng rủi ro chi phí/độ trễ cao — chỉ làm khi có nhu cầu cụ thể từ user.
+  - AI tách vocal/khử ồn audio — đúng tính năng mới nhất của 4K Video Downloader+ 2026, cần model tách nguồn âm thanh (Demucs) — worker mới, không liên quan Gemini hiện có, effort Vừa.
+  - Xử lý AI hàng loạt cho kênh/bulk scrape (tóm tắt/dịch/phát hiện highlight cho cả kênh 1 lần, ra báo cáo dạng bảng) — chưa đối thủ downloader nào làm tốt (khoảng trống thị trường thật), nhưng phụ thuộc R34+R35 xong trước, effort Vừa (chủ yếu orchestration Celery/Redis đã có sẵn).
+  - Kiểm tra bản quyền/nội dung trước khi tải — tín hiệu thị trường yếu, chưa thấy đối thủ nào triển khai thật, nên để tới khi có yêu cầu pháp lý/compliance cụ thể mới làm.
+  - Tính năng editor đầy đủ (chèn B-roll, template thương hiệu, đăng đa nền tảng tự động, timeline edit) — khác hẳn định vị "download tool" của VidGrab, sẽ cạnh tranh trực tiếp OpusClip/Vidyo.ai thay vì bổ trợ, effort Rất lớn — khuyến nghị **không làm** trừ khi định hướng sản phẩm đổi hẳn sang editor.
