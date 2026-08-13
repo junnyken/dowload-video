@@ -160,6 +160,10 @@ def analyze_media_task(job_id: str) -> dict:
         # 3. Resolve media path + metadata
         # ------------------------------------------------------------------
         media_path = _get_media_path(job)
+        print(f"[R34-DEBUG] job.media_path={job.get('media_path')!r} "
+              f"job.media_url={job.get('media_url')!r} "
+              f"resolved_media_path={media_path!r} "
+              f"isfile(job.media_path)={os.path.isfile(job.get('media_path') or '')}")
         metadata = _load_media_metadata(job)
 
         # Merge any metadata stored on the job itself
