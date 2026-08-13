@@ -7,17 +7,16 @@
 
 ---
 
-## R33 — AI Smart Suggestions: pipeline chạy "thành công" nhưng gợi ý luôn rỗng — PHÁT HIỆN, CHƯA FIX (13/08/2026)
+## R33/R34 — AI Smart Suggestions: 4 bug chồng lên nhau — ĐÃ FIX, VERIFY SỐNG (13/08/2026)
 
-Live-test `POST /api/v1/analyze-media` 2 lần với file thật vừa tải (không phải giả lập): task báo `status:"done"`, `fallback_used:false`, xử lý thật ~21-22s (đúng thời gian ffmpeg/ffprobe thật, không phải bị bỏ qua). Nhưng:
+Phát hiện live-test (R33): `analyze-media` báo `status:"done"` nhưng `probe:{}`, `clip_suggestions:[]`, `gif_suggestions:[]` luôn rỗng. Điều tra bằng debug-print (đúng phương pháp R31), gỡ ra **4 lớp bug chồng nhau**:
 
-- `probe: {}` — rỗng cả 2 lần, dù `build_analysis()` (hàm orchestrator ffprobe/scene/audio-peak/motion thật trong `app/core/media_analyzer.py`) được gọi đúng và không log lỗi nào (`get_runtime_logs` filter `build_analysis`/`analyze_media` không thấy exception).
-- `clip_suggestions: []`, `gif_suggestions: []` — rỗng cả 2 lần.
-- `trim_suggestions` có nội dung nhưng confidence thấp (0.2), lý do `"no_dead_intro_detected"` — tức là có chạy nhưng không tìm thấy gì đáng kể.
+1. **`logger.warning("msg", key=val)` sai cách gọi** — `get_logger()` trả về `logging.Logger` thật, không nhận kwargs tuỳ ý (phải bọc `extra={}`). 13 chỗ dính (`media_analyzer.py` ×9, `smart_gif.py` ×3, `smart_trim.py` ×3, `smart_clips.py` ×1) — mỗi lần code cố log lỗi thật, dòng log đó **tự crash**, exception giả (`Logger._log() got an unexpected keyword argument`) che mất hoàn toàn lý do lỗi thật.
+2. **`probe.get("duration")` sai key** — key thật là `"duration_s"`. Lặp lại y hệt **5 lần** ở cả 3 module trim/clips/gif → mọi video bị tính là dài **0 giây**, tự động kích hoạt nhánh "quá ngắn, bỏ qua" bất kể video dài bao nhiêu.
+3. **`probe`/`signals_used` tính ra rồi nhưng không bao giờ lưu** — `analysis_results` (migration 013) không có cột `probe`; upsert cũng bỏ sót cột `signals_used` dù đã có sẵn. Đã nhét `probe` vào `metadata_suggestions._probe` (không cần đổi schema DB) và populate đúng `signals_used`.
+4. **Sai shape dữ liệu giữa detector và consumer** — `detect_scenes()` trả `list[float]` (mốc thời gian trần), nhưng code tiêu thụ tưởng là `list[{"ts":...}]`; `detect_audio_peaks()`/`compute_motion_score()` trả đoạn `{start,end,rms_db/motion_score}` nhưng code tiêu thụ tưởng là điểm `{"ts":...,"level"/"score":...}`. Gọi `.get()` trên float → crash `'float' object has no attribute 'get'`.
 
-**Chẩn đoán sơ bộ (chưa xác nhận 100%, cần thêm 1 vòng debug-print như đã làm với bug dịch phụ đề R31):** nghi vấn `analysis` (kết quả `build_analysis()`, chứa `probe`+`signals`) không được truyền/lưu đúng vào `results["probe"]` trước khi lưu DB — tách biệt với việc `suggest_all_trim_modes(analysis)`/`detect_highlights(analysis)`/`suggest_gif_segments(analysis)` nhận `analysis` rỗng hoặc thiếu field mong đợi, nên trả rỗng đúng theo logic (không phải chúng tự lỗi, mà là input đầu vào rỗng).
-
-**Vì sao đáng chú ý:** đây chính là tính năng "AI Gợi ý" tôi vừa nối dây vào extension phiên này (nút xuất hiện sau khi tải xong 1 video) — nút hoạt động, gọi API đúng, không báo lỗi gì cho user, nhưng **kết quả luôn trống rỗng** → trải nghiệm là "tính năng có nhưng vô dụng", dễ khiến user nghĩ AI của mình yếu trong khi thực ra pipeline chưa nối đúng dây. Đây cũng là gốc rễ định lượng cho R34 bên dưới — không cần "xây AI mới", chỉ cần fix nối dây cái đã build sẵn.
+**Verify sống cuối cùng** (video Big Buck Bunny 4K thật, format mới không dính cache): `probe` đầy đủ (fps/width/height/duration thật), `signals_used:["silence","scenes","motion"]`, **`gif_suggestions` có 2 gợi ý thật với điểm số hợp lý** (loop_score 0.68, motion_score 0.66, stability_score 0.96...), `warnings:[]` sạch hoàn toàn. `clip_suggestions` vẫn rỗng cho video test này nhưng **không còn lỗi** — có thể là ngưỡng phát hiện highlight hợp lệ, không phải bug (cần thêm test với video khác để xác nhận có cần tinh chỉnh ngưỡng không).
 
 ---
 
@@ -423,7 +422,7 @@ Web research thật (không suy đoán từ kiến thức cũ) về các tool t�
 
 ---
 
-## R34 — MINI-SPEC: Fix + hoàn thiện Smart Clip/Trim/GIF thành "AI Gợi ý" thật
+## R34 — MINI-SPEC: Fix + hoàn thiện Smart Clip/Trim/GIF thành "AI Gợi ý" thật — ✅ ĐÃ FIX 13/08/2026, xem chi tiết ở mục R33/R34 phía trên
 
 ### Context
 Tính năng đã tồn tại (nối dây vào extension phiên này) nhưng **luôn trả kết quả rỗng** — xem R33. Đây không phải "xây tính năng AI mới" mà là fix 1 bug nối dây khiến 1 tính năng đã đầu tư build từ trước (Phase 18 AI Media) vô dụng trên thực tế.
