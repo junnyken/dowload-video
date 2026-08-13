@@ -219,6 +219,18 @@ The extension Settings panel shows:
 4. Upload ZIP to Chrome Web Store Developer Dashboard
 5. Fill "What's new" field with changelog
 6. Submit for review (typically 1–3 business days)
+7. **Regenerate the self-hosted download ZIPs too** (easy to forget — found
+   stuck at v4.9.5 on 2026-08-13 while the source had moved to v5.1.7, so
+   the "Tải Extension (.ZIP)" button on `/extension` and the Telegram bot
+   delivery were both serving a many-versions-stale build for who knows how
+   long): from `chrome-extension/`, run
+   `zip -r VidGrab-extension.zip . -x "*.md" -x "*.DS_Store" -x "*.git*" -x "store-assets/*" -x "tests/*"`
+   and overwrite both `backend/extension/VidGrab-extension.zip` (served by
+   `GET /api/v1/extension/download`, checked first at the mounted path
+   `/app/extension/VidGrab-extension.zip`) and
+   `telegram-bot/extension/VidGrab-extension.zip`. Neither is auto-built —
+   both are static files that only change when someone manually redoes
+   this step.
 
 ### Manual Install (backward compat preserved)
 Sideloaded CRX / unpacked installs continue to work indefinitely.
