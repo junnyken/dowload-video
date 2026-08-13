@@ -1356,19 +1356,6 @@ async function downloadSingleTrack(track, btn) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// DARK / LIGHT MODE TOGGLE
-// ══════════════════════════════════════════════════════════════════
-const themeBtn = document.getElementById('theme-toggle');
-chrome.storage.local.get('vg_theme', (res) => {
-  if (res.vg_theme === 'light') { document.body.classList.add('light-mode'); themeBtn.textContent = '☀️'; }
-});
-themeBtn.addEventListener('click', () => {
-  const isLight = document.body.classList.toggle('light-mode');
-  themeBtn.textContent = isLight ? '☀️' : '🌙';
-  chrome.storage.local.set({ vg_theme: isLight ? 'light' : 'dark' });
-});
-
-// ══════════════════════════════════════════════════════════════════
 // MULTI-FORMAT POPUP
 // ══════════════════════════════════════════════════════════════════
 function showMultiFormat(data) {

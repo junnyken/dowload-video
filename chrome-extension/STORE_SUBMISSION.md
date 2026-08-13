@@ -43,7 +43,6 @@ VidGrab lets you download videos from the most popular platforms with one click 
 • Download history — local log of last 100 downloads
 • Archive — save to cloud history when logged in
 • Right-click context menu — download any supported link
-• Dark / light theme
 
 ★ PRIVACY FIRST
 VidGrab does not collect personal data. All download processing happens on your own backend server (self-hosted) or the VidGrab cloud instance. No browsing history is tracked or sent anywhere. See our Privacy Policy for details.
