@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Download, Layers, History, Wand2,
-  Sparkles, Smartphone, X
+  Sparkles, Smartphone, X, ShieldCheck
 } from 'lucide-react';
 import DashboardContent from './DashboardContent';
 import BulkContent from './BulkContent';
@@ -225,6 +225,11 @@ export default function LandingPage() {
               <History className="w-3 h-3" />
               Lịch sử tải
             </button>
+            <span aria-hidden="true">·</span>
+            <span className="inline-flex items-center gap-1.5 text-emerald-500/70">
+              <ShieldCheck className="w-3 h-3" />
+              Không quảng cáo · không giới hạn giả
+            </span>
           </div>
         </section>
 

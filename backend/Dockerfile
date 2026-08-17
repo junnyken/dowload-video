@@ -4,18 +4,15 @@ FROM python:3.10-slim
 # Thiết lập thư mục làm việc
 WORKDIR /app
 
-# Cài đặt FFmpeg via static binary + Deno (JS challenge solver cho yt-dlp 2026)
-RUN apt-get update && apt-get install -y --no-install-recommends wget xz-utils unzip \
-    && wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz \
-    && tar xf ffmpeg-release-amd64-static.tar.xz \
-    && mv ffmpeg-*-amd64-static/ffmpeg /usr/local/bin/ \
-    && mv ffmpeg-*-amd64-static/ffprobe /usr/local/bin/ \
-    && rm -rf ffmpeg-*-amd64-static* ffmpeg-release-amd64-static.tar.xz \
+# Cài đặt FFmpeg (kho Debian — nguồn static binary johnvansickle.com bị egress
+# block từ container trên host này, apt ổn định hơn) + Deno (JS challenge
+# solver cho yt-dlp 2026)
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg wget unzip \
     && wget -q https://github.com/denoland/deno/releases/download/v2.4.1/deno-x86_64-unknown-linux-gnu.zip \
     && unzip -q deno-x86_64-unknown-linux-gnu.zip -d /usr/local/bin/ \
     && chmod +x /usr/local/bin/deno \
     && rm deno-x86_64-unknown-linux-gnu.zip \
-    && apt-get purge -y wget xz-utils unzip && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+    && apt-get purge -y wget unzip && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # Copy yêu cầu và cài đặt môi trường
 COPY requirements.txt .

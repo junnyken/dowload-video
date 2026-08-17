@@ -71,11 +71,15 @@ def _probe_audio_codec(path: str) -> str:
 
 @router.post("/merge-clips")
 @limiter.limit("5/minute")
-async def merge_clips(
+def merge_clips(
     request: Request,
     body: MergeRequest,
     user=Depends(get_optional_user),
 ):
+    # Sync def (not async) is intentional: FastAPI/Starlette runs sync route
+    # handlers in a worker thread pool. This handler calls blocking
+    # subprocess.run() for up to 300s — as `async def` it would block the
+    # whole event loop, freezing every other request on this uvicorn worker.
     # ── 1. Validate clip count ───────────────────────────────────────
     if len(body.job_ids) < 2:
         raise HTTPException(

@@ -52,12 +52,20 @@ export function usePWAInstall() {
 
   const triggerInstall = async () => {
     if (!deferredPrompt) return false;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setIsInstalled(true);
+    let outcome = 'dismissed';
+    try {
+      deferredPrompt.prompt();
+      ({ outcome } = await deferredPrompt.userChoice);
+    } finally {
+      // A BeforeInstallPromptEvent can only be prompted once — clear it
+      // whether the user accepted or dismissed, so the button doesn't
+      // silently break on a second click.
       setShowBanner(false);
       setDeferredPrompt(null);
+      window.__pwaInstallPrompt = null;
+    }
+    if (outcome === 'accepted') {
+      setIsInstalled(true);
     }
     return outcome === 'accepted';
   };

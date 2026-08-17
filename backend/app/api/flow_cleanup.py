@@ -475,11 +475,15 @@ class ProcessRequest(BaseModel):
 
 @router.post("/process")
 @limiter.limit("5/minute")
-async def process_flow_cleanup(
+def process_flow_cleanup(
     payload: ProcessRequest,
     request: Request,
     _: None = Depends(_require_pro),
 ):
+    # Sync def (not async) is intentional: FastAPI/Starlette runs sync route
+    # handlers in a worker thread pool. This handler runs blocking FFmpeg/
+    # OpenCV work for up to 300s — as `async def` it would block the whole
+    # event loop, freezing every other request on this uvicorn worker.
     """
     Visible-logo cleanup on an uploaded Flow/Veo video.
 
@@ -722,11 +726,12 @@ class FromLocalRequest(BaseModel):
 
 @router.post("/from-local")
 @limiter.limit("10/minute")
-async def cleanup_from_local_path(
+def cleanup_from_local_path(
     payload: FromLocalRequest,
     request: Request,
     _: None = Depends(_require_pro),
 ):
+    # Sync def (not async) is intentional — see process_flow_cleanup above.
     """
     Start a logo-cleanup session from an already-downloaded video file.
     Accepts a server-side local_path (must be inside downloads dir).

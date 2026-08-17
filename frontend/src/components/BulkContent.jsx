@@ -467,13 +467,20 @@ export default function BulkContent() {
             setJobs(data.jobs);
             setSummary(data.summary || null);
 
-            // Auto-Download trigger
+            // Auto-Download trigger — staggered like handleDownloadAll (500ms
+            // apart). Firing every just-finished download in the same tick
+            // with no delay hits Chrome/Firefox's automatic-download block,
+            // so most files silently never save even though the UI says
+            // "success".
             if (autoDownload) {
+              let _staggerIndex = 0;
               data.jobs.forEach(job => {
                 const dlPath = job.local_mp3_path || job.local_file_path || job.direct_mp4_url;
                 if (job.status === 'success' && dlPath && !autoDownloadedRefs.current.has(job.id)) {
                   autoDownloadedRefs.current.add(job.id);
-                  handleSmartDownload(dlPath, job.slugified_name);
+                  const delay = _staggerIndex * 500;
+                  _staggerIndex += 1;
+                  setTimeout(() => handleSmartDownload(dlPath, job.slugified_name), delay);
                 }
               });
             }

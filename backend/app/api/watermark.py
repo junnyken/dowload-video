@@ -103,10 +103,14 @@ class WatermarkRequest(BaseModel):
 
 @router.post("/watermark-embed")
 @limiter.limit("5/minute")
-async def watermark_embed(
+def watermark_embed(
     request: Request,
     body: WatermarkRequest,
 ):
+    # Sync def (not async) is intentional: FastAPI/Starlette runs sync route
+    # handlers in a worker thread pool. This handler calls blocking
+    # subprocess.run() for up to 300s — as `async def` it would block the
+    # whole event loop, freezing every other request on this uvicorn worker.
     # ── Validate source path ─────────────────────────────────────────
     source_abs = _safe_path(body.source_path)
 

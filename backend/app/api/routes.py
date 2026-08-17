@@ -1041,6 +1041,38 @@ async def bulk_download(
             }),
         )
 
+    # ── Daily quota gate — bulk previously skipped this entirely, letting
+    # anon/free users bypass the per-day download cap that /fetch-link
+    # enforces for single downloads. Gate the whole batch up front; each
+    # individual job still re-checks (authenticated) inside process_video_task.
+    _bulk_client_ip = (
+        request.headers.get("x-forwarded-for", "")
+        .split(",")[0].strip()
+        or (request.client.host if request.client else "127.0.0.1")
+    )
+    if auth_user_id:
+        _bulk_quota = check_user_quota(auth_user_id)
+        if not _bulk_quota["allowed"]:
+            raise HTTPException(
+                status_code=403,
+                detail=make_error(ERR_QUOTA_DAILY, extra={
+                    "message":         _bulk_quota["message"],
+                    "downloads_today": _bulk_quota.get("downloads_today", 0),
+                    "daily_limit":     _bulk_quota.get("daily_limit", 30),
+                }),
+            )
+    else:
+        _bulk_anon_q = check_anon_quota(_bulk_client_ip)
+        if not _bulk_anon_q["allowed"]:
+            raise HTTPException(
+                status_code=429,
+                detail=make_error(ERR_QUOTA_DAILY, extra={
+                    "message":         _bulk_anon_q["message"],
+                    "downloads_today": _bulk_anon_q["downloads_today"],
+                    "daily_limit":     _bulk_anon_q["daily_limit"],
+                }),
+            )
+
     # Also enforce max_videos per channel against tier limit
     if payload.channel_mode and auth_user_id:
         from app.core.quotas import get_tier_permissions, get_user_tier
@@ -1048,8 +1080,6 @@ async def bulk_download(
         _perms = get_tier_permissions(_tier)
         payload.max_videos = min(payload.max_videos or 100, _perms["batch_limit"])
 
-    # IP used for rate limiting / quota (keep existing behavior)
-    ip_id = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
     batch_id = str(uuid.uuid4())
     supabase = get_supabase_client()
 
@@ -1104,7 +1134,7 @@ async def bulk_download(
                 # Hard limit max_videos to prevent scraping abuse (max 500)
                 safe_max_videos = min(payload.max_videos or 100, 500)
                 scrape_channel_task.apply_async(
-                    args=[url, batch_id, channel_job_id, safe_max_videos, payload.min_views, ip_id, payload.quality, payload.remove_watermark, payload.download_subs],
+                    args=[url, batch_id, channel_job_id, safe_max_videos, payload.min_views, auth_user_id, payload.quality, payload.remove_watermark, payload.download_subs],
                     priority=3,
                 )
                 channel_count += 1
@@ -1149,9 +1179,18 @@ async def bulk_download(
 
                 if not _dedup_resolved:
                     process_video_task.apply_async(
-                        args=[job_id, url, ip_id, payload.quality, payload.remove_watermark, payload.download_subs],
+                        args=[job_id, url, auth_user_id, payload.quality, payload.remove_watermark, payload.download_subs],
                         priority=5,
                     )
+                # Authenticated usage is counted inside process_video_task on
+                # completion (via the now-correct auth_user_id above). Anon
+                # usage has no task-side hook, so count it here at dispatch —
+                # matches check_anon_quota's per-IP daily gate above.
+                if not auth_user_id:
+                    try:
+                        increment_anon_usage(_bulk_client_ip)
+                    except Exception:
+                        pass
                 video_count += 1
 
         except Exception as e:

@@ -142,9 +142,12 @@ function AppInner() {
 
   const handlePwaInstall = async () => {
     if (!window.__pwaInstallPrompt) return;
-    window.__pwaInstallPrompt.prompt();
-    const { outcome } = await window.__pwaInstallPrompt.userChoice;
-    if (outcome === 'accepted') {
+    try {
+      window.__pwaInstallPrompt.prompt();
+      await window.__pwaInstallPrompt.userChoice;
+    } finally {
+      // Clear on both accept and dismiss — a BeforeInstallPromptEvent can
+      // only be prompted once, so leaving it set breaks the button on retry.
       window.__pwaInstallPrompt = null;
       setPwaInstallReady(false);
     }
