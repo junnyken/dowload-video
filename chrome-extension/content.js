@@ -11,6 +11,9 @@
   window.__vidgrab_injected = true;
 
   let API_BASE = 'https://dvid-api.cmc-1.vibenode.matbao.ai';
+  // Web app (frontend) — separate domain from the API backend. Used only to
+  // open the batch-progress page after a bulk send; never for API calls.
+  const FRONTEND_BASE = 'https://dvid.cmc-1.vibenode.matbao.ai';
   // Load custom server URL từ storage (nếu có)
   chrome.storage.sync.get('vg_api_base', (r) => { if (r.vg_api_base?.trim()) API_BASE = r.vg_api_base.trim(); });
 
@@ -594,7 +597,7 @@
           sendText.textContent = '✅ Đã gửi thành công';
           sendResult.style.display = 'block';
           sendResult.innerHTML = `Batch: <span style="color:#f97316;font-family:monospace">${data.batch_id.slice(0,10)}…</span>`;
-          window.open(`${API_BASE}?batch=${data.batch_id}`, '_blank');
+          window.open(`${FRONTEND_BASE}?batch=${data.batch_id}`, '_blank');
         } else throw new Error(data.detail || 'Server lỗi');
       } catch (err) {
         statusEl.style.color = '#f87171';

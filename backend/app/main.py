@@ -33,12 +33,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-# Initialize Rate Limiter (stricter: 60 req/min per IP default)
-limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+from app.core.client_ip import get_client_ip
+
+# Initialize Rate Limiter (stricter: 60 req/min per IP default).
+# key_func=get_client_ip (not slowapi's get_remote_address) — the latter
+# trusts request.client.host, which uvicorn's --forwarded-allow-ips '*'
+# sets from the FIRST (client-spoofable) X-Forwarded-For entry.
+# storage_uri: without this, slowapi falls back to in-process MemoryStorage,
+# which is NOT shared across the 4 uvicorn workers — each worker counts
+# independently, so the real limit is up to 4x the configured number and
+# unpredictable which worker a given request lands on.
+limiter = Limiter(
+    key_func=get_client_ip,
+    default_limits=["60/minute"],
+    storage_uri=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+)
 
 # ── Per-IP Daily Quota Middleware ────────────────────────────────────
 # Counts heavy endpoints (/fetch-link, /bulk-download) per IP per UTC day.
@@ -55,7 +67,7 @@ class DailyIPQuotaMiddleware(BaseHTTPMiddleware):
         if request.url.path not in _QUOTA_ENDPOINTS:
             return await call_next(request)
 
-        ip = get_remote_address(request)
+        ip = get_client_ip(request)
         today = __import__("datetime").date.today().isoformat()
         redis_key = f"quota:{ip}:{today}"
 

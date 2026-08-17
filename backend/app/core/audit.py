@@ -68,10 +68,8 @@ def log_event(
 def _extract_ip(request) -> str | None:
     if request is None:
         return None
-    forwarded = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-    if forwarded:
-        return forwarded
-    return request.client.host if request.client else None
+    from app.core.client_ip import get_client_ip
+    return get_client_ip(request)
 
 
 def log_from_request(request, action: str, user=None, **kwargs) -> None:

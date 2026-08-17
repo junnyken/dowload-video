@@ -102,6 +102,7 @@ def _assert_safe_url(url: str) -> None:
 
 from app.services.downloader import extract_video_info, classify_url
 from app.core.database import get_supabase_client
+from app.core.client_ip import get_client_ip
 from app.core.quotas import (
     check_user_quota, increment_usage,
     check_quality_permission, check_batch_limit, check_feature_permission,
@@ -436,11 +437,7 @@ async def fetch_link(
     _p27c_user_key  = ""
 
     # Extract client IP once — used for anon quota and YouTube yt_quota
-    _req_client_ip = (
-        request.headers.get("x-forwarded-for", "")
-        .split(",")[0].strip()
-        or (request.client.host if request.client else "127.0.0.1")
-    )
+    _req_client_ip = get_client_ip(request)
 
     # 1. Daily quota check (authenticated users)
     if user_id:
@@ -1045,11 +1042,7 @@ async def bulk_download(
     # anon/free users bypass the per-day download cap that /fetch-link
     # enforces for single downloads. Gate the whole batch up front; each
     # individual job still re-checks (authenticated) inside process_video_task.
-    _bulk_client_ip = (
-        request.headers.get("x-forwarded-for", "")
-        .split(",")[0].strip()
-        or (request.client.host if request.client else "127.0.0.1")
-    )
+    _bulk_client_ip = get_client_ip(request)
     if auth_user_id:
         _bulk_quota = check_user_quota(auth_user_id)
         if not _bulk_quota["allowed"]:
@@ -1363,7 +1356,7 @@ async def zip_stream(
 
 @router.get("/quota")
 async def get_quota(req: Request):
-    user_id = req.headers.get("x-forwarded-for", req.client.host).split(",")[0].strip()
+    user_id = get_client_ip(req)
     try:
         info = check_user_quota(user_id)
         return {
@@ -1745,7 +1738,7 @@ async def retry_failed_jobs(batch_id: str, request: Request):
     Skips jobs that have already reached MAX_MANUAL_RETRIES attempts.
     """
     from app.core.state_model import MAX_MANUAL_RETRIES, RETRYABLE_STATES
-    user_id = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
+    user_id = get_client_ip(request)
     supabase = get_supabase_client()
 
     failed_res = (
@@ -1800,7 +1793,7 @@ async def resume_batch(batch_id: str, request: Request):
     - processing: stuck > 10 min (worker died mid-task)
     """
     from datetime import datetime, timezone, timedelta
-    user_id = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
+    user_id = get_client_ip(request)
     supabase = get_supabase_client()
 
     stuck_cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)

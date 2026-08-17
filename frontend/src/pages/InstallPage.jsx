@@ -46,7 +46,11 @@ export default function InstallPage() {
 
   const handleDownload = () => {
     setDownloading(true);
-    window.open('/extension/VidGrab-extension.zip', '_blank');
+    // The extension zip is served by the backend (app/api/routes.py
+    // GET /extension/download), which can be a different domain than the
+    // frontend in split deployments — a bare relative path 404s there.
+    const apiBase = import.meta.env.VITE_API_URL ?? '';
+    window.open(`${apiBase}/extension/download`, '_blank');
     setTimeout(() => setDownloading(false), 3000);
   };
 

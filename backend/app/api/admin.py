@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from app.core.database import get_supabase_client
 from app.core.audit import log_admin_action, log_access_denied
+from app.core.client_ip import get_client_ip
 from datetime import datetime, timezone, timedelta
 
 router = APIRouter()
@@ -78,10 +79,7 @@ async def verify_admin(
     Also enforces ADMIN_ALLOWED_IPS if configured and logs denied attempts.
     """
     r = _redis()
-    ip = (
-        request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-        or (request.client.host if request.client else "unknown")
-    )
+    ip = get_client_ip(request)
 
     # ── IP allowlist check (when configured) ────────────────────────
     if _ADMIN_ALLOWED_IPS and ip not in _ADMIN_ALLOWED_IPS:
@@ -121,10 +119,7 @@ async def admin_login(payload: AdminLoginRequest, request: Request):
         raise HTTPException(status_code=503, detail="Admin password not configured")
 
     r = _redis()
-    ip = (
-        request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-        or (request.client.host if request.client else "unknown")
-    )
+    ip = get_client_ip(request)
 
     # Check lockout
     if r.exists(_lockout_key(ip)):
@@ -4072,7 +4067,7 @@ async def set_platform_override_mode(
     """28: Place a platform into manual operating mode (no restart needed)."""
     try:
         from app.core.runtime_overrides import set_platform_mode
-        ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "?").split(",")[0][:16]
+        ip = get_client_ip(request)[:16]
         set_platform_mode(platform, body.mode, body.reason, body.ttl, set_by=ip + "**")
         log_admin_action(request, "admin.policy.set_mode", resource_type="platform", resource_id=platform)
         return {"success": True, "platform": platform, "mode": body.mode}
@@ -4171,7 +4166,7 @@ async def activate_global_safe_mode(
         reason = "admin_manual"
     try:
         from app.core.runtime_overrides import set_global_safe_mode
-        ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "?").split(",")[0][:16]
+        ip = get_client_ip(request)[:16]
         set_global_safe_mode(reason, set_by=ip + "**")
         log_admin_action(request, "admin.policy.global_safe_mode_on", resource_type="system", resource_id="global")
         return {"success": True, "globalSafeMode": True, "reason": reason}
