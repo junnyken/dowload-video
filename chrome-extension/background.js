@@ -56,6 +56,9 @@ async function getApiBase() {
 const COOKIE_GATED_DOMAINS = [
   'instagram.com', 'twitter.com', 'x.com', 'facebook.com',
   'reddit.com', 'bilibili.com', 'xiaohongshu.com', 'lemon8-app.com',
+  // Douyin gates EVERY video behind signature cookies (ttwid/__ac_nonce/msToken),
+  // public ones included — no account needed, just a live browser session.
+  'douyin.com',
 ];
 
 function _cookieGatedDomainFor(pageUrl) {

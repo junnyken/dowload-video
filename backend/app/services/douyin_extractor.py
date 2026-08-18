@@ -16,6 +16,7 @@ Usage:
 """
 
 
+import os
 import re
 import sys
 import json
@@ -108,6 +109,39 @@ def _extract_video_id(url: str) -> Optional[str]:
         if m:
             return m.group(1)
     return None
+
+
+def _canonical_douyin_url(video_id: str) -> str:
+    """
+    Build the canonical watch URL from an aweme_id.
+
+    Every downstream consumer (yt-dlp, Apify, TikWM) only recognises the
+    /video/<id> form. Feed-style URLs such as
+    `douyin.com/jingxuan?modal_id=<id>` or `/discover?modal_id=<id>` are
+    rejected outright ("Unsupported URL"), so we always normalise first.
+    """
+    return f"https://www.douyin.com/video/{video_id}"
+
+
+def _resolve_cookie_file(user_cookies_file: Optional[str] = None) -> tuple[Optional[str], bool]:
+    """
+    Pick the best Douyin cookie file.
+
+    Order: caller-supplied file (UI "Dùng cookie của tôi") -> shared cookie pool.
+    Returns (path, is_temporary) — the caller deletes the file when temporary.
+    """
+    if user_cookies_file and os.path.exists(user_cookies_file):
+        return user_cookies_file, False
+
+    try:
+        from app.core.cookie_manager import get_cookie_file
+        pooled = get_cookie_file("douyin")
+        if pooled:
+            return pooled, True
+    except Exception as e:
+        _safe_print(f"[DouyinExtractor] Cookie pool unavailable: {e}")
+
+    return None, False
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -539,10 +573,140 @@ async def _try_scraperapi_ssr(url: str, quality: str = "video") -> Optional[Dict
 
 
 # ═════════════════════════════════════════════════════════════════════
+# PROVIDER 0: yt-dlp + signature cookies (primary — only unblocked path)
+# ═════════════════════════════════════════════════════════════════════
+
+def _ytdlp_extract_blocking(
+    canonical_url: str,
+    quality: str,
+    cookie_file: Optional[str],
+    proxy: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    """
+    Blocking yt-dlp extraction — the async wrapper runs this in a thread.
+
+    yt-dlp's DouyinIE calls Douyin's own /aweme/v1/web/aweme/detail/ endpoint.
+    That endpoint silently returns an empty body (HTTP 200, 0 bytes) unless the
+    request carries valid signature cookies, which is why a cookie file is the
+    deciding factor here rather than an optional extra.
+    """
+    try:
+        import yt_dlp
+    except ImportError:
+        _safe_print("[yt-dlp] yt_dlp not installed")
+        return None
+
+    opts: Dict[str, Any] = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "noplaylist": True,
+        "socket_timeout": 20,
+    }
+    if cookie_file:
+        opts["cookiefile"] = cookie_file
+    if proxy:
+        opts["proxy"] = proxy
+    if quality.startswith("mp3"):
+        opts["format"] = "bestaudio/best"
+
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(canonical_url, download=False)
+    except Exception as e:
+        _safe_print(f"[yt-dlp] {type(e).__name__}: {str(e)[:200]}")
+        return None
+
+    if not isinstance(info, dict):
+        return None
+
+    formats = [f for f in (info.get("formats") or []) if f.get("url")]
+    if not formats:
+        direct_url = info.get("url") or ""
+    elif quality.startswith("mp3"):
+        audio_only = [f for f in formats if f.get("vcodec") in (None, "none")]
+        direct_url = (audio_only or formats)[-1].get("url", "")
+    else:
+        # yt-dlp sorts worst -> best, so the tail is the highest quality.
+        direct_url = formats[-1].get("url", "")
+
+    if not direct_url:
+        _safe_print("[yt-dlp] No playable URL in extracted info")
+        return None
+
+    filesize = 0
+    for f in reversed(formats):
+        fs = f.get("filesize") or f.get("filesize_approx")
+        if fs:
+            filesize = round(fs / (1024 * 1024), 2)
+            break
+
+    _safe_print(f"[yt-dlp] Success: {(info.get('title') or '')[:60]}")
+    return {
+        "title": info.get("title") or "Douyin Video",
+        "thumbnail_url": info.get("thumbnail") or "",
+        "direct_mp4_url": direct_url,
+        "audio_url": "",
+        "file_size_mb": filesize,
+        "duration": int(info.get("duration") or 0),
+        "quality": quality,
+        "original_url": canonical_url,
+        "provider": "yt-dlp",
+    }
+
+
+async def _try_ytdlp(
+    video_id: str,
+    quality: str = "video",
+    user_cookies_file: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Extract via yt-dlp's DouyinIE using the best cookie we can find.
+
+    Douyin now requires signature cookies for every data path, so this provider
+    is the only one that can succeed; the HTML-scraping providers below are kept
+    as fallbacks in case Douyin restores its server-rendered payload.
+    """
+    if not video_id:
+        return None
+
+    canonical_url = _canonical_douyin_url(video_id)
+    cookie_file, is_temp = _resolve_cookie_file(user_cookies_file)
+
+    # ScraperAPI's proxy blocks Douyin's API paths (protected domain), so only a
+    # genuine CN residential proxy is usable here — never the ScraperAPI fallback.
+    try:
+        from app.core.proxy_manager import IPROYAL_PROXY_CN
+        proxy = IPROYAL_PROXY_CN or None
+    except Exception:
+        proxy = None
+
+    _safe_print(
+        f"[DouyinExtractor] Trying yt-dlp: {canonical_url} "
+        f"(cookies={'yes' if cookie_file else 'NO'}, cn_proxy={'yes' if proxy else 'no'})"
+    )
+
+    try:
+        return await asyncio.to_thread(
+            _ytdlp_extract_blocking, canonical_url, quality, cookie_file, proxy
+        )
+    finally:
+        if is_temp and cookie_file:
+            try:
+                os.unlink(cookie_file)
+            except OSError:
+                pass
+
+
+# ═════════════════════════════════════════════════════════════════════
 # PUBLIC API — Main entry point
 # ═════════════════════════════════════════════════════════════════════
 
-async def extract_douyin_video(url: str, quality: str = "video") -> Dict[str, Any]:
+async def extract_douyin_video(
+    url: str,
+    quality: str = "video",
+    user_cookies_file: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Extract a Douyin video using the multi-provider waterfall.
 
@@ -572,35 +736,53 @@ async def extract_douyin_video(url: str, quality: str = "video") -> Dict[str, An
 
     _safe_print(f"[DouyinExtractor] video_id={video_id}")
 
-    # Provider 1: iesdouyin Share Page (most reliable)
+    # Every provider below needs the canonical /video/<id> form: feed URLs such
+    # as /jingxuan?modal_id=<id> are rejected outright by yt-dlp and TikWM.
+    canonical_url = _canonical_douyin_url(video_id) if video_id else resolved_url
+
+    # Provider 0: yt-dlp + signature cookies (the only path Douyin still serves)
+    if video_id:
+        result = await _try_ytdlp(video_id, quality, user_cookies_file)
+        if result:
+            result["original_url"] = original_url
+            return result
+
+    # Provider 1: iesdouyin Share Page (kept as fallback — Douyin dropped the
+    # videoInfoRes payload from this page, so it currently returns nothing)
     if video_id:
         result = await _try_iesdouyin_share(video_id, quality)
         if result:
             result["original_url"] = original_url
             return result
 
-    # Provider 2: TikWM — try with original short URL (best chance)
-    result = await _try_tikwm(original_url, quality)
+    # Provider 2: TikWM
+    result = await _try_tikwm(canonical_url, quality)
     if result:
         result["original_url"] = original_url
         return result
 
-    # Provider 3: ScraperAPI SSR — use canonical URL
-    if resolved_url and "douyin.com" in resolved_url:
-        result = await _try_scraperapi_ssr(resolved_url, quality)
+    # Provider 3: ScraperAPI SSR
+    if canonical_url and "douyin.com" in canonical_url:
+        result = await _try_scraperapi_ssr(canonical_url, quality)
         if result:
             result["original_url"] = original_url
             return result
 
     raise ValueError(
-        "Không thể tải video Douyin. Tất cả provider đều thất bại. "
-        "Vui lòng thử lại sau."
+        "Không tải được video Douyin này. Douyin hiện yêu cầu cookie hợp lệ cho "
+        "mọi video, kể cả video công khai. Hãy bật \"Dùng cookie của tôi\" và dán "
+        "cookie douyin.com lấy từ trình duyệt, hoặc nhờ quản trị viên thêm cookie "
+        "Douyin vào kho cookie dùng chung."
     )
 
 
-def extract_douyin_video_sync(url: str, quality: str = "video") -> Dict[str, Any]:
+def extract_douyin_video_sync(
+    url: str,
+    quality: str = "video",
+    user_cookies_file: Optional[str] = None,
+) -> Dict[str, Any]:
     """Synchronous wrapper for Celery / sync contexts."""
-    return asyncio.run(extract_douyin_video(url, quality))
+    return asyncio.run(extract_douyin_video(url, quality, user_cookies_file))
 
 
 # ── Test ─────────────────────────────────────────────────────────────

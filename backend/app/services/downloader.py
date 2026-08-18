@@ -998,16 +998,28 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     if is_douyin_url(url) or is_douyin_url(original_input_url):
         try:
             result = None
+
+            # Feed-style links (/jingxuan?modal_id=, /discover?modal_id=) are not
+            # recognised by Apify or yt-dlp — normalise to /video/<id> up front.
+            from app.services.douyin_extractor import (
+                _extract_video_id as _dy_video_id,
+                _canonical_douyin_url as _dy_canonical,
+            )
+            _dy_id = _dy_video_id(original_input_url) or _dy_video_id(url)
+            douyin_input = _dy_canonical(_dy_id) if _dy_id else original_input_url
+
             if os.getenv("APIFY_TOKEN", ""):
                 try:
                     from app.services.apify_service import extract_douyin_apify_sync
-                    result = extract_douyin_apify_sync(original_input_url, quality)
+                    result = extract_douyin_apify_sync(douyin_input, quality)
                     print(f"[Downloader] Douyin via Apify: {result.get('title','')[:60]}")
                 except Exception as apify_err:
                     print(f"[Downloader] Apify Douyin failed, falling back: {apify_err}")
                     result = None
             if result is None:
-                result = extract_douyin_video_sync(original_input_url, quality)
+                # Douyin requires signature cookies — forward the cookies the user
+                # supplied via "Dùng cookie của tôi" instead of dropping them.
+                result = extract_douyin_video_sync(douyin_input, quality, user_cookies_file)
 
             # Download Douyin file: try direct (Oracle Cloud) first, CN proxy only on failure
             if result.get("direct_mp4_url") and not result.get("local_file_path"):
@@ -1033,10 +1045,23 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                             os.remove(local_path)
                         return False
 
+                # Douyin's CDN rejects header-less requests (403), so mimic the
+                # browser session the play URL was issued for.
+                _cdn_headers = {
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                    ),
+                    "Referer": "https://www.douyin.com/",
+                    "Accept": "*/*",
+                }
+
                 # Attempt 1: direct (free)
                 _downloaded = False
                 try:
-                    with httpx.Client(follow_redirects=True, timeout=120.0) as client:
+                    with httpx.Client(
+                        follow_redirects=True, timeout=120.0, headers=_cdn_headers
+                    ) as client:
                         _downloaded = _stream_to_file(client)
                     if _downloaded:
                         print("[Downloader] Douyin: CDN download direct OK")
@@ -1049,7 +1074,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                     try:
                         with httpx.Client(
                             follow_redirects=True, timeout=120.0,
-                            proxy=IPROYAL_PROXY_CN
+                            proxy=IPROYAL_PROXY_CN, headers=_cdn_headers
                         ) as client:
                             _downloaded = _stream_to_file(client)
                         if _downloaded:

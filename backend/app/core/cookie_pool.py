@@ -78,6 +78,12 @@ _AUTH_COOKIES: dict[str, set[str]] = {
         "tt_webid", "tt_webid_v2",
         "passport_auth_status",
     },
+    # Douyin gates every video (public ones too) behind a browser session rather
+    # than a login. Only the long-lived names are listed: msToken/__ac_nonce
+    # rotate within hours and would drag the session expiry down with them.
+    "douyin": {
+        "ttwid", "odin_tt", "passport_csrf_token", "sessionid",
+    },
     "instagram": {
         "sessionid", "ds_user_id", "csrftoken",
     },
