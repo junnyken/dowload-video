@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { RefreshCw, Download, RotateCcw, Home, Loader2 } from 'lucide-react';
+import { API_BASE } from '../lib/apiBase';
 
 const PLATFORM_MAP = {
   tiktok:    { emoji: '🎵', label: 'TikTok' },
@@ -147,7 +148,7 @@ export default function ActiveJobsMobile({ onNavigate, onActiveCountChange }) {
     if (!isAuthenticated || !session?.access_token) return;
     if (!opts.silent) setLoadingState('loading');
     try {
-      const res = await fetch('/api/v1/history?limit=30', {
+      const res = await fetch(`${API_BASE}/api/v1/history?limit=30`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (!res.ok) throw new Error('fetch failed');

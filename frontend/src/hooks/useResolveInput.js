@@ -7,7 +7,9 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-const API_BASE = import.meta.env.VITE_API_BASE || '';
+// VITE_API_BASE/VITE_API_BASE_URL are not defined in any build —
+// this fell back to '' and became a relative (502) URL.
+import { API_BASE } from '../lib/apiBase';
 const DEBOUNCE_MS = 350;
 const MIN_LENGTH  = 12; // "https://x.co" minimum
 

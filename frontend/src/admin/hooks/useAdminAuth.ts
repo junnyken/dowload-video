@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import type { AdminUser, AdminRole } from '../types/admin.types'
+import { API_BASE } from '../../lib/apiBase'
 
 const STORAGE_KEY = 'vg_admin_session'
 
@@ -50,7 +51,7 @@ export function useAdminAuth() {
   const login = useCallback(async (email: string, password: string): Promise<string | null> => {
     if (!email || !password) return 'Email and password are required.'
     try {
-      const res = await fetch('/api/v1/admin/login', {
+      const res = await fetch(`${API_BASE}/api/v1/admin/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),

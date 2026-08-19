@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { API_BASE } from '../../lib/apiBase';
 
 const SOURCE_CONFIG = {
   auto_tuner: { label: "Auto-Tune", color: "bg-blue-500/20 text-blue-300" },
@@ -27,7 +28,7 @@ export default function AutomationHistoryPanel({ adminToken }) {
   const fetch_ = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/v1/intelligence/automation-history", { headers: { "X-Admin-Token": adminToken } });
+      const r = await fetch(`${API_BASE}/api/v1/intelligence/automation-history`, { headers: { "X-Admin-Token": adminToken } });
       const d = await r.json();
       setEvents(d.events || []);
     } catch (_) {}

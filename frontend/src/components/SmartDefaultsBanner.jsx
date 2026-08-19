@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { API_BASE } from '../lib/apiBase';
 
 const PLATFORM_NAMES = {
   youtube: "YouTube", tiktok: "TikTok", facebook: "Facebook",
@@ -18,7 +19,7 @@ export default function SmartDefaultsBanner({ platform, userId, onAccept, onDism
     const token = localStorage.getItem("sb-access-token");
     if (!token) return;
 
-    fetch(`/api/v1/intelligence/smart-defaults/${platform}`, {
+    fetch(`${API_BASE}/api/v1/intelligence/smart-defaults/${platform}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { API_BASE } from '../lib/apiBase';
 
 export default function ScheduleSuggestions({ authToken, onApplySuggestion }) {
   const [suggestions, setSuggestions] = useState([]);
@@ -10,7 +11,7 @@ export default function ScheduleSuggestions({ authToken, onApplySuggestion }) {
 
   const fetch_ = useCallback(async () => {
     try {
-      const r = await fetch("/api/v1/intelligence/schedule-suggestions", {
+      const r = await fetch(`${API_BASE}/api/v1/intelligence/schedule-suggestions`, {
         headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
       });
       const d = await r.json();
@@ -23,7 +24,7 @@ export default function ScheduleSuggestions({ authToken, onApplySuggestion }) {
 
   const dismiss = async (jobId) => {
     try {
-      await fetch(`/api/v1/intelligence/schedule-suggestions/${jobId}/dismiss`, {
+      await fetch(`${API_BASE}/api/v1/intelligence/schedule-suggestions/${jobId}/dismiss`, {
         method: "POST",
         headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
       });
@@ -35,7 +36,7 @@ export default function ScheduleSuggestions({ authToken, onApplySuggestion }) {
     setApplying(s.job_id);
     try {
       if (onApplySuggestion) onApplySuggestion(s.job_id, s.suggested_cron);
-      await fetch(`/api/v1/intelligence/schedule-suggestions/${s.job_id}/dismiss`, {
+      await fetch(`${API_BASE}/api/v1/intelligence/schedule-suggestions/${s.job_id}/dismiss`, {
         method: "POST",
         headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
       });

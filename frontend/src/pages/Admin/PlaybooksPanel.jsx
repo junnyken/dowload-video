@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { API_BASE } from '../../lib/apiBase';
 
 function timeAgo(iso) {
   if (!iso) return "";
@@ -38,7 +39,7 @@ export default function PlaybooksPanel({ adminToken }) {
 
   const fetchPlaybooks = useCallback(async () => {
     try {
-      const r = await fetch("/api/v1/intelligence/playbooks", { headers: { "X-Admin-Token": adminToken } });
+      const r = await fetch(`${API_BASE}/api/v1/intelligence/playbooks`, { headers: { "X-Admin-Token": adminToken } });
       const d = await r.json();
       setPlaybooks(d.playbooks || []);
     } catch (_) {}
@@ -46,7 +47,7 @@ export default function PlaybooksPanel({ adminToken }) {
 
   const fetchHistory = useCallback(async () => {
     try {
-      const r = await fetch("/api/v1/intelligence/playbooks/history", { headers: { "X-Admin-Token": adminToken } });
+      const r = await fetch(`${API_BASE}/api/v1/intelligence/playbooks/history`, { headers: { "X-Admin-Token": adminToken } });
       const d = await r.json();
       setHistory((d.history || []).slice(0, 20));
     } catch (_) {}
@@ -58,7 +59,7 @@ export default function PlaybooksPanel({ adminToken }) {
     setConfirm(null);
     setExecuting(action);
     try {
-      const r = await fetch("/api/v1/intelligence/playbooks/execute", {
+      const r = await fetch(`${API_BASE}/api/v1/intelligence/playbooks/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
         body: JSON.stringify({ action, params }),

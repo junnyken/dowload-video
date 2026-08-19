@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { CheckCircle, Clock, AlertCircle, Lock, Wifi, RefreshCw, Search, X } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE || '';
+// VITE_API_BASE is not defined in any build — this fell back to ''
+// and became a relative (502) URL on the split-domain deploy.
+import { API_BASE } from '../lib/apiBase';
 
 const PLATFORMS = [
   // ── Fully supported ────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { API_BASE } from '../lib/apiBase';
 
 export default function ArchiveSuggestions({ authToken }) {
   const [tagSuggestions, setTagSuggestions] = useState([]);
@@ -13,7 +14,7 @@ export default function ArchiveSuggestions({ authToken }) {
 
   const fetch_ = useCallback(async () => {
     try {
-      const r = await fetch("/api/v1/intelligence/archive-suggestions", {
+      const r = await fetch(`${API_BASE}/api/v1/intelligence/archive-suggestions`, {
         headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
       });
       const d = await r.json();
@@ -27,7 +28,7 @@ export default function ArchiveSuggestions({ authToken }) {
   const acceptTags = async (item) => {
     setAccepting(item.item_id);
     try {
-      await fetch(`/api/v1/intelligence/archive-suggestions/${item.item_id}/accept-tags`, {
+      await fetch(`${API_BASE}/api/v1/intelligence/archive-suggestions/${item.item_id}/accept-tags`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
         body: JSON.stringify({ tags: item.suggested_tags }),
@@ -40,7 +41,7 @@ export default function ArchiveSuggestions({ authToken }) {
 
   const dismissTag = async (itemId) => {
     try {
-      await fetch(`/api/v1/intelligence/archive-suggestions/${itemId}/dismiss`, {
+      await fetch(`${API_BASE}/api/v1/intelligence/archive-suggestions/${itemId}/dismiss`, {
         method: "POST",
         headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
       });

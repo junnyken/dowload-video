@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { X, MessageSquare, Send, CheckCircle } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+// VITE_API_BASE/VITE_API_BASE_URL are not defined in any build —
+// this fell back to '' and became a relative (502) URL.
+import { API_BASE } from '../lib/apiBase';
 
 export default function FeedbackModal({ onClose }) {
   const [name, setName]       = useState('');

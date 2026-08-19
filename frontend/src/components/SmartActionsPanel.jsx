@@ -4,8 +4,10 @@
 // Default collapsed to not overwhelm the main download UI
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { API_BASE as API_ROOT } from "../lib/apiBase";
 
-const API_BASE = "/api/v1";
+// Was the literal "/api/v1" — relative, so 502 on the split-domain deploy.
+const API_BASE = `${API_ROOT}/api/v1`;
 const POLL_INTERVAL_MS = 2000;
 const POLL_MAX_ATTEMPTS = 30; // ~60s timeout
 

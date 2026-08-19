@@ -4,6 +4,7 @@ import {
   CheckCircle, Loader2, RotateCcw, Info, Eye,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE } from '../lib/apiBase';
 
 // Corner positions — percentages match backend preset_map exactly
 const PRESETS = [
@@ -348,7 +349,7 @@ export default function FlowVeoCleanup() {
     const formData = new FormData();
     formData.append('file', file);
     try {
-      const res = await fetch('/api/v1/flow-cleanup/upload', withAuth({ method: 'POST', body: formData }));
+      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/upload`, withAuth({ method: 'POST', body: formData }));
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.detail || `Upload lỗi (${res.status})`);
@@ -379,7 +380,7 @@ export default function FlowVeoCleanup() {
     setStep('no-logo');
     // Best-effort record — non-blocking, fire-and-forget
     if (tempId) {
-      fetch('/api/v1/flow-cleanup/no-logo', withAuth({
+      fetch(`${API_BASE}/api/v1/flow-cleanup/no-logo`, withAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ temp_id: tempId, suitability_level: suitability?.level ?? null }),
@@ -403,7 +404,7 @@ export default function FlowVeoCleanup() {
       h: Math.round(region.hPct * vh),
     } : null;
     try {
-      const res = await fetch('/api/v1/flow-cleanup/preview-frame', withAuth({
+      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/preview-frame`, withAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -438,7 +439,7 @@ export default function FlowVeoCleanup() {
     } : null;
     const actualMethod = method === 'telea' && delogoVariant === 'soft' ? 'telea_soft' : method;
     try {
-      const res = await fetch('/api/v1/flow-cleanup/process', withAuth({
+      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/process`, withAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

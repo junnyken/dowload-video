@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, ChevronDown, ChevronUp } from 'lucide-react';
+import { API_BASE } from '../lib/apiBase';
 
 function detectPlatform(url) {
   if (!url) return { name: 'Unknown', emoji: '🌐', color: '#64748b' };
@@ -49,7 +50,7 @@ export default function MobileShareIntake({ onNavigate }) {
       const ctrl = new AbortController();
       abortRef.current = ctrl;
 
-      fetch(`/api/v1/fetch-link?url=${encodeURIComponent(sharedUrl)}`, { signal: ctrl.signal })
+      fetch(`${API_BASE}/api/v1/fetch-link?url=${encodeURIComponent(sharedUrl)}`, { signal: ctrl.signal })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data) setVideoInfo(data);

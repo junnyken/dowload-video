@@ -1,4 +1,5 @@
 import { getAdminToken } from '../hooks/useAdminAuth'
+import { API_BASE } from '../../lib/apiBase'
 
 /**
  * Authenticated fetch wrapper for admin API endpoints.
@@ -18,7 +19,7 @@ export async function adminFetch<T = unknown>(
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const res = await fetch(`/api/v1/admin${path}`, { ...options, headers })
+  const res = await fetch(`${API_BASE}/api/v1/admin${path}`, { ...options, headers })
   if (!res.ok) {
     let msg = `HTTP ${res.status}`
     try {
