@@ -46,11 +46,31 @@ DISK_WARNING_PCT    = 0.75
 DISK_CRITICAL_PCT   = 0.90
 ALERT_COOLDOWN_S    = 1800   # 30 min between same alert type
 
-# ── Cooldown store (in-process, resets on worker restart) ────────────
+# ── Cooldown store ───────────────────────────────────────────────────
+# Redis-backed so the cooldown is shared across processes, with an in-process
+# fallback when Redis is unreachable.
+#
+# The in-process dict alone was fine while every alert came from a Celery task
+# (beat dispatches once, so one execution sends one message). It stopped being
+# fine with the worker-liveness watchdog: that runs in the API process, and the
+# container serves uvicorn --workers 2, so both processes evaluate the same
+# condition every 120s and each had its own cooldown — a real outage would page
+# twice per window. Duplicate alerts are how people learn to mute alerts.
 _last_alert: dict = {}
 
+
 def _throttle(key: str) -> bool:
-    """Return True if alert should be suppressed (cooldown not elapsed)."""
+    """Return True if this alert should be suppressed (cooldown not elapsed)."""
+    # SET NX EX is atomic: exactly one caller across all processes wins the
+    # window, and the key self-expires so there is nothing to clean up.
+    try:
+        from app.core.redis_client import get_redis
+        won = get_redis().set(f"vidgrab:alert_cooldown:{key}", "1",
+                              nx=True, ex=ALERT_COOLDOWN_S)
+        return not won
+    except Exception:
+        pass
+
     now = time.time()
     last = _last_alert.get(key, 0)
     if now - last < ALERT_COOLDOWN_S:

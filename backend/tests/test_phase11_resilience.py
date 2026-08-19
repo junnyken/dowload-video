@@ -316,6 +316,37 @@ class TestWorkerHeartbeat:
 
         assert sent == [], "a Redis outage is not evidence that workers are gone"
 
+    def test_only_one_process_alerts_per_cooldown(self, monkeypatch):
+        """
+        The container runs uvicorn --workers 2, so two API processes evaluate
+        this same condition every interval. The cooldown therefore has to be
+        shared, not per-process, or one outage pages twice per window.
+
+        A second process is simulated by clearing the in-process fallback dict
+        between the two calls while keeping the same Redis — calling twice
+        without that proves nothing, because the module-level dict would
+        suppress the repeat on its own and the test would pass even with the
+        shared lock removed.
+        """
+        from app.core import alerts as _alerts
+
+        fake_rc = self._fake_redis(monkeypatch)
+        fake_rc.set(
+            "vidgrab:last_worker_seen_at",
+            (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat(),
+        )
+        sent = self._capture_alerts(monkeypatch)
+
+        from app.core.alerts import check_worker_liveness
+        check_worker_liveness()          # process A
+        _alerts._last_alert.clear()      # process B starts with its own empty dict
+        check_worker_liveness()          # ...but the same Redis cooldown
+
+        assert len(sent) == 1, (
+            f"expected one alert per cooldown across processes, got {len(sent)} — "
+            "the cooldown is not shared"
+        )
+
     # ── the count itself must be able to say "none" and "unknown" ─────
     def test_worker_count_can_report_zero_and_unknown(self, monkeypatch):
         fake_rc = self._fake_redis(monkeypatch)
