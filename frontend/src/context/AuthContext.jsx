@@ -33,6 +33,29 @@ export function AuthProvider({ children }) {
     fetchPreferences();
   }, [user]);
 
+  // ── Hand the session to the VidGrab browser extension ────────────
+  // The extension's "Kết nối tài khoản" button opens this app with
+  // ?connect_extension=1 and then waits for a token. Nothing ever sent one,
+  // so the extension stayed anonymous no matter how many times a user clicked
+  // connect — history, archive and Pro quota were unreachable from it.
+  //
+  // We postMessage to our own origin only. The extension's web-bridge.js
+  // content script is the sole listener, and it (plus the service worker)
+  // re-verifies the origin, so this never exposes the token to another site.
+  useEffect(() => {
+    const wantsExtensionConnect =
+      new URLSearchParams(window.location.search).get('connect_extension') === '1';
+    if (!wantsExtensionConnect) return;
+    if (!session?.access_token) return;   // wait until sign-in completes
+
+    window.postMessage({
+      __vg_source: 'webapp',
+      type: 'VG_AUTH_TOKEN_FROM_WEB',
+      token: session.access_token,
+      email: session.user?.email || user?.email || '',
+    }, window.location.origin);
+  }, [session, user]);
+
   const fetchPreferences = useCallback(async () => {
     if (!session) return;
     try {
@@ -62,6 +85,11 @@ export function AuthProvider({ children }) {
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setPreferences(null);
+    // Don't leave a signed-out session live inside the extension.
+    window.postMessage(
+      { __vg_source: 'webapp', type: 'VG_AUTH_LOGOUT_FROM_WEB' },
+      window.location.origin,
+    );
   }, []);
 
   const resetPassword = useCallback(async (email) => {

@@ -2,7 +2,7 @@
   "update_url": "https://clients2.google.com/service/update2/crx",
   "manifest_version": 3,
   "name": "VidGrab - Video Downloader",
-  "version": "5.1.7",
+  "version": "5.1.8",
   "description": "Download videos from 20+ platforms: YouTube, TikTok, Instagram, Bilibili, Xiaohongshu, VK, Twitch, Facebook, Reddit, Twitter, Snapchat, and more.",
   "minimum_chrome_version": "102",
   "permissions": [
@@ -44,7 +44,9 @@
     "*://*.odysee.com/*",
     "*://*.dailymotion.com/*",
     "*://*.soundcloud.com/*",
-    "*://*.matbao.ai/*"
+    "*://*.matbao.ai/*",
+    "*://localhost/*",
+    "*://127.0.0.1/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -74,7 +76,9 @@
         "*://*.xiaohongshu.com/*",
         "*://*.lemon8-app.com/*"
       ],
-      "js": ["interceptor.js"],
+      "js": [
+        "interceptor.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     },
@@ -104,7 +108,20 @@
         "*://*.dailymotion.com/*",
         "*://*.soundcloud.com/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://dvid.cmc-1.vibenode.matbao.ai/*",
+        "*://localhost/*",
+        "*://127.0.0.1/*"
+      ],
+      "js": [
+        "web-bridge.js"
+      ],
       "run_at": "document_idle"
     }
   ]
