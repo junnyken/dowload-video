@@ -1431,15 +1431,26 @@ async def download_thumbnail(request: Request, url: str, filename: str = "thumbn
         }
         content_type = content_types.get(ext, "image/jpeg")
 
+        # Open (and fully redirect-resolve) the upstream BEFORE building the
+        # StreamingResponse: once headers are flushed the status is locked in,
+        # so a guard rejection raised from inside the generator would surface
+        # as "200 OK, empty body" instead of a 400.
+        from app.core.ssrf_guard import open_safe_stream
+        _client = httpx.AsyncClient(timeout=30.0)
+        try:
+            _resp, _aclose = await open_safe_stream(_client, "GET", url)
+            _resp.raise_for_status()
+        except Exception:
+            await _client.aclose()
+            raise
+
         async def stream_image():
-            # follow_redirects stays OFF — safe_stream re-runs the SSRF guard on
-            # every hop, so a public URL cannot 302 us onto 169.254.169.254.
-            from app.core.ssrf_guard import safe_stream
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                async with safe_stream(client, "GET", url) as resp:
-                    resp.raise_for_status()
-                    async for chunk in resp.aiter_bytes(chunk_size=65536):
-                        yield chunk
+            try:
+                async for chunk in _resp.aiter_bytes(chunk_size=65536):
+                    yield chunk
+            finally:
+                await _aclose()
+                await _client.aclose()
 
         return StreamingResponse(
             stream_image(),
@@ -1449,6 +1460,10 @@ async def download_thumbnail(request: Request, url: str, filename: str = "thumbn
                 "Access-Control-Expose-Headers": "Content-Disposition",
             },
         )
+    except HTTPException:
+        # A guard rejection (e.g. the SSRF check firing on a redirect hop) is
+        # already the right status — don't relabel it as an internal error.
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Thumbnail download failed: {str(e)}")
 
@@ -2081,28 +2096,41 @@ async def proxy_download(request: Request, url: str, filename: str = "video", ex
         content_type = media_types.get(safe_ext, "application/octet-stream")
         safe_filename = quote(slugified, safe="")
 
-        async def stream_video():
-            import re as _re
-            _proxy = None
-            if _is_yt_cdn:
-                from app.core.proxy_manager import IPROYAL_PROXY
-                if IPROYAL_PROXY:
-                    _ip_m = _re.search(r'[?&]ip=([0-9.]+)', url)
-                    if _ip_m:
-                        _cdn_ip = _ip_m.group(1)
-                        _server_ip = os.getenv("SERVER_OUTBOUND_IP", "")
-                        if not _server_ip or _cdn_ip != _server_ip:
-                            _proxy = IPROYAL_PROXY
+        import re as _re
+        _proxy = None
+        if _is_yt_cdn:
+            from app.core.proxy_manager import IPROYAL_PROXY
+            if IPROYAL_PROXY:
+                _ip_m = _re.search(r'[?&]ip=([0-9.]+)', url)
+                if _ip_m:
+                    _cdn_ip = _ip_m.group(1)
+                    _server_ip = os.getenv("SERVER_OUTBOUND_IP", "")
+                    if not _server_ip or _cdn_ip != _server_ip:
+                        _proxy = IPROYAL_PROXY
 
-            from app.core.ssrf_guard import safe_stream
-            async with httpx.AsyncClient(
-                timeout=300.0, headers=_req_headers,
-                proxy=_proxy if _proxy else None,
-            ) as client:
-                async with safe_stream(client, "GET", url) as resp:
-                    resp.raise_for_status()
-                    async for chunk in resp.aiter_bytes(chunk_size=65536):
-                        yield chunk
+        # Resolve the redirect chain and open the upstream here, not inside the
+        # body generator: StreamingResponse locks the status to 200 the moment
+        # it flushes headers, so a guard rejection raised later would reach the
+        # client as an empty 200 and be indistinguishable from a network fault.
+        from app.core.ssrf_guard import open_safe_stream
+        _client = httpx.AsyncClient(
+            timeout=300.0, headers=_req_headers,
+            proxy=_proxy if _proxy else None,
+        )
+        try:
+            _resp, _aclose = await open_safe_stream(_client, "GET", url)
+            _resp.raise_for_status()
+        except Exception:
+            await _client.aclose()
+            raise
+
+        async def stream_video():
+            try:
+                async for chunk in _resp.aiter_bytes(chunk_size=65536):
+                    yield chunk
+            finally:
+                await _aclose()
+                await _client.aclose()
 
         return StreamingResponse(
             stream_video(),
@@ -2112,6 +2140,10 @@ async def proxy_download(request: Request, url: str, filename: str = "video", ex
                 "Access-Control-Expose-Headers": "Content-Disposition",
             },
         )
+    except HTTPException:
+        # A guard rejection (e.g. the SSRF check firing on a redirect hop) is
+        # already the right status — don't relabel it as an internal error.
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Proxy download failed: {str(e)}")
 

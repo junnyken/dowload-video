@@ -186,3 +186,39 @@ async def safe_head(client, url: str, *, max_redirects: int = MAX_REDIRECTS,
         return resp
 
     raise HTTPException(status_code=400, detail="Too many redirects")
+
+async def open_safe_stream(client, method: str, url: str, *, max_redirects: int = MAX_REDIRECTS,
+                           detail_factory=None, **kwargs):
+    """
+    Like `safe_stream`, but resolves the whole redirect chain EAGERLY and hands
+    back an already-open response plus its closer.
+
+    Why this exists: FastAPI's StreamingResponse commits status 200 and flushes
+    headers before it ever iterates the body generator. A guard that raises from
+    inside that generator therefore cannot turn the response into a 400 — the
+    client sees `200 OK` with an empty body and cannot tell "blocked" from
+    "upstream died". Callers that return a StreamingResponse must open the
+    stream here, in the handler, so a rejection is still a real HTTP error.
+
+    Returns (response, aclose) — call `await aclose()` when the body is done.
+    """
+    kwargs.pop("follow_redirects", None)
+    current = url
+
+    for _ in range(max_redirects + 1):
+        assert_safe_url(current, detail_factory=detail_factory)
+        cm = client.stream(method, current, follow_redirects=False, **kwargs)
+        resp = await cm.__aenter__()
+
+        location = resp.headers.get("location")
+        if resp.status_code in (301, 302, 303, 307, 308) and location:
+            await cm.__aexit__(None, None, None)
+            current = urljoin(current, location)
+            continue
+
+        async def _aclose(_cm=cm):
+            await _cm.__aexit__(None, None, None)
+
+        return resp, _aclose
+
+    raise HTTPException(status_code=400, detail="Too many redirects")

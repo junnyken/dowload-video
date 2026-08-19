@@ -71,3 +71,44 @@ def test_routes_survive_unreachable_rate_limit_store(app, path):
         f"{path} returned {r.status_code} with the limiter's Redis store down — "
         "the rate limiter must degrade, not take the API with it"
     )
+
+
+# ── A guard rejection must be a real error status, not an empty 200 ───
+# StreamingResponse commits status 200 the moment it flushes headers. When the
+# SSRF check lived inside the body generator, a redirect onto an internal host
+# was still blocked (0 bytes leaked) but reached the client as "200 OK" with an
+# empty body — indistinguishable from a network fault. Verified live against
+# production before this was fixed.
+
+import httpx
+
+
+def _redirect_transport(final_target):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "redirector.example.com":
+            return httpx.Response(302, headers={"location": final_target})
+        return httpx.Response(200, content=b"SHOULD-NEVER-BE-REACHED")
+    return httpx.MockTransport(handler)
+
+
+@pytest.mark.parametrize("endpoint", ["/api/v1/proxy-download", "/api/v1/download-thumbnail"])
+def test_redirect_to_internal_returns_error_status_not_empty_200(app, monkeypatch, endpoint):
+    from app.core import ssrf_guard
+    monkeypatch.setattr(ssrf_guard, "_resolve", lambda h: ("93.184.216.34",))
+
+    transport = _redirect_transport("http://169.254.169.254/latest/meta-data/")
+    real_client = httpx.AsyncClient
+
+    def _patched(*args, **kwargs):
+        kwargs.pop("proxy", None)
+        kwargs["transport"] = transport
+        return real_client(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", _patched)
+
+    r = app.get(endpoint, params={"url": "https://redirector.example.com/r"})
+    assert r.status_code == 400, (
+        f"{endpoint} returned {r.status_code}; a blocked redirect must be an "
+        "explicit error, not a silent empty 200"
+    )
+    assert b"SHOULD-NEVER-BE-REACHED" not in r.content
