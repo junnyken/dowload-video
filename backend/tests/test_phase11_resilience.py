@@ -220,44 +220,115 @@ class TestRetryTracking:
 # ─── 6. Worker heartbeat check ────────────────────────────────────────────────
 
 class TestWorkerHeartbeat:
-    def test_healthy_workers_update_redis(self, monkeypatch):
+    """
+    The worker-outage alert used to live inside worker_heartbeat_check, which
+    is itself a Celery task — it only ran when a worker was alive to run it, so
+    the alert could never fire. Detection now lives in the API process
+    (alerts.check_worker_liveness) and reads a beacon the workers publish.
+
+    These tests keep the original intent — "beacon gets written", "a stale
+    beacon raises the alarm" — but point it at the half that can actually fire.
+    """
+
+    @staticmethod
+    def _fake_redis(monkeypatch):
         import fakeredis
         fake_rc = fakeredis.FakeStrictRedis(decode_responses=True)
+        # Two patch targets on purpose: queue_intelligence binds get_redis at
+        # import time (`from ... import get_redis`), so patching the source
+        # module alone misses it, while alerts.py and the heartbeat task import
+        # it inside their functions and only see the source module.
         monkeypatch.setattr("app.core.redis_client.get_redis", lambda: fake_rc)
-        monkeypatch.setattr("app.core.queue_intelligence._get_active_workers", lambda: ["w1", "w2"])
+        monkeypatch.setattr("app.core.queue_intelligence.get_redis", lambda: fake_rc)
+        return fake_rc
 
-        from app.tasks.video_tasks import worker_heartbeat_check
-        # worker_heartbeat_check(self) is a bind=True Celery task — calling
-        # the Celery-wrapped proxy directly (not via .delay()/.apply_async())
-        # already supplies `self` automatically, so passing an extra `ctx`
-        # positional arg here raised "takes 1 positional argument but 2 were
-        # given". The function body doesn't reference self.request/anything
-        # from a context object, so no replacement arg is needed either.
-        worker_heartbeat_check()
+    @staticmethod
+    def _capture_alerts(monkeypatch):
+        """Capture at the Telegram boundary and clear the cooldown memo."""
+        from app.core import alerts as _alerts
+        _alerts._last_alert.clear()
+        sent = []
+        monkeypatch.setattr(_alerts, "send_telegram_message_sync", lambda msg, **kw: sent.append(msg))
+        return sent
 
-        assert fake_rc.get("vidgrab:last_worker_seen_at") is not None
-
-    def test_no_workers_sends_alert_after_5min(self, monkeypatch):
-        import fakeredis
-        fake_rc = fakeredis.FakeStrictRedis(decode_responses=True)
-        # Simulate last_worker_seen_at was 10 min ago
-        old_time = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
-        fake_rc.set("vidgrab:last_worker_seen_at", old_time)
-        monkeypatch.setattr("app.core.redis_client.get_redis", lambda: fake_rc)
-        monkeypatch.setattr("app.core.queue_intelligence._get_active_workers", lambda: [])
-
-        alert_sent = []
+    # ── the worker half: publish the beacon ───────────────────────────
+    def test_running_worker_publishes_beacon(self, monkeypatch):
+        fake_rc = self._fake_redis(monkeypatch)
+        # The task also refreshes the cached worker count via a control-plane
+        # ping; stub it so the test does not need a live broker.
         monkeypatch.setattr(
-            "app.core.notifications.send_telegram_message_sync",
-            lambda msg, **kw: alert_sent.append(msg),
+            "app.core.queue_intelligence._get_active_workers",
+            lambda force_refresh=False: 2,
         )
 
         from app.tasks.video_tasks import worker_heartbeat_check
-        # See test_healthy_workers_update_redis — no explicit arg needed.
+        # bind=True task called directly — Celery supplies `self`.
         worker_heartbeat_check()
 
-        assert len(alert_sent) == 1
-        assert "No Workers" in alert_sent[0]
+        beacon = fake_rc.get("vidgrab:last_worker_seen_at")
+        assert beacon is not None, "a running worker must publish its liveness beacon"
+        parsed = datetime.fromisoformat(beacon)
+        assert (datetime.now(timezone.utc) - parsed).total_seconds() < 60
+
+    # ── the API half: notice the beacon went stale ────────────────────
+    def test_stale_beacon_sends_alert(self, monkeypatch):
+        fake_rc = self._fake_redis(monkeypatch)
+        fake_rc.set(
+            "vidgrab:last_worker_seen_at",
+            (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat(),
+        )
+        sent = self._capture_alerts(monkeypatch)
+
+        from app.core.alerts import check_worker_liveness
+        check_worker_liveness()
+
+        assert len(sent) == 1, "a 10-minute-old beacon must raise the worker alarm"
+        assert "No Celery Workers" in sent[0]
+
+    def test_missing_beacon_sends_alert(self, monkeypatch):
+        self._fake_redis(monkeypatch)          # empty Redis: no beacon at all
+        sent = self._capture_alerts(monkeypatch)
+
+        from app.core.alerts import check_worker_liveness
+        check_worker_liveness()
+
+        assert len(sent) == 1
+        assert "No Celery Workers" in sent[0]
+
+    def test_fresh_beacon_stays_quiet(self, monkeypatch):
+        fake_rc = self._fake_redis(monkeypatch)
+        fake_rc.set("vidgrab:last_worker_seen_at", datetime.now(timezone.utc).isoformat())
+        sent = self._capture_alerts(monkeypatch)
+
+        from app.core.alerts import check_worker_liveness
+        check_worker_liveness()
+
+        assert sent == [], "a live worker pool must not page anyone"
+
+    def test_unreachable_redis_does_not_cry_wolf(self, monkeypatch):
+        def _boom():
+            raise ConnectionError("redis down")
+        monkeypatch.setattr("app.core.redis_client.get_redis", _boom)
+        sent = self._capture_alerts(monkeypatch)
+
+        from app.core.alerts import check_worker_liveness
+        check_worker_liveness()
+
+        assert sent == [], "a Redis outage is not evidence that workers are gone"
+
+    # ── the count itself must be able to say "none" and "unknown" ─────
+    def test_worker_count_can_report_zero_and_unknown(self, monkeypatch):
+        fake_rc = self._fake_redis(monkeypatch)
+        from app.core import queue_intelligence as qi
+
+        # No cached value yet → unknown, never a made-up 1.
+        assert qi._get_active_workers() == -1
+
+        fake_rc.set(qi.WORKER_COUNT_CACHE_KEY, 0)
+        assert qi._get_active_workers() == 0, "zero workers must be reportable"
+
+        fake_rc.set(qi.WORKER_COUNT_CACHE_KEY, 3)
+        assert qi._get_active_workers() == 3
 
 
 # ─── 7. Health endpoint shape ─────────────────────────────────────────────────
@@ -280,7 +351,12 @@ class TestHealthEndpointShape:
         fake_rc.get.return_value = None
         monkeypatch.setattr(_r_mod, "from_url", lambda *a, **kw: fake_rc)
 
-        monkeypatch.setattr("app.core.queue_intelligence._get_active_workers", lambda: ["w1"])
+        # Returns an int, not a list — main.py used to call len() on it, which
+        # raised TypeError and pinned /health at worker_count: -1.
+        monkeypatch.setattr(
+            "app.core.queue_intelligence._get_active_workers",
+            lambda force_refresh=False: 1,
+        )
 
         mock_sb = MagicMock()
         mock_sb.table.return_value.select.return_value.in_.return_value.execute.return_value.count = 2

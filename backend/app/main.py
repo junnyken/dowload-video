@@ -185,8 +185,43 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[Startup] Telegram notification failed (non-critical): {e}")
 
+    # Worker liveness watchdog.
+    #
+    # Both previous "no Celery workers" checks ran inside Celery tasks, so they
+    # could only execute while a worker was alive to run them — neither could
+    # ever fire. This loop lives in the API process, which keeps serving when
+    # every worker is gone, and only reads the beacon workers publish.
+    # send_admin_alert throttles on alert_key, so a sustained outage is one
+    # message per cooldown, not one per tick.
+    _watchdog_task = None
+    if os.getenv("WORKER_WATCHDOG_ENABLED", "1").strip().lower() in ("1", "true", "yes", "on"):
+        import asyncio as _asyncio
+
+        async def _worker_watchdog():
+            interval = int(os.getenv("WORKER_WATCHDOG_INTERVAL_SEC", "120"))
+            # Grace period before the first check. It must exceed the time a
+            # cold start needs to publish its first beacon: celery beat only
+            # dispatches worker_heartbeat_check every 120s and beat itself has
+            # to come up first, so a 120s grace would page the admin on every
+            # single deploy. 5 minutes matches the staleness threshold.
+            grace = int(os.getenv("WORKER_WATCHDOG_GRACE_SEC", "300"))
+            await _asyncio.sleep(max(grace, interval))
+            while True:
+                try:
+                    from app.core.alerts import check_worker_liveness
+                    await _asyncio.to_thread(check_worker_liveness)
+                except _asyncio.CancelledError:
+                    raise
+                except Exception as _wd_err:
+                    print(f"[Watchdog] worker liveness check failed: {_wd_err}")
+                await _asyncio.sleep(interval)
+
+        _watchdog_task = _asyncio.create_task(_worker_watchdog())
+
     yield
     # --- Shutdown ---
+    if _watchdog_task:
+        _watchdog_task.cancel()
     print("Shutting down Video Downloader API...")
 
 
@@ -421,7 +456,9 @@ async def health_check():
     # Celery worker count
     try:
         from app.core.queue_intelligence import _get_active_workers
-        celery_worker_cnt = len(_get_active_workers())
+        # Was len(...) on an int — TypeError on every call, so the except below
+        # swallowed it and /health reported worker_count: -1 forever.
+        celery_worker_cnt = _get_active_workers()
     except Exception:
         pass
 

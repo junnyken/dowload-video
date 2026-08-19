@@ -120,20 +120,51 @@ def update_avg_duration(duration_seconds: float) -> None:
 # Active worker count
 # ---------------------------------------------------------------------------
 
-def _get_active_workers() -> int:
-    """Best-effort count of active Celery workers via Redis inspect keys."""
+# Written by worker_heartbeat_check (which only runs when a worker is alive) and
+# read by everything else, so no request path pays for a broadcast ping.
+WORKER_COUNT_CACHE_KEY = "vg:worker_count_cache"
+WORKER_SEEN_KEY = "vidgrab:last_worker_seen_at"
+WORKER_COUNT_TTL = 300           # > the 120s heartbeat period, so a healthy
+                                 # system always has a fresh value
+
+
+def _get_active_workers(force_refresh: bool = False) -> int:
+    """
+    Number of Celery workers currently answering. Returns -1 when we could not
+    determine it — callers must not read that as "healthy".
+
+    The old implementation counted `_kombu.binding.*` keys, which are queue
+    *bindings*: they exist whenever the queue has been declared, with or
+    without a worker attached. It then clamped 0 up to 1 and also returned 1
+    from its except branch, so it could never report an outage — and
+    main.py called len() on this int, which raised TypeError and left /health
+    permanently reporting worker_count: -1.
+
+    By default this reads the cached value only (a plain Redis GET), because
+    /health is polled frequently and a control-plane ping blocks. Pass
+    force_refresh=True from the periodic heartbeat task, which is the writer.
+    """
+    if not force_refresh:
+        try:
+            cached = get_redis().get(WORKER_COUNT_CACHE_KEY)
+            if cached is not None:
+                return int(cached)
+        except Exception:
+            pass
+        return -1
+
     try:
-        r = get_redis()
-        # Celery workers write heartbeat keys like: _kombu.binding.celery.pidbox
-        # For a lightweight estimate, scan for worker heartbeat keys.
-        keys = r.keys("_kombu.binding.*") or []
-        worker_count = len(keys)
-        if worker_count == 0:
-            # Fallback: assume at least 1 worker if queue is non-empty
-            worker_count = 1
-        return worker_count
+        from app.core.celery_app import celery_app
+        replies = celery_app.control.ping(timeout=2.0) or []
+        count = len(replies)
     except Exception:
-        return 1
+        return -1
+
+    try:
+        get_redis().set(WORKER_COUNT_CACHE_KEY, count, ex=WORKER_COUNT_TTL)
+    except Exception:
+        pass
+    return count
 
 
 # ---------------------------------------------------------------------------

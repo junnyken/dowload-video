@@ -49,18 +49,16 @@ def _recovery_log(limit: int = 20) -> list:
 
 
 def _worker_count() -> int:
-    """Best-effort Celery worker count via Redis KEYS scan."""
+    """
+    Celery worker count (-1 = unknown).
+
+    This used to read `vg:worker_count_cache` directly — a key nothing wrote,
+    so it returned -1 unconditionally. The heartbeat task is now its writer;
+    go through the single reader so both stay in step.
+    """
     try:
-        from app.core.redis_client import get_redis
-        rc = get_redis()
-        # Celery workers write a heartbeat key: celery@{hostname}
-        # Quick heuristic: count _kombu.{queue}.binding keys (one per active worker)
-        # Safer: check vidgrab:pending_tasks SET cardinality as proxy
-        # Use celery inspect via cached key if available
-        cached = rc.get("vg:worker_count_cache")
-        if cached:
-            return int(cached)
-        return -1  # unknown
+        from app.core.queue_intelligence import _get_active_workers
+        return _get_active_workers()
     except Exception:
         return -1
 

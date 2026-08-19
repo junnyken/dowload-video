@@ -182,21 +182,78 @@ def check_disk_usage() -> None:
         print(f"[Alerts] check_disk_usage error: {e}")
 
 
-def check_worker_count() -> None:
-    """Alert if no Celery workers are running."""
+# How long the worker liveness beacon may go unrefreshed before we call it an
+# outage. worker_heartbeat_check republishes it every 120s.
+WORKER_STALE_SECONDS = 5 * 60
+
+
+def check_worker_liveness() -> None:
+    """
+    Dead-man's-switch for the Celery worker pool.
+
+    This is a beacon check, not a probe, and that distinction is the whole
+    point. The previous check_worker_count() asked Celery whether any worker
+    was alive — but it ran *inside* a Celery task (run_health_checks_task), so
+    it only ever executed when a worker was already running to execute it. It
+    could not fire by construction, and the same was true of the alert branch
+    in worker_heartbeat_check. Neither had ever produced an alert.
+
+    Workers instead publish `vidgrab:last_worker_seen_at` while they live; this
+    function only reads it, so it stays meaningful when called from the API
+    process, which keeps running when every worker is gone.
+    """
+    from datetime import datetime, timezone
+    from app.core.queue_intelligence import WORKER_SEEN_KEY
+
     try:
-        from app.core.celery_app import celery_app
-        inspect = celery_app.control.inspect(timeout=3)
-        workers = inspect.active()
-        if not workers:
-            send_admin_alert(
-                "critical",
-                "No Celery Workers",
-                "Không có worker nào đang chạy!\nMọi download đang bị treo trong queue.",
-                alert_key="no_workers",
-            )
+        from app.core.redis_client import get_redis
+        rc = get_redis()
+        last_seen_raw = rc.get(WORKER_SEEN_KEY)
     except Exception as e:
-        print(f"[Alerts] check_worker_count error: {e}")
+        # Redis unreachable — that is a different outage, and alerting "no
+        # workers" here would be a guess. Its own check covers it.
+        print(f"[Alerts] check_worker_liveness: cannot read beacon — {e}")
+        return
+
+    if not last_seen_raw:
+        # No beacon at all: either a cold start (workers have not run yet) or
+        # they have been down longer than the key's TTL.
+        send_admin_alert(
+            "critical",
+            "No Celery Workers",
+            "Không có worker nào báo hiệu còn sống.\n"
+            "Mọi download sẽ nằm chờ trong hàng đợi cho tới khi worker chạy lại.",
+            alert_key="no_workers",
+        )
+        return
+
+    try:
+        last_seen = datetime.fromisoformat(
+            last_seen_raw if isinstance(last_seen_raw, str) else last_seen_raw.decode()
+        )
+    except Exception:
+        return
+
+    gap_sec = (datetime.now(timezone.utc) - last_seen).total_seconds()
+    if gap_sec > WORKER_STALE_SECONDS:
+        from app.core.queue_intelligence import get_queue_depth
+        try:
+            depth = get_queue_depth()
+        except Exception:
+            depth = -1
+        send_admin_alert(
+            "critical",
+            "No Celery Workers",
+            f"Worker cuối cùng báo hiệu cách đây {gap_sec / 60:.1f} phút.\n"
+            f"Hàng đợi đang có {depth} tác vụ chờ.\n"
+            f"Cần kiểm tra container Celery.",
+            alert_key="no_workers",
+        )
+
+
+def check_worker_count() -> None:
+    """Backwards-compatible alias — see check_worker_liveness()."""
+    check_worker_liveness()
 
 
 STALE_JOB_WARNING  = int(os.getenv("ALERT_STALE_JOB_WARNING",  "3"))

@@ -958,39 +958,35 @@ def delete_local_file(self, filepath: str):
 @celery_app.task(name="worker_heartbeat_check", bind=True)
 def worker_heartbeat_check(self):
     """
-    Phase 11: Periodic worker health check.
-    Alerts via Telegram if no workers have been seen for >5 minutes.
-    Updates a Redis key on every healthy check.
+    Phase 11: republish the worker liveness beacon.
+
+    If this task is executing then a worker is by definition alive, so the
+    beacon is written unconditionally. The old body wrapped the write in
+    `if worker_count > 0` and kept an `else` branch that sent a "no workers"
+    Telegram alert — code that could never run: a task only executes when a
+    worker picks it up, and _get_active_workers() could not return 0 anyway.
+
+    Detecting the absence of workers has to happen somewhere that keeps running
+    when they are gone, so it now lives in the API process — see
+    alerts.check_worker_liveness(), which reads this beacon.
     """
     try:
-        from app.core.queue_intelligence import _get_active_workers
+        from app.core.queue_intelligence import (
+            WORKER_SEEN_KEY, WORKER_COUNT_TTL, _get_active_workers,
+        )
         from app.core.redis_client import get_redis
         rc = get_redis()
-        worker_count = _get_active_workers()
-        if worker_count > 0:
-            rc.set("vidgrab:last_worker_seen_at", datetime.now(timezone.utc).isoformat(), ex=3600)
-        else:
-            last_seen_raw = rc.get("vidgrab:last_worker_seen_at")
-            if last_seen_raw:
-                try:
-                    last_seen = datetime.fromisoformat(last_seen_raw)
-                    gap_min = (datetime.now(timezone.utc) - last_seen).total_seconds() / 60
-                    if gap_min > 5:
-                        alert_key = "vidgrab:alert:no_workers"
-                        if not rc.get(alert_key):
-                            rc.set(alert_key, "1", ex=1800)  # alert once per 30min
-                            from app.core.notifications import send_telegram_message_sync
-                            send_telegram_message_sync(
-                                f"⚠️ <b>VidGrab — No Workers Detected</b>\n"
-                                f"Last worker seen: {gap_min:.1f} min ago.\n"
-                                f"Celery queue depth: {rc.llen('celery')} tasks pending.\n"
-                                f"Action: check Celery containers.",
-                                parse_mode="HTML",
-                            )
-                except Exception:
-                    pass
+        rc.set(
+            WORKER_SEEN_KEY,
+            datetime.now(timezone.utc).isoformat(),
+            ex=WORKER_COUNT_TTL,
+        )
+        # Refresh the cached worker count while we are here; this is the only
+        # place that pays for the control-plane ping, so /health and /ops-signals
+        # can serve it with a plain GET.
+        _get_active_workers(force_refresh=True)
     except Exception as e:
-        print(f"[Heartbeat] worker check error: {e}")
+        print(f"[Heartbeat] worker beacon error: {e}")
 
 
 @celery_app.task(name="periodic_cleanup_downloads", bind=True)
