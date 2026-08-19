@@ -197,26 +197,36 @@ async def lifespan(app: FastAPI):
     if os.getenv("WORKER_WATCHDOG_ENABLED", "1").strip().lower() in ("1", "true", "yes", "on"):
         import asyncio as _asyncio
 
+        _wd_interval = int(os.getenv("WORKER_WATCHDOG_INTERVAL_SEC", "120"))
+        # Grace period before the first check. It must exceed the time a cold
+        # start needs to publish its first beacon: celery beat only dispatches
+        # worker_heartbeat_check every 120s and beat itself has to come up
+        # first, so a 120s grace would page on every single deploy. 5 minutes
+        # matches the staleness threshold.
+        _wd_grace = max(int(os.getenv("WORKER_WATCHDOG_GRACE_SEC", "300")), _wd_interval)
+
         async def _worker_watchdog():
-            interval = int(os.getenv("WORKER_WATCHDOG_INTERVAL_SEC", "120"))
-            # Grace period before the first check. It must exceed the time a
-            # cold start needs to publish its first beacon: celery beat only
-            # dispatches worker_heartbeat_check every 120s and beat itself has
-            # to come up first, so a 120s grace would page the admin on every
-            # single deploy. 5 minutes matches the staleness threshold.
-            grace = int(os.getenv("WORKER_WATCHDOG_GRACE_SEC", "300"))
-            await _asyncio.sleep(max(grace, interval))
+            await _asyncio.sleep(_wd_grace)
+            first = True
             while True:
                 try:
                     from app.core.alerts import check_worker_liveness
                     await _asyncio.to_thread(check_worker_liveness)
+                    if first:
+                        # Exactly one proof-of-life line, then silence. The
+                        # thing this replaced was dead for months precisely
+                        # because nothing it did was observable; a watchdog you
+                        # cannot confirm is running is not a watchdog.
+                        print("[Watchdog] worker liveness watchdog is live (first check completed)")
+                        first = False
                 except _asyncio.CancelledError:
                     raise
                 except Exception as _wd_err:
                     print(f"[Watchdog] worker liveness check failed: {_wd_err}")
-                await _asyncio.sleep(interval)
+                await _asyncio.sleep(_wd_interval)
 
         _watchdog_task = _asyncio.create_task(_worker_watchdog())
+        print(f"[Watchdog] armed — first check in {_wd_grace}s, then every {_wd_interval}s")
 
     yield
     # --- Shutdown ---
