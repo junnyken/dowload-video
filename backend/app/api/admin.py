@@ -14,6 +14,7 @@ import json
 import os
 import base64
 import secrets
+import datetime as _dt
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Request
 from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -2347,17 +2348,53 @@ async def admin_user_action(request: Request, _=Depends(verify_admin)):
         supabase = get_supabase_client()
 
         if action == "reset_quota":
-            supabase.table("profiles").update({"downloads_today": 0}).eq("id", user_id).execute()
+            # Daily counters live in user_usage, not profiles — profiles has no
+            # downloads_today column, so this wrote to a column that does not
+            # exist and the reset never happened.
+            supabase.table("user_usage").update({
+                "downloads_today": 0,
+                "last_reset_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+            }).eq("user_id", user_id).execute()
             log_admin_action(request, "admin.user.quota_reset", resource_type="user", resource_id=user_id)
             return {"success": True, "action": "reset_quota", "user_id": user_id}
 
         elif action == "set_tier":
-            tier = params.get("tier", "free")
-            if tier not in ("free", "pro"):
-                return {"success": False, "error": "tier must be free or pro"}
-            supabase.table("profiles").update({"tier": tier}).eq("id", user_id).execute()
-            log_admin_action(request, "admin.user.tier_changed", resource_type="user", resource_id=user_id, metadata={"new_tier": tier})
-            return {"success": True, "action": "set_tier", "tier": tier, "user_id": user_id}
+            # Valid tiers come from the quota table rather than a hardcoded
+            # pair: 'team' and 'enterprise' are fully defined in
+            # quotas.TIER_PERMISSIONS and entitlements.PLAN_DEFS, but this
+            # endpoint rejected them, so there was no supported way to grant
+            # unlimited downloads at all.
+            from app.core.quotas import TIER_PERMISSIONS
+            tier = (params.get("tier") or "free").lower()
+            if tier not in TIER_PERMISSIONS:
+                return {"success": False,
+                        "error": f"tier must be one of {sorted(TIER_PERMISSIONS)}"}
+
+            # billing_status has to move with the tier. entitlements.py
+            # downgrades any non-free tier back to free when billing_status is
+            # 'none', while quotas.py honours the tier as declared — so setting
+            # tier alone left the two disagreeing and the upgrade looked like it
+            # silently did nothing.
+            update = {"tier": tier}
+            if tier == "free":
+                update.update({"billing_status": "none", "plan_name": "Free",
+                               "subscription_expiry": None})
+            else:
+                from app.core.entitlements import get_plan_def
+                update.update({
+                    "billing_status": "active",
+                    "plan_name": get_plan_def(tier)["name"],
+                    # Admin grants are not subscriptions; an expiry here would
+                    # only matter for canceling/past_due, but leaving a stale
+                    # one behind is how a grant quietly lapses.
+                    "subscription_expiry": None,
+                })
+
+            supabase.table("profiles").update(update).eq("id", user_id).execute()
+            log_admin_action(request, "admin.user.tier_changed", resource_type="user",
+                             resource_id=user_id, metadata={"new_tier": tier})
+            return {"success": True, "action": "set_tier", "tier": tier,
+                    "applied": update, "user_id": user_id}
 
         elif action == "revoke_api_keys":
             supabase.table("api_keys").update({"active": False}).eq("user_id", user_id).execute()

@@ -1473,12 +1473,19 @@ export default function AdminDashboard({ token, onLogout }) {
                   <p className="text-[10px] text-slate-500 mb-2">One-click Actions</p>
                   {[
                     { label: 'Reset Quota', action: 'reset_quota', color: 'text-blue-400 border-blue-500/40 hover:bg-blue-500/10' },
-                    { label: 'Upgrade → Pro', action: 'set_tier', params: { tier: 'pro' }, color: 'text-amber-400 border-amber-500/40 hover:bg-amber-500/10' },
-                    { label: 'Downgrade → Free', action: 'set_tier', params: { tier: 'free' }, color: 'text-slate-400 border-slate-600 hover:bg-slate-700' },
+                    { label: 'Nâng lên Pro (100/ngày)', action: 'set_tier', params: { tier: 'pro' }, color: 'text-amber-400 border-amber-500/40 hover:bg-amber-500/10' },
+                    { label: 'Nâng lên Team (500/ngày)', action: 'set_tier', params: { tier: 'team' }, color: 'text-sky-400 border-sky-500/40 hover:bg-sky-500/10' },
+                    // Enterprise is the only tier with no daily cap. It was
+                    // defined in quotas/entitlements but had no way to reach it
+                    // from here, so "unlimited downloads" was unreachable.
+                    { label: 'Nâng lên Enterprise (không giới hạn)', action: 'set_tier', params: { tier: 'enterprise' }, color: 'text-violet-400 border-violet-500/40 hover:bg-violet-500/10' },
+                    { label: 'Hạ về Free', action: 'set_tier', params: { tier: 'free' }, color: 'text-slate-400 border-slate-600 hover:bg-slate-700' },
                     { label: 'Revoke API Keys', action: 'revoke_api_keys', color: 'text-red-400 border-red-500/40 hover:bg-red-500/10' },
                     { label: 'Retry Failed Jobs', action: 'retry_failed_jobs', color: 'text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10' },
                   ].map(btn => (
-                    <button key={btn.action}
+                    // Keyed by action+tier: every set_tier button shared the key
+                    // "set_tier", so React could not tell them apart.
+                    <button key={`${btn.action}:${btn.params?.tier || ''}`}
                       onClick={async () => {
                         try {
                           const r = await adminFetch('/user-action', {
