@@ -395,3 +395,46 @@ ssh vidgrab 'ls -lh /home/ubuntu/vidgrab/backups/ 2>/dev/null || echo "No local 
 - [ ] (specific, assigned, time-bounded)
 - [ ] (specific, assigned, time-bounded)
 ```
+
+---
+
+## Scenario: Signup / password-reset emails land on localhost (ERR_CONNECTION_REFUSED)
+
+**Symptom.** A user registers, clicks the confirmation link in the email, and
+the browser shows `localhost refused to connect` at
+`localhost:3000/#access_token=...`.
+
+**What actually happened.** Nothing is wrong with the account — Supabase
+confirms the email server-side when the link is opened, so the user *is*
+registered and confirmed. Only the page they were sent to afterwards does not
+exist. They are dropped on a dead page with no way to tell it worked, and will
+usually assume registration failed.
+
+**Cause.** The Supabase project's **Site URL** is still the default
+`http://localhost:3000`, and `emailRedirectTo` is only honoured for URLs that
+appear in the redirect allowlist. The frontend now passes
+`emailRedirectTo: <origin>/` (AuthContext.signUp), but Supabase silently
+reverts to the Site URL when that origin is not allow-listed, so the code
+change alone does not fix it.
+
+**Fix — Supabase dashboard, cannot be done from this repo.** There is no
+service-key API for auth config; it needs dashboard access or a Management API
+personal access token (`sbp_...`), neither of which is stored here.
+
+1. Supabase dashboard → **Authentication → URL Configuration**
+2. **Site URL**: `https://dvid.cmc-1.vibenode.matbao.ai`
+3. **Redirect URLs**: add
+   - `https://dvid.cmc-1.vibenode.matbao.ai/**`
+   - `http://localhost:5173/**` (Vite dev, keep for local work)
+4. Save, then register a throwaway address and confirm the link lands on the
+   real site.
+
+**Users already stuck.** No action needed — their account exists and is
+confirmed. They can sign in normally at the production site; the dead redirect
+page has no bearing on the account.
+
+**Related gap (still open).** `AuthContext.resetPassword` sends users to
+`<origin>/reset-password`, but that path is not in `PATH_MAP` in App.jsx, so it
+falls through to the landing page and there is no UI to enter a new password.
+Fixing the Site URL makes the reset link reach the site but not a working reset
+screen; that page still needs to be built.

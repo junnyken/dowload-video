@@ -69,10 +69,23 @@ export function AuthProvider({ children }) {
 
   // ── Auth actions ──────────────────────────────────────────────────
   const signUp = useCallback(async (email, password, displayName) => {
+    // Without emailRedirectTo, Supabase falls back to the project's Site URL.
+    // That is still the default http://localhost:3000, so every confirmation
+    // email sent to a real user landed on ERR_CONNECTION_REFUSED — the account
+    // was created and confirmed, but the person was dropped on a dead page and
+    // had no way to tell it had worked.
+    //
+    // NOTE: Supabase only honours this when the URL is allow-listed under
+    // Authentication -> URL Configuration -> Redirect URLs; otherwise it
+    // silently reverts to the Site URL. Both need to be set for the prod
+    // domain — see docs/RUNBOOK.md.
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { display_name: displayName } },
+      options: {
+        data: { display_name: displayName },
+        emailRedirectTo: `${window.location.origin}/`,
+      },
     });
     return { data, error };
   }, []);
