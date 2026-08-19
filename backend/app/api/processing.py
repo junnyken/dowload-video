@@ -72,22 +72,12 @@ def _guard_local_path(path: str) -> str:
 
 
 def _assert_safe_url(url: str) -> None:
-    """Reject non-http(s) schemes and private/loopback IP ranges (SSRF guard)."""
-    try:
-        parsed = urlparse(url)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid URL")
-    if parsed.scheme not in ("http", "https"):
-        raise HTTPException(status_code=400, detail="Only http/https URLs are allowed")
-    hostname = parsed.hostname or ""
-    try:
-        addr = ipaddress.ip_address(hostname)
-        if addr.is_private or addr.is_loopback or addr.is_link_local:
-            raise HTTPException(status_code=400, detail="URL resolves to a private/loopback address")
-    except ValueError:
-        blocked = ("localhost", "redis", "cobalt-api", "backend", "celery")
-        if any(hostname == b or hostname.endswith(f".{b}") for b in blocked):
-            raise HTTPException(status_code=400, detail="URL resolves to a blocked internal host")
+    """
+    Reject non-http(s) schemes and any URL reaching a non-public address.
+    Shared implementation — see app.core.ssrf_guard.
+    """
+    from app.core.ssrf_guard import assert_safe_url as _guard
+    _guard(url)
 
 
 def _slugify(name: str, fallback: str = "output") -> str:
@@ -109,16 +99,17 @@ def _schedule_cleanup(output_path: str) -> None:
 def _download_url_to_path(url: str, dest_path: str) -> None:
     """Stream a remote URL into dest_path. Raises HTTPException on failure."""
     import asyncio
+    _assert_safe_url(url)
     async def _fetch():
+        from app.core.ssrf_guard import safe_stream
         async with httpx.AsyncClient(
-            follow_redirects=True,
             timeout=120.0,
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Referer": "https://www.tiktok.com/",
             },
         ) as client:
-            async with client.stream("GET", url) as resp:
+            async with safe_stream(client, "GET", url) as resp:
                 resp.raise_for_status()
                 with open(dest_path, "wb") as f:
                     async for chunk in resp.aiter_bytes(chunk_size=65536):
@@ -131,15 +122,15 @@ def _download_url_to_path(url: str, dest_path: str) -> None:
 
 async def _download_url_async(url: str, dest_path: str) -> None:
     """Async version: stream a remote URL into dest_path."""
+    from app.core.ssrf_guard import safe_stream
     async with httpx.AsyncClient(
-        follow_redirects=True,
         timeout=120.0,
         headers={
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Referer": "https://www.tiktok.com/",
         },
     ) as client:
-        async with client.stream("GET", url) as resp:
+        async with safe_stream(client, "GET", url) as resp:
             resp.raise_for_status()
             with open(dest_path, "wb") as f:
                 async for chunk in resp.aiter_bytes(chunk_size=65536):

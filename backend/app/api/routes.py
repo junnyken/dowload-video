@@ -81,24 +81,16 @@ from pydantic import BaseModel
 
 
 def _assert_safe_url(url: str) -> None:
-    """Reject non-http(s) schemes and private/loopback IP ranges (SSRF guard)."""
+    """
+    Reject non-http(s) schemes and any URL reaching a non-public address.
+
+    Delegates to app.core.ssrf_guard, which (unlike the previous inline
+    version) resolves the hostname before deciding — a domain whose A record
+    points at 127.0.0.1 / 10.x / 169.254.169.254 no longer passes.
+    """
     from app.core.error_codes import make_error
-    try:
-        parsed = urlparse(url)
-    except Exception:
-        raise HTTPException(status_code=400, detail=make_error("invalid_url"))
-    if parsed.scheme not in ("http", "https"):
-        raise HTTPException(status_code=400, detail=make_error("invalid_url"))
-    hostname = parsed.hostname or ""
-    try:
-        addr = ipaddress.ip_address(hostname)
-        if addr.is_private or addr.is_loopback or addr.is_link_local:
-            raise HTTPException(status_code=400, detail=make_error("invalid_url"))
-    except ValueError:
-        # hostname is a domain name, not an IP — check common internal names
-        blocked = ("localhost", "redis", "cobalt-api", "backend", "celery")
-        if any(hostname == b or hostname.endswith(f".{b}") for b in blocked):
-            raise HTTPException(status_code=400, detail=make_error("invalid_url"))
+    from app.core.ssrf_guard import assert_safe_url as _guard
+    _guard(url, detail_factory=lambda _msg: make_error("invalid_url"))
 
 from app.services.downloader import extract_video_info, classify_url
 from app.core.database import get_supabase_client
@@ -1373,7 +1365,8 @@ from fastapi.responses import FileResponse
 import os
 
 @router.get("/download-local")
-async def download_local_file(filepath: str, filename: str):
+@limiter.limit("120/minute")
+async def download_local_file(request: Request, filepath: str, filename: str):
     # Resolve relative paths (e.g. "downloads/xxx.mp3") to absolute
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     if not os.path.isabs(filepath):
@@ -1403,7 +1396,8 @@ async def download_local_file(filepath: str, filename: str):
 # ── GET /download-thumbnail  (proxy thumbnail image) ────────────────
 
 @router.get("/download-thumbnail")
-async def download_thumbnail(url: str, filename: str = "thumbnail"):
+@limiter.limit("120/minute")
+async def download_thumbnail(request: Request, url: str, filename: str = "thumbnail"):
     """
     Proxy-download a video thumbnail image through the backend.
     This bypasses CORS restrictions so the browser can save the image.
@@ -1438,8 +1432,11 @@ async def download_thumbnail(url: str, filename: str = "thumbnail"):
         content_type = content_types.get(ext, "image/jpeg")
 
         async def stream_image():
-            async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
-                async with client.stream("GET", url) as resp:
+            # follow_redirects stays OFF — safe_stream re-runs the SSRF guard on
+            # every hop, so a public URL cannot 302 us onto 169.254.169.254.
+            from app.core.ssrf_guard import safe_stream
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                async with safe_stream(client, "GET", url) as resp:
                     resp.raise_for_status()
                     async for chunk in resp.aiter_bytes(chunk_size=65536):
                         yield chunk
@@ -1505,12 +1502,15 @@ async def trim_media(payload: TrimRequest, request: Request):
         else:
             input_path = os.path.join(download_dir, f"trim_input_{_uuid.uuid4().hex[:8]}.{ext}")
             _trim_downloaded = True
-            # Download the source file
-            async with httpx.AsyncClient(follow_redirects=True, timeout=120.0, headers={
+            # Download the source file. This path had NO SSRF guard at all —
+            # any caller could point /trim at an internal host.
+            _assert_safe_url(payload.url)
+            from app.core.ssrf_guard import safe_stream
+            async with httpx.AsyncClient(timeout=120.0, headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Referer": "https://www.tiktok.com/",
             }) as client:
-                async with client.stream("GET", payload.url) as resp:
+                async with safe_stream(client, "GET", payload.url) as resp:
                     resp.raise_for_status()
                     with open(input_path, "wb") as f:
                         async for chunk in resp.aiter_bytes(chunk_size=65536):
@@ -1654,11 +1654,12 @@ async def convert_to_gif(payload: ToGifRequest, request: Request):
         else:
             input_path = os.path.join(download_dir, f"gif_src_{uid}.mp4")
             _assert_safe_url(payload.url)
-            async with httpx.AsyncClient(follow_redirects=True, timeout=120.0, headers={
+            from app.core.ssrf_guard import safe_stream
+            async with httpx.AsyncClient(timeout=120.0, headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Referer": "https://www.tiktok.com/",
             }) as client:
-                async with client.stream("GET", payload.url) as resp:
+                async with safe_stream(client, "GET", payload.url) as resp:
                     resp.raise_for_status()
                     with open(input_path, "wb") as f:
                         async for chunk in resp.aiter_bytes(chunk_size=65536):
@@ -2025,7 +2026,8 @@ async def refresh_job_link(job_id: str, request: Request):
 # ── GET /proxy-download  (stream video through backend) ─────────────
 
 @router.get("/proxy-download")
-async def proxy_download(url: str, filename: str = "video", ext: str = "mp4"):
+@limiter.limit("60/minute")
+async def proxy_download(request: Request, url: str, filename: str = "video", ext: str = "mp4"):
     """
     Proxy the video download through the backend to bypass CORS.
     Peeks at the upstream Content-Type so audio URLs mis-labeled as .mp4
@@ -2059,8 +2061,9 @@ async def proxy_download(url: str, filename: str = "video", ext: str = "mp4"):
         # We do a HEAD first (8s timeout); if that fails we proceed with declared ext.
         if safe_ext == "mp4" and not _is_yt_cdn:
             try:
-                async with httpx.AsyncClient(follow_redirects=True, timeout=8.0) as peek:
-                    head = await peek.head(url, headers=_req_headers)
+                from app.core.ssrf_guard import safe_head
+                async with httpx.AsyncClient(timeout=8.0) as peek:
+                    head = await safe_head(peek, url, headers=_req_headers)
                     upstream_ct = head.headers.get("content-type", "").split(";")[0].strip().lower()
                     if upstream_ct in ("audio/mpeg", "audio/mp3", "audio/x-mpeg"):
                         safe_ext = "mp3"
@@ -2091,11 +2094,12 @@ async def proxy_download(url: str, filename: str = "video", ext: str = "mp4"):
                         if not _server_ip or _cdn_ip != _server_ip:
                             _proxy = IPROYAL_PROXY
 
+            from app.core.ssrf_guard import safe_stream
             async with httpx.AsyncClient(
-                follow_redirects=True, timeout=300.0, headers=_req_headers,
+                timeout=300.0, headers=_req_headers,
                 proxy=_proxy if _proxy else None,
             ) as client:
-                async with client.stream("GET", url) as resp:
+                async with safe_stream(client, "GET", url) as resp:
                     resp.raise_for_status()
                     async for chunk in resp.aiter_bytes(chunk_size=65536):
                         yield chunk

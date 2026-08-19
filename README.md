@@ -34,8 +34,8 @@ SUPABASE_URL=...
 SUPABASE_KEY=...
 
 # Proxies
-ZENROWS_API_KEY=7b73fbf26ec30aba13f7c67dd93d5766b9fcdcf9
-SCRAPERAPI_KEY=ee4213d31acd11652b22b538c3f3efa2
+ZENROWS_API_KEY=<your-zenrows-key>
+SCRAPERAPI_API_KEY=<your-scraperapi-key>
 
 # Telegram
 TELEGRAM_BOT_TOKEN=...

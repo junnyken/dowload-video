@@ -26,6 +26,7 @@ if _SENTRY_DSN:
     )
     print(f"[Sentry] Initialized (DSN configured)")
 
+import re
 import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
@@ -50,6 +51,21 @@ limiter = Limiter(
     key_func=get_client_ip,
     default_limits=["60/minute"],
     storage_uri=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+    # Survive a Redis outage instead of taking the whole API down with it.
+    #
+    # Previously neither option was set, so a redis.ConnectionError propagated
+    # out of the limiter and EVERY request 500'd — default_limits applies to
+    # all routes, so a Redis blip killed even GET /api/v1/ping, the endpoint
+    # the extension and frontend poll to decide whether the server is alive.
+    #
+    # in_memory_fallback_enabled: when Redis is unreachable, keep enforcing the
+    #   same limits from per-process memory (degraded accuracy across workers,
+    #   but still real protection) rather than dropping limiting entirely.
+    # swallow_errors: last-resort backstop so no limiter failure can ever
+    #   become a user-visible 500. Matches DailyIPQuotaMiddleware, which
+    #   already swallows its own store errors.
+    in_memory_fallback_enabled=True,
+    swallow_errors=True,
 )
 
 # ── Per-IP Daily Quota Middleware ────────────────────────────────────
@@ -223,11 +239,31 @@ prod_domain = os.getenv("FRONTEND_URL", "")
 if prod_domain and prod_domain not in origins:
     origins.append(prod_domain)
 
+# Chrome extension origins.
+#
+# The previous config was `allow_origin_regex=r"^chrome-extension://.*$"` with
+# allow_credentials=True — i.e. ANY extension the user had installed could make
+# credentialed cross-origin calls here and read the responses, including the
+# cookie-authenticated endpoints (smart_analysis reads `user_id`, mobile reads
+# `vg_session_id`). That is a browser-wide read primitive on this API.
+#
+# Our own extension does not need this grant: it declares `*://*.matbao.ai/*`
+# in host_permissions, and MV3 exempts host_permissions fetches from CORS
+# entirely. So the default is now "no extension origin allowed".
+#
+# If a build is served from a host NOT covered by host_permissions and really
+# needs the grant, list the specific extension IDs:
+#   ALLOWED_EXTENSION_IDS=abcdefghijklmnopabcdefghijklmnop,....
+_ext_ids = [i.strip() for i in os.getenv("ALLOWED_EXTENSION_IDS", "").split(",") if i.strip()]
+_ext_origin_regex = (
+    r"^chrome-extension://(" + "|".join(re.escape(i) for i in _ext_ids) + r")$"
+    if _ext_ids else None
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    # Allow Chrome Extension origins (chrome-extension://...)
-    allow_origin_regex=r"^chrome-extension://.*$",
+    allow_origin_regex=_ext_origin_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-API-Key", "X-VG-Source", "X-Session-ID"],
