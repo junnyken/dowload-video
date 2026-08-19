@@ -31,12 +31,41 @@ async function authHeaders(extra = {}) {
 }
 
 // ── API Base (configurable) ───────────────────────────────────────
+// `vg_api_base` is user-writable (Settings) and lives in chrome.storage.sync,
+// so it rides along to every browser signed into the same Google account.
+// It used to be accepted on `startsWith('http')` alone, which meant a single
+// bad value turned this extension into a cleartext exfiltration channel —
+// see getEphemeralCookiesB64 below. Two rules now:
+//   • normalizeApiBase()  — must be https (http only for localhost dev)
+//   • isCookieTrustedBase() — cookies go ONLY to first-party hosts
+const COOKIE_TRUSTED_SUFFIXES = ['.matbao.ai'];
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+
+function normalizeApiBase(value) {
+  if (!value || typeof value !== 'string') return null;
+  let u;
+  try { u = new URL(value.trim()); } catch { return null; }
+  const isLocal = LOCAL_HOSTS.includes(u.hostname);
+  if (u.protocol !== 'https:' && !(u.protocol === 'http:' && isLocal)) return null;
+  return (u.origin + u.pathname).replace(/\/+$/, '');
+}
+
+// Is this base first-party enough to be handed the user's live session cookies?
+function isCookieTrustedBase(base) {
+  try {
+    const u = new URL(base);
+    if (LOCAL_HOSTS.includes(u.hostname)) return true;
+    if (u.protocol !== 'https:') return false;
+    return COOKIE_TRUSTED_SUFFIXES.some((sfx) => u.hostname.endsWith(sfx));
+  } catch { return false; }
+}
+
 let _apiBase = DEFAULT_API_BASE;
 
 async function getApiBase() {
   try {
     const r = await chrome.storage.sync.get('vg_api_base');
-    return (r.vg_api_base && r.vg_api_base.trim()) ? r.vg_api_base.trim() : DEFAULT_API_BASE;
+    return normalizeApiBase(r.vg_api_base) || DEFAULT_API_BASE;
   } catch {
     return _apiBase;
   }
@@ -87,6 +116,17 @@ function _toNetscapeCookieFile(cookies) {
 async function getEphemeralCookiesB64(pageUrl) {
   const domain = _cookieGatedDomainFor(pageUrl);
   if (!domain) return undefined;
+
+  // Hard stop: these are the user's LIVE Facebook/Instagram/X/Reddit session
+  // cookies. They only ever go to a first-party endpoint. If someone has
+  // pointed the extension at a custom backend, extraction silently falls back
+  // to the server-side cookie pool instead of handing that host the session.
+  const base = await getApiBase();
+  if (!isCookieTrustedBase(base)) {
+    console.warn('[VidGrab] Custom API base is not first-party — skipping browser-cookie handoff.');
+    return undefined;
+  }
+
   try {
     const cookies = await chrome.cookies.getAll({ domain });
     if (!cookies || cookies.length === 0) return undefined;
@@ -153,7 +193,7 @@ function smartDownload({ rawUrl, base, safeName, finalExt, saveAs }) {
 // Keep cached value updated
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'sync' && changes.vg_api_base) {
-    _apiBase = changes.vg_api_base.newValue || DEFAULT_API_BASE;
+    _apiBase = normalizeApiBase(changes.vg_api_base.newValue) || DEFAULT_API_BASE;
   }
 });
 
@@ -375,12 +415,65 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   // ── Auth token management ─────────────────────────────────────────────────────────────────
+  // Who is allowed to write the auth token.
+  //
+  // `sender.tab` is set for content scripts and undefined for extension pages,
+  // so the first check keeps any injected script on the 24 third-party sites
+  // we run on from seeding a token of its own choosing — which would make us
+  // attach an attacker's Bearer header to every subsequent API call.
+  //
+  // The one content script that MAY set it is web-bridge.js, and only because
+  // Chrome (not the page) fills in sender.origin/sender.url, so a page cannot
+  // claim to be the web app. We re-derive that origin here rather than trusting
+  // the bridge's own say-so.
+  const _fromExtensionPage = !sender.tab && sender.id === chrome.runtime.id;
+
+  function _senderOrigin() {
+    if (sender.origin) return sender.origin;
+    try { return new URL(sender.url || '').origin; } catch { return null; }
+  }
+  function _isTrustedWebAppSender() {
+    if (sender.id !== chrome.runtime.id) return false;
+    const origin = _senderOrigin();
+    if (!origin) return false;
+    try {
+      const u = new URL(origin);
+      if (LOCAL_HOSTS.includes(u.hostname)) return true;
+      if (u.protocol !== 'https:') return false;
+      return COOKIE_TRUSTED_SUFFIXES.some((sfx) => u.hostname.endsWith(sfx));
+    } catch { return false; }
+  }
+  const _mayWriteAuth = _fromExtensionPage || _isTrustedWebAppSender();
+
   if (msg.type === 'VG_SET_AUTH_TOKEN') {
-    chrome.storage.local.set({ [AUTH_TOKEN_KEY]: msg.token }, () => sendResponse({ ok: true }));
+    if (!_mayWriteAuth || typeof msg.token !== 'string' || !msg.token) {
+      sendResponse({ ok: false, error: 'Blocked: auth token may only be set by the extension UI or the VidGrab web app' });
+      return true;
+    }
+    const _write = { [AUTH_TOKEN_KEY]: msg.token };
+    if (typeof msg.email === 'string' && msg.email) _write.vg_auth_email = msg.email;
+    chrome.storage.local.set(_write, () => {
+      // Refresh the popup's account row if it happens to be open.
+      chrome.runtime.sendMessage({ type: 'VG_AUTH_CHANGED', authenticated: true, email: msg.email }).catch(() => {});
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
+  // Read side of the same pair — popup.js has always sent this, but no handler
+  // existed, so the callback fired with `undefined` + a lastError and the
+  // tier/quota panel reported "Khách" even for signed-in Pro accounts.
+  if (msg.type === 'VG_GET_AUTH_TOKEN') {
+    if (!_fromExtensionPage) { sendResponse({ token: null }); return true; }
+    getAuthToken().then((token) => sendResponse({ token }));
     return true;
   }
   if (msg.type === 'VG_CLEAR_AUTH_TOKEN') {
-    chrome.storage.local.remove(AUTH_TOKEN_KEY, () => sendResponse({ ok: true }));
+    if (!_mayWriteAuth) { sendResponse({ ok: false }); return true; }
+    chrome.storage.local.remove([AUTH_TOKEN_KEY, 'vg_auth_email'], () => {
+      chrome.runtime.sendMessage({ type: 'VG_AUTH_CHANGED', authenticated: false }).catch(() => {});
+      sendResponse({ ok: true });
+    });
     return true;
   }
   if (msg.type === 'VG_GET_AUTH_STATUS') {
@@ -550,7 +643,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'VG_API_FETCH') {
     (async () => {
       try {
-        const resp = await fetch(msg.url, {
+        // This ran `fetch(msg.url, {method, headers, body})` verbatim, with the
+        // service worker's privileges — no same-origin policy, host_permissions
+        // for 25 domains, and callable from every content script we inject.
+        // It is a proxy for our own API, so it is now scoped to our own API.
+        const base = await getApiBase();
+        let target;
+        try { target = new URL(msg.url, base); } catch { target = null; }
+        if (!target || target.origin !== new URL(base).origin) {
+          sendResponse({ ok: false, error: 'Blocked: VG_API_FETCH is restricted to the configured API origin' });
+          return;
+        }
+        const resp = await fetch(target.toString(), {
           method: msg.method || 'POST',
           headers: msg.headers || { 'Content-Type': 'application/json' },
           body: msg.body ? JSON.stringify(msg.body) : undefined,

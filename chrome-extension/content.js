@@ -14,8 +14,22 @@
   // Web app (frontend) — separate domain from the API backend. Used only to
   // open the batch-progress page after a bulk send; never for API calls.
   const FRONTEND_BASE = 'https://dvid.cmc-1.vibenode.matbao.ai';
-  // Load custom server URL từ storage (nếu có)
-  chrome.storage.sync.get('vg_api_base', (r) => { if (r.vg_api_base?.trim()) API_BASE = r.vg_api_base.trim(); });
+  // Load custom server URL từ storage (nếu có).
+  // Same validation as background.js/popup.js — an unvalidated value here
+  // would also desync us from the background worker, whose VG_API_FETCH now
+  // only proxies requests aimed at its own normalized origin.
+  const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+  function normalizeApiBase(value) {
+    if (!value || typeof value !== 'string') return null;
+    let u;
+    try { u = new URL(value.trim()); } catch { return null; }
+    const isLocal = LOCAL_HOSTS.includes(u.hostname);
+    if (u.protocol !== 'https:' && !(u.protocol === 'http:' && isLocal)) return null;
+    return (u.origin + u.pathname).replace(/\/+$/, '');
+  }
+  chrome.storage.sync.get('vg_api_base', (r) => {
+    API_BASE = normalizeApiBase(r.vg_api_base) || API_BASE;
+  });
 
   // Metadata like the "creator" field is scraped from the page's own meta
   // tags / title — the page (or a compromised/malicious one) controls that
@@ -144,8 +158,8 @@
     }
 
     const badges = [];
-    if (meta.duration_str) badges.push(`⏱ ${meta.duration_str}`);
-    if (meta.view_count_str) badges.push(`👁 ${meta.view_count_str}`);
+    if (meta.duration_str) badges.push(`⏱ ${escapeHtml(meta.duration_str)}`);
+    if (meta.view_count_str) badges.push(`👁 ${escapeHtml(meta.view_count_str)}`);
 
     if (badges.length > 0) {
       lines.push(`<div style="display:flex;gap:8px;font-size:10px;color:#6b7280;">${badges.join('')}</div>`);

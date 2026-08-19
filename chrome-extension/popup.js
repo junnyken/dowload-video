@@ -2,6 +2,20 @@ const DEFAULT_API_BASE = 'https://dvid-api.cmc-1.vibenode.matbao.ai';
 const WEB_BASE = 'https://dvid.cmc-1.vibenode.matbao.ai';
 let API_BASE = DEFAULT_API_BASE;
 
+// Mirrors normalizeApiBase() in background.js. The Settings field used to
+// accept anything starting with "http", including plain-http hosts — and the
+// value syncs across every browser on the account. Require https (http only
+// for localhost dev) so a bad paste can't downgrade the channel.
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+function normalizeApiBase(value) {
+  if (!value || typeof value !== 'string') return null;
+  let u;
+  try { u = new URL(value.trim()); } catch { return null; }
+  const isLocal = LOCAL_HOSTS.includes(u.hostname);
+  if (u.protocol !== 'https:' && !(u.protocol === 'http:' && isLocal)) return null;
+  return (u.origin + u.pathname).replace(/\/+$/, '');
+}
+
 // Video titles / creator names / platform strings come from the source
 // platform (anyone can name a public video anything) and get interpolated
 // into innerHTML for history/archive rows — escape them so a malicious
@@ -141,7 +155,7 @@ function startJobPolling(batchId, maxVideos) {
 
 // Khởi tạo API_BASE từ storage ngay khi popup mở
 chrome.storage.sync.get('vg_api_base', (r) => {
-  if (r.vg_api_base?.trim()) API_BASE = r.vg_api_base.trim();
+  API_BASE = normalizeApiBase(r.vg_api_base) || DEFAULT_API_BASE;
 });
 
 // ── Tab switcher ──────────────────────────────────────────────────
@@ -607,7 +621,9 @@ document.getElementById('action-copy-link')?.addEventListener('click', async () 
 
 document.getElementById('action-open-web')?.addEventListener('click', async () => {
   const tab = await getActiveTab();
-  if (tab?.url) chrome.tabs.create({ url: `${API_BASE}?url=${encodeURIComponent(tab.url)}` });
+  // API_BASE is the backend (dvid-api…) — opening it shows a JSON root, not
+  // the site. The web app is WEB_BASE, which is what reads ?url=.
+  if (tab?.url) chrome.tabs.create({ url: `${WEB_BASE}/?url=${encodeURIComponent(tab.url)}` });
 });
 
 document.getElementById('action-dl-thumb')?.addEventListener('click', () => {
@@ -946,7 +962,7 @@ function openSettingsPanel() {
   settingsPanel.classList.remove('hidden');
   settingsPanel.style.display = 'block';
   chrome.storage.sync.get('vg_api_base', (r) => {
-    settingsApiUrl.value = r.vg_api_base || DEFAULT_API_BASE;
+    settingsApiUrl.value = normalizeApiBase(r.vg_api_base) || DEFAULT_API_BASE;
   });
 }
 settingsBtn?.addEventListener('click', () => {
@@ -955,10 +971,10 @@ settingsBtn?.addEventListener('click', () => {
 });
 
 settingsSave?.addEventListener('click', () => {
-  const val = settingsApiUrl.value.trim().replace(/\/$/, '');
-  if (!val.startsWith('http')) {
-    settingsSave.textContent = '❌ URL không hợp lệ';
-    setTimeout(() => { settingsSave.textContent = 'Lưu'; }, 2000);
+  const val = normalizeApiBase(settingsApiUrl.value);
+  if (!val) {
+    settingsSave.textContent = '❌ Cần URL https hợp lệ';
+    setTimeout(() => { settingsSave.textContent = 'Lưu'; }, 2500);
     return;
   }
   chrome.storage.sync.set({ vg_api_base: val }, () => {
@@ -1015,7 +1031,8 @@ function checkAuthStatus() {
 
 authConnectBtn?.addEventListener('click', () => {
   // Open web app login page in new tab
-  chrome.tabs.create({ url: `${API_BASE}/?connect_extension=1` });
+  // Login lives on the web app, not on the API host.
+  chrome.tabs.create({ url: `${WEB_BASE}/?connect_extension=1` });
 });
 
 authDisconnectBtn?.addEventListener('click', () => {
@@ -1025,11 +1042,20 @@ authDisconnectBtn?.addEventListener('click', () => {
   });
 });
 
-// Listen for token passed from web page (via content script / postMessage bridge)
+// Account state changes.
+//
+// The token itself is delivered web app → web-bridge.js → background worker;
+// the popup is normally closed while the user logs in, so it must not be on
+// that path. It only listens for the resulting state change to repaint.
 chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === 'VG_AUTH_CHANGED') {
+    updateAuthUI(!!msg.authenticated, msg.email);
+    if (msg.authenticated) loadTierQuota();
+    return;
+  }
+  // Back-compat: older builds relayed the raw token through the popup.
   if (msg.type === 'VG_AUTH_TOKEN_FROM_WEB' && msg.token) {
-    chrome.runtime.sendMessage({ type: 'VG_SET_AUTH_TOKEN', token: msg.token });
-    if (msg.email) chrome.storage.local.set({ vg_auth_email: msg.email });
+    chrome.runtime.sendMessage({ type: 'VG_SET_AUTH_TOKEN', token: msg.token, email: msg.email });
     updateAuthUI(true, msg.email);
   }
 });
@@ -1151,7 +1177,7 @@ function showVersionInfo() {
       const el = document.getElementById('vg-backend-ver');
       if (el) el.innerHTML = `
         <span>Backend yt-dlp</span>
-        <span style="color:#34d399;font-weight:700;font-family:monospace;">${ytdlpVer}${disk ? ` · disk ${disk}` : ''}</span>
+        <span style="color:#34d399;font-weight:700;font-family:monospace;">${escapeHtml(ytdlpVer)}${disk ? ` · disk ${escapeHtml(disk)}` : ''}</span>
       `;
     } catch {
       const el = document.getElementById('vg-backend-ver');
@@ -1164,7 +1190,7 @@ function showVersionInfo() {
 async function getApiBaseLocal() {
   return new Promise((resolve) => {
     chrome.storage.sync.get('vg_api_base', (r) => {
-      resolve((r.vg_api_base?.trim()) || 'https://dvid-api.cmc-1.vibenode.matbao.ai');
+      resolve(normalizeApiBase(r.vg_api_base) || DEFAULT_API_BASE);
     });
   });
 }
@@ -1274,7 +1300,7 @@ document.getElementById('ch-send-btn').addEventListener('click', async () => {
         status.textContent = `✅ Đã xếp hàng ${urls.length} video thành công!`; status.style.color = '#4ade80';
         sendText.textContent = '✅ Đã gửi';
         chrome.runtime.sendMessage({ type: 'VG_TRACK_BATCH', batchId: data.batch_id, sourceUrl: tab.url }).catch(() => {});
-        chrome.tabs.create({ url: `${API_BASE}?batch=${data.batch_id}` });
+        chrome.tabs.create({ url: `${WEB_BASE}/?batch=${encodeURIComponent(data.batch_id)}` });
       }
     } else throw new Error(data.detail || 'Lỗi không xác định');
   } catch (err) {
