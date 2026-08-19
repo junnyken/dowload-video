@@ -81,7 +81,13 @@ assert(!/fetch\(msg\.url,/.test(backgroundCode), 'no longer fetches msg.url verb
 assert(/await fetch\(target\.toString\(\),/.test(backgroundCode), 'fetches the origin-checked target instead');
 
 console.log('\n[4] auth token writes are gated to extension pages');
-assert(background.includes('const _fromExtensionPage = !sender.tab && sender.id === chrome.runtime.id'), 'sender provenance computed');
+// Origin-based, not tab-based. `!sender.tab` denied our own popup whenever it
+// was opened as a tab — found by driving the real extension in Chromium, where
+// VG_GET_AUTH_TOKEN returned null while VG_GET_AUTH_STATUS said authenticated.
+assert(/_senderOrigin\(\) === `chrome-extension:\/\/\$\{chrome\.runtime\.id\}`/.test(background),
+       'extension-page trust is decided by sender origin');
+assert(!/_fromExtensionPage\s*=\s*!sender\.tab/.test(background),
+       'no longer conflates "runs in a tab" with "untrusted"');
 assert(background.includes("if (msg.type === 'VG_SET_AUTH_TOKEN')") && background.includes('auth token may only be set by the extension UI'), 'VG_SET_AUTH_TOKEN gated');
 assert(background.includes("msg.type === 'VG_GET_AUTH_TOKEN'"), 'VG_GET_AUTH_TOKEN handler now exists (popup has always sent it)');
 

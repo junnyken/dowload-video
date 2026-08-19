@@ -415,23 +415,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   // ── Auth token management ─────────────────────────────────────────────────────────────────
-  // Who is allowed to write the auth token.
+  // Who is allowed to read/write the auth token.
   //
-  // `sender.tab` is set for content scripts and undefined for extension pages,
-  // so the first check keeps any injected script on the 24 third-party sites
-  // we run on from seeding a token of its own choosing — which would make us
-  // attach an attacker's Bearer header to every subsequent API call.
-  //
-  // The one content script that MAY set it is web-bridge.js, and only because
   // Chrome (not the page) fills in sender.origin/sender.url, so a page cannot
-  // claim to be the web app. We re-derive that origin here rather than trusting
-  // the bridge's own say-so.
-  const _fromExtensionPage = !sender.tab && sender.id === chrome.runtime.id;
-
+  // claim to be somewhere it is not. We compare origins rather than asking
+  // "is this a tab?": an extension page reports chrome-extension://<our id>
+  // whatever surface it is on, while a content script reports the host page's
+  // origin even though it shares our extension id. The earlier `!sender.tab`
+  // form conflated "runs in a tab" with "untrusted" and so denied our own
+  // popup whenever it was opened as a tab — caught by driving the real
+  // extension in a real browser, where VG_GET_AUTH_TOKEN came back null while
+  // VG_GET_AUTH_STATUS said authenticated.
   function _senderOrigin() {
     if (sender.origin) return sender.origin;
     try { return new URL(sender.url || '').origin; } catch { return null; }
   }
+
+  const _fromExtensionPage =
+    sender.id === chrome.runtime.id &&
+    _senderOrigin() === `chrome-extension://${chrome.runtime.id}`;
   function _isTrustedWebAppSender() {
     if (sender.id !== chrome.runtime.id) return false;
     const origin = _senderOrigin();
