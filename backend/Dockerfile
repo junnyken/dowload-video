@@ -1,6 +1,12 @@
 # Sử dụng Python image chính thức
 FROM python:3.10-slim
 
+# Không đệm stdout/stderr. Codebase này dùng print() rất nhiều cho chẩn đoán
+# ([Startup], [Heartbeat], [Alerts], [Watchdog]...); khi stdout là pipe thì
+# Python đệm theo block, nên các dòng đó ra log trễ và mất hẳn nếu tiến trình
+# chết trước lúc flush — đúng lúc cần đọc nhất.
+ENV PYTHONUNBUFFERED=1
+
 # Thiết lập thư mục làm việc
 WORKDIR /app
 

@@ -155,6 +155,44 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+WATCHDOG_BEAT_KEY = "vidgrab:watchdog_last_run_at"
+
+
+def _publish_watchdog_beat() -> None:
+    """Record that the worker-liveness watchdog just completed a check."""
+    from datetime import datetime, timezone
+    try:
+        from app.core.redis_client import get_redis
+        # TTL is generous relative to the check interval so a single slow tick
+        # does not read as "watchdog dead", but short enough that a stopped
+        # watchdog disappears rather than lingering as a stale success.
+        get_redis().set(
+            WATCHDOG_BEAT_KEY,
+            datetime.now(timezone.utc).isoformat(),
+            ex=int(os.getenv("WORKER_WATCHDOG_INTERVAL_SEC", "120")) * 3,
+        )
+    except Exception:
+        pass
+
+
+def _watchdog_status() -> dict:
+    """
+    Report whether the worker-liveness watchdog is running, and when it last
+    ran. `enabled` reflects config; `alive` reflects reality — they disagree
+    when the loop has died or has not passed its startup grace yet.
+    """
+    enabled = os.getenv("WORKER_WATCHDOG_ENABLED", "1").strip().lower() in ("1", "true", "yes", "on")
+    last = None
+    try:
+        from app.core.redis_client import get_redis
+        raw = get_redis().get(WATCHDOG_BEAT_KEY)
+        if raw:
+            last = raw if isinstance(raw, str) else raw.decode()
+    except Exception:
+        pass
+    return {"enabled": enabled, "alive": last is not None, "last_run_at": last}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan - runs on startup and shutdown."""
@@ -212,12 +250,18 @@ async def lifespan(app: FastAPI):
                 try:
                     from app.core.alerts import check_worker_liveness
                     await _asyncio.to_thread(check_worker_liveness)
+                    # Publish our own liveness. A one-shot log line was the
+                    # first attempt and was the wrong shape: this container's
+                    # log window holds about three minutes of Celery chatter,
+                    # so the line scrolls away long before anyone asks whether
+                    # the watchdog is running — the same unobservability that
+                    # let the checks this replaced stay dead for months.
+                    # /health reads this key, so the answer is available on
+                    # demand instead of only in a log race.
+                    await _asyncio.to_thread(_publish_watchdog_beat)
                     if first:
-                        # Exactly one proof-of-life line, then silence. The
-                        # thing this replaced was dead for months precisely
-                        # because nothing it did was observable; a watchdog you
-                        # cannot confirm is running is not a watchdog.
-                        print("[Watchdog] worker liveness watchdog is live (first check completed)")
+                        print("[Watchdog] worker liveness watchdog is live "
+                              "(first check completed)", flush=True)
                         first = False
                 except _asyncio.CancelledError:
                     raise
@@ -226,7 +270,8 @@ async def lifespan(app: FastAPI):
                 await _asyncio.sleep(_wd_interval)
 
         _watchdog_task = _asyncio.create_task(_worker_watchdog())
-        print(f"[Watchdog] armed — first check in {_wd_grace}s, then every {_wd_interval}s")
+        print(f"[Watchdog] armed — first check in {_wd_grace}s, "
+              f"then every {_wd_interval}s", flush=True)
 
     yield
     # --- Shutdown ---
@@ -531,6 +576,9 @@ async def health_check():
         },
         "youtube_circuit_breaker": youtube_cb_state,
         "ytdlp_version": ytdlp_version,
+        # Is the thing that watches the workers itself alive? Without this the
+        # only answer was "grep the logs and hope the line has not rotated".
+        "worker_watchdog": _watchdog_status(),
     }
 
 

@@ -347,6 +347,32 @@ class TestWorkerHeartbeat:
             "the cooldown is not shared"
         )
 
+    # ── the watchdog must be able to answer "am I running?" ───────────
+    def test_watchdog_status_reports_alive_only_after_a_real_check(self, monkeypatch):
+        """
+        The first attempt at proving the watchdog runs was a one-shot log line.
+        This container's log window holds ~3 minutes, so that line is gone
+        before anyone asks — unverifiable observability is the exact failure
+        that let the checks this replaced sit dead. /health now answers instead.
+        """
+        fake_rc = self._fake_redis(monkeypatch)
+        from app import main as _main
+        monkeypatch.setattr("app.core.redis_client.get_redis", lambda: fake_rc)
+
+        before = _main._watchdog_status()
+        assert before["enabled"] is True
+        assert before["alive"] is False, "must not claim to be alive before running"
+        assert before["last_run_at"] is None
+
+        _main._publish_watchdog_beat()
+
+        after = _main._watchdog_status()
+        assert after["alive"] is True
+        assert after["last_run_at"] is not None
+        # And the beat expires, so a stopped watchdog stops reading as alive
+        # instead of leaving a stale success behind.
+        assert fake_rc.ttl(_main.WATCHDOG_BEAT_KEY) > 0
+
     # ── the count itself must be able to say "none" and "unknown" ─────
     def test_worker_count_can_report_zero_and_unknown(self, monkeypatch):
         fake_rc = self._fake_redis(monkeypatch)
