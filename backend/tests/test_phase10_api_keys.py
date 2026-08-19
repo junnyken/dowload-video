@@ -279,9 +279,17 @@ class TestTelegramLinkFlow:
 # ─── Test: Telegram user-info endpoint ───────────────────────────────────────
 
 class TestTelegramUserInfo:
+    # These mocks used to stub `.maybe_single()`, which the endpoint stopped
+    # calling in commit 767f500 — that postgrest-py version raises PGRST116 on
+    # zero rows instead of returning data=None, so 28 call sites moved to
+    # `.limit(1)` plus a manual empty check. A MagicMock happily answers
+    # `.maybe_single()` with a fresh truthy mock, so the stubs kept "passing"
+    # into the wrong branch. They now mirror the real chain: `.limit(1)`,
+    # `.data` a list.
+
     def test_unlinked_user_returns_linked_false(self, monkeypatch):
         mock_sb = MagicMock()
-        mock_sb.table.return_value.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = None
+        mock_sb.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
         monkeypatch.setattr("app.api.telegram_link.get_supabase_client", lambda: mock_sb)
 
         from app.api.telegram_link import get_tg_user_info
@@ -294,17 +302,17 @@ class TestTelegramUserInfo:
         def _table(name):
             tbl = MagicMock()
             if name == "telegram_links":
-                tbl.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
-                    "vidgrab_user_id": user_id
-                }
+                tbl.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+                    {"vidgrab_user_id": user_id}
+                ]
             elif name == "profiles":
                 tbl.select.return_value.eq.return_value.single.return_value.execute.return_value.data = {
                     "tier": "pro", "billing_status": "active", "subscription_expiry": None
                 }
             elif name == "user_usage":
-                tbl.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
-                    "downloads_today": 42
-                }
+                tbl.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+                    {"downloads_today": 42}
+                ]
             return tbl
 
         mock_sb = MagicMock()

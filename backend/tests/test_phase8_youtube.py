@@ -104,30 +104,35 @@ class TestTierGating:
     def test_720_effective_height(self, g):
         assert g.tier_decision("video_720")["effective_height"] == 720
 
-    def test_1080_needs_confirmation(self, g):
-        d = g.tier_decision("video_1080", confirmed=False)
-        assert d["allow"] is False
-        assert d["needs_confirmation"] is True
-        assert d["reason"] == "confirm_1080"
-        assert d["suggested"] == f"video_{g.MAX_PROXY_HEIGHT}"
+    # ── Quality tiering was deliberately removed ──────────────────────
+    # The 4K hard-block, the 1440p block and the 1080p confirmation prompt
+    # existed only to cap metered residential-proxy bandwidth. VidGrab now runs
+    # on the server's own proxy, so that cost model is gone and every height is
+    # served as requested (commit 2575339). The tests below used to assert the
+    # blocking behaviour; they now pin the decision that replaced it, so a
+    # reintroduced cap fails loudly instead of silently degrading downloads.
 
-    def test_1080_confirmed_allowed(self, g):
-        d = g.tier_decision("video_1080", confirmed=True)
+    @pytest.mark.parametrize("quality,expected_height", [
+        ("video_1080", 1080),
+        ("video_1440", 1440),
+        ("video_2160", 2160),
+        ("video_4k",   2160),
+        ("4k",         2160),
+        ("mp4_4k",     2160),
+    ])
+    def test_high_quality_is_served_at_requested_height(self, g, quality, expected_height):
+        d = g.tier_decision(quality)
         assert d["allow"] is True
         assert d["needs_confirmation"] is False
-        assert d["effective_height"] == 1080
+        assert d["reason"] == "ok"
+        assert d["suggested"] is None
+        assert d["effective_height"] == expected_height
 
-    @pytest.mark.parametrize("quality", ["video_4k", "4k", "mp4_4k", "video_2160"])
-    def test_4k_hard_blocked(self, g, quality):
-        d = g.tier_decision(quality, confirmed=True)  # confirm must NOT bypass 4K
-        assert d["allow"] is False
-        assert d["needs_confirmation"] is False
-        assert d["reason"] == "4k_blocked"
-
-    def test_1440_blocked(self, g):
-        d = g.tier_decision("video_1440")
-        assert d["allow"] is False
-        assert d["reason"] == "above_cap_blocked"
+    def test_confirmation_flag_changes_nothing(self, g):
+        """No tier asks for confirmation any more, so the flag is inert."""
+        for quality in ("video_1080", "video_4k", "video_720"):
+            assert g.tier_decision(quality, confirmed=False) == \
+                   g.tier_decision(quality, confirmed=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -238,25 +243,25 @@ class TestPreflight:
         assert ei.value.code == "youtube_cost_limit"
         assert ei.value.http == 503
 
-    def test_1080_requires_confirmation(self, g):
+    def test_1080_passes_without_confirmation(self, g):
+        """Was: raised youtube_confirm_required (409). Tiering is gone — see
+        TestTierGating for why — so preflight lets it straight through."""
         g.set_youtube_enabled(True)
-        with pytest.raises(g.YouTubeBlocked) as ei:
-            g.preflight("video_1080", confirmed=False)
-        assert ei.value.code == "youtube_confirm_required"
-        assert ei.value.http == 409
-        assert ei.value.payload.get("needs_confirmation") is True
+        out = g.preflight("video_1080", confirmed=False)
+        assert out["effective_height"] == 1080
 
     def test_1080_confirmed_passes(self, g):
         g.set_youtube_enabled(True)
         out = g.preflight("video_1080", confirmed=True)
         assert out["effective_height"] == 1080
 
-    def test_4k_blocked_400(self, g):
+    def test_4k_passes(self, g):
+        """Was: raised 4k_blocked (400). The 4K hard-block was removed with the
+        rest of the bandwidth tiering; preflight now only enforces the kill
+        switch, the circuit breaker and the daily cost ceiling."""
         g.set_youtube_enabled(True)
-        with pytest.raises(g.YouTubeBlocked) as ei:
-            g.preflight("video_4k")
-        assert ei.value.code == "4k_blocked"
-        assert ei.value.http == 400
+        out = g.preflight("video_4k")
+        assert out["effective_height"] == 2160
 
     def test_mp3_passes_when_enabled(self, g):
         g.set_youtube_enabled(True)

@@ -256,19 +256,45 @@ class TestAuditHelpers:
             audit.log_admin_action(None, "admin.test", metadata={"k": "v"})
             mock_log.assert_called_once()
 
-    def test_extract_ip_uses_x_forwarded_for(self):
-        from app.core.audit import _extract_ip
+    @staticmethod
+    def _req(xff=None, client_host=None):
+        """Request stub with case-insensitive headers, like Starlette's."""
         req = MagicMock()
-        req.headers.get = lambda k, d=None: "203.0.113.1, 10.0.0.1" if k == "X-Forwarded-For" else d
-        req.client = None
-        assert _extract_ip(req) == "203.0.113.1"
+        headers = {"x-forwarded-for": xff} if xff is not None else {}
+        req.headers.get = lambda k, d=None: headers.get(k.lower(), d)
+        if client_host is None:
+            req.client = None
+        else:
+            req.client.host = client_host
+        return req
+
+    def test_extract_ip_takes_last_forwarded_entry_not_first(self):
+        """
+        X-Forwarded-For is append-only: our own reverse proxy adds the peer it
+        actually saw as the LAST entry, so that is the only trustworthy one.
+        Everything before it was supplied by the caller.
+
+        This test used to assert the FIRST entry — the behaviour commit 336f67e
+        removed precisely because it let anyone spoof their way past IP quotas,
+        rate limits and the /admin allowlist. If it ever fails again, fix the
+        test's expectation, not client_ip.get_client_ip.
+        """
+        from app.core.audit import _extract_ip
+        assert _extract_ip(self._req(xff="203.0.113.1, 10.0.0.1")) == "10.0.0.1"
+
+    def test_extract_ip_ignores_client_supplied_forwarded_prefix(self):
+        """A caller injecting their own XFF cannot displace the proxy's entry."""
+        from app.core.audit import _extract_ip
+        spoofed = "1.2.3.4, 9.9.9.9, 203.0.113.77"
+        assert _extract_ip(self._req(xff=spoofed, client_host="10.0.0.9")) == "203.0.113.77"
 
     def test_extract_ip_falls_back_to_client_host(self):
         from app.core.audit import _extract_ip
-        req = MagicMock()
-        req.headers.get = lambda k, d=None: "" if k == "X-Forwarded-For" else d
-        req.client.host = "192.168.1.1"
-        assert _extract_ip(req) == "192.168.1.1"
+        assert _extract_ip(self._req(xff="", client_host="192.168.1.1")) == "192.168.1.1"
+
+    def test_extract_ip_defaults_when_nothing_available(self):
+        from app.core.audit import _extract_ip
+        assert _extract_ip(self._req()) == "127.0.0.1"
 
     def test_extract_ip_returns_none_for_none_request(self):
         from app.core.audit import _extract_ip
