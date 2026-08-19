@@ -112,3 +112,46 @@ def test_redirect_to_internal_returns_error_status_not_empty_200(app, monkeypatc
         "explicit error, not a silent empty 200"
     )
     assert b"SHOULD-NEVER-BE-REACHED" not in r.content
+
+
+# ── The extraction endpoints hand their URL straight to yt-dlp ────────
+# /fetch-link, /bulk-download and /zip-stream had no SSRF guard at all: an
+# internal URL reached the extractor and came back as a generic 500, making
+# them blind request-forgery primitives against the internal network. Found
+# by probing the live deployment after the first release of this work.
+
+@pytest.fixture
+def _disk_guardrail_usable(monkeypatch, tmp_path):
+    """
+    The disk guardrail middleware runs before these routes and mkdir()s
+    DOWNLOAD_DIR, which defaults to /app/downloads — present in the container,
+    not writable in the test env, where it 500s before the handler is reached.
+    Point it at a temp dir so the request actually gets to the guard.
+    """
+    from app.core import disk_guardrail
+    monkeypatch.setattr(disk_guardrail, "_DOWNLOAD_DIR", str(tmp_path))
+
+
+@pytest.mark.parametrize("target", [
+    "http://169.254.169.254/latest/meta-data/",
+    "http://127.0.0.1:6379/",
+    "http://10.0.0.5/internal",
+])
+def test_fetch_link_rejects_internal_targets(app, _disk_guardrail_usable, target):
+    r = app.post("/api/v1/fetch-link", json={"url": target, "quality": "video"})
+    assert r.status_code == 400, f"{target} reached the extractor (got {r.status_code})"
+
+
+def test_bulk_download_rejects_internal_target_in_list(app, _disk_guardrail_usable):
+    r = app.post("/api/v1/bulk-download", json={
+        "urls": ["https://www.tiktok.com/@x/video/1234567890123456789",
+                 "http://169.254.169.254/latest/meta-data/"],
+    })
+    assert r.status_code == 400
+
+
+def test_zip_stream_rejects_internal_target_in_list(app):
+    r = app.post("/api/v1/zip-stream", json={
+        "urls": ["http://127.0.0.1:6379/"],
+    })
+    assert r.status_code == 400

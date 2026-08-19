@@ -374,6 +374,11 @@ async def fetch_link(
 ):
     if not payload.url:
         raise HTTPException(status_code=400, detail="URL is required")
+    # yt-dlp will fetch whatever it is handed, so the URL must clear the SSRF
+    # guard here — otherwise /fetch-link is a blind request-forgery primitive
+    # against the internal network (found while live-verifying this release:
+    # an internal URL reached the extractor and came back as a generic 500).
+    _assert_safe_url(payload.url)
 
     # ── Scheduled download: dispatch to Celery with eta and return 202 ──
     if payload.scheduled_at:
@@ -1002,6 +1007,8 @@ async def bulk_download(
 ):
     if not payload.urls or len(payload.urls) == 0:
         raise HTTPException(status_code=400, detail="No URLs provided")
+    for _u in payload.urls:
+        _assert_safe_url(_u)
 
     # ── Phase 11: disk pre-flight check ──────────────────────────────
     _preflight_disk_check()
@@ -1301,6 +1308,8 @@ async def zip_stream(
     )
 
     urls = [u.strip() for u in (payload.urls or []) if u and u.strip()]
+    for _u in urls:
+        _assert_safe_url(_u)
     if not urls:
         raise HTTPException(status_code=400, detail="Cần ít nhất 1 URL.")
     if len(urls) > MAX_STREAM_ZIP_ITEMS:
