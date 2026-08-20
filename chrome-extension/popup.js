@@ -486,20 +486,60 @@ async function getTargetUrl() {
   return tab.url;
 }
 
-async function readClipboardUrl() {
+// clipboardRead is an OPTIONAL permission, so a fresh install shows no
+// "Read data you copy and paste" warning at all. It is requested the first time
+// someone actually presses Dán, and never on popup open. Anyone who prefers not
+// to grant it can still paste with Ctrl+V into the focused box, which needs no
+// permission whatsoever — so the feature degrades instead of disappearing.
+function hasClipboardPermission() {
+  return new Promise((resolve) => {
+    try {
+      chrome.permissions.contains({ permissions: ['clipboardRead'] }, (granted) => {
+        resolve(!!granted && !chrome.runtime.lastError);
+      });
+    } catch { resolve(false); }
+  });
+}
+
+function requestClipboardPermission() {
+  return new Promise((resolve) => {
+    try {
+      chrome.permissions.request({ permissions: ['clipboardRead'] }, (granted) => {
+        resolve(!!granted && !chrome.runtime.lastError);
+      });
+    } catch { resolve(false); }
+  });
+}
+
+async function readClipboardUrl({ allowPrompt = false } = {}) {
+  let ok = await hasClipboardPermission();
+  // Only ever prompt from a real click; never while the popup is opening.
+  if (!ok && allowPrompt) ok = await requestClipboardPermission();
+  if (!ok) return null;
   try {
     const text = (await navigator.clipboard.readText() || '').trim();
     return isHttpUrl(text) ? text : null;
   } catch {
-    return null;   // permission refused or empty — not an error worth surfacing
+    return null;
   }
 }
 
 urlPaste?.addEventListener('click', async () => {
-  const link = await readClipboardUrl();
-  if (!link) { setUrlHint('Clipboard không chứa link hợp lệ.', 'warn'); return; }
-  urlInput.value = link;
-  setUrlHint('Đã dán link từ clipboard.', 'ok');
+  const granted = await hasClipboardPermission();
+  const link = await readClipboardUrl({ allowPrompt: true });
+  if (link) {
+    urlInput.value = link;
+    setUrlHint('Đã dán link từ clipboard.', 'ok');
+    return;
+  }
+  // Distinguish "you said no" from "clipboard has nothing useful", and always
+  // leave a route that works without the permission.
+  if (!granted && !(await hasClipboardPermission())) {
+    urlInput.focus();
+    setUrlHint('Chưa cấp quyền đọc clipboard — bấm Ctrl+V để dán vào ô này.', 'warn');
+  } else {
+    setUrlHint('Clipboard không chứa link hợp lệ.', 'warn');
+  }
 });
 
 urlInput?.addEventListener('input', () => {
@@ -519,12 +559,15 @@ urlInput?.addEventListener('input', () => {
     setUrlHint('Đang dùng link của tab hiện tại. Dán link khác để thay.');
     return;
   }
+  // No prompt on open: read the clipboard only if the user already granted it.
   const clip = await readClipboardUrl();
   if (clip) {
     urlInput.value = clip;
     setUrlHint('Trang này không phải video — đã lấy link bạn vừa copy.', 'ok');
   } else {
-    setUrlHint('Trang này không phải video. Hãy copy link video rồi bấm Dán.', 'warn');
+    // Focus the box so Ctrl+V works immediately, permission or not.
+    urlInput.focus();
+    setUrlHint('Trang này không phải video. Dán link vào ô này (Ctrl+V) hoặc bấm Dán.', 'warn');
   }
 })();
 

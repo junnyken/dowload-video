@@ -32,6 +32,19 @@ def main():
             check("URL input exists in the popup", pop.locator("#vg-url-input").count() == 1)
             check("paste button exists", pop.locator("#vg-url-paste").count() == 1)
 
+            # clipboardRead must be OPTIONAL: a fresh install shows no
+            # "Read data you copy and paste" warning, and nothing prompts on open.
+            manifest = pop.evaluate("() => chrome.runtime.getManifest()")
+            check("clipboardRead is NOT an install-time permission",
+                  "clipboardRead" not in (manifest.get("permissions") or []),
+                  str(manifest.get("permissions")))
+            check("clipboardRead is declared optional",
+                  "clipboardRead" in (manifest.get("optional_permissions") or []),
+                  str(manifest.get("optional_permissions")))
+            granted = pop.evaluate("""() => new Promise(r =>
+                chrome.permissions.contains({permissions:['clipboardRead']}, g => r(!!g)))""")
+            check("permission is not granted just by opening the popup", granted is False, str(granted))
+
             hint = pop.locator("#vg-url-hint").inner_text()
             check("feed page is called out instead of failing silently", bool(hint.strip()), hint.strip()[:60])
 
