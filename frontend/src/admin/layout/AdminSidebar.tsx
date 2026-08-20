@@ -22,6 +22,8 @@ const NAV_MONITOR: NavItem[] = [
   { href: '/vid-admin/analytics', label: 'Analytics', icon: '◫', minRole: 'viewer' },
   { href: '/vid-admin/queue-health', label: 'Queue Health', icon: '◍', minRole: 'viewer' },
   { href: '/vid-admin/youtube-gate', label: 'YouTube Gate', icon: '⊙', minRole: 'operator' },
+  { href: '/vid-admin/anomalies', label: 'Anomalies', icon: '◇', minRole: 'viewer' },
+  { href: '/vid-admin/ops-signals', label: 'Ops Signals', icon: '◆', minRole: 'viewer' },
 ]
 
 const NAV_MANAGE: NavItem[] = [

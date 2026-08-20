@@ -19,14 +19,13 @@ the new admin shell**, while their backend endpoints still exist:
 | `AutomationHistoryPanel`     | `/intelligence/automation-history` | **yes** — `admin/pages/AutomationHistoryPage.tsx` |
 | `YouTubeGatePanel`           | `/admin/youtube/*`                 | **yes** — `admin/pages/YouTubeGatePage.tsx` |
 | `QueueHealthPanel`           | `/intelligence/queue-health`, `/auto-tune` | **yes** — `admin/pages/QueueHealthPage.tsx` |
-| `AnomalyPanel`               | anomaly routes                     | partial — surfaced on AdminHomePage |
-| `OpsPanel`                   | `/ops-signals`                     | partial — platform badges |
+| `AnomalyPanel`               | `/intelligence/anomalies`, `/resolve` | **yes** — `admin/pages/AnomaliesPage.tsx` |
+| `OpsPanel`                   | `/admin/ops-signals`               | **yes** — `admin/pages/OpsSignalsPage.tsx` |
 
-The four that had no home now have one, so those originals are safe to delete
-whenever someone is confident nothing was missed in the rewrite; they are kept
-for now only as a diff reference. `AnomalyPanel` and `OpsPanel` are the ones
-still worth reading before deleting — their coverage in the new shell is partial,
-not equivalent.
+Every panel here now has a counterpart in `src/admin/pages/`, so nothing in this
+folder represents a missing capability any more. They are kept only as a diff
+reference while the ports settle, and can be deleted once someone is satisfied
+nothing was lost in the rewrite.
 
 Porting note: the old panels authenticated with `X-Admin-Token`, which the
 current UI cannot produce. Anything ported must use the admin session token —

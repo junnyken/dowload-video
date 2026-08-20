@@ -24,6 +24,8 @@ import QueueHealthPage from './pages/QueueHealthPage'
 import PlaybooksPage from './pages/PlaybooksPage'
 import AutomationHistoryPage from './pages/AutomationHistoryPage'
 import YouTubeGatePage from './pages/YouTubeGatePage'
+import AnomaliesPage from './pages/AnomaliesPage'
+import OpsSignalsPage from './pages/OpsSignalsPage'
 
 function Shell({ children }: { children: React.ReactNode }) {
   return <AdminShell>{children}</AdminShell>
@@ -48,6 +50,8 @@ export function AdminRoutes() {
       <Route path="/vid-admin/playbooks"          element={<Shell><PlaybooksPage /></Shell>} />
       <Route path="/vid-admin/automation-history" element={<Shell><AutomationHistoryPage /></Shell>} />
       <Route path="/vid-admin/youtube-gate"       element={<Shell><YouTubeGatePage /></Shell>} />
+      <Route path="/vid-admin/anomalies"          element={<Shell><AnomaliesPage /></Shell>} />
+      <Route path="/vid-admin/ops-signals"        element={<Shell><OpsSignalsPage /></Shell>} />
       <Route path="/vid-admin/audit"     element={<Shell><AuditLogPage /></Shell>} />
 
       {/* Phase 3+ — Analytics now live */}

@@ -17,6 +17,8 @@ PAGES = [
     ("/vid-admin/playbooks",          "Playbooks"),
     ("/vid-admin/automation-history", "Automation History"),
     ("/vid-admin/youtube-gate",       "YouTube Gate"),
+    ("/vid-admin/anomalies",          "Anomalies"),
+    ("/vid-admin/ops-signals",        "Ops Signals"),
 ]
 res = []
 def check(n, ok, d=""):
@@ -64,6 +66,8 @@ def main():
                 "/vid-admin/playbooks":          "/intelligence/playbooks",
                 "/vid-admin/automation-history": "/intelligence/automation-history",
                 "/vid-admin/youtube-gate":       "/admin/youtube/status",
+                "/vid-admin/anomalies":          "/intelligence/anomalies",
+                "/vid-admin/ops-signals":        "/admin/ops-signals",
             }
             for path, frag in wanted.items():
                 calls.clear()
