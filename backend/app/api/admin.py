@@ -681,6 +681,85 @@ async def get_user_analytics(_=Depends(verify_admin)):
 # GET /users/signups — Daily new signup trend
 # ═════════════════════════════════════════════════════════════════════
 
+@router.get("/accounts")
+async def list_accounts(
+    q: str = "",
+    tier: str = "",
+    limit: int = 50,
+    offset: int = 0,
+    _=Depends(verify_admin),
+):
+    """
+    Registered accounts, newest first — the roster behind the signup counts.
+
+    /users reads user_usage, so it only ever showed people who had already
+    downloaded something, keyed by an opaque user_id. /users/signups counts
+    registrations per day but lists nobody. Neither could answer "who signed up,
+    and put this one on Pro", which is the whole point of having the page.
+
+    q       — substring match on email
+    tier    — exact tier filter
+    """
+    supabase = get_supabase_client()
+    try:
+        limit = max(1, min(limit, 200))
+        offset = max(0, offset)
+
+        query = (
+            supabase.table("profiles")
+            .select("id, email, display_name, tier, billing_status, plan_name, created_at",
+                    count="exact")
+            .order("created_at", desc=True)
+        )
+        if q.strip():
+            query = query.ilike("email", f"%{q.strip()}%")
+        if tier.strip():
+            query = query.eq("tier", tier.strip().lower())
+
+        res = query.range(offset, offset + limit - 1).execute()
+        rows = res.data or []
+        total = res.count if getattr(res, "count", None) is not None else len(rows)
+
+        # Daily usage lives in a separate table; fold it in so the operator can
+        # see consumption next to the tier they are about to change.
+        usage_by_id: Dict[str, int] = {}
+        ids = [r["id"] for r in rows if r.get("id")]
+        if ids:
+            try:
+                u = (supabase.table("user_usage")
+                     .select("user_id, downloads_today")
+                     .in_("user_id", ids).execute())
+                usage_by_id = {x["user_id"]: x.get("downloads_today", 0) for x in (u.data or [])}
+            except Exception:
+                pass
+
+        from app.core.quotas import TIER_PERMISSIONS
+        accounts = [{
+            "user_id":         r.get("id"),
+            "email":           r.get("email"),
+            "display_name":    r.get("display_name"),
+            "tier":            (r.get("tier") or "free"),
+            "billing_status":  r.get("billing_status"),
+            "plan_name":       r.get("plan_name"),
+            "created_at":      r.get("created_at"),
+            "downloads_today": usage_by_id.get(r.get("id"), 0),
+            "daily_limit":     TIER_PERMISSIONS.get(
+                                   (r.get("tier") or "free"), TIER_PERMISSIONS["free"]
+                               )["daily_limit"],
+        } for r in rows]
+
+        return {
+            "success":       True,
+            "accounts":      accounts,
+            "total":         total,
+            "limit":         limit,
+            "offset":        offset,
+            "available_tiers": sorted(TIER_PERMISSIONS),
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e), "accounts": [], "total": 0}
+
+
 @router.get("/users/signups")
 async def get_user_signups(days: int = 30, _=Depends(verify_admin)):
     """

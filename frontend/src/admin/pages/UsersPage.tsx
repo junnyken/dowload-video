@@ -236,7 +236,31 @@ function ResetButton({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+interface Account {
+  user_id: string
+  email: string | null
+  display_name: string | null
+  tier: string
+  billing_status: string | null
+  plan_name: string | null
+  created_at: string | null
+  downloads_today: number
+  daily_limit: number
+}
+
+interface AccountsData {
+  success: boolean
+  accounts: Account[]
+  total: number
+  available_tiers: string[]
+  error?: string
+}
+
 export default function UsersPage() {
+  const [accounts, setAccounts]       = useState<AccountsData | null>(null)
+  const [accQuery, setAccQuery]       = useState('')
+  const [accBusy, setAccBusy]         = useState<Record<string, boolean>>({})
+  const [accMsg, setAccMsg]           = useState<Record<string, string>>({})
   const [data, setData]       = useState<UsersData | null>(null)
   const [signups, setSignups] = useState<SignupsData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -254,6 +278,16 @@ export default function UsersPage() {
       setError((e as Error).message)
     } finally {
       setLoading(false)
+    }
+  }, [])
+
+  const fetchAccounts = useCallback(async (q: string) => {
+    try {
+      const qs = q.trim() ? `?q=${encodeURIComponent(q.trim())}&limit=50` : '?limit=50'
+      setAccounts(await adminFetch<AccountsData>(`/accounts${qs}`))
+    } catch (e) {
+      setAccounts({ success: false, accounts: [], total: 0, available_tiers: [],
+                    error: (e as Error).message })
     }
   }, [])
 
@@ -275,6 +309,25 @@ export default function UsersPage() {
   useEffect(() => {
     fetchSignups(signupDays)
   }, [signupDays, fetchSignups])
+
+  useEffect(() => {
+    const t = setTimeout(() => fetchAccounts(accQuery), accQuery ? 350 : 0)
+    return () => clearTimeout(t)
+  }, [accQuery, fetchAccounts])
+
+  async function handleSetTier(userId: string, tier: string) {
+    setAccBusy(p => ({ ...p, [userId]: true }))
+    setAccMsg(p => ({ ...p, [userId]: '' }))
+    try {
+      await adminPost('/user-action', { action: 'set_tier', user_id: userId, params: { tier } })
+      setAccMsg(p => ({ ...p, [userId]: `→ ${tier}` }))
+      await fetchAccounts(accQuery)
+    } catch (e) {
+      setAccMsg(p => ({ ...p, [userId]: (e as Error).message }))
+    } finally {
+      setAccBusy(p => ({ ...p, [userId]: false }))
+    }
+  }
 
   async function handleResetQuota(userId: string) {
     setResetting(prev => ({ ...prev, [userId]: true }))
@@ -305,6 +358,101 @@ export default function UsersPage() {
           {loading && <span className="text-xs text-gray-400 animate-pulse">Refreshing…</span>}
           {!loading && <span className="text-xs text-gray-500">Auto-refresh 60s</span>}
         </div>
+      </div>
+
+      {/* ── Registered accounts ─────────────────────────────────────────
+          The panels below this one aggregate: /users reports usage keyed by an
+          opaque id, /users/signups counts registrations per day. Neither lists
+          who actually signed up, so an operator could see "3 new accounts" and
+          still have no way to put one of them on Pro. This is that roster. */}
+      <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div>
+            <h2 className="text-sm font-semibold text-white">Tài khoản đăng ký</h2>
+            <p className="text-[11px] text-gray-500">
+              {accounts ? `${accounts.total} tài khoản` : 'Đang tải…'} · mới nhất trước
+            </p>
+          </div>
+          <input
+            value={accQuery}
+            onChange={e => setAccQuery(e.target.value)}
+            placeholder="Tìm theo email…"
+            className="w-64 rounded-md border border-gray-700 bg-gray-950 px-3 py-1.5
+                       text-xs text-gray-100 placeholder-gray-600 focus:border-blue-600
+                       focus:outline-none"
+          />
+        </div>
+
+        {accounts && !accounts.success && (
+          <p className="text-xs text-red-400">Lỗi: {accounts.error}</p>
+        )}
+
+        {accounts?.success && accounts.accounts.length === 0 && (
+          <p className="text-xs text-gray-500 py-3">
+            {accQuery ? 'Không có tài khoản nào khớp.' : 'Chưa có tài khoản nào.'}
+          </p>
+        )}
+
+        {accounts?.success && accounts.accounts.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-gray-500 border-b border-gray-800">
+                  <th className="py-2 pr-4 font-medium">Email</th>
+                  <th className="py-2 pr-4 font-medium">Gói</th>
+                  <th className="py-2 pr-4 font-medium">Hôm nay</th>
+                  <th className="py-2 pr-4 font-medium">Đăng ký</th>
+                  <th className="py-2 font-medium">Đổi gói</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accounts.accounts.map(a => (
+                  <tr key={a.user_id} className="border-b border-gray-800/60">
+                    <td className="py-2 pr-4">
+                      <span className="text-gray-100">{a.email ?? '—'}</span>
+                      {a.display_name && (
+                        <span className="text-gray-500 ml-2">({a.display_name})</span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-4"><TierBadge tier={a.tier} /></td>
+                    <td className="py-2 pr-4 font-mono text-gray-300">
+                      {a.downloads_today}
+                      <span className="text-gray-600">
+                        /{a.daily_limit === -1 ? '∞' : a.daily_limit}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-4 text-gray-400">
+                      {a.created_at ? a.created_at.slice(0, 10) : '—'}
+                    </td>
+                    <td className="py-2">
+                      <div className="flex flex-wrap items-center gap-1">
+                        {(accounts.available_tiers ?? []).map(t => (
+                          <button
+                            key={t}
+                            disabled={accBusy[a.user_id] || t === a.tier}
+                            onClick={() => handleSetTier(a.user_id, t)}
+                            title={t === 'enterprise' ? 'Không giới hạn lượt tải' : undefined}
+                            className={`rounded px-2 py-0.5 border text-[10px] transition
+                              ${t === a.tier
+                                ? 'border-gray-700 text-gray-600 cursor-default'
+                                : 'border-gray-600 text-gray-300 hover:bg-gray-800'}`}
+                          >
+                            {t}
+                          </button>
+                        ))}
+                        {accMsg[a.user_id] && (
+                          <span className="text-[10px] text-emerald-400 ml-1">
+                            {accMsg[a.user_id]}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {error && (
