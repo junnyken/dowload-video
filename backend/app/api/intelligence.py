@@ -413,7 +413,12 @@ async def automation_history(request: Request):
     events: List[Dict[str, Any]] = []
 
     # Auto-tune history (Redis list, newest first)
-    for item in r.lrange("vidgrab:tuning:history", 0, 199):
+    try:
+        _tuning = r.lrange("vidgrab:tuning:history", 0, 199)
+    except Exception as _e:
+        print(f"[automation-history] tuning history unavailable: {_e}", flush=True)
+        _tuning = []
+    for item in _tuning:
         try:
             entry = json.loads(item.decode() if isinstance(item, bytes) else item)
             events.append({
@@ -427,7 +432,12 @@ async def automation_history(request: Request):
             continue
 
     # Playbook execution history (Redis list)
-    for item in r.lrange("vidgrab:playbooks:history", 0, 199):
+    try:
+        _pb = r.lrange("vidgrab:playbooks:history", 0, 199)
+    except Exception as _e:
+        print(f"[automation-history] playbook history unavailable: {_e}", flush=True)
+        _pb = []
+    for item in _pb:
         try:
             entry = json.loads(item.decode() if isinstance(item, bytes) else item)
             events.append({
@@ -441,7 +451,12 @@ async def automation_history(request: Request):
             continue
 
     # Active anomaly events (Redis hash)
-    for _key, val_raw in r.hgetall("vidgrab:anomalies:active").items():
+    try:
+        _anom = r.hgetall("vidgrab:anomalies:active") or {}
+    except Exception as _e:
+        print(f"[automation-history] anomaly feed unavailable: {_e}", flush=True)
+        _anom = {}
+    for _key, val_raw in _anom.items():
         try:
             entry = json.loads(val_raw.decode() if isinstance(val_raw, bytes) else val_raw)
             events.append({

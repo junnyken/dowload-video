@@ -313,6 +313,40 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
+# ── Unhandled errors must still look like HTTP errors ────────────────
+# Starlette's ServerErrorMiddleware is the outermost layer, outside
+# CORSMiddleware, so an exception that is not an HTTPException produced a bare
+# 500 carrying no CORS headers. The browser blocks that response and the
+# frontend reports "Failed to fetch" — a network-level message for what is
+# really a server bug, with no status and nothing actionable in the UI. That is
+# how a Redis error inside one admin endpoint surfaced on the Automation
+# History page.
+#
+# Registered here, BEFORE add_middleware(CORSMiddleware), so it sits inside it:
+# the newest middleware is outermost, and CORS has to stay outermost to
+# decorate the response this produces.
+#
+# A generic @app.exception_handler(Exception) does NOT work for this — Starlette
+# routes that to ServerErrorMiddleware, which is outside CORS again.
+class UnhandledErrorMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        try:
+            return await call_next(request)
+        except Exception as exc:
+            import traceback as _tb
+            from fastapi.responses import JSONResponse
+            # Full detail to the log; nothing internal to the caller.
+            print(f"[Unhandled] {request.method} {request.url.path}: {exc!r}\n"
+                  f"{_tb.format_exc()}", flush=True)
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "Internal server error", "path": request.url.path},
+            )
+
+
+app.add_middleware(UnhandledErrorMiddleware)
+
+
 # ── CORS Configuration ──────────────────────────────────────────────
 # Only allow known frontend origins
 origins = [
