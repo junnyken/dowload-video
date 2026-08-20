@@ -1794,11 +1794,29 @@ def aggregate_platform_health_task(self):
         hour_bucket = now.replace(minute=0, second=0, microsecond=0).isoformat()
         since = (now - timedelta(hours=1)).isoformat()
 
-        # Fetch all jobs from the past hour
+        # Fetch all jobs from the past hour.
+        # download_jobs has no duration_ms column — selecting it made PostgREST
+        # reject the whole query (42703), so this task had been failing and
+        # retrying every 300s, and platform_health_metrics was never written.
+        # Duration is derived from the timestamps that do exist.
         res = sb.table("download_jobs").select(
-            "platform, status, duration_ms, error_message, updated_at"
+            "platform, status, created_at, completed_at, error_message, updated_at"
         ).gt("updated_at", since).execute()
         jobs = res.data or []
+
+        def _duration_ms(job):
+            """Milliseconds from creation to completion, or None if unfinished."""
+            start, end = job.get("created_at"), job.get("completed_at")
+            if not start or not end:
+                return None
+            try:
+                from datetime import datetime as _dt
+                a = _dt.fromisoformat(str(start).replace("Z", "+00:00"))
+                b = _dt.fromisoformat(str(end).replace("Z", "+00:00"))
+                delta = (b - a).total_seconds() * 1000.0
+                return int(delta) if delta >= 0 else None
+            except Exception:
+                return None
 
         # Group by platform
         from collections import defaultdict
@@ -1811,7 +1829,7 @@ def aggregate_platform_health_task(self):
             total = len(pjobs)
             success = sum(1 for j in pjobs if j.get("status") == "completed")
             failed = sum(1 for j in pjobs if j.get("status") == "failed")
-            durations = [j["duration_ms"] for j in pjobs if j.get("duration_ms")]
+            durations = [d for d in (_duration_ms(j) for j in pjobs) if d is not None]
             avg_ms = int(sum(durations) / len(durations)) if durations else None
             sorted_d = sorted(durations)
             p95_ms = sorted_d[int(len(sorted_d) * 0.95)] if sorted_d else None
@@ -1823,8 +1841,13 @@ def aggregate_platform_health_task(self):
                     error_counts[key] += 1
 
             # Circuit open events in the hour
+            # get_redis() sets decode_responses=True, so this is already a str;
+            # calling .decode() on it raised AttributeError and would have kept
+            # the task failing even after the column fix above.
             circuit_state = r.get(circuit_key(platform, "state"))
-            circuit_opens = 1 if circuit_state and circuit_state.decode() == "open" else 0
+            if isinstance(circuit_state, bytes):
+                circuit_state = circuit_state.decode()
+            circuit_opens = 1 if circuit_state == "open" else 0
 
             try:
                 sb.table("platform_health_metrics").upsert({
