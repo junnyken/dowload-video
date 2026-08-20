@@ -22,6 +22,25 @@ from unittest.mock import MagicMock, patch, call
 
 import pytest
 
+# ── Keep module-level admin config from leaking between tests ────────────────
+# Several tests below reload app.api.admin inside a patched environment, or set
+# _ADMIN_ALLOWED_IPS / _ADMIN_PASSWORD directly. Whatever the last one leaves
+# behind used to persist for the rest of the session: an allowlist of
+# {"10.0.0.1"} made every later admin request 403, which silently changed the
+# meaning of any test that ran afterwards (it is how the intelligence auth tests
+# started failing only in a full-suite run). One test even captured its
+# "original" value after it had already been overwritten, so its finally block
+# restored the polluted value.
+@pytest.fixture(autouse=True)
+def _restore_admin_module_config():
+    import app.api.admin as _admin
+    saved_ips = set(_admin._ADMIN_ALLOWED_IPS)
+    saved_pw = _admin._ADMIN_PASSWORD
+    yield
+    _admin._ADMIN_ALLOWED_IPS = saved_ips
+    _admin._ADMIN_PASSWORD = saved_pw
+
+
 # ── Stub heavy modules before any app import ─────────────────────────────────
 for _mod in (
     "realtime", "realtime.types", "realtime.connection",

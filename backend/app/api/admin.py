@@ -89,9 +89,19 @@ async def verify_admin(
 
     # ── Bearer session token (preferred) ────────────────────────────
     if bearer and bearer.credentials:
-        sess = r.get(_session_key(bearer.credentials))
+        # Sessions live in Redis. If the store is unreachable we cannot confirm
+        # the token, so treat it as unauthenticated and fall through to a clean
+        # 401 — an auth check must fail closed, and it must not surface as a 500
+        # that looks like a server fault rather than a refusal.
+        try:
+            sess = r.get(_session_key(bearer.credentials))
+        except Exception:
+            sess = None
         if sess:
-            r.expire(_session_key(bearer.credentials), _SESSION_TTL)
+            try:
+                r.expire(_session_key(bearer.credentials), _SESSION_TTL)
+            except Exception:
+                pass
             return
 
     # ── Legacy X-Admin-Token (kept for backward compat) ─────────────

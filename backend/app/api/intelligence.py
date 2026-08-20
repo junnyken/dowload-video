@@ -44,11 +44,34 @@ def _redis():
 
 
 async def _require_admin(request: Request) -> None:
-    """Lazily import and call verify_admin to avoid circular imports at module load."""
+    """
+    Lazily import and call verify_admin to avoid circular imports at module load.
+
+    Two bugs lived here. verify_admin takes `request` as a required positional
+    parameter — it needs the caller IP for the allowlist and the denial log — and
+    it was never passed, so every admin endpoint in this module raised TypeError
+    and answered 500 instead of 401/200. They had never worked.
+
+    And `bearer` was hardcoded to None, which left only the legacy X-Admin-Token
+    path. The admin UI authenticates with the Bearer session token from
+    POST /admin/login and has no way to produce that legacy header, so even once
+    the TypeError is gone these routes would still have rejected it. The
+    Authorization header is now parsed into the same credentials object FastAPI
+    would have built.
+    """
+    from fastapi.security import HTTPAuthorizationCredentials
     from app.api.admin import verify_admin
+
+    bearer = None
+    auth = request.headers.get("Authorization") or ""
+    scheme, _, credentials = auth.partition(" ")
+    if scheme.lower() == "bearer" and credentials.strip():
+        bearer = HTTPAuthorizationCredentials(scheme=scheme, credentials=credentials.strip())
+
     await verify_admin(
+        request=request,
         legacy_token=request.headers.get("X-Admin-Token"),
-        bearer=None,
+        bearer=bearer,
     )
 
 
