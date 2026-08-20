@@ -510,6 +510,27 @@
   <!-- ══════════════════ SINGLE VIDEO ══════════════════ -->
   <div id="single-section" class="content">
 
+    <!-- Link to download.
+         Was implicit: the popup always used the active tab's URL, so on a feed
+         page (x.com/home, a TikTok "For You" wall) there was nothing to grab and
+         no way to tell it what to fetch. Prefilled from the tab, editable, and
+         pasteable in one tap. -->
+    <div style="margin-bottom:12px;">
+      <div class="card-label">Link video</div>
+      <div style="display:flex;gap:6px;">
+        <input id="vg-url-input" type="text" spellcheck="false"
+               placeholder="Dán link video vào đây…"
+               style="flex:1;min-width:0;background:#13151f;border:1px solid #1e2333;
+                      border-radius:10px;padding:8px 10px;font-size:11px;color:#e2e8f0;
+                      font-family:monospace;outline:none;">
+        <button id="vg-url-paste" title="Dán từ clipboard"
+                style="flex-shrink:0;background:#1e2333;border:1px solid #2d3348;
+                       border-radius:10px;padding:0 10px;color:#a5b4fc;font-size:11px;
+                       font-weight:600;cursor:pointer;">Dán</button>
+      </div>
+      <div id="vg-url-hint" style="font-size:10px;color:#475569;margin-top:4px;"></div>
+    </div>
+
     <!-- Quality selector -->
     <div style="margin-bottom:12px;">
       <div class="card-label">Chất lượng tải</div>

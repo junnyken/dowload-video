@@ -437,6 +437,97 @@ function resolveDownloadUrl(data, ext, base) {
 // ══════════════════════════════════════════════════════════════════
 // SINGLE VIDEO — Download + Preview + Progress
 // ══════════════════════════════════════════════════════════════════
+
+// ── Link to download ────────────────────────────────────────────────
+// The popup used to read the active tab's URL and nothing else, so a feed page
+// (x.com/home, a TikTok "For You" wall) offered no way to say what to fetch.
+// Priority: whatever is in the box > the active tab.
+const urlInput = document.getElementById('vg-url-input');
+const urlPaste = document.getElementById('vg-url-paste');
+const urlHint  = document.getElementById('vg-url-hint');
+
+// Pages that are a site's own shell rather than a piece of media. Used only to
+// decide whether to *offer* a clipboard link — never to block a download, since
+// this list can never be complete and a wrong guess must not stop the user.
+const FEED_PATHS = /^\/?(home|explore|foryou|for-you|feed|following|notifications|messages|search|settings)?\/?$/i;
+
+function looksLikeFeed(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    return FEED_PATHS.test(u.pathname);
+  } catch { return false; }
+}
+
+function isHttpUrl(v) {
+  try { const u = new URL((v || '').trim()); return u.protocol === 'http:' || u.protocol === 'https:'; }
+  catch { return false; }
+}
+
+function setUrlHint(msg, tone) {
+  if (!urlHint) return;
+  urlHint.textContent = msg || '';
+  urlHint.style.color = tone === 'warn' ? '#fbbf24' : tone === 'ok' ? '#4ade80' : '#475569';
+}
+
+/** URL the download actions should use. Box wins; falls back to the tab. */
+async function getTargetUrl() {
+  const typed = (urlInput?.value || '').trim();
+  if (typed) {
+    if (!isHttpUrl(typed)) throw new Error('Link không hợp lệ. Cần bắt đầu bằng http:// hoặc https://');
+    return typed;
+  }
+  const tab = await getActiveTab();
+  // chrome-extension:// matters as well as chrome://: when the popup is opened
+  // as a tab (or an extension page is focused) the "active tab" is our own
+  // page, and without this we would hand our own URL to the downloader.
+  if (!tab?.url || /^(chrome|chrome-extension|edge|about):/i.test(tab.url)) {
+    throw new Error('Không lấy được link ở trang này. Hãy dán link video vào ô phía trên.');
+  }
+  return tab.url;
+}
+
+async function readClipboardUrl() {
+  try {
+    const text = (await navigator.clipboard.readText() || '').trim();
+    return isHttpUrl(text) ? text : null;
+  } catch {
+    return null;   // permission refused or empty — not an error worth surfacing
+  }
+}
+
+urlPaste?.addEventListener('click', async () => {
+  const link = await readClipboardUrl();
+  if (!link) { setUrlHint('Clipboard không chứa link hợp lệ.', 'warn'); return; }
+  urlInput.value = link;
+  setUrlHint('Đã dán link từ clipboard.', 'ok');
+});
+
+urlInput?.addEventListener('input', () => {
+  const v = urlInput.value.trim();
+  if (!v) { setUrlHint(''); return; }
+  setUrlHint(isHttpUrl(v) ? 'Sẽ tải link này.' : 'Link chưa hợp lệ.', isHttpUrl(v) ? 'ok' : 'warn');
+});
+
+// On open: show the tab's URL when it is a real page. When it is a feed, offer
+// the clipboard instead of silently leaving the user with nothing to download.
+(async () => {
+  if (!urlInput) return;
+  const tab = await getActiveTab().catch(() => null);
+  const tabUrl = tab?.url && !/^(chrome|chrome-extension|edge|about):/i.test(tab.url) ? tab.url : '';
+  if (tabUrl && !looksLikeFeed(tabUrl)) {
+    urlInput.placeholder = tabUrl;
+    setUrlHint('Đang dùng link của tab hiện tại. Dán link khác để thay.');
+    return;
+  }
+  const clip = await readClipboardUrl();
+  if (clip) {
+    urlInput.value = clip;
+    setUrlHint('Trang này không phải video — đã lấy link bạn vừa copy.', 'ok');
+  } else {
+    setUrlHint('Trang này không phải video. Hãy copy link video rồi bấm Dán.', 'warn');
+  }
+})();
+
 document.getElementById('downloadBtn').addEventListener('click', async () => {
   const btnText = document.getElementById('btnText'), spinner = document.getElementById('spinner'),
     iconDl = document.getElementById('icon-download'), statusMsg = document.getElementById('statusMsg'),
@@ -454,13 +545,12 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
   startElapsedTimer(statusMsg);
 
   try {
-    const tab = await getActiveTab();
-    if (!tab?.url || tab.url.startsWith('chrome://')) throw new Error('Không thể lấy link ở trang này.');
+    const targetUrl = await getTargetUrl();
 
     // Send to background worker — download continues even if popup is closed
     chrome.runtime.sendMessage({
       type: 'VG_DOWNLOAD_NOW',
-      payload: { url: tab.url, quality, remove_watermark: noWm, download_subs: dlSubs, subtitle_mode: subtitleMode, subtitle_language: 'auto' },
+      payload: { url: targetUrl, quality, remove_watermark: noWm, download_subs: dlSubs, subtitle_mode: subtitleMode, subtitle_language: 'auto' },
     }, (ack) => {
       if (ack?.queued) {
         stopElapsedTimer();
@@ -490,11 +580,11 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
       const data = msg.data;
       _lastDownloadData = data;
       if (msg.dlUrl) _lastDownloadData._resolvedUrl = msg.dlUrl;
-      showPreviewCard(data, tab.url);
+      showPreviewCard(data, targetUrl);
       showMultiFormat(data);
       document.getElementById('error-card')?.classList.add('hidden');
       const isMp3Done = quality && quality.startsWith('mp3');
-      const isCleanTikTok = isWatermarkPlatform(tab.url) && noWm;
+      const isCleanTikTok = isWatermarkPlatform(targetUrl) && noWm;
       statusMsg.textContent = isMp3Done
         ? '✅ Tải nhạc hoàn tất! File MP3 đã lưu vào thư mục VidGrab.'
         : isCleanTikTok
@@ -1208,11 +1298,21 @@ document.getElementById('ch-scrape-btn').addEventListener('click', async () => {
   const pageInfo = await tryGetPageInfo(tab.id).catch(() => null);
   btn.disabled = true; document.getElementById('ch-spinner').style.display = 'block';
 
+  // Same rule as the download tab: a link typed/pasted above wins over the tab,
+  // so a feed page is not a dead end here either.
+  let chUrl;
+  try { chUrl = await getTargetUrl(); }
+  catch (e) {
+    btn.disabled = false; document.getElementById('ch-spinner').style.display = 'none';
+    status.textContent = e.message; status.style.color = '#f87171';
+    return;
+  }
+
   if (pageInfo?.pageType === 'spotify_playlist') {
     document.getElementById('ch-btn-text').textContent = 'Đang lấy dữ liệu Spotify...';
     status.textContent = 'Đang gọi API Spotify...';
     try {
-      const res = await fetch(`${API_BASE}/api/v1/fetch-spotify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: tab.url }) });
+      const res = await fetch(`${API_BASE}/api/v1/fetch-spotify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: chUrl }) });
       const data = await res.json();
       if (data.success && data.tracks) { _spotifyTracksCache = data.tracks.map(t => t.search_query); renderSpotifyPlaylist(data); }
       else throw new Error(data.detail || 'Lỗi server');
@@ -1224,7 +1324,7 @@ document.getElementById('ch-scrape-btn').addEventListener('click', async () => {
   if (pageInfo?.pageType === 'generic_channel') {
     // Directly trigger the bulk submit for generic channels (YouTube, etc.)
     btn.disabled = false; document.getElementById('ch-spinner').style.display = 'none';
-    const urls = [tab.url];
+    const urls = [chUrl];
     const status = document.getElementById('ch-status');
     const batchDiv = document.getElementById('ch-batch-info');
     try {
@@ -1241,7 +1341,7 @@ document.getElementById('ch-scrape-btn').addEventListener('click', async () => {
         btn.disabled = true;
         startChannelDiscovery();
         startJobPolling(data.batch_id, _chMaxVideos);
-        chrome.runtime.sendMessage({ type: 'VG_TRACK_BATCH', batchId: data.batch_id, sourceUrl: tab.url }).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'VG_TRACK_BATCH', batchId: data.batch_id, sourceUrl: chUrl }).catch(() => {});
       } else throw new Error(data.detail || 'Lỗi không xác định');
     } catch (err) {
       status.textContent = `❌ Lỗi: ${err.message}`; status.style.color = '#f87171';
@@ -1295,11 +1395,11 @@ document.getElementById('ch-send-btn').addEventListener('click', async () => {
         sendText.textContent = '⏳ Đang quét...';
         startChannelDiscovery();
         startJobPolling(data.batch_id, _chMaxVideos);
-        chrome.runtime.sendMessage({ type: 'VG_TRACK_BATCH', batchId: data.batch_id, sourceUrl: tab.url }).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'VG_TRACK_BATCH', batchId: data.batch_id, sourceUrl: chUrl }).catch(() => {});
       } else {
         status.textContent = `✅ Đã xếp hàng ${urls.length} video thành công!`; status.style.color = '#4ade80';
         sendText.textContent = '✅ Đã gửi';
-        chrome.runtime.sendMessage({ type: 'VG_TRACK_BATCH', batchId: data.batch_id, sourceUrl: tab.url }).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'VG_TRACK_BATCH', batchId: data.batch_id, sourceUrl: chUrl }).catch(() => {});
         chrome.tabs.create({ url: `${WEB_BASE}/?batch=${encodeURIComponent(data.batch_id)}` });
       }
     } else throw new Error(data.detail || 'Lỗi không xác định');
