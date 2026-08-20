@@ -2074,11 +2074,19 @@ async def proxy_download(request: Request, url: str, filename: str = "video", ex
         safe_ext = ext if ext in ("mp4", "webm", "m4a", "mp3", "ogg", "wav") else "mp4"
 
         _is_yt_cdn = "googlevideo.com" in url
-        _req_headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Referer": "https://www.youtube.com/" if _is_yt_cdn else "https://www.tiktok.com/",
-            "Accept": "*/*",
-        }
+        if _is_yt_cdn:
+            # A signed videoplayback URL belongs to the InnerTube client named in
+            # its c= parameter, and the CDN 403s a fetch whose User-Agent does not
+            # match it. We extract with player_client android_vr, so sending a
+            # desktop Chrome UA here failed every such download.
+            from app.core.youtube_cdn import request_headers as _yt_headers
+            _req_headers = _yt_headers(url)
+        else:
+            _req_headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Referer": "https://www.tiktok.com/",
+                "Accept": "*/*",
+            }
 
         # ── Peek at actual Content-Type to catch audio-disguised-as-mp4 ──────
         # TikWM sometimes returns music URLs in the hdplay/play slots.
@@ -2153,8 +2161,24 @@ async def proxy_download(request: Request, url: str, filename: str = "video", ex
         # A guard rejection (e.g. the SSRF check firing on a redirect hop) is
         # already the right status — don't relabel it as an internal error.
         raise
+    except httpx.HTTPStatusError as e:
+        # Echoing str(e) put the whole signed CDN URL — hundreds of characters of
+        # signature parameters — into a browser tab: unreadable, and it exposes
+        # the signed link in history and logs.
+        _status = e.response.status_code if e.response is not None else 502
+        if _status in (401, 403):
+            _msg = ("Link tải đã hết hạn hoặc bị nguồn từ chối. "
+                    "Hãy lấy lại link rồi thử lại.")
+        elif _status == 404:
+            _msg = "Không tìm thấy tệp ở nguồn. Hãy lấy lại link rồi thử lại."
+        else:
+            _msg = f"Nguồn trả lỗi {_status}. Vui lòng thử lại sau."
+        print(f"[proxy-download] upstream {_status} for {url[:120]}...", flush=True)
+        raise HTTPException(status_code=502, detail=_msg)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Proxy download failed: {str(e)}")
+        print(f"[proxy-download] failed for {url[:120]}...: {e!r}", flush=True)
+        raise HTTPException(status_code=502,
+                            detail="Không tải được tệp từ nguồn. Vui lòng thử lại.")
 
 
 # ── GET /extension/download  (serve Chrome extension zip) ────────────

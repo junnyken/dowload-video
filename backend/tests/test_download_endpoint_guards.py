@@ -123,13 +123,21 @@ def test_redirect_to_internal_returns_error_status_not_empty_200(app, monkeypatc
 @pytest.fixture
 def _disk_guardrail_usable(monkeypatch, tmp_path):
     """
-    The disk guardrail middleware runs before these routes and mkdir()s
-    DOWNLOAD_DIR, which defaults to /app/downloads — present in the container,
-    not writable in the test env, where it 500s before the handler is reached.
-    Point it at a temp dir so the request actually gets to the guard.
+    Neutralise the disk guardrail, which runs before these routes.
+
+    Two ways it interfered. It mkdir()s DOWNLOAD_DIR, defaulting to
+    /app/downloads — present in the container, not writable here, so it 500'd
+    before the handler was reached. And once pointed at a real directory, its
+    verdict depends on how full THIS machine's disk happens to be: at >=80% it
+    rejects bulk/batch with 503, so test_bulk_download started failing when the
+    dev disk crossed 81% while nothing about the code had changed.
+
+    These tests are about the SSRF guard, so the decision is stubbed rather than
+    measured. Disk-pressure behaviour belongs in its own test.
     """
     from app.core import disk_guardrail
     monkeypatch.setattr(disk_guardrail, "_DOWNLOAD_DIR", str(tmp_path))
+    monkeypatch.setattr(disk_guardrail, "check_can_accept_job", lambda *a, **k: (True, ""))
 
 
 @pytest.mark.parametrize("target", [
