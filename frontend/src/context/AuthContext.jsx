@@ -112,6 +112,14 @@ export function AuthProvider({ children }) {
     return { data, error };
   }, []);
 
+  // Set a new password for the session Supabase establishes from a recovery
+  // link. Kept here rather than in the page so the page never touches the
+  // Supabase client directly, matching the rest of the auth surface.
+  const updatePassword = useCallback(async (newPassword) => {
+    const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+    return { data, error };
+  }, []);
+
   const savePreferences = useCallback(async (updates) => {
     if (!session) return;
     try {
@@ -150,6 +158,7 @@ export function AuthProvider({ children }) {
       signIn,
       signOut,
       resetPassword,
+      updatePassword,
       savePreferences,
       refetchPreferences: fetchPreferences,
       withAuth,

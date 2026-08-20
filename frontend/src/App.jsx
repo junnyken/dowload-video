@@ -6,6 +6,7 @@ import { WorkspaceProvider } from './context/WorkspaceContext';
 import LandingPage from './components/LandingPage';
 import ExtensionPage from './components/ExtensionPage';
 import SettingsContent from './components/SettingsContent';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import AccountMenu from './components/AccountMenu';
 import AuthModal from './components/auth/AuthModal';
@@ -58,6 +59,7 @@ const PATH_MAP = {
   '/workspace-settings':  'workspace-settings',
   '/audit':               'audit',
   '/approvals':           'approvals',
+  '/reset-password':      'reset-password',
   '/privacy':             'privacy',
   '/api-docs':            'api-docs',
   '/api-keys':            'api-keys',
@@ -407,6 +409,12 @@ function AppInner() {
         {view === 'settings' && (
           <div className="max-w-4xl mx-auto px-4 md:px-8 py-8 md:py-12">
             <SettingsContent />
+          </div>
+        )}
+
+        {view === 'reset-password' && (
+          <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
+            <ResetPasswordPage />
           </div>
         )}
 

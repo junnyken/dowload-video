@@ -1,3 +1,6 @@
+// First import on purpose: captures the auth fragment before the Supabase
+// client is created and clears it. See lib/authRecovery.js.
+import './lib/authRecovery'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
