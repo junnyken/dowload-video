@@ -19,6 +19,11 @@ import EnterprisUsagePage from './pages/EnterprisUsagePage'
 import AiAnalysisPage from './pages/AiAnalysisPage'
 import BillingAdminPage from './pages/BillingAdminPage'
 import PresetsPage from './pages/PresetsPage'
+// Ported back from src/pages/Admin/, where no route could reach them.
+import QueueHealthPage from './pages/QueueHealthPage'
+import PlaybooksPage from './pages/PlaybooksPage'
+import AutomationHistoryPage from './pages/AutomationHistoryPage'
+import YouTubeGatePage from './pages/YouTubeGatePage'
 
 function Shell({ children }: { children: React.ReactNode }) {
   return <AdminShell>{children}</AdminShell>
@@ -39,6 +44,10 @@ export function AdminRoutes() {
       {/* Protected — Phase 2 (now wired) */}
       <Route path="/vid-admin/proxy"     element={<Shell><ProxyPage /></Shell>} />
       <Route path="/vid-admin/queue"     element={<Shell><QueuePage /></Shell>} />
+      <Route path="/vid-admin/queue-health"       element={<Shell><QueueHealthPage /></Shell>} />
+      <Route path="/vid-admin/playbooks"          element={<Shell><PlaybooksPage /></Shell>} />
+      <Route path="/vid-admin/automation-history" element={<Shell><AutomationHistoryPage /></Shell>} />
+      <Route path="/vid-admin/youtube-gate"       element={<Shell><YouTubeGatePage /></Shell>} />
       <Route path="/vid-admin/audit"     element={<Shell><AuditLogPage /></Shell>} />
 
       {/* Phase 3+ — Analytics now live */}

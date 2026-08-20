@@ -20,11 +20,15 @@ const NAV_MONITOR: NavItem[] = [
   { href: '/vid-admin/queue', label: 'Queue', icon: '◧', minRole: 'viewer' },
   { href: '/vid-admin/jobs', label: 'Jobs', icon: '⊡', minRole: 'viewer' },
   { href: '/vid-admin/analytics', label: 'Analytics', icon: '◫', minRole: 'viewer' },
+  { href: '/vid-admin/queue-health', label: 'Queue Health', icon: '◍', minRole: 'viewer' },
+  { href: '/vid-admin/youtube-gate', label: 'YouTube Gate', icon: '⊙', minRole: 'operator' },
 ]
 
 const NAV_MANAGE: NavItem[] = [
   { href: '/vid-admin/users', label: 'Users', icon: '⊛', minRole: 'operator' },
   { href: '/vid-admin/config', label: 'Config', icon: '⊜', minRole: 'admin' },
+  { href: '/vid-admin/playbooks', label: 'Playbooks', icon: '⊟', minRole: 'operator' },
+  { href: '/vid-admin/automation-history', label: 'Automation', icon: '⊠', minRole: 'viewer' },
 ]
 
 const NAV_ENTERPRISE: NavItem[] = [
