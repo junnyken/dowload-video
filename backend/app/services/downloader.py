@@ -328,6 +328,27 @@ def _is_channel_or_playlist(url: str) -> bool:
     return False
 
 
+def _bgutil_extractor_args() -> dict:
+    """
+    PO token provider configuration, decided in one place.
+
+    BGUTIL_POT_URL selects the HTTP provider — that is the docker-compose
+    layout, where a `bgutil-pot` service really is running. With no URL set,
+    use the script provider baked into the image, which generates tokens
+    locally under Deno with no service to deploy or reach.
+
+    This used to be built inline in three places, each defaulting to
+    "http://bgutil-pot:4416" — a compose-only hostname that cannot resolve on a
+    split-project deployment. It produced no token and no error, which is why
+    every android_vr download came back 403.
+    """
+    base = os.getenv("BGUTIL_POT_URL", "").split(",")[0].strip()
+    if base:
+        return {"youtubepot-bgutilhttp": {"base_url": [base]}}
+    home = os.getenv("BGUTIL_POT_HOME", "/opt/bgutil-pot/server")
+    return {"youtubepot-bgutilscript": {"server_home": [home]}}
+
+
 def _youtube_proxy_download_enabled() -> bool:
     """
     Whether YouTube video bytes may be downloaded THROUGH the residential proxy.
@@ -544,23 +565,31 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         # Prioritize resolution, then codec compatibility, then bitrate
         opts["format_sort"] = ["res", "ext:mp4:m4a", "tbr", "vbr", "abr", "asr"]
 
-        # bgutil-ytdlp-pot-provider v1.3+ uses 'youtubepot-bgutilhttp:base_url' (not 'youtube:getpot_bgutil_baseurl').
-        # android_vr is primary (works without PO token on many requests),
-        # web is fallback using bgutil-pot HTTP server for session-bound PO token.
-        _bgutil_base = (os.getenv("BGUTIL_POT_URL", "").split(",")[0].strip()
-                        or "http://bgutil-pot:4416")
+        # PO token provider.
+        #
+        # The comment here used to claim android_vr needs no PO token. Measured
+        # against production, that is not true for these URLs: extraction
+        # succeeded and every byte fetch came back 403, for 4K and 720p alike,
+        # with the server's own IP matching the ip= signed into the link.
+        #
+        # Two ways to supply one. BGUTIL_POT_URL points at a running provider
+        # service — the docker-compose layout, kept working here. Otherwise use
+        # the script provider baked into the image (see Dockerfile), which runs
+        # the generator locally under Deno with no service to deploy, reach or
+        # health-check. Preferring the URL when it is set means the compose
+        # deployment is unaffected by this.
         opts["extractor_args"] = {
             "youtube": {
-                # android_vr: JSLESS, no GVS PO token needed — most reliable
-                # web_safari: fallback with bgutil-pot session PO tokens
-                # ios/web_music removed: require GVS PO token we don't provide → always skipped + noisy warnings
+                # android_vr: JSLESS and the most reliable client here
+                # web_safari: fallback, session-bound PO token
+                # ios/web_music removed: need a GVS PO token we do not provide
+                #   → always skipped, and noisy about it
                 "player_client": ["android_vr", "web_safari"],
             },
-            "youtubepot-bgutilhttp": {
-                "base_url": [_bgutil_base],
-            },
+            **_bgutil_extractor_args(),
         }
-        print(f"[Downloader] YouTube: android_vr+web_safari + bgutil-pot ({_bgutil_base})")
+        print(f"[Downloader] YouTube: android_vr+web_safari + PO token "
+              f"({'HTTP' if os.getenv('BGUTIL_POT_URL', '').strip() else 'script'})")
 
         # Only load cookies if they exist — expired cookies trigger bot detection warnings
         # and can hurt more than help. Skip silently if file is missing.
@@ -1589,13 +1618,11 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                     "BUG: android_vr opts must NOT contain cookies — yt-dlp silently skips the client"
 
                 # ── YDL_OPTS_WEB_WITH_COOKIES — web_safari + bgutil + cookies ─
-                _bgutil_base_a = (os.getenv("BGUTIL_POT_URL", "").split(",")[0].strip()
-                                  or "http://bgutil-pot:4416")
                 _web_a_opts = opts.copy()
                 _web_a_opts.pop("proxy", None)
                 _web_a_opts["extractor_args"] = {
                     "youtube": {"player_client": ["web_safari", "web"]},
-                    "youtubepot-bgutilhttp": {"base_url": [_bgutil_base_a]},
+                    **_bgutil_extractor_args(),
                 }
                 _web_a_opts["ignoreerrors"] = False
                 _web_a_opts["retries"] = 1
@@ -1829,12 +1856,11 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             # Purpose: get CDN URLs signed for Oracle IP → Phase B downloads directly → 0 DataImpulse for video bytes
             # Skip when circuit=OPEN — Oracle IP is network-level blocked, Phase A.5 will always fail
             if _proxy_used_for_a and info and _circuit_state != "open" and not _yt_already_downloaded:
-                _bgutil_base_a5 = (os.getenv("BGUTIL_POT_URL", "").split(",")[0].strip() or "http://bgutil-pot:4416")
                 from app.core.po_token_cache import is_bgutil_healthy as _a5_bgutil_ok
                 _a5_clients = ["android_vr", "web_safari"] if _a5_bgutil_ok() else ["android_vr"]
                 _a5_extractor_args: dict = {"youtube": {"player_client": _a5_clients}}
                 if _a5_bgutil_ok():
-                    _a5_extractor_args["youtubepot-bgutilhttp"] = {"base_url": [_bgutil_base_a5]}
+                    _a5_extractor_args.update(_bgutil_extractor_args())
                 print(f"[Downloader] YouTube Phase A.5: re-extracting from Oracle IP (clients={_a5_clients})")
                 _a5_opts = {
                     "quiet": True,
