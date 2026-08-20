@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Build output: the committed copy referenced hashed filenames under
+# dist/assets/, which is gitignored — so it could never load, and reverting it
+# after a local build silently broke anything serving dist from a clone.
+# Docker builds it from source (frontend/Dockerfile: npm run build).
+dist/index.html
