@@ -6,9 +6,7 @@ import { WorkspaceProvider } from './context/WorkspaceContext';
 import LandingPage from './components/LandingPage';
 import ExtensionPage from './components/ExtensionPage';
 import SettingsContent from './components/SettingsContent';
-import AdminDashboard from './pages/Admin/AdminDashboard';
 import PrivacyPolicy from './pages/PrivacyPolicy';
-import AdminLogin from './components/AdminLogin';
 import AccountMenu from './components/AccountMenu';
 import AuthModal from './components/auth/AuthModal';
 import PreferencesContent from './components/PreferencesContent';
@@ -60,7 +58,6 @@ const PATH_MAP = {
   '/workspace-settings':  'workspace-settings',
   '/audit':               'audit',
   '/approvals':           'approvals',
-  '/vid-admin':           'admin',
   '/privacy':             'privacy',
   '/api-docs':            'api-docs',
   '/api-keys':            'api-keys',
@@ -77,9 +74,6 @@ const PATH_MAP = {
 function AppInner() {
   const { isAuthenticated, loading } = useAuth();
   const [view, setView]           = useState('landing');
-  const [isAdminRoute, setIsAdminRoute] = useState(false);
-  const [adminAuth, setAdminAuth] = useState(() => !!sessionStorage.getItem('admin_token'));
-  const [adminToken, setAdminToken] = useState(() => sessionStorage.getItem('admin_token') || null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showFeedback, setShowFeedback]   = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -157,12 +151,10 @@ function AppInner() {
     const path = window.location.pathname;
     const v = PATH_MAP[path] || 'landing';
     setView(v);
-    setIsAdminRoute(v === 'admin');
 
     const handlePopState = () => {
       const v2 = PATH_MAP[window.location.pathname] || 'landing';
       setView(v2);
-      setIsAdminRoute(v2 === 'admin');
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -192,7 +184,6 @@ function AppInner() {
       return;
     }
     setView(newView);
-    setIsAdminRoute(newView === 'admin');
     window.history.pushState({}, '', path);
   };
 
@@ -345,14 +336,6 @@ function AppInner() {
                 Cài ứng dụng
               </button>
             )}
-            {adminAuth && view !== 'admin' && (
-              <button
-                onClick={() => navigateTo('admin', '/vid-admin')}
-                className="bg-primary hover:bg-primary-hover text-[#012622] px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-              >
-                Admin
-              </button>
-            )}
           </div>
         </div>
       </nav>
@@ -427,24 +410,6 @@ function AppInner() {
           </div>
         )}
 
-        {view === 'admin' && (
-          <div className="max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12">
-            {!adminAuth ? (
-              <AdminLogin onLogin={(token) => {
-                setAdminAuth(true);
-                setAdminToken(token);
-                sessionStorage.setItem('admin_token', token);
-              }} />
-            ) : (
-              <AdminDashboard token={adminToken} onLogout={() => {
-                setAdminAuth(false);
-                setAdminToken(null);
-                sessionStorage.removeItem('admin_token');
-              }} />
-            )}
-          </div>
-        )}
-
         {view === 'privacy' && (
           <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
             <PrivacyPolicy />
@@ -488,7 +453,7 @@ function AppInner() {
       </main>
 
       {/* ── Feedback Button ──────────────────────────────── */}
-      {!isAdminRoute && (
+      {(
         <button
           onClick={() => setShowFeedback(true)}
           className="fixed bottom-24 right-4 z-40 md:bottom-6 md:right-6 flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#1a4a42] border border-slate-600/50 text-slate-300 text-xs font-semibold hover:bg-[#FBBF24]/15 hover:border-[#FBBF24]/40 hover:text-[#FBBF24] shadow-lg transition-all duration-200 cursor-pointer"
@@ -517,7 +482,7 @@ function AppInner() {
       )}
 
       {/* ── Mobile Tab Bar ───────────────────────────────── */}
-      {!isAdminRoute && (
+      {(
         <MobileTabBar
           activeTab={mobileActiveTab}
           onTabChange={handleMobileTabChange}
