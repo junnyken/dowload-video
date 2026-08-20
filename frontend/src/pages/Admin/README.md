@@ -13,17 +13,23 @@ login could set — a closed loop with no entry point. `AdminDashboard.jsx` and
 They are kept rather than deleted because four of them have **no equivalent in
 the new admin shell**, while their backend endpoints still exist:
 
-| Panel                        | Backend still there            | In `src/admin/`? |
-|------------------------------|--------------------------------|------------------|
-| `PlaybooksPanel`             | `/intelligence/playbooks`      | no               |
-| `AutomationHistoryPanel`     | `/intelligence/automation-history` | no           |
-| `YouTubeGatePanel`           | YouTube gate admin routes      | no               |
-| `QueueHealthPanel`           | queue/health routes            | no               |
-| `AnomalyPanel`               | anomaly routes                 | partial — AdminHomePage |
-| `OpsPanel`                   | `/ops-signals`                 | partial — platform badges |
+| Panel                        | Backend                            | Ported? |
+|------------------------------|------------------------------------|---------|
+| `PlaybooksPanel`             | `/intelligence/playbooks`          | **yes** — `admin/pages/PlaybooksPage.tsx` |
+| `AutomationHistoryPanel`     | `/intelligence/automation-history` | **yes** — `admin/pages/AutomationHistoryPage.tsx` |
+| `YouTubeGatePanel`           | `/admin/youtube/*`                 | **yes** — `admin/pages/YouTubeGatePage.tsx` |
+| `QueueHealthPanel`           | `/intelligence/queue-health`, `/auto-tune` | **yes** — `admin/pages/QueueHealthPage.tsx` |
+| `AnomalyPanel`               | anomaly routes                     | partial — surfaced on AdminHomePage |
+| `OpsPanel`                   | `/ops-signals`                     | partial — platform badges |
 
-So this is not just dead code: it is a list of admin capabilities that were lost
-when the UI was swapped, and the fastest reference for porting them into
-`src/admin/pages/`. Delete a file here once its capability has a home in the new shell.
+The four that had no home now have one, so those originals are safe to delete
+whenever someone is confident nothing was missed in the rewrite; they are kept
+for now only as a diff reference. `AnomalyPanel` and `OpsPanel` are the ones
+still worth reading before deleting — their coverage in the new shell is partial,
+not equivalent.
+
+Porting note: the old panels authenticated with `X-Admin-Token`, which the
+current UI cannot produce. Anything ported must use the admin session token —
+`adminFetch` for `/api/v1/admin/*`, `intelFetch` for `/api/v1/intelligence/*`.
 
 Do not add anything new to this folder.
