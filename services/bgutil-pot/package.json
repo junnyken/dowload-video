@@ -1,0 +1,9 @@
+{
+  "name": "bgutil-pot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PO token provider for yt-dlp — wraps ghcr.io/jim60105/bgutil-pot so the platform can build it as a project",
+  "scripts": {
+    "start": "node /app/server/build/main.js"
+  }
+}
