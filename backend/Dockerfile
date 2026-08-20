@@ -41,13 +41,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg wget unz
     && tar -xzf /tmp/bgutil.tar.gz -C /opt/bgutil-pot --strip-components=1 \
     && rm /tmp/bgutil.tar.gz \
     && test -f /opt/bgutil-pot/server/src/generate_once.ts \
-    && DENO_DIR=/opt/deno-cache deno cache --allow-import \
-         /opt/bgutil-pot/server/src/generate_once.ts \
+    && cd /opt/bgutil-pot/server \
+    && DENO_DIR=/opt/deno-cache DENO_NO_PROMPT=1 deno install --allow-scripts \
+    && test -d /opt/bgutil-pot/server/node_modules \
+    && cd /app \
+    && mkdir -p /opt/bgutil-cache \
     && chmod -R a+rX /opt/bgutil-pot /opt/deno-cache \
+    && chmod 777 /opt/bgutil-cache \
     && apt-get purge -y wget unzip && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
-# Deno writes to its cache at runtime; point it where the app user can read it.
+# Deno reads its module cache from here at runtime.
 ENV DENO_DIR=/opt/deno-cache
+# The generator writes a token cache under XDG_CACHE_HOME (falling back to
+# $HOME/.cache); point it somewhere writable rather than relying on the
+# container user having a usable home directory.
+ENV XDG_CACHE_HOME=/opt/bgutil-cache
 
 # Copy yêu cầu và cài đặt môi trường
 COPY requirements.txt .
