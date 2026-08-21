@@ -20,3 +20,8 @@ numpy
 pywebpush>=2.0.0
 openai>=1.40.0
 google-generativeai>=0.8.0
+# S3-compatible uploads: off-site database backups (app/tasks/backup_tasks.py)
+# and the S3 storage backend in app/core/storage.py — which imports boto3 and
+# raises "boto3 is required for S3 storage" if it is missing, so that backend
+# could never have been selected while this line was absent.
+boto3>=1.34.0

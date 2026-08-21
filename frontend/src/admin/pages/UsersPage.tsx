@@ -190,7 +190,9 @@ function TierBadge({ tier }: { tier: string }) {
 
 // ─── Stat card ────────────────────────────────────────────────────────────────
 
-function StatCard({ label, value, accent }: { label: string; value: string; accent?: 'amber' | 'green' | 'blue' }) {
+function StatCard({ label, value, accent, hint }: {
+  label: string; value: string; accent?: 'amber' | 'green' | 'blue'; hint?: string
+}) {
   const valueClass = {
     amber: 'text-amber-300',
     green: 'text-emerald-400',
@@ -202,6 +204,7 @@ function StatCard({ label, value, accent }: { label: string; value: string; acce
     <div className="rounded-xl border border-slate-800 bg-slate-900 px-5 py-4 space-y-1">
       <div className="text-[10px] text-slate-500 uppercase tracking-widest font-mono">{label}</div>
       <div className={`text-2xl font-bold font-mono ${valueClass}`}>{value}</div>
+      {hint && <div className="text-[10px] text-slate-500 leading-snug">{hint}</div>}
     </div>
   )
 }
@@ -478,7 +481,16 @@ export default function UsersPage() {
       {/* Summary stats */}
       {data && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <StatCard label="Total Users"    value={data.total_users.toLocaleString()} />
+          {/* "Total Users" read data.total_users, which is a count of rows in
+              user_usage — and that table is keyed by account id OR by client
+              IP for anonymous downloads. It showed 6 against 4 real accounts,
+              the extra two being IP addresses. Two different numbers, so show
+              both and say which is which. */}
+          <StatCard
+            label="Tài khoản"
+            value={(accounts?.total ?? 0).toLocaleString()}
+            hint={`${data.total_users.toLocaleString()} lượt dùng (gồm khách vãng lai theo IP)`}
+          />
           <StatCard label="Signups Today"  value={(signups?.today ?? 0).toLocaleString()} accent="green" />
           <StatCard label="Flagged Today"  value={data.flagged_users.length.toLocaleString()} accent="amber" />
           <StatCard label="Batches (48h)"  value={data.total_batches_48h.toLocaleString()} accent="blue" />

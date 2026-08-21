@@ -89,3 +89,56 @@ class TestBackupTaskGuards:
         result = bt.backup_database_daily()
         assert result["ok"] is False
         assert "missing" in result["error"]
+
+
+class TestOffsiteCopy:
+    """The Supabase Storage copy lives in the same project as the data it
+    protects. Whether a genuinely off-site copy exists must be reported, never
+    assumed."""
+
+    S3_VARS = ("BACKUP_S3_ENDPOINT", "BACKUP_S3_BUCKET",
+               "BACKUP_S3_ACCESS_KEY", "BACKUP_S3_SECRET_KEY")
+
+    def test_no_target_configured_is_not_an_error(self, monkeypatch):
+        for v in self.S3_VARS:
+            monkeypatch.delenv(v, raising=False)
+        assert bt._s3_configured() is False
+        assert bt._upload_offsite("f.gz", b"x") is None
+
+    def test_partial_configuration_counts_as_unconfigured(self, monkeypatch):
+        for v in self.S3_VARS:
+            monkeypatch.delenv(v, raising=False)
+        monkeypatch.setenv("BACKUP_S3_ENDPOINT", "https://r2.example.com")
+        monkeypatch.setenv("BACKUP_S3_BUCKET", "b")
+        assert bt._s3_configured() is False, (
+            "half-configured must not read as 'off-site backup exists'"
+        )
+
+    def test_configured_but_failing_upload_is_reported(self, monkeypatch):
+        for v in self.S3_VARS:
+            monkeypatch.setenv(v, "x")
+
+        import sys
+        fake = MagicMock()
+        fake.client.side_effect = RuntimeError("bucket unreachable")
+        monkeypatch.setitem(sys.modules, "boto3", fake)
+
+        err = bt._upload_offsite("f.gz", b"x")
+        assert err and "FAILED" in err, (
+            "a silent off-site failure would leave you believing in a backup "
+            "that does not exist"
+        )
+
+    def test_configured_and_working_returns_no_error(self, monkeypatch):
+        for v in self.S3_VARS:
+            monkeypatch.setenv(v, "x")
+
+        import sys
+        fake = MagicMock()
+        monkeypatch.setitem(sys.modules, "boto3", fake)
+
+        assert bt._upload_offsite("f.gz", b"payload") is None
+        fake.client.return_value.put_object.assert_called_once()
+        kwargs = fake.client.return_value.put_object.call_args.kwargs
+        assert kwargs["Key"] == "vidgrab/f.gz"
+        assert kwargs["Body"] == b"payload"

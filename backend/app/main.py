@@ -484,9 +484,14 @@ app.include_router(partner_api.router, tags=["Partner API"])
 app.include_router(billing_api.router,         prefix="/api/v1", tags=["Billing"])
 app.include_router(tenant_api_keys_api.router, prefix="/api/v1", tags=["Partner API Keys"])
 
-# Phase 20 — Billing Ops Admin Dashboard
-from app.api import billing_ops as billing_ops_api
-app.include_router(billing_ops_api.router, prefix="/api/v1", tags=["Billing Ops"])
+# Phase 20's /api/v1/admin/billing router is gone. Its auth guard read
+# profiles.is_admin, a column that does not exist on this database, so the
+# lookup raised on every request and the guard's except turned that into 403 —
+# every endpoint under it had been unreachable to everyone since it shipped.
+# No frontend called it: the admin Billing page uses /admin/enterprise/billing
+# in admin.py, which works. Removed rather than wired to a second admin
+# identity model (the admin_users table exists but no code reads it either).
+# History is in git if those six endpoints are ever wanted back.
 
 # Phase 21 — User Presets & Platform Preferences
 from app.api import presets as presets_api

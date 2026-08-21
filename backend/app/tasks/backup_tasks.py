@@ -27,15 +27,21 @@ What it does NOT capture: schema, functions, triggers, RLS policies. Those live
 in database/migrations/ in git. Schema from git + data from here is a restore;
 neither half alone is.
 
-Destination
------------
-Supabase Storage, because it works with credentials the app already has. Be
-clear-eyed about what that does and does not protect against: it covers the
-failure that actually happened — a table wiped by application code — but a
-backup living in the same project as the data is not off-site. If the project
-itself is lost or paused, so is this. Set BACKUP_S3_* (and add boto3) when an
-off-site target exists; until then this is a real backup of the realistic risk,
-not a pretence of disaster recovery.
+Destinations
+------------
+1. Supabase Storage — always. Needs no credential the app does not already
+   hold, so it works the day it ships. It covers the failure that actually
+   happened, a table wiped by application code. It is NOT off-site: if the
+   project itself is lost or paused, this copy goes with it.
+
+2. Any S3-compatible bucket — when BACKUP_S3_ENDPOINT / _BUCKET / _ACCESS_KEY
+   / _SECRET_KEY are all set. Cloudflare R2 is the cheap option. This is the
+   copy that survives losing the Supabase project.
+
+With no S3 target configured the task still succeeds and reports
+"off-site: chưa cấu hình". When a target IS configured and the copy fails, that
+is a warning on the run, because believing you have an off-site backup you do
+not have is worse than knowing you have none.
 """
 
 from __future__ import annotations
@@ -162,9 +168,15 @@ def _ensure_bucket(client: httpx.Client, url: str, key: str) -> None:
         headers={**_headers(key), "Content-Type": "application/json"},
         json={"name": BUCKET, "public": False},
     )
-    # 409 = already there, which is the normal case after the first run.
-    if r.status_code not in (200, 201, 409):
-        print(f"[Backup] bucket create returned {r.status_code}: {r.text[:200]}")
+    # "Already exists" is the normal case on every run after the first, and
+    # Supabase reports it as HTTP 400 with statusCode 409 in the body — so
+    # matching on the status code alone printed an alarming line daily. A
+    # warning that cries wolf every day is a warning you stop reading.
+    if r.status_code in (200, 201, 409):
+        return
+    if r.status_code == 400 and "already exists" in r.text.lower():
+        return
+    print(f"[Backup] bucket create returned {r.status_code}: {r.text[:200]}")
 
 
 def _upload(client: httpx.Client, url: str, key: str, path: str, blob: bytes) -> None:
@@ -174,6 +186,51 @@ def _upload(client: httpx.Client, url: str, key: str, path: str, blob: bytes) ->
         content=blob,
     )
     r.raise_for_status()
+
+
+def _s3_configured() -> bool:
+    return all(os.getenv(v) for v in (
+        "BACKUP_S3_ENDPOINT", "BACKUP_S3_BUCKET",
+        "BACKUP_S3_ACCESS_KEY", "BACKUP_S3_SECRET_KEY",
+    ))
+
+
+def _upload_offsite(path: str, blob: bytes) -> str | None:
+    """
+    Copy the backup somewhere that is not the Supabase project it came from.
+
+    Returns None when no off-site target is configured — that is a normal,
+    reported state, not an error. It returns an error string when a target IS
+    configured but the upload failed, because a backup you believe is off-site
+    and is not is worse than knowing you have none.
+
+    Works with any S3-compatible endpoint; Cloudflare R2 is the cheap one.
+    """
+    if not _s3_configured():
+        return None
+
+    try:
+        import boto3  # noqa: PLC0415
+    except ImportError:
+        return "boto3 not installed — off-site copy skipped"
+
+    try:
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=os.environ["BACKUP_S3_ENDPOINT"],
+            aws_access_key_id=os.environ["BACKUP_S3_ACCESS_KEY"],
+            aws_secret_access_key=os.environ["BACKUP_S3_SECRET_KEY"],
+            region_name=os.getenv("BACKUP_S3_REGION", "auto"),
+        )
+        s3.put_object(
+            Bucket=os.environ["BACKUP_S3_BUCKET"],
+            Key=f"vidgrab/{path}",
+            Body=blob,
+            ContentType="application/gzip",
+        )
+        return None
+    except Exception as exc:  # noqa: BLE001
+        return f"off-site upload FAILED: {str(exc)[:160]}"
 
 
 def _prune(client: httpx.Client, url: str, key: str) -> int:
@@ -248,6 +305,11 @@ def backup_database_daily() -> dict[str, Any]:
             _upload(client, url, key, name, blob)
             pruned = _prune(client, url, key)
 
+        offsite_err = _upload_offsite(name, blob)
+        if offsite_err:
+            warnings.append(offsite_err)
+        offsite = "có" if (_s3_configured() and not offsite_err) else "chưa cấu hình"
+
         total_rows = sum(counts.values())
         size_kb = len(blob) / 1024
         print(f"[Backup] {name}: {total_rows} rows across {len(counts)} tables, "
@@ -265,13 +327,16 @@ def backup_database_daily() -> dict[str, Any]:
                 f"📄 <code>{name}</code>\n"
                 f"🔢 {total_rows} dòng / {len(counts)} bảng\n"
                 f"📦 {size_kb:.1f} KB\n"
+                f"🌍 Bản off-site: {offsite}\n"
                 f"{lines}{warn_block}"
             )
         except Exception as exc:  # noqa: BLE001
             print(f"[Backup] telegram notify failed: {exc}")
 
         return {"ok": True, "file": name, "rows": total_rows,
-                "tables": len(counts), "bytes": len(blob), "warnings": warnings}
+                "tables": len(counts), "bytes": len(blob),
+                "offsite": _s3_configured() and not offsite_err,
+                "warnings": warnings}
 
     except Exception as exc:  # noqa: BLE001
         print(f"[Backup] FAILED: {exc}")

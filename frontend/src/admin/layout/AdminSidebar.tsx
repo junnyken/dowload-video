@@ -7,6 +7,20 @@ interface NavItem {
   label: string
   icon: string
   minRole?: 'viewer' | 'operator' | 'admin' | 'superadmin'
+  /**
+   * Kept out of the sidebar, still routed and reachable by URL.
+   *
+   * The menu had 24 entries and most of them could not show anything on this
+   * deployment: the whole Enterprise group is backed by tables holding either
+   * zero rows or leftovers from one "R27 Pilot Tenant" trial in August, and
+   * Billing in particular cannot ever populate because no STRIPE_* variable
+   * exists in the environment. A menu that lists mostly dead ends trains you
+   * to ignore it, which is how a real signal gets missed.
+   *
+   * Nothing is deleted — the routes stay in AdminRoutes.tsx, so bookmarks keep
+   * working, and re-listing one is deleting a single line.
+   */
+  hidden?: boolean
 }
 
 const NAV_OVERVIEW: NavItem[] = [
@@ -20,10 +34,15 @@ const NAV_MONITOR: NavItem[] = [
   { href: '/vid-admin/queue', label: 'Queue', icon: '◧', minRole: 'viewer' },
   { href: '/vid-admin/jobs', label: 'Jobs', icon: '⊡', minRole: 'viewer' },
   { href: '/vid-admin/analytics', label: 'Analytics', icon: '◫', minRole: 'viewer' },
-  { href: '/vid-admin/queue-health', label: 'Queue Health', icon: '◍', minRole: 'viewer' },
   { href: '/vid-admin/youtube-gate', label: 'YouTube Gate', icon: '⊙', minRole: 'operator' },
-  { href: '/vid-admin/anomalies', label: 'Anomalies', icon: '◇', minRole: 'viewer' },
+  // Ops Signals is the aggregated "is anything wrong right now" view. Queue
+  // Health and Anomalies answer the same question from the same Redis state in
+  // a different arrangement, so they are folded behind it rather than listed
+  // three times. Queue Health also owns the auto-tune controls — reachable at
+  // /vid-admin/queue-health when those are needed.
   { href: '/vid-admin/ops-signals', label: 'Ops Signals', icon: '◆', minRole: 'viewer' },
+  { href: '/vid-admin/queue-health', label: 'Queue Health', icon: '◍', minRole: 'viewer', hidden: true },
+  { href: '/vid-admin/anomalies', label: 'Anomalies', icon: '◇', minRole: 'viewer', hidden: true },
 ]
 
 const NAV_MANAGE: NavItem[] = [
@@ -33,18 +52,24 @@ const NAV_MANAGE: NavItem[] = [
   { href: '/vid-admin/automation-history', label: 'Automation', icon: '⊠', minRole: 'viewer' },
 ]
 
+// The partner/multi-tenant surface. Every page here reads a table that is
+// empty or holds only the August "R27 Pilot Tenant" trial data — api_keys,
+// webhook_endpoints, analysis_jobs, payment_events, user_credits and
+// user_presets are all at zero rows. Re-list a line here the day that feature
+// has real customers.
 const NAV_ENTERPRISE: NavItem[] = [
-  { href: '/vid-admin/tenants',     label: 'Tenants',    icon: '◨', minRole: 'admin' },
-  { href: '/vid-admin/api-keys',    label: 'API Keys',   icon: '◪', minRole: 'admin' },
-  { href: '/vid-admin/webhooks',    label: 'Webhooks',   icon: '◩', minRole: 'admin' },
-  { href: '/vid-admin/usage',       label: 'Usage',      icon: '◬', minRole: 'admin' },
-  { href: '/vid-admin/ai-analysis', label: 'AI Analysis', icon: '◭', minRole: 'admin' },
-  { href: '/vid-admin/billing',     label: 'Billing',    icon: '◮', minRole: 'admin' },
-  { href: '/vid-admin/presets',     label: 'Presets',    icon: '◯', minRole: 'admin' },
+  { href: '/vid-admin/tenants',     label: 'Tenants',    icon: '◨', minRole: 'admin', hidden: true },
+  { href: '/vid-admin/api-keys',    label: 'API Keys',   icon: '◪', minRole: 'admin', hidden: true },
+  { href: '/vid-admin/webhooks',    label: 'Webhooks',   icon: '◩', minRole: 'admin', hidden: true },
+  { href: '/vid-admin/usage',       label: 'Usage',      icon: '◬', minRole: 'admin', hidden: true },
+  { href: '/vid-admin/ai-analysis', label: 'AI Analysis', icon: '◭', minRole: 'admin', hidden: true },
+  { href: '/vid-admin/billing',     label: 'Billing',    icon: '◮', minRole: 'admin', hidden: true },
+  { href: '/vid-admin/presets',     label: 'Presets',    icon: '◯', minRole: 'admin', hidden: true },
 ]
 
 const NAV_SYSTEM: NavItem[] = [
-  { href: '/vid-admin/access', label: 'Access', icon: '⊝', minRole: 'superadmin' },
+  // Admin session management, superadmin-only, with a single admin account.
+  { href: '/vid-admin/access', label: 'Access', icon: '⊝', minRole: 'superadmin', hidden: true },
   { href: '/vid-admin/audit', label: 'Audit Log', icon: '⊞', minRole: 'admin' },
 ]
 
@@ -79,7 +104,7 @@ export function AdminSidebar() {
       <nav className="flex-1 overflow-y-auto py-3">
         {SECTIONS.map((section, si) => {
           const visibleItems = section.items.filter(
-            (item) => !item.minRole || hasRole(item.minRole),
+            (item) => !item.hidden && (!item.minRole || hasRole(item.minRole)),
           )
           if (visibleItems.length === 0) return null
           return (
