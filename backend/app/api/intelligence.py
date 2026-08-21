@@ -393,6 +393,44 @@ async def accept_archive_tags(item_id: str, body: AcceptTagsRequest, request: Re
     return {"success": True, "item_id": item_id, "tags": body.tags}
 
 
+@router.post("/archive-suggestions/{item_id}/dismiss")
+async def dismiss_archive_suggestion(item_id: str, request: Request):
+    """
+    Logged-in user — discard a tag suggestion without applying it.
+
+    The ✕ button in ArchiveSuggestions has always POSTed here and this route did
+    not exist. The component drops the row from local state and swallows the
+    error, so dismissing looked like it worked and the same suggestion was back
+    on the next page load — the kind of bug a user reports as "it keeps coming
+    back" rather than as an error.
+
+    Ownership is checked the same way accept-tags checks it: a suggestion
+    belongs to whoever the archive item belongs to.
+    """
+    user = await _require_user(request)
+    user_id = str(user["id"])
+    is_admin = user.get("tier") == "admin"
+
+    r = _redis()
+
+    raw = r.hget("vidgrab:archive:tag_suggestions", item_id)
+    if not raw:
+        # Already gone — accepted, expired, or dismissed in another tab. The
+        # caller wanted it absent and it is absent.
+        return {"success": True, "item_id": item_id, "already_gone": True}
+
+    if not is_admin:
+        try:
+            suggestion = json.loads(raw.decode() if isinstance(raw, bytes) else raw)
+        except Exception:
+            suggestion = {}
+        if suggestion.get("user_id") != user_id:
+            raise HTTPException(status_code=403, detail="Not your item")
+
+    r.hdel("vidgrab:archive:tag_suggestions", item_id)
+    return {"success": True, "item_id": item_id}
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Automation history (aggregated feed)
 # ══════════════════════════════════════════════════════════════════════════════

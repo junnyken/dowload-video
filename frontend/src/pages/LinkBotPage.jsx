@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Bot, Check, X, Link2, Unlink } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE } from '../lib/apiBase';
 
 export default function LinkBotPage() {
   const { session, isAuthenticated } = useAuth();
   const token   = session?.access_token || localStorage.getItem('vg_token') || '';
-  const apiBase = localStorage.getItem('vg_api_base') || '';
+  const apiBase = API_BASE;
 
   // Extract token from URL: /link-bot?token=XXX
   const searchParams = new URLSearchParams(window.location.search);

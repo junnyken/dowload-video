@@ -222,6 +222,69 @@ def is_unlimited(tier: Optional[str], limit_key: str) -> bool:
     return get_limit(tier, limit_key) == -1
 
 
+def resolve_effective_tier(profile: Dict[str, Any]) -> str:
+    """
+    The one place that turns a profiles row into the tier the user actually has.
+
+    There used to be three answers to this question and they disagreed. For an
+    account with tier='enterprise' and billing_status='none':
+
+        quotas.py               → enterprise  (used the declared tier)
+        entitlements.py         → free        (no billing record ⇒ free)
+        payments/billing-status → enterprise  (returned profiles.tier raw)
+
+    So the account menu displayed ENTERPRISE while every require_feature gate
+    refused, and the download quota let them through unlimited anyway. Whichever
+    answer is right, three of them cannot be.
+
+    Rules, in order:
+      canceled                          → free
+      canceling, period not yet over    → keep the tier until it ends
+      past_due, still inside grace      → keep the tier
+      past_due, grace expired           → free
+      none, on a paid tier              → free (no billing record at all)
+      otherwise                         → the tier as declared
+
+    Note the grace cases keep the DECLARED tier. quotas.py returned a hardcoded
+    "pro" here, which quietly demoted a Team or Enterprise account to Pro for
+    the duration of a payment problem.
+    """
+    from datetime import datetime, timezone  # noqa: PLC0415
+
+    declared = (profile.get("tier") or "free").lower()
+    status = (profile.get("billing_status") or "none").lower()
+    now = datetime.now(timezone.utc)
+
+    def _dt(value):
+        if not value:
+            return None
+        try:
+            if isinstance(value, str):
+                return datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return value
+        except Exception:
+            return None
+
+    expiry = _dt(profile.get("subscription_expiry"))
+    grace_end = _dt(profile.get("grace_period_ends_at"))
+
+    if status == "canceled":
+        return "free"
+    if status == "canceling":
+        return declared if (expiry and expiry > now) else "free"
+    if status == "past_due":
+        # Either clock may carry the grace period depending on which code path
+        # wrote the row, so honour whichever is set and still in the future.
+        if (grace_end and grace_end > now) or (expiry and expiry > now):
+            return declared
+        return "free"
+    if status == "none" and declared != "free":
+        # An admin grant sets billing_status='active'; a paid tier with no
+        # billing record at all is a leftover, not an entitlement.
+        return "free"
+    return declared
+
+
 # ── DB-backed effective tier resolver ────────────────────────────────────────
 
 async def get_entitlement(user_id: str, db) -> Dict[str, Any]:
@@ -260,39 +323,9 @@ async def get_entitlement(user_id: str, db) -> Dict[str, Any]:
 
     declared_tier = (profile.get("tier") or "free").lower()
     billing_status = (profile.get("billing_status") or "none").lower()
-    sub_expiry = profile.get("subscription_expiry")
-    grace_end = profile.get("grace_period_ends_at")
 
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc)
-
-    def _parse_dt(s):
-        if not s:
-            return None
-        try:
-            if isinstance(s, str):
-                return datetime.fromisoformat(s.replace("Z", "+00:00"))
-            return s
-        except Exception:
-            return None
-
-    sub_expiry_dt = _parse_dt(sub_expiry)
-    grace_end_dt = _parse_dt(grace_end)
-
-    # Effective tier resolution
-    effective_tier = declared_tier
-    if billing_status == "canceled":
-        effective_tier = "free"
-    elif billing_status == "canceling" and sub_expiry_dt and sub_expiry_dt > now:
-        effective_tier = declared_tier  # keep until period end
-    elif billing_status == "past_due":
-        if grace_end_dt and grace_end_dt > now:
-            effective_tier = declared_tier  # grace period active
-        else:
-            effective_tier = "free"  # grace expired → downgrade
-    elif billing_status == "none" and declared_tier != "free":
-        # Shouldn't happen in normal flow, but if no billing record, treat as free
-        effective_tier = "free"
+    # Effective tier resolution — one shared rule, see resolve_effective_tier.
+    effective_tier = resolve_effective_tier(profile)
 
     plan = get_plan_def(effective_tier)
     limits = dict(plan["limits"])

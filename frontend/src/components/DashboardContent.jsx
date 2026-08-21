@@ -25,6 +25,7 @@ import ProcessingHub from './ProcessingHub';
 import { useSmartDefaults, detectPlatform } from '../hooks/useSmartDefaults';
 import { usePresets } from '../hooks/usePresets';
 import { useResolveInput } from '../hooks/useResolveInput';
+import { useEntitlement } from '../hooks/useEntitlement';
 import CapabilityBadge from './CapabilityBadge';
 import PlatformStatusBanner from './PlatformStatusBanner';
 
@@ -105,6 +106,20 @@ const ResBadge = ({ label, height }) => {
 
 export default function DashboardContent() {
   const { withAuth, session } = useAuth();
+
+  /**
+   * Every tier check on this screen read `session.user.user_metadata.tier`.
+   * Nothing anywhere writes that field — signUp only ever sets display_name,
+   * and an admin tier change writes profiles.tier — so it was undefined for
+   * every user who has ever used the app, and the `|| 'free'` fallback meant
+   * Pro, Team and Enterprise accounts were gated as free. An account upgraded
+   * in the admin panel saw no change here at all.
+   *
+   * useEntitlement asks the backend (/payments/billing-status, which reads
+   * profiles through the service role) and caches for 5 minutes.
+   */
+  const { tier: userTier } = useEntitlement();
+
   const _historyAuthHeaders = session?.access_token
     ? { Authorization: `Bearer ${session.access_token}` }
     : {};
@@ -229,7 +244,7 @@ export default function DashboardContent() {
   // Phase 14: lifecycle banner hook
   const { banner: lifecycleBanner, dismiss: dismissBanner } = useLifecycleBanners({
     user: session?.user || null,
-    tier: session?.user?.user_metadata?.tier || 'free',
+    tier: userTier,
     downloadCount: sessionDownloadCount,
     quotaUsed: 0, // TODO: wire from quota state if available
     hasApiKeys: false,
@@ -1290,7 +1305,7 @@ export default function DashboardContent() {
   ];
 
   const handleOpenInpaint = async () => {
-    const userTier = session?.user?.user_metadata?.tier || 'free';
+    
     const isPro = ['pro', 'team', 'enterprise', 'api'].includes(userTier);
     if (!isPro) {
       setUpgradeErrorCode('tier_required_feature');
@@ -2736,7 +2751,7 @@ export default function DashboardContent() {
                   activePreset={activePreset}
                   onAction={handleQuickAction}
                   disabled={!!downloadingId}
-                  userTier={session?.user?.user_metadata?.tier || 'free'}
+                  userTier={userTier}
                 />
               </div>
             )}
@@ -2964,7 +2979,7 @@ export default function DashboardContent() {
                   onProcessing={() => setShowProcessingHub(true)}
                   onSavePreset={(name) => createPreset({ name, platform: detectedPlatform, settings: { quality: successCardInfo?.quality || 'video' } })}
                   onClose={() => setShowSuccessCard(false)}
-                  userTier={session?.user?.user_metadata?.tier || 'free'}
+                  userTier={userTier}
                 />
               </div>
             ) : lastDownloadInfo ? (
@@ -2983,7 +2998,7 @@ export default function DashboardContent() {
                 localPath={videoInfo.local_file_path || null}
                 sourceUrl={videoInfo.original_url || url}
                 onClose={() => setShowProcessingHub(false)}
-                userTier={session?.user?.user_metadata?.tier || 'free'}
+                userTier={userTier}
                 initialTab={processingHubTab}
               />
             )}

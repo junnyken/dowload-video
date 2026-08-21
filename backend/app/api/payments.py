@@ -284,7 +284,8 @@ async def billing_status(user: Dict[str, Any] = Depends(get_required_user)):
     try:
         res = (
             supabase.table("profiles")
-            .select("tier, billing_status, subscription_expiry, stripe_customer_id, stripe_subscription_id")
+            .select("tier, billing_status, subscription_expiry, grace_period_ends_at, "
+                    "stripe_customer_id, stripe_subscription_id")
             .eq("id", user["id"])
             .single()
             .execute()
@@ -293,7 +294,12 @@ async def billing_status(user: Dict[str, Any] = Depends(get_required_user)):
     except Exception:
         profile = {}
 
-    tier            = profile.get("tier", "free")
+    # The frontend badges and feature locks off this response, so it has to be
+    # the tier the backend will actually honour — not the raw profiles.tier.
+    # Returning the declared value is how an account could show ENTERPRISE in
+    # the account menu while every require_feature gate refused it.
+    from app.core.entitlements import resolve_effective_tier
+    tier            = resolve_effective_tier(profile)
     billing_status_ = profile.get("billing_status", "none")
     expiry          = profile.get("subscription_expiry")
 

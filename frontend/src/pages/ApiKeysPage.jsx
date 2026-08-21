@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Key, Plus, Trash2, Pencil, Copy, Check, X, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE } from '../lib/apiBase';
 
 const MAX_KEYS = 3;
 
@@ -181,7 +182,7 @@ function EditLabelModal({ keyId, currentLabel, onClose, onSaved, apiBase, token 
 export default function ApiKeysPage() {
   const { session } = useAuth();
   const token       = session?.access_token || localStorage.getItem('vg_token') || '';
-  const apiBase     = localStorage.getItem('vg_api_base') || '';
+  const apiBase     = API_BASE;
 
   const [keys, setKeys]           = useState([]);
   const [loading, setLoading]     = useState(true);

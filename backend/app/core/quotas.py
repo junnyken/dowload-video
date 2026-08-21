@@ -116,7 +116,9 @@ def _get_profile(user_id: str) -> Dict[str, Any]:
         supabase = get_supabase_client()
         res = (
             supabase.table("profiles")
-            .select("tier, billing_status, subscription_expiry")
+            # grace_period_ends_at is part of the shared tier rule — omitting it
+            # silently turned a past_due account's grace period into a downgrade.
+            .select("tier, billing_status, subscription_expiry, grace_period_ends_at")
             .eq("id", user_id)
             .single()
             .execute()
@@ -128,25 +130,19 @@ def _get_profile(user_id: str) -> Dict[str, Any]:
 
 def _effective_tier(profile: Dict[str, Any]) -> str:
     """
-    Compute the effective tier, honouring grace period:
-    - billing_status='canceling' + subscription_expiry > now → still 'pro'
-      (keeps Pro until the billing period ends after user cancels)
-    - billing_status='past_due' + subscription_expiry > now → still 'pro'
-      (3-day grace on payment failure)
+    Delegates to the single shared rule in entitlements.resolve_effective_tier.
+
+    This used to implement its own version and disagreed with entitlements.py
+    on two points that both mattered:
+
+      - a paid tier with billing_status='none' was honoured here but treated as
+        free there, so the account menu said ENTERPRISE while every
+        require_feature gate refused
+      - during a grace period it returned a hardcoded "pro", quietly demoting a
+        Team or Enterprise account for the duration of a payment problem
     """
-    tier    = profile.get("tier", "free") or "free"
-    billing = profile.get("billing_status", "none") or "none"
-    expiry  = profile.get("subscription_expiry")
-
-    if billing in ("canceling", "past_due") and expiry:
-        try:
-            exp_dt = datetime.fromisoformat(expiry.replace("Z", "+00:00"))
-            if exp_dt > datetime.now(timezone.utc):
-                return "pro"
-        except Exception:
-            pass
-
-    return tier
+    from app.core.entitlements import resolve_effective_tier  # noqa: PLC0415
+    return resolve_effective_tier(profile)
 
 
 def _get_tier(user_id: str) -> str:
@@ -250,6 +246,36 @@ def get_tier_permissions(tier: str) -> Dict[str, Any]:
     return TIER_PERMISSIONS.get(tier, TIER_PERMISSIONS["free"])
 
 
+def _enforced_daily_limit(tier: str, configured: int) -> int:
+    """
+    The daily limit actually enforced for a tier. -1 means unlimited.
+
+    check_user_quota used to short-circuit on `tier in ("pro","team","enterprise")`
+    and return allowed=True without looking at the number at all. Only
+    enterprise is configured as unlimited (-1); pro and team have real limits
+    (PRO_DAILY_LIMIT, TEAM_DAILY_LIMIT) that were shown in the UI as "x/200"
+    and never enforced anywhere. Every one of those downloads can pull bytes
+    through the paid residential proxy, so the ceiling that was supposed to
+    bound that spend did nothing.
+
+    The guard below exists because enforcing the configured numbers as-is would
+    be worse than not enforcing them: this deployment sets FREE_DAILY_LIMIT to
+    1000 and never sets PRO_DAILY_LIMIT, which defaults to 100 — so a paying
+    Pro account would get one tenth of what a free account gets. A paid tier is
+    never meant to allow less than free, so it never does. Fix the environment
+    to raise the real ceiling; this only stops a misconfiguration from
+    punishing the people who paid.
+    """
+    if configured == -1:
+        return -1
+    if tier == "free":
+        return configured
+    free_limit = TIER_PERMISSIONS["free"]["daily_limit"]
+    if free_limit == -1:
+        return -1
+    return max(configured, free_limit)
+
+
 def check_user_quota(user_id: str) -> Dict[str, Any]:
     """
     Check daily quota for an authenticated user.
@@ -259,11 +285,11 @@ def check_user_quota(user_id: str) -> Dict[str, Any]:
     profile = _get_profile(user_id)
     tier    = _effective_tier(profile)
     perms   = get_tier_permissions(tier)
-    limit   = perms["daily_limit"]
+    limit   = _enforced_daily_limit(tier, perms["daily_limit"])
     usage   = _get_usage(user_id)
     used    = usage.get("downloads_today", 0)
 
-    if tier in ("pro", "team", "enterprise") or limit == -1:
+    if limit == -1:
         return {
             "allowed":         True,
             "plan":            tier,

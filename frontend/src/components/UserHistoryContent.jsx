@@ -5,8 +5,9 @@ import {
   Check, X, Clock, Filter, FileDown, RotateCcw,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE } from '../lib/apiBase';
 
-const apiBase = localStorage.getItem('vg_api_base') || '';
+const apiBase = API_BASE;
 const API = `${apiBase}/api/v1`;
 
 // Session ID for anonymous note ownership (generated once, stored in localStorage)

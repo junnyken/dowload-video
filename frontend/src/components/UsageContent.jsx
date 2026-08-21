@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BarChart2, Zap, Calendar, Archive, Crown, RefreshCw, Key, Copy, Trash2, Lock, Webhook, Shield, Clock, HardDrive, Pin } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE } from '../lib/apiBase';
 
 export default function UsageContent() {
   const { session } = useAuth();
@@ -27,7 +28,7 @@ export default function UsageContent() {
   const load = async () => {
     if (!session) return;
     setLoading(true);
-    const apiBase = localStorage.getItem('vg_api_base') || '';
+    const apiBase = API_BASE;
     const hdrs = { Authorization: `Bearer ${session.access_token}` };
     try {
       const [usageRes, storageRes] = await Promise.all([
@@ -59,7 +60,7 @@ export default function UsageContent() {
   // Fetch API key status when pro tier is confirmed
   useEffect(() => {
     if (!isPro || !session) return;
-    const apiBase = localStorage.getItem('vg_api_base') || '';
+    const apiBase = API_BASE;
     fetch(`${apiBase}/api/v1/user/api-key/status`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
@@ -72,7 +73,7 @@ export default function UsageContent() {
     setApiKeyLoading(true);
     setApiKeyError('');
     try {
-      const apiBase = localStorage.getItem('vg_api_base') || '';
+      const apiBase = API_BASE;
       const res = await fetch(`${apiBase}/api/v1/user/api-key/generate`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -93,7 +94,7 @@ export default function UsageContent() {
     setApiKeyLoading(true);
     setApiKeyError('');
     try {
-      const apiBase = localStorage.getItem('vg_api_base') || '';
+      const apiBase = API_BASE;
       const res = await fetch(`${apiBase}/api/v1/user/api-key/revoke`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -116,7 +117,7 @@ export default function UsageContent() {
   // ── Webhook: fetch logs on mount to detect registration ───────────
   useEffect(() => {
     if (!isPro || !session) return;
-    const apiBase = localStorage.getItem('vg_api_base') || '';
+    const apiBase = API_BASE;
     fetch(`${apiBase}/api/v1/user/webhook/logs`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
@@ -135,7 +136,7 @@ export default function UsageContent() {
     setWebhookLoading(true);
     setWebhookError('');
     try {
-      const apiBase = localStorage.getItem('vg_api_base') || '';
+      const apiBase = API_BASE;
       const res = await fetch(`${apiBase}/api/v1/user/webhook/register`, {
         method: 'POST',
         headers: {
@@ -161,7 +162,7 @@ export default function UsageContent() {
     setWebhookLoading(true);
     setWebhookError('');
     try {
-      const apiBase = localStorage.getItem('vg_api_base') || '';
+      const apiBase = API_BASE;
       const res = await fetch(`${apiBase}/api/v1/user/webhook/revoke`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${session.access_token}` },

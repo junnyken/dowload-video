@@ -18,7 +18,28 @@
  * so no existing deployment regresses. Empty means same-origin, which remains
  * correct for the compose layout.
  */
+/**
+ * A third group read `localStorage.getItem('vg_api_base') || ''` directly —
+ * 16 call sites across AccountMenu, UsageContent, UserHistoryContent,
+ * PlaylistsPage, ApiKeysPage, LinkBotPage, AnalyticsPage, UpgradeModal and
+ * AuthContext's preferences.
+ *
+ * Nothing in the codebase ever WRITES that key. Not one setItem call exists.
+ * So every one of those reads returned '', fell back to a relative URL, and
+ * hit the frontend origin — which answers 502 for /api/v1/* on the Vibe Host
+ * layout. That is why a user upgraded to Enterprise still saw "Nâng cấp Pro":
+ * AccountMenu's usage fetch never reached a backend, so it rendered the
+ * signed-out-ish default.
+ *
+ * Keeping the key as an override rather than deleting it: it is a useful
+ * escape hatch for pointing a built bundle at a different backend from the
+ * browser console. It just cannot be the only source.
+ */
+const OVERRIDE =
+  (typeof localStorage !== 'undefined' && localStorage.getItem('vg_api_base')) || '';
+
 const RAW =
+  OVERRIDE ||
   import.meta.env.VITE_API_URL ||
   import.meta.env.VITE_API_BASE ||
   import.meta.env.VITE_API_BASE_URL ||

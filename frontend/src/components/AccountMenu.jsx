@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { History, Settings2, BarChart2, LogOut, ChevronDown, Crown, ListVideo, Archive, Calendar, Building2, Shield, ClipboardCheck, Languages, Mic } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { API_BASE } from '../lib/apiBase';
 
 export default function AccountMenu({ onNavigate }) {
   const { user, session, signOut, isAuthenticated } = useAuth();
@@ -22,7 +23,7 @@ export default function AccountMenu({ onNavigate }) {
   // Fetch quota when dropdown opens
   useEffect(() => {
     if (!open || !session?.access_token) return;
-    const apiBase = localStorage.getItem('vg_api_base') || '';
+    const apiBase = API_BASE;
     fetch(`${apiBase}/api/v1/user/usage`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })

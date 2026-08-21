@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { BarChart2, Download, Globe, TrendingUp, Calendar, Crown, ChevronDown } from 'lucide-react';
+import { API_BASE } from '../lib/apiBase';
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 
@@ -70,7 +71,7 @@ const PLATFORM_COLORS = {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
   const { session } = useAuth();
-  const apiBase = localStorage.getItem('vg_api_base') || '';
+  const apiBase = API_BASE;
 
   const [range, setRange]           = useState(30);
   const [analytics, setAnalytics]   = useState(null);

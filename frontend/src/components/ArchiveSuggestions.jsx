@@ -40,11 +40,16 @@ export default function ArchiveSuggestions({ authToken }) {
   };
 
   const dismissTag = async (itemId) => {
+    // Dropped the row from local state whether or not the server agreed, and
+    // the endpoint did not exist — so dismissing appeared to work and the same
+    // suggestion returned on the next load. Only forget it once it is actually
+    // gone on the server.
     try {
-      await fetch(`${API_BASE}/api/v1/intelligence/archive-suggestions/${itemId}/dismiss`, {
-        method: "POST",
-        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
-      });
+      const res = await fetch(
+        `${API_BASE}/api/v1/intelligence/archive-suggestions/${itemId}/dismiss`,
+        { method: "POST", headers: authToken ? { Authorization: `Bearer ${authToken}` } : {} },
+      );
+      if (!res.ok) return;
       setTagSuggestions((s) => s.filter((x) => x.item_id !== itemId));
     } catch (_) {}
   };

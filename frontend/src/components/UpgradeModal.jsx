@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X, Crown, Check, Zap } from 'lucide-react';
+import { API_BASE } from '../lib/apiBase';
 
 const ERROR_COPY = {
   quota_exceeded_daily: {
@@ -71,7 +72,7 @@ export default function UpgradeModal({ isOpen, onClose, errorCode = null, authTo
     setCtaError('');
     setLoading(true);
     try {
-      const apiBase = localStorage.getItem('vg_api_base') || '';
+      const apiBase = API_BASE;
       const res = await fetch(`${apiBase}/api/v1/payments/create-checkout-session`, {
         method: 'POST',
         headers: {

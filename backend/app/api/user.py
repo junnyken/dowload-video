@@ -150,12 +150,15 @@ async def get_usage(user: Dict[str, Any] = Depends(get_required_user)):
     try:
         profile_res = (
             supabase.table("profiles")
-            .select("tier")
+            .select("tier, billing_status, subscription_expiry, grace_period_ends_at")
             .eq("id", user["id"])
             .limit(1)
             .execute()
         )
-        tier = profile_res.data[0].get("tier", "free") if profile_res.data else "free"
+        # Same shared rule the quota checks and feature gates use, so the tier
+        # this reports is the tier the backend will actually honour.
+        from app.core.entitlements import resolve_effective_tier
+        tier = resolve_effective_tier(profile_res.data[0]) if profile_res.data else "free"
     except Exception:
         tier = "free"
 
@@ -163,6 +166,12 @@ async def get_usage(user: Dict[str, Any] = Depends(get_required_user)):
     daily_limit = perms["daily_limit"]   # 30 free / 200 pro
 
     return {
+        # "tier" and "daily_limit" are what the account menu actually reads —
+        # it looked for `data.tier ?? data.plan` and `data.limit ?? data.daily_limit`,
+        # found neither at the top level, and fell back to a hardcoded 10.
+        # "plan" and "limits" stay for older callers.
+        "tier":                   tier,
+        "daily_limit":            daily_limit,
         "plan":                   tier,
         "downloads_today":        usage.get("downloads_today", 0),
         "downloads_this_month":   usage.get("downloads_this_month", 0),

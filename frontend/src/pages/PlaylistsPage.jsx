@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { ListMusic, RefreshCw, Trash2, Play, Plus, ExternalLink, Loader2 } from 'lucide-react';
+import { API_BASE } from '../lib/apiBase';
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 
@@ -20,7 +21,7 @@ function formatDate(iso) {
 
 export default function PlaylistsPage({ onNavigate }) {
   const { session } = useAuth();
-  const apiBase = localStorage.getItem('vg_api_base') || '';
+  const apiBase = API_BASE;
 
   const [playlists, setPlaylists]   = useState([]);
   const [loading, setLoading]       = useState(true);

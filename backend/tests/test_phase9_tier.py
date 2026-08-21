@@ -53,9 +53,27 @@ class TestEffectiveTier:
     def test_pro_returns_pro(self):
         assert self.q._effective_tier(_profile("pro", "active")) == "pro"
 
-    def test_canceling_within_expiry_returns_pro(self):
+    def test_canceling_within_expiry_keeps_the_paid_tier(self):
+        """Cancelling keeps what you paid for until the period ends.
+
+        This asserted that a profile with tier='free' resolved to 'pro' —
+        _effective_tier hardcoded "pro" for any grace case regardless of the
+        declared tier. Two things were wrong with that. It upgraded an account
+        that never paid, and it DEMOTED a Team or Enterprise subscriber to Pro
+        for the duration of a payment problem.
+
+        The real cancel path (payments._downgrade_user with at_period_end=True)
+        never writes `tier` at all — it sets billing_status='canceling' plus an
+        expiry and leaves the paid tier in place, so tier='free' here was a
+        state the application does not produce.
+        """
         future = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
-        assert self.q._effective_tier(_profile("free", "canceling", future)) == "pro"
+        assert self.q._effective_tier(_profile("pro", "canceling", future)) == "pro"
+        assert self.q._effective_tier(_profile("enterprise", "canceling", future)) == "enterprise"
+
+    def test_canceling_does_not_upgrade_a_free_account(self):
+        future = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
+        assert self.q._effective_tier(_profile("free", "canceling", future)) == "free"
 
     def test_canceling_expired_returns_free(self):
         past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
@@ -360,10 +378,14 @@ class TestTierTransitions:
         assert result["plan"] == "pro"
 
     def test_canceling_within_expiry_still_pro(self, monkeypatch):
-        """Case 10: User cancelled but expiry hasn't passed → still Pro."""
+        """Case 10: User cancelled but expiry hasn't passed → still Pro.
+
+        tier stays 'pro' on the row — payments._downgrade_user(at_period_end=True)
+        only sets billing_status and an expiry, it never rewrites the tier.
+        """
         future = (datetime.now(timezone.utc) + timedelta(days=15)).isoformat()
         def _fake_profile(uid):
-            return _profile("free", "canceling", future)
+            return _profile("pro", "canceling", future)
         monkeypatch.setattr(self.q, "_get_profile", _fake_profile)
         monkeypatch.setattr(self.q, "_get_usage", lambda uid: {"downloads_today": 5})
 

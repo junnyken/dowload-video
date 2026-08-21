@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { API_BASE } from '../lib/apiBase';
 
 const AuthContext = createContext(null);
 
@@ -59,7 +60,7 @@ export function AuthProvider({ children }) {
   const fetchPreferences = useCallback(async () => {
     if (!session) return;
     try {
-      const apiBase = localStorage.getItem('vg_api_base') || '';
+      const apiBase = API_BASE;
       const res = await fetch(`${apiBase}/api/v1/user/preferences`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
@@ -123,7 +124,7 @@ export function AuthProvider({ children }) {
   const savePreferences = useCallback(async (updates) => {
     if (!session) return;
     try {
-      const apiBase = localStorage.getItem('vg_api_base') || '';
+      const apiBase = API_BASE;
       await fetch(`${apiBase}/api/v1/user/preferences`, {
         method: 'PUT',
         headers: {
