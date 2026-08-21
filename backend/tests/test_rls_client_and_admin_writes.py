@@ -229,16 +229,24 @@ class TestHistoryScoping:
         sb._q.execute.return_value = MagicMock(data=[])
         return sb
 
+    def _request(self):
+        req = MagicMock()
+        req.headers = {"User-Agent": "pytest"}
+        req.client.host = "127.0.0.1"
+        return req
+
     def _run(self, coro_fn, sb, **kwargs):
         import app.api.routes as routes
-        with patch.object(routes, "get_supabase_client", return_value=sb):
+        with patch.object(routes, "get_supabase_client", return_value=sb), \
+             patch("app.core.bulk_delete_alert.record_bulk_delete"):
             return asyncio.new_event_loop().run_until_complete(coro_fn(**kwargs))
 
     def test_delete_all_requires_sign_in(self):
         import app.api.routes as routes
         from fastapi import HTTPException
         with pytest.raises(HTTPException) as exc:
-            self._run(routes.delete_all_history, self._sb(), user=None)
+            self._run(routes.delete_all_history, self._sb(),
+                      request=self._request(), user=None)
         assert exc.value.status_code == 401
 
     def test_delete_all_is_scoped_to_the_caller(self):
@@ -247,12 +255,30 @@ class TestHistoryScoping:
         delete_q = sb.table.return_value.delete.return_value
         delete_q.eq.return_value.execute.return_value = MagicMock(data=[{"id": "j1"}])
 
-        result = self._run(routes.delete_all_history, sb, user={"id": "user-7"})
+        result = self._run(routes.delete_all_history, sb,
+                           request=self._request(), user={"id": "user-7"})
 
         assert delete_q.eq.call_args[0] == ("user_id", "user-7"), (
             "the delete must be filtered to the caller's own rows"
         )
         assert result["success"] is True
+
+    def test_bulk_delete_is_recorded(self):
+        """The table emptying with no record of who or when is what made the
+        original incident unanswerable."""
+        import app.api.routes as routes
+        sb = MagicMock()
+        sb.table.return_value.delete.return_value.eq.return_value.execute.return_value = (
+            MagicMock(data=[{"id": f"j{i}"} for i in range(150)])
+        )
+        with patch.object(routes, "get_supabase_client", return_value=sb), \
+             patch("app.core.bulk_delete_alert.record_bulk_delete") as rec:
+            asyncio.new_event_loop().run_until_complete(
+                routes.delete_all_history(request=self._request(), user={"id": "user-7"})
+            )
+        assert rec.called
+        assert rec.call_args.kwargs["deleted"] == 150
+        assert rec.call_args.kwargs["scope"] == "user_id=user-7"
 
     def test_anonymous_history_read_excludes_owned_rows(self):
         import app.api.routes as routes

@@ -1907,7 +1907,7 @@ async def get_history(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/history/all")
-async def delete_all_history(user=Depends(get_optional_user)):
+async def delete_all_history(request: Request, user=Depends(get_optional_user)):
     """Clear the signed-in user's own download history.
 
     This took no auth and matched every row in the table — `neq("id", <zero
@@ -1932,7 +1932,17 @@ async def delete_all_history(user=Depends(get_optional_user)):
                .delete()
                .eq("user_id", user["id"])
                .execute())
-        return {"success": True, "deleted": len(res.data or [])}
+        deleted = len(res.data or [])
+
+        # Leave a trail. The table being found empty with no record of who
+        # emptied it, or when, is what made the original incident impossible
+        # to reason about after the fact.
+        from app.core.bulk_delete_alert import record_bulk_delete
+        record_bulk_delete(
+            "download_jobs", deleted=deleted, scope=f"user_id={user['id']}",
+            request=request, user=user,
+        )
+        return {"success": True, "deleted": deleted}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
