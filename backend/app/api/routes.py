@@ -1872,7 +1872,16 @@ async def get_history(
     offset: int = 0,
     platform: str = None,
     status: str = None,
+    user=Depends(get_optional_user),
 ):
+    """Download history for the caller.
+
+    This selected from download_jobs with no owner filter at all, on a route
+    with no auth dependency — so any visitor, signed in or not, read back every
+    account's history: URLs, filenames, error messages, user ids. Anonymous
+    downloads are stored with user_id NULL and have no owner, so they stay a
+    shared pool; a signed-in user now sees only their own rows.
+    """
     try:
         supabase = get_supabase_client()
         q = (
@@ -1880,6 +1889,10 @@ async def get_history(
             .select("*")
             .order("created_at", desc=True)
         )
+        if user and user.get("id"):
+            q = q.eq("user_id", user["id"])
+        else:
+            q = q.is_("user_id", "null")
         if platform:
             q = q.eq("platform", platform)
         if status in ("success", "failed", "processing"):
@@ -1894,20 +1907,56 @@ async def get_history(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/history/all")
-async def delete_all_history():
+async def delete_all_history(user=Depends(get_optional_user)):
+    """Clear the signed-in user's own download history.
+
+    This took no auth and matched every row in the table — `neq("id", <zero
+    uuid>)` is "everything" — so one unauthenticated DELETE wiped every
+    account's history globally, and anything that walks an API (a crawler, a
+    scanner, a mistyped script) could fire it. download_jobs being empty in
+    production while user_usage still counted 36 downloads is what that looks
+    like afterwards.
+
+    Anonymous rows carry no owner (user_id is NULL), so there is no such thing
+    as "my anonymous history" to clear without clearing every other visitor's
+    too. Signing in is the only way to have a history that is yours to delete.
+    """
+    if not user or not user.get("id"):
+        raise HTTPException(
+            status_code=401,
+            detail="Cần đăng nhập để xóa lịch sử tải.",
+        )
     try:
         supabase = get_supabase_client()
-        supabase.table("download_jobs").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
-        return {"success": True}
+        res = (supabase.table("download_jobs")
+               .delete()
+               .eq("user_id", user["id"])
+               .execute())
+        return {"success": True, "deleted": len(res.data or [])}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/history/{job_id}")
-async def delete_history_job(job_id: str):
+async def delete_history_job(job_id: str, user=Depends(get_optional_user)):
+    """Delete one history entry the caller owns.
+
+    Unauthenticated and unscoped before, so any job id deleted anyone's row.
+    """
     try:
         supabase = get_supabase_client()
-        supabase.table("download_jobs").delete().eq("id", job_id).execute()
+        q = supabase.table("download_jobs").delete().eq("id", job_id)
+        if user and user.get("id"):
+            q = q.eq("user_id", user["id"])
+        else:
+            # An anonymous caller may only remove un-owned rows, never a
+            # signed-in user's.
+            q = q.is_("user_id", "null")
+        res = q.execute()
+        if not (res.data or []):
+            raise HTTPException(status_code=404, detail="Không tìm thấy mục lịch sử này.")
         return {"success": True}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

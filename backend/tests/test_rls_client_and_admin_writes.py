@@ -209,3 +209,63 @@ class TestQuotaSubject:
             resolve_quota_subject(self._request("sess-aaa"), {"id": "user-42"})
         )
         assert subject == "user-42"
+
+
+# ═════════════════════════════════════════════════════════════════════
+# F) /history — was unauthenticated, unscoped, and globally destructive
+# ═════════════════════════════════════════════════════════════════════
+
+class TestHistoryScoping:
+    """DELETE /api/v1/history/all took no auth and matched every row in
+    download_jobs, so a single anonymous request wiped every account's history.
+    GET /history had no owner filter, so any visitor read everyone's."""
+
+    def _sb(self):
+        sb = MagicMock()
+        sb._q = sb.table.return_value.select.return_value.order.return_value
+        sb._q.eq.return_value = sb._q
+        sb._q.is_.return_value = sb._q
+        sb._q.range.return_value = sb._q
+        sb._q.execute.return_value = MagicMock(data=[])
+        return sb
+
+    def _run(self, coro_fn, sb, **kwargs):
+        import app.api.routes as routes
+        with patch.object(routes, "get_supabase_client", return_value=sb):
+            return asyncio.new_event_loop().run_until_complete(coro_fn(**kwargs))
+
+    def test_delete_all_requires_sign_in(self):
+        import app.api.routes as routes
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc:
+            self._run(routes.delete_all_history, self._sb(), user=None)
+        assert exc.value.status_code == 401
+
+    def test_delete_all_is_scoped_to_the_caller(self):
+        import app.api.routes as routes
+        sb = MagicMock()
+        delete_q = sb.table.return_value.delete.return_value
+        delete_q.eq.return_value.execute.return_value = MagicMock(data=[{"id": "j1"}])
+
+        result = self._run(routes.delete_all_history, sb, user={"id": "user-7"})
+
+        assert delete_q.eq.call_args[0] == ("user_id", "user-7"), (
+            "the delete must be filtered to the caller's own rows"
+        )
+        assert result["success"] is True
+
+    def test_anonymous_history_read_excludes_owned_rows(self):
+        import app.api.routes as routes
+        sb = self._sb()
+        self._run(routes.get_history, sb, limit=5, offset=0,
+                  platform=None, status=None, user=None)
+        assert sb._q.is_.call_args[0] == ("user_id", "null"), (
+            "an anonymous caller must not be served signed-in users' history"
+        )
+
+    def test_signed_in_history_read_is_filtered_to_that_user(self):
+        import app.api.routes as routes
+        sb = self._sb()
+        self._run(routes.get_history, sb, limit=5, offset=0,
+                  platform=None, status=None, user={"id": "user-7"})
+        assert ("user_id", "user-7") in [c[0] for c in sb._q.eq.call_args_list]

@@ -105,6 +105,9 @@ const ResBadge = ({ label, height }) => {
 
 export default function DashboardContent() {
   const { withAuth, session } = useAuth();
+  const _historyAuthHeaders = session?.access_token
+    ? { Authorization: `Bearer ${session.access_token}` }
+    : {};
   const [url, setUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -288,12 +291,14 @@ export default function DashboardContent() {
   };
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/v1/history?limit=5`)
+    // /api/v1/history returns the caller's own rows now, so the token decides
+    // what comes back — without it a signed-in user sees the anonymous pool.
+    fetch(`${API_BASE}/api/v1/history?limit=5`, { headers: _historyAuthHeaders })
       .then(res => res.json())
       .then(data => {
         if (data.success && data.jobs) setRecentDownloads(data.jobs);
       }).catch(() => {});
-  }, []);
+  }, [session?.access_token]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset track selection when the Spotify album/playlist changes
   useEffect(() => {
@@ -319,7 +324,10 @@ export default function DashboardContent() {
 
   const handleDeleteJob = async (jobId) => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/history/${jobId}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/api/v1/history/${jobId}`, {
+        method: 'DELETE',
+        headers: _historyAuthHeaders,
+      });
       if (res.ok) {
         setRecentDownloads(prev => prev.filter(j => j.id !== jobId));
         showToast('Đã xóa thành công!');
@@ -328,9 +336,16 @@ export default function DashboardContent() {
   };
 
   const handleClearAllHistory = async () => {
+    if (!session?.access_token) {
+      showToast('Cần đăng nhập để xóa lịch sử tải.');
+      return;
+    }
     if (!window.confirm('Bạn có chắc chắn muốn xóa tất cả lịch sử tải gần đây không?')) return;
     try {
-      const res = await fetch(`${API_BASE}/api/v1/history/all`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/api/v1/history/all`, {
+        method: 'DELETE',
+        headers: _historyAuthHeaders,
+      });
       if (res.ok) {
         setRecentDownloads([]);
         showToast('Đã xóa tất cả lịch sử!');

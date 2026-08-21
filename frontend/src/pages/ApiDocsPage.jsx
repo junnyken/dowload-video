@@ -27,7 +27,7 @@ const ENDPOINTS = [
   },
   {
     method: 'GET', path: '/api/v1/history', auth: false,
-    description: 'Recent jobs. Supports ?limit=20&offset=0&platform=youtube&status=success.',
+    description: 'Recent jobs for the caller — your own when a token is sent, otherwise the anonymous pool. Supports ?limit=20&offset=0&platform=youtube&status=success.',
     response: `{ "success": true, "jobs": [ { "id": "...", "title": "...", "status": "success", ... } ] }`,
   },
   {

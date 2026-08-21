@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../context/AuthContext';
 import {
   History,
   Search,
@@ -24,6 +25,13 @@ import {
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export default function HistoryContent() {
+  // /api/v1/history is scoped to the caller now — without this header a
+  // signed-in user is served the anonymous pool instead of their own rows,
+  // and clearing history answers 401.
+  const { session } = useAuth();
+  const authHeaders = session?.access_token
+    ? { Authorization: `Bearer ${session.access_token}` }
+    : {};
   const [jobs, setJobs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -53,7 +61,10 @@ export default function HistoryContent() {
   const fetchHistory = useCallback(async (pageNum = 1, append = false) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/history?limit=${PER_PAGE}&offset=${(pageNum - 1) * PER_PAGE}`);
+      const res = await fetch(
+        `${API_BASE}/api/v1/history?limit=${PER_PAGE}&offset=${(pageNum - 1) * PER_PAGE}`,
+        { headers: authHeaders },
+      );
       const data = await res.json();
       if (data.success && data.jobs) {
         if (append) {
@@ -76,7 +87,8 @@ export default function HistoryContent() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+    // Re-fetch on sign-in/sign-out: the two states now return different rows.
+  }, [session?.access_token]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchHistory(1);
@@ -84,7 +96,10 @@ export default function HistoryContent() {
 
   const handleDeleteJob = async (jobId) => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/history/${jobId}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/api/v1/history/${jobId}`, {
+        method: 'DELETE',
+        headers: authHeaders,
+      });
       if (res.ok) {
         setJobs(prev => prev.filter(j => j.id !== jobId));
       }
@@ -92,9 +107,16 @@ export default function HistoryContent() {
   };
 
   const handleClearAll = async () => {
+    if (!session?.access_token) {
+      window.alert('Cần đăng nhập để xóa lịch sử tải.');
+      return;
+    }
     if (!window.confirm('Bạn có chắc chắn muốn xóa tất cả lịch sử?')) return;
     try {
-      const res = await fetch(`${API_BASE}/api/v1/history/all`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/api/v1/history/all`, {
+        method: 'DELETE',
+        headers: authHeaders,
+      });
       if (res.ok) {
         setJobs([]);
       }
