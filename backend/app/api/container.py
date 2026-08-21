@@ -829,10 +829,24 @@ async def queue_container(container_id: str, req: QueueRequest, request: Request
         raise HTTPException(400, detail="Tất cả mục đã bị loại do trùng lặp.")
 
     # ── Get optional user_id ──────────────────────────────────────────────────
+    # get_optional_user takes (request, credentials, x_api_key) and the last two
+    # default to Depends(...) objects. Calling it with just `request` left
+    # x_api_key holding a raw Depends — truthy, so it tried .startswith on it
+    # and raised, and the except below swallowed that. Every container queue
+    # ran as anonymous: the jobs were never attributed to the signed-in user,
+    # so they never appeared in that account's history and never counted
+    # against its quota. It also assigned the whole user dict to a variable
+    # typed Optional[str] and passed it on as the job's user_id.
     user_id: Optional[str] = None
     try:
+        from fastapi.security import HTTPBearer
         from app.core.auth_middleware import get_optional_user
-        user_id = await get_optional_user(request)
+
+        cred = await HTTPBearer(auto_error=False)(request)
+        user = await get_optional_user(
+            request, cred, request.headers.get("X-API-Key"),
+        )
+        user_id = user.get("id") if user else None
     except Exception:
         pass
 

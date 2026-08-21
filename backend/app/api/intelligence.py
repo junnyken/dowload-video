@@ -85,7 +85,19 @@ async def _require_user(request: Request) -> Dict[str, Any]:
 
     _bearer = HTTPBearer(auto_error=False)
     cred = await _bearer(request)
-    user = await get_optional_user(cred)
+
+    # get_optional_user's signature is (request, credentials, x_api_key), and
+    # the last two carry Depends(...) defaults. Called directly rather than
+    # through FastAPI's injection, `get_optional_user(cred)` bound cred to
+    # `request` and left x_api_key holding the raw Depends object — which is
+    # truthy, so the first branch ran _lookup_new_api_key(<Depends>) and died on
+    # .startswith. Nothing catches that, so EVERY endpoint here that requires a
+    # user answered 500, signed in or not: archive suggestions, schedule
+    # suggestions, smart defaults, all of them. Pass the arguments positionally
+    # and explicitly.
+    user = await get_optional_user(
+        request, cred, request.headers.get("X-API-Key"),
+    )
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required")
     return user
