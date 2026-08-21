@@ -28,6 +28,7 @@ celery_app = Celery(
         "app.tasks.keepalive_tasks",
         "app.tasks.container_tasks",
         "app.tasks.partner_tasks",
+        "app.tasks.backup_tasks",
     ]
 )
 
@@ -249,6 +250,14 @@ celery_app.conf.update(
         'aggregate-platform-health-hourly': {
             'task': 'aggregate_platform_health',
             'schedule': crontab(minute=0),
+        },
+        # Daily database export at 19:00 UTC (02:00 UTC+7) — quiet hours, and
+        # after the 23:30/23:55 analytics rollups of the previous day have run.
+        # There was no database backup of any kind before this; scripts/backup.sh
+        # only ever covered Redis.
+        'backup-database-daily': {
+            'task': 'backup_database_daily',
+            'schedule': crontab(hour=19, minute=0),
         },
         # Supabase free-tier auto-pauses a project after 7 days of zero API
         # activity — this already silently wiped the production DB once.
