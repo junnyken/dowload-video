@@ -45,22 +45,45 @@ def get_service_client() -> Client:
 
 
 @lru_cache(maxsize=1)
-def get_supabase_client() -> Client:
+def get_anon_client() -> Client:
     """
-    Creates and returns a cached Supabase client instance.
-    
-    The client is cached using lru_cache so that only one
-    instance is created throughout the application lifecycle.
-    
-    Returns:
-        Client: An initialized Supabase client.
-    
-    Raises:
-        ValueError: If SUPABASE_URL or SUPABASE_KEY is not set.
+    Anon-key client. RLS applies, and since the backend never attaches an end
+    user's JWT to it, `auth.uid()` is always NULL — so any policy written as
+    `USING (id = auth.uid())` denies every row. Only reach for this when anon
+    really is the right role for the table.
     """
     _validate_credentials()
-    client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-    return client
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+@lru_cache(maxsize=1)
+def get_supabase_client() -> Client:
+    """
+    The backend's database client — service-role whenever it is configured.
+
+    This handed back an anon-key client before, which is the wrong role for
+    server-side work: the backend acts on its own behalf and never sets a user
+    session on the client, so `auth.uid()` is NULL on every query it makes. Any
+    table with a per-user policy — `profiles` has `USING (id = auth.uid()::TEXT)`
+    — returned ZERO rows to every backend read and accepted ZERO rows on every
+    write. RLS filters instead of raising, so all of it failed silently:
+
+      - admin "Tài khoản đăng ký" showed 0 while `profiles` held real accounts
+      - the signup chart read a flat 0 for every day
+      - quotas.py resolved every paying user's tier back to 'free'
+      - admin "Đổi gói" reported success and changed nothing
+
+    Authorization is enforced in application code — each query filters by the
+    user id taken from the verified JWT, and admin routes sit behind
+    verify_admin — which is the same assumption the permissive `USING (true)`
+    policies on download_jobs/user_usage were already written against.
+
+    Falls back to the anon key when SUPABASE_SERVICE_KEY is unset, so a
+    half-configured environment degrades rather than failing to boot.
+    """
+    _validate_credentials()
+    key = SUPABASE_SERVICE_KEY or SUPABASE_KEY
+    return create_client(SUPABASE_URL, key)
 
 
 # Convenience alias

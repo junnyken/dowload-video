@@ -63,9 +63,14 @@ def _lookup_api_key(token: str) -> Optional[Dict[str, Any]]:
 
         try:
             profile = supabase.table("profiles").select("tier").eq("id", user_id).single().execute()
-            tier = (profile.data or {}).get("tier", "pro")
+            tier = (profile.data or {}).get("tier") or "free"
         except Exception:
-            tier = "pro"
+            # Fail closed. This defaulted to 'pro', so any failure to read the
+            # profile handed out paid entitlements — and it failed on every
+            # request, because the lookup ran on an RLS-filtered client that
+            # could never see a profiles row. Presenting an API key was enough
+            # to be billed as Pro.
+            tier = "free"
 
         return {
             "id":          user_id,

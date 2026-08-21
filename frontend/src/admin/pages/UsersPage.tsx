@@ -319,7 +319,14 @@ export default function UsersPage() {
     setAccBusy(p => ({ ...p, [userId]: true }))
     setAccMsg(p => ({ ...p, [userId]: '' }))
     try {
-      await adminPost('/user-action', { action: 'set_tier', user_id: userId, params: { tier } })
+      // /user-action answers 200 with {success:false, error} for a refusal, so
+      // "didn't throw" is not the same as "the tier changed" — reporting the
+      // new tier on the strength of the HTTP status alone is how a failed
+      // upgrade still read as "→ pro" on screen.
+      const res = await adminPost<{ success: boolean; error?: string }>(
+        '/user-action', { action: 'set_tier', user_id: userId, params: { tier } },
+      )
+      if (!res?.success) throw new Error(res?.error ?? 'Đổi gói không thành công')
       setAccMsg(p => ({ ...p, [userId]: `→ ${tier}` }))
       await fetchAccounts(accQuery)
     } catch (e) {
@@ -441,7 +448,14 @@ export default function UsersPage() {
                           </button>
                         ))}
                         {accMsg[a.user_id] && (
-                          <span className="text-[10px] text-emerald-400 ml-1">
+                          // Failures land in the same slot as "→ pro"; painting
+                          // them green too would hide the one thing worth
+                          // noticing.
+                          <span className={`text-[10px] ml-1 ${
+                            accMsg[a.user_id].startsWith('→')
+                              ? 'text-emerald-400'
+                              : 'text-red-400'
+                          }`}>
                             {accMsg[a.user_id]}
                           </span>
                         )}

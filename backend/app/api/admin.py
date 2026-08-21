@@ -468,6 +468,15 @@ async def update_user(req: UpdateUserRequest, request: Request, _=Depends(verify
             }).execute()
 
         updated = bool(p_res.data)
+        if not updated:
+            # profiles is the source of truth check_user_quota reads. If that
+            # write matched nothing, the plan did not change — don't report a
+            # success the database never performed.
+            return {
+                "success": False,
+                "updated": False,
+                "message": f"Không đổi được gói cho {req.user_id} — không tìm thấy hồ sơ.",
+            }
         log_admin_action(
             request, "admin.user.tier_changed",
             resource_type="user", resource_id=req.user_id,
@@ -2479,16 +2488,34 @@ async def admin_user_action(request: Request, _=Depends(verify_admin)):
                     "subscription_expiry": None,
                 })
 
-            supabase.table("profiles").update(update).eq("id", user_id).execute()
+            res = supabase.table("profiles").update(update).eq("id", user_id).execute()
+            # An update that matches no row is not an error to PostgREST — it
+            # returns an empty list. Reporting success regardless is how this
+            # told an operator a customer was on Pro while the row still said
+            # free (RLS was silently dropping every write). Say what happened.
+            if not (res.data or []):
+                return {"success": False, "action": "set_tier", "user_id": user_id,
+                        "error": (f"Không cập nhật được gói cho user {user_id} — "
+                                  "không tìm thấy hồ sơ nào khớp.")}
+
             log_admin_action(request, "admin.user.tier_changed", resource_type="user",
                              resource_id=user_id, metadata={"new_tier": tier})
             return {"success": True, "action": "set_tier", "tier": tier,
                     "applied": update, "user_id": user_id}
 
         elif action == "revoke_api_keys":
-            supabase.table("api_keys").update({"active": False}).eq("user_id", user_id).execute()
-            log_admin_action(request, "admin.user.api_keys_revoked", resource_type="user", resource_id=user_id)
-            return {"success": True, "action": "revoke_api_keys", "user_id": user_id}
+            # Column is is_active (migration 010), not active. Writing 'active'
+            # made PostgREST reject the whole request with PGRST204, so the one
+            # control an operator has for a leaked key never revoked anything.
+            res = (supabase.table("api_keys")
+                   .update({"is_active": False})
+                   .eq("user_id", user_id)
+                   .execute())
+            revoked = len(res.data or [])
+            log_admin_action(request, "admin.user.api_keys_revoked", resource_type="user",
+                             resource_id=user_id, metadata={"revoked": revoked})
+            return {"success": True, "action": "revoke_api_keys", "user_id": user_id,
+                    "revoked": revoked}
 
         elif action == "retry_failed_jobs":
             # Re-queue failed jobs from last 24h

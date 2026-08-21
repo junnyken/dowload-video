@@ -100,6 +100,31 @@ async def resolve_identity(
     return session_id or None
 
 
+async def resolve_quota_subject(
+    request: Request,
+    user: dict | None = Depends(_auth_get_optional_user),
+) -> str | None:
+    """
+    Who the daily cue quota is charged to — deliberately NOT the same thing as
+    resolve_identity.
+
+    Identity owns the jobs, and for an anonymous visitor that is X-Session-ID,
+    a value the client makes up. Charging the quota to it meant the cap could
+    be reset by editing a header: every 6000 cues, send a new session id and
+    keep translating. Each cue is a paid Gemini call, so the ceiling that was
+    supposed to bound that spend bounded nothing at all.
+
+    Anonymous usage stays allowed; it is just metered against the client IP,
+    which the caller cannot mint at will. Signed-in users are metered per
+    account exactly as before.
+    """
+    if user:
+        return user.get("id")
+    from app.core.client_ip import get_client_ip  # noqa: PLC0415
+    ip = get_client_ip(request)
+    return f"ip:{ip}" if ip else None
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -175,6 +200,7 @@ async def upload_transcripts(
     files: list[UploadFile] = File(...),
     target_lang: str = Form(...),
     identity: str | None = Depends(resolve_identity),
+    quota_subject: str | None = Depends(resolve_quota_subject),
 ):
     """
     Upload a batch of .srt/.vtt transcript files for translation.
@@ -205,6 +231,11 @@ async def upload_transcripts(
             status_code=401,
             detail="Cần đăng nhập để sử dụng tính năng dịch phụ đề.",
         )
+
+    # Jobs are owned by `user_id`; the paid-translation quota is charged to
+    # `quota_key`, which is the account for signed-in users and the client IP
+    # otherwise — see resolve_quota_subject.
+    quota_key = quota_subject or user_id
 
     from app.services.subtitle_format import parse_srt_with_skip_count, parse_vtt_with_skip_count
 
@@ -309,11 +340,11 @@ async def upload_transcripts(
         try:
             reserve_resp = db.rpc(
                 "reserve_transcript_translation_usage",
-                {"p_user_id": user_id, "p_cues": cue_count, "p_limit": _DAILY_CUE_LIMIT},
+                {"p_user_id": quota_key, "p_cues": cue_count, "p_limit": _DAILY_CUE_LIMIT},
             ).execute()
             reserved = bool(reserve_resp.data)
         except Exception as exc:
-            logger.error("Failed to call reserve_transcript_translation_usage for %s: %s", user_id, exc)
+            logger.error("Failed to call reserve_transcript_translation_usage for %s: %s", quota_key, exc)
             # Fail CLOSED — an unreachable quota function must not silently
             # become "unlimited" for this file.
             rejected.append({"filename": fname, "reason": "Không thể kiểm tra hạn mức dịch, vui lòng thử lại sau."})

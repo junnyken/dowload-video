@@ -24,7 +24,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app.api.transcript_translate import resolve_identity  # same identity model, reused not duplicated
+from app.api.transcript_translate import (  # same identity model, reused not duplicated
+    resolve_identity,
+    resolve_quota_subject,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +115,7 @@ class CreateAsrJobRequest(BaseModel):
 async def create_asr_job(
     payload: CreateAsrJobRequest,
     identity: str | None = Depends(resolve_identity),
+    quota_subject: str | None = Depends(resolve_quota_subject),
 ):
     """Create a job that auto-generates subtitles from an already-downloaded
     video's audio. Validates the video path, probes its duration to enforce
@@ -121,6 +125,10 @@ async def create_asr_job(
     user_id = identity
     if not user_id:
         raise HTTPException(status_code=401, detail="Cần đăng nhập để sử dụng tính năng tạo phụ đề tự động.")
+
+    # Whisper minutes are billed per minute, so the daily cap cannot hang off a
+    # client-supplied X-Session-ID — see resolve_quota_subject.
+    quota_key = quota_subject or user_id
 
     video_path = _guard_local_path(payload.video_local_path)
 
@@ -147,11 +155,11 @@ async def create_asr_job(
     try:
         reserve_resp = db.rpc(
             "reserve_transcript_asr_usage",
-            {"p_user_id": user_id, "p_minutes": duration_minutes, "p_limit": _DAILY_MINUTES_LIMIT},
+            {"p_user_id": quota_key, "p_minutes": duration_minutes, "p_limit": _DAILY_MINUTES_LIMIT},
         ).execute()
         reserved = bool(reserve_resp.data)
     except Exception as exc:
-        logger.error("Failed to call reserve_transcript_asr_usage for %s: %s", user_id, exc)
+        logger.error("Failed to call reserve_transcript_asr_usage for %s: %s", quota_key, exc)
         raise HTTPException(status_code=503, detail="Không thể kiểm tra hạn mức, vui lòng thử lại sau.") from exc
 
     if not reserved:
