@@ -345,27 +345,31 @@ async def billing_summary(user: dict = Depends(get_required_user)):
     )
     today_row = (today_resp.data or [{}])[0]
 
-    # Month-to-date aggregates (SUM via PostgREST)
+    # Month-to-date totals.
+    #
+    # This asked PostgREST for "api_calls.sum(), downloads.sum()". Aggregate
+    # functions are disabled on this project, so the request came back 400 and
+    # took the whole billing summary down with it — verified against the live
+    # database. The fallback below it could never run, and would have been
+    # wrong anyway: both totals read month_agg["sum"], so downloads_month was
+    # a copy of api_calls_month.
+    #
+    # A tenant accumulates at most one row per day, so summing the month's rows
+    # here is a few dozen values at worst.
     month_start = date.today().replace(day=1).isoformat()
     month_resp = (
         supabase.table("tenant_usage_daily")
-        .select("api_calls.sum(), downloads.sum()")
+        .select("api_calls, downloads")
         .eq("tenant_id", tenant_id)
         .gte("date", month_start)
         .execute()
     )
-    month_agg = (month_resp.data or [{}])[0]
+    month_rows = month_resp.data or []
 
     api_calls_today: int = today_row.get("api_calls", 0) or 0
     downloads_today: int = today_row.get("downloads", 0) or 0
-    api_calls_month: int = int(month_agg.get("sum", 0) or 0)
-    downloads_month: int = int(month_agg.get("sum", 0) or 0)
-
-    # More precise: run two separate sums when PostgREST aliasing is unavailable
-    if month_agg.get("api_calls"):
-        api_calls_month = int(month_agg["api_calls"] or 0)
-    if month_agg.get("downloads"):
-        downloads_month = int(month_agg["downloads"] or 0)
+    api_calls_month: int = sum(int(r.get("api_calls") or 0) for r in month_rows)
+    downloads_month: int = sum(int(r.get("downloads") or 0) for r in month_rows)
 
     monthly_limit: int = plan_info["api_calls_per_month"]
     remaining_calls = max(0, monthly_limit - api_calls_month)

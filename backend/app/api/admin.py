@@ -2368,7 +2368,10 @@ async def get_user_detail(user_id: str, days: int = 30, _=Depends(verify_admin))
         profile = (profile_resp.data or [{}])[0]
 
         # Jobs
-        jobs_resp = supabase.table("download_jobs").select("id,url,status,platform,source,created_at,error_message,file_size_mb") \
+        # The column is original_url — every other query in this file uses that
+        # name. Selecting a column that does not exist is a 400 from PostgREST,
+        # which took the whole user-detail panel down rather than one field.
+        jobs_resp = supabase.table("download_jobs").select("id,original_url,status,platform,source,created_at,error_message,file_size_mb") \
             .eq("user_id", user_id).gte("created_at", since) \
             .order("created_at", desc=True).limit(50).execute()
         jobs = jobs_resp.data or []
@@ -2396,8 +2399,12 @@ async def get_user_detail(user_id: str, days: int = 30, _=Depends(verify_admin))
         # Telegram linked
         telegram_linked = False
         try:
-            tl_resp = supabase.table("telegram_links").select("id", count="exact") \
-                .eq("user_id", user_id).execute()
+            # telegram_links is keyed by telegram_user_id and points back via
+            # vidgrab_user_id — it has neither an `id` nor a `user_id` column.
+            # Both names were wrong, so this query always raised and the except
+            # below reported "not linked" for everyone, including linked users.
+            tl_resp = supabase.table("telegram_links").select("telegram_user_id", count="exact") \
+                .eq("vidgrab_user_id", user_id).execute()
             telegram_linked = (tl_resp.count or 0) > 0
         except Exception:
             pass
