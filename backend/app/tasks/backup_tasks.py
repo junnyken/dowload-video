@@ -305,6 +305,36 @@ def _upload_postgres(name: str, blob: bytes) -> str | None:
                 "DELETE FROM db_backups WHERE created_at < NOW() - %s::interval",
                 (f"{RETENTION_DAYS} days",),
             )
+
+        # Read it straight back and prove it is restorable.
+        #
+        # "The INSERT did not raise" is a much weaker claim than it sounds: it
+        # says bytes reached the server, not that they come back intact or that
+        # what comes back is a usable dump. This database is only reachable
+        # from inside the platform network, so nobody outside can spot-check it
+        # — the proof has to be produced here or it does not exist. Decompress
+        # the stored bytes and confirm they still parse as the dump, with the
+        # tables and auth users in them.
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT data, size_bytes FROM db_backups WHERE name = %s", (name,))
+            row = cur.fetchone()
+        if not row:
+            return "Postgres copy FAILED: row missing immediately after write"
+
+        stored = bytes(row[0])
+        if len(stored) != len(blob):
+            return (f"Postgres copy FAILED: stored {len(stored)} bytes, "
+                    f"wrote {len(blob)}")
+        try:
+            restored = json.loads(gzip.decompress(stored).decode("utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            return f"Postgres copy FAILED: stored bytes do not restore: {str(exc)[:120]}"
+        if not restored.get("tables"):
+            return "Postgres copy FAILED: restored dump has no tables"
+
+        print(f"[Backup] Postgres copy verified: {len(stored)} bytes, "
+              f"{len(restored.get('tables', {}))} tables, "
+              f"{len(restored.get('auth_users', []))} auth users")
         return None
     except Exception as exc:  # noqa: BLE001
         return f"Postgres copy FAILED: {str(exc)[:160]}"

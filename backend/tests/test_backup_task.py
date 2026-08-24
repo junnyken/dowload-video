@@ -8,6 +8,8 @@ which looks identical to a good backup right up until a restore.
 
 from __future__ import annotations
 
+import gzip
+import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -113,11 +115,17 @@ class TestPostgresCopy:
         err = bt._upload_postgres("f.gz", b"x")
         assert err and "FAILED" in err and "connect" in err
 
-    def test_row_is_written_with_the_blob_and_pruned(self, monkeypatch):
-        monkeypatch.setenv("BACKUP_PG_DSN", "postgresql://u:p@host:5432/db")
+    @staticmethod
+    def _dump_blob(tables=None, users=1):
+        payload = {"tables": tables if tables is not None else {"profiles": [{"id": "u1"}]},
+                   "auth_users": [{"id": f"u{i}"} for i in range(users)]}
+        return gzip.compress(json.dumps(payload).encode("utf-8"))
 
+    def _fake_psycopg2(self, monkeypatch, stored):
+        """stored: what the read-back SELECT returns, or None for 'no row'."""
         import sys
         cur = MagicMock()
+        cur.fetchone.return_value = (stored, len(stored)) if stored is not None else None
         conn = MagicMock()
         conn.cursor.return_value.__enter__ = lambda *_: cur
         conn.cursor.return_value.__exit__ = lambda *_: False
@@ -127,8 +135,14 @@ class TestPostgresCopy:
         fake.connect.return_value = conn
         fake.Binary = lambda b: b
         monkeypatch.setitem(sys.modules, "psycopg2", fake)
+        return cur, conn
 
-        assert bt._upload_postgres("vidgrab-2026-08-24.json.gz", b"payload") is None
+    def test_row_is_written_with_the_blob_and_pruned(self, monkeypatch):
+        monkeypatch.setenv("BACKUP_PG_DSN", "postgresql://u:p@host:5432/db")
+        blob = self._dump_blob()
+        cur, _ = self._fake_psycopg2(monkeypatch, blob)
+
+        assert bt._upload_postgres("vidgrab-2026-08-24.json.gz", blob) is None
 
         statements = " ".join(c[0][0] for c in cur.execute.call_args_list)
         assert "CREATE TABLE IF NOT EXISTS db_backups" in statements
@@ -137,11 +151,41 @@ class TestPostgresCopy:
             "on the primary key"
         )
         assert "DELETE FROM db_backups" in statements
+        assert "SELECT data" in statements, "the write must be read back and checked"
 
         insert = next(c for c in cur.execute.call_args_list if "INSERT" in c[0][0])
         assert insert[0][1][0] == "vidgrab-2026-08-24.json.gz"
-        assert insert[0][1][1] == len(b"payload")
-        assert insert[0][1][2] == b"payload"
+        assert insert[0][1][1] == len(blob)
+        assert insert[0][1][2] == blob
+
+    def test_missing_row_after_write_is_a_failure(self, monkeypatch):
+        monkeypatch.setenv("BACKUP_PG_DSN", "postgresql://u:p@host:5432/db")
+        self._fake_psycopg2(monkeypatch, None)
+        err = bt._upload_postgres("f.gz", self._dump_blob())
+        assert err and "row missing" in err
+
+    def test_truncated_bytes_are_caught(self, monkeypatch):
+        monkeypatch.setenv("BACKUP_PG_DSN", "postgresql://u:p@host:5432/db")
+        blob = self._dump_blob()
+        self._fake_psycopg2(monkeypatch, blob[:-5])
+        err = bt._upload_postgres("f.gz", blob)
+        assert err and "stored" in err and "wrote" in err
+
+    def test_corrupt_bytes_are_caught(self, monkeypatch):
+        """The point of reading back: bytes arriving is not the same as a
+        restorable dump arriving."""
+        monkeypatch.setenv("BACKUP_PG_DSN", "postgresql://u:p@host:5432/db")
+        blob = self._dump_blob()
+        self._fake_psycopg2(monkeypatch, b"x" * len(blob))
+        err = bt._upload_postgres("f.gz", blob)
+        assert err and "do not restore" in err
+
+    def test_an_empty_dump_is_caught(self, monkeypatch):
+        monkeypatch.setenv("BACKUP_PG_DSN", "postgresql://u:p@host:5432/db")
+        blob = self._dump_blob(tables={})
+        self._fake_psycopg2(monkeypatch, blob)
+        err = bt._upload_postgres("f.gz", blob)
+        assert err and "no tables" in err
 
     def test_connection_is_closed_even_when_the_write_fails(self, monkeypatch):
         monkeypatch.setenv("BACKUP_PG_DSN", "postgresql://u:p@host:5432/db")
