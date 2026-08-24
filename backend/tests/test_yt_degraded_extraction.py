@@ -67,6 +67,34 @@ class TestDegradedDetection:
         assert _yt_extraction_is_degraded(info) is True
 
 
+class TestDegradedResultIsNotCachedForLong:
+    """Phase A caches for 30 minutes. Caching a degraded extraction for that
+    long pinned the URL to 360p for everyone asking, with no retry of the
+    clients that return adaptive formats — the failure outlived its cause by
+    half an hour."""
+
+    def test_degraded_cache_hit_is_discarded_and_deleted(self):
+        import inspect
+        from app.services import downloader
+        src = inspect.getsource(downloader)
+        assert "HIT but degraded" in src
+        assert "_rc.delete(_yt_phase_a_key)" in src, (
+            "a degraded entry written before this check existed must be cleared, "
+            "not served for the rest of its TTL"
+        )
+
+    def test_degraded_write_uses_a_short_ttl(self):
+        import inspect
+        from app.services import downloader
+        src = inspect.getsource(downloader)
+        assert "_ttl = 60 if _degraded_now else _YT_PHASE_A_TTL" in src
+
+    def test_full_ttl_still_applies_to_a_healthy_extraction(self):
+        from app.services.downloader import _yt_extraction_is_degraded
+        healthy = {"formats": [_adaptive_video(1920, 1080), _audio_only()]}
+        assert _yt_extraction_is_degraded(healthy) is False
+
+
 class TestFallbackIsPreserved:
     """Holding the degraded result aside must never turn a 360p download into a
     failure — it is restored when no better layer produces anything."""

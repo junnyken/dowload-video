@@ -3599,16 +3599,14 @@ function DigestCard({ info, onToggle, isVisible }) {
     ? `${Math.floor(dur / 3600) > 0 ? Math.floor(dur / 3600) + ':' : ''}${String(Math.floor((dur % 3600) / 60)).padStart(2, '0')}:${String(dur % 60).padStart(2, '0')}`
     : null;
 
-  const QUALITY_BITRATES = [
-    { label: '4K', mbps: 20 }, { label: '1080p', mbps: 8 }, { label: '720p', mbps: 4 },
-    { label: '480p', mbps: 1.5 }, { label: 'Audio', mbps: 0.128 },
-  ];
-
-  function estSize(durSec, bps) {
-    const mb = durSec * bps * 0.125;
-    if (mb >= 1024) return `~${(mb / 1024).toFixed(1)} GB`;
-    return `~${Math.round(mb)} MB`;
-  }
+  // The "Kích thước ước tính" panel that used to live here is gone. It listed
+  // 4K / 1080p / 720p / 480p sizes computed as duration × a hardcoded bitrate
+  // table — it never looked at which formats the video actually has. On a
+  // YouTube Short whose extraction only offered a 360p progressive stream it
+  // still advertised "4K ~33MB, 1080p ~13MB", so the numbers were an invented
+  // promise of resolutions the download could not deliver. Real per-format
+  // sizes are already shown on each format row, from the extractor's own
+  // filesize, wherever a format list exists.
 
   function fmtViews(n) {
     if (!n) return null;
@@ -3709,20 +3707,6 @@ function DigestCard({ info, onToggle, isVisible }) {
             </span>
           </div>
 
-          {/* Estimated sizes */}
-          {dur > 0 && (
-            <div>
-              <p className="text-[10px] text-slate-500 uppercase font-semibold mb-1.5 tracking-wider">Kích thước ước tính</p>
-              <div className="grid grid-cols-3 gap-1.5">
-                {QUALITY_BITRATES.map(({ label, mbps }) => (
-                  <div key={label} className="flex justify-between items-center px-2 py-1 rounded-lg bg-slate-800/60 text-[10px]">
-                    <span className="text-slate-400 font-semibold">{label}</span>
-                    <span className="text-slate-300">{estSize(dur, mbps)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

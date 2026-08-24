@@ -1618,7 +1618,23 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                         _proxy_used_for_a = _cached_obj.get("proxy")
                     else:
                         info = _cached_obj
-                    print(f"[Cache] YouTube Phase A HIT ({_yt_phase_a_key[-8:]})")
+                    # A degraded extraction must not be served from cache. It
+                    # would pin every request for this URL to 360p for the rest
+                    # of the TTL and never give the better clients another try —
+                    # so one unlucky extraction became half an hour of bad
+                    # downloads for everyone asking for that video. Also clears
+                    # entries written before this check existed.
+                    if _yt_extraction_is_degraded(info):
+                        print(f"[Cache] YouTube Phase A HIT but degraded "
+                              f"({_yt_phase_a_key[-8:]}) — discarding, re-extracting")
+                        info = None
+                        _proxy_used_for_a = None
+                        try:
+                            _rc.delete(_yt_phase_a_key)
+                        except Exception:
+                            pass
+                    else:
+                        print(f"[Cache] YouTube Phase A HIT ({_yt_phase_a_key[-8:]})")
             except Exception:
                 pass
 
@@ -1904,9 +1920,19 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 # or a missing file. Proxy downloads are fresh per request.
                 if info and _rc and not _yt_already_downloaded:
                     try:
+                        # Cache a degraded result only long enough to absorb a
+                        # burst of identical requests. Giving it the full 30
+                        # minutes would lock that URL to 360p for everyone until
+                        # it expired, with no retry of the clients that return
+                        # adaptive formats — the failure would outlive its cause
+                        # by half an hour.
+                        _degraded_now = _yt_extraction_is_degraded(info)
+                        _ttl = 60 if _degraded_now else _YT_PHASE_A_TTL
                         _cache_obj = {"info": info, "proxy": _proxy_used_for_a}
-                        _rc.setex(_yt_phase_a_key, _YT_PHASE_A_TTL, _json_dl.dumps(_cache_obj, default=str))
-                        print(f"[Cache] YouTube Phase A cached ({'proxy' if _proxy_used_for_a else 'direct'}, {_YT_PHASE_A_TTL}s)")
+                        _rc.setex(_yt_phase_a_key, _ttl, _json_dl.dumps(_cache_obj, default=str))
+                        print(f"[Cache] YouTube Phase A cached "
+                              f"({'proxy' if _proxy_used_for_a else 'direct'}, {_ttl}s"
+                              f"{', degraded' if _degraded_now else ''})")
                     except Exception as _ce:
                         print(f"[Cache] Phase A write failed: {_ce}")
 
