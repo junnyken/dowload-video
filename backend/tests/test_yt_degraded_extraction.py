@@ -103,25 +103,54 @@ class TestAdaptiveFallbackClients:
     so letting the chain run past a degraded result was necessary but not
     sufficient on its own."""
 
-    def test_visionos_is_tried_first(self):
-        from app.services.downloader import _YT_ADAPTIVE_FALLBACK_CLIENTS
-        assert _YT_ADAPTIVE_FALLBACK_CLIENTS[0] == "visionos"
+    def test_visionos_is_the_primary_client(self):
+        """android_vr lost 5 of 5 measured races and is the only client that
+        offers format 18 at all, so asking it first cost a round trip on every
+        single YouTube request."""
+        from app.services.downloader import _YT_PRIMARY_CLIENT
+        assert _YT_PRIMARY_CLIENT == "visionos"
 
-    def test_ytdlp_defaults_are_kept_as_a_second_attempt(self):
+    def test_android_vr_is_demoted_not_deleted(self):
+        """Whichever of the two a given video prefers, both are still tried —
+        free and direct — before anything that costs money."""
+        from app.services.downloader import _YT_ADAPTIVE_FALLBACK_CLIENTS
+        assert _YT_ADAPTIVE_FALLBACK_CLIENTS[0] == "android_vr"
+
+    def test_ytdlp_defaults_are_kept_as_a_last_attempt(self):
         """yt-dlp's default client set moves with each release — an unpinned run
         picked visionos by itself, so it is the next best guess if visionos is
         ever blocked."""
         from app.services.downloader import _YT_ADAPTIVE_FALLBACK_CLIENTS
-        assert None in _YT_ADAPTIVE_FALLBACK_CLIENTS
+        assert _YT_ADAPTIVE_FALLBACK_CLIENTS[-1] is None
 
-    def test_the_clients_that_measured_empty_are_not_in_the_list(self):
-        from app.services.downloader import _YT_ADAPTIVE_FALLBACK_CLIENTS
-        for dud in ("android_vr", "ios", "tv", "web_safari", "web", "mweb",
+    def test_the_clients_that_measured_empty_are_not_listed(self):
+        from app.services.downloader import (_YT_ADAPTIVE_FALLBACK_CLIENTS,
+                                             _YT_PRIMARY_CLIENT)
+        tried = set(_YT_ADAPTIVE_FALLBACK_CLIENTS) | {_YT_PRIMARY_CLIENT}
+        for dud in ("ios", "tv", "web_safari", "web", "mweb",
                     "web_embedded", "android"):
-            assert dud not in _YT_ADAPTIVE_FALLBACK_CLIENTS, (
+            assert dud not in tried, (
                 f"{dud} returned zero adaptive streams when measured; listing it "
-                "only adds latency to every degraded extraction"
+                "only adds a round trip and buys nothing"
             )
+
+    def test_fallbacks_run_on_outright_failure_too(self):
+        """A block on one client says nothing about the others. This used to be
+        reachable only from the degraded branch, so a bot-block went straight to
+        the residential proxy while a free client was still untried."""
+        import inspect
+        from app.services import downloader
+        src = inspect.getsource(downloader)
+        assert src.count("_try_alt_clients()") >= 2
+
+    def test_a_genuinely_missing_video_still_raises(self):
+        """"Video unavailable" is not a client problem — no proxy can make an
+        absent video appear, so the paid layers must not be entered to arrive at
+        the same error."""
+        import inspect
+        from app.services import downloader
+        src = inspect.getsource(downloader)
+        assert "elif not _is_bot:" in src
 
     def test_layer_1b_runs_before_any_paid_layer(self):
         """It must sit inside the Layer 1 degraded branch — proxy and ScraperAPI

@@ -349,9 +349,24 @@ def _bgutil_extractor_args() -> dict:
     return {"youtubepot-bgutilscript": {"server_home": [home]}}
 
 
-# Clients to try, direct and in this order, when android_vr answers without
-# adaptive formats. All are PO-token-free and cost nothing — no proxy, no
-# ScraperAPI — so this runs before any of the paid layers.
+# The first client Phase A asks, direct and PO-token-free.
+#
+# This was android_vr, which measured ZERO adaptive streams on every video
+# tried — five of five, across a vertical Short, two music videos, a 4K video
+# and a 2005 upload — and is the only client that offers format 18 at all. It
+# therefore lost every race it entered and cost a network round trip before
+# visionos rescued each request. visionos returned the full ladder on all five,
+# up to whatever the video actually has (4K where 4K exists, 240p on the 2005
+# upload, which is genuinely all that was ever uploaded).
+#
+# android_vr is not deleted, only demoted: it is first in the fallback list, so
+# whichever of the two a given video prefers, both are still tried, free and
+# direct, before anything that costs money.
+_YT_PRIMARY_CLIENT = "visionos"
+
+# Tried in this order, direct, when the primary answers without adaptive
+# formats. All are PO-token-free and cost nothing — no proxy, no ScraperAPI —
+# so this runs before any of the paid layers.
 #
 # Measured against the Short that exposed this, from a datacenter IP:
 #
@@ -372,10 +387,10 @@ def _bgutil_extractor_args() -> dict:
 # layer comes back empty and restores the same 360p. visionos was the only
 # client of the nine that saw the adaptive streams at all.
 #
-# None means "let yt-dlp choose", kept as a second attempt because its default
+# None means "let yt-dlp choose", kept as a last attempt because its default
 # client set moves with each release: an unpinned run picked visionos by itself
 # here, so if visionos is ever blocked the defaults are the next best guess.
-_YT_ADAPTIVE_FALLBACK_CLIENTS = ("visionos", None)
+_YT_ADAPTIVE_FALLBACK_CLIENTS = ("android_vr", None)
 
 
 def _yt_extraction_is_degraded(info: dict | None) -> bool:
@@ -1695,6 +1710,15 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 assert "cookiefile" not in _avr_opts and "cookiesfrombrowser" not in _avr_opts, \
                     "BUG: android_vr opts must NOT contain cookies — yt-dlp silently skips the client"
 
+                # Layer 1's own options. Built from the same cookie-free base
+                # rather than reusing _avr_opts, because _avr_opts is also what
+                # the ScraperAPI layers below clone — those still go out as
+                # android_vr and are deliberately left alone.
+                _primary_opts = dict(_avr_opts)
+                _primary_opts["extractor_args"] = {
+                    "youtube": {"player_client": [_YT_PRIMARY_CLIENT]}
+                }
+
                 # ── YDL_OPTS_WEB_WITH_COOKIES — web_safari + bgutil + cookies ─
                 _web_a_opts = opts.copy()
                 _web_a_opts.pop("proxy", None)
@@ -1722,72 +1746,91 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                         parts.append("fallback_triggered=true")
                     print(" ".join(parts))
 
-                # ── Layer 1: android_vr direct (oracle CLOSED or HALF probe) ──
+                # ── Layer 1b: the other PO-token-free clients, direct ──
+                # Costs nothing (no proxy, no ScraperAPI), so it runs before any
+                # paid layer. Reachable from BOTH Layer 1 outcomes: a result
+                # with no adaptive formats, and an outright failure. It used to
+                # sit only under the first, so a bot-block on the primary client
+                # skipped straight to the residential proxy and started spending
+                # money while a free client was still untried.
+                def _try_alt_clients():
+                    for _alt in _YT_ADAPTIVE_FALLBACK_CLIENTS:
+                        _t1b = _time.time()
+                        _alt_name = _alt or "ytdlp_default"
+                        _alt_opts = dict(_avr_opts)
+                        if _alt:
+                            _alt_opts["extractor_args"] = {
+                                "youtube": {"player_client": [_alt]}
+                            }
+                        else:
+                            _alt_opts.pop("extractor_args", None)
+                        try:
+                            with yt_dlp.YoutubeDL(_alt_opts) as ydl:
+                                _alt_info = ydl.extract_info(url, download=False)
+                        except Exception as _ae:
+                            _log_pa(f"{_alt_name}_direct", "fail", str(_ae)[:40],
+                                    ms=int((_time.time() - _t1b) * 1000))
+                            continue
+                        if not _yt_extraction_is_degraded(_alt_info):
+                            _log_pa(f"{_alt_name}_direct", "success",
+                                    ms=int((_time.time() - _t1b) * 1000))
+                            return _alt_info
+                        _log_pa(f"{_alt_name}_direct", "degraded_no_adaptive_formats",
+                                fallback=True, ms=int((_time.time() - _t1b) * 1000))
+                    return None
+
+                # ── Layer 1: visionos direct (oracle CLOSED or HALF probe) ──
                 if _circuit_state != "open":
                     _t = _time.time()
                     try:
-                        with yt_dlp.YoutubeDL(_avr_opts) as ydl:
+                        with yt_dlp.YoutubeDL(_primary_opts) as ydl:
                             info = ydl.extract_info(url, download=False)
                         oracle_circuit.record_success()
                         _proxy_used_for_a = None
-                        # "Did not raise" is not the same as "usable". android_vr
-                        # needs no PO token, which is why it runs first — but it
+                        # "Did not raise" is not the same as "usable". A client
                         # can be answered with progressive formats only, and then
                         # the best the selector can do is 360p. Accepting that as
                         # success set `info`, and every later layer is guarded by
-                        # `if info is None`, so Layer 3 (web_safari + PO token) —
-                        # the one that returns the adaptive streams — never ran.
-                        # Hold the result aside instead and let the chain
-                        # continue; it is restored below if nothing better turns
-                        # up, so this can only improve the outcome.
+                        # `if info is None`, so nothing better ever ran. Hold the
+                        # result aside instead and let the chain continue; it is
+                        # restored below if nothing better turns up, so this can
+                        # only improve the outcome.
                         if _yt_extraction_is_degraded(info):
                             _degraded_info = info
                             info = None
-                            _log_pa("android_vr_direct", "degraded_no_adaptive_formats",
+                            _log_pa(f"{_YT_PRIMARY_CLIENT}_direct",
+                                    "degraded_no_adaptive_formats",
                                     fallback=True, ms=int((_time.time()-_t)*1000))
-
-                            # ── Layer 1b: other PO-token-free clients, direct ──
-                            # Costs nothing (no proxy, no ScraperAPI), so it runs
-                            # before any paid layer. See the table above:
-                            # visionos is the one that returns adaptive formats
-                            # where android_vr returns only 360p.
-                            for _alt in _YT_ADAPTIVE_FALLBACK_CLIENTS:
-                                _t1b = _time.time()
-                                _alt_name = _alt or "ytdlp_default"
-                                _alt_opts = dict(_avr_opts)
-                                if _alt:
-                                    _alt_opts["extractor_args"] = {
-                                        "youtube": {"player_client": [_alt]}
-                                    }
-                                else:
-                                    _alt_opts.pop("extractor_args", None)
-                                try:
-                                    with yt_dlp.YoutubeDL(_alt_opts) as ydl:
-                                        _alt_info = ydl.extract_info(url, download=False)
-                                except Exception as _ae:
-                                    _log_pa(f"{_alt_name}_direct", "fail", str(_ae)[:40],
-                                            ms=int((_time.time()-_t1b)*1000))
-                                    continue
-                                if not _yt_extraction_is_degraded(_alt_info):
-                                    info = _alt_info
-                                    _proxy_used_for_a = None
-                                    _log_pa(f"{_alt_name}_direct", "success",
-                                            ms=int((_time.time()-_t1b)*1000))
-                                    break
-                                _log_pa(f"{_alt_name}_direct", "degraded_no_adaptive_formats",
-                                        fallback=True, ms=int((_time.time()-_t1b)*1000))
+                            info = _try_alt_clients()
+                            if info is not None:
+                                _proxy_used_for_a = None
                         else:
-                            _log_pa("android_vr_direct", "success", ms=int((_time.time()-_t)*1000))
+                            _log_pa(f"{_YT_PRIMARY_CLIENT}_direct", "success",
+                                    ms=int((_time.time()-_t)*1000))
                     except Exception as _e1:
                         _e1s = str(_e1).lower()
                         _is_bot = any(k in _e1s for k in ["sign in", "bot", "confirm", "429", "403", "forbidden"])
                         if _is_bot:
                             oracle_circuit.record_failure()
-                            _log_pa("android_vr_direct", "fail", "bot_blocked", fallback=True,
-                                    ms=int((_time.time()-_t)*1000))
+                            _log_pa(f"{_YT_PRIMARY_CLIENT}_direct", "fail", "bot_blocked",
+                                    fallback=True, ms=int((_time.time()-_t)*1000))
                         else:
-                            _log_pa("android_vr_direct", "fail", _e1s[:40],
+                            _log_pa(f"{_YT_PRIMARY_CLIENT}_direct", "fail", _e1s[:40],
                                     ms=int((_time.time()-_t)*1000))
+                        # The primary client failed outright. Try the free ones
+                        # before going any further — a block on one client says
+                        # nothing about the others, and everything downstream
+                        # (residential proxy, ScraperAPI) costs money per GB.
+                        info = _try_alt_clients()
+                        if info is not None:
+                            _proxy_used_for_a = None
+                        elif not _is_bot:
+                            # Not a block — "video unavailable", "private video"
+                            # and friends. This re-raised before, and it must
+                            # still: no client and no proxy can make an absent
+                            # video appear, so the paid layers would spend money
+                            # to arrive at the same error.
+                            raise
                             raise
 
                 # ── Layer 2: android_vr via residential proxy (oracle OPEN or L1 bot-blocked) ──
