@@ -349,6 +349,35 @@ def _bgutil_extractor_args() -> dict:
     return {"youtubepot-bgutilscript": {"server_home": [home]}}
 
 
+def _yt_extraction_is_degraded(info: dict | None) -> bool:
+    """
+    True when a YouTube extraction came back with no adaptive video streams.
+
+    A healthy YouTube extraction always exposes DASH video-only formats — that
+    is where every resolution above 360p lives. When a client is answered
+    without them, the only thing left that carries video AND audio is the
+    legacy progressive format 18, which is 360p. The format selector then falls
+    all the way down its chain to `best[ext=mp4]` and picks it.
+
+    That is exactly what a Short came back as: quality video_4320 requested,
+    downloaded_height 640, file kGWFwVWwJYU_18.mp4, 0.52 MB for 13 seconds.
+    Not a height cap — the cap was 4320 — the formats simply were not offered.
+
+    Deliberately tested on the presence of adaptive streams rather than on
+    height: a Short is vertical, so format 18 reports height 640 and sails past
+    any "height looks too low" check.
+    """
+    fmts = (info or {}).get("formats") or []
+    if not fmts:
+        return True
+    has_adaptive_video = any(
+        f.get("vcodec") and f.get("vcodec") != "none"
+        and f.get("acodec") in (None, "none")
+        for f in fmts
+    )
+    return not has_adaptive_video
+
+
 def _youtube_proxy_download_enabled() -> bool:
     """
     Whether YouTube video bytes may be downloaded THROUGH the residential proxy.
@@ -1604,6 +1633,10 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 # Set True when Layer 2 already downloaded the file in-session
                 # (proxy-download mode) → Phase A.5 / Phase B become no-ops.
                 _yt_already_downloaded = False
+                # Holds a Layer-1 result that parsed fine but carried no adaptive
+                # formats, so the better layers get a turn. Restored after the
+                # chain if none of them produced anything.
+                _degraded_info = None
 
                 # ── INVARIANT: YDL_OPTS_ANDROID_VR — NEVER contains cookies ──
                 # yt-dlp auto-skips android_vr when cookiefile is present (unsupported).
@@ -1652,7 +1685,23 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                             info = ydl.extract_info(url, download=False)
                         oracle_circuit.record_success()
                         _proxy_used_for_a = None
-                        _log_pa("android_vr_direct", "success", ms=int((_time.time()-_t)*1000))
+                        # "Did not raise" is not the same as "usable". android_vr
+                        # needs no PO token, which is why it runs first — but it
+                        # can be answered with progressive formats only, and then
+                        # the best the selector can do is 360p. Accepting that as
+                        # success set `info`, and every later layer is guarded by
+                        # `if info is None`, so Layer 3 (web_safari + PO token) —
+                        # the one that returns the adaptive streams — never ran.
+                        # Hold the result aside instead and let the chain
+                        # continue; it is restored below if nothing better turns
+                        # up, so this can only improve the outcome.
+                        if _yt_extraction_is_degraded(info):
+                            _degraded_info = info
+                            info = None
+                            _log_pa("android_vr_direct", "degraded_no_adaptive_formats",
+                                    fallback=True, ms=int((_time.time()-_t)*1000))
+                        else:
+                            _log_pa("android_vr_direct", "success", ms=int((_time.time()-_t)*1000))
                     except Exception as _e1:
                         _e1s = str(_e1).lower()
                         _is_bot = any(k in _e1s for k in ["sign in", "bot", "confirm", "429", "403", "forbidden"])
@@ -1838,6 +1887,15 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                                   "bgutil NOT marked unhealthy (PO token was valid)")
                 elif info is None:
                     print("[PhaseA] bgutil_unhealthy=1 — skipping web_safari layer, next fallback=Cobalt")
+
+                # Nothing better than the progressive-only result turned up.
+                # Use it rather than failing the request: 360p beats an error,
+                # and this is exactly the behaviour before the degraded check.
+                if info is None and _degraded_info is not None:
+                    info = _degraded_info
+                    _proxy_used_for_a = None
+                    print("[PhaseA] no layer returned adaptive formats — falling back "
+                          "to the progressive-only extraction (expect ≤360p)")
 
                 # ── Cache Phase A result ──────────────────────────────────────
                 # Skip caching the combined proxy-download result: its CDN URLs
