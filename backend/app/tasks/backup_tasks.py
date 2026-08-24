@@ -34,9 +34,15 @@ Destinations
    happened, a table wiped by application code. It is NOT off-site: if the
    project itself is lost or paused, this copy goes with it.
 
-2. Any S3-compatible bucket — when BACKUP_S3_ENDPOINT / _BUCKET / _ACCESS_KEY
+2. A Postgres database on the hosting platform — when BACKUP_PG_DSN is set.
+   Different provider from Supabase, so it covers the realistic failure: the
+   Supabase project lost, paused, or emptied by application code. It does NOT
+   cover losing the hosting account, because then the app and this copy go
+   together.
+
+3. Any S3-compatible bucket — when BACKUP_S3_ENDPOINT / _BUCKET / _ACCESS_KEY
    / _SECRET_KEY are all set. Cloudflare R2 is the cheap option. This is the
-   copy that survives losing the Supabase project.
+   only one that is genuinely off-site from both of the above.
 
 With no S3 target configured the task still succeeds and reports
 "off-site: chưa cấu hình". When a target IS configured and the copy fails, that
@@ -233,6 +239,82 @@ def _upload_offsite(path: str, blob: bytes) -> str | None:
         return f"off-site upload FAILED: {str(exc)[:160]}"
 
 
+def _pg_configured() -> bool:
+    return bool(os.getenv("BACKUP_PG_DSN"))
+
+
+def _upload_postgres(name: str, blob: bytes) -> str | None:
+    """
+    Second copy, into a Postgres database on the hosting platform.
+
+    Same contract as _upload_offsite: None when no target is configured (a
+    normal, reported state), an error string when one IS configured and the
+    write failed — believing you have a second copy you do not have is worse
+    than knowing you have one.
+
+    Be honest about what this protects against. It lives at a different
+    provider from Supabase, so it covers the realistic failure: the Supabase
+    project lost, paused, or emptied by application code. It does NOT cover
+    losing the hosting account, because then the app and this copy go together.
+    BACKUP_S3_* remains the genuinely off-site target.
+
+    The whole dump is one gzip blob of about 25 KB, so a single bytea column is
+    the right shape — no large-object plumbing, and a restore is one SELECT.
+    """
+    dsn = os.getenv("BACKUP_PG_DSN", "")
+    if not dsn:
+        return None
+
+    try:
+        import psycopg2  # noqa: PLC0415
+    except ImportError:
+        return "psycopg2 not installed — Postgres copy skipped"
+
+    try:
+        # connect_timeout so a database that is down fails the copy in seconds
+        # rather than hanging the whole nightly task on a TCP timeout.
+        conn = psycopg2.connect(dsn, connect_timeout=15)
+    except Exception as exc:  # noqa: BLE001
+        return f"Postgres copy FAILED (connect): {str(exc)[:160]}"
+
+    try:
+        conn.autocommit = False
+        with conn, conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS db_backups (
+                    name        TEXT        PRIMARY KEY,
+                    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    size_bytes  INTEGER     NOT NULL,
+                    data        BYTEA       NOT NULL
+                )
+            """)
+            # Re-running on the same day replaces that day's row rather than
+            # failing on the primary key — the file name is per-day.
+            cur.execute(
+                """
+                INSERT INTO db_backups (name, size_bytes, data)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (name) DO UPDATE
+                SET size_bytes = EXCLUDED.size_bytes,
+                    data       = EXCLUDED.data,
+                    created_at = NOW()
+                """,
+                (name, len(blob), psycopg2.Binary(blob)),
+            )
+            cur.execute(
+                "DELETE FROM db_backups WHERE created_at < NOW() - %s::interval",
+                (f"{RETENTION_DAYS} days",),
+            )
+        return None
+    except Exception as exc:  # noqa: BLE001
+        return f"Postgres copy FAILED: {str(exc)[:160]}"
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def _prune(client: httpx.Client, url: str, key: str) -> int:
     """Drop backups past the retention window."""
     r = client.post(
@@ -310,6 +392,11 @@ def backup_database_daily() -> dict[str, Any]:
             warnings.append(offsite_err)
         offsite = "có" if (_s3_configured() and not offsite_err) else "chưa cấu hình"
 
+        pg_err = _upload_postgres(name, blob)
+        if pg_err:
+            warnings.append(pg_err)
+        pg_state = "có" if (_pg_configured() and not pg_err) else "chưa cấu hình"
+
         total_rows = sum(counts.values())
         size_kb = len(blob) / 1024
         print(f"[Backup] {name}: {total_rows} rows across {len(counts)} tables, "
@@ -327,7 +414,8 @@ def backup_database_daily() -> dict[str, Any]:
                 f"📄 <code>{name}</code>\n"
                 f"🔢 {total_rows} dòng / {len(counts)} bảng\n"
                 f"📦 {size_kb:.1f} KB\n"
-                f"🌍 Bản off-site: {offsite}\n"
+                f"🌍 Bản off-site (S3/R2): {offsite}\n"
+                f"🐘 Bản Postgres: {pg_state}\n"
                 f"{lines}{warn_block}"
             )
         except Exception as exc:  # noqa: BLE001
@@ -336,6 +424,7 @@ def backup_database_daily() -> dict[str, Any]:
         return {"ok": True, "file": name, "rows": total_rows,
                 "tables": len(counts), "bytes": len(blob),
                 "offsite": _s3_configured() and not offsite_err,
+                "postgres": _pg_configured() and not pg_err,
                 "warnings": warnings}
 
     except Exception as exc:  # noqa: BLE001

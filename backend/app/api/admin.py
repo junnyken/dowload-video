@@ -843,6 +843,29 @@ async def get_user_signups(days: int = 30, _=Depends(verify_admin)):
 
 
 # ═════════════════════════════════════════════════════════════════════
+# POST /backup/run — Run the database backup now
+# ═════════════════════════════════════════════════════════════════════
+
+@router.post("/backup/run")
+async def run_backup_now(_=Depends(verify_admin)):
+    """
+    Run the nightly database backup immediately and return what it did.
+
+    The scheduled run is once a day at 19:00 UTC, which is a long time to wait
+    to find out whether a destination was configured correctly — and a backup
+    nobody has ever watched succeed is a backup nobody should trust. This gives
+    an operator the answer in seconds: how many rows and tables were captured,
+    how large the file is, whether each destination accepted it, and any
+    warnings the run produced.
+
+    Runs inline rather than dispatching to Celery, so the caller gets the real
+    result instead of a task id and a shrug.
+    """
+    from app.tasks.backup_tasks import backup_database_daily
+    return backup_database_daily()
+
+
+# ═════════════════════════════════════════════════════════════════════
 # POST /po-token/test — Test bgutil-pot + PO token cache
 # ═════════════════════════════════════════════════════════════════════
 

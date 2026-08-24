@@ -91,6 +91,75 @@ class TestBackupTaskGuards:
         assert "missing" in result["error"]
 
 
+class TestPostgresCopy:
+    """The second copy, on the hosting platform's Postgres. Same contract as
+    the S3 one: unconfigured is a normal reported state, configured-but-failing
+    is a warning — believing you have a second copy you do not have is worse
+    than knowing you have one."""
+
+    def test_no_dsn_is_not_an_error(self, monkeypatch):
+        monkeypatch.delenv("BACKUP_PG_DSN", raising=False)
+        assert bt._pg_configured() is False
+        assert bt._upload_postgres("f.gz", b"x") is None
+
+    def test_connect_failure_is_reported(self, monkeypatch):
+        monkeypatch.setenv("BACKUP_PG_DSN", "postgresql://u:p@nowhere:5432/db")
+
+        import sys
+        fake = MagicMock()
+        fake.connect.side_effect = RuntimeError("could not connect")
+        monkeypatch.setitem(sys.modules, "psycopg2", fake)
+
+        err = bt._upload_postgres("f.gz", b"x")
+        assert err and "FAILED" in err and "connect" in err
+
+    def test_row_is_written_with_the_blob_and_pruned(self, monkeypatch):
+        monkeypatch.setenv("BACKUP_PG_DSN", "postgresql://u:p@host:5432/db")
+
+        import sys
+        cur = MagicMock()
+        conn = MagicMock()
+        conn.cursor.return_value.__enter__ = lambda *_: cur
+        conn.cursor.return_value.__exit__ = lambda *_: False
+        conn.__enter__ = lambda *_: conn
+        conn.__exit__ = lambda *_: False
+        fake = MagicMock()
+        fake.connect.return_value = conn
+        fake.Binary = lambda b: b
+        monkeypatch.setitem(sys.modules, "psycopg2", fake)
+
+        assert bt._upload_postgres("vidgrab-2026-08-24.json.gz", b"payload") is None
+
+        statements = " ".join(c[0][0] for c in cur.execute.call_args_list)
+        assert "CREATE TABLE IF NOT EXISTS db_backups" in statements
+        assert "ON CONFLICT (name) DO UPDATE" in statements, (
+            "re-running on the same day must replace that day's row, not fail "
+            "on the primary key"
+        )
+        assert "DELETE FROM db_backups" in statements
+
+        insert = next(c for c in cur.execute.call_args_list if "INSERT" in c[0][0])
+        assert insert[0][1][0] == "vidgrab-2026-08-24.json.gz"
+        assert insert[0][1][1] == len(b"payload")
+        assert insert[0][1][2] == b"payload"
+
+    def test_connection_is_closed_even_when_the_write_fails(self, monkeypatch):
+        monkeypatch.setenv("BACKUP_PG_DSN", "postgresql://u:p@host:5432/db")
+
+        import sys
+        conn = MagicMock()
+        conn.__enter__ = lambda *_: conn
+        conn.__exit__ = lambda *_: False
+        conn.cursor.side_effect = RuntimeError("boom")
+        fake = MagicMock()
+        fake.connect.return_value = conn
+        monkeypatch.setitem(sys.modules, "psycopg2", fake)
+
+        err = bt._upload_postgres("f.gz", b"x")
+        assert err and "FAILED" in err
+        conn.close.assert_called_once()
+
+
 class TestOffsiteCopy:
     """The Supabase Storage copy lives in the same project as the data it
     protects. Whether a genuinely off-site copy exists must be reported, never

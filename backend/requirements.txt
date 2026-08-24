@@ -25,3 +25,7 @@ google-generativeai>=0.8.0
 # raises "boto3 is required for S3 storage" if it is missing, so that backend
 # could never have been selected while this line was absent.
 boto3>=1.34.0
+# Second backup destination: a Postgres database on the hosting platform
+# (app/tasks/backup_tasks.py). Nothing else in the app talks to Postgres
+# directly — Supabase is reached over its REST API.
+psycopg2-binary>=2.9.9
