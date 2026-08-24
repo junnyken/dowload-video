@@ -95,6 +95,45 @@ class TestDegradedResultIsNotCachedForLong:
         assert _yt_extraction_is_degraded(healthy) is False
 
 
+class TestAdaptiveFallbackClients:
+    """Measured against the Short that exposed this, from a datacenter IP: of
+    nine YouTube clients tried, only visionos returned adaptive streams
+    (29 of them, up to 1080x1920). android_vr returned format 18 alone.
+    web_safari — the client the bgutil PO-token layer uses — returned nothing,
+    so letting the chain run past a degraded result was necessary but not
+    sufficient on its own."""
+
+    def test_visionos_is_tried_first(self):
+        from app.services.downloader import _YT_ADAPTIVE_FALLBACK_CLIENTS
+        assert _YT_ADAPTIVE_FALLBACK_CLIENTS[0] == "visionos"
+
+    def test_ytdlp_defaults_are_kept_as_a_second_attempt(self):
+        """yt-dlp's default client set moves with each release — an unpinned run
+        picked visionos by itself, so it is the next best guess if visionos is
+        ever blocked."""
+        from app.services.downloader import _YT_ADAPTIVE_FALLBACK_CLIENTS
+        assert None in _YT_ADAPTIVE_FALLBACK_CLIENTS
+
+    def test_the_clients_that_measured_empty_are_not_in_the_list(self):
+        from app.services.downloader import _YT_ADAPTIVE_FALLBACK_CLIENTS
+        for dud in ("android_vr", "ios", "tv", "web_safari", "web", "mweb",
+                    "web_embedded", "android"):
+            assert dud not in _YT_ADAPTIVE_FALLBACK_CLIENTS, (
+                f"{dud} returned zero adaptive streams when measured; listing it "
+                "only adds latency to every degraded extraction"
+            )
+
+    def test_layer_1b_runs_before_any_paid_layer(self):
+        """It must sit inside the Layer 1 degraded branch — proxy and ScraperAPI
+        cost money, and this costs nothing."""
+        import inspect
+        from app.services import downloader
+        src = inspect.getsource(downloader)
+        pos_1b = src.index("Layer 1b")
+        pos_proxy = src.index("Layer 2: android_vr via residential proxy")
+        assert pos_1b < pos_proxy
+
+
 class TestFallbackIsPreserved:
     """Holding the degraded result aside must never turn a 360p download into a
     failure — it is restored when no better layer produces anything."""

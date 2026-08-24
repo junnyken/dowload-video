@@ -349,6 +349,35 @@ def _bgutil_extractor_args() -> dict:
     return {"youtubepot-bgutilscript": {"server_home": [home]}}
 
 
+# Clients to try, direct and in this order, when android_vr answers without
+# adaptive formats. All are PO-token-free and cost nothing — no proxy, no
+# ScraperAPI — so this runs before any of the paid layers.
+#
+# Measured against the Short that exposed this, from a datacenter IP:
+#
+#     client         adaptive streams   best resolution   format 18 offered
+#     android_vr     0                  —                 yes
+#     visionos       29                 1080x1920         no
+#     ios            0                  —                 no
+#     tv             0                  —                 no
+#     web_safari     0                  —                 no
+#     web            0                  —                 no
+#     mweb           0                  —                 no
+#     web_embedded   0                  —                 no
+#     android        0                  —                 no
+#
+# Worth stating plainly: web_safari is what the bgutil PO-token layer uses, and
+# it returned nothing here either. Letting the existing chain run past a
+# degraded android_vr result was necessary but NOT sufficient — every later
+# layer comes back empty and restores the same 360p. visionos was the only
+# client of the nine that saw the adaptive streams at all.
+#
+# None means "let yt-dlp choose", kept as a second attempt because its default
+# client set moves with each release: an unpinned run picked visionos by itself
+# here, so if visionos is ever blocked the defaults are the next best guess.
+_YT_ADAPTIVE_FALLBACK_CLIENTS = ("visionos", None)
+
+
 def _yt_extraction_is_degraded(info: dict | None) -> bool:
     """
     True when a YouTube extraction came back with no adaptive video streams.
@@ -1716,6 +1745,37 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                             info = None
                             _log_pa("android_vr_direct", "degraded_no_adaptive_formats",
                                     fallback=True, ms=int((_time.time()-_t)*1000))
+
+                            # ── Layer 1b: other PO-token-free clients, direct ──
+                            # Costs nothing (no proxy, no ScraperAPI), so it runs
+                            # before any paid layer. See the table above:
+                            # visionos is the one that returns adaptive formats
+                            # where android_vr returns only 360p.
+                            for _alt in _YT_ADAPTIVE_FALLBACK_CLIENTS:
+                                _t1b = _time.time()
+                                _alt_name = _alt or "ytdlp_default"
+                                _alt_opts = dict(_avr_opts)
+                                if _alt:
+                                    _alt_opts["extractor_args"] = {
+                                        "youtube": {"player_client": [_alt]}
+                                    }
+                                else:
+                                    _alt_opts.pop("extractor_args", None)
+                                try:
+                                    with yt_dlp.YoutubeDL(_alt_opts) as ydl:
+                                        _alt_info = ydl.extract_info(url, download=False)
+                                except Exception as _ae:
+                                    _log_pa(f"{_alt_name}_direct", "fail", str(_ae)[:40],
+                                            ms=int((_time.time()-_t1b)*1000))
+                                    continue
+                                if not _yt_extraction_is_degraded(_alt_info):
+                                    info = _alt_info
+                                    _proxy_used_for_a = None
+                                    _log_pa(f"{_alt_name}_direct", "success",
+                                            ms=int((_time.time()-_t1b)*1000))
+                                    break
+                                _log_pa(f"{_alt_name}_direct", "degraded_no_adaptive_formats",
+                                        fallback=True, ms=int((_time.time()-_t1b)*1000))
                         else:
                             _log_pa("android_vr_direct", "success", ms=int((_time.time()-_t)*1000))
                     except Exception as _e1:
