@@ -1432,10 +1432,20 @@ class CookieRemoveRequest(BaseModel):
     index: int  # position in pool (0-based)
 
 
+# Douyin was missing, and that was the whole reason Douyin downloads failed.
+# The extractor asks the pool for a douyin cookie on every request, but this
+# allowlist rejected "douyin" with a 400 — so a douyin cookie could never be
+# added through the admin API, the pool never had one, and every video came
+# back with "Douyin requires a valid cookie". Nobody had forgotten to upload
+# one; there was no way to.
+#
+# Nothing else needed changing: cookie_pool discovers platforms from its Redis
+# keys, falls back to a default cooldown, and treats an unknown platform as
+# having no required auth cookies.
 _VALID_PLATFORMS = {
     "youtube", "tiktok", "facebook", "instagram",
     "twitter", "x", "reddit", "bilibili",
-    "threads", "soundcloud", "spotify",
+    "threads", "soundcloud", "spotify", "douyin",
 }
 
 

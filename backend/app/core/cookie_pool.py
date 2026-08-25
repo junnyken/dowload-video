@@ -81,8 +81,17 @@ _AUTH_COOKIES: dict[str, set[str]] = {
     # Douyin gates every video (public ones too) behind a browser session rather
     # than a login. Only the long-lived names are listed: msToken/__ac_nonce
     # rotate within hours and would drag the session expiry down with them.
+    # Douyin needs no login cookie for public videos — a guest session is
+    # enough — so the durable guest tokens count as auth here alongside the
+    # signed-in ones. Without UIFID / s_v_web_id / __ac_signature, a perfectly
+    # good guest cookie looked like it carried no credentials at all.
+    #
+    # __ac_nonce is deliberately absent: it is a single-use anti-bot nonce good
+    # for minutes, so counting it would make every freshly uploaded Douyin
+    # cookie look expired within the hour.
     "douyin": {
         "ttwid", "odin_tt", "passport_csrf_token", "sessionid",
+        "UIFID", "s_v_web_id", "__ac_signature",
     },
     "instagram": {
         "sessionid", "ds_user_id", "csrftoken",
