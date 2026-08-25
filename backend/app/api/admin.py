@@ -1476,10 +1476,25 @@ async def cookie_pool_list(platform: str, _=Depends(verify_admin)):
 async def cookie_expiry_report(_=Depends(verify_admin)):
     """Full expiry report across all platforms — for dashboard / monitoring."""
     try:
-        from app.core.cookie_pool import get_expiry_report
+        from app.core.cookie_pool import get_expiry_report, get_pool_status
         report = {}
         has_warnings = False
-        for platform in ("youtube", "tiktok", "facebook", "instagram"):
+
+        # Report on every platform that actually holds cookies, not a fixed
+        # four. This iterated ("youtube","tiktok","facebook","instagram") and
+        # nothing else, so a douyin or twitter cookie was invisible here — and
+        # this endpoint is the early-warning surface, so those cookies would
+        # have expired with no warning at all. get_pool_status discovers
+        # platforms from the pool's own Redis keys; the defaults stay in the
+        # union so a platform whose pool is empty still reports as empty
+        # rather than vanishing from the dashboard.
+        try:
+            live = set(get_pool_status().keys())
+        except Exception:
+            live = set()
+        platforms = sorted(live | {"youtube", "tiktok", "facebook", "instagram"})
+
+        for platform in platforms:
             entries = get_expiry_report(platform)
             report[platform] = entries
             if any(e["expiry_status"] in ("expired", "critical", "expiring_soon") for e in entries):
