@@ -97,6 +97,26 @@ class TestResolution:
         assert got is None
 
 
+class TestDownloadPathGate:
+    """The dispatcher fix alone was not enough. /fetch-link never calls
+    extract_threads() — downloader.py has its own gate that admitted only
+    is_threads_post_url(), so a share link was still rejected with the profile
+    message. Verified against production: the first fix changed nothing there."""
+
+    def test_share_links_get_past_the_download_gate(self):
+        import inspect
+        from app.services import downloader
+        src = inspect.getsource(downloader)
+        assert "is_threads_share_url(threads_url)" in src, (
+            "downloader.py gates Threads separately from extract_threads(); "
+            "fixing only the extractor leaves /fetch-link broken"
+        )
+
+    def test_the_gate_helper_is_imported(self):
+        from app.services import downloader
+        assert hasattr(downloader, "is_threads_share_url")
+
+
 class TestDispatch:
 
     def test_unresolvable_share_link_says_so_in_plain_terms(self):

@@ -186,7 +186,8 @@ def _make_progress_hook(progress_key: str):
     return _hook
 from app.services.douyin_extractor import extract_douyin_video_sync, _try_tikwm
 from app.services.threads_extractor import (
-    is_threads_url, is_threads_post_url, extract_threads_sync, to_download_info,
+    is_threads_url, is_threads_post_url, is_threads_share_url,
+    extract_threads_sync, to_download_info,
 )
 from app.services.cobalt_service import is_cobalt_available, extract_youtube_formats_via_cobalt, download_from_cobalt, download_instagram_via_cobalt, download_facebook_via_cobalt, fetch_cobalt_stream
 
@@ -1220,7 +1221,14 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     # Failures stay isolated to Threads (never leak into yt-dlp pipeline).
     if is_threads_url(url) or is_threads_url(original_input_url):
         threads_url = url if is_threads_url(url) else original_input_url
-        if not is_threads_post_url(threads_url):
+        # /share/<code> links are admitted too. They are not post permalinks, so
+        # this gate used to reject them with the profile message below — which
+        # is what a user gets from the app's own "Copy link" button, and it
+        # blamed their link instead of our gap. extract_threads_sync resolves
+        # the redirect to the real permalink, so the gate only has to let them
+        # past; a share code that does not resolve fails there with a message
+        # about the share link, not about a profile.
+        if not (is_threads_post_url(threads_url) or is_threads_share_url(threads_url)):
             raise ValueError(
                 "Đây là trang cá nhân Threads. Hãy dán link một bài viết "
                 "công khai để tải media, hoặc xem danh sách bài qua chế độ Threads."
