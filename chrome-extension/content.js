@@ -165,22 +165,12 @@
       lines.push(`<div style="display:flex;gap:8px;font-size:10px;color:#6b7280;">${badges.join('')}</div>`);
     }
 
-    // Estimated sizes for top 3 qualities
-    if (meta.duration_seconds) {
-      const d = meta.duration_seconds;
-      const sizes = [
-        { q: '1080p', mb: Math.round(d * 8 * 0.125) },
-        { q: '720p',  mb: Math.round(d * 4 * 0.125) },
-        { q: 'Audio', mb: Math.round(d * 0.128 * 0.125) },
-      ];
-      const sizeHtml = sizes.map(({ q, mb }) =>
-        `<span style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:1px 5px;font-size:9px;">` +
-        `<span style="color:#94a3b8;">${q}</span>` +
-        `<span style="color:#cbd5e1;margin-left:3px;">${mb >= 1024 ? (mb / 1024).toFixed(1) + 'GB' : mb + 'MB'}</span>` +
-        `</span>`
-      ).join('');
-      lines.push(`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px;">${sizeHtml}</div>`);
-    }
+    // The "1080p / 720p / Audio" size row that used to sit here is gone. It
+    // multiplied duration by a hardcoded bitrate table and never looked at
+    // which formats the video actually has, so it advertised resolutions the
+    // download could not necessarily deliver — the same invented numbers that
+    // were removed from the web app's info panel. A size shown next to a
+    // resolution reads as a promise that the resolution exists.
 
     if (lines.length === 0) return '';
 

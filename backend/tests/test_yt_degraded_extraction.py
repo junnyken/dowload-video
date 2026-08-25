@@ -163,6 +163,44 @@ class TestAdaptiveFallbackClients:
         assert pos_1b < pos_proxy
 
 
+class TestPortraitResolutionSemantics:
+    """"1080p" names the SHORTER side. A 1080x1920 Short is a 1080p vertical
+    video — yt-dlp labels it that way too. Filtering on height alone made
+    height the long side, so a 1080p request rejected the 1080x1920 stream and
+    settled for 480x854: measured on a real Short, 0.97 MB at 480x854 against
+    3.15 MB at 1080x1920 for "best". The higher-sounding choice gave the worse
+    picture."""
+
+    def _fmt(self, quality):
+        from app.services.downloader import _get_base_opts
+        return _get_base_opts("https://www.youtube.com/watch?v=x",
+                              phase="download", quality=quality)["format"]
+
+    def test_portrait_clause_comes_before_the_height_clause(self):
+        fmt = self._fmt("video_1080")
+        portrait = fmt.index("width<=1080")
+        height_only = fmt.index("bestvideo[height<=1080]")
+        assert portrait < height_only, (
+            "height-only would match 608x1080 first and never reach the "
+            "1080x1920 stream the user asked for"
+        )
+
+    def test_portrait_clause_is_scoped_to_portrait(self):
+        """The height>N guard is what keeps landscape behaviour unchanged."""
+        fmt = self._fmt("video_720")
+        assert "[width<=720][height>720]" in fmt
+
+    def test_requested_height_is_threaded_through(self):
+        for h in (480, 720, 1080):
+            fmt = self._fmt(f"video_{h}")
+            assert f"width<={h}" in fmt and f"height<={h}" in fmt
+
+    def test_best_quality_is_left_uncapped(self):
+        """'video' must not acquire a cap from this change."""
+        fmt = self._fmt("video")
+        assert "width<=" not in fmt
+
+
 class TestFallbackIsPreserved:
     """Holding the degraded result aside must never turn a 360p download into a
     failure — it is restored when no better layer produces anything."""

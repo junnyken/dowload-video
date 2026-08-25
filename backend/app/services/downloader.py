@@ -467,7 +467,23 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         try:
             height = int(quality.split("_")[1])
             fmt = (
-                f"bestvideo[height<={height}][vcodec^=avc1]+bestaudio[acodec^=mp4a]"
+                # Portrait first. "1080p" names the SHORTER side — a 1080x1920
+                # Short is what everyone calls a 1080p vertical video, and
+                # yt-dlp labels it that way too. Filtering on height alone is
+                # technically correct and semantically wrong there: height is
+                # the LONG side, so height<=1080 rejects the 1080x1920 stream
+                # and settles for 480x854. Measured on a real Short: asking for
+                # 1080p returned 0.97 MB at 480x854 while "best" returned
+                # 3.15 MB at 1080x1920 — the higher-sounding choice gave the
+                # worse picture, which is exactly the complaint that started
+                # this whole thread.
+                #
+                # The height>N clause keeps this branch portrait-only, so
+                # landscape falls straight through to the height rules below
+                # and behaves exactly as before.
+                f"bestvideo[width<={height}][height>{height}][vcodec^=avc1]+bestaudio[acodec^=mp4a]"
+                f"/bestvideo[width<={height}][height>{height}][ext=mp4]+bestaudio[ext=m4a]"
+                f"/bestvideo[height<={height}][vcodec^=avc1]+bestaudio[acodec^=mp4a]"
                 f"/bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]"
                 f"/best[height<={height}][ext=mp4]"
                 f"/bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]"

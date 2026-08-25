@@ -535,15 +535,32 @@
     <div style="margin-bottom:12px;">
       <div class="card-label">Chất lượng tải</div>
       <div class="quality-pills">
+        <!--
+          These used to be HD / 4K / MP3, but HD and 4K were the same button.
+          The backend maps "video", "video_4k", "4k" and "mp4_4k" all to the
+          same uncapped "best available" request, so the two pills produced
+          byte-identical downloads — and the HD pill's "MP4 1080p" sub-label
+          was wrong either way, since what comes back is whatever the video
+          actually has: 4K on one video, 240p on a 2005 upload.
+
+          Every value below now resolves to a different request the backend
+          really honours — video_1080 and video_720 are clamped by the format
+          selector to that height — so picking one changes the result.
+        -->
         <label class="q-pill active">
           <input type="radio" name="quality" value="video" style="display:none">
-          🎬 HD
-          <span class="q-sub">MP4 1080p</span>
+          🎬 Tốt nhất
+          <span class="q-sub">Cao nhất có sẵn</span>
         </label>
         <label class="q-pill">
-          <input type="radio" name="quality" value="video_4k" style="display:none">
-          ✨ 4K
-          <span class="q-sub">Tốt nhất</span>
+          <input type="radio" name="quality" value="video_1080" style="display:none">
+          🎯 1080p
+          <span class="q-sub">Full HD</span>
+        </label>
+        <label class="q-pill">
+          <input type="radio" name="quality" value="video_720" style="display:none">
+          ⚡ 720p
+          <span class="q-sub">Nhẹ hơn</span>
         </label>
         <label class="q-pill">
           <input type="radio" name="quality" value="mp3_320" style="display:none">
@@ -553,11 +570,14 @@
       </div>
     </div>
 
-    <!-- Hidden select for JS compatibility -->
+    <!-- Hidden select for JS compatibility — must mirror the pills above,
+         since the pill click handler writes the chosen value into it and the
+         download handler reads it back. First option is the default. -->
     <select id="qualitySelect" style="display:none">
-      <option value="video">MP4 (Video HD)</option>
-      <option value="video_4k">MP4 (4K / Tốt nhất)</option>
-      <option value="mp3_320">MP3 (Âm thanh 320kbps)</option>
+      <option value="video">MP4 (tốt nhất có sẵn)</option>
+      <option value="video_1080">MP4 1080p</option>
+      <option value="video_720">MP4 720p</option>
+      <option value="mp3_320">MP3 (âm thanh 320kbps)</option>
     </select>
 
     <!-- Options -->
