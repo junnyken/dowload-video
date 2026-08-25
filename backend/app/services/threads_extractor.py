@@ -91,6 +91,19 @@ _POST_PATH_RE = re.compile(
 # Profile:  /@handle   (no /post/ segment)
 _PROFILE_PATH_RE = re.compile(r"/@(?P<handle>[\w.\-]+)/?(?:\?|$)", re.IGNORECASE)
 
+# Share link:  /share/<code>  — what the app's "Copy link" button produces.
+#
+# These carry a share code, NOT the post shortcode, so they cannot simply be
+# added to _POST_PATH_RE: extract_threads_post locks post_id from the URL and
+# then accepts only the embedded node whose code matches it, so a share code
+# would lock an id that never matches and fail in a new way. They have to be
+# redirected to the real permalink first.
+#
+# Until this existed, /share/ links matched neither pattern, classified as
+# "unsupported", and came back as "this is a Threads profile" — which sent the
+# user looking for a problem with their link instead of ours.
+_SHARE_PATH_RE = re.compile(r"/share/(?P<code>[A-Za-z0-9_\-]+)", re.IGNORECASE)
+
 # Realistic UAs — alternate between desktop and mobile on each retry.
 _DESKTOP_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -142,13 +155,55 @@ def is_threads_profile_url(url: str) -> bool:
     return bool(_PROFILE_PATH_RE.search(url)) and not is_threads_post_url(url)
 
 
+def is_threads_share_url(url: str) -> bool:
+    """True for a /share/<code> link — needs resolving before it can be used."""
+    if not is_threads_url(url):
+        return False
+    return bool(_SHARE_PATH_RE.search(url))
+
+
 def classify_threads_url(url: str) -> str:
-    """Return 'post', 'profile', or 'unsupported'."""
+    """Return 'post', 'profile', 'share', or 'unsupported'."""
     if is_threads_post_url(url):
         return "post"
+    if is_threads_share_url(url):
+        return "share"
     if is_threads_profile_url(url):
         return "profile"
     return "unsupported"
+
+
+async def _resolve_share_url(url: str) -> Optional[str]:
+    """
+    Follow a /share/<code> link to the permalink it points at.
+
+    Returns the resolved URL, or None if it could not be resolved — the caller
+    must treat that as a failure rather than carrying on with the share URL,
+    because every step downstream reads a post shortcode out of the path and a
+    share code is not one.
+
+    Reuses this module's own UA rotation: a bare client gets a consent wall.
+    """
+    for attempt in range(len(_ALL_UAS)):
+        ua = _ALL_UAS[attempt % len(_ALL_UAS)]
+        try:
+            async with httpx.AsyncClient(
+                follow_redirects=True, timeout=_FETCH_TIMEOUT,
+            ) as client:
+                resp = await client.get(url, headers={
+                    "User-Agent": ua,
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+                })
+            final = str(resp.url)
+            # Only accept a redirect that actually landed on a post. Threads
+            # answers an unresolvable share code with the home page or a login
+            # wall, and following that to "not a post" is the honest outcome.
+            if final and final != url and is_threads_post_url(final):
+                return final
+        except Exception as e:  # noqa: BLE001
+            _safe_print(f"[Threads] share resolve attempt {attempt + 1} failed: {e}")
+    return None
 
 
 def _extract_post_code(url: str) -> Optional[str]:
@@ -772,6 +827,24 @@ async def extract_threads(url: str) -> Dict[str, Any]:
         return _error_result(url, "single_post", ERR_INVALID)
 
     kind = classify_threads_url(u)
+
+    # A share link carries a share code, not a post shortcode, so resolve it to
+    # the real permalink before anything downstream tries to read an id out of
+    # the path. Done here rather than inside the post extractor so the profile
+    # branch and the error paths all see the resolved URL too.
+    if kind == "share":
+        resolved = await _resolve_share_url(u)
+        if not resolved:
+            return _error_result(
+                u, "single_post", ERR_UNSUPPORTED,
+                "Không mở được link chia sẻ Threads này. Link có thể đã hết hạn, "
+                "bài viết ở chế độ riêng tư, hoặc đã bị xoá. Thử dán link bài viết "
+                "trực tiếp (dạng threads.com/@tên/post/...).",
+            )
+        _safe_print(f"[Threads] share link resolved -> {resolved}")
+        u = resolved
+        kind = classify_threads_url(u)
+
     if kind == "post":
         try:
             return await extract_threads_post(u)
