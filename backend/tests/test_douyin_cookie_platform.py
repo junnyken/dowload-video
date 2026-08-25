@@ -24,10 +24,38 @@ class TestPlatformIsAccepted:
         uploadable, or that code reads from a pool that can never be filled."""
         from app.api.admin import _VALID_PLATFORMS
         for platform in ("youtube", "tiktok", "facebook", "instagram",
-                         "twitter", "douyin"):
+                         "twitter", "douyin", "xiaohongshu", "bilibili",
+                         "reddit"):
             assert platform in _VALID_PLATFORMS, (
                 f"{platform} has cookie-loading code but cannot be uploaded"
             )
+
+    def test_no_extractor_asks_the_pool_for_a_platform_that_cannot_be_uploaded(self):
+        """The general form of the Douyin bug, so the next one is caught here
+        rather than by a user reporting that a platform never works.
+
+        Xiaohongshu was the second instance: its own docstring says 'Add XHS
+        cookie to admin: platform "xiaohongshu"', and the upload endpoint
+        answered 400 to exactly that.
+        """
+        import pathlib
+        import re
+
+        from app.api.admin import _VALID_PLATFORMS
+
+        root = pathlib.Path(__file__).resolve().parent.parent / "app"
+        pattern = re.compile(
+            r'(?:get_cookie_from_pool|_get_cookies_file)\(\s*"([a-z0-9_]+)"'
+        )
+        wanted = set()
+        for path in root.rglob("*.py"):
+            wanted |= set(pattern.findall(path.read_text(encoding="utf-8", errors="replace")))
+
+        missing = sorted(wanted - set(_VALID_PLATFORMS))
+        assert not missing, (
+            f"these platforms request a cookie from the pool but cannot be "
+            f"uploaded, so the pool can never satisfy them: {missing}"
+        )
 
 
 class TestExpiryReportCoversEveryPlatform:

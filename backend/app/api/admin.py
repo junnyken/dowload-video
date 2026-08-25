@@ -1445,7 +1445,7 @@ class CookieRemoveRequest(BaseModel):
 _VALID_PLATFORMS = {
     "youtube", "tiktok", "facebook", "instagram",
     "twitter", "x", "reddit", "bilibili",
-    "threads", "soundcloud", "spotify", "douyin",
+    "threads", "soundcloud", "spotify", "douyin", "xiaohongshu",
 }
 
 
