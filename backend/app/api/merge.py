@@ -14,6 +14,7 @@ Merges 2–5 completed download jobs into a single MP4 via FFmpeg concat.
 import json
 import os
 import subprocess
+from app.core.ffmpeg_budget import thread_args as _ffmpeg_threads
 import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -161,10 +162,12 @@ def merge_clips(
         if use_copy:
             cmd += ["-c", "copy"]
         else:
+            # Re-encode path only — the -c copy branch above is remux, which
+            # is I/O-bound and has no threads to cap.
             cmd += [
                 "-c:v", "libx264", "-preset", "fast", "-crf", "23",
                 "-c:a", "aac", "-b:a", "128k",
-            ]
+            ] + _ffmpeg_threads()
         cmd += ["-movflags", "+faststart", output_path]
 
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)

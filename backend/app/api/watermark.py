@@ -10,6 +10,7 @@ Supports preview (first 3 seconds) and full render.
 import base64
 import os
 import subprocess
+from app.core.ffmpeg_budget import thread_args as _ffmpeg_threads
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -207,6 +208,9 @@ def watermark_embed(
                 "-c:a", "copy",
             ]
 
+        # Both branches above re-encode video (drawtext / overlay filters), so
+        # bound the thread count before handing off.
+        cmd += _ffmpeg_threads()
         cmd += ["-movflags", "+faststart", output_path]
 
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
