@@ -130,22 +130,163 @@ _INSTAGRAM_MOBILE_UA = (
 
 
 class _YTDLPLogger:
-    """Captures yt-dlp warnings/errors regardless of quiet/no_warnings settings."""
-    def __init__(self, prefix: str = ""):
+    """Captures yt-dlp warnings/errors regardless of quiet/no_warnings settings.
+
+    Every error line is also appended to `errors` (optionally a caller-owned
+    list, so several YoutubeDL instances in one request share one sink). That
+    list is the ONLY way a failure's real reason survives: base opts set
+    `ignoreerrors`, so extract_info returns None instead of raising, and
+    without a sink the reason reaches neither the user nor the log line that
+    claims to report it.
+
+    verbose=False keeps the routine screen chatter out of the log — attaching a
+    logger bypasses `quiet`, and 8 workers narrating every download would bury
+    the warnings worth reading. Warnings and errors always print.
+    """
+    def __init__(self, prefix: str = "", sink: list | None = None,
+                 verbose: bool = True):
         self._prefix = prefix
+        self._verbose = verbose
+        self.errors: list = sink if sink is not None else []
 
     def debug(self, msg: str) -> None:
-        if not msg.startswith("[debug] "):
+        if self._verbose and not msg.startswith("[debug] "):
             print(f"[yt-dlp{self._prefix}] {msg}")
 
     def info(self, msg: str) -> None:
-        print(f"[yt-dlp{self._prefix}] {msg}")
+        if self._verbose:
+            print(f"[yt-dlp{self._prefix}] {msg}")
 
     def warning(self, msg: str) -> None:
         print(f"[yt-dlp{self._prefix} WARN] {msg}")
 
     def error(self, msg: str) -> None:
+        text = str(msg).strip()
+        if text:
+            self.errors.append(text)
         print(f"[yt-dlp{self._prefix} ERROR] {msg}")
+
+
+# Platforms whose extraction chatter is worth printing in full. YouTube has
+# always logged this way (client fallbacks and PO-token trouble are read from
+# these lines); everything else logs warnings and errors only.
+_VERBOSE_LOG_PLATFORMS = ("youtube.com", "youtu.be", "ytsearch")
+
+
+def _ytdlp_log_prefix(url: str) -> tuple[str, bool]:
+    """Return (log prefix, verbose) for a target URL."""
+    u = (url or "").lower()
+    for name, tag in (
+        ("youtube.com", "/YT"), ("youtu.be", "/YT"), ("ytsearch", "/YT"),
+        ("facebook.com", "/FB"), ("fb.watch", "/FB"),
+        ("instagram.com", "/IG"),
+        ("tiktok.com", "/TT"), ("douyin.com", "/DY"),
+        ("twitter.com", "/X"), ("x.com", "/X"),
+        ("threads.net", "/TH"), ("threads.com", "/TH"),
+    ):
+        if name in u or u.startswith(name):
+            return tag, any(v in u or u.startswith(v) for v in _VERBOSE_LOG_PLATFORMS)
+    return "", False
+
+
+# Trailing boilerplate yt-dlp appends to extractor errors. Useful to a
+# maintainer reading a bug report, noise in a message shown to a user.
+_YTDLP_NOISE_RE = re.compile(
+    r"\s*;?\s*(please report this issue.*|Confirm you are on the latest version.*"
+    r"|you might want to use.*|Use --.*)$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _ytdlp_failure_reason(errors: list | None) -> str:
+    """Condense captured yt-dlp errors into one short user-facing reason.
+
+    Returns "" when nothing was captured — callers must not print an empty
+    parenthetical in that case.
+    """
+    if not errors:
+        return ""
+    for raw in reversed(errors):
+        text = re.sub(r"\x1b\[[0-9;]*m", "", str(raw)).strip()
+        text = re.sub(r"^ERROR:\s*", "", text).strip()
+        text = _YTDLP_NOISE_RE.sub("", text).strip(" .;")
+        # A bare "[facebook] 123: " with the reason stripped off helps nobody.
+        if text and not re.fullmatch(r"\[[^\]]+\][\s:]*\S*[\s:]*", text):
+            return text if len(text) <= 300 else text[:297] + "..."
+    return ""
+
+
+_impersonate_probe: list = []  # cache: [] = not probed, [None] = unavailable
+
+
+def _impersonate_target():
+    """A Chrome impersonation target yt-dlp can actually use, or None.
+
+    Facebook increasingly answers a plain urllib request with a page yt-dlp
+    cannot parse, while serving the video to a real browser TLS fingerprint.
+
+    "curl_cffi imports" is NOT the check: yt-dlp accepts only curl_cffi 0.5.10
+    and 0.10.x–0.14.x and refuses to load its impersonate handler for anything
+    else, leaving zero available targets — and YoutubeDL then raises
+    "Impersonate target ... is not available" from its CONSTRUCTOR, before a
+    single request goes out. (Measured: curl_cffi 0.15.0 installed, targets
+    available: 0.) So ask yt-dlp what it supports instead of inferring it.
+    """
+    if _impersonate_probe:
+        return _impersonate_probe[0]
+
+    target = None
+    try:
+        from yt_dlp.networking.impersonate import ImpersonateTarget
+        chrome = ImpersonateTarget("chrome")
+        probe = yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True})
+        try:
+            if probe._impersonate_target_available(chrome):
+                target = chrome
+        finally:
+            probe.close()
+    except Exception as _imp_err:
+        print(f"[Downloader] Impersonation unavailable: {str(_imp_err)[:120]}")
+        target = None
+
+    if target is None:
+        print("[Downloader] Impersonation unavailable — check the curl_cffi "
+              "version bound in requirements.txt")
+    _impersonate_probe.append(target)
+    return target
+
+
+def _facebook_retry_plan(opts: dict) -> list:
+    """Attempts to make after Facebook's first extraction comes back empty.
+
+    Returns [(label, opts), ...] — each entry a full opts dict ready to hand to
+    YoutubeDL, ordered cheapest-first. Facebook is the one platform here with
+    no fallback provider (Cobalt is optional and usually not deployed), so
+    "first attempt failed" used to mean "user gets an error", even when a
+    stale pool cookie or a missing browser fingerprint was the only problem.
+    """
+    plan = []
+    has_cookie = bool(opts.get("cookiefile"))
+    target = _impersonate_target()
+
+    if has_cookie:
+        # A cookie that is expired, checkpointed, or from a suspended account
+        # turns a public video into a login wall. Anonymous is what the rest of
+        # the internet gets, and it works for public content.
+        no_cookie = dict(opts)
+        no_cookie.pop("cookiefile", None)
+        plan.append(("không dùng cookie", no_cookie))
+
+    if target is not None:
+        impersonated = dict(opts)
+        impersonated["impersonate"] = target
+        plan.append(("giả lập trình duyệt Chrome", impersonated))
+        if has_cookie:
+            both = dict(impersonated)
+            both.pop("cookiefile", None)
+            plan.append(("giả lập Chrome + không cookie", both))
+
+    return plan
 
 from app.core.proxy_manager import get_proxy_config_for_phase, dispatch_scraping_request, get_scraperapi_proxy_url
 from app.core.redis_client import get_redis
@@ -440,7 +581,8 @@ def _youtube_proxy_download_enabled() -> bool:
     )
 
 
-def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") -> dict:
+def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
+                   error_sink: list | None = None) -> dict:
     """
     Return base yt-dlp options with PHASE-AWARE proxy selection.
 
@@ -448,6 +590,10 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         url:     The target video/channel URL.
         phase:   "metadata" -> proxy if needed; "download" -> server IP.
         quality: "video" (no-watermark), "video_4k" (best merge), "mp3_128", "mp3_320".
+        error_sink: list that collects every yt-dlp error line from the
+                 YoutubeDL built with these opts. Pass the SAME list to every
+                 _get_base_opts call in one request so the failure reason
+                 survives whichever attempt produced it.
     """
     if quality == "video_4k":
         # 4K/2K: request highest quality video+audio, merge with FFmpeg.
@@ -540,6 +686,13 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         "concurrent_fragment_downloads": 4,  # parallel fragment download — faster
         "noplaylist": True,       # single video only — ignore list=/radio params to prevent OOM
     }
+
+    # Every platform gets a logger, not just YouTube. `ignoreerrors` above means
+    # a failed extraction returns None WITHOUT raising, so the except-branch that
+    # logs the reason never runs — the logger is what makes the reason readable
+    # at all, and `error_sink` is what carries it back to the caller.
+    _log_prefix, _log_verbose = _ytdlp_log_prefix(url)
+    opts["logger"] = _YTDLPLogger(_log_prefix, sink=error_sink, verbose=_log_verbose)
     
     if not quality.startswith("mp3"):
         opts["merge_output_format"] = "mp4"
@@ -646,7 +799,8 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video") ->
         or url.lower().startswith("ytsearch")  # Spotify → ytsearch1:track name
     )
     if _is_youtube:
-        opts["logger"] = _YTDLPLogger("/YT")
+        # (the logger is attached for every platform where opts are built —
+        # this branch used to be the only place it happened)
         # yt-dlp 2025.5+: use node for JS challenges + enable EJS remote solver script
         opts["js_runtimes"] = {"node": {}}
         opts["remote_components"] = ["ejs:github"]
@@ -1086,6 +1240,12 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     Uses PROXY ONLY for metadata extraction, not file download.
     Falls back to Scraping API if primary extraction fails.
     """
+    # Shared across every YoutubeDL this request builds, so the reason a
+    # download failed is still available at the end — whichever attempt
+    # produced it. Without this the user gets a hard-coded guess and the log
+    # gets nothing at all (see _YTDLPLogger).
+    _ytdlp_errors: list = []
+
     # ── Step 0: Unshorten short links (v.douyin.com, vm.tiktok.com, etc.)
     # This MUST happen before any other processing so that downstream
     # extractors and proxy rules see the canonical URL.
@@ -1501,7 +1661,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 url = cached_yt
             else:
                 # Phase 0: resolve ytsearch → YouTube URL (no proxy — ytsearch works direct)
-                _search_opts = _get_base_opts(search_query, phase="metadata")
+                _search_opts = _get_base_opts(search_query, phase="metadata", error_sink=_ytdlp_errors)
                 _search_opts.pop("proxy", None)  # ytsearch needs no proxy, saves residential bandwidth
                 _search_opts["extract_flat"] = True
                 _search_opts["quiet"] = True
@@ -1560,7 +1720,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         print(f"[Downloader] SoundCloud → forcing audio mode (mp3_128): {url[:80]}")
 
     # ── Phase 1: Metadata extraction (and download if needed) ──────
-    opts = _get_base_opts(url, phase="metadata", quality=quality)
+    opts = _get_base_opts(url, phase="metadata", quality=quality, error_sink=_ytdlp_errors)
     opts["extract_flat"] = False
     opts = _apply_tiktok_opts(opts, url, remove_watermark)
     if user_cookies_file:
@@ -1877,7 +2037,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 # paid residential bandwidth. The free layers (1/3/Cobalt) still run.
                 _combined_dl = _spotify_origin or _youtube_proxy_download_enabled()
                 if info is None and _yt_proxy and _combined_dl:
-                    _vr_base = _get_base_opts(url, phase="download", quality=quality)
+                    _vr_base = _get_base_opts(url, phase="download", quality=quality, error_sink=_ytdlp_errors)
                     _vr_base.pop("cookiefile", None)
                     _vr_base.pop("cookiesfrombrowser", None)
                     if download_subs and not quality.startswith("mp3"):
@@ -2134,7 +2294,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                     pass  # DOWNLOAD_DIR not mounted yet — skip check
 
             if info and not _yt_already_downloaded:
-                dl_opts = _get_base_opts(url, phase="download", quality=quality)
+                dl_opts = _get_base_opts(url, phase="download", quality=quality, error_sink=_ytdlp_errors)
                 if user_cookies_file:
                     dl_opts["cookiefile"] = user_cookies_file
                 dl_opts["extract_flat"] = False
@@ -2196,7 +2356,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                         except Exception:
                             pass
                         try:
-                            _rescue_opts = _get_base_opts(url, phase="download", quality=quality)
+                            _rescue_opts = _get_base_opts(url, phase="download", quality=quality, error_sink=_ytdlp_errors)
                             _rescue_opts.pop("proxy", None)
                             _rescue_opts["ignoreerrors"] = False
                             _rescue_opts["extractor_args"] = {
@@ -2270,7 +2430,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                         pass
 
             if info:
-                dl_opts = _get_base_opts(url, phase="download", quality=quality)
+                dl_opts = _get_base_opts(url, phase="download", quality=quality, error_sink=_ytdlp_errors)
                 dl_opts = _apply_tiktok_opts(dl_opts, url, remove_watermark)
                 if user_cookies_file:
                     dl_opts["cookiefile"] = user_cookies_file
@@ -2293,7 +2453,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
             if info:
-                dl_opts = _get_base_opts(url, phase="download", quality=quality)
+                dl_opts = _get_base_opts(url, phase="download", quality=quality, error_sink=_ytdlp_errors)
                 dl_opts = _apply_tiktok_opts(dl_opts, url, remove_watermark)
                 if user_cookies_file:
                     dl_opts["cookiefile"] = user_cookies_file
@@ -2532,7 +2692,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                     f.write(html_content)
                     tmp_path = f.name
                 
-                fallback_opts = _get_base_opts(url, phase="download")  # no proxy for API
+                fallback_opts = _get_base_opts(url, phase="download", error_sink=_ytdlp_errors)  # no proxy for API
                 fallback_opts["extract_flat"] = False
                 fallback_opts["enable_file_urls"] = True
                 fallback_opts = _apply_tiktok_opts(fallback_opts, url, remove_watermark)
@@ -2560,6 +2720,31 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         else:
             print(f"[Downloader] Cobalt failed, trying embed scraper for Instagram")
             info = asyncio.run(_try_instagram_embed(url))
+
+    # ── Phase 3a-FB: Facebook retry ladder ─────────────────────────
+    # One failed attempt is not evidence the video is private. Retry without the
+    # cookie and/or with a browser TLS fingerprint before giving up — a public
+    # reel that downloads fine anonymously must not be reported as login-only.
+    if info is None and is_facebook:
+        for _fb_label, _fb_opts in _facebook_retry_plan(opts):
+            print(f"[Downloader] Facebook retry: {_fb_label}")
+            try:
+                with yt_dlp.YoutubeDL(_fb_opts) as ydl:
+                    info = ydl.extract_info(url, download=should_download)
+            except Exception as _fb_err:
+                print(f"[Downloader] Facebook retry ({_fb_label}) failed: "
+                      f"{str(_fb_err)[:150]}")
+                info = None
+            if info:
+                print(f"[Downloader] Facebook: recovered via {_fb_label}")
+                # Dropping the cookie is what fixed it, and it came from the
+                # pool — take it out of rotation so the next request doesn't
+                # pay for the same bad cookie. A cookie the USER uploaded for
+                # this one download isn't ours to block.
+                if (opts.get("cookiefile") and "cookiefile" not in _fb_opts
+                        and not user_cookies_file):
+                    _rotate_cookie("facebook", hard=True)
+                break
 
     # ── Phase 3b: Facebook Cobalt fallback ─────────────────────────
     if info is None and is_facebook:
@@ -2619,36 +2804,47 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 "SoundCloud không có bản phù hợp. Vui lòng thử lại sau."
             )
 
+        # The real reason, captured from yt-dlp itself. Every message below used
+        # to assert a cause the code had never established — "yêu cầu đăng nhập"
+        # was printed for a deleted video, a broken extractor and a blocked
+        # server IP alike, and the actual error reached neither user nor log.
+        _fail_reason = _ytdlp_failure_reason(_ytdlp_errors)
+        _detail = f" (Lý do kỹ thuật: {_fail_reason})" if _fail_reason else ""
+        if _fail_reason:
+            print(f"[Downloader] Extraction failed for {url} — reason: {_fail_reason}")
+
         _is_twitter = "twitter.com" in url.lower() or "x.com" in url.lower()
         if is_youtube_url:
             raise ValueError(
                 "Không thể tải video YouTube. YouTube đang chặn bot — "
                 "vui lòng thử lại sau 30 giây. "
                 "Nếu lỗi tiếp tục, video có thể bị xoá, giới hạn vùng (geo-block), "
-                "hoặc yêu cầu đăng nhập."
+                "hoặc yêu cầu đăng nhập." + _detail
             )
         if is_facebook:
             raise ValueError(
-                "Không thể tải video Facebook. Facebook yêu cầu đăng nhập để xem video này. "
-                "Vui lòng đảm bảo video là Public (không phải chỉ bạn bè), "
-                "hoặc upload cookies Facebook để tải video riêng tư."
+                "Không thể tải video Facebook. Video có thể ở chế độ riêng tư, "
+                "đã bị xoá, hoặc Facebook đang chặn máy chủ tải. "
+                "Nếu video là Public mà vẫn lỗi, hãy nạp cookies Facebook "
+                "qua Admin panel: POST /admin/cookies/upload." + _detail
             )
         if is_instagram:
             raise ValueError(
                 "Không thể tải video Instagram. Instagram yêu cầu đăng nhập. "
                 "Vui lòng upload cookies Instagram (hết hạn sau ~7 ngày) "
-                "qua Admin panel: POST /admin/cookies/upload"
+                "qua Admin panel: POST /admin/cookies/upload" + _detail
             )
         if _is_twitter:
             raise ValueError(
                 "Không thể tải video Twitter/X. X (Twitter) yêu cầu tài khoản đăng nhập "
                 "để xem video từ tháng 6/2023. "
                 "Vui lòng upload cookies Twitter/X qua Admin panel: POST /admin/cookies/upload"
+                + _detail
             )
         raise ValueError(
             "Không thể trích xuất thông tin video. "
             "Vui lòng kiểm tra: link đúng không, video có Public không, "
-            "hoặc video có bị xoá/riêng tư không."
+            "hoặc video có bị xoá/riêng tư không." + _detail
         )
 
     direct_url, filesize = _extract_best_url(info)

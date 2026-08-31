@@ -6,7 +6,12 @@ python-multipart==0.0.12
 yt-dlp>=2025.5.1
 yt_dlp_ejs
 bgutil-ytdlp-pot-provider>=1.3.0
-curl_cffi>=0.11.0
+# Upper bound is not cosmetic: yt-dlp loads its impersonate handler only for
+# curl_cffi 0.5.10 and 0.10.x-0.14.x and refuses anything newer, which leaves
+# ZERO impersonation targets and no error until a YoutubeDL constructor raises.
+# An unpinned install already resolved to 0.15.0, so browser impersonation was
+# silently unavailable while the dependency looked satisfied.
+curl_cffi>=0.11.0,<0.15.0
 celery
 redis
 httpx[http2,brotli]
