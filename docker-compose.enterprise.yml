@@ -195,8 +195,11 @@ services:
     volumes:
       # Shared download storage (also mounted by workers)
       - downloads:/app/downloads
-      # Chrome extension asset served by the API
-      - ./chrome_extension_v4.9.5.zip:/app/extension/VidGrab-extension.zip:ro
+      # Chrome extension asset served by the API — canonical package,
+      # regenerated from chrome-extension/ per STORE_SUBMISSION.md. Do NOT
+      # point this at a zip in the repo root: those are outside that
+      # regeneration step and go stale silently.
+      - ./backend/extension/VidGrab-extension.zip:/app/extension/VidGrab-extension.zip:ro
     networks:
       - internal
     dns:

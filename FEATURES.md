@@ -57,7 +57,7 @@
 | Surface | Mô tả | URL / Ghi chú |
 |---------|-------|--------------|
 | **Web App** | React SPA + FastAPI, đầy đủ tính năng | `dowloadvideo.io.vn` |
-| **Chrome Extension** | Manifest V3, v4.7, cài manual (chưa lên Chrome Store) | 4 tab, 380×500px |
+| **Chrome Extension** | Manifest V3, v5.2.2, cài manual (chưa lên Chrome Store) | 4 tab, 380×500px |
 | **Telegram Bot** | Chỉ phân phối extension ZIP | Chưa có tính năng tải video qua chat |
 
 **Tech Stack:**
@@ -265,7 +265,7 @@ queued → resolving → discovering → assemble_sections → finalize → succ
 
 ---
 
-## 4. Tính năng — Chrome Extension (v4.7, Manifest V3)
+## 4. Tính năng — Chrome Extension (v5.2.2, Manifest V3)
 
 ### Tab 1: Tải Video (Single)
 - Auto-detect video trên tab hiện tại: YouTube, TikTok, Instagram, Facebook, Douyin, Spotify, Threads

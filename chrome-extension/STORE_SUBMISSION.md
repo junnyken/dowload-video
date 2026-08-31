@@ -232,6 +232,18 @@ The extension Settings panel shows:
    both are static files that only change when someone manually redoes
    this step.
 
+   Those two paths are now the ONLY packages in the tree, and every
+   docker-compose mount points at one of them, so redoing this step is
+   sufficient. It did not used to be: `docker-compose.small.yml` (twice) and
+   `docker-compose.enterprise.yml` mounted `./chrome_extension_v4.9.5.zip`
+   from the repo root over `/app/extension/VidGrab-extension.zip` — a third
+   copy, outside this checklist, holding a build from two versions earlier
+   than its own filename claimed. Anyone deploying from those files served
+   that stale build no matter how carefully this step was followed. The root
+   zips have been deleted; do not reintroduce one. If you add a new deploy
+   target, mount `backend/extension/VidGrab-extension.zip` rather than
+   copying a zip somewhere new.
+
 ### Manual Install (backward compat preserved)
 Sideloaded CRX / unpacked installs continue to work indefinitely.
 The `update_url` in manifest.json points to Google's update service — auto-populated by the Store.

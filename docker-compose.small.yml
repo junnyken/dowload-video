@@ -90,7 +90,11 @@ services:
       - bgutil-pot
     volumes:
       - downloads:/app/downloads
-      - ./chrome_extension_v4.9.5.zip:/app/extension/VidGrab-extension.zip:ro
+      # Canonical extension package, regenerated from chrome-extension/ per
+      # chrome-extension/STORE_SUBMISSION.md. Do NOT point this at a zip in
+      # the repo root: those are not part of that regeneration step and go
+      # stale silently.
+      - ./backend/extension/VidGrab-extension.zip:/app/extension/VidGrab-extension.zip:ro
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
       interval: 30s
@@ -218,7 +222,8 @@ services:
       - VIDGRAB_WEB_URL=${VIDGRAB_WEB_URL:-https://vidgrab.io}
       - TELEGRAM_BOT_SECRET=${TELEGRAM_BOT_SECRET:-}
     volumes:
-      - ./chrome_extension_v4.9.5.zip:/app/extension/VidGrab-extension.zip:ro
+      # The bot ships its own copy — see STORE_SUBMISSION.md.
+      - ./telegram-bot/extension/VidGrab-extension.zip:/app/extension/VidGrab-extension.zip:ro
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
       interval: 60s
