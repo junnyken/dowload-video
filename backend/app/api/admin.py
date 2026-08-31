@@ -66,6 +66,73 @@ def _lockout_key(ip: str) -> str:
     return f"admin:lockout:{ip}"
 
 
+def _password_matches(candidate: str) -> bool:
+    """Constant-time comparison against ADMIN_PASSWORD.
+
+    Plain `==` short-circuits on the first differing byte, which leaks the
+    length of the correct prefix through response timing.
+    """
+    if not _ADMIN_PASSWORD or not candidate:
+        return False
+    return secrets.compare_digest(candidate, _ADMIN_PASSWORD)
+
+
+def _session_is_valid(r, token: str) -> bool:
+    """True if `token` is a live admin session; refreshes its TTL when so.
+
+    Sessions live in Redis. If the store is unreachable we cannot confirm the
+    token, so we report "not a session" and let the caller fall through to a
+    clean 401 rather than a 500 — same fail-closed rule as the Bearer path.
+    """
+    if not token:
+        return False
+    try:
+        if not r.get(_session_key(token)):
+            return False
+    except Exception:
+        return False
+    try:
+        r.expire(_session_key(token), _SESSION_TTL)
+    except Exception:
+        pass
+    return True
+
+
+def _is_locked_out(r, ip: str) -> int | None:
+    """Remaining lockout seconds for `ip`, or None when not locked out.
+
+    A Redis failure means we cannot read the counter. We report "not locked"
+    rather than denying, so an outage cannot lock every admin out of the
+    dashboard — the password check below is still authoritative.
+    """
+    try:
+        if not r.exists(_lockout_key(ip)):
+            return None
+        return max(r.ttl(_lockout_key(ip)), 1)
+    except Exception:
+        return None
+
+
+def _register_failed_attempt(r, ip: str) -> int:
+    """Count a bad credential from `ip` and arm the lockout at the threshold."""
+    try:
+        attempts = r.incr(_attempt_key(ip))
+        r.expire(_attempt_key(ip), _ATTEMPT_WINDOW)
+        if attempts >= _MAX_ATTEMPTS:
+            r.setex(_lockout_key(ip), _LOCKOUT_TTL, "1")
+            r.delete(_attempt_key(ip))
+        return attempts
+    except Exception:
+        return 0
+
+
+def _clear_attempts(r, ip: str) -> None:
+    try:
+        r.delete(_attempt_key(ip))
+    except Exception:
+        pass
+
+
 async def verify_admin(
     request: Request,
     legacy_token: Optional[str] = Depends(_ADMIN_TOKEN_HEADER),
@@ -88,28 +155,40 @@ async def verify_admin(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     # ── Bearer session token (preferred) ────────────────────────────
-    if bearer and bearer.credentials:
-        # Sessions live in Redis. If the store is unreachable we cannot confirm
-        # the token, so treat it as unauthenticated and fall through to a clean
-        # 401 — an auth check must fail closed, and it must not surface as a 500
-        # that looks like a server fault rather than a refusal.
-        try:
-            sess = r.get(_session_key(bearer.credentials))
-        except Exception:
-            sess = None
-        if sess:
-            try:
-                r.expire(_session_key(bearer.credentials), _SESSION_TTL)
-            except Exception:
-                pass
-            return
+    if bearer and bearer.credentials and _session_is_valid(r, bearer.credentials):
+        return
 
     # ── Legacy X-Admin-Token (kept for backward compat) ─────────────
+    # This header carries EITHER a session token or the raw admin password.
+    # Several admin panels hold the token from POST /admin/login in a variable
+    # named `adminToken` and send it here, so refusing session tokens outright
+    # would 401 them; the same value is sent as a Bearer token elsewhere.
     if legacy_token:
-        if _ADMIN_PASSWORD and legacy_token == _ADMIN_PASSWORD:
+        if _session_is_valid(r, legacy_token):
             return
-        # Wrong token — log and deny
-        log_access_denied(request, "/admin", reason="wrong_legacy_token", metadata={"ip": ip})
+
+        # Past this point the header is a credential guess, so it gets the same
+        # lockout as POST /admin/login. Without this the lockout there is
+        # decorative: an attacker skips the login route and brute-forces the
+        # password through this header instead, unlimited.
+        locked_for = _is_locked_out(r, ip)
+        if locked_for is not None:
+            log_access_denied(request, "/admin", reason="ip_locked_out", metadata={"ip": ip})
+            raise HTTPException(
+                status_code=429,
+                detail={"error": "locked_out", "retry_after_seconds": locked_for},
+            )
+
+        if _password_matches(legacy_token):
+            _clear_attempts(r, ip)
+            return
+
+        attempts = _register_failed_attempt(r, ip)
+        log_access_denied(
+            request, "/admin",
+            reason="wrong_legacy_token",
+            metadata={"ip": ip, "attempts": attempts},
+        )
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     log_access_denied(request, "/admin", reason="no_credentials", metadata={"ip": ip})
@@ -132,22 +211,18 @@ async def admin_login(payload: AdminLoginRequest, request: Request):
     r = _redis()
     ip = get_client_ip(request)
 
-    # Check lockout
-    if r.exists(_lockout_key(ip)):
-        ttl = r.ttl(_lockout_key(ip))
+    # Check lockout — shared with the X-Admin-Token path in verify_admin
+    locked_for = _is_locked_out(r, ip)
+    if locked_for is not None:
         log_access_denied(request, "/admin/login", reason="ip_locked_out", metadata={"ip": ip})
         raise HTTPException(
             status_code=429,
-            detail={"error": "locked_out", "retry_after_seconds": max(ttl, 1)},
+            detail={"error": "locked_out", "retry_after_seconds": locked_for},
         )
 
-    if payload.password != _ADMIN_PASSWORD:
-        # Increment attempt counter
-        attempts = r.incr(_attempt_key(ip))
-        r.expire(_attempt_key(ip), _ATTEMPT_WINDOW)
+    if not _password_matches(payload.password):
+        attempts = _register_failed_attempt(r, ip)
         if attempts >= _MAX_ATTEMPTS:
-            r.setex(_lockout_key(ip), _LOCKOUT_TTL, "1")
-            r.delete(_attempt_key(ip))
             log_access_denied(request, "/admin/login", reason="locked_out_after_attempts", metadata={"ip": ip, "attempts": attempts})
             raise HTTPException(
                 status_code=429,
@@ -157,7 +232,7 @@ async def admin_login(payload: AdminLoginRequest, request: Request):
         raise HTTPException(status_code=401, detail={"error": "wrong_password", "attempts_left": _MAX_ATTEMPTS - attempts})
 
     # Password correct — clear attempts, issue session token
-    r.delete(_attempt_key(ip))
+    _clear_attempts(r, ip)
     token = secrets.token_urlsafe(32)
     r.setex(_session_key(token), _SESSION_TTL, "1")
 

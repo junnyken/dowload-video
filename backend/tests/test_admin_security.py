@@ -122,6 +122,10 @@ class TestVerifyAdmin:
         r.get.return_value = b"1" if session_valid else None
         r.exists.return_value = 1 if locked else 0
         r.expire = MagicMock()
+        r.ttl.return_value = 900
+        # Real Redis INCR returns an int; the bare MagicMock default would
+        # break the `attempts >= threshold` comparison in the lockout path.
+        r.incr.return_value = 1
         return r
 
     @pytest.fixture(autouse=True)
@@ -525,3 +529,151 @@ class TestRegressionNotBroken:
         from fastapi.routing import APIRoute
         paths = [r.path for r in router.routes if isinstance(r, APIRoute)]
         assert "/update-user" in paths
+
+
+# ═══════════════════════════════════════════════════════════════════
+# X — X-Admin-Token header hardening (regression)
+# ═══════════════════════════════════════════════════════════════════
+
+class TestLegacyHeaderHardening:
+    """X-Admin-Token carries EITHER a session token or the raw password, and
+    used to be compared only against the password with no lockout at all."""
+
+    def _redis(self, session_valid: bool = False, locked: bool = False, attempts: int = 1):
+        r = MagicMock()
+        r.get.return_value = b"1" if session_valid else None
+        r.exists.return_value = 1 if locked else 0
+        r.ttl.return_value = 900
+        r.incr.return_value = attempts
+        return r
+
+    def _pin(self, admin_mod, pw="correct-pw"):
+        admin_mod._ADMIN_PASSWORD = pw
+        admin_mod._ADMIN_ALLOWED_IPS = set()
+
+    def test_session_token_in_legacy_header_is_accepted(self):
+        """Panels hold the /admin/login token in a var named `adminToken` and
+        send it in this header; the same value goes out as a Bearer token
+        elsewhere. Comparing it only to the password 401'd every such call."""
+        import app.api.admin as admin_mod
+        from app.api.admin import verify_admin
+
+        pw, ips = admin_mod._ADMIN_PASSWORD, admin_mod._ADMIN_ALLOWED_IPS
+        try:
+            self._pin(admin_mod)
+            with patch("app.api.admin._redis", return_value=self._redis(session_valid=True)):
+                async def _run():
+                    assert await verify_admin(
+                        _make_request(), legacy_token="live-session-token", bearer=None
+                    ) is None
+                asyncio.run(_run())
+        finally:
+            admin_mod._ADMIN_PASSWORD, admin_mod._ADMIN_ALLOWED_IPS = pw, ips
+
+    def test_wrong_legacy_token_is_counted(self):
+        """A guess through this header must count toward the same lockout as
+        /admin/login, or the lockout is bypassed by switching headers."""
+        import app.api.admin as admin_mod
+        from fastapi import HTTPException
+        from app.api.admin import verify_admin
+
+        pw, ips = admin_mod._ADMIN_PASSWORD, admin_mod._ADMIN_ALLOWED_IPS
+        r = self._redis(attempts=1)
+        try:
+            self._pin(admin_mod)
+            with patch("app.api.admin._redis", return_value=r):
+                async def _run():
+                    with pytest.raises(HTTPException) as exc:
+                        await verify_admin(_make_request(), legacy_token="wrong", bearer=None)
+                    assert exc.value.status_code == 401
+                asyncio.run(_run())
+            assert r.incr.called, "failed guess was not counted"
+        finally:
+            admin_mod._ADMIN_PASSWORD, admin_mod._ADMIN_ALLOWED_IPS = pw, ips
+
+    def test_legacy_token_arms_lockout_at_threshold(self):
+        import app.api.admin as admin_mod
+        from fastapi import HTTPException
+        from app.api.admin import verify_admin
+
+        pw, ips = admin_mod._ADMIN_PASSWORD, admin_mod._ADMIN_ALLOWED_IPS
+        r = self._redis(attempts=admin_mod._MAX_ATTEMPTS)
+        try:
+            self._pin(admin_mod)
+            with patch("app.api.admin._redis", return_value=r):
+                async def _run():
+                    with pytest.raises(HTTPException):
+                        await verify_admin(_make_request(), legacy_token="wrong", bearer=None)
+                asyncio.run(_run())
+            assert any("admin:lockout:" in str(c) for c in r.setex.call_args_list), \
+                "lockout never armed after reaching the attempt threshold"
+        finally:
+            admin_mod._ADMIN_PASSWORD, admin_mod._ADMIN_ALLOWED_IPS = pw, ips
+
+    def test_locked_out_ip_gets_429_on_legacy_header(self):
+        import app.api.admin as admin_mod
+        from fastapi import HTTPException
+        from app.api.admin import verify_admin
+
+        pw, ips = admin_mod._ADMIN_PASSWORD, admin_mod._ADMIN_ALLOWED_IPS
+        try:
+            self._pin(admin_mod)
+            with patch("app.api.admin._redis", return_value=self._redis(locked=True)):
+                async def _run():
+                    with pytest.raises(HTTPException) as exc:
+                        await verify_admin(_make_request(), legacy_token="wrong", bearer=None)
+                    assert exc.value.status_code == 429
+                asyncio.run(_run())
+        finally:
+            admin_mod._ADMIN_PASSWORD, admin_mod._ADMIN_ALLOWED_IPS = pw, ips
+
+    def test_redis_outage_does_not_lock_admins_out(self):
+        """Lockout state is unreadable during an outage. The rate limit degrades
+        open, the password check stays authoritative, and nothing 500s."""
+        import app.api.admin as admin_mod
+        from app.api.admin import verify_admin
+
+        pw, ips = admin_mod._ADMIN_PASSWORD, admin_mod._ADMIN_ALLOWED_IPS
+        r = MagicMock()
+        r.get.side_effect = ConnectionError("redis down")
+        r.exists.side_effect = ConnectionError("redis down")
+        r.incr.side_effect = ConnectionError("redis down")
+        try:
+            self._pin(admin_mod)
+            with patch("app.api.admin._redis", return_value=r):
+                async def _run():
+                    assert await verify_admin(
+                        _make_request(), legacy_token="correct-pw", bearer=None
+                    ) is None
+                asyncio.run(_run())
+        finally:
+            admin_mod._ADMIN_PASSWORD, admin_mod._ADMIN_ALLOWED_IPS = pw, ips
+
+
+class TestPasswordComparison:
+
+    def test_uses_constant_time_compare(self):
+        """`==` leaks the correct prefix length through response timing."""
+        import inspect
+        import app.api.admin as admin_mod
+        assert "compare_digest" in inspect.getsource(admin_mod._password_matches)
+
+    def test_empty_password_never_matches(self):
+        import app.api.admin as admin_mod
+        original = admin_mod._ADMIN_PASSWORD
+        try:
+            admin_mod._ADMIN_PASSWORD = ""
+            assert admin_mod._password_matches("") is False
+            assert admin_mod._password_matches("anything") is False
+        finally:
+            admin_mod._ADMIN_PASSWORD = original
+
+    def test_correct_password_matches(self):
+        import app.api.admin as admin_mod
+        original = admin_mod._ADMIN_PASSWORD
+        try:
+            admin_mod._ADMIN_PASSWORD = "s3cr3t"
+            assert admin_mod._password_matches("s3cr3t") is True
+            assert admin_mod._password_matches("s3cr3") is False
+        finally:
+            admin_mod._ADMIN_PASSWORD = original
