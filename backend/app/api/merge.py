@@ -78,9 +78,10 @@ def merge_clips(
     user=Depends(get_optional_user),
 ):
     # Sync def (not async) is intentional: FastAPI/Starlette runs sync route
-    # handlers in a worker thread pool. This handler calls blocking
-    # subprocess.run() for up to 300s — as `async def` it would block the
-    # whole event loop, freezing every other request on this uvicorn worker.
+    # handlers in a worker thread pool. The encode itself now runs on the media
+    # worker, but this handler still blocks while waiting for that result (and
+    # on the short ffprobe reads) — as `async def` it would block the whole
+    # event loop, freezing every other request on this uvicorn worker.
     # ── 1. Validate clip count ───────────────────────────────────────
     if len(body.job_ids) < 2:
         raise HTTPException(
@@ -170,11 +171,13 @@ def merge_clips(
             ] + _ffmpeg_threads()
         cmd += ["-movflags", "+faststart", output_path]
 
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        if proc.returncode != 0:
+        # Encode runs on the media worker — see app/tasks/media_tasks.py.
+        from app.tasks.media_tasks import merge_audio_video_task, run_on_worker
+        outcome = run_on_worker(merge_audio_video_task, cmd, timeout=300)
+        if outcome["returncode"] != 0:
             raise HTTPException(
                 status_code=500,
-                detail={"error_code": "merge_failed", "message": "FFmpeg merge failed.", "stderr": proc.stderr[-500:]},
+                detail={"error_code": "merge_failed", "message": "FFmpeg merge failed.", "stderr": outcome["stderr"]},
             )
     finally:
         try:

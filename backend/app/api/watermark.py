@@ -109,9 +109,10 @@ def watermark_embed(
     body: WatermarkRequest,
 ):
     # Sync def (not async) is intentional: FastAPI/Starlette runs sync route
-    # handlers in a worker thread pool. This handler calls blocking
-    # subprocess.run() for up to 300s — as `async def` it would block the
-    # whole event loop, freezing every other request on this uvicorn worker.
+    # handlers in a worker thread pool. The encode itself now runs on the media
+    # worker, but this handler still blocks while waiting for that result (and
+    # on the short ffprobe reads) — as `async def` it would block the whole
+    # event loop, freezing every other request on this uvicorn worker.
     # ── Validate source path ─────────────────────────────────────────
     source_abs = _safe_path(body.source_path)
 
@@ -213,14 +214,18 @@ def watermark_embed(
         cmd += _ffmpeg_threads()
         cmd += ["-movflags", "+faststart", output_path]
 
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        if proc.returncode != 0:
+        # Hand the encode to the media worker instead of burning CPU inside
+        # this API process. Validation, paths and the response below are
+        # unchanged — only the place ffmpeg runs moved.
+        from app.tasks.media_tasks import watermark_task, run_on_worker
+        outcome = run_on_worker(watermark_task, cmd, timeout=300)
+        if outcome["returncode"] != 0:
             raise HTTPException(
                 status_code=500,
                 detail={
                     "error_code": "watermark_render_failed",
                     "message": "FFmpeg watermark render failed.",
-                    "stderr": proc.stderr[-500:],
+                    "stderr": outcome["stderr"],
                 },
             )
 

@@ -18,6 +18,7 @@ celery_app = Celery(
     backend=redis_url,
     include=[
         "app.tasks.video_tasks",
+        "app.tasks.media_tasks",
         "app.tasks.archive_tasks",
         "app.tasks.schedule_tasks",
         "app.tasks.intelligence_tasks",
