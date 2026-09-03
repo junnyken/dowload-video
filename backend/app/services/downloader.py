@@ -72,6 +72,33 @@ def _get_cookies_file(platform: str, env_b64: str) -> str | None:
 
     try:
         decoded = base64.b64decode(b64_to_use).decode("utf-8")
+
+        # Strip anything yt-dlp would reject BEFORE it ever sees the file.
+        # Its rejection path prints the offending line verbatim to stderr
+        # (write_string, not the logger — unsuppressable), and that line is a
+        # live session cookie. Production was leaking a Facebook c_user/xs pair
+        # into the runtime log on every single request this way.
+        from app.core.cookie_pool import sanitize_netscape_cookies
+        decoded, _kept, _dropped = sanitize_netscape_cookies(decoded)
+        if _dropped:
+            # Count only — the content of a dropped line is the credential.
+            print(f"[Cookies] {platform}: dropped {_dropped} line(s) not in "
+                  f"Netscape cookies.txt format")
+        if _kept == 0:
+            print(f"[Cookies] {platform}: cookie holds no usable Netscape entries "
+                  f"— ignoring it (re-upload a real cookies.txt export)")
+            if b64_to_use != env_b64:
+                try:
+                    from app.core.cookie_pool import mark_cookie_disabled
+                    mark_cookie_disabled(
+                        platform, b64_to_use,
+                        reason="not in Netscape cookies.txt format",
+                    )
+                except Exception:
+                    pass
+            _cookies_cache[platform] = None
+            return None
+
         tmp = tempfile.NamedTemporaryFile(
             mode="w", suffix=".txt", delete=False, prefix=f"{platform}_cookies_"
         )

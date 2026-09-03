@@ -1517,6 +1517,38 @@ class CookieRemoveRequest(BaseModel):
 # Nothing else needed changing: cookie_pool discovers platforms from its Redis
 # keys, falls back to a default cooldown, and treats an unknown platform as
 # having no required auth cookies.
+def _validated_cookie_b64(raw: bytes, platform: str) -> tuple[str, int, int]:
+    """
+    Sanitize an uploaded cookies.txt. Returns (base64 of the clean file,
+    entries kept, lines dropped); raises 400 if nothing usable survives.
+
+    This endpoint used to base64 whatever bytes it was handed and push them
+    straight into the pool. Production ended up holding a single browser
+    `Cookie:` header line for Facebook — accepted, stored, served on every
+    request, and dropped by yt-dlp every time, so the pool looked healthy
+    while behaving exactly like an empty one. Rejecting it here is the only
+    moment anyone is around to read the error and fix the export.
+
+    The rejection message never quotes the file. Its content is a live
+    session, and an error string travels into logs and admin UIs.
+    """
+    text = raw.decode("utf-8", errors="replace") if raw else ""
+    from app.core.cookie_pool import sanitize_netscape_cookies
+    clean, entries, dropped = sanitize_netscape_cookies(text)
+    if entries == 0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Not a Netscape cookies.txt file — 0 usable entries for {platform}. "
+                "Export with a 'Get cookies.txt LOCALLY' browser extension. "
+                "A copied `Cookie:` request header or a JSON cookie export will "
+                "not work: yt-dlp skips every line and downloads run as if no "
+                "cookie existed."
+            ),
+        )
+    return base64.b64encode(clean.encode("utf-8")).decode("utf-8"), entries, dropped
+
+
 _VALID_PLATFORMS = {
     "youtube", "tiktok", "facebook", "instagram",
     "twitter", "x", "reddit", "bilibili",
@@ -1605,9 +1637,11 @@ async def cookie_pool_upload(
     """
     if platform not in _VALID_PLATFORMS:
         raise HTTPException(status_code=400, detail=f"Platform must be one of: {_VALID_PLATFORMS}")
+    content = await file.read()
+    # Validate OUTSIDE the try: the except below turns everything into a 500,
+    # so a 400 raised inside it would reach the admin as "internal error".
+    cookies_b64, _entries, _dropped = _validated_cookie_b64(content, platform)
     try:
-        content = await file.read()
-        cookies_b64 = base64.b64encode(content).decode("utf-8")
         from app.core.cookie_pool import add_cookie, get_expiry_report
         new_size = add_cookie(platform, cookies_b64, label=label)
         # Return expiry info for the newly added cookie
@@ -1617,9 +1651,14 @@ async def cookie_pool_upload(
             resource_type="cookie_pool", resource_id=platform,
             metadata={"label": label, "pool_size": new_size},
         )
+        message = f"Cookie added to {platform} pool (total: {new_size})"
+        if _dropped:
+            message += (f" — {_dropped} line(s) were not valid Netscape entries "
+                        f"and were discarded; {_entries} kept")
         return {
             "success": True, "platform": platform, "pool_size": new_size,
-            "message": f"Cookie added to {platform} pool (total: {new_size})",
+            "entries": _entries, "dropped_lines": _dropped,
+            "message": message,
             "cookies": report,
         }
     except Exception as e:
@@ -1747,14 +1786,22 @@ async def cookie_pool_add(req: CookieAddRequest, request: Request, _=Depends(ver
     if not req.cookies_b64.strip():
         raise HTTPException(status_code=400, detail="cookies_b64 is required")
     try:
+        _raw = base64.b64decode(req.cookies_b64.strip())
+    except Exception:
+        raise HTTPException(status_code=400, detail="cookies_b64 is not valid base64")
+    # Same gate as /cookies/upload — this endpoint is the other way into the
+    # pool, and a pool entry yt-dlp cannot load is worse than an empty pool.
+    cookies_b64, _entries, _dropped = _validated_cookie_b64(_raw, req.platform)
+    try:
         from app.core.cookie_pool import add_cookie
-        new_size = add_cookie(req.platform, req.cookies_b64.strip(), label=req.label)
+        new_size = add_cookie(req.platform, cookies_b64, label=req.label)
         log_admin_action(
             request, "admin.cookie.added",
             resource_type="cookie_pool", resource_id=req.platform,
             metadata={"label": req.label or "", "pool_size": new_size},
         )
-        return {"success": True, "platform": req.platform, "pool_size": new_size}
+        return {"success": True, "platform": req.platform, "pool_size": new_size,
+                "entries": _entries, "dropped_lines": _dropped}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

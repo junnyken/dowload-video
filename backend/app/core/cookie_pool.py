@@ -39,6 +39,7 @@ Per-platform cooldown (seconds between reuses of same cookie):
 import base64
 import hashlib
 import json
+import re
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -120,6 +121,73 @@ _AUTH_COOKIES: dict[str, set[str]] = {
 
 def _hash(cookie_b64: str) -> str:
     return hashlib.md5(cookie_b64.encode()).hexdigest()[:16]
+
+
+# ── Netscape cookies.txt validation ──────────────────────────────────
+# yt-dlp's cookiejar reads ONLY the Netscape format: seven TAB-separated
+# fields per entry. Hand it anything else and it skips the line — so a
+# Facebook cookie that uploaded "successfully" can be completely inert, which
+# is exactly what production was doing: the pool held one long `Cookie:`
+# header line copied out of a browser, every request loaded it, and yt-dlp
+# dropped it on the floor. Nothing reported that, because the upload endpoint
+# base64'd whatever bytes it was given without ever looking at them.
+#
+# The skip is not silent either, and that is the worse half. yt-dlp writes
+#     WARNING: skipping cookie file entry due to invalid length N: '<the line>'
+# through write_string() straight to stderr, bypassing any logger we set. The
+# line it prints IS the credential — c_user/xs for Facebook, auth_token for X —
+# so one malformed upload puts a live session into the runtime log in
+# plaintext, where anyone with log access can lift it. No logging change can
+# stop that. The only fix is to never hand yt-dlp a line it will reject.
+#
+# These rules mirror YoutubeDLCookieJar.load()'s prepare_line() exactly,
+# including the numeric-expiry check, so a line this function keeps is a line
+# yt-dlp accepts without a word. test_cookie_format_validation.py pins that
+# equivalence against the real cookiejar so the two cannot drift apart.
+_NETSCAPE_ENTRY_LEN = 7
+_HTTPONLY_PREFIX = "#HttpOnly_"
+_EXPIRES_RE = re.compile(r"[0-9]+(?:\.[0-9]+)?")
+
+
+def _netscape_line_is_loadable(line: str) -> bool:
+    """True if yt-dlp's cookiejar accepts this line without warning."""
+    if line.startswith(_HTTPONLY_PREFIX):
+        line = line[len(_HTTPONLY_PREFIX):]
+    if line.startswith("#") or not line.strip():
+        return True  # comments and blank lines are fine
+    fields = line.split("\t")
+    if len(fields) != _NETSCAPE_ENTRY_LEN:
+        return False
+    expires_at = fields[4]
+    return not expires_at or bool(_EXPIRES_RE.fullmatch(expires_at))
+
+
+def sanitize_netscape_cookies(text: str) -> tuple[str, int, int]:
+    """
+    Drop every line yt-dlp would reject.
+
+    Returns (clean_text, entries_kept, lines_dropped). `entries_kept` counts
+    real cookie entries only — a file of nothing but comments keeps 0, which
+    is the honest answer: it carries no credentials.
+
+    Never returns, logs or raises the content of a dropped line. That content
+    is a live session; the whole point of this function is to keep it out of
+    the places a rejected line would otherwise end up.
+    """
+    kept: list[str] = []
+    entries = 0
+    dropped = 0
+    for line in (text or "").splitlines():
+        if not _netscape_line_is_loadable(line):
+            dropped += 1
+            continue
+        kept.append(line)
+        if line.strip() and not line.lstrip().startswith("#"):
+            entries += 1
+        elif line.startswith(_HTTPONLY_PREFIX):
+            entries += 1
+    clean = "\n".join(kept).strip()
+    return (clean + "\n" if clean else ""), entries, dropped
 
 
 def _parse_cookie_info(cookie_b64: str, platform: str) -> dict:
