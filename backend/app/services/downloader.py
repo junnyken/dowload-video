@@ -977,6 +977,40 @@ def _extract_best_url(info: dict) -> tuple[str, float]:
     return best_combined or best_video_only or "", best_filesize
 
 
+def _stream_short_side(f: dict) -> int:
+    """
+    The side a resolution label actually names.
+
+    "1080p" means the SHORTER side. A 1080x1920 reel is what everyone calls a
+    1080p video, and the download format selector in _get_base_opts already
+    reads the number that way on purpose.
+
+    Naming a portrait stream by its height instead left the two halves reading
+    the same number differently, and the mismatch was invisible until you
+    checked the bytes. Measured on facebook.com/reel/2033078270746905, whose
+    streams are 1440x2560, 1080x1920 and 720x1280:
+
+        UI offered "4K 2560p"      -> got 1440x2560   (right, by luck)
+        UI offered "2K 1920p"      -> got 1440x2560   (same file as "4K")
+        UI offered "Full HD 1280p" -> got 1080x1920   (a tier too high)
+
+    The selector was never wrong: asked for a short side of 1920, it correctly
+    found 1440x2560 eligible. The label was — it promised a stream nobody could
+    ask for, alongside a size the download would not match. Naming by the short
+    side makes the picker send 1440 / 1080 / 720, which resolve to exactly the
+    stream shown. It also stops calling a 1440x2560 reel "4K": by the short
+    side it is 1440p, which is what a player will report.
+
+    Landscape video is unaffected — its short side IS its height, so the two
+    conventions agree and always did.
+    """
+    height = f.get("height") or 0
+    width = f.get("width") or 0
+    if width and height:
+        return min(width, height)
+    return height
+
+
 def _extract_available_formats(info: dict) -> dict:
     """
     Parse yt-dlp's format list into a clean, deduplicated list of
@@ -1040,7 +1074,7 @@ def _extract_available_formats(info: dict) -> dict:
 
     merge_audio_real = bool(merge_audio) and _has_real_size(merge_audio)
 
-    def _make_video_entry(f, height, ext, requires_merge):
+    def _make_video_entry(f, short_side, ext, requires_merge):
         # Add the merged audio size ONLY for video-only streams. HLS/progressive
         # formats already carry audio, so adding it would double-count.
         video_only = (f.get("acodec") or "none") == "none"
@@ -1053,23 +1087,28 @@ def _extract_available_formats(info: dict) -> dict:
         # H.264 plays on every OS/player (Windows, macOS, iPhone, Android, QuickTime).
         # VP9/AV1 (2K/4K — YouTube has no H.264 there) may not open on Apple/older devices.
         universal = (f.get("vcodec") or "").lower().startswith(("avc1", "h264"))
-        if height >= 2160:
+        # Tiers read the short side, so a 1440x2560 reel is "2K 1440p" — what a
+        # player reports — instead of the "4K 2560p" its height alone suggested.
+        if short_side >= 2160:
             label = "4K"
-        elif height >= 1440:
+        elif short_side >= 1440:
             label = "2K"
-        elif height >= 1080:
+        elif short_side >= 1080:
             label = "Full HD"
-        elif height >= 720:
+        elif short_side >= 720:
             label = "HD"
-        elif height >= 480:
+        elif short_side >= 480:
             label = "SD"
         else:
-            label = f"{height}p"
+            label = f"{short_side}p"
         return {
             "type": "video",
             "label": label,
-            "resolution": f"{height}p",
-            "height": height,
+            "resolution": f"{short_side}p",
+            # The picker sends this number back as `video_<n>`, and the format
+            # selector reads it as the short side — so this must BE the short
+            # side or the file will not be the one described here.
+            "height": short_side,
             "ext": ext,
             "filesize_mb": filesize_mb,
             "size_estimated": size_estimated,
@@ -1094,7 +1133,10 @@ def _extract_available_formats(info: dict) -> dict:
             continue  # audio-only handled separately
         if (f.get("ext") or "") not in ("mp4", "webm"):
             continue
-        height = f.get("height") or 0
+        # Keyed by short side, the same number the picker sends back and the
+        # format selector matches on. Keying by height grouped a portrait
+        # stream under a resolution nobody could actually request.
+        height = _stream_short_side(f)
         if not height:
             continue
         if (f.get("acodec") or "none") == "none" and height > max_video_only_height:
@@ -3006,12 +3048,18 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
 
     # Add the actual downloaded video height so frontend knows
     # what quality is already available locally (avoids re-downloading)
+    # Short side, matching available_formats[].height — the frontend compares
+    # the two directly ("already downloaded at this quality?"), so a portrait
+    # video reported here by its height would never equal the format entry it
+    # came from, and the "already downloaded" shortcut would silently re-fetch.
+    # It is also the honest number for the {resolution} rename token: a
+    # 1080x1920 reel is a 1080p file, not a 1920p one.
     downloaded_height = 0
     if info.get("requested_downloads"):
         dl0 = info["requested_downloads"][0]
-        downloaded_height = dl0.get("height") or info.get("height") or 0
+        downloaded_height = _stream_short_side(dl0) or _stream_short_side(info) or 0
     elif info.get("height"):
-        downloaded_height = info["height"]
+        downloaded_height = _stream_short_side(info)
     result["downloaded_height"] = downloaded_height
 
     # ── YouTube Chapters ─────────────────────────────────────
