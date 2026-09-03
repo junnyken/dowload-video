@@ -18,6 +18,8 @@ import os
 import asyncio
 import base64
 import hashlib
+import hmac
+import secrets
 import tempfile
 from time import sleep
 import yt_dlp
@@ -133,6 +135,98 @@ def _rotate_cookie(platform: str, hard: bool = False) -> None:
     _active_cookie_b64.pop(platform, None)
     label = "hard" if hard else "soft"
     print(f"[Cookies] Rotated {platform} cookie ({label} block)")
+
+
+# ── Unguessable download paths ───────────────────────────────────────
+# GET /download-local serves any file under downloads/ to anyone who can name
+# it — no session, no ownership check (verified against production: a bare
+# curl with no credentials returned 200 and the whole file). The containment
+# check there is correct, so the path cannot escape the directory; what was
+# missing is that the path was *guessable*.
+#
+# It was `%(id)s_%(format_id)s.%(ext)s`. For YouTube that is an 11-character
+# public video id and an itag from a short known list — `kGWFwVWwJYU_18.mp4`,
+# a couple of dozen guesses. And the app offers "use my cookies" for private
+# and members-only content, so the file one person decrypted with their own
+# session sat in a shared directory under a name anyone could derive from the
+# video id alone.
+#
+# Signing the URL would be the stronger fix, but /download-local has 42 call
+# sites including the Chrome extension — already installed on users' machines
+# and not updatable on our schedule — so enforcing a signature would break
+# every client until each one shipped. An unguessable path closes the same
+# hole with no client change at all: each caller already receives the exact
+# path in its own API response.
+#
+# The token is an HMAC of the URL, not a random value, so the same URL keeps
+# landing on the same filename and the existing "already downloaded, reuse
+# it" behaviour survives. Cookie-authenticated downloads mix the cookie into
+# the token as well, so private content never shares a path with the
+# anonymous fetch of the same URL.
+_DOWNLOAD_PATH_SECRET_REDIS_KEY = "download_path_secret"
+_path_secret_cache: str | None = None
+
+
+def _download_path_secret() -> str:
+    """The server-side secret that makes a download path unguessable."""
+    global _path_secret_cache
+    if _path_secret_cache:
+        return _path_secret_cache
+
+    env_secret = os.getenv("DOWNLOAD_PATH_SECRET", "").strip()
+    if env_secret:
+        _path_secret_cache = env_secret
+        return _path_secret_cache
+
+    # No env var needed to be secure: mint one and keep it in Redis so every
+    # worker derives the same paths. setnx settles a race between workers
+    # starting together — whoever loses reads back the winner's value.
+    try:
+        rc = get_redis()
+        existing = rc.get(_DOWNLOAD_PATH_SECRET_REDIS_KEY)
+        if not existing:
+            fresh = secrets.token_hex(32)
+            if not rc.setnx(_DOWNLOAD_PATH_SECRET_REDIS_KEY, fresh):
+                existing = rc.get(_DOWNLOAD_PATH_SECRET_REDIS_KEY)
+            else:
+                existing = fresh
+        _path_secret_cache = existing.decode() if isinstance(existing, bytes) else str(existing)
+        return _path_secret_cache
+    except Exception:
+        # Redis unreachable. A per-process secret still hides the path; the
+        # only cost is that workers stop sharing each other's cached files.
+        # Never fall back to a fixed string — that is the same as no secret.
+        _path_secret_cache = secrets.token_hex(32)
+        return _path_secret_cache
+
+
+def _download_path_token(url: str, cookies_file: str | None = None) -> str:
+    """
+    Filename component nobody outside this server can compute.
+
+    Stable for a given URL (so the reuse-the-file path still works) and
+    distinct once a user's own cookies are involved.
+    """
+    material = (url or "").encode()
+    if cookies_file:
+        try:
+            with open(cookies_file, "rb") as fh:
+                material += b"\x00" + hashlib.sha256(fh.read()).digest()
+        except Exception:
+            # Unreadable cookie file — fall back to its path, which is already
+            # per-request. Never fall through to the cookie-less token.
+            material += b"\x00" + cookies_file.encode()
+    return hmac.new(_download_path_secret().encode(), material, hashlib.sha256).hexdigest()[:16]
+
+
+def _isolate_outtmpl(opts: dict, url: str, cookies_file: str) -> None:
+    """Re-point an opts dict at the cookie-specific path for this URL."""
+    if not opts.get("outtmpl"):
+        return
+    opts["outtmpl"] = os.path.join(
+        DOWNLOAD_DIR,
+        f"%(id)s_%(format_id)s_{_download_path_token(url, cookies_file)}.%(ext)s",
+    )
 
 
 def _get_instagram_cookies_file() -> str | None:
@@ -757,7 +851,10 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
         is_tiktok
     )
     if needs_local_download:
-        opts["outtmpl"] = os.path.join(DOWNLOAD_DIR, "%(id)s_%(format_id)s.%(ext)s")
+        opts["outtmpl"] = os.path.join(
+            DOWNLOAD_DIR,
+            f"%(id)s_%(format_id)s_{_download_path_token(url)}.%(ext)s",
+        )
 
     # ── Proxy: METADATA-ONLY by design (EXCEPT YouTube, see below) ──────
     # The (paid, per-GB) proxy is used ONLY to extract metadata for every other
@@ -1794,6 +1891,9 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     opts = _apply_tiktok_opts(opts, url, remove_watermark)
     if user_cookies_file:
         opts["cookiefile"] = user_cookies_file
+        # Private content must not land on the path an anonymous fetch
+        # of the same URL would compute.
+        _isolate_outtmpl(opts, url, user_cookies_file)
 
     # Bilibili: inject admin cookie from pool/env (users often need login for HD)
     # bilibili.com = Chinese main site (BiliBili extractor)
@@ -2366,6 +2466,9 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 dl_opts = _get_base_opts(url, phase="download", quality=quality, error_sink=_ytdlp_errors)
                 if user_cookies_file:
                     dl_opts["cookiefile"] = user_cookies_file
+                    # Private content must not land on the path an anonymous fetch
+                    # of the same URL would compute.
+                    _isolate_outtmpl(dl_opts, url, user_cookies_file)
                 dl_opts["extract_flat"] = False
                 # Subtitle download: write .srt alongside video when user requested subs
                 if download_subs and not quality.startswith("mp3"):
@@ -2503,6 +2606,9 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 dl_opts = _apply_tiktok_opts(dl_opts, url, remove_watermark)
                 if user_cookies_file:
                     dl_opts["cookiefile"] = user_cookies_file
+                    # Private content must not land on the path an anonymous fetch
+                    # of the same URL would compute.
+                    _isolate_outtmpl(dl_opts, url, user_cookies_file)
                 dl_opts["extract_flat"] = False
                 if download_subs and not quality.startswith("mp3"):
                     dl_opts["writesubtitles"] = True
@@ -2526,6 +2632,9 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 dl_opts = _apply_tiktok_opts(dl_opts, url, remove_watermark)
                 if user_cookies_file:
                     dl_opts["cookiefile"] = user_cookies_file
+                    # Private content must not land on the path an anonymous fetch
+                    # of the same URL would compute.
+                    _isolate_outtmpl(dl_opts, url, user_cookies_file)
                 dl_opts["extract_flat"] = False
                 if download_subs and not quality.startswith("mp3"):
                     dl_opts["writesubtitles"] = True
