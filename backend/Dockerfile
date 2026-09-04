@@ -1,5 +1,16 @@
 # Sử dụng Python image chính thức
-FROM python:3.10-slim
+#
+# 3.12, not 3.13: this is the version the test suite actually runs on
+# (backend/venv is 3.12), so the 1457 passing tests are evidence for this
+# image rather than for a version nobody has exercised.
+#
+# Why move at all — 3.10 still works today. yt-dlp already prints "Support for
+# Python version 3.10 has been deprecated" on every run, and yt-dlp is the one
+# dependency this project cannot afford to stop upgrading: a stale copy of it
+# is the most likely root cause of the Facebook reel outage on 03-09, fixed by
+# an image rebuild that pulled a newer release. Being unable to take the next
+# yt-dlp because the base image aged out is the failure worth avoiding early.
+FROM python:3.12-slim
 
 # Không đệm stdout/stderr. Codebase này dùng print() rất nhiều cho chẩn đoán
 # ([Startup], [Heartbeat], [Alerts], [Watchdog]...); khi stdout là pipe thì

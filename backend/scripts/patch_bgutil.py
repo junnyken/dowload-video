@@ -7,10 +7,26 @@ Without this patch the plugin raises PoTokenProviderRejectedRequest and PO token
 are never generated, breaking YouTube web-client downloads.
 """
 import sys
+import sysconfig
+from pathlib import Path
 
-PLUGIN_PATH = (
-    "/usr/local/lib/python3.10/site-packages"
-    "/yt_dlp_plugins/extractor/getpot_bgutil.py"
+# Ask the interpreter where its packages live rather than naming a version.
+#
+# This was hardcoded to /usr/local/lib/python3.10/site-packages, so moving the
+# base image to python:3.12-slim failed the build with FileNotFoundError on a
+# path that no longer existed. A build break is the good outcome — the same
+# hardcoding would have silently skipped the patch if this script ever stopped
+# treating a missing file as fatal, and PO token generation would have broken
+# instead, which shows up as YouTube downloads 403ing on every byte.
+_candidates = [
+    Path(sysconfig.get_paths()["purelib"]),
+    Path(sysconfig.get_paths()["platlib"]),
+]
+_rel = Path("yt_dlp_plugins/extractor/getpot_bgutil.py")
+
+PLUGIN_PATH = next(
+    (str(base / _rel) for base in _candidates if (base / _rel).exists()),
+    str(_candidates[0] / _rel),   # keep the old "fail loudly" behaviour
 )
 
 OLD = (
