@@ -571,6 +571,12 @@ export default function DashboardContent() {
       }
       if (data.success) {
         setVideoInfo(data);
+        // Marks "this person has used the tool before", which is what decides
+        // whether the landing hero introduces the product or gets out of the
+        // way. vg_download_count alone was too narrow: it only counts the
+        // merge-download path, so someone who only ever used the quick
+        // download would keep being sold the product they already use.
+        try { localStorage.setItem('vg_used_before', '1'); } catch {}
         trackEvent(EVENT.FETCH_SUCCESS, { platform: data.platform || 'unknown', has_subtitles: !!data.has_subtitles });
         showToast('Trích xuất thành công!');
         if (subtitleMode !== 'off') {

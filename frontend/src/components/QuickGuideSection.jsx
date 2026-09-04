@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { hasUsedBefore } from '../lib/returningUser';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 // ── Guide content data ─────────────────────────────────────────────
@@ -166,6 +167,8 @@ function GuidePanel({ tabKey, visible }) {
  *   - when parent prop changes, auto-sync overrides any manual selection
  *
  * Collapse rules:
+ *   - returning visitor: collapsed (they do not need "step 01: paste a link",
+ *     and this sits directly on top of the input)
  *   - first visit, mobile (< 640px): collapsed; pills always visible
  *   - first visit, desktop (≥ 640px): expanded
  *   - after that: whatever the reader last chose, remembered across visits
@@ -197,8 +200,12 @@ export default function QuickGuideSection({
       const saved = localStorage.getItem(GUIDE_EXPANDED_KEY);
       if (saved !== null) return saved === '1';
     } catch {
-      // Private mode / storage blocked — fall through to the width default.
+      // Private mode / storage blocked — fall through to the defaults below.
     }
+    // Someone who has used the tool does not need "step 01: paste a link"
+    // open by default — and this guide sits directly on top of the input,
+    // so leaving it open costs them ~270px of the first screen.
+    if (hasUsedBefore()) return false;
     return window.matchMedia('(min-width: 640px)').matches;
   });
 

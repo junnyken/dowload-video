@@ -3,6 +3,8 @@ import {
   Download, Layers, History, Wand2,
   Sparkles, Smartphone, X, ShieldCheck, Puzzle
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { hasUsedBefore } from '../lib/returningUser';
 import DashboardContent from './DashboardContent';
 import BulkContent from './BulkContent';
 import HistoryContent from './HistoryContent';
@@ -39,6 +41,13 @@ const tabs = [
 ];
 
 export default function LandingPage() {
+  const { isAuthenticated } = useAuth();
+
+  // Read once, at mount: this must not flip mid-session and reflow the page
+  // under someone who is reading it.
+  const [returning] = useState(hasUsedBefore);
+  const compactHero = isAuthenticated || returning;
+
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.has('batch') ? 'bulk' : 'single';
@@ -152,16 +161,28 @@ export default function LandingPage() {
       </a> */}
 
       {/* Main container */}
-      <div className="relative z-10 w-full max-w-4xl mx-auto px-4 sm:px-6 pt-20 md:pt-28 flex flex-col items-center">
+      <div className={`relative z-10 w-full max-w-4xl mx-auto px-4 sm:px-6 flex flex-col items-center ${
+        compactHero ? 'pt-6 md:pt-10' : 'pt-20 md:pt-28'
+      }`}>
 
-        {/* Hero Section */}
-        <section className="w-full flex flex-col items-center text-center mb-6 md:mb-10">
-          {/* Context label */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-xs font-bold text-emerald-400 tracking-wide max-w-full">
+        {/* Hero Section — full pitch on a first visit, one line after that */}
+        <section className={`w-full flex flex-col items-center text-center ${
+          compactHero ? 'mb-3 md:mb-4' : 'mb-6 md:mb-10'
+        }`}>
+          {/* Context label — kept in both: it is what the product does, in one line */}
+          <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-xs font-bold text-emerald-400 tracking-wide max-w-full ${
+            compactHero ? 'mb-0' : 'mb-5'
+          }`}>
             <Sparkles className="w-3 h-3 flex-shrink-0" />
             <span className="truncate">TikTok / Douyin không watermark · 30+ nền tảng</span>
           </div>
 
+          {/* Everything below is the introduction. A returning visitor has
+              read it; the platform list lives on /platforms and the extension
+              stays in the nav, so nothing here is only reachable from the
+              hero. */}
+          {!compactHero && (
+          <>
           <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tighter leading-tight text-white mb-4">
             Bắt trọn video.{' '}
             <span className="bg-gradient-to-r from-[#FBBF24] to-[#FB923C] bg-clip-text text-transparent">
@@ -214,8 +235,12 @@ export default function LandingPage() {
             <Puzzle className="w-4 h-4" />
             Cài Extension Chrome — TikTok sạch 1 click
           </a>
+          </>
+          )}
 
-          {/* Product depth cues — surfaces Bulk, format range, and History */}
+          {/* Product depth cues — kept in both. Two of these are navigation
+              (Bulk, History), not decoration, and they are the only pointer
+              to those tabs from a compact hero. */}
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 mt-3 text-[11px] text-slate-600">
             <button
               onClick={() => setActiveTab('bulk')}
