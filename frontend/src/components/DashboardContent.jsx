@@ -1586,7 +1586,12 @@ export default function DashboardContent() {
               onPaste={handleInputPaste}
               onKeyDown={(e) => e.key === 'Enter' && handleFetchLink()}
               onFocus={() => { if (!url) checkClipboard(); }}
-              placeholder="🔗 Dán liên kết video hoặc kênh vào đây..."
+              /* The emoji sat directly beside the Link2 icon above — two chain
+                 glyphs in a row — and it pushed the text long enough to clip
+                 against the button, so the field's only label read "…vào đâ".
+                 Shortened to fit; the Link2 icon carries the visual cue. */
+              placeholder="Dán liên kết video hoặc kênh…"
+              aria-label="Liên kết video hoặc kênh"
               disabled={isLoading}
               className="w-full bg-transparent text-slate-900 placeholder-slate-500 text-sm sm:text-base md:text-lg font-semibold focus:outline-none disabled:opacity-50 h-14"
             />

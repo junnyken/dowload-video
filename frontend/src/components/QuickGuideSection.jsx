@@ -166,10 +166,13 @@ function GuidePanel({ tabKey, visible }) {
  *   - when parent prop changes, auto-sync overrides any manual selection
  *
  * Collapse rules:
- *   - mobile (< 640px): starts collapsed; pills always visible; steps expand on pill tap
- *   - desktop (≥ 640px): starts expanded
+ *   - first visit, mobile (< 640px): collapsed; pills always visible
+ *   - first visit, desktop (≥ 640px): expanded
+ *   - after that: whatever the reader last chose, remembered across visits
  *   - when parent prop changes on mobile, switch pill but keep collapse state
  */
+const GUIDE_EXPANDED_KEY = 'vg_quickguide_expanded';
+
 export default function QuickGuideSection({
   className = '',
   currentToolTab,
@@ -183,10 +186,29 @@ export default function QuickGuideSection({
     resolveInitialTab(effectiveToolTab, defaultGuideTab)
   );
 
-  // Desktop starts expanded; mobile starts collapsed
-  const [isExpanded, setIsExpanded] = useState(() =>
-    typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches
-  );
+  // Desktop starts expanded; mobile starts collapsed — but only until the
+  // reader says otherwise. Collapsing used to last exactly one visit, so a
+  // returning user scrolled past the same beginner's guide every time to
+  // reach the input it sits on top of. Their choice is remembered now; the
+  // width rule is just the first-visit default.
+  const [isExpanded, setIsExpanded] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const saved = localStorage.getItem(GUIDE_EXPANDED_KEY);
+      if (saved !== null) return saved === '1';
+    } catch {
+      // Private mode / storage blocked — fall through to the width default.
+    }
+    return window.matchMedia('(min-width: 640px)').matches;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(GUIDE_EXPANDED_KEY, isExpanded ? '1' : '0');
+    } catch {
+      // Not being able to remember the preference must never break the guide.
+    }
+  }, [isExpanded]);
 
   const [visible, setVisible] = useState(true);
 

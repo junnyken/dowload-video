@@ -282,9 +282,19 @@ function AppInner() {
               Platforms
             </button>
 
+            {/* Amber marks "you are here", the same as every other nav item.
+                This one used to be amber unconditionally, so it read as the
+                current page from the home screen — and it was the third place
+                on that screen selling the extension, next to the hero button
+                and the install toast. */}
             <button
               onClick={() => navigateTo('extension', '/extension')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#FBBF24]/40 text-[#FBBF24] text-xs font-bold hover:bg-[#FBBF24]/10 transition-colors cursor-pointer"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                view === 'extension'
+                  ? 'border-[#FBBF24]/50 bg-[#FBBF24]/10 text-[#FBBF24]'
+                  : 'border-slate-600/50 text-slate-300 hover:bg-slate-700/40'
+              }`}
+              title="Tiện ích trình duyệt"
             >
               Extension
             </button>

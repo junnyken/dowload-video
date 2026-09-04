@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Download, Layers, History, Wand2,
-  Sparkles, Smartphone, X, ShieldCheck
+  Sparkles, Smartphone, X, ShieldCheck, Puzzle
 } from 'lucide-react';
 import DashboardContent from './DashboardContent';
 import BulkContent from './BulkContent';
@@ -189,7 +189,19 @@ export default function LandingPage() {
             ))}
           </div>
 
-          {/* Extension link — secondary, compact */}
+          {/* Extension link — secondary, compact.
+              It said that already, while being styled as the loudest button on
+              the page: an amber gradient with a shadow and a hover scale, the
+              same weight as BÓC TÁCH NGAY further down. Two primary CTAs, and
+              the louder one was not the job people came here to do. Now it
+              looks like the secondary link this comment always described.
+
+              The Chrome mark used to be an <img> hotlinked from Wikimedia —
+              a third-party request on the home screen that leaves a broken
+              icon if it ever 403s. Puzzle is the browser-extension glyph and
+              comes from the same lucide set as every other icon here (lucide
+              1.11 has no Chrome icon, and hand-drawing a brand mark is worse
+              than not using one). */}
           <a
             href="/extension"
             onClick={(e) => {
@@ -197,9 +209,9 @@ export default function LandingPage() {
               window.history.pushState({}, '', '/extension');
               window.dispatchEvent(new PopStateEvent('popstate'));
             }}
-            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-[#012622] bg-gradient-to-r from-[#FBBF24] to-[#FB923C] hover:from-[#FDE047] hover:to-[#FBBF24] rounded-full transition-all shadow-lg shadow-amber-500/20 hover:scale-105"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[#FBBF24] border border-[#FBBF24]/40 hover:bg-[#FBBF24]/10 rounded-full transition-colors"
           >
-            <img src="https://upload.wikimedia.org/wikipedia/commons/e/e1/Google_Chrome_icon_%28February_2022%29.svg" className="w-4 h-4" alt="Chrome" />
+            <Puzzle className="w-4 h-4" />
             Cài Extension Chrome — TikTok sạch 1 click
           </a>
 
