@@ -290,14 +290,44 @@ def get_provider_circuit_states() -> dict:
 # ── Stale job count ───────────────────────────────────────────────────────────
 
 def get_stale_job_count() -> int:
-    """Count jobs currently in 'stale' status in Supabase."""
+    """
+    Count jobs the recovery scanner has marked stale.
+
+    This asked for status="stale", and there is no such status: the job_status
+    enum holds pending/processing/success/failed. recovery.py says so in a
+    comment and marks stale jobs with job_stage="stale" while leaving status at
+    "processing". Postgres rejected the comparison, Supabase answered 400, the
+    bare except below turned that into -1, and every caller reads -1 as "DB
+    unavailable":
+
+      - alerts.check_stale_jobs() returns early on count < 0, so the stale-job
+        alert has never fired and could not have
+      - /ops renders `if stale_count > 0`, so its warning never appeared, and
+        the dashboard published stale_job_count: -1
+
+    A watchdog that cannot fire is worse than no watchdog, because the silence
+    reads as "nothing is wrong". It also meant a 400 on Supabase every scrape.
+
+    Not to be confused with /health's stale count in main.py, which is a
+    different question — "processing and untouched for over 8 minutes", a
+    heuristic for jobs going quiet. This one counts jobs the scanner has
+    already decided about, which is what the alert is about.
+    """
     try:
         from app.core.database import get_service_client
         sb = get_service_client()
-        res = sb.table("download_jobs").select("id", count="exact") \
-            .eq("status", "stale").limit(1).execute()
+        res = (
+            sb.table("download_jobs")
+            .select("id", count="exact")
+            .eq("job_stage", "stale")
+            .eq("status", "processing")
+            .limit(1)
+            .execute()
+        )
         return res.count or 0
-    except Exception:
+    except Exception as exc:
+        # Say why. Swallowing this is how a broken query stayed invisible.
+        print(f"[Metrics] get_stale_job_count failed: {exc}")
         return -1  # -1 indicates unavailable
 
 

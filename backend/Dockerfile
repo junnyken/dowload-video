@@ -92,6 +92,27 @@ RUN mkdir -p /app/ytdlp_cache && \
 # Expose port (tuỳ chọn)
 EXPOSE 8000
 
+# Run the app as a normal user instead of root.
+#
+# Celery said so itself on every boot: "SecurityWarning: You're running the
+# worker with superuser privileges". It matters more here than in a typical
+# web app — this container hands attacker-supplied URLs to yt-dlp and pipes
+# whatever comes back through ffmpeg, which is the largest remote-code-
+# execution surface in the project. Root inside a container is not root on the
+# host, but it is the difference between an exploit that owns the process and
+# one that also rewrites the application it lives in.
+#
+# The container still STARTS as root, deliberately: the platform mounts a
+# volume over /app/downloads, and a mount arrives owned by root no matter what
+# this image does. The entrypoint fixes ownership of the mount and then drops
+# to this user, which is the only ordering that survives both a mounted and an
+# unmounted deploy. Dropping here with USER would work today and break the
+# first time a volume appears.
+RUN groupadd --system --gid 10001 appuser \
+    && useradd --system --uid 10001 --gid appuser --home-dir /app --shell /usr/sbin/nologin appuser \
+    && mkdir -p /app/downloads /app/ytdlp_cache /opt/bgutil-cache \
+    && chown -R appuser:appuser /app /opt/bgutil-cache
+
 # Single-container deploy: run celery worker (background) + uvicorn (foreground)
 RUN chmod +x docker-entrypoint.sh
 CMD ["./docker-entrypoint.sh"]
