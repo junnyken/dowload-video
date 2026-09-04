@@ -38,7 +38,16 @@ import uuid
 from dataclasses import asdict
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+
+# Imported at module level so the guard is a real FastAPI dependency:
+# FastAPI then injects the request, the legacy X-Admin-Token header and
+# the Bearer session token itself. intelligence.py calls verify_admin by
+# hand instead, and that is exactly how it once shipped a call missing
+# the required `request` argument — every admin route there answered 500
+# instead of 401 and nobody noticed, because a 500 still looks like a
+# refusal from outside.
+from app.api.admin import verify_admin
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -1002,10 +1011,16 @@ async def platforms_capabilities():
 
 
 @router.get("/admin/container-stats")
-async def container_admin_stats():
+async def container_admin_stats(_=Depends(verify_admin)):
     """
     Admin overview of Phase 25 container discovery subsystem.
     Reads counters written by track_container_metric() in container_tasks.py.
+
+    The path said /admin/ and the docstring said "Admin overview" while the
+    signature took no auth at all, so anyone could read per-platform usage
+    counters and the runtime capability snapshot. Nothing here is catastrophic
+    on its own; it is operational detail this project does not publish, and an
+    endpoint that looks guarded but is not is the kind that stays unguarded.
     """
     from app.core.redis_client import get_redis
     import datetime

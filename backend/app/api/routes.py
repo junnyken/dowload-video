@@ -9,6 +9,7 @@ GET  /proxy-download   — proxy video stream to bypass CORS
 
 import ipaddress
 import os
+import threading
 import uuid
 from typing import List, Optional
 from urllib.parse import quote, urlparse
@@ -53,6 +54,25 @@ _MAX_CONCURRENT_DL = int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "10"))
 _ACTIVE_DL_KEY = "vidgrab:active_downloads"
 _ACTIVE_DL_TTL = 600  # auto-expire 10min (crash-safety)
 
+# In-process backstop for when Redis is unreachable.
+#
+# Every cost control in this service fails open on a Redis error, and each one
+# is defensible alone: platform_lanes, fair_queue, admission_control, yt_quota
+# and this slot counter all answer "allow" rather than block a user over
+# infrastructure trouble. Together they mean losing Redis removes the daily
+# quota, the per-platform lane, admission control AND the concurrency ceiling
+# at the same moment — and every download costs money (Gemini, ScraperAPI,
+# residential proxy). The failure that is supposed to be invisible is the one
+# that empties the budget.
+#
+# So the shared counter still fails open, but not into nothing: this process
+# keeps its own count as a floor. It is per-worker rather than global, which
+# is exactly why it is a backstop and not the limiter — it cannot enforce the
+# real ceiling, only refuse to let one worker run unbounded.
+_local_slots = threading.BoundedSemaphore(_MAX_CONCURRENT_DL)
+_local_slot_held = threading.local()
+
+
 def _acquire_download_slot() -> tuple:
     """Atomically INCR slot counter. Returns (acquired: bool, active_count: int)."""
     try:
@@ -63,11 +83,33 @@ def _acquire_download_slot() -> tuple:
         if count > _MAX_CONCURRENT_DL:
             rc.decr(_ACTIVE_DL_KEY)
             return False, int(count) - 1
+        _local_slot_held.redis = True
         return True, int(count)
     except Exception:
-        return True, 0  # fail open if Redis unavailable
+        # Redis is down. Fall back to the in-process ceiling instead of waving
+        # everything through: non-blocking, so a full worker refuses the
+        # request the same way a full cluster would.
+        if _local_slots.acquire(blocking=False):
+            _local_slot_held.redis = False
+            return True, 0
+        print("[Concurrency] Redis unavailable and this worker is at its "
+              f"local ceiling ({_MAX_CONCURRENT_DL}) — refusing")
+        return False, _MAX_CONCURRENT_DL
+
 
 def _release_download_slot() -> None:
+    # Release whichever counter this request actually took. Releasing the
+    # semaphore for a Redis-backed slot would raise ValueError on the bounded
+    # semaphore once it over-releases, and would also inflate the local
+    # ceiling for every later request.
+    used_redis = getattr(_local_slot_held, "redis", True)
+    _local_slot_held.redis = True
+    if not used_redis:
+        try:
+            _local_slots.release()
+        except ValueError:
+            pass  # already at full capacity — nothing was held
+        return
     try:
         from app.core.redis_client import get_redis as _get_redis
         rc = _get_redis()
