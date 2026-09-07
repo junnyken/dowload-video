@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sys
 import time
 import traceback
@@ -43,6 +44,104 @@ _job_id: ContextVar[Optional[str]] = ContextVar("job_id", default=None)
 _tenant_id: ContextVar[Optional[str]] = ContextVar("tenant_id", default=None)
 _user_id: ContextVar[Optional[str]] = ContextVar("user_id", default=None)
 _platform: ContextVar[Optional[str]] = ContextVar("platform", default=None)
+
+
+# ---------------------------------------------------------------------------
+# Secret redaction
+# ---------------------------------------------------------------------------
+# httpx logs every request it makes at INFO as "HTTP Request: POST <full url>",
+# and a Telegram bot token lives in the URL path. So production logs carried
+#
+#   HTTP Request: POST https://api.telegram.org/bot<id>:<secret>/sendMessage
+#
+# on every alert — anyone with log access could take over the alerting bot.
+# Found by reading production logs while verifying an unrelated deploy, which
+# is the same way the Facebook session cookie leak was found: a secret reaching
+# the log through a path nobody was looking at.
+#
+# Silencing httpx to WARNING (the way urllib3 and botocore are silenced below)
+# would have fixed this line and thrown away the rest — those same httpx lines
+# are how the broken stale-job query was spotted, because they show the exact
+# Supabase request and its response code. Redacting keeps the diagnostics and
+# drops the credential.
+#
+# Applied in the formatter rather than as a filter so it covers every logger
+# routed through this handler, including third-party ones we do not control.
+_REDACTIONS: tuple[tuple[re.Pattern, str], ...] = (
+    # Telegram bot token: /bot<numeric id>:<secret>/
+    (re.compile(r"(/bot\d+):[A-Za-z0-9_-]{20,}"), r"\1:<redacted>"),
+    # Credentials in a query string, whatever the host
+    (re.compile(
+        r"([?&](?:api_key|apikey|access_token|auth_token|token|key|password|passwd|secret|sig|signature)=)"
+        r"[^&\s\"']+",
+        re.IGNORECASE,
+    ), r"\1<redacted>"),
+    # Credentials embedded in a URL's userinfo: https://user:pass@host
+    (re.compile(r"(https?://[^/\s:@]+):[^/\s@]+@"), r"\1:<redacted>@"),
+    # Bearer / token headers, if one is ever logged
+    (re.compile(r"(Bearer\s+)[A-Za-z0-9._\-]{12,}", re.IGNORECASE), r"\1<redacted>"),
+    # Provider token shapes that are recognisable on their own
+    (re.compile(r"\b(github_pat_|ghp_|gho_|ghs_)[A-Za-z0-9_]{20,}"), r"\1<redacted>"),
+    (re.compile(r"\b(sk-)[A-Za-z0-9_\-]{20,}"), r"\1<redacted>"),
+)
+
+
+def redact_secrets(text: str) -> str:
+    """Strip credentials from a log line, keeping the rest of it readable."""
+    if not text:
+        return text
+    for pattern, replacement in _REDACTIONS:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+_redaction_installed = False
+
+
+def install_secret_redaction() -> None:
+    """
+    Redact secrets in every LogRecord, whatever formats it.
+
+    Doing this in JsonFormatter alone was not enough, and the leak proves why:
+    configure_logging() runs in app/main.py only, so the Celery worker never
+    calls it and formats its own output — and the Telegram token appeared in
+    exactly those worker lines. A record factory is the one hook both
+    processes share, because it runs wherever a record is created, before any
+    handler or formatter sees it.
+
+    httpx passes the URL as a %-arg rather than baking it into the message
+    ('HTTP Request: %s %s ...'), so the args are redacted too. Missing that is
+    how a redactor looks like it works and does nothing.
+    """
+    global _redaction_installed
+    if _redaction_installed:
+        return
+    _redaction_installed = True
+
+    previous_factory = logging.getLogRecordFactory()
+
+    def factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
+        record = previous_factory(*args, **kwargs)
+        try:
+            if isinstance(record.msg, str):
+                record.msg = redact_secrets(record.msg)
+            if record.args:
+                if isinstance(record.args, tuple):
+                    record.args = tuple(
+                        redact_secrets(a) if isinstance(a, str) else a
+                        for a in record.args
+                    )
+                elif isinstance(record.args, dict):
+                    record.args = {
+                        k: redact_secrets(v) if isinstance(v, str) else v
+                        for k, v in record.args.items()
+                    }
+        except Exception:
+            # A logging hook must never be the reason something fails.
+            pass
+        return record
+
+    logging.setLogRecordFactory(factory)
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +181,7 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:  # noqa: A003
         # Resolve message (handles %-style and lazy string args)
-        record.message = record.getMessage()
+        record.message = redact_secrets(record.getMessage())
 
         doc: dict[str, Any] = {
             "ts": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
@@ -218,6 +317,8 @@ def configure_logging(level: str = "INFO") -> None:
     if _logging_configured:
         return
     _logging_configured = True
+
+    install_secret_redaction()
 
     numeric_level = getattr(logging, level.upper(), logging.INFO)
     json_handler = logging.StreamHandler(sys.stdout)

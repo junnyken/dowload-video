@@ -8,6 +8,23 @@ import os
 from celery import Celery
 from dotenv import load_dotenv
 
+# Redact credentials from worker logs.
+#
+# configure_logging() lives in app/main.py, which the worker never imports, so
+# the worker formats its own output and none of that module's protections
+# applied to it. That is not theoretical: production worker logs carried
+#   HTTP Request: POST https://api.telegram.org/bot<id>:<secret>/sendMessage
+# on every alert httpx sent, because httpx logs the full URL at INFO and the
+# Telegram token is part of the path.
+#
+# Installed here, at import of the Celery app, so it is in place before any
+# task runs — a record factory is process-wide and formatter-independent,
+# which is what this needs to be given the worker and the API format
+# differently.
+from app.core.structured_log import install_secret_redaction
+
+install_secret_redaction()
+
 load_dotenv()
 
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
