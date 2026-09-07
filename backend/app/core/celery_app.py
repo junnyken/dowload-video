@@ -36,7 +36,13 @@ install_secret_redaction()
 # the hook is broken; if it never logs it, the container is not running this
 # build. print() rather than logging, because at import time the logger is not
 # configured yet and this must not depend on the thing it is diagnosing.
-print("[Startup] celery worker: secret redaction installed", flush=True)
+# stderr, not stdout. The platform's runtime log appears to carry only
+# stderr: Celery logs there by default and its lines show up, while nothing
+# written to stdout ever has — not uvicorn's JSON handler (StreamHandler on
+# sys.stdout), and not the first version of this marker. That single fact
+# explains every confusing observation while chasing this, so the marker has
+# to be written where it can actually be read.
+print("[Startup] celery worker: secret redaction installed", file=sys.stderr, flush=True)
 
 load_dotenv()
 
