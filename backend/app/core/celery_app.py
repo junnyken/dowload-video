@@ -25,6 +25,19 @@ from app.core.structured_log import install_secret_redaction
 
 install_secret_redaction()
 
+# Startup marker. After the redaction shipped, the worker's log still carried
+# the raw Telegram token, and there was no way to tell which of two things was
+# true: the running container did not have this code yet, or it had it and the
+# hook was not taking effect. The runtime log carries only Celery output — no
+# HTTP request this session made ever appeared in it — so neither could be
+# ruled out by reading.
+#
+# One line settles it. If the worker logs this and still prints a raw token,
+# the hook is broken; if it never logs it, the container is not running this
+# build. print() rather than logging, because at import time the logger is not
+# configured yet and this must not depend on the thing it is diagnosing.
+print("[Startup] celery worker: secret redaction installed", flush=True)
+
 load_dotenv()
 
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
