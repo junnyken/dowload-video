@@ -100,6 +100,45 @@ class TestItWorksThroughTheLoggingStack:
         assert "AAFy6EwC9fHD6gRixXhUet70eTlgqwvRVFc" not in rendered
         assert "api.telegram.org" in rendered
 
+    def test_the_arg_is_redacted_when_it_is_not_a_string(self, caplog):
+        """The one that was missed, and the reason the first fix shipped and
+        did nothing.
+
+        httpx does not log a str — it logs request.url, an httpx.URL object.
+        The first version checked isinstance(a, str), walked past it, and
+        production kept printing the token while this file stayed green
+        because every test here handed it a plain string.
+        """
+        httpx = pytest.importorskip("httpx")
+        request = httpx.Request("POST", TELEGRAM_URL)
+        assert not isinstance(request.url, str), (
+            "httpx changed: this test only means something while the URL is "
+            "an object rather than a string"
+        )
+
+        logger = logging.getLogger("httpx")
+        with caplog.at_level(logging.INFO, logger="httpx"):
+            # Byte-for-byte the call httpx._client makes.
+            logger.info(
+                'HTTP Request: %s %s "%s %d %s"',
+                request.method, request.url, "HTTP/1.1", 200, "OK",
+            )
+
+        rendered = caplog.records[-1].getMessage()
+        assert "AAFy6EwC9fHD6gRixXhUet70eTlgqwvRVFc" not in rendered, (
+            "the URL object slipped through — this is exactly what leaked"
+        )
+        assert "api.telegram.org" in rendered
+        assert "200" in rendered, "the %d argument must still render"
+
+    def test_numeric_args_are_left_alone(self, caplog):
+        """Turning an int into a str breaks a '%d' template. A redactor that
+        corrupts unrelated log lines is worse than the leak."""
+        logger = logging.getLogger("numbers")
+        with caplog.at_level(logging.INFO, logger="numbers"):
+            logger.info("status %d in %.2f seconds", 503, 1.5)
+        assert caplog.records[-1].getMessage() == "status 503 in 1.50 seconds"
+
     def test_a_plain_message_is_redacted(self, caplog):
         logger = logging.getLogger("anything")
         with caplog.at_level(logging.INFO, logger="anything"):

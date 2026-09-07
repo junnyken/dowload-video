@@ -95,6 +95,33 @@ def redact_secrets(text: str) -> str:
     return text
 
 
+def _redact_arg(value: Any) -> Any:
+    """
+    Redact one %-format argument, whatever type it is.
+
+    Strings are the easy case. The one that mattered was not a string:
+    httpx logs request.url, an httpx.URL object, and an isinstance(str) check
+    walked straight past it — production kept printing the Telegram token
+    while the tests, which passed a plain string, stayed green.
+
+    Numbers and None are returned untouched: swapping an int for its str
+    breaks a '%d' template, and a redactor that corrupts unrelated log lines
+    is worse than the leak it was added for. Other objects are stringified
+    only to test them, and the original is kept when nothing matched, so a
+    log line's formatting is never changed for no reason.
+    """
+    if isinstance(value, str):
+        return redact_secrets(value)
+    if isinstance(value, (int, float, bool, complex)) or value is None:
+        return value
+    try:
+        rendered = str(value)
+    except Exception:
+        return value
+    redacted = redact_secrets(rendered)
+    return redacted if redacted != rendered else value
+
+
 _redaction_installed = False
 
 
@@ -112,6 +139,15 @@ def install_secret_redaction() -> None:
     httpx passes the URL as a %-arg rather than baking it into the message
     ('HTTP Request: %s %s ...'), so the args are redacted too. Missing that is
     how a redactor looks like it works and does nothing.
+
+    And the arg is an httpx.URL, not a str. The first version of this checked
+    isinstance(a, str), skipped the URL object, and shipped: production kept
+    printing the token while the unit tests passed, because the tests handed
+    it a plain string. Non-primitive args are stringified before matching now.
+
+    Numbers are left alone on purpose. Replacing an int with its str would
+    break a '%d' template, and a redactor that corrupts unrelated log lines is
+    a worse problem than the one it solves.
     """
     global _redaction_installed
     if _redaction_installed:
@@ -127,15 +163,9 @@ def install_secret_redaction() -> None:
                 record.msg = redact_secrets(record.msg)
             if record.args:
                 if isinstance(record.args, tuple):
-                    record.args = tuple(
-                        redact_secrets(a) if isinstance(a, str) else a
-                        for a in record.args
-                    )
+                    record.args = tuple(_redact_arg(a) for a in record.args)
                 elif isinstance(record.args, dict):
-                    record.args = {
-                        k: redact_secrets(v) if isinstance(v, str) else v
-                        for k, v in record.args.items()
-                    }
+                    record.args = {k: _redact_arg(v) for k, v in record.args.items()}
         except Exception:
             # A logging hook must never be the reason something fails.
             pass
