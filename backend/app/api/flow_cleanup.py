@@ -10,6 +10,7 @@ SynthID and other invisible AI watermarks are NOT affected by any operation here
 """
 
 import json
+import logging
 import os
 import queue as _queue
 import re
@@ -32,6 +33,7 @@ from app.core.auth_middleware import get_optional_user
 from app.core.entitlements import get_entitlement, check_feature
 
 router = APIRouter()
+log = logging.getLogger(__name__)
 
 
 async def _require_pro(
@@ -50,8 +52,26 @@ async def _require_pro(
             db = get_service_client()
             ent = await get_entitlement(user["id"], db)
             tier = ent["tier"]
-        except Exception:
-            tier = "free"
+        except Exception as exc:
+            # A lookup that FAILED is not the same fact as a user who IS on the
+            # free plan, and `tier = "free"` here erased the difference. Every
+            # Supabase blip — or a container booted without SUPABASE_URL — then
+            # answered a paying subscriber with 402 "nâng cấp lên Pro": we blamed
+            # their plan for our outage and told them to buy what they already
+            # own. Deny either way (never fail open on a paid gate), but report
+            # which of the two happened, with a status worth retrying.
+            log.warning(
+                "[flow-cleanup] entitlement lookup failed for user %s: %s",
+                user.get("id"), exc,
+            )
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error_code": "entitlement_check_failed",
+                    "user_message": "Chưa kiểm tra được gói của bạn. Vui lòng thử lại sau ít phút.",
+                    "retryable": True,
+                },
+            )
 
     if not check_feature(tier, "logo_inpaint"):
         raise HTTPException(
@@ -59,8 +79,13 @@ async def _require_pro(
             detail={
                 "error_code": "tier_required_feature",
                 "feature": "logo_inpaint",
+                # Without this the client has no sentence to show: parseApiError
+                # falls back to "Lỗi không xác định.", and the callers that did
+                # `new Error(detail)` rendered the dict as "[object Object]".
+                "user_message": "Xoá Logo / Watermark là tính năng của gói Pro. Nâng cấp để sử dụng.",
                 "required_plan": "pro",
                 "current_plan": tier,
+                "retryable": False,
             },
         )
 

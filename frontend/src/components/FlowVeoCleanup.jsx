@@ -6,6 +6,13 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../lib/apiBase';
 
+// A FastAPI HTTPException detail is either a plain string or a structured
+// object. `new Error(object)` stringifies to the literal "[object Object]",
+// which is exactly what the red error card used to show for every gated or
+// structured failure — including the 402 telling a user to upgrade.
+const errMessage = (detail, fallback) =>
+  (typeof detail === 'string' ? detail : detail?.user_message || detail?.message) || fallback;
+
 // Corner positions — percentages match backend preset_map exactly
 const PRESETS = [
   { id: 'lower-right', label: 'Dưới phải', arrow: '↘', xPct: 0.82, yPct: 0.88, wPct: 0.16, hPct: 0.10 },
@@ -352,7 +359,7 @@ export default function FlowVeoCleanup() {
       const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/upload`, withAuth({ method: 'POST', body: formData }));
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || `Upload lỗi (${res.status})`);
+        throw new Error(errMessage(body.detail, `Upload lỗi (${res.status})`));
       }
       const data = await res.json();
       setTempId(data.temp_id);
@@ -455,7 +462,7 @@ export default function FlowVeoCleanup() {
       }));
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || `Xử lý lỗi (${res.status})`);
+        throw new Error(errMessage(body.detail, `Xử lý lỗi (${res.status})`));
       }
       const data = await res.json();
       setResult(data);
