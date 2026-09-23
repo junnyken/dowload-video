@@ -357,7 +357,7 @@ export default function FlowVeoCleanup() {
       const data = await res.json();
       setTempId(data.temp_id);
       setVideoInfo(data.video_info);
-      setPreviewUrl(`${data.preview_url}?t=${Date.now()}`);
+      setPreviewUrl(`${API_BASE}${data.preview_url}?t=${Date.now()}`);
       const suit = computeSuitability(data.video_info);
       setSuitability(suit);
       if (suit.level === 'crop') setMethod('crop');
@@ -416,7 +416,7 @@ export default function FlowVeoCleanup() {
       }));
       if (!res.ok) { setFramePreviewUrl('error'); return; }
       const data = await res.json();
-      setFramePreviewUrl(`${data.preview_clean_url}?t=${Date.now()}`);
+      setFramePreviewUrl(`${API_BASE}${data.preview_clean_url}?t=${Date.now()}`);
       setPreviewInfo(data);  // { strategy, motion, quality, recommend_crop, reason, ... }
     } catch {
       setFramePreviewUrl('error');
@@ -1117,7 +1117,7 @@ export default function FlowVeoCleanup() {
 
           {/* 4. Primary CTA */}
           <a
-            href={`/api/v1/download-local?filepath=${encodeURIComponent(result.cleaned_path)}&filename=${encodeURIComponent(result.filename)}`}
+            href={`${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(result.cleaned_path)}&filename=${encodeURIComponent(result.filename)}`}
             download={result.filename}
             className="flex items-center justify-center gap-2.5 w-full px-5 py-4 rounded-xl text-base font-bold bg-gradient-to-r from-[#FB923C] to-[#FBBF24] text-[#012622] shadow-md shadow-[#FBBF24]/20 hover:shadow-[#FBBF24]/40 transition-all"
           >
