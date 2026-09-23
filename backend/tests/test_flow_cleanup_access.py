@@ -381,3 +381,65 @@ class TestEntitlementsNotBroken:
         assert PLAN_DEFS["team"]["features"]["logo_inpaint"] is True
         assert PLAN_DEFS["enterprise"]["features"]["logo_inpaint"] is True
         assert PLAN_DEFS["api"]["features"]["logo_inpaint"] is True
+
+# ═══════════════════════════════════════════════════════════════════
+# D — the other half of the gate: the client has to send the token
+# ═══════════════════════════════════════════════════════════════════
+
+class TestFrontendSendsCredentials:
+    """Gating an endpoint does nothing if the caller never sends a token.
+
+    DashboardContent's "Xoá Logo" button called from-local, preview-frame and
+    process with `headers: {'Content-Type': 'application/json'}` and nothing
+    else, while every one of those sits behind _require_pro. Verified against
+    the deployed backend: 401 "Đăng nhập để sử dụng tính năng này." The button
+    was dead for every user, Pro included — the tier check in front of it runs
+    in the browser off useEntitlement, so the panel opened and then the very
+    first call failed. withAuth was already destructured in that component and
+    used at eight other call sites; these three were simply missed.
+
+    The gated list is read from the router's own dependencies rather than typed
+    out here, so adding a gate to a new endpoint puts it under this check
+    automatically.
+    """
+
+    def _gated_paths(self):
+        from app.api import flow_cleanup as fcmod
+        gated = []
+        for route in fcmod.router.routes:
+            endpoint = getattr(route, "endpoint", None)
+            if endpoint is not None and _has_dep(endpoint, fcmod._require_pro):
+                gated.append(route.path.lstrip("/"))
+        assert gated, "no gated routes found — has _require_pro been unwired?"
+        return gated
+
+    def _call_sites(self, path: str):
+        """Lines that fetch this endpoint, across the frontend source."""
+        import pathlib
+        root = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src"
+        if not root.is_dir():
+            pytest.skip("frontend/src not present in this checkout")
+        hits = []
+        for f in root.rglob("*.jsx"):
+            for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+                if f"flow-cleanup/{path}" in line and "fetch(" in line:
+                    hits.append((f.name, i, line.strip()))
+        return hits
+
+    def test_every_gated_endpoint_is_called_with_credentials(self):
+        missing = []
+        checked = 0
+        for path in self._gated_paths():
+            for name, lineno, line in self._call_sites(path):
+                checked += 1
+                if "withAuth(" not in line:
+                    missing.append(f"{name}:{lineno} -> flow-cleanup/{path}")
+        assert checked, (
+            "found no frontend fetch() for any gated endpoint — the scan itself "
+            "is broken, not the code it is meant to check"
+        )
+        assert not missing, (
+            "these call a Pro-gated endpoint without credentials, so the server "
+            "answers 401 no matter what plan the user is on:\n  "
+            + "\n  ".join(missing)
+        )
