@@ -1333,11 +1333,11 @@ export default function DashboardContent() {
     setInpaintError('');
     setInpaintLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/from-local`, {
+      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/from-local`, withAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ local_path: localPath, title: videoInfo.title || '' }),
-      });
+      }));
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.detail || 'Không khởi tạo được session.');
       setInpaintTempId(data.temp_id);
@@ -1357,11 +1357,11 @@ export default function DashboardContent() {
     setInpaintLoading(true);
     setInpaintStep('preview');
     try {
-      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/preview-frame`, {
+      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/preview-frame`, withAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ temp_id: inpaintTempId, preset }),
-      });
+      }));
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.detail || 'Xem trước thất bại.');
       setInpaintPreviewResult(data);
@@ -1380,11 +1380,11 @@ export default function DashboardContent() {
     try {
       const body = { temp_id: inpaintTempId, method: 'natural', preset: inpaintPreset };
       if (inpaintPixelRegion) { body.preset = 'custom'; body.region = inpaintPixelRegion; }
-      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/process`, {
+      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/process`, withAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-      });
+      }));
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.detail || 'Xử lý thất bại.');
       if (data.success && (data.cleaned_path || data.output_path)) {

@@ -73,6 +73,21 @@ class TestEntitlementsLogic:
 # B — _require_pro dependency unit tests
 # ═══════════════════════════════════════════════════════════════════
 
+
+def _working_db():
+    """Patch the service-role client factory with one that simply constructs.
+
+    Without this the tests below never reach get_entitlement at all: conftest
+    sets SUPABASE_KEY="test-anon-key" and create_client rejects it with
+    "Invalid API key". While the dependency swallowed every exception into
+    tier="free", that made two of these tests pass for the wrong reason — they
+    named the free-tier and query-failure paths but both exercised client
+    construction blowing up. Stubbing the factory keeps each test on the path
+    it claims to cover.
+    """
+    return patch("app.core.database.get_service_client", return_value=MagicMock())
+
+
 class TestRequireProDependency:
 
     @pytest.fixture()
@@ -160,13 +175,43 @@ class TestRequireProDependency:
         fake_ent = {"tier": "free", "features": {"logo_inpaint": False}}
 
         async def _run():
-            with patch(
+            with _working_db(), patch(
                 "app.api.flow_cleanup.get_entitlement",
                 new=AsyncMock(return_value=fake_ent),
             ):
                 with pytest.raises(HTTPException) as exc_info:
                     await _require_pro(fake_request, user=jwt_free_user)
+            # 402 must mean "we looked, and you are on free" — see _working_db.
             assert exc_info.value.status_code == 402
+            assert exc_info.value.detail["current_plan"] == "free"
+
+        asyncio.run(_run())
+
+    def test_free_tier_402_carries_a_displayable_message(self, fake_request):
+        """The 402 body must contain a sentence the client can render.
+
+        The detail is a dict, and callers that did `new Error(detail)` showed
+        it to the user as the literal string "[object Object]". parseApiError
+        reads user_message; without it the client falls back to the useless
+        "Lỗi không xác định.".
+        """
+        from fastapi import HTTPException
+        from app.api.flow_cleanup import _require_pro
+
+        jwt_free_user = {"id": "u-free", "email": "f@test.com", "token": "tok"}
+        fake_ent = {"tier": "free", "features": {"logo_inpaint": False}}
+
+        async def _run():
+            with _working_db(), patch(
+                "app.api.flow_cleanup.get_entitlement",
+                new=AsyncMock(return_value=fake_ent),
+            ):
+                with pytest.raises(HTTPException) as exc_info:
+                    await _require_pro(fake_request, user=jwt_free_user)
+            detail = exc_info.value.detail
+            assert isinstance(detail["user_message"], str)
+            assert detail["user_message"].strip()
+            assert detail["retryable"] is False
 
         asyncio.run(_run())
 
@@ -177,7 +222,7 @@ class TestRequireProDependency:
         fake_ent = {"tier": "pro", "features": {"logo_inpaint": True}}
 
         async def _run():
-            with patch(
+            with _working_db(), patch(
                 "app.api.flow_cleanup.get_entitlement",
                 new=AsyncMock(return_value=fake_ent),
             ):
@@ -186,21 +231,73 @@ class TestRequireProDependency:
 
         asyncio.run(_run())
 
-    def test_db_lookup_failure_defaults_to_free(self, fake_request):
-        """If DB lookup throws, tier defaults to 'free' → 402."""
+    def test_entitlement_query_failure_is_503_not_a_paywall(self, fake_request):
+        """A failed lookup must not be reported as "you are on the free plan".
+
+        This used to answer 402 tier_required_feature, i.e. a paying subscriber
+        was shown an upgrade prompt whenever Supabase was unreachable. Still
+        denied — the gate never fails open — but with the honest reason and a
+        status the client can retry.
+        """
         from fastapi import HTTPException
         from app.api.flow_cleanup import _require_pro
 
         jwt_user = {"id": "u-broken", "email": "err@test.com", "token": "tok"}
 
         async def _run():
-            with patch(
+            with _working_db(), patch(
                 "app.api.flow_cleanup.get_entitlement",
                 new=AsyncMock(side_effect=Exception("DB down")),
             ):
                 with pytest.raises(HTTPException) as exc_info:
                     await _require_pro(fake_request, user=jwt_user)
-            assert exc_info.value.status_code == 402
+            assert exc_info.value.status_code == 503
+            assert exc_info.value.detail["error_code"] == "entitlement_check_failed"
+            assert exc_info.value.detail["retryable"] is True
+
+        asyncio.run(_run())
+
+    def test_db_client_construction_failure_is_503_not_a_paywall(self, fake_request):
+        """The failure that actually happens in production.
+
+        get_service_client() runs inside the same try as the query, and it
+        raises on its own whenever SUPABASE_URL is unset or the key is
+        rejected — a container booted with a bad env, not a user on free.
+        """
+        from fastapi import HTTPException
+        from app.api.flow_cleanup import _require_pro
+
+        jwt_user = {"id": "u-noenv", "email": "noenv@test.com", "token": "tok"}
+
+        async def _run():
+            with patch(
+                "app.core.database.get_service_client",
+                side_effect=ValueError("SUPABASE_URL is not set."),
+            ):
+                with pytest.raises(HTTPException) as exc_info:
+                    await _require_pro(fake_request, user=jwt_user)
+            assert exc_info.value.status_code == 503
+            assert exc_info.value.detail["error_code"] == "entitlement_check_failed"
+
+        asyncio.run(_run())
+
+    def test_gate_never_fails_open(self, fake_request):
+        """Every failure path denies. None of them returns None."""
+        from fastapi import HTTPException
+        from app.api.flow_cleanup import _require_pro
+
+        jwt_user = {"id": "u-x", "email": "x@test.com", "token": "tok"}
+
+        async def _run():
+            for broken in (
+                patch("app.core.database.get_service_client",
+                      side_effect=RuntimeError("boom")),
+                patch("app.api.flow_cleanup.get_entitlement",
+                      new=AsyncMock(side_effect=RuntimeError("boom"))),
+            ):
+                with _working_db(), broken:
+                    with pytest.raises(HTTPException):
+                        await _require_pro(fake_request, user=jwt_user)
 
         asyncio.run(_run())
 
@@ -284,3 +381,65 @@ class TestEntitlementsNotBroken:
         assert PLAN_DEFS["team"]["features"]["logo_inpaint"] is True
         assert PLAN_DEFS["enterprise"]["features"]["logo_inpaint"] is True
         assert PLAN_DEFS["api"]["features"]["logo_inpaint"] is True
+
+# ═══════════════════════════════════════════════════════════════════
+# D — the other half of the gate: the client has to send the token
+# ═══════════════════════════════════════════════════════════════════
+
+class TestFrontendSendsCredentials:
+    """Gating an endpoint does nothing if the caller never sends a token.
+
+    DashboardContent's "Xoá Logo" button called from-local, preview-frame and
+    process with `headers: {'Content-Type': 'application/json'}` and nothing
+    else, while every one of those sits behind _require_pro. Verified against
+    the deployed backend: 401 "Đăng nhập để sử dụng tính năng này." The button
+    was dead for every user, Pro included — the tier check in front of it runs
+    in the browser off useEntitlement, so the panel opened and then the very
+    first call failed. withAuth was already destructured in that component and
+    used at eight other call sites; these three were simply missed.
+
+    The gated list is read from the router's own dependencies rather than typed
+    out here, so adding a gate to a new endpoint puts it under this check
+    automatically.
+    """
+
+    def _gated_paths(self):
+        from app.api import flow_cleanup as fcmod
+        gated = []
+        for route in fcmod.router.routes:
+            endpoint = getattr(route, "endpoint", None)
+            if endpoint is not None and _has_dep(endpoint, fcmod._require_pro):
+                gated.append(route.path.lstrip("/"))
+        assert gated, "no gated routes found — has _require_pro been unwired?"
+        return gated
+
+    def _call_sites(self, path: str):
+        """Lines that fetch this endpoint, across the frontend source."""
+        import pathlib
+        root = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src"
+        if not root.is_dir():
+            pytest.skip("frontend/src not present in this checkout")
+        hits = []
+        for f in root.rglob("*.jsx"):
+            for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+                if f"flow-cleanup/{path}" in line and "fetch(" in line:
+                    hits.append((f.name, i, line.strip()))
+        return hits
+
+    def test_every_gated_endpoint_is_called_with_credentials(self):
+        missing = []
+        checked = 0
+        for path in self._gated_paths():
+            for name, lineno, line in self._call_sites(path):
+                checked += 1
+                if "withAuth(" not in line:
+                    missing.append(f"{name}:{lineno} -> flow-cleanup/{path}")
+        assert checked, (
+            "found no frontend fetch() for any gated endpoint — the scan itself "
+            "is broken, not the code it is meant to check"
+        )
+        assert not missing, (
+            "these call a Pro-gated endpoint without credentials, so the server "
+            "answers 401 no matter what plan the user is on:\n  "
+            + "\n  ".join(missing)
+        )

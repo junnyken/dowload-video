@@ -6,6 +6,13 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../lib/apiBase';
 
+// A FastAPI HTTPException detail is either a plain string or a structured
+// object. `new Error(object)` stringifies to the literal "[object Object]",
+// which is exactly what the red error card used to show for every gated or
+// structured failure — including the 402 telling a user to upgrade.
+const errMessage = (detail, fallback) =>
+  (typeof detail === 'string' ? detail : detail?.user_message || detail?.message) || fallback;
+
 // Corner positions — percentages match backend preset_map exactly
 const PRESETS = [
   { id: 'lower-right', label: 'Dưới phải', arrow: '↘', xPct: 0.82, yPct: 0.88, wPct: 0.16, hPct: 0.10 },
@@ -352,12 +359,12 @@ export default function FlowVeoCleanup() {
       const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/upload`, withAuth({ method: 'POST', body: formData }));
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || `Upload lỗi (${res.status})`);
+        throw new Error(errMessage(body.detail, `Upload lỗi (${res.status})`));
       }
       const data = await res.json();
       setTempId(data.temp_id);
       setVideoInfo(data.video_info);
-      setPreviewUrl(`${data.preview_url}?t=${Date.now()}`);
+      setPreviewUrl(`${API_BASE}${data.preview_url}?t=${Date.now()}`);
       const suit = computeSuitability(data.video_info);
       setSuitability(suit);
       if (suit.level === 'crop') setMethod('crop');
@@ -416,7 +423,7 @@ export default function FlowVeoCleanup() {
       }));
       if (!res.ok) { setFramePreviewUrl('error'); return; }
       const data = await res.json();
-      setFramePreviewUrl(`${data.preview_clean_url}?t=${Date.now()}`);
+      setFramePreviewUrl(`${API_BASE}${data.preview_clean_url}?t=${Date.now()}`);
       setPreviewInfo(data);  // { strategy, motion, quality, recommend_crop, reason, ... }
     } catch {
       setFramePreviewUrl('error');
@@ -455,7 +462,7 @@ export default function FlowVeoCleanup() {
       }));
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || `Xử lý lỗi (${res.status})`);
+        throw new Error(errMessage(body.detail, `Xử lý lỗi (${res.status})`));
       }
       const data = await res.json();
       setResult(data);
@@ -1117,7 +1124,7 @@ export default function FlowVeoCleanup() {
 
           {/* 4. Primary CTA */}
           <a
-            href={`/api/v1/download-local?filepath=${encodeURIComponent(result.cleaned_path)}&filename=${encodeURIComponent(result.filename)}`}
+            href={`${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(result.cleaned_path)}&filename=${encodeURIComponent(result.filename)}`}
             download={result.filename}
             className="flex items-center justify-center gap-2.5 w-full px-5 py-4 rounded-xl text-base font-bold bg-gradient-to-r from-[#FB923C] to-[#FBBF24] text-[#012622] shadow-md shadow-[#FBBF24]/20 hover:shadow-[#FBBF24]/40 transition-all"
           >
