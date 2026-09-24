@@ -73,6 +73,27 @@ export default function ProbesPage() {
         </button>
       </div>
 
+      {/* The button queues work on a worker and returns immediately, so without
+          this the only visible change was a 200ms flicker — identical to a
+          button that does nothing, which is how it was first reported. */}
+      {runNow.isSuccess && (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3">
+          <p className="text-sm text-emerald-300 font-semibold">Đã xếp hàng đợi</p>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Mỗi nền tảng mất tới 30 giây, nên một lượt dò có thể chạy hơn một phút.
+            Bảng dưới tự làm mới trong 90 giây tới — cột «Lần dò gần nhất» đổi là xong.
+          </p>
+        </div>
+      )}
+      {runNow.isError && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3">
+          <p className="text-sm text-red-300 font-semibold">Không xếp được hàng đợi</p>
+          <p className="text-xs text-slate-400 mt-0.5 break-words">
+            {(runNow.error as Error)?.message || 'Lỗi không xác định.'}
+          </p>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {([['ok', 'Tải được'], ['failed', 'Hỏng'], ['stale', 'Cũ'], ['not_configured', 'Chưa cấu hình']] as const).map(([k, lbl]) => (
           <div key={k} className={`rounded-xl border px-3 py-2 ${TONE[k]}`}>

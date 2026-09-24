@@ -20,7 +20,18 @@ export function useRunProbes() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: runProbesNow,
-    // The sweep runs on a worker; give it a moment before asking for results.
-    onSuccess: () => setTimeout(() => qc.invalidateQueries({ queryKey: KEY }), 8000),
+    // The first version refetched once after 8 seconds, which was wrong twice
+    // over: each platform can take up to EXTRACTION_TIMEOUT_SECONDS=30, so a
+    // sweep runs far longer than that, and a single early refetch showed the
+    // OLD numbers — indistinguishable from the button doing nothing. Poll
+    // instead, for long enough to outlast a real sweep.
+    onSuccess: () => {
+      let n = 0
+      const t = setInterval(() => {
+        n += 1
+        qc.invalidateQueries({ queryKey: KEY })
+        if (n >= 15) clearInterval(t)   // 15 × 6s = 90s
+      }, 6000)
+    },
   })
 }
