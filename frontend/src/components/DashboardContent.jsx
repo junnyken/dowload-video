@@ -588,7 +588,12 @@ export default function DashboardContent() {
         // merge-download path, so someone who only ever used the quick
         // download would keep being sold the product they already use.
         try { localStorage.setItem('vg_used_before', '1'); } catch {}
-        trackEvent(EVENT.FETCH_SUCCESS, { platform: data.platform || 'unknown', has_subtitles: !!data.has_subtitles });
+        // detectedPlatform is the reliable source here, not the response:
+        // routes.py has 22 success paths and only 7 of them echo a platform
+        // back, which is why the funnel's per-platform table came out as a
+        // single 'unknown' row on its first real data. The browser always
+        // knows the URL, so it can always derive this.
+        trackEvent(EVENT.FETCH_SUCCESS, { platform: data.platform || detectedPlatform || 'unknown', has_subtitles: !!data.has_subtitles });
         showToast('Trích xuất thành công!');
         if (subtitleMode !== 'off') {
           if (data.subtitle_file_url) {
@@ -1072,7 +1077,7 @@ export default function DashboardContent() {
         }
       }
       if (data.success) {
-        trackEvent(EVENT.DOWNLOAD_SUCCESS, { platform: data.platform || videoInfo?.platform || 'unknown' });
+        trackEvent(EVENT.DOWNLOAD_SUCCESS, { platform: data.platform || videoInfo?.platform || detectedPlatform || 'unknown' });
         setSessionDownloadCount(c => c + 1);
         try {
           const cnt = parseInt(localStorage.getItem('vg_download_count') || '0', 10);
