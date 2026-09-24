@@ -50,7 +50,10 @@ function DefaultOverlay({ feature, requiredPlan }) {
       </div>
 
       <button
-        onClick={() => navigate('/pricing')}
+        // The one button whose whole job is to convert a free user used to
+        // send them to /pricing, which App.jsx:457 hides and renders as an
+        // empty page. /billing renders, and carries the upgrade modal.
+        onClick={() => navigate('/billing')}
         className="mt-1 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500
                    text-white text-xs font-semibold transition-colors focus:outline-none
                    focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2

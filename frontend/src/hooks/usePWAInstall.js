@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { trackEvent, EVENT } from '../utils/trackEvent';
 
 const DISMISS_KEY = 'pwa-install-dismissed-at';
 const COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
@@ -33,6 +34,7 @@ export function usePWAInstall() {
     };
     window.addEventListener('beforeinstallprompt', onBeforeInstall);
     window.addEventListener('appinstalled', () => {
+      trackEvent(EVENT.PWA_INSTALLED, {});
       setIsInstalled(true);
       setShowBanner(false);
       setDeferredPrompt(null);

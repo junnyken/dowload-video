@@ -59,6 +59,7 @@ celery_app = Celery(
         "app.tasks.schedule_tasks",
         "app.tasks.intelligence_tasks",
         "app.tasks.analytics_tasks",
+        "app.tasks.probe_tasks",
         "app.tasks.analysis_tasks",
         "app.tasks.transcript_translation_tasks",
         "app.tasks.transcript_asr_tasks",
@@ -119,6 +120,7 @@ celery_app.conf.update(
         'render_video_task': {'queue': 'media'},
         # Phase 18 — AI analysis jobs → dedicated analysis worker.
         'analyze_media_task': {'queue': 'analysis'},
+        'probe_all_platforms': {'queue': 'light'},
         'expire_analysis_jobs_task': {'queue': 'analysis'},
         # Transcript translation — reuses the 'analysis' worker (also
         # LLM-bound, bounded, moderate-concurrency work) rather than a new
@@ -252,6 +254,13 @@ celery_app.conf.update(
         'run-health-checks-every-5min': {
             'task': 'run_health_checks_task',
             'schedule': 300.0,
+        },
+        # Active platform probes every 30 minutes. P0.1 of the Q4 plan: without
+        # this, a platform nobody happens to be using looks healthy because it
+        # is silent, which is how it also looks the moment it breaks.
+        'probe-platforms-30m': {
+            'task': 'probe_all_platforms',
+            'schedule': 1800.0,
         },
         # Phase 14 — Aggregate analytics_events daily at 23:30 UTC
         'flush-analytics-daily-2330': {

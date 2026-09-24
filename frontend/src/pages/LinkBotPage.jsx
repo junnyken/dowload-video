@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { trackEvent, EVENT } from '../utils/trackEvent';
 import { Bot, Check, X, Link2, Unlink } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../lib/apiBase';
@@ -45,6 +46,7 @@ export default function LinkBotPage() {
         setStatus('error');
         return;
       }
+      trackEvent(EVENT.TELEGRAM_BOT_LINKED, {});
       setStatus('success');
       setLinkInfo({ linked: true, telegram_user_id: data.telegram_user_id });
     } catch (e) {
