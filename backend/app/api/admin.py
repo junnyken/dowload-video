@@ -1549,6 +1549,152 @@ def _validated_cookie_b64(raw: bytes, platform: str) -> tuple[str, int, int]:
     return base64.b64encode(clean.encode("utf-8")).decode("utf-8"), entries, dropped
 
 
+# ═════════════════════════════════════════════════════════════════════
+# GET /funnel — conversion funnel from analytics_events
+# ═════════════════════════════════════════════════════════════════════
+
+# The funnel, in the order a person walks it. Each entry is (event, label).
+_FUNNEL_STEPS = [
+    ("landing_page_view", "Vào trang"),
+    ("paste_url",         "Dán link"),
+    ("fetch_success",     "Lấy được thông tin"),
+    ("download_success",  "Tải xong"),
+    ("paywall_seen",      "Chạm giới hạn"),
+    ("upgrade_clicked",   "Bấm nâng cấp"),
+]
+
+# Counted separately rather than as funnel steps: a failure is not a stage
+# someone passes through, and burying it inside the chain would make the
+# drop-off between two neighbouring steps unreadable.
+_FAILURE_PAIRS = [
+    ("fetch_success",    "fetch_failed",    "Lấy thông tin"),
+    ("download_success", "download_failed", "Tải về"),
+]
+
+_EVENT_ROW_LIMIT = 50000
+
+
+@router.get("/funnel")
+async def get_funnel(days: int = 7, _=Depends(verify_admin)):
+    """
+    Conversion funnel and failure rates, counted by PEOPLE, not by events.
+
+    analytics_daily already aggregates event_count per day, but a funnel built
+    on counts is wrong in a way that flatters it: one person pasting ten links
+    would look like ten people at that step, and every ratio downstream shrinks
+    accordingly. So this reads analytics_events directly and counts distinct
+    identities per step (user_id when signed in, anonymous_id otherwise).
+
+    Honest about what it is NOT: each step counts everyone who performed that
+    event in the window, not everyone who performed it *after* the previous
+    step. Somebody who arrives on a deep link never fires landing_page_view, so
+    a later step can exceed an earlier one. `ordered` is false to say so, and
+    a step whose count exceeds its predecessor is reported with
+    drop_from_prev_pct = null rather than a negative drop that reads as growth.
+    """
+    days = min(max(days, 1), 90)
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    supabase = get_supabase_client()
+
+    wanted = {e for e, _lbl in _FUNNEL_STEPS}
+    for ok, fail, _lbl in _FAILURE_PAIRS:
+        wanted.add(ok)
+        wanted.add(fail)
+
+    try:
+        res = (
+            supabase.table("analytics_events")
+            .select("event_name,user_id,anonymous_id,properties,created_at")
+            .gte("created_at", since)
+            .in_("event_name", sorted(wanted))
+            .limit(_EVENT_ROW_LIMIT)
+            .execute()
+        )
+        rows = res.data or []
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Không đọc được analytics_events: {e}")
+
+    # identity → one person. Signed-in id wins so a user who logs in mid-session
+    # is not counted twice.
+    people: Dict[str, set] = {}
+    counts: Dict[str, int] = {}
+    platforms: Dict[str, Dict[str, set]] = {}
+
+    for r in rows:
+        name = r.get("event_name")
+        if not name:
+            continue
+        who = r.get("user_id") or r.get("anonymous_id")
+        counts[name] = counts.get(name, 0) + 1
+        if who:
+            people.setdefault(name, set()).add(who)
+            props = r.get("properties") or {}
+            plat = props.get("platform")
+            if plat:
+                platforms.setdefault(plat, {}).setdefault(name, set()).add(who)
+
+    def n(event: str) -> int:
+        return len(people.get(event, ()))
+
+    top = n(_FUNNEL_STEPS[0][0])
+    steps = []
+    prev = None
+    for event, label in _FUNNEL_STEPS:
+        users = n(event)
+        drop = None
+        if prev is not None and prev > 0 and users <= prev:
+            drop = round((1 - users / prev) * 100, 1)
+        steps.append({
+            "event":              event,
+            "label":              label,
+            "users":              users,
+            "events":             counts.get(event, 0),
+            "pct_of_top":         round(users / top * 100, 1) if top else None,
+            "drop_from_prev_pct": drop,
+        })
+        prev = users
+
+    failures = []
+    for ok, fail, label in _FAILURE_PAIRS:
+        good, bad = n(ok), n(fail)
+        total = good + bad
+        failures.append({
+            "stage":            label,
+            "ok_users":         good,
+            "failed_users":     bad,
+            "failure_rate_pct": round(bad / total * 100, 1) if total else None,
+        })
+
+    by_platform = []
+    for plat, ev in sorted(platforms.items()):
+        ok = len(ev.get("download_success", ()))
+        bad = len(ev.get("download_failed", ()))
+        tot = ok + bad
+        by_platform.append({
+            "platform":         plat,
+            "download_ok":      ok,
+            "download_failed":  bad,
+            "failure_rate_pct": round(bad / tot * 100, 1) if tot else None,
+            "fetch_failed":     len(ev.get("fetch_failed", ())),
+        })
+    by_platform.sort(key=lambda x: (x["failure_rate_pct"] or 0, x["download_failed"]), reverse=True)
+
+    return {
+        "success": True,
+        "range":   {"days": days, "since": since},
+        "ordered": False,
+        "note": (
+            "Mỗi bước đếm SỐ NGƯỜI đã thực hiện sự kiện đó trong khoảng thời gian, "
+            "không phải số người đi đúng thứ tự. Người vào bằng link sâu không có "
+            "'Vào trang', nên một bước sau có thể cao hơn bước trước."
+        ),
+        "truncated": len(rows) >= _EVENT_ROW_LIMIT,
+        "steps":       steps,
+        "failures":    failures,
+        "by_platform": by_platform[:25],
+    }
+
+
 _VALID_PLATFORMS = {
     "youtube", "tiktok", "facebook", "instagram",
     "twitter", "x", "reddit", "bilibili",
