@@ -105,73 +105,60 @@ class TestUnknownIsNotHealthy:
 
 
 class TestProbeNeverGoesQuiet:
-    """probe_once shells out to yt-dlp instead of importing it, solely to get a
-    hard wall-clock bound. The in-process version passed socket_timeout, which
-    caps each socket read rather than the call: a podcast feed measured at 295
-    seconds against a 15-second setting, because the extractor kept issuing
-    fresh requests that each stayed under the per-read limit. One platform
-    hanging that way stalls the whole sweep."""
+    """The probe calls extract_video_info_sync — the same entry point
+    /fetch-link uses — rather than bare yt-dlp.
 
-    def _proc(self, returncode=0, stdout=b"", stderr=b""):
-        m = MagicMock()
-        m.returncode, m.stdout, m.stderr = returncode, stdout, stderr
-        return m
+    The bare version got TikTok wrong on its first real run, in the most
+    damaging direction: it reported an IP block and would have alerted, while
+    the app returned a title and a playable URL for the same video. The app
+    reaches TikTok through TikWM, whose servers fetch on our behalf, so a block
+    on ours never touches it. A monitor that cries wolf gets muted, and takes
+    the next real outage with it."""
 
-    def test_a_hung_extractor_is_killed_at_the_deadline(self):
-        import subprocess
-        with patch("app.core.platform_probe.subprocess.run",
-                   side_effect=subprocess.TimeoutExpired(cmd="yt-dlp", timeout=15)):
-            r = pp.probe_once("https://example.com/v", timeout=15)
-        assert r["ok"] is False
-        assert r["reason"] == "timeout_after_15s", (
-            "a probe that never returns is a platform that never gets reported"
-        )
+    def _app(self, **kw):
+        return patch("app.services.downloader.extract_video_info_sync", **kw)
 
-    def test_the_deadline_is_actually_passed_to_the_subprocess(self):
-        """Regression guard: the old version accepted a timeout argument and
-        then did not enforce it."""
-        with patch("app.core.platform_probe.subprocess.run",
-                   return_value=self._proc(stdout=b'{"title":"x"}')) as run:
-            pp.probe_once("https://example.com/v", timeout=11)
-        assert run.call_args.kwargs.get("timeout") == 11
-
-    def test_a_failing_extractor_returns_its_last_line_not_an_exception(self):
-        err = b"WARNING: something\nERROR: [TikTok] Your IP address is blocked\n"
-        with patch("app.core.platform_probe.subprocess.run",
-                   return_value=self._proc(returncode=1, stderr=err)):
+    def test_a_raising_extractor_reports_a_failure_not_an_exception(self):
+        with self._app(side_effect=RuntimeError("blocked")):
             r = pp.probe_once("https://example.com/v")
-        assert r["ok"] is False
-        assert "IP address is blocked" in r["reason"]
+        assert r["ok"] is False and "RuntimeError" in r["reason"]
 
-    def test_empty_output_is_a_failure(self):
-        with patch("app.core.platform_probe.subprocess.run",
-                   return_value=self._proc(stdout=b"")):
+    def test_success_false_is_a_failure_even_with_a_200_shaped_body(self):
+        with self._app(return_value={"success": False, "error": "private_video"}):
+            r = pp.probe_once("https://example.com/v")
+        assert r["ok"] is False and r["reason"] == "private_video"
+
+    def test_a_body_with_no_title_and_no_media_url_is_not_a_success(self):
+        """However it labelled itself. An empty shell means extraction did not
+        actually produce anything usable."""
+        with self._app(return_value={"success": True}):
+            r = pp.probe_once("https://example.com/v")
+        assert r["ok"] is False and r["reason"] == "no_title_or_media_url"
+
+    def test_empty_response_is_a_failure(self):
+        with self._app(return_value={}):
             r = pp.probe_once("https://example.com/v")
         assert r["ok"] is False and r["reason"] == "no_metadata_returned"
 
-    def test_unparseable_output_is_a_failure_not_a_crash(self):
-        with patch("app.core.platform_probe.subprocess.run",
-                   return_value=self._proc(stdout=b"<html>nope</html>")):
+    def test_a_title_alone_counts_as_working(self):
+        with self._app(return_value={"success": True, "title": "Me at the zoo"}):
             r = pp.probe_once("https://example.com/v")
-        assert r["ok"] is False and r["reason"] == "unparseable_metadata"
+        assert r["ok"] is True and r["title"] == "Me at the zoo"
+
+    def test_a_media_url_without_a_title_still_counts(self):
+        with self._app(return_value={"success": True, "direct_mp4_url": "https://cdn/x.mp4"}):
+            r = pp.probe_once("https://example.com/v")
+        assert r["ok"] is True
 
     def test_reason_is_truncated_so_an_html_page_cannot_land_in_redis(self):
-        with patch("app.core.platform_probe.subprocess.run",
-                   return_value=self._proc(returncode=1, stderr=b"E" * 5000)):
+        with self._app(side_effect=RuntimeError("E" * 5000)):
             r = pp.probe_once("https://example.com/v")
         assert len(r["reason"]) <= 200
 
-    def test_success_reports_the_title(self):
-        with patch("app.core.platform_probe.subprocess.run",
-                   return_value=self._proc(stdout=b'{"title":"Me at the zoo"}')):
+    def test_an_unimportable_downloader_is_reported_not_raised(self):
+        with patch.dict("sys.modules", {"app.services.downloader": None}):
             r = pp.probe_once("https://example.com/v")
-        assert r["ok"] is True and r["title"] == "Me at the zoo" and r["ms"] >= 0
-
-    def test_a_subprocess_that_cannot_start_is_reported_not_raised(self):
-        with patch("app.core.platform_probe.subprocess.run",
-                   side_effect=OSError("no such file")):
-            r = pp.probe_once("https://example.com/v")
-        assert r["ok"] is False and "OSError" in r["reason"]
+        assert r["ok"] is False and "probe_unavailable" in r["reason"]
 
 
 class TestTargets:
