@@ -1550,6 +1550,77 @@ def _validated_cookie_b64(raw: bytes, platform: str) -> tuple[str, int, int]:
 
 
 # ═════════════════════════════════════════════════════════════════════
+# Platform probes — P0.1: active health for all 21 platforms
+# ═════════════════════════════════════════════════════════════════════
+
+class ProbeTargetRequest(BaseModel):
+    platform: str
+    url: Optional[str] = None      # empty/None clears the target
+
+
+@router.get("/probes")
+async def get_probes(_=Depends(verify_admin)):
+    """
+    Probe state for every platform on the public list.
+
+    `not_configured` and `stale` are reported as themselves rather than folded
+    into healthy: "nobody has checked" and "we checked and it was fine" are
+    different facts, and showing the first as the second is how a dead platform
+    stays invisible.
+    """
+    from app.core.platform_probe import (
+        NOT_CONFIGURED, OK, FAILED, PROBE_PLATFORMS, get_probe_states,
+    )
+    states = get_probe_states()
+    rows = [{"platform": p, **states.get(p, {})} for p in PROBE_PLATFORMS]
+    counts = {"ok": 0, "failed": 0, "not_configured": 0, "stale": 0}
+    for r in rows:
+        counts[r.get("status", NOT_CONFIGURED)] = counts.get(r.get("status", NOT_CONFIGURED), 0) + 1
+    # Worst first: failures, then unmonitored, then stale, then healthy.
+    order = {FAILED: 0, NOT_CONFIGURED: 1, "stale": 2, OK: 3}
+    rows.sort(key=lambda r: (order.get(r.get("status"), 9), r["platform"]))
+    return {
+        "success": True,
+        "platforms": rows,
+        "counts": counts,
+        "total": len(rows),
+        "note": (
+            "Dò bằng metadata (yt-dlp, không tải byte nào, không qua nhà cung cấp "
+            "trả phí). Không chứng minh tải được thật — phần đó do fetch_failed / "
+            "download_failed từ người dùng thật phủ."
+        ),
+    }
+
+
+@router.post("/probes/target")
+async def set_probe_target(req: ProbeTargetRequest, request: Request, _=Depends(verify_admin)):
+    """Set or clear one platform's probe URL. Takes effect on the next run."""
+    from app.core.platform_probe import set_target
+    try:
+        targets = set_target(req.platform, req.url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    log_admin_action(
+        request, "admin.probe.target_set",
+        resource_type="platform_probe", resource_id=req.platform,
+        metadata={"cleared": not (req.url or "").strip()},
+    )
+    return {"success": True, "platform": req.platform, "configured": len(targets)}
+
+
+@router.post("/probes/run")
+async def run_probes_now(request: Request, _=Depends(verify_admin)):
+    """Queue a probe run immediately instead of waiting for the 30-minute tick."""
+    try:
+        from app.tasks.probe_tasks import probe_all_platforms
+        probe_all_platforms.delay()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Không xếp được hàng đợi: {e}")
+    log_admin_action(request, "admin.probe.run_now", resource_type="platform_probe")
+    return {"success": True, "queued": True}
+
+
+# ═════════════════════════════════════════════════════════════════════
 # GET /funnel — conversion funnel from analytics_events
 # ═════════════════════════════════════════════════════════════════════
 

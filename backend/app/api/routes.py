@@ -2384,24 +2384,61 @@ async def get_platform_status():
     }
     try:
         from app.core.lane_observer import observe_all_platforms
-        observations = observe_all_platforms()
-        platforms = []
-        for obs in observations:
-            lane = obs.get("laneState", "healthy")
-            platforms.append({
-                "platform": obs["platform"],
-                "status":   lane,
-                "message":  _STATUS_MSG.get(lane, "Hoạt động bình thường"),
-                "reason":   obs.get("constrainedReason") if lane != "healthy" else None,
-            })
-        degraded_count = sum(1 for p in platforms if p["status"] == "degraded")
-        return {
-            "success":        True,
-            "platforms":      platforms,
-            "degraded_count": degraded_count,
-            "all_healthy":    degraded_count == 0,
-        }
-    except Exception as e:
-        return {"success": True, "platforms": [], "degraded_count": 0, "all_healthy": True}
+        from app.core.platform_probe import (
+            FAILED as _PROBE_FAILED,
+            NOT_CONFIGURED as _PROBE_NOT_CONFIGURED,
+            OK as _PROBE_OK,
+            PROBE_PLATFORMS,
+            get_probe_states,
+        )
 
-    return {"success": True, **result}
+        # lane_observer only sees platforms carrying traffic, so it reported 5
+        # of 21 and the other 16 were silent — indistinguishable from healthy.
+        # The active probes cover the rest; where both have an opinion, a failed
+        # probe wins, because "we asked and extraction is broken" outranks "our
+        # cookie pool looks fine".
+        lanes = {o["platform"]: o for o in observe_all_platforms()}
+        try:
+            probes = get_probe_states()
+        except Exception:
+            probes = {}
+
+        platforms = []
+        for name in sorted(set(PROBE_PLATFORMS) | set(lanes)):
+            obs = lanes.get(name) or {}
+            lane = obs.get("laneState", "healthy")
+            probe = probes.get(name) or {}
+            probe_status = probe.get("status")
+
+            status = lane
+            reason = obs.get("constrainedReason") if lane != "healthy" else None
+            if probe_status == _PROBE_FAILED:
+                status = "degraded"
+                reason = "probe_failed"
+            elif probe_status == _PROBE_OK and lane == "healthy":
+                reason = None
+
+            platforms.append({
+                "platform": name,
+                "status":   status,
+                "message":  _STATUS_MSG.get(status, "Hoạt động bình thường"),
+                "reason":   reason,
+                # Surfaced so "nobody has checked" is never read as "checked and
+                # fine". Absent lane data plus an unconfigured probe means we
+                # genuinely do not know.
+                "probe":    probe_status or _PROBE_NOT_CONFIGURED,
+                "monitored": bool(probe_status and probe_status != _PROBE_NOT_CONFIGURED),
+            })
+
+        degraded_count = sum(1 for p in platforms if p["status"] == "degraded")
+        monitored = sum(1 for p in platforms if p["monitored"])
+        return {
+            "success":         True,
+            "platforms":       platforms,
+            "degraded_count":  degraded_count,
+            "all_healthy":     degraded_count == 0,
+            "monitored_count": monitored,
+            "total_count":     len(platforms),
+        }
+    except Exception:
+        return {"success": True, "platforms": [], "degraded_count": 0, "all_healthy": True}
