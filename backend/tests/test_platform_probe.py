@@ -105,37 +105,73 @@ class TestUnknownIsNotHealthy:
 
 
 class TestProbeNeverGoesQuiet:
+    """probe_once shells out to yt-dlp instead of importing it, solely to get a
+    hard wall-clock bound. The in-process version passed socket_timeout, which
+    caps each socket read rather than the call: a podcast feed measured at 295
+    seconds against a 15-second setting, because the extractor kept issuing
+    fresh requests that each stayed under the per-read limit. One platform
+    hanging that way stalls the whole sweep."""
 
-    def test_an_extractor_that_raises_returns_a_failure_not_an_exception(self):
-        """A probe that throws is a probe that reports nothing, and silence is
-        indistinguishable from health."""
-        boom = MagicMock()
-        boom.return_value.__enter__.return_value.extract_info.side_effect = RuntimeError("blocked")
-        with patch.dict("sys.modules", {"yt_dlp": MagicMock(YoutubeDL=boom)}):
+    def _proc(self, returncode=0, stdout=b"", stderr=b""):
+        m = MagicMock()
+        m.returncode, m.stdout, m.stderr = returncode, stdout, stderr
+        return m
+
+    def test_a_hung_extractor_is_killed_at_the_deadline(self):
+        import subprocess
+        with patch("app.core.platform_probe.subprocess.run",
+                   side_effect=subprocess.TimeoutExpired(cmd="yt-dlp", timeout=15)):
+            r = pp.probe_once("https://example.com/v", timeout=15)
+        assert r["ok"] is False
+        assert r["reason"] == "timeout_after_15s", (
+            "a probe that never returns is a platform that never gets reported"
+        )
+
+    def test_the_deadline_is_actually_passed_to_the_subprocess(self):
+        """Regression guard: the old version accepted a timeout argument and
+        then did not enforce it."""
+        with patch("app.core.platform_probe.subprocess.run",
+                   return_value=self._proc(stdout=b'{"title":"x"}')) as run:
+            pp.probe_once("https://example.com/v", timeout=11)
+        assert run.call_args.kwargs.get("timeout") == 11
+
+    def test_a_failing_extractor_returns_its_last_line_not_an_exception(self):
+        err = b"WARNING: something\nERROR: [TikTok] Your IP address is blocked\n"
+        with patch("app.core.platform_probe.subprocess.run",
+                   return_value=self._proc(returncode=1, stderr=err)):
             r = pp.probe_once("https://example.com/v")
         assert r["ok"] is False
-        assert "RuntimeError" in r["reason"]
+        assert "IP address is blocked" in r["reason"]
 
-    def test_empty_metadata_is_a_failure(self):
-        ydl = MagicMock()
-        ydl.return_value.__enter__.return_value.extract_info.return_value = None
-        with patch.dict("sys.modules", {"yt_dlp": MagicMock(YoutubeDL=ydl)}):
+    def test_empty_output_is_a_failure(self):
+        with patch("app.core.platform_probe.subprocess.run",
+                   return_value=self._proc(stdout=b"")):
             r = pp.probe_once("https://example.com/v")
         assert r["ok"] is False and r["reason"] == "no_metadata_returned"
 
+    def test_unparseable_output_is_a_failure_not_a_crash(self):
+        with patch("app.core.platform_probe.subprocess.run",
+                   return_value=self._proc(stdout=b"<html>nope</html>")):
+            r = pp.probe_once("https://example.com/v")
+        assert r["ok"] is False and r["reason"] == "unparseable_metadata"
+
     def test_reason_is_truncated_so_an_html_page_cannot_land_in_redis(self):
-        ydl = MagicMock()
-        ydl.return_value.__enter__.return_value.extract_info.side_effect = RuntimeError("x" * 5000)
-        with patch.dict("sys.modules", {"yt_dlp": MagicMock(YoutubeDL=ydl)}):
+        with patch("app.core.platform_probe.subprocess.run",
+                   return_value=self._proc(returncode=1, stderr=b"E" * 5000)):
             r = pp.probe_once("https://example.com/v")
         assert len(r["reason"]) <= 200
 
-    def test_success_reports_title_and_duration(self):
-        ydl = MagicMock()
-        ydl.return_value.__enter__.return_value.extract_info.return_value = {"title": "Me at the zoo"}
-        with patch.dict("sys.modules", {"yt_dlp": MagicMock(YoutubeDL=ydl)}):
+    def test_success_reports_the_title(self):
+        with patch("app.core.platform_probe.subprocess.run",
+                   return_value=self._proc(stdout=b'{"title":"Me at the zoo"}')):
             r = pp.probe_once("https://example.com/v")
         assert r["ok"] is True and r["title"] == "Me at the zoo" and r["ms"] >= 0
+
+    def test_a_subprocess_that_cannot_start_is_reported_not_raised(self):
+        with patch("app.core.platform_probe.subprocess.run",
+                   side_effect=OSError("no such file")):
+            r = pp.probe_once("https://example.com/v")
+        assert r["ok"] is False and "OSError" in r["reason"]
 
 
 class TestTargets:
@@ -143,6 +179,13 @@ class TestTargets:
     def test_defaults_apply_when_nothing_is_configured(self):
         with _with(_FakeRedis(targets=None)):
             assert pp.get_targets() == pp._DEFAULT_TARGETS
+
+    def test_every_shipped_default_was_actually_verified(self):
+        """Defaults are the one place a wrong URL turns the monitor into a liar
+        on day one. Only platforms whose target was run through the real probe
+        ship with one; the rest report not_configured until an operator sets
+        them. Measured 2026-09-24: youtube and vk resolved, 19 others did not."""
+        assert set(pp._DEFAULT_TARGETS) == {"youtube", "vk"}
 
     def test_configured_target_overrides_the_default(self):
         with _with(_FakeRedis(targets={"youtube": "https://custom/v"})):

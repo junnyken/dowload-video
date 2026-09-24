@@ -29,6 +29,8 @@ Configured targets live in Redis under `probe:targets` as a JSON object
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import time
 from typing import Any, Dict, Optional
 
@@ -47,6 +49,8 @@ PROBE_PLATFORMS = [
 _DEFAULT_TARGETS: Dict[str, str] = {
     # The first video ever uploaded to YouTube, April 2005, still public.
     "youtube": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+    # Verified by running the real probe against it on 2026-09-24, not assumed.
+    "vk": "https://vk.com/video-22822305_456241864",
 }
 
 _TARGETS_KEY = "probe:targets"
@@ -106,42 +110,64 @@ def probe_once(url: str, timeout: int = _PROBE_TIMEOUT_SEC) -> Dict[str, Any]:
     """
     Resolve metadata for one URL. No download, no paid provider.
 
-    Returns {ok, reason, ms, title}. Never raises: a probe that throws is a
-    probe that reports nothing, and a monitor that goes quiet on failure is the
-    exact thing this module exists to replace.
+    Runs yt-dlp as a SUBPROCESS rather than importing it, purely to get a hard
+    wall-clock bound. The in-process version passed `socket_timeout`, which caps
+    each socket read and not the call: a podcast feed probe measured at 295
+    seconds against a 15-second setting, because the extractor kept making fresh
+    requests that each stayed under the per-read limit. One platform hanging
+    like that stalls the whole sweep, which is the opposite of what a monitor is
+    for. subprocess.run(timeout=) kills the process outright.
+
+    Returns {ok, reason, ms, title}. Never raises: a probe that throws reports
+    nothing, and a monitor that goes quiet on failure is the thing this module
+    exists to replace.
     """
     started = time.time()
-    try:
-        import yt_dlp
-        opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "socket_timeout": timeout,
-            "extract_flat": False,
-            "noplaylist": True,
-        }
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-        ms = int((time.time() - started) * 1000)
-        if not info:
-            return {"ok": False, "reason": "no_metadata_returned", "ms": ms, "title": None}
+
+    def _done(ok: bool, reason: Optional[str], title: Optional[str] = None) -> Dict[str, Any]:
         return {
-            "ok": True,
-            "reason": None,
-            "ms": ms,
-            "title": (info.get("title") or "")[:120] or None,
-        }
-    except Exception as exc:
-        ms = int((time.time() - started) * 1000)
-        return {
-            "ok": False,
+            "ok": ok,
             # Truncated: extractor errors can embed a whole HTML page, and the
             # reason is stored in Redis and rendered in the admin.
-            "reason": f"{type(exc).__name__}: {exc}"[:200],
-            "ms": ms,
-            "title": None,
+            "reason": reason[:200] if reason else None,
+            "ms": int((time.time() - started) * 1000),
+            "title": title,
         }
+
+    try:
+        proc = subprocess.run(
+            [
+                sys.executable, "-m", "yt_dlp",
+                "-J",                      # metadata as JSON
+                "--skip-download",
+                "--no-warnings",
+                "--no-playlist",
+                "--socket-timeout", str(max(5, timeout // 2)),
+                url,
+            ],
+            capture_output=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return _done(False, f"timeout_after_{timeout}s")
+    except Exception as exc:
+        return _done(False, f"{type(exc).__name__}: {exc}")
+
+    if proc.returncode != 0:
+        err = (proc.stderr or b"").decode("utf-8", errors="replace").strip()
+        last = err.splitlines()[-1] if err else f"exit_{proc.returncode}"
+        return _done(False, last)
+
+    raw = (proc.stdout or b"").decode("utf-8", errors="replace").strip()
+    if not raw:
+        return _done(False, "no_metadata_returned")
+    try:
+        info = json.loads(raw.splitlines()[0])
+    except Exception:
+        return _done(False, "unparseable_metadata")
+    if not isinstance(info, dict) or not info:
+        return _done(False, "no_metadata_returned")
+    return _done(True, None, (info.get("title") or "")[:120] or None)
 
 
 def record_probe(platform: str, result: Dict[str, Any]) -> None:
