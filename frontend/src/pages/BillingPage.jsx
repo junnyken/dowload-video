@@ -5,15 +5,11 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import QuotaBar from '../components/QuotaBar';
+import UpgradeModal from '../components/UpgradeModal';
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function navigate(path) {
-  window.history.pushState({}, '', path);
-  window.dispatchEvent(new PopStateEvent('popstate'));
-}
 
 function formatDate(iso) {
   if (!iso) return null;
@@ -119,6 +115,12 @@ export default function BillingPage() {
   const [portalLoading, setPortalLoading] = useState(false);
   const [portalError, setPortalError]   = useState('');
   const [toast, setToast]               = useState(null);
+  // These two buttons used to navigate('/pricing'), a page App.jsx hides and
+  // renders as nothing. Pointing them at /billing would be this page linking
+  // to itself, so they open the upgrade modal instead — the path that already
+  // reaches Stripe checkout and already fires upgrade_clicked.
+  const [showUpgrade, setShowUpgrade]   = useState(false);
+  const [authToken, setAuthToken]       = useState(null);
 
   // ── Query-param toasts ───────────────────────────────────────────────
   useEffect(() => {
@@ -142,6 +144,14 @@ export default function BillingPage() {
     const { data: { session } } = await supabase.auth.getSession();
     return session?.access_token || null;
   }, []);
+
+  // Token is read on click rather than kept in state from the load effect:
+  // setting it there is a setState inside an effect, which the hooks lint
+  // rejects, and a token grabbed at click time is the fresher one anyway.
+  const openUpgrade = useCallback(async () => {
+    setAuthToken(await getToken());
+    setShowUpgrade(true);
+  }, [getToken]);
 
   const fetchBillingInfo = useCallback(async () => {
     setLoadingInfo(true);
@@ -294,7 +304,7 @@ export default function BillingPage() {
 
                 {isFree && (
                   <button
-                    onClick={() => navigate('/pricing')}
+                    onClick={openUpgrade}
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-lg
                                bg-emerald-600 hover:bg-emerald-500 text-sm font-semibold
                                text-white transition-colors focus:outline-none
@@ -414,7 +424,7 @@ export default function BillingPage() {
               </p>
             </div>
             <button
-              onClick={() => navigate('/pricing')}
+              onClick={openUpgrade}
               className="shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl
                          bg-emerald-600 hover:bg-emerald-500 text-white text-sm
                          font-semibold transition-colors focus:outline-none
@@ -427,6 +437,12 @@ export default function BillingPage() {
           </div>
         )}
       </div>
+
+      <UpgradeModal
+        isOpen={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        authToken={authToken}
+      />
     </div>
   );
 }
