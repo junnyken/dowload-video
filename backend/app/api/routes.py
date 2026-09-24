@@ -2432,13 +2432,24 @@ async def get_platform_status():
 
         degraded_count = sum(1 for p in platforms if p["status"] == "degraded")
         monitored = sum(1 for p in platforms if p["monitored"])
+        unmonitored = len(platforms) - monitored
         return {
             "success":         True,
             "platforms":       platforms,
             "degraded_count":  degraded_count,
-            "all_healthy":     degraded_count == 0,
-            "monitored_count": monitored,
-            "total_count":     len(platforms),
+            # Means "nothing is KNOWN to be broken", not "everything was
+            # checked and is fine". The first run after this shipped reported
+            # all_healthy=True while only 2 of 21 platforms had a probe
+            # configured — which is the same "we did not look, reported as it
+            # is fine" defect the probes exist to remove, reappearing one level
+            # up in the summary. The client banner still keys off this (an
+            # unchecked platform is no reason to alarm a user), so the honest
+            # number rides alongside it rather than replacing it.
+            "all_healthy":      degraded_count == 0,
+            "fully_checked":    degraded_count == 0 and unmonitored == 0,
+            "monitored_count":  monitored,
+            "unmonitored_count": unmonitored,
+            "total_count":      len(platforms),
         }
     except Exception:
         return {"success": True, "platforms": [], "degraded_count": 0, "all_healthy": True}

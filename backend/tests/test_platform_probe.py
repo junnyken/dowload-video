@@ -239,3 +239,56 @@ class TestAlertsFireOnTransition:
     def test_a_platform_that_stays_healthy_is_silent(self):
         send = self._run(_FakeRedis(), {"tiktok": pp.OK}, {"tiktok": pp.OK})
         send.assert_not_called()
+
+
+class TestCoverageIsNotConfidence:
+    """The summary field on /platform-status reintroduced, one level up, the
+    defect the probes exist to remove: the first run after they shipped
+    reported all_healthy=True while only 2 of 21 platforms had a probe
+    configured. "Nothing is known to be broken" and "everything was checked
+    and is fine" are different claims and need different fields."""
+
+    def _status(self, lanes, probes):
+        import asyncio
+        from app.api.routes import get_platform_status
+        with patch("app.core.lane_observer.observe_all_platforms", return_value=lanes), \
+             patch("app.core.platform_probe.get_probe_states", return_value=probes):
+            return asyncio.run(get_platform_status())
+
+    def _all_unconfigured(self):
+        return {p: {"status": pp.NOT_CONFIGURED} for p in pp.PROBE_PLATFORMS}
+
+    def test_unchecked_platforms_block_the_fully_checked_claim(self):
+        r = self._status([], self._all_unconfigured())
+        assert r["fully_checked"] is False, (
+            "claimed every platform was checked while none had a probe"
+        )
+        assert r["unmonitored_count"] == r["total_count"]
+
+    def test_all_healthy_still_means_nothing_known_broken(self):
+        """Kept separate on purpose: the user-facing banner keys off this, and
+        a platform nobody has probed is no reason to alarm a user."""
+        r = self._status([], self._all_unconfigured())
+        assert r["all_healthy"] is True
+        assert r["degraded_count"] == 0
+
+    def test_fully_checked_only_when_everything_is_probed_and_ok(self):
+        probes = {p: {"status": pp.OK} for p in pp.PROBE_PLATFORMS}
+        r = self._status([], probes)
+        assert r["fully_checked"] is True
+        assert r["unmonitored_count"] == 0
+
+    def test_a_failed_probe_degrades_the_platform_and_the_summary(self):
+        probes = {p: {"status": pp.OK} for p in pp.PROBE_PLATFORMS}
+        probes["tiktok"] = {"status": pp.FAILED}
+        r = self._status([], probes)
+        assert r["degraded_count"] == 1
+        assert r["all_healthy"] is False and r["fully_checked"] is False
+        assert next(p for p in r["platforms"] if p["platform"] == "tiktok")["reason"] == "probe_failed"
+
+    def test_counts_add_up(self):
+        probes = self._all_unconfigured()
+        probes["youtube"] = {"status": pp.OK}
+        r = self._status([], probes)
+        assert r["monitored_count"] + r["unmonitored_count"] == r["total_count"]
+        assert r["monitored_count"] == 1
