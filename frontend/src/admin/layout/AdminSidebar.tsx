@@ -34,6 +34,7 @@ const NAV_MONITOR: NavItem[] = [
   { href: '/vid-admin/queue', label: 'Queue', icon: '◧', minRole: 'viewer' },
   { href: '/vid-admin/jobs', label: 'Jobs', icon: '⊡', minRole: 'viewer' },
   { href: '/vid-admin/analytics', label: 'Analytics', icon: '◫', minRole: 'viewer' },
+  { href: '/vid-admin/probes', label: 'Sức khoẻ nền tảng', icon: '◉', minRole: 'viewer' },
   { href: '/vid-admin/funnel', label: 'Funnel', icon: '◩', minRole: 'viewer' },
   { href: '/vid-admin/youtube-gate', label: 'YouTube Gate', icon: '⊙', minRole: 'operator' },
   // Ops Signals is the aggregated "is anything wrong right now" view. Queue

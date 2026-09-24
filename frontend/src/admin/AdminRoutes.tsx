@@ -10,6 +10,7 @@ import { QueuePage } from './pages/QueuePage'
 import { AuditLogPage } from './pages/AuditLogPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import FunnelPage from './pages/FunnelPage'
+import ProbesPage from './pages/ProbesPage'
 import UsersPage from './pages/UsersPage'
 import ConfigPage from './pages/ConfigPage'
 import AccessPage from './pages/AccessPage'
@@ -58,6 +59,7 @@ export function AdminRoutes() {
       {/* Phase 3+ — Analytics now live */}
       <Route path="/vid-admin/analytics" element={<Shell><AnalyticsPage /></Shell>} />
       <Route path="/vid-admin/funnel"    element={<Shell><FunnelPage /></Shell>} />
+      <Route path="/vid-admin/probes"    element={<Shell><ProbesPage /></Shell>} />
       <Route path="/vid-admin/users"     element={<Shell><UsersPage /></Shell>} />
       <Route path="/vid-admin/config"    element={<Shell><ConfigPage /></Shell>} />
       <Route path="/vid-admin/access"    element={<Shell><AccessPage /></Shell>} />
