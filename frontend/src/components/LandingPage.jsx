@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { hasUsedBefore } from '../lib/returningUser';
+import { trackEvent, EVENT } from '../utils/trackEvent';
 import DashboardContent from './DashboardContent';
 import BulkContent from './BulkContent';
 import HistoryContent from './HistoryContent';
@@ -41,6 +42,13 @@ const tabs = [
 ];
 
 export default function LandingPage() {
+  // Top of the funnel. Without it there is no denominator, so no conversion
+  // rate can be computed from any of the steps below it. Empty dep array: once
+  // per mount, not once per re-render.
+  useEffect(() => {
+    trackEvent(EVENT.LANDING_PAGE_VIEW, { returning: hasUsedBefore() });
+  }, []);
+
   const { isAuthenticated } = useAuth();
 
   // Read once, at mount: this must not flip mid-session and reflow the page

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Crown, Check, Zap } from 'lucide-react';
 import { API_BASE } from '../lib/apiBase';
+import { trackEvent, EVENT } from '../utils/trackEvent';
 
 const ERROR_COPY = {
   quota_exceeded_daily: {
@@ -69,6 +70,11 @@ export default function UpgradeModal({ isOpen, onClose, errorCode = null, authTo
   };
 
   const handleUpgrade = async () => {
+    // paywall_seen already fires when this modal opens, so we could see people
+    // reach the wall and never whether they tried to climb it. Fired before the
+    // network call on purpose: the intent is the signal, and counting only
+    // successful checkouts would hide every attempt that failed here.
+    trackEvent(EVENT.UPGRADE_CLICKED, { trigger: errorCode || 'unknown' });
     setCtaError('');
     setLoading(true);
     try {

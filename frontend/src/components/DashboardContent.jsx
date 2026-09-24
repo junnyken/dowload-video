@@ -234,6 +234,17 @@ export default function DashboardContent() {
   // Phase 21: preset + smart defaults
   const { allPresets, getPresetForPlatform, createPreset } = usePresets();
   const detectedPlatform = detectPlatform(url);
+
+  // Fires once per platform, not once per keystroke: detectPlatform runs on
+  // every render of a controlled input, so tracking it directly would bury the
+  // funnel under one event per character typed.
+  const lastTrackedPlatformRef = useRef(null);
+  useEffect(() => {
+    if (detectedPlatform && detectedPlatform !== lastTrackedPlatformRef.current) {
+      lastTrackedPlatformRef.current = detectedPlatform;
+      trackEvent(EVENT.PLATFORM_DETECTED, { platform: detectedPlatform });
+    }
+  }, [detectedPlatform]);
   const { defaults: smartDefaults, activePreset, recordUsed: recordSmartUsed } = useSmartDefaults(url, { activePresets: allPresets });
 
   // Phase 24: universal capability resolve (debounced, non-blocking)
@@ -601,6 +612,14 @@ export default function DashboardContent() {
         }
       } else throw new Error('Không thể trích xuất thông tin video.');
     } catch (err) {
+      // fetch_success had no counterpart here, so a link that never resolved
+      // left no trace in the funnel at all — the failure mode that matters most
+      // for a product whose value is "the download works". Paywall rejections
+      // return above rather than throwing, so they do not land here.
+      trackEvent(EVENT.FETCH_FAILED, {
+        platform: detectedPlatform || 'unknown',
+        reason: String(err?.message || '').slice(0, 120),
+      });
       setError(err.message || 'Đã xảy ra lỗi khi xử lý link.');
     } finally {
       setIsLoading(false);
@@ -1082,6 +1101,10 @@ export default function DashboardContent() {
         }
       }
     } catch (err) {
+      trackEvent(EVENT.DOWNLOAD_FAILED, {
+        platform: videoInfo?.platform || detectedPlatform || 'unknown',
+        reason: String(err?.message || '').slice(0, 120),
+      });
       setError(err.message || 'Đã xảy ra lỗi khi xử lý ghép tệp.');
       addNotification({
         type: 'download_failed',
