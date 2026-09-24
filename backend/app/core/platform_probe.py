@@ -29,8 +29,6 @@ Configured targets live in Redis under `probe:targets` as a JSON object
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 import time
 from typing import Any, Dict, Optional
 
@@ -108,66 +106,64 @@ def set_target(platform: str, url: Optional[str]) -> Dict[str, str]:
 
 def probe_once(url: str, timeout: int = _PROBE_TIMEOUT_SEC) -> Dict[str, Any]:
     """
-    Resolve metadata for one URL. No download, no paid provider.
+    Ask the platform whether extraction still works, THROUGH THE PATH THE APP
+    ACTUALLY USES.
 
-    Runs yt-dlp as a SUBPROCESS rather than importing it, purely to get a hard
-    wall-clock bound. The in-process version passed `socket_timeout`, which caps
-    each socket read and not the call: a podcast feed probe measured at 295
-    seconds against a 15-second setting, because the extractor kept making fresh
-    requests that each stayed under the per-read limit. One platform hanging
-    like that stalls the whole sweep, which is the opposite of what a monitor is
-    for. subprocess.run(timeout=) kills the process outright.
+    The first version shelled out to bare yt-dlp, and its very first real run
+    got TikTok wrong in the most damaging direction: it reported "Your IP
+    address is blocked from accessing this post" and would have marked the
+    platform broken and alerted, while /fetch-link returned a title, thumbnail
+    and direct_mp4_url for the same video without trouble. The app does not
+    reach TikTok with bare yt-dlp — it goes through TikWM, whose servers fetch
+    on our behalf, so an IP block on ours never touches it. A monitor that
+    cries wolf gets muted, and takes the next real outage with it.
 
-    Returns {ok, reason, ms, title}. Never raises: a probe that throws reports
-    nothing, and a monitor that goes quiet on failure is the thing this module
-    exists to replace.
+    So the probe now calls extract_video_info_sync, the same entry point
+    /fetch-link uses, and therefore the same fallback chain: TikWM, cookie
+    pool, proxy, Cobalt. What it reports is what a user would have experienced.
+
+    Still metadata only — _extract_video_info_impl's own docstring says "Uses
+    PROXY ONLY for metadata extraction, not file download", and every yt-dlp
+    call inside it passes download=False. No bytes, so the sweep stays cheap.
+    The caveat worth stating: a platform that falls through to a paid provider
+    for metadata costs a little per probe. That was not true of the bare
+    yt-dlp version, and it is the price of measuring the real path.
+
+    Never raises: a probe that throws reports nothing, and silence is
+    indistinguishable from health.
     """
     started = time.time()
 
     def _done(ok: bool, reason: Optional[str], title: Optional[str] = None) -> Dict[str, Any]:
         return {
             "ok": ok,
-            # Truncated: extractor errors can embed a whole HTML page, and the
-            # reason is stored in Redis and rendered in the admin.
+            # Truncated: extractor errors can embed a whole HTML page, and this
+            # is stored in Redis and rendered in the admin.
             "reason": reason[:200] if reason else None,
             "ms": int((time.time() - started) * 1000),
             "title": title,
         }
 
     try:
-        proc = subprocess.run(
-            [
-                sys.executable, "-m", "yt_dlp",
-                "-J",                      # metadata as JSON
-                "--skip-download",
-                "--no-warnings",
-                "--no-playlist",
-                "--socket-timeout", str(max(5, timeout // 2)),
-                url,
-            ],
-            capture_output=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        return _done(False, f"timeout_after_{timeout}s")
+        from app.services.downloader import extract_video_info_sync
+    except Exception as exc:
+        return _done(False, f"probe_unavailable: {type(exc).__name__}: {exc}")
+
+    try:
+        info = extract_video_info_sync(url, quality="video")
     except Exception as exc:
         return _done(False, f"{type(exc).__name__}: {exc}")
 
-    if proc.returncode != 0:
-        err = (proc.stderr or b"").decode("utf-8", errors="replace").strip()
-        last = err.splitlines()[-1] if err else f"exit_{proc.returncode}"
-        return _done(False, last)
-
-    raw = (proc.stdout or b"").decode("utf-8", errors="replace").strip()
-    if not raw:
-        return _done(False, "no_metadata_returned")
-    try:
-        info = json.loads(raw.splitlines()[0])
-    except Exception:
-        return _done(False, "unparseable_metadata")
     if not isinstance(info, dict) or not info:
         return _done(False, "no_metadata_returned")
-    return _done(True, None, (info.get("title") or "")[:120] or None)
+    if not info.get("success", True):
+        return _done(False, str(info.get("error") or info.get("message") or "extraction_failed"))
+    title = info.get("title")
+    # A response carrying neither a title nor a playable URL is not a success
+    # however it labelled itself.
+    if not title and not (info.get("direct_mp4_url") or info.get("local_file_path")):
+        return _done(False, "no_title_or_media_url")
+    return _done(True, None, (title or "")[:120] or None)
 
 
 def record_probe(platform: str, result: Dict[str, Any]) -> None:
