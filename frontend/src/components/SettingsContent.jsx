@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { trackEvent, EVENT } from '../utils/trackEvent';
 import {
   Settings, Server, Palette, Bell, BellOff, Shield,
   Clock, Database, FileDown, Key, Info, ExternalLink,
@@ -54,7 +55,10 @@ export default function SettingsContent() {
         method: 'POST', credentials: 'include',
       });
       const d = await r.json();
-      if (d.api_key) setApiKey(d.api_key);
+      if (d.api_key) {
+        setApiKey(d.api_key);
+        trackEvent(EVENT.API_KEY_CREATED, {});
+      }
     } catch { /* ignore */ }
     setApiKeyLoading(false);
   };

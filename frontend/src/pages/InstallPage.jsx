@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { trackEvent, EVENT } from '../utils/trackEvent';
 import { Download, AppWindow as Chrome, CheckCircle, ChevronRight, Zap, Shield, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 
 const EXT_VERSION = 'v5.1.0';
@@ -49,8 +50,14 @@ export default function InstallPage() {
     // The extension zip is served by the backend (app/api/routes.py
     // GET /extension/download), which can be a different domain than the
     // frontend in split deployments — a bare relative path 404s there.
+    trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'install_page' });
     const apiBase = import.meta.env.VITE_API_URL ?? '';
-    window.open(`${apiBase}/extension/download`, '_blank');
+    // Was `${apiBase}/extension/download` — the router is mounted under
+    // /api/v1, so that path 404s. Measured against the deployed backend:
+    //   /extension/download        -> 404
+    //   /api/v1/extension/download -> 200
+    // ExtensionPage.jsx already used the prefixed form; this one was missed.
+    window.open(`${apiBase}/api/v1/extension/download`, '_blank');
     setTimeout(() => setDownloading(false), 3000);
   };
 

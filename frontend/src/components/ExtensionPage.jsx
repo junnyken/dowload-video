@@ -7,6 +7,7 @@ import {
   Send,
   ArrowRight,
 } from 'lucide-react';
+import { trackEvent, EVENT } from '../utils/trackEvent';
 
 // ── Constants ────────────────────────────────────────────────
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -107,6 +108,7 @@ export default function ExtensionPage() {
           <div className="flex flex-col sm:flex-row gap-3 w-full max-w-sm sm:max-w-lg">
             <a
               href={`${API_BASE}/api/v1/extension/download`}
+              onClick={() => trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'extension_page' })}
               download
               className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] font-extrabold text-sm shadow-lg shadow-[#FBBF24]/25 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
             >

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { trackEvent, EVENT } from '../utils/trackEvent';
 import { useAuth } from '../context/AuthContext';
 import {
   Layers,
@@ -331,6 +332,11 @@ export default function BulkContent() {
       }
       urlList = expandedUrls;
 
+      trackEvent(EVENT.BULK_STARTED, {
+        url_count: urlList.length,
+        channel_mode: channelMode,
+        quality,
+      });
       const res = await fetch(`${API}/bulk-download`,
         withAuth({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
           urls: urlList,
