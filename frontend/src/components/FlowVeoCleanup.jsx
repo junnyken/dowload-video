@@ -794,7 +794,7 @@ export default function FlowVeoCleanup() {
               disabled={!!durationWarning}
               className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
                 !!durationWarning
-                  ? 'opacity-40 cursor-not-allowed bg-surface-2 text-fg-muted'
+                  ? 'cursor-not-allowed bg-surface-2 text-fg-muted border border-line'
                   : ctaGradient
                   ? 'bg-accent text-accent-fg shadow-md'
                   : 'bg-accent-soft text-accent-text border border-accent/30 hover:bg-accent/20'

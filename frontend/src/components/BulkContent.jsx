@@ -27,6 +27,9 @@ import {
   AlertTriangle,
   Sparkles,
   FolderOpen,
+  Link2,
+  Pencil,
+  Eye,
 } from 'lucide-react';
 
 import UpgradeModal from './UpgradeModal';
@@ -896,26 +899,29 @@ export default function BulkContent() {
             
             {/* Mode Tabs */}
             <div className="flex flex-col items-start gap-1">
-              <div className="flex gap-1.5 p-1 bg-surface rounded-xl border border-line">
+              <div className="flex flex-wrap gap-1 p-1 bg-surface-2 rounded-control border border-line max-w-full">
                 {[
-                  { key: 'bulk',      label: '📋 Bulk URL',    active: !channelMode && !searchMode && !containerMode },
-                  { key: 'channel',   label: '📡 Channel',      active: channelMode && !searchMode && !containerMode },
-                  { key: 'search',    label: '🔍 Từ khóa',     active: searchMode && !containerMode },
-                  { key: 'container', label: '📂 Browse',       active: containerMode },
+                  { key: 'bulk',      label: 'Bulk URL',  icon: Link2,      active: !channelMode && !searchMode && !containerMode },
+                  { key: 'channel',   label: 'Channel',   icon: Tv,         active: channelMode && !searchMode && !containerMode },
+                  { key: 'search',    label: 'Từ khóa',   icon: Search,     active: searchMode && !containerMode },
+                  { key: 'container', label: 'Browse',    icon: FolderOpen, active: containerMode },
                 ].map(tab => (
                   <button
                     key={tab.key}
+                    type="button"
+                    aria-pressed={tab.active}
                     onClick={() => {
                       setChannelMode(tab.key === 'channel');
                       setSearchMode(tab.key === 'search');
                       setContainerMode(tab.key === 'container');
                     }}
-                    className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                    className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
                       tab.active
-                        ? 'bg-accent text-fg'
-                        : 'text-fg-muted hover:text-fg'
+                        ? 'bg-surface text-fg shadow-sm ring-1 ring-line'
+                        : 'text-fg-2 hover:text-fg'
                     }`}
                   >
+                    <tab.icon className="w-3.5 h-3.5" />
                     {tab.label}
                   </button>
                 ))}
@@ -1034,7 +1040,7 @@ export default function BulkContent() {
                 ))}
               </div>
               {(urls.toLowerCase().includes('twitter.com') || urls.toLowerCase().includes('x.com')) && (
-                <p className="text-xs text-warning mt-1">⚠ Twitter rate-limit: &gt;50 video có thể chậm hoặc bị gián đoạn.</p>
+                <p className="text-xs text-fg-2 mt-1 inline-flex items-center gap-1"><AlertTriangle className="w-3 h-3 flex-shrink-0" /> Twitter rate-limit: &gt;50 video có thể chậm hoặc bị gián đoạn.</p>
               )}
               <input
                 type="number"
@@ -1110,7 +1116,7 @@ export default function BulkContent() {
               <button
                 onClick={handleKeywordSearch}
                 disabled={kwLoading || kw.trim().length < 3}
-                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-accent-soft text-accent-text text-sm font-bold border border-accent/30 hover:bg-accent/20 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-accent text-accent-fg text-sm font-semibold border border-transparent hover:bg-accent-hover transition-colors cursor-pointer disabled:bg-surface-2 disabled:text-fg-muted disabled:border disabled:border-line disabled:shadow-none disabled:cursor-not-allowed"
               >
                 {kwLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                 {kwLoading ? 'Đang tìm...' : 'Tìm kiếm'}
@@ -1175,7 +1181,7 @@ export default function BulkContent() {
                           <div className="flex gap-2 mt-0.5 flex-wrap">
                             {r.creator && <span className="text-[10px] text-fg-muted">@{r.creator}</span>}
                             {durStr && <span className="text-[10px] text-fg-muted">⏱ {durStr}</span>}
-                            {views && <span className="text-[10px] text-fg-muted">👁 {views}</span>}
+                            {views && <span className="text-[10px] text-fg-muted inline-flex items-center gap-0.5"><Eye className="w-3 h-3" /> {views}</span>}
                             {r.upload_date && <span className="text-[10px] text-fg-muted">{r.upload_date}</span>}
                           </div>
                         </div>
@@ -1187,7 +1193,7 @@ export default function BulkContent() {
                 <button
                   onClick={handleKwAddSelected}
                   disabled={kwSelected.size === 0}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent text-fg text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent text-accent-fg border border-transparent text-sm font-semibold disabled:bg-surface-2 disabled:text-fg-muted disabled:border disabled:border-line disabled:shadow-none disabled:cursor-not-allowed hover:bg-accent-hover transition-colors cursor-pointer"
                 >
                   <Download className="w-4 h-4" />
                   Tải {kwSelected.size} video đã chọn →
@@ -1283,13 +1289,12 @@ export default function BulkContent() {
               className="
                 flex items-center gap-2
                 px-5 py-2.5 rounded-xl
-                bg-accent
+                bg-accent border border-transparent
                 text-accent-fg text-sm font-semibold cursor-pointer
-                shadow-lg
-                hover:shadow-xl
+                hover:bg-accent-hover
                 active:scale-[0.98]
-                transition-all duration-200
-                disabled:opacity-50 disabled:cursor-not-allowed
+                transition-colors duration-200
+                disabled:bg-surface-2 disabled:text-fg-muted disabled:border disabled:border-line disabled:shadow-none disabled:cursor-not-allowed
               "
             >
               <FolderOpen className="w-4 h-4" />
@@ -1299,17 +1304,17 @@ export default function BulkContent() {
             <button
               onClick={handleSubmit}
               disabled={isSubmitting || !urls.trim()}
-              className="
+              className={`
                 flex items-center gap-2
                 px-5 py-2.5 rounded-xl
-                bg-accent
+                bg-accent border border-transparent
                 text-accent-fg text-sm font-semibold cursor-pointer
-                shadow-lg
-                hover:shadow-xl
+                hover:bg-accent-hover
                 active:scale-[0.98]
-                transition-all duration-200
-                disabled:opacity-50 disabled:cursor-not-allowed
-              "
+                transition-colors duration-200
+                disabled:cursor-not-allowed
+                ${isSubmitting ? 'disabled:opacity-80 disabled:cursor-progress' : 'disabled:bg-surface-2 disabled:text-fg-muted disabled:border-line disabled:shadow-none'}
+              `}
             >
               {isSubmitting ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -1457,7 +1462,7 @@ export default function BulkContent() {
                         : 'bg-surface text-fg-muted border-line hover:text-fg-2 hover:border-line'
                     }`}
                   >
-                    ✏️ Rename & ZIP
+                    <Pencil className="w-3.5 h-3.5" /> Rename & ZIP
                   </button>
                 </div>
               )}
@@ -1519,7 +1524,7 @@ export default function BulkContent() {
           {/* ── Rename Panel ────────────────────────────────────── */}
           {showRename && batchId && (
             <div className="mt-3 p-4 rounded-xl bg-surface-2 border border-line space-y-3">
-              <h3 className="text-sm font-bold text-fg-2">✏️ Đổi tên & Tải ZIP</h3>
+              <h3 className="text-sm font-bold text-fg-2 inline-flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5" /> Đổi tên & Tải ZIP</h3>
 
               {/* Token chips */}
               <div>

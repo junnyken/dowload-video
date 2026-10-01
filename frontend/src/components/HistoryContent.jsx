@@ -20,6 +20,7 @@ import {
   Check,
   FileDown,
   RotateCcw,
+  WifiOff,
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -430,7 +431,7 @@ export default function HistoryContent() {
       {/* ── Table ──────────────────────────────────────── */}
       {isOfflineCached && (
         <div className="flex items-center gap-2 bg-accent-soft border border-accent/30 rounded-lg px-3 py-2 mb-3 text-xs text-accent-text">
-          <span>📵</span> Đang hiển thị dữ liệu đã lưu — kết nối lại để cập nhật
+          <WifiOff className="w-3.5 h-3.5 inline" /> Đang hiển thị dữ liệu đã lưu — kết nối lại để cập nhật
         </div>
       )}
       <div className="rounded-2xl bg-surface border border-line shadow-lg overflow-hidden">

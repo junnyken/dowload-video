@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Download, Layers, History, Wand2,
-  Sparkles, Smartphone, X, ShieldCheck, Puzzle
+  Sparkles, Smartphone, X, ShieldCheck, Puzzle, Lightbulb
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { hasUsedBefore } from '../lib/returningUser';
@@ -275,8 +275,8 @@ export default function LandingPage() {
           {!compactHero && (
           <>
           {typeof window !== 'undefined' && !window.matchMedia('(display-mode: standalone)').matches && (
-            <p className="text-xs text-fg-muted text-center mt-3 sm:hidden">
-              💡 Thêm vào màn hình chính để mở nhanh hơn
+            <p className="text-xs text-fg-muted text-center mt-3 sm:hidden inline-flex items-center gap-1.5">
+              <Lightbulb className="w-3 h-3" /> Thêm vào màn hình chính để mở nhanh hơn
             </p>
           )}
 

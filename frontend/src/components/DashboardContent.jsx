@@ -2343,7 +2343,7 @@ export default function DashboardContent() {
                 <button
                   onClick={handleTrimDownload}
                   disabled={isTrimming || trimEnd <= trimStart}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-accent text-accent-fg font-bold text-sm shadow-lg hover:shadow-xl transition-all disabled:opacity-60 active:scale-[0.98]"
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-accent text-accent-fg font-bold text-sm shadow-lg hover:shadow-xl transition-all active:scale-[0.98] border border-transparent disabled:bg-surface-2 disabled:text-fg-muted disabled:border disabled:border-line disabled:shadow-none disabled:cursor-not-allowed"
                 >
                   {isTrimming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
                   {isTrimming ? 'Đang cắt và xử lý...' : `Cắt & Tải về (${formatTime(trimStart)} → ${formatTime(trimEnd)})`}
@@ -2412,7 +2412,7 @@ export default function DashboardContent() {
                 </div>
 
                 <button onClick={handleConvertGif} disabled={isConverting || gifEnd <= gifStart || gifEnd - gifStart > 30}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-accent text-accent-fg font-bold text-sm shadow-lg transition-all disabled:opacity-60 active:scale-[0.98]">
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-accent text-accent-fg font-bold text-sm shadow-lg transition-all active:scale-[0.98] border border-transparent disabled:bg-surface-2 disabled:text-fg-muted disabled:border disabled:border-line disabled:shadow-none disabled:cursor-not-allowed">
                   {isConverting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                   {isConverting ? 'Đang tạo GIF...' : `Tạo GIF · ${gifWidth}px · ${gifFps}fps · ${formatTime(gifEnd - gifStart)}`}
                 </button>
@@ -2489,7 +2489,7 @@ export default function DashboardContent() {
                     <button
                       onClick={() => inpaintPreset && handleInpaintPreview(inpaintPreset)}
                       disabled={!inpaintPreset}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm shadow transition-all disabled:opacity-50 active:scale-[0.98]"
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm shadow transition-all active:scale-[0.98] border border-transparent disabled:bg-surface-2 disabled:text-fg-muted disabled:border disabled:border-line disabled:shadow-none disabled:cursor-not-allowed"
                     >
                       <ZoomIn className="w-4 h-4" />
                       Xem trước kết quả
