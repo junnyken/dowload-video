@@ -12,11 +12,11 @@ interface HealthTone {
 }
 
 function getHealthTone(score: number): HealthTone {
-  if (score >= 80) return { text: 'text-emerald-400', bg: 'bg-emerald-950', border: 'border-emerald-900', bar: 'bg-emerald-500', label: 'Healthy'  }
-  if (score >= 60) return { text: 'text-amber-400',   bg: 'bg-amber-950',   border: 'border-amber-900',   bar: 'bg-amber-500',   label: 'Good'     }
-  if (score >= 40) return { text: 'text-amber-400',   bg: 'bg-amber-950/50',border: 'border-amber-900/50',bar: 'bg-amber-400',   label: 'Fair'     }
-  if (score >= 20) return { text: 'text-orange-400',  bg: 'bg-orange-950',  border: 'border-orange-900',  bar: 'bg-orange-500',  label: 'Poor'     }
-  return            { text: 'text-red-400',    bg: 'bg-red-950',     border: 'border-red-900',     bar: 'bg-red-500',     label: 'Critical' }
+  if (score >= 80) return { text: 'text-success', bg: 'bg-success-soft', border: 'border-success/30', bar: 'bg-success', label: 'Healthy'  }
+  if (score >= 60) return { text: 'text-accent-text',   bg: 'bg-accent-soft',   border: 'border-accent/30',   bar: 'bg-accent',   label: 'Good'     }
+  if (score >= 40) return { text: 'text-accent-text',   bg: 'bg-accent-soft',border: 'border-accent/50',bar: 'bg-accent',   label: 'Fair'     }
+  if (score >= 20) return { text: 'text-accent-text',  bg: 'bg-accent-soft',  border: 'border-accent/30',  bar: 'bg-accent',  label: 'Poor'     }
+  return            { text: 'text-danger',    bg: 'bg-danger-soft',     border: 'border-danger/30',     bar: 'bg-danger',     label: 'Critical' }
 }
 
 interface CookieHealthBadgeProps {
@@ -31,7 +31,7 @@ export function CookieHealthBadge({ score, showBar = false, className }: CookieH
   if (showBar) {
     return (
       <div className={cn('flex items-center gap-2', className)}>
-        <div className="h-1.5 w-14 flex-shrink-0 overflow-hidden rounded-full bg-slate-800">
+        <div className="h-1.5 w-14 flex-shrink-0 overflow-hidden rounded-full bg-surface">
           <div className={cn('h-full rounded-full transition-all', t.bar)} style={{ width: `${score}%` }} />
         </div>
         <span className={cn('w-7 font-mono text-[11px] tabular-nums', t.text)}>{score}</span>
@@ -48,7 +48,7 @@ export function CookieHealthBadge({ score, showBar = false, className }: CookieH
       )}
     >
       <span className={t.text}>{score}</span>
-      <span className="text-slate-700">·</span>
+      <span className="text-fg-muted">·</span>
       <span className={cn('text-[9px] uppercase tracking-wide', t.text)}>{t.label}</span>
     </span>
   )
@@ -57,12 +57,12 @@ export function CookieHealthBadge({ score, showBar = false, className }: CookieH
 // ─── Cookie status pill ────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<CookieStatus, { style: string; label: string; dot: string }> = {
-  active:       { style: 'text-emerald-400 bg-emerald-950 border-emerald-900', label: 'Active',     dot: 'bg-emerald-400 animate-pulse' },
-  soft_blocked: { style: 'text-amber-400   bg-amber-950   border-amber-900',   label: 'Soft Block', dot: 'bg-amber-400 animate-pulse'   },
-  hard_blocked: { style: 'text-red-400     bg-red-950     border-red-900',     label: 'Hard Block', dot: 'bg-red-400 animate-pulse'     },
-  expired:      { style: 'text-slate-500   bg-slate-800   border-slate-700',   label: 'Expired',    dot: 'bg-slate-600'                 },
-  disabled:     { style: 'text-slate-500   bg-slate-800   border-slate-700',   label: 'Disabled',   dot: 'bg-slate-700'                 },
-  untested:     { style: 'text-blue-400    bg-blue-950    border-blue-900',    label: 'Untested',   dot: 'bg-blue-400'                  },
+  active:       { style: 'text-success bg-success-soft border-success/30', label: 'Active',     dot: 'bg-success animate-pulse' },
+  soft_blocked: { style: 'text-accent-text   bg-accent-soft   border-accent/30',   label: 'Soft Block', dot: 'bg-accent animate-pulse'   },
+  hard_blocked: { style: 'text-danger     bg-danger-soft     border-danger/30',     label: 'Hard Block', dot: 'bg-danger animate-pulse'     },
+  expired:      { style: 'text-fg-muted   bg-surface   border-line',   label: 'Expired',    dot: 'bg-line'                 },
+  disabled:     { style: 'text-fg-muted   bg-surface   border-line',   label: 'Disabled',   dot: 'bg-surface-2'                 },
+  untested:     { style: 'text-fg-2    bg-surface-2    border-line',    label: 'Untested',   dot: 'bg-accent'                  },
 }
 
 interface CookieStatusPillProps {

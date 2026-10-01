@@ -89,22 +89,22 @@ function computeSuitability(info) {
 const SUIT_CONFIG = {
   good: {
     note: 'Trường hợp này phù hợp để làm sạch tự động.',
-    cls: 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400',
+    cls: 'bg-success-soft border-success/25 text-success',
     Icon: CheckCircle,
   },
   manual: {
     note: 'Hệ thống cần bạn xác nhận vùng logo để xử lý chính xác hơn.',
-    cls: 'bg-amber-500/10 border-amber-500/25 text-amber-400',
+    cls: 'bg-accent-soft border-accent/25 text-accent-text',
     Icon: Info,
   },
   crop: {
     note: 'Với video này, cắt khung hình có thể cho kết quả tốt hơn lấp pixel.',
-    cls: 'bg-sky-500/10 border-sky-500/25 text-sky-400',
+    cls: 'bg-surface-2 border-line text-fg-2',
     Icon: Info,
   },
   low: {
     note: 'Vùng này chưa phù hợp để làm sạch tự động — kết quả có thể thấy vệt.',
-    cls: 'bg-orange-500/10 border-orange-500/25 text-orange-400',
+    cls: 'bg-accent-soft border-accent/25 text-accent-text',
     Icon: AlertCircle,
   },
 };
@@ -155,16 +155,16 @@ function CornerZoom({ beforeUrl, afterUrl, region }) {
   return (
     <div className="grid grid-cols-2 gap-2">
       {[
-        { ref: beforeRef, label: 'Trước', url: beforeUrl, cls: 'border-slate-700/50',    lCls: 'text-slate-600' },
-        { ref: afterRef,  label: 'Sau (tự nhiên)', url: afterUrl,  cls: 'border-emerald-500/30', lCls: 'text-emerald-500/70' },
+        { ref: beforeRef, label: 'Trước', url: beforeUrl, cls: 'border-line',    lCls: 'text-fg-muted' },
+        { ref: afterRef,  label: 'Sau (tự nhiên)', url: afterUrl,  cls: 'border-success/30', lCls: 'text-success' },
       ].map(({ ref, label, url, cls, lCls }) => (
-        <div key={label} className={`rounded-xl overflow-hidden bg-slate-900/60 border ${cls}`}>
+        <div key={label} className={`rounded-xl overflow-hidden bg-surface-2 border ${cls}`}>
           <p className={`text-[9px] font-semibold text-center py-1 ${lCls}`}>{label}</p>
           {url ? (
             <canvas ref={ref} className="w-full h-auto block" />
           ) : (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
+              <Loader2 className="w-4 h-4 animate-spin text-fg-muted" />
             </div>
           )}
         </div>
@@ -241,14 +241,14 @@ function RegionEditor({ region, onChange }) {
 
       {/* Selection box */}
       <div
-        className="absolute border-2 border-[#FB923C] cursor-move"
+        className="absolute border-2 border-accent cursor-move"
         style={{ left: p(region.xPct), top: p(region.yPct), width: p(region.wPct), height: p(region.hPct) }}
         onPointerDown={(e) => startDrag(e, 'move')}
       >
         {HANDLES.map(({ id, l, t, cur }) => (
           <div
             key={id}
-            className="absolute w-3.5 h-3.5 bg-[#FB923C] border-2 border-white rounded-sm z-10"
+            className="absolute w-3.5 h-3.5 bg-accent border-2 border-line-strong rounded-sm z-10"
             style={{ left: l, top: t, transform: 'translate(-50%,-50%)', cursor: cur, touchAction: 'none' }}
             onPointerDown={(e) => startDrag(e, id)}
           />
@@ -261,15 +261,15 @@ function RegionEditor({ region, onChange }) {
 // Shared scope note — used in header and no-logo state
 function SynthIDNote({ className = '' }) {
   return (
-    <div className={`flex items-start gap-2 px-3 py-2 rounded-xl bg-slate-800/60 border border-slate-700/40 ${className}`}>
-      <Info className="w-3.5 h-3.5 text-slate-500 flex-shrink-0 mt-0.5" />
-      <p className="text-[11px] text-slate-500 leading-snug">
+    <div className={`flex items-start gap-2 px-3 py-2 rounded-xl bg-surface border border-line ${className}`}>
+      <Info className="w-3.5 h-3.5 text-fg-muted flex-shrink-0 mt-0.5" />
+      <p className="text-[11px] text-fg-muted leading-snug">
         Chỉ áp dụng cho logo{' '}
-        <strong className="text-slate-400">hiển thị trên khung hình</strong>.{' '}
+        <strong className="text-fg-muted">hiển thị trên khung hình</strong>.{' '}
         Watermark vô hình{' '}
-        <strong className="text-slate-400">SynthID</strong>{' '}
+        <strong className="text-fg-muted">SynthID</strong>{' '}
         không nằm trong phạm vi hỗ trợ và{' '}
-        <strong className="text-slate-400">không thể xóa bằng bất kỳ công cụ nào</strong>.
+        <strong className="text-fg-muted">không thể xóa bằng bất kỳ công cụ nào</strong>.
       </p>
     </div>
   );
@@ -505,17 +505,17 @@ export default function FlowVeoCleanup() {
       {/* ── Shared header (idle / uploading / preview) ──────────── */}
       {showHeader && (
         <div className="mb-6 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-4 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-xs font-bold text-emerald-400 tracking-wide">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-4 rounded-full bg-success-soft border border-success/25 text-xs font-bold text-success tracking-wide">
             <Wand2 className="w-3 h-3" />
             <span>Flow/Veo · Làm sạch logo hiển thị</span>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight mb-2">
+          <h2 className="text-2xl sm:text-3xl font-black text-fg tracking-tight mb-2">
             Làm sạch logo hiển thị
-            <span style={{fontSize:'9px', fontWeight:800, padding:'2px 6px', borderRadius:'4px', background:'rgba(139,92,246,0.2)', color:'#a78bfa', border:'1px solid rgba(139,92,246,0.3)', marginLeft:'6px', letterSpacing:'0.05em', verticalAlign:'middle'}}>EXPERIMENTAL</span>
+            <span style={{fontSize:'9px', fontWeight:800, padding:'2px 6px', borderRadius:'4px', background:'var(--vg-accent-soft)', color:'var(--vg-accent-text)', border:'1px solid var(--vg-line-strong)', marginLeft:'6px', letterSpacing:'0.05em', verticalAlign:'middle'}}>EXPERIMENTAL</span>
           </h2>
-          <p className="text-sm text-slate-400 max-w-md mx-auto mb-3">
+          <p className="text-sm text-fg-muted max-w-md mx-auto mb-3">
             Dành cho video Flow/Veo có logo hiển thị{' '}
-            <strong className="text-slate-300">trên khung hình</strong>.{' '}
+            <strong className="text-fg-2">trên khung hình</strong>.{' '}
             Không phải video nào cũng có.
           </p>
           <div className="flex justify-center">
@@ -533,19 +533,19 @@ export default function FlowVeoCleanup() {
           onClick={() => fileInputRef.current?.click()}
           className={`flex flex-col items-center justify-center gap-4 w-full px-6 py-12 rounded-2xl border-2 border-dashed cursor-pointer transition-all select-none ${
             isDragging
-              ? 'border-emerald-400/60 bg-emerald-500/5'
-              : 'border-slate-700/60 bg-slate-800/30 hover:border-slate-600 hover:bg-slate-800/50'
+              ? 'border-success/60 bg-success-soft'
+              : 'border-line bg-surface-2 hover:border-line-strong hover:bg-surface'
           }`}
         >
-          <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-            <Upload className="w-6 h-6 text-emerald-400" />
+          <div className="w-14 h-14 rounded-2xl bg-success-soft border border-success/20 flex items-center justify-center">
+            <Upload className="w-6 h-6 text-success" />
           </div>
           <div className="text-center">
-            <p className="text-base font-bold text-white mb-1">
+            <p className="text-base font-bold text-fg mb-1">
               Kéo thả video vào đây hoặc bấm để chọn file
             </p>
-            <p className="text-xs text-slate-500 mb-1">MP4 · MOV · WebM · MKV · tối đa 500MB</p>
-            <p className="text-[11px] text-slate-600">
+            <p className="text-xs text-fg-muted mb-1">MP4 · MOV · WebM · MKV · tối đa 500MB</p>
+            <p className="text-[11px] text-fg-muted">
               Ưu tiên video có logo hiển thị rõ trên khung hình · Clip &lt; 2 phút tốt nhất
             </p>
           </div>
@@ -562,10 +562,10 @@ export default function FlowVeoCleanup() {
       {/* ── Step: uploading ────────────────────────────────────── */}
       {step === 'uploading' && (
         <div className="flex flex-col items-center gap-3 py-14">
-          <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
+          <Loader2 className="w-8 h-8 text-success animate-spin" />
           <div className="text-center">
-            <p className="text-sm font-semibold text-slate-300">Đang tải lên video...</p>
-            <p className="text-xs text-slate-500 mt-1">Trích xuất khung hình để xác định vùng logo hiển thị</p>
+            <p className="text-sm font-semibold text-fg-2">Đang tải lên video...</p>
+            <p className="text-xs text-fg-muted mt-1">Trích xuất khung hình để xác định vùng logo hiển thị</p>
           </div>
         </div>
       )}
@@ -575,7 +575,7 @@ export default function FlowVeoCleanup() {
         <div className="space-y-5">
 
           {/* Frame preview — logo box in cleanup mode, crop boundary in crop mode */}
-          <div className="relative w-full rounded-xl overflow-hidden bg-slate-900/50 border border-slate-700/50">
+          <div className="relative w-full rounded-xl overflow-hidden bg-surface-2 border border-line">
             <img src={previewUrl} alt="Khung hình đầu video" className="w-full h-auto block" />
             {/* Cleanup / blur modes: draggable/resizable region editor */}
             {!cropBounds && region && (
@@ -596,7 +596,7 @@ export default function FlowVeoCleanup() {
                     style={{ top: `${(cropBounds.cy + cropBounds.ch) * 100}%`, height: `${(1 - cropBounds.cy - cropBounds.ch) * 100}%` }} />
                 )}
                 <div
-                  className="absolute border-2 border-[#FB923C] pointer-events-none"
+                  className="absolute border-2 border-accent pointer-events-none"
                   style={{
                     left:   `${cropBounds.cx * 100}%`,
                     top:    `${cropBounds.cy * 100}%`,
@@ -604,13 +604,13 @@ export default function FlowVeoCleanup() {
                     height: `${cropBounds.ch * 100}%`,
                   }}
                 />
-                <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-[#FB923C] font-semibold">
+                <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-accent-text font-semibold">
                   Phần giữ lại sau khi cắt
                 </div>
               </>
             )}
             {videoInfo && (
-              <div className={`absolute px-2 py-0.5 rounded-md bg-black/60 text-[10px] text-slate-400 font-mono ${cropBounds ? 'bottom-2 right-2' : 'bottom-2 left-2'}`}>
+              <div className={`absolute px-2 py-0.5 rounded-md bg-black/60 text-[10px] text-fg-muted font-mono ${cropBounds ? 'bottom-2 right-2' : 'bottom-2 left-2'}`}>
                 {videoInfo.width}×{videoInfo.height} · {videoInfo.duration}s
               </div>
             )}
@@ -620,9 +620,9 @@ export default function FlowVeoCleanup() {
           <SuitabilityBanner suitability={suitability} />
 
           {/* Eligibility prompt — method-aware guidance */}
-          <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-slate-800/40 border border-slate-700/30">
-            <Eye className="w-3.5 h-3.5 text-slate-500 flex-shrink-0 mt-0.5" />
-            <p className="text-[11px] text-slate-400 leading-snug">
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-surface-2 border border-line">
+            <Eye className="w-3.5 h-3.5 text-fg-muted flex-shrink-0 mt-0.5" />
+            <p className="text-[11px] text-fg-muted leading-snug">
               {method === 'crop'
                 ? 'Vùng sáng trong ảnh là phần giữ lại sau khi cắt — vùng tối chứa logo sẽ bị loại bỏ. Đổi góc bên dưới để thay đổi vùng cắt.'
                 : 'Kéo vùng cam để di chuyển · kéo góc/cạnh để đổi kích thước. Căn chính xác vào vùng logo hiển thị.'}
@@ -631,7 +631,7 @@ export default function FlowVeoCleanup() {
 
           {/* Corner selector */}
           <div>
-            <p className="text-xs font-bold text-slate-400 mb-2">Vùng logo hiển thị ở góc nào?</p>
+            <p className="text-xs font-bold text-fg-muted mb-2">Vùng logo hiển thị ở góc nào?</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {PRESETS.map((p) => (
                 <button
@@ -643,8 +643,8 @@ export default function FlowVeoCleanup() {
                   }}
                   className={`flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                     preset === p.id
-                      ? 'bg-[#FB923C]/20 border-[#FB923C]/50 text-[#FB923C]'
-                      : 'bg-slate-800/50 border-slate-700/50 text-slate-400 hover:border-slate-600 hover:text-white'
+                      ? 'bg-accent-soft border-accent/50 text-accent-text'
+                      : 'bg-surface border-line text-fg-muted hover:border-line-strong hover:text-fg'
                   }`}
                 >
                   <span className="text-base leading-none">{p.arrow}</span>
@@ -657,7 +657,7 @@ export default function FlowVeoCleanup() {
           {/* No-logo escape — real option, not a tiny link */}
           <button
             onClick={handleNoLogo}
-            className="w-full flex items-center justify-center gap-2 py-2.5 text-xs text-slate-500 border border-slate-700/30 rounded-xl hover:text-slate-300 hover:border-slate-600 transition-colors cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 py-2.5 text-xs text-fg-muted border border-line rounded-xl hover:text-fg-2 hover:border-line-strong transition-colors cursor-pointer"
           >
             <Eye className="w-3.5 h-3.5" />
             Không thấy logo hiển thị trên video này
@@ -665,8 +665,8 @@ export default function FlowVeoCleanup() {
 
           {/* Expand padding control — only for delogo/blur modes */}
           {method !== 'crop' && (
-            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-800/40 border border-slate-700/30">
-              <span className="text-[11px] text-slate-500">Mở rộng vùng:</span>
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-surface-2 border border-line">
+              <span className="text-[11px] text-fg-muted">Mở rộng vùng:</span>
               <div className="flex gap-1">
                 {[0, 4, 8, 12, 16].map((px) => (
                   <button
@@ -674,8 +674,8 @@ export default function FlowVeoCleanup() {
                     onClick={() => setExpandPx(px)}
                     className={`text-[10px] px-2 py-1 rounded-lg font-mono transition-colors cursor-pointer border ${
                       expandPx === px
-                        ? 'bg-[#FB923C]/20 border-[#FB923C]/50 text-[#FB923C]'
-                        : 'bg-slate-700/30 border-slate-700/30 text-slate-500 hover:text-white'
+                        ? 'bg-accent-soft border-accent/50 text-accent-text'
+                        : 'bg-surface-2 border-line text-fg-muted hover:text-fg'
                     }`}
                   >
                     {px === 0 ? 'Khít' : `+${px}px`}
@@ -687,8 +687,8 @@ export default function FlowVeoCleanup() {
 
           {/* Method selector — recommendation badge per suitability level */}
           <div>
-            <p className="text-xs font-bold text-slate-400 mb-2">Chọn phương thức</p>
-            <p style={{fontSize:'10px', color:'#64748b', lineHeight:1.5, marginBottom:'8px'}}>
+            <p className="text-xs font-bold text-fg-muted mb-2">Chọn phương thức</p>
+            <p style={{fontSize:'10px', color:'var(--vg-fg-muted)', lineHeight:1.5, marginBottom:'8px'}}>
               ⚡ Tốt nhất với logo nhỏ, nền ít chuyển động. Video quá dài → hãy trim trước.
             </p>
             <div className="space-y-1.5">
@@ -705,14 +705,14 @@ export default function FlowVeoCleanup() {
                     onClick={() => setMethod(m.id)}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all cursor-pointer text-left ${
                       isSelected
-                        ? 'bg-slate-700/50 border-slate-600/60 text-white'
-                        : 'bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600'
+                        ? 'bg-surface-2 border-line-strong text-fg'
+                        : 'bg-surface-2 border-line text-fg-muted hover:border-line-strong'
                     }`}
                   >
                     <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
-                      isSelected ? 'border-[#FBBF24]' : 'border-slate-600'
+                      isSelected ? 'border-accent' : 'border-line-strong'
                     }`}>
-                      {isSelected && <div className="w-2 h-2 rounded-full bg-[#FBBF24]" />}
+                      {isSelected && <div className="w-2 h-2 rounded-full bg-accent" />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -720,14 +720,14 @@ export default function FlowVeoCleanup() {
                         {isRecommended && (
                           <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border ${
                             isSelected
-                              ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
-                              : 'bg-amber-500/15 border-amber-500/25 text-amber-400'
+                              ? 'bg-success-soft border-success/30 text-success'
+                              : 'bg-accent-soft border-accent/25 text-accent-text'
                           }`}>
                             {isSelected ? '✓ Khuyến nghị' : 'Khuyến nghị'}
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-500 leading-snug mt-0.5">{m.desc}</p>
+                      <p className="text-[11px] text-fg-muted leading-snug mt-0.5">{m.desc}</p>
                     </div>
                   </button>
                 );
@@ -737,8 +737,8 @@ export default function FlowVeoCleanup() {
 
           {/* TELEA variant sub-toggle — only when TELEA is selected */}
           {method === 'telea' && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800/40 border border-slate-700/30">
-              <span className="text-[11px] text-slate-500">Chế độ lấp pixel:</span>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-2 border border-line">
+              <span className="text-[11px] text-fg-muted">Chế độ lấp pixel:</span>
               {[
                 { id: 'standard', label: 'Chuẩn', hint: 'TELEA thuần' },
                 { id: 'soft',     label: 'Mềm',   hint: 'TELEA + gblur' },
@@ -748,25 +748,25 @@ export default function FlowVeoCleanup() {
                   onClick={() => setDelogoVariant(v.id)}
                   className={`text-[10px] px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${
                     delogoVariant === v.id
-                      ? 'bg-slate-700 border-slate-600 text-white'
-                      : 'border-slate-700/30 text-slate-500 hover:text-slate-300'
+                      ? 'bg-surface-2 border-line-strong text-fg'
+                      : 'border-line text-fg-muted hover:text-fg-2'
                   }`}
                 >
                   {v.label}
                 </button>
               ))}
               {delogoVariant === 'soft' && (
-                <span className="ml-1 text-[10px] text-slate-600">làm mịn viền sau TELEA</span>
+                <span className="ml-1 text-[10px] text-fg-muted">làm mịn viền sau TELEA</span>
               )}
             </div>
           )}
 
           {/* Rule-based guidance — deterministic, no fake confidence */}
-          <div className="px-3 py-2 rounded-xl bg-slate-800/30 border border-slate-700/20 text-[11px] text-slate-500 space-y-1 leading-snug">
+          <div className="px-3 py-2 rounded-xl bg-surface-2 border border-line text-[11px] text-fg-muted space-y-1 leading-snug">
             {method !== 'crop' && <p>· TELEA phù hợp với logo nhỏ ở góc và nền tương đối sạch. Nên chọn dư ra một chút.</p>}
             {method === 'crop' && <p>· Cắt viền thường sạch nhất khi logo sát mép — không để vệt trên nền.</p>}
             {(suitability?.level === 'crop' || suitability?.level === 'low') && method !== 'crop' && (
-              <p className="text-amber-600/80">· Clip này dài hoặc phức tạp — cắt viền có thể cho kết quả tốt hơn.</p>
+              <p className="text-accent-text">· Clip này dài hoặc phức tạp — cắt viền có thể cho kết quả tốt hơn.</p>
             )}
             {regionAdjusted && <p>· Đã chỉnh vùng thủ công — xem preview để kiểm tra trước khi xử lý toàn bộ.</p>}
             {method !== 'crop' && expandPx === 0 && <p>· Padding 0px — nếu còn thấy viền mờ, thử tăng lên 8px.</p>}
@@ -774,9 +774,9 @@ export default function FlowVeoCleanup() {
 
           {/* Duration guard warning */}
           {durationWarning && (
-            <div style={{background:'rgba(251,191,36,0.08)', border:'1px solid rgba(251,191,36,0.25)', borderRadius:'10px', padding:'10px 12px', marginBottom:'10px'}}>
-              <p style={{fontSize:'11px', fontWeight:700, color:'#fbbf24', marginBottom:'4px'}}>⏱ Video quá dài</p>
-              <p style={{fontSize:'10px', color:'#94a3b8', lineHeight:1.5}}>{durationWarning.message}</p>
+            <div style={{background:'var(--vg-accent-soft)', border:'1px solid var(--vg-line-strong)', borderRadius:'10px', padding:'10px 12px', marginBottom:'10px'}}>
+              <p style={{fontSize:'11px', fontWeight:700, color:'var(--vg-accent-text)', marginBottom:'4px'}}>⏱ Video quá dài</p>
+              <p style={{fontSize:'10px', color:'var(--vg-fg-muted)', lineHeight:1.5}}>{durationWarning.message}</p>
             </div>
           )}
 
@@ -784,7 +784,7 @@ export default function FlowVeoCleanup() {
           <div className="flex gap-3">
             <button
               onClick={reset}
-              className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-slate-400 border border-slate-700/50 hover:text-white hover:border-slate-600 transition-all cursor-pointer"
+              className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-fg-muted border border-line hover:text-fg hover:border-line-strong transition-all cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
               Đổi video
@@ -794,10 +794,10 @@ export default function FlowVeoCleanup() {
               disabled={!!durationWarning}
               className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
                 !!durationWarning
-                  ? 'opacity-40 cursor-not-allowed bg-slate-700 text-slate-400'
+                  ? 'opacity-40 cursor-not-allowed bg-surface-2 text-fg-muted'
                   : ctaGradient
-                  ? 'bg-gradient-to-r from-[#FB923C] to-[#FBBF24] text-[#012622] shadow-md shadow-[#FBBF24]/20 hover:shadow-[#FBBF24]/40'
-                  : 'bg-orange-500/15 text-orange-300 border border-orange-500/30 hover:bg-orange-500/25'
+                  ? 'bg-accent text-accent-fg shadow-md'
+                  : 'bg-accent-soft text-accent-text border border-accent/30 hover:bg-accent/20'
               }`}
             >
               <Wand2 className="w-4 h-4" />
@@ -808,7 +808,7 @@ export default function FlowVeoCleanup() {
           {suitability?.level === 'crop' && method === 'crop' && (
             <button
               onClick={() => setMethod('natural')}
-              className="w-full flex items-center justify-center py-1.5 text-[11px] text-slate-600 hover:text-slate-400 transition-colors cursor-pointer"
+              className="w-full flex items-center justify-center py-1.5 text-[11px] text-fg-muted hover:text-fg-muted transition-colors cursor-pointer"
             >
               Vẫn muốn thử xóa tự nhiên thay thế
             </button>
@@ -816,7 +816,7 @@ export default function FlowVeoCleanup() {
           {suitability?.level === 'low' && (
             <button
               onClick={() => setMethod('crop')}
-              className="w-full flex items-center justify-center py-1.5 text-[11px] text-slate-600 hover:text-slate-400 transition-colors cursor-pointer"
+              className="w-full flex items-center justify-center py-1.5 text-[11px] text-fg-muted hover:text-fg-muted transition-colors cursor-pointer"
             >
               Dùng cách cắt khung hình thay thế
             </button>
@@ -828,40 +828,40 @@ export default function FlowVeoCleanup() {
       {step === 'no-logo' && (
         <div className="space-y-5">
           <div className="text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-4 rounded-full bg-slate-700/40 border border-slate-600/30 text-xs font-bold text-slate-400 tracking-wide">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-4 rounded-full bg-surface-2 border border-line-strong text-xs font-bold text-fg-muted tracking-wide">
               <Eye className="w-3 h-3" />
               <span>Không thấy logo hiển thị</span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight mb-2">
+            <h2 className="text-xl sm:text-2xl font-black text-fg tracking-tight mb-2">
               Video này không cần làm sạch logo
             </h2>
-            <p className="text-sm text-slate-400 max-w-sm mx-auto">
+            <p className="text-sm text-fg-muted max-w-sm mx-auto">
               Không phát hiện logo hiển thị trên khung hình. Nếu bạn vẫn thấy logo, hãy thử chọn vùng thủ công.
             </p>
           </div>
 
           {/* Explanations */}
-          <div className="px-4 py-4 rounded-xl bg-slate-800/40 border border-slate-700/30 text-xs text-slate-500 space-y-2">
-            <p className="font-semibold text-slate-400 mb-1">Một số trường hợp phổ biến:</p>
+          <div className="px-4 py-4 rounded-xl bg-surface-2 border border-line text-xs text-fg-muted space-y-2">
+            <p className="font-semibold text-fg-muted mb-1">Một số trường hợp phổ biến:</p>
             <p>
-              · <strong className="text-slate-300">Google One Ultra</strong> — Flow trên plan này thường không kèm logo hiển thị
+              · <strong className="text-fg-2">Google One Ultra</strong> — Flow trên plan này thường không kèm logo hiển thị
             </p>
             <p>
-              · <strong className="text-slate-300">Logo chỉ ở vài giây</strong> — kiểm tra đầu hoặc cuối clip, không chỉ khung hình đầu tiên
+              · <strong className="text-fg-2">Logo chỉ ở vài giây</strong> — kiểm tra đầu hoặc cuối clip, không chỉ khung hình đầu tiên
             </p>
             <p>
-              · <strong className="text-slate-300">Xuất từ project riêng</strong> — một số luồng xuất không áp dụng logo nhìn thấy
+              · <strong className="text-fg-2">Xuất từ project riêng</strong> — một số luồng xuất không áp dụng logo nhìn thấy
             </p>
           </div>
 
           {/* SynthID explanation — important context */}
-          <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-slate-800/40 border border-slate-700/30">
-            <Info className="w-3.5 h-3.5 text-slate-500 flex-shrink-0 mt-0.5" />
-            <p className="text-[11px] text-slate-500 leading-snug">
+          <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-surface-2 border border-line">
+            <Info className="w-3.5 h-3.5 text-fg-muted flex-shrink-0 mt-0.5" />
+            <p className="text-[11px] text-fg-muted leading-snug">
               Tất cả video Flow/Veo đều có{' '}
-              <strong className="text-slate-400">SynthID</strong> — watermark vô hình, không thấy bằng mắt thường.
+              <strong className="text-fg-muted">SynthID</strong> — watermark vô hình, không thấy bằng mắt thường.
               SynthID khác hoàn toàn với logo hiển thị và{' '}
-              <strong className="text-slate-400">không nằm trong phạm vi hỗ trợ</strong>.
+              <strong className="text-fg-muted">không nằm trong phạm vi hỗ trợ</strong>.
             </p>
           </div>
 
@@ -869,14 +869,14 @@ export default function FlowVeoCleanup() {
             {/* Primary exit — this is the expected outcome, not an error */}
             <button
               onClick={reset}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-[#FB923C] to-[#FBBF24] text-[#012622] shadow-md shadow-[#FBBF24]/20 cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-accent text-accent-fg shadow-md cursor-pointer"
             >
               Tiếp tục với video gốc
             </button>
             {/* Secondary — only if user thinks they still see a logo */}
             <button
               onClick={() => setStep('preview')}
-              className="w-full flex items-center justify-center gap-2 py-2 text-xs text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-2 text-xs text-fg-muted hover:text-fg-2 transition-colors cursor-pointer"
             >
               Tôi vẫn thấy logo — chọn vùng thủ công
             </button>
@@ -888,18 +888,18 @@ export default function FlowVeoCleanup() {
       {step === 'frame-preview' && (
         <div className="space-y-4">
           <div className="text-center pt-2">
-            <p className="text-sm font-bold text-white">Kết quả trên khung hình đầu</p>
-            <p className="text-xs text-slate-500 mt-0.5">Kiểm tra trước khi xử lý toàn bộ video</p>
+            <p className="text-sm font-bold text-fg">Kết quả trên khung hình đầu</p>
+            <p className="text-xs text-fg-muted mt-0.5">Kiểm tra trước khi xử lý toàn bộ video</p>
           </div>
 
           {/* Full cleaned frame with region overlay */}
-          <div className="relative w-full rounded-xl overflow-hidden bg-slate-900/50 border border-slate-700/50">
+          <div className="relative w-full rounded-xl overflow-hidden bg-surface-2 border border-line">
             {framePreviewUrl && framePreviewUrl !== 'error' ? (
               <>
                 <img src={framePreviewUrl} alt="Khung hình đã xử lý" className="w-full h-auto block" />
                 {lastRegionRef.current && (
                   <div
-                    className="absolute border-2 border-emerald-400/60 pointer-events-none"
+                    className="absolute border-2 border-success/60 pointer-events-none"
                     style={{
                       left:   `${lastRegionRef.current.xPct * 100}%`,
                       top:    `${lastRegionRef.current.yPct * 100}%`,
@@ -908,20 +908,20 @@ export default function FlowVeoCleanup() {
                     }}
                   />
                 )}
-                <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-emerald-400 font-semibold">
+                <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-success font-semibold">
                   <CheckCircle className="w-3 h-3" />
                   Khung hình đầu · sau xử lý tự nhiên
                 </div>
               </>
             ) : framePreviewUrl === 'error' ? (
               <div className="flex flex-col items-center justify-center py-10 gap-2">
-                <AlertCircle className="w-5 h-5 text-amber-500" />
-                <p className="text-xs text-slate-400">Không thể tải preview — vẫn có thể tiếp tục xử lý.</p>
+                <AlertCircle className="w-5 h-5 text-warning" />
+                <p className="text-xs text-fg-muted">Không thể tải preview — vẫn có thể tiếp tục xử lý.</p>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-14 gap-3">
-                <Loader2 className="w-6 h-6 text-[#FB923C] animate-spin" />
-                <p className="text-xs text-slate-400">Đang tạo preview từ khung hình đầu…</p>
+                <Loader2 className="w-6 h-6 text-accent-text animate-spin" />
+                <p className="text-xs text-fg-muted">Đang tạo preview từ khung hình đầu…</p>
               </div>
             )}
           </div>
@@ -940,12 +940,12 @@ export default function FlowVeoCleanup() {
             <div className="flex flex-wrap items-center gap-2 text-[11px]">
               <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-semibold border ${
                 previewInfo.motion === 'moving'
-                  ? 'text-sky-300 bg-sky-500/10 border-sky-500/20'
-                  : 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20'}`}>
+                  ? 'text-fg-2 bg-surface-2 border-line'
+                  : 'text-success bg-success-soft border-success/20'}`}>
                 {previewInfo.motion === 'moving' ? 'Chế độ chuyển động · Ít nhòe hơn' : 'Nền tĩnh · Tự nhiên hơn'}
               </span>
               {previewInfo.quality === 'weak' && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/20">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-semibold text-accent-text bg-accent-soft border border-accent/20">
                   Preview còn lem
                 </span>
               )}
@@ -954,27 +954,27 @@ export default function FlowVeoCleanup() {
 
           {/* Crop recommendation — do NOT auto-promote a weak result */}
           {previewInfo?.recommend_crop ? (
-            <div className="px-3 py-3 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2.5">
-              <p className="text-xs text-amber-200 font-semibold leading-snug">
+            <div className="px-3 py-3 rounded-xl bg-accent-soft border border-accent/30 space-y-2.5">
+              <p className="text-xs text-accent-text font-semibold leading-snug">
                 {previewInfo.reason || 'Nếu preview còn lem, nên chuyển sang Cắt viền.'}
               </p>
               <div className="flex gap-2">
                 <button
                   onClick={() => { setMethod('crop'); handleProcess(); }}
-                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-bold bg-gradient-to-r from-[#FB923C] to-[#FBBF24] text-[#012622] shadow-md shadow-[#FBBF24]/20 hover:shadow-[#FBBF24]/40 transition-all cursor-pointer"
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-bold bg-accent text-accent-fg shadow-md transition-all cursor-pointer"
                 >
                   ✂ Chuyển sang Cắt viền (sạch hơn)
                 </button>
                 <button
                   onClick={handleProcess}
-                  className="px-3 py-2.5 rounded-lg text-xs font-semibold text-slate-400 border border-slate-700/50 hover:text-white hover:border-slate-600 transition-all cursor-pointer whitespace-nowrap"
+                  className="px-3 py-2.5 rounded-lg text-xs font-semibold text-fg-muted border border-line hover:text-fg hover:border-line-strong transition-all cursor-pointer whitespace-nowrap"
                 >
                   Vẫn xử lý tự nhiên
                 </button>
               </div>
             </div>
           ) : (
-            <div className="px-3 py-2.5 rounded-xl bg-slate-800/40 border border-slate-700/30 text-[11px] text-slate-500 space-y-1 leading-snug">
+            <div className="px-3 py-2.5 rounded-xl bg-surface-2 border border-line text-[11px] text-fg-muted space-y-1 leading-snug">
               <p>· {previewInfo?.reason || 'Phù hợp hơn khi có chuyển động — lấy nền thật từ khung hình lân cận.'}</p>
               <p>· Nếu thấy viền mờ — quay lại tăng padding hoặc mở rộng vùng chọn.</p>
               <p>· Đây là khung hình đầu — toàn clip dùng cùng cách xử lý này.</p>
@@ -986,13 +986,13 @@ export default function FlowVeoCleanup() {
             <div className="flex gap-3">
               <button
                 onClick={() => setStep('preview')}
-                className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-slate-400 border border-slate-700/50 hover:text-white hover:border-slate-600 transition-all cursor-pointer"
+                className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-fg-muted border border-line hover:text-fg hover:border-line-strong transition-all cursor-pointer"
               >
                 ← Chỉnh lại vùng
               </button>
               <button
                 onClick={handleProcess}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-[#FB923C] to-[#FBBF24] text-[#012622] shadow-md shadow-[#FBBF24]/20 hover:shadow-[#FBBF24]/40 transition-all cursor-pointer"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-accent text-accent-fg shadow-md transition-all cursor-pointer"
               >
                 <Wand2 className="w-4 h-4" />
                 Xử lý toàn bộ video →
@@ -1002,7 +1002,7 @@ export default function FlowVeoCleanup() {
           {previewInfo?.recommend_crop && (
             <button
               onClick={() => setStep('preview')}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 border border-slate-700/50 hover:text-white hover:border-slate-600 transition-all cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-fg-muted border border-line hover:text-fg hover:border-line-strong transition-all cursor-pointer"
             >
               ← Chỉnh lại vùng
             </button>
@@ -1013,10 +1013,10 @@ export default function FlowVeoCleanup() {
       {/* ── Step: processing ───────────────────────────────────── */}
       {step === 'processing' && (
         <div className="flex flex-col items-center gap-4 py-16">
-          <Loader2 className="w-8 h-8 text-[#FBBF24] animate-spin" />
+          <Loader2 className="w-8 h-8 text-accent-text animate-spin" />
           <div className="text-center">
-            <p className="text-sm font-semibold text-slate-200 mb-1">Đang làm sạch logo hiển thị...</p>
-            <p className="text-xs text-slate-500">
+            <p className="text-sm font-semibold text-fg-2 mb-1">Đang làm sạch logo hiển thị...</p>
+            <p className="text-xs text-fg-muted">
               {method === 'natural'
                 ? 'Đang tái tạo nền bằng patch texture + lấy nền thật từ các khung hình lân cận'
                 : method === 'crop'
@@ -1034,31 +1034,31 @@ export default function FlowVeoCleanup() {
 
           {/* 1. Title — compact, rewarding */}
           <div className="flex items-center gap-3 px-1 pt-4">
-            <div className="w-9 h-9 flex-shrink-0 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-emerald-400" />
+            <div className="w-9 h-9 flex-shrink-0 rounded-xl bg-success-soft border border-success/30 flex items-center justify-center">
+              <CheckCircle className="w-5 h-5 text-success" />
             </div>
             <div>
-              <p className="text-sm font-bold text-white leading-snug">
+              <p className="text-sm font-bold text-fg leading-snug">
                 {method === 'crop'
                   ? 'Đã cắt viền để loại bỏ logo'
                   : method === 'blur'
                   ? 'Đã che mờ vùng logo'
                   : 'Đã xử lý bằng xóa logo tự nhiên'}
               </p>
-              <p className="text-[11px] text-slate-500">{result.file_size_mb} MB · Bản xuất hết hạn sau ~20 phút</p>
+              <p className="text-[11px] text-fg-muted">{result.file_size_mb} MB · Bản xuất hết hạn sau ~20 phút</p>
             </div>
           </div>
 
           {/* 2. Preview — method-aware reference visualization */}
           {previewUrl && (
-            <div className="relative w-full rounded-xl overflow-hidden bg-slate-900/50 border border-slate-700/50">
+            <div className="relative w-full rounded-xl overflow-hidden bg-surface-2 border border-line">
               <img src={previewUrl} alt="Khung hình tham chiếu" className="w-full h-auto block opacity-75" />
               {method !== 'crop' ? (
                 /* Cleanup / blur: emerald box over the exact region that was processed */
                 <>
                   {lastRegionRef.current && (
                     <div
-                      className="absolute border-2 border-emerald-400 bg-emerald-400/15 pointer-events-none"
+                      className="absolute border-2 border-success bg-success-soft pointer-events-none"
                       style={{
                         left:   `${lastRegionRef.current.xPct * 100}%`,
                         top:    `${lastRegionRef.current.yPct * 100}%`,
@@ -1067,7 +1067,7 @@ export default function FlowVeoCleanup() {
                       }}
                     />
                   )}
-                  <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-emerald-400 font-semibold">
+                  <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-success font-semibold">
                     <CheckCircle className="w-3 h-3" />
                     Vùng đã xử lý
                   </div>
@@ -1085,7 +1085,7 @@ export default function FlowVeoCleanup() {
                         style={{ top: `${(cropBounds.cy + cropBounds.ch) * 100}%`, height: `${(1 - cropBounds.cy - cropBounds.ch) * 100}%` }} />
                     )}
                     <div
-                      className="absolute border-2 border-emerald-400 pointer-events-none"
+                      className="absolute border-2 border-success pointer-events-none"
                       style={{
                         left:   `${cropBounds.cx * 100}%`,
                         top:    `${cropBounds.cy * 100}%`,
@@ -1093,26 +1093,26 @@ export default function FlowVeoCleanup() {
                         height: `${cropBounds.ch * 100}%`,
                       }}
                     />
-                    <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-emerald-400 font-semibold">
+                    <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-success font-semibold">
                       <CheckCircle className="w-3 h-3" />
                       Khung hình sau khi cắt
                     </div>
                   </>
                 )
               )}
-              <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-black/60 text-[10px] text-slate-400">
+              <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-black/60 text-[10px] text-fg-muted">
                 Khung hình gốc · để tham chiếu
               </div>
             </div>
           )}
 
           {/* 3. Method summary — human-readable, mode-aware labels */}
-          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800/40 border border-slate-700/40 text-xs text-slate-500">
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-2 border border-line text-xs text-fg-muted">
             <span>Phương thức:</span>
-            <span className="text-slate-300 font-semibold">{methodLabel}</span>
-            <span className="mx-1 text-slate-700">·</span>
+            <span className="text-fg-2 font-semibold">{methodLabel}</span>
+            <span className="mx-1 text-fg-muted">·</span>
             <span>{method === 'crop' ? 'Viền cắt:' : 'Vùng xử lý:'}</span>
-            <span className="text-slate-300 font-semibold">
+            <span className="text-fg-2 font-semibold">
               {method === 'crop'
                 ? (PRESETS.find(p => p.id === preset)?.label ?? preset)
                 : regionAdjusted
@@ -1126,7 +1126,7 @@ export default function FlowVeoCleanup() {
           <a
             href={`${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(result.cleaned_path)}&filename=${encodeURIComponent(result.filename)}`}
             download={result.filename}
-            className="flex items-center justify-center gap-2.5 w-full px-5 py-4 rounded-xl text-base font-bold bg-gradient-to-r from-[#FB923C] to-[#FBBF24] text-[#012622] shadow-md shadow-[#FBBF24]/20 hover:shadow-[#FBBF24]/40 transition-all"
+            className="flex items-center justify-center gap-2.5 w-full px-5 py-4 rounded-xl text-base font-bold bg-accent text-accent-fg shadow-md transition-all"
           >
             <Download className="w-5 h-5" />
             Tải video đã xử lý
@@ -1136,13 +1136,13 @@ export default function FlowVeoCleanup() {
           <div className="flex gap-2">
             <button
               onClick={() => setStep('preview')}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm text-slate-500 border border-slate-700/40 rounded-xl hover:text-white hover:border-slate-600 transition-colors cursor-pointer"
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm text-fg-muted border border-line rounded-xl hover:text-fg hover:border-line-strong transition-colors cursor-pointer"
             >
               Chỉnh lại vùng xử lý
             </button>
             <button
               onClick={reset}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm text-slate-500 hover:text-white transition-colors cursor-pointer"
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm text-fg-muted hover:text-fg transition-colors cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
               Xử lý video khác
@@ -1152,12 +1152,12 @@ export default function FlowVeoCleanup() {
           {/* 6. Quality + scope note — low emphasis; level-aware */}
           <SynthIDNote className="mt-1" />
           {suitability?.level === 'low' ? (
-            <p className="text-[11px] text-orange-600/70 text-center px-4 leading-snug">
+            <p className="text-[11px] text-accent-text text-center px-4 leading-snug">
               Xử lý từ trường hợp độ tin cậy thấp — nếu thấy vệt, thử lại với phương thức{' '}
-              <strong className="text-orange-500/80">Cắt viền</strong>.
+              <strong className="text-accent-text">Cắt viền</strong>.
             </p>
           ) : (
-            <p className="text-[11px] text-slate-600 text-center px-4 leading-snug">
+            <p className="text-[11px] text-fg-muted text-center px-4 leading-snug">
               Kết quả có thể khác nhau tùy kích thước logo và nền phía sau vùng xử lý.
             </p>
           )}
@@ -1167,19 +1167,19 @@ export default function FlowVeoCleanup() {
       {/* ── Step: error ────────────────────────────────────────── */}
       {step === 'error' && (
         <div className="space-y-4 pt-4">
-          <div className="flex items-start gap-3 px-5 py-4 rounded-2xl bg-red-500/10 border border-red-500/20">
-            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+          <div className="flex items-start gap-3 px-5 py-4 rounded-2xl bg-danger-soft border border-danger/20">
+            <AlertCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-bold text-red-400 mb-1">Chưa thể xử lý video này</p>
-              <p className="text-xs text-red-300/70">{error || 'Vùng logo hiện chưa phù hợp để làm sạch tự động.'}</p>
+              <p className="text-sm font-bold text-danger mb-1">Chưa thể xử lý video này</p>
+              <p className="text-xs text-danger">{error || 'Vùng logo hiện chưa phù hợp để làm sạch tự động.'}</p>
             </div>
           </div>
 
           {/* Troubleshooting — honest about limitations */}
-          <div className="px-4 py-3 rounded-xl bg-slate-800/40 border border-slate-700/30 text-xs text-slate-500 space-y-1">
-            <p className="font-semibold text-slate-400 mb-1">Thử các cách sau:</p>
-            <p>· Logo ở góc cạnh → thử phương thức <strong className="text-slate-300">Cắt viền</strong> — ổn định hơn trên mọi nền</p>
-            <p>· Nền phức tạp → <strong className="text-slate-300">Lấp pixel</strong> có thể để vết không đều; Cắt viền hoặc Che mờ sẽ ổn hơn</p>
+          <div className="px-4 py-3 rounded-xl bg-surface-2 border border-line text-xs text-fg-muted space-y-1">
+            <p className="font-semibold text-fg-muted mb-1">Thử các cách sau:</p>
+            <p>· Logo ở góc cạnh → thử phương thức <strong className="text-fg-2">Cắt viền</strong> — ổn định hơn trên mọi nền</p>
+            <p>· Nền phức tạp → <strong className="text-fg-2">Lấp pixel</strong> có thể để vết không đều; Cắt viền hoặc Che mờ sẽ ổn hơn</p>
             <p>· Clip &gt; 2 phút → cắt ngắn đoạn cần thiết trước khi xử lý</p>
           </div>
 
@@ -1188,7 +1188,7 @@ export default function FlowVeoCleanup() {
                 or upload fresh if the error was during upload */}
             <button
               onClick={() => previewUrl ? setStep('preview') : reset()}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-slate-200 border border-slate-600/60 hover:text-white hover:border-slate-500 transition-all cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-fg-2 border border-line-strong hover:text-fg hover:border-line-strong transition-all cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
               {previewUrl ? 'Thử vùng hoặc phương thức khác' : 'Thử lại'}
@@ -1196,7 +1196,7 @@ export default function FlowVeoCleanup() {
             {previewUrl && (
               <button
                 onClick={reset}
-                className="w-full flex items-center justify-center py-2 text-xs text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+                className="w-full flex items-center justify-center py-2 text-xs text-fg-muted hover:text-fg-2 transition-colors cursor-pointer"
               >
                 Đổi video khác
               </button>

@@ -83,132 +83,132 @@ export default function SettingsContent() {
       {/* ── Header ────────────────────────────────────────── */}
       <div>
         <div className="flex items-center gap-3 mb-1">
-          <Settings className="w-5 h-5 text-accent-light" />
-          <h2 className="text-2xl font-bold text-text-primary tracking-tight">Settings</h2>
+          <Settings className="w-5 h-5 text-accent-text" />
+          <h2 className="text-2xl font-bold text-fg tracking-tight">Settings</h2>
         </div>
-        <p className="text-sm text-text-muted ml-8">Cài đặt kết nối, thông báo, dữ liệu, và API</p>
+        <p className="text-sm text-fg-muted ml-8">Cài đặt kết nối, thông báo, dữ liệu, và API</p>
       </div>
 
       <div className="space-y-4">
 
         {/* ── API Connection ─────────────────────────────── */}
-        <div className="p-6 rounded-2xl bg-surface-card border border-border shadow-lg">
+        <div className="p-6 rounded-2xl bg-surface border border-line shadow-lg">
           <div className="flex items-center gap-3 mb-4">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-success to-emerald-600">
-              <Server className="w-4 h-4 text-white" />
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-success">
+              <Server className="w-4 h-4 text-success-fg" />
             </div>
             <div className="flex-1">
-              <h3 className="text-base font-semibold text-text-primary">API Connection</h3>
-              <p className="text-xs text-text-muted">Trạng thái kết nối backend</p>
+              <h3 className="text-base font-semibold text-fg">API Connection</h3>
+              <p className="text-xs text-fg-muted">Trạng thái kết nối backend</p>
             </div>
             <div className="flex items-center gap-2">
-              {apiOk === null && <div className="w-2 h-2 rounded-full bg-text-muted animate-pulse" />}
+              {apiOk === null && <div className="w-2 h-2 rounded-full bg-fg-muted animate-pulse" />}
               {apiOk === true && <CheckCircle2 className="w-4 h-4 text-success" />}
               {apiOk === false && <XCircle className="w-4 h-4 text-error" />}
-              <span className={`text-xs font-medium ${apiOk === true ? 'text-success' : apiOk === false ? 'text-error' : 'text-text-muted'}`}>
+              <span className={`text-xs font-medium ${apiOk === true ? 'text-success' : apiOk === false ? 'text-error' : 'text-fg-muted'}`}>
                 {apiOk === null ? 'Đang kiểm tra…' : apiOk ? 'Kết nối tốt' : 'Không kết nối được'}
               </span>
             </div>
           </div>
           {appVersion && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-border">
-              <Info className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
-              <span className="text-xs text-text-muted">Phiên bản backend: <span className="text-text-primary font-mono font-semibold">{appVersion}</span></span>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-line">
+              <Info className="w-3.5 h-3.5 text-fg-muted flex-shrink-0" />
+              <span className="text-xs text-fg-muted">Phiên bản backend: <span className="text-fg font-mono font-semibold">{appVersion}</span></span>
             </div>
           )}
         </div>
 
         {/* ── Notifications ──────────────────────────────── */}
-        <div className="p-6 rounded-2xl bg-surface-card border border-border shadow-lg">
+        <div className="p-6 rounded-2xl bg-surface border border-line shadow-lg">
           <div className="flex items-center gap-3 mb-4">
-            <div className={`flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br ${notifEnabled ? 'from-primary to-accent' : 'from-slate-600 to-slate-700'}`}>
-              {notifEnabled ? <Bell className="w-4 h-4 text-white" /> : <BellOff className="w-4 h-4 text-white" />}
+            <div className={`flex items-center justify-center w-9 h-9 rounded-lg ${notifEnabled ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-fg-2'}`}>
+              {notifEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
             </div>
             <div className="flex-1">
-              <h3 className="text-base font-semibold text-text-primary">Thông báo trình duyệt</h3>
-              <p className="text-xs text-text-muted">Nhận thông báo khi tải xong hoặc thất bại</p>
+              <h3 className="text-base font-semibold text-fg">Thông báo trình duyệt</h3>
+              <p className="text-xs text-fg-muted">Nhận thông báo khi tải xong hoặc thất bại</p>
             </div>
             <button
               onClick={handleNotifToggle}
               disabled={!isSupported() || notifPerm === 'denied'}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${notifEnabled ? 'bg-primary' : 'bg-slate-600'}`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${notifEnabled ? 'bg-accent' : 'bg-line-strong'}`}
             >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${notifEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-surface shadow transition-transform ${notifEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
           </div>
-          <div className="space-y-2 text-xs text-text-muted">
-            <p>Trạng thái: <span className={`font-semibold ${notifEnabled ? 'text-success' : 'text-text-secondary'}`}>{notifLabel()}</span></p>
+          <div className="space-y-2 text-xs text-fg-muted">
+            <p>Trạng thái: <span className={`font-semibold ${notifEnabled ? 'text-success' : 'text-fg-2'}`}>{notifLabel()}</span></p>
             <p className="flex items-start gap-1.5">
               <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
               Thông báo Telegram cho operator được cấu hình qua biến môi trường server.
             </p>
             {notifPerm === 'denied' && (
-              <p className="text-yellow-500">Để bật lại, mở cài đặt trình duyệt → Site Permissions → Notifications → cho phép trang này.</p>
+              <p className="text-accent-text">Để bật lại, mở cài đặt trình duyệt → Site Permissions → Notifications → cho phép trang này.</p>
             )}
           </div>
         </div>
 
         {/* ── Data & Retention ───────────────────────────── */}
-        <div className="p-6 rounded-2xl bg-surface-card border border-border shadow-lg">
+        <div className="p-6 rounded-2xl bg-surface border border-line shadow-lg">
           <div className="flex items-center gap-3 mb-4">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600">
-              <Clock className="w-4 h-4 text-white" />
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-accent">
+              <Clock className="w-4 h-4 text-accent-fg" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-text-primary">Dữ liệu & Lưu trữ</h3>
-              <p className="text-xs text-text-muted">Thời hạn lưu giữ từng loại dữ liệu</p>
+              <h3 className="text-base font-semibold text-fg">Dữ liệu & Lưu trữ</h3>
+              <p className="text-xs text-fg-muted">Thời hạn lưu giữ từng loại dữ liệu</p>
             </div>
           </div>
           <div className="space-y-2">
             {RETENTION_RULES.map((rule, i) => (
-              <div key={i} className="flex items-start gap-3 px-3 py-2.5 rounded-xl bg-surface border border-border/60">
-                <Database className="w-3.5 h-3.5 text-text-muted flex-shrink-0 mt-0.5" />
+              <div key={i} className="flex items-start gap-3 px-3 py-2.5 rounded-xl bg-surface border border-line/60">
+                <Database className="w-3.5 h-3.5 text-fg-muted flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-medium text-text-secondary">{rule.label}</span>
-                    <span className="text-xs font-bold text-text-primary flex-shrink-0">{rule.value}</span>
+                    <span className="text-xs font-medium text-fg-2">{rule.label}</span>
+                    <span className="text-xs font-bold text-fg flex-shrink-0">{rule.value}</span>
                   </div>
-                  <p className="text-[11px] text-text-muted mt-0.5">{rule.note}</p>
+                  <p className="text-[11px] text-fg-muted mt-0.5">{rule.note}</p>
                 </div>
               </div>
             ))}
           </div>
           <div className="mt-3 flex items-center gap-2">
-            <FileDown className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-            <span className="text-xs text-text-muted">
+            <FileDown className="w-3.5 h-3.5 text-accent-text flex-shrink-0" />
+            <span className="text-xs text-fg-muted">
               Xuất lịch sử: đăng nhập → History → nút <strong>Xuất CSV/JSON</strong>.
             </span>
           </div>
         </div>
 
         {/* ── API Access ─────────────────────────────────── */}
-        <div className="p-6 rounded-2xl bg-surface-card border border-border shadow-lg">
+        <div className="p-6 rounded-2xl bg-surface border border-line shadow-lg">
           <div className="flex items-center gap-3 mb-4">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600">
-              <Key className="w-4 h-4 text-white" />
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-accent">
+              <Key className="w-4 h-4 text-accent-fg" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-text-primary">API Access</h3>
-              <p className="text-xs text-text-muted">Tích hợp VidGrab vào công cụ của bạn</p>
+              <h3 className="text-base font-semibold text-fg">API Access</h3>
+              <p className="text-xs text-fg-muted">Tích hợp VidGrab vào công cụ của bạn</p>
             </div>
             <a
               href="/api-docs"
-              className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-violet-500/30 text-violet-400 text-xs hover:bg-violet-500/10 transition-colors cursor-pointer"
+              className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-line text-fg-2 text-xs hover:bg-surface-2 transition-colors cursor-pointer"
             >
               <ExternalLink className="w-3 h-3" /> API Docs
             </a>
           </div>
           {apiKey ? (
             <div className="space-y-2">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-border font-mono text-xs text-text-primary">
-                <Shield className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-line font-mono text-xs text-fg">
+                <Shield className="w-3.5 h-3.5 text-fg-muted flex-shrink-0" />
                 <span className="flex-1 truncate">{apiKey}</span>
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={handleGenerateKey}
                   disabled={apiKeyLoading}
-                  className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary border border-primary/30 text-xs font-semibold hover:bg-primary/20 transition-colors cursor-pointer disabled:opacity-50"
+                  className="px-3 py-1.5 rounded-lg bg-accent/10 text-accent-text border border-accent/30 text-xs font-semibold hover:bg-accent/20 transition-colors cursor-pointer disabled:opacity-50"
                 >
                   Tạo key mới
                 </button>
@@ -219,56 +219,56 @@ export default function SettingsContent() {
                   Hủy key
                 </button>
               </div>
-              <p className="text-[11px] text-text-muted">Dùng header <code className="bg-surface px-1 rounded">Authorization: Bearer &lt;key&gt;</code> trong mọi API request.</p>
+              <p className="text-[11px] text-fg-muted">Dùng header <code className="bg-surface px-1 rounded">Authorization: Bearer &lt;key&gt;</code> trong mọi API request.</p>
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-xs text-text-muted">Chưa có API key. Tạo để dùng Public API.</p>
+              <p className="text-xs text-fg-muted">Chưa có API key. Tạo để dùng Public API.</p>
               <button
                 onClick={handleGenerateKey}
                 disabled={apiKeyLoading}
-                className="px-4 py-2 rounded-xl bg-violet-500/10 border border-violet-500/30 text-violet-400 text-xs font-semibold hover:bg-violet-500/20 transition-colors cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 rounded-xl bg-surface-2 border border-line text-fg-2 text-xs font-semibold hover:bg-line transition-colors cursor-pointer disabled:opacity-50"
               >
                 {apiKeyLoading ? 'Đang tạo…' : 'Tạo API Key'}
               </button>
-              <p className="text-[11px] text-text-muted">Cần đăng nhập để tạo API key.</p>
+              <p className="text-[11px] text-fg-muted">Cần đăng nhập để tạo API key.</p>
             </div>
           )}
         </div>
 
         {/* ── App Info ───────────────────────────────────── */}
-        <div className="p-6 rounded-2xl bg-surface-card border border-border shadow-lg">
+        <div className="p-6 rounded-2xl bg-surface border border-line shadow-lg">
           <div className="flex items-center gap-3 mb-4">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-accent">
-              <Palette className="w-4 h-4 text-white" />
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-accent">
+              <Palette className="w-4 h-4 text-accent-fg" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-text-primary">Thông tin ứng dụng</h3>
-              <p className="text-xs text-text-muted">Phiên bản, tương thích, liên hệ</p>
+              <h3 className="text-base font-semibold text-fg">Thông tin ứng dụng</h3>
+              <p className="text-xs text-fg-muted">Phiên bản, tương thích, liên hệ</p>
             </div>
           </div>
           <div className="space-y-2 text-xs">
-            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-surface border border-border/60">
-              <span className="text-text-muted">Frontend</span>
-              <span className="font-mono font-semibold text-text-primary">v1.6.0</span>
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-surface border border-line/60">
+              <span className="text-fg-muted">Frontend</span>
+              <span className="font-mono font-semibold text-fg">v1.6.0</span>
             </div>
-            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-surface border border-border/60">
-              <span className="text-text-muted">Backend</span>
-              <span className="font-mono font-semibold text-text-primary">{appVersion || '—'}</span>
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-surface border border-line/60">
+              <span className="text-fg-muted">Backend</span>
+              <span className="font-mono font-semibold text-fg">{appVersion || '—'}</span>
             </div>
-            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-surface border border-border/60">
-              <span className="text-text-muted">Tương thích</span>
-              <span className={`font-semibold ${appVersion ? 'text-success' : 'text-text-muted'}`}>
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-surface border border-line/60">
+              <span className="text-fg-muted">Tương thích</span>
+              <span className={`font-semibold ${appVersion ? 'text-success' : 'text-fg-muted'}`}>
                 {appVersion ? '✓ Frontend ↔ Backend' : 'Chưa xác định'}
               </span>
             </div>
-            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-surface border border-border/60">
-              <span className="text-text-muted">Hỗ trợ</span>
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-surface border border-line/60">
+              <span className="text-fg-muted">Hỗ trợ</span>
               <a
                 href="https://t.me/vidgrab_support"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-primary hover:text-primary-light transition-colors"
+                className="inline-flex items-center gap-1 text-accent-text hover:text-primary-light transition-colors"
               >
                 Telegram <ExternalLink className="w-3 h-3" />
               </a>

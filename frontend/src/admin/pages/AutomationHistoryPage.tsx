@@ -12,9 +12,9 @@ interface Event {
 }
 
 const SOURCE_STYLE: Record<string, string> = {
-  auto_tuner:       'bg-sky-900/50 text-sky-200 border-sky-700/50',
-  playbooks:        'bg-indigo-900/50 text-indigo-200 border-indigo-700/50',
-  anomaly_detector: 'bg-amber-900/50 text-amber-200 border-amber-700/50',
+  auto_tuner:       'bg-surface-2 text-fg-2 border-line',
+  playbooks:        'bg-surface-2 text-fg-2 border-line',
+  anomaly_detector: 'bg-accent-soft text-accent-text border-accent/50',
 }
 
 export default function AutomationHistoryPage() {
@@ -41,11 +41,11 @@ export default function AutomationHistoryPage() {
   const shown = source === 'all' ? events : events.filter(e => e.source === source)
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6 space-y-5">
+    <div className="min-h-screen bg-canvas text-fg p-6 space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Automation History</h1>
-          <p className="text-xs text-gray-500">
+          <h1 className="text-2xl font-bold text-fg">Automation History</h1>
+          <p className="text-xs text-fg-muted">
             Mọi thay đổi hệ thống tự thực hiện · {events.length} sự kiện · làm mới 30s
           </p>
         </div>
@@ -53,26 +53,26 @@ export default function AutomationHistoryPage() {
           {['all', ...sources].map(s => (
             <button key={s} onClick={() => setSource(s)}
               className={`rounded px-2 py-1 text-[10px] border transition ${
-                source === s ? 'border-gray-500 bg-gray-800 text-gray-100'
-                             : 'border-gray-700 text-gray-400 hover:bg-gray-800'}`}>
+                source === s ? 'border-line-strong bg-surface text-fg'
+                             : 'border-line text-fg-muted hover:bg-surface'}`}>
               {s === 'all' ? 'Tất cả' : s}
             </button>
           ))}
         </div>
       </div>
 
-      {err && <p className="text-xs text-red-400">Lỗi: {err}</p>}
-      {loading && <p className="text-xs text-gray-500 animate-pulse">Đang tải…</p>}
+      {err && <p className="text-xs text-danger">Lỗi: {err}</p>}
+      {loading && <p className="text-xs text-fg-muted animate-pulse">Đang tải…</p>}
 
       {!loading && shown.length === 0 && (
-        <p className="text-xs text-gray-500">Chưa có sự kiện tự động nào được ghi lại.</p>
+        <p className="text-xs text-fg-muted">Chưa có sự kiện tự động nào được ghi lại.</p>
       )}
 
       {shown.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-gray-800 bg-gray-900/60">
+        <div className="overflow-x-auto rounded-lg border border-line bg-surface-2">
           <table className="w-full text-[11px]">
             <thead>
-              <tr className="border-b border-gray-800 text-left text-gray-500">
+              <tr className="border-b border-line text-left text-fg-muted">
                 <th className="px-3 py-2 font-medium">Thời điểm</th>
                 <th className="px-3 py-2 font-medium">Nguồn</th>
                 <th className="px-3 py-2 font-medium">Hành động</th>
@@ -82,19 +82,19 @@ export default function AutomationHistoryPage() {
             </thead>
             <tbody>
               {shown.map((e, i) => (
-                <tr key={i} className="border-b border-gray-800/60 align-top">
-                  <td className="px-3 py-2 font-mono text-gray-500 whitespace-nowrap">
+                <tr key={i} className="border-b border-line align-top">
+                  <td className="px-3 py-2 font-mono text-fg-muted whitespace-nowrap">
                     {(e.timestamp || '').replace('T', ' ').slice(0, 19) || '—'}
                   </td>
                   <td className="px-3 py-2">
                     <span className={`rounded border px-1.5 py-0.5 text-[10px] ${
-                      SOURCE_STYLE[e.source] ?? 'bg-gray-800 text-gray-300 border-gray-700'}`}>
+                      SOURCE_STYLE[e.source] ?? 'bg-surface text-fg-2 border-line'}`}>
                       {e.source}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-gray-100">{e.action || '—'}</td>
-                  <td className="px-3 py-2 text-gray-400">{e.reason || '—'}</td>
-                  <td className="px-3 py-2 text-gray-300">{e.outcome || '—'}</td>
+                  <td className="px-3 py-2 text-fg">{e.action || '—'}</td>
+                  <td className="px-3 py-2 text-fg-muted">{e.reason || '—'}</td>
+                  <td className="px-3 py-2 text-fg-2">{e.outcome || '—'}</td>
                 </tr>
               ))}
             </tbody>

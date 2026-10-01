@@ -49,8 +49,8 @@ const FEATURES = [
 ];
 
 function CellValue({ value }) {
-  if (value === true)  return <Check className="w-4 h-4 text-violet-400 mx-auto" aria-label="Có" />;
-  if (value === false) return <X     className="w-4 h-4 text-zinc-600   mx-auto" aria-label="Không" />;
+  if (value === true)  return <Check className="w-4 h-4 text-fg-2 mx-auto" aria-label="Có" />;
+  if (value === false) return <X     className="w-4 h-4 text-fg-muted   mx-auto" aria-label="Không" />;
   return <span>{value}</span>;
 }
 
@@ -110,16 +110,16 @@ export default function UpgradeModal({ isOpen, onClose, errorCode = null, authTo
       aria-labelledby="upgrade-modal-title"
     >
       {/* Panel */}
-      <div className="relative w-full max-w-lg bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-lg bg-canvas border border-line rounded-2xl shadow-2xl overflow-hidden">
 
         {/* Top accent bar */}
-        <div className="h-1 w-full bg-gradient-to-r from-violet-500 to-indigo-500" />
+        <div className="h-1 w-full bg-accent" />
 
         {/* Close */}
         <button
           onClick={onClose}
           aria-label="Đóng"
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-fg-muted hover:text-fg hover:bg-surface transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
@@ -127,39 +127,39 @@ export default function UpgradeModal({ isOpen, onClose, errorCode = null, authTo
         <div className="px-6 pt-6 pb-7">
           {/* Header */}
           <div className="flex items-center gap-3 mb-1">
-            <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center shadow-lg">
-              <Crown className="w-4 h-4 text-white" />
+            <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-accent flex items-center justify-center shadow-lg">
+              <Crown className="w-4 h-4 text-accent-fg" />
             </div>
             <h2
               id="upgrade-modal-title"
-              className="text-lg font-bold text-white leading-snug"
+              className="text-lg font-bold text-fg leading-snug"
             >
               {copy.title}
             </h2>
           </div>
-          <p className="text-sm text-zinc-400 mb-5 pl-12">{copy.subtitle}</p>
+          <p className="text-sm text-fg-muted mb-5 pl-12">{copy.subtitle}</p>
 
           {/* Comparison table */}
-          <div className="rounded-xl border border-zinc-700 overflow-hidden mb-5">
+          <div className="rounded-xl border border-line overflow-hidden mb-5">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-zinc-800">
-                  <th className="text-left px-4 py-2.5 text-zinc-400 font-medium w-1/2">Tính năng</th>
-                  <th className="text-center px-3 py-2.5 text-zinc-400 font-medium w-1/4">Free</th>
-                  <th className="text-center px-3 py-2.5 text-violet-300 font-semibold w-1/4">Pro</th>
+                <tr className="bg-surface">
+                  <th className="text-left px-4 py-2.5 text-fg-muted font-medium w-1/2">Tính năng</th>
+                  <th className="text-center px-3 py-2.5 text-fg-muted font-medium w-1/4">Free</th>
+                  <th className="text-center px-3 py-2.5 text-fg-2 font-semibold w-1/4">Pro</th>
                 </tr>
               </thead>
               <tbody>
                 {FEATURES.map((row, i) => (
                   <tr
                     key={row.label}
-                    className={i % 2 === 0 ? 'bg-zinc-900' : 'bg-zinc-800/40'}
+                    className={i % 2 === 0 ? 'bg-canvas' : 'bg-surface-2'}
                   >
-                    <td className="px-4 py-2 text-zinc-300">{row.label}</td>
-                    <td className="px-3 py-2 text-center text-zinc-500">
+                    <td className="px-4 py-2 text-fg-2">{row.label}</td>
+                    <td className="px-3 py-2 text-center text-fg-muted">
                       <CellValue value={row.free} />
                     </td>
-                    <td className="px-3 py-2 text-center text-white font-medium">
+                    <td className="px-3 py-2 text-center text-fg font-medium">
                       <CellValue value={row.pro} />
                     </td>
                   </tr>
@@ -170,7 +170,7 @@ export default function UpgradeModal({ isOpen, onClose, errorCode = null, authTo
 
           {/* CTA error */}
           {ctaError && (
-            <p className="text-xs text-red-400 mb-3 text-center">{ctaError}</p>
+            <p className="text-xs text-danger mb-3 text-center">{ctaError}</p>
           )}
 
           {/* Action buttons */}
@@ -178,11 +178,11 @@ export default function UpgradeModal({ isOpen, onClose, errorCode = null, authTo
             <button
               onClick={handleUpgrade}
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-semibold text-sm shadow-lg hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed mb-2"
+              className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-xl bg-accent text-accent-fg font-semibold text-sm shadow-lg hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed mb-2"
             >
               {loading ? (
                 <>
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span className="w-4 h-4 border-2 border-line border-t-fg rounded-full animate-spin" />
                   Đang xử lý…
                 </>
               ) : (
@@ -193,14 +193,14 @@ export default function UpgradeModal({ isOpen, onClose, errorCode = null, authTo
               )}
             </button>
           ) : (
-            <p className="text-center text-sm text-zinc-400 mb-2">
-              <span className="text-white font-medium">Đăng nhập để nâng cấp</span>
+            <p className="text-center text-sm text-fg-muted mb-2">
+              <span className="text-fg font-medium">Đăng nhập để nâng cấp</span>
             </p>
           )}
 
           <button
             onClick={onClose}
-            className="w-full py-2.5 px-6 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 text-sm transition-colors"
+            className="w-full py-2.5 px-6 rounded-xl text-fg-muted hover:text-fg hover:bg-surface text-sm transition-colors"
           >
             Để sau
           </button>

@@ -29,13 +29,13 @@ interface Ops {
 function Stat({ label, value, tone, hint }: {
   label: string; value: string; tone?: 'ok' | 'warn' | 'bad'; hint?: string
 }) {
-  const c = tone === 'bad' ? 'text-red-400' : tone === 'warn' ? 'text-amber-400'
-    : tone === 'ok' ? 'text-emerald-400' : 'text-gray-100'
+  const c = tone === 'bad' ? 'text-danger' : tone === 'warn' ? 'text-warning'
+    : tone === 'ok' ? 'text-success' : 'text-fg'
   return (
-    <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-3">
-      <div className="text-[10px] uppercase tracking-wide text-gray-500">{label}</div>
+    <div className="rounded-lg border border-line bg-surface-2 p-3">
+      <div className="text-[10px] uppercase tracking-wide text-fg-muted">{label}</div>
       <div className={`mt-1 text-xl font-semibold ${c}`}>{value}</div>
-      {hint && <div className="mt-0.5 text-[10px] text-gray-500">{hint}</div>}
+      {hint && <div className="mt-0.5 text-[10px] text-fg-muted">{hint}</div>}
     </div>
   )
 }
@@ -62,16 +62,16 @@ export default function OpsSignalsPage() {
   const depleted = d?.depleted_cookie_platforms ?? []
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6 space-y-6">
+    <div className="min-h-screen bg-canvas text-fg p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Ops Signals</h1>
-        <p className="text-xs text-gray-500">
+        <h1 className="text-2xl font-bold text-fg">Ops Signals</h1>
+        <p className="text-xs text-fg-muted">
           Cửa sổ {d?.window_minutes ?? 30} phút · làm mới 20s
           {d?.generated_at ? ` · cập nhật ${String(d.generated_at).replace('T', ' ').slice(11, 19)}` : ''}
         </p>
       </div>
 
-      {err && <p className="text-xs text-red-400">Lỗi: {err}</p>}
+      {err && <p className="text-xs text-danger">Lỗi: {err}</p>}
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <Stat label="Tỷ lệ thành công"
@@ -90,14 +90,14 @@ export default function OpsSignalsPage() {
       </div>
 
       {(open.length > 0 || depleted.length > 0) && (
-        <div className="rounded-lg border border-amber-800/50 bg-amber-950/20 p-4 space-y-2">
+        <div className="rounded-lg border border-accent/50 bg-accent-soft p-4 space-y-2">
           {open.length > 0 && (
-            <div className="text-[11px] text-amber-200">
+            <div className="text-[11px] text-accent-text">
               <span className="font-semibold">Circuit đang mở:</span> {open.join(', ')}
             </div>
           )}
           {depleted.length > 0 && (
-            <div className="text-[11px] text-amber-200">
+            <div className="text-[11px] text-accent-text">
               <span className="font-semibold">Cookie đã cạn:</span> {depleted.join(', ')}
             </div>
           )}
@@ -105,12 +105,12 @@ export default function OpsSignalsPage() {
       )}
 
       {d?.queue_depths && Object.keys(d.queue_depths).length > 0 && (
-        <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-4">
-          <h2 className="mb-2 text-sm font-semibold text-white">Độ sâu từng hàng đợi</h2>
+        <div className="rounded-lg border border-line bg-surface-2 p-4">
+          <h2 className="mb-2 text-sm font-semibold text-fg">Độ sâu từng hàng đợi</h2>
           <div className="flex flex-wrap gap-2">
             {Object.entries(d.queue_depths).map(([k, v]) => (
-              <span key={k} className="rounded border border-gray-700 px-2 py-0.5 text-[11px] text-gray-300">
-                {k}: <span className="font-mono text-gray-100">{v}</span>
+              <span key={k} className="rounded border border-line px-2 py-0.5 text-[11px] text-fg-2">
+                {k}: <span className="font-mono text-fg">{v}</span>
               </span>
             ))}
           </div>
@@ -118,15 +118,15 @@ export default function OpsSignalsPage() {
       )}
 
       {d?.provider_circuits && Object.keys(d.provider_circuits).length > 0 && (
-        <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-4">
-          <h2 className="mb-2 text-sm font-semibold text-white">Circuit theo nền tảng</h2>
+        <div className="rounded-lg border border-line bg-surface-2 p-4">
+          <h2 className="mb-2 text-sm font-semibold text-fg">Circuit theo nền tảng</h2>
           <div className="flex flex-wrap gap-2">
             {Object.entries(d.provider_circuits).map(([k, v]) => (
               <span key={k}
                 className={`rounded border px-2 py-0.5 text-[11px] ${
-                  v === 'open' ? 'border-red-700/60 text-red-300'
-                  : v === 'half_open' ? 'border-amber-700/60 text-amber-300'
-                  : 'border-gray-700 text-gray-300'}`}>
+                  v === 'open' ? 'border-danger/60 text-danger'
+                  : v === 'half_open' ? 'border-accent/60 text-accent-text'
+                  : 'border-line text-fg-2'}`}>
                 {k}: {String(v)}
               </span>
             ))}
@@ -135,18 +135,18 @@ export default function OpsSignalsPage() {
       )}
 
       {!!d?.recovery_log?.length && (
-        <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-4">
-          <h2 className="mb-2 text-sm font-semibold text-white">Nhật ký tự khôi phục</h2>
+        <div className="rounded-lg border border-line bg-surface-2 p-4">
+          <h2 className="mb-2 text-sm font-semibold text-fg">Nhật ký tự khôi phục</h2>
           <div className="max-h-64 overflow-y-auto">
             <table className="w-full text-[11px]">
               <tbody>
                 {d.recovery_log.map((e, i) => (
-                  <tr key={i} className="border-b border-gray-800/60">
-                    <td className="py-1 pr-3 text-gray-500 font-mono whitespace-nowrap">
+                  <tr key={i} className="border-b border-line">
+                    <td className="py-1 pr-3 text-fg-muted font-mono whitespace-nowrap">
                       {String(e.timestamp ?? e.ts ?? '').replace('T', ' ').slice(0, 19)}
                     </td>
-                    <td className="py-1 pr-3 text-gray-200">{String(e.action ?? e.type ?? '')}</td>
-                    <td className="py-1 text-gray-400">{String(e.detail ?? e.reason ?? e.result ?? '')}</td>
+                    <td className="py-1 pr-3 text-fg-2">{String(e.action ?? e.type ?? '')}</td>
+                    <td className="py-1 text-fg-muted">{String(e.detail ?? e.reason ?? e.result ?? '')}</td>
                   </tr>
                 ))}
               </tbody>

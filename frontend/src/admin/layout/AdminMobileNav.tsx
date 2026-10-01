@@ -11,7 +11,7 @@ const MOBILE_TABS = [
 
 export function AdminMobileNav() {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex h-14 items-stretch border-t border-slate-800 bg-slate-950 lg:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex h-14 items-stretch border-t border-line bg-canvas lg:hidden">
       {MOBILE_TABS.map((tab) => (
         <NavLink
           key={tab.href}
@@ -20,7 +20,7 @@ export function AdminMobileNav() {
           className={({ isActive }) =>
             cn(
               'flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] transition-colors',
-              isActive ? 'text-slate-100' : 'text-slate-500 hover:text-slate-300',
+              isActive ? 'text-fg' : 'text-fg-muted hover:text-fg-2',
             )
           }
         >
@@ -29,7 +29,7 @@ export function AdminMobileNav() {
               <span
                 className={cn(
                   'flex h-7 w-10 items-center justify-center rounded-xl text-base transition-colors',
-                  isActive ? 'bg-slate-800' : '',
+                  isActive ? 'bg-surface' : '',
                 )}
               >
                 {tab.icon}

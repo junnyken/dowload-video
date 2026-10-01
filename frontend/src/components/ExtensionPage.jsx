@@ -47,12 +47,12 @@ const SpotifyIcon = () => (
 
 // ── Feature chip data ────────────────────────────────────────
 const platforms = [
-  { icon: TikTokIcon, label: 'TikTok',    color: 'text-[#69C9D0] border-[#69C9D0]/30 bg-[#69C9D0]/10' },
-  { icon: YouTubeIcon, label: 'YouTube',  color: 'text-[#FF0000] border-[#FF0000]/30 bg-[#FF0000]/10' },
-  { icon: FacebookIcon, label: 'Facebook', color: 'text-[#1877F2] border-[#1877F2]/30 bg-[#1877F2]/10' },
-  { icon: InstagramIcon, label: 'Instagram', color: 'text-[#E1306C] border-[#E1306C]/30 bg-[#E1306C]/10' },
-  { icon: DouyinIcon, label: 'Douyin',    color: 'text-[#ff0050] border-[#ff0050]/30 bg-[#ff0050]/10' },
-  { icon: SpotifyIcon, label: 'Spotify',  color: 'text-[#1DB954] border-[#1DB954]/30 bg-[#1DB954]/10' },
+  { icon: TikTokIcon, label: 'TikTok',    color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#69C9D0]' },
+  { icon: YouTubeIcon, label: 'YouTube',  color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#FF0000]' },
+  { icon: FacebookIcon, label: 'Facebook', color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#1877F2]' },
+  { icon: InstagramIcon, label: 'Instagram', color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#E1306C]' },
+  { icon: DouyinIcon, label: 'Douyin',    color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#ff0050]' },
+  { icon: SpotifyIcon, label: 'Spotify',  color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#1DB954]' },
 ];
 
 // ── Install step data ────────────────────────────────────────
@@ -86,20 +86,20 @@ export default function ExtensionPage() {
         {/* ── Hero ─────────────────────────────────────────── */}
         <section className="w-full flex flex-col items-center text-center gap-6">
           {/* Icon badge */}
-          <div className="w-20 h-20 md:w-24 md:h-24 rounded-3xl bg-gradient-to-br from-[#FBBF24] to-[#FB923C] flex items-center justify-center shadow-2xl shadow-[#FBBF24]/30">
-            <Puzzle className="w-10 h-10 md:w-12 md:h-12 text-[#012622]" strokeWidth={2.5} />
+          <div className="w-20 h-20 md:w-24 md:h-24 rounded-3xl bg-accent flex items-center justify-center shadow-2xl">
+            <Puzzle className="w-10 h-10 md:w-12 md:h-12 text-accent-fg" strokeWidth={2.5} />
           </div>
 
           {/* Heading */}
           <div className="flex flex-col items-center gap-3">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-white leading-tight">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-fg leading-tight">
               Cài{' '}
-              <span className="bg-gradient-to-r from-[#FBBF24] to-[#FB923C] bg-clip-text text-transparent">
+              <span className=" text-accent-text">
                 VidGrab
               </span>{' '}
               Extension
             </h1>
-            <p className="max-w-lg text-sm sm:text-base text-slate-300 font-medium leading-relaxed">
+            <p className="max-w-lg text-sm sm:text-base text-fg-2 font-medium leading-relaxed">
               Tải video 1 click ngay trên trang TikTok, YouTube, Facebook và nhiều nền tảng khác — không cần copy link.
             </p>
           </div>
@@ -110,7 +110,7 @@ export default function ExtensionPage() {
               href={`${API_BASE}/api/v1/extension/download`}
               onClick={() => trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'extension_page' })}
               download
-              className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] font-extrabold text-sm shadow-lg shadow-[#FBBF24]/25 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
+              className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-accent text-accent-fg font-extrabold text-sm shadow-lg hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
             >
               <Download className="w-4 h-4 flex-shrink-0" />
               Tải Extension (.ZIP)
@@ -119,7 +119,7 @@ export default function ExtensionPage() {
               href={TELEGRAM_BOT_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-[#012622]/60 border border-slate-600/60 text-white font-bold text-sm hover:border-[#FBBF24]/50 hover:bg-[#012622]/80 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer backdrop-blur-sm"
+              className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-surface/60 border border-line-strong text-fg font-bold text-sm hover:border-accent/50 hover:bg-surface/80 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer backdrop-blur-sm"
             >
               <Send className="w-4 h-4 flex-shrink-0" />
               Nhận qua Telegram
@@ -129,7 +129,7 @@ export default function ExtensionPage() {
 
         {/* ── Platform chips ────────────────────────────────── */}
         <section className="w-full" aria-label="Nền tảng hỗ trợ">
-          <p className="text-center text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">
+          <p className="text-center text-xs font-semibold text-fg-muted uppercase tracking-widest mb-4">
             Hỗ trợ tải từ
           </p>
           {/* Negative mx to let chips bleed on mobile for scroll feel */}
@@ -139,18 +139,18 @@ export default function ExtensionPage() {
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               aria-label="Danh sách nền tảng"
             >
-              {platforms.map(({ icon: Icon, label, color }) => (
+              {platforms.map(({ icon: Icon, label, color, ic }) => (
                 <span
                   key={label}
                   className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-semibold whitespace-nowrap flex-shrink-0 ${color}`}
                 >
-                  <Icon />
+                  <span className={ic}><Icon /></span>
                   {label}
                 </span>
               ))}
             </div>
             {/* Fade hint on right edge — mobile only */}
-            <div className="sm:hidden absolute right-0 top-0 bottom-2 w-10 bg-gradient-to-l from-[#012622] to-transparent pointer-events-none" />
+            <div className="sm:hidden absolute right-0 top-0 bottom-2 w-10 bg-gradient-to-l from-canvas to-transparent pointer-events-none" />
           </div>
         </section>
 
@@ -158,7 +158,7 @@ export default function ExtensionPage() {
         <section className="w-full" aria-labelledby="install-heading">
           <h2
             id="install-heading"
-            className="text-center text-xl sm:text-2xl font-black text-white mb-8"
+            className="text-center text-xl sm:text-2xl font-black text-fg mb-8"
           >
             Hướng dẫn cài đặt
           </h2>
@@ -167,22 +167,22 @@ export default function ExtensionPage() {
             {steps.map(({ num, icon: Icon, title, desc }) => (
               <div
                 key={num}
-                className="relative flex flex-col gap-4 p-6 rounded-2xl bg-white/5 border border-slate-700/50 backdrop-blur-sm hover:border-[#FBBF24]/30 transition-colors duration-300"
+                className="relative flex flex-col gap-4 p-6 rounded-2xl bg-surface-2 border border-line backdrop-blur-sm hover:border-accent/30 transition-colors duration-300"
               >
                 {/* Number badge */}
-                <div className="absolute -top-3.5 -left-3.5 w-8 h-8 rounded-xl bg-gradient-to-br from-[#FBBF24] to-[#FB923C] text-[#012622] font-black text-sm flex items-center justify-center shadow-md shadow-[#FBBF24]/30 select-none">
+                <div className="absolute -top-3.5 -left-3.5 w-8 h-8 rounded-xl bg-accent text-accent-fg font-black text-sm flex items-center justify-center shadow-md select-none">
                   {num}
                 </div>
 
                 {/* Step icon */}
-                <div className="w-10 h-10 rounded-xl bg-[#FBBF24]/10 border border-[#FBBF24]/20 flex items-center justify-center">
-                  <Icon className="w-5 h-5 text-[#FBBF24]" />
+                <div className="w-10 h-10 rounded-xl bg-accent-soft border border-accent/20 flex items-center justify-center">
+                  <Icon className="w-5 h-5 text-accent-text" />
                 </div>
 
                 {/* Text */}
                 <div>
-                  <h3 className="font-bold text-white text-base mb-1">{title}</h3>
-                  <p className="text-sm text-slate-400 leading-relaxed">{desc}</p>
+                  <h3 className="font-bold text-fg text-base mb-1">{title}</h3>
+                  <p className="text-sm text-fg-muted leading-relaxed">{desc}</p>
                 </div>
               </div>
             ))}
@@ -191,15 +191,15 @@ export default function ExtensionPage() {
 
         {/* ── Warning note ──────────────────────────────────── */}
         <div
-          className="w-full flex items-start gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25"
+          className="w-full flex items-start gap-3 p-4 rounded-2xl bg-accent-soft border border-accent/25"
           role="note"
           aria-label="Lưu ý quan trọng"
         >
-          <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-amber-200 leading-relaxed">
+          <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-accent-text leading-relaxed">
             <span className="font-bold">Lưu ý: </span>
-            Cần bật <span className="font-mono font-semibold text-amber-300">Developer mode</span> trong{' '}
-            <span className="font-mono font-semibold text-amber-300">chrome://extensions</span> trước khi cài extension thủ công.
+            Cần bật <span className="font-mono font-semibold text-accent-text">Developer mode</span> trong{' '}
+            <span className="font-mono font-semibold text-accent-text">chrome://extensions</span> trước khi cài extension thủ công.
           </p>
         </div>
 
@@ -208,20 +208,20 @@ export default function ExtensionPage() {
           className="w-full"
           aria-labelledby="telegram-heading"
         >
-          <div className="flex flex-col items-center gap-5 p-8 md:p-10 rounded-3xl bg-white/5 border border-slate-700/50 text-center backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-5 p-8 md:p-10 rounded-3xl bg-surface-2 border border-line text-center backdrop-blur-sm">
             {/* Bot icon */}
-            <div className="w-14 h-14 rounded-2xl bg-[#229ED9]/10 border border-[#229ED9]/25 flex items-center justify-center">
+            <div className="w-14 h-14 rounded-2xl bg-surface-2 border border-line flex items-center justify-center">
               <Send className="w-7 h-7 text-[#229ED9]" />
             </div>
 
             <div className="flex flex-col gap-2">
               <h2
                 id="telegram-heading"
-                className="text-xl sm:text-2xl font-black text-white"
+                className="text-xl sm:text-2xl font-black text-fg"
               >
                 Nhận file qua Telegram Bot
               </h2>
-              <p className="text-sm sm:text-base text-slate-400 max-w-sm mx-auto leading-relaxed">
+              <p className="text-sm sm:text-base text-fg-muted max-w-sm mx-auto leading-relaxed">
                 Nhận bất kỳ nội dung → bot tự gửi file ZIP + hướng dẫn cài đặt chi tiết.
               </p>
             </div>
@@ -230,7 +230,7 @@ export default function ExtensionPage() {
               href={TELEGRAM_BOT_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-7 py-3.5 rounded-2xl bg-[#229ED9] text-white font-extrabold text-sm hover:bg-[#1a8fc4] hover:scale-[1.03] active:scale-[0.98] transition-all duration-200 shadow-lg shadow-[#229ED9]/25 cursor-pointer"
+              className="inline-flex items-center gap-2 px-7 py-3.5 rounded-2xl bg-accent text-accent-fg font-extrabold text-sm hover:bg-accent-hover hover:scale-[1.03] active:scale-[0.98] transition-all duration-200 shadow-lg cursor-pointer"
             >
               Mở Telegram Bot
               <ArrowRight className="w-4 h-4" />

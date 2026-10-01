@@ -203,7 +203,7 @@ export default function HistoryContent() {
     const ms = new Date(expiryDate) - Date.now();
     if (ms < 0) {
       return (
-        <span className="text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 px-1.5 py-0.5 rounded font-semibold">
+        <span className="text-[10px] bg-danger-soft text-danger border border-danger/30 px-1.5 py-0.5 rounded font-semibold">
           Hết hạn
         </span>
       );
@@ -211,7 +211,7 @@ export default function HistoryContent() {
     const days = Math.floor(ms / 86400000);
     if (days <= 3) {
       return (
-        <span className="text-[10px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-1.5 py-0.5 rounded font-semibold">
+        <span className="text-[10px] bg-accent-soft text-accent-text border border-accent/30 px-1.5 py-0.5 rounded font-semibold">
           Còn {days}d
         </span>
       );
@@ -263,37 +263,37 @@ export default function HistoryContent() {
         );
       case 'cancelled':
         return (
-          <span className="inline-flex items-center gap-1 text-text-muted bg-surface/50 px-2.5 py-1 rounded-lg text-xs font-medium">
+          <span className="inline-flex items-center gap-1 text-fg-muted bg-surface/50 px-2.5 py-1 rounded-lg text-xs font-medium">
             <XCircle className="w-3 h-3" /> Đã hủy
           </span>
         );
       case 'expired':
         return (
-          <span className="inline-flex items-center gap-1 text-orange-400 bg-orange-500/10 px-2.5 py-1 rounded-lg text-xs font-medium">
+          <span className="inline-flex items-center gap-1 text-accent-text bg-accent-soft px-2.5 py-1 rounded-lg text-xs font-medium">
             <Clock className="w-3 h-3" /> Hết hạn
           </span>
         );
       case 'metadata_only':
         return (
-          <span className="inline-flex items-center gap-1 text-text-muted bg-surface/50 px-2.5 py-1 rounded-lg text-xs font-medium">
+          <span className="inline-flex items-center gap-1 text-fg-muted bg-surface/50 px-2.5 py-1 rounded-lg text-xs font-medium">
             <ExternalLink className="w-3 h-3" /> Chỉ metadata
           </span>
         );
       case 'archived':
         return (
-          <span className="inline-flex items-center gap-1 text-accent-light bg-accent/10 px-2.5 py-1 rounded-lg text-xs font-medium">
+          <span className="inline-flex items-center gap-1 text-accent-text bg-accent/10 px-2.5 py-1 rounded-lg text-xs font-medium">
             <CheckCircle2 className="w-3 h-3" /> Đã lưu trữ
           </span>
         );
       case 'queued':
         return (
-          <span className="inline-flex items-center gap-1 text-text-muted bg-surface/50 px-2.5 py-1 rounded-lg text-xs font-medium">
+          <span className="inline-flex items-center gap-1 text-fg-muted bg-surface/50 px-2.5 py-1 rounded-lg text-xs font-medium">
             <Clock className="w-3 h-3" /> Trong hàng đợi
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 text-text-muted bg-surface/50 px-2.5 py-1 rounded-lg text-xs font-medium">
+          <span className="inline-flex items-center gap-1 text-fg-muted bg-surface/50 px-2.5 py-1 rounded-lg text-xs font-medium">
             <Clock className="w-3 h-3" /> {status === 'pending' ? 'Chờ xử lý' : 'Chờ'}
           </span>
         );
@@ -317,19 +317,19 @@ export default function HistoryContent() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <History className="w-5 h-5 text-accent-light" />
-            <h2 className="text-2xl font-bold text-text-primary tracking-tight">
+            <History className="w-5 h-5 text-accent-text" />
+            <h2 className="text-2xl font-bold text-fg tracking-tight">
               Lịch sử tải xuống
             </h2>
           </div>
-          <p className="text-sm text-text-muted ml-8">
+          <p className="text-sm text-fg-muted ml-8">
             Xem và quản lý tất cả các lần tải trước đây
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => { setPage(1); fetchHistory(1); }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface border border-border text-text-muted hover:text-text-primary text-xs font-semibold transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface border border-line text-fg-muted hover:text-fg text-xs font-semibold transition-colors cursor-pointer"
           >
             <RefreshCw className="w-3.5 h-3.5" /> Làm mới
           </button>
@@ -338,13 +338,13 @@ export default function HistoryContent() {
               <div className="relative group">
                 <button
                   disabled={exportLoading}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors cursor-pointer disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-accent/10 border border-accent/30 text-accent-text text-xs font-semibold hover:bg-accent/20 transition-colors cursor-pointer disabled:opacity-50"
                 >
                   <FileDown className="w-3.5 h-3.5" /> Xuất
                 </button>
-                <div className="absolute right-0 top-full mt-1 hidden group-hover:flex group-focus-within:flex flex-col z-20 bg-surface-card border border-border rounded-xl shadow-lg overflow-hidden min-w-[100px]">
-                  <button onClick={() => handleExport('csv')} className="px-4 py-2 text-xs text-text-secondary hover:bg-surface-lighter/50 text-left">CSV</button>
-                  <button onClick={() => handleExport('json')} className="px-4 py-2 text-xs text-text-secondary hover:bg-surface-lighter/50 text-left">JSON</button>
+                <div className="absolute right-0 top-full mt-1 hidden group-hover:flex group-focus-within:flex flex-col z-20 bg-surface border border-line rounded-xl shadow-lg overflow-hidden min-w-[100px]">
+                  <button onClick={() => handleExport('csv')} className="px-4 py-2 text-xs text-fg-2 hover:bg-surface-2/50 text-left">CSV</button>
+                  <button onClick={() => handleExport('json')} className="px-4 py-2 text-xs text-fg-2 hover:bg-surface-2/50 text-left">JSON</button>
                 </div>
               </div>
               <button
@@ -362,7 +362,7 @@ export default function HistoryContent() {
       <div className="flex gap-2 mb-4 flex-wrap">
         {[['all', 'Tất cả'], ['today', 'Hôm nay'], ['recent', '7 ngày'], ['failed', 'Thất bại']].map(([key, label]) => (
           <button key={key} onClick={() => setFilterTab(key)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterTab === key ? 'bg-indigo-600 text-white' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}>
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterTab === key ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-accent-fg hover:bg-line'}`}>
             {label}
           </button>
         ))}
@@ -372,7 +372,7 @@ export default function HistoryContent() {
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-muted" />
             <input
               type="text"
               value={search}
@@ -380,15 +380,15 @@ export default function HistoryContent() {
               placeholder="Tìm theo URL, tiêu đề hoặc Batch ID..."
               className="
                 w-full pl-10 pr-4 py-2.5 rounded-xl
-                bg-surface border border-border
-                text-text-primary placeholder-text-muted
+                bg-surface border border-line
+                text-fg placeholder-text-muted
                 text-sm
-                focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50
+                focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-accent/50
                 transition-all duration-200
               "
             />
           </div>
-          <div className="flex items-center gap-1 p-1 bg-surface border border-border rounded-xl">
+          <div className="flex items-center gap-1 p-1 bg-surface border border-line rounded-xl">
             {[
               { key: 'all', label: 'Tất cả' },
               { key: 'success', label: 'Thành công' },
@@ -399,8 +399,8 @@ export default function HistoryContent() {
                 onClick={() => setFilter(f.key)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   filter === f.key
-                    ? 'bg-primary/20 text-primary border border-primary/30'
-                    : 'text-text-muted hover:text-text-secondary border border-transparent'
+                    ? 'bg-accent/20 text-accent-text border border-accent/30'
+                    : 'text-fg-muted hover:text-fg-2 border border-transparent'
                 }`}
               >
                 {f.label}
@@ -410,15 +410,15 @@ export default function HistoryContent() {
         </div>
         {/* Platform filter */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          <Filter className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+          <Filter className="w-3.5 h-3.5 text-fg-muted flex-shrink-0" />
           {PLATFORMS.map(p => (
             <button
               key={p}
               onClick={() => setPlatformFilter(p)}
               className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                 platformFilter === p
-                  ? 'bg-accent/20 text-accent-light border border-accent/30'
-                  : 'text-text-muted hover:text-text-secondary border border-transparent'
+                  ? 'bg-accent/20 text-accent-text border border-accent/30'
+                  : 'text-fg-muted hover:text-fg-2 border border-transparent'
               }`}
             >
               {p === 'all' ? 'Tất cả nền tảng' : p.charAt(0).toUpperCase() + p.slice(1)}
@@ -429,25 +429,25 @@ export default function HistoryContent() {
 
       {/* ── Table ──────────────────────────────────────── */}
       {isOfflineCached && (
-        <div className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-2 mb-3 text-xs text-yellow-400">
+        <div className="flex items-center gap-2 bg-accent-soft border border-accent/30 rounded-lg px-3 py-2 mb-3 text-xs text-accent-text">
           <span>📵</span> Đang hiển thị dữ liệu đã lưu — kết nối lại để cập nhật
         </div>
       )}
-      <div className="rounded-2xl bg-surface-card border border-border shadow-lg overflow-hidden">
+      <div className="rounded-2xl bg-surface border border-line shadow-lg overflow-hidden">
         {isLoading && jobs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Loader2 className="w-6 h-6 animate-spin text-primary mb-3" />
-            <p className="text-sm text-text-muted">Đang tải lịch sử...</p>
+            <Loader2 className="w-6 h-6 animate-spin text-accent-text mb-3" />
+            <p className="text-sm text-fg-muted">Đang tải lịch sử...</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-surface flex items-center justify-center mb-4 border border-border">
-              <FileVideo className="w-7 h-7 text-text-muted" />
+            <div className="w-16 h-16 rounded-2xl bg-surface flex items-center justify-center mb-4 border border-line">
+              <FileVideo className="w-7 h-7 text-fg-muted" />
             </div>
-            <p className="text-sm text-text-secondary font-medium">
+            <p className="text-sm text-fg-2 font-medium">
               {search ? 'Không tìm thấy kết quả' : 'Chưa có lịch sử tải xuống'}
             </p>
-            <p className="text-xs text-text-muted mt-1">
+            <p className="text-xs text-fg-muted mt-1">
               {search ? 'Thử từ khóa khác' : 'Các file đã tải xong sẽ hiển thị ở đây'}
             </p>
           </div>
@@ -456,7 +456,7 @@ export default function HistoryContent() {
             {/* Desktop Table */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="bg-surface-lighter/50 text-xs uppercase text-text-muted">
+                <thead className="bg-surface-2/50 text-xs uppercase text-fg-muted">
                   <tr>
                     <th className="px-6 py-3 font-medium w-8">#</th>
                     <th className="px-6 py-3 font-medium">Tiêu đề / URL</th>
@@ -469,36 +469,36 @@ export default function HistoryContent() {
                   {applyTabFilter(filtered).map((job, idx) => {
                     const hasDownload = job.status === 'success' && (job.direct_mp4_url || job.local_mp3_path || job.local_file_path);
                     return (
-                      <tr key={job.id} className="hover:bg-surface-lighter/20 transition-colors">
-                        <td className="px-6 py-3 text-text-muted text-xs">{idx + 1}</td>
+                      <tr key={job.id} className="hover:bg-surface-2/20 transition-colors">
+                        <td className="px-6 py-3 text-fg-muted text-xs">{idx + 1}</td>
                         <td className="px-6 py-3 max-w-[360px]">
                           <div className="flex items-start gap-2">
                             <div className="mt-0.5">
                               {job.local_mp3_path ? (
-                                <Music className="w-4 h-4 text-accent-light flex-shrink-0" />
+                                <Music className="w-4 h-4 text-accent-text flex-shrink-0" />
                               ) : job.source_surface === 'logo_inpaint' || job.job_kind === 'visible_logo_cleanup' ? (
-                                <Eraser className="w-4 h-4 text-violet-400 flex-shrink-0" />
+                                <Eraser className="w-4 h-4 text-fg-2 flex-shrink-0" />
                               ) : (
-                                <Video className="w-4 h-4 text-primary flex-shrink-0" />
+                                <Video className="w-4 h-4 text-accent-text flex-shrink-0" />
                               )}
                             </div>
                             <div className="flex-1 overflow-hidden">
                               {job.title && (
-                                <span className="block truncate text-text-primary font-medium text-sm" title={job.title}>
+                                <span className="block truncate text-fg font-medium text-sm" title={job.title}>
                                   {job.title}
                                 </span>
                               )}
                               {(job.source_surface === 'logo_inpaint' || job.job_kind === 'visible_logo_cleanup') && (
-                                <span className="inline-block text-[10px] bg-violet-500/20 text-violet-300 border border-violet-500/30 px-1.5 py-0.5 rounded font-semibold mr-1 mb-0.5">
+                                <span className="inline-block text-[10px] bg-surface-2 text-fg-2 border border-line px-1.5 py-0.5 rounded font-semibold mr-1 mb-0.5">
                                   Inpainted
                                 </span>
                               )}
-                              <span className="block truncate text-text-muted text-xs" title={job.original_url}>
+                              <span className="block truncate text-fg-muted text-xs" title={job.original_url}>
                                 {job.original_url}
                               </span>
                               <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                                 {job.file_size_mb > 0 && (
-                                  <span className="text-[10px] text-text-muted font-medium px-1.5 py-0.5 bg-surface rounded inline-block">
+                                  <span className="text-[10px] text-fg-muted font-medium px-1.5 py-0.5 bg-surface rounded inline-block">
                                     {job.file_size_mb} MB
                                   </span>
                                 )}
@@ -508,7 +508,7 @@ export default function HistoryContent() {
                           </div>
                         </td>
                         <td className="px-6 py-3">{getStatusBadge(job.status)}</td>
-                        <td className="px-6 py-3 text-text-muted text-xs whitespace-nowrap">
+                        <td className="px-6 py-3 text-fg-muted text-xs whitespace-nowrap">
                           {formatDate(job.created_at)}
                         </td>
                         <td className="px-6 py-3 text-right whitespace-nowrap">
@@ -528,7 +528,7 @@ export default function HistoryContent() {
                               <button
                                 onClick={() => handleRerun(job.original_url)}
                                 title="Tải lại URL này"
-                                className="p-1.5 rounded-lg text-text-muted hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-fg-muted hover:text-success hover:bg-success-soft transition-colors cursor-pointer"
                               >
                                 <RotateCcw className="w-3.5 h-3.5" />
                               </button>
@@ -537,7 +537,7 @@ export default function HistoryContent() {
                               <button
                                 onClick={() => handleCopyUrl(job.id, job.original_url)}
                                 title="Copy URL gốc"
-                                className="p-1.5 rounded-lg text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-fg-muted hover:text-accent-text hover:bg-accent/10 transition-colors cursor-pointer"
                               >
                                 {copiedId === job.id
                                   ? <Check className="w-3.5 h-3.5 text-success" />
@@ -547,7 +547,7 @@ export default function HistoryContent() {
                             )}
                             <button
                               onClick={() => handleDeleteJob(job.id)}
-                              className="p-1.5 rounded-lg text-text-muted hover:text-error hover:bg-error/10 transition-colors cursor-pointer"
+                              className="p-1.5 rounded-lg text-fg-muted hover:text-error hover:bg-error/10 transition-colors cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -565,32 +565,32 @@ export default function HistoryContent() {
               {applyTabFilter(filtered).map((job, idx) => {
                 const hasDownload = job.status === 'success' && (job.direct_mp4_url || job.local_mp3_path || job.local_file_path);
                 return (
-                  <div key={job.id} className="p-3 rounded-xl bg-surface border border-border">
+                  <div key={job.id} className="p-3 rounded-xl bg-surface border border-line">
                     <div className="flex items-start gap-2 mb-2">
                       {job.local_mp3_path ? (
-                        <Music className="w-4 h-4 text-accent-light flex-shrink-0 mt-0.5" />
+                        <Music className="w-4 h-4 text-accent-text flex-shrink-0 mt-0.5" />
                       ) : job.source_surface === 'logo_inpaint' || job.job_kind === 'visible_logo_cleanup' ? (
-                        <Eraser className="w-4 h-4 text-violet-400 flex-shrink-0 mt-0.5" />
+                        <Eraser className="w-4 h-4 text-fg-2 flex-shrink-0 mt-0.5" />
                       ) : (
-                        <Video className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                        <Video className="w-4 h-4 text-accent-text flex-shrink-0 mt-0.5" />
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1 flex-wrap">
-                          <p className="text-sm font-medium text-text-primary truncate">{job.title || job.original_url}</p>
+                          <p className="text-sm font-medium text-fg truncate">{job.title || job.original_url}</p>
                           {(job.source_surface === 'logo_inpaint' || job.job_kind === 'visible_logo_cleanup') && (
-                            <span className="text-[10px] bg-violet-500/20 text-violet-300 border border-violet-500/30 px-1.5 py-0.5 rounded font-semibold flex-shrink-0">
+                            <span className="text-[10px] bg-surface-2 text-fg-2 border border-line px-1.5 py-0.5 rounded font-semibold flex-shrink-0">
                               Inpainted
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-text-muted truncate">{job.original_url}</p>
+                        <p className="text-xs text-fg-muted truncate">{job.original_url}</p>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 flex-wrap">
                         {getStatusBadge(job.status)}
                         {getExpiryBadge(job)}
-                        <span className="text-[10px] text-text-muted">{formatDate(job.created_at)}</span>
+                        <span className="text-[10px] text-fg-muted">{formatDate(job.created_at)}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         {hasDownload && (
@@ -608,7 +608,7 @@ export default function HistoryContent() {
                           <button
                             onClick={() => handleRerun(job.original_url)}
                             title="Tải lại URL này"
-                            className="p-1.5 rounded-lg text-text-muted hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                            className="p-1.5 rounded-lg text-fg-muted hover:text-success hover:bg-success-soft transition-colors"
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
                           </button>
@@ -616,7 +616,7 @@ export default function HistoryContent() {
                         {job.original_url && (
                           <button
                             onClick={() => handleCopyUrl(job.id, job.original_url)}
-                            className="p-1.5 rounded-lg text-text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                            className="p-1.5 rounded-lg text-fg-muted hover:text-accent-text hover:bg-accent/10 transition-colors"
                           >
                             {copiedId === job.id
                               ? <Check className="w-3.5 h-3.5 text-success" />
@@ -626,7 +626,7 @@ export default function HistoryContent() {
                         )}
                         <button
                           onClick={() => handleDeleteJob(job.id)}
-                          className="p-1.5 rounded-lg text-text-muted hover:text-error hover:bg-error/10 transition-colors"
+                          className="p-1.5 rounded-lg text-fg-muted hover:text-error hover:bg-error/10 transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -639,11 +639,11 @@ export default function HistoryContent() {
 
             {/* Load More */}
             {hasMore && (
-              <div className="flex justify-center py-4 border-t border-border/50">
+              <div className="flex justify-center py-4 border-t border-line/50">
                 <button
                   onClick={handleLoadMore}
                   disabled={isLoading}
-                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-surface border border-border text-text-secondary text-xs font-semibold hover:text-text-primary hover:border-primary/30 transition-all cursor-pointer disabled:opacity-50"
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-surface border border-line text-fg-2 text-xs font-semibold hover:text-fg hover:border-accent/30 transition-all cursor-pointer disabled:opacity-50"
                 >
                   {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                   Tải thêm

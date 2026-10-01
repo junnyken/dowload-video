@@ -5,11 +5,11 @@ import { PHASE_ORDER } from './job.types'
 // ─── Status pill config ────────────────────────────────────────────────────────
 
 const PILL: Record<PhaseStatus, string> = {
-  success: 'border-emerald-900 bg-emerald-950 text-emerald-400',
-  running: 'border-blue-900   bg-blue-950   text-blue-400',
-  failed:  'border-red-900    bg-red-950    text-red-400',
-  skipped: 'border-slate-800  bg-transparent text-slate-600',
-  pending: 'border-slate-800  bg-transparent text-slate-700',
+  success: 'border-success/30 bg-success-soft text-success',
+  running: 'border-line   bg-surface-2   text-fg-2',
+  failed:  'border-danger/30    bg-danger-soft    text-danger',
+  skipped: 'border-line  bg-transparent text-fg-muted',
+  pending: 'border-line  bg-transparent text-fg-muted',
 }
 
 const LABEL: Record<PhaseStatus, string> = {
@@ -65,13 +65,13 @@ export function JobPhaseTable({ traces }: JobPhaseTableProps) {
   return (
     <div className="overflow-x-auto">
       <table className="min-w-[960px] w-full text-sm">
-        <thead className="sticky top-0 z-10 bg-slate-900">
-          <tr className="border-y border-slate-800">
+        <thead className="sticky top-0 z-10 bg-canvas">
+          <tr className="border-y border-line">
             {COLS.map(col => (
               <th
                 key={col.key}
                 className={cn(
-                  'py-2 pr-3 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-slate-600 first:pl-4',
+                  'py-2 pr-3 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-fg-muted first:pl-4',
                   col.w,
                 )}
               >
@@ -89,14 +89,14 @@ export function JobPhaseTable({ traces }: JobPhaseTableProps) {
               <tr
                 key={row.phase}
                 className={cn(
-                  'transition-colors hover:bg-slate-800/20',
-                  !isLast && 'border-b border-slate-800/50',
+                  'transition-colors hover:bg-surface-2',
+                  !isLast && 'border-b border-line',
                   dim && 'opacity-35',
                 )}
               >
                 {/* Phase */}
                 <td className="py-2.5 pl-4 pr-3">
-                  <span className="font-mono text-[11px] font-semibold text-slate-300 capitalize">
+                  <span className="font-mono text-[11px] font-semibold text-fg-2 capitalize">
                     {row.phase}
                   </span>
                 </td>
@@ -115,14 +115,14 @@ export function JobPhaseTable({ traces }: JobPhaseTableProps) {
 
                 {/* Start */}
                 <td className="py-2.5 pr-3">
-                  <span className="font-mono text-[10px] text-slate-600">
+                  <span className="font-mono text-[10px] text-fg-muted">
                     {row.startedAt ?? '—'}
                   </span>
                 </td>
 
                 {/* End */}
                 <td className="py-2.5 pr-3">
-                  <span className="font-mono text-[10px] text-slate-600">
+                  <span className="font-mono text-[10px] text-fg-muted">
                     {row.endedAt ?? '—'}
                   </span>
                 </td>
@@ -133,10 +133,10 @@ export function JobPhaseTable({ traces }: JobPhaseTableProps) {
                     className={cn(
                       'font-mono text-[11px] tabular-nums',
                       row.status === 'failed'
-                        ? 'text-red-400'
+                        ? 'text-danger'
                         : row.status === 'success'
-                          ? 'text-slate-400'
-                          : 'text-slate-700',
+                          ? 'text-fg-muted'
+                          : 'text-fg-muted',
                     )}
                   >
                     {fmtMs(row.durationMs)}
@@ -145,14 +145,14 @@ export function JobPhaseTable({ traces }: JobPhaseTableProps) {
 
                 {/* Proxy */}
                 <td className="py-2.5 pr-3">
-                  <span className="font-mono text-[10px] text-blue-500/60">
+                  <span className="font-mono text-[10px] text-fg-2">
                     {row.proxyUsed ?? '—'}
                   </span>
                 </td>
 
                 {/* Cookie */}
                 <td className="py-2.5 pr-3">
-                  <span className="font-mono text-[10px] text-purple-400/60">
+                  <span className="font-mono text-[10px] text-fg-2">
                     {row.cookieUsed ?? '—'}
                   </span>
                 </td>
@@ -160,11 +160,11 @@ export function JobPhaseTable({ traces }: JobPhaseTableProps) {
                 {/* Error */}
                 <td className="py-2.5 pr-3">
                   {row.errorMessage ? (
-                    <span className="font-mono text-[10px] leading-relaxed text-red-400/80 line-clamp-2">
+                    <span className="font-mono text-[10px] leading-relaxed text-danger line-clamp-2">
                       {row.errorMessage}
                     </span>
                   ) : (
-                    <span className="text-[10px] text-slate-800">—</span>
+                    <span className="text-[10px] text-fg">—</span>
                   )}
                 </td>
               </tr>

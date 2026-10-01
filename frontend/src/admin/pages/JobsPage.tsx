@@ -61,21 +61,21 @@ function fmtTime(iso: string): string {
 
 const STATUS_STYLE: Record<string, { pill: string; dot: string; label: string }> = {
   processing: {
-    pill: 'border-blue-700 bg-blue-900 text-blue-300',
-    dot: 'bg-blue-400 animate-pulse',
+    pill: 'border-line bg-surface-2 text-fg-2',
+    dot: 'bg-accent animate-pulse',
     label: 'RUNNING',
   },
   pending: {
-    pill: 'border-amber-900 bg-amber-950 text-amber-400',
-    dot: 'bg-amber-400',
+    pill: 'border-accent/30 bg-accent-soft text-accent-text',
+    dot: 'bg-accent',
     label: 'PENDING',
   },
 }
 
 function StatusPill({ status }: { status: string }) {
   const cfg = STATUS_STYLE[status] ?? {
-    pill: 'border-slate-700 bg-slate-800 text-slate-400',
-    dot: 'bg-slate-500',
+    pill: 'border-line bg-surface text-fg-muted',
+    dot: 'bg-line-strong',
     label: status.toUpperCase(),
   }
   return (
@@ -95,17 +95,17 @@ function StatusPill({ status }: { status: string }) {
 // ─── Platform badge ───────────────────────────────────────────────────────────
 
 const PLATFORM_COLOR: Record<string, string> = {
-  youtube:     'bg-red-950 text-red-400 border-red-900',
-  tiktok:      'bg-slate-800 text-slate-300 border-slate-700',
-  instagram:   'bg-purple-950 text-purple-400 border-purple-900',
-  facebook:    'bg-blue-950 text-blue-400 border-blue-900',
-  'twitter/x': 'bg-slate-800 text-slate-300 border-slate-700',
-  soundcloud:  'bg-orange-950 text-orange-400 border-orange-900',
-  threads:     'bg-slate-800 text-slate-300 border-slate-700',
+  youtube:     'bg-danger-soft text-danger border-danger/30',
+  tiktok:      'bg-surface text-fg-2 border-line',
+  instagram:   'bg-surface-2 text-fg-2 border-line',
+  facebook:    'bg-surface-2 text-fg-2 border-line',
+  'twitter/x': 'bg-surface text-fg-2 border-line',
+  soundcloud:  'bg-accent-soft text-accent-text border-accent/30',
+  threads:     'bg-surface text-fg-2 border-line',
 }
 
 function PlatformBadge({ platform }: { platform: string }) {
-  const cls = PLATFORM_COLOR[platform.toLowerCase()] ?? 'bg-slate-800 text-slate-400 border-slate-700'
+  const cls = PLATFORM_COLOR[platform.toLowerCase()] ?? 'bg-surface text-fg-muted border-line'
   return (
     <span className={cn('rounded border px-1.5 py-0.5 text-[10px] font-semibold', cls)}>
       {platform}
@@ -117,7 +117,7 @@ function PlatformBadge({ platform }: { platform: string }) {
 
 function ElapsedCell({ createdAt }: { createdAt: string }) {
   const s = useElapsedSeconds(createdAt)
-  return <span className="font-mono text-xs text-slate-300">{fmtElapsed(s)}</span>
+  return <span className="font-mono text-xs text-fg-2">{fmtElapsed(s)}</span>
 }
 
 // ─── Detail panel ─────────────────────────────────────────────────────────────
@@ -125,8 +125,8 @@ function ElapsedCell({ createdAt }: { createdAt: string }) {
 function DetailRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <>
-      <span className="text-slate-500">{label}</span>
-      <span className={cn('text-slate-200', mono && 'font-mono')}>{value}</span>
+      <span className="text-fg-muted">{label}</span>
+      <span className={cn('text-fg-2', mono && 'font-mono')}>{value}</span>
     </>
   )
 }
@@ -136,16 +136,16 @@ function JobDetailPanel({ job, onClose }: { job: ActiveJob; onClose: () => void 
   const elapsed  = useElapsedSeconds(job.created_at)
 
   return (
-    <div className="rounded-xl border border-slate-700 bg-slate-900 p-4 space-y-3">
+    <div className="rounded-xl border border-line bg-canvas p-4 space-y-3">
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-sm font-bold text-slate-100">{job.id}</span>
+          <span className="font-mono text-sm font-bold text-fg">{job.id}</span>
           <StatusPill status={job.status} />
           <PlatformBadge platform={platform} />
         </div>
         <button
           onClick={onClose}
-          className="rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-300 transition-colors"
+          className="rounded p-1 text-fg-muted hover:bg-surface hover:text-fg-2 transition-colors"
           aria-label="Close detail"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4">
@@ -154,7 +154,7 @@ function JobDetailPanel({ job, onClose }: { job: ActiveJob; onClose: () => void 
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-lg border border-slate-800 bg-slate-950/60 px-4 py-3 text-xs">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-lg border border-line bg-surface-2 px-4 py-3 text-xs">
         <DetailRow label="Job ID"   value={job.id} mono />
         <DetailRow label="Batch ID" value={job.batch_id ?? '—'} mono />
         <DetailRow label="Status"   value={job.status} />
@@ -163,13 +163,13 @@ function JobDetailPanel({ job, onClose }: { job: ActiveJob; onClose: () => void 
         <DetailRow label="Elapsed"  value={fmtElapsed(elapsed)} mono />
       </div>
 
-      <div className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2">
-        <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-600">URL</p>
+      <div className="rounded-lg border border-line bg-surface-2 px-3 py-2">
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-fg-muted">URL</p>
         <a
           href={job.original_url}
           target="_blank"
           rel="noopener noreferrer"
-          className="break-all font-mono text-xs text-blue-400 hover:text-blue-300 transition-colors"
+          className="break-all font-mono text-xs text-fg-2 hover:text-fg-2 transition-colors"
         >
           {job.original_url}
         </a>
@@ -195,17 +195,17 @@ function JobRow({
     <tr
       onClick={onClick}
       className={cn(
-        'cursor-pointer border-b border-slate-800 transition-colors',
-        selected ? 'bg-blue-950/30' : 'hover:bg-slate-800/50',
+        'cursor-pointer border-b border-line transition-colors',
+        selected ? 'bg-surface-2' : 'hover:bg-surface',
       )}
     >
       <td className="px-4 py-2.5">
-        <span className="font-mono text-xs font-bold text-slate-200">{shortId(job.id)}</span>
+        <span className="font-mono text-xs font-bold text-fg-2">{shortId(job.id)}</span>
       </td>
       <td className="px-3 py-2.5"><PlatformBadge platform={platform} /></td>
       <td className="px-3 py-2.5"><StatusPill status={job.status} /></td>
       <td className="max-w-[240px] px-3 py-2.5">
-        <span className="block truncate font-mono text-xs text-slate-400" title={job.original_url}>
+        <span className="block truncate font-mono text-xs text-fg-muted" title={job.original_url}>
           {truncate(job.original_url, 40)}
         </span>
       </td>
@@ -237,30 +237,30 @@ export function JobsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-base font-semibold text-slate-100">Active Jobs</h1>
+            <h1 className="text-base font-semibold text-fg">Active Jobs</h1>
             {!isLoading && (
               <span
                 className={cn(
                   'inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5',
                   'font-mono text-[11px] font-bold tabular-nums',
-                  totalCount > 0 ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-500',
+                  totalCount > 0 ? 'bg-accent text-accent-fg' : 'bg-surface text-fg-muted',
                 )}
               >
                 {totalCount}
               </span>
             )}
             {isFetching && (
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-700 border-t-blue-500" />
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-line border-t-line" />
             )}
           </div>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <p className="mt-0.5 text-xs text-fg-muted">
             Live view — refreshes every 15 s · click a row for details
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           {lastCheckedStr && (
-            <span className="font-mono text-[10px] text-slate-600">
+            <span className="font-mono text-[10px] text-fg-muted">
               checked {fmtTime(lastCheckedStr)}
             </span>
           )}
@@ -268,9 +268,9 @@ export function JobsPage() {
             onClick={() => refetch()}
             disabled={isFetching}
             className={cn(
-              'flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800',
-              'px-3 py-1.5 text-xs text-slate-300 transition-colors',
-              'hover:border-slate-600 hover:text-slate-100 disabled:opacity-40',
+              'flex items-center gap-1.5 rounded-lg border border-line bg-surface',
+              'px-3 py-1.5 text-xs text-fg-2 transition-colors',
+              'hover:border-line-strong hover:text-fg disabled:opacity-40',
             )}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
@@ -282,29 +282,29 @@ export function JobsPage() {
       </div>
 
       {errorMsg && (
-        <div className="rounded-lg border border-red-900 bg-red-950/50 px-4 py-3 text-sm text-red-400">
+        <div className="rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">
           Failed to fetch jobs: {errorMsg}
         </div>
       )}
 
       {!isLoading && totalCount > 0 && (
-        <div className="flex gap-3 text-xs text-slate-500">
-          <span><span className="font-bold text-blue-400">{processing.length}</span> running</span>
-          <span><span className="font-bold text-amber-400">{pending.length}</span> pending</span>
+        <div className="flex gap-3 text-xs text-fg-muted">
+          <span><span className="font-bold text-fg-2">{processing.length}</span> running</span>
+          <span><span className="font-bold text-warning">{pending.length}</span> pending</span>
         </div>
       )}
 
       {!isLoading && totalCount > 0 && (
-        <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
+        <div className="overflow-hidden rounded-xl border border-line bg-canvas">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-800 bg-slate-800/50">
-                  <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-widest text-slate-500">ID</th>
-                  <th className="px-3 py-2.5 text-left font-mono text-[10px] uppercase tracking-widest text-slate-500">Platform</th>
-                  <th className="px-3 py-2.5 text-left font-mono text-[10px] uppercase tracking-widest text-slate-500">Status</th>
-                  <th className="px-3 py-2.5 text-left font-mono text-[10px] uppercase tracking-widest text-slate-500">URL</th>
-                  <th className="px-3 py-2.5 text-right font-mono text-[10px] uppercase tracking-widest text-slate-500">Elapsed</th>
+                <tr className="border-b border-line bg-surface">
+                  <th className="px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-widest text-fg-muted">ID</th>
+                  <th className="px-3 py-2.5 text-left font-mono text-[10px] uppercase tracking-widest text-fg-muted">Platform</th>
+                  <th className="px-3 py-2.5 text-left font-mono text-[10px] uppercase tracking-widest text-fg-muted">Status</th>
+                  <th className="px-3 py-2.5 text-left font-mono text-[10px] uppercase tracking-widest text-fg-muted">URL</th>
+                  <th className="px-3 py-2.5 text-right font-mono text-[10px] uppercase tracking-widest text-fg-muted">Elapsed</th>
                 </tr>
               </thead>
               <tbody>
@@ -327,13 +327,13 @@ export function JobsPage() {
       )}
 
       {!isLoading && !errorMsg && totalCount === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-slate-800 bg-slate-900 py-16 gap-3">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="h-10 w-10 text-slate-700">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-line bg-canvas py-16 gap-3">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="h-10 w-10 text-fg-muted">
             <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          <p className="text-sm font-medium text-slate-400">No active jobs right now</p>
+          <p className="text-sm font-medium text-fg-muted">No active jobs right now</p>
           {lastCheckedStr && (
-            <p className="font-mono text-xs text-slate-600">
+            <p className="font-mono text-xs text-fg-muted">
               Last checked at {fmtTime(lastCheckedStr)}
             </p>
           )}
@@ -341,14 +341,14 @@ export function JobsPage() {
       )}
 
       {isLoading && (
-        <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
+        <div className="overflow-hidden rounded-xl border border-line bg-canvas">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className={cn('flex gap-4 px-4 py-3 border-b border-slate-800', i === 4 && 'border-b-0')}>
-              <div className="h-4 w-20 animate-pulse rounded bg-slate-800" />
-              <div className="h-4 w-16 animate-pulse rounded bg-slate-800" />
-              <div className="h-4 w-14 animate-pulse rounded bg-slate-800" />
-              <div className="h-4 w-48 animate-pulse rounded bg-slate-800" />
-              <div className="ml-auto h-4 w-10 animate-pulse rounded bg-slate-800" />
+            <div key={i} className={cn('flex gap-4 px-4 py-3 border-b border-line', i === 4 && 'border-b-0')}>
+              <div className="h-4 w-20 animate-pulse rounded bg-surface" />
+              <div className="h-4 w-16 animate-pulse rounded bg-surface" />
+              <div className="h-4 w-14 animate-pulse rounded bg-surface" />
+              <div className="h-4 w-48 animate-pulse rounded bg-surface" />
+              <div className="ml-auto h-4 w-10 animate-pulse rounded bg-surface" />
             </div>
           ))}
         </div>

@@ -49,11 +49,11 @@ interface RevenueResponse {
 }
 
 const PLAN_COLORS: Record<string, string> = {
-  free: 'bg-slate-700',
-  pro: 'bg-blue-700',
-  team: 'bg-indigo-700',
-  api: 'bg-teal-700',
-  enterprise: 'bg-purple-700',
+  free: 'bg-surface-2',
+  pro: 'bg-accent-hover',
+  team: 'bg-accent-hover',
+  api: 'bg-accent-hover',
+  enterprise: 'bg-accent-hover',
 }
 
 function formatRelative(iso: string): string {
@@ -144,11 +144,11 @@ export default function BillingAdminPage() {
     <div className="space-y-6">
       {/* P5: Migration required banner */}
       {setupStatus && !setupStatus.ready && (
-        <div className="rounded-xl border border-amber-700/60 bg-amber-900/15 p-4 space-y-3">
+        <div className="rounded-xl border border-accent/60 bg-accent-soft p-4 space-y-3">
           <div className="flex items-center gap-2">
-            <span className="text-amber-400 text-sm font-semibold">⚠ Billing tables chưa được tạo</span>
+            <span className="text-accent-text text-sm font-semibold">⚠ Billing tables chưa được tạo</span>
           </div>
-          <p className="text-xs text-amber-300/80">
+          <p className="text-xs text-accent-text">
             Các bảng sau chưa tồn tại trong Supabase:{' '}
             <span className="font-mono">{setupStatus.missing_tables.join(', ')}</span>.
             Hãy chạy migration SQL trong Supabase SQL Editor.
@@ -156,22 +156,22 @@ export default function BillingAdminPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowSql(s => !s)}
-              className="rounded-lg border border-amber-700 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-900/30 transition-colors"
+              className="rounded-lg border border-accent/30 px-3 py-1.5 text-xs text-accent-text hover:bg-accent-soft transition-colors"
             >
               {showSql ? 'Ẩn SQL' : 'Xem migration SQL'}
             </button>
-            <span className="text-[10px] text-amber-600 font-mono">{setupStatus.migration_file}</span>
+            <span className="text-[10px] text-accent-text font-mono">{setupStatus.migration_file}</span>
           </div>
           {showSql && setupStatus.sql_hint && (
-            <pre className="rounded-lg bg-slate-950 border border-slate-800 p-3 text-[10px] font-mono text-slate-300 overflow-x-auto max-h-64 whitespace-pre-wrap">
+            <pre className="rounded-lg bg-canvas border border-line p-3 text-[10px] font-mono text-fg-2 overflow-x-auto max-h-64 whitespace-pre-wrap">
               {setupStatus.sql_hint}
             </pre>
           )}
         </div>
       )}
       {setupStatus?.ready && (
-        <div className="flex items-center gap-2 text-xs text-emerald-400">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+        <div className="flex items-center gap-2 text-xs text-success">
+          <span className="h-1.5 w-1.5 rounded-full bg-success" />
           Billing tables sẵn sàng
         </div>
       )}
@@ -179,27 +179,27 @@ export default function BillingAdminPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-mono text-lg font-bold text-slate-100">Billing Overview</h1>
-          <p className="mt-0.5 text-xs text-slate-500">MRR, plans, usage events, credit grants</p>
+          <h1 className="font-mono text-lg font-bold text-fg">Billing Overview</h1>
+          <p className="mt-0.5 text-xs text-fg-muted">MRR, plans, usage events, credit grants</p>
         </div>
         <div className="flex items-center gap-2">
           <select
             value={days}
             onChange={e => setDays(Number(e.target.value))}
-            className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-300"
+            className="rounded border border-line bg-surface px-2 py-1.5 text-xs text-fg-2"
           >
             <option value={7}>7d</option>
             <option value={30}>30d</option>
             <option value={90}>90d</option>
           </select>
-          <button onClick={fetchAll} className="rounded bg-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-600">
+          <button onClick={fetchAll} className="rounded bg-surface-2 px-3 py-1.5 text-xs text-fg-2 hover:bg-line">
             ↺ Refresh
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="rounded border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-300">{error}</div>
+        <div className="rounded border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">{error}</div>
       )}
 
       {/* Top KPI cards */}
@@ -211,9 +211,9 @@ export default function BillingAdminPage() {
             { label: 'Paying Users', value: overview.paying_users.toLocaleString() },
             { label: 'Conversion', value: totalUsers > 0 ? `${((overview.paying_users / totalUsers) * 100).toFixed(1)}%` : '—' },
           ].map(c => (
-            <div key={c.label} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-              <p className="font-mono text-xs text-slate-500">{c.label}</p>
-              <p className="mt-1 font-mono text-2xl font-bold text-slate-100">{c.value}</p>
+            <div key={c.label} className="rounded-lg border border-line bg-canvas p-4">
+              <p className="font-mono text-xs text-fg-muted">{c.label}</p>
+              <p className="mt-1 font-mono text-2xl font-bold text-fg">{c.value}</p>
             </div>
           ))}
         </div>
@@ -222,20 +222,20 @@ export default function BillingAdminPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Plan distribution */}
         {overview && (
-          <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-            <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-slate-500">Plan Distribution</h2>
+          <div className="rounded-lg border border-line bg-canvas p-4">
+            <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-fg-muted">Plan Distribution</h2>
             <div className="space-y-2.5">
               {planCountEntries.map(([plan, count]) => {
                 const pct = totalUsers > 0 ? (count / totalUsers) * 100 : 0
                 return (
                   <div key={plan}>
                     <div className="flex justify-between font-mono text-xs mb-0.5">
-                      <span className="capitalize text-slate-300">{plan}</span>
-                      <span className="text-slate-500">{count.toLocaleString()} ({pct.toFixed(1)}%)</span>
+                      <span className="capitalize text-fg-2">{plan}</span>
+                      <span className="text-fg-muted">{count.toLocaleString()} ({pct.toFixed(1)}%)</span>
                     </div>
-                    <div className="h-1.5 w-full rounded-full bg-slate-800">
+                    <div className="h-1.5 w-full rounded-full bg-surface">
                       <div
-                        className={cn('h-1.5 rounded-full', PLAN_COLORS[plan] ?? 'bg-slate-600')}
+                        className={cn('h-1.5 rounded-full', PLAN_COLORS[plan] ?? 'bg-line')}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -248,12 +248,12 @@ export default function BillingAdminPage() {
 
         {/* Daily download activity */}
         {revenue && (
-          <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-            <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-slate-500">
+          <div className="rounded-lg border border-line bg-canvas p-4">
+            <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-fg-muted">
               Download Events — {days}d
             </h2>
             {revenue.daily.length === 0 ? (
-              <p className="font-mono text-xs text-slate-600">No events in range</p>
+              <p className="font-mono text-xs text-fg-muted">No events in range</p>
             ) : (
               <>
                 <div className="flex h-20 items-end gap-0.5">
@@ -264,20 +264,20 @@ export default function BillingAdminPage() {
                       <div
                         key={d.date}
                         title={`${d.date}: ${v} downloads`}
-                        className="flex-1 cursor-default rounded-sm bg-emerald-600/70 transition-colors hover:bg-emerald-500"
+                        className="flex-1 cursor-default rounded-sm bg-success/70 transition-colors hover:bg-success"
                         style={{ height: `${h}px` }}
                       />
                     )
                   })}
                 </div>
-                <div className="mt-2 flex justify-between font-mono text-[10px] text-slate-700">
+                <div className="mt-2 flex justify-between font-mono text-[10px] text-fg-muted">
                   <span>{revenue.daily[0]?.date ?? ''}</span>
                   <span>{revenue.daily[revenue.daily.length - 1]?.date ?? ''}</span>
                 </div>
                 {/* Metric totals */}
-                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-slate-500">
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-fg-muted">
                   {Object.entries(revenue.metric_totals).map(([m, v]) => (
-                    <span key={m}>{m}: <span className="text-slate-300">{v.toLocaleString()}</span></span>
+                    <span key={m}>{m}: <span className="text-fg-2">{v.toLocaleString()}</span></span>
                   ))}
                 </div>
               </>
@@ -287,11 +287,11 @@ export default function BillingAdminPage() {
 
         {/* Plans table */}
         {overview?.plans && overview.plans.length > 0 && (
-          <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-            <h2 className="mb-3 font-mono text-xs font-semibold uppercase text-slate-500">Plan Catalog</h2>
+          <div className="rounded-lg border border-line bg-canvas p-4">
+            <h2 className="mb-3 font-mono text-xs font-semibold uppercase text-fg-muted">Plan Catalog</h2>
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-slate-500 font-mono">
+                <tr className="text-fg-muted font-mono">
                   <th className="pb-2 text-left">Plan</th>
                   <th className="pb-2 text-left">Price</th>
                   <th className="pb-2 text-left">Users</th>
@@ -300,18 +300,18 @@ export default function BillingAdminPage() {
               </thead>
               <tbody>
                 {overview.plans.map(p => (
-                  <tr key={p.code} className="border-t border-slate-800">
+                  <tr key={p.code} className="border-t border-line">
                     <td className="py-1.5">
                       <div className="flex items-center gap-1.5">
-                        <span className={cn('h-2 w-2 rounded-full', PLAN_COLORS[p.code] ?? 'bg-slate-600')} />
-                        <span className="text-slate-200 font-medium">{p.name}</span>
+                        <span className={cn('h-2 w-2 rounded-full', PLAN_COLORS[p.code] ?? 'bg-line')} />
+                        <span className="text-fg-2 font-medium">{p.name}</span>
                       </div>
                     </td>
-                    <td className="py-1.5 font-mono text-slate-400">{formatCents(p.price_monthly_cents)}</td>
-                    <td className="py-1.5 font-mono text-slate-400">
+                    <td className="py-1.5 font-mono text-fg-muted">{formatCents(p.price_monthly_cents)}</td>
+                    <td className="py-1.5 font-mono text-fg-muted">
                       {(overview.plan_counts[p.code] ?? 0).toLocaleString()}
                     </td>
-                    <td className="py-1.5 font-mono text-slate-500">
+                    <td className="py-1.5 font-mono text-fg-muted">
                       {(p.limits as Record<string, unknown>)?.['downloads_per_day'] === -1
                         ? '∞'
                         : String((p.limits as Record<string, unknown>)?.['downloads_per_day'] ?? '—')}
@@ -324,15 +324,15 @@ export default function BillingAdminPage() {
         )}
 
         {/* Credit grant form + recent grants */}
-        <div className="rounded-lg border border-slate-800 bg-slate-900 p-4 space-y-4">
-          <h2 className="font-mono text-xs font-semibold uppercase text-slate-500">Grant Credits</h2>
+        <div className="rounded-lg border border-line bg-canvas p-4 space-y-4">
+          <h2 className="font-mono text-xs font-semibold uppercase text-fg-muted">Grant Credits</h2>
           <form onSubmit={handleGrantCredits} className="space-y-2">
             <input
               type="text"
               placeholder="User ID (auth UID)"
               value={grantForm.user_id}
               onChange={e => setGrantForm(f => ({ ...f, user_id: e.target.value }))}
-              className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 placeholder-slate-600"
+              className="w-full rounded border border-line bg-surface px-3 py-1.5 text-xs text-fg-2 placeholder:text-fg-muted"
             />
             <div className="flex gap-2">
               <input
@@ -341,12 +341,12 @@ export default function BillingAdminPage() {
                 min={1}
                 value={grantForm.amount}
                 onChange={e => setGrantForm(f => ({ ...f, amount: e.target.value }))}
-                className="flex-1 rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 placeholder-slate-600"
+                className="flex-1 rounded border border-line bg-surface px-3 py-1.5 text-xs text-fg-2 placeholder:text-fg-muted"
               />
               <select
                 value={grantForm.reason}
                 onChange={e => setGrantForm(f => ({ ...f, reason: e.target.value }))}
-                className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-300"
+                className="rounded border border-line bg-surface px-2 py-1.5 text-xs text-fg-2"
               >
                 <option value="admin_comp">Admin comp</option>
                 <option value="refund">Refund</option>
@@ -358,12 +358,12 @@ export default function BillingAdminPage() {
             <button
               type="submit"
               disabled={granting || !grantForm.user_id || !grantForm.amount}
-              className="rounded bg-blue-700 px-4 py-1.5 text-xs text-white hover:bg-blue-600 disabled:opacity-40"
+              className="rounded bg-accent-hover px-4 py-1.5 text-xs text-accent-fg hover:bg-accent-hover disabled:opacity-40"
             >
               {granting ? 'Granting…' : 'Grant Credits'}
             </button>
             {grantMsg && (
-              <p className={cn('font-mono text-xs', grantMsg.startsWith('✓') ? 'text-emerald-400' : 'text-red-400')}>
+              <p className={cn('font-mono text-xs', grantMsg.startsWith('✓') ? 'text-success' : 'text-danger')}>
                 {grantMsg}
               </p>
             )}
@@ -372,17 +372,17 @@ export default function BillingAdminPage() {
           {/* Recent grants */}
           {(overview?.recent_credit_grants ?? []).length > 0 && (
             <>
-              <h3 className="font-mono text-[10px] font-semibold uppercase text-slate-600 pt-1">Recent Grants</h3>
+              <h3 className="font-mono text-[10px] font-semibold uppercase text-fg-muted pt-1">Recent Grants</h3>
               <div className="space-y-1.5">
                 {(overview?.recent_credit_grants ?? []).slice(0, 5).map((g, i) => (
-                  <div key={i} className="flex items-center justify-between rounded bg-slate-800 px-2.5 py-1.5">
+                  <div key={i} className="flex items-center justify-between rounded bg-surface px-2.5 py-1.5">
                     <div>
-                      <span className="font-mono text-[10px] text-slate-400">{g.user_id.slice(0, 12)}…</span>
-                      <span className="ml-2 font-mono text-[10px] text-slate-600">{g.reason}</span>
+                      <span className="font-mono text-[10px] text-fg-muted">{g.user_id.slice(0, 12)}…</span>
+                      <span className="ml-2 font-mono text-[10px] text-fg-muted">{g.reason}</span>
                     </div>
                     <div className="text-right">
-                      <span className="font-mono text-xs font-bold text-emerald-400">+{g.amount}</span>
-                      <span className="ml-2 font-mono text-[10px] text-slate-600">{formatRelative(g.created_at)}</span>
+                      <span className="font-mono text-xs font-bold text-success">+{g.amount}</span>
+                      <span className="ml-2 font-mono text-[10px] text-fg-muted">{formatRelative(g.created_at)}</span>
                     </div>
                   </div>
                 ))}
@@ -394,17 +394,17 @@ export default function BillingAdminPage() {
 
       {/* Recent payment events */}
       {(overview?.recent_payment_events ?? []).length > 0 && (
-        <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-          <h2 className="mb-3 font-mono text-xs font-semibold uppercase text-slate-500">Recent Payment Events</h2>
+        <div className="rounded-lg border border-line bg-canvas p-4">
+          <h2 className="mb-3 font-mono text-xs font-semibold uppercase text-fg-muted">Recent Payment Events</h2>
           <div className="space-y-1">
             {(overview?.recent_payment_events ?? []).map((ev, i) => (
-              <div key={i} className="flex items-center justify-between rounded px-2.5 py-1.5 hover:bg-slate-800">
-                <span className="font-mono text-xs text-slate-400">{ev.event_type}</span>
+              <div key={i} className="flex items-center justify-between rounded px-2.5 py-1.5 hover:bg-surface">
+                <span className="font-mono text-xs text-fg-muted">{ev.event_type}</span>
                 <div className="flex items-center gap-3">
-                  <span className={cn('font-mono text-[10px]', ev.processed ? 'text-emerald-400' : 'text-amber-400')}>
+                  <span className={cn('font-mono text-[10px]', ev.processed ? 'text-success' : 'text-accent-text')}>
                     {ev.processed ? '✓ processed' : '○ pending'}
                   </span>
-                  <span className="font-mono text-[10px] text-slate-600">{formatRelative(ev.created_at)}</span>
+                  <span className="font-mono text-[10px] text-fg-muted">{formatRelative(ev.created_at)}</span>
                 </div>
               </div>
             ))}

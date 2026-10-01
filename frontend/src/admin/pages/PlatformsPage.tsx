@@ -47,7 +47,7 @@ export function PlatformsPage() {
   if (isLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-sm text-slate-500 animate-pulse">Loading platform health…</div>
+        <div className="text-sm text-fg-muted animate-pulse">Loading platform health…</div>
       </div>
     )
   }
@@ -56,10 +56,10 @@ export function PlatformsPage() {
     const msg = error instanceof Error ? error.message : 'Failed to load platform health'
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3">
-        <p className="text-sm text-red-400">{msg}</p>
+        <p className="text-sm text-danger">{msg}</p>
         <button
           onClick={() => refetch()}
-          className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+          className="rounded-lg border border-line px-3 py-1.5 text-xs text-fg-2 hover:bg-surface"
         >
           Retry
         </button>
@@ -75,10 +75,10 @@ export function PlatformsPage() {
     <>
       {updatedStr && (
         <div className="mb-2 flex items-center justify-between px-1">
-          <span className="text-[10px] text-slate-600">
+          <span className="text-[10px] text-fg-muted">
             Updated {updatedStr} · auto-refresh 30s
           </span>
-          <button onClick={() => refetch()} className="text-[10px] text-slate-500 hover:text-slate-300">
+          <button onClick={() => refetch()} className="text-[10px] text-fg-muted hover:text-fg-2">
             ↺ Refresh
           </button>
         </div>

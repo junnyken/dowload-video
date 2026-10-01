@@ -14,17 +14,17 @@ import { PlatformActionMenu } from './PlatformActionMenu'
 
 function FailRateCell({ rate }: { rate: number }) {
   const color =
-    rate >= 20 ? 'bg-red-500' :
-    rate >= 5  ? 'bg-amber-500' :
-    'bg-emerald-500'
+    rate >= 20 ? 'bg-danger' :
+    rate >= 5  ? 'bg-warning' :
+    'bg-success'
   const textColor =
-    rate >= 20 ? 'text-red-400' :
-    rate >= 5  ? 'text-amber-400' :
-    'text-emerald-400'
+    rate >= 20 ? 'text-danger' :
+    rate >= 5  ? 'text-warning' :
+    'text-success'
 
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 w-14 flex-shrink-0 overflow-hidden rounded-full bg-slate-800">
+      <div className="h-1.5 w-14 flex-shrink-0 overflow-hidden rounded-full bg-surface">
         <div
           className={cn('h-full rounded-full transition-all', color)}
           style={{ width: `${Math.min(rate, 100)}%` }}
@@ -39,14 +39,14 @@ function FailRateCell({ rate }: { rate: number }) {
 
 function BoolCell({ value, trueLabel, falseLabel }: { value: boolean; trueLabel: string; falseLabel: string }) {
   return value ? (
-    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="h-3 w-3 text-emerald-500">
+    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-fg-muted">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="h-3 w-3 text-success">
         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
       </svg>
       {trueLabel}
     </span>
   ) : (
-    <span className="text-[11px] text-slate-700">{falseLabel}</span>
+    <span className="text-[11px] text-fg-muted">{falseLabel}</span>
   )
 }
 
@@ -108,17 +108,17 @@ export function PlatformHealthTable({
       {/* ── Toolbar ── */}
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <h1 className="text-sm font-semibold text-slate-100">Platform Health</h1>
-          <p className="mt-0.5 text-[11px] text-slate-600">
+          <h1 className="text-sm font-semibold text-fg">Platform Health</h1>
+          <p className="mt-0.5 text-[11px] text-fg-muted">
             {healthyCount} / {rows.length} operational · circuit breakers + cookie pool status
           </p>
         </div>
-        <span className="font-mono text-[10px] text-slate-700">
+        <span className="font-mono text-[10px] text-fg-muted">
           auto-refresh 30s
         </span>
       </div>
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-900">
+      <div className="rounded-2xl border border-line bg-canvas">
         {/* ── Filters ── */}
         <div className="px-4 pt-4 pb-3">
           <PlatformFilters
@@ -147,13 +147,13 @@ export function PlatformHealthTable({
           <div className="overflow-x-auto">
             <table className="min-w-[780px] w-full text-sm">
               {/* Sticky header */}
-              <thead className="sticky top-0 z-10 bg-slate-900">
-                <tr className="border-y border-slate-800">
+              <thead className="sticky top-0 z-10 bg-canvas">
+                <tr className="border-y border-line">
                   {COLUMNS.map(col => (
                     <th
                       key={col.key}
                       className={cn(
-                        'py-2 pr-3 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-slate-600 first:pl-4',
+                        'py-2 pr-3 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-fg-muted first:pl-4',
                         col.minW,
                         col.key === 'actions' && 'text-center',
                       )}
@@ -175,10 +175,10 @@ export function PlatformHealthTable({
                       onClick={() => onRowClick?.(row)}
                       className={cn(
                         'cursor-pointer transition-colors',
-                        !isLast && 'border-b border-slate-800/50',
+                        !isLast && 'border-b border-line',
                         isSelected
-                          ? 'bg-blue-950/20 hover:bg-blue-950/30'
-                          : 'hover:bg-slate-800/40',
+                          ? 'bg-surface-2 hover:bg-line'
+                          : 'hover:bg-surface-2',
                       )}
                     >
                       {/* Platform */}
@@ -201,7 +201,7 @@ export function PlatformHealthTable({
 
                       {/* Last Success */}
                       <td className="py-2.5 pr-3">
-                        <span className="font-mono text-[11px] text-slate-500">
+                        <span className="font-mono text-[11px] text-fg-muted">
                           {row.lastSuccessAt}
                         </span>
                       </td>
@@ -250,21 +250,21 @@ export function PlatformHealthTable({
 
         {/* ── Footer ── */}
         {!loading && !error && filtered.length > 0 && (
-          <div className="flex items-center justify-between border-t border-slate-800/60 px-4 py-2">
-            <span className="font-mono text-[10px] text-slate-700">
+          <div className="flex items-center justify-between border-t border-line px-4 py-2">
+            <span className="font-mono text-[10px] text-fg-muted">
               Showing {filtered.length} of {rows.length} platforms
             </span>
             <div className="flex items-center gap-3">
               {[
-                { status: 'healthy',  label: 'Healthy',  color: 'bg-emerald-500' },
-                { status: 'warning',  label: 'Warning',  color: 'bg-amber-500'   },
-                { status: 'critical', label: 'Critical', color: 'bg-red-500'     },
-                { status: 'disabled', label: 'Disabled', color: 'bg-slate-600'   },
+                { status: 'healthy',  label: 'Healthy',  color: 'bg-success' },
+                { status: 'warning',  label: 'Warning',  color: 'bg-warning'   },
+                { status: 'critical', label: 'Critical', color: 'bg-danger'     },
+                { status: 'disabled', label: 'Disabled', color: 'bg-line'   },
               ].map(({ status, label, color }) => {
                 const count = rows.filter(r => r.status === status).length
                 if (count === 0) return null
                 return (
-                  <span key={status} className="flex items-center gap-1 font-mono text-[10px] text-slate-600">
+                  <span key={status} className="flex items-center gap-1 font-mono text-[10px] text-fg-muted">
                     <span className={cn('h-1.5 w-1.5 rounded-full', color)} />
                     {count} {label}
                   </span>

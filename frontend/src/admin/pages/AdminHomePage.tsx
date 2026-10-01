@@ -16,13 +16,13 @@ function fmt(v: number | undefined | null, decimals = 0): string {
 type Tone = 'green' | 'blue' | 'amber' | 'red' | 'purple' | 'slate' | 'cyan'
 
 const TONE: Record<Tone, { val: string; border: string; dot: string }> = {
-  green:  { val: 'text-emerald-400', border: 'border-emerald-800/40', dot: 'bg-emerald-400' },
-  blue:   { val: 'text-blue-400',    border: 'border-blue-800/40',    dot: 'bg-blue-400'    },
-  amber:  { val: 'text-amber-400',   border: 'border-amber-800/40',   dot: 'bg-amber-400'   },
-  red:    { val: 'text-red-400',     border: 'border-red-800/40',     dot: 'bg-red-400'     },
-  purple: { val: 'text-purple-400',  border: 'border-purple-800/40',  dot: 'bg-purple-400'  },
-  slate:  { val: 'text-slate-300',   border: 'border-slate-800',      dot: 'bg-slate-500'   },
-  cyan:   { val: 'text-cyan-400',    border: 'border-cyan-800/40',    dot: 'bg-cyan-400'    },
+  green:  { val: 'text-success', border: 'border-success/40', dot: 'bg-success' },
+  blue:   { val: 'text-fg-2',    border: 'border-line',    dot: 'bg-accent'    },
+  amber:  { val: 'text-accent-text',   border: 'border-accent/40',   dot: 'bg-accent'   },
+  red:    { val: 'text-danger',     border: 'border-danger/40',     dot: 'bg-danger'     },
+  purple: { val: 'text-fg-2',  border: 'border-line',  dot: 'bg-accent'  },
+  slate:  { val: 'text-fg-2',   border: 'border-line',      dot: 'bg-line-strong'   },
+  cyan:   { val: 'text-fg-2',    border: 'border-line',    dot: 'bg-accent'    },
 }
 
 // ─── Metric card ──────────────────────────────────────────────────────────────
@@ -35,13 +35,13 @@ function MetricCard({
 }) {
   const t = TONE[tone]
   const body = (
-    <div className={`rounded-xl border bg-slate-900 px-4 py-3.5 space-y-1 h-full transition-colors hover:border-slate-700 ${t.border}`}>
-      <div className="text-[10px] text-slate-500 uppercase tracking-widest font-mono">{label}</div>
+    <div className={`rounded-xl border bg-canvas px-4 py-3.5 space-y-1 h-full transition-colors hover:border-line ${t.border}`}>
+      <div className="text-[10px] text-fg-muted uppercase tracking-widest font-mono">{label}</div>
       <div className={`text-xl font-bold font-mono flex items-center gap-2 ${t.val}`}>
         {pulse && <span className={`inline-block h-2 w-2 rounded-full animate-pulse ${t.dot}`} />}
         {value}
       </div>
-      {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
+      {sub && <div className="text-[11px] text-fg-muted">{sub}</div>}
     </div>
   )
   return link ? <Link to={link} className="block">{body}</Link> : body
@@ -52,9 +52,9 @@ function MetricCard({
 function SectionTitle({ title, linkTo, linkLabel }: { title: string; linkTo?: string; linkLabel?: string }) {
   return (
     <div className="flex items-center justify-between mb-2.5">
-      <h2 className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">{title}</h2>
+      <h2 className="text-[10px] font-semibold uppercase tracking-widest text-fg-muted">{title}</h2>
       {linkTo && (
-        <Link to={linkTo} className="text-[11px] text-slate-600 hover:text-slate-300 transition-colors">{linkLabel ?? 'View all →'}</Link>
+        <Link to={linkTo} className="text-[11px] text-fg-muted hover:text-fg-2 transition-colors">{linkLabel ?? 'View all →'}</Link>
       )}
     </div>
   )
@@ -63,7 +63,7 @@ function SectionTitle({ title, linkTo, linkLabel }: { title: string; linkTo?: st
 // ─── P2: Mini sparkline ───────────────────────────────────────────────────────
 
 function MiniSparkline({
-  data, color = '#60a5fa', label, valueKey,
+  data, color = 'var(--vg-accent)', label, valueKey,
 }: {
   data: DailyStatEntry[]
   color?: string
@@ -71,7 +71,7 @@ function MiniSparkline({
   valueKey: 'total' | 'success' | 'failed'
 }) {
   if (!data || data.length < 2) {
-    return <div className="h-16 flex items-center justify-center text-[10px] text-slate-600">No data</div>
+    return <div className="h-16 flex items-center justify-center text-[10px] text-fg-muted">No data</div>
   }
 
   const W = 200, H = 56, PL = 0, PR = 0, PT = 4, PB = 16
@@ -91,7 +91,7 @@ function MiniSparkline({
   return (
     <div>
       <div className="flex items-baseline justify-between mb-1">
-        <span className="text-[10px] text-slate-500">{label}</span>
+        <span className="text-[10px] text-fg-muted">{label}</span>
         <span className="font-mono text-xs font-semibold" style={{ color }}>{fmt(today)}</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
@@ -107,7 +107,7 @@ function MiniSparkline({
         <circle cx={x(data.length - 1)} cy={y(today)} r={2.5} fill={color} />
         {/* X labels — first, mid, last */}
         {[0, Math.floor(data.length / 2), data.length - 1].map(i => (
-          <text key={i} x={x(i)} y={H} textAnchor={i === 0 ? 'start' : i === data.length - 1 ? 'end' : 'middle'} fontSize={7} fill="#475569">
+          <text key={i} x={x(i)} y={H} textAnchor={i === 0 ? 'start' : i === data.length - 1 ? 'end' : 'middle'} fontSize={7} fill="var(--vg-line-strong)">
             {data[i]?.date?.slice(5) ?? ''}
           </text>
         ))}
@@ -129,22 +129,22 @@ const PLAT_ABBR: Record<string, string> = {
 function PlatformBar({ p, maxTotal }: { p: PlatformStatsTotal; maxTotal: number }) {
   const pct = maxTotal > 0 ? (p.total / maxTotal) * 100 : 0
   const okPct = p.total > 0 ? (p.ok / p.total) * 100 : 100
-  const barColor = p.success_rate >= 95 ? 'bg-emerald-500' : p.success_rate >= 80 ? 'bg-amber-500' : 'bg-red-500'
-  const rateColor = p.success_rate >= 95 ? 'text-emerald-400' : p.success_rate >= 80 ? 'text-amber-400' : 'text-red-400'
+  const barColor = p.success_rate >= 95 ? 'bg-success' : p.success_rate >= 80 ? 'bg-warning' : 'bg-danger'
+  const rateColor = p.success_rate >= 95 ? 'text-success' : p.success_rate >= 80 ? 'text-warning' : 'text-danger'
   const abbr = PLAT_ABBR[p.platform.toLowerCase()] ?? p.platform.slice(0, 2).toUpperCase()
 
   return (
     <div className="flex items-center gap-3">
-      <div className="w-7 h-7 shrink-0 rounded-md bg-slate-800 flex items-center justify-center font-mono text-[9px] font-bold text-slate-400">
+      <div className="w-7 h-7 shrink-0 rounded-md bg-surface flex items-center justify-center font-mono text-[9px] font-bold text-fg-muted">
         {abbr}
       </div>
       <div className="flex-1 space-y-1">
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-slate-300 capitalize">{p.platform}</span>
-          <span className="font-mono text-slate-500">{fmt(p.total)} req</span>
+          <span className="text-fg-2 capitalize">{p.platform}</span>
+          <span className="font-mono text-fg-muted">{fmt(p.total)} req</span>
         </div>
-        <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-          <div className="h-full bg-slate-700 rounded-full relative" style={{ width: `${pct}%` }}>
+        <div className="h-1.5 bg-surface rounded-full overflow-hidden">
+          <div className="h-full bg-surface-2 rounded-full relative" style={{ width: `${pct}%` }}>
             <div className={`absolute inset-0 ${barColor} rounded-full`} style={{ width: `${okPct}%` }} />
           </div>
         </div>
@@ -163,15 +163,15 @@ function ProxyPoolCard({ platform, redis, env, total }: { platform: string; redi
   const t = TONE[tone]
   const abbr = PLAT_ABBR[platform.toLowerCase()] ?? platform.slice(0, 2).toUpperCase()
   return (
-    <div className={`rounded-lg border bg-slate-900 px-3 py-2.5 ${t.border}`}>
+    <div className={`rounded-lg border bg-canvas px-3 py-2.5 ${t.border}`}>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] text-slate-500 uppercase font-mono">{abbr}</span>
+        <span className="text-[10px] text-fg-muted uppercase font-mono">{abbr}</span>
         <span className={`text-xs font-bold font-mono ${t.val}`}>{total}</span>
       </div>
-      <div className="text-[9px] text-slate-600 space-y-0.5">
+      <div className="text-[9px] text-fg-muted space-y-0.5">
         {redis > 0 && <div>Redis: {redis}</div>}
         {env > 0 && <div>Env: {env}</div>}
-        {total === 0 && <div className="text-red-500">No proxies</div>}
+        {total === 0 && <div className="text-danger">No proxies</div>}
       </div>
     </div>
   )
@@ -181,15 +181,15 @@ function ProxyPoolCard({ platform, redis, env, total }: { platform: string; redi
 
 function FailureRow({ job }: { job: { platform?: string; phase?: string; error?: string; time?: string } }) {
   return (
-    <div className="flex items-start gap-3 py-2 border-b border-slate-800/70 last:border-0 text-xs">
-      <span className="shrink-0 rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[9px] uppercase text-slate-400">
+    <div className="flex items-start gap-3 py-2 border-b border-line last:border-0 text-xs">
+      <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 font-mono text-[9px] uppercase text-fg-muted">
         {job.platform ?? '?'}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-slate-300 truncate">{job.error ?? 'Unknown error'}</p>
-        <p className="text-slate-600 text-[10px]">{job.phase ?? '—'}</p>
+        <p className="text-fg-2 truncate">{job.error ?? 'Unknown error'}</p>
+        <p className="text-fg-muted text-[10px]">{job.phase ?? '—'}</p>
       </div>
-      <span className="shrink-0 text-slate-600 text-[10px] font-mono">{job.time ?? '—'}</span>
+      <span className="shrink-0 text-fg-muted text-[10px] font-mono">{job.time ?? '—'}</span>
     </div>
   )
 }
@@ -200,10 +200,10 @@ function ProviderPill({ name, credits }: { name: string; credits: number }) {
   const tone: Tone = credits > 5000 ? 'green' : credits > 1000 ? 'amber' : 'red'
   const t = TONE[tone]
   return (
-    <div className={`rounded-xl border bg-slate-900 px-3 py-3 ${t.border}`}>
-      <div className="text-[10px] text-slate-500 uppercase tracking-wider font-mono mb-1">{name}</div>
+    <div className={`rounded-xl border bg-canvas px-3 py-3 ${t.border}`}>
+      <div className="text-[10px] text-fg-muted uppercase tracking-wider font-mono mb-1">{name}</div>
       <div className={`text-xl font-bold font-mono ${t.val}`}>{credits.toLocaleString()}</div>
-      <div className="text-[10px] text-slate-600 mt-0.5">
+      <div className="text-[10px] text-fg-muted mt-0.5">
         {credits > 5000 ? 'Credits OK' : credits > 1000 ? 'Low credits' : '⚠ Critical'}
       </div>
     </div>
@@ -241,7 +241,7 @@ export function AdminHomePage() {
   if (isLoading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
-        <svg className="h-8 w-8 animate-spin text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
+        <svg className="h-8 w-8 animate-spin text-fg-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>
       </div>
@@ -308,18 +308,18 @@ export function AdminHomePage() {
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-slate-100">Overview</h1>
-          <p className="text-[11px] text-slate-500 mt-0.5">
+          <h1 className="text-lg font-semibold text-fg">Overview</h1>
+          <p className="text-[11px] text-fg-muted mt-0.5">
             {isFetching ? 'Refreshing…' : `Auto-refresh in ${countdown}s`}
           </p>
         </div>
         <div className="flex items-center gap-3">
           {/* P4: Live active jobs badge */}
           {liveJobTotal > 0 && (
-            <div className="flex items-center gap-1.5 rounded-lg border border-blue-800/50 bg-blue-950/40 px-2.5 py-1.5 text-[11px] text-blue-300">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+            <div className="flex items-center gap-1.5 rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 text-[11px] text-fg-2">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
               <span className="font-mono font-semibold">{liveJobTotal}</span>
-              <span className="text-blue-400/80">
+              <span className="text-fg-2">
                 {processingCount > 0 && `${processingCount} running`}
                 {processingCount > 0 && pendingCount > 0 && ' / '}
                 {pendingCount > 0 && `${pendingCount} pending`}
@@ -327,15 +327,15 @@ export function AdminHomePage() {
             </div>
           )}
           {liveJobTotal === 0 && (
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <div className="flex items-center gap-1.5 text-[11px] text-fg-muted">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-success" />
               No active jobs
             </div>
           )}
           <button
             onClick={() => refetch()}
             disabled={isFetching}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 hover:border-slate-600 transition-colors disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs text-fg-muted hover:text-fg-2 hover:border-line-strong transition-colors disabled:opacity-40"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -346,7 +346,7 @@ export function AdminHomePage() {
       </div>
 
       {errorMsg && (
-        <div className="rounded-lg border border-red-800 bg-red-900/20 px-4 py-3 text-xs text-red-300">{errorMsg}</div>
+        <div className="rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-xs text-danger">{errorMsg}</div>
       )}
 
       {/* ── Active alerts ── */}
@@ -433,14 +433,14 @@ export function AdminHomePage() {
         <section>
           <SectionTitle title="Trend 7 ngày" linkTo="/vid-admin/analytics" linkLabel="Full analytics →" />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
-              <MiniSparkline data={daily7d} color="#60a5fa" label="Downloads / ngày" valueKey="total" />
+            <div className="rounded-xl border border-line bg-canvas px-4 py-3">
+              <MiniSparkline data={daily7d} color="var(--vg-accent)" label="Downloads / ngày" valueKey="total" />
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
-              <MiniSparkline data={daily7d} color="#34d399" label="Success / ngày" valueKey="success" />
+            <div className="rounded-xl border border-line bg-canvas px-4 py-3">
+              <MiniSparkline data={daily7d} color="var(--vg-success)" label="Success / ngày" valueKey="success" />
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
-              <MiniSparkline data={daily7d} color="#f87171" label="Failed / ngày" valueKey="failed" />
+            <div className="rounded-xl border border-line bg-canvas px-4 py-3">
+              <MiniSparkline data={daily7d} color="var(--vg-danger)" label="Failed / ngày" valueKey="failed" />
             </div>
           </div>
         </section>
@@ -452,12 +452,12 @@ export function AdminHomePage() {
         {platformTotals.length > 0 && (
           <section>
             <SectionTitle title="Kênh tải hôm nay" linkTo="/vid-admin/analytics" linkLabel="Analytics →" />
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 space-y-3">
+            <div className="rounded-xl border border-line bg-canvas p-4 space-y-3">
               {platformTotals.slice(0, 8).map(p => (
                 <PlatformBar key={p.platform} p={p} maxTotal={maxPlatTotal} />
               ))}
               {platformTotals.length === 0 && (
-                <p className="text-xs text-slate-600 text-center py-4">Chưa có dữ liệu hôm nay</p>
+                <p className="text-xs text-fg-muted text-center py-4">Chưa có dữ liệu hôm nay</p>
               )}
             </div>
           </section>
@@ -467,7 +467,7 @@ export function AdminHomePage() {
         {failedJobs.length > 0 && (
           <section>
             <SectionTitle title="Recent Failures" linkTo="/vid-admin/jobs" linkLabel="All jobs →" />
-            <div className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2">
+            <div className="rounded-xl border border-line bg-canvas px-4 py-2">
               {failedJobs.map((f, i) => <FailureRow key={f.id ?? i} job={f} />)}
             </div>
           </section>
@@ -490,9 +490,9 @@ export function AdminHomePage() {
             ))}
           </div>
           {proxyEntries.some(([, p]) => p.total === 0) && (
-            <p className="mt-2 text-[11px] text-amber-500/80">
+            <p className="mt-2 text-[11px] text-accent-text">
               ⚠ Một số platform không có proxy — tải có thể bị chặn.{' '}
-              <Link to="/vid-admin/proxy" className="underline hover:text-amber-300">Thêm proxy →</Link>
+              <Link to="/vid-admin/proxy" className="underline hover:text-accent-text">Thêm proxy →</Link>
             </p>
           )}
         </section>
@@ -519,15 +519,15 @@ export function AdminHomePage() {
               const rate = info.success_rate ?? 100
               const tone: Tone = rate >= 95 ? 'green' : rate >= 80 ? 'amber' : 'red'
               return (
-                <div key={platform} className={`rounded-lg border bg-slate-900 px-3 py-2.5 ${TONE[tone].border}`}>
-                  <div className="text-[10px] text-slate-500 uppercase font-mono mb-1">
+                <div key={platform} className={`rounded-lg border bg-canvas px-3 py-2.5 ${TONE[tone].border}`}>
+                  <div className="text-[10px] text-fg-muted uppercase font-mono mb-1">
                     {PLAT_ABBR[platform.toLowerCase()] ?? platform}
                   </div>
                   <div className={`text-base font-bold font-mono ${TONE[tone].val}`}>
                     {rate.toFixed(0)}%
                   </div>
                   {info.top_layer && (
-                    <div className="text-[9px] text-slate-600 mt-0.5 truncate">{info.top_layer}</div>
+                    <div className="text-[9px] text-fg-muted mt-0.5 truncate">{info.top_layer}</div>
                   )}
                 </div>
               )
@@ -551,7 +551,7 @@ export function AdminHomePage() {
             <Link
               key={l.to}
               to={l.to}
-              className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2.5 text-center text-xs text-slate-400 hover:text-slate-200 hover:border-slate-700 transition-colors"
+              className="rounded-lg border border-line bg-canvas px-3 py-2.5 text-center text-xs text-fg-muted hover:text-fg-2 hover:border-line transition-colors"
             >
               {l.label}
             </Link>

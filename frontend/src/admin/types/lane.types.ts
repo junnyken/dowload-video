@@ -54,22 +54,22 @@ export interface LaneSnapshotResponse {
 // Utility: derive display colour for a lane state
 export function laneStateColor(state: LaneState): string {
   return {
-    healthy:     'text-emerald-400',
-    constrained: 'text-yellow-400',
-    degraded:    'text-orange-400',
-    paused:      'text-red-400',
-    disabled:    'text-slate-500',
-  }[state] ?? 'text-slate-400'
+    healthy:     'text-success',
+    constrained: 'text-accent-text',
+    degraded:    'text-warning',
+    paused:      'text-danger',
+    disabled:    'text-fg-muted',
+  }[state] ?? 'text-fg-muted'
 }
 
 export function laneStateBg(state: LaneState): string {
   return {
-    healthy:     'bg-emerald-500/15',
-    constrained: 'bg-yellow-500/15',
-    degraded:    'bg-orange-500/15',
-    paused:      'bg-red-500/15',
-    disabled:    'bg-slate-700/30',
-  }[state] ?? 'bg-slate-700/30'
+    healthy:     'bg-success-soft',
+    constrained: 'bg-accent-soft',
+    degraded:    'bg-warning-soft',
+    paused:      'bg-danger-soft',
+    disabled:    'bg-surface-2',
+  }[state] ?? 'bg-surface-2'
 }
 
 export function failureBucketLabel(bucket: FailureBucket): string {

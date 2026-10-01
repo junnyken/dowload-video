@@ -6,7 +6,7 @@ import { API_BASE } from '../lib/apiBase';
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 
 // ── SVG Bar Chart (no external lib) ─────────────────────────────────────────
-function BarChart({ data, valueKey, color = '#FBBF24', height = 120 }) {
+function BarChart({ data, valueKey, color = 'var(--vg-accent-text)', height = 120 }) {
   const max = Math.max(...data.map(d => d[valueKey] || 0), 1);
   const w = 100 / data.length;
   return (
@@ -33,13 +33,13 @@ function BarChart({ data, valueKey, color = '#FBBF24', height = 120 }) {
 // ── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({ icon, label, value, sub }) {
   return (
-    <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 space-y-1">
-      <div className="flex items-center gap-2 text-slate-400 text-xs mb-2">
+    <div className="bg-surface-2 border border-line rounded-xl p-4 space-y-1">
+      <div className="flex items-center gap-2 text-fg-muted text-xs mb-2">
         {icon}
         <span>{label}</span>
       </div>
-      <p className="text-white font-bold text-2xl leading-none">{value ?? '—'}</p>
-      {sub && <p className="text-slate-500 text-xs">{sub}</p>}
+      <p className="text-fg font-bold text-2xl leading-none">{value ?? '—'}</p>
+      {sub && <p className="text-fg-muted text-xs">{sub}</p>}
     </div>
   );
 }
@@ -50,22 +50,22 @@ function PlatformBar({ label, count, total, color }) {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-xs">
-        <span className="text-slate-300 font-medium">{label}</span>
-        <span className="text-slate-400">{count} ({pct}%)</span>
+        <span className="text-fg-2 font-medium">{label}</span>
+        <span className="text-fg-muted">{count} ({pct}%)</span>
       </div>
-      <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color || '#FBBF24' }} />
+      <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color || 'var(--vg-accent)' }} />
       </div>
     </div>
   );
 }
 
 const PLATFORM_COLORS = {
-  youtube:  '#EF4444',
-  spotify:  '#22C55E',
-  tiktok:   '#94A3B8',
-  threads:  '#A78BFA',
-  other:    '#64748B',
+  youtube:  'var(--vg-danger)',
+  spotify:  'var(--vg-success)',
+  tiktok:   'var(--vg-fg-muted)',
+  threads:  'var(--vg-accent)',
+  other:    'var(--vg-fg-muted)',
 };
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -116,14 +116,14 @@ export default function AnalyticsPage() {
   if (notPro) {
     return (
       <div className="flex flex-col items-center justify-center py-20 space-y-4 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-[#FBBF24]/10 border border-[#FBBF24]/20 flex items-center justify-center">
-          <Crown className="w-8 h-8 text-[#FBBF24]" />
+        <div className="w-16 h-16 rounded-2xl bg-accent-soft border border-accent/20 flex items-center justify-center">
+          <Crown className="w-8 h-8 text-accent-text" />
         </div>
         <div>
-          <p className="text-white font-bold text-lg">Analytics — tính năng Pro</p>
-          <p className="text-slate-400 text-sm mt-1">Nâng cấp Pro để xem analytics chi tiết: lượt tải theo ngày, platform, dung lượng...</p>
+          <p className="text-fg font-bold text-lg">Analytics — tính năng Pro</p>
+          <p className="text-fg-muted text-sm mt-1">Nâng cấp Pro để xem analytics chi tiết: lượt tải theo ngày, platform, dung lượng...</p>
         </div>
-        <button className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] text-sm font-bold hover:opacity-90 transition">
+        <button className="px-5 py-2.5 rounded-lg bg-accent text-accent-fg text-sm font-bold hover:opacity-90 transition">
           Nâng cấp Pro →
         </button>
       </div>
@@ -150,25 +150,25 @@ export default function AnalyticsPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-slate-800 flex items-center justify-center">
-            <BarChart2 className="w-5 h-5 text-[#FBBF24]" />
+          <div className="w-9 h-9 rounded-lg bg-surface flex items-center justify-center">
+            <BarChart2 className="w-5 h-5 text-accent-text" />
           </div>
           <div>
-            <h1 className="text-white font-bold text-lg">Analytics</h1>
-            <p className="text-slate-400 text-xs">Thống kê lượt tải theo tài khoản</p>
+            <h1 className="text-fg font-bold text-lg">Analytics</h1>
+            <p className="text-fg-muted text-xs">Thống kê lượt tải theo tài khoản</p>
           </div>
         </div>
 
         {/* Range selector */}
-        <div className="flex items-center gap-1 bg-slate-800/50 rounded-lg p-1 border border-slate-700/50">
+        <div className="flex items-center gap-1 bg-surface rounded-lg p-1 border border-line">
           {[7, 30, 90].map(r => (
             <button
               key={r}
               onClick={() => setRange(r)}
               className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
                 range === r
-                  ? 'bg-[#FBBF24] text-[#012622]'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-accent text-accent-fg'
+                  : 'text-fg-muted hover:text-fg'
               }`}
             >
               {r}D
@@ -180,13 +180,13 @@ export default function AnalyticsPage() {
       {/* Loading */}
       {loading && (
         <div className="flex justify-center py-16">
-          <div className="w-6 h-6 border-2 border-[#FBBF24] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
         </div>
       )}
 
       {/* Error */}
       {!loading && error && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-300 text-sm">
+        <div className="rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-danger text-sm">
           {error}
         </div>
       )}
@@ -224,12 +224,12 @@ export default function AnalyticsPage() {
 
           {/* Daily bar chart */}
           {daily.length > 0 && (
-            <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 space-y-3">
+            <div className="bg-surface-2 border border-line rounded-xl p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-white font-semibold text-sm">Lượt tải theo ngày</p>
+                <p className="text-fg font-semibold text-sm">Lượt tải theo ngày</p>
                 <button
                   onClick={exportCSV}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700/50 text-slate-300 hover:bg-slate-700 text-xs font-bold transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-2 text-fg-2 hover:bg-line text-xs font-bold transition-colors"
                 >
                   <Download className="w-3.5 h-3.5" />
                   Export CSV
@@ -237,13 +237,13 @@ export default function AnalyticsPage() {
               </div>
 
               <div className="relative">
-                <BarChart data={daily} valueKey="downloads" color="#FBBF24" height={120} />
+                <BarChart data={daily} valueKey="downloads" color="var(--vg-accent-text)" height={120} />
                 {/* Date label row */}
                 <div className="flex mt-1" style={{ overflowX: 'hidden' }}>
                   {daily.map((d, i) => (
                     <div
                       key={i}
-                      className="text-slate-500 text-[9px] text-center overflow-hidden"
+                      className="text-fg-muted text-[9px] text-center overflow-hidden"
                       style={{ width: `${100 / daily.length}%`, flexShrink: 0 }}
                     >
                       {i % 7 === 0 ? (d.date?.slice(5) || '') : ''}
@@ -256,8 +256,8 @@ export default function AnalyticsPage() {
 
           {/* Platform breakdown */}
           {platforms.length > 0 && (
-            <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 space-y-3">
-              <p className="text-white font-semibold text-sm">Theo platform</p>
+            <div className="bg-surface-2 border border-line rounded-xl p-4 space-y-3">
+              <p className="text-fg font-semibold text-sm">Theo platform</p>
               <div className="space-y-3">
                 {platforms.map((p, i) => (
                   <PlatformBar
@@ -274,7 +274,7 @@ export default function AnalyticsPage() {
 
           {/* Empty daily */}
           {daily.length === 0 && (
-            <div className="text-center py-10 text-slate-400 text-sm">
+            <div className="text-center py-10 text-fg-muted text-sm">
               Chưa có dữ liệu trong {range} ngày qua.
             </div>
           )}

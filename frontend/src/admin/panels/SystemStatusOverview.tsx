@@ -19,30 +19,30 @@ const STATUS_CONFIG: Record<
 > = {
   healthy: {
     label: 'All Systems Operational',
-    dot:   'bg-emerald-400 animate-pulse',
-    pill:  'text-emerald-400 bg-emerald-950 border-emerald-900',
-    border:'border-emerald-900/30',
-    bg:    'bg-emerald-950/10',
+    dot:   'bg-success animate-pulse',
+    pill:  'text-success bg-success-soft border-success/30',
+    border:'border-success/30',
+    bg:    'bg-success-soft',
   },
   degraded: {
     label: 'Partial Degradation Detected',
-    dot:   'bg-amber-400 animate-pulse',
-    pill:  'text-amber-400 bg-amber-950 border-amber-900',
-    border:'border-amber-900/30',
-    bg:    'bg-amber-950/10',
+    dot:   'bg-accent animate-pulse',
+    pill:  'text-accent-text bg-accent-soft border-accent/30',
+    border:'border-accent/30',
+    bg:    'bg-accent-soft',
   },
   critical: {
     label: 'Critical — Immediate Action Required',
-    dot:   'bg-red-400 animate-pulse',
-    pill:  'text-red-400 bg-red-950 border-red-900',
-    border:'border-red-900/30',
-    bg:    'bg-red-950/10',
+    dot:   'bg-danger animate-pulse',
+    pill:  'text-danger bg-danger-soft border-danger/30',
+    border:'border-danger/30',
+    bg:    'bg-danger-soft',
   },
   unknown: {
     label: 'Status Unknown',
-    dot:   'bg-slate-500',
-    pill:  'text-slate-400 bg-slate-800 border-slate-700',
-    border:'border-slate-800',
+    dot:   'bg-line-strong',
+    pill:  'text-fg-muted bg-surface border-line',
+    border:'border-line',
     bg:    '',
   },
 }
@@ -55,15 +55,15 @@ interface QuickStatProps {
 
 function QuickStat({ label, value, tone = 'neutral' }: QuickStatProps) {
   const textColor =
-    tone === 'red'     ? 'text-red-400' :
-    tone === 'amber'   ? 'text-amber-400' :
-    tone === 'emerald' ? 'text-emerald-400' :
-    tone === 'blue'    ? 'text-blue-400' :
-    'text-slate-200'
+    tone === 'red'     ? 'text-danger' :
+    tone === 'amber'   ? 'text-accent-text' :
+    tone === 'emerald' ? 'text-success' :
+    tone === 'blue'    ? 'text-fg-2' :
+    'text-fg-2'
 
   return (
-    <div className="flex flex-col gap-0.5 border-l border-slate-800 pl-4 first:border-l-0 first:pl-0">
-      <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-600">{label}</p>
+    <div className="flex flex-col gap-0.5 border-l border-line pl-4 first:border-l-0 first:pl-0">
+      <p className="text-[9px] font-semibold uppercase tracking-widest text-fg-muted">{label}</p>
       <p className={cn('font-mono text-lg font-bold leading-none tabular-nums', textColor)}>
         {value}
       </p>
@@ -115,7 +115,7 @@ export function SystemStatusOverview({
               <span className={cn('h-2 w-2 rounded-full flex-shrink-0', cfg.dot)} />
               {status}
             </span>
-            <p className="text-sm font-medium text-slate-300">{cfg.label}</p>
+            <p className="text-sm font-medium text-fg-2">{cfg.label}</p>
           </div>
 
           {/* Quick stats row */}
@@ -144,13 +144,13 @@ export function SystemStatusOverview({
 
           {/* Refresh + timestamp */}
           <div className="flex flex-shrink-0 items-center gap-2">
-            <p className="font-mono text-[10px] text-slate-700">
+            <p className="font-mono text-[10px] text-fg-muted">
               Updated {updatedAt}
             </p>
             {onRefresh && (
               <button
                 onClick={onRefresh}
-                className="flex h-6 w-6 items-center justify-center rounded text-slate-600 hover:bg-slate-800 hover:text-slate-300"
+                className="flex h-6 w-6 items-center justify-center rounded text-fg-muted hover:bg-surface hover:text-fg-2"
                 aria-label="Refresh status"
               >
                 <svg

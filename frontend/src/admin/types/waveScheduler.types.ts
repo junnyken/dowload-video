@@ -63,21 +63,21 @@ export interface WaveSnapshotResponse {
 // ── Display helpers ──────────────────────────────────────────────────────────
 
 export const WAVE_MODE_COLOR: Record<WaveMode, string> = {
-  aggressive:   'text-emerald-400',
-  balanced:     'text-slate-300',
-  conservative: 'text-amber-400',
-  reduced:      'text-orange-400',
-  emergency:    'text-red-400',
-  disabled:     'text-slate-500',
+  aggressive:   'text-success',
+  balanced:     'text-fg-2',
+  conservative: 'text-accent-text',
+  reduced:      'text-accent-text',
+  emergency:    'text-danger',
+  disabled:     'text-fg-muted',
 }
 
 export const WAVE_MODE_BG: Record<WaveMode, string> = {
-  aggressive:   'bg-emerald-500/10',
-  balanced:     'bg-slate-700/30',
-  conservative: 'bg-amber-500/10',
-  reduced:      'bg-orange-500/10',
-  emergency:    'bg-red-500/10',
-  disabled:     'bg-slate-800/40',
+  aggressive:   'bg-success-soft',
+  balanced:     'bg-surface-2',
+  conservative: 'bg-accent-soft',
+  reduced:      'bg-accent-soft',
+  emergency:    'bg-danger-soft',
+  disabled:     'bg-surface-2',
 }
 
 export const WAVE_MODE_LABEL: Record<WaveMode, string> = {

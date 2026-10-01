@@ -7,11 +7,11 @@ const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 
 function platformBadge(platform) {
   const p = (platform || '').toLowerCase();
-  if (p === 'youtube')  return { label: 'YouTube',  cls: 'bg-red-600/20 text-red-400 border border-red-500/30' };
-  if (p === 'spotify')  return { label: 'Spotify',  cls: 'bg-green-600/20 text-green-400 border border-green-500/30' };
-  if (p === 'tiktok')   return { label: 'TikTok',   cls: 'bg-zinc-700/60 text-zinc-300 border border-zinc-600/40' };
-  if (p === 'threads')  return { label: 'Threads',  cls: 'bg-purple-600/20 text-purple-400 border border-purple-500/30' };
-  return { label: platform || 'Other', cls: 'bg-slate-700/50 text-slate-400 border border-slate-600/40' };
+  if (p === 'youtube')  return { label: 'YouTube',  cls: 'bg-danger-soft text-danger border border-danger/30' };
+  if (p === 'spotify')  return { label: 'Spotify',  cls: 'bg-success-soft text-success border border-success/30' };
+  if (p === 'tiktok')   return { label: 'TikTok',   cls: 'bg-surface-2 text-fg-2 border border-line-strong' };
+  if (p === 'threads')  return { label: 'Threads',  cls: 'bg-surface-2 text-fg-2 border border-line' };
+  return { label: platform || 'Other', cls: 'bg-surface-2 text-fg-muted border border-line-strong' };
 }
 
 function formatDate(iso) {
@@ -137,18 +137,18 @@ export default function PlaylistsPage({ onNavigate }) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-slate-800 flex items-center justify-center">
-            <ListMusic className="w-5 h-5 text-[#FBBF24]" />
+          <div className="w-9 h-9 rounded-lg bg-surface flex items-center justify-center">
+            <ListMusic className="w-5 h-5 text-accent-text" />
           </div>
           <div>
-            <h1 className="text-white font-bold text-lg">Playlists đã lưu</h1>
-            <p className="text-slate-400 text-xs">Lưu link YouTube / Spotify để tải lại sau</p>
+            <h1 className="text-fg font-bold text-lg">Playlists đã lưu</h1>
+            <p className="text-fg-muted text-xs">Lưu link YouTube / Spotify để tải lại sau</p>
           </div>
         </div>
         <button
           onClick={fetchPlaylists}
           disabled={loading}
-          className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors disabled:opacity-50"
+          className="p-2 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-2 transition-colors disabled:opacity-50"
           aria-label="Tải lại danh sách"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -156,20 +156,20 @@ export default function PlaylistsPage({ onNavigate }) {
       </div>
 
       {/* Save new playlist form */}
-      <form onSubmit={handleSave} className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 space-y-3">
-        <p className="text-white font-semibold text-sm">Lưu playlist mới</p>
+      <form onSubmit={handleSave} className="rounded-xl border border-line bg-surface-2 p-4 space-y-3">
+        <p className="text-fg font-semibold text-sm">Lưu playlist mới</p>
         <div className="flex gap-2">
           <input
             type="url"
             value={saveUrl}
             onChange={e => setSaveUrl(e.target.value)}
             placeholder="https://youtube.com/playlist?list=..."
-            className="flex-1 bg-slate-900/60 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-[#FBBF24]/60 transition-colors"
+            className="flex-1 bg-surface-2 border border-line-strong rounded-lg px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:outline-none focus:border-accent/60 transition-colors"
           />
           <button
             type="submit"
             disabled={saving || !saveUrl.trim()}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#FBBF24] hover:bg-[#F59E0B] text-[#012622] text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving
               ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -178,16 +178,16 @@ export default function PlaylistsPage({ onNavigate }) {
           </button>
         </div>
         {saveError && (
-          <p className="text-red-400 text-xs font-semibold">{saveError}</p>
+          <p className="text-danger text-xs font-semibold">{saveError}</p>
         )}
       </form>
 
       {/* Limit indicator */}
-      <div className="flex items-center justify-between text-xs text-slate-400">
+      <div className="flex items-center justify-between text-xs text-fg-muted">
         <span>
-          <span className="text-white font-bold">{playlists.length}</span>
+          <span className="text-fg font-bold">{playlists.length}</span>
           <span>/{limit}</span>
-          <span className="ml-1.5 text-[10px] font-bold text-[#FBBF24] bg-[#FBBF24]/10 border border-[#FBBF24]/20 px-1.5 py-0.5 rounded-full">
+          <span className="ml-1.5 text-[10px] font-bold text-accent-text bg-accent-soft border border-accent/20 px-1.5 py-0.5 rounded-full">
             {isPro ? 'Pro' : 'Free'}
           </span>
         </span>
@@ -196,7 +196,7 @@ export default function PlaylistsPage({ onNavigate }) {
 
       {/* Fetch error */}
       {fetchError && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-300 text-sm">
+        <div className="rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-danger text-sm">
           {fetchError}
         </div>
       )}
@@ -204,16 +204,16 @@ export default function PlaylistsPage({ onNavigate }) {
       {/* Loading */}
       {loading && (
         <div className="flex justify-center py-12">
-          <Loader2 className="w-6 h-6 text-[#FBBF24] animate-spin" />
+          <Loader2 className="w-6 h-6 text-accent-text animate-spin" />
         </div>
       )}
 
       {/* Empty state */}
       {!loading && !fetchError && playlists.length === 0 && (
         <div className="text-center py-14 space-y-2">
-          <ListMusic className="w-10 h-10 text-slate-600 mx-auto" />
-          <p className="text-slate-400 text-sm">Chưa có playlist nào.</p>
-          <p className="text-slate-500 text-xs">Lưu link YouTube hoặc Spotify để tải lại sau.</p>
+          <ListMusic className="w-10 h-10 text-fg-muted mx-auto" />
+          <p className="text-fg-muted text-sm">Chưa có playlist nào.</p>
+          <p className="text-fg-muted text-xs">Lưu link YouTube hoặc Spotify để tải lại sau.</p>
         </div>
       )}
 
@@ -229,7 +229,7 @@ export default function PlaylistsPage({ onNavigate }) {
             return (
               <div
                 key={pl.id}
-                className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 space-y-3"
+                className="rounded-xl border border-line bg-surface-2 p-4 space-y-3"
               >
                 {/* Top row */}
                 <div className="flex items-start justify-between gap-3">
@@ -239,13 +239,13 @@ export default function PlaylistsPage({ onNavigate }) {
                         {badge.label}
                       </span>
                       {pl.item_count != null && (
-                        <span className="text-xs text-slate-500">{pl.item_count} bài</span>
+                        <span className="text-xs text-fg-muted">{pl.item_count} bài</span>
                       )}
                     </div>
-                    <p className="text-white font-semibold text-sm leading-snug truncate">
+                    <p className="text-fg font-semibold text-sm leading-snug truncate">
                       {pl.title || pl.url}
                     </p>
-                    <p className="text-slate-500 text-xs">
+                    <p className="text-fg-muted text-xs">
                       Cập nhật: {formatDate(pl.last_refreshed_at || pl.updated_at)}
                     </p>
                   </div>
@@ -254,7 +254,7 @@ export default function PlaylistsPage({ onNavigate }) {
                       href={pl.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-shrink-0 p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-colors"
+                      className="flex-shrink-0 p-1.5 rounded-lg text-fg-muted hover:text-fg-2 hover:bg-surface-2 transition-colors"
                       aria-label="Mở playlist"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
@@ -264,7 +264,7 @@ export default function PlaylistsPage({ onNavigate }) {
 
                 {/* Error */}
                 {err && (
-                  <p className="text-red-400 text-xs font-semibold">{err}</p>
+                  <p className="text-danger text-xs font-semibold">{err}</p>
                 )}
 
                 {/* Actions */}
@@ -272,7 +272,7 @@ export default function PlaylistsPage({ onNavigate }) {
                   <button
                     onClick={() => handleRefresh(pl.id)}
                     disabled={isRefreshing || isDeleting}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700/50 text-slate-300 hover:bg-slate-700 text-xs font-bold transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-2 text-fg-2 hover:bg-line text-xs font-bold transition-colors disabled:opacity-50"
                   >
                     {isRefreshing
                       ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -283,7 +283,7 @@ export default function PlaylistsPage({ onNavigate }) {
                   <button
                     onClick={() => handleDownload(pl)}
                     disabled={isDeleting}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FBBF24]/15 text-[#FBBF24] border border-[#FBBF24]/25 hover:bg-[#FBBF24]/25 text-xs font-bold transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-soft text-accent-text border border-accent/25 hover:bg-accent/20 text-xs font-bold transition-colors disabled:opacity-50"
                   >
                     <Play className="w-3.5 h-3.5" />
                     Tải xuống
@@ -292,7 +292,7 @@ export default function PlaylistsPage({ onNavigate }) {
                   <button
                     onClick={() => handleDelete(pl.id)}
                     disabled={isRefreshing || isDeleting}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 text-xs font-bold transition-colors disabled:opacity-50 ml-auto"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft text-danger border border-danger/25 hover:bg-danger/20 text-xs font-bold transition-colors disabled:opacity-50 ml-auto"
                   >
                     {isDeleting
                       ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -308,7 +308,7 @@ export default function PlaylistsPage({ onNavigate }) {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-600/60 text-white text-sm font-semibold shadow-xl">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl bg-surface border border-line-strong text-fg text-sm font-semibold shadow-xl">
           {toast}
         </div>
       )}

@@ -38,21 +38,21 @@ export default function ExtensionInstallBanner() {
 
   return (
     <div className="fixed top-16 right-4 z-30 w-72">
-      <div className="bg-[#0d2e29] border border-white/15 rounded-xl p-3.5 shadow-xl shadow-black/30 relative">
+      <div className="bg-surface-2 border border-line rounded-xl p-3.5 shadow-xl shadow-black/30 relative">
         <button
           onClick={dismiss}
-          className="absolute top-2.5 right-2.5 text-white/30 hover:text-white/60 transition-colors"
+          className="absolute top-2.5 right-2.5 text-fg-muted hover:text-fg-2 transition-colors"
           aria-label="Đóng"
         >
           <X className="w-3.5 h-3.5" />
         </button>
         <div className="flex items-center gap-2.5 pr-5">
-          <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
-            <Zap className="w-4 h-4 text-indigo-400" />
+          <div className="w-8 h-8 rounded-lg bg-surface-2 flex items-center justify-center flex-shrink-0">
+            <Zap className="w-4 h-4 text-fg-2" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-white">Cài extension để tải 1 chạm</p>
-            <p className="text-[11px] text-white/40 mt-0.5">Không cần mở tab mới</p>
+            <p className="text-xs font-semibold text-fg">Cài extension để tải 1 chạm</p>
+            <p className="text-[11px] text-fg-muted mt-0.5">Không cần mở tab mới</p>
           </div>
         </div>
         <div className="flex gap-2 mt-3">
@@ -62,13 +62,13 @@ export default function ExtensionInstallBanner() {
               window.dispatchEvent(new PopStateEvent('popstate'));
               dismiss();
             }}
-            className="flex-1 text-center text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white py-1.5 rounded-lg transition-colors"
+            className="flex-1 text-center text-xs font-semibold bg-accent hover:bg-accent-hover text-accent-fg py-1.5 rounded-lg transition-colors"
           >
             Xem hướng dẫn
           </button>
           <button
             onClick={dismiss}
-            className="text-xs text-white/30 hover:text-white/50 px-2 transition-colors"
+            className="text-xs text-fg-muted hover:text-fg-muted px-2 transition-colors"
           >
             Bỏ qua
           </button>

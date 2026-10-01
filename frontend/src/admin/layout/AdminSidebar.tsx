@@ -95,10 +95,10 @@ export function AdminSidebar() {
   return (
     <div className="flex h-full flex-col">
       {/* Logo */}
-      <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-slate-800 px-4">
+      <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-line px-4">
         <span className="text-lg">▼</span>
-        <span className="font-mono text-sm font-bold tracking-tight text-slate-100">
-          VidGrab <span className="text-slate-500">Admin</span>
+        <span className="font-mono text-sm font-bold tracking-tight text-fg">
+          VidGrab <span className="text-fg-muted">Admin</span>
         </span>
       </div>
 
@@ -112,7 +112,7 @@ export function AdminSidebar() {
           return (
             <div key={si} className="mb-1">
               {section.label && (
-                <p className="mb-0.5 px-4 pt-3 font-mono text-[9px] font-semibold uppercase tracking-widest text-slate-600">
+                <p className="mb-0.5 px-4 pt-3 font-mono text-[9px] font-semibold uppercase tracking-widest text-fg-muted">
                   {section.label}
                 </p>
               )}
@@ -125,12 +125,12 @@ export function AdminSidebar() {
                     cn(
                       'flex items-center gap-2.5 rounded-lg mx-2 px-3 py-1.5 text-sm transition-colors',
                       isActive
-                        ? 'bg-slate-800 text-slate-100'
-                        : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200',
+                        ? 'bg-surface text-fg'
+                        : 'text-fg-muted hover:bg-surface hover:text-fg-2',
                     )
                   }
                 >
-                  <span className="font-mono text-base leading-none text-slate-500">
+                  <span className="font-mono text-base leading-none text-fg-muted">
                     {item.icon}
                   </span>
                   <span>{item.label}</span>
@@ -142,20 +142,20 @@ export function AdminSidebar() {
       </nav>
 
       {/* User footer */}
-      <div className="shrink-0 border-t border-slate-800 p-3">
+      <div className="shrink-0 border-t border-line p-3">
         {user && (
           <div className="flex items-center gap-2 rounded-lg px-2 py-1.5">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-700 font-mono text-xs text-slate-300">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-2 font-mono text-xs text-fg-2">
               {user.email.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-slate-300">{user.email}</p>
-              <p className="font-mono text-[10px] uppercase text-slate-600">{user.role}</p>
+              <p className="truncate text-xs font-medium text-fg-2">{user.email}</p>
+              <p className="font-mono text-[10px] uppercase text-fg-muted">{user.role}</p>
             </div>
             <button
               onClick={handleLogout}
               title="Logout"
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-500 transition-colors hover:text-red-400"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-muted transition-colors hover:text-danger"
             >
               ⏻
             </button>

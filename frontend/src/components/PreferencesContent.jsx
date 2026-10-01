@@ -23,7 +23,7 @@ export default function PreferencesContent() {
 
   if (!form) return (
     <div className="flex justify-center py-16">
-      <div className="w-6 h-6 border-2 border-[#FBBF24] border-t-transparent rounded-full animate-spin" />
+      <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
@@ -40,17 +40,17 @@ export default function PreferencesContent() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-slate-800 flex items-center justify-center">
-          <Settings2 className="w-5 h-5 text-[#FBBF24]" />
+        <div className="w-9 h-9 rounded-lg bg-surface flex items-center justify-center">
+          <Settings2 className="w-5 h-5 text-accent-text" />
         </div>
         <div>
-          <h1 className="text-white font-bold text-lg">Preferences</h1>
-          <p className="text-slate-400 text-xs">Cài đặt mặc định khi tải — sync theo tài khoản</p>
+          <h1 className="text-fg font-bold text-lg">Preferences</h1>
+          <p className="text-fg-muted text-xs">Cài đặt mặc định khi tải — sync theo tài khoản</p>
         </div>
       </div>
 
       {/* Card */}
-      <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5 space-y-5">
+      <div className="bg-surface-2 border border-line rounded-2xl p-5 space-y-5">
 
         {/* Default quality */}
         <Section title="Chất lượng mặc định">
@@ -59,9 +59,9 @@ export default function PreferencesContent() {
               <label key={opt.value}
                 className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors
                   ${form.default_quality === opt.value
-                    ? 'border-[#FBBF24]/60 bg-[#FBBF24]/10 text-[#FBBF24]'
-                    : 'border-slate-600/40 text-slate-400 hover:border-slate-500'}`}>
-                <input type="radio" className="accent-[#FBBF24]"
+                    ? 'border-accent/60 bg-accent-soft text-accent-text'
+                    : 'border-line-strong text-fg-muted hover:border-line-strong'}`}>
+                <input type="radio" className="accent-accent"
                   checked={form.default_quality === opt.value}
                   onChange={() => update('default_quality', opt.value)} />
                 <span className="text-sm">{opt.label}</span>
@@ -96,8 +96,8 @@ export default function PreferencesContent() {
                 onClick={() => update('bulk_count_preset', n)}
                 className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-colors
                   ${form.bulk_count_preset === n
-                    ? 'border-[#FBBF24]/60 bg-[#FBBF24]/10 text-[#FBBF24]'
-                    : 'border-slate-600/40 text-slate-400 hover:border-slate-500'}`}>
+                    ? 'border-accent/60 bg-accent-soft text-accent-text'
+                    : 'border-line-strong text-fg-muted hover:border-line-strong'}`}>
                 {n}
               </button>
             ))}
@@ -112,8 +112,8 @@ export default function PreferencesContent() {
                 onClick={() => update('theme_mode', t)}
                 className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-colors capitalize
                   ${form.theme_mode === t
-                    ? 'border-[#FBBF24]/60 bg-[#FBBF24]/10 text-[#FBBF24]'
-                    : 'border-slate-600/40 text-slate-400 hover:border-slate-500'}`}>
+                    ? 'border-accent/60 bg-accent-soft text-accent-text'
+                    : 'border-line-strong text-fg-muted hover:border-line-strong'}`}>
                 {t === 'dark' ? '🌙 Tối' : '☀️ Sáng'}
               </button>
             ))}
@@ -125,7 +125,7 @@ export default function PreferencesContent() {
       <button
         onClick={handleSave}
         disabled={saving}
-        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] font-bold hover:opacity-90 active:scale-[0.98] transition disabled:opacity-50"
+        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent text-accent-fg font-bold hover:opacity-90 active:scale-[0.98] transition disabled:opacity-50"
       >
         {saving
           ? <><Loader2 className="w-4 h-4 animate-spin" /> Đang lưu...</>
@@ -140,7 +140,7 @@ export default function PreferencesContent() {
 function Section({ title, children }) {
   return (
     <div className="space-y-2.5">
-      <p className="text-slate-300 text-sm font-semibold">{title}</p>
+      <p className="text-fg-2 text-sm font-semibold">{title}</p>
       {children}
     </div>
   );
@@ -150,17 +150,17 @@ function Toggle({ label, desc, checked, onChange }) {
   return (
     <label className="flex items-center justify-between gap-4 cursor-pointer">
       <div>
-        <p className="text-slate-200 text-sm">{label}</p>
-        {desc && <p className="text-slate-500 text-xs">{desc}</p>}
+        <p className="text-fg-2 text-sm">{label}</p>
+        {desc && <p className="text-fg-muted text-xs">{desc}</p>}
       </div>
       <button
         type="button"
         onClick={() => onChange(!checked)}
         className={`relative w-10 h-5.5 rounded-full transition-colors flex-shrink-0
-          ${checked ? 'bg-[#FBBF24]' : 'bg-slate-600'}`}
+          ${checked ? 'bg-accent' : 'bg-line-strong'}`}
         style={{ height: '22px', width: '40px' }}
       >
-        <span className={`absolute top-0.5 left-0.5 w-4.5 h-4.5 bg-white rounded-full shadow transition-transform
+        <span className={`absolute top-0.5 left-0.5 w-4.5 h-4.5 bg-surface rounded-full shadow transition-transform
           ${checked ? 'translate-x-[18px]' : 'translate-x-0'}`}
           style={{ width: '18px', height: '18px' }} />
       </button>

@@ -35,15 +35,15 @@ export function ContextualHelp({ topic, position = "right" }) {
     <span ref={ref} className="relative inline-flex items-center">
       <button
         onClick={() => setOpen(!open)}
-        className="w-4 h-4 rounded-full bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-white text-xs flex items-center justify-center transition ml-1"
+        className="w-4 h-4 rounded-full bg-surface-2 text-fg-muted hover:bg-line hover:text-fg text-xs flex items-center justify-center transition ml-1"
         title="Trợ giúp"
       >
         ?
       </button>
       {open && (
-        <div className={`absolute z-50 w-64 p-3 bg-zinc-800 border border-zinc-600 rounded-lg shadow-xl text-xs text-zinc-300 leading-relaxed ${posClass}`}>
+        <div className={`absolute z-50 w-64 p-3 bg-surface border border-line-strong rounded-lg shadow-xl text-xs text-fg-2 leading-relaxed ${posClass}`}>
           {text}
-          <div className="absolute w-2 h-2 bg-zinc-800 border-l border-t border-zinc-600 rotate-[-135deg] -left-1 top-3" />
+          <div className="absolute w-2 h-2 bg-surface border-l border-t border-line-strong rotate-[-135deg] -left-1 top-3" />
         </div>
       )}
     </span>
@@ -77,7 +77,7 @@ export function FirstTimeHint({ feature, children }) {
     <span className="relative inline-flex items-center gap-1" onClick={markSeen}>
       {children}
       {!seen && (
-        <span className="absolute -top-1.5 -right-2 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-blue-500 text-white animate-pulse leading-none">
+        <span className="absolute -top-1.5 -right-2 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-accent text-accent-fg animate-pulse leading-none">
           Mới
         </span>
       )}

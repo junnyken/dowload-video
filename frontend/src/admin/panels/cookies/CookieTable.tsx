@@ -9,22 +9,22 @@ import { CookieActionsMenu } from './CookieActionsMenu'
 // ─── Platform abbreviation badge (local, no cross-panel dep) ──────────────────
 
 const PLAT_COLORS: Record<string, { text: string; bg: string }> = {
-  youtube:    { text: 'text-red-300',    bg: 'bg-red-950/70'    },
-  instagram:  { text: 'text-pink-300',   bg: 'bg-pink-950/70'   },
-  tiktok:     { text: 'text-sky-300',    bg: 'bg-sky-950/70'    },
-  twitter:    { text: 'text-slate-300',  bg: 'bg-slate-800'     },
-  facebook:   { text: 'text-blue-300',   bg: 'bg-blue-950/70'   },
-  bilibili:   { text: 'text-cyan-300',   bg: 'bg-cyan-950/70'   },
-  douyin:     { text: 'text-slate-300',  bg: 'bg-slate-800'     },
-  soundcloud: { text: 'text-orange-300', bg: 'bg-orange-950/70' },
-  pinterest:  { text: 'text-rose-300',   bg: 'bg-rose-950/70'   },
-  reddit:     { text: 'text-orange-300', bg: 'bg-orange-950/60' },
-  vimeo:      { text: 'text-blue-300',   bg: 'bg-blue-950/60'   },
-  threads:    { text: 'text-slate-300',  bg: 'bg-slate-800'     },
+  youtube:    { text: 'text-danger',    bg: 'bg-danger-soft'    },
+  instagram:  { text: 'text-fg-2',   bg: 'bg-surface-2'   },
+  tiktok:     { text: 'text-fg-2',    bg: 'bg-surface-2'    },
+  twitter:    { text: 'text-fg-2',  bg: 'bg-surface'     },
+  facebook:   { text: 'text-fg-2',   bg: 'bg-surface-2'   },
+  bilibili:   { text: 'text-fg-2',   bg: 'bg-surface-2'   },
+  douyin:     { text: 'text-fg-2',  bg: 'bg-surface'     },
+  soundcloud: { text: 'text-accent-text', bg: 'bg-accent-soft' },
+  pinterest:  { text: 'text-danger',   bg: 'bg-danger-soft'   },
+  reddit:     { text: 'text-accent-text', bg: 'bg-accent-soft' },
+  vimeo:      { text: 'text-fg-2',   bg: 'bg-surface-2'   },
+  threads:    { text: 'text-fg-2',  bg: 'bg-surface'     },
 }
 
 function PlatBadge({ platform }: { platform: string }) {
-  const meta = PLAT_COLORS[platform] ?? { text: 'text-slate-400', bg: 'bg-slate-800' }
+  const meta = PLAT_COLORS[platform] ?? { text: 'text-fg-muted', bg: 'bg-surface' }
   const abbr = platform.slice(0, 2).toUpperCase()
   return (
     <div className="flex items-center gap-2">
@@ -37,7 +37,7 @@ function PlatBadge({ platform }: { platform: string }) {
       >
         {abbr}
       </span>
-      <span className="text-xs font-medium capitalize text-slate-300">{platform}</span>
+      <span className="text-xs font-medium capitalize text-fg-2">{platform}</span>
     </div>
   )
 }
@@ -56,14 +56,14 @@ function formatCooldown(secs: number): string {
 }
 
 function CooldownCell({ secs, status }: { secs: number; status: CookieItem['status'] }) {
-  if (secs <= 0) return <span className="text-[11px] text-slate-700">—</span>
+  if (secs <= 0) return <span className="text-[11px] text-fg-muted">—</span>
 
   const isHard = status === 'hard_blocked'
   return (
     <span
       className={cn(
         'font-mono text-[11px] font-medium tabular-nums',
-        isHard ? 'text-red-400' : 'text-amber-400',
+        isHard ? 'text-danger' : 'text-accent-text',
       )}
     >
       {formatCooldown(secs)}
@@ -134,7 +134,7 @@ export function CookieTable({
           onAddCookie && (
             <button
               onClick={onAddCookie}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg hover:bg-accent-hover"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -151,13 +151,13 @@ export function CookieTable({
     <div className="overflow-x-auto">
       <table className="min-w-[1080px] w-full text-sm">
         {/* Sticky header */}
-        <thead className="sticky top-0 z-10 bg-slate-900">
-          <tr className="border-y border-slate-800">
+        <thead className="sticky top-0 z-10 bg-canvas">
+          <tr className="border-y border-line">
             {COLS.map(col => (
               <th
                 key={col.key}
                 className={cn(
-                  'py-2 pr-3 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-slate-600 first:pl-4',
+                  'py-2 pr-3 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-fg-muted first:pl-4',
                   col.w,
                   col.key === 'actions' && 'text-center',
                 )}
@@ -177,8 +177,8 @@ export function CookieTable({
               <tr
                 key={cookie.id}
                 className={cn(
-                  'transition-colors hover:bg-slate-800/30',
-                  !isLast && 'border-b border-slate-800/50',
+                  'transition-colors hover:bg-surface-2',
+                  !isLast && 'border-b border-line',
                   isDim && 'opacity-60',
                 )}
               >
@@ -189,7 +189,7 @@ export function CookieTable({
 
                 {/* Account Label */}
                 <td className="py-2.5 pr-3">
-                  <span className="font-mono text-[11px] text-slate-300">{cookie.accountLabel}</span>
+                  <span className="font-mono text-[11px] text-fg-2">{cookie.accountLabel}</span>
                 </td>
 
                 {/* Status */}
@@ -204,14 +204,14 @@ export function CookieTable({
 
                 {/* Last Success */}
                 <td className="py-2.5 pr-3">
-                  <span className="font-mono text-[11px] text-slate-500">
+                  <span className="font-mono text-[11px] text-fg-muted">
                     {cookie.lastSuccessAt}
                   </span>
                 </td>
 
                 {/* Last Fail */}
                 <td className="py-2.5 pr-3">
-                  <span className={cn('font-mono text-[11px]', cookie.lastFailAt ? 'text-red-500/80' : 'text-slate-700')}>
+                  <span className={cn('font-mono text-[11px]', cookie.lastFailAt ? 'text-danger' : 'text-fg-muted')}>
                     {cookie.lastFailAt ?? '—'}
                   </span>
                 </td>
@@ -222,12 +222,12 @@ export function CookieTable({
                     className={cn(
                       'font-mono text-xs font-semibold tabular-nums',
                       cookie.failCount === 0
-                        ? 'text-slate-700'
+                        ? 'text-fg-muted'
                         : cookie.failCount >= 7
-                          ? 'text-red-400'
+                          ? 'text-danger'
                           : cookie.failCount >= 3
-                            ? 'text-amber-400'
-                            : 'text-slate-400',
+                            ? 'text-accent-text'
+                            : 'text-fg-muted',
                     )}
                   >
                     {cookie.failCount === 0 ? '—' : cookie.failCount}
@@ -245,12 +245,12 @@ export function CookieTable({
                     className={cn(
                       'font-mono text-[11px]',
                       cookie.expiryEstimate === 'Expired'
-                        ? 'text-red-400'
+                        ? 'text-danger'
                         : cookie.expiryEstimate === 'Unknown'
-                          ? 'text-slate-600'
+                          ? 'text-fg-muted'
                           : cookie.expiryEstimate.startsWith('~1') || cookie.expiryEstimate.startsWith('~2')
-                            ? 'text-amber-400'
-                            : 'text-slate-500',
+                            ? 'text-accent-text'
+                            : 'text-fg-muted',
                     )}
                   >
                     {cookie.expiryEstimate}

@@ -5,11 +5,11 @@ import { ErrorState } from '../shared/ErrorState'
 export type StatTone = 'green' | 'yellow' | 'red' | 'blue' | 'neutral'
 
 const TONE: Record<StatTone, { border: string; value: string; iconBg: string; iconText: string }> = {
-  green:   { border: 'border-emerald-900/50', value: 'text-emerald-400', iconBg: 'bg-emerald-950', iconText: 'text-emerald-400' },
-  yellow:  { border: 'border-amber-900/50',   value: 'text-amber-400',   iconBg: 'bg-amber-950',   iconText: 'text-amber-400'   },
-  red:     { border: 'border-red-900/50',     value: 'text-red-400',     iconBg: 'bg-red-950',     iconText: 'text-red-400'     },
-  blue:    { border: 'border-blue-900/50',    value: 'text-blue-400',    iconBg: 'bg-blue-950',    iconText: 'text-blue-400'    },
-  neutral: { border: 'border-slate-800',      value: 'text-slate-200',   iconBg: 'bg-slate-800',   iconText: 'text-slate-400'   },
+  green:   { border: 'border-success/50', value: 'text-success', iconBg: 'bg-success-soft', iconText: 'text-success' },
+  yellow:  { border: 'border-accent/50',   value: 'text-accent-text',   iconBg: 'bg-accent-soft',   iconText: 'text-accent-text'   },
+  red:     { border: 'border-danger/50',     value: 'text-danger',     iconBg: 'bg-danger-soft',     iconText: 'text-danger'     },
+  blue:    { border: 'border-line',    value: 'text-fg-2',    iconBg: 'bg-surface-2',    iconText: 'text-fg-2'    },
+  neutral: { border: 'border-line',      value: 'text-fg-2',   iconBg: 'bg-surface',   iconText: 'text-fg-muted'   },
 }
 
 export interface HealthStatCardProps {
@@ -39,7 +39,7 @@ function TrendIndicator({
   trendPositive?: boolean
 }) {
   const isGood = (trend === 'up') === trendPositive
-  const color = isGood ? 'text-emerald-400' : 'text-red-400'
+  const color = isGood ? 'text-success' : 'text-danger'
   const arrowPath = trend === 'up' ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'
 
   return (
@@ -77,17 +77,17 @@ export function HealthStatCard({
   if (loading) return <CardSkeleton className={className} />
   if (error) {
     return (
-      <div className={cn('rounded-2xl border border-slate-800 bg-slate-900/70 p-4', className)}>
+      <div className={cn('rounded-2xl border border-line bg-surface-2 p-4', className)}>
         <ErrorState message={error} />
       </div>
     )
   }
 
   return (
-    <div className={cn('rounded-2xl border bg-slate-900/70 p-4', t.border, className)}>
+    <div className={cn('rounded-2xl border bg-surface-2 p-4', t.border, className)}>
       {/* Label row */}
       <div className="mb-3 flex items-start justify-between gap-2">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
           {label}
         </p>
         {iconPath && (
@@ -121,7 +121,7 @@ export function HealthStatCard({
       {/* Footer row */}
       <div className="mt-2 flex items-center gap-2">
         {subvalue && (
-          <p className="text-[11px] text-slate-500">{subvalue}</p>
+          <p className="text-[11px] text-fg-muted">{subvalue}</p>
         )}
         {trend && (
           <TrendIndicator

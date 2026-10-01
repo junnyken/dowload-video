@@ -216,54 +216,54 @@ function AppInner() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#012622] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#FBBF24] border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-canvas flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
     <NotificationProvider>
-    <div className="min-h-screen bg-[#012622] text-slate-100">
+    <div className="min-h-screen bg-canvas text-fg">
       <ShareTargetHandler />
       {/* ── Offline Banner ────────────────────────────────── */}
       {!isOnline && (
-        <div className="fixed bottom-0 inset-x-0 z-[60] bg-red-900/95 backdrop-blur-sm border-t border-red-700/50 flex items-center justify-center gap-2 py-2 px-4 text-sm text-red-100">
-          <span className="inline-block w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+        <div className="fixed bottom-0 inset-x-0 z-[60] bg-danger-soft backdrop-blur-sm border-t border-danger/50 flex items-center justify-center gap-2 py-2 px-4 text-sm text-danger">
+          <span className="inline-block w-2 h-2 rounded-full bg-danger animate-pulse" />
           Đang offline — Kết nối internet để tiếp tục tải video
         </div>
       )}
       <ExtensionInstallBanner />
       {/* ── SW Update Banner ─────────────────────────────── */}
       {swUpdateReady && (
-        <div className="fixed bottom-0 inset-x-0 z-[59] bg-[#1a3a2a]/95 backdrop-blur-sm border-t border-[#FBBF24]/30 flex items-center justify-center gap-3 py-2 px-4 text-sm text-slate-200">
-          <span className="text-[#FBBF24] font-semibold">Phiên bản mới khả dụng</span>
+        <div className="fixed bottom-0 inset-x-0 z-[59] bg-surface-2/95 backdrop-blur-sm border-t border-accent/30 flex items-center justify-center gap-3 py-2 px-4 text-sm text-fg-2">
+          <span className="text-accent-text font-semibold">Phiên bản mới khả dụng</span>
           <button
             onClick={handleSwUpdate}
-            className="px-3 py-1 rounded-lg bg-[#FBBF24] text-[#012622] text-xs font-bold hover:opacity-90 transition cursor-pointer"
+            className="px-3 py-1 rounded-lg bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition cursor-pointer"
           >
             Cập nhật ngay
           </button>
           <button
             onClick={() => setSwUpdateReady(false)}
-            className="text-slate-400 hover:text-slate-200 text-xs cursor-pointer"
+            className="text-fg-muted hover:text-fg-2 text-xs cursor-pointer"
           >
             Bỏ qua
           </button>
         </div>
       )}
       {/* ── Top Navbar ───────────────────────────────────── */}
-      <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-xl bg-[#012622]/70 border-b border-slate-700/50">
+      <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-xl bg-surface/70 border-b border-line">
         <div className="max-w-6xl mx-auto h-14 md:h-16 px-4 md:px-8 flex items-center justify-between">
           {/* Logo */}
           <button
             onClick={() => navigateTo('landing', '/')}
             className="flex items-center gap-2.5 group cursor-pointer"
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FBBF24] to-[#FB923C] flex items-center justify-center shadow-md shadow-[#FBBF24]/20 group-hover:shadow-lg transition-shadow">
-              <Video className="w-5 h-5 text-[#012622]" />
+            <div className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
+              <Video className="w-5 h-5 text-accent-fg" />
             </div>
-            <span className="text-lg font-extrabold text-white tracking-tight">VidGrab</span>
+            <span className="text-lg font-extrabold text-fg tracking-tight">VidGrab</span>
           </button>
 
           {/* Right Nav */}
@@ -272,8 +272,8 @@ function AppInner() {
               onClick={() => navigateTo('search', '/search')}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
                 view === 'search'
-                  ? 'border-[#FBBF24]/50 bg-[#FBBF24]/10 text-[#FBBF24]'
-                  : 'border-slate-600/50 text-slate-300 hover:bg-slate-700/40'
+                  ? 'border-accent/50 bg-accent-soft text-accent-text'
+                  : 'border-line-strong text-fg-2 hover:bg-surface-2'
               }`}
               title="Tìm kiếm video"
             >
@@ -282,7 +282,7 @@ function AppInner() {
             </button>
             <button
               onClick={() => navigateTo('platforms', '/platforms')}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-600/50 text-slate-300 text-xs font-medium hover:bg-slate-700/40 transition-colors cursor-pointer"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line-strong text-fg-2 text-xs font-medium hover:bg-surface-2 transition-colors cursor-pointer"
               title="Nền tảng được hỗ trợ"
             >
               Platforms
@@ -297,8 +297,8 @@ function AppInner() {
               onClick={() => navigateTo('extension', '/extension')}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
                 view === 'extension'
-                  ? 'border-[#FBBF24]/50 bg-[#FBBF24]/10 text-[#FBBF24]'
-                  : 'border-slate-600/50 text-slate-300 hover:bg-slate-700/40'
+                  ? 'border-accent/50 bg-accent-soft text-accent-text'
+                  : 'border-line-strong text-fg-2 hover:bg-surface-2'
               }`}
               title="Tiện ích trình duyệt"
             >
@@ -310,19 +310,19 @@ function AppInner() {
                 <WorkspaceSwitcher onNavigate={navigateTo} />
                 <button
                   onClick={() => navigateTo('archive', '/archive')}
-                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-600/50 text-slate-300 text-xs font-bold hover:bg-slate-700/50 hover:text-white transition-colors cursor-pointer"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line-strong text-fg-2 text-xs font-bold hover:bg-surface-2 hover:text-fg transition-colors cursor-pointer"
                 >
                   Archive
                 </button>
                 <button
                   onClick={() => navigateTo('schedule', '/schedule')}
-                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-600/50 text-slate-300 text-xs font-bold hover:bg-slate-700/50 hover:text-white transition-colors cursor-pointer"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line-strong text-fg-2 text-xs font-bold hover:bg-surface-2 hover:text-fg transition-colors cursor-pointer"
                 >
                   Lịch Tải
                 </button>
                 <button
                   onClick={() => navigateTo('transcript-translate', '/transcript-translate')}
-                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-600/50 text-slate-300 text-xs font-bold hover:bg-slate-700/50 hover:text-white transition-colors cursor-pointer"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line-strong text-fg-2 text-xs font-bold hover:bg-surface-2 hover:text-fg transition-colors cursor-pointer"
                   title="Dịch transcript .srt/.vtt sang ngôn ngữ khác"
                 >
                   <Languages className="w-3.5 h-3.5" />
@@ -341,7 +341,7 @@ function AppInner() {
             ) : (
               <button
                 onClick={() => setShowAuthModal(true)}
-                className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] text-xs font-bold hover:opacity-90 transition cursor-pointer"
+                className="px-3 py-1.5 rounded-lg bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition cursor-pointer"
               >
                 Đăng nhập
               </button>
@@ -350,7 +350,7 @@ function AppInner() {
             {pwaInstallReady && (
               <button
                 onClick={handlePwaInstall}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-600/50 text-slate-300 text-xs font-bold hover:bg-slate-700/50 hover:text-white transition-colors cursor-pointer"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line-strong text-fg-2 text-xs font-bold hover:bg-surface-2 hover:text-fg transition-colors cursor-pointer"
                 title="Cài ứng dụng VidGrab về máy"
               >
                 Cài ứng dụng
@@ -486,7 +486,7 @@ function AppInner() {
       {(
         <button
           onClick={() => setShowFeedback(true)}
-          className="fixed bottom-24 right-4 z-40 md:bottom-6 md:right-6 flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#1a4a42] border border-slate-600/50 text-slate-300 text-xs font-semibold hover:bg-[#FBBF24]/15 hover:border-[#FBBF24]/40 hover:text-[#FBBF24] shadow-lg transition-all duration-200 cursor-pointer"
+          className="fixed bottom-24 right-4 z-40 md:bottom-6 md:right-6 flex items-center gap-2 px-4 py-2.5 rounded-full bg-surface-2 border border-line-strong text-fg-2 text-xs font-semibold hover:bg-accent-soft hover:border-accent/40 hover:text-accent-text shadow-lg transition-all duration-200 cursor-pointer"
           title="Góp ý & Phản hồi"
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

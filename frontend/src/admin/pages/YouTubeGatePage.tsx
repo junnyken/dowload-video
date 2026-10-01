@@ -61,57 +61,57 @@ export default function YouTubeGatePage() {
   const extra = Object.entries(snap ?? {}).filter(([k]) => !known.has(k))
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6 space-y-6">
+    <div className="min-h-screen bg-canvas text-fg p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">YouTube Gate</h1>
-          <p className="text-xs text-gray-500">Công tắc, circuit breaker và trần băng thông · làm mới 20s</p>
+          <h1 className="text-2xl font-bold text-fg">YouTube Gate</h1>
+          <p className="text-xs text-fg-muted">Công tắc, circuit breaker và trần băng thông · làm mới 20s</p>
         </div>
         <button onClick={() => toggle(!enabled)} disabled={busy || !snap}
           className={`rounded-md px-3 py-1.5 text-xs font-semibold border transition disabled:opacity-50 ${
-            enabled ? 'border-red-600/50 text-red-300 hover:bg-red-600/10'
-                    : 'border-emerald-600/50 text-emerald-300 hover:bg-emerald-600/10'}`}>
+            enabled ? 'border-danger/50 text-danger hover:bg-danger-soft'
+                    : 'border-success/50 text-success hover:bg-success-soft'}`}>
           {busy ? 'Đang xử lý…' : enabled ? 'Tắt tải YouTube' : 'Bật tải YouTube'}
         </button>
       </div>
 
-      {err && <p className="text-xs text-red-400">Lỗi: {err}</p>}
-      {msg && <p className="text-xs text-emerald-400">{msg}</p>}
+      {err && <p className="text-xs text-danger">Lỗi: {err}</p>}
+      {msg && <p className="text-xs text-success">{msg}</p>}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-3">
-          <div className="text-[10px] uppercase tracking-wide text-gray-500">Trạng thái</div>
-          <div className={`mt-1 text-xl font-semibold ${enabled ? 'text-emerald-400' : 'text-red-400'}`}>
+        <div className="rounded-lg border border-line bg-surface-2 p-3">
+          <div className="text-[10px] uppercase tracking-wide text-fg-muted">Trạng thái</div>
+          <div className={`mt-1 text-xl font-semibold ${enabled ? 'text-success' : 'text-danger'}`}>
             {snap ? (enabled ? 'Đang bật' : 'Đang tắt') : '…'}
           </div>
         </div>
-        <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-3">
-          <div className="text-[10px] uppercase tracking-wide text-gray-500">Circuit breaker</div>
+        <div className="rounded-lg border border-line bg-surface-2 p-3">
+          <div className="text-[10px] uppercase tracking-wide text-fg-muted">Circuit breaker</div>
           <div className={`mt-1 text-xl font-semibold ${
-            circuit === 'open' ? 'text-red-400' : circuit === 'half_open' ? 'text-amber-400' : 'text-emerald-400'}`}>
+            circuit === 'open' ? 'text-danger' : circuit === 'half_open' ? 'text-accent-text' : 'text-success'}`}>
             {circuit}
           </div>
         </div>
-        <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-3">
-          <div className="text-[10px] uppercase tracking-wide text-gray-500">Băng thông hôm nay</div>
-          <div className="mt-1 text-xl font-semibold text-gray-100">{fmtBytes(snap?.bytes_today)}</div>
+        <div className="rounded-lg border border-line bg-surface-2 p-3">
+          <div className="text-[10px] uppercase tracking-wide text-fg-muted">Băng thông hôm nay</div>
+          <div className="mt-1 text-xl font-semibold text-fg">{fmtBytes(snap?.bytes_today)}</div>
         </div>
-        <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-3">
-          <div className="text-[10px] uppercase tracking-wide text-gray-500">Chi phí ước tính</div>
-          <div className="mt-1 text-xl font-semibold text-gray-100">
+        <div className="rounded-lg border border-line bg-surface-2 p-3">
+          <div className="text-[10px] uppercase tracking-wide text-fg-muted">Chi phí ước tính</div>
+          <div className="mt-1 text-xl font-semibold text-fg">
             {snap?.cost_today != null ? `$${Number(snap.cost_today).toFixed(2)}` : '—'}
           </div>
         </div>
       </div>
 
       {extra.length > 0 && (
-        <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-4">
-          <h2 className="mb-2 text-sm font-semibold text-white">Chi tiết khác</h2>
+        <div className="rounded-lg border border-line bg-surface-2 p-4">
+          <h2 className="mb-2 text-sm font-semibold text-fg">Chi tiết khác</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             {extra.map(([k, v]) => (
-              <div key={k} className="rounded border border-gray-800 px-2 py-1">
-                <div className="text-[10px] text-gray-500">{k}</div>
-                <div className="font-mono text-[11px] text-gray-200 break-all">
+              <div key={k} className="rounded border border-line px-2 py-1">
+                <div className="text-[10px] text-fg-muted">{k}</div>
+                <div className="font-mono text-[11px] text-fg-2 break-all">
                   {typeof v === 'object' ? JSON.stringify(v) : String(v)}
                 </div>
               </div>

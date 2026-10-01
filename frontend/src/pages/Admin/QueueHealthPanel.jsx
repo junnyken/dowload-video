@@ -28,50 +28,50 @@ function fmtWait(seconds) {
 }
 
 function diskColor(pct) {
-  if (pct == null) return 'text-slate-400';
-  if (pct > 85) return 'text-red-400';
-  if (pct > 70) return 'text-amber-400';
-  return 'text-emerald-400';
+  if (pct == null) return 'text-fg-muted';
+  if (pct > 85) return 'text-danger';
+  if (pct > 70) return 'text-accent-text';
+  return 'text-success';
 }
 
 function diskBg(pct) {
-  if (pct == null) return 'bg-slate-600';
-  if (pct > 85) return 'bg-red-500';
-  if (pct > 70) return 'bg-amber-400';
-  return 'bg-emerald-500';
+  if (pct == null) return 'bg-line';
+  if (pct > 85) return 'bg-danger';
+  if (pct > 70) return 'bg-accent';
+  return 'bg-success';
 }
 
 function providerColor(level) {
-  if (!level) return 'text-slate-400';
+  if (!level) return 'text-fg-muted';
   const l = level.toLowerCase();
-  if (l === 'high') return 'text-red-400';
-  if (l === 'elevated') return 'text-amber-400';
-  return 'text-emerald-400';
+  if (l === 'high') return 'text-danger';
+  if (l === 'elevated') return 'text-accent-text';
+  return 'text-success';
 }
 
 function providerBadge(level) {
-  if (!level) return 'bg-slate-700 text-slate-300';
+  if (!level) return 'bg-surface-2 text-fg-2';
   const l = level.toLowerCase();
-  if (l === 'high') return 'bg-red-900/60 text-red-300 border border-red-700';
-  if (l === 'elevated') return 'bg-amber-900/60 text-amber-300 border border-amber-700';
-  return 'bg-emerald-900/60 text-emerald-300 border border-emerald-700';
+  if (l === 'high') return 'bg-danger-soft text-danger border border-danger/30';
+  if (l === 'elevated') return 'bg-accent-soft text-accent-text border border-accent/30';
+  return 'bg-success-soft text-success border border-success/30';
 }
 
 function TrendIcon({ value, prev }) {
-  if (prev == null || value == null) return <Minus size={14} className="text-slate-500" />;
-  if (value > prev) return <ChevronUp size={14} className="text-red-400" />;
-  if (value < prev) return <ChevronDown size={14} className="text-emerald-400" />;
-  return <Minus size={14} className="text-slate-500" />;
+  if (prev == null || value == null) return <Minus size={14} className="text-fg-muted" />;
+  if (value > prev) return <ChevronUp size={14} className="text-danger" />;
+  if (value < prev) return <ChevronDown size={14} className="text-success" />;
+  return <Minus size={14} className="text-fg-muted" />;
 }
 
 // ── Priority bar ─────────────────────────────────────────────────────────────
 
 const PRIORITY_LEVELS = [
-  { key: 'interactive', label: 'Interactive', color: 'bg-violet-500' },
-  { key: 'redownload',  label: 'Redownload',  color: 'bg-blue-500' },
-  { key: 'batch',       label: 'Batch',       color: 'bg-cyan-500' },
-  { key: 'scheduled',   label: 'Scheduled',   color: 'bg-amber-400' },
-  { key: 'maintenance', label: 'Maintenance', color: 'bg-slate-500' },
+  { key: 'interactive', label: 'Interactive', color: 'bg-accent' },
+  { key: 'redownload',  label: 'Redownload',  color: 'bg-accent' },
+  { key: 'batch',       label: 'Batch',       color: 'bg-accent' },
+  { key: 'scheduled',   label: 'Scheduled',   color: 'bg-accent' },
+  { key: 'maintenance', label: 'Maintenance', color: 'bg-line-strong' },
 ];
 
 function PriorityBar({ breakdown }) {
@@ -81,7 +81,7 @@ function PriorityBar({ breakdown }) {
   const total = PRIORITY_LEVELS.reduce((s, p) => s + (breakdown[p.key] || 0), 0);
   if (total === 0) {
     return (
-      <div className="flex items-center justify-center h-6 rounded-lg bg-slate-800 text-slate-500 text-xs">
+      <div className="flex items-center justify-center h-6 rounded-lg bg-surface text-fg-muted text-xs">
         Hàng đợi trống
       </div>
     );
@@ -117,8 +117,8 @@ function PriorityBar({ breakdown }) {
               onMouseLeave={() => setHovered(null)}
             >
               <span className={`inline-block w-2.5 h-2.5 rounded-sm ${color}`} />
-              <span className="text-xs text-slate-400">{label}</span>
-              <span className="text-xs font-semibold text-slate-200">{count}</span>
+              <span className="text-xs text-fg-muted">{label}</span>
+              <span className="text-xs font-semibold text-fg-2">{count}</span>
             </div>
           );
         })}
@@ -129,10 +129,10 @@ function PriorityBar({ breakdown }) {
 
 // ── Stat card ────────────────────────────────────────────────────────────────
 
-function StatCard({ icon: Icon, label, value, sub, colorClass = 'text-slate-200', iconColor = 'text-slate-400', trend }) {
+function StatCard({ icon: Icon, label, value, sub, colorClass = 'text-fg-2', iconColor = 'text-fg-muted', trend }) {
   return (
-    <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 flex flex-col gap-1 min-w-0">
-      <div className="flex items-center gap-2 text-slate-400 text-xs font-medium mb-1">
+    <div className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-1 min-w-0">
+      <div className="flex items-center gap-2 text-fg-muted text-xs font-medium mb-1">
         <Icon size={14} className={iconColor} />
         <span>{label}</span>
       </div>
@@ -140,7 +140,7 @@ function StatCard({ icon: Icon, label, value, sub, colorClass = 'text-slate-200'
         <span className="text-2xl font-bold leading-none tabular-nums">{value ?? '—'}</span>
         {trend}
       </div>
-      {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
+      {sub && <p className="text-xs text-fg-muted mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -149,9 +149,9 @@ function StatCard({ icon: Icon, label, value, sub, colorClass = 'text-slate-200'
 
 function TuneChip({ label, value }) {
   return (
-    <div className="flex flex-col items-center bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 gap-0.5 min-w-[90px]">
-      <span className="text-slate-500 text-[10px] font-medium uppercase tracking-wide">{label}</span>
-      <span className="text-slate-100 text-sm font-bold tabular-nums">{value ?? '—'}</span>
+    <div className="flex flex-col items-center bg-surface border border-line rounded-lg px-3 py-2 gap-0.5 min-w-[90px]">
+      <span className="text-fg-muted text-[10px] font-medium uppercase tracking-wide">{label}</span>
+      <span className="text-fg text-sm font-bold tabular-nums">{value ?? '—'}</span>
     </div>
   );
 }
@@ -160,7 +160,7 @@ function TuneChip({ label, value }) {
 
 function DiskBar({ pct }) {
   return (
-    <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+    <div className="w-full bg-surface-2 rounded-full h-2 overflow-hidden">
       <div
         className={`h-2 rounded-full transition-all duration-500 ${diskBg(pct)}`}
         style={{ width: `${Math.min(pct || 0, 100)}%` }}
@@ -262,27 +262,27 @@ export default function QueueHealthPanel({ adminToken }) {
   const providerLevel = health?.provider_pressure;
 
   return (
-    <div className="space-y-5 text-slate-100">
+    <div className="space-y-5 text-fg">
 
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <Activity size={20} className="text-violet-400" />
+          <Activity size={20} className="text-fg-2" />
           <h2 className="text-lg font-semibold">Sức khỏe hàng đợi</h2>
         </div>
         <div className="flex items-center gap-3">
           {lastRefresh && (
-            <span className="text-xs text-slate-500 tabular-nums">
+            <span className="text-xs text-fg-muted tabular-nums">
               Cập nhật: {lastRefresh.toLocaleTimeString('vi-VN')}
             </span>
           )}
           <div
-            className={`w-2 h-2 rounded-full transition-all duration-300 ${pulse ? 'bg-violet-300 scale-125' : 'bg-violet-600'}`}
+            className={`w-2 h-2 rounded-full transition-all duration-300 ${pulse ? 'bg-accent scale-125' : 'bg-accent'}`}
             title="Tự động làm mới mỗi 10s"
           />
           <button
             onClick={() => { fetchHealth(); fetchTune(); }}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white text-xs rounded-lg border border-slate-600 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-2 hover:bg-line text-fg-2 hover:text-fg text-xs rounded-lg border border-line-strong transition-colors"
           >
             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
             Làm mới
@@ -292,12 +292,12 @@ export default function QueueHealthPanel({ adminToken }) {
 
       {/* Error */}
       {error && (
-        <div className="flex items-center gap-2 bg-red-900/40 border border-red-700/50 text-red-300 text-sm px-4 py-3 rounded-xl">
+        <div className="flex items-center gap-2 bg-danger-soft border border-danger/50 text-danger text-sm px-4 py-3 rounded-xl">
           <AlertTriangle size={15} />
           <span>{error}</span>
           <button
             onClick={() => setError(null)}
-            className="ml-auto text-red-400 hover:text-red-200 text-xs"
+            className="ml-auto text-danger hover:text-danger text-xs"
           >
             ✕
           </button>
@@ -306,7 +306,7 @@ export default function QueueHealthPanel({ adminToken }) {
 
       {/* Paused banner */}
       {isPaused && (
-        <div className="flex items-center gap-2 bg-amber-900/40 border border-amber-700/50 text-amber-300 text-sm px-4 py-3 rounded-xl">
+        <div className="flex items-center gap-2 bg-accent-soft border border-accent/50 text-accent-text text-sm px-4 py-3 rounded-xl">
           <Pause size={15} />
           <span>
             Job ưu tiên thấp đang bị tạm dừng — hệ thống chỉ xử lý interactive &amp; redownload.
@@ -316,7 +316,7 @@ export default function QueueHealthPanel({ adminToken }) {
 
       {/* Stat cards */}
       {loading && !health ? (
-        <div className="flex items-center justify-center py-16 text-slate-500 gap-2">
+        <div className="flex items-center justify-center py-16 text-fg-muted gap-2">
           <Loader2 size={20} className="animate-spin" />
           <span>Đang tải dữ liệu hàng đợi…</span>
         </div>
@@ -330,8 +330,8 @@ export default function QueueHealthPanel({ adminToken }) {
               label="Độ sâu hàng đợi"
               value={health?.queue_depth ?? '—'}
               sub="job đang chờ"
-              iconColor="text-violet-400"
-              colorClass="text-violet-300"
+              iconColor="text-fg-2"
+              colorClass="text-fg-2"
               trend={<TrendIcon value={health?.queue_depth} prev={prevDepthRef.current} />}
             />
 
@@ -341,8 +341,8 @@ export default function QueueHealthPanel({ adminToken }) {
               label="Thời gian chờ ước tính"
               value={fmtWait(health?.estimated_wait_seconds)}
               sub={health?.estimated_wait_seconds != null ? `${health.estimated_wait_seconds}s` : undefined}
-              iconColor="text-cyan-400"
-              colorClass="text-cyan-300"
+              iconColor="text-fg-2"
+              colorClass="text-fg-2"
             />
 
             {/* Active workers */}
@@ -351,13 +351,13 @@ export default function QueueHealthPanel({ adminToken }) {
               label="Worker đang chạy"
               value={health?.active_workers ?? '—'}
               sub="tiến trình hoạt động"
-              iconColor="text-blue-400"
-              colorClass="text-blue-300"
+              iconColor="text-fg-2"
+              colorClass="text-fg-2"
             />
 
             {/* Disk pressure */}
-            <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 flex flex-col gap-2 min-w-0 col-span-2 lg:col-span-1">
-              <div className="flex items-center gap-2 text-slate-400 text-xs font-medium">
+            <div className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-2 min-w-0 col-span-2 lg:col-span-1">
+              <div className="flex items-center gap-2 text-fg-muted text-xs font-medium">
                 <HardDrive size={14} className={diskColor(diskPct)} />
                 <span>Áp lực đĩa</span>
               </div>
@@ -365,7 +365,7 @@ export default function QueueHealthPanel({ adminToken }) {
                 {diskPct != null ? `${diskPct.toFixed(1)}%` : '—'}
               </div>
               <DiskBar pct={diskPct} />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-fg-muted">
                 {diskPct > 85
                   ? 'Nguy hiểm — cần dọn dẹp ngay'
                   : diskPct > 70
@@ -375,8 +375,8 @@ export default function QueueHealthPanel({ adminToken }) {
             </div>
 
             {/* Provider pressure */}
-            <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 flex flex-col gap-2 min-w-0">
-              <div className="flex items-center gap-2 text-slate-400 text-xs font-medium">
+            <div className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-2 min-w-0">
+              <div className="flex items-center gap-2 text-fg-muted text-xs font-medium">
                 <Server size={14} className={providerColor(providerLevel)} />
                 <span>Áp lực Provider</span>
               </div>
@@ -388,31 +388,31 @@ export default function QueueHealthPanel({ adminToken }) {
                 </span>
               </div>
               {providerLevel === 'high' && (
-                <p className="text-xs text-red-400">Giảm tốc độ tải xuống</p>
+                <p className="text-xs text-danger">Giảm tốc độ tải xuống</p>
               )}
               {providerLevel === 'elevated' && (
-                <p className="text-xs text-amber-400">Theo dõi chặt chẽ</p>
+                <p className="text-xs text-accent-text">Theo dõi chặt chẽ</p>
               )}
               {providerLevel === 'normal' && (
-                <p className="text-xs text-emerald-400">Hoạt động ổn định</p>
+                <p className="text-xs text-success">Hoạt động ổn định</p>
               )}
             </div>
           </div>
 
           {/* Priority breakdown */}
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 space-y-3">
-            <div className="flex items-center gap-2 text-slate-300 text-sm font-medium">
-              <Zap size={15} className="text-amber-400" />
+          <div className="bg-surface border border-line rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-fg-2 text-sm font-medium">
+              <Zap size={15} className="text-accent-text" />
               Phân bổ theo mức ưu tiên
             </div>
             <PriorityBar breakdown={health?.priority_breakdown} />
           </div>
 
           {/* Pause / Resume */}
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 flex items-center justify-between gap-4">
+          <div className="bg-surface border border-line rounded-xl p-4 flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-medium text-slate-200">Tạm dừng việc ưu tiên thấp</p>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-sm font-medium text-fg-2">Tạm dừng việc ưu tiên thấp</p>
+              <p className="text-xs text-fg-muted mt-0.5">
                 Tạm dừng batch, scheduled và maintenance jobs để ưu tiên tài nguyên cho interactive.
               </p>
             </div>
@@ -421,8 +421,8 @@ export default function QueueHealthPanel({ adminToken }) {
               disabled={pausing}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all min-w-[130px] justify-center ${
                 isPaused
-                  ? 'bg-emerald-900/50 border-emerald-700 text-emerald-300 hover:bg-emerald-800/60'
-                  : 'bg-amber-900/50 border-amber-700 text-amber-300 hover:bg-amber-800/60'
+                  ? 'bg-success-soft border-success/30 text-success hover:bg-success/20'
+                  : 'bg-accent-soft border-accent/30 text-accent-text hover:bg-accent/20'
               } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               {pausing ? (
@@ -439,16 +439,16 @@ export default function QueueHealthPanel({ adminToken }) {
       )}
 
       {/* Auto-tune section */}
-      <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 space-y-3">
+      <div className="bg-surface border border-line rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-slate-300 text-sm font-medium">
-            <Activity size={15} className="text-violet-400" />
+          <div className="flex items-center gap-2 text-fg-2 text-sm font-medium">
+            <Activity size={15} className="text-fg-2" />
             Tham số tự chỉnh (Auto-tune)
           </div>
           <button
             onClick={handleResetTune}
             disabled={resetting || tuneLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white text-xs rounded-lg border border-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-2 hover:bg-line text-fg-2 hover:text-fg text-xs rounded-lg border border-line-strong transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {resetting ? (
               <Loader2 size={12} className="animate-spin" />
@@ -460,7 +460,7 @@ export default function QueueHealthPanel({ adminToken }) {
         </div>
 
         {tuneLoading && !tune ? (
-          <div className="flex items-center gap-2 text-slate-500 text-xs py-3">
+          <div className="flex items-center gap-2 text-fg-muted text-xs py-3">
             <Loader2 size={13} className="animate-spin" />
             Đang tải tham số…
           </div>
@@ -480,7 +480,7 @@ export default function QueueHealthPanel({ adminToken }) {
                 ))}
           </div>
         )}
-        <p className="text-xs text-slate-600">
+        <p className="text-xs text-fg-muted">
           Chỉ đọc — hệ thống tự điều chỉnh dựa trên tải thực tế.
         </p>
       </div>

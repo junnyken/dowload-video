@@ -10,24 +10,24 @@ export type IconButtonSize    = 'xs' | 'sm' | 'md'
 
 const VARIANT: Record<IconButtonVariant, string> = {
   default: [
-    'border border-slate-700 bg-slate-800/60 text-slate-400',
-    'hover:border-slate-600 hover:bg-slate-700 hover:text-slate-200',
+    'border border-line bg-surface text-fg-muted',
+    'hover:border-line-strong hover:bg-surface-2 hover:text-fg-2',
   ].join(' '),
   ghost: [
-    'border border-transparent bg-transparent text-slate-500',
-    'hover:border-slate-700 hover:bg-slate-800 hover:text-slate-300',
+    'border border-transparent bg-transparent text-fg-muted',
+    'hover:border-line hover:bg-surface hover:text-fg-2',
   ].join(' '),
   danger: [
-    'border border-red-900/60 bg-red-950/40 text-red-500',
-    'hover:border-red-800 hover:bg-red-950 hover:text-red-400',
+    'border border-danger/60 bg-danger-soft text-danger',
+    'hover:border-danger/30 hover:bg-danger-soft hover:text-danger',
   ].join(' '),
   success: [
-    'border border-emerald-900/60 bg-emerald-950/40 text-emerald-500',
-    'hover:border-emerald-800 hover:bg-emerald-950 hover:text-emerald-400',
+    'border border-success/60 bg-success-soft text-success',
+    'hover:border-success/30 hover:bg-success-soft hover:text-success',
   ].join(' '),
   primary: [
-    'border border-blue-800 bg-blue-950/50 text-blue-400',
-    'hover:border-blue-700 hover:bg-blue-950 hover:text-blue-300',
+    'border border-line bg-surface-2 text-fg-2',
+    'hover:border-line hover:bg-surface-2 hover:text-fg-2',
   ].join(' '),
 }
 
@@ -95,11 +95,11 @@ export function IconButton({
       disabled={disabled || loading}
       className={cn(
         'inline-flex items-center justify-center transition-colors',
-        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-700',
+        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-line-strong',
         'disabled:cursor-not-allowed disabled:opacity-40',
         SIZE[size],
         VARIANT[variant],
-        active && 'ring-1 ring-inset ring-blue-700/50',
+        active && 'ring-1 ring-inset ring-line-strong',
         className,
       )}
     >

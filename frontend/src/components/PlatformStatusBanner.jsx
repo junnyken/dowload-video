@@ -41,11 +41,11 @@ export default function PlatformStatusBanner() {
   return (
     <div className={`w-full max-w-3xl mb-4 rounded-2xl border text-sm ${
       hasSevere
-        ? 'bg-red-50 border-red-200 text-red-800'
-        : 'bg-amber-50 border-amber-200 text-amber-800'
+        ? 'bg-danger-soft border-danger text-danger'
+        : 'bg-accent-soft border-accent text-accent-text'
     }`}>
       <div className="flex items-center gap-2 px-4 py-3">
-        <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${hasSevere ? 'text-red-500' : 'text-amber-500'}`} />
+        <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${hasSevere ? 'text-danger' : 'text-warning'}`} />
         <span className="flex-1 font-medium">
           {hasSevere
             ? `${degraded.length} nền tảng đang gặp sự cố`
@@ -74,8 +74,8 @@ export default function PlatformStatusBanner() {
               key={p.platform}
               className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
                 p.status === 'degraded'
-                  ? 'bg-red-100 text-red-700'
-                  : 'bg-amber-100 text-amber-700'
+                  ? 'bg-danger-soft text-danger'
+                  : 'bg-accent-soft text-accent-text'
               }`}
             >
               {PLATFORM_LABEL[p.platform] || p.platform}

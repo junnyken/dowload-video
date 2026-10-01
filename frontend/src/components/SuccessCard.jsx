@@ -46,7 +46,7 @@ function CopyButton({ text, label, className = '' }) {
   };
   return (
     <button onClick={copy} className={`flex items-center gap-1.5 ${className}`}>
-      {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+      {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
       {copied ? 'Đã sao chép' : label}
     </button>
   );
@@ -96,9 +96,9 @@ export default function SuccessCard({
   const fileLabel = quality === 'thumbnail_only' ? 'Thumbnail' : (format?.toUpperCase() || 'File');
 
   return (
-    <div className="bg-[#0d2e29] border border-emerald-700/40 rounded-2xl overflow-hidden shadow-xl shadow-emerald-950/50">
+    <div className="bg-surface-2 border border-success/40 rounded-2xl overflow-hidden shadow-xl">
       {/* Header */}
-      <div className="flex items-start gap-3 p-4 border-b border-white/8">
+      <div className="flex items-start gap-3 p-4 border-b border-line">
         {thumbnail_url ? (
           <img
             src={thumbnail_url}
@@ -106,43 +106,43 @@ export default function SuccessCard({
             className="w-14 h-10 object-cover rounded-lg shrink-0 bg-black/30"
           />
         ) : (
-          <div className="w-14 h-10 rounded-lg bg-emerald-900/40 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+          <div className="w-14 h-10 rounded-lg bg-success-soft flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-5 h-5 text-success" />
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-white truncate leading-tight">
+          <p className="text-sm font-semibold text-fg truncate leading-tight">
             {title || 'Tải hoàn tất'}
           </p>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {platform && (
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-400/80 bg-emerald-900/30 px-1.5 py-0.5 rounded">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-success bg-success-soft px-1.5 py-0.5 rounded">
                 {platform}
               </span>
             )}
             {fileLabel && (
-              <span className="text-[10px] text-white/50">{fileLabel}</span>
+              <span className="text-[10px] text-fg-muted">{fileLabel}</span>
             )}
             {fmt_duration(duration) && (
-              <span className="text-[10px] text-white/40">{fmt_duration(duration)}</span>
+              <span className="text-[10px] text-fg-muted">{fmt_duration(duration)}</span>
             )}
             {fmt_size(file_size) && (
-              <span className="text-[10px] text-white/40">{fmt_size(file_size)}</span>
+              <span className="text-[10px] text-fg-muted">{fmt_size(file_size)}</span>
             )}
           </div>
         </div>
-        <button onClick={onClose} className="text-white/25 hover:text-white/60 transition-colors p-1 cursor-pointer shrink-0">
+        <button onClick={onClose} className="text-fg-muted hover:text-fg-2 transition-colors p-1 cursor-pointer shrink-0">
           <X className="w-4 h-4" />
         </button>
       </div>
 
       {/* Primary actions */}
-      <div className="flex items-center gap-2 p-3 flex-wrap border-b border-white/6">
+      <div className="flex items-center gap-2 p-3 flex-wrap border-b border-line">
         {file_url && (
           <a
             href={file_url}
             download={title || 'download'}
-            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 bg-accent hover:opacity-90 text-accent-fg text-xs font-semibold rounded-lg transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
             Tải file
@@ -152,7 +152,7 @@ export default function SuccessCard({
           <CopyButton
             text={file_url}
             label="Copy link"
-            className="px-3 py-2 bg-white/8 hover:bg-white/15 text-white/80 text-xs font-semibold rounded-lg transition-colors border border-white/10 cursor-pointer"
+            className="px-3 py-2 bg-surface-2 hover:bg-line text-fg-2 text-xs font-semibold rounded-lg transition-colors border border-line cursor-pointer"
           />
         )}
         {source_url && (
@@ -160,7 +160,7 @@ export default function SuccessCard({
             href={source_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10 text-white/50 text-xs rounded-lg transition-colors border border-white/8 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 bg-surface-2 hover:bg-line text-fg-muted text-xs rounded-lg transition-colors border border-line cursor-pointer"
           >
             <ExternalLink className="w-3 h-3" />
             Nguồn
@@ -169,7 +169,7 @@ export default function SuccessCard({
         {onProcessing && (
           <button
             onClick={onProcessing}
-            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600/20 hover:bg-indigo-600/35 text-indigo-300 text-xs font-semibold rounded-lg transition-colors border border-indigo-500/30 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 bg-surface-2 hover:bg-line text-fg-2 text-xs font-semibold rounded-lg transition-colors border border-line cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5" />
             Xử lý thêm
@@ -179,13 +179,13 @@ export default function SuccessCard({
 
       {/* Next best actions */}
       {nextActions.length > 0 && (
-        <div className="p-3 border-b border-white/6">
-          <p className="text-[10px] font-semibold text-white/35 uppercase tracking-wider mb-2">Làm gì tiếp?</p>
+        <div className="p-3 border-b border-line">
+          <p className="text-[10px] font-semibold text-fg-muted uppercase tracking-wider mb-2">Làm gì tiếp?</p>
           <div className="flex items-center gap-2 flex-wrap">
             {nextActions.includes('gif') && (
               <button
                 onClick={onGif}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer bg-white/8 hover:bg-white/15 text-white/80 border border-white/10"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer bg-surface-2 hover:bg-line text-fg-2 border border-line"
                 title="Tạo GIF từ video vừa tải"
               >
                 <Film className="w-3.5 h-3.5" />
@@ -195,7 +195,7 @@ export default function SuccessCard({
             {nextActions.includes('trim') && (
               <button
                 onClick={onTrim}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer bg-white/8 hover:bg-white/15 text-white/80 border border-white/10"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer bg-surface-2 hover:bg-line text-fg-2 border border-line"
                 title="Cắt đoạn video"
               >
                 <Scissors className="w-3.5 h-3.5" />
@@ -205,7 +205,7 @@ export default function SuccessCard({
             {nextActions.includes('thumbnail') && (
               <button
                 onClick={() => onRetry && source_url && onRetry(source_url, { quality: 'thumbnail_only' })}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white/8 hover:bg-white/15 text-white/80 border border-white/10 transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-surface-2 hover:bg-line text-fg-2 border border-line transition-colors cursor-pointer"
               >
                 <Image className="w-3.5 h-3.5" />
                 Lấy thumbnail
@@ -214,7 +214,7 @@ export default function SuccessCard({
             {nextActions.includes('playlist_zip') && (
               <button
                 onClick={() => onRetry && source_url && onRetry(source_url, { zip: true })}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white/8 hover:bg-white/15 text-white/80 border border-white/10 transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-surface-2 hover:bg-line text-fg-2 border border-line transition-colors cursor-pointer"
               >
                 <Zap className="w-3.5 h-3.5" />
                 ZIP playlist
@@ -223,7 +223,7 @@ export default function SuccessCard({
             {nextActions.includes('new_url') && (
               <button
                 onClick={() => onClose?.()}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-white/45 border border-white/8 transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-surface-2 hover:bg-line text-fg-muted border border-line transition-colors cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3" />
                 Tải link khác
@@ -238,7 +238,7 @@ export default function SuccessCard({
         {!showPresetForm ? (
           <button
             onClick={() => setShowPresetForm(true)}
-            className="flex items-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg-2 transition-colors cursor-pointer"
           >
             <Bookmark className="w-3 h-3" />
             Lưu preset này
@@ -258,20 +258,20 @@ export default function SuccessCard({
               value={presetName}
               onChange={(e) => setPresetName(e.target.value)}
               placeholder="Tên preset..."
-              className="flex-1 bg-white/8 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-white/30 outline-none focus:border-emerald-500/60"
+              className="flex-1 bg-surface-2 border border-line rounded-lg px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-muted outline-none focus:border-success/60"
               maxLength={60}
             />
             <button
               type="submit"
               disabled={!presetName.trim()}
-              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+              className="px-2.5 py-1.5 bg-accent hover:opacity-90 disabled:opacity-40 text-accent-fg text-xs font-semibold rounded-lg transition-colors cursor-pointer"
             >
               Lưu
             </button>
             <button
               type="button"
               onClick={() => setShowPresetForm(false)}
-              className="text-white/30 hover:text-white/60 transition-colors cursor-pointer"
+              className="text-fg-muted hover:text-fg-2 transition-colors cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>

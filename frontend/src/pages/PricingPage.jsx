@@ -129,30 +129,30 @@ const FAQS = [
 function PeriodToggle({ period, onChange }) {
   return (
     <div className="flex items-center justify-center gap-3">
-      <span className={`text-sm font-medium transition-colors ${period === 'monthly' ? 'text-white' : 'text-white/40'}`}>
+      <span className={`text-sm font-medium transition-colors ${period === 'monthly' ? 'text-fg' : 'text-fg-muted'}`}>
         Tháng
       </span>
 
       <button
         onClick={() => onChange(period === 'monthly' ? 'yearly' : 'monthly')}
         aria-label="Chuyển đổi chu kỳ thanh toán"
-        className={`relative w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
-          period === 'yearly' ? 'bg-emerald-600' : 'bg-white/20'
+        className={`relative w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-success ${
+          period === 'yearly' ? 'bg-success' : 'bg-line-strong'
         }`}
       >
         <span
-          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-300 ${
+          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-surface rounded-full shadow transition-transform duration-300 ${
             period === 'yearly' ? 'translate-x-6' : 'translate-x-0'
           }`}
         />
       </button>
 
-      <span className={`text-sm font-medium transition-colors ${period === 'yearly' ? 'text-white' : 'text-white/40'}`}>
+      <span className={`text-sm font-medium transition-colors ${period === 'yearly' ? 'text-fg' : 'text-fg-muted'}`}>
         Năm
       </span>
 
       {period === 'yearly' && (
-        <span className="text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+        <span className="text-xs font-semibold bg-success-soft text-success border border-success/30 px-2 py-0.5 rounded-full">
           Tiết kiệm 34%
         </span>
       )}
@@ -164,11 +164,11 @@ function FeatureRow({ label, included }) {
   return (
     <li className="flex items-start gap-2.5 text-sm">
       {included ? (
-        <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+        <CheckCircle className="w-4 h-4 text-success shrink-0 mt-0.5" />
       ) : (
-        <X className="w-4 h-4 text-white/25 shrink-0 mt-0.5" />
+        <X className="w-4 h-4 text-fg-muted shrink-0 mt-0.5" />
       )}
-      <span className={included ? 'text-white/80' : 'text-white/30 line-through decoration-white/20'}>
+      <span className={included ? 'text-fg-2' : 'text-fg-muted line-through decoration-line-strong'}>
         {label}
       </span>
     </li>
@@ -182,18 +182,18 @@ function PriceDisplay({ plan, period }) {
   if (price === 0) {
     return (
       <div className="mt-4 mb-1">
-        <span className="text-4xl font-extrabold text-white">$0</span>
-        <span className="text-white/40 text-sm ml-1">mãi mãi</span>
+        <span className="text-4xl font-extrabold text-fg">$0</span>
+        <span className="text-fg-muted text-sm ml-1">mãi mãi</span>
       </div>
     );
   }
 
   return (
     <div className="mt-4 mb-1">
-      <span className="text-4xl font-extrabold text-white">${price}</span>
-      <span className="text-white/40 text-sm ml-1">{suffix}</span>
+      <span className="text-4xl font-extrabold text-fg">${price}</span>
+      <span className="text-fg-muted text-sm ml-1">{suffix}</span>
       {plan.priceSuffix && (
-        <span className="block text-xs text-white/30 mt-0.5">{plan.priceSuffix}</span>
+        <span className="block text-xs text-fg-muted mt-0.5">{plan.priceSuffix}</span>
       )}
     </div>
   );
@@ -225,13 +225,13 @@ function PlanCard({ plan, period, onCheckout }) {
     <div
       className={`relative flex flex-col rounded-2xl p-6 transition-all duration-200 ${
         isFeatured
-          ? 'bg-[#0d2e29] border border-emerald-500/50 shadow-[0_0_32px_rgba(16,185,129,0.12)] lg:scale-105 lg:-translate-y-1 z-10'
-          : 'bg-[#0d2e29] border border-white/10 hover:border-white/20'
+          ? 'bg-surface-2 border border-success/50 lg:scale-105 lg:-translate-y-1 z-10'
+          : 'bg-surface-2 border border-line hover:border-line'
       }`}
     >
       {isFeatured && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-          <span className="bg-emerald-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg whitespace-nowrap">
+          <span className="bg-success text-success-fg text-xs font-bold px-3 py-1 rounded-full shadow-lg whitespace-nowrap">
             Phổ biến nhất
           </span>
         </div>
@@ -239,26 +239,26 @@ function PlanCard({ plan, period, onCheckout }) {
 
       {/* Header */}
       <div className="flex items-center gap-2.5">
-        <span className={`p-2 rounded-lg ${isFeatured ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/10 text-white/60'}`}>
+        <span className={`p-2 rounded-lg ${isFeatured ? 'bg-success-soft text-success' : 'bg-surface-2 text-fg-2'}`}>
           {plan.icon}
         </span>
-        <h3 className="text-lg font-bold text-white">{plan.name}</h3>
+        <h3 className="text-lg font-bold text-fg">{plan.name}</h3>
       </div>
 
       {/* Price */}
       <PriceDisplay plan={plan} period={period} />
 
       {/* Description */}
-      <p className="text-white/50 text-sm mb-5 leading-relaxed">{plan.description}</p>
+      <p className="text-fg-muted text-sm mb-5 leading-relaxed">{plan.description}</p>
 
       {/* CTA */}
       <button
         onClick={handleCta}
         disabled={loading}
-        className={`w-full py-2.5 px-4 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed ${
+        className={`w-full py-2.5 px-4 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-success disabled:opacity-60 disabled:cursor-not-allowed ${
           isFeatured
-            ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20'
-            : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'
+            ? 'bg-accent hover:opacity-90 text-accent-fg shadow-lg'
+            : 'bg-surface-2 hover:bg-line text-fg border border-line'
         }`}
         aria-label={`${plan.cta} — gói ${plan.name}`}
       >
@@ -273,11 +273,11 @@ function PlanCard({ plan, period, onCheckout }) {
       </button>
 
       {error && (
-        <p className="mt-2 text-xs text-red-400 text-center leading-snug">{error}</p>
+        <p className="mt-2 text-xs text-danger text-center leading-snug">{error}</p>
       )}
 
       {/* Divider */}
-      <hr className="border-white/10 my-5" />
+      <hr className="border-line my-5" />
 
       {/* Features */}
       <ul className="space-y-2.5 flex-1">
@@ -293,15 +293,15 @@ function FaqItem({ q, a }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="border-b border-white/10 last:border-b-0">
+    <div className="border-b border-line last:border-b-0">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between gap-4 py-4 text-left text-white/80 hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
+        className="w-full flex items-center justify-between gap-4 py-4 text-left text-fg-2 hover:text-fg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-success rounded"
         aria-expanded={open}
       >
         <span className="font-medium text-sm sm:text-base">{q}</span>
         <ChevronDown
-          className={`w-5 h-5 text-white/40 shrink-0 transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
+          className={`w-5 h-5 text-fg-muted shrink-0 transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
         />
       </button>
 
@@ -310,7 +310,7 @@ function FaqItem({ q, a }) {
           open ? 'max-h-64 opacity-100 pb-4' : 'max-h-0 opacity-0'
         }`}
       >
-        <p className="text-sm text-white/50 leading-relaxed">{a}</p>
+        <p className="text-sm text-fg-muted leading-relaxed">{a}</p>
       </div>
     </div>
   );
@@ -366,7 +366,7 @@ export default function PricingPage({ onNavigate }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#071a16] text-white">
+    <div className="min-h-screen bg-canvas text-fg">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
 
         {/* Hero */}
@@ -374,7 +374,7 @@ export default function PricingPage({ onNavigate }) {
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight mb-4">
             Chọn gói phù hợp với bạn
           </h1>
-          <p className="text-white/50 text-base sm:text-lg max-w-xl mx-auto">
+          <p className="text-fg-muted text-base sm:text-lg max-w-xl mx-auto">
             Bắt đầu miễn phí. Nâng cấp khi cần. Huỷ bất cứ lúc nào.
           </p>
         </div>
@@ -397,17 +397,17 @@ export default function PricingPage({ onNavigate }) {
         </div>
 
         {/* Enterprise strip */}
-        <div className="mt-10 rounded-2xl border border-white/10 bg-[#0d2e29] px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-6">
+        <div className="mt-10 rounded-2xl border border-line bg-surface-2 px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-6">
           <div>
-            <h3 className="text-lg font-bold text-white mb-1">Enterprise</h3>
-            <p className="text-white/50 text-sm max-w-md">
+            <h3 className="text-lg font-bold text-fg mb-1">Enterprise</h3>
+            <p className="text-fg-muted text-sm max-w-md">
               Dung lượng không giới hạn, SLA tuỳ chỉnh, hỗ trợ kỹ thuật chuyên biệt, triển khai
               riêng (on-premise hoặc cloud). Hãy nói cho chúng tôi biết nhu cầu của bạn.
             </p>
           </div>
           <a
             href="mailto:support@vidgrab.app?subject=Enterprise%20Inquiry"
-            className="shrink-0 px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-white text-sm font-semibold transition-colors whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            className="shrink-0 px-6 py-3 rounded-xl bg-surface-2 hover:bg-line border border-line text-fg text-sm font-semibold transition-colors whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-success"
           >
             Liên hệ đội ngũ
           </a>
@@ -418,7 +418,7 @@ export default function PricingPage({ onNavigate }) {
           <h2 id="faq-heading" className="text-2xl font-bold text-center mb-8">
             Câu hỏi thường gặp
           </h2>
-          <div className="max-w-2xl mx-auto bg-[#0d2e29] border border-white/10 rounded-2xl px-6 divide-y-0">
+          <div className="max-w-2xl mx-auto bg-surface-2 border border-line rounded-2xl px-6 divide-y-0">
             {FAQS.map((faq) => (
               <FaqItem key={faq.q} q={faq.q} a={faq.a} />
             ))}
@@ -426,7 +426,7 @@ export default function PricingPage({ onNavigate }) {
         </section>
 
         {/* Footer note */}
-        <p className="text-center text-white/25 text-xs mt-12">
+        <p className="text-center text-fg-muted text-xs mt-12">
           Giá hiển thị bằng USD. Thuế (nếu có) sẽ được tính thêm lúc thanh toán.
           Bảo mật thẻ bởi Stripe — VidGrab không lưu thông tin thẻ.
         </p>

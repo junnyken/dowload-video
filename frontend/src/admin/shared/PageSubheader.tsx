@@ -7,7 +7,7 @@ import { cn } from '../utils/cn'
 // line and an optional right-side meta slot (status pills, counts, badges).
 //
 // Usage:
-//   <h1 className="text-base font-semibold text-slate-100">Platform Health</h1>
+//   <h1 className="text-base font-semibold text-fg">Platform Health</h1>
 //   <PageSubheader
 //     description="Real-time status across all 12 download platforms"
 //     meta={<StatusPill status="healthy" dot />}
@@ -23,7 +23,7 @@ interface PageSubheaderProps {
 export function PageSubheader({ description, meta, className }: PageSubheaderProps) {
   return (
     <div className={cn('flex items-center justify-between gap-3', className)}>
-      <p className="text-xs text-slate-500">{description}</p>
+      <p className="text-xs text-fg-muted">{description}</p>
       {meta && (
         <div className="flex flex-shrink-0 items-center gap-2">
           {meta}

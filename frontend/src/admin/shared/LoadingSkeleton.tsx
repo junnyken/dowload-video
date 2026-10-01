@@ -6,7 +6,7 @@ function Bone({ className }: { className?: string }) {
   return (
     <div
       aria-hidden
-      className={cn('animate-pulse rounded bg-slate-800', className)}
+      className={cn('animate-pulse rounded bg-surface', className)}
     />
   )
 }
@@ -96,7 +96,7 @@ export function CardSkeleton({ className }: { className?: string }) {
       aria-busy
       aria-label="Loading"
       className={cn(
-        'animate-pulse rounded-2xl border border-slate-800 bg-slate-900/70 p-4',
+        'animate-pulse rounded-2xl border border-line bg-surface-2 p-4',
         className,
       )}
     >
@@ -114,7 +114,7 @@ export function TableSkeleton({ rows = 5, className }: { rows?: number; classNam
     <div
       aria-busy
       aria-label="Loading"
-      className={cn('divide-y divide-slate-800/50', className)}
+      className={cn('divide-y divide-line', className)}
     >
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex animate-pulse items-center gap-3 px-4 py-2.5">
@@ -136,18 +136,18 @@ export function PanelSkeleton({ rows = 5, className }: { rows?: number; classNam
       aria-busy
       aria-label="Loading"
       className={cn(
-        'animate-pulse overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70',
+        'animate-pulse overflow-hidden rounded-2xl border border-line bg-surface-2',
         className,
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <Bone className="h-2.5 w-24" />
         <Bone className="h-6 w-16 rounded-lg" />
       </div>
       {/* Row shimmer */}
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex items-center gap-3 border-b border-slate-800/50 px-4 py-3 last:border-0">
+        <div key={i} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-0">
           <Bone className="h-4 w-14 flex-shrink-0" />
           <Bone className="h-4 flex-1" />
           <Bone className="h-5 w-16 rounded-full flex-shrink-0" />

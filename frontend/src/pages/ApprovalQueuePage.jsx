@@ -13,9 +13,9 @@ const ACTION_LABELS = {
 };
 
 const STATUS_CONFIG = {
-  awaiting_approval: { label: 'Chờ duyệt',  cls: 'text-amber-300 bg-amber-900/30 border-amber-700/40',  icon: <Clock    className="w-3 h-3" /> },
-  approved:          { label: 'Đã duyệt',   cls: 'text-teal-300  bg-teal-900/30  border-teal-700/40',   icon: <Check    className="w-3 h-3" /> },
-  rejected:          { label: 'Từ chối',    cls: 'text-red-300   bg-red-900/30   border-red-700/40',    icon: <X        className="w-3 h-3" /> },
+  awaiting_approval: { label: 'Chờ duyệt',  cls: 'text-accent-text bg-accent-soft border-accent/40',  icon: <Clock    className="w-3 h-3" /> },
+  approved:          { label: 'Đã duyệt',   cls: 'text-fg-2  bg-surface-2  border-line',   icon: <Check    className="w-3 h-3" /> },
+  rejected:          { label: 'Từ chối',    cls: 'text-danger   bg-danger-soft   border-danger/40',    icon: <X        className="w-3 h-3" /> },
 };
 
 function fmtDate(iso) {
@@ -82,7 +82,7 @@ export default function ApprovalQueuePage() {
 
   if (!activeWorkspace) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-12 text-center text-slate-400">
+      <div className="max-w-3xl mx-auto px-4 py-12 text-center text-fg-muted">
         Chưa có workspace nào.
       </div>
     );
@@ -91,18 +91,18 @@ export default function ApprovalQueuePage() {
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
       <div className="flex items-center gap-3 mb-6">
-        <ClipboardCheck className="w-5 h-5 text-[#FBBF24]" />
-        <h1 className="text-xl font-bold text-white">Phê duyệt</h1>
+        <ClipboardCheck className="w-5 h-5 text-accent-text" />
+        <h1 className="text-xl font-bold text-fg">Phê duyệt</h1>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-5 border-b border-slate-700/50">
+      <div className="flex gap-1 mb-5 border-b border-line">
         {[['pending', 'Chờ duyệt'], ['all', 'Tất cả']].map(([key, label]) => (
           <button
             key={key}
             onClick={() => { setTab(key); setRequests([]); }}
             className={`px-4 py-2.5 text-sm font-medium transition-colors cursor-pointer -mb-px border-b-2
-              ${tab === key ? 'border-[#FBBF24] text-[#FBBF24]' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+              ${tab === key ? 'border-accent text-accent-text' : 'border-transparent text-fg-muted hover:text-fg-2'}`}
           >
             {label}
           </button>
@@ -110,17 +110,17 @@ export default function ApprovalQueuePage() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-red-900/30 border border-red-700/40 text-red-300 text-sm">
+        <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-danger-soft border border-danger/40 text-danger text-sm">
           <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
         </div>
       )}
 
       {loading ? (
         <div className="space-y-3">
-          {[...Array(3)].map((_, i) => <div key={i} className="h-24 rounded-xl bg-slate-800/30 animate-pulse" />)}
+          {[...Array(3)].map((_, i) => <div key={i} className="h-24 rounded-xl bg-surface-2 animate-pulse" />)}
         </div>
       ) : requests.length === 0 ? (
-        <div className="text-center py-16 text-slate-500">
+        <div className="text-center py-16 text-fg-muted">
           <ClipboardCheck className="w-8 h-8 mx-auto mb-3 opacity-40" />
           <p>{tab === 'pending' ? 'Không có yêu cầu nào chờ duyệt.' : 'Chưa có yêu cầu phê duyệt nào.'}</p>
         </div>
@@ -131,24 +131,24 @@ export default function ApprovalQueuePage() {
             const actionLabel = ACTION_LABELS[req.action_type] || req.action_type;
             const note = req.action_payload?.requester_note;
             return (
-              <div key={req.id} className="bg-slate-800/30 rounded-xl border border-slate-700/50 p-4">
+              <div key={req.id} className="bg-surface-2 rounded-xl border border-line p-4">
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <span className="text-sm font-semibold text-white">{actionLabel}</span>
+                      <span className="text-sm font-semibold text-fg">{actionLabel}</span>
                       <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border leading-none ${sc.cls}`}>
                         {sc.icon} {sc.label}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400 mb-1">
+                    <p className="text-xs text-fg-muted mb-1">
                       {fmtDate(req.created_at)}
                       {req.requester_user_id && <span className="ml-2 font-mono opacity-60">{req.requester_user_id.slice(0, 8)}</span>}
                     </p>
                     {note && (
-                      <p className="text-xs text-slate-300 italic mt-1 bg-slate-900/40 rounded px-2 py-1.5">{note}</p>
+                      <p className="text-xs text-fg-2 italic mt-1 bg-surface-2 rounded px-2 py-1.5">{note}</p>
                     )}
                     {req.rejection_reason && (
-                      <p className="text-xs text-red-300 mt-1">Lý do từ chối: {req.rejection_reason}</p>
+                      <p className="text-xs text-danger mt-1">Lý do từ chối: {req.rejection_reason}</p>
                     )}
                   </div>
 
@@ -157,14 +157,14 @@ export default function ApprovalQueuePage() {
                       <button
                         onClick={() => handleApprove(req.id)}
                         disabled={busy === req.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-900/40 text-teal-300 text-xs font-semibold hover:bg-teal-800/50 border border-teal-700/40 disabled:opacity-40 transition-colors cursor-pointer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-2 text-fg-2 text-xs font-semibold hover:bg-line border border-line disabled:opacity-40 transition-colors cursor-pointer"
                       >
                         <Check className="w-3 h-3" /> Duyệt
                       </button>
                       <button
                         onClick={() => { setRejectModal(req.id); setRejectReason(''); }}
                         disabled={busy === req.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-900/30 text-red-300 text-xs font-semibold hover:bg-red-900/50 border border-red-700/40 disabled:opacity-40 transition-colors cursor-pointer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft text-danger text-xs font-semibold hover:bg-danger/20 border border-danger/40 disabled:opacity-40 transition-colors cursor-pointer"
                       >
                         <X className="w-3 h-3" /> Từ chối
                       </button>
@@ -180,26 +180,26 @@ export default function ApprovalQueuePage() {
       {/* Reject modal */}
       {rejectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-[#021f1c] rounded-2xl border border-slate-700/60 shadow-2xl p-6">
-            <h3 className="text-base font-semibold text-white mb-3">Lý do từ chối</h3>
+          <div className="w-full max-w-md bg-canvas rounded-2xl border border-line shadow-2xl p-6">
+            <h3 className="text-base font-semibold text-fg mb-3">Lý do từ chối</h3>
             <textarea
               value={rejectReason}
               onChange={e => setRejectReason(e.target.value)}
               rows={3}
               placeholder="Nhập lý do (không bắt buộc)..."
-              className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl px-3 py-2.5 text-white text-sm resize-none focus:outline-none focus:border-red-500/50 placeholder-slate-500 mb-4"
+              className="w-full bg-surface-2 border border-line-strong rounded-xl px-3 py-2.5 text-fg text-sm resize-none focus:outline-none focus:border-danger/50 placeholder:text-fg-muted mb-4"
             />
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => { setRejectModal(null); setRejectReason(''); }}
-                className="px-4 py-2 rounded-lg border border-slate-600/50 text-slate-300 text-sm hover:bg-slate-700/40 transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-lg border border-line-strong text-fg-2 text-sm hover:bg-surface-2 transition-colors cursor-pointer"
               >
                 Huỷ
               </button>
               <button
                 onClick={handleReject}
                 disabled={!!busy}
-                className="px-4 py-2 rounded-lg bg-red-900/40 text-red-300 border border-red-700/40 text-sm font-semibold hover:bg-red-900/60 disabled:opacity-40 transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-danger-soft text-danger border border-danger/40 text-sm font-semibold hover:bg-danger/20 disabled:opacity-40 transition-colors cursor-pointer"
               >
                 {busy ? '...' : 'Xác nhận từ chối'}
               </button>

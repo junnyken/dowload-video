@@ -15,11 +15,11 @@ function InfoGrid({ items }: { items: Array<{ label: string; value: string }> })
   return (
     <div className="grid grid-cols-2 gap-2">
       {items.map(({ label, value }) => (
-        <div key={label} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-          <p className="mb-1 text-[9px] font-semibold uppercase tracking-widest text-slate-600">
+        <div key={label} className="rounded-xl border border-line bg-surface-2 p-3">
+          <p className="mb-1 text-[9px] font-semibold uppercase tracking-widest text-fg-muted">
             {label}
           </p>
-          <p className="font-mono text-sm font-semibold text-slate-200">{value}</p>
+          <p className="font-mono text-sm font-semibold text-fg-2">{value}</p>
         </div>
       ))}
     </div>
@@ -29,20 +29,20 @@ function InfoGrid({ items }: { items: Array<{ label: string; value: string }> })
 function JobResultIcon({ result }: { result: RecentJob['result'] }) {
   if (result === 'success') {
     return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5 text-emerald-400">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5 text-success">
         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
       </svg>
     )
   }
   if (result === 'running') {
     return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5 animate-spin text-blue-400">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5 animate-spin text-fg-2">
         <path strokeLinecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
       </svg>
     )
   }
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5 text-red-400">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5 text-danger">
       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
   )
@@ -51,26 +51,26 @@ function JobResultIcon({ result }: { result: RecentJob['result'] }) {
 function JobsTab({ jobs }: { jobs: RecentJob[] }) {
   if (jobs.length === 0) {
     return (
-      <div className="py-8 text-center text-sm text-slate-600">
+      <div className="py-8 text-center text-sm text-fg-muted">
         No recent jobs
       </div>
     )
   }
   return (
-    <div className="flex flex-col divide-y divide-slate-800/60">
+    <div className="flex flex-col divide-y divide-line">
       {jobs.map(job => (
         <div key={job.id} className="flex items-start gap-3 py-3">
           <div className="mt-0.5 flex-shrink-0">
             <JobResultIcon result={job.result} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate font-mono text-[11px] text-slate-400" title={job.url}>
+            <p className="truncate font-mono text-[11px] text-fg-muted" title={job.url}>
               {job.url}
             </p>
             {job.error && (
-              <p className="mt-0.5 text-[11px] text-red-500">{job.error}</p>
+              <p className="mt-0.5 text-[11px] text-danger">{job.error}</p>
             )}
-            <div className="mt-1 flex items-center gap-2 font-mono text-[9px] text-slate-700">
+            <div className="mt-1 flex items-center gap-2 font-mono text-[9px] text-fg-muted">
               {job.phase && <span>phase:{job.phase}</span>}
               <span>{(job.durationMs / 1000).toFixed(1)}s</span>
               <span>{job.startedAt}</span>
@@ -85,26 +85,26 @@ function JobsTab({ jobs }: { jobs: RecentJob[] }) {
 function ErrorsTab({ errors }: { errors: ErrorBreakdownItem[] }) {
   if (errors.length === 0) {
     return (
-      <div className="py-8 text-center text-sm text-slate-600">No errors recorded</div>
+      <div className="py-8 text-center text-sm text-fg-muted">No errors recorded</div>
     )
   }
   const total = errors.reduce((s, e) => s + e.count, 0)
   return (
     <div className="flex flex-col gap-2.5">
-      <p className="text-[10px] text-slate-600">
+      <p className="text-[10px] text-fg-muted">
         {total} total errors · last 1h
       </p>
       {errors.map(item => (
         <div key={item.errorType}>
           <div className="mb-1 flex items-center justify-between">
-            <span className="font-mono text-[11px] text-slate-300">{item.errorType}</span>
-            <span className="font-mono text-[10px] text-slate-500">
+            <span className="font-mono text-[11px] text-fg-2">{item.errorType}</span>
+            <span className="font-mono text-[10px] text-fg-muted">
               {item.count} ({item.pct}%)
             </span>
           </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+          <div className="h-1.5 overflow-hidden rounded-full bg-surface">
             <div
-              className="h-full rounded-full bg-red-500 transition-all"
+              className="h-full rounded-full bg-danger transition-all"
               style={{ width: `${item.pct}%` }}
             />
           </div>
@@ -116,16 +116,16 @@ function ErrorsTab({ errors }: { errors: ErrorBreakdownItem[] }) {
 
 function SuccessRateBar({ rate }: { rate: number }) {
   const color =
-    rate >= 90 ? 'bg-emerald-500' :
-    rate >= 70 ? 'bg-amber-500' :
-    'bg-red-500'
+    rate >= 90 ? 'bg-success' :
+    rate >= 70 ? 'bg-warning' :
+    'bg-danger'
   const textColor =
-    rate >= 90 ? 'text-emerald-400' :
-    rate >= 70 ? 'text-amber-400' :
-    'text-red-400'
+    rate >= 90 ? 'text-success' :
+    rate >= 70 ? 'text-warning' :
+    'text-danger'
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface">
         <div className={cn('h-full rounded-full transition-all', color)} style={{ width: `${rate}%` }} />
       </div>
       <span className={cn('w-8 flex-shrink-0 text-right font-mono text-[10px] font-semibold', textColor)}>
@@ -139,12 +139,12 @@ function PhasesTab({ phases }: { phases: PhaseStatItem[] }) {
   return (
     <div className="flex flex-col gap-4">
       {/* Phase stats table */}
-      <div className="overflow-hidden rounded-xl border border-slate-800">
+      <div className="overflow-hidden rounded-xl border border-line">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-slate-800">
+            <tr className="border-b border-line">
               {['Phase', 'Success Rate', 'Avg Duration', 'Jobs'].map(h => (
-                <th key={h} className="px-3 py-2 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-slate-600 first:pl-4">
+                <th key={h} className="px-3 py-2 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-fg-muted first:pl-4">
                   {h}
                 </th>
               ))}
@@ -154,10 +154,10 @@ function PhasesTab({ phases }: { phases: PhaseStatItem[] }) {
             {phases.map((p, i) => (
               <tr
                 key={p.phase}
-                className={cn('transition-colors hover:bg-slate-800/30', i < phases.length - 1 && 'border-b border-slate-800/60')}
+                className={cn('transition-colors hover:bg-surface-2', i < phases.length - 1 && 'border-b border-line')}
               >
                 <td className="py-2 pl-4 pr-3">
-                  <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-slate-400">
+                  <span className="rounded bg-surface px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
                     {p.phase}
                   </span>
                 </td>
@@ -165,7 +165,7 @@ function PhasesTab({ phases }: { phases: PhaseStatItem[] }) {
                   <SuccessRateBar rate={p.successRate} />
                 </td>
                 <td className="py-2 pr-3">
-                  <span className="font-mono text-[11px] text-slate-400">
+                  <span className="font-mono text-[11px] text-fg-muted">
                     {p.avgDurationMs < 1000
                       ? `${p.avgDurationMs}ms`
                       : `${(p.avgDurationMs / 1000).toFixed(1)}s`
@@ -173,7 +173,7 @@ function PhasesTab({ phases }: { phases: PhaseStatItem[] }) {
                   </span>
                 </td>
                 <td className="py-2 pr-3">
-                  <span className="font-mono text-[11px] text-slate-500">{p.totalJobs}</span>
+                  <span className="font-mono text-[11px] text-fg-muted">{p.totalJobs}</span>
                 </td>
               </tr>
             ))}
@@ -182,9 +182,9 @@ function PhasesTab({ phases }: { phases: PhaseStatItem[] }) {
       </div>
 
       {/* Heatmap placeholder */}
-      <div className="rounded-xl border border-dashed border-slate-800 p-4 text-center">
-        <p className="text-xs font-medium text-slate-500">Phase × Time Heatmap</p>
-        <p className="mt-1 text-[11px] text-slate-700">
+      <div className="rounded-xl border border-dashed border-line p-4 text-center">
+        <p className="text-xs font-medium text-fg-muted">Phase × Time Heatmap</p>
+        <p className="mt-1 text-[11px] text-fg-muted">
           Phase failure heatmap will render here — requires time-series phase data
           (planned for Phase 2).
         </p>
@@ -202,19 +202,19 @@ function ConfigTab({ config }: { config: PlatformDetail['config'] }) {
   ]
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col divide-y divide-slate-800/60 rounded-xl border border-slate-800">
+      <div className="flex flex-col divide-y divide-line rounded-xl border border-line">
         {rows.map(row => (
           <div key={row.key} className="flex items-start justify-between gap-4 px-4 py-3">
-            <span className="flex-shrink-0 text-[11px] font-medium text-slate-500">{row.label}</span>
-            <span className="text-right font-mono text-[11px] text-slate-300">{row.value}</span>
+            <span className="flex-shrink-0 text-[11px] font-medium text-fg-muted">{row.label}</span>
+            <span className="text-right font-mono text-[11px] text-fg-2">{row.value}</span>
           </div>
         ))}
       </div>
 
       {/* Config overrides placeholder */}
-      <div className="rounded-xl border border-dashed border-slate-800 p-4">
-        <p className="text-xs font-medium text-slate-500">Runtime Config Overrides</p>
-        <p className="mt-1 text-[11px] text-slate-700">
+      <div className="rounded-xl border border-dashed border-line p-4">
+        <p className="text-xs font-medium text-fg-muted">Runtime Config Overrides</p>
+        <p className="mt-1 text-[11px] text-fg-muted">
           Override per-platform settings at runtime without redeployment.
           Requires config API endpoints (Phase 2).
         </p>
@@ -259,7 +259,7 @@ export function PlatformDetailDrawer({
       {/* Backdrop */}
       <div
         className={cn(
-          'fixed inset-0 z-30 bg-slate-950/70 backdrop-blur-sm transition-opacity duration-200',
+          'fixed inset-0 z-30 bg-surface-2 backdrop-blur-sm transition-opacity duration-200',
           isOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
         onClick={onClose}
@@ -270,7 +270,7 @@ export function PlatformDetailDrawer({
       <aside
         className={cn(
           'fixed inset-y-0 right-0 z-40 flex w-full max-w-[480px] flex-col',
-          'border-l border-slate-800 bg-slate-950 shadow-2xl',
+          'border-l border-line bg-canvas shadow-2xl',
           'transition-transform duration-200 ease-in-out',
           isOpen ? 'translate-x-0' : 'translate-x-full',
         )}
@@ -279,25 +279,25 @@ export function PlatformDetailDrawer({
         {detail && (
           <>
             {/* ── Header ── */}
-            <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-800 px-5 py-3.5">
+            <div className="flex flex-shrink-0 items-center justify-between border-b border-line px-5 py-3.5">
               <div className="flex items-center gap-3">
                 <div
                   className={cn(
                     'flex h-8 w-10 items-center justify-center rounded-lg font-mono text-xs font-bold',
-                    detail.status === 'critical' ? 'bg-red-950 text-red-300' :
-                    detail.status === 'warning'  ? 'bg-amber-950 text-amber-300' :
-                    'bg-slate-800 text-slate-300',
+                    detail.status === 'critical' ? 'bg-danger-soft text-danger' :
+                    detail.status === 'warning'  ? 'bg-warning-soft text-warning' :
+                    'bg-surface text-fg-2',
                   )}
                 >
                   {detail.platform.slice(0, 2).toUpperCase()}
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold capitalize text-slate-100">
+                  <h3 className="text-sm font-bold capitalize text-fg">
                     {detail.platform}
                   </h3>
                   <div className="flex items-center gap-2">
                     <PlatformStatusBadge status={detail.status} />
-                    <span className="text-slate-700">·</span>
+                    <span className="text-fg-muted">·</span>
                     <CircuitStatePill state={detail.circuitState} size="xs" />
                   </div>
                 </div>
@@ -305,7 +305,7 @@ export function PlatformDetailDrawer({
 
               <button
                 onClick={onClose}
-                className="flex h-7 w-7 items-center justify-center rounded text-slate-600 transition-colors hover:bg-slate-800 hover:text-slate-300"
+                className="flex h-7 w-7 items-center justify-center rounded text-fg-muted transition-colors hover:bg-surface hover:text-fg-2"
                 aria-label="Close panel"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4">
@@ -315,7 +315,7 @@ export function PlatformDetailDrawer({
             </div>
 
             {/* ── Tabs ── */}
-            <div className="flex flex-shrink-0 gap-0 border-b border-slate-800">
+            <div className="flex flex-shrink-0 gap-0 border-b border-line">
               {TABS.map(tab => (
                 <button
                   key={tab}
@@ -323,8 +323,8 @@ export function PlatformDetailDrawer({
                   className={cn(
                     'px-4 py-2.5 text-xs font-medium transition-colors',
                     activeTab === tab
-                      ? 'border-b-2 border-blue-500 text-blue-400'
-                      : 'text-slate-500 hover:text-slate-300',
+                      ? 'border-b-2 border-line text-fg-2'
+                      : 'text-fg-muted hover:text-fg-2',
                   )}
                 >
                   {tab}
@@ -338,7 +338,7 @@ export function PlatformDetailDrawer({
                 <div className="flex flex-col gap-4">
                   {/* Description */}
                   {detail.description && (
-                    <p className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-xs leading-relaxed text-slate-400">
+                    <p className="rounded-xl border border-line bg-surface-2 p-3 text-xs leading-relaxed text-fg-muted">
                       {detail.description}
                     </p>
                   )}
@@ -367,27 +367,27 @@ export function PlatformDetailDrawer({
 
                   {/* Quick actions */}
                   <div>
-                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-600">
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
                       Quick Actions
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {(detail.circuitState === 'open' || detail.circuitState === 'half') && (
                         <button
                           onClick={() => onAction?.(detail.platform, 'reset_circuit')}
-                          className="rounded-lg border border-emerald-900 bg-emerald-950/40 px-3 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-950"
+                          className="rounded-lg border border-success/30 bg-success-soft px-3 py-1.5 text-xs font-medium text-success transition-colors hover:bg-success/20"
                         >
                           Reset Circuit
                         </button>
                       )}
                       <button
                         onClick={() => onAction?.(detail.platform, 'test_connection')}
-                        className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-800"
+                        className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-fg-2 transition-colors hover:bg-surface"
                       >
                         Test Connection
                       </button>
                       <Link
                         to={`/vid-admin/jobs?platform=${detail.platform}`}
-                        className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-800"
+                        className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-fg-2 transition-colors hover:bg-surface"
                       >
                         View Jobs →
                       </Link>

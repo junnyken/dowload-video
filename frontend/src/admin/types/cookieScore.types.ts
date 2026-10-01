@@ -43,15 +43,15 @@ export interface SelectionHistoryResponse {
 
 // Score tier display helpers
 export const SCORE_TIER_COLOR: Record<CookieScoreTier, string> = {
-  best:     'text-emerald-400',
-  ok:       'text-slate-300',
-  degraded: 'text-orange-400',
+  best:     'text-success',
+  ok:       'text-fg-2',
+  degraded: 'text-warning',
 }
 
 export const SCORE_TIER_BG: Record<CookieScoreTier, string> = {
-  best:     'bg-emerald-500/15',
-  ok:       'bg-slate-700/30',
-  degraded: 'bg-orange-500/15',
+  best:     'bg-success-soft',
+  ok:       'bg-surface-2',
+  degraded: 'bg-warning-soft',
 }
 
 export function scoreBar(score: number): number {

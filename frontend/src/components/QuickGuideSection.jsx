@@ -79,11 +79,11 @@ function GuideTabPills({ activeTab, onSelect }) {
             className={[
               'px-2.5 py-2 sm:px-3 sm:py-1 rounded-full text-[11px] font-medium',
               'transition-all duration-150 cursor-pointer whitespace-nowrap',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FBBF24]/40',
-              'focus-visible:ring-offset-1 focus-visible:ring-offset-[#011a17]',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+              'focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
               isActive
-                ? 'bg-[#FBBF24]/15 border border-[#FBBF24]/40 text-[#FBBF24] font-semibold'
-                : 'bg-transparent border border-slate-700/30 text-slate-500 hover:text-slate-400 hover:border-slate-600/50',
+                ? 'bg-accent-soft border border-accent/40 text-accent-text font-semibold'
+                : 'bg-transparent border border-line text-fg-muted hover:text-fg-muted hover:border-line-strong',
             ].join(' ')}
           >
             {GUIDE_CONTENT[key].label}
@@ -99,12 +99,12 @@ function GuideStepItem({ index, text }) {
   return (
     <li className="flex items-start gap-2">
       <span
-        className="flex-shrink-0 w-5 h-5 rounded-md bg-[#FBBF24]/10 border border-[#FBBF24]/20 flex items-center justify-center text-[9px] font-bold text-[#FBBF24] font-mono mt-px"
+        className="flex-shrink-0 w-5 h-5 rounded-md bg-accent-soft border border-accent/20 flex items-center justify-center text-[9px] font-bold text-accent-text font-mono mt-px"
         aria-hidden="true"
       >
         {num}
       </span>
-      <span className="text-[11px] sm:text-[11.5px] text-slate-300 leading-[1.45] break-words">{text}</span>
+      <span className="text-[11px] sm:text-[11.5px] text-fg-2 leading-[1.45] break-words">{text}</span>
     </li>
   );
 }
@@ -112,10 +112,10 @@ function GuideStepItem({ index, text }) {
 function GuideNotes({ notes }) {
   if (!notes?.length) return null;
   return (
-    <div className="mt-1.5 pl-5 sm:pl-7 space-y-0.5 border-t border-slate-700/20 pt-1.5">
+    <div className="mt-1.5 pl-5 sm:pl-7 space-y-0.5 border-t border-line pt-1.5">
       {notes.map((note, idx) => (
-        <p key={idx} className="text-[10px] text-slate-400 leading-[1.4] flex gap-1.5 break-words">
-          <span className="text-slate-600 flex-shrink-0 mt-px">→</span>
+        <p key={idx} className="text-[10px] text-fg-muted leading-[1.4] flex gap-1.5 break-words">
+          <span className="text-fg-muted flex-shrink-0 mt-px">→</span>
           {note}
         </p>
       ))}
@@ -133,8 +133,8 @@ function GuidePanel({ tabKey, visible }) {
       style={{ opacity: visible ? 1 : 0 }}
     >
       <div className="mb-1.5">
-        <p className="text-[11px] font-semibold text-slate-300 leading-snug">{content.title}</p>
-        <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">{content.description}</p>
+        <p className="text-[11px] font-semibold text-fg-2 leading-snug">{content.title}</p>
+        <p className="text-[10px] text-fg-muted mt-0.5 leading-snug">{content.description}</p>
       </div>
       <ol className="space-y-1 sm:space-y-1.5">
         {content.steps.map((step, idx) => (
@@ -252,20 +252,20 @@ export default function QuickGuideSection({
 
   return (
     <div className={`w-full max-w-3xl mx-auto mb-3 sm:mb-4 ${className}`}>
-      <div className="bg-[#011a17]/80 border border-slate-700/30 rounded-xl p-2.5 sm:p-3 md:p-3.5">
+      <div className="bg-surface/80 border border-line rounded-xl p-2.5 sm:p-3 md:p-3.5">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-2 gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <p className="text-[11px] font-semibold text-slate-400 whitespace-nowrap">Hướng dẫn nhanh</p>
-            <span className="hidden sm:block text-[10px] text-slate-600">·</span>
-            <p className="hidden sm:block text-[10px] text-slate-500 truncate">
+            <p className="text-[11px] font-semibold text-fg-muted whitespace-nowrap">Hướng dẫn nhanh</p>
+            <span className="hidden sm:block text-[10px] text-fg-muted">·</span>
+            <p className="hidden sm:block text-[10px] text-fg-muted truncate">
               Người mới làm theo từng bước dưới đây.
             </p>
           </div>
           <button
             onClick={() => setIsExpanded((v) => !v)}
-            className="flex-shrink-0 flex items-center gap-1 px-2 py-1.5 sm:py-1 rounded-lg text-slate-500 hover:text-slate-400 hover:bg-slate-700/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-600"
+            className="flex-shrink-0 flex items-center gap-1 px-2 py-1.5 sm:py-1 rounded-lg text-fg-muted hover:text-fg-muted hover:bg-surface-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-line-strong"
             aria-label={isExpanded ? 'Thu gọn hướng dẫn' : 'Mở rộng hướng dẫn'}
             aria-expanded={isExpanded}
           >

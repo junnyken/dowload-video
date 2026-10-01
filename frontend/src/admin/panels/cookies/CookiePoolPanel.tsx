@@ -18,17 +18,17 @@ interface SummaryCardProps {
 }
 
 const TONE_CLASSES: Record<SummaryCardProps['tone'], { text: string; icon: string }> = {
-  neutral: { text: 'text-slate-300',  icon: 'text-slate-500'  },
-  green:   { text: 'text-emerald-400', icon: 'text-emerald-600' },
-  amber:   { text: 'text-amber-400',   icon: 'text-amber-600'   },
-  red:     { text: 'text-red-400',     icon: 'text-red-700'     },
-  blue:    { text: 'text-blue-400',    icon: 'text-blue-600'    },
+  neutral: { text: 'text-fg-2',  icon: 'text-fg-muted'  },
+  green:   { text: 'text-success', icon: 'text-success' },
+  amber:   { text: 'text-accent-text',   icon: 'text-accent-text'   },
+  red:     { text: 'text-danger',     icon: 'text-danger'     },
+  blue:    { text: 'text-fg-2',    icon: 'text-fg-2'    },
 }
 
 function SummaryCard({ label, value, total, tone, iconPath }: SummaryCardProps) {
   const t = TONE_CLASSES[tone]
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
+    <div className="flex items-center gap-3 rounded-xl border border-line bg-canvas px-4 py-3">
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -44,10 +44,10 @@ function SummaryCard({ label, value, total, tone, iconPath }: SummaryCardProps) 
         <div className="flex items-baseline gap-1">
           <span className={cn('text-xl font-bold tabular-nums leading-none', t.text)}>{value}</span>
           {total !== undefined && (
-            <span className="text-xs text-slate-600">/ {total}</span>
+            <span className="text-xs text-fg-muted">/ {total}</span>
           )}
         </div>
-        <p className="mt-0.5 text-[10px] font-medium uppercase tracking-widest text-slate-600">{label}</p>
+        <p className="mt-0.5 text-[10px] font-medium uppercase tracking-widest text-fg-muted">{label}</p>
       </div>
     </div>
   )
@@ -75,8 +75,8 @@ function PlatformChips({ selected, onChange, cookiesByPlatform }: PlatformChipsP
         className={cn(
           'rounded-full border px-3 py-0.5 text-[11px] font-medium transition-colors',
           selected === 'all'
-            ? 'border-blue-700 bg-blue-950 text-blue-300'
-            : 'border-slate-700 text-slate-500 hover:border-slate-600 hover:text-slate-300',
+            ? 'border-line bg-surface-2 text-fg-2'
+            : 'border-line text-fg-muted hover:border-line-strong hover:text-fg-2',
         )}
       >
         All
@@ -88,12 +88,12 @@ function PlatformChips({ selected, onChange, cookiesByPlatform }: PlatformChipsP
           className={cn(
             'rounded-full border px-3 py-0.5 text-[11px] font-medium capitalize transition-colors',
             selected === p
-              ? 'border-blue-700 bg-blue-950 text-blue-300'
-              : 'border-slate-700 text-slate-500 hover:border-slate-600 hover:text-slate-300',
+              ? 'border-line bg-surface-2 text-fg-2'
+              : 'border-line text-fg-muted hover:border-line-strong hover:text-fg-2',
           )}
         >
           {p}
-          <span className="ml-1 text-[10px] text-slate-700">{cookiesByPlatform[p]}</span>
+          <span className="ml-1 text-[10px] text-fg-muted">{cookiesByPlatform[p]}</span>
         </button>
       ))}
     </div>
@@ -175,7 +175,7 @@ export function CookiePoolPanel({
           right={
             <button
               onClick={() => setModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-500"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg transition-colors hover:bg-accent-hover"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -186,7 +186,7 @@ export function CookiePoolPanel({
         />
 
         {/* ── Summary stats ── */}
-        <div className="grid grid-cols-2 gap-2 border-b border-slate-800 px-4 py-3 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 border-b border-line px-4 py-3 sm:grid-cols-5">
           <SummaryCard
             label="Total"
             value={summary.total}
@@ -221,7 +221,7 @@ export function CookiePoolPanel({
         </div>
 
         {/* ── Toolbar: search + platform chips ── */}
-        <div className="flex flex-col gap-2.5 border-b border-slate-800 px-4 py-3">
+        <div className="flex flex-col gap-2.5 border-b border-line px-4 py-3">
           {/* Search */}
           <div className="relative max-w-xs">
             <svg
@@ -229,7 +229,7 @@ export function CookiePoolPanel({
               fill="none"
               stroke="currentColor"
               strokeWidth={2}
-              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-600"
+              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-muted"
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M16.65 10a6.65 6.65 0 11-13.3 0 6.65 6.65 0 0113.3 0z" />
             </svg>
@@ -238,7 +238,7 @@ export function CookiePoolPanel({
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search label, platform, status…"
-              className="w-full rounded-lg border border-slate-800 bg-slate-950 py-1.5 pl-8 pr-3 text-xs text-slate-300 placeholder-slate-700 outline-none transition-colors focus:border-blue-700"
+              className="w-full rounded-lg border border-line bg-canvas py-1.5 pl-8 pr-3 text-xs text-fg-2 placeholder:text-fg-muted outline-none transition-colors focus:border-line"
             />
           </div>
 
@@ -252,12 +252,12 @@ export function CookiePoolPanel({
           {/* Result count */}
           {(search || platform !== 'all') && (
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-600">
+              <span className="text-[11px] text-fg-muted">
                 {filtered.length} of {cookies.length} cookies
               </span>
               <button
                 onClick={() => { setSearch(''); setPlatform('all') }}
-                className="text-[11px] text-blue-500 hover:text-blue-400"
+                className="text-[11px] text-fg-2 hover:text-fg-2"
               >
                 Clear filters
               </button>

@@ -14,12 +14,12 @@ import { findJob } from './job.mock'
 // ─── Job status pill ───────────────────────────────────────────────────────────
 
 const JOB_STATUS: Record<JobStatus, { pill: string; dot: string; label: string }> = {
-  queued:    { pill: 'border-blue-900   bg-blue-950   text-blue-400',    dot: 'bg-blue-500',            label: 'QUEUED'    },
-  running:   { pill: 'border-blue-700   bg-blue-900   text-blue-300',    dot: 'bg-blue-400 animate-pulse', label: 'RUNNING' },
-  done:      { pill: 'border-emerald-900 bg-emerald-950 text-emerald-400', dot: 'bg-emerald-500',       label: 'DONE'      },
-  failed:    { pill: 'border-red-900    bg-red-950    text-red-400',     dot: 'bg-red-500',             label: 'FAILED'    },
-  cancelled: { pill: 'border-slate-700  bg-slate-800  text-slate-500',   dot: 'bg-slate-600',           label: 'CANCELLED' },
-  stuck:     { pill: 'border-amber-900  bg-amber-950  text-amber-400',   dot: 'bg-amber-400 animate-pulse', label: 'STUCK' },
+  queued:    { pill: 'border-line   bg-surface-2   text-fg-2',    dot: 'bg-accent',            label: 'QUEUED'    },
+  running:   { pill: 'border-line   bg-surface-2   text-fg-2',    dot: 'bg-accent animate-pulse', label: 'RUNNING' },
+  done:      { pill: 'border-success/30 bg-success-soft text-success', dot: 'bg-success',       label: 'DONE'      },
+  failed:    { pill: 'border-danger/30    bg-danger-soft    text-danger',     dot: 'bg-danger',             label: 'FAILED'    },
+  cancelled: { pill: 'border-line  bg-surface  text-fg-muted',   dot: 'bg-line',           label: 'CANCELLED' },
+  stuck:     { pill: 'border-accent/30  bg-accent-soft  text-accent-text',   dot: 'bg-accent animate-pulse', label: 'STUCK' },
 }
 
 function JobStatusPill({ status }: { status: JobStatus }) {
@@ -48,12 +48,12 @@ function fmtMs(ms: number | null): string {
 
 function JobHeader({ job }: { job: JobInspectorData }) {
   return (
-    <div className="border-b border-slate-800 px-4 py-3 space-y-2">
+    <div className="border-b border-line px-4 py-3 space-y-2">
       {/* Top row: IDs + status + timestamps */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-sm font-bold text-slate-100">{job.jobId}</span>
+            <span className="font-mono text-sm font-bold text-fg">{job.jobId}</span>
             <JobStatusPill status={job.currentStatus} />
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5">
@@ -75,22 +75,22 @@ function JobHeader({ job }: { job: JobInspectorData }) {
       </div>
 
       {/* URL */}
-      <div className="flex items-start gap-1.5 rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-1.5">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" className="mt-0.5 h-3 w-3 flex-shrink-0 text-slate-700">
+      <div className="flex items-start gap-1.5 rounded-lg border border-line bg-surface-2 px-3 py-1.5">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" className="mt-0.5 h-3 w-3 flex-shrink-0 text-fg-muted">
           <path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
         </svg>
-        <span className="break-all font-mono text-[10px] text-slate-500">{job.url}</span>
+        <span className="break-all font-mono text-[10px] text-fg-muted">{job.url}</span>
       </div>
 
       {/* Recent errors */}
       {job.recentErrors.length > 0 && (
         <div>
-          <p className="mb-1 text-[9px] uppercase tracking-widest text-slate-700">Recent errors</p>
+          <p className="mb-1 text-[9px] uppercase tracking-widest text-fg-muted">Recent errors</p>
           <div className="flex flex-col gap-0.5">
             {job.recentErrors.map((err, i) => (
               <div key={i} className="flex items-start gap-1.5">
-                <span className="mt-1 h-1 w-1 flex-shrink-0 rounded-full bg-red-700" />
-                <span className="font-mono text-[10px] text-red-500/80">{err}</span>
+                <span className="mt-1 h-1 w-1 flex-shrink-0 rounded-full bg-danger" />
+                <span className="font-mono text-[10px] text-danger">{err}</span>
               </div>
             ))}
           </div>
@@ -112,13 +112,13 @@ function MetaField({
 }) {
   return (
     <div className={cn('flex items-center gap-1', right && 'justify-end')}>
-      <span className="text-[9px] uppercase tracking-widest text-slate-700">{label}</span>
+      <span className="text-[9px] uppercase tracking-widest text-fg-muted">{label}</span>
       <span
         className={cn(
-          'text-[10px] text-slate-500',
+          'text-[10px] text-fg-muted',
           mono       && 'font-mono',
           capitalize && 'capitalize',
-          bold       && 'font-semibold text-slate-400',
+          bold       && 'font-semibold text-fg-muted',
         )}
       >
         {value}
@@ -142,7 +142,7 @@ function TabBar({ active, onChange, job }: TabBarProps) {
   const hasFail = job.summary.failedPhases > 0
 
   return (
-    <div className="flex items-center border-b border-slate-800 px-4">
+    <div className="flex items-center border-b border-line px-4">
       {(['timeline', 'table'] as ViewTab[]).map(t => (
         <button
           key={t}
@@ -150,8 +150,8 @@ function TabBar({ active, onChange, job }: TabBarProps) {
           className={cn(
             'flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-medium transition-colors',
             active === t
-              ? 'border-blue-600 text-blue-400'
-              : 'border-transparent text-slate-600 hover:text-slate-400',
+              ? 'border-line text-fg-2'
+              : 'border-transparent text-fg-muted hover:text-fg-muted',
           )}
         >
           {t === 'timeline' ? (
@@ -174,16 +174,16 @@ function TabBar({ active, onChange, job }: TabBarProps) {
 
       {/* Progress bar */}
       <div className="ml-auto flex items-center gap-2 py-2">
-        <span className="font-mono text-[10px] text-slate-600">
+        <span className="font-mono text-[10px] text-fg-muted">
           {job.summary.completedPhases}/{job.summary.totalPhases}
         </span>
-        <div className="h-1 w-20 overflow-hidden rounded-full bg-slate-800">
+        <div className="h-1 w-20 overflow-hidden rounded-full bg-surface">
           <div
-            className={cn('h-full rounded-full transition-all', hasFail ? 'bg-red-600' : 'bg-emerald-500')}
+            className={cn('h-full rounded-full transition-all', hasFail ? 'bg-danger' : 'bg-success')}
             style={{ width: `${pct}%` }}
           />
         </div>
-        <span className="font-mono text-[10px] text-slate-600">{pct}%</span>
+        <span className="font-mono text-[10px] text-fg-muted">{pct}%</span>
       </div>
     </div>
   )
@@ -253,7 +253,7 @@ export function JobInspectorPanel({ initialJob }: JobInspectorPanelProps) {
               : 'Search a job ID, batch ID, URL, platform, or IP to inspect its phase trace.'
           }
           icon={
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.25} className="h-10 w-10 text-slate-700">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.25} className="h-10 w-10 text-fg-muted">
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M16.65 10a6.65 6.65 0 11-13.3 0 6.65 6.65 0 0113.3 0z" />
             </svg>
           }

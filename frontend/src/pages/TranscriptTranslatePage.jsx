@@ -70,11 +70,11 @@ function sourceLangLabel(sourceLang) {
 const ACTIVE_STATUSES = ['queued', 'detecting', 'translating'];
 
 const STATUS_CONFIG = {
-  queued:      { label: 'Đang chờ',              cls: 'bg-slate-600/30 text-slate-400 border-slate-600/40' },
-  detecting:   { label: 'Đang nhận diện ngôn ngữ', cls: 'bg-blue-500/15 text-blue-400 border-blue-500/30', spin: true },
-  translating: { label: 'Đang dịch',              cls: 'bg-blue-500/15 text-blue-400 border-blue-500/30', spin: true },
-  done:        { label: 'Hoàn tất',               cls: 'bg-green-500/15 text-green-400 border-green-500/30' },
-  failed:      { label: 'Thất bại',               cls: 'bg-red-500/15 text-red-400 border-red-500/30' },
+  queued:      { label: 'Đang chờ',              cls: 'bg-line text-fg-muted border-line-strong' },
+  detecting:   { label: 'Đang nhận diện ngôn ngữ', cls: 'bg-surface-2 text-fg-2 border-line', spin: true },
+  translating: { label: 'Đang dịch',              cls: 'bg-surface-2 text-fg-2 border-line', spin: true },
+  done:        { label: 'Hoàn tất',               cls: 'bg-success-soft text-success border-success/30' },
+  failed:      { label: 'Thất bại',               cls: 'bg-danger-soft text-danger border-danger/30' },
 };
 
 function StatusBadge({ status }) {
@@ -111,12 +111,12 @@ function Dropzone({ files, onFilesAdded, onRemoveFile }) {
         aria-label="Chọn hoặc kéo thả file transcript .srt/.vtt để tải lên"
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inputRef.current?.click(); } }}
         className={`cursor-pointer rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors ${
-          dragOver ? 'border-[#FBBF24] bg-[#FBBF24]/5' : 'border-slate-700/50 hover:border-slate-600'
+          dragOver ? 'border-accent bg-accent-soft' : 'border-line hover:border-line-strong'
         }`}
       >
-        <Upload className="w-8 h-8 mx-auto text-slate-500 mb-2" />
-        <p className="text-sm text-slate-300 font-medium">Kéo thả file .srt/.vtt vào đây, hoặc bấm để chọn file</p>
-        <p className="text-xs text-slate-500 mt-1">Có thể chọn nhiều file cùng lúc</p>
+        <Upload className="w-8 h-8 mx-auto text-fg-muted mb-2" />
+        <p className="text-sm text-fg-2 font-medium">Kéo thả file .srt/.vtt vào đây, hoặc bấm để chọn file</p>
+        <p className="text-xs text-fg-muted mt-1">Có thể chọn nhiều file cùng lúc</p>
         <input
           ref={inputRef}
           type="file"
@@ -132,17 +132,17 @@ function Dropzone({ files, onFilesAdded, onRemoveFile }) {
           {files.map((f, i) => (
             <li
               key={`${f.name}-${i}`}
-              className="flex items-center justify-between gap-2 bg-slate-800/40 border border-slate-700/30 rounded-lg px-3 py-2 text-sm text-slate-300"
+              className="flex items-center justify-between gap-2 bg-surface-2 border border-line rounded-lg px-3 py-2 text-sm text-fg-2"
             >
               <span className="flex items-center gap-2 min-w-0">
-                <FileText className="w-4 h-4 text-slate-500 shrink-0" />
+                <FileText className="w-4 h-4 text-fg-muted shrink-0" />
                 <span className="truncate">{f.name}</span>
               </span>
               <button
                 onClick={() => onRemoveFile(i)}
                 title="Bỏ file này"
                 aria-label={`Bỏ file ${f.name}`}
-                className="text-slate-500 hover:text-red-400 cursor-pointer shrink-0"
+                className="text-fg-muted hover:text-danger cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -160,14 +160,14 @@ function JobCard({ job, onDownload, onDelete, onBurn, onEdit }) {
   const pct = Math.min(100, Math.max(0, job.progress_pct ?? 0));
 
   return (
-    <div className="bg-[#0d2320] border border-slate-700/30 rounded-xl p-4 flex flex-col gap-3">
+    <div className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-white flex items-center gap-2 min-w-0">
-            <FileText className="w-4 h-4 text-slate-500 shrink-0" />
+          <p className="text-sm font-medium text-fg flex items-center gap-2 min-w-0">
+            <FileText className="w-4 h-4 text-fg-muted shrink-0" />
             <span className="truncate">{job.filename}</span>
           </p>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-fg-muted mt-1">
             {sourceLangLabel(job.source_lang)} → {langLabel}
           </p>
         </div>
@@ -176,34 +176,34 @@ function JobCard({ job, onDownload, onDelete, onBurn, onEdit }) {
 
       {/* Progress */}
       <div>
-        <div className="h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
+        <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-500 ${
-              job.status === 'failed' ? 'bg-red-500' : job.status === 'done' ? 'bg-green-500' : 'bg-gradient-to-r from-[#FBBF24] to-[#FB923C]'
+              job.status === 'failed' ? 'bg-danger' : job.status === 'done' ? 'bg-success' : 'bg-accent'
             }`}
             style={{ width: `${pct}%` }}
           />
         </div>
         {job.cue_count != null && (
-          <p className="text-[11px] text-slate-500 mt-1">
+          <p className="text-[11px] text-fg-muted mt-1">
             Đã dịch {job.translated_cue_count ?? 0}/{job.cue_count} dòng
           </p>
         )}
       </div>
 
       {job.status === 'failed' && job.error && (
-        <p className="text-xs text-red-400">{job.error}</p>
+        <p className="text-xs text-danger">{job.error}</p>
       )}
 
       {job.skipped_block_count > 0 && (
-        <p className="text-[11px] text-amber-400 flex items-center gap-1">
+        <p className="text-[11px] text-accent-text flex items-center gap-1">
           <AlertCircle className="w-3 h-3 shrink-0" />
           Bỏ qua {job.skipped_block_count} dòng phụ đề bị lỗi định dạng trong file gốc.
         </p>
       )}
 
       {isDone && job.reading_speed_warning_count > 0 && (
-        <p className="text-[11px] text-amber-400 flex items-center gap-1" title="Một số dòng dịch dài hơn thời gian hiển thị cho phép, người xem có thể không đọc kịp">
+        <p className="text-[11px] text-accent-text flex items-center gap-1" title="Một số dòng dịch dài hơn thời gian hiển thị cho phép, người xem có thể không đọc kịp">
           <AlertCircle className="w-3 h-3 shrink-0" />
           {job.reading_speed_warning_count} dòng dịch có thể quá dài để đọc kịp.
         </p>
@@ -215,7 +215,7 @@ function JobCard({ job, onDownload, onDelete, onBurn, onEdit }) {
           disabled={!isDone}
           title="Xem/sửa bản dịch trước khi tải"
           aria-label={`Xem/sửa bản dịch ${job.filename}`}
-          className="p-2 rounded-lg border border-slate-700/50 text-slate-300 hover:text-[#FBBF24] hover:border-[#FBBF24]/40 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-300 disabled:hover:border-slate-700/50 cursor-pointer transition-colors"
+          className="p-2 rounded-lg border border-line text-fg-2 hover:text-accent-text hover:border-accent/40 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-fg-2 disabled:hover:border-line cursor-pointer transition-colors"
         >
           <Pencil className="w-4 h-4" />
         </button>
@@ -224,7 +224,7 @@ function JobCard({ job, onDownload, onDelete, onBurn, onEdit }) {
           disabled={!isDone}
           title="Tải file đã dịch"
           aria-label={`Tải file đã dịch ${job.filename}`}
-          className="p-2 rounded-lg border border-slate-700/50 text-slate-300 hover:text-[#FBBF24] hover:border-[#FBBF24]/40 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-300 disabled:hover:border-slate-700/50 cursor-pointer transition-colors"
+          className="p-2 rounded-lg border border-line text-fg-2 hover:text-accent-text hover:border-accent/40 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-fg-2 disabled:hover:border-line cursor-pointer transition-colors"
         >
           <Download className="w-4 h-4" />
         </button>
@@ -233,7 +233,7 @@ function JobCard({ job, onDownload, onDelete, onBurn, onEdit }) {
           disabled={!isDone}
           title="Ghép phụ đề đã dịch vào video đã tải"
           aria-label={`Ghép phụ đề vào video cho ${job.filename}`}
-          className="p-2 rounded-lg border border-slate-700/50 text-slate-300 hover:text-[#FBBF24] hover:border-[#FBBF24]/40 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-300 disabled:hover:border-slate-700/50 cursor-pointer transition-colors"
+          className="p-2 rounded-lg border border-line text-fg-2 hover:text-accent-text hover:border-accent/40 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-fg-2 disabled:hover:border-line cursor-pointer transition-colors"
         >
           <Film className="w-4 h-4" />
         </button>
@@ -241,7 +241,7 @@ function JobCard({ job, onDownload, onDelete, onBurn, onEdit }) {
           onClick={() => onDelete(job.id)}
           title="Xoá job dịch"
           aria-label={`Xoá job dịch ${job.filename}`}
-          className="p-2 rounded-lg border border-slate-700/50 text-slate-300 hover:text-red-400 hover:border-red-500/40 cursor-pointer transition-colors"
+          className="p-2 rounded-lg border border-line text-fg-2 hover:text-danger hover:border-danger/40 cursor-pointer transition-colors"
         >
           <Trash2 className="w-4 h-4" />
         </button>
@@ -491,18 +491,18 @@ export default function TranscriptTranslatePage() {
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-          <Languages className="w-6 h-6 text-[#FBBF24]" />
+        <h1 className="text-2xl font-bold text-fg flex items-center gap-2">
+          <Languages className="w-6 h-6 text-accent-text" />
           Dịch Phụ Đề
         </h1>
-        <p className="text-sm text-slate-400 mt-1.5 leading-relaxed">
+        <p className="text-sm text-fg-muted mt-1.5 leading-relaxed">
           Tải lên transcript .srt/.vtt có sẵn, chọn ngôn ngữ đích — hệ thống dịch bám sát ngữ nghĩa nội dung
           gốc (không dịch máy móc từng chữ) và giữ nguyên mốc thời gian gốc của file.
         </p>
         <a
           href="/transcript-asr"
           onClick={(e) => { e.preventDefault(); window.history.pushState({}, '', '/transcript-asr'); window.dispatchEvent(new PopStateEvent('popstate')); }}
-          className="inline-flex items-center gap-1.5 text-xs text-[#FBBF24] hover:underline mt-2 cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-xs text-accent-text hover:underline mt-2 cursor-pointer"
         >
           Chưa có file phụ đề? Tự tạo bằng AI từ video đã tải →
         </a>
@@ -510,10 +510,10 @@ export default function TranscriptTranslatePage() {
 
       {/* Error banner */}
       {errorMsg && (
-        <div className="mb-4 flex items-start gap-2 px-4 py-3 bg-red-900/20 border border-red-700/30 rounded-xl text-sm text-red-300">
+        <div className="mb-4 flex items-start gap-2 px-4 py-3 bg-danger-soft border border-danger/30 rounded-xl text-sm text-danger">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
           <p className="flex-1">{errorMsg}</p>
-          <button onClick={() => setErrorMsg('')} className="text-red-400 hover:text-red-200 cursor-pointer shrink-0" aria-label="Đóng thông báo lỗi">
+          <button onClick={() => setErrorMsg('')} className="text-danger hover:text-danger cursor-pointer shrink-0" aria-label="Đóng thông báo lỗi">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -521,16 +521,16 @@ export default function TranscriptTranslatePage() {
 
       {/* Rejected files banner */}
       {rejected.length > 0 && (
-        <div className="mb-4 px-4 py-3 bg-red-900/20 border border-red-700/30 rounded-xl text-sm text-red-300">
+        <div className="mb-4 px-4 py-3 bg-danger-soft border border-danger/30 rounded-xl text-sm text-danger">
           <div className="flex items-center justify-between gap-2 mb-1.5">
             <p className="font-semibold flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" /> Một số file bị từ chối
             </p>
-            <button onClick={() => setRejected([])} className="text-red-400 hover:text-red-200 cursor-pointer shrink-0" aria-label="Đóng thông báo file bị từ chối">
+            <button onClick={() => setRejected([])} className="text-danger hover:text-danger cursor-pointer shrink-0" aria-label="Đóng thông báo file bị từ chối">
               <X className="w-4 h-4" />
             </button>
           </div>
-          <ul className="space-y-0.5 text-xs text-red-300/90">
+          <ul className="space-y-0.5 text-xs text-danger">
             {rejected.map((r, i) => (
               <li key={`${r.filename}-${i}`}>• {r.filename}: {r.reason}</li>
             ))}
@@ -539,17 +539,17 @@ export default function TranscriptTranslatePage() {
       )}
 
       {/* Upload form */}
-      <div className="bg-[#0d2320] border border-slate-700/30 rounded-xl p-5 mb-8">
+      <div className="bg-surface border border-line rounded-xl p-5 mb-8">
         <Dropzone files={files} onFilesAdded={addFiles} onRemoveFile={removeFile} />
 
         <div className="mt-4 flex flex-col sm:flex-row gap-3 sm:items-end">
           <div className="flex-1">
-            <label htmlFor="target-lang-select" className="text-xs text-slate-400 mb-1 block">Ngôn ngữ đích</label>
+            <label htmlFor="target-lang-select" className="text-xs text-fg-muted mb-1 block">Ngôn ngữ đích</label>
             <select
               id="target-lang-select"
               value={targetLang}
               onChange={(e) => setTargetLang(e.target.value)}
-              className="w-full sm:w-auto bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#FBBF24]/50 cursor-pointer"
+              className="w-full sm:w-auto bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:border-accent/50 cursor-pointer"
             >
               <option value="" disabled>-- Chọn ngôn ngữ đích --</option>
               {Object.entries(TARGET_LANGS).map(([key, label]) => (
@@ -561,7 +561,7 @@ export default function TranscriptTranslatePage() {
           <button
             onClick={handleSubmit}
             disabled={files.length === 0 || !targetLang || submitting}
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] font-bold text-sm hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
             {submitting ? 'Đang tải lên...' : 'Bắt đầu dịch'}
@@ -571,7 +571,7 @@ export default function TranscriptTranslatePage() {
 
       {/* Queue */}
       <div>
-        <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+        <h2 className="text-xs font-bold text-fg-muted uppercase tracking-wider mb-3">
           Hàng đợi dịch{jobs.length > 0 ? ` (${jobs.length})` : ''}
         </h2>
 
@@ -601,44 +601,44 @@ export default function TranscriptTranslatePage() {
           onClick={closeBurnPicker}
         >
           <div
-            className="bg-[#0d2320] border border-slate-700/40 rounded-xl w-full max-w-md max-h-[80vh] overflow-y-auto p-5"
+            className="bg-surface border border-line rounded-xl w-full max-w-md max-h-[80vh] overflow-y-auto p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Film className="w-4 h-4 text-[#FBBF24]" />
+              <h3 className="text-sm font-bold text-fg flex items-center gap-2">
+                <Film className="w-4 h-4 text-accent-text" />
                 Ghép vào video đã tải
               </h3>
-              <button onClick={closeBurnPicker} className="text-slate-500 hover:text-white cursor-pointer" aria-label="Đóng">
+              <button onClick={closeBurnPicker} className="text-fg-muted hover:text-fg cursor-pointer" aria-label="Đóng">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-400 mb-3 truncate">
-              Phụ đề: <span className="text-slate-300">{burnJob.filename}</span>
+            <p className="text-xs text-fg-muted mb-3 truncate">
+              Phụ đề: <span className="text-fg-2">{burnJob.filename}</span>
             </p>
 
             {burnResult ? (
               <div className="text-center py-4">
-                <CheckCircle2 className="w-8 h-8 text-green-400 mx-auto mb-2" />
-                <p className="text-sm text-white mb-3">Đã ghép phụ đề vào video thành công.</p>
+                <CheckCircle2 className="w-8 h-8 text-success mx-auto mb-2" />
+                <p className="text-sm text-fg mb-3">Đã ghép phụ đề vào video thành công.</p>
                 <a
                   href={`${API}${burnResult.download_url}`}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] text-sm font-bold hover:opacity-90 transition"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-accent-fg text-sm font-bold hover:opacity-90 transition"
                 >
                   <Download className="w-4 h-4" />
                   Tải video đã ghép phụ đề
                 </a>
               </div>
             ) : burnLoading ? (
-              <div className="flex items-center justify-center gap-2 py-8 text-slate-400 text-sm">
+              <div className="flex items-center justify-center gap-2 py-8 text-fg-muted text-sm">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Đang xử lý...
               </div>
             ) : (
               <>
                 {burnError && (
-                  <p className="text-xs text-red-400 mb-3 flex items-start gap-1.5">
+                  <p className="text-xs text-danger mb-3 flex items-start gap-1.5">
                     <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                     {burnError}
                   </p>
@@ -648,11 +648,11 @@ export default function TranscriptTranslatePage() {
                     <button
                       key={item.id}
                       onClick={() => handleBurnPick(item)}
-                      className="text-left px-3 py-2.5 rounded-lg border border-slate-700/40 hover:border-[#FBBF24]/40 hover:bg-[#FBBF24]/5 transition-colors cursor-pointer"
+                      className="text-left px-3 py-2.5 rounded-lg border border-line hover:border-accent/40 hover:bg-accent-soft transition-colors cursor-pointer"
                     >
-                      <p className="text-sm text-white truncate">{item.title || item.original_url}</p>
+                      <p className="text-sm text-fg truncate">{item.title || item.original_url}</p>
                       {item.platform && (
-                        <p className="text-[11px] text-slate-500 mt-0.5">{item.platform}</p>
+                        <p className="text-[11px] text-fg-muted mt-0.5">{item.platform}</p>
                       )}
                     </button>
                   ))}
@@ -665,25 +665,25 @@ export default function TranscriptTranslatePage() {
 
       {editJob && (
         <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-[#0d2320] border border-slate-700/40 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/30 shrink-0">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2 min-w-0">
-                <Pencil className="w-4 h-4 text-[#FBBF24] shrink-0" />
+          <div className="bg-surface border border-line rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-line shrink-0">
+              <h3 className="text-sm font-bold text-fg flex items-center gap-2 min-w-0">
+                <Pencil className="w-4 h-4 text-accent-text shrink-0" />
                 <span className="truncate">Xem/sửa bản dịch — {editJob.filename}</span>
               </h3>
-              <button onClick={closeEditor} className="text-slate-500 hover:text-white cursor-pointer shrink-0" aria-label="Đóng">
+              <button onClick={closeEditor} className="text-fg-muted hover:text-fg cursor-pointer shrink-0" aria-label="Đóng">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-4">
               {editLoading ? (
-                <div className="flex items-center justify-center gap-2 py-8 text-slate-400 text-sm">
+                <div className="flex items-center justify-center gap-2 py-8 text-fg-muted text-sm">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Đang tải...
                 </div>
               ) : editError && editCues.length === 0 ? (
-                <p className="text-sm text-red-400 flex items-start gap-1.5">
+                <p className="text-sm text-danger flex items-start gap-1.5">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   {editError}
                 </p>
@@ -691,7 +691,7 @@ export default function TranscriptTranslatePage() {
                 <div className="flex flex-col gap-3">
                   {editCues.map((cue) => (
                     <div key={cue.index} className="flex gap-3">
-                      <div className="w-24 shrink-0 pt-2 text-[10px] text-slate-500 font-mono leading-tight">
+                      <div className="w-24 shrink-0 pt-2 text-[10px] text-fg-muted font-mono leading-tight">
                         <div>#{cue.index}</div>
                         <div>{cue.start.split(',')[0].split('.')[0]}</div>
                       </div>
@@ -699,8 +699,8 @@ export default function TranscriptTranslatePage() {
                         value={cue.text}
                         onChange={(e) => editCueText(cue.index, e.target.value)}
                         rows={1}
-                        className={`flex-1 bg-slate-800/40 border rounded-lg px-3 py-2 text-sm text-white resize-y focus:outline-none focus:border-[#FBBF24]/50 ${
-                          editDirty.has(cue.index) ? 'border-[#FBBF24]/40' : 'border-slate-700/40'
+                        className={`flex-1 bg-surface-2 border rounded-lg px-3 py-2 text-sm text-fg resize-y focus:outline-none focus:border-accent/50 ${
+                          editDirty.has(cue.index) ? 'border-accent/40' : 'border-line'
                         }`}
                       />
                     </div>
@@ -709,19 +709,19 @@ export default function TranscriptTranslatePage() {
               )}
             </div>
 
-            <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-slate-700/30 shrink-0">
+            <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-line shrink-0">
               <div className="text-xs min-w-0">
                 {editError && editCues.length > 0 && (
-                  <span className="text-red-400 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5 shrink-0" />{editError}</span>
+                  <span className="text-danger flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5 shrink-0" />{editError}</span>
                 )}
                 {!editError && editDirty.size > 0 && (
-                  <span className="text-slate-400">{editDirty.size} dòng đã sửa, chưa lưu.</span>
+                  <span className="text-fg-muted">{editDirty.size} dòng đã sửa, chưa lưu.</span>
                 )}
               </div>
               <button
                 onClick={saveEdits}
                 disabled={editDirty.size === 0 || editSaving}
-                className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] text-sm font-bold hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-accent-fg text-sm font-bold hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
                 {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 {editSaving ? 'Đang lưu...' : 'Lưu thay đổi'}

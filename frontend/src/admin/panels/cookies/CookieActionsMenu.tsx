@@ -22,8 +22,8 @@ function MenuItem({ label, description, iconPath, onClick, destructive, disabled
         disabled
           ? 'cursor-not-allowed opacity-35'
           : destructive
-            ? 'text-red-400 hover:bg-red-950/40'
-            : 'text-slate-300 hover:bg-slate-800',
+            ? 'text-danger hover:bg-danger-soft'
+            : 'text-fg-2 hover:bg-surface',
       )}
     >
       <svg
@@ -40,7 +40,7 @@ function MenuItem({ label, description, iconPath, onClick, destructive, disabled
       <div className="min-w-0">
         <p className="font-medium leading-tight">{label}</p>
         {description && (
-          <p className={cn('text-[10px] leading-tight', destructive ? 'text-red-700' : 'text-slate-600')}>
+          <p className={cn('text-[10px] leading-tight', destructive ? 'text-danger' : 'text-fg-muted')}>
             {description}
           </p>
         )}
@@ -50,7 +50,7 @@ function MenuItem({ label, description, iconPath, onClick, destructive, disabled
 }
 
 function Divider() {
-  return <div className="my-1 border-t border-slate-800" />
+  return <div className="my-1 border-t border-line" />
 }
 
 interface CookieActionsMenuProps {
@@ -113,7 +113,7 @@ export function CookieActionsMenu({ cookie, onAction }: CookieActionsMenuProps) 
     <div
       ref={menuRef}
       style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 9999 }}
-      className="w-52 rounded-xl border border-slate-800 bg-slate-900 py-1 shadow-2xl"
+      className="w-52 rounded-xl border border-line bg-canvas py-1 shadow-2xl"
       onClick={e => e.stopPropagation()}
     >
           {/* Test */}
@@ -196,8 +196,8 @@ export function CookieActionsMenu({ cookie, onAction }: CookieActionsMenuProps) 
         ref={btnRef}
         onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
         className={cn(
-          'flex h-6 w-6 items-center justify-center rounded text-slate-600 transition-colors hover:bg-slate-700 hover:text-slate-300',
-          open && 'bg-slate-700 text-slate-300',
+          'flex h-6 w-6 items-center justify-center rounded text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg-2',
+          open && 'bg-surface-2 text-fg-2',
         )}
         aria-label={`Actions for ${cookie.accountLabel}`}
       >

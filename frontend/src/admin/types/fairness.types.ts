@@ -130,24 +130,24 @@ export const ADMISSION_DECISION_LABEL: Record<AdmissionDecision, string> = {
 }
 
 export const ADMISSION_DECISION_COLOR: Record<AdmissionDecision, string> = {
-  ACCEPT_IMMEDIATE:             'text-emerald-400',
-  ACCEPT_DELAYED:               'text-amber-400',
-  REJECT_TEMPORARY:             'text-orange-400',
-  REJECT_PLATFORM_UNAVAILABLE:  'text-red-400',
+  ACCEPT_IMMEDIATE:             'text-success',
+  ACCEPT_DELAYED:               'text-accent-text',
+  REJECT_TEMPORARY:             'text-accent-text',
+  REJECT_PLATFORM_UNAVAILABLE:  'text-danger',
 }
 
 export const ADMISSION_DECISION_BG: Record<AdmissionDecision, string> = {
-  ACCEPT_IMMEDIATE:             'bg-emerald-500/10',
-  ACCEPT_DELAYED:               'bg-amber-500/10',
-  REJECT_TEMPORARY:             'bg-orange-500/10',
-  REJECT_PLATFORM_UNAVAILABLE:  'bg-red-500/10',
+  ACCEPT_IMMEDIATE:             'bg-success-soft',
+  ACCEPT_DELAYED:               'bg-accent-soft',
+  REJECT_TEMPORARY:             'bg-accent-soft',
+  REJECT_PLATFORM_UNAVAILABLE:  'bg-danger-soft',
 }
 
 export function pressureColor(p: number): string {
-  if (p >= 0.9) return 'text-red-400'
-  if (p >= 0.7) return 'text-orange-400'
-  if (p >= 0.4) return 'text-amber-400'
-  return 'text-emerald-400'
+  if (p >= 0.9) return 'text-danger'
+  if (p >= 0.7) return 'text-accent-text'
+  if (p >= 0.4) return 'text-accent-text'
+  return 'text-success'
 }
 
 export function pressureLabel(p: number): string {

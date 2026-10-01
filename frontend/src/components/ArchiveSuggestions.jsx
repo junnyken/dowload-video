@@ -62,54 +62,54 @@ export default function ArchiveSuggestions({ authToken }) {
   return (
     <div className="space-y-3 mb-4">
       {toast && (
-        <div className="fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg bg-green-600 text-white text-sm shadow-lg">
+        <div className="fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg bg-success text-success-fg text-sm shadow-lg">
           {toast}
         </div>
       )}
 
       {dupModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60">
-          <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-5 max-w-md w-full mx-4">
-            <div className="text-white font-semibold mb-3">Có thể trùng lặp</div>
-            <div className="text-zinc-400 text-sm mb-3">"{dupModal.title}"</div>
+          <div className="bg-surface border border-line rounded-xl p-5 max-w-md w-full mx-4">
+            <div className="text-fg font-semibold mb-3">Có thể trùng lặp</div>
+            <div className="text-fg-muted text-sm mb-3">"{dupModal.title}"</div>
             <div className="space-y-2">
               {(dupModal.items || []).map((it, i) => (
-                <div key={i} className="bg-zinc-700/50 rounded p-2 text-sm">
-                  <div className="text-white">{it.title}</div>
-                  <div className="text-zinc-500 text-xs">{it.created_at ? new Date(it.created_at).toLocaleString("vi-VN") : ""}</div>
+                <div key={i} className="bg-surface-2 rounded p-2 text-sm">
+                  <div className="text-fg">{it.title}</div>
+                  <div className="text-fg-muted text-xs">{it.created_at ? new Date(it.created_at).toLocaleString("vi-VN") : ""}</div>
                 </div>
               ))}
             </div>
-            <button onClick={() => setDupModal(null)} className="mt-4 w-full py-2 rounded-lg bg-zinc-700 text-white text-sm hover:bg-zinc-600 transition">Đóng</button>
+            <button onClick={() => setDupModal(null)} className="mt-4 w-full py-2 rounded-lg bg-surface-2 text-fg text-sm hover:bg-line transition">Đóng</button>
           </div>
         </div>
       )}
 
       {tagSuggestions.length > 0 && (
-        <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
+        <div className="bg-surface-2 border border-line rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-white">💡 Gợi ý tag tự động</span>
-            <span className="text-xs text-zinc-500">{tagSuggestions.length} mục</span>
+            <span className="text-sm font-medium text-fg">💡 Gợi ý tag tự động</span>
+            <span className="text-xs text-fg-muted">{tagSuggestions.length} mục</span>
           </div>
           <div className="space-y-2">
             {visibleTags.map((s) => (
               <div key={s.item_id} className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-zinc-400 shrink-0 max-w-[120px] truncate" title={s.title}>{s.title}</span>
+                <span className="text-xs text-fg-muted shrink-0 max-w-[120px] truncate" title={s.title}>{s.title}</span>
                 <div className="flex gap-1 flex-wrap flex-1">
                   {(s.suggested_tags || []).map((t) => (
-                    <span key={t} className="px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-300 text-xs border border-blue-500/20">{t}</span>
+                    <span key={t} className="px-2 py-0.5 rounded-full bg-surface-2 text-fg-2 text-xs border border-line">{t}</span>
                   ))}
                 </div>
                 <button onClick={() => acceptTags(s)} disabled={accepting === s.item_id}
-                  className="text-xs px-2 py-1 rounded bg-blue-600/30 text-blue-300 hover:bg-blue-600/50 transition disabled:opacity-50 shrink-0">
+                  className="text-xs px-2 py-1 rounded bg-surface-2 text-fg-2 hover:bg-line transition disabled:opacity-50 shrink-0">
                   {accepting === s.item_id ? "..." : "Áp dụng"}
                 </button>
-                <button onClick={() => dismissTag(s.item_id)} className="text-xs text-zinc-600 hover:text-zinc-400 transition shrink-0">✕</button>
+                <button onClick={() => dismissTag(s.item_id)} className="text-xs text-fg-muted hover:text-fg-muted transition shrink-0">✕</button>
               </div>
             ))}
           </div>
           {tagSuggestions.length > 3 && (
-            <button onClick={() => setTagsExpanded(!tagsExpanded)} className="mt-2 text-xs text-zinc-500 hover:text-zinc-300 transition">
+            <button onClick={() => setTagsExpanded(!tagsExpanded)} className="mt-2 text-xs text-fg-muted hover:text-fg-2 transition">
               {tagsExpanded ? "Thu gọn" : `Xem thêm ${tagSuggestions.length - 3} mục`}
             </button>
           )}
@@ -117,23 +117,23 @@ export default function ArchiveSuggestions({ authToken }) {
       )}
 
       {duplicates.length > 0 && (
-        <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
+        <div className="bg-surface-2 border border-line rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-white">🔍 Có thể trùng lặp</span>
-            <span className="text-xs text-zinc-500">{duplicates.length} nhóm</span>
+            <span className="text-sm font-medium text-fg">🔍 Có thể trùng lặp</span>
+            <span className="text-xs text-fg-muted">{duplicates.length} nhóm</span>
           </div>
           <div className="space-y-2">
             {visibleDups.map((d, i) => (
               <div key={i} className="flex items-center gap-2">
-                <span className="text-xs text-zinc-400 flex-1 truncate">{d.title}</span>
-                <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-300">{(d.items || []).length} bản</span>
-                <button onClick={() => setDupModal(d)} className="text-xs px-2 py-1 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition">Xem</button>
-                <button onClick={() => setDuplicates((prev) => prev.filter((_, j) => j !== i))} className="text-xs text-zinc-600 hover:text-zinc-400 transition">✕</button>
+                <span className="text-xs text-fg-muted flex-1 truncate">{d.title}</span>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-accent-soft text-accent-text">{(d.items || []).length} bản</span>
+                <button onClick={() => setDupModal(d)} className="text-xs px-2 py-1 rounded bg-surface text-fg-2 hover:bg-surface-2 transition">Xem</button>
+                <button onClick={() => setDuplicates((prev) => prev.filter((_, j) => j !== i))} className="text-xs text-fg-muted hover:text-fg-muted transition">✕</button>
               </div>
             ))}
           </div>
           {duplicates.length > 3 && (
-            <button onClick={() => setDupExpanded(!dupExpanded)} className="mt-2 text-xs text-zinc-500 hover:text-zinc-300 transition">
+            <button onClick={() => setDupExpanded(!dupExpanded)} className="mt-2 text-xs text-fg-muted hover:text-fg-2 transition">
               {dupExpanded ? "Thu gọn" : `Xem thêm ${duplicates.length - 3} nhóm`}
             </button>
           )}

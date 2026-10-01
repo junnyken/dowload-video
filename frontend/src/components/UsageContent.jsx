@@ -45,12 +45,12 @@ export default function UsageContent() {
 
   if (loading) return (
     <div className="flex justify-center py-16">
-      <div className="w-6 h-6 border-2 border-[#FBBF24] border-t-transparent rounded-full animate-spin" />
+      <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
   if (!usage) return (
-    <div className="text-center py-16 text-slate-400">Không tải được dữ liệu. Thử lại sau.</div>
+    <div className="text-center py-16 text-fg-muted">Không tải được dữ liệu. Thử lại sau.</div>
   );
 
   const dailyPct  = usage.limits.daily  > 0 ? Math.min(100, (usage.downloads_today  / usage.limits.daily)  * 100) : 0;
@@ -183,16 +183,16 @@ export default function UsageContent() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-slate-800 flex items-center justify-center">
-            <BarChart2 className="w-5 h-5 text-[#FBBF24]" />
+          <div className="w-9 h-9 rounded-lg bg-surface flex items-center justify-center">
+            <BarChart2 className="w-5 h-5 text-accent-text" />
           </div>
           <div>
-            <h1 className="text-white font-bold text-lg">Quota & Usage</h1>
-            <p className="text-slate-400 text-xs">Theo dõi lượt tải theo tài khoản</p>
+            <h1 className="text-fg font-bold text-lg">Quota & Usage</h1>
+            <p className="text-fg-muted text-xs">Theo dõi lượt tải theo tài khoản</p>
           </div>
         </div>
         <button onClick={load}
-          className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors">
+          className="p-2 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-2 transition-colors">
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
@@ -200,19 +200,19 @@ export default function UsageContent() {
       {/* Plan badge */}
       <div className={`flex items-center gap-2.5 px-4 py-3 rounded-xl border
         ${isPro
-          ? 'bg-[#FBBF24]/10 border-[#FBBF24]/30'
-          : 'bg-slate-800/40 border-slate-700/50'}`}>
-        <Crown className={`w-5 h-5 ${isPro ? 'text-[#FBBF24]' : 'text-slate-500'}`} />
+          ? 'bg-accent-soft border-accent/30'
+          : 'bg-surface-2 border-line'}`}>
+        <Crown className={`w-5 h-5 ${isPro ? 'text-accent-text' : 'text-fg-muted'}`} />
         <div>
-          <p className={`text-sm font-bold ${isPro ? 'text-[#FBBF24]' : 'text-white'}`}>
+          <p className={`text-sm font-bold ${isPro ? 'text-accent-text' : 'text-fg'}`}>
             {isPro ? 'Pro Plan' : 'Free Plan'}
           </p>
-          <p className="text-slate-400 text-xs">
+          <p className="text-fg-muted text-xs">
             {isPro ? 'Tải không giới hạn' : `Tối đa ${usage.limits.daily}/ngày, ${usage.limits.monthly}/tháng`}
           </p>
         </div>
         {!isPro && (
-          <span className="ml-auto text-[10px] font-bold text-[#FBBF24] bg-[#FBBF24]/10 border border-[#FBBF24]/20 px-2 py-0.5 rounded-full">
+          <span className="ml-auto text-[10px] font-bold text-accent-text bg-accent-soft border border-accent/20 px-2 py-0.5 rounded-full">
             Nâng cấp
           </span>
         )}
@@ -236,11 +236,11 @@ export default function UsageContent() {
           pct={monthPct}
           isPro={isPro}
         />
-        <div className="col-span-2 bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 flex items-center gap-3">
-          <Archive className="w-4 h-4 text-slate-400" />
+        <div className="col-span-2 bg-surface-2 border border-line rounded-xl p-4 flex items-center gap-3">
+          <Archive className="w-4 h-4 text-fg-muted" />
           <div>
-            <p className="text-white font-bold text-lg">{usage.bulk_jobs_count}</p>
-            <p className="text-slate-400 text-xs">Bulk jobs tổng cộng</p>
+            <p className="text-fg font-bold text-lg">{usage.bulk_jobs_count}</p>
+            <p className="text-fg-muted text-xs">Bulk jobs tổng cộng</p>
           </div>
         </div>
       </div>
@@ -252,40 +252,40 @@ export default function UsageContent() {
 
       {/* Upgrade CTA for free users */}
       {!isPro && (
-        <div className="bg-gradient-to-r from-[#FBBF24]/5 to-[#FB923C]/5 border border-[#FBBF24]/20 rounded-xl p-4">
-          <p className="text-white font-semibold text-sm mb-1">Nâng lên Pro — tải không giới hạn</p>
-          <p className="text-slate-400 text-xs mb-3">
+        <div className="bg-surface-2 border border-accent/20 rounded-xl p-4">
+          <p className="text-fg font-semibold text-sm mb-1">Nâng lên Pro — tải không giới hạn</p>
+          <p className="text-fg-muted text-xs mb-3">
             Xoá giới hạn ngày/tháng, ưu tiên queue, không có quảng cáo.
           </p>
-          <button className="px-4 py-2 rounded-lg bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] text-sm font-bold hover:opacity-90 transition">
+          <button className="px-4 py-2 rounded-lg bg-accent text-accent-fg text-sm font-bold hover:opacity-90 transition">
             Xem gói Pro →
           </button>
         </div>
       )}
 
       {/* ── API Key Section (moved up, webhook follows) ─── */}
-      <div className="rounded-xl border border-slate-700/50 overflow-hidden">
+      <div className="rounded-xl border border-line overflow-hidden">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 bg-slate-800/60 border-b border-slate-700/50">
-          <Key className={`w-4 h-4 ${isPro ? 'text-violet-400' : 'text-slate-500'}`} />
-          <span className="text-white font-bold text-sm">API Key</span>
+        <div className="flex items-center gap-3 px-4 py-3 bg-surface border-b border-line">
+          <Key className={`w-4 h-4 ${isPro ? 'text-fg-2' : 'text-fg-muted'}`} />
+          <span className="text-fg font-bold text-sm">API Key</span>
           {isPro && (
-            <span className="ml-auto text-[10px] font-bold text-violet-300 bg-violet-500/15 border border-violet-500/30 px-2 py-0.5 rounded-full">
+            <span className="ml-auto text-[10px] font-bold text-fg-2 bg-surface-2 border border-line px-2 py-0.5 rounded-full">
               Pro
             </span>
           )}
         </div>
 
-        <div className="p-4 bg-slate-800/30">
+        <div className="p-4 bg-surface-2">
           {/* Free tier: locked */}
           {!isPro && (
             <div className="flex flex-col items-center gap-3 py-4 text-center">
-              <Lock className="w-8 h-8 text-slate-600" />
+              <Lock className="w-8 h-8 text-fg-muted" />
               <div>
-                <p className="text-white font-semibold text-sm">Tính năng Pro</p>
-                <p className="text-slate-400 text-xs mt-1">Nâng cấp để dùng API Key và tích hợp VidGrab vào ứng dụng của bạn.</p>
+                <p className="text-fg font-semibold text-sm">Tính năng Pro</p>
+                <p className="text-fg-muted text-xs mt-1">Nâng cấp để dùng API Key và tích hợp VidGrab vào ứng dụng của bạn.</p>
               </div>
-              <button className="mt-1 px-4 py-2 rounded-lg bg-gradient-to-r from-violet-500 to-indigo-500 text-white text-xs font-bold hover:opacity-90 transition">
+              <button className="mt-1 px-4 py-2 rounded-lg bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition">
                 Nâng cấp Pro →
               </button>
             </div>
@@ -296,30 +296,30 @@ export default function UsageContent() {
             <>
               {/* Error */}
               {apiKeyError && (
-                <div className="mb-3 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-semibold">
+                <div className="mb-3 px-3 py-2 rounded-lg bg-danger-soft border border-danger/30 text-danger text-xs font-semibold">
                   {apiKeyError}
                 </div>
               )}
 
               {/* Show-once key reveal */}
               {newApiKey && (
-                <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/8 overflow-hidden">
-                  <div className="flex items-start gap-2 px-3 py-2.5 border-b border-amber-500/20">
-                    <span className="text-amber-400 text-xs font-bold">Lưu key ngay — không thể xem lại sau khi đóng.</span>
+                <div className="mb-4 rounded-lg border border-accent/40 bg-accent-soft overflow-hidden">
+                  <div className="flex items-start gap-2 px-3 py-2.5 border-b border-accent/20">
+                    <span className="text-accent-text text-xs font-bold">Lưu key ngay — không thể xem lại sau khi đóng.</span>
                   </div>
                   <div className="flex items-center gap-2 px-3 py-2.5">
-                    <code className="flex-1 text-xs font-mono text-emerald-300 break-all select-all">{newApiKey}</code>
+                    <code className="flex-1 text-xs font-mono text-success break-all select-all">{newApiKey}</code>
                     <button
                       onClick={handleCopyKey}
                       title="Sao chép"
-                      className="flex-shrink-0 p-1.5 rounded-lg bg-slate-700/60 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                      className="flex-shrink-0 p-1.5 rounded-lg bg-surface-2 text-fg-2 hover:text-fg hover:bg-line transition-colors"
                     >
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => setNewApiKey(null)}
                       title="Đóng"
-                      className="flex-shrink-0 p-1.5 rounded-lg bg-slate-700/60 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors text-xs font-bold leading-none"
+                      className="flex-shrink-0 p-1.5 rounded-lg bg-surface-2 text-fg-muted hover:text-fg hover:bg-line transition-colors text-xs font-bold leading-none"
                       aria-label="Đóng"
                     >
                       ✕
@@ -331,14 +331,14 @@ export default function UsageContent() {
               {/* No key yet */}
               {apiKeyStatus && !apiKeyStatus.has_key && !newApiKey && (
                 <div className="flex flex-col items-center gap-3 py-3 text-center">
-                  <p className="text-slate-400 text-xs">Bạn chưa có API Key. Tạo key để tích hợp VidGrab vào ứng dụng.</p>
+                  <p className="text-fg-muted text-xs">Bạn chưa có API Key. Tạo key để tích hợp VidGrab vào ứng dụng.</p>
                   <button
                     onClick={handleGenerateApiKey}
                     disabled={apiKeyLoading}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-sm font-bold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {apiKeyLoading
-                      ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ? <span className="w-4 h-4 border-2 border-line border-t-fg rounded-full animate-spin" />
                       : <Key className="w-4 h-4" />}
                     Tạo API Key
                   </button>
@@ -349,34 +349,34 @@ export default function UsageContent() {
               {apiKeyStatus && apiKeyStatus.has_key && (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
-                    <span className="text-emerald-400 text-xs font-bold">Key đang hoạt động</span>
+                    <span className="w-2 h-2 rounded-full bg-success flex-shrink-0" />
+                    <span className="text-success text-xs font-bold">Key đang hoạt động</span>
                   </div>
-                  <div className="space-y-1 text-xs text-slate-400">
+                  <div className="space-y-1 text-xs text-fg-muted">
                     {apiKeyStatus.created_at && (
-                      <p>Tạo lúc: <span className="text-slate-300">{new Date(apiKeyStatus.created_at).toLocaleString('vi-VN')}</span></p>
+                      <p>Tạo lúc: <span className="text-fg-2">{new Date(apiKeyStatus.created_at).toLocaleString('vi-VN')}</span></p>
                     )}
                     {apiKeyStatus.last_used_at ? (
-                      <p>Dùng lần cuối: <span className="text-slate-300">{new Date(apiKeyStatus.last_used_at).toLocaleString('vi-VN')}</span></p>
+                      <p>Dùng lần cuối: <span className="text-fg-2">{new Date(apiKeyStatus.last_used_at).toLocaleString('vi-VN')}</span></p>
                     ) : (
-                      <p className="text-slate-500">Chưa dùng lần nào.</p>
+                      <p className="text-fg-muted">Chưa dùng lần nào.</p>
                     )}
                   </div>
                   <div className="flex gap-2 pt-1">
                     <button
                       onClick={handleGenerateApiKey}
                       disabled={apiKeyLoading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/20 text-violet-300 border border-violet-500/30 hover:bg-violet-600/30 text-xs font-bold transition-colors disabled:opacity-60"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-2 text-fg-2 border border-line hover:bg-line text-xs font-bold transition-colors disabled:opacity-60"
                     >
                       {apiKeyLoading
-                        ? <span className="w-3.5 h-3.5 border-2 border-violet-300/30 border-t-violet-300 rounded-full animate-spin" />
+                        ? <span className="w-3.5 h-3.5 border-2 border-line border-t-line rounded-full animate-spin" />
                         : <RefreshCw className="w-3.5 h-3.5" />}
                       Tạo Key mới
                     </button>
                     <button
                       onClick={handleRevokeApiKey}
                       disabled={apiKeyLoading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 text-xs font-bold transition-colors disabled:opacity-60"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft text-danger border border-danger/30 hover:bg-danger/20 text-xs font-bold transition-colors disabled:opacity-60"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       Thu hồi Key
@@ -388,7 +388,7 @@ export default function UsageContent() {
               {/* Loading initial status */}
               {!apiKeyStatus && (
                 <div className="flex justify-center py-4">
-                  <span className="w-5 h-5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                  <span className="w-5 h-5 border-2 border-line border-t-transparent rounded-full animate-spin" />
                 </div>
               )}
             </>
@@ -396,28 +396,28 @@ export default function UsageContent() {
         </div>
       </div>
       {/* ── Webhook Section ──────────────────────────────── */}
-      <div className="rounded-xl border border-slate-700/50 overflow-hidden">
+      <div className="rounded-xl border border-line overflow-hidden">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 bg-slate-800/60 border-b border-slate-700/50">
-          <Webhook className={`w-4 h-4 ${isPro ? 'text-sky-400' : 'text-slate-500'}`} />
-          <span className="text-white font-bold text-sm">Webhook</span>
+        <div className="flex items-center gap-3 px-4 py-3 bg-surface border-b border-line">
+          <Webhook className={`w-4 h-4 ${isPro ? 'text-fg-2' : 'text-fg-muted'}`} />
+          <span className="text-fg font-bold text-sm">Webhook</span>
           {isPro && (
-            <span className="ml-auto text-[10px] font-bold text-sky-300 bg-sky-500/15 border border-sky-500/30 px-2 py-0.5 rounded-full">
+            <span className="ml-auto text-[10px] font-bold text-fg-2 bg-surface-2 border border-line px-2 py-0.5 rounded-full">
               Pro
             </span>
           )}
         </div>
 
-        <div className="p-4 bg-slate-800/30">
+        <div className="p-4 bg-surface-2">
           {/* Free tier: locked */}
           {!isPro && (
             <div className="flex flex-col items-center gap-3 py-4 text-center">
-              <Lock className="w-8 h-8 text-slate-600" />
+              <Lock className="w-8 h-8 text-fg-muted" />
               <div>
-                <p className="text-white font-semibold text-sm">Tính năng Pro</p>
-                <p className="text-slate-400 text-xs mt-1">Nâng cấp để nhận webhook khi có sự kiện tải xuống.</p>
+                <p className="text-fg font-semibold text-sm">Tính năng Pro</p>
+                <p className="text-fg-muted text-xs mt-1">Nâng cấp để nhận webhook khi có sự kiện tải xuống.</p>
               </div>
-              <button className="mt-1 px-4 py-2 rounded-lg bg-gradient-to-r from-sky-500 to-indigo-500 text-white text-xs font-bold hover:opacity-90 transition">
+              <button className="mt-1 px-4 py-2 rounded-lg bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition">
                 Nâng cấp Pro →
               </button>
             </div>
@@ -428,31 +428,31 @@ export default function UsageContent() {
             <div className="space-y-4">
               {/* Error */}
               {webhookError && (
-                <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-semibold">
+                <div className="px-3 py-2 rounded-lg bg-danger-soft border border-danger/30 text-danger text-xs font-semibold">
                   {webhookError}
                 </div>
               )}
 
               {/* Show-once secret reveal */}
               {webhookSecret && (
-                <div className="rounded-lg border border-amber-500/40 bg-amber-500/8 overflow-hidden">
-                  <div className="flex items-start gap-2 px-3 py-2.5 border-b border-amber-500/20">
-                    <Shield className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
-                    <span className="text-amber-400 text-xs font-bold">Lưu secret ngay — không thể xem lại sau khi đóng.</span>
+                <div className="rounded-lg border border-accent/40 bg-accent-soft overflow-hidden">
+                  <div className="flex items-start gap-2 px-3 py-2.5 border-b border-accent/20">
+                    <Shield className="w-3.5 h-3.5 text-accent-text flex-shrink-0 mt-0.5" />
+                    <span className="text-accent-text text-xs font-bold">Lưu secret ngay — không thể xem lại sau khi đóng.</span>
                   </div>
                   <div className="flex items-center gap-2 px-3 py-2.5">
-                    <code className="flex-1 text-xs font-mono text-emerald-300 break-all select-all">{webhookSecret}</code>
+                    <code className="flex-1 text-xs font-mono text-success break-all select-all">{webhookSecret}</code>
                     <button
                       onClick={() => navigator.clipboard.writeText(webhookSecret).catch(() => {})}
                       title="Sao chép"
-                      className="flex-shrink-0 p-1.5 rounded-lg bg-slate-700/60 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                      className="flex-shrink-0 p-1.5 rounded-lg bg-surface-2 text-fg-2 hover:text-fg hover:bg-line transition-colors"
                     >
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => setWebhookSecret(null)}
                       title="Đóng"
-                      className="flex-shrink-0 p-1.5 rounded-lg bg-slate-700/60 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors text-xs font-bold leading-none"
+                      className="flex-shrink-0 p-1.5 rounded-lg bg-surface-2 text-fg-muted hover:text-fg hover:bg-line transition-colors text-xs font-bold leading-none"
                       aria-label="Đóng"
                     >
                       ✕
@@ -464,19 +464,19 @@ export default function UsageContent() {
               {/* No webhook: registration form */}
               {!webhookHasReg && !webhookLoading && (
                 <form onSubmit={handleRegisterWebhook} className="space-y-3">
-                  <p className="text-slate-400 text-xs">Nhận sự kiện tải xuống (job_done, job_failed) tới URL của bạn.</p>
+                  <p className="text-fg-muted text-xs">Nhận sự kiện tải xuống (job_done, job_failed) tới URL của bạn.</p>
                   <div className="flex gap-2">
                     <input
                       type="url"
                       value={webhookUrl}
                       onChange={e => setWebhookUrl(e.target.value)}
                       placeholder="https://your-server.com/webhook"
-                      className="flex-1 bg-slate-900/60 border border-slate-600/50 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-400/60 transition-colors"
+                      className="flex-1 bg-surface-2 border border-line-strong rounded-lg px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:outline-none focus:border-line transition-colors"
                     />
                     <button
                       type="submit"
                       disabled={!webhookUrl.trim()}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Webhook className="w-4 h-4" />
                       Đăng ký
@@ -488,7 +488,7 @@ export default function UsageContent() {
               {/* Loading */}
               {webhookLoading && (
                 <div className="flex justify-center py-4">
-                  <span className="w-5 h-5 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
+                  <span className="w-5 h-5 border-2 border-line border-t-transparent rounded-full animate-spin" />
                 </div>
               )}
 
@@ -497,12 +497,12 @@ export default function UsageContent() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
-                      <span className="text-emerald-400 text-xs font-bold">Webhook đang hoạt động</span>
+                      <span className="w-2 h-2 rounded-full bg-success flex-shrink-0" />
+                      <span className="text-success text-xs font-bold">Webhook đang hoạt động</span>
                     </div>
                     <button
                       onClick={handleRevokeWebhook}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 text-xs font-bold transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft text-danger border border-danger/30 hover:bg-danger/20 text-xs font-bold transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       Thu hồi
@@ -512,36 +512,36 @@ export default function UsageContent() {
                   {/* Logs table */}
                   {webhookLogs.length > 0 && (
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold">
+                      <div className="flex items-center gap-2 text-fg-muted text-xs font-semibold">
                         <Clock className="w-3.5 h-3.5" />
                         <span>Delivery logs ({webhookLogs.length})</span>
                       </div>
-                      <div className="rounded-lg border border-slate-700/50 overflow-hidden">
+                      <div className="rounded-lg border border-line overflow-hidden">
                         <table className="w-full text-xs">
                           <thead>
-                            <tr className="bg-slate-800/60 border-b border-slate-700/50">
-                              <th className="px-3 py-2 text-left text-slate-400 font-semibold">Job ID</th>
-                              <th className="px-3 py-2 text-left text-slate-400 font-semibold">Status</th>
-                              <th className="px-3 py-2 text-left text-slate-400 font-semibold hidden sm:table-cell">Thời gian</th>
+                            <tr className="bg-surface border-b border-line">
+                              <th className="px-3 py-2 text-left text-fg-muted font-semibold">Job ID</th>
+                              <th className="px-3 py-2 text-left text-fg-muted font-semibold">Status</th>
+                              <th className="px-3 py-2 text-left text-fg-muted font-semibold hidden sm:table-cell">Thời gian</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-700/30">
+                          <tbody className="divide-y divide-line">
                             {webhookLogs.slice(0, 20).map((log, i) => (
-                              <tr key={i} className="hover:bg-slate-700/20 transition-colors">
-                                <td className="px-3 py-2 font-mono text-slate-300">
+                              <tr key={i} className="hover:bg-surface-2 transition-colors">
+                                <td className="px-3 py-2 font-mono text-fg-2">
                                   {log.job_id ? `${log.job_id.slice(0, 8)}…` : '—'}
                                 </td>
                                 <td className="px-3 py-2">
                                   <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
                                     log.success
-                                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                                      : 'bg-red-500/15 text-red-400 border border-red-500/30'
+                                      ? 'bg-success-soft text-success border border-success/30'
+                                      : 'bg-danger-soft text-danger border border-danger/30'
                                   }`}>
                                     {log.success ? 'OK' : 'FAIL'}
                                     {log.status_code && <span className="opacity-70">·{log.status_code}</span>}
                                   </span>
                                 </td>
-                                <td className="px-3 py-2 text-slate-500 hidden sm:table-cell">
+                                <td className="px-3 py-2 text-fg-muted hidden sm:table-cell">
                                   {log.delivered_at
                                     ? new Date(log.delivered_at).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
                                     : '—'}
@@ -555,7 +555,7 @@ export default function UsageContent() {
                   )}
 
                   {webhookLogs.length === 0 && (
-                    <p className="text-slate-500 text-xs text-center py-3">Chưa có delivery nào. Webhook sẽ được gọi khi job hoàn tất.</p>
+                    <p className="text-fg-muted text-xs text-center py-3">Chưa có delivery nào. Webhook sẽ được gọi khi job hoàn tất.</p>
                   )}
                 </div>
               )}
@@ -583,35 +583,35 @@ function StorageSection({ info, isPro }) {
   const tempBytes   = info.temp_bytes ?? 0;
   const archiveTotal = info.archive_total ?? 0;
   const pinnedPct   = pinnedLimit > 0 ? Math.min(100, (pinnedCount / pinnedLimit) * 100) : 0;
-  const pinBarColor = pinnedPct >= 90 ? 'bg-red-500' : pinnedPct >= 70 ? 'bg-amber-400' : 'bg-emerald-400';
+  const pinBarColor = pinnedPct >= 90 ? 'bg-danger' : pinnedPct >= 70 ? 'bg-accent' : 'bg-success';
 
   return (
-    <div className="rounded-xl border border-slate-700/50 overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-3 bg-slate-800/60 border-b border-slate-700/50">
-        <HardDrive className="w-4 h-4 text-teal-400" />
-        <span className="text-white font-bold text-sm">Storage</span>
-        <span className="ml-auto text-[10px] text-slate-500">Oracle Cloud 10 GB</span>
+    <div className="rounded-xl border border-line overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-3 bg-surface border-b border-line">
+        <HardDrive className="w-4 h-4 text-fg-2" />
+        <span className="text-fg font-bold text-sm">Storage</span>
+        <span className="ml-auto text-[10px] text-fg-muted">Oracle Cloud 10 GB</span>
       </div>
 
-      <div className="p-4 bg-slate-800/30 space-y-4">
+      <div className="p-4 bg-surface-2 space-y-4">
         {/* Pinned files */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
-              <Pin className="w-3.5 h-3.5 text-teal-400" />
+            <div className="flex items-center gap-1.5 text-fg-2 font-semibold">
+              <Pin className="w-3.5 h-3.5 text-fg-2" />
               File được ghim
             </div>
-            <span className="text-slate-400">
+            <span className="text-fg-muted">
               {pinnedCount} / {pinnedLimit} file · {fmtBytes(pinnedBytes)}
             </span>
           </div>
-          <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+          <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all ${pinBarColor}`}
               style={{ width: `${pinnedPct}%` }}
             />
           </div>
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-fg-muted">
             {isPro
               ? 'Pro: ghim tối đa 50 file · giữ 30 ngày'
               : 'Free: ghim tối đa 3 file · giữ 7 ngày · Nâng cấp Pro để ghim nhiều hơn'}
@@ -620,15 +620,15 @@ function StorageSection({ info, isPro }) {
 
         {/* Row: temp + archive */}
         <div className="grid grid-cols-2 gap-3 pt-1">
-          <div className="bg-slate-900/40 rounded-lg p-3 space-y-0.5">
-            <p className="text-xs text-slate-400">File tạm</p>
-            <p className="text-white font-bold">{tempCount} <span className="text-slate-500 text-xs font-normal">file</span></p>
-            <p className="text-[11px] text-slate-500">{fmtBytes(tempBytes)} · hết hạn sau 24h</p>
+          <div className="bg-surface-2 rounded-lg p-3 space-y-0.5">
+            <p className="text-xs text-fg-muted">File tạm</p>
+            <p className="text-fg font-bold">{tempCount} <span className="text-fg-muted text-xs font-normal">file</span></p>
+            <p className="text-[11px] text-fg-muted">{fmtBytes(tempBytes)} · hết hạn sau 24h</p>
           </div>
-          <div className="bg-slate-900/40 rounded-lg p-3 space-y-0.5">
-            <p className="text-xs text-slate-400">Archive</p>
-            <p className="text-white font-bold">{archiveTotal} <span className="text-slate-500 text-xs font-normal">mục</span></p>
-            <p className="text-[11px] text-slate-500">Metadata only · không giới hạn</p>
+          <div className="bg-surface-2 rounded-lg p-3 space-y-0.5">
+            <p className="text-xs text-fg-muted">Archive</p>
+            <p className="text-fg font-bold">{archiveTotal} <span className="text-fg-muted text-xs font-normal">mục</span></p>
+            <p className="text-[11px] text-fg-muted">Metadata only · không giới hạn</p>
           </div>
         </div>
       </div>
@@ -637,23 +637,23 @@ function StorageSection({ info, isPro }) {
 }
 
 function StatCard({ icon, label, value, limit, pct, isPro }) {
-  const barColor = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-yellow-500' : 'bg-[#FBBF24]';
+  const barColor = pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-accent' : 'bg-accent';
 
   return (
-    <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 space-y-2">
-      <div className="flex items-center gap-2 text-slate-400">
+    <div className="bg-surface-2 border border-line rounded-xl p-4 space-y-2">
+      <div className="flex items-center gap-2 text-fg-muted">
         {icon}
         <span className="text-xs">{label}</span>
       </div>
       <div className="flex items-baseline gap-1">
-        <span className="text-white font-bold text-2xl">{value}</span>
+        <span className="text-fg font-bold text-2xl">{value}</span>
         {!isPro && limit > 0 && (
-          <span className="text-slate-500 text-xs">/ {limit}</span>
+          <span className="text-fg-muted text-xs">/ {limit}</span>
         )}
-        {isPro && <span className="text-slate-500 text-xs">lượt</span>}
+        {isPro && <span className="text-fg-muted text-xs">lượt</span>}
       </div>
       {!isPro && limit > 0 && (
-        <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
           <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
         </div>
       )}

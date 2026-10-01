@@ -17,17 +17,17 @@ export default function EmptyState({ icon, title, body, action, compact = false 
           {typeof icon === 'string' ? (
             <span>{icon}</span>
           ) : (
-            <span className="text-slate-600">{icon}</span>
+            <span className="text-fg-muted">{icon}</span>
           )}
         </div>
       )}
       {title && (
-        <p className={`font-bold text-slate-300 ${compact ? 'text-sm' : 'text-base'}`}>
+        <p className={`font-bold text-fg-2 ${compact ? 'text-sm' : 'text-base'}`}>
           {title}
         </p>
       )}
       {body && (
-        <p className={`text-slate-500 max-w-xs leading-relaxed ${compact ? 'text-xs' : 'text-sm'}`}>
+        <p className={`text-fg-muted max-w-xs leading-relaxed ${compact ? 'text-xs' : 'text-sm'}`}>
           {body}
         </p>
       )}

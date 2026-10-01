@@ -121,13 +121,13 @@ function SignupChart({ stats, days }: { stats: DailySignup[]; days: number }) {
         {/* Grid lines */}
         {yTicks.map(({ y, label }) => (
           <g key={y}>
-            <line x1={PAD_LEFT} y1={y} x2={W - PAD_RIGHT} y2={y} stroke="#1e293b" strokeWidth={1} />
-            <text x={PAD_LEFT - 4} y={y + 3.5} textAnchor="end" fontSize={8} fill="#475569">{label}</text>
+            <line x1={PAD_LEFT} y1={y} x2={W - PAD_RIGHT} y2={y} stroke="var(--vg-surface-2)" strokeWidth={1} />
+            <text x={PAD_LEFT - 4} y={y + 3.5} textAnchor="end" fontSize={8} fill="var(--vg-line-strong)">{label}</text>
           </g>
         ))}
 
         {/* X baseline */}
-        <line x1={PAD_LEFT} y1={PAD_TOP + innerH} x2={W - PAD_RIGHT} y2={PAD_TOP + innerH} stroke="#334155" strokeWidth={1} />
+        <line x1={PAD_LEFT} y1={PAD_TOP + innerH} x2={W - PAD_RIGHT} y2={PAD_TOP + innerH} stroke="var(--vg-surface-2)" strokeWidth={1} />
 
         {/* Area fill */}
         <polygon points={fillPoints} fill="url(#signupGrad)" opacity={0.25} />
@@ -136,7 +136,7 @@ function SignupChart({ stats, days }: { stats: DailySignup[]; days: number }) {
         <polyline
           points={points}
           fill="none"
-          stroke="#34d399"
+          stroke="var(--vg-success)"
           strokeWidth={2}
           strokeLinejoin="round"
           strokeLinecap="round"
@@ -145,14 +145,14 @@ function SignupChart({ stats, days }: { stats: DailySignup[]; days: number }) {
         {/* Gradient */}
         <defs>
           <linearGradient id="signupGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#34d399" />
-            <stop offset="100%" stopColor="#34d399" stopOpacity={0} />
+            <stop offset="0%" stopColor="var(--vg-success)" />
+            <stop offset="100%" stopColor="var(--vg-success)" stopOpacity={0} />
           </linearGradient>
         </defs>
 
         {/* Dots (only for <= 30d to avoid clutter) */}
         {stats.length <= 30 && stats.map((s, i) => (
-          <circle key={i} cx={xOf(i)} cy={yOf(s.total)} r={2.5} fill="#34d399" stroke="#0f172a" strokeWidth={1.5}>
+          <circle key={i} cx={xOf(i)} cy={yOf(s.total)} r={2.5} fill="var(--vg-success)" stroke="var(--vg-canvas)" strokeWidth={1.5}>
             <title>{`${s.date}: ${s.total} signups`}</title>
           </circle>
         ))}
@@ -161,7 +161,7 @@ function SignupChart({ stats, days }: { stats: DailySignup[]; days: number }) {
         {stats.map((s, i) => {
           if (i % step !== 0 && i !== stats.length - 1) return null
           return (
-            <text key={i} x={xOf(i)} y={H - PAD_BOT + 14} textAnchor="middle" fontSize={7.5} fill="#475569">
+            <text key={i} x={xOf(i)} y={H - PAD_BOT + 14} textAnchor="middle" fontSize={7.5} fill="var(--vg-line-strong)">
               {shortDate(s.date, days)}
             </text>
           )
@@ -175,12 +175,12 @@ function SignupChart({ stats, days }: { stats: DailySignup[]; days: number }) {
 
 function TierBadge({ tier }: { tier: string }) {
   const classes: Record<string, string> = {
-    free:       'bg-slate-700 text-slate-200',
-    pro:        'bg-blue-700 text-blue-100',
-    team:       'bg-cyan-700 text-cyan-100',
-    enterprise: 'bg-purple-700 text-purple-100',
+    free:       'bg-surface-2 text-fg-2',
+    pro:        'bg-accent-hover text-fg-2',
+    team:       'bg-accent-hover text-fg-2',
+    enterprise: 'bg-accent-hover text-fg-2',
   }
-  const cls = classes[tier.toLowerCase()] ?? 'bg-slate-700 text-slate-200'
+  const cls = classes[tier.toLowerCase()] ?? 'bg-surface-2 text-fg-2'
   return (
     <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${cls}`}>
       {tier}
@@ -194,17 +194,17 @@ function StatCard({ label, value, accent, hint }: {
   label: string; value: string; accent?: 'amber' | 'green' | 'blue'; hint?: string
 }) {
   const valueClass = {
-    amber: 'text-amber-300',
-    green: 'text-emerald-400',
-    blue:  'text-blue-400',
-    undefined: 'text-white',
+    amber: 'text-accent-text',
+    green: 'text-success',
+    blue:  'text-fg-2',
+    undefined: 'text-fg',
   }[accent ?? 'undefined']
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900 px-5 py-4 space-y-1">
-      <div className="text-[10px] text-slate-500 uppercase tracking-widest font-mono">{label}</div>
+    <div className="rounded-xl border border-line bg-canvas px-5 py-4 space-y-1">
+      <div className="text-[10px] text-fg-muted uppercase tracking-widest font-mono">{label}</div>
       <div className={`text-2xl font-bold font-mono ${valueClass}`}>{value}</div>
-      {hint && <div className="text-[10px] text-slate-500 leading-snug">{hint}</div>}
+      {hint && <div className="text-[10px] text-fg-muted leading-snug">{hint}</div>}
     </div>
   )
 }
@@ -217,8 +217,8 @@ function ResetButton({
   userId: string; loading: boolean; message?: string; onReset: (id: string) => void; accent?: 'amber'
 }) {
   const btnClass = accent === 'amber'
-    ? 'bg-amber-700 hover:bg-amber-600 text-amber-100 disabled:opacity-50'
-    : 'bg-slate-700 hover:bg-slate-600 text-slate-200 disabled:opacity-50'
+    ? 'bg-accent hover:bg-accent-hover text-accent-text disabled:opacity-50'
+    : 'bg-surface-2 hover:bg-line text-fg-2 disabled:opacity-50'
   return (
     <div className="flex items-center gap-2">
       <button
@@ -229,7 +229,7 @@ function ResetButton({
         {loading ? 'Resetting…' : 'Reset Quota'}
       </button>
       {message && (
-        <span className={`text-xs ${message === 'Reset!' ? 'text-green-400' : 'text-red-400'}`}>
+        <span className={`text-xs ${message === 'Reset!' ? 'text-success' : 'text-danger'}`}>
           {message}
         </span>
       )}
@@ -360,13 +360,13 @@ export default function UsersPage() {
   const tierTotal = Object.values(tierBreakdown).reduce((s, v) => s + v, 0) || 1
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6 space-y-8">
+    <div className="min-h-screen bg-canvas text-fg p-6 space-y-8">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">Users</h1>
+        <h1 className="text-2xl font-bold text-fg">Users</h1>
         <div className="flex items-center gap-3">
-          {loading && <span className="text-xs text-gray-400 animate-pulse">Refreshing…</span>}
-          {!loading && <span className="text-xs text-gray-500">Auto-refresh 60s</span>}
+          {loading && <span className="text-xs text-fg-muted animate-pulse">Refreshing…</span>}
+          {!loading && <span className="text-xs text-fg-muted">Auto-refresh 60s</span>}
         </div>
       </div>
 
@@ -375,11 +375,11 @@ export default function UsersPage() {
           opaque id, /users/signups counts registrations per day. Neither lists
           who actually signed up, so an operator could see "3 new accounts" and
           still have no way to put one of them on Pro. This is that roster. */}
-      <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-4">
+      <div className="rounded-lg border border-line bg-surface-2 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <div>
-            <h2 className="text-sm font-semibold text-white">Tài khoản đăng ký</h2>
-            <p className="text-[11px] text-gray-500">
+            <h2 className="text-sm font-semibold text-fg">Tài khoản đăng ký</h2>
+            <p className="text-[11px] text-fg-muted">
               {accounts ? `${accounts.total} tài khoản` : 'Đang tải…'} · mới nhất trước
             </p>
           </div>
@@ -387,18 +387,18 @@ export default function UsersPage() {
             value={accQuery}
             onChange={e => setAccQuery(e.target.value)}
             placeholder="Tìm theo email…"
-            className="w-64 rounded-md border border-gray-700 bg-gray-950 px-3 py-1.5
-                       text-xs text-gray-100 placeholder-gray-600 focus:border-blue-600
+            className="w-64 rounded-md border border-line bg-canvas px-3 py-1.5
+                       text-xs text-fg placeholder:text-fg-muted focus:border-line
                        focus:outline-none"
           />
         </div>
 
         {accounts && !accounts.success && (
-          <p className="text-xs text-red-400">Lỗi: {accounts.error}</p>
+          <p className="text-xs text-danger">Lỗi: {accounts.error}</p>
         )}
 
         {accounts?.success && accounts.accounts.length === 0 && (
-          <p className="text-xs text-gray-500 py-3">
+          <p className="text-xs text-fg-muted py-3">
             {accQuery ? 'Không có tài khoản nào khớp.' : 'Chưa có tài khoản nào.'}
           </p>
         )}
@@ -407,7 +407,7 @@ export default function UsersPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-left text-gray-500 border-b border-gray-800">
+                <tr className="text-left text-fg-muted border-b border-line">
                   <th className="py-2 pr-4 font-medium">Email</th>
                   <th className="py-2 pr-4 font-medium">Gói</th>
                   <th className="py-2 pr-4 font-medium">Hôm nay</th>
@@ -417,21 +417,21 @@ export default function UsersPage() {
               </thead>
               <tbody>
                 {accounts.accounts.map(a => (
-                  <tr key={a.user_id} className="border-b border-gray-800/60">
+                  <tr key={a.user_id} className="border-b border-line">
                     <td className="py-2 pr-4">
-                      <span className="text-gray-100">{a.email ?? '—'}</span>
+                      <span className="text-fg">{a.email ?? '—'}</span>
                       {a.display_name && (
-                        <span className="text-gray-500 ml-2">({a.display_name})</span>
+                        <span className="text-fg-muted ml-2">({a.display_name})</span>
                       )}
                     </td>
                     <td className="py-2 pr-4"><TierBadge tier={a.tier} /></td>
-                    <td className="py-2 pr-4 font-mono text-gray-300">
+                    <td className="py-2 pr-4 font-mono text-fg-2">
                       {a.downloads_today}
-                      <span className="text-gray-600">
+                      <span className="text-fg-muted">
                         /{a.daily_limit === -1 ? '∞' : a.daily_limit}
                       </span>
                     </td>
-                    <td className="py-2 pr-4 text-gray-400">
+                    <td className="py-2 pr-4 text-fg-muted">
                       {a.created_at ? a.created_at.slice(0, 10) : '—'}
                     </td>
                     <td className="py-2">
@@ -444,8 +444,8 @@ export default function UsersPage() {
                             title={t === 'enterprise' ? 'Không giới hạn lượt tải' : undefined}
                             className={`rounded px-2 py-0.5 border text-[10px] transition
                               ${t === a.tier
-                                ? 'border-gray-700 text-gray-600 cursor-default'
-                                : 'border-gray-600 text-gray-300 hover:bg-gray-800'}`}
+                                ? 'border-line text-fg-muted cursor-default'
+                                : 'border-line-strong text-fg-2 hover:bg-surface'}`}
                           >
                             {t}
                           </button>
@@ -456,8 +456,8 @@ export default function UsersPage() {
                           // noticing.
                           <span className={`text-[10px] ml-1 ${
                             accMsg[a.user_id].startsWith('→')
-                              ? 'text-emerald-400'
-                              : 'text-red-400'
+                              ? 'text-success'
+                              : 'text-danger'
                           }`}>
                             {accMsg[a.user_id]}
                           </span>
@@ -473,7 +473,7 @@ export default function UsersPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg bg-red-900/40 border border-red-700 px-4 py-3 text-red-300 text-sm">
+        <div className="rounded-lg bg-danger-soft border border-danger/30 px-4 py-3 text-danger text-sm">
           {error}
         </div>
       )}
@@ -498,21 +498,21 @@ export default function UsersPage() {
       )}
 
       {/* ── Signup trend chart ─────────────────────────────────────────── */}
-      <section className="rounded-xl border border-slate-800 bg-slate-900 p-5 space-y-4">
+      <section className="rounded-xl border border-line bg-canvas p-5 space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
-            <h2 className="text-sm font-semibold text-slate-100">New Signups</h2>
-            <p className="text-[11px] text-slate-500 mt-0.5">
+            <h2 className="text-sm font-semibold text-fg">New Signups</h2>
+            <p className="text-[11px] text-fg-muted mt-0.5">
               {signups
                 ? `${signups.total_period.toLocaleString()} total in last ${signupDays} days`
                 : 'Loading…'}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => fetchSignups(signupDays)} className="text-[10px] text-slate-500 hover:text-slate-300 mr-1">
+            <button onClick={() => fetchSignups(signupDays)} className="text-[10px] text-fg-muted hover:text-fg-2 mr-1">
               ↺
             </button>
-            <div className="flex rounded-lg overflow-hidden border border-slate-800">
+            <div className="flex rounded-lg overflow-hidden border border-line">
               {([7, 30, 90] as const).map(d => (
                 <button
                   key={d}
@@ -520,8 +520,8 @@ export default function UsersPage() {
                   className={[
                     'px-3 py-1 font-mono text-xs transition-colors',
                     signupDays === d
-                      ? 'bg-slate-700 text-slate-100'
-                      : 'bg-slate-900 text-slate-500 hover:text-slate-300',
+                      ? 'bg-surface-2 text-fg'
+                      : 'bg-canvas text-fg-muted hover:text-fg-2',
                   ].join(' ')}
                 >
                   {d}d
@@ -534,13 +534,13 @@ export default function UsersPage() {
         {signups && signups.daily_signups.length > 0 ? (
           <SignupChart stats={signups.daily_signups} days={signupDays} />
         ) : (
-          <div className="h-40 animate-pulse rounded-xl bg-slate-800/40" />
+          <div className="h-40 animate-pulse rounded-xl bg-surface-2" />
         )}
 
         {/* Tier breakdown bar */}
         {signups && Object.keys(tierBreakdown).length > 0 && (
-          <div className="pt-2 border-t border-slate-800">
-            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-mono mb-3">
+          <div className="pt-2 border-t border-line">
+            <p className="text-[10px] text-fg-muted uppercase tracking-widest font-mono mb-3">
               Tier Breakdown — last {signupDays}d
             </p>
             <div className="space-y-2">
@@ -549,19 +549,19 @@ export default function UsersPage() {
                 if (count === 0) return null
                 const pct = (count / tierTotal) * 100
                 const barColor = {
-                  free:       'bg-slate-500',
-                  pro:        'bg-blue-500',
-                  team:       'bg-cyan-500',
-                  enterprise: 'bg-purple-500',
+                  free:       'bg-line-strong',
+                  pro:        'bg-accent',
+                  team:       'bg-accent',
+                  enterprise: 'bg-accent',
                 }[tier]
                 return (
                   <div key={tier} className="flex items-center gap-3 text-xs">
-                    <span className="w-20 text-right text-slate-400 font-mono capitalize">{tier}</span>
-                    <div className="flex-1 bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <span className="w-20 text-right text-fg-muted font-mono capitalize">{tier}</span>
+                    <div className="flex-1 bg-surface rounded-full h-2 overflow-hidden">
                       <div className={`h-2 rounded-full ${barColor} transition-all duration-500`} style={{ width: `${pct}%` }} />
                     </div>
-                    <span className="w-20 text-right font-mono text-slate-300">
-                      {count.toLocaleString()} <span className="text-slate-600">({pct.toFixed(1)}%)</span>
+                    <span className="w-20 text-right font-mono text-fg-2">
+                      {count.toLocaleString()} <span className="text-fg-muted">({pct.toFixed(1)}%)</span>
                     </span>
                   </div>
                 )
@@ -573,18 +573,18 @@ export default function UsersPage() {
 
       {/* ── Flagged users ──────────────────────────────────────────────── */}
       {data && data.flagged_users.length > 0 && (
-        <section className="rounded-xl border border-amber-700/60 bg-amber-900/20 p-5 space-y-3">
-          <h2 className="text-base font-semibold text-amber-300 flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
+        <section className="rounded-xl border border-accent/60 bg-accent-soft p-5 space-y-3">
+          <h2 className="text-base font-semibold text-accent-text flex items-center gap-2">
+            <span className="inline-block w-2 h-2 rounded-full bg-accent" />
             Flagged Users
-            <span className="ml-1 text-xs text-amber-400 font-normal">
+            <span className="ml-1 text-xs text-accent-text font-normal">
               (&gt;{data.abuse_threshold} downloads today)
             </span>
           </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-amber-400/70 border-b border-amber-700/30">
+                <tr className="text-left text-accent-text border-b border-accent/30">
                   <th className="pb-2 pr-4 font-medium">User ID</th>
                   <th className="pb-2 pr-4 font-medium">Downloads Today</th>
                   <th className="pb-2 pr-4 font-medium">Tier</th>
@@ -593,9 +593,9 @@ export default function UsersPage() {
               </thead>
               <tbody>
                 {data.flagged_users.map(u => (
-                  <tr key={u.user_id} className="border-b border-amber-700/20 hover:bg-amber-900/30 transition-colors">
-                    <td className="py-2 pr-4 font-mono text-amber-200">{maskUserId(u.user_id)}</td>
-                    <td className="py-2 pr-4 text-amber-100 font-semibold">{u.downloads_today}</td>
+                  <tr key={u.user_id} className="border-b border-accent/20 hover:bg-accent-soft transition-colors">
+                    <td className="py-2 pr-4 font-mono text-accent-text">{maskUserId(u.user_id)}</td>
+                    <td className="py-2 pr-4 text-accent-text font-semibold">{u.downloads_today}</td>
                     <td className="py-2 pr-4"><TierBadge tier={u.tier ?? u.plan ?? 'free'} /></td>
                     <td className="py-2">
                       <ResetButton
@@ -616,12 +616,12 @@ export default function UsersPage() {
 
       {/* ── Top users ──────────────────────────────────────────────────── */}
       {data && (
-        <section className="rounded-xl border border-gray-800 bg-gray-900 p-5 space-y-3">
-          <h2 className="text-base font-semibold text-gray-200">Top Users</h2>
+        <section className="rounded-xl border border-line bg-canvas p-5 space-y-3">
+          <h2 className="text-base font-semibold text-fg-2">Top Users</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-gray-400 border-b border-gray-700">
+                <tr className="text-left text-fg-muted border-b border-line">
                   <th className="pb-2 pr-4 font-medium">User ID</th>
                   <th className="pb-2 pr-4 font-medium">Today</th>
                   <th className="pb-2 pr-4 font-medium">Total</th>
@@ -632,12 +632,12 @@ export default function UsersPage() {
               </thead>
               <tbody>
                 {data.top_users.map(u => (
-                  <tr key={u.user_id} className="border-b border-gray-800 hover:bg-gray-800/50 transition-colors">
-                    <td className="py-2 pr-4 font-mono text-gray-300">{maskUserId(u.user_id)}</td>
-                    <td className="py-2 pr-4 text-white font-semibold">{u.downloads_today}</td>
-                    <td className="py-2 pr-4 text-gray-300">{(u.downloads_total ?? u.downloads_this_month ?? 0).toLocaleString()}</td>
+                  <tr key={u.user_id} className="border-b border-line hover:bg-surface transition-colors">
+                    <td className="py-2 pr-4 font-mono text-fg-2">{maskUserId(u.user_id)}</td>
+                    <td className="py-2 pr-4 text-fg font-semibold">{u.downloads_today}</td>
+                    <td className="py-2 pr-4 text-fg-2">{(u.downloads_total ?? u.downloads_this_month ?? 0).toLocaleString()}</td>
                     <td className="py-2 pr-4"><TierBadge tier={u.tier ?? u.plan ?? 'free'} /></td>
-                    <td className="py-2 pr-4 text-gray-400 text-xs">{formatRelative(u.last_reset_at)}</td>
+                    <td className="py-2 pr-4 text-fg-muted text-xs">{formatRelative(u.last_reset_at)}</td>
                     <td className="py-2">
                       <ResetButton
                         userId={u.user_id}
@@ -650,7 +650,7 @@ export default function UsersPage() {
                 ))}
                 {data.top_users.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-6 text-center text-gray-500 text-sm">No users yet.</td>
+                    <td colSpan={6} className="py-6 text-center text-fg-muted text-sm">No users yet.</td>
                   </tr>
                 )}
               </tbody>
@@ -661,18 +661,18 @@ export default function UsersPage() {
 
       {/* ── Batch distribution ─────────────────────────────────────────── */}
       {data && data.batch_distribution.length > 0 && (
-        <section className="rounded-xl border border-gray-800 bg-gray-900 p-5 space-y-3">
-          <h2 className="text-base font-semibold text-gray-200">Batch Distribution (48h)</h2>
+        <section className="rounded-xl border border-line bg-canvas p-5 space-y-3">
+          <h2 className="text-base font-semibold text-fg-2">Batch Distribution (48h)</h2>
           <div className="space-y-2">
             {data.batch_distribution.map(b => {
               const pct = maxBatch > 0 ? (b.count / maxBatch) * 100 : 0
               return (
                 <div key={b.range} className="flex items-center gap-3 text-sm">
-                  <span className="w-24 shrink-0 text-right text-gray-400 text-xs font-mono">{b.range}</span>
-                  <div className="flex-1 bg-gray-800 rounded-full h-4 overflow-hidden">
-                    <div className="h-4 rounded-full bg-blue-600 transition-all duration-500" style={{ width: `${pct}%` }} />
+                  <span className="w-24 shrink-0 text-right text-fg-muted text-xs font-mono">{b.range}</span>
+                  <div className="flex-1 bg-surface rounded-full h-4 overflow-hidden">
+                    <div className="h-4 rounded-full bg-accent transition-all duration-500" style={{ width: `${pct}%` }} />
                   </div>
-                  <span className="w-10 shrink-0 text-right text-gray-300 text-xs font-semibold">{b.count}</span>
+                  <span className="w-10 shrink-0 text-right text-fg-2 text-xs font-semibold">{b.count}</span>
                 </div>
               )
             })}
@@ -681,7 +681,7 @@ export default function UsersPage() {
       )}
 
       {!data && !loading && !error && (
-        <div className="text-center text-gray-500 py-16">No data available.</div>
+        <div className="text-center text-fg-muted py-16">No data available.</div>
       )}
     </div>
   )

@@ -147,34 +147,34 @@ export default function ConfigPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6">
+    <div className="min-h-screen bg-canvas text-fg p-6">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <h1 className="text-2xl font-bold text-white">Config</h1>
+        <h1 className="text-2xl font-bold text-fg">Config</h1>
         {!loading && (
-          <span className="inline-flex items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-semibold px-2.5 py-0.5 min-w-[1.5rem]">
+          <span className="inline-flex items-center justify-center rounded-full bg-accent text-accent-fg text-xs font-semibold px-2.5 py-0.5 min-w-[1.5rem]">
             {entries.length}
           </span>
         )}
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-gray-400 text-sm py-8">
-          <span className="inline-block h-4 w-4 rounded-full border-2 border-gray-400 border-t-transparent animate-spin" />
+        <div className="flex items-center gap-2 text-fg-muted text-sm py-8">
+          <span className="inline-block h-4 w-4 rounded-full border-2 border-line-strong border-t-transparent animate-spin" />
           Loading config...
         </div>
       ) : error ? (
-        <div className="rounded-lg bg-red-900/40 border border-red-700 px-4 py-3 text-red-300 text-sm mb-4">
+        <div className="rounded-lg bg-danger-soft border border-danger/30 px-4 py-3 text-danger text-sm mb-4">
           {error}
         </div>
       ) : entries.length === 0 ? (
-        <div className="text-center py-12 text-gray-500 text-sm mb-8">
+        <div className="text-center py-12 text-fg-muted text-sm mb-8">
           No config entries yet. Add one below.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-800 mb-8">
+        <div className="overflow-x-auto rounded-xl border border-line mb-8">
           <table className="w-full text-sm">
-            <thead className="bg-gray-900 text-gray-400 uppercase text-xs tracking-wider">
+            <thead className="bg-canvas text-fg-muted uppercase text-xs tracking-wider">
               <tr>
                 <th className="px-4 py-3 text-left w-40">Key</th>
                 <th className="px-4 py-3 text-left">Value</th>
@@ -182,11 +182,11 @@ export default function ConfigPage() {
                 <th className="px-4 py-3 text-center w-20"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-800">
+            <tbody className="divide-y divide-line">
               {entries.map((entry) => (
-                <tr key={entry.key} className="bg-gray-900/50 hover:bg-gray-800/40 transition-colors">
+                <tr key={entry.key} className="bg-surface-2 hover:bg-line transition-colors">
                   {/* Key */}
-                  <td className="px-4 py-3 font-mono text-indigo-300 align-top">
+                  <td className="px-4 py-3 font-mono text-fg-2 align-top">
                     {entry.key}
                   </td>
 
@@ -206,14 +206,14 @@ export default function ConfigPage() {
                           if (e.key === 'Enter') saveEdit(entry.key)
                           if (e.key === 'Escape') cancelEdit()
                         }}
-                        className="w-full bg-gray-800 border border-indigo-500 rounded px-2 py-1 text-gray-100 text-sm font-mono outline-none focus:ring-1 focus:ring-indigo-400"
+                        className="w-full bg-surface border border-line rounded px-2 py-1 text-fg text-sm font-mono outline-none focus:ring-1 focus:ring-line-strong"
                         onClick={(e) => e.stopPropagation()}
                       />
                     ) : (
-                      <span className="font-mono text-gray-300 group">
-                        {truncate(entry.value) || <span className="text-gray-600 italic">empty</span>}
+                      <span className="font-mono text-fg-2 group">
+                        {truncate(entry.value) || <span className="text-fg-muted italic">empty</span>}
                         {rowMsg[entry.key] && (
-                          <span className={`ml-2 text-xs ${rowMsg[entry.key].startsWith('Error') ? 'text-red-400' : 'text-emerald-400'}`}>
+                          <span className={`ml-2 text-xs ${rowMsg[entry.key].startsWith('Error') ? 'text-danger' : 'text-success'}`}>
                             {rowMsg[entry.key]}
                           </span>
                         )}
@@ -222,8 +222,8 @@ export default function ConfigPage() {
                   </td>
 
                   {/* Description */}
-                  <td className="px-4 py-3 text-gray-400 align-top text-xs leading-relaxed">
-                    {entry.description || <span className="text-gray-600 italic">—</span>}
+                  <td className="px-4 py-3 text-fg-muted align-top text-xs leading-relaxed">
+                    {entry.description || <span className="text-fg-muted italic">—</span>}
                   </td>
 
                   {/* Delete */}
@@ -231,7 +231,7 @@ export default function ConfigPage() {
                     <button
                       onClick={() => handleDelete(entry.key)}
                       disabled={deletingKey === entry.key}
-                      className="text-gray-600 hover:text-red-400 disabled:opacity-40 transition-colors text-xs px-2 py-1 rounded hover:bg-red-900/30"
+                      className="text-fg-muted hover:text-danger disabled:opacity-40 transition-colors text-xs px-2 py-1 rounded hover:bg-danger-soft"
                       title="Delete"
                     >
                       {deletingKey === entry.key ? '...' : 'Delete'}
@@ -245,59 +245,59 @@ export default function ConfigPage() {
       )}
 
       {/* Add form */}
-      <div className="rounded-xl border border-gray-800 bg-gray-900/60 p-5">
-        <h2 className="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Add / Update Entry</h2>
+      <div className="rounded-xl border border-line bg-surface-2 p-5">
+        <h2 className="text-sm font-semibold text-fg-2 mb-4 uppercase tracking-wider">Add / Update Entry</h2>
         <form onSubmit={handleAdd} className="flex flex-col gap-3">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Key <span className="text-red-400">*</span></label>
+              <label className="block text-xs text-fg-muted mb-1">Key <span className="text-danger">*</span></label>
               <input
                 value={addKey}
                 onChange={(e) => setAddKey(e.target.value)}
                 placeholder="config_key"
-                className="w-full bg-gray-800 border border-gray-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm text-gray-100 font-mono outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+                className="w-full bg-surface border border-line focus:border-line rounded-lg px-3 py-2 text-sm text-fg font-mono outline-none focus:ring-1 focus:ring-line-strong transition-colors"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Value</label>
+              <label className="block text-xs text-fg-muted mb-1">Value</label>
               <input
                 value={addValue}
                 onChange={(e) => setAddValue(e.target.value)}
                 placeholder="value"
-                className="w-full bg-gray-800 border border-gray-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm text-gray-100 font-mono outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+                className="w-full bg-surface border border-line focus:border-line rounded-lg px-3 py-2 text-sm text-fg font-mono outline-none focus:ring-1 focus:ring-line-strong transition-colors"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Description</label>
+              <label className="block text-xs text-fg-muted mb-1">Description</label>
               <input
                 value={addDesc}
                 onChange={(e) => setAddDesc(e.target.value)}
                 placeholder="Optional description"
-                className="w-full bg-gray-800 border border-gray-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm text-gray-100 outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+                className="w-full bg-surface border border-line focus:border-line rounded-lg px-3 py-2 text-sm text-fg outline-none focus:ring-1 focus:ring-line-strong transition-colors"
               />
             </div>
           </div>
 
           {addError && (
-            <p className="text-red-400 text-xs">{addError}</p>
+            <p className="text-danger text-xs">{addError}</p>
           )}
 
           <div className="flex items-center gap-3 pt-1">
             <button
               type="submit"
               disabled={addSaving}
-              className="flex items-center gap-2 px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+              className="flex items-center gap-2 px-5 py-2 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-accent-fg text-sm font-medium transition-colors"
             >
               {addSaving ? (
                 <>
-                  <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-line-strong border-t-transparent animate-spin" />
                   Saving...
                 </>
               ) : (
                 'Save'
               )}
             </button>
-            <span className="text-xs text-gray-600">
+            <span className="text-xs text-fg-muted">
               If key already exists, its value will be updated.
             </span>
           </div>

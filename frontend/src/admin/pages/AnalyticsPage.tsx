@@ -50,20 +50,20 @@ interface ErrorsResponse {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PLATFORM_COLORS: Record<string, string> = {
-  youtube: '#ef4444',
-  tiktok: '#f97316',
-  instagram: '#a855f7',
-  twitter: '#3b82f6',
-  facebook: '#60a5fa',
-  soundcloud: '#f59e0b',
-  threads: '#818cf8',
-  spotify: '#22c55e',
+  youtube: 'var(--vg-danger)',
+  tiktok: 'var(--vg-accent)',
+  instagram: 'var(--vg-accent)',
+  twitter: 'var(--vg-accent)',
+  facebook: 'var(--vg-accent)',
+  soundcloud: 'var(--vg-accent)',
+  threads: 'var(--vg-accent)',
+  spotify: 'var(--vg-success)',
   vimeo: '#06b6d4',
-  reddit: '#fb923c',
+  reddit: 'var(--vg-accent)',
 }
 
 function platformColor(name: string): string {
-  return PLATFORM_COLORS[name.toLowerCase()] ?? '#94a3b8'
+  return PLATFORM_COLORS[name.toLowerCase()] ?? 'var(--vg-fg-muted)'
 }
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
@@ -93,17 +93,17 @@ function StatCard({
   tone?: 'green' | 'red' | 'blue' | 'default'
 }) {
   const toneClass = {
-    green: 'text-emerald-400',
-    red: 'text-red-400',
-    blue: 'text-blue-400',
-    default: 'text-slate-100',
+    green: 'text-success',
+    red: 'text-danger',
+    blue: 'text-fg-2',
+    default: 'text-fg',
   }[tone]
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 flex flex-col gap-1">
-      <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-500">{label}</span>
+    <div className="rounded-2xl border border-line bg-surface-2 p-5 flex flex-col gap-1">
+      <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">{label}</span>
       <span className={cn('text-2xl font-bold font-mono', toneClass)}>{value}</span>
-      {sub && <span className="text-[10px] text-slate-600">{sub}</span>}
+      {sub && <span className="text-[10px] text-fg-muted">{sub}</span>}
     </div>
   )
 }
@@ -141,9 +141,9 @@ function TrendChart({ stats }: { stats: DailyStat[] }) {
   const step = stats.length > 14 ? Math.ceil(stats.length / 7) : 1
 
   const series = [
-    { name: 'Total', getter: (s: DailyStat) => s.total, color: '#94a3b8' },
-    { name: 'Success', getter: (s: DailyStat) => s.success, color: '#34d399' },
-    { name: 'Failed', getter: (s: DailyStat) => s.failed, color: '#f87171' },
+    { name: 'Total', getter: (s: DailyStat) => s.total, color: 'var(--vg-fg-muted)' },
+    { name: 'Success', getter: (s: DailyStat) => s.success, color: 'var(--vg-success)' },
+    { name: 'Failed', getter: (s: DailyStat) => s.failed, color: 'var(--vg-danger)' },
   ]
 
   return (
@@ -159,13 +159,13 @@ function TrendChart({ stats }: { stats: DailyStat[] }) {
           <g key={y}>
             <line
               x1={PAD} y1={y} x2={W - PAD} y2={y}
-              stroke="#1e293b" strokeWidth={1}
+              stroke="var(--vg-surface-2)" strokeWidth={1}
             />
             <text
               x={PAD - 5} y={y + 4}
               textAnchor="end"
               fontSize={9}
-              fill="#475569"
+              fill="var(--vg-line-strong)"
             >
               {label}
             </text>
@@ -182,7 +182,7 @@ function TrendChart({ stats }: { stats: DailyStat[] }) {
               y={H - PAD + 14}
               textAnchor="middle"
               fontSize={8}
-              fill="#475569"
+              fill="var(--vg-line-strong)"
             >
               {shortDate(s.date)}
             </text>
@@ -211,7 +211,7 @@ function TrendChart({ stats }: { stats: DailyStat[] }) {
               cy={yOf(getter(s))}
               r={3}
               fill={color}
-              stroke="#0f172a"
+              stroke="var(--vg-canvas)"
               strokeWidth={1.5}
             >
               <title>{`${s.date} · ${name}: ${getter(s)}`}</title>
@@ -222,7 +222,7 @@ function TrendChart({ stats }: { stats: DailyStat[] }) {
         {/* X axis baseline */}
         <line
           x1={PAD} y1={PAD + inner_h} x2={W - PAD} y2={PAD + inner_h}
-          stroke="#334155" strokeWidth={1}
+          stroke="var(--vg-surface-2)" strokeWidth={1}
         />
       </svg>
 
@@ -231,7 +231,7 @@ function TrendChart({ stats }: { stats: DailyStat[] }) {
         {series.map(({ name, color }) => (
           <div key={name} className="flex items-center gap-1.5">
             <span className="inline-block h-2 w-6 rounded-full" style={{ background: color }} />
-            <span className="text-[10px] text-slate-500">{name}</span>
+            <span className="text-[10px] text-fg-muted">{name}</span>
           </div>
         ))}
       </div>
@@ -252,21 +252,21 @@ function PlatformBars({ stats }: { stats: PlatformStat[] }) {
         const color = platformColor(p.platform)
         return (
           <div key={p.platform} className="flex items-center gap-3">
-            <span className="w-24 font-mono text-[10px] capitalize text-slate-400 truncate">{p.platform}</span>
-            <div className="flex-1 overflow-hidden rounded-full bg-slate-800 h-2">
+            <span className="w-24 font-mono text-[10px] capitalize text-fg-muted truncate">{p.platform}</span>
+            <div className="flex-1 overflow-hidden rounded-full bg-surface h-2">
               <div
                 className="h-2 rounded-full transition-all duration-500"
                 style={{ width: `${pct}%`, background: color }}
               />
             </div>
-            <span className="w-16 text-right font-mono text-[10px] text-slate-400">
-              {p.count.toLocaleString()} <span className="text-slate-600">({pct.toFixed(1)}%)</span>
+            <span className="w-16 text-right font-mono text-[10px] text-fg-muted">
+              {p.count.toLocaleString()} <span className="text-fg-muted">({pct.toFixed(1)}%)</span>
             </span>
           </div>
         )
       })}
       {sorted.length === 0 && (
-        <p className="text-xs text-slate-600">No platform data.</p>
+        <p className="text-xs text-fg-muted">No platform data.</p>
       )}
     </div>
   )
@@ -285,23 +285,23 @@ function ErrorPatternBars({ patterns }: { patterns: ErrorPattern[] }) {
         return (
           <div key={i} className="flex items-center gap-3">
             <span
-              className="w-40 truncate text-[10px] text-slate-400"
+              className="w-40 truncate text-[10px] text-fg-muted"
               title={p.pattern}
             >
               {p.pattern}
             </span>
-            <div className="flex-1 overflow-hidden rounded-full bg-slate-800 h-1.5">
+            <div className="flex-1 overflow-hidden rounded-full bg-surface h-1.5">
               <div
-                className="h-1.5 rounded-full bg-red-500/70 transition-all duration-500"
+                className="h-1.5 rounded-full bg-danger/70 transition-all duration-500"
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <span className="w-8 text-right font-mono text-[10px] font-semibold text-red-400">{p.count}</span>
+            <span className="w-8 text-right font-mono text-[10px] font-semibold text-danger">{p.count}</span>
           </div>
         )
       })}
       {sorted.length === 0 && (
-        <p className="text-xs text-slate-600">No error patterns found.</p>
+        <p className="text-xs text-fg-muted">No error patterns found.</p>
       )}
     </div>
   )
@@ -339,8 +339,8 @@ function PlatformFailTable({ rows }: { rows: PlatformFailRate[] }) {
       <th
         className={cn(
           'cursor-pointer select-none py-2 text-right font-mono text-[9px] uppercase tracking-widest',
-          active ? 'text-slate-300' : 'text-slate-600',
-          'hover:text-slate-400',
+          active ? 'text-fg-2' : 'text-fg-muted',
+          'hover:text-fg-muted',
         )}
         onClick={() => handleSort(col)}
       >
@@ -351,15 +351,15 @@ function PlatformFailTable({ rows }: { rows: PlatformFailRate[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-800">
+    <div className="overflow-hidden rounded-xl border border-line">
       <table className="w-full text-xs">
         <thead>
-          <tr className="border-b border-slate-800 bg-slate-900/80">
+          <tr className="border-b border-line bg-surface-2">
             <th
               className={cn(
                 'cursor-pointer select-none py-2 pl-3 text-left font-mono text-[9px] uppercase tracking-widest',
-                sortKey === 'platform' ? 'text-slate-300' : 'text-slate-600',
-                'hover:text-slate-400',
+                sortKey === 'platform' ? 'text-fg-2' : 'text-fg-muted',
+                'hover:text-fg-muted',
               )}
               onClick={() => handleSort('platform')}
             >
@@ -370,16 +370,16 @@ function PlatformFailTable({ rows }: { rows: PlatformFailRate[] }) {
             <ColHead col="fail_rate" label="Fail %" />
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-800/50">
+        <tbody className="divide-y divide-line">
           {sorted.map(r => {
             const rate = r.fail_rate ?? 0
             const rateTone =
-              rate >= 50 ? 'text-red-400' : rate >= 20 ? 'text-amber-400' : 'text-emerald-400'
+              rate >= 50 ? 'text-danger' : rate >= 20 ? 'text-warning' : 'text-success'
             return (
-              <tr key={r.platform} className="hover:bg-slate-800/20">
-                <td className="py-2 pl-3 font-mono text-[10px] capitalize text-slate-300">{r.platform}</td>
-                <td className="py-2 pr-3 text-right font-mono text-slate-400">{r.total.toLocaleString()}</td>
-                <td className="py-2 pr-3 text-right font-mono text-red-400/80">{r.failed.toLocaleString()}</td>
+              <tr key={r.platform} className="hover:bg-surface-2">
+                <td className="py-2 pl-3 font-mono text-[10px] capitalize text-fg-2">{r.platform}</td>
+                <td className="py-2 pr-3 text-right font-mono text-fg-muted">{r.total.toLocaleString()}</td>
+                <td className="py-2 pr-3 text-right font-mono text-danger">{r.failed.toLocaleString()}</td>
                 <td className={cn('py-2 pr-3 text-right font-mono font-semibold', rateTone)}>
                   {fmtRate(rate)}
                 </td>
@@ -388,7 +388,7 @@ function PlatformFailTable({ rows }: { rows: PlatformFailRate[] }) {
           })}
           {sorted.length === 0 && (
             <tr>
-              <td colSpan={4} className="py-4 text-center text-xs text-slate-600">No data.</td>
+              <td colSpan={4} className="py-4 text-center text-xs text-fg-muted">No data.</td>
             </tr>
           )}
         </tbody>
@@ -450,19 +450,19 @@ export function AnalyticsPage() {
       {/* Header + days toggle */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-mono text-sm font-semibold text-slate-100">Analytics</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <h2 className="font-mono text-sm font-semibold text-fg">Analytics</h2>
+          <p className="mt-0.5 text-xs text-fg-muted">
             Download job stats · last {days} days
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => { fetchAnalytics(days); fetchErrors() }}
-            className="text-[10px] text-slate-500 hover:text-slate-300 mr-2"
+            className="text-[10px] text-fg-muted hover:text-fg-2 mr-2"
           >
             ↺ Refresh
           </button>
-          <div className="flex rounded-lg overflow-hidden border border-slate-800">
+          <div className="flex rounded-lg overflow-hidden border border-line">
             {([7, 30] as const).map(d => (
               <button
                 key={d}
@@ -470,8 +470,8 @@ export function AnalyticsPage() {
                 className={cn(
                   'px-3 py-1 font-mono text-xs transition-colors',
                   days === d
-                    ? 'bg-slate-700 text-slate-100'
-                    : 'bg-slate-900 text-slate-500 hover:text-slate-300',
+                    ? 'bg-surface-2 text-fg'
+                    : 'bg-canvas text-fg-muted hover:text-fg-2',
                 )}
               >
                 {d}d
@@ -485,15 +485,15 @@ export function AnalyticsPage() {
       {loadingA && !analytics ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[0, 1, 2, 3].map(i => (
-            <div key={i} className="h-24 rounded-2xl border border-slate-800 bg-slate-900/60 animate-pulse" />
+            <div key={i} className="h-24 rounded-2xl border border-line bg-surface-2 animate-pulse" />
           ))}
         </div>
       ) : errorA && !analytics ? (
-        <div className="rounded-2xl border border-red-900/40 bg-red-950/20 p-4 text-sm text-red-400">
+        <div className="rounded-2xl border border-danger/40 bg-danger-soft p-4 text-sm text-danger">
           {errorA}
           <button
             onClick={() => fetchAnalytics(days)}
-            className="ml-3 text-xs underline hover:text-red-300"
+            className="ml-3 text-xs underline hover:text-danger"
           >
             Retry
           </button>
@@ -527,47 +527,47 @@ export function AnalyticsPage() {
       ) : null}
 
       {/* Daily trend chart */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-        <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+      <div className="rounded-2xl border border-line bg-surface-2 p-5">
+        <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
           Daily Trend — {days}d
         </h3>
         {loadingA && !analytics ? (
-          <div className="h-48 animate-pulse rounded-xl bg-slate-800/40" />
+          <div className="h-48 animate-pulse rounded-xl bg-surface-2" />
         ) : analytics?.daily_stats && analytics.daily_stats.length > 0 ? (
           <TrendChart stats={analytics.daily_stats} />
         ) : (
-          <p className="text-xs text-slate-600">No daily data available.</p>
+          <p className="text-xs text-fg-muted">No daily data available.</p>
         )}
       </div>
 
       {/* Platform breakdown + error patterns side by side */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Platform breakdown */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-          <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+        <div className="rounded-2xl border border-line bg-surface-2 p-5">
+          <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
             Platform Breakdown
           </h3>
           {loadingA && !analytics ? (
             <div className="space-y-2">
               {[0, 1, 2, 3].map(i => (
-                <div key={i} className="h-4 animate-pulse rounded-full bg-slate-800" />
+                <div key={i} className="h-4 animate-pulse rounded-full bg-surface" />
               ))}
             </div>
           ) : analytics?.platform_stats ? (
             <PlatformBars stats={analytics.platform_stats} />
           ) : (
-            <p className="text-xs text-slate-600">No platform data.</p>
+            <p className="text-xs text-fg-muted">No platform data.</p>
           )}
         </div>
 
         {/* Error patterns */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+        <div className="rounded-2xl border border-line bg-surface-2 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+            <h3 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
               Top Error Patterns
             </h3>
             {errors?.summary_24h != null && (
-              <span className="font-mono text-[10px] text-red-400">
+              <span className="font-mono text-[10px] text-danger">
                 {typeof errors.summary_24h === 'object'
                   ? errors.summary_24h.total
                   : errors.summary_24h} errors (24h)
@@ -577,36 +577,36 @@ export function AnalyticsPage() {
           {loadingE && !errors ? (
             <div className="space-y-2">
               {[0, 1, 2, 3].map(i => (
-                <div key={i} className="h-3 animate-pulse rounded-full bg-slate-800" />
+                <div key={i} className="h-3 animate-pulse rounded-full bg-surface" />
               ))}
             </div>
           ) : errorE && !errors ? (
-            <p className="text-xs text-red-400">{errorE}</p>
+            <p className="text-xs text-danger">{errorE}</p>
           ) : errors?.error_patterns ? (
             <ErrorPatternBars patterns={errors.error_patterns} />
           ) : (
-            <p className="text-xs text-slate-600">No error data.</p>
+            <p className="text-xs text-fg-muted">No error data.</p>
           )}
         </div>
       </div>
 
       {/* Platform fail rates table */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-        <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+      <div className="rounded-2xl border border-line bg-surface-2 p-5">
+        <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
           Platform Fail Rates
-          <span className="ml-2 normal-case font-normal text-slate-600 tracking-normal">(click header to sort)</span>
+          <span className="ml-2 normal-case font-normal text-fg-muted tracking-normal">(click header to sort)</span>
         </h3>
         {loadingE && !errors ? (
-          <div className="h-32 animate-pulse rounded-xl bg-slate-800/40" />
+          <div className="h-32 animate-pulse rounded-xl bg-surface-2" />
         ) : errors?.platform_fail_rates ? (
           <PlatformFailTable rows={errors.platform_fail_rates} />
         ) : (
-          <p className="text-xs text-slate-600">No fail rate data.</p>
+          <p className="text-xs text-fg-muted">No fail rate data.</p>
         )}
       </div>
 
       {isLoading && (analytics || errors) && (
-        <div className="text-center text-[10px] text-slate-700 animate-pulse">Refreshing…</div>
+        <div className="text-center text-[10px] text-fg-muted animate-pulse">Refreshing…</div>
       )}
     </div>
   )

@@ -25,14 +25,14 @@ interface Tune {
 function Stat({ label, value, hint, tone }: {
   label: string; value: string; hint?: string; tone?: 'ok' | 'warn' | 'bad'
 }) {
-  const colour = tone === 'bad' ? 'text-red-400'
-    : tone === 'warn' ? 'text-amber-400'
-    : tone === 'ok' ? 'text-emerald-400' : 'text-gray-100'
+  const colour = tone === 'bad' ? 'text-danger'
+    : tone === 'warn' ? 'text-warning'
+    : tone === 'ok' ? 'text-success' : 'text-fg'
   return (
-    <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-3">
-      <div className="text-[10px] uppercase tracking-wide text-gray-500">{label}</div>
+    <div className="rounded-lg border border-line bg-surface-2 p-3">
+      <div className="text-[10px] uppercase tracking-wide text-fg-muted">{label}</div>
       <div className={`mt-1 text-xl font-semibold ${colour}`}>{value}</div>
-      {hint && <div className="mt-0.5 text-[10px] text-gray-500">{hint}</div>}
+      {hint && <div className="mt-0.5 text-[10px] text-fg-muted">{hint}</div>}
     </div>
   )
 }
@@ -71,21 +71,21 @@ export default function QueueHealthPage() {
   const wait = health ? Math.round(health.estimated_wait_seconds) : 0
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6 space-y-6">
+    <div className="min-h-screen bg-canvas text-fg p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Queue Health</h1>
-          <p className="text-xs text-gray-500">Tự làm mới mỗi 15s</p>
+          <h1 className="text-2xl font-bold text-fg">Queue Health</h1>
+          <p className="text-xs text-fg-muted">Tự làm mới mỗi 15s</p>
         </div>
         <button onClick={resetTuning} disabled={busy}
-          className="rounded-md border border-gray-700 px-3 py-1.5 text-xs text-gray-300
-                     hover:bg-gray-800 disabled:opacity-50">
+          className="rounded-md border border-line px-3 py-1.5 text-xs text-fg-2
+                     hover:bg-surface disabled:opacity-50">
           {busy ? 'Đang đặt lại…' : 'Đặt lại auto-tune'}
         </button>
       </div>
 
-      {err && <p className="text-xs text-red-400">Lỗi: {err}</p>}
-      {msg && <p className="text-xs text-emerald-400">{msg}</p>}
+      {err && <p className="text-xs text-danger">Lỗi: {err}</p>}
+      {msg && <p className="text-xs text-success">{msg}</p>}
 
       {health && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -107,12 +107,12 @@ export default function QueueHealthPage() {
       )}
 
       {health && Object.keys(health.jobs_by_priority || {}).length > 0 && (
-        <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-4">
-          <h2 className="mb-2 text-sm font-semibold text-white">Job theo mức ưu tiên</h2>
+        <div className="rounded-lg border border-line bg-surface-2 p-4">
+          <h2 className="mb-2 text-sm font-semibold text-fg">Job theo mức ưu tiên</h2>
           <div className="flex flex-wrap gap-2">
             {Object.entries(health.jobs_by_priority).map(([k, v]) => (
-              <span key={k} className="rounded border border-gray-700 px-2 py-0.5 text-[11px] text-gray-300">
-                {k}: <span className="font-mono text-gray-100">{v}</span>
+              <span key={k} className="rounded border border-line px-2 py-0.5 text-[11px] text-fg-2">
+                {k}: <span className="font-mono text-fg">{v}</span>
               </span>
             ))}
           </div>
@@ -120,27 +120,27 @@ export default function QueueHealthPage() {
       )}
 
       {tune && (
-        <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-4">
-          <h2 className="mb-2 text-sm font-semibold text-white">Auto-tune</h2>
+        <div className="rounded-lg border border-line bg-surface-2 p-4">
+          <h2 className="mb-2 text-sm font-semibold text-fg">Auto-tune</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
             {Object.entries(tune.params || {}).map(([k, v]) => (
-              <div key={k} className="rounded border border-gray-800 px-2 py-1">
-                <div className="text-[10px] text-gray-500">{k}</div>
-                <div className="font-mono text-xs text-gray-100">{String(v)}</div>
+              <div key={k} className="rounded border border-line px-2 py-1">
+                <div className="text-[10px] text-fg-muted">{k}</div>
+                <div className="font-mono text-xs text-fg">{String(v)}</div>
               </div>
             ))}
           </div>
           {(tune.history || []).length === 0
-            ? <p className="text-[11px] text-gray-500">Chưa có lần điều chỉnh nào.</p>
+            ? <p className="text-[11px] text-fg-muted">Chưa có lần điều chỉnh nào.</p>
             : (
               <div className="max-h-64 overflow-y-auto">
                 <table className="w-full text-[11px]">
                   <tbody>
                     {tune.history.map((h, i) => (
-                      <tr key={i} className="border-b border-gray-800/60">
-                        <td className="py-1 pr-3 text-gray-500">{String(h.timestamp ?? h.ts ?? '')}</td>
-                        <td className="py-1 pr-3 text-gray-200">{String(h.param ?? h.action ?? '')}</td>
-                        <td className="py-1 text-gray-400">{String(h.new_value ?? h.reason ?? '')}</td>
+                      <tr key={i} className="border-b border-line">
+                        <td className="py-1 pr-3 text-fg-muted">{String(h.timestamp ?? h.ts ?? '')}</td>
+                        <td className="py-1 pr-3 text-fg-2">{String(h.param ?? h.action ?? '')}</td>
+                        <td className="py-1 text-fg-muted">{String(h.new_value ?? h.reason ?? '')}</td>
                       </tr>
                     ))}
                   </tbody>

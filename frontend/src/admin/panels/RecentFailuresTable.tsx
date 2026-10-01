@@ -15,25 +15,25 @@ export interface FailureRow {
 
 // Platform badge colors (best-effort, falls back to neutral)
 const PLATFORM_COLORS: Record<string, string> = {
-  youtube:   'text-red-400    bg-red-950/60    border-red-900/60',
-  instagram: 'text-pink-400   bg-pink-950/60   border-pink-900/60',
-  tiktok:    'text-sky-400    bg-sky-950/60    border-sky-900/60',
-  twitter:   'text-slate-300  bg-slate-800     border-slate-700',
-  facebook:  'text-blue-400   bg-blue-950/60   border-blue-900/60',
-  bilibili:  'text-cyan-400   bg-cyan-950/60   border-cyan-900/60',
-  soundcloud:'text-orange-400 bg-orange-950/60 border-orange-900/60',
+  youtube:   'text-danger    bg-danger-soft    border-danger/60',
+  instagram: 'text-fg-2   bg-surface-2   border-line',
+  tiktok:    'text-fg-2    bg-surface-2    border-line',
+  twitter:   'text-fg-2  bg-surface     border-line',
+  facebook:  'text-fg-2   bg-surface-2   border-line',
+  bilibili:  'text-fg-2   bg-surface-2   border-line',
+  soundcloud:'text-accent-text bg-accent-soft border-accent/60',
 }
 
 function platformStyle(name: string) {
   return (
     PLATFORM_COLORS[name.toLowerCase()] ??
-    'text-slate-400 bg-slate-800 border-slate-700'
+    'text-fg-muted bg-surface border-line'
   )
 }
 
 function PhaseBadge({ phase }: { phase: string }) {
   return (
-    <span className="inline-flex items-center rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-slate-400">
+    <span className="inline-flex items-center rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
       {phase}
     </span>
   )
@@ -55,7 +55,7 @@ export function RecentFailuresTable({
   onRetry,
 }: RecentFailuresTableProps) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/70">
+    <div className="rounded-2xl border border-line bg-surface-2">
       {/* Table header */}
       {loading ? (
         <div className="p-4">
@@ -75,7 +75,7 @@ export function RecentFailuresTable({
               fill="none"
               stroke="currentColor"
               strokeWidth={1.25}
-              className="h-10 w-10 text-emerald-800"
+              className="h-10 w-10 text-success"
             >
               <path
                 strokeLinecap="round"
@@ -89,12 +89,12 @@ export function RecentFailuresTable({
         <div className="overflow-x-auto">
           <table className="min-w-[540px] w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-800">
+              <tr className="border-b border-line">
                 {COL_HEADERS.map(h => (
                   <th
                     key={h}
                     className={cn(
-                      'py-2 pr-3 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-slate-600 first:pl-4',
+                      'py-2 pr-3 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-fg-muted first:pl-4',
                       h === '' && 'w-12 text-right last:pr-4',
                     )}
                   >
@@ -108,8 +108,8 @@ export function RecentFailuresTable({
                 <tr
                   key={row.id}
                   className={cn(
-                    'transition-colors hover:bg-slate-800/30',
-                    i < rows.length - 1 && 'border-b border-slate-800/50',
+                    'transition-colors hover:bg-surface-2',
+                    i < rows.length - 1 && 'border-b border-line',
                   )}
                 >
                   {/* Platform */}
@@ -132,7 +132,7 @@ export function RecentFailuresTable({
                   {/* Error */}
                   <td className="py-2.5 pr-3">
                     <p
-                      className="max-w-[280px] truncate text-xs text-slate-400"
+                      className="max-w-[280px] truncate text-xs text-fg-muted"
                       title={row.error}
                     >
                       {row.error}
@@ -141,7 +141,7 @@ export function RecentFailuresTable({
 
                   {/* Time */}
                   <td className="py-2.5 pr-3">
-                    <span className="font-mono text-[11px] text-slate-600">{row.time}</span>
+                    <span className="font-mono text-[11px] text-fg-muted">{row.time}</span>
                   </td>
 
                   {/* Action */}
@@ -149,12 +149,12 @@ export function RecentFailuresTable({
                     {row.action ? (
                       <Link
                         to={row.action}
-                        className="inline-flex items-center rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-500 transition-colors hover:border-slate-600 hover:text-slate-300"
+                        className="inline-flex items-center rounded border border-line px-2 py-0.5 text-[10px] text-fg-muted transition-colors hover:border-line-strong hover:text-fg-2"
                       >
                         View
                       </Link>
                     ) : (
-                      <span className="text-[10px] text-slate-700">—</span>
+                      <span className="text-[10px] text-fg-muted">—</span>
                     )}
                   </td>
                 </tr>

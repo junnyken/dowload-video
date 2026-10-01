@@ -93,13 +93,13 @@ const JobActionCell = ({ job, onDownload, onRefresh }) => {
         </button>
       );
     }
-    return <span className="text-xs text-text-muted">-</span>;
+    return <span className="text-xs text-fg-muted">-</span>;
   }
 
-  if (job.status !== 'success') return <span className="text-xs text-text-muted">Đang chờ...</span>;
+  if (job.status !== 'success') return <span className="text-xs text-fg-muted">Đang chờ...</span>;
 
   const hasLink = job.direct_mp4_url || job.local_mp3_path || job.local_file_path;
-  if (!hasLink) return <span className="text-xs text-text-muted">-</span>;
+  if (!hasLink) return <span className="text-xs text-fg-muted">-</span>;
 
   // Expired local file: show "Gia hạn link" CTA
   if (expired || job.recovery_state === 'expired_refreshable') {
@@ -538,7 +538,7 @@ export default function BulkContent() {
     if (status === 'pending') {
       const label = stage === 'queued' && job.recovery_attempts > 0 ? 'Đang khôi phục...' : 'Chờ xử lý';
       return (
-        <span className="inline-flex items-center gap-1 text-text-muted bg-surface/50 px-2.5 py-1 rounded-lg text-xs font-medium">
+        <span className="inline-flex items-center gap-1 text-fg-muted bg-surface/50 px-2.5 py-1 rounded-lg text-xs font-medium">
           <Clock className="w-3 h-3" /> {label}
         </span>
       );
@@ -828,19 +828,19 @@ export default function BulkContent() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <Layers className="w-5 h-5 text-accent-light" />
-            <h2 className="text-2xl font-bold text-text-primary tracking-tight">
+            <Layers className="w-5 h-5 text-accent-text" />
+            <h2 className="text-2xl font-bold text-fg tracking-tight">
               Tải Hàng Loạt
             </h2>
           </div>
-          <p className="text-sm text-text-muted ml-8">
+          <p className="text-sm text-fg-muted ml-8">
             Xử lý đồng thời nhiều video hoặc toàn bộ kênh
           </p>
         </div>
         {quotaInfo && ['pro', 'vip'].includes(quotaInfo.plan) && (
-          <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30 rounded-xl shadow-lg shadow-primary/10 animate-in fade-in zoom-in slide-in-from-right-8 duration-500">
-            <Crown className="w-4 h-4 text-primary" />
-            <span className="text-xs font-bold text-primary uppercase tracking-wider">{quotaInfo.plan} ACTIVE</span>
+          <div className="flex items-center gap-2 px-4 py-2 bg-accent-soft border border-accent/30 rounded-xl shadow-lg animate-in fade-in zoom-in slide-in-from-right-8 duration-500">
+            <Crown className="w-4 h-4 text-accent-text" />
+            <span className="text-xs font-bold text-accent-text uppercase tracking-wider">{quotaInfo.plan} ACTIVE</span>
           </div>
         )}
       </div>
@@ -849,13 +849,13 @@ export default function BulkContent() {
       <QuickGuideSection activeToolTab={channelMode ? 'channel' : 'bulk'} />
 
       {/* ── Input Area ────────────────────────────────── */}
-      <div className="p-6 rounded-2xl bg-surface-card border border-border shadow-lg">
+      <div className="p-6 rounded-2xl bg-surface border border-line shadow-lg">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
           <div>
-            <h3 className="text-base font-semibold text-text-primary">
+            <h3 className="text-base font-semibold text-fg">
               Dán URL vào đây
             </h3>
-            <p className="text-xs text-text-muted mt-0.5">
+            <p className="text-xs text-fg-muted mt-0.5">
               Mỗi dòng một link. Có thể dán nhiều URL hoặc import file .txt / .csv.
             </p>
           </div>
@@ -865,7 +865,7 @@ export default function BulkContent() {
             <select
               value={quality}
               onChange={(e) => setQuality(e.target.value)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold border bg-surface border-border text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="px-4 py-2 rounded-xl text-xs font-semibold border bg-surface border-line text-fg focus:outline-none focus:ring-2 focus:ring-primary/50"
             >
               <option value="video">MP4 Video</option>
               <option value="mp3_128">MP3 Audio (128kbps)</option>
@@ -885,7 +885,7 @@ export default function BulkContent() {
                 ${
                   autoDownload
                     ? 'bg-success/15 border-success/30 text-success'
-                    : 'bg-surface border-border text-text-muted hover:text-text-secondary'
+                    : 'bg-surface border-line text-fg-muted hover:text-fg-2'
                 }
               `}
             >
@@ -899,7 +899,7 @@ export default function BulkContent() {
             
             {/* Mode Tabs */}
             <div className="flex flex-col items-start gap-1">
-              <div className="flex gap-1.5 p-1 bg-slate-800/60 rounded-xl border border-slate-700/40">
+              <div className="flex gap-1.5 p-1 bg-surface rounded-xl border border-line">
                 {[
                   { key: 'bulk',      label: '📋 Bulk URL',    active: !channelMode && !searchMode && !containerMode },
                   { key: 'channel',   label: '📡 Channel',      active: channelMode && !searchMode && !containerMode },
@@ -915,15 +915,15 @@ export default function BulkContent() {
                     }}
                     className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                       tab.active
-                        ? 'bg-[#FBBF24] text-slate-900'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-accent text-fg'
+                        : 'text-fg-muted hover:text-fg'
                     }`}
                   >
                     {tab.label}
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-text-muted mt-1">
+              <p className="text-xs text-fg-muted mt-1">
                 {channelMode ? 'Bật chế độ này khi bạn dán link kênh/profile thay vì link video đơn.'
                   : searchMode ? 'Tìm video theo từ khóa và chọn để tải.'
                   : containerMode ? 'Xem trước và chọn nội dung trước khi queue tải.'
@@ -948,10 +948,10 @@ export default function BulkContent() {
                       flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold
                       border transition-all duration-200
                       ${isOtherPlatform
-                        ? 'opacity-40 cursor-not-allowed bg-surface border-border text-text-muted'
+                        ? 'opacity-40 cursor-not-allowed bg-surface border-line text-fg-muted'
                         : removeWatermark && hasTikTok
-                          ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400 cursor-pointer'
-                          : 'bg-surface border-border text-text-muted hover:text-text-secondary cursor-pointer'
+                          ? 'bg-success-soft border-success/30 text-success cursor-pointer'
+                          : 'bg-surface border-line text-fg-muted hover:text-fg-2 cursor-pointer'
                       }
                     `}
                   >
@@ -963,13 +963,13 @@ export default function BulkContent() {
                     <Sparkles className="w-3.5 h-3.5" />
                     Bỏ watermark
                     {hasTikTok && (
-                      <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">TikTok/Douyin</span>
+                      <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-success-soft text-success">TikTok/Douyin</span>
                     )}
                     {isOtherPlatform && (
-                      <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-surface border border-border text-text-muted">Chỉ TikTok</span>
+                      <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-surface border border-line text-fg-muted">Chỉ TikTok</span>
                     )}
                   </button>
-                  <p className="text-xs text-text-muted mt-1">
+                  <p className="text-xs text-fg-muted mt-1">
                     {isOtherPlatform ? 'Chỉ áp dụng cho TikTok và Douyin.' : 'Tải bản không có logo/watermark (TikTok, Douyin).'}
                   </p>
                 </div>
@@ -980,7 +980,7 @@ export default function BulkContent() {
 
         {channelMode && (
           <div className="mb-4 p-4 rounded-xl bg-accent/5 border border-accent/20">
-            <p className="text-xs text-accent-light flex items-center gap-2 mb-3">
+            <p className="text-xs text-accent-text flex items-center gap-2 mb-3">
               <Tv className="w-4 h-4" />
               <strong>Channel Mode ON:</strong> Tự động bóc tách và lọc video trong kênh
             </p>
@@ -988,32 +988,32 @@ export default function BulkContent() {
             {(() => {
               const allUrls = urls.toLowerCase();
               if (allUrls.includes('twitter.com') || allUrls.includes('x.com')) return (
-                <div className="mb-3 p-2.5 rounded-lg bg-sky-500/10 border border-sky-500/20 text-xs text-sky-300">
+                <div className="mb-3 p-2.5 rounded-lg bg-surface-2 border border-line text-xs text-fg-2">
                   <strong>Twitter/X:</strong> Nhập @username hoặc link trang cá nhân. Tải video từ Media tab công khai. Giới hạn 100 video/lần — Twitter rate-limit rất chặt với scrape lớn.
                 </div>
               );
               if (allUrls.includes('reddit.com')) return (
-                <div className="mb-3 p-2.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-xs text-orange-300">
+                <div className="mb-3 p-2.5 rounded-lg bg-accent-soft border border-accent/20 text-xs text-accent-text">
                   <strong>Reddit:</strong> Nhập link subreddit (r/videos) hoặc user page. Hỗ trợ sort hot/new/top. Chỉ lấy các bài có video. Tối đa 50 video/lần.
                 </div>
               );
               if (allUrls.includes('pinterest.com') || allUrls.includes('pin.it')) return (
-                <div className="mb-3 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-300">
+                <div className="mb-3 p-2.5 rounded-lg bg-danger-soft border border-danger/20 text-xs text-danger">
                   <strong>Pinterest:</strong> Nhập link board (pinterest.com/user/board-name). Chỉ Video Pin được tải. Board riêng tư sẽ báo lỗi.
                 </div>
               );
               if (allUrls.includes('threads.com') || allUrls.includes('threads.net')) return (
-                <div className="mb-3 p-2.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300">
+                <div className="mb-3 p-2.5 rounded-lg bg-surface-2 border border-line text-xs text-fg-2">
                   <strong>Threads:</strong> Nhập @username hoặc link trang cá nhân công khai. Lấy tối đa 100 bài gần đây có media.
                 </div>
               );
               return null;
             })()}
             <div>
-              <label className="block text-[10px] font-semibold text-text-muted uppercase mb-2">
+              <label className="block text-[10px] font-semibold text-fg-muted uppercase mb-2">
                 Số lượng video muốn tải
               </label>
-              <p className="text-xs text-text-muted mb-2">Chọn số video muốn quét từ kênh. Nếu mới dùng, hãy thử 10–50 video trước.</p>
+              <p className="text-xs text-fg-muted mb-2">Chọn số video muốn quét từ kênh. Nếu mới dùng, hãy thử 10–50 video trước.</p>
               <div className="flex flex-wrap gap-2 mb-2">
                 {[
                   { value: 10, label: '10' },
@@ -1028,8 +1028,8 @@ export default function BulkContent() {
                     onClick={() => { setMaxVideos(opt.value); setCustomMaxVideos(''); }}
                     className={`px-3.5 py-1.5 rounded-lg text-xs font-bold border transition-all duration-200 cursor-pointer ${
                       !customMaxVideos && parseInt(maxVideos) === opt.value
-                        ? 'bg-accent/20 border-accent/40 text-accent-light shadow-sm'
-                        : 'bg-surface border-border text-text-muted hover:text-text-secondary hover:border-border/80'
+                        ? 'bg-accent/20 border-accent/40 text-accent-text shadow-sm'
+                        : 'bg-surface border-line text-fg-muted hover:text-fg-2 hover:border-line/80'
                     }`}
                   >
                     {opt.label}
@@ -1037,7 +1037,7 @@ export default function BulkContent() {
                 ))}
               </div>
               {(urls.toLowerCase().includes('twitter.com') || urls.toLowerCase().includes('x.com')) && (
-                <p className="text-xs text-yellow-400/80 mt-1">⚠ Twitter rate-limit: &gt;50 video có thể chậm hoặc bị gián đoạn.</p>
+                <p className="text-xs text-warning mt-1">⚠ Twitter rate-limit: &gt;50 video có thể chậm hoặc bị gián đoạn.</p>
               )}
               <input
                 type="number"
@@ -1045,10 +1045,10 @@ export default function BulkContent() {
                 max="1000"
                 value={customMaxVideos}
                 onChange={(e) => { setCustomMaxVideos(e.target.value); setMaxVideos(0); }}
-                className="w-full px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:border-primary/50"
+                className="w-full px-3 py-2 bg-surface border border-line rounded-lg text-sm text-fg focus:outline-none focus:border-accent/50"
                 placeholder="Hoặc nhập số lượng tuỳ chỉnh..."
               />
-              <p className="text-[10px] text-text-muted mt-1.5">
+              <p className="text-[10px] text-fg-muted mt-1.5">
                 💡 Video được xử lý theo đợt (10 video/đợt) để tối ưu hiệu suất
               </p>
             </div>
@@ -1061,84 +1061,84 @@ export default function BulkContent() {
             {/* Search controls */}
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <div className="col-span-2 sm:col-span-2">
-                <label className="text-[10px] text-slate-500 uppercase font-semibold mb-1 block">Từ khóa</label>
+                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">Từ khóa</label>
                 <input
                   value={kw}
                   onChange={e => setKw(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleKeywordSearch()}
                   placeholder="Nhập từ khóa tìm kiếm..."
-                  className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#FBBF24]/40"
+                  className="w-full bg-surface border border-line rounded-xl px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:outline-none focus:border-accent/40"
                 />
               </div>
               <div>
-                <label className="text-[10px] text-slate-500 uppercase font-semibold mb-1 block">Nền tảng</label>
+                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">Nền tảng</label>
                 <select value={kwPlatform} onChange={e => setKwPlatform(e.target.value)}
-                  className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-2 py-2 text-sm text-white focus:outline-none cursor-pointer">
+                  className="w-full bg-surface border border-line rounded-xl px-2 py-2 text-sm text-fg focus:outline-none cursor-pointer">
                   <option value="youtube">YouTube</option>
                   <option value="tiktok">TikTok</option>
                 </select>
               </div>
               <div>
-                <label className="text-[10px] text-slate-500 uppercase font-semibold mb-1 block">Số lượng</label>
+                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">Số lượng</label>
                 <select value={kwCount} onChange={e => setKwCount(Number(e.target.value))}
-                  className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-2 py-2 text-sm text-white focus:outline-none cursor-pointer">
+                  className="w-full bg-surface border border-line rounded-xl px-2 py-2 text-sm text-fg focus:outline-none cursor-pointer">
                   {[10, 20, 50].map(n => <option key={n} value={n}>{n} video</option>)}
                 </select>
               </div>
             </div>
             <div className="flex gap-2 flex-wrap items-end">
               <div>
-                <label className="text-[10px] text-slate-500 uppercase font-semibold mb-1 block">Sắp xếp</label>
+                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">Sắp xếp</label>
                 <select value={kwSort} onChange={e => setKwSort(e.target.value)}
-                  className="bg-slate-800/60 border border-slate-700/50 rounded-xl px-2 py-2 text-sm text-white focus:outline-none cursor-pointer">
+                  className="bg-surface border border-line rounded-xl px-2 py-2 text-sm text-fg focus:outline-none cursor-pointer">
                   <option value="relevance">Liên quan</option>
                   <option value="date">Mới nhất</option>
                   <option value="view_count">Nhiều xem</option>
                 </select>
               </div>
               <div>
-                <label className="text-[10px] text-slate-500 uppercase font-semibold mb-1 block">Thời lượng tối thiểu (giây)</label>
+                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">Thời lượng tối thiểu (giây)</label>
                 <input type="number" value={kwMinDur} onChange={e => setKwMinDur(e.target.value)}
                   placeholder="0"
-                  className="w-24 bg-slate-800/60 border border-slate-700/50 rounded-xl px-2 py-2 text-sm text-white focus:outline-none"
+                  className="w-24 bg-surface border border-line rounded-xl px-2 py-2 text-sm text-fg focus:outline-none"
                 />
               </div>
               <div>
-                <label className="text-[10px] text-slate-500 uppercase font-semibold mb-1 block">Thời lượng tối đa (giây)</label>
+                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">Thời lượng tối đa (giây)</label>
                 <input type="number" value={kwMaxDur} onChange={e => setKwMaxDur(e.target.value)}
                   placeholder="không giới hạn"
-                  className="w-32 bg-slate-800/60 border border-slate-700/50 rounded-xl px-2 py-2 text-sm text-white focus:outline-none"
+                  className="w-32 bg-surface border border-line rounded-xl px-2 py-2 text-sm text-fg focus:outline-none"
                 />
               </div>
               <button
                 onClick={handleKeywordSearch}
                 disabled={kwLoading || kw.trim().length < 3}
-                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-[#FBBF24]/20 text-[#FBBF24] text-sm font-bold border border-[#FBBF24]/30 hover:bg-[#FBBF24]/30 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-accent-soft text-accent-text text-sm font-bold border border-accent/30 hover:bg-accent/20 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {kwLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                 {kwLoading ? 'Đang tìm...' : 'Tìm kiếm'}
               </button>
             </div>
 
-            {kwError && <p className="text-sm text-red-400">{kwError}</p>}
+            {kwError && <p className="text-sm text-danger">{kwError}</p>}
 
             {/* Results */}
             {kwResults.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-fg-muted">
                     Tìm thấy {kwResults.length} video cho "{kw}"{kwCached ? ' (từ cache)' : ''}
                   </p>
                   <div className="flex gap-2">
                     <button
                       onClick={() => setKwSelected(new Set(kwResults.map(r => r.url)))}
-                      className="text-[10px] text-slate-400 hover:text-white cursor-pointer"
+                      className="text-[10px] text-fg-muted hover:text-fg cursor-pointer"
                     >
                       Chọn tất cả
                     </button>
                     <button
                       onClick={() => setKwSelected(new Set())}
-                      className="text-[10px] text-slate-400 hover:text-white cursor-pointer"
+                      className="text-[10px] text-fg-muted hover:text-fg cursor-pointer"
                     >
                       Bỏ chọn
                     </button>
@@ -1165,21 +1165,21 @@ export default function BulkContent() {
                         })}
                         className={`flex items-center gap-3 p-2.5 rounded-xl border cursor-pointer transition-colors ${
                           selected
-                            ? 'bg-[#FBBF24]/10 border-[#FBBF24]/40'
-                            : 'bg-slate-800/40 border-slate-700/40 hover:border-slate-600/60'
+                            ? 'bg-accent-soft border-accent/40'
+                            : 'bg-surface-2 border-line hover:border-line-strong'
                         }`}
                       >
-                        <input type="checkbox" checked={selected} onChange={() => {}} className="w-3.5 h-3.5 accent-[#FBBF24] cursor-pointer flex-shrink-0" />
+                        <input type="checkbox" checked={selected} onChange={() => {}} className="w-3.5 h-3.5 accent-accent cursor-pointer flex-shrink-0" />
                         {r.thumbnail_url && (
-                          <img src={r.thumbnail_url} alt="" className="w-14 h-9 object-cover rounded-lg flex-shrink-0 bg-slate-700" />
+                          <img src={r.thumbnail_url} alt="" className="w-14 h-9 object-cover rounded-lg flex-shrink-0 bg-surface-2" />
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs text-white font-medium truncate">{r.title}</p>
+                          <p className="text-xs text-fg font-medium truncate">{r.title}</p>
                           <div className="flex gap-2 mt-0.5 flex-wrap">
-                            {r.creator && <span className="text-[10px] text-slate-400">@{r.creator}</span>}
-                            {durStr && <span className="text-[10px] text-slate-500">⏱ {durStr}</span>}
-                            {views && <span className="text-[10px] text-slate-500">👁 {views}</span>}
-                            {r.upload_date && <span className="text-[10px] text-slate-600">{r.upload_date}</span>}
+                            {r.creator && <span className="text-[10px] text-fg-muted">@{r.creator}</span>}
+                            {durStr && <span className="text-[10px] text-fg-muted">⏱ {durStr}</span>}
+                            {views && <span className="text-[10px] text-fg-muted">👁 {views}</span>}
+                            {r.upload_date && <span className="text-[10px] text-fg-muted">{r.upload_date}</span>}
                           </div>
                         </div>
                       </div>
@@ -1190,12 +1190,12 @@ export default function BulkContent() {
                 <button
                   onClick={handleKwAddSelected}
                   disabled={kwSelected.size === 0}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-[#FBBF24] to-yellow-500 text-slate-900 text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent text-fg text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity cursor-pointer"
                 >
                   <Download className="w-4 h-4" />
                   Tải {kwSelected.size} video đã chọn →
                 </button>
-                <p className="text-[10px] text-center text-slate-500">Các URL sẽ được chuyển sang tab Bulk URL để tải.</p>
+                <p className="text-[10px] text-center text-fg-muted">Các URL sẽ được chuyển sang tab Bulk URL để tải.</p>
               </div>
             )}
           </div>
@@ -1223,11 +1223,11 @@ export default function BulkContent() {
             }
             className="
               w-full px-4 py-3 rounded-xl
-              bg-surface border border-border
-              text-text-primary placeholder-text-muted
+              bg-surface border border-line
+              text-fg placeholder-text-muted
               text-sm leading-relaxed cursor-text
               resize-none
-              focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50
+              focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-accent/50
               transition-all duration-200
             "
             disabled={isSubmitting}
@@ -1235,7 +1235,7 @@ export default function BulkContent() {
           <div className="absolute top-2 right-2 flex gap-1">
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 bg-surface-lighter text-text-muted hover:text-accent-light border border-border rounded-lg transition-colors shadow-sm"
+              className="p-1.5 bg-surface-2 text-fg-muted hover:text-accent-text border border-line rounded-lg transition-colors shadow-sm"
               title="Import URL từ file .txt hoặc .csv"
             >
               <FileDown className="w-4 h-4" />
@@ -1253,7 +1253,7 @@ export default function BulkContent() {
                     console.error("Failed to read clipboard: ", err);
                   }
                 }}
-                className="p-1.5 bg-surface-lighter text-text-muted hover:text-primary border border-border rounded-lg transition-colors shadow-sm"
+                className="p-1.5 bg-surface-2 text-fg-muted hover:text-accent-text border border-line rounded-lg transition-colors shadow-sm"
                 title="Dán từ bộ nhớ tạm"
               >
                 <ClipboardPaste className="w-4 h-4" />
@@ -1267,7 +1267,7 @@ export default function BulkContent() {
             const lines = urls.split('\n').map(u => u.trim()).filter(Boolean);
             const dups = lines.length - new Set(lines).size;
             return dups > 0 ? (
-              <span className="text-xs text-amber-400/80 flex items-center gap-1">
+              <span className="text-xs text-accent-text flex items-center gap-1">
                 ⚠ {dups} URL trùng sẽ bị bỏ qua
               </span>
             ) : <span />;
@@ -1286,10 +1286,10 @@ export default function BulkContent() {
               className="
                 flex items-center gap-2
                 px-5 py-2.5 rounded-xl
-                bg-gradient-to-r from-purple-600 to-violet-600
-                text-white text-sm font-semibold cursor-pointer
-                shadow-lg shadow-purple-500/25
-                hover:shadow-xl hover:shadow-purple-500/30
+                bg-accent
+                text-accent-fg text-sm font-semibold cursor-pointer
+                shadow-lg
+                hover:shadow-xl
                 active:scale-[0.98]
                 transition-all duration-200
                 disabled:opacity-50 disabled:cursor-not-allowed
@@ -1305,10 +1305,10 @@ export default function BulkContent() {
               className="
                 flex items-center gap-2
                 px-5 py-2.5 rounded-xl
-                bg-gradient-to-r from-primary to-primary-dark
-                text-white text-sm font-semibold cursor-pointer
-                shadow-lg shadow-primary/25
-                hover:shadow-xl hover:shadow-primary/30
+                bg-accent
+                text-accent-fg text-sm font-semibold cursor-pointer
+                shadow-lg
+                hover:shadow-xl
                 active:scale-[0.98]
                 transition-all duration-200
                 disabled:opacity-50 disabled:cursor-not-allowed
@@ -1327,12 +1327,12 @@ export default function BulkContent() {
 
       {/* ── Progress Summary Bar ──────────────────────── */}
       {summary && totalData.total > 0 && (
-        <div className="p-5 rounded-2xl bg-surface-card border border-border shadow-lg">
+        <div className="p-5 rounded-2xl bg-surface border border-line shadow-lg">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text-primary">
+            <h3 className="text-sm font-semibold text-fg">
               Tiến độ xử lý
             </h3>
-            <span className="text-xs text-text-muted">
+            <span className="text-xs text-fg-muted">
               {totalData.success + totalData.failed} / {totalData.total} hoàn tất
             </span>
           </div>
@@ -1340,18 +1340,18 @@ export default function BulkContent() {
           {/* Progress Bar */}
           <div className="w-full h-2.5 bg-surface rounded-full overflow-hidden mb-4">
             <div
-              className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-500 rounded-full"
+              className="h-full bg-accent transition-all duration-500 rounded-full"
               style={{ width: `${progressPct}%` }}
             />
           </div>
 
           {/* Stat Pills */}
           <div className="flex flex-wrap gap-3">
-            <span className="text-xs px-3 py-1.5 rounded-lg bg-surface font-medium text-text-secondary">
-              Tổng: <strong className="text-text-primary">{totalData.total}</strong>
+            <span className="text-xs px-3 py-1.5 rounded-lg bg-surface font-medium text-fg-2">
+              Tổng: <strong className="text-fg">{totalData.total}</strong>
             </span>
             {totalData.pending > 0 && (
-              <span className="text-xs px-3 py-1.5 rounded-lg bg-surface font-medium text-text-muted">
+              <span className="text-xs px-3 py-1.5 rounded-lg bg-surface font-medium text-fg-muted">
                 Chờ: {totalData.pending}
               </span>
             )}
@@ -1391,24 +1391,24 @@ export default function BulkContent() {
 
           {/* Download All Buttons */}
           {successJobs.length > 0 && (
-            <div className="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-border/50">
+            <div className="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-line/50">
               {totalData.total === totalData.success && (
                 <div className="mr-auto">
                     {zipJob && zipJob.status === "success" ? (
                        <div className="flex flex-col items-start gap-1.5">
                          <JobActionCell job={zipJob} onDownload={handleSmartDownload} />
                          {zipJob.file_size_mb > 0 && (
-                           <span className="text-[11px] font-semibold text-accent-light bg-accent/10 px-2.5 py-1 rounded-lg border border-accent/20 flex items-center gap-1.5">
+                           <span className="text-[11px] font-semibold text-accent-text bg-accent/10 px-2.5 py-1 rounded-lg border border-accent/20 flex items-center gap-1.5">
                              <FileDown className="w-3 h-3" />
                              ZIP: {zipJob.file_size_mb} MB
                              {zipJob.title && zipJob.title.includes('files') && (
-                               <span className="text-text-muted">• {zipJob.title.split('—')[1]?.trim()}</span>
+                               <span className="text-fg-muted">• {zipJob.title.split('—')[1]?.trim()}</span>
                              )}
                            </span>
                          )}
                        </div>
                     ) : (zipJob && (zipJob.status === "processing" || zipJob.status === "pending")) || isZipping ? (
-                        <button disabled className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary/50 text-white text-xs font-bold uppercase tracking-wider cursor-not-allowed">
+                        <button disabled className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-accent/50 text-fg text-xs font-bold uppercase tracking-wider cursor-not-allowed">
                           <Loader2 className="w-4 h-4 animate-spin" />
                           Đang tạo file ZIP...
                         </button>
@@ -1422,7 +1422,7 @@ export default function BulkContent() {
                               }
                               handleCreateZip();
                             }}
-                            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-primary to-primary-dark shadow-lg hover:shadow-xl text-white text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer"
+                            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-accent shadow-lg hover:shadow-xl text-accent-fg text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer"
                           >
                             <FileDown className="w-4 h-4" />
                             Tải tất cả (ZIP) {zipJob?.error_message ? " (Thử lại)" : ""}
@@ -1435,11 +1435,11 @@ export default function BulkContent() {
                               onChange={e => setOrganizeByChannel(e.target.checked)}
                               className="w-3.5 h-3.5 accent-primary rounded"
                             />
-                            <span className="text-[10px] text-text-muted">Chia thư mục theo kênh</span>
+                            <span className="text-[10px] text-fg-muted">Chia thư mục theo kênh</span>
                           </label>
                           {/* Show estimated total size before zipping */}
                           {successJobs.length > 0 && (
-                            <span className="text-[10px] text-text-muted ml-1">
+                            <span className="text-[10px] text-fg-muted ml-1">
                               Ước tính: {successJobs.reduce((sum, j) => sum + (j.file_size_mb || 0), 0).toFixed(1)} MB • {successJobs.length} files
                             </span>
                           )}
@@ -1456,8 +1456,8 @@ export default function BulkContent() {
                     onClick={() => setShowRename(p => !p)}
                     className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
                       showRename
-                        ? 'bg-violet-500/20 text-violet-300 border-violet-500/40'
-                        : 'bg-slate-800/60 text-slate-400 border-slate-700/40 hover:text-violet-300 hover:border-violet-500/40'
+                        ? 'bg-surface-2 text-fg-2 border-line'
+                        : 'bg-surface text-fg-muted border-line hover:text-fg-2 hover:border-line'
                     }`}
                   >
                     ✏️ Rename & ZIP
@@ -1474,7 +1474,7 @@ export default function BulkContent() {
                   transition-all duration-200
                   ${selectedJobIds.size > 0 
                     ? 'bg-success/10 hover:bg-success/20 border-success/20 text-success cursor-pointer' 
-                    : 'bg-surface border-border text-text-muted opacity-50 cursor-not-allowed'}
+                    : 'bg-surface border-line text-fg-muted opacity-50 cursor-not-allowed'}
                 `}
               >
                 <FileDown className="w-4 h-4" />
@@ -1484,8 +1484,8 @@ export default function BulkContent() {
                 onClick={handleExportCSV}
                 className="
                   flex items-center gap-2 px-4 py-2.5 rounded-xl
-                  bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20
-                  text-emerald-500 text-xs font-semibold
+                  bg-success-soft hover:bg-success/20 border border-success/20
+                  text-success text-xs font-semibold
                   transition-all duration-200 cursor-pointer
                 "
               >
@@ -1497,7 +1497,7 @@ export default function BulkContent() {
                 className="
                   flex items-center gap-2 px-4 py-2.5 rounded-xl
                   bg-accent/10 hover:bg-accent/20 border border-accent/20
-                  text-accent-light text-xs font-semibold
+                  text-accent-text text-xs font-semibold
                   transition-all duration-200 cursor-pointer
                 "
               >
@@ -1508,7 +1508,7 @@ export default function BulkContent() {
                 onClick={handleOpenAll}
                 className="
                   flex items-center gap-2 px-4 py-2.5 rounded-xl
-                  bg-primary/10 hover:bg-primary/20 border border-primary/20
+                  bg-accent/10 hover:bg-accent/20 border border-accent/20
                   text-primary-light text-xs font-semibold
                   transition-all duration-200 cursor-pointer
                 "
@@ -1521,18 +1521,18 @@ export default function BulkContent() {
 
           {/* ── Rename Panel ────────────────────────────────────── */}
           {showRename && batchId && (
-            <div className="mt-3 p-4 rounded-xl bg-violet-500/5 border border-violet-500/20 space-y-3">
-              <h3 className="text-sm font-bold text-violet-300">✏️ Đổi tên & Tải ZIP</h3>
+            <div className="mt-3 p-4 rounded-xl bg-surface-2 border border-line space-y-3">
+              <h3 className="text-sm font-bold text-fg-2">✏️ Đổi tên & Tải ZIP</h3>
 
               {/* Token chips */}
               <div>
-                <p className="text-[10px] text-slate-500 mb-1.5">Click token để chèn vào pattern:</p>
+                <p className="text-[10px] text-fg-muted mb-1.5">Click token để chèn vào pattern:</p>
                 <div className="flex flex-wrap gap-1.5">
                   {TOKEN_CHIPS.map(tok => (
                     <button
                       key={tok}
                       onClick={() => handleInsertToken(tok)}
-                      className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-[10px] text-slate-300 hover:border-violet-500/50 hover:text-violet-300 transition-colors cursor-pointer font-mono"
+                      className="px-2 py-0.5 rounded bg-surface border border-line text-[10px] text-fg-2 hover:border-line hover:text-fg-2 transition-colors cursor-pointer font-mono"
                     >
                       {tok}
                     </button>
@@ -1542,38 +1542,38 @@ export default function BulkContent() {
 
               {/* Pattern input */}
               <div>
-                <label className="text-[10px] text-slate-500 uppercase font-semibold mb-1 block">Pattern</label>
+                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">Pattern</label>
                 <input
                   value={renamePattern}
                   onChange={e => setRenamePattern(e.target.value)}
-                  className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-violet-500/50"
+                  className="w-full bg-surface-2 border border-line rounded-lg px-3 py-2 text-xs text-fg-2 font-mono focus:outline-none focus:border-line"
                 />
               </div>
 
               {/* Live preview */}
               {successJobs.length > 0 && (
                 <div>
-                  <p className="text-[10px] text-slate-500 uppercase font-semibold mb-1">Xem trước (3 file đầu):</p>
+                  <p className="text-[10px] text-fg-muted uppercase font-semibold mb-1">Xem trước (3 file đầu):</p>
                   <div className="space-y-1">
                     {renamePreview.map((name, i) => (
-                      <p key={i} className="text-[11px] text-slate-300 font-mono bg-slate-900/40 px-2 py-1 rounded truncate">
+                      <p key={i} className="text-[11px] text-fg-2 font-mono bg-surface-2 px-2 py-1 rounded truncate">
                         {name}
                       </p>
                     ))}
                   </div>
-                  <p className="text-[10px] text-slate-600 mt-1">? = giá trị sẽ được điền khi tạo ZIP</p>
+                  <p className="text-[10px] text-fg-muted mt-1">? = giá trị sẽ được điền khi tạo ZIP</p>
                 </div>
               )}
 
-              {renameError && <p className="text-xs text-red-400">{renameError}</p>}
+              {renameError && <p className="text-xs text-danger">{renameError}</p>}
 
               {renameResult && (
-                <div className="p-3 rounded-lg bg-violet-500/10 border border-violet-500/30">
-                  <p className="text-xs text-violet-300 font-semibold">ZIP đã sẵn sàng! ({renameResult.file_count} files, {renameResult.file_size_mb} MB)</p>
+                <div className="p-3 rounded-lg bg-surface-2 border border-line">
+                  <p className="text-xs text-fg-2 font-semibold">ZIP đã sẵn sàng! ({renameResult.file_count} files, {renameResult.file_size_mb} MB)</p>
                   <a
                     href={`${API}${renameResult.zip_url.replace('/api/v1', '')}`}
                     download={renameResult.filename}
-                    className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/20 text-violet-300 text-xs font-bold hover:bg-violet-500/30 transition-colors"
+                    className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-2 text-fg-2 text-xs font-bold hover:bg-line transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" /> Tải ZIP đã đổi tên
                   </a>
@@ -1583,7 +1583,7 @@ export default function BulkContent() {
               <button
                 onClick={handleRenameZip}
                 disabled={renameLoading || !renamePattern.trim()}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-500/20 text-violet-300 text-xs font-bold border border-violet-500/30 hover:bg-violet-500/30 transition-colors cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-2 text-fg-2 text-xs font-bold border border-line hover:bg-line transition-colors cursor-pointer disabled:opacity-50"
               >
                 {renameLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                 {renameLoading ? 'Đang tạo ZIP...' : 'Tạo ZIP đổi tên'}
@@ -1595,20 +1595,20 @@ export default function BulkContent() {
 
       {/* ── Jobs Table ────────────────────────────────── */}
       {(batchId || jobs.length > 0) && (
-        <div className="rounded-2xl bg-surface-card border border-border shadow-lg overflow-hidden">
-          <div className="px-6 py-4 border-b border-border bg-surface-lighter/30 flex justify-between items-center">
+        <div className="rounded-2xl bg-surface border border-line shadow-lg overflow-hidden">
+          <div className="px-6 py-4 border-b border-line bg-surface-2/30 flex justify-between items-center">
             <div className="flex items-center gap-3">
-              <h3 className="font-semibold text-text-primary">
+              <h3 className="font-semibold text-fg">
                 Danh sách ({isDiscovering ? '...' : displayJobs.length})
               </h3>
               {selectedJobIds.size > 0 && (
-                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-lg bg-primary/15 text-primary border border-primary/25 animate-in fade-in duration-200">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-lg bg-accent/15 text-accent-text border border-accent/25 animate-in fade-in duration-200">
                   <CheckSquare className="w-3 h-3" />
                   Đã chọn {selectedJobIds.size}
                 </span>
               )}
             </div>
-            <span className="text-xs text-text-muted bg-surface px-2.5 py-1 rounded-md font-mono">
+            <span className="text-xs text-fg-muted bg-surface px-2.5 py-1 rounded-md font-mono">
               {batchId ? batchId.slice(0, 8) + '...' : 'Loading...'}
             </span>
           </div>
@@ -1617,47 +1617,47 @@ export default function BulkContent() {
             <div className="p-8 flex flex-col items-center gap-5">
               {/* Animated radar icon */}
               <div className="relative flex items-center justify-center w-16 h-16">
-                <span className="absolute w-16 h-16 rounded-full bg-primary/10 animate-ping" />
-                <span className="absolute w-10 h-10 rounded-full bg-primary/15 animate-ping [animation-delay:0.3s]" />
-                <Radio className="w-7 h-7 text-primary relative z-10" />
+                <span className="absolute w-16 h-16 rounded-full bg-accent/10 animate-ping" />
+                <span className="absolute w-10 h-10 rounded-full bg-accent/15 animate-ping [animation-delay:0.3s]" />
+                <Radio className="w-7 h-7 text-accent-text relative z-10" />
               </div>
 
               <div className="text-center">
-                <p className="text-sm font-semibold text-text-primary mb-1">
+                <p className="text-sm font-semibold text-fg mb-1">
                   Đang quét danh sách video từ kênh...
                 </p>
-                <p className="text-xs text-text-muted">
+                <p className="text-xs text-fg-muted">
                   {discoveryJob?.error_message || 'Đang kết nối tới YouTube...'}
                 </p>
               </div>
 
               {/* Elapsed timer */}
-              <div className="flex items-center gap-3 text-xs text-text-muted bg-surface border border-border rounded-xl px-5 py-3">
-                <Clock className="w-4 h-4 text-primary" />
+              <div className="flex items-center gap-3 text-xs text-fg-muted bg-surface border border-line rounded-xl px-5 py-3">
+                <Clock className="w-4 h-4 text-accent-text" />
                 <span>Thời gian đã chờ:</span>
-                <span className="font-mono font-bold text-text-primary text-sm tabular-nums">
+                <span className="font-mono font-bold text-fg text-sm tabular-nums">
                   {String(Math.floor(discoverElapsed / 60)).padStart(2, '0')}:{String(discoverElapsed % 60).padStart(2, '0')}
                 </span>
               </div>
 
-              <p className="text-[11px] text-text-muted text-center max-w-xs leading-relaxed">
+              <p className="text-[11px] text-fg-muted text-center max-w-xs leading-relaxed">
                 YouTube có thể mất 30–90 giây để tải toàn bộ danh sách video của kênh. Vui lòng chờ trong giây lát.
               </p>
             </div>
           ) : displayJobs.length === 0 ? (
-            <div className="p-10 text-center text-text-muted text-sm flex flex-col items-center gap-2">
-              <Loader2 className="w-5 h-5 animate-spin text-primary" />
+            <div className="p-10 text-center text-fg-muted text-sm flex flex-col items-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin text-accent-text" />
               {channelMode ? 'Đang khởi tạo...' : 'Đang tạo jobs...'}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="bg-surface-lighter/50 text-xs uppercase text-text-muted">
+                <thead className="bg-surface-2/50 text-xs uppercase text-fg-muted">
                   <tr>
                     <th className="px-6 py-3 font-medium w-8">
                       <input 
                         type="checkbox" 
-                        className="rounded border-border bg-surface text-primary focus:ring-primary/50"
+                        className="rounded border-line bg-surface text-accent-text focus:ring-primary/50"
                         checked={successJobs.length > 0 && selectedJobIds.size === successJobs.length}
                         onChange={(e) => {
                           if (e.target.checked) {
@@ -1678,13 +1678,13 @@ export default function BulkContent() {
                   {displayJobs.map((job, idx) => (
                     <tr
                       key={job.id}
-                      className="hover:bg-surface-lighter/20 transition-colors"
+                      className="hover:bg-surface-2/20 transition-colors"
                     >
                       <td className="px-6 py-3">
                         <input 
                           type="checkbox" 
                           disabled={job.status !== 'success'}
-                          className="rounded border-border bg-surface text-primary focus:ring-primary/50 disabled:opacity-50"
+                          className="rounded border-line bg-surface text-accent-text focus:ring-primary/50 disabled:opacity-50"
                           checked={selectedJobIds.has(job.id)}
                           onChange={(e) => {
                             const next = new Set(selectedJobIds);
@@ -1694,24 +1694,24 @@ export default function BulkContent() {
                           }}
                         />
                       </td>
-                      <td className="px-6 py-3 text-text-muted text-xs">
+                      <td className="px-6 py-3 text-fg-muted text-xs">
                         {idx + 1}
                       </td>
                       <td className="px-6 py-3 max-w-[320px]">
                         <div className="flex items-start gap-2">
                           <div className="mt-0.5">
                             {job.local_mp3_path ? (
-                              <Music className="w-4 h-4 text-accent-light flex-shrink-0" />
+                              <Music className="w-4 h-4 text-accent-text flex-shrink-0" />
                             ) : (
-                              <Video className="w-4 h-4 text-primary flex-shrink-0" />
+                              <Video className="w-4 h-4 text-accent-text flex-shrink-0" />
                             )}
                           </div>
                           <div className="flex-1 overflow-hidden">
-                            <span className="block truncate text-text-primary" title={job.original_url}>
+                            <span className="block truncate text-fg" title={job.original_url}>
                               {job.original_url}
                             </span>
                             {job.file_size_mb > 0 && job.status === 'success' && (
-                              <span className="text-[10px] text-text-muted mt-1 font-medium px-1.5 py-0.5 bg-surface rounded inline-block">
+                              <span className="text-[10px] text-fg-muted mt-1 font-medium px-1.5 py-0.5 bg-surface rounded inline-block">
                                 {job.file_size_mb} MB
                               </span>
                             )}
@@ -1754,16 +1754,16 @@ export default function BulkContent() {
       {/* ── Floating Selection Action Bar ─────────────── */}
       {selectedJobIds.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 fade-in duration-300">
-          <div className="flex items-center gap-3 px-5 py-3 bg-[#0a1a17]/95 border border-primary/30 rounded-2xl shadow-2xl shadow-black/40 backdrop-blur-xl">
-            <div className="flex items-center gap-2 pr-3 border-r border-border">
-              <CheckSquare className="w-4 h-4 text-primary" />
-              <span className="text-sm font-bold text-white">{selectedJobIds.size}</span>
-              <span className="text-xs text-text-muted">video đã chọn</span>
+          <div className="flex items-center gap-3 px-5 py-3 bg-surface/95 border border-accent/30 rounded-2xl shadow-2xl shadow-black/40 backdrop-blur-xl">
+            <div className="flex items-center gap-2 pr-3 border-r border-line">
+              <CheckSquare className="w-4 h-4 text-accent-text" />
+              <span className="text-sm font-bold text-fg">{selectedJobIds.size}</span>
+              <span className="text-xs text-fg-muted">video đã chọn</span>
             </div>
 
             <button
               onClick={handleDownloadAll}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] text-sm font-extrabold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent text-accent-fg text-sm font-extrabold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
             >
               <Download className="w-4 h-4" />
               Tải {selectedJobIds.size} video
@@ -1771,7 +1771,7 @@ export default function BulkContent() {
 
             <button
               onClick={() => setSelectedJobIds(new Set())}
-              className="p-2 rounded-xl text-text-muted hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              className="p-2 rounded-xl text-fg-muted hover:text-fg hover:bg-surface-2 transition-colors cursor-pointer"
               title="Bỏ chọn tất cả"
             >
               <X className="w-4 h-4" />

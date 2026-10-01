@@ -14,38 +14,38 @@ interface StatusMeta {
 
 const STATUS_META: Record<PhaseStatus, StatusMeta> = {
   success: {
-    dot:   'bg-emerald-500',
-    ring:  'border-emerald-700',
-    line:  'bg-emerald-900',
-    badge: 'border-emerald-900 bg-emerald-950 text-emerald-400',
+    dot:   'bg-success',
+    ring:  'border-success/30',
+    line:  'bg-success-soft',
+    badge: 'border-success/30 bg-success-soft text-success',
     label: 'PASS',
   },
   running: {
-    dot:   'bg-blue-500 animate-pulse',
-    ring:  'border-blue-600',
-    line:  'bg-slate-800',
-    badge: 'border-blue-900 bg-blue-950 text-blue-400',
+    dot:   'bg-accent animate-pulse',
+    ring:  'border-line',
+    line:  'bg-surface',
+    badge: 'border-line bg-surface-2 text-fg-2',
     label: 'RUN',
   },
   failed: {
-    dot:   'bg-red-600',
-    ring:  'border-red-800',
-    line:  'bg-slate-800',
-    badge: 'border-red-900 bg-red-950 text-red-400',
+    dot:   'bg-danger',
+    ring:  'border-danger/30',
+    line:  'bg-surface',
+    badge: 'border-danger/30 bg-danger-soft text-danger',
     label: 'FAIL',
   },
   skipped: {
-    dot:   'bg-slate-800',
-    ring:  'border-slate-700',
-    line:  'bg-slate-900',
-    badge: 'border-slate-800 bg-slate-900/50 text-slate-600',
+    dot:   'bg-surface',
+    ring:  'border-line',
+    line:  'bg-canvas',
+    badge: 'border-line bg-surface-2 text-fg-muted',
     label: 'SKIP',
   },
   pending: {
     dot:   'bg-transparent',
-    ring:  'border-slate-700 border-dashed',
-    line:  'bg-slate-900',
-    badge: 'border-slate-800 bg-slate-900/30 text-slate-700',
+    ring:  'border-line border-dashed',
+    line:  'bg-canvas',
+    badge: 'border-line bg-surface-2 text-fg-muted',
     label: 'WAIT',
   },
 }
@@ -55,20 +55,20 @@ const STATUS_META: Record<PhaseStatus, StatusMeta> = {
 function DotIcon({ status }: { status: PhaseStatus }) {
   if (status === 'success') {
     return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} className="h-2.5 w-2.5 text-white">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} className="h-2.5 w-2.5 text-fg">
         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
       </svg>
     )
   }
   if (status === 'failed') {
     return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} className="h-2.5 w-2.5 text-white">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} className="h-2.5 w-2.5 text-fg">
         <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
       </svg>
     )
   }
   if (status === 'running') {
-    return <span className="h-2 w-2 rounded-full bg-white opacity-90" />
+    return <span className="h-2 w-2 rounded-full bg-surface opacity-90" />
   }
   return null
 }
@@ -116,7 +116,7 @@ function TraceRow({ trace, isLast }: TraceRowProps) {
           <span
             className={cn(
               'font-mono text-[11px] font-bold uppercase tracking-wide',
-              hasDetail ? 'text-slate-200' : 'text-slate-600',
+              hasDetail ? 'text-fg-2' : 'text-fg-muted',
             )}
           >
             {trace.phase}
@@ -135,7 +135,7 @@ function TraceRow({ trace, isLast }: TraceRowProps) {
             <span
               className={cn(
                 'font-mono text-[10px] tabular-nums',
-                trace.status === 'failed' ? 'text-red-500/80' : 'text-slate-600',
+                trace.status === 'failed' ? 'text-danger' : 'text-fg-muted',
               )}
             >
               {fmtMs(trace.durationMs)}
@@ -147,27 +147,27 @@ function TraceRow({ trace, isLast }: TraceRowProps) {
         {hasDetail && (trace.startedAt || trace.proxyUsed || trace.cookieUsed) && (
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5">
             {trace.startedAt && (
-              <span className="text-[10px] text-slate-600">
-                <span className="text-[9px] uppercase tracking-widest text-slate-700 mr-1">start</span>
+              <span className="text-[10px] text-fg-muted">
+                <span className="text-[9px] uppercase tracking-widest text-fg-muted mr-1">start</span>
                 <span className="font-mono">{trace.startedAt}</span>
               </span>
             )}
             {trace.endedAt && (
-              <span className="text-[10px] text-slate-600">
-                <span className="text-[9px] uppercase tracking-widest text-slate-700 mr-1">end</span>
+              <span className="text-[10px] text-fg-muted">
+                <span className="text-[9px] uppercase tracking-widest text-fg-muted mr-1">end</span>
                 <span className="font-mono">{trace.endedAt}</span>
               </span>
             )}
             {trace.proxyUsed && (
               <span className="text-[10px]">
-                <span className="text-[9px] uppercase tracking-widest text-slate-700 mr-1">proxy</span>
-                <span className="font-mono text-blue-500/70">{trace.proxyUsed}</span>
+                <span className="text-[9px] uppercase tracking-widest text-fg-muted mr-1">proxy</span>
+                <span className="font-mono text-fg-2">{trace.proxyUsed}</span>
               </span>
             )}
             {trace.cookieUsed && (
               <span className="text-[10px]">
-                <span className="text-[9px] uppercase tracking-widest text-slate-700 mr-1">cookie</span>
-                <span className="font-mono text-purple-400/70">{trace.cookieUsed}</span>
+                <span className="text-[9px] uppercase tracking-widest text-fg-muted mr-1">cookie</span>
+                <span className="font-mono text-fg-2">{trace.cookieUsed}</span>
               </span>
             )}
           </div>
@@ -175,18 +175,18 @@ function TraceRow({ trace, isLast }: TraceRowProps) {
 
         {/* Error message */}
         {trace.errorMessage && (
-          <div className="mt-2 flex items-start gap-2 rounded-lg border border-red-900/60 bg-red-950/25 px-3 py-2">
+          <div className="mt-2 flex items-start gap-2 rounded-lg border border-danger/60 bg-danger-soft px-3 py-2">
             <svg
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               strokeWidth={1.75}
               strokeLinecap="round"
-              className="mt-0.5 h-3 w-3 flex-shrink-0 text-red-600"
+              className="mt-0.5 h-3 w-3 flex-shrink-0 text-danger"
             >
               <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
-            <p className="font-mono text-[10px] leading-relaxed text-red-400/90">
+            <p className="font-mono text-[10px] leading-relaxed text-danger">
               {trace.errorMessage}
             </p>
           </div>

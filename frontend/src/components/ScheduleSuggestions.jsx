@@ -51,36 +51,36 @@ export default function ScheduleSuggestions({ authToken, onApplySuggestion }) {
   return (
     <div className="space-y-3 mb-4">
       {toast && (
-        <div className="fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg bg-green-600 text-white text-sm shadow-lg">{toast}</div>
+        <div className="fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg bg-success text-success-fg text-sm shadow-lg">{toast}</div>
       )}
 
       {driftAlerts.length > 0 && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-2.5 text-sm text-yellow-300">
+        <div className="bg-accent-soft border border-accent/30 rounded-lg px-4 py-2.5 text-sm text-accent-text">
           ⚠️ {driftAlerts.length} job đang bị trễ — hàng đợi có thể đang bận
         </div>
       )}
 
       {suggestions.length > 0 && (
-        <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
-          <div className="text-sm font-medium text-white mb-3">📅 Gợi ý lịch biểu tối ưu</div>
+        <div className="bg-surface-2 border border-line rounded-xl p-4">
+          <div className="text-sm font-medium text-fg mb-3">📅 Gợi ý lịch biểu tối ưu</div>
           <div className="space-y-3">
             {suggestions.map((s) => (
-              <div key={s.job_id} className="bg-zinc-800/50 rounded-lg p-3">
+              <div key={s.job_id} className="bg-surface rounded-lg p-3">
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div>
-                    <div className="text-xs text-zinc-300 font-mono">
-                      <span className="text-zinc-500">{s.current_cron}</span>
+                    <div className="text-xs text-fg-2 font-mono">
+                      <span className="text-fg-muted">{s.current_cron}</span>
                       {" → "}
-                      <span className="text-green-300">{s.suggested_cron}</span>
+                      <span className="text-success">{s.suggested_cron}</span>
                     </div>
-                    <div className="text-xs text-zinc-500 mt-0.5">{s.reason}</div>
+                    <div className="text-xs text-fg-muted mt-0.5">{s.reason}</div>
                   </div>
                   <div className="flex gap-1.5 shrink-0">
                     <button onClick={() => apply(s)} disabled={applying === s.job_id}
-                      className="text-xs px-2.5 py-1 rounded bg-green-600/30 text-green-300 hover:bg-green-600/50 transition disabled:opacity-50">
+                      className="text-xs px-2.5 py-1 rounded bg-success-soft text-success hover:bg-success/50 transition disabled:opacity-50">
                       {applying === s.job_id ? "..." : "Áp dụng"}
                     </button>
-                    <button onClick={() => dismiss(s.job_id)} className="text-xs px-2.5 py-1 rounded bg-zinc-700 text-zinc-400 hover:text-white transition">
+                    <button onClick={() => dismiss(s.job_id)} className="text-xs px-2.5 py-1 rounded bg-surface-2 text-fg-muted hover:text-fg transition">
                       Bỏ qua
                     </button>
                   </div>

@@ -128,17 +128,17 @@ export default function PresetsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-mono text-lg font-bold text-slate-100">Presets</h1>
-          <p className="mt-0.5 text-xs text-slate-500">user_presets · user_platform_prefs (Phase 21)</p>
+          <h1 className="font-mono text-lg font-bold text-fg">Presets</h1>
+          <p className="mt-0.5 text-xs text-fg-muted">user_presets · user_platform_prefs (Phase 21)</p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => setShowForm(v => !v)}
-            className="rounded bg-blue-700 px-3 py-1.5 text-xs text-white hover:bg-blue-600"
+            className="rounded bg-accent-hover px-3 py-1.5 text-xs text-accent-fg hover:bg-accent-hover"
           >
             + System Preset
           </button>
-          <button onClick={fetchAll} className="rounded bg-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-600">
+          <button onClick={fetchAll} className="rounded bg-surface-2 px-3 py-1.5 text-xs text-fg-2 hover:bg-line">
             ↺
           </button>
         </div>
@@ -153,34 +153,34 @@ export default function PresetsPage() {
             { label: 'Platform Prefs', value: stats.total_prefs },
             { label: 'Defaults Set', value: stats.default_count },
           ].map(c => (
-            <div key={c.label} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-              <p className="font-mono text-xs text-slate-500">{c.label}</p>
-              <p className="mt-1 font-mono text-2xl font-bold text-slate-100">{c.value}</p>
+            <div key={c.label} className="rounded-lg border border-line bg-canvas p-4">
+              <p className="font-mono text-xs text-fg-muted">{c.label}</p>
+              <p className="mt-1 font-mono text-2xl font-bold text-fg">{c.value}</p>
             </div>
           ))}
         </div>
       )}
 
       {error && (
-        <div className="rounded border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-300">{error}</div>
+        <div className="rounded border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">{error}</div>
       )}
 
       {/* Create form */}
       {showForm && (
-        <div className="rounded-lg border border-blue-800 bg-blue-950/30 p-4">
-          <h2 className="mb-3 font-mono text-xs font-semibold text-blue-300">New System Preset</h2>
+        <div className="rounded-lg border border-line bg-surface-2 p-4">
+          <h2 className="mb-3 font-mono text-xs font-semibold text-fg-2">New System Preset</h2>
           <form onSubmit={handleCreate} className="flex flex-wrap gap-2 items-end">
             <input
               type="text"
               placeholder="Preset name"
               value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 placeholder-slate-600 w-48"
+              className="rounded border border-line bg-surface px-3 py-1.5 text-xs text-fg-2 placeholder:text-fg-muted w-48"
             />
             <select
               value={form.platform}
               onChange={e => setForm(f => ({ ...f, platform: e.target.value }))}
-              className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-300"
+              className="rounded border border-line bg-surface px-2 py-1.5 text-xs text-fg-2"
             >
               <option value="">Universal</option>
               {['youtube', 'tiktok', 'instagram', 'spotify', 'twitter', 'facebook', 'soundcloud', 'threads'].map(p => (
@@ -192,21 +192,21 @@ export default function PresetsPage() {
               placeholder="Order"
               value={form.sort_order}
               onChange={e => setForm(f => ({ ...f, sort_order: e.target.value }))}
-              className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 w-20"
+              className="rounded border border-line bg-surface px-3 py-1.5 text-xs text-fg-2 w-20"
             />
             <button
               type="submit"
               disabled={creating || !form.name}
-              className="rounded bg-blue-700 px-3 py-1.5 text-xs text-white hover:bg-blue-600 disabled:opacity-40"
+              className="rounded bg-accent-hover px-3 py-1.5 text-xs text-accent-fg hover:bg-accent-hover disabled:opacity-40"
             >
               {creating ? 'Creating…' : 'Create'}
             </button>
-            <button type="button" onClick={() => setShowForm(false)} className="text-xs text-slate-500 hover:text-slate-300">
+            <button type="button" onClick={() => setShowForm(false)} className="text-xs text-fg-muted hover:text-fg-2">
               Cancel
             </button>
           </form>
           {createMsg && (
-            <p className={cn('mt-2 font-mono text-xs', createMsg.startsWith('✓') ? 'text-emerald-400' : 'text-red-400')}>
+            <p className={cn('mt-2 font-mono text-xs', createMsg.startsWith('✓') ? 'text-success' : 'text-danger')}>
               {createMsg}
             </p>
           )}
@@ -214,14 +214,14 @@ export default function PresetsPage() {
       )}
 
       {loading ? (
-        <div className="py-12 text-center font-mono text-xs text-slate-600">Loading presets…</div>
+        <div className="py-12 text-center font-mono text-xs text-fg-muted">Loading presets…</div>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Platform distribution */}
-          <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-            <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-slate-500">Presets by Platform</h2>
+          <div className="rounded-lg border border-line bg-canvas p-4">
+            <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-fg-muted">Presets by Platform</h2>
             {Object.keys(stats?.by_platform ?? {}).length === 0 ? (
-              <p className="font-mono text-xs text-slate-600">No presets yet</p>
+              <p className="font-mono text-xs text-fg-muted">No presets yet</p>
             ) : (
               <div className="space-y-2">
                 {Object.entries(stats?.by_platform ?? {}).sort((a, b) => b[1] - a[1]).map(([pl, count]) => {
@@ -229,14 +229,14 @@ export default function PresetsPage() {
                   return (
                     <div key={pl}>
                       <div className="flex items-center justify-between font-mono text-xs mb-0.5">
-                        <span className="flex items-center gap-1.5 text-slate-300">
-                          <span className="text-slate-500">{PLATFORM_ICONS[pl] ?? '○'}</span>
+                        <span className="flex items-center gap-1.5 text-fg-2">
+                          <span className="text-fg-muted">{PLATFORM_ICONS[pl] ?? '○'}</span>
                           {pl}
                         </span>
-                        <span className="text-slate-500">{count}</span>
+                        <span className="text-fg-muted">{count}</span>
                       </div>
-                      <div className="h-1 w-full rounded-full bg-slate-800">
-                        <div className="h-1 rounded-full bg-blue-600" style={{ width: `${pct}%` }} />
+                      <div className="h-1 w-full rounded-full bg-surface">
+                        <div className="h-1 rounded-full bg-accent" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   )
@@ -246,16 +246,16 @@ export default function PresetsPage() {
           </div>
 
           {/* Popular settings keys */}
-          <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-            <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-slate-500">Popular Settings Keys</h2>
+          <div className="rounded-lg border border-line bg-canvas p-4">
+            <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-fg-muted">Popular Settings Keys</h2>
             {(stats?.popular_settings_keys ?? []).length === 0 ? (
-              <p className="font-mono text-xs text-slate-600">No preset settings yet</p>
+              <p className="font-mono text-xs text-fg-muted">No preset settings yet</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {(stats?.popular_settings_keys ?? []).map(([key, count]) => (
-                  <div key={key} className="flex items-center gap-1.5 rounded bg-slate-800 px-2.5 py-1.5">
-                    <span className="text-xs text-slate-300">{SETTINGS_KEY_LABELS[key] ?? key}</span>
-                    <span className="font-mono text-[10px] text-slate-500">×{count}</span>
+                  <div key={key} className="flex items-center gap-1.5 rounded bg-surface px-2.5 py-1.5">
+                    <span className="text-xs text-fg-2">{SETTINGS_KEY_LABELS[key] ?? key}</span>
+                    <span className="font-mono text-[10px] text-fg-muted">×{count}</span>
                   </div>
                 ))}
               </div>
@@ -263,14 +263,14 @@ export default function PresetsPage() {
 
             {/* Platform prefs distribution */}
             {Object.keys(stats?.prefs_by_platform ?? {}).length > 0 && (
-              <div className="mt-4 pt-4 border-t border-slate-800">
-                <h3 className="mb-2 font-mono text-[10px] font-semibold uppercase text-slate-600">Platform Prefs Learned</h3>
+              <div className="mt-4 pt-4 border-t border-line">
+                <h3 className="mb-2 font-mono text-[10px] font-semibold uppercase text-fg-muted">Platform Prefs Learned</h3>
                 <div className="flex flex-wrap gap-2">
                   {Object.entries(stats?.prefs_by_platform ?? {}).map(([pl, count]) => (
-                    <span key={pl} className="flex items-center gap-1 rounded bg-slate-800 px-2 py-1 font-mono text-[10px]">
-                      <span className="text-slate-500">{PLATFORM_ICONS[pl] ?? '○'}</span>
-                      <span className="text-slate-300">{pl}</span>
-                      <span className="text-slate-600">×{count}</span>
+                    <span key={pl} className="flex items-center gap-1 rounded bg-surface px-2 py-1 font-mono text-[10px]">
+                      <span className="text-fg-muted">{PLATFORM_ICONS[pl] ?? '○'}</span>
+                      <span className="text-fg-2">{pl}</span>
+                      <span className="text-fg-muted">×{count}</span>
                     </span>
                   ))}
                 </div>
@@ -279,28 +279,28 @@ export default function PresetsPage() {
           </div>
 
           {/* System presets management */}
-          <div className="lg:col-span-2 rounded-lg border border-slate-800 bg-slate-900 p-4">
-            <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-slate-500">
-              System Presets <span className="text-slate-600 normal-case">(visible to all users, cannot be deleted by users)</span>
+          <div className="lg:col-span-2 rounded-lg border border-line bg-canvas p-4">
+            <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-fg-muted">
+              System Presets <span className="text-fg-muted normal-case">(visible to all users, cannot be deleted by users)</span>
             </h2>
             {systemPresets.length === 0 ? (
-              <p className="font-mono text-xs text-slate-600">No system presets — create one above</p>
+              <p className="font-mono text-xs text-fg-muted">No system presets — create one above</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="border-b border-slate-800">
+                    <tr className="border-b border-line">
                       {['Name', 'Platform', 'Settings keys', 'Order', 'Created', ''].map(h => (
-                        <th key={h} className="pb-2.5 pr-4 font-mono font-semibold text-slate-500">{h}</th>
+                        <th key={h} className="pb-2.5 pr-4 font-mono font-semibold text-fg-muted">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {systemPresets.map(p => (
-                      <tr key={p.id} className="border-b border-slate-800/40 hover:bg-slate-800/20">
-                        <td className="py-2.5 pr-4 font-medium text-slate-200">{p.name}</td>
+                      <tr key={p.id} className="border-b border-line hover:bg-surface-2">
+                        <td className="py-2.5 pr-4 font-medium text-fg-2">{p.name}</td>
                         <td className="py-2.5 pr-4">
-                          <span className="flex items-center gap-1 font-mono text-slate-400">
+                          <span className="flex items-center gap-1 font-mono text-fg-muted">
                             <span>{PLATFORM_ICONS[p.platform ?? 'universal'] ?? '○'}</span>
                             {p.platform ?? 'universal'}
                           </span>
@@ -308,24 +308,24 @@ export default function PresetsPage() {
                         <td className="py-2.5 pr-4">
                           <div className="flex flex-wrap gap-1">
                             {Object.keys(p.settings ?? {}).map(k => (
-                              <span key={k} className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
+                              <span key={k} className="rounded bg-surface px-1.5 py-0.5 font-mono text-[10px] text-fg-muted">
                                 {k}
                               </span>
                             ))}
                             {Object.keys(p.settings ?? {}).length === 0 && (
-                              <span className="text-slate-700">—</span>
+                              <span className="text-fg-muted">—</span>
                             )}
                           </div>
                         </td>
-                        <td className="py-2.5 pr-4 font-mono text-slate-500">{p.sort_order}</td>
-                        <td className="py-2.5 pr-4 font-mono text-[10px] text-slate-600">
+                        <td className="py-2.5 pr-4 font-mono text-fg-muted">{p.sort_order}</td>
+                        <td className="py-2.5 pr-4 font-mono text-[10px] text-fg-muted">
                           {new Date(p.created_at).toLocaleDateString('en-GB')}
                         </td>
                         <td className="py-2.5">
                           <button
                             disabled={deleting[p.id]}
                             onClick={() => handleDelete(p.id)}
-                            className="rounded px-2 py-1 text-[10px] text-red-400 hover:bg-red-900/30 disabled:opacity-40"
+                            className="rounded px-2 py-1 text-[10px] text-danger hover:bg-danger-soft disabled:opacity-40"
                           >
                             {deleting[p.id] ? '…' : 'Delete'}
                           </button>

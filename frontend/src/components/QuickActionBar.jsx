@@ -98,10 +98,10 @@ export default function QuickActionBar({ platform, videoInfo, activePreset, onAc
   function buttonCls(action, isPrimaryBtn) {
     const locked = action.tier === 'pro' && !isPro;
     const base = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer whitespace-nowrap';
-    if (disabled) return `${base} opacity-40 cursor-not-allowed bg-white/5 text-white/30`;
-    if (locked)   return `${base} bg-white/5 text-white/30 border border-white/10`;
-    if (isPrimaryBtn) return `${base} bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm shadow-emerald-900/30`;
-    return `${base} bg-white/8 hover:bg-white/15 text-white/80 border border-white/10`;
+    if (disabled) return `${base} opacity-40 cursor-not-allowed bg-surface-2 text-fg-muted`;
+    if (locked)   return `${base} bg-surface-2 text-fg-muted border border-line`;
+    if (isPrimaryBtn) return `${base} bg-accent hover:opacity-90 text-accent-fg shadow-sm`;
+    return `${base} bg-surface-2 hover:bg-line text-fg-2 border border-line`;
   }
 
   if (!actions.length) return null;
@@ -109,7 +109,7 @@ export default function QuickActionBar({ platform, videoInfo, activePreset, onAc
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
       {/* Label */}
-      <span className="text-xs text-white/35 font-medium shrink-0">Tải nhanh:</span>
+      <span className="text-xs text-fg-muted font-medium shrink-0">Tải nhanh:</span>
 
       {/* Primary actions */}
       {primary.map((action) => {
@@ -124,7 +124,7 @@ export default function QuickActionBar({ platform, videoInfo, activePreset, onAc
           >
             <ActionIcon icon={action.icon} />
             {action.label}
-            {locked && <Lock className="w-2.5 h-2.5 text-white/40" />}
+            {locked && <Lock className="w-2.5 h-2.5 text-fg-muted" />}
           </button>
         );
       })}
@@ -133,7 +133,7 @@ export default function QuickActionBar({ platform, videoInfo, activePreset, onAc
       {activePreset && (
         <button
           onClick={() => onAction(activePreset.settings)}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600/20 hover:bg-indigo-600/35 text-indigo-300 border border-indigo-500/30 transition-all cursor-pointer"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-surface-2 hover:bg-line text-fg-2 border border-line transition-all cursor-pointer"
           title={`Preset: ${activePreset.name}`}
           disabled={disabled}
         >
@@ -146,25 +146,25 @@ export default function QuickActionBar({ platform, videoInfo, activePreset, onAc
         <div className="relative">
           <button
             onClick={() => setShowMore((v) => !v)}
-            className="flex items-center gap-0.5 px-2 py-1.5 rounded-lg text-xs text-white/40 hover:text-white/70 hover:bg-white/8 transition-all cursor-pointer"
+            className="flex items-center gap-0.5 px-2 py-1.5 rounded-lg text-xs text-fg-muted hover:text-fg-2 hover:bg-surface-2 transition-all cursor-pointer"
             disabled={disabled}
           >
             Thêm <ChevronDown className={`w-3 h-3 transition-transform ${showMore ? 'rotate-180' : ''}`} />
           </button>
           {showMore && (
-            <div className="absolute left-0 top-full mt-1 z-20 bg-[#0d2e29] border border-white/15 rounded-xl shadow-xl p-1.5 min-w-36 flex flex-col gap-0.5">
+            <div className="absolute left-0 top-full mt-1 z-20 bg-surface-2 border border-line rounded-xl shadow-xl p-1.5 min-w-36 flex flex-col gap-0.5">
               {secondary.map((action) => {
                 const locked = action.tier === 'pro' && !isPro;
                 return (
                   <button
                     key={action.id}
                     onClick={() => { handleAction(action); setShowMore(false); }}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-white/80 hover:bg-white/10 transition-colors cursor-pointer text-left w-full"
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-fg-2 hover:bg-surface-2 transition-colors cursor-pointer text-left w-full"
                     disabled={disabled || locked}
                   >
                     <ActionIcon icon={action.icon} />
                     {action.label}
-                    {locked && <Lock className="w-2.5 h-2.5 text-white/30 ml-auto" />}
+                    {locked && <Lock className="w-2.5 h-2.5 text-fg-muted ml-auto" />}
                   </button>
                 );
               })}

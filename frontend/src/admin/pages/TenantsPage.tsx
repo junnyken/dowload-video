@@ -40,20 +40,20 @@ interface TenantsResponse {
 }
 
 const PLAN_COLORS: Record<string, string> = {
-  starter: 'bg-slate-700 text-slate-200',
-  growth: 'bg-blue-700 text-blue-100',
-  enterprise: 'bg-purple-700 text-purple-100',
+  starter: 'bg-surface-2 text-fg-2',
+  growth: 'bg-accent-hover text-fg-2',
+  enterprise: 'bg-accent-hover text-fg-2',
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  active: 'bg-emerald-800 text-emerald-200',
-  suspended: 'bg-amber-800 text-amber-200',
-  canceled: 'bg-red-900 text-red-300',
+  active: 'bg-success text-success',
+  suspended: 'bg-accent text-accent-text',
+  canceled: 'bg-danger-soft text-danger',
 }
 
 function PlanBadge({ plan }: { plan: string }) {
   return (
-    <span className={cn('inline-block rounded px-2 py-0.5 text-xs font-semibold uppercase', PLAN_COLORS[plan] ?? 'bg-slate-700 text-slate-200')}>
+    <span className={cn('inline-block rounded px-2 py-0.5 text-xs font-semibold uppercase', PLAN_COLORS[plan] ?? 'bg-surface-2 text-fg-2')}>
       {plan}
     </span>
   )
@@ -61,7 +61,7 @@ function PlanBadge({ plan }: { plan: string }) {
 
 function StatusBadge({ status }: { status: string }) {
   return (
-    <span className={cn('inline-block rounded px-2 py-0.5 text-xs font-semibold uppercase', STATUS_COLORS[status] ?? 'bg-slate-700 text-slate-200')}>
+    <span className={cn('inline-block rounded px-2 py-0.5 text-xs font-semibold uppercase', STATUS_COLORS[status] ?? 'bg-surface-2 text-fg-2')}>
       {status}
     </span>
   )
@@ -141,10 +141,10 @@ export default function TenantsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-mono text-lg font-bold text-slate-100">Tenants</h1>
-          <p className="mt-0.5 text-xs text-slate-500">Multi-tenant enterprise accounts</p>
+          <h1 className="font-mono text-lg font-bold text-fg">Tenants</h1>
+          <p className="mt-0.5 text-xs text-fg-muted">Multi-tenant enterprise accounts</p>
         </div>
-        <button onClick={fetchData} className="rounded bg-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-600">
+        <button onClick={fetchData} className="rounded bg-surface-2 px-3 py-1.5 text-xs text-fg-2 hover:bg-line">
           ↺ Refresh
         </button>
       </div>
@@ -158,9 +158,9 @@ export default function TenantsPage() {
             { label: 'Suspended', value: data.status_counts['suspended'] ?? 0 },
             { label: 'Enterprise', value: data.plan_counts['enterprise'] ?? 0 },
           ].map(card => (
-            <div key={card.label} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-              <p className="font-mono text-xs text-slate-500">{card.label}</p>
-              <p className="mt-1 font-mono text-2xl font-bold text-slate-100">{card.value}</p>
+            <div key={card.label} className="rounded-lg border border-line bg-canvas p-4">
+              <p className="font-mono text-xs text-fg-muted">{card.label}</p>
+              <p className="mt-1 font-mono text-2xl font-bold text-fg">{card.value}</p>
             </div>
           ))}
         </div>
@@ -171,7 +171,7 @@ export default function TenantsPage() {
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
-          className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-300"
+          className="rounded border border-line bg-surface px-2 py-1.5 text-xs text-fg-2"
         >
           <option value="">All status</option>
           <option value="active">Active</option>
@@ -181,7 +181,7 @@ export default function TenantsPage() {
         <select
           value={planFilter}
           onChange={e => setPlanFilter(e.target.value)}
-          className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-300"
+          className="rounded border border-line bg-surface px-2 py-1.5 text-xs text-fg-2"
         >
           <option value="">All plans</option>
           <option value="starter">Starter</option>
@@ -192,44 +192,44 @@ export default function TenantsPage() {
 
       {/* Error */}
       {error && (
-        <div className="rounded border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-300">{error}</div>
+        <div className="rounded border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">{error}</div>
       )}
 
       {/* Table */}
       {loading ? (
-        <div className="py-12 text-center font-mono text-xs text-slate-600">Loading tenants…</div>
+        <div className="py-12 text-center font-mono text-xs text-fg-muted">Loading tenants…</div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-800">
+        <div className="overflow-x-auto rounded-lg border border-line">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-900">
+              <tr className="border-b border-line bg-canvas">
                 {['Tenant', 'Plan', 'Status', "Today's Usage", 'Seats', 'Custom Domain', 'Created', 'Actions'].map(h => (
-                  <th key={h} className="px-3 py-2.5 font-mono font-semibold text-slate-500">{h}</th>
+                  <th key={h} className="px-3 py-2.5 font-mono font-semibold text-fg-muted">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {(data?.tenants ?? []).map(t => (
-                <tr key={t.id} className="border-b border-slate-800/50 hover:bg-slate-800/30">
+                <tr key={t.id} className="border-b border-line hover:bg-surface-2">
                   <td className="px-3 py-2.5">
-                    <p className="font-medium text-slate-200">{t.name}</p>
-                    <p className="font-mono text-[10px] text-slate-600">{t.slug}</p>
+                    <p className="font-medium text-fg-2">{t.name}</p>
+                    <p className="font-mono text-[10px] text-fg-muted">{t.slug}</p>
                   </td>
                   <td className="px-3 py-2.5">
                     <PlanBadge plan={t.plan} />
-                    <p className="mt-0.5 font-mono text-[10px] text-slate-600">{t.plan_api_calls_per_month?.toLocaleString()}/mo</p>
+                    <p className="mt-0.5 font-mono text-[10px] text-fg-muted">{t.plan_api_calls_per_month?.toLocaleString()}/mo</p>
                   </td>
                   <td className="px-3 py-2.5"><StatusBadge status={t.status} /></td>
-                  <td className="px-3 py-2.5 font-mono text-slate-400">
+                  <td className="px-3 py-2.5 font-mono text-fg-muted">
                     <span title="API calls">⚡{t.today_usage?.api_calls ?? 0}</span>
                     {' · '}
                     <span title="Downloads">↓{t.today_usage?.downloads ?? 0}</span>
                   </td>
-                  <td className="px-3 py-2.5 font-mono text-slate-400">{t.plan_seats}</td>
-                  <td className="px-3 py-2.5 font-mono text-slate-500 text-[10px]">
+                  <td className="px-3 py-2.5 font-mono text-fg-muted">{t.plan_seats}</td>
+                  <td className="px-3 py-2.5 font-mono text-fg-muted text-[10px]">
                     {t.tenant_settings?.custom_domain ?? '—'}
                   </td>
-                  <td className="px-3 py-2.5 font-mono text-slate-500">{formatDate(t.created_at)}</td>
+                  <td className="px-3 py-2.5 font-mono text-fg-muted">{formatDate(t.created_at)}</td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5">
                       {/* Plan change */}
@@ -237,7 +237,7 @@ export default function TenantsPage() {
                         disabled={actionInProgress[t.id + '_plan']}
                         value={t.plan}
                         onChange={e => handlePlanChange(t.id, e.target.value)}
-                        className="rounded border border-slate-700 bg-slate-800 px-1.5 py-1 text-[10px] text-slate-300"
+                        className="rounded border border-line bg-surface px-1.5 py-1 text-[10px] text-fg-2"
                       >
                         <option value="starter">Starter</option>
                         <option value="growth">Growth</option>
@@ -248,7 +248,7 @@ export default function TenantsPage() {
                         <button
                           disabled={actionInProgress[t.id]}
                           onClick={() => handleStatusChange(t.id, 'suspended')}
-                          className="rounded bg-amber-800/40 px-2 py-1 text-[10px] text-amber-300 hover:bg-amber-700/40 disabled:opacity-40"
+                          className="rounded bg-accent-soft px-2 py-1 text-[10px] text-accent-text hover:bg-accent/40 disabled:opacity-40"
                         >
                           Suspend
                         </button>
@@ -256,14 +256,14 @@ export default function TenantsPage() {
                         <button
                           disabled={actionInProgress[t.id]}
                           onClick={() => handleStatusChange(t.id, 'active')}
-                          className="rounded bg-emerald-800/40 px-2 py-1 text-[10px] text-emerald-300 hover:bg-emerald-700/40 disabled:opacity-40"
+                          className="rounded bg-success-soft px-2 py-1 text-[10px] text-success hover:bg-success/40 disabled:opacity-40"
                         >
                           Activate
                         </button>
                       )}
                     </div>
                     {(msg[t.id] || msg[t.id + '_plan']) && (
-                      <p className="mt-1 font-mono text-[10px] text-emerald-400">
+                      <p className="mt-1 font-mono text-[10px] text-success">
                         {msg[t.id] || msg[t.id + '_plan']}
                       </p>
                     )}
@@ -272,7 +272,7 @@ export default function TenantsPage() {
               ))}
               {(data?.tenants ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-10 text-center font-mono text-xs text-slate-600">
+                  <td colSpan={8} className="py-10 text-center font-mono text-xs text-fg-muted">
                     No tenants found
                   </td>
                 </tr>

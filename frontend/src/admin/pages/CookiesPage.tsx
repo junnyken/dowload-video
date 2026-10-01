@@ -194,11 +194,11 @@ export function CookiesPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-base font-semibold text-slate-100">Cookie Pool</h1>
-        <p className="mt-0.5 text-xs text-slate-500">
+        <h1 className="text-base font-semibold text-fg">Cookie Pool</h1>
+        <p className="mt-0.5 text-xs text-fg-muted">
           {summary.active} active · {summary.cooldown} in cooldown · {summary.disabled} disabled
           {summary.expiringSoon > 0 && (
-            <span className="ml-2 font-medium text-amber-500">
+            <span className="ml-2 font-medium text-accent-text">
               {summary.expiringSoon} expiring soon
             </span>
           )}
@@ -207,7 +207,7 @@ export function CookiesPage() {
 
       {/* Dynamic platform tabs */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-slate-500">Platform:</span>
+        <span className="text-xs text-fg-muted">Platform:</span>
         <div className="flex flex-wrap gap-1.5">
           {availablePlatforms.map(p => {
             const count = poolCounts[p]?.total ?? 0
@@ -219,8 +219,8 @@ export function CookiesPage() {
                 className={[
                   'inline-flex items-center gap-1 rounded-full border px-3 py-0.5 text-[11px] font-medium transition-colors',
                   isActive
-                    ? 'border-blue-700 bg-blue-950 text-blue-300'
-                    : 'border-slate-700 text-slate-500 hover:border-slate-600 hover:text-slate-300',
+                    ? 'border-line bg-surface-2 text-fg-2'
+                    : 'border-line text-fg-muted hover:border-line-strong hover:text-fg-2',
                 ].join(' ')}
               >
                 <span className="font-mono text-[9px] opacity-60">{PLATFORM_ICONS[p] ?? p.slice(0,2).toUpperCase()}</span>
@@ -228,7 +228,7 @@ export function CookiesPage() {
                 {count > 0 && (
                   <span className={[
                     'ml-0.5 rounded-full px-1 py-0 font-mono text-[9px]',
-                    isActive ? 'bg-blue-900 text-blue-300' : 'bg-slate-800 text-slate-400',
+                    isActive ? 'bg-surface-2 text-fg-2' : 'bg-surface text-fg-muted',
                   ].join(' ')}>
                     {count}
                   </span>

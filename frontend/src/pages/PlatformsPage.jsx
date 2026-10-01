@@ -182,13 +182,13 @@ const FEATURE_ICONS = {
 function StatusBadge({ status }) {
   // status may be legacy ('full','basic') or from live capability API
   const map = {
-    full:                 { Icon: CheckCircle, cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', label: 'Đầy đủ' },
-    basic:                { Icon: Clock,       cls: 'bg-amber-500/20 text-amber-400 border-amber-500/30',       label: 'Cơ bản' },
-    partial:              { Icon: AlertCircle, cls: 'bg-amber-500/20 text-amber-400 border-amber-500/30',       label: 'Một phần' },
-    cookie_required:      { Icon: Lock,        cls: 'bg-blue-500/20 text-blue-400 border-blue-500/30',         label: 'Cần cookie' },
-    proxy_required:       { Icon: Wifi,        cls: 'bg-purple-500/20 text-purple-400 border-purple-500/30',   label: 'Cần proxy' },
-    temporarily_disabled: { Icon: Clock,       cls: 'bg-red-500/20 text-red-400 border-red-500/30',            label: 'Tạm dừng' },
-    unsupported:          { Icon: AlertCircle, cls: 'bg-slate-500/20 text-slate-400 border-slate-500/30',      label: 'Chưa hỗ trợ' },
+    full:                 { Icon: CheckCircle, cls: 'bg-success-soft text-success border-success/30', label: 'Đầy đủ' },
+    basic:                { Icon: Clock,       cls: 'bg-accent-soft text-accent-text border-accent/30',       label: 'Cơ bản' },
+    partial:              { Icon: AlertCircle, cls: 'bg-warning-soft text-warning border-warning/30',       label: 'Một phần' },
+    cookie_required:      { Icon: Lock,        cls: 'bg-surface-2 text-fg-2 border-line',         label: 'Cần cookie' },
+    proxy_required:       { Icon: Wifi,        cls: 'bg-surface-2 text-fg-2 border-line',   label: 'Cần proxy' },
+    temporarily_disabled: { Icon: Clock,       cls: 'bg-danger-soft text-danger border-danger/30',            label: 'Tạm dừng' },
+    unsupported:          { Icon: AlertCircle, cls: 'bg-line-strong text-fg-muted border-line-strong',      label: 'Chưa hỗ trợ' },
   };
   const cfg = map[status] || map.basic;
   const { Icon, cls, label } = cfg;
@@ -211,17 +211,17 @@ function PlatformCard({ platform, liveData }) {
   const effectiveStatus = liveData?.overall_status || platform.status;
 
   const borderCls = effectiveStatus === 'full'
-    ? 'border-emerald-500/20 hover:border-[#FBBF24]/30'
+    ? 'border-success/20 hover:border-accent/30'
     : effectiveStatus === 'cookie_required'
-    ? 'border-blue-500/15 hover:border-blue-400/30'
+    ? 'border-line hover:border-line'
     : effectiveStatus === 'proxy_required'
-    ? 'border-purple-500/15 hover:border-purple-400/30'
-    : 'border-amber-500/15 hover:border-amber-400/30';
+    ? 'border-line hover:border-line'
+    : 'border-accent/15 hover:border-accent/30';
 
   return (
-    <div className={`relative rounded-xl border p-4 transition-all bg-[#0d2821]/70 backdrop-blur-sm hover:bg-[#0d2821]/90 hover:shadow-lg hover:shadow-black/20 ${borderCls}`}>
+    <div className={`relative rounded-xl border p-4 transition-all bg-surface/70 backdrop-blur-sm hover:bg-surface/90 hover:shadow-lg hover:shadow-black/20 ${borderCls}`}>
       {platform.isNew && (
-        <span className="absolute top-3 right-3 text-xs font-bold px-1.5 py-0.5 rounded bg-blue-500/25 text-blue-300 border border-blue-500/30">
+        <span className="absolute top-3 right-3 text-xs font-bold px-1.5 py-0.5 rounded bg-surface-2 text-fg-2 border border-line">
           NEW
         </span>
       )}
@@ -229,17 +229,17 @@ function PlatformCard({ platform, liveData }) {
         <span className="text-2xl leading-none flex-shrink-0">{platform.logo}</span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-white">{platform.name}</span>
+            <span className="font-semibold text-fg">{platform.name}</span>
             <StatusBadge status={effectiveStatus} />
             {liveData && (
-              <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-500/60 border border-emerald-500/15">
+              <span className="text-[9px] px-1 py-0.5 rounded bg-success-soft text-success border border-success/15">
                 LIVE
               </span>
             )}
           </div>
-          <p className="mt-1 text-sm text-slate-400 leading-snug">{platform.description}</p>
+          <p className="mt-1 text-sm text-fg-muted leading-snug">{platform.description}</p>
           {platform.note && (
-            <p className="mt-1 text-xs text-amber-400/80">⚠ {platform.note}</p>
+            <p className="mt-1 text-xs text-accent-text">⚠ {platform.note}</p>
           )}
 
           {/* Domains — helps users know what URLs they can paste */}
@@ -248,7 +248,7 @@ function PlatformCard({ platform, liveData }) {
               {platform.domains.map(d => (
                 <span
                   key={d}
-                  className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-800/70 text-slate-400 border border-slate-700/40"
+                  className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface text-fg-muted border border-line"
                 >
                   {d}
                 </span>
@@ -262,7 +262,7 @@ function PlatformCard({ platform, liveData }) {
               {liveData.source_types.map(st => (
                 <span
                   key={st.source_type}
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-slate-700/40 text-slate-400 border border-slate-600/20"
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-surface-2 text-fg-muted border border-line-strong"
                   title={st.support_level_label}
                 >
                   {SOURCE_TYPE_LABELS[st.source_type] || st.source_type}
@@ -278,7 +278,7 @@ function PlatformCard({ platform, liveData }) {
               return (
                 <span
                   key={f}
-                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs bg-slate-700/60 text-slate-300 border border-slate-600/30"
+                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs bg-surface-2 text-fg-2 border border-line-strong"
                 >
                   <span className="text-[10px]">{fi.icon}</span>
                   <span>{fi.label}</span>
@@ -300,7 +300,7 @@ function Section({ title, platforms, liveCapMap }) {
   if (!platforms.length) return null;
   return (
     <div className="mb-8">
-      <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">{title}</h2>
+      <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">{title}</h2>
       <div className="grid gap-3 sm:grid-cols-2">
         {platforms.map(p => (
           <PlatformCard
@@ -385,35 +385,35 @@ export default function PlatformsPage() {
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <h1 className="text-2xl font-bold text-white">Nền tảng được hỗ trợ</h1>
+          <h1 className="text-2xl font-bold text-fg">Nền tảng được hỗ trợ</h1>
           {liveLoading ? (
-            <span className="flex items-center gap-1.5 text-xs text-slate-500">
+            <span className="flex items-center gap-1.5 text-xs text-fg-muted">
               <RefreshCw size={12} className="animate-spin" /> Đang đồng bộ…
             </span>
           ) : liveCount > 0 ? (
-            <span className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500/70">
+            <span className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-full bg-success-soft border border-success/20 text-success">
               ● LIVE · {liveCount} nền tảng
             </span>
           ) : null}
         </div>
-        <p className="mt-1 text-slate-400">
-          VidGrab hỗ trợ <strong className="text-white">{PLATFORMS.length}</strong> nền tảng —{' '}
-          <span className="text-emerald-400">{fullCount} đầy đủ</span>,{' '}
-          <span className="text-amber-400">{basicCount} cơ bản</span>.
+        <p className="mt-1 text-fg-muted">
+          VidGrab hỗ trợ <strong className="text-fg">{PLATFORMS.length}</strong> nền tảng —{' '}
+          <span className="text-success">{fullCount} đầy đủ</span>,{' '}
+          <span className="text-accent-text">{basicCount} cơ bản</span>.
         </p>
 
         {/* Stats row */}
         <div className="mt-4 flex gap-2.5 flex-wrap">
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25">
-            <CheckCircle size={14} className="text-emerald-400" />
-            <span className="text-sm font-semibold text-emerald-400">{fullCount} Đầy đủ</span>
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-success-soft border border-success/25">
+            <CheckCircle size={14} className="text-success" />
+            <span className="text-sm font-semibold text-success">{fullCount} Đầy đủ</span>
           </div>
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/25">
-            <Clock size={14} className="text-amber-400" />
-            <span className="text-sm font-semibold text-amber-400">{basicCount} Cơ bản</span>
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent-soft border border-accent/25">
+            <Clock size={14} className="text-accent-text" />
+            <span className="text-sm font-semibold text-accent-text">{basicCount} Cơ bản</span>
           </div>
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/25">
-            <span className="text-sm font-semibold text-blue-400">🆕 {newCount} Mới trong Phase 15</span>
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-2 border border-line">
+            <span className="text-sm font-semibold text-fg-2">🆕 {newCount} Mới trong Phase 15</span>
           </div>
         </div>
       </div>
@@ -422,19 +422,19 @@ export default function PlatformsPage() {
       <div className="mb-6 flex flex-col gap-3">
         {/* Search box */}
         <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-muted pointer-events-none" />
           <input
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Tìm nền tảng, domain, tính năng… (vd: tiktok.com, playlist, 4K)"
-            className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-[#0d2821]/80 border border-slate-700/50 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-[#FBBF24]/50 focus:ring-1 focus:ring-[#FBBF24]/20 transition-all"
+            className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-surface/80 border border-line text-fg placeholder:text-fg-muted text-sm focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition-all"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-fg-muted hover:text-fg-2 transition-colors"
               aria-label="Xóa tìm kiếm"
             >
               <X size={15} />
@@ -458,8 +458,8 @@ export default function PlatformsPage() {
               onClick={() => setFilter(f.key)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                 filter === f.key
-                  ? 'bg-[#FBBF24] text-[#012622] font-bold shadow-md shadow-amber-500/20'
-                  : 'bg-[#0d2821]/70 text-slate-300 border border-slate-700/50 hover:border-slate-500/60 hover:text-white'
+                  ? 'bg-accent text-accent-fg font-bold shadow-md'
+                  : 'bg-surface/70 text-fg-2 border border-line hover:border-line-strong hover:text-fg'
               }`}
             >
               {f.label}
@@ -469,10 +469,10 @@ export default function PlatformsPage() {
 
         {/* Search result count */}
         {isSearching && (
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-fg-muted">
             {displayList.length > 0
-              ? <>{displayList.length} nền tảng phù hợp với "<span className="text-slate-300">{query}</span>"</>
-              : <>Không tìm thấy nền tảng nào cho "<span className="text-slate-300">{query}</span>"</>
+              ? <>{displayList.length} nền tảng phù hợp với "<span className="text-fg-2">{query}</span>"</>
+              : <>Không tìm thấy nền tảng nào cho "<span className="text-fg-2">{query}</span>"</>
             }
           </p>
         )}
@@ -480,7 +480,7 @@ export default function PlatformsPage() {
 
       {/* Platform grid */}
       {displayList.length === 0 ? (
-        <div className="text-center py-16 text-slate-500">
+        <div className="text-center py-16 text-fg-muted">
           <Search className="w-10 h-10 mx-auto mb-3 opacity-20" />
           <p className="text-sm">Không tìm thấy nền tảng nào.</p>
           <p className="text-xs mt-1">Thử từ khóa khác hoặc bỏ bộ lọc.</p>
@@ -506,16 +506,16 @@ export default function PlatformsPage() {
       )}
 
       {/* Footer note */}
-      <div className="mt-8 p-4 rounded-xl bg-[#0d2821]/60 border border-slate-700/40">
-        <p className="text-sm text-slate-400">
-          <strong className="text-slate-300">Ghi chú:</strong> Nền tảng yêu cầu cookie cần được cấu hình bởi admin trong{' '}
-          <span className="font-mono text-xs bg-slate-700/60 text-slate-300 px-1.5 py-0.5 rounded border border-slate-600/40">Admin → Cookie Pool</span>.
+      <div className="mt-8 p-4 rounded-xl bg-surface/60 border border-line">
+        <p className="text-sm text-fg-muted">
+          <strong className="text-fg-2">Ghi chú:</strong> Nền tảng yêu cầu cookie cần được cấu hình bởi admin trong{' '}
+          <span className="font-mono text-xs bg-surface-2 text-fg-2 px-1.5 py-0.5 rounded border border-line-strong">Admin → Cookie Pool</span>.
           {liveCount > 0 && (
-            <span className="ml-1 text-emerald-400/70"> Dữ liệu status đang sync từ capability registry.</span>
+            <span className="ml-1 text-success"> Dữ liệu status đang sync từ capability registry.</span>
           )}
         </p>
-        <p className="mt-2 text-sm text-slate-400">
-          Không tìm thấy nền tảng bạn cần? Gửi yêu cầu qua nút <strong className="text-slate-300">Phản hồi</strong> ở sidebar.
+        <p className="mt-2 text-sm text-fg-muted">
+          Không tìm thấy nền tảng bạn cần? Gửi yêu cầu qua nút <strong className="text-fg-2">Phản hồi</strong> ở sidebar.
         </p>
       </div>
     </div>

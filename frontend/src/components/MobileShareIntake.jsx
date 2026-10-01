@@ -3,20 +3,20 @@ import { X, ChevronDown, ChevronUp } from 'lucide-react';
 import { API_BASE } from '../lib/apiBase';
 
 function detectPlatform(url) {
-  if (!url) return { name: 'Unknown', emoji: '🌐', color: '#64748b' };
+  if (!url) return { name: 'Unknown', emoji: '🌐', color: 'var(--vg-fg-muted)' };
   const u = url.toLowerCase();
-  if (u.includes('tiktok.com'))                          return { name: 'TikTok',     emoji: '🎵', color: '#ff0050' };
-  if (u.includes('instagram.com'))                       return { name: 'Instagram',  emoji: '📸', color: '#e1306c' };
-  if (u.includes('youtube.com') || u.includes('youtu.be')) return { name: 'YouTube', emoji: '▶️', color: '#ff0000' };
-  if (u.includes('facebook.com') || u.includes('fb.watch')) return { name: 'Facebook', emoji: '🎬', color: '#1877f2' };
+  if (u.includes('tiktok.com'))                          return { name: 'TikTok',     emoji: '🎵', color: 'var(--vg-undefined)' };
+  if (u.includes('instagram.com'))                       return { name: 'Instagram',  emoji: '📸', color: 'var(--vg-undefined)' };
+  if (u.includes('youtube.com') || u.includes('youtu.be')) return { name: 'YouTube', emoji: '▶️', color: 'var(--vg-undefined)' };
+  if (u.includes('facebook.com') || u.includes('fb.watch')) return { name: 'Facebook', emoji: '🎬', color: 'var(--vg-undefined)' };
   if (u.includes('twitter.com') || u.includes('x.com')) return { name: 'X/Twitter', emoji: '🐦', color: '#1da1f2' };
   if (u.includes('spotify.com'))                         return { name: 'Spotify',    emoji: '🎵', color: '#1ed760' };
-  if (u.includes('soundcloud.com'))                      return { name: 'SoundCloud', emoji: '🎶', color: '#ff5500' };
-  return { name: 'Video', emoji: '🌐', color: '#64748b' };
+  if (u.includes('soundcloud.com'))                      return { name: 'SoundCloud', emoji: '🎶', color: 'var(--vg-accent-text)' };
+  return { name: 'Video', emoji: '🌐', color: 'var(--vg-fg-muted)' };
 }
 
 function shimmerCls() {
-  return 'bg-slate-700/50 animate-pulse rounded-lg';
+  return 'bg-surface-2 animate-pulse rounded-lg';
 }
 
 export default function MobileShareIntake({ onNavigate }) {
@@ -104,7 +104,7 @@ export default function MobileShareIntake({ onNavigate }) {
 
   if (!show) return null;
 
-  const plat = platform || { name: 'Video', emoji: '🌐', color: '#64748b' };
+  const plat = platform || { name: 'Video', emoji: '🌐', color: 'var(--vg-fg-muted)' };
   const title = videoInfo?.title || '';
   const thumbnail = videoInfo?.thumbnail || '';
   const duration = videoInfo?.duration || '';
@@ -128,22 +128,22 @@ export default function MobileShareIntake({ onNavigate }) {
         role="dialog"
         aria-modal="true"
         aria-label="Chia sẻ vào VidGrab"
-        className={`fixed inset-x-0 bottom-0 z-[71] bg-[#0d2821]/98 backdrop-blur-xl rounded-t-3xl shadow-[0_-8px_40px_rgba(0,0,0,0.4)] transition-transform duration-300 ease-out ${
+        className={`fixed inset-x-0 bottom-0 z-[71] bg-surface/98 backdrop-blur-xl rounded-t-3xl shadow-[0_-8px_40px_rgba(0,0,0,0.4)] transition-transform duration-300 ease-out ${
           visible ? 'translate-y-0' : 'translate-y-full'
         }`}
         style={{ maxHeight: '90vh', overflowY: 'auto' }}
       >
         {/* Drag handle */}
         <div className="flex justify-center pt-3 pb-1">
-          <div className="w-10 h-1 rounded-full bg-slate-600/60" />
+          <div className="w-10 h-1 rounded-full bg-line" />
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-700/40">
-          <h2 className="text-slate-100 font-semibold text-base">Chia sẻ vào VidGrab</h2>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-line">
+          <h2 className="text-fg font-semibold text-base">Chia sẻ vào VidGrab</h2>
           <button
             onClick={close}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-700/40 text-slate-400 hover:text-slate-100 hover:bg-slate-700 transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-2 text-fg-muted hover:text-fg hover:bg-line transition-colors"
             aria-label="Đóng"
           >
             <X className="w-4 h-4" />
@@ -177,20 +177,20 @@ export default function MobileShareIntake({ onNavigate }) {
                 <img
                   src={thumbnail}
                   alt="thumbnail"
-                  className="w-20 h-14 flex-shrink-0 rounded-xl object-cover bg-slate-700/40"
+                  className="w-20 h-14 flex-shrink-0 rounded-xl object-cover bg-surface-2"
                   onError={(e) => { e.target.style.display = 'none'; }}
                 />
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-slate-100 text-sm font-medium line-clamp-2 leading-snug">{title || 'Không có tiêu đề'}</p>
+                <p className="text-fg text-sm font-medium line-clamp-2 leading-snug">{title || 'Không có tiêu đề'}</p>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
-                  {duration && <span className="text-slate-400 text-[11px]">⏱ {duration}</span>}
-                  {quality  && <span className="text-slate-400 text-[11px]">{quality}</span>}
+                  {duration && <span className="text-fg-muted text-[11px]">⏱ {duration}</span>}
+                  {quality  && <span className="text-fg-muted text-[11px]">{quality}</span>}
                 </div>
               </div>
             </div>
           ) : (
-            <p className="text-slate-400 text-sm line-clamp-2 break-all">{shortUrl}</p>
+            <p className="text-fg-muted text-sm line-clamp-2 break-all">{shortUrl}</p>
           )}
         </div>
 
@@ -198,7 +198,7 @@ export default function MobileShareIntake({ onNavigate }) {
         <div className="px-5 pb-3 grid grid-cols-3 gap-2">
           <button
             onClick={handleHD}
-            className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-gradient-to-b from-[#FBBF24]/20 to-[#FBBF24]/10 border border-[#FBBF24]/30 text-[#FBBF24] hover:bg-[#FBBF24]/25 transition-colors active:scale-95"
+            className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-surface-2 border border-accent/30 text-accent-text hover:bg-accent-soft transition-colors active:scale-95"
           >
             <span className="text-xl">⬇️</span>
             <span className="text-[11px] font-semibold">Tải HD</span>
@@ -206,7 +206,7 @@ export default function MobileShareIntake({ onNavigate }) {
 
           <button
             onClick={handleMP3}
-            className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-[#1a3a2a]/60 border border-slate-700/40 text-slate-200 hover:bg-slate-700/30 transition-colors active:scale-95"
+            className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-surface-2/60 border border-line text-fg-2 hover:bg-surface-2 transition-colors active:scale-95"
           >
             <span className="text-xl">🎵</span>
             <span className="text-[11px] font-semibold">MP3</span>
@@ -214,7 +214,7 @@ export default function MobileShareIntake({ onNavigate }) {
 
           <button
             onClick={handleNoWatermark}
-            className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-[#1a3a2a]/60 border border-slate-700/40 text-slate-200 hover:bg-slate-700/30 transition-colors active:scale-95"
+            className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-surface-2/60 border border-line text-fg-2 hover:bg-surface-2 transition-colors active:scale-95"
           >
             <span className="text-xl">✨</span>
             <span className="text-[11px] font-semibold leading-tight text-center">Không watermark</span>
@@ -225,7 +225,7 @@ export default function MobileShareIntake({ onNavigate }) {
         <div className="px-5 pb-4">
           <button
             onClick={() => setExpanded((v) => !v)}
-            className="w-full flex items-center justify-between py-2 text-slate-400 text-xs font-medium hover:text-slate-200 transition-colors"
+            className="w-full flex items-center justify-between py-2 text-fg-muted text-xs font-medium hover:text-fg-2 transition-colors"
           >
             <span>Thêm lựa chọn</span>
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -235,13 +235,13 @@ export default function MobileShareIntake({ onNavigate }) {
             <div className="grid grid-cols-2 gap-2 mt-2">
               <button
                 onClick={handleBatch}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1a3a2a]/60 border border-slate-700/40 text-slate-300 text-xs font-medium hover:bg-slate-700/30 transition-colors active:scale-95"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-2/60 border border-line text-fg-2 text-xs font-medium hover:bg-surface-2 transition-colors active:scale-95"
               >
                 <span>📦</span> Thêm vào batch
               </button>
               <button
                 onClick={close}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1a3a2a]/60 border border-slate-700/40 text-slate-400 text-xs font-medium hover:bg-slate-700/30 transition-colors active:scale-95"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-2/60 border border-line text-fg-muted text-xs font-medium hover:bg-surface-2 transition-colors active:scale-95"
               >
                 <span>✕</span> Huỷ
               </button>
@@ -250,8 +250,8 @@ export default function MobileShareIntake({ onNavigate }) {
         </div>
 
         {/* URL row */}
-        <div className="px-5 pb-6 border-t border-slate-700/30 pt-3">
-          <p className="text-slate-500 text-[11px] truncate">{shortUrl}</p>
+        <div className="px-5 pb-6 border-t border-line pt-3">
+          <p className="text-fg-muted text-[11px] truncate">{shortUrl}</p>
         </div>
       </div>
     </>

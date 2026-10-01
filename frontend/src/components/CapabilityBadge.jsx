@@ -8,45 +8,45 @@ import { CheckCircle, AlertCircle, Clock, Lock, Wifi, Info } from 'lucide-react'
 
 const SUPPORT_CONFIG = {
   full: {
-    color: 'text-emerald-400',
-    bg:    'bg-emerald-500/10',
-    border:'border-emerald-500/25',
+    color: 'text-success',
+    bg:    'bg-success-soft',
+    border:'border-success/25',
     Icon:  CheckCircle,
   },
   partial: {
-    color: 'text-amber-400',
-    bg:    'bg-amber-500/10',
-    border:'border-amber-500/25',
+    color: 'text-accent-text',
+    bg:    'bg-accent-soft',
+    border:'border-accent/25',
     Icon:  AlertCircle,
   },
   cookie_required: {
-    color: 'text-blue-400',
-    bg:    'bg-blue-500/10',
-    border:'border-blue-500/25',
+    color: 'text-fg-2',
+    bg:    'bg-surface-2',
+    border:'border-line',
     Icon:  Lock,
   },
   proxy_required: {
-    color: 'text-purple-400',
-    bg:    'bg-purple-500/10',
-    border:'border-purple-500/25',
+    color: 'text-fg-2',
+    bg:    'bg-surface-2',
+    border:'border-line',
     Icon:  Wifi,
   },
   experimental: {
-    color: 'text-slate-400',
-    bg:    'bg-slate-500/10',
-    border:'border-slate-500/25',
+    color: 'text-fg-muted',
+    bg:    'bg-line-strong',
+    border:'border-line-strong',
     Icon:  Info,
   },
   temporarily_disabled: {
-    color: 'text-red-400',
-    bg:    'bg-red-500/10',
-    border:'border-red-500/25',
+    color: 'text-danger',
+    bg:    'bg-danger-soft',
+    border:'border-danger/25',
     Icon:  Clock,
   },
   unsupported: {
-    color: 'text-red-400',
-    bg:    'bg-red-500/10',
-    border:'border-red-500/25',
+    color: 'text-danger',
+    bg:    'bg-danger-soft',
+    border:'border-danger/25',
     Icon:  AlertCircle,
   },
 };
@@ -73,8 +73,8 @@ export default function CapabilityBadge({ result, loading, className = '' }) {
   if (loading) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
-        <div className="h-5 w-20 bg-slate-700/50 rounded animate-pulse" />
-        <div className="h-5 w-28 bg-slate-700/40 rounded animate-pulse" />
+        <div className="h-5 w-20 bg-surface-2 rounded animate-pulse" />
+        <div className="h-5 w-28 bg-surface-2 rounded animate-pulse" />
       </div>
     );
   }
@@ -90,13 +90,13 @@ export default function CapabilityBadge({ result, loading, className = '' }) {
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className}`}>
       {/* Platform badge */}
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#0d2821]/80 border border-slate-700/40 text-xs font-semibold text-white">
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface/80 border border-line text-xs font-semibold text-fg">
         <span>{result.platform_emoji}</span>
         <span>{result.platform_label}</span>
       </span>
 
       {/* Source type badge */}
-      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-700/30 border border-slate-600/30 text-xs text-slate-300">
+      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-surface-2 border border-line-strong text-xs text-fg-2">
         {result.source_type_label}
       </span>
 
@@ -108,7 +108,7 @@ export default function CapabilityBadge({ result, loading, className = '' }) {
 
       {/* Short-link indicator */}
       {isShortLink && (
-        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-600/20 border border-slate-600/30 text-[10px] text-slate-500">
+        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-line border border-line-strong text-[10px] text-fg-muted">
           🔗 Rút gọn
         </span>
       )}
@@ -117,7 +117,7 @@ export default function CapabilityBadge({ result, loading, className = '' }) {
       {showWarnings && result.warnings.slice(0, 1).map((w, i) => (
         <span
           key={i}
-          className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500/8 border border-amber-500/20 text-[10px] text-amber-400/80 max-w-[200px] truncate"
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-accent-soft border border-accent/20 text-[10px] text-accent-text max-w-[200px] truncate"
           title={w}
         >
           ⚠ {w}
@@ -140,14 +140,14 @@ export function CapabilityDetail({ result }) {
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-base">{result.platform_emoji}</span>
         <span className={`text-sm font-bold ${cfg.color}`}>{result.platform_label}</span>
-        <span className="text-slate-400 text-xs">— {result.source_type_label}</span>
+        <span className="text-fg-muted text-xs">— {result.source_type_label}</span>
       </div>
 
       {/* Actions */}
       {result.supported_actions?.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {result.supported_actions.map(a => (
-            <span key={a} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-300 border border-slate-600/30">
+            <span key={a} className="text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-fg-2 border border-line-strong">
               {ACTION_LABELS[a] || a}
             </span>
           ))}
@@ -156,7 +156,7 @@ export function CapabilityDetail({ result }) {
 
       {/* Warnings */}
       {result.warnings?.map((w, i) => (
-        <p key={i} className="text-[11px] text-amber-400/80 flex items-start gap-1.5">
+        <p key={i} className="text-[11px] text-accent-text flex items-start gap-1.5">
           <span className="flex-shrink-0">⚠</span>
           <span>{w}</span>
         </p>

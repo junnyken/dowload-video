@@ -16,11 +16,11 @@ const PAD: Record<CardPadding, string> = {
 
 const ACCENT: Record<CardAccent, string> = {
   none:   '',
-  green:  'border-l-2 border-l-emerald-600',
-  yellow: 'border-l-2 border-l-amber-500',
-  red:    'border-l-2 border-l-red-600',
-  blue:   'border-l-2 border-l-blue-600',
-  purple: 'border-l-2 border-l-purple-600',
+  green:  'border-l-2 border-l-success',
+  yellow: 'border-l-2 border-l-accent',
+  red:    'border-l-2 border-l-danger',
+  blue:   'border-l-2 border-l-line',
+  purple: 'border-l-2 border-l-line',
 }
 
 interface CardProps {
@@ -49,13 +49,13 @@ export function Card({
   return (
     <As
       className={cn(
-        'rounded-2xl border border-slate-800 bg-slate-900/70',
+        'rounded-2xl border border-line bg-surface-2',
         PAD[padding],
         ACCENT[accent],
         onClick && [
           'cursor-pointer transition-colors',
-          'hover:border-slate-700 hover:bg-slate-800/60',
-          'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-700',
+          'hover:border-line hover:bg-surface',
+          'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-line-strong',
         ],
         className,
       )}

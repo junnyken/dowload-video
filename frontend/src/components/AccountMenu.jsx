@@ -62,56 +62,56 @@ export default function AccountMenu({ onNavigate }) {
       {/* Trigger button */}
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-slate-600/50 hover:border-[#FBBF24]/40 bg-slate-800/40 hover:bg-slate-700/50 transition-colors cursor-pointer"
+        className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-line-strong hover:border-accent/40 bg-surface-2 hover:bg-line transition-colors cursor-pointer"
       >
         {avatar ? (
           <img src={avatar} alt="" className="w-6 h-6 rounded-full object-cover" />
         ) : (
-          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#FBBF24] to-[#FB923C] flex items-center justify-center text-[#012622] text-xs font-bold">
+          <div className="w-6 h-6 rounded-full bg-accent flex items-center justify-center text-accent-fg text-xs font-bold">
             {displayName[0].toUpperCase()}
           </div>
         )}
-        <span className="text-sm text-white font-medium hidden sm:block max-w-[100px] truncate">
+        <span className="text-sm text-fg font-medium hidden sm:block max-w-[100px] truncate">
           {displayName}
         </span>
-        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-3.5 h-3.5 text-fg-muted transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-52 bg-[#021f1c] border border-slate-700/60 rounded-xl shadow-2xl overflow-hidden z-50">
+        <div className="absolute right-0 top-full mt-2 w-52 bg-canvas border border-line rounded-xl shadow-2xl overflow-hidden z-50">
           {/* User info */}
-          <div className="px-4 py-3 border-b border-slate-700/40">
+          <div className="px-4 py-3 border-b border-line">
             <div className="flex items-center gap-2">
-              <p className="text-white text-sm font-semibold truncate">{displayName}</p>
+              <p className="text-fg text-sm font-semibold truncate">{displayName}</p>
               {usage?.tier === 'pro' && (
-                <span className="flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-600/30 text-violet-300 border border-violet-500/40 leading-none">PRO</span>
+                <span className="flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-surface-2 text-fg-2 border border-line leading-none">PRO</span>
               )}
               {(usage?.tier === 'enterprise' || usage?.tier === 'team') && (
-                <span className="flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-600/30 text-amber-300 border border-amber-500/40 leading-none">
+                <span className="flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-accent-soft text-accent-text border border-accent/40 leading-none">
                   {usage.tier === 'enterprise' ? 'ENTERPRISE' : 'TEAM'}
                 </span>
               )}
             </div>
-            <p className="text-slate-400 text-xs truncate">{user?.email}</p>
+            <p className="text-fg-muted text-xs truncate">{user?.email}</p>
           </div>
 
           {/* Quota bar */}
           {usage && (
-            <div className="px-4 py-2.5 border-b border-slate-700/40">
-              <p className="text-xs text-slate-400 mb-1.5">
-                <span className="text-white font-medium">{usage.used}</span>
+            <div className="px-4 py-2.5 border-b border-line">
+              <p className="text-xs text-fg-muted mb-1.5">
+                <span className="text-fg font-medium">{usage.used}</span>
                 {usage.unlimited
-                  ? <span className="text-amber-400 font-medium"> / Không giới hạn</span>
+                  ? <span className="text-accent-text font-medium"> / Không giới hạn</span>
                   : <> / {usage.limit} lượt hôm nay</>
                 }
               </p>
-              <div className="h-1 w-full rounded-full bg-zinc-700 overflow-hidden">
+              <div className="h-1 w-full rounded-full bg-surface-2 overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all ${
-                    usage.tier === 'enterprise' ? 'bg-amber-400' :
-                    usage.tier === 'team' ? 'bg-green-500' :
-                    usage.tier === 'pro' ? 'bg-violet-500' : 'bg-blue-500'
+                    usage.tier === 'enterprise' ? 'bg-accent' :
+                    usage.tier === 'team' ? 'bg-success' :
+                    usage.tier === 'pro' ? 'bg-accent' : 'bg-accent'
                   }`}
                   style={{ width: usage.unlimited ? '100%' : `${Math.min(100, Math.round((usage.used / usage.limit) * 100))}%` }}
                 />
@@ -136,14 +136,14 @@ export default function AccountMenu({ onNavigate }) {
             <MenuItem icon={<Mic className="w-4 h-4" />} label="Tạo Phụ Đề (AI)"
               onClick={() => nav('transcript-asr', '/transcript-asr')} />
           </div>
-          <div className="py-1 border-t border-slate-700/40">
+          <div className="py-1 border-t border-line">
             <MenuItem icon={<Settings2 className="w-4 h-4" />} label="Preferences"
               onClick={() => nav('preferences', '/preferences')} />
             <MenuItem icon={<BarChart2 className="w-4 h-4" />} label="Quota & Usage"
               onClick={() => nav('usage', '/usage')} />
           </div>
           {(can('workspace.settings') || can('audit.read') || can('approvals.manage')) && (
-            <div className="py-1 border-t border-slate-700/40">
+            <div className="py-1 border-t border-line">
               {can('workspace.settings') && (
                 <MenuItem icon={<Building2 className="w-4 h-4" />} label="Workspace"
                   onClick={() => nav('workspace-settings', '/workspace-settings')} />
@@ -161,19 +161,19 @@ export default function AccountMenu({ onNavigate }) {
 
           {/* Upgrade hint — chỉ hiện cho free users */}
           {(!usage || (usage.tier === 'free')) && (
-            <div className="px-3 py-2 border-t border-slate-700/40">
+            <div className="px-3 py-2 border-t border-line">
               <button
                 onClick={() => nav('upgrade', '/upgrade')}
-                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg bg-gradient-to-r from-[#FBBF24]/10 to-[#FB923C]/10 border border-[#FBBF24]/20 hover:border-[#FBBF24]/40 transition-colors text-left"
+                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg bg-surface-2 border border-accent/20 hover:border-accent/40 transition-colors text-left"
               >
-                <Crown className="w-3.5 h-3.5 text-[#FBBF24]" />
-                <span className="text-[#FBBF24] text-xs font-semibold">Nâng cấp Pro</span>
+                <Crown className="w-3.5 h-3.5 text-accent-text" />
+                <span className="text-accent-text text-xs font-semibold">Nâng cấp Pro</span>
               </button>
             </div>
           )}
 
           {/* Sign out */}
-          <div className="py-1 border-t border-slate-700/40">
+          <div className="py-1 border-t border-line">
             <MenuItem icon={<LogOut className="w-4 h-4" />} label="Đăng xuất"
               onClick={handleSignOut} danger />
           </div>
@@ -189,8 +189,8 @@ function MenuItem({ icon, label, onClick, danger }) {
       onClick={onClick}
       className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-left cursor-pointer
         ${danger
-          ? 'text-red-400 hover:bg-red-500/10'
-          : 'text-slate-300 hover:bg-slate-700/40 hover:text-white'
+          ? 'text-danger hover:bg-danger-soft'
+          : 'text-fg-2 hover:bg-surface-2 hover:text-fg'
         }`}
     >
       {icon}

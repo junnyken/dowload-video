@@ -12,7 +12,7 @@ export default function LazyImage({
   src,
   alt = '',
   className = '',
-  placeholderClass = 'bg-slate-800',
+  placeholderClass = 'bg-surface',
   fallback = '',
   ...rest
 }) {

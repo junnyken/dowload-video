@@ -46,10 +46,10 @@ export default class ErrorBoundary extends Component {
           </div>
 
           <div>
-            <h2 className="text-xl font-bold text-text-primary mb-2">
+            <h2 className="text-xl font-bold text-fg mb-2">
               Đã xảy ra lỗi không mong đợi
             </h2>
-            <p className="text-sm text-text-muted">
+            <p className="text-sm text-fg-muted">
               {isNetworkError
                 ? 'Không thể kết nối đến server. Kiểm tra kết nối mạng và thử lại.'
                 : 'Thành phần gặp lỗi và không thể hiển thị. Thử làm mới trang.'}
@@ -57,31 +57,31 @@ export default class ErrorBoundary extends Component {
           </div>
 
           {message && (
-            <div className="px-4 py-2.5 rounded-xl bg-surface border border-border text-left">
-              <p className="text-xs font-mono text-text-muted break-all">{message}</p>
+            <div className="px-4 py-2.5 rounded-xl bg-surface border border-line text-left">
+              <p className="text-xs font-mono text-fg-muted break-all">{message}</p>
             </div>
           )}
 
           <div className="flex items-center justify-center gap-3">
             <button
               onClick={this.handleReset}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/30 text-primary text-sm font-semibold hover:bg-primary/20 transition-colors cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-accent/10 border border-accent/30 text-accent-text text-sm font-semibold hover:bg-accent/20 transition-colors cursor-pointer"
             >
               <RefreshCw className="w-4 h-4" /> Thử lại
             </button>
             <button
               onClick={this.handleReload}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface border border-border text-text-secondary text-sm font-semibold hover:text-text-primary hover:border-primary/30 transition-colors cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface border border-line text-fg-2 text-sm font-semibold hover:text-fg hover:border-accent/30 transition-colors cursor-pointer"
             >
               <Home className="w-4 h-4" /> Tải lại trang
             </button>
           </div>
 
-          <p className="text-xs text-text-muted">
+          <p className="text-xs text-fg-muted">
             Nếu lỗi tiếp tục, liên hệ hỗ trợ tại{' '}
             <a
               href="https://t.me/vidgrab_support"
-              className="text-primary hover:text-primary-light transition-colors"
+              className="text-accent-text hover:text-primary-light transition-colors"
               target="_blank"
               rel="noopener noreferrer"
             >

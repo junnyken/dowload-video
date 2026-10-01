@@ -31,10 +31,10 @@ function ConfidenceBadge({ value }) {
   const pct = Math.round(value * 100);
   const color =
     value >= 0.7
-      ? "bg-green-100 text-green-700"
+      ? "bg-success-soft text-success"
       : value >= 0.4
-      ? "bg-yellow-100 text-yellow-700"
-      : "bg-gray-100 text-gray-500";
+      ? "bg-accent-soft text-accent-text"
+      : "bg-surface-2 text-fg-muted";
   return (
     <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${color}`}>
       {pct}%
@@ -42,12 +42,12 @@ function ConfidenceBadge({ value }) {
   );
 }
 
-function ScoreBar({ label, value, color = "bg-blue-400" }) {
+function ScoreBar({ label, value, color = "bg-accent" }) {
   const pct = Math.min(100, Math.round((value || 0) * 100));
   return (
-    <div className="flex items-center gap-2 text-xs text-gray-500">
+    <div className="flex items-center gap-2 text-xs text-fg-muted">
       <span className="w-20 shrink-0">{label}</span>
-      <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-line rounded-full overflow-hidden">
         <div className={`h-full ${color} rounded-full`} style={{ width: `${pct}%` }} />
       </div>
       <span className="w-8 text-right">{pct}%</span>
@@ -59,7 +59,7 @@ function LoadingSkeleton() {
   return (
     <div className="space-y-3 animate-pulse p-3">
       {[1, 2, 3].map((i) => (
-        <div key={i} className="h-12 bg-gray-100 rounded-lg" />
+        <div key={i} className="h-12 bg-surface-2 rounded-lg" />
       ))}
     </div>
   );
@@ -69,14 +69,14 @@ function ProGate({ feature }) {
   return (
     <div className="flex flex-col items-center justify-center py-6 text-center">
       <span className="text-2xl mb-2">🔒</span>
-      <p className="text-sm font-medium text-gray-700">
+      <p className="text-sm font-medium text-fg-muted">
         Nâng cấp Pro để xem {feature}
       </p>
       <a
         // /pricing renders nothing (App.jsx:457 hides it on purpose), so this
         // link used to land on a blank page. /billing is the page that exists.
         href="/billing"
-        className="mt-3 text-xs text-blue-600 underline hover:text-blue-800"
+        className="mt-3 text-xs text-fg-2 underline hover:text-fg-2"
       >
         Xem gói Pro →
       </a>
@@ -91,7 +91,7 @@ function ProGate({ feature }) {
 function TrimTab({ suggestions, onApplyTrim }) {
   if (!suggestions || suggestions.length === 0) {
     return (
-      <p className="text-xs text-gray-400 py-4 text-center">
+      <p className="text-xs text-fg-muted py-4 text-center">
         Không có gợi ý cắt nào.
       </p>
     );
@@ -100,14 +100,14 @@ function TrimTab({ suggestions, onApplyTrim }) {
   return (
     <div className="space-y-2">
       {suggestions.map((s, i) => (
-        <div key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
+        <div key={i} className="border border-line rounded-lg p-3 bg-surface-2">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-semibold text-gray-700">
+            <span className="text-xs font-semibold text-fg-muted">
               {s.mode_label || s.mode || `Gợi ý ${i + 1}`}
             </span>
             <ConfidenceBadge value={s.confidence} />
           </div>
-          <div className="text-sm font-mono text-gray-800 mb-2">
+          <div className="text-sm font-mono text-fg mb-2">
             {fmtRange(s.suggested_start, s.suggested_end)}
           </div>
           {s.reasons && s.reasons.length > 0 && (
@@ -115,7 +115,7 @@ function TrimTab({ suggestions, onApplyTrim }) {
               {s.reasons.map((r, ri) => (
                 <span
                   key={ri}
-                  className="text-xs bg-white border border-gray-200 text-gray-500 px-1.5 py-0.5 rounded"
+                  className="text-xs bg-surface border border-line text-fg-muted px-1.5 py-0.5 rounded"
                 >
                   {r}
                 </span>
@@ -124,7 +124,7 @@ function TrimTab({ suggestions, onApplyTrim }) {
           )}
           <button
             onClick={() => onApplyTrim({ start: s.suggested_start, end: s.suggested_end })}
-            className="w-full text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white py-1.5 rounded transition-colors"
+            className="w-full text-xs font-medium bg-accent hover:bg-accent-hover text-accent-fg py-1.5 rounded transition-colors"
           >
             Áp dụng gợi ý này
           </button>
@@ -145,7 +145,7 @@ function HighlightsTab({ suggestions, onQueueClips, tierFiltered }) {
 
   if (!suggestions || suggestions.length === 0) {
     return (
-      <p className="text-xs text-gray-400 py-4 text-center">
+      <p className="text-xs text-fg-muted py-4 text-center">
         Không phát hiện highlight nào.
       </p>
     );
@@ -154,25 +154,25 @@ function HighlightsTab({ suggestions, onQueueClips, tierFiltered }) {
   return (
     <div className="space-y-2">
       {suggestions.map((s, i) => (
-        <div key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
+        <div key={i} className="border border-line rounded-lg p-3 bg-surface-2">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-semibold text-gray-700">
+            <span className="text-xs font-semibold text-fg-muted">
               {s.label || `Highlight ${i + 1}`}
             </span>
             <div className="flex items-center gap-1.5">
               {s.duration != null && (
-                <span className="text-xs bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded">
+                <span className="text-xs bg-accent text-fg-2 border border-line px-1.5 py-0.5 rounded">
                   {fmtSeconds(s.duration)}
                 </span>
               )}
               <ConfidenceBadge value={s.confidence} />
             </div>
           </div>
-          <div className="text-sm font-mono text-gray-800 mb-1.5">
+          <div className="text-sm font-mono text-fg mb-1.5">
             {fmtRange(s.start, s.end)}
           </div>
           {s.reason && (
-            <p className="text-xs text-gray-500 mb-2">{s.reason}</p>
+            <p className="text-xs text-fg-muted mb-2">{s.reason}</p>
           )}
           <div className="flex gap-2">
             <button
@@ -180,13 +180,13 @@ function HighlightsTab({ suggestions, onQueueClips, tierFiltered }) {
                 const ts = Math.floor(s.start || 0);
                 window.open(`${window.location.origin}?t=${ts}`, "_blank");
               }}
-              className="flex-1 text-xs border border-gray-300 text-gray-600 hover:bg-gray-100 py-1.5 rounded transition-colors"
+              className="flex-1 text-xs border border-line text-fg-muted hover:bg-surface-2 py-1.5 rounded transition-colors"
             >
               Xem đoạn này
             </button>
             <button
               onClick={() => onQueueClips([i])}
-              className="flex-1 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white py-1.5 rounded transition-colors"
+              className="flex-1 text-xs font-medium bg-accent hover:bg-accent-hover text-accent-fg py-1.5 rounded transition-colors"
             >
               Cắt clip
             </button>
@@ -204,7 +204,7 @@ function HighlightsTab({ suggestions, onQueueClips, tierFiltered }) {
 function GifTab({ suggestions, onApplyGif }) {
   if (!suggestions || suggestions.length === 0) {
     return (
-      <p className="text-xs text-gray-400 py-4 text-center">
+      <p className="text-xs text-fg-muted py-4 text-center">
         Không tìm thấy đoạn phù hợp để tạo GIF.
       </p>
     );
@@ -213,31 +213,31 @@ function GifTab({ suggestions, onApplyGif }) {
   return (
     <div className="space-y-2">
       {suggestions.map((s, i) => (
-        <div key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
+        <div key={i} className="border border-line rounded-lg p-3 bg-surface-2">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-sm font-mono text-gray-800">
+            <span className="text-sm font-mono text-fg">
               {fmtRange(s.start, s.end)}
             </span>
             {s.has_scene_cut && (
-              <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded">
+              <span className="text-xs bg-accent-soft text-accent-text border border-accent px-1.5 py-0.5 rounded">
                 ⚠ cắt cảnh
               </span>
             )}
           </div>
           <div className="space-y-1.5 mb-3">
-            <ScoreBar label="Loop score" value={s.loop_score} color="bg-purple-400" />
-            <ScoreBar label="Motion" value={s.motion_score} color="bg-blue-400" />
+            <ScoreBar label="Loop score" value={s.loop_score} color="bg-accent" />
+            <ScoreBar label="Motion" value={s.motion_score} color="bg-accent" />
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => onApplyGif({ index: i, quality: "480p" })}
-              className="flex-1 text-xs border border-gray-300 text-gray-600 hover:bg-gray-100 py-1.5 rounded transition-colors"
+              className="flex-1 text-xs border border-line text-fg-muted hover:bg-surface-2 py-1.5 rounded transition-colors"
             >
               GIF 480p
             </button>
             <button
               onClick={() => onApplyGif({ index: i, quality: "720p" })}
-              className="flex-1 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white py-1.5 rounded transition-colors"
+              className="flex-1 text-xs font-medium bg-accent hover:bg-accent-hover text-accent-fg py-1.5 rounded transition-colors"
             >
               GIF 720p
             </button>
@@ -257,7 +257,7 @@ function MetadataTab({ suggestions }) {
 
   if (!suggestions || (!suggestions.filename_cleaned && !suggestions.tags)) {
     return (
-      <p className="text-xs text-gray-400 py-4 text-center">
+      <p className="text-xs text-fg-muted py-4 text-center">
         Không có gợi ý metadata.
       </p>
     );
@@ -277,23 +277,23 @@ function MetadataTab({ suggestions }) {
   return (
     <div className="space-y-3">
       {filename_cleaned && (
-        <div className="border border-gray-100 rounded-lg p-3 bg-gray-50">
+        <div className="border border-line rounded-lg p-3 bg-surface-2">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-semibold text-gray-600">Tên file gợi ý</span>
+            <span className="text-xs font-semibold text-fg-muted">Tên file gợi ý</span>
             <ConfidenceBadge value={confidence} />
           </div>
           {original_filename && original_filename !== filename_cleaned && (
-            <p className="text-xs text-red-400 line-through mb-1 break-all">
+            <p className="text-xs text-danger line-through mb-1 break-all">
               {original_filename}
             </p>
           )}
-          <p className="text-xs text-green-700 font-medium break-all mb-2">
+          <p className="text-xs text-success font-medium break-all mb-2">
             {filename_cleaned}
           </p>
           <div className="flex gap-2">
             <button
               onClick={handleCopy}
-              className="flex-1 text-xs border border-gray-300 text-gray-600 hover:bg-gray-100 py-1.5 rounded transition-colors"
+              className="flex-1 text-xs border border-line text-fg-muted hover:bg-surface-2 py-1.5 rounded transition-colors"
             >
               {copied ? "Đã sao chép ✓" : "Sao chép"}
             </button>
@@ -303,7 +303,7 @@ function MetadataTab({ suggestions }) {
                   new CustomEvent("vidgrab:set-filename", { detail: filename_cleaned })
                 );
               }}
-              className="flex-1 text-xs font-medium bg-gray-700 hover:bg-gray-800 text-white py-1.5 rounded transition-colors"
+              className="flex-1 text-xs font-medium bg-surface-2 hover:bg-surface text-fg py-1.5 rounded transition-colors"
             >
               Dùng tên này
             </button>
@@ -313,12 +313,12 @@ function MetadataTab({ suggestions }) {
 
       {tags && tags.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-gray-600 mb-1.5">Tags</p>
+          <p className="text-xs font-semibold text-fg-muted mb-1.5">Tags</p>
           <div className="flex flex-wrap gap-1">
             {tags.map((tag, i) => (
               <span
                 key={i}
-                className="text-xs bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 rounded-full"
+                className="text-xs bg-accent text-fg-2 border border-line px-2 py-0.5 rounded-full"
               >
                 {tag}
               </span>
@@ -531,36 +531,36 @@ export default function SmartActionsPanel({
   if (!videoInfo && !mediaUrl) return null;
 
   return (
-    <div className="w-full max-w-sm border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden">
+    <div className="w-full max-w-sm border border-line rounded-xl bg-surface shadow-sm overflow-hidden">
       {/* Toggle header */}
       <button
         onClick={handleToggle}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-surface-2 transition-colors"
         aria-expanded={expanded}
       >
         <div className="flex items-center gap-2">
           <span className="text-base">✨</span>
-          <span className="text-sm font-semibold text-gray-800">Smart Analysis</span>
+          <span className="text-sm font-semibold text-fg">Smart Analysis</span>
           {loading && (
-            <span className="text-xs text-gray-400 animate-pulse">Đang phân tích...</span>
+            <span className="text-xs text-fg-muted animate-pulse">Đang phân tích...</span>
           )}
           {result && !loading && (
-            <span className="text-xs bg-green-100 text-green-600 px-1.5 py-0.5 rounded">
+            <span className="text-xs bg-success-soft text-success px-1.5 py-0.5 rounded">
               Xong
             </span>
           )}
         </div>
-        <span className="text-gray-400 text-xs">{expanded ? "▲" : "▼"}</span>
+        <span className="text-fg-muted text-xs">{expanded ? "▲" : "▼"}</span>
       </button>
 
       {/* Collapsible body */}
       {expanded && (
-        <div className="border-t border-gray-100">
+        <div className="border-t border-line">
           {/* Loading state */}
           {loading && !result && (
             <div className="px-4 pt-3">
-              <p className="text-xs text-gray-400 mb-2 flex items-center gap-1">
-                <span className="inline-block w-4 h-4 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" />
+              <p className="text-xs text-fg-muted mb-2 flex items-center gap-1">
+                <span className="inline-block w-4 h-4 border-2 border-line border-t-line rounded-full animate-spin" />
                 Đang phân tích
                 <span className="animate-pulse">...</span>
               </p>
@@ -571,14 +571,14 @@ export default function SmartActionsPanel({
           {/* Error state */}
           {error && !loading && (
             <div className="px-4 py-4 text-center">
-              <p className="text-sm text-red-500 mb-3">{error}</p>
+              <p className="text-sm text-danger mb-3">{error}</p>
               <button
                 onClick={startAnalysis}
-                className="text-xs text-blue-600 underline hover:text-blue-800"
+                className="text-xs text-fg-2 underline hover:text-fg-2"
               >
                 Thử lại
               </button>
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-fg-muted mt-1">
                 (hoặc dùng trim thủ công bên dưới)
               </p>
             </div>
@@ -589,15 +589,15 @@ export default function SmartActionsPanel({
             <>
               {/* Tab bar */}
               {visibleTabs.length > 0 && (
-                <div className="flex border-b border-gray-100 overflow-x-auto">
+                <div className="flex border-b border-line overflow-x-auto">
                   {visibleTabs.map((tab) => (
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
                       className={`flex-shrink-0 px-3 py-2 text-xs font-medium transition-colors ${
                         activeTab === tab.id
-                          ? "border-b-2 border-blue-600 text-blue-600"
-                          : "text-gray-500 hover:text-gray-700"
+                          ? "border-b-2 border-line text-fg-2"
+                          : "text-fg-muted hover:text-fg-muted"
                       }`}
                     >
                       {tab.label}
@@ -636,7 +636,7 @@ export default function SmartActionsPanel({
               {result.warnings && result.warnings.length > 0 && (
                 <div className="px-3 pb-2">
                   {result.warnings.map((w, i) => (
-                    <p key={i} className="text-xs text-amber-500">
+                    <p key={i} className="text-xs text-accent-text">
                       ⚠ {w}
                     </p>
                   ))}
@@ -647,8 +647,8 @@ export default function SmartActionsPanel({
 
           {/* Footer */}
           {!hidePoweredBy && (
-            <div className="px-4 py-2 border-t border-gray-50 text-right">
-              <span className="text-xs text-gray-300">Powered by VidGrab AI</span>
+            <div className="px-4 py-2 border-t border-line text-right">
+              <span className="text-xs text-fg-2">Powered by VidGrab AI</span>
             </div>
           )}
         </div>

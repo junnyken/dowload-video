@@ -12,10 +12,10 @@ const LABEL: Record<ProbeStatus, string> = {
 // not_configured is grey, never green. The whole point of this page is that
 // "nobody has checked" and "checked and fine" must not look alike.
 const TONE: Record<ProbeStatus, string> = {
-  ok:             'text-emerald-400 border-emerald-500/30 bg-emerald-500/5',
-  failed:         'text-red-400 border-red-500/30 bg-red-500/5',
-  stale:          'text-amber-400 border-amber-500/30 bg-amber-500/5',
-  not_configured: 'text-slate-500 border-slate-600/40 bg-slate-700/10',
+  ok:             'text-success border-success/30 bg-success-soft',
+  failed:         'text-danger border-danger/30 bg-danger-soft',
+  stale:          'text-warning border-warning/30 bg-warning-soft',
+  not_configured: 'text-fg-muted border-line-strong bg-surface-2',
 }
 
 function age(s: number | null): string {
@@ -34,15 +34,15 @@ export default function ProbesPage() {
 
   if (isLoading) {
     return <div className="flex min-h-[60vh] items-center justify-center">
-      <div className="text-sm text-slate-500 animate-pulse">Đang tải trạng thái nền tảng…</div>
+      <div className="text-sm text-fg-muted animate-pulse">Đang tải trạng thái nền tảng…</div>
     </div>
   }
 
   if (isError) {
-    return <div className="max-w-2xl mx-auto mt-16 rounded-xl border border-red-500/30 bg-red-500/5 p-6">
-      <p className="text-red-300 font-semibold mb-1">Không tải được</p>
-      <p className="text-sm text-slate-400 mb-4">{(error as Error)?.message}</p>
-      <button onClick={() => refetch()} className="px-4 py-2 rounded-lg bg-slate-700 text-slate-200 text-sm">Thử lại</button>
+    return <div className="max-w-2xl mx-auto mt-16 rounded-xl border border-danger/30 bg-danger-soft p-6">
+      <p className="text-danger font-semibold mb-1">Không tải được</p>
+      <p className="text-sm text-fg-muted mb-4">{(error as Error)?.message}</p>
+      <button onClick={() => refetch()} className="px-4 py-2 rounded-lg bg-surface-2 text-fg-2 text-sm">Thử lại</button>
     </div>
   }
 
@@ -60,14 +60,14 @@ export default function ProbesPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-white">Sức khoẻ nền tảng</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Dò chủ động mỗi 30 phút · chỉ lấy metadata, không tải</p>
+          <h1 className="text-xl font-bold text-fg">Sức khoẻ nền tảng</h1>
+          <p className="text-sm text-fg-muted mt-0.5">Dò chủ động mỗi 30 phút · chỉ lấy metadata, không tải</p>
         </div>
         <button
           onClick={() => runNow.mutate()}
           disabled={runNow.isPending}
-          className="px-4 py-2 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300
-                     text-sm font-semibold hover:bg-amber-500/30 disabled:opacity-50 transition-colors"
+          className="px-4 py-2 rounded-lg bg-accent-soft border border-accent/40 text-accent-text
+                     text-sm font-semibold hover:bg-accent-soft disabled:opacity-50 transition-colors"
         >
           {runNow.isPending ? 'Đang xếp hàng…' : '▶ Dò ngay'}
         </button>
@@ -77,18 +77,18 @@ export default function ProbesPage() {
           this the only visible change was a 200ms flicker — identical to a
           button that does nothing, which is how it was first reported. */}
       {runNow.isSuccess && (
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3">
-          <p className="text-sm text-emerald-300 font-semibold">Đã xếp hàng đợi</p>
-          <p className="text-xs text-slate-400 mt-0.5">
+        <div className="rounded-xl border border-success/30 bg-success-soft px-4 py-3">
+          <p className="text-sm text-success font-semibold">Đã xếp hàng đợi</p>
+          <p className="text-xs text-fg-muted mt-0.5">
             Mỗi nền tảng mất tới 30 giây, nên một lượt dò có thể chạy hơn một phút.
             Bảng dưới tự làm mới trong 90 giây tới — cột «Lần dò gần nhất» đổi là xong.
           </p>
         </div>
       )}
       {runNow.isError && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3">
-          <p className="text-sm text-red-300 font-semibold">Không xếp được hàng đợi</p>
-          <p className="text-xs text-slate-400 mt-0.5 break-words">
+        <div className="rounded-xl border border-danger/30 bg-danger-soft px-4 py-3">
+          <p className="text-sm text-danger font-semibold">Không xếp được hàng đợi</p>
+          <p className="text-xs text-fg-muted mt-0.5 break-words">
             {(runNow.error as Error)?.message || 'Lỗi không xác định.'}
           </p>
         </div>
@@ -104,9 +104,9 @@ export default function ProbesPage() {
       </div>
 
       {unchecked > 0 && (
-        <div className="rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3">
-          <p className="text-xs text-slate-400 leading-relaxed">
-            <b className="text-slate-300">{unchecked}/{data?.total} nền tảng chưa có bằng chứng nào.</b>{' '}
+        <div className="rounded-xl border border-line bg-surface-2 px-4 py-3">
+          <p className="text-xs text-fg-muted leading-relaxed">
+            <b className="text-fg-2">{unchecked}/{data?.total} nền tảng chưa có bằng chứng nào.</b>{' '}
             Chúng không được tính là khoẻ — nền tảng không ai dò trông y hệt lúc nó vừa chết.
             Dán một link công khai bất kỳ của nền tảng đó vào ô bên dưới (link bạn đã tải
             thành công là tốt nhất), hệ thống sẽ tự dò mỗi 30 phút.
@@ -114,11 +114,11 @@ export default function ProbesPage() {
         </div>
       )}
 
-      {data?.note && <p className="text-xs text-slate-500 leading-relaxed">{data.note}</p>}
+      {data?.note && <p className="text-xs text-fg-muted leading-relaxed">{data.note}</p>}
 
-      <div className="rounded-xl border border-slate-700/60 overflow-hidden">
+      <div className="rounded-xl border border-line overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-slate-800/70 text-slate-400 text-xs">
+          <thead className="bg-surface text-fg-muted text-xs">
             <tr>
               <th className="text-left px-4 py-2 font-semibold">Nền tảng</th>
               <th className="text-left px-4 py-2 font-semibold">Trạng thái</th>
@@ -128,18 +128,18 @@ export default function ProbesPage() {
           </thead>
           <tbody>
             {rows.map(r => (
-              <tr key={r.platform} className="border-t border-slate-700/40 align-top">
-                <td className="px-4 py-2.5 text-slate-200 font-medium">{r.platform}</td>
+              <tr key={r.platform} className="border-t border-line align-top">
+                <td className="px-4 py-2.5 text-fg-2 font-medium">{r.platform}</td>
                 <td className="px-4 py-2.5">
                   <span className={`inline-block px-2 py-0.5 rounded-md border text-[11px] font-bold ${TONE[r.status]}`}>
                     {LABEL[r.status]}
                   </span>
                   {r.reason && r.status !== 'ok' && (
-                    <div className="text-[11px] text-slate-500 mt-1 max-w-[280px] break-words">{r.reason}</div>
+                    <div className="text-[11px] text-fg-muted mt-1 max-w-[280px] break-words">{r.reason}</div>
                   )}
                 </td>
-                <td className="px-4 py-2.5 text-slate-400 text-xs whitespace-nowrap">
-                  {age(r.age_s)}{r.ms !== null && <span className="text-slate-600"> · {r.ms}ms</span>}
+                <td className="px-4 py-2.5 text-fg-muted text-xs whitespace-nowrap">
+                  {age(r.age_s)}{r.ms !== null && <span className="text-fg-muted"> · {r.ms}ms</span>}
                 </td>
                 <td className="px-4 py-2.5">
                   {editing === r.platform ? (
@@ -148,18 +148,18 @@ export default function ProbesPage() {
                         autoFocus value={draft} onChange={e => setDraft(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') save(r.platform); if (e.key === 'Escape') setEditing(null) }}
                         placeholder="https://…"
-                        className="flex-1 min-w-0 px-2 py-1 rounded-md bg-slate-900 border border-slate-600
-                                   text-xs text-slate-200 focus:outline-none focus:border-amber-500/60"
+                        className="flex-1 min-w-0 px-2 py-1 rounded-md bg-canvas border border-line-strong
+                                   text-xs text-fg-2 focus:outline-none focus:border-accent/60"
                       />
-                      <button onClick={() => save(r.platform)} className="px-2 py-1 rounded-md bg-amber-500/20 text-amber-300 text-xs font-semibold">Lưu</button>
-                      <button onClick={() => setEditing(null)} className="px-2 py-1 rounded-md text-slate-500 text-xs">Huỷ</button>
+                      <button onClick={() => save(r.platform)} className="px-2 py-1 rounded-md bg-accent-soft text-accent-text text-xs font-semibold">Lưu</button>
+                      <button onClick={() => setEditing(null)} className="px-2 py-1 rounded-md text-fg-muted text-xs">Huỷ</button>
                     </div>
                   ) : (
                     <button
                       onClick={() => { setEditing(r.platform); setDraft(r.target || '') }}
-                      className="text-xs text-left text-slate-400 hover:text-amber-300 transition-colors break-all max-w-[320px]"
+                      className="text-xs text-left text-fg-muted hover:text-accent-text transition-colors break-all max-w-[320px]"
                     >
-                      {r.target || <span className="text-slate-600 italic">chưa đặt — bấm để thêm</span>}
+                      {r.target || <span className="text-fg-muted italic">chưa đặt — bấm để thêm</span>}
                     </button>
                   )}
                 </td>

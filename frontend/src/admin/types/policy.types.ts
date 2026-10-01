@@ -91,9 +91,9 @@ export const aggressivenessLabel: Record<string, string> = {
 }
 
 export const aggressivenessColor: Record<string, string> = {
-  conservative: 'text-orange-400',
-  balanced:     'text-yellow-400',
-  ample:        'text-green-400',
+  conservative: 'text-accent-text',
+  balanced:     'text-accent-text',
+  ample:        'text-success',
 }
 
 export function formatTtl(seconds: number): string {

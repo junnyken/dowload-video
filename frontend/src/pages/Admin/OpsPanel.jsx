@@ -29,16 +29,16 @@ function fmtFull(ts) {
 
 // ── Sub-components ───────────────────────────────────────────────────
 
-function MetricCard({ label, value, color = 'text-white', bg = 'bg-slate-800/60', icon: Icon }) {
+function MetricCard({ label, value, color = 'text-fg', bg = 'bg-surface', icon: Icon }) {
   return (
-    <div className={`flex items-center gap-3 rounded-xl border border-slate-700/50 p-4 ${bg}`}>
+    <div className={`flex items-center gap-3 rounded-xl border border-line p-4 ${bg}`}>
       {Icon && (
-        <div className="shrink-0 w-9 h-9 rounded-lg bg-slate-700/50 flex items-center justify-center">
+        <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-2 flex items-center justify-center">
           <Icon className={`w-4.5 h-4.5 ${color}`} style={{ width: '18px', height: '18px' }} />
         </div>
       )}
       <div className="min-w-0">
-        <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider truncate">{label}</p>
+        <p className="text-[11px] font-medium text-fg-muted uppercase tracking-wider truncate">{label}</p>
         <p className={`text-2xl font-bold mt-0.5 ${color}`}>{value ?? '—'}</p>
       </div>
     </div>
@@ -48,8 +48,8 @@ function MetricCard({ label, value, color = 'text-white', bg = 'bg-slate-800/60'
 function SectionTitle({ icon: Icon, children }) {
   return (
     <div className="flex items-center gap-2 mb-3">
-      {Icon && <Icon className="w-4 h-4 text-teal-400" />}
-      <h3 className="text-sm font-semibold text-slate-200 uppercase tracking-widest">{children}</h3>
+      {Icon && <Icon className="w-4 h-4 text-fg-2" />}
+      <h3 className="text-sm font-semibold text-fg-2 uppercase tracking-widest">{children}</h3>
     </div>
   );
 }
@@ -57,18 +57,18 @@ function SectionTitle({ icon: Icon, children }) {
 function QueueBar({ name, depth }) {
   const max = 20;
   const pct = Math.min((depth / max) * 100, 100);
-  const color = depth === 0 ? 'bg-emerald-500' : depth <= 5 ? 'bg-teal-400' : depth <= 15 ? 'bg-amber-400' : 'bg-red-400';
+  const color = depth === 0 ? 'bg-success' : depth <= 5 ? 'bg-accent' : depth <= 15 ? 'bg-accent' : 'bg-danger';
 
   return (
     <div className="flex items-center gap-3">
-      <span className="w-20 shrink-0 text-xs text-slate-400 font-mono truncate">{name}</span>
-      <div className="flex-1 h-2 rounded-full bg-slate-700/60 overflow-hidden">
+      <span className="w-20 shrink-0 text-xs text-fg-muted font-mono truncate">{name}</span>
+      <div className="flex-1 h-2 rounded-full bg-surface-2 overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-500 ${color}`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className={`w-6 text-right text-xs font-bold ${depth === 0 ? 'text-emerald-400' : depth <= 5 ? 'text-teal-300' : depth <= 15 ? 'text-amber-300' : 'text-red-400'}`}>
+      <span className={`w-6 text-right text-xs font-bold ${depth === 0 ? 'text-success' : depth <= 5 ? 'text-fg-2' : depth <= 15 ? 'text-accent-text' : 'text-danger'}`}>
         {depth}
       </span>
     </div>
@@ -78,23 +78,23 @@ function QueueBar({ name, depth }) {
 const CIRCUIT_STATE = {
   closed: {
     label: 'CLOSED',
-    bg: 'bg-emerald-500/15 border-emerald-500/40',
-    text: 'text-emerald-300',
-    dot: 'bg-emerald-400',
+    bg: 'bg-success-soft border-success/40',
+    text: 'text-success',
+    dot: 'bg-success',
     Icon: CheckCircle2,
   },
   open: {
     label: 'OPEN',
-    bg: 'bg-red-500/15 border-red-500/40',
-    text: 'text-red-300',
-    dot: 'bg-red-400',
+    bg: 'bg-danger-soft border-danger/40',
+    text: 'text-danger',
+    dot: 'bg-danger',
     Icon: XCircle,
   },
   half: {
     label: 'HALF',
-    bg: 'bg-amber-500/15 border-amber-500/40',
-    text: 'text-amber-300',
-    dot: 'bg-amber-400',
+    bg: 'bg-accent-soft border-accent/40',
+    text: 'text-accent-text',
+    dot: 'bg-accent',
     Icon: AlertTriangle,
   },
 };
@@ -102,9 +102,9 @@ const CIRCUIT_STATE = {
 function CircuitBadge({ state }) {
   const cfg = CIRCUIT_STATE[state?.toLowerCase()] || {
     label: state?.toUpperCase() || '—',
-    bg: 'bg-slate-500/15 border-slate-500/40',
-    text: 'text-slate-300',
-    dot: 'bg-slate-400',
+    bg: 'bg-line-strong border-line-strong',
+    text: 'text-fg-2',
+    dot: 'bg-line-strong',
     Icon: Shield,
   };
   const { Icon } = cfg;
@@ -120,29 +120,29 @@ function CookieHealthRow({ platform, health }) {
   const { total = 0, available = 0, blocked_soft = 0, blocked_hard = 0 } = health || {};
   const availPct = total > 0 ? Math.round((available / total) * 100) : 0;
   const healthColor =
-    blocked_hard > 0 ? 'text-red-400' :
-    blocked_soft > 0 ? 'text-amber-400' :
-    'text-emerald-400';
+    blocked_hard > 0 ? 'text-danger' :
+    blocked_soft > 0 ? 'text-accent-text' :
+    'text-success';
 
   return (
-    <div className="flex items-center gap-3 py-1.5 border-b border-slate-700/40 last:border-0">
-      <span className="w-20 shrink-0 text-xs text-slate-300 font-medium capitalize truncate">{platform}</span>
+    <div className="flex items-center gap-3 py-1.5 border-b border-line last:border-0">
+      <span className="w-20 shrink-0 text-xs text-fg-2 font-medium capitalize truncate">{platform}</span>
       <div className="flex-1 flex items-center gap-2 flex-wrap">
         <span className={`text-xs font-bold ${healthColor}`}>{available}/{total} avail</span>
         {blocked_soft > 0 && (
-          <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-accent-soft text-accent-text border border-accent/30">
             soft {blocked_soft}
           </span>
         )}
         {blocked_hard > 0 && (
-          <span className="text-[11px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/30">
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-danger-soft text-danger border border-danger/30">
             hard {blocked_hard}
           </span>
         )}
       </div>
-      <div className="w-20 h-1.5 rounded-full bg-slate-700/60 overflow-hidden shrink-0">
+      <div className="w-20 h-1.5 rounded-full bg-surface-2 overflow-hidden shrink-0">
         <div
-          className={`h-full rounded-full transition-all duration-500 ${availPct >= 50 ? 'bg-emerald-500' : availPct > 0 ? 'bg-amber-400' : 'bg-red-500'}`}
+          className={`h-full rounded-full transition-all duration-500 ${availPct >= 50 ? 'bg-success' : availPct > 0 ? 'bg-accent' : 'bg-danger'}`}
           style={{ width: `${availPct}%` }}
         />
       </div>
@@ -152,13 +152,13 @@ function CookieHealthRow({ platform, health }) {
 
 function RecoveryLogRow({ entry }) {
   return (
-    <div className="flex items-start gap-3 py-2 border-b border-slate-700/30 last:border-0 text-xs">
-      <span className="shrink-0 font-mono text-slate-500 pt-0.5">{fmt(entry.ts)}</span>
-      <span className="px-1.5 py-0.5 rounded bg-teal-500/15 border border-teal-500/30 text-teal-300 font-mono shrink-0">
+    <div className="flex items-start gap-3 py-2 border-b border-line last:border-0 text-xs">
+      <span className="shrink-0 font-mono text-fg-muted pt-0.5">{fmt(entry.ts)}</span>
+      <span className="px-1.5 py-0.5 rounded bg-surface-2 border border-line text-fg-2 font-mono shrink-0">
         {entry.action || '—'}
       </span>
-      <span className="text-slate-400 font-mono truncate">{entry.job_id || ''}</span>
-      <span className="text-slate-500 truncate ml-auto pl-2">{entry.reason || ''}</span>
+      <span className="text-fg-muted font-mono truncate">{entry.job_id || ''}</span>
+      <span className="text-fg-muted truncate ml-auto pl-2">{entry.reason || ''}</span>
     </div>
   );
 }
@@ -206,8 +206,8 @@ export default function OpsPanel({ adminToken, adminFetch: adminFetchProp }) {
   // ── Loading ──
   if (loading && !data) {
     return (
-      <div className="flex items-center justify-center h-48 text-slate-400 gap-3">
-        <Loader2 className="w-5 h-5 animate-spin text-teal-400" />
+      <div className="flex items-center justify-center h-48 text-fg-muted gap-3">
+        <Loader2 className="w-5 h-5 animate-spin text-fg-2" />
         <span className="text-sm">Đang tải Ops Signals...</span>
       </div>
     );
@@ -216,12 +216,12 @@ export default function OpsPanel({ adminToken, adminFetch: adminFetchProp }) {
   // ── Error ──
   if (error && !data) {
     return (
-      <div className="flex flex-col items-center justify-center h-48 gap-3 text-slate-400">
-        <XCircle className="w-6 h-6 text-red-400" />
-        <p className="text-sm text-red-300">{error}</p>
+      <div className="flex flex-col items-center justify-center h-48 gap-3 text-fg-muted">
+        <XCircle className="w-6 h-6 text-danger" />
+        <p className="text-sm text-danger">{error}</p>
         <button
           onClick={fetchData}
-          className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg bg-slate-700/60 hover:bg-slate-700 border border-slate-600 text-slate-300 transition-colors cursor-pointer"
+          className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg bg-surface-2 hover:bg-line border border-line-strong text-fg-2 transition-colors cursor-pointer"
         >
           <RefreshCw className="w-3.5 h-3.5" /> Thử lại
         </button>
@@ -243,24 +243,24 @@ export default function OpsPanel({ adminToken, adminFetch: adminFetchProp }) {
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Activity className="w-5 h-5 text-teal-400" />
-          <h3 className="text-lg font-bold text-white">Ops Signals</h3>
-          {loading && <Loader2 className="w-4 h-4 animate-spin text-teal-400 ml-1" />}
+          <Activity className="w-5 h-5 text-fg-2" />
+          <h3 className="text-lg font-bold text-fg">Ops Signals</h3>
+          {loading && <Loader2 className="w-4 h-4 animate-spin text-fg-2 ml-1" />}
         </div>
         <div className="flex items-center gap-3">
           {lastRefresh && (
-            <span className="text-[11px] text-slate-500 font-mono">
+            <span className="text-[11px] text-fg-muted font-mono">
               {fmt(lastRefresh)}
             </span>
           )}
           {data?.generated_at && (
-            <span className="text-[11px] text-slate-600 hidden sm:block">
+            <span className="text-[11px] text-fg-muted hidden sm:block">
               signal {fmtFull(data.generated_at)}
             </span>
           )}
           <button
             onClick={() => { setLoading(true); fetchData(); }}
-            className="p-1.5 rounded-lg bg-slate-800/60 border border-slate-700/50 text-slate-400 hover:text-teal-400 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg bg-surface border border-line text-fg-muted hover:text-fg-2 transition-colors cursor-pointer"
             title="Làm mới"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -269,7 +269,7 @@ export default function OpsPanel({ adminToken, adminFetch: adminFetchProp }) {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-danger-soft border border-danger/30 text-danger text-xs">
           <AlertTriangle className="w-4 h-4 shrink-0" /> {error} — hiển thị dữ liệu cũ
         </div>
       )}
@@ -281,26 +281,26 @@ export default function OpsPanel({ adminToken, adminFetch: adminFetchProp }) {
           <MetricCard
             label="Stale Jobs"
             value={staleCount}
-            color={staleCount > 0 ? 'text-red-400' : 'text-emerald-400'}
-            bg={staleCount > 0 ? 'bg-red-500/10' : 'bg-emerald-500/10'}
+            color={staleCount > 0 ? 'text-danger' : 'text-success'}
+            bg={staleCount > 0 ? 'bg-danger-soft' : 'bg-success-soft'}
             icon={staleCount > 0 ? AlertTriangle : CheckCircle2}
           />
-          <MetricCard label="Succeeded" value={metrics.succeeded ?? '—'} color="text-emerald-400" icon={CheckCircle2} />
-          <MetricCard label="Failed" value={metrics.failed ?? '—'} color={metrics.failed > 0 ? 'text-red-400' : 'text-slate-400'} icon={XCircle} />
-          <MetricCard label="Retrying" value={metrics.retrying ?? '—'} color={metrics.retrying > 0 ? 'text-amber-400' : 'text-slate-400'} icon={RefreshCw} />
-          <MetricCard label="Workers" value={workerCount} color="text-teal-400" icon={Server} />
-          <MetricCard label="Quota Denials" value={quotaDenials} color={quotaDenials > 0 ? 'text-amber-400' : 'text-slate-400'} icon={Shield} />
+          <MetricCard label="Succeeded" value={metrics.succeeded ?? '—'} color="text-success" icon={CheckCircle2} />
+          <MetricCard label="Failed" value={metrics.failed ?? '—'} color={metrics.failed > 0 ? 'text-danger' : 'text-fg-muted'} icon={XCircle} />
+          <MetricCard label="Retrying" value={metrics.retrying ?? '—'} color={metrics.retrying > 0 ? 'text-warning' : 'text-fg-muted'} icon={RefreshCw} />
+          <MetricCard label="Workers" value={workerCount} color="text-fg-2" icon={Server} />
+          <MetricCard label="Quota Denials" value={quotaDenials} color={quotaDenials > 0 ? 'text-warning' : 'text-fg-muted'} icon={Shield} />
         </div>
       </div>
 
       {/* ── Row 2: Queue Depths + Circuit States ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Queue Depths */}
-        <div className="rounded-xl border border-slate-700/50 bg-[#0a1a17]/80 p-4">
+        <div className="rounded-xl border border-line bg-surface/80 p-4">
           <SectionTitle icon={Activity}>Queue Depths</SectionTitle>
           <div className="space-y-2.5">
             {Object.keys(queues).length === 0 ? (
-              <p className="text-xs text-slate-500">Không có dữ liệu queue</p>
+              <p className="text-xs text-fg-muted">Không có dữ liệu queue</p>
             ) : (
               Object.entries(queues).map(([name, depth]) => (
                 <QueueBar key={name} name={name} depth={depth} />
@@ -310,15 +310,15 @@ export default function OpsPanel({ adminToken, adminFetch: adminFetchProp }) {
         </div>
 
         {/* Circuit States */}
-        <div className="rounded-xl border border-slate-700/50 bg-[#0a1a17]/80 p-4">
+        <div className="rounded-xl border border-line bg-surface/80 p-4">
           <SectionTitle icon={Wifi}>Provider Circuit States</SectionTitle>
           <div className="space-y-2">
             {Object.keys(circuits).length === 0 ? (
-              <p className="text-xs text-slate-500">Không có dữ liệu circuit</p>
+              <p className="text-xs text-fg-muted">Không có dữ liệu circuit</p>
             ) : (
               Object.entries(circuits).map(([platform, state]) => (
-                <div key={platform} className="flex items-center justify-between py-1.5 border-b border-slate-700/30 last:border-0">
-                  <span className="text-sm text-slate-300 capitalize font-medium">{platform}</span>
+                <div key={platform} className="flex items-center justify-between py-1.5 border-b border-line last:border-0">
+                  <span className="text-sm text-fg-2 capitalize font-medium">{platform}</span>
                   <CircuitBadge state={state} />
                 </div>
               ))
@@ -328,10 +328,10 @@ export default function OpsPanel({ adminToken, adminFetch: adminFetchProp }) {
       </div>
 
       {/* ── Row 3: Cookie Pool Health ── */}
-      <div className="rounded-xl border border-slate-700/50 bg-[#0a1a17]/80 p-4">
+      <div className="rounded-xl border border-line bg-surface/80 p-4">
         <SectionTitle icon={WifiOff}>Cookie Pool Health</SectionTitle>
         {Object.keys(cookies).length === 0 ? (
-          <p className="text-xs text-slate-500">Không có dữ liệu cookie pool</p>
+          <p className="text-xs text-fg-muted">Không có dữ liệu cookie pool</p>
         ) : (
           <div>
             {Object.entries(cookies).map(([platform, health]) => (
@@ -342,10 +342,10 @@ export default function OpsPanel({ adminToken, adminFetch: adminFetchProp }) {
       </div>
 
       {/* ── Row 4: Recovery Log ── */}
-      <div className="rounded-xl border border-slate-700/50 bg-[#0a1a17]/80 p-4">
+      <div className="rounded-xl border border-line bg-surface/80 p-4">
         <SectionTitle icon={RefreshCw}>Recovery Log (10 gần nhất)</SectionTitle>
         {recoveryLog.length === 0 ? (
-          <p className="text-xs text-slate-500">Chưa có recovery actions</p>
+          <p className="text-xs text-fg-muted">Chưa có recovery actions</p>
         ) : (
           <div className="overflow-x-auto">
             {recoveryLog.slice(0, 10).map((entry, i) => (

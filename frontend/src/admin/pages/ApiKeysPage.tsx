@@ -70,8 +70,8 @@ function CopyButton({ text }: { text: string }) {
       className={cn(
         'ml-1 rounded px-1 py-0.5 font-mono text-[9px] transition-colors',
         copied
-          ? 'bg-emerald-900/60 text-emerald-300'
-          : 'bg-slate-800 text-slate-500 hover:bg-slate-700 hover:text-slate-300',
+          ? 'bg-success-soft text-success'
+          : 'bg-surface text-fg-muted hover:bg-surface-2 hover:text-fg-2',
       )}
     >
       {copied ? 'Copied!' : 'Copy'}
@@ -80,11 +80,11 @@ function CopyButton({ text }: { text: string }) {
 }
 
 const SCOPE_COLORS: Record<string, string> = {
-  read: 'bg-blue-900/60 text-blue-300',
-  write: 'bg-emerald-900/60 text-emerald-300',
-  batch: 'bg-purple-900/60 text-purple-300',
-  webhook: 'bg-amber-900/60 text-amber-300',
-  admin: 'bg-red-900/60 text-red-300',
+  read: 'bg-surface-2 text-fg-2',
+  write: 'bg-success-soft text-success',
+  batch: 'bg-surface-2 text-fg-2',
+  webhook: 'bg-accent-soft text-accent-text',
+  admin: 'bg-danger-soft text-danger',
 }
 
 export default function ApiKeysPage() {
@@ -138,10 +138,10 @@ export default function ApiKeysPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-mono text-lg font-bold text-slate-100">Partner API Keys</h1>
-          <p className="mt-0.5 text-xs text-slate-500">vgp_ prefixed keys for tenant partner access</p>
+          <h1 className="font-mono text-lg font-bold text-fg">Partner API Keys</h1>
+          <p className="mt-0.5 text-xs text-fg-muted">vgp_ prefixed keys for tenant partner access</p>
         </div>
-        <button onClick={fetchData} className="rounded bg-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-600">
+        <button onClick={fetchData} className="rounded bg-surface-2 px-3 py-1.5 text-xs text-fg-2 hover:bg-line">
           ↺ Refresh
         </button>
       </div>
@@ -155,9 +155,9 @@ export default function ApiKeysPage() {
             { label: 'Req Today', value: data.total_requests_today.toLocaleString() },
             { label: 'Req Month', value: data.total_requests_month.toLocaleString() },
           ].map(c => (
-            <div key={c.label} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-              <p className="font-mono text-xs text-slate-500">{c.label}</p>
-              <p className="mt-1 font-mono text-2xl font-bold text-slate-100">{c.value}</p>
+            <div key={c.label} className="rounded-lg border border-line bg-canvas p-4">
+              <p className="font-mono text-xs text-fg-muted">{c.label}</p>
+              <p className="mt-1 font-mono text-2xl font-bold text-fg">{c.value}</p>
             </div>
           ))}
         </div>
@@ -170,53 +170,53 @@ export default function ApiKeysPage() {
           placeholder="Search key, label, tenant…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 placeholder-slate-600 w-52"
+          className="rounded border border-line bg-surface px-3 py-1.5 text-xs text-fg-2 placeholder:text-fg-muted w-52"
         />
-        <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer">
+        <label className="flex items-center gap-1.5 text-xs text-fg-muted cursor-pointer">
           <input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)} />
           Active only
         </label>
       </div>
 
       {error && (
-        <div className="rounded border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-300">{error}</div>
+        <div className="rounded border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">{error}</div>
       )}
 
       {loading ? (
-        <div className="py-12 text-center font-mono text-xs text-slate-600">Loading API keys…</div>
+        <div className="py-12 text-center font-mono text-xs text-fg-muted">Loading API keys…</div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-800">
+        <div className="overflow-x-auto rounded-lg border border-line">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-900">
+              <tr className="border-b border-line bg-canvas">
                 {['Key', 'Tenant', 'Scopes', 'IP Allowlist', 'Created By', 'Requests', 'Rate Limits', 'Last Used', 'Expires', 'Status'].map(h => (
-                  <th key={h} className="px-3 py-2.5 font-mono font-semibold text-slate-500">{h}</th>
+                  <th key={h} className="px-3 py-2.5 font-mono font-semibold text-fg-muted">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {keys.map(k => (
-                <tr key={k.id} className="border-b border-slate-800/50 hover:bg-slate-800/30">
+                <tr key={k.id} className="border-b border-line hover:bg-surface-2">
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-0.5">
-                      <p className="font-mono font-medium text-slate-200">{k.key_prefix}…</p>
+                      <p className="font-mono font-medium text-fg-2">{k.key_prefix}…</p>
                       <CopyButton text={k.key_prefix} />
                     </div>
-                    <p className="text-[10px] text-slate-600">{k.label}</p>
+                    <p className="text-[10px] text-fg-muted">{k.label}</p>
                   </td>
                   <td className="px-3 py-2.5">
-                    <p className="text-slate-300">{k.tenants?.name ?? '—'}</p>
+                    <p className="text-fg-2">{k.tenants?.name ?? '—'}</p>
                     <span className={cn('inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase mt-0.5',
-                      k.tenants?.plan === 'enterprise' ? 'bg-purple-700 text-purple-100'
-                      : k.tenants?.plan === 'growth' ? 'bg-blue-700 text-blue-100'
-                      : 'bg-slate-700 text-slate-200')}>
+                      k.tenants?.plan === 'enterprise' ? 'bg-accent-hover text-fg-2'
+                      : k.tenants?.plan === 'growth' ? 'bg-accent-hover text-fg-2'
+                      : 'bg-surface-2 text-fg-2')}>
                       {k.tenants?.plan ?? '—'}
                     </span>
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex flex-wrap gap-1">
                       {(k.scopes ?? []).map(s => (
-                        <span key={s} className={cn('rounded px-1.5 py-0.5 text-[10px] font-semibold', SCOPE_COLORS[s] ?? 'bg-slate-700 text-slate-300')}>
+                        <span key={s} className={cn('rounded px-1.5 py-0.5 text-[10px] font-semibold', SCOPE_COLORS[s] ?? 'bg-surface-2 text-fg-2')}>
                           {s}
                         </span>
                       ))}
@@ -225,11 +225,11 @@ export default function ApiKeysPage() {
                   {/* IP Allowlist */}
                   <td className="px-3 py-2.5">
                     {(!k.ip_allowlist || k.ip_allowlist.length === 0) ? (
-                      <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] text-slate-500">Any</span>
+                      <span className="rounded bg-surface px-1.5 py-0.5 font-mono text-[10px] text-fg-muted">Any</span>
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {k.ip_allowlist.map(ip => (
-                          <span key={ip} className="rounded bg-blue-900/40 px-1.5 py-0.5 font-mono text-[10px] text-blue-300">
+                          <span key={ip} className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-fg-2">
                             {ip}
                           </span>
                         ))}
@@ -237,23 +237,23 @@ export default function ApiKeysPage() {
                     )}
                   </td>
                   {/* Created By */}
-                  <td className="px-3 py-2.5 font-mono text-[11px] text-slate-500">
+                  <td className="px-3 py-2.5 font-mono text-[11px] text-fg-muted">
                     {k.created_by
                       ? <span title={k.created_by}>{k.created_by.slice(0, 8)}…</span>
-                      : <span className="text-slate-700">—</span>
+                      : <span className="text-fg-muted">—</span>
                     }
                   </td>
-                  <td className="px-3 py-2.5 font-mono text-slate-400">
+                  <td className="px-3 py-2.5 font-mono text-fg-muted">
                     <div>Today: {k.requests_today.toLocaleString()}</div>
-                    <div className="text-slate-600">Month: {k.requests_this_month.toLocaleString()}</div>
-                    <div className="text-slate-700">Total: {k.requests_total.toLocaleString()}</div>
+                    <div className="text-fg-muted">Month: {k.requests_this_month.toLocaleString()}</div>
+                    <div className="text-fg-muted">Total: {k.requests_total.toLocaleString()}</div>
                   </td>
-                  <td className="px-3 py-2.5 font-mono text-slate-500">
+                  <td className="px-3 py-2.5 font-mono text-fg-muted">
                     <div>{k.rate_limit_per_min}/min</div>
                     <div>{k.rate_limit_per_day.toLocaleString()}/day</div>
                   </td>
-                  <td className="px-3 py-2.5 font-mono text-slate-500">{formatRelative(k.last_used_at)}</td>
-                  <td className="px-3 py-2.5 font-mono text-slate-500">{formatDate(k.expires_at)}</td>
+                  <td className="px-3 py-2.5 font-mono text-fg-muted">{formatRelative(k.last_used_at)}</td>
+                  <td className="px-3 py-2.5 font-mono text-fg-muted">{formatDate(k.expires_at)}</td>
                   <td className="px-3 py-2.5">
                     <button
                       disabled={toggling[k.id]}
@@ -261,21 +261,21 @@ export default function ApiKeysPage() {
                       className={cn(
                         'rounded px-2 py-1 text-[10px] font-semibold transition-colors disabled:opacity-40',
                         k.is_active
-                          ? 'bg-red-900/40 text-red-300 hover:bg-red-800/40'
-                          : 'bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/40',
+                          ? 'bg-danger-soft text-danger hover:bg-danger/20'
+                          : 'bg-success-soft text-success hover:bg-success/20',
                       )}
                     >
                       {toggling[k.id] ? '…' : k.is_active ? 'Deactivate' : 'Activate'}
                     </button>
                     {msg[k.id] && (
-                      <p className="mt-1 font-mono text-[10px] text-emerald-400">{msg[k.id]}</p>
+                      <p className="mt-1 font-mono text-[10px] text-success">{msg[k.id]}</p>
                     )}
                   </td>
                 </tr>
               ))}
               {keys.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center font-mono text-xs text-slate-600">
+                  <td colSpan={10} className="py-10 text-center font-mono text-xs text-fg-muted">
                     No API keys found
                   </td>
                 </tr>

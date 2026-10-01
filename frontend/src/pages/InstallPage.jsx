@@ -67,57 +67,57 @@ export default function InstallPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#012622] text-white">
+    <div className="min-h-screen bg-canvas text-fg">
       <div className="max-w-2xl mx-auto px-4 py-8 sm:py-12">
 
         {/* Hero */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-medium px-3 py-1 rounded-full mb-4">
+          <div className="inline-flex items-center gap-2 bg-surface-2 border border-line text-fg-2 text-xs font-medium px-3 py-1 rounded-full mb-4">
             <Zap className="w-3 h-3" />
             Chrome Extension {EXT_VERSION}
           </div>
           <h1 className="text-3xl sm:text-4xl font-bold mb-3">Tải video 1 chạm</h1>
-          <p className="text-white/50 text-base max-w-md mx-auto">
+          <p className="text-fg-muted text-base max-w-md mx-auto">
             Right-click bất kỳ link video → Download ngay. Không cần copy, không cần chuyển tab.
           </p>
         </div>
 
         {/* Two paths */}
         <div className="grid grid-cols-2 gap-3 mb-8">
-          <div className="bg-white/5 border border-white/10 rounded-xl p-4 opacity-50">
+          <div className="bg-surface-2 border border-line rounded-xl p-4 opacity-50">
             <div className="flex items-center gap-2 mb-2">
-              <Chrome className="w-5 h-5 text-white/40" />
-              <span className="text-sm font-semibold text-white/60">Chrome Web Store</span>
+              <Chrome className="w-5 h-5 text-fg-muted" />
+              <span className="text-sm font-semibold text-fg-2">Chrome Web Store</span>
             </div>
-            <span className="text-[11px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-2 py-0.5 rounded-full">Đang xét duyệt</span>
-            <p className="text-xs text-white/30 mt-2 leading-relaxed">Sẽ ra mắt sớm — cài 1 click, tự cập nhật.</p>
+            <span className="text-[11px] bg-accent-soft text-accent-text border border-accent/30 px-2 py-0.5 rounded-full">Đang xét duyệt</span>
+            <p className="text-xs text-fg-muted mt-2 leading-relaxed">Sẽ ra mắt sớm — cài 1 click, tự cập nhật.</p>
           </div>
-          <div className="bg-indigo-600/10 border border-indigo-500/40 rounded-xl p-4">
+          <div className="bg-surface-2 border border-line rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
-              <Download className="w-5 h-5 text-indigo-400" />
-              <span className="text-sm font-semibold text-white">Cài thủ công</span>
+              <Download className="w-5 h-5 text-fg-2" />
+              <span className="text-sm font-semibold text-fg">Cài thủ công</span>
             </div>
-            <span className="text-[11px] bg-green-500/20 text-green-400 border border-green-500/30 px-2 py-0.5 rounded-full">Có ngay</span>
-            <p className="text-xs text-white/50 mt-2 leading-relaxed">6 bước đơn giản, không cần tài khoản.</p>
+            <span className="text-[11px] bg-success-soft text-success border border-success/30 px-2 py-0.5 rounded-full">Có ngay</span>
+            <p className="text-xs text-fg-muted mt-2 leading-relaxed">6 bước đơn giản, không cần tài khoản.</p>
           </div>
         </div>
 
         {/* Steps */}
         <div className="mb-8">
-          <h2 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-4">Hướng dẫn cài đặt</h2>
+          <h2 className="text-sm font-semibold text-fg-2 uppercase tracking-wider mb-4">Hướng dẫn cài đặt</h2>
           <div className="space-y-4">
             {STEPS.map((step) => (
               <div key={step.n} className="flex gap-4 items-start">
-                <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5">
+                <div className="w-7 h-7 rounded-full bg-accent flex items-center justify-center text-xs font-bold text-accent-fg flex-shrink-0 mt-0.5">
                   {step.n}
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-white">{step.title}</p>
-                  <p className="text-xs text-white/40 mt-0.5 leading-relaxed">{step.desc}</p>
+                  <p className="text-sm font-semibold text-fg">{step.title}</p>
+                  <p className="text-xs text-fg-muted mt-0.5 leading-relaxed">{step.desc}</p>
                   {step.hasBtn && (
                     <button
                       onClick={handleDownload}
-                      className="mt-2.5 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
+                      className="mt-2.5 flex items-center gap-2 bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
                     >
                       <Download className="w-3.5 h-3.5" />
                       {downloading ? 'Đang tải...' : `Tải VidGrab-extension.zip (${EXT_VERSION})`}
@@ -130,10 +130,10 @@ export default function InstallPage() {
         </div>
 
         {/* Permissions */}
-        <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-8">
+        <div className="bg-surface-2 border border-line rounded-xl p-4 mb-8">
           <div className="flex items-center gap-2 mb-3">
-            <Shield className="w-4 h-4 text-green-400" />
-            <span className="text-sm font-semibold text-white">Quyền truy cập an toàn</span>
+            <Shield className="w-4 h-4 text-success" />
+            <span className="text-sm font-semibold text-fg">Quyền truy cập an toàn</span>
           </div>
           <div className="space-y-2">
             {[
@@ -142,9 +142,9 @@ export default function InstallPage() {
               { p: 'scripting', d: 'Phát hiện link video trên trang bạn đang xem' },
             ].map(({ p, d }) => (
               <div key={p} className="flex items-start gap-2">
-                <CheckCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0 mt-0.5" />
-                <span className="text-xs text-white/60">
-                  <strong className="text-white/80">{p}</strong> — {d}
+                <CheckCircle className="w-3.5 h-3.5 text-success flex-shrink-0 mt-0.5" />
+                <span className="text-xs text-fg-2">
+                  <strong className="text-fg-2">{p}</strong> — {d}
                 </span>
               </div>
             ))}
@@ -154,14 +154,14 @@ export default function InstallPage() {
         {/* Changelog */}
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-3">
-            <RefreshCw className="w-3.5 h-3.5 text-white/30" />
-            <span className="text-xs font-semibold text-white/40 uppercase tracking-wider">Lịch sử cập nhật</span>
+            <RefreshCw className="w-3.5 h-3.5 text-fg-muted" />
+            <span className="text-xs font-semibold text-fg-muted uppercase tracking-wider">Lịch sử cập nhật</span>
           </div>
           <div className="space-y-2">
             {CHANGELOG.map(({ v, notes }) => (
               <div key={v} className="flex gap-3 items-start">
-                <span className="text-xs font-mono bg-white/10 text-white/60 px-2 py-0.5 rounded flex-shrink-0">{v}</span>
-                <span className="text-xs text-white/40 leading-relaxed">{notes}</span>
+                <span className="text-xs font-mono bg-surface-2 text-fg-2 px-2 py-0.5 rounded flex-shrink-0">{v}</span>
+                <span className="text-xs text-fg-muted leading-relaxed">{notes}</span>
               </div>
             ))}
           </div>
@@ -169,21 +169,21 @@ export default function InstallPage() {
 
         {/* FAQ */}
         <div className="mb-10">
-          <h2 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-3">Câu hỏi thường gặp</h2>
+          <h2 className="text-sm font-semibold text-fg-2 uppercase tracking-wider mb-3">Câu hỏi thường gặp</h2>
           <div className="space-y-2">
             {FAQ.map((item, i) => (
-              <div key={i} className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+              <div key={i} className="bg-surface-2 border border-line rounded-xl overflow-hidden">
                 <button
                   className="w-full flex items-center justify-between px-4 py-3 text-left"
                   onClick={() => setOpenFaq(openFaq === i ? null : i)}
                 >
-                  <span className="text-sm font-medium text-white/80 pr-4">{item.q}</span>
+                  <span className="text-sm font-medium text-fg-2 pr-4">{item.q}</span>
                   {openFaq === i
-                    ? <ChevronUp className="w-4 h-4 text-white/30 flex-shrink-0" />
-                    : <ChevronDown className="w-4 h-4 text-white/30 flex-shrink-0" />}
+                    ? <ChevronUp className="w-4 h-4 text-fg-muted flex-shrink-0" />
+                    : <ChevronDown className="w-4 h-4 text-fg-muted flex-shrink-0" />}
                 </button>
                 {openFaq === i && (
-                  <div className="px-4 pb-3 text-xs text-white/50 leading-relaxed border-t border-white/5 pt-2">
+                  <div className="px-4 pb-3 text-xs text-fg-muted leading-relaxed border-t border-line pt-2">
                     {item.a}
                   </div>
                 )}
@@ -193,11 +193,11 @@ export default function InstallPage() {
         </div>
 
         {/* Bottom CTA */}
-        <div className="text-center border-t border-white/10 pt-6">
-          <p className="text-sm text-white/40 mb-3">Muốn dùng ngay mà không cần cài đặt?</p>
+        <div className="text-center border-t border-line pt-6">
+          <p className="text-sm text-fg-muted mb-3">Muốn dùng ngay mà không cần cài đặt?</p>
           <button
             onClick={() => navigate('/')}
-            className="inline-flex items-center gap-2 text-sm text-indigo-400 hover:text-indigo-300 transition-colors font-medium"
+            className="inline-flex items-center gap-2 text-sm text-fg-2 hover:text-fg-2 transition-colors font-medium"
           >
             Thử web app ngay <ChevronRight className="w-4 h-4" />
           </button>

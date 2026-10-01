@@ -84,19 +84,19 @@ function encodeUserCookies(text) {
 
 // ── Toast ───────────────────────────────────────────────────
 const Toast = ({ message, show }) => (
-  <div className={`fixed top-20 left-1/2 -translate-x-1/2 px-5 py-3 rounded-full shadow-xl bg-slate-800 text-white font-medium text-sm flex items-center gap-2 transition-all duration-300 z-[60] ${show ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0 pointer-events-none'}`}>
-    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+  <div className={`fixed top-20 left-1/2 -translate-x-1/2 px-5 py-3 rounded-full shadow-xl bg-surface text-fg font-medium text-sm flex items-center gap-2 transition-all duration-300 z-[60] ${show ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0 pointer-events-none'}`}>
+    <CheckCircle2 className="w-5 h-5 text-success" />
     {message}
   </div>
 );
 
 // ── Resolution Badge ────────────────────────────────────────
 const ResBadge = ({ label, height }) => {
-  let colors = 'bg-slate-700 text-slate-300';
-  if (height >= 2160) colors = 'bg-gradient-to-r from-[#FBBF24] to-[#F59E0B] text-[#012622]';
-  else if (height >= 1440) colors = 'bg-gradient-to-r from-[#a78bfa] to-[#7c3aed] text-white';
-  else if (height >= 1080) colors = 'bg-gradient-to-r from-[#10b981] to-[#059669] text-white';
-  else if (height >= 720) colors = 'bg-[#0ea5e9] text-white';
+  let colors = 'bg-surface-2 text-fg-2';
+  if (height >= 2160) colors = 'bg-accent text-accent-fg';
+  else if (height >= 1440) colors = 'bg-accent text-accent-fg';
+  else if (height >= 1080) colors = 'bg-success text-accent-fg';
+  else if (height >= 720) colors = 'bg-accent text-fg';
   return (
     <span className={`px-2.5 py-0.5 rounded-lg text-xs font-black tracking-wide ${colors}`}>
       {label}
@@ -1609,10 +1609,10 @@ export default function DashboardContent() {
 
       {/* ── Input Area ──────────────────────────────────── */}
       <div className="relative group w-full max-w-3xl mb-10">
-        <div className="absolute -inset-1 bg-gradient-to-r from-[#FDE047]/10 to-[#4ADE80]/10 rounded-[2rem] md:rounded-full blur-md opacity-0 group-hover:opacity-40 transition duration-500" />
-        <div className="relative bg-white flex flex-col md:flex-row items-center p-2.5 rounded-3xl md:rounded-full shadow-2xl shadow-[#FDE047]/10 border border-slate-100/80">
+        <div className="absolute -inset-1 bg-surface-2 rounded-[2rem] md:rounded-full blur-md opacity-0 group-hover:opacity-40 transition duration-500" />
+        <div className="relative bg-surface flex flex-col md:flex-row items-center p-2.5 rounded-3xl md:rounded-full shadow-2xl border border-line">
           <div className="flex-1 flex items-center gap-3 w-full px-5 md:px-6">
-            <Link2 className="w-6 h-6 text-slate-600 flex-shrink-0" />
+            <Link2 className="w-6 h-6 text-fg-muted flex-shrink-0" />
             <input
               type="text"
               value={url}
@@ -1627,7 +1627,7 @@ export default function DashboardContent() {
               placeholder="Dán liên kết video hoặc kênh…"
               aria-label="Liên kết video hoặc kênh"
               disabled={isLoading}
-              className="w-full bg-transparent text-slate-900 placeholder-slate-500 text-sm sm:text-base md:text-lg font-semibold focus:outline-none disabled:opacity-50 h-14"
+              className="w-full bg-transparent text-fg placeholder:text-fg-muted text-sm sm:text-base md:text-lg font-semibold focus:outline-none disabled:opacity-50 h-14"
             />
             {navigator.clipboard && (
               <button
@@ -1639,7 +1639,7 @@ export default function DashboardContent() {
                     console.error("Failed to read clipboard contents: ", err);
                   }
                 }}
-                className="p-2 text-slate-400 hover:text-orange-500 transition-colors"
+                className="p-2 text-fg-muted hover:text-accent-text transition-colors"
                 title="Dán từ bộ nhớ tạm"
               >
                 <ClipboardPaste className="w-5 h-5" />
@@ -1649,9 +1649,9 @@ export default function DashboardContent() {
           <button
             onClick={handleFetchLink}
             disabled={isLoading || !url.trim()}
-            className="w-full md:w-auto mt-3 md:mt-0 h-14 md:h-16 px-6 sm:px-10 rounded-2xl md:rounded-full bg-gradient-to-r from-[#FB923C] to-[#FBBF24] hover:from-[#F97316] hover:to-[#F59E0B] text-[#012622] font-black shadow-lg shadow-[#FBBF24]/20 active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 whitespace-nowrap text-base md:text-lg uppercase tracking-wider drop-shadow-md"
+            className="w-full md:w-auto mt-3 md:mt-0 h-14 md:h-16 px-6 sm:px-10 rounded-2xl md:rounded-full bg-accent text-accent-fg font-black shadow-lg active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 whitespace-nowrap text-base md:text-lg uppercase tracking-wider drop-shadow-md"
           >
-            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-6 h-6 fill-[#012622]" />}
+            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-6 h-6 fill-accent-fg" />}
             <span>{isLoading ? 'ĐANG XỬ LÝ...' : 'BÓC TÁCH NGAY'}</span>
           </button>
         </div>
@@ -1663,8 +1663,8 @@ export default function DashboardContent() {
             onClick={() => { setShowSchedulePicker(v => !v); if (showSchedulePicker) setScheduledAt(''); }}
             className={`self-start flex items-center gap-1.5 text-xs font-semibold rounded-full px-3.5 py-1.5 transition-all border ${
               showSchedulePicker || scheduledAt
-                ? 'bg-amber-500/20 text-amber-300 border-amber-400/50 shadow-sm shadow-amber-500/10'
-                : 'bg-slate-700/50 text-slate-300 border-slate-600/50 hover:bg-slate-600/60 hover:text-white hover:border-slate-500/60'
+                ? 'bg-accent-soft text-accent-text border-accent/50 shadow-sm'
+                : 'bg-surface-2 text-fg-2 border-line-strong hover:bg-line hover:text-fg hover:border-line-strong'
             }`}
           >
             <CalendarClock className="w-3.5 h-3.5" />
@@ -1673,17 +1673,17 @@ export default function DashboardContent() {
               : 'Lên lịch tải'}
           </button>
           {showSchedulePicker && (
-            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-              <CalendarClock className="w-4 h-4 text-amber-500 flex-shrink-0" />
+            <div className="flex items-center gap-2 bg-accent-soft border border-accent rounded-xl px-3 py-2">
+              <CalendarClock className="w-4 h-4 text-accent-text flex-shrink-0" />
               <input
                 type="datetime-local"
                 value={scheduledAt}
                 min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
                 onChange={e => setScheduledAt(e.target.value)}
-                className="text-xs bg-transparent text-amber-800 focus:outline-none flex-1"
+                className="text-xs bg-transparent text-accent-text focus:outline-none flex-1"
               />
               {scheduledAt && (
-                <button onClick={() => setScheduledAt('')} className="text-amber-400 hover:text-amber-600">
+                <button onClick={() => setScheduledAt('')} className="text-accent-text hover:text-accent-text">
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
@@ -1698,26 +1698,26 @@ export default function DashboardContent() {
         )}
 
         {hasSuggestion && !url && clipboardURL && (
-          <div className="mt-2 flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/30 rounded-lg px-3 py-2">
-            <span className="text-xs text-indigo-300 flex-1 truncate min-w-0">
+          <div className="mt-2 flex items-center gap-2 bg-surface-2 border border-line rounded-lg px-3 py-2">
+            <span className="text-xs text-fg-2 flex-1 truncate min-w-0">
               Dán: {(() => { try { return new URL(clipboardURL).hostname; } catch { return clipboardURL; } })()}...
             </span>
             <button
               onClick={() => { setUrl(clipboardURL); clearSuggestion(); }}
-              className="text-xs bg-indigo-600 text-white px-2.5 py-1 rounded-lg font-semibold flex-shrink-0"
+              className="text-xs bg-accent text-accent-fg px-2.5 py-1 rounded-lg font-semibold flex-shrink-0"
             >
               Dán
             </button>
-            <button onClick={clearSuggestion} className="text-white/30 hover:text-white/50 text-xs flex-shrink-0">✕</button>
+            <button onClick={clearSuggestion} className="text-fg-muted hover:text-fg-muted text-xs flex-shrink-0">✕</button>
           </div>
         )}
       </div>
 
       {/* ── Extracting Phase Panel ──────────────────────── */}
       {isLoading && !downloadProgress && (
-        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-slate-800/60 border border-slate-700/50 animate-in fade-in slide-in-from-top-2 duration-300">
-          <Loader2 className="w-4 h-4 text-[#FBBF24] animate-spin flex-shrink-0" />
-          <p className="flex-1 text-sm font-semibold text-slate-200">
+        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-surface border border-line animate-in fade-in slide-in-from-top-2 duration-300">
+          <Loader2 className="w-4 h-4 text-accent-text animate-spin flex-shrink-0" />
+          <p className="flex-1 text-sm font-semibold text-fg-2">
             {isSpotifyArtist(url) ? 'Đang tải thông tin nghệ sĩ Spotify...' :
              isSpotifyPlaylistOrAlbum(url) ? 'Đang tải danh sách Spotify...' :
              isSpotifyTrack(url) ? 'Đang tìm và trích xuất bài nhạc...' :
@@ -1726,29 +1726,29 @@ export default function DashboardContent() {
              'Đang phân tích liên kết và trích xuất...'}
           </p>
           {loadElapsed > 0 && (
-            <span className="text-xs text-slate-500 font-mono tabular-nums flex-shrink-0">{loadElapsed}s</span>
+            <span className="text-xs text-fg-muted font-mono tabular-nums flex-shrink-0">{loadElapsed}s</span>
           )}
         </div>
       )}
 
       {/* ── Download Progress Bar ────────────────────────── */}
       {isLoading && downloadProgress && downloadProgress.status === 'downloading' && (
-        <div className="w-full max-w-3xl mb-4 px-5 py-4 rounded-2xl bg-slate-800/80 border border-slate-700/60 animate-in fade-in slide-in-from-top-2 duration-300">
+        <div className="w-full max-w-3xl mb-4 px-5 py-4 rounded-2xl bg-surface border border-line animate-in fade-in slide-in-from-top-2 duration-300">
           <div className="flex items-center justify-between mb-2 text-sm font-semibold">
-            <span className="text-slate-200">
+            <span className="text-fg-2">
               {isWatermarkPlatform(url) ? 'Đang tải bản sạch TikTok / Douyin...' :
                url.includes('spotify') ? 'Đang xử lý nhạc Spotify...' :
                'Đang tải video...'}
             </span>
-            <span className="text-[#FBBF24] tabular-nums">{downloadProgress.percent}%</span>
+            <span className="text-accent-text tabular-nums">{downloadProgress.percent}%</span>
           </div>
-          <div className="w-full h-2.5 bg-slate-700 rounded-full overflow-hidden">
+          <div className="w-full h-2.5 bg-surface-2 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-[#FB923C] to-[#FBBF24] rounded-full transition-all duration-500"
+              className="h-full bg-accent rounded-full transition-all duration-500"
               style={{ width: `${downloadProgress.percent}%` }}
             />
           </div>
-          <div className="flex items-center justify-between mt-2 text-xs text-slate-400 tabular-nums">
+          <div className="flex items-center justify-between mt-2 text-xs text-fg-muted tabular-nums">
             <span>
               {downloadProgress.speed_kbps >= 1024
                 ? `${(downloadProgress.speed_kbps / 1024).toFixed(1)} MB/s`
@@ -1766,32 +1766,32 @@ export default function DashboardContent() {
 
       {/* ── Spotify Track Hint ───────────────────────────── */}
       {isSpotifyTrack(url) && (
-        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
+        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-2xl bg-success-soft border border-success/25 text-success text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
           <Music className="w-4 h-4 flex-shrink-0" />
           <span>
             Nhạc Spotify đơn — sẽ tự động tìm trên YouTube và tải dạng{' '}
-            <strong className="text-emerald-300">MP3 128kbps</strong>.
-            Nhấn <strong className="text-emerald-300">BÓC TÁCH NGAY</strong> để bắt đầu.
+            <strong className="text-success">MP3 128kbps</strong>.
+            Nhấn <strong className="text-success">BÓC TÁCH NGAY</strong> để bắt đầu.
           </span>
         </div>
       )}
 
       {isSpotifyPlaylistOrAlbum(url) && (
-        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
+        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-2xl bg-success-soft border border-success/25 text-success text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
           <Music className="w-4 h-4 flex-shrink-0" />
           <span>
             Playlist / Album Spotify — sẽ hiển thị danh sách bài nhạc để tải từng bài hoặc tải tất cả dạng{' '}
-            <strong className="text-emerald-300">ZIP MP3</strong>.
+            <strong className="text-success">ZIP MP3</strong>.
           </span>
         </div>
       )}
 
       {/* ── TikTok / Douyin watermark hint ─────────────── */}
       {isWatermarkPlatform(url) && (
-        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
-          <Sparkles className="w-4 h-4 flex-shrink-0 text-emerald-400" />
+        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-2xl bg-success-soft border border-success/25 text-success text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
+          <Sparkles className="w-4 h-4 flex-shrink-0 text-success" />
           <span>
-            <strong className="text-emerald-300">TikTok / Douyin</strong> — {removeWatermark ? 'Tùy chọn bỏ watermark đang bật — sẽ tải bản sạch không logo.' : 'Bật tùy chọn bên dưới để tải bản không watermark / logo.'}
+            <strong className="text-success">TikTok / Douyin</strong> — {removeWatermark ? 'Tùy chọn bỏ watermark đang bật — sẽ tải bản sạch không logo.' : 'Bật tùy chọn bên dưới để tải bản không watermark / logo.'}
           </span>
         </div>
       )}
@@ -1804,12 +1804,12 @@ export default function DashboardContent() {
               type="checkbox"
               checked={removeWatermark}
               onChange={e => setRemoveWatermark(e.target.checked)}
-              className="w-4 h-4 accent-emerald-500 rounded"
+              className="w-4 h-4 accent-accent rounded"
             />
-            <span className="font-semibold text-emerald-300 group-hover:text-emerald-200 transition-colors">
+            <span className="font-semibold text-success group-hover:text-success transition-colors">
               Xoá watermark / logo
             </span>
-            <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/25 leading-tight">
+            <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-success-soft text-success font-bold border border-success/25 leading-tight">
               ✓ Hỗ trợ
             </span>
           </label>
@@ -1821,18 +1821,18 @@ export default function DashboardContent() {
               disabled
               className="w-4 h-4 rounded"
             />
-            <span className="font-medium text-slate-400 line-through">Xoá watermark / logo</span>
-            <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-slate-700/50 text-slate-500 font-medium border border-slate-600/30 leading-tight">
+            <span className="font-medium text-fg-muted line-through">Xoá watermark / logo</span>
+            <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-surface-2 text-fg-muted font-medium border border-line-strong leading-tight">
               Chỉ TikTok / Douyin
             </span>
           </label>
         ) : (
-          <label className="flex items-center gap-2 cursor-pointer hover:text-white transition-colors text-slate-300">
+          <label className="flex items-center gap-2 cursor-pointer hover:text-fg transition-colors text-fg-2">
             <input
               type="checkbox"
               checked={removeWatermark}
               onChange={e => setRemoveWatermark(e.target.checked)}
-              className="w-4 h-4 accent-emerald-500 bg-slate-800 border-slate-600 rounded"
+              className="w-4 h-4 accent-accent bg-surface border-line-strong rounded"
             />
             <span className="font-medium">Xoá logo (TikTok / Douyin)</span>
           </label>
@@ -1840,11 +1840,11 @@ export default function DashboardContent() {
 
         <div className="mt-2 flex flex-col gap-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] font-semibold text-slate-400 min-w-[60px]">Phụ đề:</span>
+            <span className="text-[11px] font-semibold text-fg-muted min-w-[60px]">Phụ đề:</span>
             <select
               value={subtitleMode}
               onChange={e => setSubtitleMode(e.target.value)}
-              className="text-[11px] px-2 py-1 rounded-md bg-[#0f1923] border border-slate-700 text-slate-200 cursor-pointer outline-none focus:border-blue-600"
+              className="text-[11px] px-2 py-1 rounded-md bg-surface-2 border border-line text-fg-2 cursor-pointer outline-none focus:border-line"
             >
               <option value="off">Không có</option>
               <option value="file">File .srt rời</option>
@@ -1855,7 +1855,7 @@ export default function DashboardContent() {
               <select
                 value={subtitleLang}
                 onChange={e => setSubtitleLang(e.target.value)}
-                className="text-[11px] px-2 py-1 rounded-md bg-[#0f1923] border border-slate-700 text-slate-200 cursor-pointer outline-none focus:border-blue-600"
+                className="text-[11px] px-2 py-1 rounded-md bg-surface-2 border border-line text-fg-2 cursor-pointer outline-none focus:border-line"
               >
                 <option value="auto">Tự động</option>
                 <option value="vi">Tiếng Việt</option>
@@ -1865,18 +1865,18 @@ export default function DashboardContent() {
             )}
             {videoInfo && subtitleMode !== 'off' && (
               videoInfo.has_subtitles
-                ? <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                ? <span className="text-[10px] font-bold text-success bg-success-soft px-2 py-0.5 rounded-full border border-success/20">
                     {videoInfo.subtitle_source === 'auto' ? 'tự động' : 'có sẵn'}
                     {videoInfo.available_subtitle_languages?.length > 0 ? ` · ${videoInfo.available_subtitle_languages.slice(0,3).join(', ')}` : ''}
                   </span>
-                : <span className="text-[10px] text-slate-500 bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-700">không có</span>
+                : <span className="text-[10px] text-fg-muted bg-surface px-2 py-0.5 rounded-full border border-line">không có</span>
             )}
           </div>
           {subtitleMode === 'burned' && (
-            <p className="text-[10px] text-amber-400 mt-1">Đốt phụ đề vào video — quá trình xử lý lâu hơn, file không có phụ đề riêng.</p>
+            <p className="text-[10px] text-accent-text mt-1">Đốt phụ đề vào video — quá trình xử lý lâu hơn, file không có phụ đề riêng.</p>
           )}
           {subtitleMode === 'soft' && (
-            <p className="text-[10px] text-indigo-400 mt-1">Phụ đề mềm: video xuất ra file .mkv, dùng VLC để bật/tắt phụ đề khi xem.</p>
+            <p className="text-[10px] text-fg-2 mt-1">Phụ đề mềm: video xuất ra file .mkv, dùng VLC để bật/tắt phụ đề khi xem.</p>
           )}
         </div>
       </div>
@@ -1886,62 +1886,62 @@ export default function DashboardContent() {
         <button
           type="button"
           onClick={() => setShowUserCookie(v => !v)}
-          className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+          className="flex items-center gap-2 text-xs text-fg-muted hover:text-fg-2 transition-colors"
         >
           <span className="font-mono">{showUserCookie ? '▼' : '▶'}</span>
           <span>Dùng cookie của tôi</span>
-          <span className="text-[10px] text-slate-600">(nội dung riêng tư, members-only)</span>
+          <span className="text-[10px] text-fg-muted">(nội dung riêng tư, members-only)</span>
         </button>
 
         {showUserCookie && (
-          <div className="mt-2 rounded-xl border border-slate-700/60 bg-slate-900/60 p-3 space-y-3">
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Dán cookie từ trình duyệt để tải nội dung <span className="text-amber-400 font-semibold">members-only, channel membership, hoặc tài khoản đăng nhập</span>.
+          <div className="mt-2 rounded-xl border border-line bg-surface-2 p-3 space-y-3">
+            <p className="text-[11px] text-fg-muted leading-relaxed">
+              Dán cookie từ trình duyệt để tải nội dung <span className="text-accent-text font-semibold">members-only, channel membership, hoặc tài khoản đăng nhập</span>.
               Cookie chỉ dùng cho lần tải này — không lưu lại.
             </p>
 
             {/* Guide */}
             <details className="group">
-              <summary className="flex cursor-pointer items-center gap-1.5 text-[11px] text-blue-400 hover:text-blue-300 transition-colors select-none list-none">
+              <summary className="flex cursor-pointer items-center gap-1.5 text-[11px] text-fg-2 hover:text-fg-2 transition-colors select-none list-none">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 transition-transform group-open:rotate-90">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
                 Hướng dẫn lấy cookie từ trình duyệt
               </summary>
-              <div className="mt-2.5 rounded-lg border border-slate-700/40 bg-slate-800/40 p-3 space-y-3 text-[11px]">
+              <div className="mt-2.5 rounded-lg border border-line bg-surface-2 p-3 space-y-3 text-[11px]">
 
                 {/* Chrome / Edge */}
                 <div>
-                  <p className="font-semibold text-slate-300 mb-1.5">🔵 Chrome / Edge (cách nhanh nhất)</p>
-                  <ol className="space-y-1 text-slate-400 pl-1">
-                    <li><span className="text-slate-500 mr-1.5">1.</span>Cài extension <span className="font-mono bg-slate-700/60 px-1 rounded text-slate-300">Get cookies.txt LOCALLY</span> từ Chrome Web Store</li>
-                    <li><span className="text-slate-500 mr-1.5">2.</span>Truy cập trang cần tải (YouTube, Instagram…) và <span className="text-white">đăng nhập tài khoản</span></li>
-                    <li><span className="text-slate-500 mr-1.5">3.</span>Click icon extension → chọn <span className="text-white font-medium">Export as Netscape</span></li>
-                    <li><span className="text-slate-500 mr-1.5">4.</span>Copy toàn bộ nội dung file <span className="font-mono text-slate-300">.txt</span> → dán vào ô bên dưới</li>
+                  <p className="font-semibold text-fg-2 mb-1.5">🔵 Chrome / Edge (cách nhanh nhất)</p>
+                  <ol className="space-y-1 text-fg-muted pl-1">
+                    <li><span className="text-fg-muted mr-1.5">1.</span>Cài extension <span className="font-mono bg-surface-2 px-1 rounded text-fg-2">Get cookies.txt LOCALLY</span> từ Chrome Web Store</li>
+                    <li><span className="text-fg-muted mr-1.5">2.</span>Truy cập trang cần tải (YouTube, Instagram…) và <span className="text-fg">đăng nhập tài khoản</span></li>
+                    <li><span className="text-fg-muted mr-1.5">3.</span>Click icon extension → chọn <span className="text-fg font-medium">Export as Netscape</span></li>
+                    <li><span className="text-fg-muted mr-1.5">4.</span>Copy toàn bộ nội dung file <span className="font-mono text-fg-2">.txt</span> → dán vào ô bên dưới</li>
                   </ol>
                 </div>
 
                 {/* Firefox */}
                 <div>
-                  <p className="font-semibold text-slate-300 mb-1.5">🦊 Firefox</p>
-                  <ol className="space-y-1 text-slate-400 pl-1">
-                    <li><span className="text-slate-500 mr-1.5">1.</span>Cài add-on <span className="font-mono bg-slate-700/60 px-1 rounded text-slate-300">Cookie Quick Manager</span></li>
-                    <li><span className="text-slate-500 mr-1.5">2.</span>Đăng nhập trang cần tải, mở add-on → <span className="text-white font-medium">Export cookies</span> dạng Netscape</li>
-                    <li><span className="text-slate-500 mr-1.5">3.</span>Dán nội dung vào ô bên dưới</li>
+                  <p className="font-semibold text-fg-2 mb-1.5">🦊 Firefox</p>
+                  <ol className="space-y-1 text-fg-muted pl-1">
+                    <li><span className="text-fg-muted mr-1.5">1.</span>Cài add-on <span className="font-mono bg-surface-2 px-1 rounded text-fg-2">Cookie Quick Manager</span></li>
+                    <li><span className="text-fg-muted mr-1.5">2.</span>Đăng nhập trang cần tải, mở add-on → <span className="text-fg font-medium">Export cookies</span> dạng Netscape</li>
+                    <li><span className="text-fg-muted mr-1.5">3.</span>Dán nội dung vào ô bên dưới</li>
                   </ol>
                 </div>
 
                 {/* DevTools */}
                 <div>
-                  <p className="font-semibold text-slate-300 mb-1.5">⚙️ DevTools (không cần extension)</p>
-                  <ol className="space-y-1 text-slate-400 pl-1">
-                    <li><span className="text-slate-500 mr-1.5">1.</span>Nhấn <span className="font-mono bg-slate-700/60 px-1 rounded text-slate-300">F12</span> → tab <span className="text-white">Application</span> (Chrome) hoặc <span className="text-white">Storage</span> (Firefox)</li>
-                    <li><span className="text-slate-500 mr-1.5">2.</span>Mục <span className="text-white">Cookies</span> → chọn domain trang</li>
-                    <li><span className="text-slate-500 mr-1.5">3.</span>Dán dạng <span className="font-mono bg-slate-700/60 px-1 rounded text-slate-300">Name=Value; Name2=Value2</span> (Raw format)</li>
+                  <p className="font-semibold text-fg-2 mb-1.5">⚙️ DevTools (không cần extension)</p>
+                  <ol className="space-y-1 text-fg-muted pl-1">
+                    <li><span className="text-fg-muted mr-1.5">1.</span>Nhấn <span className="font-mono bg-surface-2 px-1 rounded text-fg-2">F12</span> → tab <span className="text-fg">Application</span> (Chrome) hoặc <span className="text-fg">Storage</span> (Firefox)</li>
+                    <li><span className="text-fg-muted mr-1.5">2.</span>Mục <span className="text-fg">Cookies</span> → chọn domain trang</li>
+                    <li><span className="text-fg-muted mr-1.5">3.</span>Dán dạng <span className="font-mono bg-surface-2 px-1 rounded text-fg-2">Name=Value; Name2=Value2</span> (Raw format)</li>
                   </ol>
                 </div>
 
-                <p className="text-[10px] text-slate-600 border-t border-slate-700/40 pt-2">
+                <p className="text-[10px] text-fg-muted border-t border-line pt-2">
                   ⚠️ Cookie chứa thông tin đăng nhập — chỉ dùng trên thiết bị tin cậy. Không chia sẻ cookie với người khác.
                 </p>
               </div>
@@ -1953,12 +1953,12 @@ export default function DashboardContent() {
               onChange={e => setUserCookieText(e.target.value)}
               placeholder={"# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t...\n\nhoặc dán Raw: SID=abc123; HSID=def456\nhoặc JSON array: [{\"name\":\"SID\",\"value\":\"abc123\",...}]"}
               rows={4}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 font-mono text-[11px] text-slate-300 placeholder-slate-700 outline-none resize-y focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[11px] text-fg-2 placeholder:text-fg-muted outline-none resize-y focus:border-line focus:ring-1 focus:ring-line-strong"
               spellCheck={false}
             />
             {userCookieText.trim() ? (
               <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-[10px] text-emerald-400">
+                <span className="flex items-center gap-1.5 text-[10px] text-success">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3 h-3">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
@@ -1967,13 +1967,13 @@ export default function DashboardContent() {
                 <button
                   type="button"
                   onClick={() => setUserCookieText('')}
-                  className="text-[10px] text-slate-500 hover:text-red-400 transition-colors"
+                  className="text-[10px] text-fg-muted hover:text-danger transition-colors"
                 >
                   Xoá cookie
                 </button>
               </div>
             ) : (
-              <p className="text-[10px] text-slate-600">Hỗ trợ: Netscape (.txt từ extension), JSON array, hoặc Raw cookie string</p>
+              <p className="text-[10px] text-fg-muted">Hỗ trợ: Netscape (.txt từ extension), JSON array, hoặc Raw cookie string</p>
             )}
           </div>
         )}
@@ -1982,7 +1982,7 @@ export default function DashboardContent() {
       {/* ── Delayed / queued notice (Phase 27D) ────────── */}
       {delayedInfo && !isLoading && (
         <div className="max-w-2xl mx-auto mb-6 w-full px-4">
-          <div className="flex items-start gap-3 text-amber-400 bg-amber-500/10 px-5 py-3.5 rounded-2xl border border-amber-500/20 shadow-sm">
+          <div className="flex items-start gap-3 text-accent-text bg-accent-soft px-5 py-3.5 rounded-2xl border border-accent/20 shadow-sm">
             <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
             </svg>
@@ -1991,7 +1991,7 @@ export default function DashboardContent() {
                 {delayedInfo.message || 'Yêu cầu đang xếp hàng chờ xử lý.'}
               </p>
               {delayedInfo.estimatedWaitSec && (
-                <p className="text-xs text-amber-300/70 mt-0.5">
+                <p className="text-xs text-accent-text mt-0.5">
                   Ước tính chờ ~{delayedInfo.estimatedWaitSec}s · Thử lại để kiểm tra trạng thái
                 </p>
               )}
@@ -1999,7 +1999,7 @@ export default function DashboardContent() {
             {url.trim() && (
               <button
                 onClick={() => { setDelayedInfo(null); handleFetchLink(); }}
-                className="flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 transition-colors whitespace-nowrap"
+                className="flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg bg-accent-soft hover:bg-accent/20 text-accent-text transition-colors whitespace-nowrap"
               >
                 Thử lại
               </button>
@@ -2011,13 +2011,13 @@ export default function DashboardContent() {
       {/* ── Error ────────────────────────────────────────── */}
       {error && (
         <div className="max-w-2xl mx-auto mb-6 w-full px-4">
-          <div className="flex items-start gap-3 text-red-400 bg-red-500/10 px-5 py-3.5 rounded-2xl border border-red-500/20 shadow-sm">
+          <div className="flex items-start gap-3 text-danger bg-danger-soft px-5 py-3.5 rounded-2xl border border-danger/20 shadow-sm">
             <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
             <p className="text-sm font-bold flex-1">{error}</p>
             {url.trim() && (
               <button
                 onClick={() => { setError(''); handleFetchLink(); }}
-                className="flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 transition-colors whitespace-nowrap"
+                className="flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg bg-danger-soft hover:bg-danger/20 text-danger transition-colors whitespace-nowrap"
               >
                 Thử lại
               </button>
@@ -2029,34 +2029,34 @@ export default function DashboardContent() {
       {/* ── Result Card ──────────────────────────────────── */}
       {videoInfo && (
         <div className="w-full max-w-3xl mb-12">
-          <div className="bg-[#012622]/50 border border-slate-700/50 backdrop-blur-md rounded-3xl p-5 sm:p-6 shadow-2xl shadow-[#FDE047]/5 overflow-hidden">
+          <div className="bg-surface/50 border border-line backdrop-blur-md rounded-3xl p-5 sm:p-6 shadow-2xl overflow-hidden">
 
             {/* Thumbnail & Title */}
             <div className="flex flex-col sm:flex-row gap-5 items-center sm:items-start w-full mb-6">
-              <div className="w-44 sm:w-52 aspect-video rounded-2xl overflow-hidden bg-slate-800 flex-shrink-0 border border-slate-700/50 shadow-lg">
+              <div className="w-44 sm:w-52 aspect-video rounded-2xl overflow-hidden bg-surface flex-shrink-0 border border-line shadow-lg">
                 {videoInfo.thumbnail_url ? (
                   <img src={videoInfo.thumbnail_url} alt="Thumbnail" className="w-full h-full object-cover" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-slate-400 text-sm">Không có ảnh</div>
+                  <div className="w-full h-full flex items-center justify-center text-fg-muted text-sm">Không có ảnh</div>
                 )}
               </div>
               <div className="flex-1 text-center sm:text-left min-w-0">
-                <h4 className="text-white font-bold text-lg md:text-xl line-clamp-3 mb-3 leading-snug">{videoInfo.title || 'Video tải về'}</h4>
-                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-xs font-medium text-slate-300">
-                  <span className="bg-slate-800/80 border border-slate-700/50 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                <h4 className="text-fg font-bold text-lg md:text-xl line-clamp-3 mb-3 leading-snug">{videoInfo.title || 'Video tải về'}</h4>
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-xs font-medium text-fg-2">
+                  <span className="bg-surface border border-line px-3 py-1.5 rounded-lg flex items-center gap-1.5">
                     <Link2 className="w-3.5 h-3.5" /> {(() => {
                       try { return new URL(videoInfo.original_url || url).hostname.replace('www.',''); }
                       catch { return 'Liên kết'; }
                     })()}
                   </span>
                   {isWatermarkPlatform(videoInfo.original_url || url) && removeWatermark && (
-                    <span className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                    <span className="bg-success-soft border border-success/30 text-success px-3 py-1.5 rounded-lg flex items-center gap-1.5">
                       <Sparkles className="w-3 h-3" /> Không watermark
                     </span>
                   )}
                   {videoInfo.duration > 0 && (
-                    <span className="bg-slate-800/80 border border-slate-700/50 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-blue-400" />
+                    <span className="bg-surface border border-line px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-fg-2" />
                       {videoInfo.duration >= 3600 ? 
                         `${Math.floor(videoInfo.duration / 3600)}:${String(Math.floor((videoInfo.duration % 3600) / 60)).padStart(2, '0')}:${String(videoInfo.duration % 60).padStart(2, '0')}`
                         :
@@ -2065,7 +2065,7 @@ export default function DashboardContent() {
                     </span>
                   )}
                   {videoInfo.file_size_mb > 0 && (
-                    <span className="bg-slate-800/80 border border-slate-700/50 px-3 py-1.5 rounded-lg">
+                    <span className="bg-surface border border-line px-3 py-1.5 rounded-lg">
                       {videoInfo.file_size_mb.toFixed(1)} MB
                     </span>
                   )}
@@ -2081,8 +2081,8 @@ export default function DashboardContent() {
                   onClick={togglePreview}
                   className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
                     showPreview 
-                      ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                      : 'bg-slate-800/60 text-slate-300 border-slate-700/50 hover:border-purple-500/40 hover:text-purple-300'
+                      ? 'bg-surface-2 text-fg-2 border-line'
+                      : 'bg-surface text-fg-2 border-line hover:border-line hover:text-fg-2'
                   }`}
                 >
                   {showPreview ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
@@ -2094,7 +2094,7 @@ export default function DashboardContent() {
               {videoInfo.thumbnail_url && (
                 <button
                   onClick={handleThumbnailDownload}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800/60 text-slate-300 border border-slate-700/50 hover:border-cyan-500/40 hover:text-cyan-300 transition-all"
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-surface text-fg-2 border border-line hover:border-line hover:text-fg-2 transition-all"
                 >
                   <ImageDown className="w-3.5 h-3.5" />
                   Tải ảnh bìa
@@ -2107,8 +2107,8 @@ export default function DashboardContent() {
                   onClick={handleOpenTrimmer}
                   className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
                     showTrimmer
-                      ? 'bg-orange-500/20 text-orange-300 border-orange-500/40'
-                      : 'bg-slate-800/60 text-slate-300 border-slate-700/50 hover:border-orange-500/40 hover:text-orange-300'
+                      ? 'bg-accent-soft text-accent-text border-accent/40'
+                      : 'bg-surface text-fg-2 border-line hover:border-accent/40 hover:text-accent-text'
                   }`}
                 >
                   <Scissors className="w-3.5 h-3.5" />
@@ -2122,8 +2122,8 @@ export default function DashboardContent() {
                   onClick={handleOpenGif}
                   className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
                     showGifPanel
-                      ? 'bg-pink-500/20 text-pink-300 border-pink-500/40'
-                      : 'bg-slate-800/60 text-slate-300 border-slate-700/50 hover:border-pink-500/40 hover:text-pink-300'
+                      ? 'bg-surface-2 text-fg-2 border-line'
+                      : 'bg-surface text-fg-2 border-line hover:border-line hover:text-fg-2'
                   }`}
                 >
                   <Sparkles className="w-3.5 h-3.5" />
@@ -2137,13 +2137,13 @@ export default function DashboardContent() {
                   onClick={handleOpenInpaint}
                   className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
                     showInpaint
-                      ? 'bg-violet-500/20 text-violet-300 border-violet-500/40'
-                      : 'bg-slate-800/60 text-slate-300 border-slate-700/50 hover:border-violet-500/40 hover:text-violet-300'
+                      ? 'bg-surface-2 text-fg-2 border-line'
+                      : 'bg-surface text-fg-2 border-line hover:border-line hover:text-fg-2'
                   }`}
                 >
                   <Eraser className="w-3.5 h-3.5" />
                   Xoá Logo
-                  <span className="bg-violet-600 text-white text-xs px-1 rounded font-bold leading-tight">PRO</span>
+                  <span className="bg-accent text-accent-fg text-xs px-1 rounded font-bold leading-tight">PRO</span>
                 </button>
               )}
 
@@ -2152,8 +2152,8 @@ export default function DashboardContent() {
                 onClick={() => setShowMerge(p => !p)}
                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
                   showMerge
-                    ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
-                    : 'bg-slate-800/60 text-slate-300 border-slate-700/50 hover:border-teal-500/40 hover:text-teal-300'
+                    ? 'bg-surface-2 text-fg-2 border-line'
+                    : 'bg-surface text-fg-2 border-line hover:border-line hover:text-fg-2'
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
@@ -2166,8 +2166,8 @@ export default function DashboardContent() {
                   onClick={() => setShowWatermark(p => !p)}
                   className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
                     showWatermark
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                      : 'bg-slate-800/60 text-slate-300 border-slate-700/50 hover:border-amber-500/40 hover:text-amber-300'
+                      ? 'bg-accent-soft text-accent-text border-accent/40'
+                      : 'bg-surface text-fg-2 border-line hover:border-accent/40 hover:text-accent-text'
                   }`}
                 >
                   <Stamp className="w-3.5 h-3.5" />
@@ -2181,13 +2181,13 @@ export default function DashboardContent() {
                   onClick={() => setShowChapters(p => !p)}
                   className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
                     showChapters
-                      ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
-                      : 'bg-slate-800/60 text-slate-300 border-slate-700/50 hover:border-indigo-500/40 hover:text-indigo-300'
+                      ? 'bg-surface-2 text-fg-2 border-line'
+                      : 'bg-surface text-fg-2 border-line hover:border-line hover:text-fg-2'
                   }`}
                 >
                   <List className="w-3.5 h-3.5" />
                   Chapters ({videoInfo.chapters.length})
-                  <span className="bg-violet-600 text-white text-xs px-1 rounded font-bold leading-tight">PRO</span>
+                  <span className="bg-accent text-accent-fg text-xs px-1 rounded font-bold leading-tight">PRO</span>
                 </button>
               )}
 
@@ -2195,29 +2195,29 @@ export default function DashboardContent() {
               <div className="relative">
                 <button
                   onClick={() => setShowCloudMenu(prev => !prev)}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800/60 text-slate-300 border border-slate-700/50 hover:border-sky-500/40 hover:text-sky-300 transition-all"
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-surface text-fg-2 border border-line hover:border-line hover:text-fg-2 transition-all"
                 >
                   <Upload className="w-3.5 h-3.5" />
                   Lưu Cloud
-                  <span className="bg-violet-600 text-white text-xs px-1 rounded font-bold leading-tight">PRO</span>
+                  <span className="bg-accent text-accent-fg text-xs px-1 rounded font-bold leading-tight">PRO</span>
                 </button>
                 {showCloudMenu && (
-                  <div className="absolute top-full left-0 mt-2 w-52 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-30 overflow-hidden animate-in fade-in duration-200">
+                  <div className="absolute top-full left-0 mt-2 w-52 bg-surface border border-line rounded-xl shadow-2xl z-30 overflow-hidden animate-in fade-in duration-200">
                     <button
                       onClick={handleSaveToGDrive}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-700/70 transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-fg hover:bg-surface-2 transition-colors"
                     >
                       <img src="https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg" className="w-5 h-5" alt="GDrive" />
                       Google Drive
-                      <ExternalLink className="w-3 h-3 ml-auto text-slate-500" />
+                      <ExternalLink className="w-3 h-3 ml-auto text-fg-muted" />
                     </button>
                     <button
                       onClick={handleSaveToDropbox}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-700/70 transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-fg hover:bg-surface-2 transition-colors"
                     >
                       <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Dropbox_Icon.svg" className="w-5 h-5" alt="Dropbox" />
                       Dropbox
-                      <ExternalLink className="w-3 h-3 ml-auto text-slate-500" />
+                      <ExternalLink className="w-3 h-3 ml-auto text-fg-muted" />
                     </button>
                   </div>
                 )}
@@ -2226,11 +2226,11 @@ export default function DashboardContent() {
 
             {/* ── Preview Player ──────────────────────────────── */}
             {showPreview && getPreviewUrl() && (
-              <div className="mb-5 rounded-2xl overflow-hidden bg-black/40 border border-slate-700/50 shadow-lg">
+              <div className="mb-5 rounded-2xl overflow-hidden bg-black/40 border border-line shadow-lg">
                 {videoInfo.is_audio_only ? (
                   <div className="p-5 flex flex-col items-center gap-3">
-                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500/30 to-blue-500/30 flex items-center justify-center border border-purple-500/30">
-                      <Music className="w-10 h-10 text-purple-300" />
+                    <div className="w-20 h-20 rounded-full bg-surface-2 flex items-center justify-center border border-line">
+                      <Music className="w-10 h-10 text-fg-2" />
                     </div>
                     <audio
                       ref={previewRef}
@@ -2258,24 +2258,24 @@ export default function DashboardContent() {
 
             {/* ── Trimmer UI ─────────────────────────────────── */}
             {showTrimmer && videoInfo.duration > 0 && (
-              <div className="mb-5 p-4 rounded-2xl bg-slate-800/50 border border-orange-500/30 shadow-lg">
+              <div className="mb-5 p-4 rounded-2xl bg-surface border border-accent/30 shadow-lg">
                 <div className="flex items-center justify-between mb-3">
-                  <h5 className="text-white font-bold text-sm flex items-center gap-2">
-                    <Scissors className="w-4 h-4 text-orange-400" />
+                  <h5 className="text-fg font-bold text-sm flex items-center gap-2">
+                    <Scissors className="w-4 h-4 text-accent-text" />
                     Cắt đoạn Video / Nhạc
                   </h5>
-                  <button onClick={() => setShowTrimmer(false)} className="text-slate-400 hover:text-white transition-colors">
+                  <button onClick={() => setShowTrimmer(false)} className="text-fg-muted hover:text-fg transition-colors">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
                 
                 {/* Time Display */}
                 <div className="flex items-center justify-between mb-3 text-sm">
-                  <span className="bg-slate-900 px-3 py-1.5 rounded-lg text-emerald-400 font-mono font-bold border border-slate-700/50">
+                  <span className="bg-canvas px-3 py-1.5 rounded-lg text-success font-mono font-bold border border-line">
                     {formatTime(trimStart)}
                   </span>
-                  <span className="text-slate-500 text-xs">→ Thời lượng: {formatTime(trimEnd - trimStart)}</span>
-                  <span className="bg-slate-900 px-3 py-1.5 rounded-lg text-orange-400 font-mono font-bold border border-slate-700/50">
+                  <span className="text-fg-muted text-xs">→ Thời lượng: {formatTime(trimEnd - trimStart)}</span>
+                  <span className="bg-canvas px-3 py-1.5 rounded-lg text-accent-text font-mono font-bold border border-line">
                     {formatTime(trimEnd)}
                   </span>
                 </div>
@@ -2283,7 +2283,7 @@ export default function DashboardContent() {
                 {/* Range Sliders */}
                 <div className="space-y-3 mb-4">
                   <div>
-                    <label className="text-xs text-slate-400 font-medium mb-1 block">Bắt đầu</label>
+                    <label className="text-xs text-fg-muted font-medium mb-1 block">Bắt đầu</label>
                     <input
                       type="range"
                       min={0}
@@ -2294,11 +2294,11 @@ export default function DashboardContent() {
                         const v = Number(e.target.value);
                         if (v < trimEnd) setTrimStart(v);
                       }}
-                      className="w-full accent-emerald-500 h-2 bg-slate-700 rounded-full cursor-pointer"
+                      className="w-full accent-accent h-2 bg-surface-2 rounded-full cursor-pointer"
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-slate-400 font-medium mb-1 block">Kết thúc</label>
+                    <label className="text-xs text-fg-muted font-medium mb-1 block">Kết thúc</label>
                     <input
                       type="range"
                       min={0}
@@ -2309,7 +2309,7 @@ export default function DashboardContent() {
                         const v = Number(e.target.value);
                         if (v > trimStart) setTrimEnd(v);
                       }}
-                      className="w-full accent-orange-500 h-2 bg-slate-700 rounded-full cursor-pointer"
+                      className="w-full accent-accent h-2 bg-surface-2 rounded-full cursor-pointer"
                     />
                   </div>
                 </div>
@@ -2320,14 +2320,14 @@ export default function DashboardContent() {
                     <button
                       key={sec}
                       onClick={() => { setTrimStart(0); setTrimEnd(Math.min(sec, videoInfo.duration)); }}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-700/50 text-slate-300 border border-slate-600/50 hover:border-orange-500/40 hover:text-orange-300 transition-all"
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-surface-2 text-fg-2 border border-line-strong hover:border-accent/40 hover:text-accent-text transition-all"
                     >
                       {sec}s đầu
                     </button>
                   ))}
                   <button
                     onClick={() => { setTrimStart(0); setTrimEnd(videoInfo.duration); }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-700/50 text-slate-300 border border-slate-600/50 hover:border-emerald-500/40 hover:text-emerald-300 transition-all"
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-surface-2 text-fg-2 border border-line-strong hover:border-success/40 hover:text-success transition-all"
                   >
                     Toàn bộ
                   </button>
@@ -2337,7 +2337,7 @@ export default function DashboardContent() {
                 <button
                   onClick={handleTrimDownload}
                   disabled={isTrimming || trimEnd <= trimStart}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-[#FB923C] to-[#FBBF24] text-[#012622] font-bold text-sm shadow-lg hover:shadow-xl transition-all disabled:opacity-60 active:scale-[0.98]"
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-accent text-accent-fg font-bold text-sm shadow-lg hover:shadow-xl transition-all disabled:opacity-60 active:scale-[0.98]"
                 >
                   {isTrimming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
                   {isTrimming ? 'Đang cắt và xử lý...' : `Cắt & Tải về (${formatTime(trimStart)} → ${formatTime(trimEnd)})`}
@@ -2347,57 +2347,57 @@ export default function DashboardContent() {
 
             {/* ── GIF Converter Panel ─────────────────────────── */}
             {showGifPanel && (
-              <div className="mb-5 p-4 rounded-2xl bg-slate-800/50 border border-pink-500/30 shadow-lg">
+              <div className="mb-5 p-4 rounded-2xl bg-surface border border-line shadow-lg">
                 <div className="flex items-center justify-between mb-3">
-                  <h5 className="text-white font-bold text-sm flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-pink-400" />
+                  <h5 className="text-fg font-bold text-sm flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-fg-2" />
                     Chuyển đổi sang GIF
                   </h5>
-                  <button onClick={() => setShowGifPanel(false)} className="text-slate-400 hover:text-white transition-colors">
+                  <button onClick={() => setShowGifPanel(false)} className="text-fg-muted hover:text-fg transition-colors">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
 
                 {/* Time range */}
                 <div className="flex items-center justify-between mb-2 text-sm">
-                  <span className="bg-slate-900 px-3 py-1.5 rounded-lg text-pink-400 font-mono font-bold border border-slate-700/50">{formatTime(gifStart)}</span>
-                  <span className="text-slate-500 text-xs">→ {formatTime(gifEnd - gifStart)} (tối đa 30s)</span>
-                  <span className="bg-slate-900 px-3 py-1.5 rounded-lg text-orange-400 font-mono font-bold border border-slate-700/50">{formatTime(gifEnd)}</span>
+                  <span className="bg-canvas px-3 py-1.5 rounded-lg text-fg-2 font-mono font-bold border border-line">{formatTime(gifStart)}</span>
+                  <span className="text-fg-muted text-xs">→ {formatTime(gifEnd - gifStart)} (tối đa 30s)</span>
+                  <span className="bg-canvas px-3 py-1.5 rounded-lg text-accent-text font-mono font-bold border border-line">{formatTime(gifEnd)}</span>
                 </div>
                 <div className="space-y-2 mb-4">
                   <div>
-                    <label className="text-xs text-slate-400 font-medium mb-1 block">Bắt đầu</label>
+                    <label className="text-xs text-fg-muted font-medium mb-1 block">Bắt đầu</label>
                     <input type="range" min={0} max={videoInfo.duration} step={1} value={gifStart}
                       onChange={e => { const v = Number(e.target.value); if (v < gifEnd) setGifStart(v); }}
-                      className="w-full accent-pink-500 h-2 bg-slate-700 rounded-full cursor-pointer" />
+                      className="w-full accent-accent h-2 bg-surface-2 rounded-full cursor-pointer" />
                   </div>
                   <div>
-                    <label className="text-xs text-slate-400 font-medium mb-1 block">Kết thúc (tối đa +30s)</label>
+                    <label className="text-xs text-fg-muted font-medium mb-1 block">Kết thúc (tối đa +30s)</label>
                     <input type="range" min={0} max={videoInfo.duration} step={1} value={gifEnd}
                       onChange={e => { const v = Number(e.target.value); if (v > gifStart && v - gifStart <= 30) setGifEnd(v); }}
-                      className="w-full accent-orange-500 h-2 bg-slate-700 rounded-full cursor-pointer" />
+                      className="w-full accent-accent h-2 bg-surface-2 rounded-full cursor-pointer" />
                   </div>
                 </div>
 
                 {/* GIF options */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <div>
-                    <label className="text-xs text-slate-400 font-medium mb-1 block">Chiều rộng (px)</label>
+                    <label className="text-xs text-fg-muted font-medium mb-1 block">Chiều rộng (px)</label>
                     <div className="flex flex-wrap gap-1">
                       {[320, 480, 640, 1080].map(w => (
                         <button key={w} onClick={() => setGifWidth(w)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${gifWidth === w ? 'bg-pink-500/20 border-pink-500/40 text-pink-300' : 'bg-slate-700/50 border-slate-600/50 text-slate-400 hover:text-white'}`}>
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${gifWidth === w ? 'bg-surface-2 border-line text-fg-2' : 'bg-surface-2 border-line-strong text-fg-muted hover:text-fg'}`}>
                           {w}
                         </button>
                       ))}
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs text-slate-400 font-medium mb-1 block">FPS</label>
+                    <label className="text-xs text-fg-muted font-medium mb-1 block">FPS</label>
                     <div className="flex flex-wrap gap-1">
                       {[10, 15, 20, 30].map(f => (
                         <button key={f} onClick={() => setGifFps(f)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${gifFps === f ? 'bg-pink-500/20 border-pink-500/40 text-pink-300' : 'bg-slate-700/50 border-slate-600/50 text-slate-400 hover:text-white'}`}>
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${gifFps === f ? 'bg-surface-2 border-line text-fg-2' : 'bg-surface-2 border-line-strong text-fg-muted hover:text-fg'}`}>
                           {f}
                         </button>
                       ))}
@@ -2406,7 +2406,7 @@ export default function DashboardContent() {
                 </div>
 
                 <button onClick={handleConvertGif} disabled={isConverting || gifEnd <= gifStart || gifEnd - gifStart > 30}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold text-sm shadow-lg transition-all disabled:opacity-60 active:scale-[0.98]">
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-accent text-accent-fg font-bold text-sm shadow-lg transition-all disabled:opacity-60 active:scale-[0.98]">
                   {isConverting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                   {isConverting ? 'Đang tạo GIF...' : `Tạo GIF · ${gifWidth}px · ${gifFps}fps · ${formatTime(gifEnd - gifStart)}`}
                 </button>
@@ -2415,55 +2415,55 @@ export default function DashboardContent() {
 
             {/* ── Logo Inpaint Panel ──────────────────────────── */}
             {showInpaint && (
-              <div className="mb-5 p-4 rounded-2xl bg-slate-800/50 border border-violet-500/30 shadow-lg">
+              <div className="mb-5 p-4 rounded-2xl bg-surface border border-line shadow-lg">
                 <div className="flex items-center justify-between mb-3">
-                  <h5 className="text-white font-bold text-sm flex items-center gap-2">
-                    <Eraser className="w-4 h-4 text-violet-400" />
+                  <h5 className="text-fg font-bold text-sm flex items-center gap-2">
+                    <Eraser className="w-4 h-4 text-fg-2" />
                     Logo Inpaint
-                    <span className="px-2 py-0.5 rounded-full text-xs bg-violet-500/20 text-violet-300 border border-violet-500/30 font-semibold">Thử nghiệm</span>
-                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-700/60 text-slate-400 border border-slate-600/40 font-medium">Chỉ web</span>
+                    <span className="px-2 py-0.5 rounded-full text-xs bg-surface-2 text-fg-2 border border-line font-semibold">Thử nghiệm</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-surface-2 text-fg-muted border border-line-strong font-medium">Chỉ web</span>
                   </h5>
-                  <button onClick={() => setShowInpaint(false)} className="text-slate-400 hover:text-white transition-colors">
+                  <button onClick={() => setShowInpaint(false)} className="text-fg-muted hover:text-fg transition-colors">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
 
                 {/* Safety disclosure — always visible */}
-                <div className="mb-3 px-3 py-2.5 rounded-xl bg-violet-500/5 border border-violet-500/20 space-y-1">
-                  <p className="text-violet-300 font-semibold text-xs flex items-center gap-1.5">
+                <div className="mb-3 px-3 py-2.5 rounded-xl bg-surface-2 border border-line space-y-1">
+                  <p className="text-fg-2 font-semibold text-xs flex items-center gap-1.5">
                     <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                     Logo Inpaint (Experimental) — đọc trước khi dùng
                   </p>
-                  <p className="text-slate-400 text-xs">• Kết quả thực nghiệm có thể chứa nhiễu hình ảnh.</p>
-                  <p className="text-slate-400 text-xs">• Chỉ sử dụng với nội dung bạn có quyền chỉnh sửa.</p>
-                  <p className="text-slate-400 text-xs">• Chất lượng phụ thuộc vào nội dung và chuyển động trong video.</p>
-                  <p className="text-slate-400 text-xs">• Tính năng này không hoạt động tự động — bạn phải xác nhận từng bước.</p>
+                  <p className="text-fg-muted text-xs">• Kết quả thực nghiệm có thể chứa nhiễu hình ảnh.</p>
+                  <p className="text-fg-muted text-xs">• Chỉ sử dụng với nội dung bạn có quyền chỉnh sửa.</p>
+                  <p className="text-fg-muted text-xs">• Chất lượng phụ thuộc vào nội dung và chuyển động trong video.</p>
+                  <p className="text-fg-muted text-xs">• Tính năng này không hoạt động tự động — bạn phải xác nhận từng bước.</p>
                 </div>
 
                 {/* Loading init */}
                 {inpaintLoading && inpaintStep === 'region' && (
                   <div className="flex flex-col items-center gap-3 py-6">
-                    <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
-                    <p className="text-slate-400 text-sm">Đang tải khung hình...</p>
+                    <Loader2 className="w-8 h-8 text-fg-2 animate-spin" />
+                    <p className="text-fg-muted text-sm">Đang tải khung hình...</p>
                   </div>
                 )}
 
                 {/* Step 1: Region select */}
                 {!inpaintLoading && inpaintStep === 'region' && inpaintFrameUrl && (
                   <div>
-                    <p className="text-slate-400 text-xs mb-3">Chọn vị trí logo cần xoá:</p>
+                    <p className="text-fg-muted text-xs mb-3">Chọn vị trí logo cần xoá:</p>
                     {/* Preview frame */}
-                    <div className="relative mb-3 rounded-xl overflow-hidden border border-slate-700/50 bg-black">
+                    <div className="relative mb-3 rounded-xl overflow-hidden border border-line bg-black">
                       <img src={inpaintFrameUrl} alt="preview frame" className="w-full max-h-[220px] object-contain" />
                       {inpaintRegionPct && (
                         <div
-                          className="absolute border-2 border-violet-400 bg-violet-400/20 pointer-events-none"
+                          className="absolute border-2 border-line bg-surface-2 pointer-events-none"
                           style={inpaintRegionPct}
                         />
                       )}
                     </div>
                     {/* Preset buttons */}
-                    <p className="text-xs text-slate-500 mb-2">Vị trí logo thường gặp:</p>
+                    <p className="text-xs text-fg-muted mb-2">Vị trí logo thường gặp:</p>
                     <div className="grid grid-cols-2 gap-2 mb-3">
                       {INPAINT_PRESETS.map(preset => (
                         <button
@@ -2471,8 +2471,8 @@ export default function DashboardContent() {
                           onClick={() => setInpaintPreset(preset.key)}
                           className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
                             inpaintPreset === preset.key
-                              ? 'bg-violet-500/20 border-violet-500/40 text-violet-300'
-                              : 'bg-slate-700/40 border-slate-600/50 text-slate-300 hover:border-violet-500/30 hover:text-violet-300'
+                              ? 'bg-surface-2 border-line text-fg-2'
+                              : 'bg-surface-2 border-line-strong text-fg-2 hover:border-line hover:text-fg-2'
                           }`}
                         >
                           <Move className="w-3.5 h-3.5" />
@@ -2483,7 +2483,7 @@ export default function DashboardContent() {
                     <button
                       onClick={() => inpaintPreset && handleInpaintPreview(inpaintPreset)}
                       disabled={!inpaintPreset}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-bold text-sm shadow transition-all disabled:opacity-50 active:scale-[0.98]"
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm shadow transition-all disabled:opacity-50 active:scale-[0.98]"
                     >
                       <ZoomIn className="w-4 h-4" />
                       Xem trước kết quả
@@ -2495,13 +2495,13 @@ export default function DashboardContent() {
                 {(inpaintStep === 'preview' && !inpaintLoading) && inpaintPreviewResult && (
                   <div>
                     {inpaintPreviewResult.recommend_crop && (
-                      <div className="mb-3 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-2">
+                      <div className="mb-3 px-3 py-2 rounded-xl bg-accent-soft border border-accent/30 text-accent-text text-xs font-semibold flex items-center gap-2">
                         <AlertCircle className="w-4 h-4 flex-shrink-0" />
                         Kết quả xem trước chưa mịn — hãy thử crop vùng logo sẽ sạch hơn.
                       </div>
                     )}
-                    <p className="text-slate-400 text-xs mb-2">Xem trước (nhanh):</p>
-                    <div className="rounded-xl overflow-hidden border border-slate-700/50 bg-black mb-3">
+                    <p className="text-fg-muted text-xs mb-2">Xem trước (nhanh):</p>
+                    <div className="rounded-xl overflow-hidden border border-line bg-black mb-3">
                       <img
                         src={`${API_BASE}${inpaintPreviewResult.preview_clean_url || `/api/v1/flow-cleanup/preview-clean/${inpaintTempId}`}`}
                         alt="inpaint preview"
@@ -2511,13 +2511,13 @@ export default function DashboardContent() {
                     <div className="flex gap-2">
                       <button
                         onClick={() => { setInpaintStep('region'); setInpaintPixelRegion(null); setInpaintPreviewResult(null); }}
-                        className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-slate-700/50 text-slate-300 border border-slate-600/50 hover:bg-slate-700 transition-all"
+                        className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-surface-2 text-fg-2 border border-line-strong hover:bg-line transition-all"
                       >
                         Chọn lại vùng
                       </button>
                       <button
                         onClick={handleInpaintProcess}
-                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow transition-all active:scale-[0.98]"
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold bg-accent text-accent-fg shadow transition-all active:scale-[0.98]"
                       >
                         <Eraser className="w-4 h-4" />
                         Xử lý toàn video
@@ -2529,40 +2529,40 @@ export default function DashboardContent() {
                 {/* Step 2 loading */}
                 {inpaintStep === 'preview' && inpaintLoading && (
                   <div className="flex flex-col items-center gap-3 py-6">
-                    <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
-                    <p className="text-slate-400 text-sm">Đang tạo xem trước...</p>
+                    <Loader2 className="w-8 h-8 text-fg-2 animate-spin" />
+                    <p className="text-fg-muted text-sm">Đang tạo xem trước...</p>
                   </div>
                 )}
 
                 {/* Step 3: Processing */}
                 {inpaintStep === 'processing' && (
                   <div className="flex flex-col items-center gap-3 py-6">
-                    <Loader2 className="w-10 h-10 text-violet-400 animate-spin" />
-                    <p className="text-white font-semibold text-sm">Đang xoá logo toàn video...</p>
-                    <p className="text-slate-400 text-xs text-center">Sử dụng SHIFTMAP motion-aware — có thể mất vài phút tùy độ dài video.</p>
-                    <p className="text-slate-500 text-xs text-center">Khuyến nghị: clip dưới 5 phút · file dưới 500 MB · tối đa 1080p</p>
+                    <Loader2 className="w-10 h-10 text-fg-2 animate-spin" />
+                    <p className="text-fg font-semibold text-sm">Đang xoá logo toàn video...</p>
+                    <p className="text-fg-muted text-xs text-center">Sử dụng SHIFTMAP motion-aware — có thể mất vài phút tùy độ dài video.</p>
+                    <p className="text-fg-muted text-xs text-center">Khuyến nghị: clip dưới 5 phút · file dưới 500 MB · tối đa 1080p</p>
                   </div>
                 )}
 
                 {/* Step 4: Done */}
                 {inpaintStep === 'done' && (
                   <div className="flex flex-col items-center gap-3 py-4">
-                    <CheckCircle2 className="w-10 h-10 text-emerald-400" />
-                    <p className="text-white font-semibold text-sm">Xoá logo thành công!</p>
-                    <div className="w-full px-3 py-2 rounded-xl bg-slate-700/40 border border-slate-600/40 text-xs text-slate-400 space-y-0.5">
-                      <p><span className="text-slate-300 font-semibold">Nguồn:</span> {videoInfo?.title || 'video gốc'}</p>
-                      <p><span className="text-slate-300 font-semibold">Đầu ra:</span> video đã xoá logo (file mới, không ghi đè bản gốc)</p>
+                    <CheckCircle2 className="w-10 h-10 text-success" />
+                    <p className="text-fg font-semibold text-sm">Xoá logo thành công!</p>
+                    <div className="w-full px-3 py-2 rounded-xl bg-surface-2 border border-line-strong text-xs text-fg-muted space-y-0.5">
+                      <p><span className="text-fg-2 font-semibold">Nguồn:</span> {videoInfo?.title || 'video gốc'}</p>
+                      <p><span className="text-fg-2 font-semibold">Đầu ra:</span> video đã xoá logo (file mới, không ghi đè bản gốc)</p>
                     </div>
                     <button
                       onClick={handleInpaintDownload}
-                      className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 text-white font-bold text-sm shadow transition-all active:scale-[0.98]"
+                      className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm shadow transition-all active:scale-[0.98]"
                     >
                       <Download className="w-4 h-4" />
                       Tải video đã xoá logo
                     </button>
                     <button
                       onClick={() => { setInpaintStep('region'); setInpaintPreset(null); setInpaintPixelRegion(null); setInpaintPreviewResult(null); setInpaintFinalUrl(null); }}
-                      className="text-xs text-slate-400 hover:text-white transition-colors"
+                      className="text-xs text-fg-muted hover:text-fg transition-colors"
                     >
                       Xoá vùng khác
                     </button>
@@ -2572,11 +2572,11 @@ export default function DashboardContent() {
                 {/* Error state */}
                 {inpaintStep === 'error' && (
                   <div className="flex flex-col items-center gap-3 py-4">
-                    <XCircle className="w-8 h-8 text-red-400" />
-                    <p className="text-red-300 text-sm font-semibold text-center">{inpaintError || 'Xử lý thất bại.'}</p>
+                    <XCircle className="w-8 h-8 text-danger" />
+                    <p className="text-danger text-sm font-semibold text-center">{inpaintError || 'Xử lý thất bại.'}</p>
                     <button
                       onClick={() => { setInpaintStep('region'); setInpaintError(''); }}
-                      className="px-5 py-2 rounded-xl text-sm font-bold bg-slate-700 text-slate-200 border border-slate-600 hover:bg-slate-600 transition-all"
+                      className="px-5 py-2 rounded-xl text-sm font-bold bg-surface-2 text-fg-2 border border-line-strong hover:bg-line transition-all"
                     >
                       Thử lại
                     </button>
@@ -2587,11 +2587,11 @@ export default function DashboardContent() {
 
             {/* ── Merge Clips Panel ───────────────────────────────── */}
             {showMerge && (
-              <div className="mt-4 p-4 rounded-xl bg-teal-500/5 border border-teal-500/20">
-                <h3 className="text-sm font-bold text-teal-300 mb-3 flex items-center gap-2">
+              <div className="mt-4 p-4 rounded-xl bg-surface-2 border border-line">
+                <h3 className="text-sm font-bold text-fg-2 mb-3 flex items-center gap-2">
                   <Layers className="w-4 h-4" /> Ghép Video (2–5 clip)
                 </h3>
-                <p className="text-xs text-slate-400 mb-3">
+                <p className="text-xs text-fg-muted mb-3">
                   Nhập Job ID (từ trang Lịch sử) mỗi dòng một ID hoặc cách nhau bằng dấu phẩy. Tối đa 5 clip, tổng thời lượng ≤30 phút.
                 </p>
                 <textarea
@@ -2599,16 +2599,16 @@ export default function DashboardContent() {
                   onChange={e => setMergeJobIds(e.target.value)}
                   placeholder={"job-id-1\njob-id-2\njob-id-3"}
                   rows={4}
-                  className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 placeholder-slate-600 font-mono resize-none focus:outline-none focus:border-teal-500/50 mb-3"
+                  className="w-full bg-surface-2 border border-line rounded-lg px-3 py-2 text-xs text-fg-2 placeholder:text-fg-muted font-mono resize-none focus:outline-none focus:border-line mb-3"
                 />
-                {mergeError && <p className="text-xs text-red-400 mb-2">{mergeError}</p>}
+                {mergeError && <p className="text-xs text-danger mb-2">{mergeError}</p>}
                 {mergeResult && (
-                  <div className="mb-3 p-3 rounded-lg bg-teal-500/10 border border-teal-500/30">
-                    <p className="text-xs text-teal-300 font-semibold mb-1">Ghep thanh cong!</p>
-                    <p className="text-xs text-slate-400">{mergeResult.title} · {Math.round(mergeResult.duration_seconds)}s · {mergeResult.file_size_mb?.toFixed(1)} MB</p>
+                  <div className="mb-3 p-3 rounded-lg bg-surface-2 border border-line">
+                    <p className="text-xs text-fg-2 font-semibold mb-1">Ghep thanh cong!</p>
+                    <p className="text-xs text-fg-muted">{mergeResult.title} · {Math.round(mergeResult.duration_seconds)}s · {mergeResult.file_size_mb?.toFixed(1)} MB</p>
                     <button
                       onClick={handleMergeClipsDownload}
-                      className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-500/20 text-teal-300 text-xs font-bold hover:bg-teal-500/30 transition-colors cursor-pointer"
+                      className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-2 text-fg-2 text-xs font-bold hover:bg-line transition-colors cursor-pointer"
                     >
                       <Download className="w-3.5 h-3.5" /> Tai video da ghep
                     </button>
@@ -2617,7 +2617,7 @@ export default function DashboardContent() {
                 <button
                   onClick={handleMergeClips}
                   disabled={mergeLoading || mergeJobIds.trim().length === 0}
-                  className="px-4 py-2 rounded-xl bg-teal-500/20 text-teal-300 text-xs font-bold border border-teal-500/30 hover:bg-teal-500/30 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-4 py-2 rounded-xl bg-surface-2 text-fg-2 text-xs font-bold border border-line hover:bg-line transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {mergeLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   {mergeLoading ? 'Dang ghep...' : 'Ghep ngay'}
@@ -2627,8 +2627,8 @@ export default function DashboardContent() {
 
             {/* ── Watermark Embed Panel ─────────────────────────────── */}
             {showWatermark && videoInfo?.local_file_path && !videoInfo?.is_audio_only && (
-              <div className="mt-4 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
-                <h3 className="text-sm font-bold text-amber-300 mb-3 flex items-center gap-2">
+              <div className="mt-4 p-4 rounded-xl bg-accent-soft border border-accent/20">
+                <h3 className="text-sm font-bold text-accent-text mb-3 flex items-center gap-2">
                   <Stamp className="w-4 h-4" /> Them Watermark vao Video
                 </h3>
 
@@ -2637,7 +2637,7 @@ export default function DashboardContent() {
                   {['text', 'image'].map(t => (
                     <button key={t} onClick={() => setWmType(t)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
-                        wmType === t ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-300'
+                        wmType === t ? 'bg-accent-soft text-accent-text border-accent/40' : 'bg-surface text-fg-muted border-line hover:text-fg-2'
                       }`}
                     >{t === 'text' ? 'Chu' : 'Anh'}</button>
                   ))}
@@ -2648,12 +2648,12 @@ export default function DashboardContent() {
                   <div className="space-y-2 mb-3">
                     <input value={wmText} onChange={e => setWmText(e.target.value)}
                       placeholder="Noi dung watermark..."
-                      className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/50"
+                      className="w-full bg-surface-2 border border-line rounded-lg px-3 py-2 text-xs text-fg-2 placeholder:text-fg-muted focus:outline-none focus:border-accent/50"
                     />
                     <div className="flex gap-2 items-center">
-                      <label className="text-xs text-slate-400">Co chu:</label>
+                      <label className="text-xs text-fg-muted">Co chu:</label>
                       <input type="number" value={wmFontSize} onChange={e => setWmFontSize(+e.target.value)}
-                        min={12} max={72} className="w-16 bg-slate-900/60 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none"
+                        min={12} max={72} className="w-16 bg-surface-2 border border-line rounded px-2 py-1 text-xs text-fg-2 focus:outline-none"
                       />
                     </div>
                   </div>
@@ -2663,19 +2663,19 @@ export default function DashboardContent() {
                 {wmType === 'image' && (
                   <div className="mb-3">
                     <input type="file" accept="image/png" onChange={handleWmImageUpload}
-                      className="text-xs text-slate-400 file:mr-2 file:px-3 file:py-1 file:rounded-lg file:bg-amber-500/20 file:text-amber-300 file:border-0 file:text-xs file:cursor-pointer cursor-pointer"
+                      className="text-xs text-fg-muted file:mr-2 file:px-3 file:py-1 file:rounded-lg file:bg-accent-soft file:text-accent-text file:border-0 file:text-xs file:cursor-pointer cursor-pointer"
                     />
-                    {wmImageB64 && <p className="text-xs text-emerald-400 mt-1">Anh da tai len</p>}
-                    <p className="text-[10px] text-slate-500 mt-1">PNG · toi da 200KB</p>
+                    {wmImageB64 && <p className="text-xs text-success mt-1">Anh da tai len</p>}
+                    <p className="text-[10px] text-fg-muted mt-1">PNG · toi da 200KB</p>
                   </div>
                 )}
 
                 {/* Position + opacity */}
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   <div>
-                    <label className="text-[10px] text-slate-500 uppercase mb-1 block">Vi tri</label>
+                    <label className="text-[10px] text-fg-muted uppercase mb-1 block">Vi tri</label>
                     <select value={wmPosition} onChange={e => setWmPosition(e.target.value)}
-                      className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
+                      className="w-full bg-surface-2 border border-line rounded-lg px-2 py-1.5 text-xs text-fg-2 focus:outline-none"
                     >
                       {[['bottom-right','Goc duoi phai'],['bottom-left','Goc duoi trai'],
                         ['top-right','Goc tren phai'],['top-left','Goc tren trai'],
@@ -2683,31 +2683,31 @@ export default function DashboardContent() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-[10px] text-slate-500 uppercase mb-1 block">Do trong ({Math.round(wmOpacity*100)}%)</label>
+                    <label className="text-[10px] text-fg-muted uppercase mb-1 block">Do trong ({Math.round(wmOpacity*100)}%)</label>
                     <input type="range" min={0.1} max={1} step={0.05} value={wmOpacity}
                       onChange={e => setWmOpacity(+e.target.value)}
-                      className="w-full accent-amber-400"
+                      className="w-full accent-accent"
                     />
                   </div>
                 </div>
 
-                {wmError && <p className="text-xs text-red-400 mb-2">{wmError}</p>}
+                {wmError && <p className="text-xs text-danger mb-2">{wmError}</p>}
 
                 {wmPreviewUrl && (
-                  <div className="mb-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                    <p className="text-xs text-amber-300 mb-1 font-semibold">Xem truoc (3 giay dau):</p>
+                  <div className="mb-3 p-2 rounded-lg bg-accent-soft border border-accent/20">
+                    <p className="text-xs text-accent-text mb-1 font-semibold">Xem truoc (3 giay dau):</p>
                     <video src={wmPreviewUrl} controls className="w-full rounded max-h-32" />
                   </div>
                 )}
 
                 {wmResult && (
-                  <div className="mb-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-                    <p className="text-xs text-emerald-300 font-semibold mb-1">Render thanh cong!</p>
-                    <p className="text-xs text-slate-400">{wmResult.file_size_mb?.toFixed(1)} MB</p>
+                  <div className="mb-3 p-3 rounded-lg bg-success-soft border border-success/30">
+                    <p className="text-xs text-success font-semibold mb-1">Render thanh cong!</p>
+                    <p className="text-xs text-fg-muted">{wmResult.file_size_mb?.toFixed(1)} MB</p>
                     <a
                       href={`${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(wmResult.output_path)}&filename=watermarked.mp4`}
                       download="watermarked.mp4"
-                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 text-xs font-bold hover:bg-emerald-500/30 transition-colors"
+                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success-soft text-success text-xs font-bold hover:bg-success/20 transition-colors"
                     >
                       <Download className="w-3.5 h-3.5" /> Tai video da watermark
                     </a>
@@ -2716,13 +2716,13 @@ export default function DashboardContent() {
 
                 <div className="flex gap-2">
                   <button onClick={() => handleWatermarkRender(true)} disabled={wmLoading}
-                    className="px-3 py-1.5 rounded-lg bg-slate-700/60 text-slate-300 text-xs font-semibold border border-slate-600 hover:bg-slate-700 transition-colors cursor-pointer disabled:opacity-50"
+                    className="px-3 py-1.5 rounded-lg bg-surface-2 text-fg-2 text-xs font-semibold border border-line-strong hover:bg-line transition-colors cursor-pointer disabled:opacity-50"
                   >
                     {wmLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1" /> : null}
                     Xem truoc
                   </button>
                   <button onClick={() => handleWatermarkRender(false)} disabled={wmLoading}
-                    className="px-4 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/30 hover:bg-amber-500/30 transition-colors cursor-pointer disabled:opacity-50"
+                    className="px-4 py-1.5 rounded-lg bg-accent-soft text-accent-text text-xs font-bold border border-accent/30 hover:bg-accent/20 transition-colors cursor-pointer disabled:opacity-50"
                   >
                     {wmLoading ? 'Dang render...' : 'Render day du'}
                   </button>
@@ -2732,28 +2732,28 @@ export default function DashboardContent() {
 
             {/* ── Chapters Panel ──────────────────────────────── */}
             {showChapters && videoInfo.chapters?.length > 0 && (
-              <div className="mb-5 rounded-2xl overflow-hidden border border-indigo-500/30 shadow-lg">
-                <div className="flex items-center justify-between px-4 py-3 bg-indigo-500/10 border-b border-indigo-500/20">
-                  <h5 className="text-white font-bold text-sm flex items-center gap-2">
-                    <List className="w-4 h-4 text-indigo-400" />
+              <div className="mb-5 rounded-2xl overflow-hidden border border-line shadow-lg">
+                <div className="flex items-center justify-between px-4 py-3 bg-surface-2 border-b border-line">
+                  <h5 className="text-fg font-bold text-sm flex items-center gap-2">
+                    <List className="w-4 h-4 text-fg-2" />
                     Chapters ({videoInfo.chapters.length})
                   </h5>
-                  <button onClick={() => setShowChapters(false)} className="text-slate-400 hover:text-white transition-colors">
+                  <button onClick={() => setShowChapters(false)} className="text-fg-muted hover:text-fg transition-colors">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="max-h-64 overflow-y-auto divide-y divide-slate-700/40">
+                <div className="max-h-64 overflow-y-auto divide-y divide-line">
                   {videoInfo.chapters.map((ch, i) => (
-                    <div key={i} className="flex items-center gap-3 px-4 py-2.5 bg-slate-800/40 hover:bg-slate-800/70 transition-colors">
-                      <span className="text-slate-500 text-xs font-mono w-6 text-right flex-shrink-0">{i + 1}</span>
+                    <div key={i} className="flex items-center gap-3 px-4 py-2.5 bg-surface-2 hover:bg-surface transition-colors">
+                      <span className="text-fg-muted text-xs font-mono w-6 text-right flex-shrink-0">{i + 1}</span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-semibold truncate">{ch.title}</p>
-                        <p className="text-slate-400 text-xs font-mono">{formatTime(ch.start_time)} → {formatTime(ch.end_time)} · {formatTime(ch.duration)}</p>
+                        <p className="text-fg text-sm font-semibold truncate">{ch.title}</p>
+                        <p className="text-fg-muted text-xs font-mono">{formatTime(ch.start_time)} → {formatTime(ch.end_time)} · {formatTime(ch.duration)}</p>
                       </div>
                       <button
                         onClick={() => handleChapterDownload(ch)}
                         disabled={downloadingChapter === ch.title}
-                        className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/20 transition-all disabled:opacity-50"
+                        className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-surface-2 text-fg-2 border border-line hover:bg-line transition-all disabled:opacity-50"
                       >
                         {downloadingChapter === ch.title
                           ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -2799,16 +2799,16 @@ export default function DashboardContent() {
             {hasFormats ? (
               <>
                 {/* Tab Switcher */}
-                <div className="flex gap-1 p-1 bg-slate-800/60 rounded-xl mb-4 max-w-xs">
+                <div className="flex gap-1 p-1 bg-surface rounded-xl mb-4 max-w-xs">
                   <button
                     onClick={() => setFormatTab('video')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${formatTab === 'video' ? 'bg-gradient-to-r from-[#10b981] to-[#059669] text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${formatTab === 'video' ? 'bg-success text-accent-fg shadow-md' : 'text-fg-muted hover:text-accent-fg'}`}
                   >
                     <Video className="w-4 h-4" /> Video ({videoFormats.length + (showMergeOption ? 1 : 0)})
                   </button>
                   <button
                     onClick={() => setFormatTab('audio')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${formatTab === 'audio' ? 'bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${formatTab === 'audio' ? 'bg-accent text-accent-fg shadow-md' : 'text-fg-muted hover:text-accent-fg'}`}
                   >
                     <Music className="w-4 h-4" /> Âm thanh ({audioFormats.length})
                   </button>
@@ -2823,20 +2823,20 @@ export default function DashboardContent() {
                         <button
                           onClick={handleMergeDownload}
                           disabled={downloadingId === 'merge_4k'}
-                          className="w-full flex items-center justify-between px-5 py-3.5 rounded-2xl bg-gradient-to-r from-[#FBBF24]/15 to-[#F59E0B]/15 border border-[#FBBF24]/40 hover:border-[#FBBF24]/70 text-white transition-all disabled:opacity-60 active:scale-[0.99] group"
+                          className="w-full flex items-center justify-between px-5 py-3.5 rounded-2xl bg-accent-soft border border-accent/40 hover:border-accent/70 text-fg transition-all disabled:opacity-60 active:scale-[0.99] group"
                         >
                           <div className="flex items-center gap-3">
-                            <Crown className="w-5 h-5 text-[#FBBF24]" />
+                            <Crown className="w-5 h-5 text-accent-text" />
                             <div className="text-left">
                               <div className="flex items-center gap-2">
                                 <ResBadge label={maxMergeHeight >= 2160 ? '4K' : maxMergeHeight >= 1440 ? '2K' : `${maxMergeHeight}p`} height={maxMergeHeight} />
                                 <span className="text-sm font-bold">Chất lượng cao nhất</span>
-                                <span className="bg-violet-600 text-white text-xs px-1 rounded font-bold">PRO</span>
+                                <span className="bg-accent text-accent-fg text-xs px-1 rounded font-bold">PRO</span>
                               </div>
-                              <p className="text-xs text-slate-400 mt-0.5">Video + Audio ghép • Cần xử lý</p>
+                              <p className="text-xs text-fg-muted mt-0.5">Video + Audio ghép • Cần xử lý</p>
                             </div>
                           </div>
-                          {downloadingId === 'merge_4k' ? <Loader2 className="w-5 h-5 animate-spin text-[#FBBF24]" /> : <Download className="w-5 h-5 text-[#FBBF24] group-hover:scale-110 transition-transform" />}
+                          {downloadingId === 'merge_4k' ? <Loader2 className="w-5 h-5 animate-spin text-accent-text" /> : <Download className="w-5 h-5 text-accent-text group-hover:scale-110 transition-transform" />}
                         </button>
                       )}
 
@@ -2853,65 +2853,65 @@ export default function DashboardContent() {
                           disabled={downloadingId === `merge_${fmt.height}`}
                           className={`w-full flex items-center justify-between px-5 py-3.5 rounded-2xl ${
                             isAlreadyDownloaded
-                              ? 'bg-emerald-500/10 border border-emerald-500/40 hover:border-emerald-400/70'
-                              : 'bg-slate-800/50 border border-slate-700/40 hover:border-emerald-500/50 hover:bg-slate-800/80'
-                          } text-white transition-all disabled:opacity-60 active:scale-[0.99] group`}
+                              ? 'bg-success-soft border border-success/40 hover:border-success/70'
+                              : 'bg-surface border border-line hover:border-success/50 hover:bg-surface-2'
+                          } text-fg transition-all disabled:opacity-60 active:scale-[0.99] group`}
                         >
                           <div className="flex items-center gap-3">
-                            <Video className="w-5 h-5 text-emerald-400" />
+                            <Video className="w-5 h-5 text-success" />
                             <div className="text-left">
                               <div className="flex items-center gap-2">
                                 <ResBadge label={fmt.label} height={fmt.height} />
                                 <span className="text-sm font-bold">{fmt.resolution}</span>
-                                <span className="text-xs text-slate-500 uppercase">{fmt.ext}</span>
+                                <span className="text-xs text-fg-muted uppercase">{fmt.ext}</span>
                                 {fmt.recommended && (
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-success-soft text-success border border-success/30">
                                     ✓ MỌI THIẾT BỊ
                                   </span>
                                 )}
                                 {fmt.universal === false && (
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-accent-soft text-accent-text border border-accent/30">
                                     VP9/AV1
                                   </span>
                                 )}
                                 {isAlreadyDownloaded ? (
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-success-soft text-success border border-success/30">
                                     SẴN SÀNG
                                   </span>
                                 ) : fmt.requires_merge && (
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-surface-2 text-fg-2 border border-line">
                                     GHÉP TỆP
                                   </span>
                                 )}
                                 {fmt.label?.includes('No Watermark') && (
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-success-soft text-success border border-success/30">
                                     KHÔNG LOGO
                                   </span>
                                 )}
                                 {fmt.label?.includes('With Watermark') && (
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-accent-soft text-accent-text border border-accent/30">
                                     CÓ LOGO
                                   </span>
                                 )}
                               </div>
-                              {displaySize > 0 && <p className="text-xs text-slate-400 mt-0.5">{fmt.size_estimated && !isAlreadyDownloaded ? '~' : ''}{displaySize.toFixed(1)} MB{isAlreadyDownloaded ? ' (đã tải)' : ''}</p>}
+                              {displaySize > 0 && <p className="text-xs text-fg-muted mt-0.5">{fmt.size_estimated && !isAlreadyDownloaded ? '~' : ''}{displaySize.toFixed(1)} MB{isAlreadyDownloaded ? ' (đã tải)' : ''}</p>}
                               {fmt.universal === false && (
-                                <p className="text-[11px] text-amber-400/80 mt-0.5">⚠ Định dạng VP9/AV1 — nếu máy không phát được, mở bằng VLC (miễn phí, mọi nền tảng)</p>
+                                <p className="text-[11px] text-accent-text mt-0.5">⚠ Định dạng VP9/AV1 — nếu máy không phát được, mở bằng VLC (miễn phí, mọi nền tảng)</p>
                               )}
                             </div>
                           </div>
                           {downloadingId === `merge_${fmt.height}` ? (
-                            <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
+                            <Loader2 className="w-5 h-5 animate-spin text-success" />
                           ) : (
-                            <Download className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
+                            <Download className="w-5 h-5 text-success group-hover:scale-110 transition-transform" />
                           )}
                         </button>
                       ); })}
 
                       {videoFormats.length === 0 && !showMergeOption && (
-                        <div className="text-center py-6 text-slate-400 text-sm">
+                        <div className="text-center py-6 text-fg-muted text-sm">
                           Không tìm thấy định dạng video riêng lẻ.
-                          <button onClick={handleDefaultDownload} className="block mx-auto mt-3 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#10b981] to-[#059669] text-white font-bold text-sm">
+                          <button onClick={handleDefaultDownload} className="block mx-auto mt-3 px-6 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm">
                             <Download className="w-4 h-4 inline mr-1.5" />Tải video mặc định
                           </button>
                         </div>
@@ -2926,42 +2926,42 @@ export default function DashboardContent() {
                           key={`a-${i}`}
                           onClick={() => fmt.requires_merge ? handleMergeDownload(fmt.ext) : handleFormatDownload(fmt)}
                           disabled={downloadingId === `merge_${fmt.ext}`}
-                          className="w-full flex items-center justify-between px-5 py-3.5 rounded-2xl bg-slate-800/50 border border-slate-700/40 hover:border-blue-500/50 hover:bg-slate-800/80 text-white transition-all disabled:opacity-60 active:scale-[0.99] group"
+                          className="w-full flex items-center justify-between px-5 py-3.5 rounded-2xl bg-surface border border-line hover:border-line hover:bg-surface-2 text-fg transition-all disabled:opacity-60 active:scale-[0.99] group"
                         >
                           <div className="flex items-center gap-3">
-                            <Music className="w-5 h-5 text-blue-400" />
+                            <Music className="w-5 h-5 text-fg-2" />
                             <div className="text-left">
                               <div className="flex items-center gap-2 mb-1">
-                                <span className="text-sm font-bold text-white">Âm thanh</span>
+                                <span className="text-sm font-bold text-fg">Âm thanh</span>
                               </div>
                               <div className="flex items-center gap-2">
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-blue-500/20 text-blue-300 border border-blue-500/30 uppercase">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-surface-2 text-fg-2 border border-line uppercase">
                                   {fmt.ext}
                                 </span>
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-purple-500/20 text-purple-300 border border-purple-500/30 uppercase">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-surface-2 text-fg-2 border border-line uppercase">
                                   CHỈ ÂM THANH
                                 </span>
-                                <span className="text-xs font-semibold text-slate-400">{fmt.label}</span>
+                                <span className="text-xs font-semibold text-fg-muted">{fmt.label}</span>
                               </div>
                             </div>
                           </div>
                           {downloadingId === `merge_${fmt.ext}` ? (
-                            <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+                            <Loader2 className="w-5 h-5 animate-spin text-fg-2" />
                           ) : (
-                            <Download className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />
+                            <Download className="w-5 h-5 text-fg-2 group-hover:scale-110 transition-transform" />
                           )}
                         </button>
                       ))}
                       {audioFormats.length === 0 && (
-                        <div className="text-center py-6 text-slate-400 text-sm">
+                        <div className="text-center py-6 text-fg-muted text-sm">
                           <p className="mb-4">Không tìm thấy định dạng âm thanh riêng lẻ.</p>
                           <button
                             onClick={handleAudioDownload}
                             disabled={downloadingId === 'audio_mp3'}
-                            className="w-full flex items-center justify-between px-6 py-4 rounded-2xl bg-[#1e293b] hover:bg-[#334155] border border-slate-700/50 text-white font-bold shadow-lg transition-all disabled:opacity-70 active:scale-[0.98]"
+                            className="w-full flex items-center justify-between px-6 py-4 rounded-2xl bg-surface-2 hover:bg-line border border-line text-fg font-bold shadow-lg transition-all disabled:opacity-70 active:scale-[0.98]"
                           >
                             <div className="flex items-center gap-3">
-                              <Music className="w-6 h-6 text-[#38bdf8]" />
+                              <Music className="w-6 h-6 text-accent-text" />
                               <span className="text-base sm:text-lg">Tải Âm Thanh (MP3 320kbps)</span>
                             </div>
                             {downloadingId === 'audio_mp3' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
@@ -2975,7 +2975,7 @@ export default function DashboardContent() {
             ) : (
               /* Fallback: no format list (TikTok/Douyin) */
               <div className="flex flex-col gap-3 max-w-lg mx-auto w-full">
-                <button onClick={handleDefaultDownload} className="w-full flex items-center justify-between px-6 py-4 rounded-2xl bg-gradient-to-r from-[#10b981] to-[#059669] hover:from-[#059669] hover:to-[#047857] text-white font-bold shadow-lg transition-all active:scale-[0.98]">
+                <button onClick={handleDefaultDownload} className="w-full flex items-center justify-between px-6 py-4 rounded-2xl bg-accent text-accent-fg font-bold shadow-lg transition-all active:scale-[0.98]">
                   <div className="flex items-center gap-3">
                     <Video className="w-6 h-6" />
                     <span className="text-base">{removeWatermark ? 'Tải Video (Không logo)' : 'Tải Video'}</span>
@@ -2985,7 +2985,7 @@ export default function DashboardContent() {
                 <button
                   onClick={handleMergeDownload}
                   disabled={downloadingId === 'merge_4k'}
-                  className="w-full flex items-center justify-between px-6 py-4 rounded-2xl bg-gradient-to-r from-[#FBBF24] to-[#F59E0B] hover:from-[#F59E0B] hover:to-[#D97706] text-[#012622] font-bold shadow-lg transition-all disabled:opacity-70 active:scale-[0.98]"
+                  className="w-full flex items-center justify-between px-6 py-4 rounded-2xl bg-accent text-accent-fg font-bold shadow-lg transition-all disabled:opacity-70 active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-3">
                     <Crown className="w-6 h-6" />
@@ -2996,10 +2996,10 @@ export default function DashboardContent() {
                 <button
                   onClick={handleAudioDownload}
                   disabled={downloadingId === 'audio_mp3'}
-                  className="w-full flex items-center justify-between px-6 py-4 rounded-2xl bg-[#1e293b] hover:bg-[#334155] border border-slate-700/50 text-white font-bold shadow-lg transition-all disabled:opacity-70 active:scale-[0.98]"
+                  className="w-full flex items-center justify-between px-6 py-4 rounded-2xl bg-surface-2 hover:bg-line border border-line text-fg font-bold shadow-lg transition-all disabled:opacity-70 active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-3">
-                    <Music className="w-6 h-6 text-[#38bdf8]" />
+                    <Music className="w-6 h-6 text-accent-text" />
                     <span className="text-base">Tải Âm Thanh (MP3 320kbps)</span>
                   </div>
                   {downloadingId === 'audio_mp3' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
@@ -3044,7 +3044,7 @@ export default function DashboardContent() {
 
             {/* Cancel/Reset */}
             <div className="text-center mt-6">
-              <button onClick={() => { setVideoInfo(null); setLastDownloadInfo(null); setShowSuccessCard(false); setSuccessCardInfo(null); }} className="px-8 py-2.5 rounded-full text-slate-400 font-semibold hover:text-white hover:bg-white/10 transition-colors text-sm border border-transparent hover:border-slate-700">
+              <button onClick={() => { setVideoInfo(null); setLastDownloadInfo(null); setShowSuccessCard(false); setSuccessCardInfo(null); }} className="px-8 py-2.5 rounded-full text-fg-muted font-semibold hover:text-fg hover:bg-surface-2 transition-colors text-sm border border-transparent hover:border-line">
                 Tải video khác
               </button>
             </div>
@@ -3055,29 +3055,29 @@ export default function DashboardContent() {
       {/* ── Spotify Playlist / Album Track List ─────────── */}
       {spotifyData && (
         <div className="w-full max-w-3xl mb-12">
-          <div className="bg-[#012622]/50 border border-[#1DB954]/30 backdrop-blur-md rounded-3xl p-5 sm:p-6 shadow-2xl overflow-hidden">
+          <div className="bg-surface/50 border border-accent/30 backdrop-blur-md rounded-3xl p-5 sm:p-6 shadow-2xl overflow-hidden">
             {/* Header */}
             <div className="flex items-center gap-4 mb-6">
               {spotifyData.thumbnail && (
                 <img src={spotifyData.thumbnail} alt="cover"
-                  className="w-20 h-20 rounded-2xl object-cover flex-shrink-0 border border-slate-700/50 shadow-lg" />
+                  className="w-20 h-20 rounded-2xl object-cover flex-shrink-0 border border-line shadow-lg" />
               )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-[#1DB954]/20 text-[#1DB954] border border-[#1DB954]/40 uppercase tracking-wider">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-accent-soft text-accent-text border border-accent/40 uppercase tracking-wider">
                     {spotifyData.type === 'album' ? 'Album' : 'Playlist'} • Spotify
                   </span>
                 </div>
-                <h3 className="text-white font-bold text-xl line-clamp-1">
+                <h3 className="text-fg font-bold text-xl line-clamp-1">
                   {spotifyData.playlist_name || spotifyData.album_name}
                 </h3>
                 {spotifyData.artist && (
-                  <p className="text-slate-400 text-sm mt-0.5">{spotifyData.artist}</p>
+                  <p className="text-fg-muted text-sm mt-0.5">{spotifyData.artist}</p>
                 )}
-                <p className="text-slate-500 text-xs mt-1">{spotifyData.tracks?.length || 0} bài nhạc</p>
+                <p className="text-fg-muted text-xs mt-1">{spotifyData.tracks?.length || 0} bài nhạc</p>
               </div>
               <button onClick={() => setSpotifyData(null)}
-                className="text-slate-500 hover:text-white transition-colors text-sm px-3 py-1.5 rounded-lg hover:bg-white/10">
+                className="text-fg-muted hover:text-fg transition-colors text-sm px-3 py-1.5 rounded-lg hover:bg-surface-2">
                 ✕
               </button>
             </div>
@@ -3086,17 +3086,17 @@ export default function DashboardContent() {
             {(spotifyData.tracks && spotifyData.tracks.length > 0) && (
               <div className="flex justify-between items-center px-2 mb-2 gap-2">
                 {selectedTracks.size > 0 ? (
-                  <span className="text-xs text-emerald-400 font-medium">
+                  <span className="text-xs text-success font-medium">
                     Đã chọn {selectedTracks.size}/{spotifyData.tracks.length} bài
                   </span>
                 ) : (
-                  <span className="text-xs text-slate-500">Chọn bài hoặc tải tất cả</span>
+                  <span className="text-xs text-fg-muted">Chọn bài hoặc tải tất cả</span>
                 )}
                 <div className="flex gap-2">
                   <button
                     onClick={handleDownloadAllZip}
                     disabled={isZipping}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] text-sm font-bold rounded-xl shadow-lg hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100"
+                    className="flex items-center gap-2 px-4 py-2 bg-accent text-accent-fg text-sm font-bold rounded-xl shadow-lg hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100"
                   >
                     {isZipping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                     {isZipping
@@ -3109,7 +3109,7 @@ export default function DashboardContent() {
                   {isZipping && (
                     <button
                       onClick={handleCancelZip}
-                      className="flex items-center justify-center w-9 h-9 bg-red-500/20 text-red-400 hover:bg-red-500/40 hover:text-white rounded-xl transition-all"
+                      className="flex items-center justify-center w-9 h-9 bg-danger-soft text-danger hover:bg-danger/40 hover:text-fg rounded-xl transition-all"
                       title="Hủy nén ZIP"
                     >
                       <X className="w-5 h-5" />
@@ -3120,16 +3120,16 @@ export default function DashboardContent() {
             )}
 
             {/* Track list as Table */}
-            <div className="max-h-[480px] overflow-y-auto pr-1 custom-scrollbar bg-slate-800/40 rounded-xl border border-slate-700/30">
+            <div className="max-h-[480px] overflow-y-auto pr-1 custom-scrollbar bg-surface-2 rounded-xl border border-line">
               <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="sticky top-0 bg-slate-900/90 backdrop-blur-md text-slate-400 text-xs font-semibold uppercase tracking-wider z-10">
+                <thead className="sticky top-0 bg-surface-2 backdrop-blur-md text-fg-muted text-xs font-semibold uppercase tracking-wider z-10">
                   <tr>
                     <th className="px-3 py-3 w-10">
                       <input
                         type="checkbox"
                         checked={spotifyData.tracks?.length > 0 && selectedTracks.size === spotifyData.tracks.length}
                         onChange={handleToggleAll}
-                        className="w-4 h-4 accent-emerald-500 rounded cursor-pointer"
+                        className="w-4 h-4 accent-accent rounded cursor-pointer"
                         title="Chọn tất cả"
                       />
                     </th>
@@ -3140,37 +3140,37 @@ export default function DashboardContent() {
                     <th className="px-4 py-3 w-28 text-right">Hành động</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-700/30">
+                <tbody className="divide-y divide-line">
                   {(spotifyData.tracks || []).map((track, i) => {
                     const key = track.search_query;
                     const dlState = trackDownloads[key];
                     const isSelected = selectedTracks.has(key);
                     return (
-                      <tr key={i} className={`hover:bg-slate-700/30 transition-colors group ${isSelected ? 'bg-emerald-900/20' : ''}`}>
+                      <tr key={i} className={`hover:bg-surface-2 transition-colors group ${isSelected ? 'bg-success-soft' : ''}`}>
                         <td className="px-3 py-3">
                           <input
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => handleToggleTrack(key)}
-                            className="w-4 h-4 accent-emerald-500 rounded cursor-pointer"
+                            className="w-4 h-4 accent-accent rounded cursor-pointer"
                           />
                         </td>
-                        <td className="px-4 py-3 text-slate-500 font-medium">
+                        <td className="px-4 py-3 text-fg-muted font-medium">
                           {track.thumbnail ? (
                             <img src={track.thumbnail} alt="" className="w-8 h-8 rounded object-cover shadow-sm" />
                           ) : (
-                            <div className="w-8 h-8 rounded bg-[#1DB954]/20 flex items-center justify-center">
+                            <div className="w-8 h-8 rounded bg-accent-soft flex items-center justify-center">
                               <Music className="w-4 h-4 text-[#1DB954]" />
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-white font-medium max-w-[200px] truncate" title={track.name}>
+                        <td className="px-4 py-3 text-fg font-medium max-w-[200px] truncate" title={track.name}>
                           {track.name}
                         </td>
-                        <td className="px-4 py-3 text-slate-400 max-w-[150px] truncate" title={track.artist_str}>
+                        <td className="px-4 py-3 text-fg-muted max-w-[150px] truncate" title={track.artist_str}>
                           {track.artist_str}
                         </td>
-                        <td className="px-4 py-3 text-slate-500 text-center">
+                        <td className="px-4 py-3 text-fg-muted text-center">
                           {track.duration > 0 ? `${Math.floor(track.duration / 60)}:${String(track.duration % 60).padStart(2, '0')}` : '--:--'}
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -3179,12 +3179,12 @@ export default function DashboardContent() {
                             disabled={dlState === 'loading' || dlState === 'done'}
                             className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                               dlState === 'done'
-                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 cursor-default'
+                                ? 'bg-success-soft text-success border-success/30 cursor-default'
                                 : dlState === 'error'
-                                ? 'bg-red-500/20 text-red-300 border-red-500/30'
+                                ? 'bg-danger-soft text-danger border-danger/30'
                                 : dlState === 'loading'
-                                ? 'bg-slate-700 text-slate-400 border-slate-600 cursor-wait'
-                                : 'bg-[#1DB954]/10 text-[#1DB954] border-[#1DB954]/30 hover:bg-[#1DB954]/20'
+                                ? 'bg-surface-2 text-fg-muted border-line-strong cursor-wait'
+                                : 'bg-accent-soft text-accent-text border-accent/30 hover:bg-accent/20'
                             }`}
                           >
                             {dlState === 'loading' ? (
@@ -3210,38 +3210,38 @@ export default function DashboardContent() {
       {/* ── Spotify Artist ───────────────────────────────── */}
       {artistData && (
         <div className="w-full max-w-3xl mb-12">
-          <div className="bg-[#012622]/50 border border-[#1DB954]/30 backdrop-blur-md rounded-3xl p-5 sm:p-6 shadow-2xl overflow-hidden">
+          <div className="bg-surface/50 border border-accent/30 backdrop-blur-md rounded-3xl p-5 sm:p-6 shadow-2xl overflow-hidden">
             {/* Artist header */}
             <div className="flex items-start gap-4 mb-4">
               {artistData.artist?.image ? (
-                <img src={artistData.artist.image} alt="" className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover flex-shrink-0 border border-slate-700/50 shadow-lg" />
+                <img src={artistData.artist.image} alt="" className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover flex-shrink-0 border border-line shadow-lg" />
               ) : (
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#1DB954]/20 flex items-center justify-center flex-shrink-0">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-accent-soft flex items-center justify-center flex-shrink-0">
                   <Music className="w-8 h-8 text-[#1DB954]" />
                 </div>
               )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-[#1DB954]/20 text-[#1DB954] border border-[#1DB954]/40 uppercase tracking-wider">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-accent-soft text-accent-text border border-accent/40 uppercase tracking-wider">
                     Nghệ sĩ • Spotify
                   </span>
                   {typeof artistData.artist?.popularity === 'number' && (
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-700/60 text-slate-300 border border-slate-600/50">
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-surface-2 text-fg-2 border border-line-strong">
                       Độ phổ biến {artistData.artist.popularity}/100
                     </span>
                   )}
                 </div>
-                <h3 className="text-white font-bold text-xl sm:text-2xl line-clamp-1 mt-1">{artistData.artist?.name}</h3>
-                <p className="text-slate-500 text-xs mt-1">
+                <h3 className="text-fg font-bold text-xl sm:text-2xl line-clamp-1 mt-1">{artistData.artist?.name}</h3>
+                <p className="text-fg-muted text-xs mt-1">
                   {artistData.artist?.followers ? `${artistData.artist.followers.toLocaleString()} người theo dõi · ` : ''}
                   {artistData.summary?.top_tracks_count || 0} top tracks · {artistData.summary?.albums_count || 0} album · {artistData.summary?.singles_count || 0} single
                 </p>
                 {artistData.artist?.genres?.length > 0 && (
-                  <p className="text-slate-600 text-[11px] mt-0.5 line-clamp-1">{artistData.artist.genres.join(', ')}</p>
+                  <p className="text-fg-muted text-[11px] mt-0.5 line-clamp-1">{artistData.artist.genres.join(', ')}</p>
                 )}
                 {artistData.artist?.external_url && (
                   <a href={artistData.artist.external_url} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[11px] text-[#1DB954] hover:underline mt-1">
+                    className="inline-flex items-center gap-1 text-[11px] text-accent-text hover:underline mt-1">
                     <ExternalLink className="w-3 h-3" /> Mở trên Spotify
                   </a>
                 )}
@@ -3251,12 +3251,12 @@ export default function DashboardContent() {
                   setArtistPreviewKey(null); setExpandedAlbum(null);
                   setArtistData(null); setSelectedTracks(new Set());
                 }}
-                className="text-slate-500 hover:text-white transition-colors text-sm px-3 py-1.5 rounded-lg hover:bg-white/10 flex-shrink-0">✕</button>
+                className="text-fg-muted hover:text-fg transition-colors text-sm px-3 py-1.5 rounded-lg hover:bg-surface-2 flex-shrink-0">✕</button>
             </div>
 
             {/* Partial notice (no API key) */}
             {artistData.partial && (
-              <div className="mb-4 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">
+              <div className="mb-4 text-xs text-accent-text bg-accent-soft border border-accent/30 rounded-xl px-3 py-2">
                 Hiện chỉ lấy được <b>Top tracks</b> cho nghệ sĩ này. Albums/Singles tạm chưa khả dụng.
               </div>
             )}
@@ -3272,22 +3272,22 @@ export default function DashboardContent() {
                 <button key={b.mode} onClick={() => handleArtistDownload(b.mode)} disabled={isZipping || !b.on}
                   className={`flex items-center gap-1.5 px-3.5 py-2 text-sm font-bold rounded-xl transition-all ${
                     b.mode === 'top_tracks'
-                      ? 'bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] hover:scale-105'
-                      : 'bg-[#1DB954]/10 text-[#1DB954] border border-[#1DB954]/30 hover:bg-[#1DB954]/20'
+                      ? 'bg-accent text-accent-fg hover:scale-105'
+                      : 'bg-accent-soft text-accent-text border border-accent/30 hover:bg-accent/20'
                   } disabled:opacity-40 disabled:hover:scale-100 disabled:cursor-not-allowed`}>
                   {isZipping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}{b.label}
                 </button>
               ))}
             </div>
             {isZipping && (
-              <div className="mb-3 text-xs text-emerald-400 flex items-center gap-2">
+              <div className="mb-3 text-xs text-success flex items-center gap-2">
                 Đang tải & nén... {zipProgress}%
-                <button onClick={handleCancelZip} className="text-red-400 hover:text-red-300 font-semibold">Hủy</button>
+                <button onClick={handleCancelZip} className="text-danger hover:text-danger font-semibold">Hủy</button>
               </div>
             )}
 
             {/* Tabs */}
-            <div className="flex gap-1 mb-3 border-b border-slate-700/40">
+            <div className="flex gap-1 mb-3 border-b border-line">
               {[
                 { k: 'top', label: `Top tracks (${artistData.summary?.top_tracks_count || 0})` },
                 { k: 'albums', label: `Albums (${artistData.summary?.albums_count || 0})` },
@@ -3295,7 +3295,7 @@ export default function DashboardContent() {
               ].map(t => (
                 <button key={t.k} onClick={() => setArtistTab(t.k)}
                   className={`px-3 py-2 text-sm font-semibold transition-colors ${
-                    artistTab === t.k ? 'text-[#1DB954] border-b-2 border-[#1DB954]' : 'text-slate-400 hover:text-slate-200'
+                    artistTab === t.k ? 'text-accent-text border-b-2 border-accent' : 'text-fg-muted hover:text-fg-2'
                   }`}>{t.label}</button>
               ))}
             </div>
@@ -3303,7 +3303,7 @@ export default function DashboardContent() {
             {/* Top tracks */}
             {artistTab === 'top' && (
               (artistData.top_tracks || []).length === 0 ? (
-                <p className="text-slate-500 text-sm py-8 text-center">Chưa lấy được top tracks của nghệ sĩ này.</p>
+                <p className="text-fg-muted text-sm py-8 text-center">Chưa lấy được top tracks của nghệ sĩ này.</p>
               ) : (() => {
                 const topKeys = (artistData.top_tracks || []).map(t => t.search_query);
                 const allTopSelected = topKeys.length > 0 && topKeys.every(k => selectedTracks.has(k));
@@ -3316,14 +3316,14 @@ export default function DashboardContent() {
                 return (
                   <>
                     <div className="flex items-center justify-between px-1 mb-2">
-                      <button onClick={toggleAllTop} className="text-xs font-semibold text-[#1DB954] hover:underline">
+                      <button onClick={toggleAllTop} className="text-xs font-semibold text-accent-text hover:underline">
                         {allTopSelected ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
                       </button>
                       {selectedTracks.size > 0 && (
-                        <span className="text-xs text-emerald-400">Đã chọn {topKeys.filter(k => selectedTracks.has(k)).length}/{topKeys.length}</span>
+                        <span className="text-xs text-success">Đã chọn {topKeys.filter(k => selectedTracks.has(k)).length}/{topKeys.length}</span>
                       )}
                     </div>
-                    <div className="max-h-[420px] overflow-y-auto pr-1 custom-scrollbar bg-slate-800/40 rounded-xl border border-slate-700/30 divide-y divide-slate-700/30">
+                    <div className="max-h-[420px] overflow-y-auto pr-1 custom-scrollbar bg-surface-2 rounded-xl border border-line divide-y divide-line">
                       {(artistData.top_tracks || []).map((track, i) => {
                         const key = track.search_query;
                         const dlState = trackDownloads[key];
@@ -3331,37 +3331,37 @@ export default function DashboardContent() {
                         const pk = track.spotify_track_id || track.search_query;
                         const isPreviewing = artistPreviewKey === pk;
                         return (
-                          <div key={i} className={`flex items-center gap-2.5 px-3 py-2.5 hover:bg-slate-700/30 transition-colors ${isSelected ? 'bg-emerald-900/20' : ''}`}>
+                          <div key={i} className={`flex items-center gap-2.5 px-3 py-2.5 hover:bg-surface-2 transition-colors ${isSelected ? 'bg-success-soft' : ''}`}>
                             <input type="checkbox" checked={isSelected} onChange={() => handleToggleTrack(key)}
-                              className="w-4 h-4 accent-emerald-500 rounded cursor-pointer flex-shrink-0" />
-                            <span className="text-slate-500 text-xs w-4 text-right flex-shrink-0 hidden sm:block">{i + 1}</span>
+                              className="w-4 h-4 accent-accent rounded cursor-pointer flex-shrink-0" />
+                            <span className="text-fg-muted text-xs w-4 text-right flex-shrink-0 hidden sm:block">{i + 1}</span>
                             {track.thumbnail ? (
                               <img src={track.thumbnail} alt="" className="w-9 h-9 rounded object-cover flex-shrink-0" />
                             ) : (
-                              <div className="w-9 h-9 rounded bg-[#1DB954]/20 flex items-center justify-center flex-shrink-0"><Music className="w-4 h-4 text-[#1DB954]" /></div>
+                              <div className="w-9 h-9 rounded bg-accent-soft flex items-center justify-center flex-shrink-0"><Music className="w-4 h-4 text-[#1DB954]" /></div>
                             )}
                             <div className="flex-1 min-w-0">
-                              <p className="text-white text-sm font-medium truncate" title={track.name}>{track.name}</p>
-                              <p className="text-slate-400 text-xs truncate" title={`${track.artist_str}${track.album_name ? ' · ' + track.album_name : ''}`}>
-                                {track.artist_str}{track.album_name ? <span className="text-slate-600"> · {track.album_name}</span> : ''}
+                              <p className="text-fg text-sm font-medium truncate" title={track.name}>{track.name}</p>
+                              <p className="text-fg-muted text-xs truncate" title={`${track.artist_str}${track.album_name ? ' · ' + track.album_name : ''}`}>
+                                {track.artist_str}{track.album_name ? <span className="text-fg-muted"> · {track.album_name}</span> : ''}
                               </p>
                             </div>
                             {track.preview_url && (
                               <button onClick={() => toggleArtistPreview(track)} title="Nghe thử 30s"
                                 className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center border transition-colors ${
-                                  isPreviewing ? 'bg-[#1DB954] text-[#012622] border-[#1DB954]' : 'bg-slate-700/50 text-slate-300 border-slate-600 hover:text-white'}`}>
+                                  isPreviewing ? 'bg-accent text-accent-fg border-accent' : 'bg-surface-2 text-fg-2 border-line-strong hover:text-fg'}`}>
                                 {isPreviewing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                               </button>
                             )}
-                            <span className="text-slate-500 text-xs flex-shrink-0 hidden sm:block">
+                            <span className="text-fg-muted text-xs flex-shrink-0 hidden sm:block">
                               {track.duration > 0 ? `${Math.floor(track.duration / 60)}:${String(track.duration % 60).padStart(2, '0')}` : '--:--'}
                             </span>
                             <button onClick={() => handleSpotifyTrackDownload(track)} disabled={dlState === 'loading' || dlState === 'done'}
                               className={`inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold border flex-shrink-0 ${
-                                dlState === 'done' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 cursor-default'
-                                : dlState === 'error' ? 'bg-red-500/20 text-red-300 border-red-500/30'
-                                : dlState === 'loading' ? 'bg-slate-700 text-slate-400 border-slate-600 cursor-wait'
-                                : 'bg-[#1DB954]/10 text-[#1DB954] border-[#1DB954]/30 hover:bg-[#1DB954]/20'}`}>
+                                dlState === 'done' ? 'bg-success-soft text-success border-success/30 cursor-default'
+                                : dlState === 'error' ? 'bg-danger-soft text-danger border-danger/30'
+                                : dlState === 'loading' ? 'bg-surface-2 text-fg-muted border-line-strong cursor-wait'
+                                : 'bg-accent-soft text-accent-text border-accent/30 hover:bg-accent/20'}`}>
                               {dlState === 'loading' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : dlState === 'done' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
                               <span className="hidden sm:inline">{dlState === 'done' ? 'Xong' : dlState === 'error' ? 'Lỗi' : 'MP3'}</span>
                             </button>
@@ -3379,15 +3379,15 @@ export default function DashboardContent() {
               const list = (artistTab === 'albums' ? artistData.albums : artistData.singles) || [];
               if (artistData.partial) {
                 return (
-                  <p className="text-slate-500 text-sm py-8 text-center px-4">
+                  <p className="text-fg-muted text-sm py-8 text-center px-4">
                     {artistTab === 'albums' ? 'Danh sách album' : 'Danh sách single'} tạm chưa khả dụng cho nghệ sĩ này.
-                    <br /><span className="text-slate-600 text-xs">(Cần Spotify API với tài khoản Premium của chủ app.)</span>
+                    <br /><span className="text-fg-muted text-xs">(Cần Spotify API với tài khoản Premium của chủ app.)</span>
                   </p>
                 );
               }
               if (list.length === 0) {
                 return (
-                  <p className="text-slate-500 text-sm py-8 text-center">
+                  <p className="text-fg-muted text-sm py-8 text-center">
                     {artistTab === 'albums' ? 'Nghệ sĩ này chưa có album.' : 'Nghệ sĩ này chưa có single riêng.'}
                   </p>
                 );
@@ -3399,43 +3399,43 @@ export default function DashboardContent() {
                     const cached = albumTracksCache[al.album_id];
                     const kind = artistTab === 'singles' ? (al.total_tracks >= 4 ? 'EP' : 'Single') : (al.album_type === 'compilation' ? 'Tuyển tập' : 'Album');
                     return (
-                      <div key={i} className="rounded-xl bg-slate-800/40 border border-slate-700/30 overflow-hidden">
+                      <div key={i} className="rounded-xl bg-surface-2 border border-line overflow-hidden">
                         <div className="flex items-center gap-3 p-3">
                           {al.cover_image ? (
                             <img src={al.cover_image} alt="" className="w-12 h-12 rounded object-cover flex-shrink-0" />
                           ) : (
-                            <div className="w-12 h-12 rounded bg-[#1DB954]/20 flex items-center justify-center flex-shrink-0"><Music className="w-5 h-5 text-[#1DB954]" /></div>
+                            <div className="w-12 h-12 rounded bg-accent-soft flex items-center justify-center flex-shrink-0"><Music className="w-5 h-5 text-[#1DB954]" /></div>
                           )}
                           <div className="flex-1 min-w-0">
-                            <p className="text-white text-sm font-medium truncate" title={al.title}>{al.title}</p>
-                            <p className="text-slate-500 text-xs">
-                              <span className="text-[#1DB954]/80">{kind}</span> · {(al.release_date || '').slice(0, 4) || '—'} · {al.total_tracks} bài
+                            <p className="text-fg text-sm font-medium truncate" title={al.title}>{al.title}</p>
+                            <p className="text-fg-muted text-xs">
+                              <span className="text-accent-text">{kind}</span> · {(al.release_date || '').slice(0, 4) || '—'} · {al.total_tracks} bài
                             </p>
                           </div>
                           <button onClick={() => toggleAlbumExpand(al)} title="Xem bài hát"
-                            className="flex-shrink-0 px-2 py-1.5 rounded-lg text-xs font-bold text-slate-300 border border-slate-600 hover:bg-slate-700/50">
+                            className="flex-shrink-0 px-2 py-1.5 rounded-lg text-xs font-bold text-fg-2 border border-line-strong hover:bg-surface-2">
                             {isOpen ? '▴' : '▾'}
                           </button>
                           <button onClick={() => handleArtistAlbumDownload(al)} disabled={isZipping}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-[#1DB954]/10 text-[#1DB954] border border-[#1DB954]/30 hover:bg-[#1DB954]/20 disabled:opacity-40 flex-shrink-0">
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-accent-soft text-accent-text border border-accent/30 hover:bg-accent/20 disabled:opacity-40 flex-shrink-0">
                             <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Tải</span>
                           </button>
                         </div>
                         {isOpen && (
-                          <div className="px-3 pb-3 border-t border-slate-700/30 pt-2">
+                          <div className="px-3 pb-3 border-t border-line pt-2">
                             {cached?.state === 'loading' && (
-                              <p className="text-slate-500 text-xs py-2 flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang tải tracklist...</p>
+                              <p className="text-fg-muted text-xs py-2 flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang tải tracklist...</p>
                             )}
                             {cached?.state === 'error' && (
-                              <p className="text-slate-500 text-xs py-2">Chưa lấy được tracklist của album này.</p>
+                              <p className="text-fg-muted text-xs py-2">Chưa lấy được tracklist của album này.</p>
                             )}
                             {cached?.state === 'ok' && (
-                              <ol className="text-xs text-slate-300 space-y-1 mt-1">
+                              <ol className="text-xs text-fg-2 space-y-1 mt-1">
                                 {cached.tracks.map((tr, j) => (
                                   <li key={j} className="flex items-center gap-2">
-                                    <span className="text-slate-600 w-5 text-right">{j + 1}</span>
+                                    <span className="text-fg-muted w-5 text-right">{j + 1}</span>
                                     <span className="flex-1 truncate" title={tr.name}>{tr.name}</span>
-                                    <span className="text-slate-600">{tr.duration > 0 ? `${Math.floor(tr.duration / 60)}:${String(tr.duration % 60).padStart(2, '0')}` : ''}</span>
+                                    <span className="text-fg-muted">{tr.duration > 0 ? `${Math.floor(tr.duration / 60)}:${String(tr.duration % 60).padStart(2, '0')}` : ''}</span>
                                   </li>
                                 ))}
                               </ol>
@@ -3456,39 +3456,39 @@ export default function DashboardContent() {
       {recentDownloads.length > 0 && (
         <div className="w-full max-w-3xl">
           <div className="flex items-center justify-between mb-3 px-1">
-            <h3 className="text-sm font-bold text-slate-300">Tải gần đây</h3>
+            <h3 className="text-sm font-bold text-fg-2">Tải gần đây</h3>
             <button
               onClick={handleClearAllHistory}
-              className="text-xs font-semibold text-red-400 hover:text-red-300 transition-colors"
+              className="text-xs font-semibold text-danger hover:text-danger transition-colors"
             >
               Xóa tất cả
             </button>
           </div>
           <div className="space-y-2.5">
             {recentDownloads.map((job) => (
-              <div key={job.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3.5 md:p-4 rounded-2xl bg-[#012622]/50 border border-slate-700/50 backdrop-blur-sm shadow-sm hover:bg-[#012622]/80 transition-colors">
+              <div key={job.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3.5 md:p-4 rounded-2xl bg-surface/50 border border-line backdrop-blur-sm shadow-sm hover:bg-surface/80 transition-colors">
                 <div className="flex-1 min-w-0 w-full">
-                  <h5 className="text-sm font-bold text-white truncate mb-1">{job.title || job.slugified_name || '...'}</h5>
+                  <h5 className="text-sm font-bold text-fg truncate mb-1">{job.title || job.slugified_name || '...'}</h5>
                   <div className="flex items-center gap-2 text-xs font-medium">
                     {job.status === 'success' ? (
-                      <span className="text-[#4ADE80] flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> OK</span>
+                      <span className="text-success flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> OK</span>
                     ) : job.status === 'failed' ? (
-                      <span className="text-red-400 flex items-center gap-1"><XCircle className="w-3 h-3" /> Lỗi</span>
+                      <span className="text-danger flex items-center gap-1"><XCircle className="w-3 h-3" /> Lỗi</span>
                     ) : (
-                      <span className="text-[#FBBF24] flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> ...</span>
+                      <span className="text-accent-text flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> ...</span>
                     )}
                   </div>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
                   {job.status === 'success' && job.direct_mp4_url ? (
                     <a href={`${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(job.direct_mp4_url)}&filename=${encodeURIComponent(job.title || 'video')}`}
-                      className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#FDE047]/10 text-[#FDE047] font-bold hover:bg-[#FDE047]/20 transition-colors border border-[#FDE047]/30 text-xs">
+                      className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-accent-soft text-accent-text font-bold hover:bg-accent/20 transition-colors border border-accent/30 text-xs">
                       <Download className="w-3.5 h-3.5" /> Tải lại
                     </a>
                   ) : (
-                    <button disabled className="flex-1 sm:flex-none px-3 py-2 rounded-xl bg-slate-800 text-slate-500 font-bold cursor-not-allowed border border-slate-700 text-xs">Chờ</button>
+                    <button disabled className="flex-1 sm:flex-none px-3 py-2 rounded-xl bg-surface text-fg-muted font-bold cursor-not-allowed border border-line text-xs">Chờ</button>
                   )}
-                  <button onClick={() => handleDeleteJob(job.id)} className="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-700 hover:border-red-500/30 transition-colors">
+                  <button onClick={() => handleDeleteJob(job.id)} className="px-2.5 py-2 rounded-xl bg-surface hover:bg-danger-soft text-fg-muted hover:text-danger border border-line hover:border-danger/30 transition-colors">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -3503,58 +3503,58 @@ export default function DashboardContent() {
         <div className="w-full max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-300">
           {/* Header: platform + source type + author */}
           <div className="flex flex-wrap items-center gap-2 mb-4">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black text-white bg-black border border-slate-600">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black text-white bg-black border border-line-strong">
               <span className="text-base leading-none">@</span> Threads
             </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-sky-300 bg-sky-500/10 border border-sky-500/20">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-fg-2 bg-surface-2 border border-line">
               {threadsData.source_type === 'profile' ? <><List className="w-3 h-3" /> Trang cá nhân</> : <><Clapperboard className="w-3 h-3" /> Bài viết</>}
             </span>
             {threadsData.author_handle && (
-              <span className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 bg-slate-800 border border-slate-700">@{threadsData.author_handle}</span>
+              <span className="px-3 py-1.5 rounded-xl text-xs font-semibold text-fg-2 bg-surface border border-line">@{threadsData.author_handle}</span>
             )}
           </div>
 
           {/* Resolved canonical URL + post ID (single post) */}
           {threadsData.source_type !== 'profile' && (threadsData.canonical_url || threadsData.post_id) && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 text-[11px] text-slate-500">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 text-[11px] text-fg-muted">
               {threadsData.canonical_url && (
-                <a href={threadsData.canonical_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sky-400 hover:underline break-all">
+                <a href={threadsData.canonical_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-fg-2 hover:underline break-all">
                   <ExternalLink className="w-3 h-3 flex-shrink-0" />{threadsData.canonical_url}
                 </a>
               )}
-              {threadsData.post_id && <span className="text-slate-500">ID: {threadsData.post_id}</span>}
+              {threadsData.post_id && <span className="text-fg-muted">ID: {threadsData.post_id}</span>}
             </div>
           )}
 
           {/* Error / unsupported states — honest copy */}
           {threadsData.error_code ? (
-            <div className="flex items-start gap-3 px-5 py-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
-              <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="flex items-start gap-3 px-5 py-4 rounded-2xl bg-accent-soft border border-accent/30">
+              <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-semibold text-amber-200">
+                <p className="text-sm font-semibold text-accent-text">
                   {THREADS_ERROR_COPY[threadsData.error_code] || threadsData.error_message || 'Không xử lý được nội dung Threads.'}
                 </p>
-                <p className="text-xs text-slate-400 mt-1">Chỉ hỗ trợ nội dung Threads công khai.</p>
+                <p className="text-xs text-fg-muted mt-1">Chỉ hỗ trợ nội dung Threads công khai.</p>
               </div>
             </div>
           ) : threadsData.source_type === 'profile' ? (
             /* ── Profile: recent public post list ── */
-            <div className="bg-slate-900/60 border border-slate-700/50 rounded-2xl p-4">
-              <p className="text-xs text-slate-400 mb-3">Bài công khai gần đây — chọn để bóc tách media.</p>
+            <div className="bg-surface-2 border border-line rounded-2xl p-4">
+              <p className="text-xs text-fg-muted mb-3">Bài công khai gần đây — chọn để bóc tách media.</p>
               <div className="flex flex-col gap-2">
                 {threadsData.posts?.map((post, i) => (
-                  <div key={post.post_id || i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-800/60 border border-slate-700/40 hover:border-slate-600 transition-colors">
+                  <div key={post.post_id || i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-surface border border-line hover:border-line-strong transition-colors">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-200 truncate">{post.caption_snippet || `Bài viết #${i + 1}`}</p>
-                      <p className="text-[11px] text-slate-500 truncate">{post.post_id}{post.has_media ? ' · có media' : ''}</p>
+                      <p className="text-sm font-semibold text-fg-2 truncate">{post.caption_snippet || `Bài viết #${i + 1}`}</p>
+                      <p className="text-[11px] text-fg-muted truncate">{post.post_id}{post.has_media ? ' · có media' : ''}</p>
                     </div>
                     {post.has_media && (
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">MEDIA</span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold text-success bg-success-soft border border-success/20">MEDIA</span>
                     )}
-                    <button onClick={() => handleLoadThreadsPost(post.url)} className="px-3 py-1.5 rounded-lg text-xs font-bold text-[#012622] bg-gradient-to-r from-[#FB923C] to-[#FBBF24] hover:from-[#F97316] hover:to-[#F59E0B] active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap">
+                    <button onClick={() => handleLoadThreadsPost(post.url)} className="px-3 py-1.5 rounded-lg text-xs font-bold text-accent-fg bg-accent active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap">
                       <Zap className="w-3.5 h-3.5" /> Bóc tách
                     </button>
-                    <a href={post.url} target="_blank" rel="noreferrer" className="p-1.5 text-slate-500 hover:text-sky-400 transition-colors" title="Mở trên Threads">
+                    <a href={post.url} target="_blank" rel="noreferrer" className="p-1.5 text-fg-muted hover:text-fg-2 transition-colors" title="Mở trên Threads">
                       <ExternalLink className="w-4 h-4" />
                     </a>
                   </div>
@@ -3563,46 +3563,46 @@ export default function DashboardContent() {
             </div>
           ) : (
             /* ── Single post: caption + media grid ── */
-            <div className="bg-slate-900/60 border border-slate-700/50 rounded-2xl p-4">
+            <div className="bg-surface-2 border border-line rounded-2xl p-4">
               {threadsData.caption && (
-                <p className="text-sm text-slate-300 mb-3 whitespace-pre-line line-clamp-4">{threadsData.caption}</p>
+                <p className="text-sm text-fg-2 mb-3 whitespace-pre-line line-clamp-4">{threadsData.caption}</p>
               )}
               {threadsData.timestamp && (
-                <p className="text-[11px] text-slate-500 mb-3 flex items-center gap-1.5"><Clock className="w-3 h-3" /> {new Date(threadsData.timestamp).toLocaleString('vi-VN')}</p>
+                <p className="text-[11px] text-fg-muted mb-3 flex items-center gap-1.5"><Clock className="w-3 h-3" /> {new Date(threadsData.timestamp).toLocaleString('vi-VN')}</p>
               )}
               {threadsData.downloadable && threadsData.media_items?.length ? (
                 <>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {threadsData.media_items.map((item, i) => (
-                      <div key={i} className="group relative rounded-xl overflow-hidden border border-slate-700/50 bg-slate-800 aspect-square">
+                      <div key={i} className="group relative rounded-xl overflow-hidden border border-line bg-surface aspect-square">
                         {item.type === 'image' ? (
                           <img src={item.thumbnail || item.url} alt="" className="w-full h-full object-cover" loading="lazy" />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-slate-800">
-                            {item.thumbnail ? <img src={item.thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Video className="w-8 h-8 text-slate-500" />}
+                          <div className="w-full h-full flex items-center justify-center bg-surface">
+                            {item.thumbnail ? <img src={item.thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Video className="w-8 h-8 text-fg-muted" />}
                             <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold text-white bg-black/70 flex items-center gap-1"><Play className="w-2.5 h-2.5 fill-white" /> Video</span>
                           </div>
                         )}
                         <button onClick={() => handleThreadsMediaDownload(item, i)} className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/50 transition-colors opacity-0 group-hover:opacity-100" title="Tải media này">
-                          <span className="px-3 py-1.5 rounded-lg text-xs font-bold text-[#012622] bg-[#FBBF24] flex items-center gap-1.5">
+                          <span className="px-3 py-1.5 rounded-lg text-xs font-bold text-accent-fg bg-accent flex items-center gap-1.5">
                             {item.type === 'image' ? <ImageDown className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />} Tải
                           </span>
                         </button>
                       </div>
                     ))}
                   </div>
-                  <p className="text-xs text-slate-400 mt-3 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Đã tìm thấy {threadsData.media_items.length} media từ bài Threads.</p>
+                  <p className="text-xs text-fg-muted mt-3 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-success" /> Đã tìm thấy {threadsData.media_items.length} media từ bài Threads.</p>
                 </>
               ) : (
-                <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-800/60 border border-slate-700/40">
-                  <AlertCircle className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                  <p className="text-sm text-slate-300">Bài viết này không có media tải xuống được.</p>
+                <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-surface border border-line">
+                  <AlertCircle className="w-4 h-4 text-fg-muted flex-shrink-0" />
+                  <p className="text-sm text-fg-2">Bài viết này không có media tải xuống được.</p>
                 </div>
               )}
             </div>
           )}
 
-          <p className="text-[11px] text-slate-500 mt-3 px-1">Một số bài Threads có thể không trích xuất ổn định. Chỉ hỗ trợ nội dung công khai.</p>
+          <p className="text-[11px] text-fg-muted mt-3 px-1">Một số bài Threads có thể không trích xuất ổn định. Chỉ hỗ trợ nội dung công khai.</p>
         </div>
       )}
 
@@ -3610,16 +3610,16 @@ export default function DashboardContent() {
       {!videoInfo && !spotifyData && !threadsData && recentDownloads.length === 0 && !isLoading && (
         <div className="w-full max-w-3xl mt-2">
           <div className="flex flex-wrap justify-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
+            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-success bg-success-soft border border-success/20">
               <Sparkles className="w-3 h-3 flex-shrink-0" /> TikTok / Douyin → bản không watermark
             </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-400 bg-red-500/10 border border-red-500/20">
+            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-danger bg-danger-soft border border-danger/20">
               <Video className="w-3 h-3 flex-shrink-0" /> YouTube → 4K · 1080p · MP3
             </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#1DB954] bg-[#1DB954]/10 border border-[#1DB954]/20">
+            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-accent-text bg-accent-soft border border-accent/20">
               <Music className="w-3 h-3 flex-shrink-0" /> Spotify → MP3 320kbps
             </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-200 bg-white/5 border border-white/10">
+            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg-2 bg-surface-2 border border-line">
               <span className="text-sm leading-none font-black">@</span> Threads → bài & trang công khai
             </span>
           </div>
@@ -3661,14 +3661,14 @@ function DigestCard({ info, onToggle, isVisible }) {
   }
 
   return (
-    <div className="rounded-2xl border border-slate-700/50 bg-slate-900/40 overflow-hidden">
+    <div className="rounded-2xl border border-line bg-surface-2 overflow-hidden">
       {/* Header toggle */}
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-800/50 hover:bg-slate-800/80 transition-colors cursor-pointer"
+        className="w-full flex items-center justify-between px-4 py-2.5 bg-surface hover:bg-surface-2 transition-colors cursor-pointer"
       >
-        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Thong tin video</span>
-        <span className="text-[10px] text-slate-500">{isVisible ? '▲ Thu gọn' : '▼ Mở rộng'}</span>
+        <span className="text-xs font-bold text-fg-2 uppercase tracking-wider">Thong tin video</span>
+        <span className="text-[10px] text-fg-muted">{isVisible ? '▲ Thu gọn' : '▼ Mở rộng'}</span>
       </button>
 
       {isVisible && (
@@ -3678,23 +3678,23 @@ function DigestCard({ info, onToggle, isVisible }) {
             <img
               src={info.thumbnail_url}
               alt=""
-              className="w-full rounded-xl object-cover aspect-video bg-slate-800"
+              className="w-full rounded-xl object-cover aspect-video bg-surface"
               loading="lazy"
             />
           )}
 
           {/* Title */}
           <div>
-            <p className="text-white font-bold text-sm leading-snug">{info.title || 'Không có tiêu đề'}</p>
+            <p className="text-fg font-bold text-sm leading-snug">{info.title || 'Không có tiêu đề'}</p>
           </div>
 
           {/* Creator + Meta row */}
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-muted">
             {(info.uploader || info.channel_handle) && (
-              <span className="text-slate-300 font-semibold">
+              <span className="text-fg-2 font-semibold">
                 @{info.channel_handle || info.uploader}
                 {info.uploader && info.channel_handle && info.uploader !== info.channel_handle && (
-                  <span className="text-slate-500 font-normal ml-1">({info.uploader})</span>
+                  <span className="text-fg-muted font-normal ml-1">({info.uploader})</span>
                 )}
               </span>
             )}
@@ -3716,7 +3716,7 @@ function DigestCard({ info, onToggle, isVisible }) {
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {tags.map(tag => (
-                <span key={tag} className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[10px] text-slate-400">
+                <span key={tag} className="px-2 py-0.5 rounded-full bg-surface border border-line text-[10px] text-fg-muted">
                   #{tag}
                 </span>
               ))}
@@ -3726,7 +3726,7 @@ function DigestCard({ info, onToggle, isVisible }) {
           {/* Indicators */}
           <div className="flex gap-2 flex-wrap">
             {info.has_subtitles ? (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-emerald-500/10 border-emerald-500/30 text-emerald-400" title={
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-success-soft border-success/30 text-success" title={
                 info.available_subtitle_languages?.length
                   ? `Ngôn ngữ: ${info.available_subtitle_languages.slice(0, 6).join(', ')}${info.available_subtitle_languages.length > 6 ? '…' : ''}`
                   : 'Có phụ đề'
@@ -3737,11 +3737,11 @@ function DigestCard({ info, onToggle, isVisible }) {
                 )}
               </span>
             ) : (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-slate-800 border-slate-700 text-slate-500">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-surface border-line text-fg-muted">
                 ✕ Không có phụ đề
               </span>
             )}
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-[#FBBF24]/10 border-[#FBBF24]/30 text-[#FBBF24]">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-accent-soft border-accent/30 text-accent-text">
               ✓ Có thể tải
             </span>
           </div>

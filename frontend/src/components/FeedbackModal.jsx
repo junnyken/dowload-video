@@ -51,18 +51,18 @@ export default function FeedbackModal({ onClose }) {
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-md bg-[#0d3b35] border border-slate-700/60 rounded-2xl shadow-2xl p-6 z-10">
+      <div className="relative w-full max-w-md bg-surface-2 border border-line rounded-2xl shadow-2xl p-6 z-10">
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#FBBF24]/15 flex items-center justify-center">
-              <MessageSquare className="w-4 h-4 text-[#FBBF24]" />
+            <div className="w-8 h-8 rounded-lg bg-accent-soft flex items-center justify-center">
+              <MessageSquare className="w-4 h-4 text-accent-text" />
             </div>
-            <h2 className="text-base font-bold text-white">Góp ý & Phản hồi</h2>
+            <h2 className="text-base font-bold text-fg">Góp ý & Phản hồi</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-2 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -70,55 +70,55 @@ export default function FeedbackModal({ onClose }) {
 
         {done ? (
           <div className="flex flex-col items-center gap-3 py-6 text-center">
-            <CheckCircle className="w-12 h-12 text-emerald-400" />
-            <p className="text-white font-semibold">Gửi thành công!</p>
-            <p className="text-slate-400 text-sm">Cảm ơn bạn đã góp ý. Chúng tôi sẽ xem xét và cải thiện.</p>
+            <CheckCircle className="w-12 h-12 text-success" />
+            <p className="text-fg font-semibold">Gửi thành công!</p>
+            <p className="text-fg-muted text-sm">Cảm ơn bạn đã góp ý. Chúng tôi sẽ xem xét và cải thiện.</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <p className="text-slate-400 text-sm">
+            <p className="text-fg-muted text-sm">
               Ý kiến của bạn giúp VidGrab trở nên tốt hơn. Chúng tôi đọc từng phản hồi.
             </p>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Tên (tuỳ chọn)</label>
+                <label className="block text-xs font-medium text-fg-muted mb-1.5">Tên (tuỳ chọn)</label>
                 <input
                   type="text"
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="Nguyễn Văn A"
-                  className="w-full bg-slate-800/60 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#FBBF24]/50 transition-colors"
+                  className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:outline-none focus:border-accent/50 transition-colors"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Email (tuỳ chọn)</label>
+                <label className="block text-xs font-medium text-fg-muted mb-1.5">Email (tuỳ chọn)</label>
                 <input
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="example@gmail.com"
-                  className="w-full bg-slate-800/60 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#FBBF24]/50 transition-colors"
+                  className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:outline-none focus:border-accent/50 transition-colors"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                Nội dung góp ý <span className="text-red-400">*</span>
+              <label className="block text-xs font-medium text-fg-muted mb-1.5">
+                Nội dung góp ý <span className="text-danger">*</span>
               </label>
               <textarea
                 value={content}
                 onChange={e => { setContent(e.target.value); setError(''); }}
                 placeholder="Mô tả vấn đề bạn gặp, tính năng muốn có, hoặc bất kỳ phản hồi nào..."
                 rows={4}
-                className="w-full bg-slate-800/60 border border-slate-700/50 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#FBBF24]/50 transition-colors resize-none"
+                className="w-full bg-surface border border-line rounded-lg px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted focus:outline-none focus:border-accent/50 transition-colors resize-none"
               />
             </div>
 
             {error && (
-              <p className="text-red-400 text-xs flex items-center gap-1.5">
-                <span className="w-1 h-1 rounded-full bg-red-400 inline-block" />
+              <p className="text-danger text-xs flex items-center gap-1.5">
+                <span className="w-1 h-1 rounded-full bg-danger inline-block" />
                 {error}
               </p>
             )}
@@ -126,11 +126,11 @@ export default function FeedbackModal({ onClose }) {
             <button
               type="submit"
               disabled={sending || !content.trim()}
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] font-bold py-2.5 rounded-xl text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 bg-accent text-accent-fg font-bold py-2.5 rounded-xl text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {sending ? (
                 <>
-                  <span className="w-4 h-4 border-2 border-[#012622]/40 border-t-[#012622] rounded-full animate-spin" />
+                  <span className="w-4 h-4 border-2 border-canvas border-t-canvas rounded-full animate-spin" />
                   Đang gửi...
                 </>
               ) : (

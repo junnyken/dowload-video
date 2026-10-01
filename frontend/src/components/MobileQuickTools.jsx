@@ -55,7 +55,7 @@ function Toast({ message, onDone }) {
   }, [onDone]);
 
   return (
-    <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-[80] px-4 py-2.5 rounded-2xl bg-slate-800/95 backdrop-blur text-slate-100 text-sm font-medium shadow-xl border border-slate-600/40 whitespace-nowrap animate-fade-in">
+    <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-[80] px-4 py-2.5 rounded-2xl bg-surface backdrop-blur text-fg text-sm font-medium shadow-xl border border-line-strong whitespace-nowrap animate-fade-in">
       {message}
     </div>
   );
@@ -138,24 +138,24 @@ export default function MobileQuickTools({ show, onClose, onNavigate }) {
         role="dialog"
         aria-modal="true"
         aria-label="Công cụ nhanh"
-        className={`fixed inset-x-0 bottom-0 z-[73] bg-[#0d2821]/98 backdrop-blur-xl rounded-t-3xl shadow-[0_-8px_40px_rgba(0,0,0,0.4)] transition-transform duration-300 ease-out ${
+        className={`fixed inset-x-0 bottom-0 z-[73] bg-surface/98 backdrop-blur-xl rounded-t-3xl shadow-[0_-8px_40px_rgba(0,0,0,0.4)] transition-transform duration-300 ease-out ${
           visible ? 'translate-y-0' : 'translate-y-full'
         }`}
       >
         {/* Drag handle */}
         <div className="flex justify-center pt-3 pb-1">
-          <div className="w-10 h-1 rounded-full bg-slate-600/60" />
+          <div className="w-10 h-1 rounded-full bg-line" />
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-700/40">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-line">
           <div>
-            <h2 className="text-slate-100 font-semibold text-base">Công cụ nhanh</h2>
-            <p className="text-slate-400 text-xs mt-0.5">Chọn công cụ để xử lý video vừa tải</p>
+            <h2 className="text-fg font-semibold text-base">Công cụ nhanh</h2>
+            <p className="text-fg-muted text-xs mt-0.5">Chọn công cụ để xử lý video vừa tải</p>
           </div>
           <button
             onClick={handleClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-700/40 text-slate-400 hover:text-slate-100 hover:bg-slate-700 transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-2 text-fg-muted hover:text-fg hover:bg-line transition-colors"
             aria-label="Đóng"
           >
             <X className="w-4 h-4" />
@@ -164,13 +164,13 @@ export default function MobileQuickTools({ show, onClose, onNavigate }) {
 
         {/* Recent download hint */}
         {recentDownload && (
-          <div className="mx-5 mt-3 px-3 py-2 rounded-xl bg-[#FBBF24]/10 border border-[#FBBF24]/20 flex items-center gap-2">
-            <span className="text-[#FBBF24] text-lg">⬇️</span>
+          <div className="mx-5 mt-3 px-3 py-2 rounded-xl bg-accent-soft border border-accent/20 flex items-center gap-2">
+            <span className="text-accent-text text-lg">⬇️</span>
             <div className="flex-1 min-w-0">
-              <p className="text-[#FBBF24] text-xs font-semibold truncate">
+              <p className="text-accent-text text-xs font-semibold truncate">
                 {recentDownload.title || 'Video vừa tải'}
               </p>
-              <p className="text-slate-400 text-[10px] truncate">{recentDownload.url}</p>
+              <p className="text-fg-muted text-[10px] truncate">{recentDownload.url}</p>
             </div>
           </div>
         )}
@@ -181,14 +181,14 @@ export default function MobileQuickTools({ show, onClose, onNavigate }) {
             <button
               key={tool.id}
               onClick={() => handleTool(tool)}
-              className="flex flex-col items-center gap-2 py-4 px-2 rounded-2xl bg-[#1a3a2a]/60 border border-slate-700/40 hover:bg-[#FBBF24]/10 hover:border-[#FBBF24]/30 transition-all duration-200 active:scale-95 group"
+              className="flex flex-col items-center gap-2 py-4 px-2 rounded-2xl bg-surface-2/60 border border-line hover:bg-accent-soft hover:border-accent/30 transition-all duration-200 active:scale-95 group"
             >
               <span className="text-2xl">{tool.emoji}</span>
               <div className="text-center">
-                <p className="text-slate-100 text-xs font-semibold group-hover:text-[#FBBF24] transition-colors">
+                <p className="text-fg text-xs font-semibold group-hover:text-accent-text transition-colors">
                   {tool.label}
                 </p>
-                <p className="text-slate-500 text-[10px] mt-0.5 leading-tight">{tool.desc}</p>
+                <p className="text-fg-muted text-[10px] mt-0.5 leading-tight">{tool.desc}</p>
               </div>
             </button>
           ))}

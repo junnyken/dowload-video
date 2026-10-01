@@ -75,16 +75,16 @@ export default function LinkBotPage() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center px-4">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center mb-4 shadow-lg">
-          <Bot className="w-6 h-6 text-white" />
+        <div className="w-12 h-12 rounded-2xl bg-accent flex items-center justify-center mb-4 shadow-lg">
+          <Bot className="w-6 h-6 text-accent-fg" />
         </div>
-        <h1 className="text-white text-xl font-bold mb-2">Kết nối Telegram Bot</h1>
-        <p className="text-zinc-400 text-sm text-center mb-6">
+        <h1 className="text-fg text-xl font-bold mb-2">Kết nối Telegram Bot</h1>
+        <p className="text-fg-muted text-sm text-center mb-6">
           Đăng nhập VidGrab để kết nối tài khoản với Telegram Bot.
         </p>
         <button
           onClick={() => window.dispatchEvent(new CustomEvent('vg:open-auth'))}
-          className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white text-sm font-semibold hover:opacity-90 transition"
+          className="px-6 py-2.5 rounded-xl bg-accent text-accent-fg text-sm font-semibold hover:opacity-90 transition"
         >
           Đăng nhập
         </button>
@@ -97,32 +97,32 @@ export default function LinkBotPage() {
       <div className="w-full max-w-sm">
         {/* Icon */}
         <div className="flex justify-center mb-5">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shadow-lg">
-            <Bot className="w-7 h-7 text-white" />
+          <div className="w-14 h-14 rounded-2xl bg-accent flex items-center justify-center shadow-lg">
+            <Bot className="w-7 h-7 text-accent-fg" />
           </div>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 text-center">
+        <div className="bg-canvas border border-line rounded-2xl p-6 text-center">
 
           {/* Already linked */}
           {linkInfo?.linked && status === 'idle' && (
             <>
-              <div className="w-9 h-9 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-3">
-                <Check className="w-5 h-5 text-emerald-400" />
+              <div className="w-9 h-9 rounded-full bg-success-soft flex items-center justify-center mx-auto mb-3">
+                <Check className="w-5 h-5 text-success" />
               </div>
-              <h2 className="text-white font-bold text-base mb-1">Đã kết nối</h2>
+              <h2 className="text-fg font-bold text-base mb-1">Đã kết nối</h2>
               {linkInfo.telegram_username && (
-                <p className="text-zinc-400 text-xs mb-1">
+                <p className="text-fg-muted text-xs mb-1">
                   Telegram: @{linkInfo.telegram_username}
                 </p>
               )}
-              <p className="text-zinc-500 text-xs mb-5">
+              <p className="text-fg-muted text-xs mb-5">
                 Tài khoản VidGrab của bạn đã được liên kết với Telegram Bot.
               </p>
 
               {linkToken && (
-                <div className="mb-4 p-3 rounded-xl bg-blue-950/30 border border-blue-700/40 text-left">
-                  <p className="text-blue-300 text-xs">
+                <div className="mb-4 p-3 rounded-xl bg-surface-2 border border-line text-left">
+                  <p className="text-fg-2 text-xs">
                     Có vẻ bạn đang muốn kết nối lại. Nhấn "Cập nhật kết nối" để liên kết với phiên Telegram mới.
                   </p>
                 </div>
@@ -133,7 +133,7 @@ export default function LinkBotPage() {
                   <button
                     onClick={handleConfirmLink}
                     disabled={status === 'linking'}
-                    className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold disabled:opacity-60 transition-colors"
+                    className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-fg text-sm font-semibold disabled:opacity-60 transition-colors"
                   >
                     {status === 'linking' ? 'Đang cập nhật...' : 'Cập nhật kết nối'}
                   </button>
@@ -141,7 +141,7 @@ export default function LinkBotPage() {
                 <button
                   onClick={handleUnlink}
                   disabled={status === 'linking'}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-semibold disabled:opacity-60 transition-colors"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-surface hover:bg-surface-2 text-fg-2 text-sm font-semibold disabled:opacity-60 transition-colors"
                 >
                   <Unlink className="w-3.5 h-3.5" />
                   Huỷ kết nối
@@ -153,16 +153,16 @@ export default function LinkBotPage() {
           {/* Ready to link */}
           {!linkInfo?.linked && status === 'idle' && linkToken && (
             <>
-              <div className="w-9 h-9 rounded-full bg-blue-500/20 flex items-center justify-center mx-auto mb-3">
-                <Link2 className="w-5 h-5 text-blue-400" />
+              <div className="w-9 h-9 rounded-full bg-surface-2 flex items-center justify-center mx-auto mb-3">
+                <Link2 className="w-5 h-5 text-fg-2" />
               </div>
-              <h2 className="text-white font-bold text-base mb-1">Kết nối tài khoản VidGrab</h2>
-              <p className="text-zinc-400 text-xs mb-5">
+              <h2 className="text-fg font-bold text-base mb-1">Kết nối tài khoản VidGrab</h2>
+              <p className="text-fg-muted text-xs mb-5">
                 Kết nối để đồng bộ quota và tính năng Pro với Telegram Bot.
               </p>
               <button
                 onClick={handleConfirmLink}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 hover:opacity-90 text-white text-sm font-semibold transition-all active:scale-[0.98]"
+                className="w-full py-3 rounded-xl bg-accent hover:opacity-90 text-accent-fg text-sm font-semibold transition-all active:scale-[0.98]"
               >
                 Xác nhận kết nối
               </button>
@@ -172,12 +172,12 @@ export default function LinkBotPage() {
           {/* No token, not linked */}
           {!linkInfo?.linked && status === 'idle' && !linkToken && (
             <>
-              <div className="w-9 h-9 rounded-full bg-zinc-700 flex items-center justify-center mx-auto mb-3">
-                <Bot className="w-5 h-5 text-zinc-400" />
+              <div className="w-9 h-9 rounded-full bg-surface-2 flex items-center justify-center mx-auto mb-3">
+                <Bot className="w-5 h-5 text-fg-muted" />
               </div>
-              <h2 className="text-white font-bold text-base mb-1">Chưa kết nối Telegram</h2>
-              <p className="text-zinc-400 text-xs mb-5">
-                Mở Telegram Bot và dùng lệnh <code className="text-blue-400">/link</code> để nhận link kết nối.
+              <h2 className="text-fg font-bold text-base mb-1">Chưa kết nối Telegram</h2>
+              <p className="text-fg-muted text-xs mb-5">
+                Mở Telegram Bot và dùng lệnh <code className="text-fg-2">/link</code> để nhận link kết nối.
               </p>
             </>
           )}
@@ -185,24 +185,24 @@ export default function LinkBotPage() {
           {/* Linking in progress */}
           {status === 'linking' && (
             <>
-              <div className="w-6 h-6 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto mb-3" />
-              <p className="text-zinc-400 text-sm">Đang xử lý...</p>
+              <div className="w-6 h-6 border-2 border-line border-t-line rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-fg-muted text-sm">Đang xử lý...</p>
             </>
           )}
 
           {/* Success */}
           {status === 'success' && (
             <>
-              <div className="w-9 h-9 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-3">
-                <Check className="w-5 h-5 text-emerald-400" />
+              <div className="w-9 h-9 rounded-full bg-success-soft flex items-center justify-center mx-auto mb-3">
+                <Check className="w-5 h-5 text-success" />
               </div>
-              <h2 className="text-white font-bold text-base mb-1">Kết nối thành công!</h2>
-              <p className="text-zinc-400 text-xs mb-5">
+              <h2 className="text-fg font-bold text-base mb-1">Kết nối thành công!</h2>
+              <p className="text-fg-muted text-xs mb-5">
                 Tài khoản VidGrab đã được liên kết với Telegram Bot. Quota và tính năng Pro sẽ đồng bộ tự động.
               </p>
               <button
                 onClick={() => window.history.pushState({}, '', '/')}
-                className="w-full py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-semibold transition-colors"
+                className="w-full py-2.5 rounded-xl bg-surface hover:bg-surface-2 text-fg text-sm font-semibold transition-colors"
               >
                 Về trang chủ
               </button>
@@ -212,11 +212,11 @@ export default function LinkBotPage() {
           {/* Unlinked */}
           {status === 'unlinked' && (
             <>
-              <div className="w-9 h-9 rounded-full bg-zinc-700 flex items-center justify-center mx-auto mb-3">
-                <Unlink className="w-5 h-5 text-zinc-400" />
+              <div className="w-9 h-9 rounded-full bg-surface-2 flex items-center justify-center mx-auto mb-3">
+                <Unlink className="w-5 h-5 text-fg-muted" />
               </div>
-              <h2 className="text-white font-bold text-base mb-1">Đã huỷ kết nối</h2>
-              <p className="text-zinc-500 text-xs mb-5">
+              <h2 className="text-fg font-bold text-base mb-1">Đã huỷ kết nối</h2>
+              <p className="text-fg-muted text-xs mb-5">
                 Telegram Bot đã bị ngắt kết nối khỏi tài khoản VidGrab của bạn.
               </p>
             </>
@@ -225,14 +225,14 @@ export default function LinkBotPage() {
           {/* Error */}
           {status === 'error' && (
             <>
-              <div className="w-9 h-9 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-3">
-                <X className="w-5 h-5 text-red-400" />
+              <div className="w-9 h-9 rounded-full bg-danger-soft flex items-center justify-center mx-auto mb-3">
+                <X className="w-5 h-5 text-danger" />
               </div>
-              <h2 className="text-white font-bold text-base mb-1">Đã xảy ra lỗi</h2>
-              <p className="text-red-400 text-xs mb-5">{error || 'Vui lòng thử lại.'}</p>
+              <h2 className="text-fg font-bold text-base mb-1">Đã xảy ra lỗi</h2>
+              <p className="text-danger text-xs mb-5">{error || 'Vui lòng thử lại.'}</p>
               <button
                 onClick={() => setStatus('idle')}
-                className="w-full py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-semibold transition-colors"
+                className="w-full py-2.5 rounded-xl bg-surface hover:bg-surface-2 text-fg text-sm font-semibold transition-colors"
               >
                 Thử lại
               </button>

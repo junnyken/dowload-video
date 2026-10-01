@@ -19,10 +19,10 @@ const STATE_ORDER: Record<string, number> = {
   escalated: 0, under_watch: 1, detected: 2, resolved: 3,
 }
 const STATE_STYLE: Record<string, string> = {
-  escalated:   'border-red-700/60 bg-red-950/30 text-red-200',
-  under_watch: 'border-amber-700/60 bg-amber-950/30 text-amber-200',
-  detected:    'border-sky-700/60 bg-sky-950/30 text-sky-200',
-  resolved:    'border-gray-700 bg-gray-900/40 text-gray-400',
+  escalated:   'border-danger/60 bg-danger-soft text-danger',
+  under_watch: 'border-accent/60 bg-accent-soft text-accent-text',
+  detected:    'border-line bg-surface-2 text-fg-2',
+  resolved:    'border-line bg-surface-2 text-fg-muted',
 }
 
 export default function AnomaliesPage() {
@@ -67,25 +67,25 @@ export default function AnomaliesPage() {
   const activeCount = items.filter(a => a.state !== 'resolved').length
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6 space-y-5">
+    <div className="min-h-screen bg-canvas text-fg p-6 space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Anomalies</h1>
-          <p className="text-xs text-gray-500">
+          <h1 className="text-2xl font-bold text-fg">Anomalies</h1>
+          <p className="text-xs text-fg-muted">
             {activeCount} đang hoạt động · {items.length} tổng · làm mới 30s
           </p>
         </div>
-        <label className="flex items-center gap-2 text-[11px] text-gray-400">
+        <label className="flex items-center gap-2 text-[11px] text-fg-muted">
           <input type="checkbox" checked={showResolved}
                  onChange={e => setShowResolved(e.target.checked)} />
           Hiện cả mục đã xử lý
         </label>
       </div>
 
-      {err && <p className="text-xs text-red-400">Lỗi: {err}</p>}
-      {loading && <p className="text-xs text-gray-500 animate-pulse">Đang tải…</p>}
+      {err && <p className="text-xs text-danger">Lỗi: {err}</p>}
+      {loading && <p className="text-xs text-fg-muted animate-pulse">Đang tải…</p>}
       {!loading && shown.length === 0 && (
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-fg-muted">
           {items.length === 0 ? 'Không có bất thường nào.' : 'Không còn mục nào đang hoạt động.'}
         </p>
       )}
@@ -98,7 +98,7 @@ export default function AnomaliesPage() {
             ([k]) => !['id', 'state', 'metric', 'detected_at'].includes(k))
           return (
             <div key={a.id}
-                 className={`rounded-lg border p-3 ${STATE_STYLE[a.state ?? ''] ?? 'border-gray-800 bg-gray-900/60'}`}>
+                 className={`rounded-lg border p-3 ${STATE_STYLE[a.state ?? ''] ?? 'border-line bg-surface-2'}`}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -113,10 +113,10 @@ export default function AnomaliesPage() {
                 </div>
                 {a.state !== 'resolved' && (
                   <div className="flex items-center gap-2">
-                    {msg[a.id] && <span className="text-[10px] text-emerald-400">{msg[a.id]}</span>}
+                    {msg[a.id] && <span className="text-[10px] text-success">{msg[a.id]}</span>}
                     <button disabled={!!busy[a.id]} onClick={() => resolve(a)}
                       className="rounded border border-current/40 px-2 py-0.5 text-[10px]
-                                 hover:bg-white/5 disabled:opacity-50">
+                                 hover:bg-surface-2 disabled:opacity-50">
                       {busy[a.id] ? '…' : 'Đánh dấu đã xử lý'}
                     </button>
                   </div>

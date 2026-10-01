@@ -24,14 +24,14 @@ function SortIcon({ dir }: { dir: 'asc' | 'desc' | null }) {
     <span className="ml-1 inline-flex flex-col gap-px opacity-40">
       <svg
         viewBox="0 0 6 4"
-        className={cn('h-[5px] w-[6px]', dir === 'asc' && 'opacity-100 text-blue-400')}
+        className={cn('h-[5px] w-[6px]', dir === 'asc' && 'opacity-100 text-fg-2')}
         fill="currentColor"
       >
         <path d="M3 0L6 4H0L3 0z" />
       </svg>
       <svg
         viewBox="0 0 6 4"
-        className={cn('h-[5px] w-[6px]', dir === 'desc' && 'opacity-100 text-blue-400')}
+        className={cn('h-[5px] w-[6px]', dir === 'desc' && 'opacity-100 text-fg-2')}
         fill="currentColor"
       >
         <path d="M3 4L0 0H6L3 4z" />
@@ -60,11 +60,11 @@ export function TableHeader({
   return (
     <thead
       className={cn(
-        sticky && 'sticky top-0 z-10 bg-slate-900',
+        sticky && 'sticky top-0 z-10 bg-canvas',
         className,
       )}
     >
-      <tr className="border-y border-slate-800">
+      <tr className="border-y border-line">
         {cols.map((col, i) => {
           const isSortable = col.sort !== undefined && onSort
           const alignClass =
@@ -76,11 +76,11 @@ export function TableHeader({
               key={col.key}
               scope="col"
               className={cn(
-                'py-2 pr-3 font-mono text-[9px] font-semibold uppercase tracking-widest text-slate-600',
+                'py-2 pr-3 font-mono text-[9px] font-semibold uppercase tracking-widest text-fg-muted',
                 'first:pl-4',
                 alignClass,
                 col.width,
-                isSortable && 'cursor-pointer select-none hover:text-slate-400',
+                isSortable && 'cursor-pointer select-none hover:text-fg-muted',
               )}
               onClick={isSortable ? () => onSort(col.key) : undefined}
               aria-sort={

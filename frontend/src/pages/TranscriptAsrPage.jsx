@@ -36,11 +36,11 @@ const TARGET_LANGS = {
 const ACTIVE_STATUSES = ['queued', 'extracting_audio', 'transcribing'];
 
 const STATUS_CONFIG = {
-  queued:           { label: 'Đang chờ',        cls: 'bg-slate-600/30 text-slate-400 border-slate-600/40' },
-  extracting_audio: { label: 'Đang tách âm thanh', cls: 'bg-blue-500/15 text-blue-400 border-blue-500/30', spin: true },
-  transcribing:     { label: 'Đang nhận diện giọng nói', cls: 'bg-blue-500/15 text-blue-400 border-blue-500/30', spin: true },
-  done:             { label: 'Hoàn tất',         cls: 'bg-green-500/15 text-green-400 border-green-500/30' },
-  failed:           { label: 'Thất bại',         cls: 'bg-red-500/15 text-red-400 border-red-500/30' },
+  queued:           { label: 'Đang chờ',        cls: 'bg-line text-fg-muted border-line-strong' },
+  extracting_audio: { label: 'Đang tách âm thanh', cls: 'bg-surface-2 text-fg-2 border-line', spin: true },
+  transcribing:     { label: 'Đang nhận diện giọng nói', cls: 'bg-surface-2 text-fg-2 border-line', spin: true },
+  done:             { label: 'Hoàn tất',         cls: 'bg-success-soft text-success border-success/30' },
+  failed:           { label: 'Thất bại',         cls: 'bg-danger-soft text-danger border-danger/30' },
 };
 
 function StatusBadge({ status }) {
@@ -211,28 +211,28 @@ export default function TranscriptAsrPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-          <Mic className="w-6 h-6 text-[#FBBF24]" />
+        <h1 className="text-2xl font-bold text-fg flex items-center gap-2">
+          <Mic className="w-6 h-6 text-accent-text" />
           Tạo Phụ Đề Từ Video
         </h1>
-        <p className="text-sm text-slate-400 mt-1.5 leading-relaxed">
+        <p className="text-sm text-fg-muted mt-1.5 leading-relaxed">
           Chọn 1 video đã tải, hệ thống tự nhận diện giọng nói và tạo phụ đề (SRT) kèm mốc thời gian —
           dành cho video chưa có sẵn phụ đề. Có thể dịch luôn phụ đề vừa tạo sang ngôn ngữ khác.
         </p>
         <a
           href="/transcript-translate"
           onClick={(e) => { e.preventDefault(); window.history.pushState({}, '', '/transcript-translate'); window.dispatchEvent(new PopStateEvent('popstate')); }}
-          className="inline-flex items-center gap-1.5 text-xs text-[#FBBF24] hover:underline mt-2 cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-xs text-accent-text hover:underline mt-2 cursor-pointer"
         >
           Đã có sẵn file phụ đề .srt/.vtt? Dịch trực tiếp →
         </a>
       </div>
 
       {errorMsg && (
-        <div className="mb-4 flex items-start gap-2 px-4 py-3 bg-red-900/20 border border-red-700/30 rounded-xl text-sm text-red-300">
+        <div className="mb-4 flex items-start gap-2 px-4 py-3 bg-danger-soft border border-danger/30 rounded-xl text-sm text-danger">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
           <p className="flex-1">{errorMsg}</p>
-          <button onClick={() => setErrorMsg('')} className="text-red-400 hover:text-red-200 cursor-pointer shrink-0" aria-label="Đóng thông báo lỗi">
+          <button onClick={() => setErrorMsg('')} className="text-danger hover:text-danger cursor-pointer shrink-0" aria-label="Đóng thông báo lỗi">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -240,14 +240,14 @@ export default function TranscriptAsrPage() {
 
       <button
         onClick={openPicker}
-        className="w-full mb-8 flex items-center justify-center gap-2 px-5 py-4 rounded-xl border-2 border-dashed border-slate-700/50 hover:border-[#FBBF24]/40 text-slate-300 hover:text-[#FBBF24] transition-colors cursor-pointer"
+        className="w-full mb-8 flex items-center justify-center gap-2 px-5 py-4 rounded-xl border-2 border-dashed border-line hover:border-accent/40 text-fg-2 hover:text-accent-text transition-colors cursor-pointer"
       >
         <Mic className="w-5 h-5" />
         Chọn video đã tải để tạo phụ đề
       </button>
 
       <div>
-        <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+        <h2 className="text-xs font-bold text-fg-muted uppercase tracking-wider mb-3">
           Hàng đợi{jobs.length > 0 ? ` (${jobs.length})` : ''}
         </h2>
 
@@ -263,14 +263,14 @@ export default function TranscriptAsrPage() {
               const isDone = job.status === 'done';
               const pct = Math.min(100, Math.max(0, job.progress_pct ?? 0));
               return (
-                <div key={job.id} className="bg-[#0d2320] border border-slate-700/30 rounded-xl p-4 flex flex-col gap-3">
+                <div key={job.id} className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-white flex items-center gap-2 min-w-0">
-                        <Film className="w-4 h-4 text-slate-500 shrink-0" />
+                      <p className="text-sm font-medium text-fg flex items-center gap-2 min-w-0">
+                        <Film className="w-4 h-4 text-fg-muted shrink-0" />
                         <span className="truncate">{job.video_title || 'Video'}</span>
                       </p>
-                      <p className="text-xs text-slate-400 mt-1">
+                      <p className="text-xs text-fg-muted mt-1">
                         {formatDuration(job.duration_sec) && `${formatDuration(job.duration_sec)} · `}
                         {job.detected_language ? `Ngôn ngữ: ${job.detected_language}` : 'Chưa xác định ngôn ngữ'}
                       </p>
@@ -278,17 +278,17 @@ export default function TranscriptAsrPage() {
                     <StatusBadge status={job.status} />
                   </div>
 
-                  <div className="h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
+                  <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-500 ${
-                        job.status === 'failed' ? 'bg-red-500' : job.status === 'done' ? 'bg-green-500' : 'bg-gradient-to-r from-[#FBBF24] to-[#FB923C]'
+                        job.status === 'failed' ? 'bg-danger' : job.status === 'done' ? 'bg-success' : 'bg-accent'
                       }`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
 
                   {job.status === 'failed' && job.error && (
-                    <p className="text-xs text-red-400">{job.error}</p>
+                    <p className="text-xs text-danger">{job.error}</p>
                   )}
 
                   <div className="flex items-center gap-2 justify-end">
@@ -297,7 +297,7 @@ export default function TranscriptAsrPage() {
                       disabled={!isDone}
                       title="Dịch phụ đề vừa tạo sang ngôn ngữ khác"
                       aria-label={`Dịch phụ đề ${job.video_title}`}
-                      className="p-2 rounded-lg border border-slate-700/50 text-slate-300 hover:text-[#FBBF24] hover:border-[#FBBF24]/40 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                      className="p-2 rounded-lg border border-line text-fg-2 hover:text-accent-text hover:border-accent/40 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
                     >
                       <Languages className="w-4 h-4" />
                     </button>
@@ -306,7 +306,7 @@ export default function TranscriptAsrPage() {
                       disabled={!isDone}
                       title="Tải file phụ đề"
                       aria-label={`Tải phụ đề ${job.video_title}`}
-                      className="p-2 rounded-lg border border-slate-700/50 text-slate-300 hover:text-[#FBBF24] hover:border-[#FBBF24]/40 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                      className="p-2 rounded-lg border border-line text-fg-2 hover:text-accent-text hover:border-accent/40 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
                     >
                       <Download className="w-4 h-4" />
                     </button>
@@ -314,7 +314,7 @@ export default function TranscriptAsrPage() {
                       onClick={() => handleDelete(job.id)}
                       title="Xoá job"
                       aria-label={`Xoá job ${job.video_title}`}
-                      className="p-2 rounded-lg border border-slate-700/50 text-slate-300 hover:text-red-400 hover:border-red-500/40 cursor-pointer transition-colors"
+                      className="p-2 rounded-lg border border-line text-fg-2 hover:text-danger hover:border-danger/40 cursor-pointer transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -331,28 +331,28 @@ export default function TranscriptAsrPage() {
       {picking && (
         <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4" onClick={closePicker}>
           <div
-            className="bg-[#0d2320] border border-slate-700/40 rounded-xl w-full max-w-md max-h-[80vh] overflow-y-auto p-5"
+            className="bg-surface border border-line rounded-xl w-full max-w-md max-h-[80vh] overflow-y-auto p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Mic className="w-4 h-4 text-[#FBBF24]" />
+              <h3 className="text-sm font-bold text-fg flex items-center gap-2">
+                <Mic className="w-4 h-4 text-accent-text" />
                 Chọn video
               </h3>
-              <button onClick={closePicker} className="text-slate-500 hover:text-white cursor-pointer" aria-label="Đóng">
+              <button onClick={closePicker} className="text-fg-muted hover:text-fg cursor-pointer" aria-label="Đóng">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {historyLoading ? (
-              <div className="flex items-center justify-center gap-2 py-8 text-slate-400 text-sm">
+              <div className="flex items-center justify-center gap-2 py-8 text-fg-muted text-sm">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Đang tải...
               </div>
             ) : (
               <>
                 {historyError && (
-                  <p className="text-xs text-red-400 mb-3 flex items-start gap-1.5">
+                  <p className="text-xs text-danger mb-3 flex items-start gap-1.5">
                     <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                     {historyError}
                   </p>
@@ -363,13 +363,13 @@ export default function TranscriptAsrPage() {
                       key={item.id}
                       onClick={() => handlePick(item)}
                       disabled={creatingId === item.id}
-                      className="text-left px-3 py-2.5 rounded-lg border border-slate-700/40 hover:border-[#FBBF24]/40 hover:bg-[#FBBF24]/5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between gap-2"
+                      className="text-left px-3 py-2.5 rounded-lg border border-line hover:border-accent/40 hover:bg-accent-soft transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between gap-2"
                     >
                       <span className="min-w-0">
-                        <p className="text-sm text-white truncate">{item.title || item.original_url}</p>
-                        {item.platform && <p className="text-[11px] text-slate-500 mt-0.5">{item.platform}</p>}
+                        <p className="text-sm text-fg truncate">{item.title || item.original_url}</p>
+                        {item.platform && <p className="text-[11px] text-fg-muted mt-0.5">{item.platform}</p>}
                       </span>
-                      {creatingId === item.id && <Loader2 className="w-4 h-4 animate-spin text-[#FBBF24] shrink-0" />}
+                      {creatingId === item.id && <Loader2 className="w-4 h-4 animate-spin text-accent-text shrink-0" />}
                     </button>
                   ))}
                 </div>
@@ -382,25 +382,25 @@ export default function TranscriptAsrPage() {
       {chainJob && (
         <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4" onClick={() => setChainJob(null)}>
           <div
-            className="bg-[#0d2320] border border-slate-700/40 rounded-xl w-full max-w-sm p-5"
+            className="bg-surface border border-line rounded-xl w-full max-w-sm p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Languages className="w-4 h-4 text-[#FBBF24]" />
+              <h3 className="text-sm font-bold text-fg flex items-center gap-2">
+                <Languages className="w-4 h-4 text-accent-text" />
                 Dịch phụ đề
               </h3>
-              <button onClick={() => setChainJob(null)} className="text-slate-500 hover:text-white cursor-pointer" aria-label="Đóng">
+              <button onClick={() => setChainJob(null)} className="text-fg-muted hover:text-fg cursor-pointer" aria-label="Đóng">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <label htmlFor="chain-lang-select" className="text-xs text-slate-400 mb-1 block">Ngôn ngữ đích</label>
+            <label htmlFor="chain-lang-select" className="text-xs text-fg-muted mb-1 block">Ngôn ngữ đích</label>
             <select
               id="chain-lang-select"
               value={chainLang}
               onChange={(e) => setChainLang(e.target.value)}
-              className="w-full bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#FBBF24]/50 cursor-pointer mb-3"
+              className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:border-accent/50 cursor-pointer mb-3"
             >
               <option value="" disabled>-- Chọn ngôn ngữ đích --</option>
               {Object.entries(TARGET_LANGS).map(([key, label]) => (
@@ -408,12 +408,12 @@ export default function TranscriptAsrPage() {
               ))}
             </select>
 
-            {chainError && <p className="text-xs text-red-400 mb-3">{chainError}</p>}
+            {chainError && <p className="text-xs text-danger mb-3">{chainError}</p>}
 
             <button
               onClick={handleChainTranslate}
               disabled={!chainLang || chainLoading}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] font-bold text-sm hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               {chainLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Languages className="w-4 h-4" />}
               {chainLoading ? 'Đang tạo...' : 'Bắt đầu dịch'}

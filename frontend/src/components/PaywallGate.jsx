@@ -32,19 +32,19 @@ function DefaultOverlay({ feature, requiredPlan }) {
   return (
     <div
       className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3
-                 bg-[#071a16]/80 backdrop-blur-sm rounded-xl px-6 text-center"
+                 bg-surface/80 backdrop-blur-sm rounded-xl px-6 text-center"
     >
-      <div className="w-12 h-12 rounded-full bg-zinc-800 border border-white/10
+      <div className="w-12 h-12 rounded-full bg-surface border border-line
                       flex items-center justify-center">
-        <Lock className="w-5 h-5 text-zinc-400" aria-hidden="true" />
+        <Lock className="w-5 h-5 text-fg-muted" aria-hidden="true" />
       </div>
 
       <div className="space-y-1">
-        <p className="text-white font-semibold text-sm flex items-center justify-center gap-1.5">
-          <Crown className="w-4 h-4 text-amber-400" aria-hidden="true" />
+        <p className="text-fg font-semibold text-sm flex items-center justify-center gap-1.5">
+          <Crown className="w-4 h-4 text-accent-text" aria-hidden="true" />
           Tính năng {planLabel}
         </p>
-        <p className="text-zinc-400 text-xs max-w-[240px] leading-relaxed">
+        <p className="text-fg-muted text-xs max-w-[240px] leading-relaxed">
           {description}
         </p>
       </div>
@@ -54,10 +54,10 @@ function DefaultOverlay({ feature, requiredPlan }) {
         // send them to /pricing, which App.jsx:457 hides and renders as an
         // empty page. /billing renders, and carries the upgrade modal.
         onClick={() => navigate('/billing')}
-        className="mt-1 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500
-                   text-white text-xs font-semibold transition-colors focus:outline-none
-                   focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2
-                   focus:ring-offset-[#071a16]"
+        className="mt-1 px-4 py-2 rounded-lg bg-accent hover:opacity-90
+                   text-accent-fg text-xs font-semibold transition-colors focus:outline-none
+                   focus:ring-2 focus:ring-accent focus:ring-offset-2
+                   focus:ring-offset-canvas"
       >
         Nâng cấp lên {planLabel}
       </button>

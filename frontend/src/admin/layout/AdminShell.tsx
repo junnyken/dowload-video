@@ -26,12 +26,12 @@ class PageErrorBoundary extends Component<
     if (this.state.error) {
       return (
         <div className="flex h-full items-center justify-center">
-          <div className="max-w-lg rounded-xl border border-red-700 bg-red-900/30 p-6 text-center space-y-3">
-            <p className="text-lg font-semibold text-red-300">Page crashed</p>
-            <p className="text-sm text-red-400 font-mono break-all">{this.state.error}</p>
+          <div className="max-w-lg rounded-xl border border-danger/30 bg-danger-soft p-6 text-center space-y-3">
+            <p className="text-lg font-semibold text-danger">Page crashed</p>
+            <p className="text-sm text-danger font-mono break-all">{this.state.error}</p>
             <button
               onClick={() => this.setState({ error: null })}
-              className="mt-2 px-4 py-1.5 rounded bg-red-800 hover:bg-red-700 text-red-100 text-sm"
+              className="mt-2 px-4 py-1.5 rounded bg-danger hover:opacity-90 text-danger text-sm"
             >
               Retry
             </button>
@@ -51,9 +51,9 @@ export function AdminShell({ children }: AdminShellProps) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-100">
+    <div className="flex h-screen overflow-hidden bg-canvas text-fg">
       {/* Desktop sidebar */}
-      <aside className="hidden w-56 shrink-0 flex-col border-r border-slate-800 bg-slate-900/50 lg:flex">
+      <aside className="hidden w-56 shrink-0 flex-col border-r border-line bg-surface-2 lg:flex">
         <AdminSidebar />
       </aside>
 

@@ -23,15 +23,15 @@ const RedditIcon = () => <svg viewBox="0 0 24 24" className="w-6 h-6" fill="curr
 const PinterestIcon = () => <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146C9.57 23.812 10.763 24 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/></svg>;
 
 const platforms = [
-  { icon: TikTokIcon, label: 'TikTok', bg: 'bg-[#00f2fe]/10 text-black border-[#00f2fe]/20', special: true },
-  { icon: DouyinIcon, label: 'Douyin', bg: 'bg-[#ff0050]/10 text-[#ff0050] border-[#ff0050]/20', special: true },
-  { icon: YouTubeIcon, label: 'YouTube', bg: 'bg-[#FF0000]/10 text-[#FF0000] border-[#FF0000]/20' },
-  { icon: FacebookIcon, label: 'Facebook', bg: 'bg-[#1877F2]/10 text-[#1877F2] border-[#1877F2]/20' },
-  { icon: InstagramIcon, label: 'Instagram', bg: 'bg-gradient-to-tr from-[#f09433] via-[#e6683c] to-[#bc1888] text-white border-transparent' },
-  { icon: SpotifyIcon, label: 'Spotify', bg: 'bg-[#1DB954]/10 text-[#1DB954] border-[#1DB954]/20' },
-  { icon: XIcon, label: 'X / Twitter', bg: 'bg-white/5 text-white border-white/15' },
-  { icon: RedditIcon, label: 'Reddit', bg: 'bg-[#FF4500]/10 text-[#FF4500] border-[#FF4500]/20' },
-  { icon: PinterestIcon, label: 'Pinterest', bg: 'bg-[#E60023]/10 text-[#E60023] border-[#E60023]/20' },
+  { icon: TikTokIcon, label: 'TikTok', bg: 'bg-surface-2 text-fg-2 border-line', ic: 'text-fg', special: true },
+  { icon: DouyinIcon, label: 'Douyin', bg: 'bg-surface-2 text-fg-2 border-line', ic: 'text-[#ff0050]', special: true },
+  { icon: YouTubeIcon, label: 'YouTube', bg: 'bg-surface-2 text-fg-2 border-line', ic: 'text-[#FF0000]' },
+  { icon: FacebookIcon, label: 'Facebook', bg: 'bg-surface-2 text-fg-2 border-line', ic: 'text-[#1877F2]' },
+  { icon: InstagramIcon, label: 'Instagram', bg: 'bg-surface-2 text-fg-2 border-line', ic: 'text-[#E1306C]' },
+  { icon: SpotifyIcon, label: 'Spotify', bg: 'bg-surface-2 text-fg-2 border-line', ic: 'text-[#1DB954]' },
+  { icon: XIcon, label: 'X / Twitter', bg: 'bg-surface-2 text-fg-2 border-line', ic: 'text-fg' },
+  { icon: RedditIcon, label: 'Reddit', bg: 'bg-surface-2 text-fg-2 border-line', ic: 'text-[#FF4500]' },
+  { icon: PinterestIcon, label: 'Pinterest', bg: 'bg-surface-2 text-fg-2 border-line', ic: 'text-[#E60023]' },
 ];
 
 const tabs = [
@@ -122,21 +122,21 @@ export default function LandingPage() {
       {/* ── PWA Install Banner — disabled: App.jsx handles this via usePWAInstall hook ── */}
       {/* {showInstall && (
         <div className="fixed top-16 inset-x-0 z-40 flex justify-center px-4 animate-in slide-in-from-top duration-300">
-          <div className="max-w-lg w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-[#012622] to-[#0a2a25] border border-[#A3E635]/40 rounded-2xl shadow-2xl backdrop-blur-xl">
-            <div className="p-2 bg-[#A3E635]/10 rounded-xl">
-              <Smartphone className="w-5 h-5 text-[#A3E635]" />
+          <div className="max-w-lg w-full flex items-center gap-3 px-4 py-3 bg-accent border border-accent/40 rounded-2xl shadow-2xl backdrop-blur-xl">
+            <div className="p-2 bg-accent-soft rounded-xl">
+              <Smartphone className="w-5 h-5 text-accent-text" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-white">Cài đặt VidGrab</p>
-              <p className="text-xs text-slate-400 truncate">Truy cập nhanh từ màn hình chính</p>
+              <p className="text-sm font-bold text-fg">Cài đặt VidGrab</p>
+              <p className="text-xs text-fg-muted truncate">Truy cập nhanh từ màn hình chính</p>
             </div>
             <button
               onClick={handleInstall}
-              className="px-4 py-2 bg-[#A3E635] text-[#012622] text-xs font-extrabold rounded-xl hover:bg-[#bef264] transition-colors cursor-pointer whitespace-nowrap"
+              className="px-4 py-2 bg-accent text-accent-fg text-xs font-extrabold rounded-xl hover:bg-accent-hover transition-colors cursor-pointer whitespace-nowrap"
             >
               Cài đặt
             </button>
-            <button onClick={dismissInstall} className="p-1.5 text-slate-500 hover:text-white transition-colors cursor-pointer">
+            <button onClick={dismissInstall} className="p-1.5 text-fg-muted hover:text-fg transition-colors cursor-pointer">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -145,15 +145,15 @@ export default function LandingPage() {
       {/* ── iOS "Add to Home Screen" Guide ────────────────── */}
       {showIosGuide && !showInstall && (
         <div className="fixed top-16 inset-x-0 z-40 flex justify-center px-4 animate-in slide-in-from-top duration-300">
-          <div className="max-w-lg w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-[#012622] to-[#0a2a25] border border-[#A3E635]/40 rounded-2xl shadow-2xl backdrop-blur-xl">
-            <div className="p-2 bg-[#A3E635]/10 rounded-xl">
-              <Smartphone className="w-5 h-5 text-[#A3E635]" />
+          <div className="max-w-lg w-full flex items-center gap-3 px-4 py-3 bg-accent border border-accent/40 rounded-2xl shadow-2xl backdrop-blur-xl">
+            <div className="p-2 bg-accent-soft rounded-xl">
+              <Smartphone className="w-5 h-5 text-accent-text" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-white">Cài VidGrab trên iPhone</p>
-              <p className="text-xs text-slate-400">Nhấn <span className="text-[#A3E635] font-bold">⬆ Chia sẻ</span> → <span className="text-white font-semibold">Thêm vào Màn hình chính</span></p>
+              <p className="text-sm font-bold text-fg">Cài VidGrab trên iPhone</p>
+              <p className="text-xs text-fg-muted">Nhấn <span className="text-accent-text font-bold">⬆ Chia sẻ</span> → <span className="text-fg font-semibold">Thêm vào Màn hình chính</span></p>
             </div>
-            <button onClick={dismissInstall} className="p-1.5 text-slate-500 hover:text-white transition-colors cursor-pointer">
+            <button onClick={dismissInstall} className="p-1.5 text-fg-muted hover:text-fg transition-colors cursor-pointer">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -162,9 +162,9 @@ export default function LandingPage() {
       {/* Floating Support Button — tạm ẩn */}
       {/* <
         href="#"
-        className="fixed bottom-8 right-4 md:bottom-6 md:right-8 bg-gradient-to-r from-[#FBBF24] to-[#FB923C] text-[#012622] px-5 py-2.5 rounded-full shadow-xl flex items-center gap-2 hover:scale-105 transition-all duration-300 z-50 font-bold text-sm"
+        className="fixed bottom-8 right-4 md:bottom-6 md:right-8 bg-accent text-accent-fg px-5 py-2.5 rounded-full shadow-xl flex items-center gap-2 hover:scale-105 transition-all duration-300 z-50 font-bold text-sm"
       >
-        <Heart className="w-4 h-4 fill-[#012622]" />
+        <Heart className="w-4 h-4 fill-accent-fg" />
         Ủng hộ
       </a> */}
 
@@ -178,7 +178,7 @@ export default function LandingPage() {
           compactHero ? 'mb-3 md:mb-4' : 'mb-6 md:mb-10'
         }`}>
           {/* Context label — kept in both: it is what the product does, in one line */}
-          <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-xs font-bold text-emerald-400 tracking-wide max-w-full ${
+          <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-success-soft border border-success/25 text-xs font-bold text-success tracking-wide max-w-full ${
             compactHero ? 'mb-0' : 'mb-5'
           }`}>
             <Sparkles className="w-3 h-3 flex-shrink-0" />
@@ -191,16 +191,16 @@ export default function LandingPage() {
               hero. */}
           {!compactHero && (
           <>
-          <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tighter leading-tight text-white mb-4">
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tighter leading-tight text-fg mb-4">
             Bắt trọn video.{' '}
-            <span className="bg-gradient-to-r from-[#FBBF24] to-[#FB923C] bg-clip-text text-transparent">
+            <span className=" text-accent-text">
               Sạch, không logo.
             </span>
           </h1>
 
 
           {typeof window !== 'undefined' && !window.matchMedia('(display-mode: standalone)').matches && (
-            <p className="text-xs text-white/30 text-center mt-2 sm:hidden">
+            <p className="text-xs text-fg-muted text-center mt-2 sm:hidden">
               💡 Thêm vào màn hình chính để mở nhanh hơn
             </p>
           )}
@@ -210,9 +210,9 @@ export default function LandingPage() {
             {platforms.map((p, i) => (
               <div
                 key={i}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold ${p.bg} hover:scale-105 transition-transform cursor-default${p.special ? ' ring-1 ring-emerald-500/50' : ''}`}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold ${p.bg} hover:scale-105 transition-transform cursor-default${p.special ? ' ring-1 ring-success/50' : ''}`}
               >
-                <p.icon />
+                <span className={p.ic}><p.icon /></span>
                 <span className="hidden sm:inline">{p.label}</span>
               </div>
             ))}
@@ -238,7 +238,7 @@ export default function LandingPage() {
               window.history.pushState({}, '', '/extension');
               window.dispatchEvent(new PopStateEvent('popstate'));
             }}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[#FBBF24] border border-[#FBBF24]/40 hover:bg-[#FBBF24]/10 rounded-full transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-accent-text border border-accent/40 hover:bg-accent-soft rounded-full transition-colors"
           >
             <Puzzle className="w-4 h-4" />
             Cài Extension Chrome — TikTok sạch 1 click
@@ -249,10 +249,10 @@ export default function LandingPage() {
           {/* Product depth cues — kept in both. Two of these are navigation
               (Bulk, History), not decoration, and they are the only pointer
               to those tabs from a compact hero. */}
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 mt-3 text-[11px] text-slate-600">
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 mt-3 text-[11px] text-fg-muted">
             <button
               onClick={() => setActiveTab('bulk')}
-              className="inline-flex items-center gap-1.5 hover:text-slate-400 transition-colors"
+              className="inline-flex items-center gap-1.5 hover:text-fg-muted transition-colors"
             >
               <Layers className="w-3 h-3" />
               Hàng loạt · kênh · ZIP
@@ -265,13 +265,13 @@ export default function LandingPage() {
             <span aria-hidden="true">·</span>
             <button
               onClick={() => setActiveTab('history')}
-              className="inline-flex items-center gap-1.5 hover:text-slate-400 transition-colors"
+              className="inline-flex items-center gap-1.5 hover:text-fg-muted transition-colors"
             >
               <History className="w-3 h-3" />
               Lịch sử tải
             </button>
             <span aria-hidden="true">·</span>
-            <span className="inline-flex items-center gap-1.5 text-emerald-500/70">
+            <span className="inline-flex items-center gap-1.5 text-success">
               <ShieldCheck className="w-3 h-3" />
               Không quảng cáo · không giới hạn giả
             </span>
@@ -280,7 +280,7 @@ export default function LandingPage() {
 
         {/* Tab Switcher */}
         <div className="w-full flex justify-center mb-4 md:mb-6 px-4 sm:px-0">
-          <div className="inline-flex max-w-full overflow-x-auto bg-[#012622]/50 rounded-2xl p-1.5 sm:p-2 shadow-md border border-slate-700/50 gap-1 sm:gap-2 backdrop-blur-md">
+          <div className="inline-flex max-w-full overflow-x-auto bg-surface/50 rounded-2xl p-1.5 sm:p-2 shadow-md border border-line gap-1 sm:gap-2 backdrop-blur-md">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -292,14 +292,14 @@ export default function LandingPage() {
                 ? 'text-xs sm:text-sm px-3 py-2 sm:px-5 sm:py-2.5'
                 : 'text-sm sm:text-base md:text-lg px-4 py-3 sm:px-8 sm:py-4';
               const colorClasses = isActive
-                ? 'bg-gradient-to-r from-[#FB923C] to-[#FBBF24] text-[#012622] shadow-md shadow-[#FBBF24]/30'
+                ? 'bg-accent text-accent-fg shadow-md'
                 : isHistory
-                  ? 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                  ? 'text-fg-muted hover:text-fg-2 hover:bg-surface-2'
                   : isFlow
-                    ? 'text-emerald-500/60 hover:text-emerald-400 hover:bg-emerald-500/10'
+                    ? 'text-success hover:text-success hover:bg-success-soft'
                     : isBulk
-                      ? 'text-slate-400 hover:text-white hover:bg-white/10'
-                      : 'text-slate-200 hover:text-white hover:bg-white/10';
+                      ? 'text-fg-muted hover:text-fg hover:bg-surface-2'
+                      : 'text-fg-2 hover:text-fg hover:bg-surface-2';
               const titleMap = {
                 single:  'Tải 1 link — video, nhạc, phụ đề',
                 bulk:    'Tải nhiều link, kênh, playlist cùng lúc',
@@ -317,7 +317,7 @@ export default function LandingPage() {
                   <span className="hidden sm:inline">{tab.label}</span>
                   <span className="sm:hidden">{tab.shortLabel}</span>
                   {isFlow && !isActive && (
-                    <span className="ml-0.5 text-[8px] font-extrabold px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-400 leading-none tracking-wide">
+                    <span className="ml-0.5 text-[8px] font-extrabold px-1 py-0.5 rounded bg-success-soft text-success leading-none tracking-wide">
                       New
                     </span>
                   )}
@@ -337,8 +337,8 @@ export default function LandingPage() {
 
         {/* Share prompt */}
         {false && !shareShown && (
-          <div className="mt-4 flex items-center justify-between bg-white/5 border border-white/10 rounded-xl px-4 py-3">
-            <p className="text-sm text-white/50">Tìm thấy hữu ích? Chia sẻ với bạn bè</p>
+          <div className="mt-4 flex items-center justify-between bg-surface-2 border border-line rounded-xl px-4 py-3">
+            <p className="text-sm text-fg-muted">Tìm thấy hữu ích? Chia sẻ với bạn bè</p>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
@@ -346,13 +346,13 @@ export default function LandingPage() {
                   setShareShown(true);
                   try { sessionStorage.setItem('vg_share_shown', '1'); } catch {}
                 }}
-                className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors flex-shrink-0"
+                className="text-xs bg-accent hover:bg-accent-hover text-accent-fg px-3 py-1.5 rounded-lg font-medium transition-colors flex-shrink-0"
               >
                 Chia sẻ
               </button>
               <button
                 onClick={() => { setShareShown(true); try { sessionStorage.setItem('vg_share_shown', '1'); } catch {} }}
-                className="text-white/30 hover:text-white/50 text-xs transition-colors"
+                className="text-fg-muted hover:text-fg-muted text-xs transition-colors"
               >✕</button>
             </div>
           </div>

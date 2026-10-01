@@ -28,31 +28,31 @@ function ConfirmModal({
   return (
     <>
       <div
-        className="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm"
+        className="fixed inset-0 z-40 bg-surface-2 backdrop-blur-sm"
         onClick={onCancel}
         aria-hidden
       />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div
-          className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl"
+          className="w-full max-w-sm rounded-2xl border border-line bg-canvas p-5 shadow-2xl"
           onClick={e => e.stopPropagation()}
           role="dialog"
           aria-modal
         >
-          <h3 className="text-sm font-semibold text-slate-100">{title}</h3>
-          <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{description}</p>
+          <h3 className="text-sm font-semibold text-fg">{title}</h3>
+          <p className="mt-1.5 text-xs leading-relaxed text-fg-muted">{description}</p>
           <div className="mt-4 flex justify-end gap-2">
             <button
               onClick={onCancel}
-              className="rounded-lg border border-slate-700 px-4 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:border-slate-600 hover:text-slate-200"
+              className="rounded-lg border border-line px-4 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:border-line-strong hover:text-fg-2"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
               className={cn(
-                'rounded-lg px-4 py-1.5 text-xs font-semibold text-white transition-colors',
-                destructive ? 'bg-red-700 hover:bg-red-600' : 'bg-blue-600 hover:bg-blue-500',
+                'rounded-lg px-4 py-1.5 text-xs font-semibold text-fg transition-colors',
+                destructive ? 'bg-danger hover:opacity-90' : 'bg-accent hover:bg-accent-hover',
               )}
             >
               {confirmLabel}
@@ -133,7 +133,7 @@ export function JobRetryActions({
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2 border-t border-slate-800 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-3">
         {/* Retry Full */}
         <button
           onClick={() => request('retry_full')}
@@ -141,7 +141,7 @@ export function JobRetryActions({
           title={!canRetry ? `Cannot retry — job is ${job.currentStatus}` : undefined}
           className={cn(
             'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
-            'border-slate-700 text-slate-300 hover:border-blue-700 hover:bg-blue-950/30 hover:text-blue-300',
+            'border-line text-fg-2 hover:border-line hover:bg-surface-2 hover:text-fg-2',
             'disabled:cursor-not-allowed disabled:opacity-35',
           )}
         >
@@ -152,18 +152,18 @@ export function JobRetryActions({
         </button>
 
         {/* Divider */}
-        <div className="h-4 w-px bg-slate-800" />
+        <div className="h-4 w-px bg-surface" />
 
         {/* Phase picker + Retry from Phase */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-slate-700">From:</span>
+          <span className="text-[10px] text-fg-muted">From:</span>
           <select
             value={phaseTarget}
             onChange={e => setPhaseTarget(e.target.value as PhaseName)}
             disabled={!canRetry}
             className={cn(
-              'rounded border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-[11px] text-slate-300',
-              'outline-none transition-colors focus:border-blue-700',
+              'rounded border border-line bg-canvas px-2 py-1.5 font-mono text-[11px] text-fg-2',
+              'outline-none transition-colors focus:border-line',
               'disabled:cursor-not-allowed disabled:opacity-35',
             )}
           >
@@ -176,7 +176,7 @@ export function JobRetryActions({
             disabled={!canRetry}
             className={cn(
               'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
-              'border-slate-700 text-slate-300 hover:border-blue-700 hover:bg-blue-950/30 hover:text-blue-300',
+              'border-line text-fg-2 hover:border-line hover:bg-surface-2 hover:text-fg-2',
               'disabled:cursor-not-allowed disabled:opacity-35',
             )}
           >
@@ -197,7 +197,7 @@ export function JobRetryActions({
           title={!canCancel ? `Cannot cancel — job is ${job.currentStatus}` : undefined}
           className={cn(
             'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
-            'border-slate-700 text-red-700 hover:border-red-900/60 hover:bg-red-950/30 hover:text-red-400',
+            'border-line text-danger hover:border-danger/60 hover:bg-danger-soft hover:text-danger',
             'disabled:cursor-not-allowed disabled:opacity-35',
           )}
         >
