@@ -104,7 +104,7 @@ const ResBadge = ({ label, height }) => {
   );
 };
 
-export default function DashboardContent({ modeTabs = null }) {
+export default function DashboardContent() {
   const { withAuth, session } = useAuth();
 
   /**
@@ -1659,11 +1659,6 @@ export default function DashboardContent({ modeTabs = null }) {
               <span>{isLoading ? 'ĐANG XỬ LÝ...' : 'BÓC TÁCH NGAY'}</span>
             </button>
           </div>
-
-          {/* Mode tabs (rendered by LandingPage, passed in as an element) */}
-          {modeTabs && (
-            <div className="border-t border-line px-3 sm:px-4 py-3">{modeTabs}</div>
-          )}
 
           {/* Options row */}
           <div className="border-t border-line px-3 sm:px-4 py-3 flex flex-wrap items-center gap-x-5 gap-y-3 text-xs text-fg-2">

@@ -52,7 +52,7 @@ const TAB_TITLES = {
 // horizontally on narrow screens instead of clipping labels.
 function ModeTabs({ activeTab, onChange }) {
   return (
-    <div className="flex items-center gap-1 p-1 rounded-control bg-surface-2 overflow-x-auto vg-no-scrollbar w-full sm:w-fit max-w-full pr-6 sm:pr-1 [mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)] sm:[mask-image:none]">
+    <div className="grid grid-cols-4 gap-1 p-1 rounded-control bg-surface-2 border border-line w-full sm:w-fit sm:inline-flex sm:items-center">
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = activeTab === tab.id;
@@ -64,7 +64,7 @@ function ModeTabs({ activeTab, onChange }) {
             onClick={() => onChange(tab.id)}
             title={TAB_TITLES[tab.id]}
             aria-pressed={isActive}
-            className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap transition-colors cursor-pointer ${
+            className={`relative min-w-0 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 py-2 sm:py-1.5 rounded-lg text-[11px] sm:text-[13px] leading-tight font-medium whitespace-nowrap transition-colors cursor-pointer ${
               isActive
                 ? 'bg-surface text-fg shadow-sm ring-1 ring-line'
                 : 'text-fg-2 hover:text-fg'
@@ -73,8 +73,8 @@ function ModeTabs({ activeTab, onChange }) {
             <Icon className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">{tab.label}</span>
             <span className="sm:hidden">{tab.shortLabel}</span>
-            {isFlow && !isActive && (
-              <span className="text-[9px] font-mono font-semibold px-1 py-0.5 rounded bg-accent-soft text-accent-text leading-none">
+            {isFlow && (
+              <span className={`${isActive ? 'invisible ' : ''}absolute top-0.5 right-0.5 sm:static text-[9px] font-mono font-semibold px-1 py-0.5 rounded bg-accent-soft text-accent-text leading-none`}>
                 New
               </span>
             )}
@@ -164,7 +164,7 @@ export default function LandingPage() {
   const modeTabs = <ModeTabs activeTab={activeTab} onChange={setActiveTab} />;
 
   return (
-    <div className="min-h-screen relative overflow-hidden pb-24">
+    <div className="min-h-screen relative overflow-hidden pb-44 md:pb-24">
       <div aria-hidden="true" className="vg-hero-grid absolute inset-x-0 top-0 h-[520px] pointer-events-none" />
       {/* ── PWA Install Banner — disabled: App.jsx handles this via usePWAInstall hook ── */}
       {/* {showInstall && (
@@ -312,16 +312,13 @@ export default function LandingPage() {
           )}
         </section>
 
-        {/* Tab Content. On the single-link tab the mode tabs live INSIDE the
-            input card (DashboardContent renders them from the modeTabs prop);
-            on every other tab they sit in their own card above the content. */}
-        {activeTab !== 'single' && (
-          <div className="w-full mb-5 bg-surface border border-line rounded-card shadow-card px-3 sm:px-4 py-3">
-            {modeTabs}
-          </div>
-        )}
+        {/* Mode tabs — one standalone control, same position on every tab */}
+        <div className="w-full flex justify-center mb-5 md:mb-6">
+          {modeTabs}
+        </div>
+
         <div className="w-full">
-          {activeTab === 'single'  && <DashboardContent modeTabs={modeTabs} />}
+          {activeTab === 'single'  && <DashboardContent />}
           {activeTab === 'bulk'    && <BulkContent />}
           {activeTab === 'flow'    && <FlowVeoCleanup />}
           {activeTab === 'history' && <HistoryContent />}

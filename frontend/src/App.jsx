@@ -504,14 +504,15 @@ function AppInner() {
       {(
         <button
           onClick={() => setShowFeedback(true)}
-          className="fixed bottom-24 right-4 z-40 md:bottom-6 md:right-6 flex items-center gap-2 px-4 py-2.5 rounded-full bg-surface-2 border border-line-strong text-fg-2 text-xs font-semibold hover:bg-accent-soft hover:border-accent/40 hover:text-accent-text shadow-lg transition-all duration-200 cursor-pointer"
+          aria-label="Góp ý & Phản hồi"
+          className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-3 z-40 md:bottom-6 md:right-6 flex items-center justify-center gap-2 w-10 h-10 sm:w-auto sm:h-auto sm:px-4 sm:py-2.5 rounded-full bg-surface-2 border border-line-strong text-fg-2 text-xs font-semibold hover:bg-accent-soft hover:border-accent/40 hover:text-accent-text shadow-lg transition-all duration-200 cursor-pointer"
           title="Góp ý & Phản hồi"
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
           </svg>
-          Góp ý
+          <span className="hidden sm:inline">Góp ý</span>
         </button>
       )}
 
