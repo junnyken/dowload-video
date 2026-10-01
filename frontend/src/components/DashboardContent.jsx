@@ -104,7 +104,7 @@ const ResBadge = ({ label, height }) => {
   );
 };
 
-export default function DashboardContent() {
+export default function DashboardContent({ modeTabs = null }) {
   const { withAuth, session } = useAuth();
 
   /**
@@ -1601,297 +1601,202 @@ export default function DashboardContent() {
         authToken={session?.access_token}
       />
 
-      {/* ── Quick Guide ─────────────────────────────────── */}
-      <QuickGuideSection activeToolTab="single" />
-
       {/* ── Platform health banner (shown only when degraded) ── */}
       <PlatformStatusBanner />
 
-      {/* ── Input Area ──────────────────────────────────── */}
-      <div className="relative group w-full max-w-3xl mb-10">
-        <div className="absolute -inset-1 bg-surface-2 rounded-[2rem] md:rounded-full blur-md opacity-0 group-hover:opacity-40 transition duration-500" />
-        <div className="relative bg-surface flex flex-col md:flex-row items-center p-2.5 rounded-3xl md:rounded-full shadow-2xl border border-line">
-          <div className="flex-1 flex items-center gap-3 w-full px-5 md:px-6">
-            <Link2 className="w-6 h-6 text-fg-muted flex-shrink-0" />
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              onPaste={handleInputPaste}
-              onKeyDown={(e) => e.key === 'Enter' && handleFetchLink()}
-              onFocus={() => { if (!url) checkClipboard(); }}
-              /* The emoji sat directly beside the Link2 icon above — two chain
-                 glyphs in a row — and it pushed the text long enough to clip
-                 against the button, so the field's only label read "…vào đâ".
-                 Shortened to fit; the Link2 icon carries the visual cue. */
-              placeholder="Dán liên kết video hoặc kênh…"
-              aria-label="Liên kết video hoặc kênh"
-              disabled={isLoading}
-              className="w-full bg-transparent text-fg placeholder:text-fg-muted text-sm sm:text-base md:text-lg font-semibold focus:outline-none disabled:opacity-50 h-14"
-            />
-            {navigator.clipboard && (
-              <button
-                onClick={async () => {
-                  try {
-                    const text = await navigator.clipboard.readText();
-                    if (text) setUrl(text);
-                  } catch (err) {
-                    console.error("Failed to read clipboard contents: ", err);
-                  }
-                }}
-                className="p-2 text-fg-muted hover:text-accent-text transition-colors"
-                title="Dán từ bộ nhớ tạm"
-              >
-                <ClipboardPaste className="w-5 h-5" />
-              </button>
-            )}
-          </div>
-          <button
-            onClick={handleFetchLink}
-            disabled={isLoading || !url.trim()}
-            className="w-full md:w-auto mt-3 md:mt-0 h-14 md:h-16 px-6 sm:px-10 rounded-2xl md:rounded-full bg-accent text-accent-fg font-black shadow-lg active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 whitespace-nowrap text-base md:text-lg uppercase tracking-wider drop-shadow-md"
-          >
-            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-6 h-6 fill-accent-fg" />}
-            <span>{isLoading ? 'ĐANG XỬ LÝ...' : 'BÓC TÁCH NGAY'}</span>
-          </button>
-        </div>
-
-        {/* ── Schedule download picker ───────────────────────── */}
-        <div className="mt-2 px-1 flex flex-col gap-1.5">
-          <button
-            type="button"
-            onClick={() => { setShowSchedulePicker(v => !v); if (showSchedulePicker) setScheduledAt(''); }}
-            className={`self-start flex items-center gap-1.5 text-xs font-semibold rounded-full px-3.5 py-1.5 transition-all border ${
-              showSchedulePicker || scheduledAt
-                ? 'bg-accent-soft text-accent-text border-accent/50 shadow-sm'
-                : 'bg-surface-2 text-fg-2 border-line-strong hover:bg-line hover:text-fg hover:border-line-strong'
-            }`}
-          >
-            <CalendarClock className="w-3.5 h-3.5" />
-            {scheduledAt
-              ? `Lên lịch: ${new Date(scheduledAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}`
-              : 'Lên lịch tải'}
-          </button>
-          {showSchedulePicker && (
-            <div className="flex items-center gap-2 bg-accent-soft border border-accent rounded-xl px-3 py-2">
-              <CalendarClock className="w-4 h-4 text-accent-text flex-shrink-0" />
+      {/* ── Tool card (prompt box): URL row, mode tabs, options ── */}
+      <div className="w-full max-w-3xl mb-6">
+        <div className="bg-surface border border-line rounded-card shadow-card focus-within:border-line-strong transition-colors">
+          {/* URL row */}
+          <div className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex-1 min-w-0 flex items-center gap-3 px-1 sm:px-2">
+              <Link2 className="w-5 h-5 text-fg-muted flex-shrink-0" />
               <input
-                type="datetime-local"
-                value={scheduledAt}
-                min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
-                onChange={e => setScheduledAt(e.target.value)}
-                className="text-xs bg-transparent text-accent-text focus:outline-none flex-1"
+                type="text"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                onPaste={handleInputPaste}
+                onKeyDown={(e) => e.key === 'Enter' && handleFetchLink()}
+                onFocus={() => { if (!url) checkClipboard(); }}
+                /* The emoji sat directly beside the Link2 icon above — two chain
+                   glyphs in a row — and it pushed the text long enough to clip
+                   against the button, so the field's only label read "…vào đâ".
+                   Shortened to fit; the Link2 icon carries the visual cue. */
+                placeholder="Dán liên kết video hoặc kênh…"
+                aria-label="Liên kết video hoặc kênh"
+                disabled={isLoading}
+                className="w-full min-w-0 bg-transparent text-fg placeholder:text-fg-muted text-base font-medium focus:outline-none disabled:opacity-50 h-11"
               />
-              {scheduledAt && (
-                <button onClick={() => setScheduledAt('')} className="text-accent-text hover:text-accent-text">
-                  <X className="w-3.5 h-3.5" />
+              {navigator.clipboard && (
+                <button
+                  onClick={async () => {
+                    try {
+                      const text = await navigator.clipboard.readText();
+                      if (text) setUrl(text);
+                    } catch (err) {
+                      console.error("Failed to read clipboard contents: ", err);
+                    }
+                  }}
+                  className="p-2 text-fg-muted hover:text-accent-text transition-colors cursor-pointer"
+                  title="Dán từ bộ nhớ tạm"
+                >
+                  <ClipboardPaste className="w-5 h-5" />
                 </button>
               )}
             </div>
-          )}
-        </div>
-        {/* Phase 24: Capability badge — shows platform/source_type/support_level */}
-        {!videoInfo && (capResult || capLoading) && (
-          <div className="mt-2 px-1">
-            <CapabilityBadge result={capResult} loading={capLoading} />
-          </div>
-        )}
-
-        {hasSuggestion && !url && clipboardURL && (
-          <div className="mt-2 flex items-center gap-2 bg-surface-2 border border-line rounded-lg px-3 py-2">
-            <span className="text-xs text-fg-2 flex-1 truncate min-w-0">
-              Dán: {(() => { try { return new URL(clipboardURL).hostname; } catch { return clipboardURL; } })()}...
-            </span>
             <button
-              onClick={() => { setUrl(clipboardURL); clearSuggestion(); }}
-              className="text-xs bg-accent text-accent-fg px-2.5 py-1 rounded-lg font-semibold flex-shrink-0"
+              onClick={handleFetchLink}
+              disabled={isLoading || !url.trim()}
+              className={`w-full sm:w-auto h-11 px-5 rounded-control border font-semibold flex items-center justify-center gap-2 whitespace-nowrap text-sm uppercase tracking-wide transition-colors ${
+                isLoading
+                  ? 'bg-accent text-accent-fg border-transparent opacity-80 cursor-progress'
+                  : !url.trim()
+                    ? 'bg-surface-2 text-fg-muted border-line cursor-not-allowed'
+                    : 'bg-accent text-accent-fg border-transparent hover:bg-accent-hover active:scale-[0.98] cursor-pointer'
+              }`}
             >
-              Dán
+              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 fill-current" />}
+              <span>{isLoading ? 'ĐANG XỬ LÝ...' : 'BÓC TÁCH NGAY'}</span>
             </button>
-            <button onClick={clearSuggestion} className="text-fg-muted hover:text-fg-muted text-xs flex-shrink-0">✕</button>
           </div>
-        )}
-      </div>
 
-      {/* ── Extracting Phase Panel ──────────────────────── */}
-      {isLoading && !downloadProgress && (
-        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-surface border border-line animate-in fade-in slide-in-from-top-2 duration-300">
-          <Loader2 className="w-4 h-4 text-accent-text animate-spin flex-shrink-0" />
-          <p className="flex-1 text-sm font-semibold text-fg-2">
-            {isSpotifyArtist(url) ? 'Đang tải thông tin nghệ sĩ Spotify...' :
-             isSpotifyPlaylistOrAlbum(url) ? 'Đang tải danh sách Spotify...' :
-             isSpotifyTrack(url) ? 'Đang tìm và trích xuất bài nhạc...' :
-             isWatermarkPlatform(url) && removeWatermark ? 'Đang trích xuất TikTok / Douyin — bỏ watermark khi tải xong...' :
-             isWatermarkPlatform(url) ? 'Đang trích xuất TikTok / Douyin...' :
-             'Đang phân tích liên kết và trích xuất...'}
-          </p>
-          {loadElapsed > 0 && (
-            <span className="text-xs text-fg-muted font-mono tabular-nums flex-shrink-0">{loadElapsed}s</span>
+          {/* Mode tabs (rendered by LandingPage, passed in as an element) */}
+          {modeTabs && (
+            <div className="border-t border-line px-3 sm:px-4 py-3">{modeTabs}</div>
           )}
-        </div>
-      )}
 
-      {/* ── Download Progress Bar ────────────────────────── */}
-      {isLoading && downloadProgress && downloadProgress.status === 'downloading' && (
-        <div className="w-full max-w-3xl mb-4 px-5 py-4 rounded-2xl bg-surface border border-line animate-in fade-in slide-in-from-top-2 duration-300">
-          <div className="flex items-center justify-between mb-2 text-sm font-semibold">
-            <span className="text-fg-2">
-              {isWatermarkPlatform(url) ? 'Đang tải bản sạch TikTok / Douyin...' :
-               url.includes('spotify') ? 'Đang xử lý nhạc Spotify...' :
-               'Đang tải video...'}
-            </span>
-            <span className="text-accent-text tabular-nums">{downloadProgress.percent}%</span>
-          </div>
-          <div className="w-full h-2.5 bg-surface-2 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-accent rounded-full transition-all duration-500"
-              style={{ width: `${downloadProgress.percent}%` }}
-            />
-          </div>
-          <div className="flex items-center justify-between mt-2 text-xs text-fg-muted tabular-nums">
-            <span>
-              {downloadProgress.speed_kbps >= 1024
-                ? `${(downloadProgress.speed_kbps / 1024).toFixed(1)} MB/s`
-                : `${downloadProgress.speed_kbps} KB/s`}
-            </span>
-            <span>
-              {downloadProgress.eta_seconds > 0 && `còn ~${downloadProgress.eta_seconds}s`}
-            </span>
-            <span>
-              {downloadProgress.total_bytes > 0 && `${(downloadProgress.total_bytes / 1048576).toFixed(1)} MB`}
-            </span>
-          </div>
-        </div>
-      )}
+          {/* Options row */}
+          <div className="border-t border-line px-3 sm:px-4 py-3 flex flex-wrap items-center gap-x-5 gap-y-3 text-xs text-fg-2">
+            {/* Watermark toggle — platform-aware */}
+            {isWatermarkPlatform(url) ? (
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={removeWatermark}
+                  onChange={e => setRemoveWatermark(e.target.checked)}
+                  className="w-4 h-4 accent-accent rounded"
+                />
+                <span className="font-medium text-fg group-hover:text-fg transition-colors">
+                  Xoá watermark / logo
+                </span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-accent-soft text-accent-text font-mono font-semibold leading-tight">
+                  ✓ Hỗ trợ
+                </span>
+              </label>
+            ) : url.trim() ? (
+              <label className="flex items-center gap-2 cursor-not-allowed opacity-50">
+                <input
+                  type="checkbox"
+                  checked={false}
+                  disabled
+                  className="w-4 h-4 rounded"
+                />
+                <span className="font-medium text-fg-muted line-through">Xoá watermark / logo</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-surface-2 text-fg-muted font-medium border border-line leading-tight">
+                  Chỉ TikTok / Douyin
+                </span>
+              </label>
+            ) : (
+              <label className="flex items-center gap-2 cursor-pointer hover:text-fg transition-colors text-fg-2">
+                <input
+                  type="checkbox"
+                  checked={removeWatermark}
+                  onChange={e => setRemoveWatermark(e.target.checked)}
+                  className="w-4 h-4 accent-accent rounded"
+                />
+                <span className="font-medium">Xoá logo (TikTok / Douyin)</span>
+              </label>
+            )}
 
-      {/* ── Spotify Track Hint ───────────────────────────── */}
-      {isSpotifyTrack(url) && (
-        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-2xl bg-success-soft border border-success/25 text-success text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
-          <Music className="w-4 h-4 flex-shrink-0" />
-          <span>
-            Nhạc Spotify đơn — sẽ tự động tìm trên YouTube và tải dạng{' '}
-            <strong className="text-success">MP3 128kbps</strong>.
-            Nhấn <strong className="text-success">BÓC TÁCH NGAY</strong> để bắt đầu.
-          </span>
-        </div>
-      )}
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-medium text-fg-muted">Phụ đề:</span>
+                  <select
+                    value={subtitleMode}
+                    onChange={e => setSubtitleMode(e.target.value)}
+                    className="text-xs px-2 py-1 rounded-md bg-surface-2 border border-line text-fg-2 cursor-pointer outline-none hover:border-line-strong focus-visible:border-line-strong"
+                  >
+                    <option value="off">Không có</option>
+                    <option value="file">File .srt rời</option>
+                    <option value="burned">Đốt vào video</option>
+                    <option value="soft">Phụ đề mềm (MKV)</option>
+                  </select>
+                  {subtitleMode !== 'off' && (
+                    <select
+                      value={subtitleLang}
+                      onChange={e => setSubtitleLang(e.target.value)}
+                      className="text-xs px-2 py-1 rounded-md bg-surface-2 border border-line text-fg-2 cursor-pointer outline-none hover:border-line-strong focus-visible:border-line-strong"
+                    >
+                      <option value="auto">Tự động</option>
+                      <option value="vi">Tiếng Việt</option>
+                      <option value="en">English</option>
+                      <option value="all">Tất cả ngôn ngữ</option>
+                    </select>
+                  )}
+                  {videoInfo && subtitleMode !== 'off' && (
+                    videoInfo.has_subtitles
+                      ? <span className="text-[10px] font-bold text-fg-2 bg-surface-2 px-2 py-0.5 rounded-full border border-line">
+                          {videoInfo.subtitle_source === 'auto' ? 'tự động' : 'có sẵn'}
+                          {videoInfo.available_subtitle_languages?.length > 0 ? ` · ${videoInfo.available_subtitle_languages.slice(0,3).join(', ')}` : ''}
+                        </span>
+                      : <span className="text-[10px] text-fg-muted bg-surface px-2 py-0.5 rounded-full border border-line">không có</span>
+                  )}
+                </div>
+                {subtitleMode === 'burned' && (
+                  <p className="text-[10px] text-accent-text mt-1">Đốt phụ đề vào video — quá trình xử lý lâu hơn, file không có phụ đề riêng.</p>
+                )}
+                {subtitleMode === 'soft' && (
+                  <p className="text-[10px] text-fg-2 mt-1">Phụ đề mềm: video xuất ra file .mkv, dùng VLC để bật/tắt phụ đề khi xem.</p>
+                )}
+              </div>
 
-      {isSpotifyPlaylistOrAlbum(url) && (
-        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-2xl bg-success-soft border border-success/25 text-success text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
-          <Music className="w-4 h-4 flex-shrink-0" />
-          <span>
-            Playlist / Album Spotify — sẽ hiển thị danh sách bài nhạc để tải từng bài hoặc tải tất cả dạng{' '}
-            <strong className="text-success">ZIP MP3</strong>.
-          </span>
-        </div>
-      )}
-
-      {/* ── TikTok / Douyin watermark hint ─────────────── */}
-      {isWatermarkPlatform(url) && (
-        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-2xl bg-success-soft border border-success/25 text-success text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
-          <Sparkles className="w-4 h-4 flex-shrink-0 text-success" />
-          <span>
-            <strong className="text-success">TikTok / Douyin</strong> — {removeWatermark ? 'Tùy chọn bỏ watermark đang bật — sẽ tải bản sạch không logo.' : 'Bật tùy chọn bên dưới để tải bản không watermark / logo.'}
-          </span>
-        </div>
-      )}
-
-      <div className="w-full max-w-3xl mb-5 flex flex-col sm:flex-row justify-center items-center gap-4 sm:gap-8 text-sm">
-        {/* Watermark toggle — platform-aware */}
-        {isWatermarkPlatform(url) ? (
-          <label className="flex items-center gap-2.5 cursor-pointer group">
-            <input
-              type="checkbox"
-              checked={removeWatermark}
-              onChange={e => setRemoveWatermark(e.target.checked)}
-              className="w-4 h-4 accent-accent rounded"
-            />
-            <span className="font-semibold text-success group-hover:text-success transition-colors">
-              Xoá watermark / logo
-            </span>
-            <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-success-soft text-success font-bold border border-success/25 leading-tight">
-              ✓ Hỗ trợ
-            </span>
-          </label>
-        ) : url.trim() ? (
-          <label className="flex items-center gap-2.5 cursor-not-allowed opacity-40">
-            <input
-              type="checkbox"
-              checked={false}
-              disabled
-              className="w-4 h-4 rounded"
-            />
-            <span className="font-medium text-fg-muted line-through">Xoá watermark / logo</span>
-            <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-surface-2 text-fg-muted font-medium border border-line-strong leading-tight">
-              Chỉ TikTok / Douyin
-            </span>
-          </label>
-        ) : (
-          <label className="flex items-center gap-2 cursor-pointer hover:text-fg transition-colors text-fg-2">
-            <input
-              type="checkbox"
-              checked={removeWatermark}
-              onChange={e => setRemoveWatermark(e.target.checked)}
-              className="w-4 h-4 accent-accent bg-surface border-line-strong rounded"
-            />
-            <span className="font-medium">Xoá logo (TikTok / Douyin)</span>
-          </label>
-        )}
-
-        <div className="mt-2 flex flex-col gap-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] font-semibold text-fg-muted min-w-[60px]">Phụ đề:</span>
-            <select
-              value={subtitleMode}
-              onChange={e => setSubtitleMode(e.target.value)}
-              className="text-[11px] px-2 py-1 rounded-md bg-surface-2 border border-line text-fg-2 cursor-pointer outline-none focus:border-line"
+            <button
+              type="button"
+              onClick={() => { setShowSchedulePicker(v => !v); if (showSchedulePicker) setScheduledAt(''); }}
+              className={`flex items-center gap-1.5 text-xs font-medium rounded-full px-3 py-1 transition-colors border cursor-pointer ${
+                showSchedulePicker || scheduledAt
+                  ? 'bg-accent-soft text-accent-text border-accent/40'
+                  : 'bg-surface-2 text-fg-2 border-line hover:text-fg hover:border-line-strong'
+              }`}
             >
-              <option value="off">Không có</option>
-              <option value="file">File .srt rời</option>
-              <option value="burned">Đốt vào video</option>
-              <option value="soft">Phụ đề mềm (MKV)</option>
-            </select>
-            {subtitleMode !== 'off' && (
-              <select
-                value={subtitleLang}
-                onChange={e => setSubtitleLang(e.target.value)}
-                className="text-[11px] px-2 py-1 rounded-md bg-surface-2 border border-line text-fg-2 cursor-pointer outline-none focus:border-line"
-              >
-                <option value="auto">Tự động</option>
-                <option value="vi">Tiếng Việt</option>
-                <option value="en">English</option>
-                <option value="all">Tất cả ngôn ngữ</option>
-              </select>
-            )}
-            {videoInfo && subtitleMode !== 'off' && (
-              videoInfo.has_subtitles
-                ? <span className="text-[10px] font-bold text-success bg-success-soft px-2 py-0.5 rounded-full border border-success/20">
-                    {videoInfo.subtitle_source === 'auto' ? 'tự động' : 'có sẵn'}
-                    {videoInfo.available_subtitle_languages?.length > 0 ? ` · ${videoInfo.available_subtitle_languages.slice(0,3).join(', ')}` : ''}
-                  </span>
-                : <span className="text-[10px] text-fg-muted bg-surface px-2 py-0.5 rounded-full border border-line">không có</span>
+              <CalendarClock className="w-3.5 h-3.5" />
+              {scheduledAt
+                ? `Lên lịch: ${new Date(scheduledAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}`
+                : 'Lên lịch tải'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowUserCookie(v => !v)}
+              className="flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg-2 transition-colors cursor-pointer"
+            >
+              <span className="font-mono text-[10px]">{showUserCookie ? '▼' : '▶'}</span>
+              <span>Dùng cookie của tôi</span>
+              <span className="hidden sm:inline text-[10px] text-fg-muted">(nội dung riêng tư, members-only)</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Schedule picker — opens under the card */}
+        <div className="mt-2 flex flex-col gap-1.5">
+        {showSchedulePicker && (
+          <div className="flex items-center gap-2 bg-accent-soft border border-accent rounded-xl px-3 py-2">
+            <CalendarClock className="w-4 h-4 text-accent-text flex-shrink-0" />
+            <input
+              type="datetime-local"
+              value={scheduledAt}
+              min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+              onChange={e => setScheduledAt(e.target.value)}
+              className="text-xs bg-transparent text-accent-text focus:outline-none flex-1"
+            />
+            {scheduledAt && (
+              <button onClick={() => setScheduledAt('')} className="text-accent-text hover:text-accent-text">
+                <X className="w-3.5 h-3.5" />
+              </button>
             )}
           </div>
-          {subtitleMode === 'burned' && (
-            <p className="text-[10px] text-accent-text mt-1">Đốt phụ đề vào video — quá trình xử lý lâu hơn, file không có phụ đề riêng.</p>
-          )}
-          {subtitleMode === 'soft' && (
-            <p className="text-[10px] text-fg-2 mt-1">Phụ đề mềm: video xuất ra file .mkv, dùng VLC để bật/tắt phụ đề khi xem.</p>
-          )}
+        )}
         </div>
-      </div>
-
-      {/* ── User Cookie Input ─────────────────────────────── */}
-      <div className="w-full max-w-3xl mb-4">
-        <button
-          type="button"
-          onClick={() => setShowUserCookie(v => !v)}
-          className="flex items-center gap-2 text-xs text-fg-muted hover:text-fg-2 transition-colors"
-        >
-          <span className="font-mono">{showUserCookie ? '▼' : '▶'}</span>
-          <span>Dùng cookie của tôi</span>
-          <span className="text-[10px] text-fg-muted">(nội dung riêng tư, members-only)</span>
-        </button>
 
         {showUserCookie && (
           <div className="mt-2 rounded-xl border border-line bg-surface-2 p-3 space-y-3">
@@ -1977,7 +1882,113 @@ export default function DashboardContent() {
             )}
           </div>
         )}
+
+        {/* Phase 24: Capability badge — shows platform/source_type/support_level */}
+        {!videoInfo && (capResult || capLoading) && (
+          <div className="mt-2 px-1">
+            <CapabilityBadge result={capResult} loading={capLoading} />
+          </div>
+        )}
+
+        {hasSuggestion && !url && clipboardURL && (
+          <div className="mt-2 flex items-center gap-2 bg-surface-2 border border-line rounded-lg px-3 py-2">
+            <span className="text-xs text-fg-2 flex-1 truncate min-w-0">
+              Dán: {(() => { try { return new URL(clipboardURL).hostname; } catch { return clipboardURL; } })()}...
+            </span>
+            <button
+              onClick={() => { setUrl(clipboardURL); clearSuggestion(); }}
+              className="text-xs bg-accent text-accent-fg px-2.5 py-1 rounded-lg font-semibold flex-shrink-0"
+            >
+              Dán
+            </button>
+            <button onClick={clearSuggestion} className="text-fg-muted hover:text-fg-muted text-xs flex-shrink-0">✕</button>
+          </div>
+        )}
       </div>
+
+
+      {/* ── Extracting Phase Panel ──────────────────────── */}
+      {isLoading && !downloadProgress && (
+        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-surface border border-line animate-in fade-in slide-in-from-top-2 duration-300">
+          <Loader2 className="w-4 h-4 text-accent-text animate-spin flex-shrink-0" />
+          <p className="flex-1 text-sm font-semibold text-fg-2">
+            {isSpotifyArtist(url) ? 'Đang tải thông tin nghệ sĩ Spotify...' :
+             isSpotifyPlaylistOrAlbum(url) ? 'Đang tải danh sách Spotify...' :
+             isSpotifyTrack(url) ? 'Đang tìm và trích xuất bài nhạc...' :
+             isWatermarkPlatform(url) && removeWatermark ? 'Đang trích xuất TikTok / Douyin — bỏ watermark khi tải xong...' :
+             isWatermarkPlatform(url) ? 'Đang trích xuất TikTok / Douyin...' :
+             'Đang phân tích liên kết và trích xuất...'}
+          </p>
+          {loadElapsed > 0 && (
+            <span className="text-xs text-fg-muted font-mono tabular-nums flex-shrink-0">{loadElapsed}s</span>
+          )}
+        </div>
+      )}
+
+      {/* ── Download Progress Bar ────────────────────────── */}
+      {isLoading && downloadProgress && downloadProgress.status === 'downloading' && (
+        <div className="w-full max-w-3xl mb-4 px-5 py-4 rounded-2xl bg-surface border border-line animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex items-center justify-between mb-2 text-sm font-semibold">
+            <span className="text-fg-2">
+              {isWatermarkPlatform(url) ? 'Đang tải bản sạch TikTok / Douyin...' :
+               url.includes('spotify') ? 'Đang xử lý nhạc Spotify...' :
+               'Đang tải video...'}
+            </span>
+            <span className="text-accent-text tabular-nums">{downloadProgress.percent}%</span>
+          </div>
+          <div className="w-full h-2.5 bg-surface-2 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-accent rounded-full transition-all duration-500"
+              style={{ width: `${downloadProgress.percent}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between mt-2 text-xs text-fg-muted tabular-nums">
+            <span>
+              {downloadProgress.speed_kbps >= 1024
+                ? `${(downloadProgress.speed_kbps / 1024).toFixed(1)} MB/s`
+                : `${downloadProgress.speed_kbps} KB/s`}
+            </span>
+            <span>
+              {downloadProgress.eta_seconds > 0 && `còn ~${downloadProgress.eta_seconds}s`}
+            </span>
+            <span>
+              {downloadProgress.total_bytes > 0 && `${(downloadProgress.total_bytes / 1048576).toFixed(1)} MB`}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Spotify Track Hint ───────────────────────────── */}
+      {isSpotifyTrack(url) && (
+        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-card bg-surface border border-line text-fg-2 text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
+          <Music className="w-4 h-4 flex-shrink-0 text-accent-text" />
+          <span>
+            Nhạc Spotify đơn — sẽ tự động tìm trên YouTube và tải dạng{' '}
+            <strong className="text-fg">MP3 128kbps</strong>.
+            Nhấn <strong className="text-fg">BÓC TÁCH NGAY</strong> để bắt đầu.
+          </span>
+        </div>
+      )}
+
+      {isSpotifyPlaylistOrAlbum(url) && (
+        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-card bg-surface border border-line text-fg-2 text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
+          <Music className="w-4 h-4 flex-shrink-0 text-accent-text" />
+          <span>
+            Playlist / Album Spotify — sẽ hiển thị danh sách bài nhạc để tải từng bài hoặc tải tất cả dạng{' '}
+            <strong className="text-fg">ZIP MP3</strong>.
+          </span>
+        </div>
+      )}
+
+      {/* ── TikTok / Douyin watermark hint ─────────────── */}
+      {isWatermarkPlatform(url) && (
+        <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-card bg-surface border border-line text-fg-2 text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
+          <Sparkles className="w-4 h-4 flex-shrink-0 text-accent-text" />
+          <span>
+            <strong className="text-fg">TikTok / Douyin</strong> — {removeWatermark ? 'Tùy chọn bỏ watermark đang bật — sẽ tải bản sạch không logo.' : 'Bật tùy chọn bên dưới để tải bản không watermark / logo.'}
+          </span>
+        </div>
+      )}
 
       {/* ── Delayed / queued notice (Phase 27D) ────────── */}
       {delayedInfo && !isLoading && (
@@ -3608,23 +3619,26 @@ export default function DashboardContent() {
 
       {/* Idle State — platform quickstart hints */}
       {!videoInfo && !spotifyData && !threadsData && recentDownloads.length === 0 && !isLoading && (
-        <div className="w-full max-w-3xl mt-2">
+        <div className="w-full max-w-3xl mt-2 mb-6">
           <div className="flex flex-wrap justify-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-success bg-success-soft border border-success/20">
-              <Sparkles className="w-3 h-3 flex-shrink-0" /> TikTok / Douyin → bản không watermark
+            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg-2 bg-surface border border-line hover:border-line-strong transition-colors">
+              <Sparkles className="w-3 h-3 flex-shrink-0 text-accent-text" /> TikTok / Douyin → bản không watermark
             </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-danger bg-danger-soft border border-danger/20">
-              <Video className="w-3 h-3 flex-shrink-0" /> YouTube → 4K · 1080p · MP3
+            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg-2 bg-surface border border-line hover:border-line-strong transition-colors">
+              <Video className="w-3 h-3 flex-shrink-0 text-[#FF0000]" /> YouTube → 4K · 1080p · MP3
             </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-accent-text bg-accent-soft border border-accent/20">
-              <Music className="w-3 h-3 flex-shrink-0" /> Spotify → MP3 320kbps
+            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg-2 bg-surface border border-line hover:border-line-strong transition-colors">
+              <Music className="w-3 h-3 flex-shrink-0 text-[#1DB954]" /> Spotify → MP3 320kbps
             </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg-2 bg-surface-2 border border-line">
-              <span className="text-sm leading-none font-black">@</span> Threads → bài & trang công khai
+            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg-2 bg-surface border border-line hover:border-line-strong transition-colors">
+              <span className="text-sm leading-none font-black text-fg">@</span> Threads → bài & trang công khai
             </span>
           </div>
         </div>
       )}
+
+      {/* ── Quick Guide — below the tool ─────────────────── */}
+      <QuickGuideSection activeToolTab="single" />
 
     </div>
   );

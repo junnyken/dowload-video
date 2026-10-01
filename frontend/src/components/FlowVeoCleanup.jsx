@@ -505,7 +505,7 @@ export default function FlowVeoCleanup() {
       {/* ── Shared header (idle / uploading / preview) ──────────── */}
       {showHeader && (
         <div className="mb-6 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-4 rounded-full bg-success-soft border border-success/25 text-xs font-bold text-success tracking-wide">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-4 rounded-full bg-surface border border-line text-xs font-mono text-fg-2 tracking-wide">
             <Wand2 className="w-3 h-3" />
             <span>Flow/Veo · Làm sạch logo hiển thị</span>
           </div>
@@ -533,12 +533,12 @@ export default function FlowVeoCleanup() {
           onClick={() => fileInputRef.current?.click()}
           className={`flex flex-col items-center justify-center gap-4 w-full px-6 py-12 rounded-2xl border-2 border-dashed cursor-pointer transition-all select-none ${
             isDragging
-              ? 'border-success/60 bg-success-soft'
+              ? 'border-accent/60 bg-accent-soft'
               : 'border-line bg-surface-2 hover:border-line-strong hover:bg-surface'
           }`}
         >
-          <div className="w-14 h-14 rounded-2xl bg-success-soft border border-success/20 flex items-center justify-center">
-            <Upload className="w-6 h-6 text-success" />
+          <div className="w-14 h-14 rounded-2xl bg-surface-2 border border-line flex items-center justify-center">
+            <Upload className="w-6 h-6 text-accent-text" />
           </div>
           <div className="text-center">
             <p className="text-base font-bold text-fg mb-1">

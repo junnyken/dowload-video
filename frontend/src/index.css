@@ -172,3 +172,23 @@
     padding-bottom: env(safe-area-inset-bottom, 16px);
   }
 }
+
+/* ── Hero grid: faint 1px lines in the `line` token, faded by a mask ── */
+.vg-hero-grid {
+  background-image:
+    linear-gradient(to right, var(--vg-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--vg-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: center top;
+  opacity: 0.8;
+  -webkit-mask-image: radial-gradient(ellipse 70% 80% at 50% 0%, black 20%, transparent 75%);
+  mask-image: radial-gradient(ellipse 70% 80% at 50% 0%, black 20%, transparent 75%);
+}
+
+/* Horizontally scrolling rows without a visible scrollbar */
+.vg-no-scrollbar {
+  scrollbar-width: none;
+}
+.vg-no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

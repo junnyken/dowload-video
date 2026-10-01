@@ -41,6 +41,50 @@ const tabs = [
   { id: 'history', label: 'Đã Tải',             shortLabel: 'Đã Tải',       icon: History },
 ];
 
+const TAB_TITLES = {
+  single:  'Tải 1 link — video, nhạc, phụ đề',
+  bulk:    'Tải nhiều link, kênh, playlist cùng lúc',
+  flow:    'Xóa logo watermark trên video Flow / Veo',
+  history: 'Lịch sử các lượt tải gần đây',
+};
+
+// Segmented pill row: surface-2 track, active = surface + fg. Scrolls
+// horizontally on narrow screens instead of clipping labels.
+function ModeTabs({ activeTab, onChange }) {
+  return (
+    <div className="flex items-center gap-1 p-1 rounded-control bg-surface-2 overflow-x-auto vg-no-scrollbar w-full sm:w-fit max-w-full pr-6 sm:pr-1 [mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)] sm:[mask-image:none]">
+      {tabs.map((tab) => {
+        const Icon = tab.icon;
+        const isActive = activeTab === tab.id;
+        const isFlow = tab.id === 'flow';
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onChange(tab.id)}
+            title={TAB_TITLES[tab.id]}
+            aria-pressed={isActive}
+            className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap transition-colors cursor-pointer ${
+              isActive
+                ? 'bg-surface text-fg shadow-sm ring-1 ring-line'
+                : 'text-fg-2 hover:text-fg'
+            }`}
+          >
+            <Icon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{tab.label}</span>
+            <span className="sm:hidden">{tab.shortLabel}</span>
+            {isFlow && !isActive && (
+              <span className="text-[9px] font-mono font-semibold px-1 py-0.5 rounded bg-accent-soft text-accent-text leading-none">
+                New
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function LandingPage() {
   // Top of the funnel. Without it there is no denominator, so no conversion
   // rate can be computed from any of the steps below it. Empty dep array: once
@@ -117,8 +161,11 @@ export default function LandingPage() {
     localStorage.setItem('pwa-install-dismissed-at', Date.now().toString());
   };
 
+  const modeTabs = <ModeTabs activeTab={activeTab} onChange={setActiveTab} />;
+
   return (
     <div className="min-h-screen relative overflow-hidden pb-24">
+      <div aria-hidden="true" className="vg-hero-grid absolute inset-x-0 top-0 h-[520px] pointer-events-none" />
       {/* ── PWA Install Banner — disabled: App.jsx handles this via usePWAInstall hook ── */}
       {/* {showInstall && (
         <div className="fixed top-16 inset-x-0 z-40 flex justify-center px-4 animate-in slide-in-from-top duration-300">
@@ -170,67 +217,85 @@ export default function LandingPage() {
 
       {/* Main container */}
       <div className={`relative z-10 w-full max-w-4xl mx-auto px-4 sm:px-6 flex flex-col items-center ${
-        compactHero ? 'pt-6 md:pt-10' : 'pt-20 md:pt-28'
+        compactHero ? 'pt-10 md:pt-14' : 'pt-16 md:pt-24'
       }`}>
 
-        {/* Hero Section — full pitch on a first visit, one line after that */}
+        {/* Hero Section — full pitch on a first visit, headline + one line after that */}
         <section className={`w-full flex flex-col items-center text-center ${
-          compactHero ? 'mb-3 md:mb-4' : 'mb-6 md:mb-10'
+          compactHero ? 'mb-6 md:mb-8' : 'mb-8 md:mb-12'
         }`}>
-          {/* Context label — kept in both: it is what the product does, in one line */}
-          <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-success-soft border border-success/25 text-xs font-bold text-success tracking-wide max-w-full ${
-            compactHero ? 'mb-0' : 'mb-5'
+          {/* Mono label — what the product does, in one line */}
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface border border-line text-[11px] font-mono text-fg-2 max-w-full mb-5">
+            <Sparkles className="w-3 h-3 flex-shrink-0 text-accent-text" />
+            <span className="truncate">{'// 30+ nền tảng \\\\'}</span>
+          </div>
+
+          <h1 className={`font-semibold tracking-tight leading-[1.08] text-fg text-balance ${
+            compactHero ? 'text-3xl sm:text-4xl md:text-5xl' : 'text-4xl sm:text-5xl md:text-6xl'
           }`}>
-            <Sparkles className="w-3 h-3 flex-shrink-0" />
-            <span className="truncate">TikTok / Douyin không watermark · 30+ nền tảng</span>
+            Tải video TikTok / Douyin
+            <br />
+            <span className="text-accent-text">không watermark</span>
+          </h1>
+
+          {/* Product depth cues — kept in both. Two of these are navigation
+              (Bulk, History), not decoration, and they are the only pointer
+              to those tabs from a compact hero. */}
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 mt-5 text-xs text-fg-muted">
+            <button
+              onClick={() => setActiveTab('bulk')}
+              className="inline-flex items-center gap-1.5 hover:text-fg transition-colors cursor-pointer"
+            >
+              <Layers className="w-3 h-3" />
+              Hàng loạt · kênh · ZIP
+            </button>
+            <span aria-hidden="true" className="hidden sm:inline">·</span>
+            <span className="inline-flex items-center gap-1.5">
+              <Download className="w-3 h-3" />
+              4K · 1080p · MP3 320kbps
+            </span>
+            <span aria-hidden="true" className="hidden sm:inline">·</span>
+            <button
+              onClick={() => setActiveTab('history')}
+              className="inline-flex items-center gap-1.5 hover:text-fg transition-colors cursor-pointer"
+            >
+              <History className="w-3 h-3" />
+              Lịch sử tải
+            </button>
+            <span aria-hidden="true" className="hidden sm:inline">·</span>
+            <span className="inline-flex items-center gap-1.5">
+              <ShieldCheck className="w-3 h-3" />
+              Không quảng cáo · không giới hạn giả
+            </span>
           </div>
 
           {/* Everything below is the introduction. A returning visitor has
               read it; the platform list lives on /platforms and the extension
-              stays in the nav, so nothing here is only reachable from the
-              hero. */}
+              stays in the nav. */}
           {!compactHero && (
           <>
-          <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tighter leading-tight text-fg mb-4">
-            Bắt trọn video.{' '}
-            <span className=" text-accent-text">
-              Sạch, không logo.
-            </span>
-          </h1>
-
-
           {typeof window !== 'undefined' && !window.matchMedia('(display-mode: standalone)').matches && (
-            <p className="text-xs text-fg-muted text-center mt-2 sm:hidden">
+            <p className="text-xs text-fg-muted text-center mt-3 sm:hidden">
               💡 Thêm vào màn hình chính để mở nhanh hơn
             </p>
           )}
 
-          {/* Platform pills — icon + label, visible and scannable */}
-          <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 mb-4">
+          {/* Platform pills — icon + label, neutral; only the glyph keeps its brand color */}
+          <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 mt-6">
             {platforms.map((p, i) => (
               <div
                 key={i}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold ${p.bg} hover:scale-105 transition-transform cursor-default${p.special ? ' ring-1 ring-success/50' : ''}`}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${p.bg} hover:border-line-strong transition-colors cursor-default`}
               >
-                <span className={p.ic}><p.icon /></span>
+                <span className={`${p.ic} [&_svg]:w-4 [&_svg]:h-4`}><p.icon /></span>
                 <span className="hidden sm:inline">{p.label}</span>
               </div>
             ))}
           </div>
 
-          {/* Extension link — secondary, compact.
-              It said that already, while being styled as the loudest button on
-              the page: an amber gradient with a shadow and a hover scale, the
-              same weight as BÓC TÁCH NGAY further down. Two primary CTAs, and
-              the louder one was not the job people came here to do. Now it
-              looks like the secondary link this comment always described.
-
-              The Chrome mark used to be an <img> hotlinked from Wikimedia —
-              a third-party request on the home screen that leaves a broken
-              icon if it ever 403s. Puzzle is the browser-extension glyph and
-              comes from the same lucide set as every other icon here (lucide
-              1.11 has no Chrome icon, and hand-drawing a brand mark is worse
-              than not using one). */}
+          {/* Extension link — secondary, compact (comment history: it used to be
+              the loudest button on the page; it must stay a quiet link). The
+              Puzzle glyph comes from lucide; no hotlinked Chrome mark. */}
           <a
             href="/extension"
             onClick={(e) => {
@@ -238,98 +303,25 @@ export default function LandingPage() {
               window.history.pushState({}, '', '/extension');
               window.dispatchEvent(new PopStateEvent('popstate'));
             }}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-accent-text border border-accent/40 hover:bg-accent-soft rounded-full transition-colors"
+            className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-fg-2 border border-line hover:border-line-strong hover:text-fg rounded-control transition-colors"
           >
-            <Puzzle className="w-4 h-4" />
+            <Puzzle className="w-4 h-4 text-accent-text" />
             Cài Extension Chrome — TikTok sạch 1 click
           </a>
           </>
           )}
-
-          {/* Product depth cues — kept in both. Two of these are navigation
-              (Bulk, History), not decoration, and they are the only pointer
-              to those tabs from a compact hero. */}
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 mt-3 text-[11px] text-fg-muted">
-            <button
-              onClick={() => setActiveTab('bulk')}
-              className="inline-flex items-center gap-1.5 hover:text-fg-muted transition-colors"
-            >
-              <Layers className="w-3 h-3" />
-              Hàng loạt · kênh · ZIP
-            </button>
-            <span aria-hidden="true">·</span>
-            <span className="inline-flex items-center gap-1.5">
-              <Download className="w-3 h-3" />
-              4K · 1080p · MP3 320kbps
-            </span>
-            <span aria-hidden="true">·</span>
-            <button
-              onClick={() => setActiveTab('history')}
-              className="inline-flex items-center gap-1.5 hover:text-fg-muted transition-colors"
-            >
-              <History className="w-3 h-3" />
-              Lịch sử tải
-            </button>
-            <span aria-hidden="true">·</span>
-            <span className="inline-flex items-center gap-1.5 text-success">
-              <ShieldCheck className="w-3 h-3" />
-              Không quảng cáo · không giới hạn giả
-            </span>
-          </div>
         </section>
 
-        {/* Tab Switcher */}
-        <div className="w-full flex justify-center mb-4 md:mb-6 px-4 sm:px-0">
-          <div className="inline-flex max-w-full overflow-x-auto bg-surface/50 rounded-2xl p-1.5 sm:p-2 shadow-md border border-line gap-1 sm:gap-2 backdrop-blur-md">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              const isHistory = tab.id === 'history';
-              const isBulk = tab.id === 'bulk';
-              const isFlow = tab.id === 'flow';
-              const isSmall = isHistory || isFlow;
-              const sizeClasses = isSmall
-                ? 'text-xs sm:text-sm px-3 py-2 sm:px-5 sm:py-2.5'
-                : 'text-sm sm:text-base md:text-lg px-4 py-3 sm:px-8 sm:py-4';
-              const colorClasses = isActive
-                ? 'bg-accent text-accent-fg shadow-md'
-                : isHistory
-                  ? 'text-fg-muted hover:text-fg-2 hover:bg-surface-2'
-                  : isFlow
-                    ? 'text-success hover:text-success hover:bg-success-soft'
-                    : isBulk
-                      ? 'text-fg-muted hover:text-fg hover:bg-surface-2'
-                      : 'text-fg-2 hover:text-fg hover:bg-surface-2';
-              const titleMap = {
-                single:  'Tải 1 link — video, nhạc, phụ đề',
-                bulk:    'Tải nhiều link, kênh, playlist cùng lúc',
-                flow:    'Xóa logo watermark trên video Flow / Veo',
-                history: 'Lịch sử các lượt tải gần đây',
-              };
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  title={titleMap[tab.id]}
-                  className={`flex items-center gap-2 rounded-xl font-bold transition-all duration-200 cursor-pointer whitespace-nowrap ${sizeClasses} ${colorClasses}`}
-                >
-                  <Icon className={isSmall ? 'w-4 h-4' : 'w-5 h-5'} />
-                  <span className="hidden sm:inline">{tab.label}</span>
-                  <span className="sm:hidden">{tab.shortLabel}</span>
-                  {isFlow && !isActive && (
-                    <span className="ml-0.5 text-[8px] font-extrabold px-1 py-0.5 rounded bg-success-soft text-success leading-none tracking-wide">
-                      New
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+        {/* Tab Content. On the single-link tab the mode tabs live INSIDE the
+            input card (DashboardContent renders them from the modeTabs prop);
+            on every other tab they sit in their own card above the content. */}
+        {activeTab !== 'single' && (
+          <div className="w-full mb-5 bg-surface border border-line rounded-card shadow-card px-3 sm:px-4 py-3">
+            {modeTabs}
           </div>
-        </div>
-
-        {/* Tab Content */}
+        )}
         <div className="w-full">
-          {activeTab === 'single'  && <DashboardContent />}
+          {activeTab === 'single'  && <DashboardContent modeTabs={modeTabs} />}
           {activeTab === 'bulk'    && <BulkContent />}
           {activeTab === 'flow'    && <FlowVeoCleanup />}
           {activeTab === 'history' && <HistoryContent />}
