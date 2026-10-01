@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Video, Search, Languages } from 'lucide-react';
+import { Video, Search, Languages, Menu, X } from 'lucide-react';
 import SearchPage from './pages/SearchPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WorkspaceProvider } from './context/WorkspaceContext';
@@ -195,6 +195,31 @@ function AppInner() {
     window.history.pushState({}, '', path);
   };
 
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Any navigation closes the collapsed menu; so does Escape.
+  useEffect(() => { setMenuOpen(false); }, [view]);
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuOpen]);
+  const goTo = (v, path = '/') => { setMenuOpen(false); navigateTo(v, path); };
+
+  const navItems = [
+    { key: 'search', label: 'Tìm kiếm', title: 'Tìm kiếm video', icon: Search, active: view === 'search', onClick: () => goTo('search', '/search') },
+    { key: 'platforms', label: 'Platforms', title: 'Nền tảng được hỗ trợ', active: view === 'platforms', onClick: () => goTo('platforms', '/platforms') },
+    { key: 'extension', label: 'Extension', title: 'Tiện ích trình duyệt', active: view === 'extension', onClick: () => goTo('extension', '/extension') },
+    ...(isAuthenticated ? [
+      { key: 'archive', label: 'Archive', active: view === 'archive', onClick: () => goTo('archive', '/archive') },
+      { key: 'schedule', label: 'Lịch Tải', active: view === 'schedule', onClick: () => goTo('schedule', '/schedule') },
+      { key: 'transcript-translate', label: 'Dịch Phụ Đề', title: 'Dịch transcript .srt/.vtt sang ngôn ngữ khác', icon: Languages, active: view === 'transcript-translate', onClick: () => goTo('transcript-translate', '/transcript-translate') },
+    ] : []),
+    ...(pwaInstallReady ? [
+      { key: 'pwa', label: 'Cài ứng dụng', title: 'Cài ứng dụng VidGrab về máy', active: false, onClick: () => { setMenuOpen(false); handlePwaInstall(); } },
+    ] : []),
+  ];
+
   const mobileActiveTab = (() => {
     if (view === 'active')      return 'active';
     if (view === 'history')     return 'history';
@@ -253,82 +278,45 @@ function AppInner() {
         </div>
       )}
       {/* ── Top Navbar ───────────────────────────────────── */}
-      <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-xl bg-surface/70 border-b border-line">
-        <div className="max-w-6xl mx-auto h-14 md:h-16 px-4 md:px-8 flex items-center justify-between">
+      <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-xl bg-surface/80 border-b border-line">
+        <div className="max-w-6xl mx-auto h-14 md:h-16 px-4 md:px-8 flex items-center justify-between gap-3">
           {/* Logo */}
           <button
-            onClick={() => navigateTo('landing', '/')}
-            className="flex items-center gap-2.5 group cursor-pointer"
+            onClick={() => goTo('landing', '/')}
+            className="flex items-center gap-2.5 cursor-pointer flex-shrink-0"
           >
-            <div className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
-              <Video className="w-5 h-5 text-accent-fg" />
+            <div className="w-8 h-8 rounded-control bg-accent flex items-center justify-center">
+              <Video className="w-4 h-4 text-accent-fg" />
             </div>
-            <span className="text-lg font-extrabold text-fg tracking-tight">VidGrab</span>
+            <span className="text-lg font-semibold text-fg tracking-tight">VidGrab</span>
           </button>
 
-          {/* Right Nav */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigateTo('search', '/search')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
-                view === 'search'
-                  ? 'border-accent/50 bg-accent-soft text-accent-text'
-                  : 'border-line-strong text-fg-2 hover:bg-surface-2'
-              }`}
-              title="Tìm kiếm video"
-            >
-              <Search className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Tìm kiếm</span>
-            </button>
-            <button
-              onClick={() => navigateTo('platforms', '/platforms')}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line-strong text-fg-2 text-xs font-medium hover:bg-surface-2 transition-colors cursor-pointer"
-              title="Nền tảng được hỗ trợ"
-            >
-              Platforms
-            </button>
+          {/* Inline links — desktop only (>= 1024px) */}
+          <div className="hidden lg:flex items-stretch h-full gap-1 flex-1 justify-center">
+            {navItems.map((item) => (
+              <button
+                key={item.key}
+                onClick={item.onClick}
+                title={item.title}
+                aria-current={item.active ? 'page' : undefined}
+                className={`relative inline-flex items-center gap-1.5 px-3 text-sm font-medium transition-colors cursor-pointer ${
+                  item.active
+                    ? 'text-fg after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-accent'
+                    : 'text-fg-2 hover:text-fg'
+                }`}
+              >
+                {item.icon && <item.icon className="w-3.5 h-3.5" />}
+                {item.label}
+              </button>
+            ))}
+          </div>
 
-            {/* Amber marks "you are here", the same as every other nav item.
-                This one used to be amber unconditionally, so it read as the
-                current page from the home screen — and it was the third place
-                on that screen selling the extension, next to the hero button
-                and the install toast. */}
-            <button
-              onClick={() => navigateTo('extension', '/extension')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
-                view === 'extension'
-                  ? 'border-accent/50 bg-accent-soft text-accent-text'
-                  : 'border-line-strong text-fg-2 hover:bg-surface-2'
-              }`}
-              title="Tiện ích trình duyệt"
-            >
-              Extension
-            </button>
-
+          {/* Right cluster */}
+          <div className="flex items-center gap-2 flex-shrink-0">
             {isAuthenticated && (
-              <>
+              <div className="hidden lg:block">
                 <WorkspaceSwitcher onNavigate={navigateTo} />
-                <button
-                  onClick={() => navigateTo('archive', '/archive')}
-                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line-strong text-fg-2 text-xs font-bold hover:bg-surface-2 hover:text-fg transition-colors cursor-pointer"
-                >
-                  Archive
-                </button>
-                <button
-                  onClick={() => navigateTo('schedule', '/schedule')}
-                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line-strong text-fg-2 text-xs font-bold hover:bg-surface-2 hover:text-fg transition-colors cursor-pointer"
-                >
-                  Lịch Tải
-                </button>
-                <button
-                  onClick={() => navigateTo('transcript-translate', '/transcript-translate')}
-                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line-strong text-fg-2 text-xs font-bold hover:bg-surface-2 hover:text-fg transition-colors cursor-pointer"
-                  title="Dịch transcript .srt/.vtt sang ngôn ngữ khác"
-                >
-                  <Languages className="w-3.5 h-3.5" />
-                  Dịch Phụ Đề
-                </button>
-              </>
+              </div>
             )}
 
             <ThemeToggle />
@@ -341,23 +329,53 @@ function AppInner() {
             ) : (
               <button
                 onClick={() => setShowAuthModal(true)}
-                className="px-3 py-1.5 rounded-lg bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition cursor-pointer"
+                className="px-3 py-1.5 rounded-control bg-accent text-accent-fg text-xs font-semibold hover:bg-accent-hover transition-colors cursor-pointer"
               >
                 Đăng nhập
               </button>
             )}
 
-            {pwaInstallReady && (
-              <button
-                onClick={handlePwaInstall}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line-strong text-fg-2 text-xs font-bold hover:bg-surface-2 hover:text-fg transition-colors cursor-pointer"
-                title="Cài ứng dụng VidGrab về máy"
-              >
-                Cài ứng dụng
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label="Menu"
+              aria-expanded={menuOpen}
+              aria-controls="mobile-nav-sheet"
+              className="lg:hidden inline-flex items-center justify-center w-8 h-8 rounded-lg border border-line text-fg-2 hover:bg-surface-2 hover:text-fg transition-colors cursor-pointer"
+            >
+              {menuOpen ? <X className="w-4 h-4" aria-hidden="true" /> : <Menu className="w-4 h-4" aria-hidden="true" />}
+            </button>
           </div>
         </div>
+
+        {/* Collapsed menu sheet (< 1024px) */}
+        {menuOpen && (
+          <div
+            id="mobile-nav-sheet"
+            className="lg:hidden absolute top-full inset-x-0 bg-surface border-b border-line shadow-lg max-h-[calc(100vh-3.5rem)] overflow-y-auto"
+          >
+            <div className="max-w-6xl mx-auto px-4 md:px-8 py-2 flex flex-col">
+              {navItems.map((item) => (
+                <button
+                  key={item.key}
+                  onClick={item.onClick}
+                  aria-current={item.active ? 'page' : undefined}
+                  className={`flex items-center gap-2.5 px-3 py-3 rounded-control text-sm font-medium text-left transition-colors cursor-pointer ${
+                    item.active ? 'bg-accent-soft text-accent-text' : 'text-fg-2 hover:bg-surface-2 hover:text-fg'
+                  }`}
+                >
+                  {item.icon && <item.icon className="w-4 h-4" />}
+                  {item.label}
+                </button>
+              ))}
+              {isAuthenticated && (
+                <div className="empty:hidden px-3 py-3 border-t border-line mt-1">
+                  <WorkspaceSwitcher onNavigate={goTo} />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* ── Main Content ─────────────────────────────────── */}
