@@ -845,9 +845,6 @@ export default function BulkContent() {
         )}
       </div>
 
-      {/* ── Quick Guide ────────────────────────────────── */}
-      <QuickGuideSection activeToolTab={channelMode ? 'channel' : 'bulk'} />
-
       {/* ── Input Area ────────────────────────────────── */}
       <div className="p-6 rounded-2xl bg-surface border border-line shadow-lg">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
@@ -1779,6 +1776,8 @@ export default function BulkContent() {
           </div>
         </div>
       )}
+      {/* ── Quick Guide ────────────────────────────────── */}
+      <QuickGuideSection activeToolTab={channelMode ? 'channel' : 'bulk'} />
     </div>
   );
 }
