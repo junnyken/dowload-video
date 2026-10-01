@@ -15,10 +15,25 @@ const DEFAULT_BRANDING = {
 
 const BrandingContext = createContext(DEFAULT_BRANDING);
 
+// Accent override keys. Only a tenant-configured colour may touch these; the
+// default path must leave the stylesheet's own light/dark tokens alone.
+const ACCENT_VARS = ['--vg-accent', '--vg-accent-hover', '--vg-accent-text', '--vg-accent-soft'];
+
+function isHexColor(value) {
+  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value.trim());
+}
+
 function applyBrandingToDOM(branding) {
-  // Apply CSS custom properties
-  document.documentElement.style.setProperty('--color-primary', branding.primary_color);
-  document.documentElement.style.setProperty('--color-accent', branding.accent_color);
+  const root = document.documentElement.style;
+  if (branding.is_white_label && branding.has_custom_primary && isHexColor(branding.primary_color)) {
+    const c = branding.primary_color.trim();
+    root.setProperty('--vg-accent', c);
+    root.setProperty('--vg-accent-hover', `color-mix(in srgb, ${c} 82%, black)`);
+    root.setProperty('--vg-accent-text', c);
+    root.setProperty('--vg-accent-soft', `color-mix(in srgb, ${c} 12%, var(--vg-surface))`);
+  } else {
+    ACCENT_VARS.forEach((k) => root.removeProperty(k));
+  }
 
   // Update document title
   if (branding.app_name) {
@@ -56,7 +71,7 @@ export function BrandingProvider({ children }) {
 
         // If not white-label, keep defaults but merge safe fields
         const resolved = data.is_white_label
-          ? { ...DEFAULT_BRANDING, ...data }
+          ? { ...DEFAULT_BRANDING, ...data, has_custom_primary: Boolean(data.primary_color) }
           : DEFAULT_BRANDING;
 
         setBranding(resolved);

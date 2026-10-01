@@ -8,7 +8,22 @@
     <title>VidGrab - Tải Video & Nhạc HD</title>
     <!-- PWA -->
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#012622" />
+    <meta name="theme-color" content="#FAFAF9" />
+    <!-- Theme: set data-theme before first paint (no flash). Light is the default.
+         Every storage access is wrapped: it must still render when storage throws. -->
+    <script>
+      (function () {
+        var theme = 'light';
+        try {
+          var saved = localStorage.getItem('vg-theme');
+          if (saved === 'dark' || saved === 'light') theme = saved;
+        } catch (e) {}
+        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.style.colorScheme = theme;
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', theme === 'dark' ? '#0E0E10' : '#FAFAF9');
+      })();
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="VidGrab" />
@@ -18,7 +33,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
     <!-- Open Graph -->
@@ -35,19 +50,19 @@
   </head>
   <body>
     <!-- Security: DevTools Detection Overlay -->
-    <div id="security-overlay" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.95);align-items:center;justify-content:center;flex-direction:column;gap:16px;color:#fff;font-family:'Be Vietnam Pro',sans-serif;">
+    <div id="security-overlay" style="display:none;position:fixed;inset:0;z-index:99999;background:var(--vg-canvas,#FAFAF9);align-items:center;justify-content:center;flex-direction:column;gap:16px;color:var(--vg-fg,#1C1917);font-family:'Inter',system-ui,sans-serif;">
       <div style="font-size:48px;">🛡️</div>
-      <h2 style="font-size:24px;font-weight:800;color:#FBBF24;">Phát hiện Developer Tools</h2>
-      <p style="font-size:14px;color:#94a3b8;max-width:400px;text-align:center;line-height:1.6;">
+      <h2 style="font-size:24px;font-weight:800;color:var(--vg-fg,#1C1917);">Phát hiện Developer Tools</h2>
+      <p style="font-size:14px;color:var(--vg-fg-2,#57534E);max-width:400px;text-align:center;line-height:1.6;">
         Vui lòng đóng Developer Tools để tiếp tục sử dụng VidGrab.<br/>
         Hành vi phân tích mã nguồn vi phạm Điều khoản sử dụng.
       </p>
-      <button onclick="document.getElementById('security-overlay').style.display='none'" style="margin-top:12px;padding:10px 32px;border-radius:12px;background:linear-gradient(to right,#FBBF24,#F59E0B);color:#012622;font-weight:800;border:none;cursor:pointer;font-size:14px;">
+      <button onclick="document.getElementById('security-overlay').style.display='none'" style="margin-top:12px;padding:10px 32px;border-radius:12px;background:var(--vg-accent,#C9460A);color:var(--vg-accent-fg,#FFFFFF);font-weight:800;border:none;cursor:pointer;font-size:14px;">
         Tôi đã đóng DevTools
       </button>
     </div>
     <noscript>
-      <div style="padding:40px;text-align:center;font-family:sans-serif;color:#fff;background:#012622;min-height:100vh;display:flex;align-items:center;justify-content:center;">
+      <div style="padding:40px;text-align:center;font-family:sans-serif;color:#1C1917;background:#FAFAF9;min-height:100vh;display:flex;align-items:center;justify-content:center;">
         <p>VidGrab yêu cầu JavaScript để hoạt động. Vui lòng bật JavaScript trong trình duyệt.</p>
       </div>
     </noscript>

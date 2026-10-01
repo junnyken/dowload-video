@@ -9,6 +9,7 @@ import SettingsContent from './components/SettingsContent';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import AccountMenu from './components/AccountMenu';
+import ThemeToggle from './components/ThemeToggle';
 import AuthModal from './components/auth/AuthModal';
 import PreferencesContent from './components/PreferencesContent';
 import UsageContent from './components/UsageContent';
@@ -329,6 +330,8 @@ function AppInner() {
                 </button>
               </>
             )}
+
+            <ThemeToggle />
 
             {isAuthenticated ? (
               <>
