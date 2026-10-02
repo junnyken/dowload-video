@@ -1621,7 +1621,11 @@ export default function DashboardContent() {
       );
       const data = await safeJson(res);
       if (!res.ok || !data.success || !data.download_url) {
-        throw new Error(data?.error === 'no_subtitles' ? data.message : '');
+        // Backend messages are Vietnamese: no_subtitles → data.message,
+        // classified failures → user_message/detail, YouTube gate → detail.message.
+        const msg = data?.message || data?.user_message
+          || (typeof data?.detail === 'string' ? data.detail : data?.detail?.message);
+        throw new Error(msg || '');
       }
       const a = document.createElement('a');
       a.href = `${API_BASE}${data.download_url}`;
