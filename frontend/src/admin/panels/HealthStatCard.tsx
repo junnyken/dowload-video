@@ -5,11 +5,11 @@ import { ErrorState } from '../shared/ErrorState'
 export type StatTone = 'green' | 'yellow' | 'red' | 'blue' | 'neutral'
 
 const TONE: Record<StatTone, { border: string; value: string; iconBg: string; iconText: string }> = {
-  green:   { border: 'border-success/50', value: 'text-success', iconBg: 'bg-success-soft', iconText: 'text-success' },
-  yellow:  { border: 'border-accent/50',   value: 'text-accent-text',   iconBg: 'bg-accent-soft',   iconText: 'text-accent-text'   },
-  red:     { border: 'border-danger/50',     value: 'text-danger',     iconBg: 'bg-danger-soft',     iconText: 'text-danger'     },
-  blue:    { border: 'border-line',    value: 'text-fg-2',    iconBg: 'bg-surface-2',    iconText: 'text-fg-2'    },
-  neutral: { border: 'border-line',      value: 'text-fg-2',   iconBg: 'bg-surface',   iconText: 'text-fg-muted'   },
+  green:   { border: 'border-line', value: 'text-success',     iconBg: 'bg-success-soft', iconText: 'text-success' },
+  yellow:  { border: 'border-line', value: 'text-warning',     iconBg: 'bg-warning-soft', iconText: 'text-warning' },
+  red:     { border: 'border-line', value: 'text-danger',      iconBg: 'bg-danger-soft',  iconText: 'text-danger'  },
+  blue:    { border: 'border-line', value: 'text-fg',          iconBg: 'bg-surface-2',    iconText: 'text-fg-2'    },
+  neutral: { border: 'border-line', value: 'text-fg',          iconBg: 'bg-surface-2',    iconText: 'text-fg-muted'},
 }
 
 export interface HealthStatCardProps {
@@ -77,17 +77,17 @@ export function HealthStatCard({
   if (loading) return <CardSkeleton className={className} />
   if (error) {
     return (
-      <div className={cn('rounded-2xl border border-line bg-surface-2 p-4', className)}>
+      <div className={cn('rounded-card border border-line bg-surface shadow-card p-4', className)}>
         <ErrorState message={error} />
       </div>
     )
   }
 
   return (
-    <div className={cn('rounded-2xl border bg-surface-2 p-4', t.border, className)}>
+    <div className={cn('rounded-card border bg-surface p-4 shadow-card', t.border, className)}>
       {/* Label row */}
       <div className="mb-3 flex items-start justify-between gap-2">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
+        <p className="font-mono text-[10px] font-medium uppercase tracking-widest text-fg-muted">
           {label}
         </p>
         {iconPath && (

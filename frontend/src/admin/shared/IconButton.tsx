@@ -10,31 +10,31 @@ export type IconButtonSize    = 'xs' | 'sm' | 'md'
 
 const VARIANT: Record<IconButtonVariant, string> = {
   default: [
-    'border border-line bg-surface text-fg-muted',
-    'hover:border-line-strong hover:bg-surface-2 hover:text-fg-2',
+    'border border-line bg-surface text-fg-2',
+    'hover:border-line-strong hover:bg-surface-2 hover:text-fg',
   ].join(' '),
   ghost: [
     'border border-transparent bg-transparent text-fg-muted',
-    'hover:border-line hover:bg-surface hover:text-fg-2',
+    'hover:bg-surface-2 hover:text-fg',
   ].join(' '),
   danger: [
-    'border border-danger/60 bg-danger-soft text-danger',
-    'hover:border-danger/30 hover:bg-danger-soft hover:text-danger',
+    'border border-danger/30 bg-danger-soft text-danger',
+    'hover:border-danger/60',
   ].join(' '),
   success: [
-    'border border-success/60 bg-success-soft text-success',
-    'hover:border-success/30 hover:bg-success-soft hover:text-success',
+    'border border-success/30 bg-success-soft text-success',
+    'hover:border-success/60',
   ].join(' '),
   primary: [
-    'border border-line bg-surface-2 text-fg-2',
-    'hover:border-line hover:bg-surface-2 hover:text-fg-2',
+    'border border-accent bg-accent text-accent-fg',
+    'hover:bg-accent-hover hover:border-accent-hover',
   ].join(' '),
 }
 
 const SIZE: Record<IconButtonSize, string> = {
-  xs: 'h-6 w-6 rounded',
-  sm: 'h-7 w-7 rounded-lg',
-  md: 'h-8 w-8 rounded-lg',
+  xs: 'h-6 w-6 rounded-md',
+  sm: 'h-7 w-7 rounded-control',
+  md: 'h-8 w-8 rounded-control',
 }
 
 const ICON_SIZE: Record<IconButtonSize, string> = {
@@ -95,7 +95,7 @@ export function IconButton({
       disabled={disabled || loading}
       className={cn(
         'inline-flex items-center justify-center transition-colors',
-        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-line-strong',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
         'disabled:cursor-not-allowed disabled:opacity-40',
         SIZE[size],
         VARIANT[variant],

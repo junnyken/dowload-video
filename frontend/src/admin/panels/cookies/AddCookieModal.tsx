@@ -243,7 +243,7 @@ export function AddCookieModal({ isOpen, onClose, onSave, onTest }: AddCookieMod
             </div>
 
             {/* Format info box */}
-            <div className="rounded-xl border border-line bg-surface-2 p-3">
+            <div className="rounded-card border border-line bg-surface shadow-card p-3">
               <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
                 Accepted formats
               </p>

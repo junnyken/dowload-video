@@ -18,7 +18,7 @@ function ErrorIcon({ compact }: { compact?: boolean }) {
     )
   }
   return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-danger/60 bg-danger-soft">
+    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-danger/30 bg-danger-soft">
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -61,7 +61,7 @@ export function ErrorState({
       <div
         role="alert"
         className={cn(
-          'flex items-center gap-2 rounded-lg border border-danger/50 bg-danger-soft px-3 py-2',
+          'flex items-center gap-2 rounded-control border border-danger/30 bg-danger-soft px-3 py-2',
           className,
         )}
       >
@@ -75,7 +75,7 @@ export function ErrorState({
         {onRetry && (
           <button
             onClick={onRetry}
-            className="flex-shrink-0 rounded border border-danger/60 px-2.5 py-1 text-[11px] font-medium text-danger transition-colors hover:border-danger/30 hover:bg-danger-soft"
+            className="flex-shrink-0 rounded-control border border-danger/30 bg-surface px-2.5 py-1 text-[11px] font-medium text-danger transition-colors hover:bg-danger-soft"
           >
             Retry
           </button>
@@ -96,13 +96,13 @@ export function ErrorState({
       <div>
         <p className="text-sm font-semibold text-danger">{title}</p>
         {message && message !== title && (
-          <p className="mt-0.5 max-w-xs text-xs text-danger">{message}</p>
+          <p className="mt-0.5 max-w-xs text-xs text-fg-2">{message}</p>
         )}
       </div>
       {onRetry && (
         <button
           onClick={onRetry}
-          className="mt-1 rounded-lg border border-line px-4 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:border-line-strong hover:text-fg-2"
+          className="mt-1 rounded-control border border-line bg-surface px-4 py-1.5 text-xs font-medium text-fg-2 transition-colors hover:border-line-strong hover:bg-surface-2 hover:text-fg"
         >
           Try again
         </button>

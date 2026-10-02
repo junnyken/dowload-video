@@ -34,7 +34,7 @@ function ConfirmModal({
       />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div
-          className="w-full max-w-sm rounded-2xl border border-line bg-canvas p-5 shadow-2xl"
+          className="w-full max-w-sm rounded-card border border-line bg-surface shadow-card p-5 shadow-2xl"
           onClick={e => e.stopPropagation()}
           role="dialog"
           aria-modal

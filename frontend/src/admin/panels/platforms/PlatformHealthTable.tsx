@@ -118,7 +118,7 @@ export function PlatformHealthTable({
         </span>
       </div>
 
-      <div className="rounded-2xl border border-line bg-canvas">
+      <div className="rounded-card border border-line bg-surface shadow-card">
         {/* ── Filters ── */}
         <div className="px-4 pt-4 pb-3">
           <PlatformFilters

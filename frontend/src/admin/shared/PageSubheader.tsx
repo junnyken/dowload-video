@@ -23,7 +23,7 @@ interface PageSubheaderProps {
 export function PageSubheader({ description, meta, className }: PageSubheaderProps) {
   return (
     <div className={cn('flex items-center justify-between gap-3', className)}>
-      <p className="text-xs text-fg-muted">{description}</p>
+      <p className="text-xs text-fg-2">{description}</p>
       {meta && (
         <div className="flex flex-shrink-0 items-center gap-2">
           {meta}

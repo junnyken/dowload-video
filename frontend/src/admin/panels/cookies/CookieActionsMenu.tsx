@@ -113,7 +113,7 @@ export function CookieActionsMenu({ cookie, onAction }: CookieActionsMenuProps) 
     <div
       ref={menuRef}
       style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 9999 }}
-      className="w-52 rounded-xl border border-line bg-canvas py-1 shadow-2xl"
+      className="w-52 rounded-card border border-line bg-surface shadow-card py-1 shadow-2xl"
       onClick={e => e.stopPropagation()}
     >
           {/* Test */}

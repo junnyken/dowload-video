@@ -15,7 +15,7 @@ function InfoGrid({ items }: { items: Array<{ label: string; value: string }> })
   return (
     <div className="grid grid-cols-2 gap-2">
       {items.map(({ label, value }) => (
-        <div key={label} className="rounded-xl border border-line bg-surface-2 p-3">
+        <div key={label} className="rounded-card border border-line bg-surface shadow-card p-3">
           <p className="mb-1 text-[9px] font-semibold uppercase tracking-widest text-fg-muted">
             {label}
           </p>
@@ -338,7 +338,7 @@ export function PlatformDetailDrawer({
                 <div className="flex flex-col gap-4">
                   {/* Description */}
                   {detail.description && (
-                    <p className="rounded-xl border border-line bg-surface-2 p-3 text-xs leading-relaxed text-fg-muted">
+                    <p className="rounded-card border border-line bg-surface shadow-card p-3 text-xs leading-relaxed text-fg-muted">
                       {detail.description}
                     </p>
                   )}

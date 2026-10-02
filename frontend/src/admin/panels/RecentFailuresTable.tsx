@@ -55,7 +55,7 @@ export function RecentFailuresTable({
   onRetry,
 }: RecentFailuresTableProps) {
   return (
-    <div className="rounded-2xl border border-line bg-surface-2">
+    <div className="rounded-card border border-line bg-surface shadow-card">
       {/* Table header */}
       {loading ? (
         <div className="p-4">

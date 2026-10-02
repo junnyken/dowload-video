@@ -60,11 +60,11 @@ export function TableHeader({
   return (
     <thead
       className={cn(
-        sticky && 'sticky top-0 z-10 bg-canvas',
+        sticky && 'sticky top-0 z-10 bg-surface-2',
         className,
       )}
     >
-      <tr className="border-y border-line">
+      <tr className="border-b border-line">
         {cols.map((col, i) => {
           const isSortable = col.sort !== undefined && onSort
           const alignClass =
@@ -76,11 +76,11 @@ export function TableHeader({
               key={col.key}
               scope="col"
               className={cn(
-                'py-2 pr-3 font-mono text-[9px] font-semibold uppercase tracking-widest text-fg-muted',
+                'py-2.5 pr-3 font-mono text-[10px] font-medium uppercase tracking-widest text-fg-muted',
                 'first:pl-4',
                 alignClass,
                 col.width,
-                isSortable && 'cursor-pointer select-none hover:text-fg-muted',
+                isSortable && 'cursor-pointer select-none hover:text-fg',
               )}
               onClick={isSortable ? () => onSort(col.key) : undefined}
               aria-sort={

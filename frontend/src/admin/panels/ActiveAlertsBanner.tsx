@@ -17,25 +17,25 @@ const SEV: Record<
 > = {
   critical: {
     bg:        'bg-danger-soft',
-    border:    'border-danger/50',
-    text:      'text-danger',
-    sub:       'text-danger',
+    border:    'border-danger/30',
+    text:      'text-fg',
+    sub:       'text-fg-muted',
     iconPath:  'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
     iconColor: 'text-danger',
   },
   warning: {
-    bg:        'bg-accent-soft',
-    border:    'border-accent/50',
-    text:      'text-accent-text',
-    sub:       'text-accent-text',
+    bg:        'bg-warning-soft',
+    border:    'border-warning/30',
+    text:      'text-fg',
+    sub:       'text-fg-muted',
     iconPath:  'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-    iconColor: 'text-accent-text',
+    iconColor: 'text-warning',
   },
   info: {
-    bg:        'bg-surface-2',
+    bg:        'bg-surface',
     border:    'border-line',
-    text:      'text-fg-2',
-    sub:       'text-fg-2',
+    text:      'text-fg',
+    sub:       'text-fg-muted',
     iconPath:  'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
     iconColor: 'text-fg-2',
   },
@@ -70,7 +70,7 @@ export function ActiveAlertsBanner({ alerts, onDismiss }: ActiveAlertsBannerProp
           <div
             key={alert.id}
             className={cn(
-              'flex items-start gap-3 rounded-xl border px-3 py-2.5',
+              'flex items-start gap-3 rounded-card border px-3.5 py-3',
               s.bg,
               s.border,
             )}
@@ -93,14 +93,14 @@ export function ActiveAlertsBanner({ alerts, onDismiss }: ActiveAlertsBannerProp
               <div className="flex items-baseline gap-2">
                 <span
                   className={cn(
-                    'flex-shrink-0 font-mono text-[9px] font-bold uppercase tracking-widest',
+                    'flex-shrink-0 font-mono text-[10px] font-bold uppercase tracking-widest',
                     s.iconColor,
                   )}
                 >
                   {alert.severity}
                 </span>
                 {alert.platform && (
-                  <span className="rounded bg-surface px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+                  <span className="rounded-md border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-2">
                     {alert.platform}
                   </span>
                 )}
@@ -113,7 +113,7 @@ export function ActiveAlertsBanner({ alerts, onDismiss }: ActiveAlertsBannerProp
               <span className={cn('font-mono text-[10px]', s.sub)}>{alert.time}</span>
               <button
                 onClick={() => dismiss(alert.id)}
-                className="flex h-5 w-5 items-center justify-center rounded text-fg-muted hover:text-fg-2"
+                className="flex h-6 w-6 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                 aria-label="Dismiss alert"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3 w-3">

@@ -28,7 +28,7 @@ const TONE_CLASSES: Record<SummaryCardProps['tone'], { text: string; icon: strin
 function SummaryCard({ label, value, total, tone, iconPath }: SummaryCardProps) {
   const t = TONE_CLASSES[tone]
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-line bg-canvas px-4 py-3">
+    <div className="flex items-center gap-3 rounded-card border border-line bg-surface shadow-card px-4 py-3">
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -238,7 +238,7 @@ export function CookiePoolPanel({
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search label, platform, status…"
-              className="w-full rounded-lg border border-line bg-canvas py-1.5 pl-8 pr-3 text-xs text-fg-2 placeholder:text-fg-muted outline-none transition-colors focus:border-line"
+              className="w-full rounded-control border border-line bg-surface py-1.5 pl-8 pr-3 text-xs text-fg-2 placeholder:text-fg-muted outline-none transition-colors focus:border-line"
             />
           </div>
 

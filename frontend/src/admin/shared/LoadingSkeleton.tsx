@@ -6,7 +6,7 @@ function Bone({ className }: { className?: string }) {
   return (
     <div
       aria-hidden
-      className={cn('animate-pulse rounded bg-surface', className)}
+      className={cn('animate-pulse rounded bg-surface-2', className)}
     />
   )
 }
@@ -35,7 +35,7 @@ interface BlockSkeletonProps {
 }
 
 export function BlockSkeleton({ height = 'h-20', className }: BlockSkeletonProps) {
-  return <Bone className={cn('w-full rounded-xl', height, className)} />
+  return <Bone className={cn('w-full rounded-control', height, className)} />
 }
 
 // ─── Avatar — circle (user avatars, platform icons) ───────────────────────────
@@ -96,7 +96,7 @@ export function CardSkeleton({ className }: { className?: string }) {
       aria-busy
       aria-label="Loading"
       className={cn(
-        'animate-pulse rounded-2xl border border-line bg-surface-2 p-4',
+        'animate-pulse rounded-card border border-line bg-surface p-4',
         className,
       )}
     >
@@ -136,7 +136,7 @@ export function PanelSkeleton({ rows = 5, className }: { rows?: number; classNam
       aria-busy
       aria-label="Loading"
       className={cn(
-        'animate-pulse overflow-hidden rounded-2xl border border-line bg-surface-2',
+        'animate-pulse overflow-hidden rounded-card border border-line bg-surface',
         className,
       )}
     >

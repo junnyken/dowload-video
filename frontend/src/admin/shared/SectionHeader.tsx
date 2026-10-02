@@ -22,12 +22,12 @@ export function SectionHeader({
     <div
       className={cn(
         'flex items-center justify-between gap-3 border-b border-line px-4 py-2.5',
-        sticky && 'sticky top-0 z-10 bg-surface-2 backdrop-blur-sm',
+        sticky && 'sticky top-0 z-10 bg-surface',
         className,
       )}
     >
       <div className="min-w-0">
-        <h2 className="text-[10px] font-semibold uppercase tracking-widest text-fg-muted truncate">
+        <h2 className="font-mono text-[10px] font-medium uppercase tracking-widest text-fg-muted truncate">
           {title}
         </h2>
         {subtitle && (

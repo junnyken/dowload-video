@@ -56,7 +56,7 @@ export function JobSearchBar({ value, onChange, onSearch, loading }: JobSearchBa
             placeholder="Search by job ID, batch ID, URL, platform, user IP…"
             spellCheck={false}
             className={cn(
-              'w-full rounded-lg border border-line bg-canvas py-2 pl-8 text-xs text-fg-2',
+              'w-full rounded-control border border-line bg-surface py-2 pl-8 text-xs text-fg-2',
               'placeholder:text-fg-muted outline-none transition-colors focus:border-line',
               value ? 'pr-7' : 'pr-3',
             )}

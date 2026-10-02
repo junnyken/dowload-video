@@ -56,7 +56,7 @@ export function EmptyState({
         {icon ?? <DefaultIcon />}
       </div>
 
-      <p className={cn('font-medium text-fg-muted', compact ? 'text-xs' : 'text-sm')}>
+      <p className={cn('font-medium', compact ? 'text-xs text-fg-2' : 'text-sm text-fg-2')}>
         {title}
       </p>
 

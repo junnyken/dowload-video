@@ -116,7 +116,7 @@ export function PlatformActionMenu({ row, onAction, onViewJobs }: PlatformAction
 
       {open && (
         <div
-          className="absolute right-0 top-7 z-50 w-52 rounded-xl border border-line bg-canvas py-1 shadow-2xl"
+          className="absolute right-0 top-7 z-50 w-52 rounded-card border border-line bg-surface shadow-card py-1 shadow-2xl"
           onClick={e => e.stopPropagation()}
         >
           {/* Circuit actions */}
