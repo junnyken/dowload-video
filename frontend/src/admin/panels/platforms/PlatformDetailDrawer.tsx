@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { cn } from '../../utils/cn'
+import { NO_TRAFFIC_HINT, safeRate } from '../../utils/rate'
 import type { PlatformDetail, RecentJob, ErrorBreakdownItem, PhaseStatItem } from './platform.types'
 import { PlatformStatusBadge, CircuitStatePill } from './PlatformStatusBadge'
 
@@ -114,7 +115,11 @@ function ErrorsTab({ errors }: { errors: ErrorBreakdownItem[] }) {
   )
 }
 
-function SuccessRateBar({ rate }: { rate: number }) {
+function SuccessRateBar({ rate: raw, total }: { rate: number | null; total?: number }) {
+  const rate = safeRate(raw, total)
+  if (rate === null) {
+    return <span className="font-mono text-[10px] text-fg-muted" title={NO_TRAFFIC_HINT}>—</span>
+  }
   const color =
     rate >= 90 ? 'bg-success' :
     rate >= 70 ? 'bg-warning' :
@@ -162,7 +167,7 @@ function PhasesTab({ phases }: { phases: PhaseStatItem[] }) {
                   </span>
                 </td>
                 <td className="py-2 pr-3 w-28">
-                  <SuccessRateBar rate={p.successRate} />
+                  <SuccessRateBar rate={p.successRate} total={p.totalJobs} />
                 </td>
                 <td className="py-2 pr-3">
                   <span className="font-mono text-[11px] text-fg-muted">

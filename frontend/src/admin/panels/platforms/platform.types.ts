@@ -11,7 +11,7 @@ export interface PlatformHealthRow {
   status: PlatformStatus
   circuitState: CircuitState
   lastSuccessAt: string     // human-readable, e.g. "3m ago"
-  failRate1h: number        // 0–100 (percentage)
+  failRate1h: number | null  // 0–100 (percentage); null = no traffic
   cookieRequired: boolean
   proxyRequired: boolean
   totalJobs1h: number
@@ -38,7 +38,7 @@ export interface ErrorBreakdownItem {
 
 export interface PhaseStatItem {
   phase: 'resolve' | 'auth' | 'extract' | 'transcode' | 'download' | string
-  successRate: number       // 0–100
+  successRate: number | null  // 0–100; null = no traffic
   avgDurationMs: number
   totalJobs: number
 }

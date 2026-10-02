@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { cn } from '../utils/cn'
+import { SEVERITY_LABEL, absoluteTime, relativeTimeVi } from '../utils/anomalies'
 
 export type AlertSeverity = 'critical' | 'warning' | 'info'
 
@@ -7,8 +8,36 @@ export interface AlertItem {
   id: string
   severity: AlertSeverity
   message: string
+  /** Fallback label for synthetic alerts that have no timestamp. */
   time: string
   platform?: string
+  /** Human label of the anomaly type; shown as the row title. */
+  title?: string
+  /** ISO time of last activity; rendered as a relative time with the absolute one in a tooltip. */
+  lastSeen?: string
+  /** Number of occurrences folded into this row. */
+  count?: number
+}
+
+/** "Lặp lại N lần · lần cuối X" when the row folds several occurrences; otherwise `fallback`. */
+export function AlertRepeat({ alert, fallback }: { alert: AlertItem; fallback?: ReactNode }) {
+  if (!alert.count || alert.count < 2 || !alert.lastSeen) return <>{fallback}</>
+  return (
+    <>
+      Lặp lại {alert.count} lần · lần cuối{' '}
+      <time dateTime={alert.lastSeen} title={absoluteTime(alert.lastSeen)}>{relativeTimeVi(alert.lastSeen)}</time>
+    </>
+  )
+}
+
+/** Relative time with the absolute timestamp as tooltip. */
+export function AlertTime({ alert, className }: { alert: AlertItem; className?: string }) {
+  if (!alert.lastSeen) return <span className={className}>{alert.time}</span>
+  return (
+    <time dateTime={alert.lastSeen} title={absoluteTime(alert.lastSeen)} className={className}>
+      {relativeTimeVi(alert.lastSeen)}
+    </time>
+  )
 }
 
 const SEV: Record<
@@ -90,31 +119,37 @@ export function ActiveAlertsBanner({ alerts, onDismiss }: ActiveAlertsBannerProp
 
             {/* Content */}
             <div className="min-w-0 flex-1">
-              <div className="flex items-baseline gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span
                   className={cn(
-                    'flex-shrink-0 font-mono text-[10px] font-bold uppercase tracking-widest',
+                    'flex-shrink-0 rounded border border-current/40 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-widest',
                     s.iconColor,
                   )}
                 >
-                  {alert.severity}
+                  {SEVERITY_LABEL[alert.severity]}
                 </span>
+                {alert.title && <span className="text-xs font-semibold text-fg">{alert.title}</span>}
                 {alert.platform && (
                   <span className="rounded-md border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-2">
                     {alert.platform}
                   </span>
                 )}
               </div>
-              <p className={cn('mt-0.5 text-xs', s.text)}>{alert.message}</p>
+              <p className={cn('mt-1 text-xs', s.text)}>{alert.message}</p>
+              {alert.count && alert.count > 1 && (
+                <p className={cn('mt-0.5 text-[11px]', s.sub)}><AlertRepeat alert={alert} /></p>
+              )}
             </div>
 
             {/* Time + dismiss */}
             <div className="flex flex-shrink-0 items-center gap-2">
-              <span className={cn('font-mono text-[10px]', s.sub)}>{alert.time}</span>
+              {!(alert.count && alert.count > 1 && alert.lastSeen) && (
+                <AlertTime alert={alert} className={cn('font-mono text-[10px]', s.sub)} />
+              )}
               <button
                 onClick={() => dismiss(alert.id)}
                 className="flex h-6 w-6 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
-                aria-label="Dismiss alert"
+                aria-label="Ẩn cảnh báo"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3 w-3">
                   <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />

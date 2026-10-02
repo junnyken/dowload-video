@@ -10,7 +10,7 @@ export interface SystemStatusData {
   activeAlerts: number
   queuedJobs: number
   failedJobs24h: number
-  successRate24h: number  // 0–100
+  successRate24h: number | null  // 0–100; null = no attempts
 }
 
 const STATUS_CONFIG: Record<
@@ -137,8 +137,8 @@ export function SystemStatusOverview({
             />
             <QuickStat
               label="Success Rate"
-              value={`${successRate24h.toFixed(1)}%`}
-              tone={successRate24h >= 99 ? 'emerald' : successRate24h >= 95 ? 'neutral' : 'amber'}
+              value={successRate24h === null ? '—' : `${successRate24h.toFixed(1)}%`}
+              tone={successRate24h === null ? 'neutral' : successRate24h >= 99 ? 'emerald' : successRate24h >= 95 ? 'neutral' : 'amber'}
             />
           </div>
 

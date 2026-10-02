@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { adminFetch } from '../utils/adminFetch'
+import { NO_TRAFFIC_HINT, safeRate } from '../utils/rate'
 
 /**
  * Ported from the orphaned src/pages/Admin/OpsPanel.jsx. The new shell reused
@@ -56,7 +57,15 @@ export default function OpsSignalsPage() {
   }, [load])
 
   const sr = d?.success_rate
-  const srPct = typeof sr === 'number' ? (sr <= 1 ? sr * 100 : sr) : null
+  // Attempts in the window, when the payload lets us count them. Zero attempts
+  // means the rate is unknown, whatever number the backend put in the field.
+  const jobsByPlatform = d?.job_by_platform
+  const attempts = jobsByPlatform
+    ? Object.values(jobsByPlatform).reduce<number>((n, v) =>
+        n + (typeof v === 'number' ? v : Object.values(v).reduce((m, x) => m + (Number(x) || 0), 0)), 0)
+    : undefined
+  const srRaw = typeof sr === 'number' ? (sr <= 1 ? sr * 100 : sr) : null
+  const srPct = safeRate(srRaw, attempts)
   const workers = d?.worker_count ?? -1
   const open = d?.open_platforms ?? []
   const depleted = d?.depleted_cookie_platforms ?? []
@@ -76,6 +85,7 @@ export default function OpsSignalsPage() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <Stat label="Tỷ lệ thành công"
               value={srPct == null ? '—' : `${srPct.toFixed(1)}%`}
+              hint={srPct == null && d ? NO_TRAFFIC_HINT : undefined}
               tone={srPct == null ? undefined : srPct < 70 ? 'bad' : srPct < 90 ? 'warn' : 'ok'} />
         <Stat label="Hàng đợi" value={String(d?.total_queue_depth ?? '—')}
               tone={(d?.total_queue_depth ?? 0) > 100 ? 'bad' : (d?.total_queue_depth ?? 0) > 20 ? 'warn' : 'ok'} />

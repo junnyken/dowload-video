@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { adminFetch } from '../utils/adminFetch'
 import { cn } from '../utils/cn'
+import { NO_TRAFFIC_HINT, safeRate } from '../utils/rate'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,7 +19,7 @@ interface PlatformStat {
 
 interface AnalyticsSummary {
   total_jobs: number
-  success_rate: number
+  success_rate: number | null
   total_failed: number
   avg_daily: number
 }
@@ -38,7 +39,7 @@ interface PlatformFailRate {
   platform: string
   total: number
   failed: number
-  fail_rate: number
+  fail_rate: number | null
 }
 
 interface ErrorsResponse {
@@ -57,8 +58,8 @@ function platformColor(_name: string): string {
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
-function fmtRate(v: number) {
-  return `${v.toFixed(1)}%`
+function fmtRate(v: number | null) {
+  return v === null ? '—' : `${v.toFixed(1)}%`
 }
 
 function shortDate(iso: string) {
@@ -361,8 +362,8 @@ function PlatformFailTable({ rows }: { rows: PlatformFailRate[] }) {
         </thead>
         <tbody className="divide-y divide-line">
           {sorted.map(r => {
-            const rate = r.fail_rate ?? 0
-            const rateTone =
+            const rate = safeRate(r.fail_rate, r.total)
+            const rateTone = rate === null ? 'text-fg-muted' :
               rate >= 50 ? 'text-danger' : rate >= 20 ? 'text-warning' : 'text-success'
             return (
               <tr key={r.platform} className="hover:bg-surface-2">
@@ -370,7 +371,7 @@ function PlatformFailTable({ rows }: { rows: PlatformFailRate[] }) {
                 <td className="py-2 pr-3 text-right font-mono text-fg-muted">{r.total.toLocaleString()}</td>
                 <td className="py-2 pr-3 text-right font-mono text-danger">{r.failed.toLocaleString()}</td>
                 <td className={cn('py-2 pr-3 text-right font-mono font-semibold', rateTone)}>
-                  {fmtRate(rate)}
+                  <span title={rate === null ? NO_TRAFFIC_HINT : undefined}>{fmtRate(rate)}</span>
                 </td>
               </tr>
             )
@@ -432,6 +433,7 @@ export function AnalyticsPage() {
   }, [fetchErrors])
 
   const summary = analytics?.summary
+  const sr = summary ? safeRate(summary.success_rate, summary.total_jobs) : null
   const isLoading = loadingA || loadingE
 
   return (
@@ -497,9 +499,9 @@ export function AnalyticsPage() {
           />
           <StatCard
             label="Success Rate"
-            value={fmtRate(summary.success_rate)}
-            sub="succeeded / attempted"
-            tone={summary.success_rate >= 90 ? 'green' : summary.success_rate >= 70 ? 'default' : 'red'}
+            value={fmtRate(sr)}
+            sub={sr === null ? NO_TRAFFIC_HINT : 'succeeded / attempted'}
+            tone={sr === null ? 'default' : sr >= 90 ? 'green' : sr >= 70 ? 'default' : 'red'}
           />
           <StatCard
             label="Avg Daily"

@@ -25,7 +25,7 @@ export interface AnalyticsResponse {
   daily_stats?: DailyStatEntry[]
   summary?: {
     total_jobs?: number
-    success_rate?: number
+    success_rate?: number | null
     total_failed?: number
     avg_daily?: number
   }
@@ -43,6 +43,12 @@ export interface OpsHealthResponse {
     detected_at?: string
     magnitude?: number
     auto_mitigated?: boolean
+    state?: string
+    severity?: string
+    // Dedupe fields: absent until the backend ships them.
+    occurrences?: number
+    first_seen?: string
+    last_seen?: string
   }>
   queue_health?: {
     ok?: boolean
@@ -50,7 +56,7 @@ export interface OpsHealthResponse {
     workers?: number
   }
   fallback_summary?: Record<string, {
-    success_rate?: number
+    success_rate?: number | null
     top_layer?: string
     total?: number
   }>
@@ -69,7 +75,7 @@ export interface PlatformStatsTotal {
   ok: number
   err: number
   total: number
-  success_rate: number
+  success_rate: number | null
 }
 
 export interface PlatformStatsResponse {
@@ -116,7 +122,13 @@ export interface CookiePoolStatusResponse {
   }>
 }
 
+export type SnapshotSource =
+  | 'stats' | 'analytics' | 'analytics7d' | 'ops' | 'errors' | 'platformStats'
+  | 'signups' | 'proxyPools' | 'youtubeStatus' | 'cookiePoolStatus'
+
 export interface SystemSnapshot {
+  /** Sources whose request failed. Their data below is an empty placeholder, NOT a real zero. */
+  failed: SnapshotSource[]
   stats: StatsResponse
   analytics: AnalyticsResponse      // 1-day summary for today's cards
   analytics7d: AnalyticsResponse    // 7-day history for sparklines
@@ -144,7 +156,14 @@ export async function fetchSystemSnapshot(): Promise<SystemSnapshot> {
       adminFetch<CookiePoolStatusResponse>('/cookies/status'),
     ])
 
+  const named: Array<[SnapshotSource, PromiseSettledResult<unknown>]> = [
+    ['stats', stats], ['analytics', analytics], ['analytics7d', analytics7d], ['ops', ops],
+    ['errors', errors], ['platformStats', platformStats], ['signups', signups],
+    ['proxyPools', proxyPools], ['youtubeStatus', youtubeStatus], ['cookiePoolStatus', cookiePoolStatus],
+  ]
+
   return {
+    failed: named.filter(([, r]) => r.status === 'rejected').map(([n]) => n),
     stats:            stats.status            === 'fulfilled' ? stats.value            : {},
     analytics:        analytics.status        === 'fulfilled' ? analytics.value        : {},
     analytics7d:      analytics7d.status      === 'fulfilled' ? analytics7d.value      : {},

@@ -3,8 +3,11 @@ import { Link } from 'react-router-dom'
 import { ActiveAlertsBanner, type AlertItem } from '../panels/ActiveAlertsBanner'
 import { useAdminSystemStatus } from '../hooks/useAdminSystemStatus'
 import { useAdminActiveJobs } from '../hooks/useAdminActiveJobs'
-import type { SystemSnapshot, PlatformStatsTotal, DailyStatEntry } from '../api/system'
+import type { SystemSnapshot, PlatformStatsTotal, DailyStatEntry, SnapshotSource } from '../api/system'
 import { buildAlerts } from '../utils/alerts'
+import { NO_TRAFFIC_HINT, fmtRate, safeRate } from '../utils/rate'
+
+const UNAVAILABLE = 'Không tải được dữ liệu'
 
 function fmt(v: number | undefined | null, decimals = 0): string {
   if (v === undefined || v === null) return '—'
@@ -28,11 +31,14 @@ const TONE: Record<Tone, { val: string; border: string; dot: string }> = {
 // ─── Metric card ──────────────────────────────────────────────────────────────
 
 function MetricCard({
-  label, value, sub, tone = 'slate', link, pulse,
+  label, value, sub, tone = 'slate', link, pulse, unavailable,
 }: {
   label: string; value: string; sub?: string
   tone?: Tone; link?: string; pulse?: boolean
+  /** The request behind this card failed: show "—", never a made-up zero. */
+  unavailable?: boolean
 }) {
+  if (unavailable) { value = '—'; sub = UNAVAILABLE; tone = 'slate'; pulse = false }
   const t = TONE[tone]
   const body = (
     <div className={`rounded-card border bg-surface px-4 py-3.5 space-y-1 h-full shadow-card transition-colors hover:border-line-strong ${t.border}`}>
@@ -41,7 +47,7 @@ function MetricCard({
         {pulse && <span className={`inline-block h-2 w-2 rounded-full animate-pulse ${t.dot}`} />}
         {value}
       </div>
-      {sub && <div className="text-[11px] text-fg-muted">{sub}</div>}
+      {sub && <div className={`text-[11px] ${unavailable ? 'text-warning' : 'text-fg-muted'}`}>{sub}</div>}
     </div>
   )
   return link ? <Link to={link} className="block">{body}</Link> : body
@@ -121,8 +127,9 @@ const PLAT_ABBR: Record<string, string> = {
 function PlatformBar({ p, maxTotal }: { p: PlatformStatsTotal; maxTotal: number }) {
   const pct = maxTotal > 0 ? (p.total / maxTotal) * 100 : 0
   const okPct = p.total > 0 ? (p.ok / p.total) * 100 : 100
-  const barColor = p.success_rate >= 95 ? 'bg-success' : p.success_rate >= 80 ? 'bg-warning' : 'bg-danger'
-  const rateColor = p.success_rate >= 95 ? 'text-success' : p.success_rate >= 80 ? 'text-warning' : 'text-danger'
+  const rate = safeRate(p.success_rate, p.total)
+  const barColor = rate === null ? 'bg-line-strong' : p.success_rate >= 95 ? 'bg-success' : p.success_rate >= 80 ? 'bg-warning' : 'bg-danger'
+  const rateColor = rate === null ? 'text-fg-muted' : p.success_rate >= 95 ? 'text-success' : p.success_rate >= 80 ? 'text-warning' : 'text-danger'
   const abbr = PLAT_ABBR[p.platform.toLowerCase()] ?? p.platform.slice(0, 2).toUpperCase()
 
   return (
@@ -142,7 +149,7 @@ function PlatformBar({ p, maxTotal }: { p: PlatformStatsTotal; maxTotal: number 
         </div>
       </div>
       <span className={`w-10 shrink-0 text-right font-mono text-[10px] ${rateColor}`}>
-        {p.success_rate.toFixed(0)}%
+        {fmtRate(rate, 0)}
       </span>
     </div>
   )
@@ -241,7 +248,10 @@ export function AdminHomePage() {
   }
 
   const s = snapshot
-  const alerts = s ? buildAlerts(s) : []
+  const built = s ? buildAlerts(s) : { fresh: [], stale: [], anomalyCount: 0 }
+  const alerts = built.fresh
+  const down = new Set<SnapshotSource>(s?.failed ?? [])
+  const bad = (...k: SnapshotSource[]) => k.some(x => down.has(x))
 
   // Derived metrics
   const downloadsToday = s?.stats.total_downloads_today ?? 0
@@ -249,10 +259,10 @@ export function AdminHomePage() {
   const signupsToday   = s?.signups.today ?? 0
   const totalJobs24h   = s?.analytics.summary?.total_jobs ?? 0
   const failedJobs24h  = s?.analytics.summary?.total_failed ?? 0
-  const successRate    = s?.analytics.summary?.success_rate ?? 100
+  const successRate    = safeRate(s?.analytics.summary?.success_rate, totalJobs24h)
   const queueDepth     = s?.ops.queue_health?.depth ?? 0
   const queueOk        = s?.ops.queue_health?.ok !== false
-  const anomalyCount   = s?.ops.anomaly_count ?? 0
+  const anomalyCount   = built.anomalyCount
   const providers      = s?.stats.providers ?? {}
   const platformTotals = (s?.platformStats.totals ?? []).filter(p => p.total > 0)
   const maxPlatTotal   = Math.max(...platformTotals.map(p => p.total), 1)
@@ -343,6 +353,17 @@ export function AdminHomePage() {
 
       {/* ── Active alerts ── */}
       {alerts.length > 0 && <ActiveAlertsBanner alerts={alerts} />}
+      {built.stale.length > 0 && (
+        <details className="rounded-card border border-line bg-surface px-3.5 py-2.5">
+          <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg-2">
+            Cảnh báo cũ hơn 24h ({built.stale.length}) ·{' '}
+            <Link to="/vid-admin/anomalies" className="underline hover:text-fg-2" onClick={e => e.stopPropagation()}>
+              Xem trang Anomalies
+            </Link>
+          </summary>
+          <div className="mt-2.5"><ActiveAlertsBanner alerts={built.stale} /></div>
+        </details>
+      )}
 
       {/* ── Key metrics row 1 ── */}
       <section>
@@ -353,13 +374,15 @@ export function AdminHomePage() {
             value={fmt(downloadsToday)}
             sub={totalJobs24h > 0 ? `${fmt(totalJobs24h)} jobs ghi nhận` : undefined}
             tone="blue"
+            unavailable={bad('stats')}
             link="/vid-admin/analytics"
           />
           <MetricCard
             label="Success rate 24h"
-            value={successRate !== undefined ? `${successRate.toFixed(1)}%` : '—'}
-            sub={failedJobs24h > 0 ? `${failedJobs24h} failed` : 'Không có lỗi'}
-            tone={successRate >= 99 ? 'green' : successRate >= 95 ? 'amber' : 'red'}
+            value={fmtRate(successRate)}
+            sub={successRate === null ? NO_TRAFFIC_HINT : failedJobs24h > 0 ? `${failedJobs24h} failed` : 'Không có lỗi'}
+            tone={successRate === null ? 'slate' : successRate >= 99 ? 'green' : successRate >= 95 ? 'amber' : 'red'}
+            unavailable={bad('analytics')}
             link="/vid-admin/analytics"
           />
           <MetricCard
@@ -367,6 +390,7 @@ export function AdminHomePage() {
             value={fmt(totalUsers)}
             sub={signupsToday > 0 ? `+${signupsToday} đăng ký hôm nay` : 'Chưa có đăng ký mới'}
             tone="purple"
+            unavailable={bad('stats')}
             link="/vid-admin/users"
           />
           <MetricCard
@@ -389,12 +413,14 @@ export function AdminHomePage() {
             value={ytValue}
             sub={ytSub}
             tone={ytTone}
+            unavailable={bad('youtubeStatus')}
             link="/vid-admin/platforms"
           />
           <MetricCard
             label="Lỗi 24h"
             value={fmt(errors24h)}
             tone={errors24h === 0 ? 'green' : errors24h > 10 ? 'red' : 'amber'}
+            unavailable={bad('errors')}
             link="/vid-admin/analytics"
           />
           <MetricCard
@@ -402,12 +428,14 @@ export function AdminHomePage() {
             value={fmt(anomalyCount)}
             sub={anomalyCount === 0 ? 'All clear' : `${anomalyCount} cần xem`}
             tone={anomalyCount === 0 ? 'green' : 'red'}
+            unavailable={bad('ops')}
           />
           <MetricCard
             label="Queue depth"
             value={fmt(queueDepth)}
             sub={queueOk ? 'Queue healthy' : 'Queue degraded'}
             tone={queueOk ? 'green' : 'red'}
+            unavailable={bad('ops')}
             link="/vid-admin/queue"
           />
           <MetricCard
@@ -415,6 +443,7 @@ export function AdminHomePage() {
             value={fmt(failedJobs24h)}
             sub={totalJobs24h > 0 ? `/ ${fmt(totalJobs24h)} total` : undefined}
             tone={failedJobs24h === 0 ? 'green' : failedJobs24h > 10 ? 'red' : 'amber'}
+            unavailable={bad('analytics')}
             link="/vid-admin/jobs"
           />
         </div>
@@ -508,15 +537,15 @@ export function AdminHomePage() {
           <SectionTitle title="Proxy Fallback Success Rate" linkTo="/vid-admin/proxy" linkLabel="Proxy →" />
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
             {Object.entries(s.ops.fallback_summary).map(([platform, info]) => {
-              const rate = info.success_rate ?? 100
-              const tone: Tone = rate >= 95 ? 'green' : rate >= 80 ? 'amber' : 'red'
+              const rate = safeRate(info.success_rate, info.total)
+              const tone: Tone = rate === null ? 'slate' : rate >= 95 ? 'green' : rate >= 80 ? 'amber' : 'red'
               return (
                 <div key={platform} className={`rounded-control border bg-surface px-3 py-2.5 ${TONE[tone].border}`}>
                   <div className="text-[10px] text-fg-muted uppercase font-mono mb-1">
                     {PLAT_ABBR[platform.toLowerCase()] ?? platform}
                   </div>
                   <div className={`text-base font-bold font-mono ${TONE[tone].val}`}>
-                    {rate.toFixed(0)}%
+                    {fmtRate(rate, 0)}
                   </div>
                   {info.top_layer && (
                     <div className="text-[10px] text-fg-muted mt-0.5 truncate">{info.top_layer}</div>
