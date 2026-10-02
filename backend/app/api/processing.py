@@ -173,10 +173,39 @@ _SUBTITLE_LANG_MAP = {
 }
 
 
+# A concrete language code picked from the video's own list (e.g. "ja", "zh-Hans",
+# "en-orig"). Strictly validated: yt-dlp treats subtitleslangs entries as regexes.
+_LANG_CODE_RE = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
+
+
 def _subtitle_langs_for(language: Optional[str]) -> list:
     lang  = language or "auto"
+    if lang not in _SUBTITLE_LANG_MAP and _LANG_CODE_RE.match(lang):
+        return [lang]
     langs = _SUBTITLE_LANG_MAP.get(lang, _SUBTITLE_LANG_MAP["auto"])
     return langs if langs else ["vi", "vi-VN", "vi-VIE", "en", "en-US"]
+
+
+def _vtt_file_to_srt(vtt_path: str, srt_path: str) -> bool:
+    """Convert a WebVTT file to SRT. Returns True when a non-empty .srt was written."""
+    from app.services.subtitle_format import (
+        parse_vtt, serialize_srt, timestamp_to_seconds, seconds_to_srt_timestamp,
+    )
+    try:
+        with open(vtt_path, "r", encoding="utf-8", errors="replace") as f:
+            cues = parse_vtt(f.read())
+        if not cues:
+            return False
+        # SRT needs "HH:MM:SS,mmm" (the parser keeps VTT's "." as-is).
+        for i, c in enumerate(cues, 1):
+            c.index = i
+            c.start = seconds_to_srt_timestamp(timestamp_to_seconds(c.start))
+            c.end = seconds_to_srt_timestamp(timestamp_to_seconds(c.end))
+        with open(srt_path, "w", encoding="utf-8") as f:
+            f.write(serialize_srt(cues))
+        return True
+    except Exception:
+        return False
 
 
 def _burn_subtitle(video_path: str, subtitle_path: str, output_path: str) -> bool:
@@ -435,7 +464,8 @@ async def download_subtitle(payload: SubtitleRequest, request: Request):
         "writesubtitles": True,
         "writeautomaticsub": True,
         "subtitleslangs": _subtitle_langs_for(payload.language),
-        "subtitlesformat": ydl_fmt,
+        # YouTube etc. only offer vtt: accept it and convert to .srt below.
+        "subtitlesformat": "srt/vtt/best" if ydl_fmt == "srt" else ydl_fmt,
         "outtmpl": outtmpl_base,
         "quiet": True,
         "no_warnings": True,
@@ -453,11 +483,25 @@ async def download_subtitle(payload: SubtitleRequest, request: Request):
 
     # Find the downloaded subtitle file (yt-dlp may produce e.g. sub_uid.vi.srt)
     sub_file: Optional[str] = None
-    for entry in os.listdir(download_dir):
+    for entry in sorted(os.listdir(download_dir)):
         if entry.startswith(f"sub_{uid}") and entry.endswith(f".{ydl_fmt}"):
             candidate = os.path.join(download_dir, entry)
             if os.path.exists(candidate):
                 sub_file = candidate
+                break
+
+    if not sub_file and ydl_fmt == "srt":
+        # Only a .vtt was available — convert it so the user still gets an .srt.
+        for entry in sorted(os.listdir(download_dir)):
+            if entry.startswith(f"sub_{uid}") and entry.endswith(".vtt"):
+                vtt = os.path.join(download_dir, entry)
+                srt = vtt[:-4] + ".srt"
+                if _vtt_file_to_srt(vtt, srt):
+                    sub_file = srt
+                try:
+                    os.remove(vtt)
+                except OSError:
+                    pass
                 break
 
     if not sub_file:
