@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '../../utils/cn'
+import { NO_TRAFFIC_HINT, safeRate } from '../../utils/rate'
 import { EmptyState } from '../../shared/EmptyState'
 import { ErrorState } from '../../shared/ErrorState'
 import { TableSkeleton } from '../../shared/LoadingSkeleton'
@@ -12,7 +13,11 @@ import { PlatformActionMenu } from './PlatformActionMenu'
 
 // ─── Inline cell components ────────────────────────────────────────────────────
 
-function FailRateCell({ rate }: { rate: number }) {
+function FailRateCell({ rate: raw, total }: { rate: number | null; total?: number }) {
+  const rate = safeRate(raw, total)
+  if (rate === null) {
+    return <span className="font-mono text-[11px] text-fg-muted" title={NO_TRAFFIC_HINT}>—</span>
+  }
   const color =
     rate >= 20 ? 'bg-danger' :
     rate >= 5  ? 'bg-warning' :
@@ -193,7 +198,7 @@ export function PlatformHealthTable({
 
                       {/* Fail Rate */}
                       <td className="py-2.5 pr-3">
-                        <FailRateCell rate={row.failRate1h} />
+                        <FailRateCell rate={row.failRate1h} total={row.totalJobs1h} />
                       </td>
 
                       {/* Cookie Required */}

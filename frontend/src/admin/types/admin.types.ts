@@ -13,7 +13,7 @@ export interface PlatformHealthRow {
   status: StatusLevel
   circuitState: CircuitState
   lastSuccessAt: string | null
-  failRate1h: number
+  failRate1h: number | null
   totalJobs1h: number
   cookieRequired: boolean
   proxyRequired: boolean

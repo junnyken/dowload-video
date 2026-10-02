@@ -7,7 +7,7 @@ export interface PlatformHealthResponse {
     status: PlatformHealthRow['status']
     circuitState: PlatformHealthRow['circuitState']
     lastSuccessAt: string
-    failRate1h: number
+    failRate1h: number | null
     totalJobs1h: number
     activeJobs: number
     cookieRequired: boolean
