@@ -166,6 +166,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen relative overflow-hidden pb-44 md:pb-24">
       <div aria-hidden="true" className="vg-hero-grid absolute inset-x-0 top-0 h-[520px] pointer-events-none" />
+      <div aria-hidden="true" className="vg-hero-glow absolute inset-x-0 top-0 h-[520px] pointer-events-none" />
       {/* ── PWA Install Banner — disabled: App.jsx handles this via usePWAInstall hook ── */}
       {/* {showInstall && (
         <div className="fixed top-16 inset-x-0 z-40 flex justify-center px-4 animate-in slide-in-from-top duration-300">
