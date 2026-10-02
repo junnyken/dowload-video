@@ -182,10 +182,22 @@ function _isBrowserDirectUrl(u) {
   return true;
 }
 
+// Server files are named by a file id (their basename), never by the server
+// path: prefer the response's *_file_id; a legacy path (older server) is
+// reduced to its basename. Links use download-local?file=<id>, encoded so a
+// '+' in a real name (yt-dlp "230+140") survives the query string.
+function vgFileId(id, path) {
+  if (id) return id;
+  return (typeof path === 'string' && path) ? (path.split(/[\\/]/).pop() || null) : null;
+}
+function vgIsLocalRef(v) {
+  return typeof v === 'string' && !!v && !/^[a-z][a-z0-9+.-]*:/i.test(v) && !v.startsWith('/api/');
+}
+function vgLocalUrl(base, ref, safeName, ext) {
+  return `${base}/api/v1/download-local?file=${encodeURIComponent(vgFileId(null, ref))}&filename=${encodeURIComponent(safeName)}.${ext}`;
+}
 function _serverWrap(rawUrl, base, safeName, finalExt) {
-  if (rawUrl.startsWith('/app/downloads/') || rawUrl.startsWith('downloads/')) {
-    return `${base}/api/v1/download-local?filepath=${encodeURIComponent(rawUrl)}&filename=${encodeURIComponent(safeName)}.${finalExt}`;
-  }
+  if (vgIsLocalRef(rawUrl)) return vgLocalUrl(base, rawUrl, safeName, finalExt);
   if (isFirstPartyUrl(rawUrl)) return rawUrl;
   return `${base}/api/v1/proxy-download?url=${encodeURIComponent(rawUrl)}&filename=${encodeURIComponent(safeName)}&ext=${finalExt}`;
 }
@@ -581,8 +593,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         // Resolve download URL (same logic as popup resolveDownloadUrl)
         const ext = (quality || '').includes('mp3') || data.is_audio_only ? 'mp3' : 'mp4';
         let dlUrl = ext === 'mp3'
-          ? (data.local_mp3_path || data.local_file_path || data.direct_mp4_url)
-          : (data.direct_mp4_url || data.local_file_path || data.local_mp3_path);
+          ? (vgFileId(data.local_mp3_file_id, data.local_mp3_path) || vgFileId(data.local_file_id, data.local_file_path) || data.direct_mp4_url)
+          : (data.direct_mp4_url || vgFileId(data.local_file_id, data.local_file_path) || vgFileId(data.local_mp3_file_id, data.local_mp3_path));
 
         if (!dlUrl) throw new Error('Không lấy được link tải');
 
@@ -885,8 +897,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       if (data.is_audio_only) ext = 'mp3';
       // For MP3: prioritize local converted file, never the video stream URL
       const targetDlUrl = isMP3
-        ? (data.local_mp3_path || data.local_file_path || data.direct_mp4_url)
-        : (data.direct_mp4_url || data.local_file_path);
+        ? (vgFileId(data.local_mp3_file_id, data.local_mp3_path) || vgFileId(data.local_file_id, data.local_file_path) || data.direct_mp4_url)
+        : (data.direct_mp4_url || vgFileId(data.local_file_id, data.local_file_path));
       const safeName = (data.title || 'video').replace(/[/\\?%*:|"<>]/g, '-');
 
       if (!targetDlUrl) {

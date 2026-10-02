@@ -221,11 +221,24 @@
     `;
   }
 
+  // Server files are named by a file id (their basename), never by the server
+  // path: prefer the response's *_file_id; a legacy path (older server) is
+  // reduced to its basename. Links use download-local?file=<id>, encoded so a
+  // '+' in a real name (yt-dlp "230+140") survives the query string.
+  function vgFileId(id, path) {
+    if (id) return id;
+    return (typeof path === 'string' && path) ? (path.split(/[\\/]/).pop() || null) : null;
+  }
+  function vgIsLocalRef(v) {
+    return typeof v === 'string' && !!v && !/^[a-z][a-z0-9+.-]*:/i.test(v) && !v.startsWith('/api/');
+  }
+  function vgLocalUrl(base, ref, safeName, ext) {
+    return `${base}/api/v1/download-local?file=${encodeURIComponent(vgFileId(null, ref))}&filename=${encodeURIComponent(safeName)}.${ext}`;
+  }
   function buildProxyUrl(rawUrl, title, ext) {
     if (!rawUrl) return null;
     if (isFirstPartyUrl(rawUrl)) return rawUrl;
-    if (rawUrl.startsWith('/app/downloads/'))
-      return `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(rawUrl)}&filename=${encodeURIComponent(title || 'video')}.${ext}`;
+    if (vgIsLocalRef(rawUrl)) return vgLocalUrl(API_BASE, rawUrl, title || 'video', ext);
     return `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(rawUrl)}&filename=${encodeURIComponent(title || 'video')}&ext=${ext}`;
   }
 
@@ -371,7 +384,7 @@
         const data = resp.data;
 
         if (data.success) {
-          const targetUrl = data.direct_mp4_url || data.local_file_path;
+          const targetUrl = data.direct_mp4_url || vgFileId(data.local_file_id, data.local_file_path);
           let ext = 'mp4';
           if (data.is_audio_only || (targetUrl && (targetUrl.endsWith('.mp3') || targetUrl.endsWith('.m4a')))) {
              ext = 'mp3';

@@ -443,20 +443,34 @@ async function apiFetchLink(payload) {
   );
 }
 
+// Server files are named by a file id (their basename), never by the server
+// path: prefer the response's *_file_id; a legacy path (older server) is
+// reduced to its basename. Links use download-local?file=<id>, encoded so a
+// '+' in a real name (yt-dlp "230+140") survives the query string.
+function vgFileId(id, path) {
+  if (id) return id;
+  return (typeof path === 'string' && path) ? (path.split(/[\\/]/).pop() || null) : null;
+}
+function vgIsLocalRef(v) {
+  return typeof v === 'string' && !!v && !/^[a-z][a-z0-9+.-]*:/i.test(v) && !v.startsWith('/api/');
+}
+function vgLocalUrl(base, ref, safeName, ext) {
+  return `${base}/api/v1/download-local?file=${encodeURIComponent(vgFileId(null, ref))}&filename=${encodeURIComponent(safeName)}.${ext}`;
+}
 // ── Helper: resolve download URL ──────────────────────────────────
 function resolveDownloadUrl(data, ext, base) {
   const apiBase = base || API_BASE;
   let dlUrl = ext === 'mp3'
-    ? (data.local_mp3_path || data.local_file_path || data.direct_mp4_url)
-    : (data.direct_mp4_url || data.local_file_path || data.local_mp3_path);
+    ? (vgFileId(data.local_mp3_file_id, data.local_mp3_path) || vgFileId(data.local_file_id, data.local_file_path) || data.direct_mp4_url)
+    : (data.direct_mp4_url || vgFileId(data.local_file_id, data.local_file_path) || vgFileId(data.local_mp3_file_id, data.local_mp3_path));
   if (!dlUrl) return null;
 
   if (data.is_audio_only || (dlUrl.endsWith('.mp3') || dlUrl.endsWith('.m4a'))) ext = 'mp3';
 
   const safeName = (data.title || 'video').replace(/[/\\?%*:|"<>]/g, '-');
 
-  if (dlUrl.startsWith('/app/downloads/') || dlUrl.startsWith('downloads/')) {
-    dlUrl = `${apiBase}/api/v1/download-local?filepath=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}.${ext}`;
+  if (vgIsLocalRef(dlUrl)) {
+    dlUrl = vgLocalUrl(apiBase, dlUrl, safeName, ext);
   } else if (!isFirstPartyUrl(dlUrl)) {
     dlUrl = `${apiBase}/api/v1/proxy-download?url=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}&ext=${ext}`;
   }
@@ -762,7 +776,7 @@ function showPreviewCard(data, pageUrl) {
   const aiBtn = document.getElementById('action-ai-analyze');
   const aiResults = document.getElementById('ai-analyze-results');
   if (aiBtn) {
-    const hasLocalFile = !!(data.local_file_path && (data.local_file_path.startsWith('/app/downloads/') || data.local_file_path.startsWith('downloads/')));
+    const hasLocalFile = !!vgFileId(data.local_file_id, data.local_file_path);
     aiBtn.classList.toggle('hidden', !hasLocalFile);
     aiBtn.disabled = false;
     aiBtn.textContent = '🤖 AI Gợi ý';
@@ -871,7 +885,8 @@ async function pollAiAnalysis(jobId, attempt = 0) {
 document.getElementById('action-ai-analyze')?.addEventListener('click', async () => {
   const btn = document.getElementById('action-ai-analyze');
   const box = document.getElementById('ai-analyze-results');
-  if (!_lastDownloadData?.local_file_path) return;
+  const _aiFileId = vgFileId(_lastDownloadData?.local_file_id, _lastDownloadData?.local_file_path);
+  if (!_aiFileId) return;
   btn.disabled = true; btn.textContent = '⏳ Đang phân tích...';
   if (box) { box.innerHTML = '⏳ Đang phân tích video (có thể mất vài chục giây)...'; box.classList.remove('hidden'); }
   try {
@@ -879,8 +894,8 @@ document.getElementById('action-ai-analyze')?.addEventListener('click', async ()
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        url: _lastDownloadData.local_file_path,
-        media_path: _lastDownloadData.local_file_path,
+        url: _lastDownloadData.original_url || _aiFileId,
+        media_path: _aiFileId,
         analyses: ['trim', 'gif', 'metadata', 'clips'],
         duration_hint_s: _lastDownloadData.duration || null,
       }),
@@ -1543,12 +1558,12 @@ async function downloadSingleTrack(track, btn) {
     if (!result?.ok || !result.data?.success) throw new Error(result?.data?.detail || result?.error || 'Server error');
 
     const data = result.data;
-    let dlUrl = data.local_mp3_path || data.local_file_path || data.direct_mp4_url;
+    let dlUrl = (vgFileId(data.local_mp3_file_id, data.local_mp3_path) || vgFileId(data.local_file_id, data.local_file_path) || data.direct_mp4_url);
     if (!dlUrl) throw new Error('No download URL');
     const safeName = (data.title || track.name).replace(/[/\\?%*:|"<>]/g, '-');
 
-    if (dlUrl.startsWith('downloads/') || dlUrl.startsWith('/app/downloads/')) {
-      dlUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}.mp3`;
+    if (vgIsLocalRef(dlUrl)) {
+      dlUrl = vgLocalUrl(API_BASE, dlUrl, safeName, 'mp3');
     } else if (dlUrl.startsWith('http') && !isFirstPartyUrl(dlUrl)) {
       dlUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}&ext=mp3`;
     }
@@ -1614,9 +1629,11 @@ function showMultiFormat(data) {
 
           const r = result.data;
           let finalUrl;
-          const audioPath = ext === 'mp3' ? (r.local_mp3_path || r.local_file_path) : r.local_file_path;
+          const audioPath = ext === 'mp3'
+            ? (vgFileId(r.local_mp3_file_id, r.local_mp3_path) || vgFileId(r.local_file_id, r.local_file_path))
+            : vgFileId(r.local_file_id, r.local_file_path);
           if (audioPath) {
-            finalUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(audioPath)}&filename=${encodeURIComponent(safeName)}.${ext}`;
+            finalUrl = vgLocalUrl(API_BASE, audioPath, safeName, ext);
           } else if (r.direct_mp4_url) {
             finalUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(r.direct_mp4_url)}&filename=${encodeURIComponent(safeName)}&ext=${ext}`;
           }
@@ -1629,7 +1646,7 @@ function showMultiFormat(data) {
       const dlUrl = fmt.url;
       let finalUrl;
       if (dlUrl?.startsWith('/app/downloads/') || dlUrl?.startsWith('downloads/')) {
-        finalUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}.${ext}`;
+        finalUrl = vgLocalUrl(API_BASE, dlUrl, safeName, ext);
       } else if (dlUrl && !isFirstPartyUrl(dlUrl)) {
         finalUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}&ext=${ext}`;
       } else {
