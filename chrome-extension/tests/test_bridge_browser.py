@@ -19,7 +19,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 EXT = str(Path(__file__).resolve().parent.parent)
-WEB = "https://dvid.cmc-1.vibenode.matbao.ai"
+WEB = "https://dvid.vibe1.tinhgon.xyz"
 CHROME = str(Path.home() / ".cache/ms-playwright/chromium-1234/chrome-linux64/chrome")
 
 results = []

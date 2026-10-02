@@ -10,7 +10,7 @@
  * - MV3: alarms-based heartbeat to prevent SW suspension during downloads
  */
 
-const DEFAULT_API_BASE = 'https://dvid-api.cmc-1.vibenode.matbao.ai';
+const DEFAULT_API_BASE = 'https://dvid-api.vibe1.tinhgon.xyz';
 const STORAGE_KEY = (tabId) => `vg_videos_${tabId}`;
 const HISTORY_KEY = 'vg_download_history';
 const AUTH_TOKEN_KEY = 'vg_auth_token';   // Supabase access_token
@@ -38,11 +38,36 @@ async function authHeaders(extra = {}) {
 // see getEphemeralCookiesB64 below. Two rules now:
 //   • normalizeApiBase()  — must be https (http only for localhost dev)
 //   • isCookieTrustedBase() — cookies go ONLY to first-party hosts
-const COOKIE_TRUSTED_SUFFIXES = ['.matbao.ai'];
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+// ── First-party host (keep identical in background.js / popup.js / content.js) ──
+// vibe1.tinhgon.xyz is a SHARED multi-tenant domain: never trust a suffix or a
+// substring of it. Only these two exact hostnames are ours. `.matbao.ai` is the
+// legacy suffix rule, kept as-is for old builds.
+const FIRST_PARTY_EXACT_HOSTS = ['dvid.vibe1.tinhgon.xyz', 'dvid-api.vibe1.tinhgon.xyz'];
+const FIRST_PARTY_SUFFIXES = ['.matbao.ai'];
+const LEGACY_API_HOST = 'dvid-api.cmc-1.vibenode.matbao.ai';   // dead since the Vibe Host move
+function isFirstPartyHost(hostname) {
+  const h = String(hostname || '').toLowerCase();
+  return FIRST_PARTY_EXACT_HOSTS.includes(h) || FIRST_PARTY_SUFFIXES.some((s) => h.endsWith(s));
+}
+// "Is this URL one of OUR servers?" — https + hostname equality, never includes().
+function isFirstPartyUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    return u.protocol === 'https:' && isFirstPartyHost(u.hostname);
+  } catch { return false; }
+}
+// One-time migration: a saved base that still points at the dead host -> new API.
+function migrateLegacyApiBase(value) {
+  try {
+    if (new URL(String(value).trim()).hostname === LEGACY_API_HOST) return DEFAULT_API_BASE;
+  } catch { /* not a URL */ }
+  return value;
+}
 
 function normalizeApiBase(value) {
   if (!value || typeof value !== 'string') return null;
+  value = migrateLegacyApiBase(value);
   let u;
   try { u = new URL(value.trim()); } catch { return null; }
   const isLocal = LOCAL_HOSTS.includes(u.hostname);
@@ -56,7 +81,7 @@ function isCookieTrustedBase(base) {
     const u = new URL(base);
     if (LOCAL_HOSTS.includes(u.hostname)) return true;
     if (u.protocol !== 'https:') return false;
-    return COOKIE_TRUSTED_SUFFIXES.some((sfx) => u.hostname.endsWith(sfx));
+    return isFirstPartyHost(u.hostname);
   } catch { return false; }
 }
 
@@ -146,7 +171,7 @@ async function getEphemeralCookiesB64(pageUrl) {
 function _isBrowserDirectUrl(u) {
   if (!u || !u.startsWith('http')) return false;
   const low = u.toLowerCase();
-  if (low.includes('matbao.ai')) return false;       // already our server
+  if (isFirstPartyUrl(u)) return false;              // already our server
   if (low.includes('googlevideo.com')) return false; // YouTube — IP-locked
   if (low.includes('.m3u8')) return false;           // HLS — needs server merge
   return true;
@@ -156,7 +181,7 @@ function _serverWrap(rawUrl, base, safeName, finalExt) {
   if (rawUrl.startsWith('/app/downloads/') || rawUrl.startsWith('downloads/')) {
     return `${base}/api/v1/download-local?filepath=${encodeURIComponent(rawUrl)}&filename=${encodeURIComponent(safeName)}.${finalExt}`;
   }
-  if (rawUrl.includes('matbao.ai')) return rawUrl;
+  if (isFirstPartyUrl(rawUrl)) return rawUrl;
   return `${base}/api/v1/proxy-download?url=${encodeURIComponent(rawUrl)}&filename=${encodeURIComponent(safeName)}&ext=${finalExt}`;
 }
 
@@ -196,6 +221,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
     _apiBase = normalizeApiBase(changes.vg_api_base.newValue) || DEFAULT_API_BASE;
   }
 });
+
+// One-time migration of a saved base that points at the dead cmc-1 host.
+chrome.storage.sync.get('vg_api_base').then((r) => {
+  if (r && typeof r.vg_api_base === 'string' && migrateLegacyApiBase(r.vg_api_base) !== r.vg_api_base) {
+    chrome.storage.sync.set({ vg_api_base: DEFAULT_API_BASE });
+  }
+}).catch(() => {});
 
 // Warm cache on startup
 getApiBase().then((v) => { _apiBase = v; });
@@ -280,7 +312,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 const activeDownloads = new Map();
 
 chrome.downloads.onCreated.addListener((item) => {
-  if (item.filename?.includes('VidGrab') || item.url?.includes('matbao.ai')) {
+  if (item.filename?.includes('VidGrab') || isFirstPartyUrl(item.url)) {
     activeDownloads.set(item.id, {
       filename: item.filename,
       startTime: Date.now(),
@@ -442,7 +474,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const u = new URL(origin);
       if (LOCAL_HOSTS.includes(u.hostname)) return true;
       if (u.protocol !== 'https:') return false;
-      return COOKIE_TRUSTED_SUFFIXES.some((sfx) => u.hostname.endsWith(sfx));
+      return isFirstPartyHost(u.hostname);
     } catch { return false; }
   }
   const _mayWriteAuth = _fromExtensionPage || _isTrustedWebAppSender();

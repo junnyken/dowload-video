@@ -10,17 +10,44 @@
   if (window.__vidgrab_injected) return;
   window.__vidgrab_injected = true;
 
-  let API_BASE = 'https://dvid-api.cmc-1.vibenode.matbao.ai';
+  let API_BASE = 'https://dvid-api.vibe1.tinhgon.xyz';
   // Web app (frontend) — separate domain from the API backend. Used only to
   // open the batch-progress page after a bulk send; never for API calls.
-  const FRONTEND_BASE = 'https://dvid.cmc-1.vibenode.matbao.ai';
+  const FRONTEND_BASE = 'https://dvid.vibe1.tinhgon.xyz';
   // Load custom server URL từ storage (nếu có).
   // Same validation as background.js/popup.js — an unvalidated value here
   // would also desync us from the background worker, whose VG_API_FETCH now
   // only proxies requests aimed at its own normalized origin.
   const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+  const DEFAULT_API_BASE = API_BASE;
+  // ── First-party host (keep identical in background.js / popup.js / content.js) ──
+  // vibe1.tinhgon.xyz is a SHARED multi-tenant domain: never trust a suffix or a
+  // substring of it. Only these two exact hostnames are ours. `.matbao.ai` is the
+  // legacy suffix rule, kept as-is for old builds.
+  const FIRST_PARTY_EXACT_HOSTS = ['dvid.vibe1.tinhgon.xyz', 'dvid-api.vibe1.tinhgon.xyz'];
+  const FIRST_PARTY_SUFFIXES = ['.matbao.ai'];
+  const LEGACY_API_HOST = 'dvid-api.cmc-1.vibenode.matbao.ai';   // dead since the Vibe Host move
+  function isFirstPartyHost(hostname) {
+    const h = String(hostname || '').toLowerCase();
+    return FIRST_PARTY_EXACT_HOSTS.includes(h) || FIRST_PARTY_SUFFIXES.some((s) => h.endsWith(s));
+  }
+  // "Is this URL one of OUR servers?" — https + hostname equality, never includes().
+  function isFirstPartyUrl(rawUrl) {
+    try {
+      const u = new URL(rawUrl);
+      return u.protocol === 'https:' && isFirstPartyHost(u.hostname);
+    } catch { return false; }
+  }
+  // One-time migration: a saved base that still points at the dead host -> new API.
+  function migrateLegacyApiBase(value) {
+    try {
+      if (new URL(String(value).trim()).hostname === LEGACY_API_HOST) return DEFAULT_API_BASE;
+    } catch { /* not a URL */ }
+    return value;
+  }
   function normalizeApiBase(value) {
     if (!value || typeof value !== 'string') return null;
+    value = migrateLegacyApiBase(value);
     let u;
     try { u = new URL(value.trim()); } catch { return null; }
     const isLocal = LOCAL_HOSTS.includes(u.hostname);
@@ -197,7 +224,7 @@
 
   function buildProxyUrl(rawUrl, title, ext) {
     if (!rawUrl) return null;
-    if (rawUrl.includes('matbao.ai')) return rawUrl;
+    if (isFirstPartyUrl(rawUrl)) return rawUrl;
     if (rawUrl.startsWith('/app/downloads/'))
       return `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(rawUrl)}&filename=${encodeURIComponent(title || 'video')}.${ext}`;
     return `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(rawUrl)}&filename=${encodeURIComponent(title || 'video')}&ext=${ext}`;

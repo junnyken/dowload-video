@@ -1,5 +1,5 @@
-const DEFAULT_API_BASE = 'https://dvid-api.cmc-1.vibenode.matbao.ai';
-const WEB_BASE = 'https://dvid.cmc-1.vibenode.matbao.ai';
+const DEFAULT_API_BASE = 'https://dvid-api.vibe1.tinhgon.xyz';
+const WEB_BASE = 'https://dvid.vibe1.tinhgon.xyz';
 let API_BASE = DEFAULT_API_BASE;
 
 // Mirrors normalizeApiBase() in background.js. The Settings field used to
@@ -7,8 +7,34 @@ let API_BASE = DEFAULT_API_BASE;
 // value syncs across every browser on the account. Require https (http only
 // for localhost dev) so a bad paste can't downgrade the channel.
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+// ── First-party host (keep identical in background.js / popup.js / content.js) ──
+// vibe1.tinhgon.xyz is a SHARED multi-tenant domain: never trust a suffix or a
+// substring of it. Only these two exact hostnames are ours. `.matbao.ai` is the
+// legacy suffix rule, kept as-is for old builds.
+const FIRST_PARTY_EXACT_HOSTS = ['dvid.vibe1.tinhgon.xyz', 'dvid-api.vibe1.tinhgon.xyz'];
+const FIRST_PARTY_SUFFIXES = ['.matbao.ai'];
+const LEGACY_API_HOST = 'dvid-api.cmc-1.vibenode.matbao.ai';   // dead since the Vibe Host move
+function isFirstPartyHost(hostname) {
+  const h = String(hostname || '').toLowerCase();
+  return FIRST_PARTY_EXACT_HOSTS.includes(h) || FIRST_PARTY_SUFFIXES.some((s) => h.endsWith(s));
+}
+// "Is this URL one of OUR servers?" — https + hostname equality, never includes().
+function isFirstPartyUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    return u.protocol === 'https:' && isFirstPartyHost(u.hostname);
+  } catch { return false; }
+}
+// One-time migration: a saved base that still points at the dead host -> new API.
+function migrateLegacyApiBase(value) {
+  try {
+    if (new URL(String(value).trim()).hostname === LEGACY_API_HOST) return DEFAULT_API_BASE;
+  } catch { /* not a URL */ }
+  return value;
+}
 function normalizeApiBase(value) {
   if (!value || typeof value !== 'string') return null;
+  value = migrateLegacyApiBase(value);
   let u;
   try { u = new URL(value.trim()); } catch { return null; }
   const isLocal = LOCAL_HOSTS.includes(u.hostname);
@@ -156,6 +182,10 @@ function startJobPolling(batchId, maxVideos) {
 // Khởi tạo API_BASE từ storage ngay khi popup mở
 chrome.storage.sync.get('vg_api_base', (r) => {
   API_BASE = normalizeApiBase(r.vg_api_base) || DEFAULT_API_BASE;
+  // One-time migration off the dead cmc-1 host (background.js does the same).
+  if (typeof r.vg_api_base === 'string' && migrateLegacyApiBase(r.vg_api_base) !== r.vg_api_base) {
+    chrome.storage.sync.set({ vg_api_base: DEFAULT_API_BASE });
+  }
 });
 
 // ── Tab switcher ──────────────────────────────────────────────────
@@ -428,7 +458,7 @@ function resolveDownloadUrl(data, ext, base) {
 
   if (dlUrl.startsWith('/app/downloads/') || dlUrl.startsWith('downloads/')) {
     dlUrl = `${apiBase}/api/v1/download-local?filepath=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}.${ext}`;
-  } else if (!dlUrl.includes('matbao.ai')) {
+  } else if (!isFirstPartyUrl(dlUrl)) {
     dlUrl = `${apiBase}/api/v1/proxy-download?url=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}&ext=${ext}`;
   }
   return { dlUrl, safeName, ext };
@@ -1520,7 +1550,7 @@ async function downloadSingleTrack(track, btn) {
 
     if (dlUrl.startsWith('downloads/') || dlUrl.startsWith('/app/downloads/')) {
       dlUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}.mp3`;
-    } else if (dlUrl.startsWith('http') && !dlUrl.includes('matbao.ai')) {
+    } else if (dlUrl.startsWith('http') && !isFirstPartyUrl(dlUrl)) {
       dlUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}&ext=mp3`;
     }
 
@@ -1601,7 +1631,7 @@ function showMultiFormat(data) {
       let finalUrl;
       if (dlUrl?.startsWith('/app/downloads/') || dlUrl?.startsWith('downloads/')) {
         finalUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}.${ext}`;
-      } else if (dlUrl && !dlUrl.includes('matbao.ai')) {
+      } else if (dlUrl && !isFirstPartyUrl(dlUrl)) {
         finalUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(safeName)}&ext=${ext}`;
       } else {
         finalUrl = dlUrl;

@@ -38,7 +38,15 @@ function extract(src, fnName) {
 }
 
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
-const COOKIE_TRUSTED_SUFFIXES = ['.matbao.ai'];
+// Pull the shipped constants/helpers verbatim (no hand-copied lists to drift).
+const grabLine = (src, re) => { const m = src.match(re); if (!m) throw new Error('missing ' + re); return m[0]; };
+const FIRST_PARTY_EXACT_HOSTS = eval(grabLine(background, /(?<=const FIRST_PARTY_EXACT_HOSTS = )\[[^\]]*\]/));
+const FIRST_PARTY_SUFFIXES = eval(grabLine(background, /(?<=const FIRST_PARTY_SUFFIXES = )\[[^\]]*\]/));
+const LEGACY_API_HOST = eval(grabLine(background, /(?<=const LEGACY_API_HOST = )'[^']*'/));
+const DEFAULT_API_BASE = eval(grabLine(background, /(?<=const DEFAULT_API_BASE = )'[^']*'/));
+const isFirstPartyHost = eval(`(${extract(background, 'isFirstPartyHost')})`);
+const isFirstPartyUrl = eval(`(${extract(background, 'isFirstPartyUrl')})`);
+const migrateLegacyApiBase = eval(`(${extract(background, 'migrateLegacyApiBase')})`);
 const normalizeApiBase = eval(`(${extract(background, 'normalizeApiBase')})`);
 const isCookieTrustedBase = eval(`(${extract(background, 'isCookieTrustedBase')})`);
 
@@ -53,14 +61,51 @@ assert(normalizeApiBase(null) === null, 'null rejected');
 assert(normalizeApiBase(undefined) === null, 'undefined rejected');
 
 console.log('\n[1b] normalizeApiBase accepts and canonicalises valid bases');
-assert(normalizeApiBase('https://dvid-api.cmc-1.vibenode.matbao.ai') === 'https://dvid-api.cmc-1.vibenode.matbao.ai', 'prod base kept');
+assert(normalizeApiBase('https://dvid-api.vibe1.tinhgon.xyz') === 'https://dvid-api.vibe1.tinhgon.xyz', 'prod base kept');
+assert(DEFAULT_API_BASE === 'https://dvid-api.vibe1.tinhgon.xyz', 'default API base is the new host');
+assert(normalizeApiBase('https://dvid-api.cmc-1.vibenode.matbao.ai') === DEFAULT_API_BASE, 'legacy cmc-1 base migrated to new API base');
+assert(migrateLegacyApiBase('https://dvid-api.cmc-1.vibenode.matbao.ai/') === DEFAULT_API_BASE, 'migrate: legacy host (trailing slash) rewritten');
+assert(migrateLegacyApiBase('https://x.matbao.ai') === 'https://x.matbao.ai', 'migrate: other hosts untouched');
+assert(migrateLegacyApiBase('https://dvid-api.cmc-1.vibenode.matbao.ai.evil.com') === 'https://dvid-api.cmc-1.vibenode.matbao.ai.evil.com', 'migrate: hostname equality, not prefix');
 assert(normalizeApiBase('https://x.matbao.ai/') === 'https://x.matbao.ai', 'trailing slash stripped');
 assert(normalizeApiBase('  https://x.matbao.ai  ') === 'https://x.matbao.ai', 'whitespace trimmed');
 assert(normalizeApiBase('http://localhost:8000') === 'http://localhost:8000', 'localhost http allowed for dev');
 assert(normalizeApiBase('http://127.0.0.1:8000') === 'http://127.0.0.1:8000', '127.0.0.1 http allowed for dev');
 
 console.log('\n[2] cookies only leave for a first-party base');
-assert(isCookieTrustedBase('https://dvid-api.cmc-1.vibenode.matbao.ai') === true, 'prod base is cookie-trusted');
+assert(isCookieTrustedBase('https://dvid-api.vibe1.tinhgon.xyz') === true, 'new prod API host (exact) is cookie-trusted');
+assert(isCookieTrustedBase('https://dvid.vibe1.tinhgon.xyz') === true, 'new web host (exact) is cookie-trusted');
+assert(isCookieTrustedBase('https://x.matbao.ai') === true, 'legacy .matbao.ai suffix still trusted (unchanged)');
+assert(isCookieTrustedBase('https://evil.vibe1.tinhgon.xyz') === false, 'SHARED DOMAIN: sibling tenant evil.vibe1.tinhgon.xyz REJECTED');
+assert(isCookieTrustedBase('https://dvid.vibe1.tinhgon.xyz.evil.com') === false, 'dvid.vibe1.tinhgon.xyz.evil.com REJECTED');
+assert(isCookieTrustedBase('https://dvid-api.vibe1.tinhgon.xyz.evil.com') === false, 'dvid-api...xyz.evil.com REJECTED');
+assert(isCookieTrustedBase('https://xdvid.vibe1.tinhgon.xyz') === false, 'prefix-spoof xdvid.vibe1.tinhgon.xyz REJECTED');
+assert(isCookieTrustedBase('https://tinhgon.xyz') === false, 'bare tinhgon.xyz REJECTED');
+assert(isCookieTrustedBase('http://dvid-api.vibe1.tinhgon.xyz') === false, 'http on first-party host REJECTED');
+assert(isCookieTrustedBase('https://dvid-api.cmc-1.vibenode.matbao.ai') === true, 'old matbao.ai suffix behaviour unchanged');
+
+console.log('\n[2b] isFirstPartyHost / isFirstPartyUrl');
+assert(isFirstPartyHost('dvid.vibe1.tinhgon.xyz') && isFirstPartyHost('dvid-api.vibe1.tinhgon.xyz'), 'exact hosts accepted');
+assert(isFirstPartyHost('DVID.vibe1.tinhgon.xyz') === true, 'case-insensitive exact match');
+assert(!isFirstPartyHost('evil.vibe1.tinhgon.xyz'), 'evil.vibe1.tinhgon.xyz rejected');
+assert(!isFirstPartyHost('dvid.vibe1.tinhgon.xyz.evil.com'), 'dvid.vibe1.tinhgon.xyz.evil.com rejected');
+assert(!isFirstPartyHost('a.dvid.vibe1.tinhgon.xyz'), 'subdomain of exact host rejected');
+assert(!isFirstPartyHost('tinhgon.xyz') && !isFirstPartyHost('vibe1.tinhgon.xyz'), 'parent domains rejected');
+assert(isFirstPartyUrl('https://dvid-api.vibe1.tinhgon.xyz/api/v1/x') === true, 'URL on exact host accepted');
+assert(isFirstPartyUrl('https://evil.vibe1.tinhgon.xyz/x') === false, 'URL on sibling tenant rejected');
+assert(isFirstPartyUrl('https://dvid.vibe1.tinhgon.xyz.evil.com/x') === false, 'URL on lookalike rejected');
+assert(isFirstPartyUrl('https://evil.com/?u=dvid.vibe1.tinhgon.xyz') === false, 'host name in query string does NOT count (no substring match)');
+assert(isFirstPartyUrl('https://evil.com/?u=matbao.ai') === false, 'matbao.ai in query string does NOT count');
+assert(isFirstPartyUrl('http://dvid.vibe1.tinhgon.xyz/x') === false, 'plain http rejected');
+assert(isFirstPartyUrl('/app/downloads/x.mp4') === false, 'relative path is not a first-party URL');
+for (const [name, src] of [['background.js', background], ['popup.js', popup], ['content.js', content]]) {
+  assert(!/includes\(['"]matbao\.ai['"]\)/.test(src), `${name} has no substring includes('matbao.ai')`);
+  assert(!/includes\(['"][^'"]*tinhgon/.test(src), `${name} has no substring includes('tinhgon')`);
+  assert(!/['"]\.[^'"]*tinhgon\.xyz['"]/.test(src), `${name} has no tinhgon suffix rule`);
+}
+// the three duplicated helper blocks must agree
+const helperBlock = (src) => ['FIRST_PARTY_EXACT_HOSTS = ', 'FIRST_PARTY_SUFFIXES = ', 'LEGACY_API_HOST = '].map(k => grabLine(src, new RegExp(k.replace(/[$]/g,'\\$') + "[^;]*;"))).join('|');
+assert(helperBlock(background) === helperBlock(popup) && helperBlock(popup) === helperBlock(content), 'helper constants identical in background/popup/content');
 assert(isCookieTrustedBase('http://localhost:8000') === true, 'localhost is cookie-trusted (dev)');
 assert(isCookieTrustedBase('https://evil.example.com') === false, 'third-party https base NOT cookie-trusted');
 assert(isCookieTrustedBase('http://evil.example.com') === false, 'third-party http base NOT cookie-trusted');
@@ -116,13 +161,17 @@ const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'ut
 const bridgeEntry = manifest.content_scripts.find(cs => (cs.js || []).includes('web-bridge.js'));
 assert(!!bridgeEntry, 'web-bridge.js is registered as a content script');
 assert(
-  bridgeEntry.matches.every(m => /dvid\.cmc-1\.vibenode\.matbao\.ai|localhost|127\.0\.0\.1/.test(m)),
+  bridgeEntry.matches.every(m => /^\*:\/\/(dvid\.vibe1\.tinhgon\.xyz|localhost|127\.0\.0\.1)\/\*$/.test(m)),
   'bridge is scoped to the web app origin only, not the 24 third-party sites'
 );
 assert(
   !manifest.content_scripts.some(cs => (cs.js || []).includes('content.js') && cs.matches.some(m => m.includes('matbao.ai'))),
   'content.js is NOT granted the web app origin'
 );
+assert(!JSON.stringify(manifest).includes('cmc-1'), 'manifest has no dead cmc-1 host');
+assert(manifest.host_permissions.includes('*://dvid-api.vibe1.tinhgon.xyz/*') && manifest.host_permissions.includes('*://dvid.vibe1.tinhgon.xyz/*'), 'host_permissions has the two exact new hosts');
+assert(!manifest.host_permissions.concat(...manifest.content_scripts.map(c => c.matches)).some(m => /\*[^/]*tinhgon/.test(m)), 'no wildcard on tinhgon.xyz anywhere in manifest');
+assert(manifest.version === '5.2.3', 'manifest version 5.2.3');
 assert(bridge.includes('event.source !== window'), 'bridge rejects cross-window messages');
 assert(bridge.includes('event.origin !== window.location.origin'), 'bridge rejects cross-origin messages');
 assert(bridge.includes("VG_SET_AUTH_TOKEN"), 'bridge forwards the token to the service worker directly (popup is closed during login)');
