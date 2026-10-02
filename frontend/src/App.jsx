@@ -124,7 +124,11 @@ function AppInner() {
         });
       });
     });
-    const handleControllerChange = () => window.location.reload();
+    // Reload only when an existing worker is replaced (a real update). On the
+    // very first install there is nothing stale to refresh, and reloading then
+    // wiped state such as a link just received via /share-target.
+    const hadController = !!navigator.serviceWorker.controller;
+    const handleControllerChange = () => { if (hadController) window.location.reload(); };
     navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
     return () => navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
   }, []);
