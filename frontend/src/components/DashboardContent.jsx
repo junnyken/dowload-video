@@ -302,8 +302,12 @@ export default function DashboardContent() {
     try {
       const pending = sessionStorage.getItem('vg_pending_share_url');
       if (pending) {
-        sessionStorage.removeItem('vg_pending_share_url');
         setUrl(pending);
+        // Not removed immediately: if a service-worker update reloads the page
+        // right after a share, the link must survive that reload.
+        setTimeout(() => {
+          try { sessionStorage.removeItem('vg_pending_share_url'); } catch {}
+        }, 10000);
       }
     } catch {}
     const onShareURL = (e) => {

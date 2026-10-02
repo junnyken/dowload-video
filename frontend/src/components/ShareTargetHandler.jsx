@@ -28,9 +28,13 @@ export default function ShareTargetHandler() {
       sessionStorage.setItem('vg_pending_share_url', shareURL);
     } catch {}
 
-    window.dispatchEvent(
-      new CustomEvent('vidgrab:share-url', { detail: { url: shareURL } })
-    );
+    // Deferred: this effect runs before later siblings (MobileShareIntake)
+    // have attached their listeners, so a synchronous dispatch was never heard.
+    setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent('vidgrab:share-url', { detail: { url: shareURL } })
+      );
+    }, 0);
   }, []);
 
   return null;

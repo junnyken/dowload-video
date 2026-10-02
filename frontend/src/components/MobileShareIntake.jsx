@@ -51,7 +51,12 @@ export default function MobileShareIntake({ onNavigate }) {
       const ctrl = new AbortController();
       abortRef.current = ctrl;
 
-      fetch(`${API_BASE}/api/v1/fetch-link?url=${encodeURIComponent(sharedUrl)}`, { signal: ctrl.signal })
+      fetch(`${API_BASE}/api/v1/fetch-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: sharedUrl }),
+        signal: ctrl.signal,
+      })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data) setVideoInfo(data);
