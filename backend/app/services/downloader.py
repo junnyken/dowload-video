@@ -216,17 +216,30 @@ def _download_path_token(url: str, cookies_file: str | None = None) -> str:
             # Unreadable cookie file — fall back to its path, which is already
             # per-request. Never fall through to the cookie-less token.
             material += b"\x00" + cookies_file.encode()
-    return hmac.new(_download_path_secret().encode(), material, hashlib.sha256).hexdigest()[:16]
+    return hmac.new(_download_path_secret().encode(), material, hashlib.sha256).hexdigest()[:TOKEN_HEX_LEN]
+
+
+def _outtmpl_for(url: str, cookies_file: str | None = None) -> str:
+    """
+    `<128-bit HMAC token>_<format_id>.<ext>` inside DOWNLOAD_DIR.
+
+    The token comes first and nothing from the video's metadata is in the
+    name except the format id (needed so two qualities of one URL do not
+    collide): `%(id)s` used to lead, and for the generic extractor that is
+    the URL's last path segment — a title-like, guessable string that could
+    even contain `..` and lose its file id.
+    """
+    return os.path.join(
+        DOWNLOAD_DIR,
+        f"{_download_path_token(url, cookies_file)}_%(format_id)s.%(ext)s",
+    )
 
 
 def _isolate_outtmpl(opts: dict, url: str, cookies_file: str) -> None:
     """Re-point an opts dict at the cookie-specific path for this URL."""
     if not opts.get("outtmpl"):
         return
-    opts["outtmpl"] = os.path.join(
-        DOWNLOAD_DIR,
-        f"%(id)s_%(format_id)s_{_download_path_token(url, cookies_file)}.%(ext)s",
-    )
+    opts["outtmpl"] = _outtmpl_for(url, cookies_file)
 
 
 def _get_instagram_cookies_file() -> str | None:
@@ -452,6 +465,7 @@ from app.services.threads_extractor import (
     extract_threads_sync, to_download_info,
 )
 from app.services.cobalt_service import is_cobalt_available, extract_youtube_formats_via_cobalt, download_from_cobalt, download_instagram_via_cobalt, download_facebook_via_cobalt, fetch_cobalt_stream
+from app.core.local_download import new_download_path, TOKEN_HEX_LEN
 
 # Ensure Deno is discoverable for yt-dlp JS challenges
 _deno_bin = os.path.join(os.path.expanduser("~"), ".deno", "bin")
@@ -851,10 +865,7 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
         is_tiktok
     )
     if needs_local_download:
-        opts["outtmpl"] = os.path.join(
-            DOWNLOAD_DIR,
-            f"%(id)s_%(format_id)s_{_download_path_token(url)}.%(ext)s",
-        )
+        opts["outtmpl"] = _outtmpl_for(url)
 
     # ── Proxy: METADATA-ONLY by design (EXCEPT YouTube, see below) ──────
     # The (paid, per-GB) proxy is used ONLY to extract metadata for every other
@@ -1547,9 +1558,9 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 import httpx
                 from app.core.proxy_manager import IPROYAL_PROXY_CN
 
-                os.makedirs("downloads", exist_ok=True)
+                os.makedirs(DOWNLOAD_DIR, exist_ok=True)
                 ext = "mp3" if quality.startswith("mp3") else "mp4"
-                local_path = f"downloads/douyin_{uuid.uuid4().hex[:8]}.{ext}"
+                local_path = new_download_path(DOWNLOAD_DIR, "douyin_", ext)
                 cdn_url = result["direct_mp4_url"]
 
                 def _stream_to_file(client: httpx.Client) -> bool:
@@ -1775,8 +1786,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                     _cob = fetch_cobalt_stream(url, video_quality="1080", download_mode="auto")
                     if _cob.get("url"):
                         import uuid as _uuid_tw, httpx as _httpx_tw
-                        _tw_fname = f"twitter_{_uuid_tw.uuid4().hex[:8]}.mp4"
-                        _tw_path = os.path.join(DOWNLOAD_DIR, _tw_fname)
+                        _tw_path = new_download_path(DOWNLOAD_DIR, "twitter_", ".mp4")
                         os.makedirs(DOWNLOAD_DIR, exist_ok=True)
                         with _httpx_tw.Client(timeout=300.0, follow_redirects=True) as _cl:
                             with _cl.stream("GET", _cob["url"]) as _r:
@@ -2848,8 +2858,8 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
 
             if cobalt_status != "error" and cobalt_stream_url:
                 import uuid as _uuid
-                raw_name = cobalt_resp.get("filename", f"cobalt_{_uuid.uuid4().hex[:8]}.{cobalt_ext}")
-                cobalt_path = os.path.join(DOWNLOAD_DIR, os.path.basename(raw_name))
+                # Never Cobalt's "pretty" filename (the video title) — see _outtmpl_for.
+                cobalt_path = new_download_path(DOWNLOAD_DIR, "cobalt_", cobalt_ext)
                 try:
                     with httpx.Client(timeout=600.0, follow_redirects=True) as _client:
                         with _client.stream("GET", cobalt_stream_url) as _resp:

@@ -210,6 +210,7 @@ def _increment_usage(tenant_id: str) -> None:
 @router.post("/api/v1/partner/jobs", response_model=JobResponse, status_code=202)
 async def submit_job(
     body:   JobSubmitRequest,
+    request: Request,
     tenant: TenantContext = Depends(get_partner_tenant),
 ):
     """Submit a download job on behalf of a tenant."""
@@ -266,8 +267,12 @@ async def submit_job(
             kwargs={"quality": body.quality},
             priority=priority,
         )
+        from app.core.local_download import public_api_base
         sync_partner_job_task.apply_async(
             args=[job_id, download_job_id, tenant.tenant_id],
+            # The webhook leaves this server: its file link must be absolute,
+            # on the host the partner already talks to.
+            kwargs={"api_base": public_api_base(request)},
             countdown=5,
         )
     except Exception as exc:
@@ -294,9 +299,20 @@ async def submit_job(
     )
 
 
+def _public_result(result, request: Request):
+    """partner_jobs.result for the partner: rows written before file ids
+    carried the server path in direct_mp4_url — turn any into a link."""
+    if not result:
+        return result
+    from app.core.local_download import public_api_base, strip_server_paths
+    name = result.get("title") if isinstance(result, dict) else None
+    return strip_server_paths(result, public_api_base(request), name)
+
+
 @router.get("/api/v1/partner/jobs/{job_id}", response_model=JobResponse)
 async def get_job(
     job_id: str,
+    request: Request,
     tenant: TenantContext = Depends(get_partner_tenant),
 ):
     """Poll status of a specific job (tenant-isolated)."""
@@ -331,13 +347,14 @@ async def get_job(
         tenant_id=row.get("tenant_id", tenant.tenant_id),
         api_key_id=row.get("api_key_id"),
         created_at=row.get("created_at", ""),
-        result=row.get("result"),
+        result=_public_result(row.get("result"), request),
         error=row.get("error"),
     )
 
 
 @router.get("/api/v1/partner/jobs", response_model=List[JobResponse])
 async def list_jobs(
+    request: Request,
     status: Optional[str] = Query(None, description="Filter by status"),
     limit:  int           = Query(50, ge=1, le=100),
     tenant: TenantContext = Depends(get_partner_tenant),
@@ -375,7 +392,7 @@ async def list_jobs(
             tenant_id=r.get("tenant_id", tenant.tenant_id),
             api_key_id=r.get("api_key_id"),
             created_at=r.get("created_at", ""),
-            result=r.get("result"),
+            result=_public_result(r.get("result"), request),
             error=r.get("error"),
         )
         for r in rows

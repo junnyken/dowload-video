@@ -395,13 +395,13 @@ class TestZIPReuse:
         import app.services.archive_service as svc
 
         batch_id = "test-batch-reuse"
-        zip_path = tmp_path / f"batch_{batch_id}.zip"
+        original_dir = svc.DOWNLOAD_DIR
+        svc.DOWNLOAD_DIR = str(tmp_path)
+        # The zip name is a keyed token of the batch id (not batch_<id>.zip).
+        zip_path = svc.batch_zip_path(batch_id)
         # Write a tiny placeholder ZIP
         with zipfile.ZipFile(str(zip_path), "w") as zf:
             zf.writestr("dummy.txt", "hello")
-
-        original_dir = svc.DOWNLOAD_DIR
-        svc.DOWNLOAD_DIR = str(tmp_path)
         try:
             import asyncio
             result = asyncio.run(svc.create_batch_zip(batch_id))

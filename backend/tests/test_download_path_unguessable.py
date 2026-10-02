@@ -59,9 +59,11 @@ class TestThePathCannotBeDerivedFromPublicFacts:
 
     def test_the_token_is_present_and_long_enough_to_matter(self):
         tmpl = downloader._get_base_opts(YT_URL, quality="video_1080")["outtmpl"]
-        m = re.search(r"%\(id\)s_%\(format_id\)s_([0-9a-f]+)\.%\(ext\)s$", tmpl)
+        # <token>_<format_id>.<ext>: the token leads, the video id is gone.
+        m = re.fullmatch(r"([0-9a-f]+)_%\(format_id\)s\.%\(ext\)s", os.path.basename(tmpl))
         assert m, f"unexpected outtmpl shape: {tmpl}"
-        assert len(m.group(1)) >= 12, "too short to stand up to guessing"
+        assert len(m.group(1)) >= 32, "under 128 bits"
+        assert "%(id)s" not in tmpl and "%(title)s" not in tmpl
 
     def test_two_urls_do_not_share_a_token(self):
         a = downloader._download_path_token("https://www.youtube.com/watch?v=aaaaaaaaaaa")

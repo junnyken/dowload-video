@@ -162,7 +162,8 @@ def merge_clips(
     use_copy = len(set(vcodecs)) == 1 and len(set(acodecs)) == 1
 
     # ── 7. Write FFmpeg concat list ──────────────────────────────────
-    output_path = os.path.join(_DOWNLOADS_DIR, f"merged_{uuid.uuid4().hex[:8]}.mp4")
+    from app.core.local_download import new_download_path
+    output_path = new_download_path(_DOWNLOADS_DIR, "merged_", ".mp4")
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as concat_file:
         concat_file_path = concat_file.name

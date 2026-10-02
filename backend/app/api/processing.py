@@ -41,6 +41,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.main import limiter
+from app.core.local_download import new_token
 
 router = APIRouter()
 
@@ -340,7 +341,7 @@ async def extract_audio(payload: ExtractAudioRequest, request: Request):
         raise HTTPException(status_code=400, detail="quality must be '128', '192', or '320'")
 
     download_dir = _safe_download_dir()
-    uid = uuid.uuid4().hex[:8]
+    uid = new_token()  # 128 bits: the file id is the capability
     output_path = os.path.join(download_dir, f"audio_{uid}.{fmt}")
     input_path: Optional[str] = None
     _downloaded = False
@@ -408,7 +409,7 @@ async def mp4_loop(payload: Mp4LoopRequest, request: Request):
     width = max(64, min(payload.width, 1920))
 
     download_dir = _safe_download_dir()
-    uid = uuid.uuid4().hex[:8]
+    uid = new_token()  # 128 bits: the file id is the capability
     output_path = os.path.join(download_dir, f"loop_{uid}.mp4")
     input_path: Optional[str] = None
     _downloaded = False
@@ -652,7 +653,7 @@ async def download_subtitle(payload: SubtitleRequest, request: Request):
     ydl_fmt = fmt if fmt != "txt" else "srt"  # txt = post-process from srt
 
     download_dir = _safe_download_dir()
-    uid = uuid.uuid4().hex[:8]
+    uid = new_token()  # 128 bits: the file id is the capability
     work_dir = tempfile.mkdtemp(prefix=f".subtmp_{uid}_", dir=download_dir)
     try:
         try:
@@ -704,7 +705,7 @@ async def burn_subtitle(payload: BurnSubtitleRequest, request: Request):
     _youtube_gate_or_503(payload.source_url)
 
     download_dir = _safe_download_dir()
-    uid = uuid.uuid4().hex[:8]
+    uid = new_token()  # 128 bits: the file id is the capability
     # Preserve the original container; anything odd falls back to .mp4.
     orig_ext = os.path.splitext(video_path)[1]
     if not re.fullmatch(r"\.[A-Za-z0-9]{1,5}", orig_ext or ""):
@@ -760,7 +761,7 @@ async def frame_thumb(payload: FrameThumbRequest, request: Request):
         raise HTTPException(status_code=400, detail="timestamp must be >= 0")
 
     download_dir = _safe_download_dir()
-    uid = uuid.uuid4().hex[:8]
+    uid = new_token()  # 128 bits: the file id is the capability
     output_path = os.path.join(download_dir, f"thumb_{uid}.jpg")
 
     try:
@@ -817,7 +818,7 @@ async def package_zip(payload: PackageZipRequest, request: Request):
     template = payload.naming_template or "{title}"
 
     download_dir = _safe_download_dir()
-    uid = uuid.uuid4().hex[:8]
+    uid = new_token()  # 128 bits: the file id is the capability
     zip_path = os.path.join(download_dir, f"pkg_{uid}.zip")
 
     total_size = 0
@@ -829,7 +830,7 @@ async def package_zip(payload: PackageZipRequest, request: Request):
                 if idx < len(titles) and titles[idx]:
                     raw_title = titles[idx]
                 else:
-                    raw_title = os.path.splitext(os.path.basename(real_p))[0]
+                    raw_title = ""  # stored names are random tokens, not titles
 
                 title_slug = _slugify(raw_title, f"file_{idx + 1:02d}")
                 orig_ext   = os.path.splitext(real_p)[1]  # e.g. ".mp4"

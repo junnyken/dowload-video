@@ -157,12 +157,13 @@ def watermark_embed(
     x, y = _POSITIONS[pos]
 
     # ── Output path ──────────────────────────────────────────────────
-    stem = Path(source_abs).stem
-    hex8 = uuid.uuid4().hex[:8]
+    # 128-bit random name; nothing from the source name (possibly a title).
+    from app.core.local_download import new_token
+    hex8 = new_token()
     if body.preview_only:
-        output_filename = f"wm_{stem}_{hex8}_preview.mp4"
+        output_filename = f"wm_{hex8}_preview.mp4"
     else:
-        output_filename = f"wm_{stem}_{hex8}.mp4"
+        output_filename = f"wm_{hex8}.mp4"
     output_path = os.path.join(_DOWNLOADS_DIR, output_filename)
 
     # ── Build FFmpeg command ─────────────────────────────────────────

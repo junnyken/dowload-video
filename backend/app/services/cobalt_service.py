@@ -13,6 +13,14 @@ import httpx
 import re
 from typing import Dict, Any, Optional
 
+from app.core.local_download import new_download_path
+
+
+def _title_from_cobalt_filename(result: dict, fallback: str) -> str:
+    """Display title from Cobalt's pretty filename — never used as a stored name."""
+    name = os.path.basename(result.get("filename") or "")
+    return name.rsplit(".", 1)[0] if name else fallback
+
 # Default local Cobalt instance (kept for backward compat / anything importing
 # COBALT_API_URL directly — it's always instances[0]).
 COBALT_API_URL = os.getenv("COBALT_API_URL", "http://localhost:9000")
@@ -279,12 +287,9 @@ def download_from_cobalt(url: str, quality: str, output_dir: str) -> Optional[st
         print(f"[Cobalt] No stream URL in response for {quality}p (status={status})")
         return None
 
-    filename = result.get("filename", f"cobalt_{quality}p.mp4")
-    filename = os.path.basename(filename)
-    if not filename.lower().endswith(".mp4"):
-        filename = filename.rsplit(".", 1)[0] + ".mp4"
-
-    output_path = os.path.join(output_dir, filename)
+    # Cobalt's "pretty" filename is the video title — guessable by anyone who
+    # knows the video, and /download-local serves by name. Never store under it.
+    output_path = new_download_path(output_dir, "cobalt_", ".mp4")
 
     try:
         print(f"[Cobalt] Downloading {quality}p via {status}: {stream_url[:80]}...")
@@ -332,12 +337,8 @@ def download_instagram_via_cobalt(url: str, output_dir: str) -> "dict | None":
         print(f"[Cobalt/IG] No stream URL (status={status})")
         return None
 
-    import uuid as _uuid
-    filename = result.get("filename") or f"instagram_{_uuid.uuid4().hex[:8]}.mp4"
-    filename = os.path.basename(filename)
-    if not filename.lower().endswith(".mp4"):
-        filename = filename.rsplit(".", 1)[0] + ".mp4"
-    output_path = os.path.join(output_dir, filename)
+    title = _title_from_cobalt_filename(result, "Instagram video")
+    output_path = new_download_path(output_dir, "instagram_", ".mp4")
 
     try:
         print(f"[Cobalt/IG] Downloading via {status}: {stream_url[:80]}...")
@@ -359,7 +360,7 @@ def download_instagram_via_cobalt(url: str, output_dir: str) -> "dict | None":
         import uuid as _uuid2
         return {
             "url": None,
-            "title": filename.rsplit(".", 1)[0],
+            "title": title,
             "thumbnail": "",
             "ext": "mp4",
             "id": _uuid2.uuid4().hex[:8],
@@ -391,12 +392,8 @@ def download_facebook_via_cobalt(url: str, output_dir: str) -> "dict | None":
         print(f"[Cobalt/FB] No stream URL (status={status})")
         return None
 
-    import uuid as _uuid
-    filename = result.get("filename") or f"facebook_{_uuid.uuid4().hex[:8]}.mp4"
-    filename = os.path.basename(filename)
-    if not filename.lower().endswith(".mp4"):
-        filename = filename.rsplit(".", 1)[0] + ".mp4"
-    output_path = os.path.join(output_dir, filename)
+    title = _title_from_cobalt_filename(result, "Facebook video")
+    output_path = new_download_path(output_dir, "facebook_", ".mp4")
 
     try:
         print(f"[Cobalt/FB] Downloading via {status}: {stream_url[:80]}...")
@@ -418,7 +415,7 @@ def download_facebook_via_cobalt(url: str, output_dir: str) -> "dict | None":
         import uuid as _uuid2
         return {
             "url": None,
-            "title": filename.rsplit(".", 1)[0],
+            "title": title,
             "thumbnail": "",
             "ext": "mp4",
             "id": _uuid2.uuid4().hex[:8],

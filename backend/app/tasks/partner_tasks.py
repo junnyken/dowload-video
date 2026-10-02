@@ -31,19 +31,37 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def partner_download_url(row: dict, api_base: str = "") -> str | None:
+    """
+    The link a partner receives (webhook + GET /partner/jobs). The partner is
+    an external system, so a file on this server becomes an absolute
+    https://<api>/api/v1/download-local?file=<id> link — never the server
+    path the shadow download_jobs row stores.
+    """
+    from app.core.local_download import is_server_path, link_for_server_path, public_api_base
+
+    value = row.get("direct_mp4_url") or row.get("local_file_path")
+    if not value or not is_server_path(value):
+        return value or None
+    base = public_api_base() or (api_base or "").rstrip("/")
+    name = row.get("slugified_name") or row.get("title") or None
+    return link_for_server_path(value, name, base)
+
+
 @celery_app.task(
     name="sync_partner_job_task",
     bind=True,
     queue="light",
 )
-def sync_partner_job_task(self, partner_job_id: str, download_job_id: str, tenant_id: str) -> None:
+def sync_partner_job_task(self, partner_job_id: str, download_job_id: str, tenant_id: str,
+                          api_base: str = "") -> None:
     """Poll the shadow download_jobs row; mirror its terminal state into partner_jobs + fire webhook."""
     db = get_service_client()
 
     try:
         dj_resp = (
             db.table("download_jobs")
-            .select("status, direct_mp4_url, local_file_path, title, file_size_mb, "
+            .select("status, direct_mp4_url, local_file_path, title, slugified_name, file_size_mb, "
                     "thumbnail_url, error_message")
             .eq("id", download_job_id)
             .execute()
@@ -63,7 +81,7 @@ def sync_partner_job_task(self, partner_job_id: str, download_job_id: str, tenan
 
     if status == "success":
         result = {
-            "direct_mp4_url": row.get("direct_mp4_url") or row.get("local_file_path"),
+            "direct_mp4_url": partner_download_url(row, api_base),
             "title": row.get("title"),
             "file_size_mb": row.get("file_size_mb"),
             "thumbnail_url": row.get("thumbnail_url"),

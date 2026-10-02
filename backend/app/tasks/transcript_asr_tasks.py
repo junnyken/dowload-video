@@ -121,7 +121,8 @@ def transcribe_video_task(job_id: str) -> dict:
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         "downloads",
     )
-    audio_path = os.path.join(downloads_dir, f"asr_audio_{job_id}.mp3")
+    from app.core.local_download import new_download_path
+    audio_path = new_download_path(downloads_dir, "asr_audio_", ".mp3")
 
     try:
         if not os.path.isfile(video_path):
@@ -168,7 +169,7 @@ def transcribe_video_task(job_id: str) -> dict:
         # ------------------------------------------------------------------
         from app.services.subtitle_format import serialize_srt
 
-        result_path = os.path.join(os.path.dirname(audio_path), f"asr_result_{job_id}.srt")
+        result_path = new_download_path(os.path.dirname(audio_path), "asr_result_", ".srt")
         with open(result_path, "w", encoding="utf-8") as f:
             f.write(serialize_srt(cues))
 

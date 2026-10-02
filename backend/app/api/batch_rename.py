@@ -158,8 +158,10 @@ async def bulk_zip_rename(
 
     # 4. Create ZIP
     _bid = re.sub(r"[^A-Za-z0-9-]", "", payload.batch_id[:8]) or "batch"
-    zip_name = f"renamed_{_bid}_{uuid.uuid4().hex[:6]}.zip"
-    zip_path = os.path.join(_DOWNLOADS_DIR, zip_name)
+    # Stored under a 128-bit random name; the readable name is display-only.
+    from app.core.local_download import new_download_path
+    zip_name = f"renamed_{_bid}.zip"
+    zip_path = new_download_path(_DOWNLOADS_DIR, "renamed_", ".zip")
 
     try:
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=1) as zf:

@@ -1494,7 +1494,16 @@ def _local_file_response(filepath: str, filename: str) -> FileResponse:
     }
     media_type = media_types.get(ext, "application/octet-stream")
 
-    return FileResponse(filepath, filename=filename, media_type=media_type)
+    # The stored name is random; the display name (often a non-ASCII title)
+    # only ever appears here — ASCII fallback + RFC 5987 filename*.
+    from app.core.local_download import content_disposition
+    return FileResponse(
+        filepath, media_type=media_type,
+        headers={
+            "Content-Disposition": content_disposition(filename),
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
 
 
 # ── GET /download-thumbnail  (proxy thumbnail image) ────────────────
@@ -1611,20 +1620,20 @@ async def trim_media(payload: TrimRequest, request: Request):
         raise HTTPException(status_code=400, detail="Maximum trim duration is 10 minutes")
 
     try:
-        import uuid as _uuid
+        from app.core.local_download import new_token as _new_token
 
         ext = "mp3" if payload.is_audio else "mp4"
         download_dir = _LOCAL_DOWNLOADS_DIR or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "downloads")
         os.makedirs(download_dir, exist_ok=True)
 
-        output_path = os.path.join(download_dir, f"trim_output_{_uuid.uuid4().hex[:8]}.{ext}")
+        output_path = os.path.join(download_dir, f"trim_output_{_new_token()}.{ext}")
         _trim_downloaded = False
 
         # Phase 22: support local_path (skip download when file is already on server)
         if payload.local_path:
             input_path = _resolve_local_input_or_raise(payload.local_path, download_dir)
         else:
-            input_path = os.path.join(download_dir, f"trim_input_{_uuid.uuid4().hex[:8]}.{ext}")
+            input_path = os.path.join(download_dir, f"trim_input_{_new_token()}.{ext}")
             _trim_downloaded = True
             # Download the source file. This path had NO SSRF guard at all —
             # any caller could point /trim at an internal host.
@@ -1758,12 +1767,12 @@ async def convert_to_gif(payload: ToGifRequest, request: Request):
     fps = max(1, min(payload.fps, 30))
 
     try:
-        import uuid as _uuid
+        from app.core.local_download import new_token as _new_token
 
         download_dir = _LOCAL_DOWNLOADS_DIR or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "downloads")
         os.makedirs(download_dir, exist_ok=True)
 
-        uid = _uuid.uuid4().hex[:8]
+        uid = _new_token()
         palette_path = os.path.join(download_dir, f"gif_pal_{uid}.png")
         output_path = os.path.join(download_dir, f"gif_out_{uid}.gif")
 

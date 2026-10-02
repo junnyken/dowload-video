@@ -21,6 +21,34 @@ def _safe_folder_name(name: str) -> str:
 DOWNLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "downloads")
 MAX_ZIP_SIZE = 500 * 1024 * 1024  # 500 MB
 
+
+# ── Where a batch's files live ───────────────────────────────────────
+# /download-local serves any direct child of downloads/ by name, and the
+# legacy filepath= form reaches into subdirectories. So:
+#   * the zip is batch_<128-bit keyed token>[_by_channel].zip — derived (HMAC
+#     of the batch id with the server's download-path secret) rather than
+#     random, so re-zipping is still idempotent and delete_batch_resources
+#     can find it, but nobody without the secret can compute it;
+#   * the per-batch work dir, which holds title-named members, starts with
+#     "." — resolve_local_input refuses any such component, so it is not
+#     reachable at all.
+def _batch_token(batch_id: str) -> str:
+    import hashlib
+    import hmac
+    from app.core.local_download import TOKEN_HEX_LEN
+    from app.services.downloader import _download_path_secret
+    return hmac.new(_download_path_secret().encode(), b"batch-zip\x00" + str(batch_id).encode(),
+                    hashlib.sha256).hexdigest()[:TOKEN_HEX_LEN]
+
+
+def batch_zip_path(batch_id: str, organize_by_channel: bool = False) -> str:
+    suffix = "_by_channel" if organize_by_channel else ""
+    return os.path.join(DOWNLOAD_DIR, f"batch_{_batch_token(batch_id)}{suffix}.zip")
+
+
+def batch_work_dir(batch_id: str) -> str:
+    return os.path.join(DOWNLOAD_DIR, f".batch_{batch_id}")
+
 async def download_file_to_disk(
     url: str,
     dest_path: str,
@@ -74,9 +102,7 @@ async def create_batch_zip(batch_id: str, organize_by_channel: bool = False) -> 
     - Uses a single shared aiohttp.ClientSession for all remote downloads in
       the batch instead of a new session per file.
     """
-    zip_suffix = "_by_channel" if organize_by_channel else ""
-    zip_filename = f"batch_{batch_id}{zip_suffix}.zip"
-    zip_path = os.path.join(DOWNLOAD_DIR, zip_filename)
+    zip_path = batch_zip_path(batch_id, organize_by_channel)
 
     # Idempotency: reuse existing ZIP rather than re-creating it.
     if os.path.exists(zip_path):
@@ -97,7 +123,7 @@ async def create_batch_zip(batch_id: str, organize_by_channel: bool = False) -> 
     if not jobs:
         return {"success": False, "error": "Không có file nào thành công để nén."}
 
-    batch_dir = os.path.join(DOWNLOAD_DIR, batch_id)
+    batch_dir = batch_work_dir(batch_id)
     os.makedirs(batch_dir, exist_ok=True)
 
     files_to_zip: list[tuple[str, str]] = []

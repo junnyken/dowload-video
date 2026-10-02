@@ -441,13 +441,16 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
         # ── Webhook: notify user webhook (Pro feature) ──────────
         try:
             from app.api.webhook import deliver_webhook_sync
+            from app.core.local_download import public_download_link
             if user_id:
                 deliver_webhook_sync(user_id, {
                     "job_id":       job_id,
                     "status":       "success",
                     "platform":     platform,
                     "title":        title,
-                    "direct_url":   best_url,
+                    # External receiver: a local file becomes an absolute
+                    # download-local link, never the server path.
+                    "direct_url":   public_download_link(best_url, slug),
                     "file_size_mb": info.get("file_size_mb", 0),
                     "completed_at": now_iso,
                 })
@@ -925,15 +928,22 @@ def create_zip_task(self, batch_id: str, zip_job_id: str, organize_by_channel: b
             pass
 
 
+def _downloads_dir() -> str:
+    """<repo>/downloads (/app/downloads) — three dirname()s, see below. A
+    function so tests can point the cleanup sweep at a temp directory."""
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "downloads")
+
+
 @celery_app.task(name="delete_batch_resources", bind=True)
 def delete_batch_resources(self, batch_id: str):
     """Deletes the batch temp folder and the batch zip file."""
     # NB: three dirname() — __file__ is app/tasks/video_tasks.py, so the real
     # downloads volume is at <repo>/downloads (/app/downloads), NOT app/downloads.
     # A two-dirname path silently no-ops cleanup and lets the disk fill up.
-    DOWNLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "downloads")
-    batch_dir = os.path.join(DOWNLOAD_DIR, batch_id)
-    zip_file = os.path.join(DOWNLOAD_DIR, f"batch_{batch_id}.zip")
+    # Names come from archive_service (keyed token, dot-prefixed work dir) —
+    # the same functions that created them. Both zip variants are removed.
+    from app.services.archive_service import batch_zip_path, batch_work_dir
+    batch_dir = batch_work_dir(batch_id)
 
     if os.path.exists(batch_dir):
         try:
@@ -941,11 +951,12 @@ def delete_batch_resources(self, batch_id: str):
         except Exception as e:
             print(f"Failed to delete batch dir {batch_id}: {e}")
 
-    if os.path.exists(zip_file):
-        try:
-            os.remove(zip_file)
-        except Exception as e:
-            print(f"Failed to delete zip file {zip_file}: {e}")
+    for zip_file in (batch_zip_path(batch_id, False), batch_zip_path(batch_id, True)):
+        if os.path.exists(zip_file):
+            try:
+                os.remove(zip_file)
+            except Exception as e:
+                print(f"Failed to delete zip file {zip_file}: {e}")
 
 @celery_app.task(name="delete_local_file", bind=True)
 def delete_local_file(self, filepath: str):
@@ -1001,7 +1012,7 @@ def periodic_cleanup_downloads(self):
     Also enforces DOWNLOADS_MAX_GB disk quota by LRU eviction.
     """
     import time
-    DOWNLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "downloads")
+    DOWNLOAD_DIR = _downloads_dir()
     if not os.path.exists(DOWNLOAD_DIR):
         return
 

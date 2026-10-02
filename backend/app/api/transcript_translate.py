@@ -521,7 +521,8 @@ async def burn_translated_subtitle_into_video(
     video_path = _guard_local_path(payload.video_local_path)
 
     download_dir = _safe_download_dir()
-    out_name = f"burned_{uuid.uuid4().hex[:8]}.mp4"
+    from app.core.local_download import new_download_name
+    out_name = new_download_name("burned_", ".mp4")
     output_path = os.path.join(download_dir, out_name)
 
     success = _burn_subtitle(video_path, subtitle_path, output_path)
@@ -532,7 +533,7 @@ async def burn_translated_subtitle_into_video(
         )
 
     _schedule_cleanup(output_path)
-    return _success_response(output_path, out_name)
+    return _success_response(output_path, "burned_subtitles.mp4")
 
 
 def _parse_result_cues(row: dict) -> list:

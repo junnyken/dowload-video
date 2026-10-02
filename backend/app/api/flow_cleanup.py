@@ -31,7 +31,7 @@ from pydantic import BaseModel
 from app.main import limiter
 from app.core.auth_middleware import get_optional_user
 from app.core.entitlements import get_entitlement, check_feature
-from app.core.local_download import file_fields, file_id_for, resolve_file_id, resolve_local_input
+from app.core.local_download import file_fields, file_id_for, new_token, resolve_file_id, resolve_local_input, safe_file_id
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -333,7 +333,7 @@ async def upload_flow_video(request: Request, file: UploadFile = File(...), _: N
         raise HTTPException(status_code=400, detail="Loại file không hợp lệ.")
 
     os.makedirs(_DOWNLOAD_DIR, exist_ok=True)
-    temp_id = uuid.uuid4().hex
+    temp_id = new_token()  # 128 bits — the work dir name is the capability
     work_dir = _safe_work_dir(temp_id)
     os.makedirs(work_dir, exist_ok=True)
 
@@ -576,7 +576,7 @@ def process_flow_cleanup(
         x = max(0, x - ep);  y = max(0, y - ep)
         w = min(vw - x, w + ep * 2);  h = min(vh - y, h + ep * 2)
 
-    uid = uuid.uuid4().hex[:8]
+    uid = new_token()
     output_path = os.path.join(work_dir, f"cleaned_{uid}.mp4")
     mask_path = os.path.join(work_dir, "mask.png")
     natural_stats = None
@@ -687,7 +687,7 @@ def process_flow_cleanup(
                 "region_adjusted": payload.region_adjusted,
                 "expand_padding": payload.expand_padding,
                 "cleanup_mode": method,
-                "mask_path": mask_path if method in ("natural", "telea", "telea_soft") else None,
+                "mask_file": os.path.basename(mask_path) if method in ("natural", "telea", "telea_soft") else None,
                 "natural_stats": natural_stats,
                 "suitability_level": payload.suitability_level,
                 "suitability_outcome": suitability_outcome,
@@ -800,7 +800,7 @@ def cleanup_from_local_path(
     if ext not in {".mp4", ".mov", ".webm", ".mkv"}:
         raise HTTPException(status_code=400, detail="Chỉ hỗ trợ MP4, MOV, WebM, MKV.")
 
-    temp_id = uuid.uuid4().hex
+    temp_id = new_token()  # 128 bits — the work dir name is the capability
     work_dir = _safe_work_dir(temp_id)
     os.makedirs(work_dir, exist_ok=True)
 
@@ -828,7 +828,7 @@ def cleanup_from_local_path(
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "status": "uploaded",
                 "source": "from_local",
-                "source_path": abs_path,
+                "source_file_id": safe_file_id(abs_path),  # never the server path
                 "title": payload.title or "",
                 "video_info": info,
                 "file_size_mb": file_size_mb,

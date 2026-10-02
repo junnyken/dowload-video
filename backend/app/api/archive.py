@@ -29,6 +29,7 @@ from pydantic import BaseModel
 
 from app.core.auth_middleware import get_required_user
 from app.core.database import get_service_client
+from app.core.local_download import strip_server_paths
 from app.core.quotas import get_user_tier
 
 router = APIRouter()
@@ -170,7 +171,9 @@ async def list_archive(
 
     res = q.execute()
     return {
-        "items": res.data or [],
+        # Archive rows never carry server paths to the client (defensive:
+        # select("*") returns whatever columns the table grows).
+        "items": strip_server_paths(res.data or []),
         "total": res.count or 0,
         "page": page,
         "limit": limit,
@@ -206,7 +209,7 @@ async def add_archive_item(
     res = supabase.table("archive_items").insert(row).execute()
     if not res.data:
         raise HTTPException(500, "Không thể lưu vào archive.")
-    return res.data[0]
+    return strip_server_paths(res.data[0])
 
 
 @router.get("/archive/export")
@@ -224,7 +227,7 @@ async def export_archive(
         .order("archived_at", desc=True)
         .execute()
     )
-    items = res.data or []
+    items = strip_server_paths(res.data or [])
 
     # Attach collection names
     col_res = (
@@ -303,7 +306,7 @@ async def search_archive(
         return query in haystack
 
     matched = [i for i in items if _matches(i)][:limit]
-    return {"items": matched, "total": len(matched)}
+    return {"items": strip_server_paths(matched), "total": len(matched)}
 
 
 @router.get("/archive/{item_id}")
@@ -329,7 +332,7 @@ async def get_archive_item(item_id: str, user=Depends(get_required_user)):
         }).eq("id", item_id).execute()
     except Exception:
         pass
-    return item
+    return strip_server_paths(item)
 
 
 @router.patch("/archive/{item_id}")
@@ -356,7 +359,7 @@ async def patch_archive_item(
     )
     if not res.data:
         raise HTTPException(404, "Archive item không tồn tại.")
-    return res.data[0]
+    return strip_server_paths(res.data[0])
 
 
 @router.delete("/archive/{item_id}", status_code=204)

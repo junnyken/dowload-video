@@ -22,6 +22,7 @@ from typing import Optional, Dict, Any, List
 from app.core.database import get_supabase_client
 from app.core.audit import log_admin_action, log_access_denied
 from app.core.client_ip import get_client_ip
+from app.core.local_download import scrub_job_row, strip_server_paths
 from datetime import datetime, timezone, timedelta
 
 router = APIRouter()
@@ -303,7 +304,9 @@ async def get_admin_stats(_=Depends(verify_admin)):
             "total_downloads_today": total_downloads,
             "total_users": total_users,
             "providers": providers,
-            "failed_jobs": failed_jobs_res.data if failed_jobs_res.data else [],
+            # Admin pages show file ids, never server paths (whatever EXPOSE_LEGACY_PATHS says).
+            "failed_jobs": [strip_server_paths(scrub_job_row(r, strip_paths=True))
+                            for r in (failed_jobs_res.data or [])],
             "recent_users": recent_users_res.data if recent_users_res.data else [],
         }
     except Exception as e:
@@ -2461,7 +2464,7 @@ async def list_flow_cleanup_jobs(_=Depends(verify_admin)):
         except Exception:
             continue
     jobs.sort(key=lambda j: j.get("created_at", ""), reverse=True)
-    return {"jobs": jobs, "total": len(jobs)}
+    return {"jobs": strip_server_paths(jobs, roots=(_FLOW_DOWNLOAD_DIR,)), "total": len(jobs)}
 
 
 @router.get("/flow-cleanup/jobs/{temp_id}")
@@ -2487,7 +2490,7 @@ async def get_flow_cleanup_job(temp_id: str, _=Depends(verify_admin)):
     meta["has_preview"] = "preview.jpg" in files
     meta["has_output"] = any(f.startswith("cleaned_") and f.endswith(".mp4") for f in files)
     meta["preview_url"] = f"/api/v1/flow-cleanup/frame/{safe}" if "preview.jpg" in files else None
-    return meta
+    return strip_server_paths(meta, roots=(_FLOW_DOWNLOAD_DIR,))  # metadata.json from older jobs held source_path/mask_path
 
 
 # ═════════════════════════════════════════════════════════════════════
