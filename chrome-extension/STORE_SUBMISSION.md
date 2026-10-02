@@ -110,13 +110,13 @@ Primary: English | Secondary: Vietnamese
 | `*://*.dailymotion.com/*` | Detect video pages; inject content script |
 | `*://*.soundcloud.com/*` | Detect track/playlist pages; inject content script (audio download) |
 
-**Note on the backend domain:** the API server (default `https://dvid-api.cmc-1.vibenode.matbao.ai`, user-configurable in Settings → Server URL) is covered by the `*://*.matbao.ai/*` entry in `host_permissions`, added alongside the R32 domain migration so the extension can talk to the backend without relying solely on the backend's own CORS headers.
+**Note on the backend domain:** the API server (default `https://dvid-api.vibe1.tinhgon.xyz`) is covered by its exact-host entry in `host_permissions`. As of 5.2.4 there is no wildcard or `matbao.ai` host permission.
 
 ---
 
 ## 3. Privacy Policy
 
-**Live, publicly reachable at: https://dvid.cmc-1.vibenode.matbao.ai/privacy** (verified 200 OK — use this exact URL in the Developer Dashboard's Privacy Policy field.)
+**Live, publicly reachable at: https://dvid.vibe1.tinhgon.xyz/privacy** (verified 200 OK — use this exact URL in the Developer Dashboard's Privacy Policy field.)
 
 ---
 
@@ -263,7 +263,7 @@ The `update_url` in manifest.json points to Google's update service — auto-pop
 - [x] All permissions used and justified in Section 2
 
 **Store assets**
-- [x] Privacy Policy published at a public URL (https://dvid.cmc-1.vibenode.matbao.ai/privacy)
+- [x] Privacy Policy published at a public URL (https://dvid.vibe1.tinhgon.xyz/privacy)
 - [ ] Privacy Policy URL entered in Developer Dashboard (manual step, do this at submission time)
 - [ ] Screenshots uploaded (min 3 × 1280×800 PNG) — see Section 6.1
 - [ ] Promotional tile uploaded (440×280 PNG)
@@ -320,7 +320,7 @@ The `connect_extension=1` login flow is opt-in. Extension works without login.
 
 | Item | Priority | Notes |
 |---|---|---|
-| ~~Privacy Policy page not yet live~~ | ~~HIGH~~ | **Resolved 2026-08-13** — live at https://dvid.cmc-1.vibenode.matbao.ai/privacy (verified: real `PrivacyPolicy.jsx` page, not a stub; curl 200) |
+| ~~Privacy Policy page not yet live~~ | ~~HIGH~~ | **Resolved 2026-08-13** — live at https://dvid.vibe1.tinhgon.xyz/privacy (verified: real `PrivacyPolicy.jsx` page, not a stub; curl 200) |
 | Screenshots not yet captured | **HIGH** | Still open — needs a real Chrome session (popup UI, live download in progress, bulk mode, settings) to capture; can't be done headlessly from this environment |
 | Promotional tile not created | Medium | Required for featured placement |
 | Download progress setInterval is best-effort in MV3 | Low | Chrome can suspend SW mid-interval; fine progress (500ms) stays as-is — alarm keepalive (1 min) is the practical fix |

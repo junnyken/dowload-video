@@ -9,14 +9,13 @@ let API_BASE = DEFAULT_API_BASE;
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 // ── First-party host (keep identical in background.js / popup.js / content.js) ──
 // vibe1.tinhgon.xyz is a SHARED multi-tenant domain: never trust a suffix or a
-// substring of it. Only these two exact hostnames are ours. `.matbao.ai` is the
-// legacy suffix rule, kept as-is for old builds.
+// substring of it. Only these two exact hostnames are ours - hostname equality,
+// no suffix rule of any kind (the old shared-suffix rule was removed in 5.2.4).
 const FIRST_PARTY_EXACT_HOSTS = ['dvid.vibe1.tinhgon.xyz', 'dvid-api.vibe1.tinhgon.xyz'];
-const FIRST_PARTY_SUFFIXES = ['.matbao.ai'];
-const LEGACY_API_HOST = 'dvid-api.cmc-1.vibenode.matbao.ai';   // dead since the Vibe Host move
+const LEGACY_API_HOST = 'dvid-api.cmc-1.vibenode.matbao.ai';   // dead host; ONLY used to migrate a stored old base to DEFAULT_API_BASE, never trusted
 function isFirstPartyHost(hostname) {
   const h = String(hostname || '').toLowerCase();
-  return FIRST_PARTY_EXACT_HOSTS.includes(h) || FIRST_PARTY_SUFFIXES.some((s) => h.endsWith(s));
+  return FIRST_PARTY_EXACT_HOSTS.includes(h);
 }
 // "Is this URL one of OUR servers?" — https + hostname equality, never includes().
 function isFirstPartyUrl(rawUrl) {
