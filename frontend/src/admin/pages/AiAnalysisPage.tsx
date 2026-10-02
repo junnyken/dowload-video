@@ -35,11 +35,11 @@ interface StatsResponse {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  done: 'bg-success text-success',
-  processing: 'bg-surface-2 text-fg-2',
-  queued: 'bg-accent text-accent-text',
-  failed: 'bg-danger-soft text-danger',
-  cached: 'bg-surface-2 text-fg-2',
+  done: 'border-success/30 bg-success-soft text-success',
+  processing: 'border-line bg-surface-2 text-fg-2',
+  queued: 'border-warning/30 bg-warning-soft text-warning',
+  failed: 'border-danger/30 bg-danger-soft text-danger',
+  cached: 'border-line bg-surface-2 text-fg-2',
 }
 
 const TYPE_ICONS: Record<string, string> = {
@@ -95,9 +95,9 @@ export default function AiAnalysisPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-mono text-lg font-bold text-fg">AI Analysis</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">AI Analysis</h1>
           <p className="mt-0.5 text-xs text-fg-muted">Smart trim · clip · GIF · metadata jobs</p>
         </div>
         <div className="flex items-center gap-2">
@@ -110,7 +110,7 @@ export default function AiAnalysisPage() {
             <option value={30}>30d</option>
             <option value={90}>90d</option>
           </select>
-          <button onClick={fetchAll} className="rounded bg-surface-2 px-3 py-1.5 text-xs text-fg-2 hover:bg-line">
+          <button onClick={fetchAll} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
             ↺ Refresh
           </button>
         </div>
@@ -126,7 +126,7 @@ export default function AiAnalysisPage() {
             { label: 'Analyses Metered', value: stats.total_analyses_metered.toLocaleString() },
             { label: 'Media Minutes', value: `${stats.total_media_minutes}m` },
           ].map(c => (
-            <div key={c.label} className="rounded-lg border border-line bg-canvas p-4">
+            <div key={c.label} className="rounded-card border border-line bg-surface shadow-card p-4">
               <p className="font-mono text-xs text-fg-muted">{c.label}</p>
               <p className="mt-1 font-mono text-xl font-bold text-fg">{c.value}</p>
             </div>
@@ -171,10 +171,10 @@ export default function AiAnalysisPage() {
       {loading ? (
         <div className="py-12 text-center font-mono text-xs text-fg-muted">Loading analysis jobs…</div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-line">
+        <div className="overflow-x-auto rounded-control border border-line">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-line bg-canvas">
+              <tr className="border-b border-line bg-surface-2">
                 {['Job ID', 'User', 'Analyses', 'Duration', 'Status', 'Version', 'Created', 'Error'].map(h => (
                   <th key={h} className="px-3 py-2.5 font-mono font-semibold text-fg-muted">{h}</th>
                 ))}
@@ -198,7 +198,7 @@ export default function AiAnalysisPage() {
                     {j.duration_seconds ? `${j.duration_seconds.toFixed(1)}s` : '—'}
                   </td>
                   <td className="px-3 py-2.5">
-                    <span className={cn('inline-block rounded px-2 py-0.5 text-[10px] font-semibold uppercase', STATUS_COLORS[j.status] ?? 'bg-surface-2 text-fg-2')}>
+                    <span className={cn('inline-block rounded-md border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider', STATUS_COLORS[j.status] ?? 'border-line bg-surface-2 text-fg-2')}>
                       {j.status}
                     </span>
                   </td>

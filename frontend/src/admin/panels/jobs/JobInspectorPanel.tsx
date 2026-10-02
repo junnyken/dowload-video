@@ -19,7 +19,7 @@ const JOB_STATUS: Record<JobStatus, { pill: string; dot: string; label: string }
   done:      { pill: 'border-success/30 bg-success-soft text-success', dot: 'bg-success',       label: 'DONE'      },
   failed:    { pill: 'border-danger/30    bg-danger-soft    text-danger',     dot: 'bg-danger',             label: 'FAILED'    },
   cancelled: { pill: 'border-line  bg-surface  text-fg-muted',   dot: 'bg-line',           label: 'CANCELLED' },
-  stuck:     { pill: 'border-accent/30  bg-accent-soft  text-accent-text',   dot: 'bg-accent animate-pulse', label: 'STUCK' },
+  stuck:     { pill: 'border-warning/30  bg-warning-soft  text-warning',   dot: 'bg-accent animate-pulse', label: 'STUCK' },
 }
 
 function JobStatusPill({ status }: { status: JobStatus }) {
@@ -85,7 +85,7 @@ function JobHeader({ job }: { job: JobInspectorData }) {
       {/* Recent errors */}
       {job.recentErrors.length > 0 && (
         <div>
-          <p className="mb-1 text-[9px] uppercase tracking-widest text-fg-muted">Recent errors</p>
+          <p className="mb-1 text-[10px] uppercase tracking-widest text-fg-muted">Recent errors</p>
           <div className="flex flex-col gap-0.5">
             {job.recentErrors.map((err, i) => (
               <div key={i} className="flex items-start gap-1.5">
@@ -112,7 +112,7 @@ function MetaField({
 }) {
   return (
     <div className={cn('flex items-center gap-1', right && 'justify-end')}>
-      <span className="text-[9px] uppercase tracking-widest text-fg-muted">{label}</span>
+      <span className="text-[10px] uppercase tracking-widest text-fg-muted">{label}</span>
       <span
         className={cn(
           'text-[10px] text-fg-muted',

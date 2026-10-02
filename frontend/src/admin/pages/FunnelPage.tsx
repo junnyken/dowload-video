@@ -9,7 +9,7 @@ const RANGES = [7, 14, 30, 90]
 function rateColour(pct: number | null): string {
   if (pct === null) return 'text-fg-muted'
   if (pct >= 25) return 'text-danger'
-  if (pct >= 10) return 'text-accent-text'
+  if (pct >= 10) return 'text-warning'
   return 'text-success'
 }
 
@@ -31,10 +31,10 @@ export default function FunnelPage() {
 
   if (isError) {
     return (
-      <div className="max-w-2xl mx-auto mt-16 rounded-xl border border-danger/30 bg-danger-soft p-6">
+      <div className="max-w-2xl mx-auto mt-16 rounded-card border border-danger/30 bg-danger-soft p-6">
         <p className="text-danger font-semibold mb-1">Không tải được phễu</p>
         <p className="text-sm text-fg-muted mb-4">{(error as Error)?.message || 'Lỗi không xác định.'}</p>
-        <button onClick={() => refetch()} className="px-4 py-2 rounded-lg bg-surface-2 text-fg-2 text-sm hover:bg-line">
+        <button onClick={() => refetch()} className="px-4 py-2 text-sm rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
           Thử lại
         </button>
       </div>
@@ -46,11 +46,11 @@ export default function FunnelPage() {
   const noData = top === 0 && steps.every(s => s.users === 0)
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
+    <div className="space-y-8">
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-fg">Phễu chuyển đổi</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Phễu chuyển đổi</h1>
           <p className="text-sm text-fg-muted mt-0.5">Đếm theo SỐ NGƯỜI, không phải số lượt</p>
         </div>
         <div className="flex gap-1.5">
@@ -58,10 +58,10 @@ export default function FunnelPage() {
             <button
               key={d}
               onClick={() => setDays(d)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+              className={`px-3 py-1.5 rounded-control text-xs font-semibold border transition-colors ${
                 d === days
-                  ? 'bg-accent-soft border-accent/40 text-accent-text'
-                  : 'bg-surface border-line text-fg-muted hover:text-fg-2'
+                  ? 'bg-surface-2 border-line-strong text-fg'
+                  : 'bg-surface border-line text-fg-2 hover:bg-surface-2 hover:text-fg'
               }`}
             >{d} ngày</button>
           ))}
@@ -70,14 +70,14 @@ export default function FunnelPage() {
 
       {/* The number above every other number: what these steps do and do not mean. */}
       {data?.note && (
-        <div className="rounded-xl border border-line bg-surface-2 px-4 py-3">
+        <div className="rounded-card border border-line bg-surface shadow-card px-4 py-3">
           <p className="text-xs text-fg-muted leading-relaxed">{data.note}</p>
         </div>
       )}
 
       {data?.truncated && (
-        <div className="rounded-xl border border-accent/30 bg-accent-soft px-4 py-3">
-          <p className="text-xs text-accent-text">
+        <div className="rounded-card border border-warning/30 bg-warning-soft px-4 py-3">
+          <p className="text-xs text-warning">
             Đã chạm trần số dòng đọc được — mọi tỷ lệ dưới đây là của phần dữ liệu
             bị cắt, không phải của cả khoảng thời gian. Thu hẹp số ngày để có số đúng.
           </p>
@@ -85,7 +85,7 @@ export default function FunnelPage() {
       )}
 
       {noData ? (
-        <div className="rounded-xl border border-line bg-surface-2 px-5 py-8 text-center">
+        <div className="rounded-card border border-line bg-surface shadow-card px-5 py-8 text-center">
           <p className="text-fg-2 font-semibold mb-1">Chưa có dữ liệu trong {days} ngày qua</p>
           <p className="text-sm text-fg-muted">
             Sự kiện chỉ bắt đầu chảy về từ lúc frontend mang bản có gắn theo dõi được
@@ -95,7 +95,7 @@ export default function FunnelPage() {
       ) : (
         <section className="space-y-2">
           {steps.map((s, i) => (
-            <div key={s.event} className="rounded-xl border border-line bg-surface-2 px-4 py-3">
+            <div key={s.event} className="rounded-card border border-line bg-surface shadow-card px-4 py-3">
               <div className="flex items-baseline justify-between gap-3 mb-2">
                 <div className="flex items-baseline gap-2 min-w-0">
                   <span className="text-fg-muted text-xs tabular-nums">{i + 1}</span>
@@ -137,7 +137,7 @@ export default function FunnelPage() {
         </p>
         <div className="grid sm:grid-cols-2 gap-3">
           {(data?.failures ?? []).map(f => (
-            <div key={f.stage} className="rounded-xl border border-line bg-surface-2 px-4 py-3">
+            <div key={f.stage} className="rounded-card border border-line bg-surface shadow-card px-4 py-3">
               <div className="flex items-baseline justify-between">
                 <span className="text-fg-2 text-sm font-semibold">{f.stage}</span>
                 <span className={`text-lg font-bold tabular-nums ${rateColour(f.failure_rate_pct)}`}>
@@ -157,7 +157,7 @@ export default function FunnelPage() {
         <section>
           <h2 className="text-sm font-bold text-fg mb-2">Theo nền tảng</h2>
           <p className="text-xs text-fg-muted mb-3">Xếp theo tỷ lệ hỏng giảm dần — tệ nhất lên đầu.</p>
-          <div className="rounded-xl border border-line overflow-hidden">
+          <div className="rounded-card border border-line overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-surface text-fg-muted text-xs">
                 <tr>

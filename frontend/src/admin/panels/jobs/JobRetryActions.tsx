@@ -44,14 +44,14 @@ function ConfirmModal({
           <div className="mt-4 flex justify-end gap-2">
             <button
               onClick={onCancel}
-              className="rounded-lg border border-line px-4 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:border-line-strong hover:text-fg-2"
+              className="rounded-control border border-line px-4 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:border-line-strong hover:text-fg-2"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
               className={cn(
-                'rounded-lg px-4 py-1.5 text-xs font-semibold text-fg transition-colors',
+                'rounded-control px-4 py-1.5 text-xs font-semibold text-fg transition-colors',
                 destructive ? 'bg-danger hover:opacity-90' : 'bg-accent hover:bg-accent-hover',
               )}
             >
@@ -140,7 +140,7 @@ export function JobRetryActions({
           disabled={!canRetry}
           title={!canRetry ? `Cannot retry — job is ${job.currentStatus}` : undefined}
           className={cn(
-            'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
+            'flex items-center gap-1.5 rounded-control border px-3 py-2 text-xs font-medium transition-colors',
             'border-line text-fg-2 hover:border-line hover:bg-surface-2 hover:text-fg-2',
             'disabled:cursor-not-allowed disabled:opacity-35',
           )}
@@ -162,7 +162,7 @@ export function JobRetryActions({
             onChange={e => setPhaseTarget(e.target.value as PhaseName)}
             disabled={!canRetry}
             className={cn(
-              'rounded border border-line bg-canvas px-2 py-1.5 font-mono text-[11px] text-fg-2',
+              'rounded-md border border-line bg-surface px-2 py-1.5 font-mono text-[11px] text-fg-2',
               'outline-none transition-colors focus:border-line',
               'disabled:cursor-not-allowed disabled:opacity-35',
             )}
@@ -175,7 +175,7 @@ export function JobRetryActions({
             onClick={() => request('retry_phase')}
             disabled={!canRetry}
             className={cn(
-              'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
+              'flex items-center gap-1.5 rounded-control border px-3 py-2 text-xs font-medium transition-colors',
               'border-line text-fg-2 hover:border-line hover:bg-surface-2 hover:text-fg-2',
               'disabled:cursor-not-allowed disabled:opacity-35',
             )}
@@ -196,7 +196,7 @@ export function JobRetryActions({
           disabled={!canCancel}
           title={!canCancel ? `Cannot cancel — job is ${job.currentStatus}` : undefined}
           className={cn(
-            'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
+            'flex items-center gap-1.5 rounded-control border px-3 py-2 text-xs font-medium transition-colors',
             'border-line text-danger hover:border-danger/60 hover:bg-danger-soft hover:text-danger',
             'disabled:cursor-not-allowed disabled:opacity-35',
           )}

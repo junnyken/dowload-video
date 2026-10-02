@@ -36,7 +36,7 @@ const CIRCUIT_CONFIG: Record<
 > = {
   closed: { style: 'text-success bg-success-soft border-success/30', label: 'CLOSED'    },
   open:   { style: 'text-danger    bg-danger-soft     border-danger/30',     label: 'OPEN'      },
-  half:   { style: 'text-accent-text  bg-accent-soft   border-accent/30',   label: 'HALF'      },
+  half:   { style: 'text-warning  bg-warning-soft   border-warning/30',   label: 'HALF'      },
   exempt: { style: 'text-fg-muted  bg-surface   border-line',   label: 'EXEMPT'    },
 }
 
@@ -52,7 +52,7 @@ export function CircuitStatePill({ state, size = 'sm', className }: CircuitState
     <span
       className={cn(
         'inline-flex items-center rounded border font-mono font-semibold uppercase tracking-widest',
-        size === 'xs' ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-[10px]',
+        size === 'xs' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[10px]',
         cfg.style,
         className,
       )}
@@ -65,16 +65,16 @@ export function CircuitStatePill({ state, size = 'sm', className }: CircuitState
 // ─── Platform name cell (Platform column) ─────────────────────────────────────
 
 const PLATFORM_META: Record<string, { abbr: string; abbr_color: string; abbr_bg: string }> = {
-  youtube:    { abbr: 'YT', abbr_color: 'text-danger',    abbr_bg: 'bg-danger-soft'    },
+  youtube:    { abbr: 'YT', abbr_color: 'text-fg-2', abbr_bg: 'bg-surface-2' },
   instagram:  { abbr: 'IG', abbr_color: 'text-fg-2',   abbr_bg: 'bg-surface-2'   },
   tiktok:     { abbr: 'TK', abbr_color: 'text-fg-2',    abbr_bg: 'bg-surface-2'    },
   twitter:    { abbr: 'TW', abbr_color: 'text-fg-2',  abbr_bg: 'bg-surface'     },
   facebook:   { abbr: 'FB', abbr_color: 'text-fg-2',   abbr_bg: 'bg-surface-2'   },
   bilibili:   { abbr: 'BB', abbr_color: 'text-fg-2',   abbr_bg: 'bg-surface-2'   },
   douyin:     { abbr: 'DY', abbr_color: 'text-fg-2',  abbr_bg: 'bg-surface'     },
-  soundcloud: { abbr: 'SC', abbr_color: 'text-accent-text', abbr_bg: 'bg-accent-soft' },
-  pinterest:  { abbr: 'PT', abbr_color: 'text-danger',   abbr_bg: 'bg-danger-soft'   },
-  reddit:     { abbr: 'RD', abbr_color: 'text-accent-text', abbr_bg: 'bg-accent-soft' },
+  soundcloud: { abbr: 'SC', abbr_color: 'text-fg-2', abbr_bg: 'bg-surface-2' },
+  pinterest:  { abbr: 'PT', abbr_color: 'text-fg-2', abbr_bg: 'bg-surface-2'},
+  reddit:     { abbr: 'RD', abbr_color: 'text-fg-2', abbr_bg: 'bg-surface-2' },
   vimeo:      { abbr: 'VM', abbr_color: 'text-fg-2',   abbr_bg: 'bg-surface-2'   },
   threads:    { abbr: 'TH', abbr_color: 'text-fg-2',  abbr_bg: 'bg-surface'     },
 }
@@ -105,7 +105,7 @@ export function PlatformNameCell({ platform, activeJobs = 0 }: PlatformNameCellP
       <div>
         <p className="text-xs font-semibold capitalize text-fg-2">{platform}</p>
         {activeJobs > 0 && (
-          <p className="font-mono text-[9px] text-fg-muted">
+          <p className="font-mono text-[10px] text-fg-muted">
             {activeJobs} active
           </p>
         )}

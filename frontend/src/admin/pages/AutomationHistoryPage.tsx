@@ -14,7 +14,7 @@ interface Event {
 const SOURCE_STYLE: Record<string, string> = {
   auto_tuner:       'bg-surface-2 text-fg-2 border-line',
   playbooks:        'bg-surface-2 text-fg-2 border-line',
-  anomaly_detector: 'bg-accent-soft text-accent-text border-accent/50',
+  anomaly_detector: 'bg-warning-soft text-warning border-warning/30',
 }
 
 export default function AutomationHistoryPage() {
@@ -41,10 +41,10 @@ export default function AutomationHistoryPage() {
   const shown = source === 'all' ? events : events.filter(e => e.source === source)
 
   return (
-    <div className="min-h-screen bg-canvas text-fg p-6 space-y-5">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-fg">Automation History</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Automation History</h1>
           <p className="text-xs text-fg-muted">
             Mọi thay đổi hệ thống tự thực hiện · {events.length} sự kiện · làm mới 30s
           </p>
@@ -69,7 +69,7 @@ export default function AutomationHistoryPage() {
       )}
 
       {shown.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-line bg-surface-2">
+        <div className="overflow-x-auto rounded-control border border-line bg-surface">
           <table className="w-full text-[11px]">
             <thead>
               <tr className="border-b border-line text-left text-fg-muted">

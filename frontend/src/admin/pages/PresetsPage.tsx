@@ -126,19 +126,19 @@ export default function PresetsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-mono text-lg font-bold text-fg">Presets</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Presets</h1>
           <p className="mt-0.5 text-xs text-fg-muted">user_presets · user_platform_prefs (Phase 21)</p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => setShowForm(v => !v)}
-            className="rounded bg-accent-hover px-3 py-1.5 text-xs text-accent-fg hover:bg-accent-hover"
+            className="rounded-control bg-accent px-3 py-1.5 text-xs text-accent-fg hover:bg-accent-hover"
           >
             + System Preset
           </button>
-          <button onClick={fetchAll} className="rounded bg-surface-2 px-3 py-1.5 text-xs text-fg-2 hover:bg-line">
+          <button onClick={fetchAll} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
             ↺
           </button>
         </div>
@@ -153,7 +153,7 @@ export default function PresetsPage() {
             { label: 'Platform Prefs', value: stats.total_prefs },
             { label: 'Defaults Set', value: stats.default_count },
           ].map(c => (
-            <div key={c.label} className="rounded-lg border border-line bg-canvas p-4">
+            <div key={c.label} className="rounded-card border border-line bg-surface shadow-card p-4">
               <p className="font-mono text-xs text-fg-muted">{c.label}</p>
               <p className="mt-1 font-mono text-2xl font-bold text-fg">{c.value}</p>
             </div>
@@ -167,7 +167,7 @@ export default function PresetsPage() {
 
       {/* Create form */}
       {showForm && (
-        <div className="rounded-lg border border-line bg-surface-2 p-4">
+        <div className="rounded-card border border-line bg-surface shadow-card p-4">
           <h2 className="mb-3 font-mono text-xs font-semibold text-fg-2">New System Preset</h2>
           <form onSubmit={handleCreate} className="flex flex-wrap gap-2 items-end">
             <input
@@ -197,7 +197,7 @@ export default function PresetsPage() {
             <button
               type="submit"
               disabled={creating || !form.name}
-              className="rounded bg-accent-hover px-3 py-1.5 text-xs text-accent-fg hover:bg-accent-hover disabled:opacity-40"
+              className="rounded-control bg-accent px-3 py-1.5 text-xs text-accent-fg hover:bg-accent-hover disabled:opacity-40"
             >
               {creating ? 'Creating…' : 'Create'}
             </button>
@@ -218,7 +218,7 @@ export default function PresetsPage() {
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Platform distribution */}
-          <div className="rounded-lg border border-line bg-canvas p-4">
+          <div className="rounded-card border border-line bg-surface shadow-card p-4">
             <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-fg-muted">Presets by Platform</h2>
             {Object.keys(stats?.by_platform ?? {}).length === 0 ? (
               <p className="font-mono text-xs text-fg-muted">No presets yet</p>
@@ -246,7 +246,7 @@ export default function PresetsPage() {
           </div>
 
           {/* Popular settings keys */}
-          <div className="rounded-lg border border-line bg-canvas p-4">
+          <div className="rounded-card border border-line bg-surface shadow-card p-4">
             <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-fg-muted">Popular Settings Keys</h2>
             {(stats?.popular_settings_keys ?? []).length === 0 ? (
               <p className="font-mono text-xs text-fg-muted">No preset settings yet</p>
@@ -279,7 +279,7 @@ export default function PresetsPage() {
           </div>
 
           {/* System presets management */}
-          <div className="lg:col-span-2 rounded-lg border border-line bg-canvas p-4">
+          <div className="lg:col-span-2 rounded-card border border-line bg-surface shadow-card p-4">
             <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-fg-muted">
               System Presets <span className="text-fg-muted normal-case">(visible to all users, cannot be deleted by users)</span>
             </h2>

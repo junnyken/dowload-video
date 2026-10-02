@@ -49,11 +49,11 @@ interface RevenueResponse {
 }
 
 const PLAN_COLORS: Record<string, string> = {
-  free: 'bg-surface-2',
-  pro: 'bg-accent-hover',
-  team: 'bg-accent-hover',
-  api: 'bg-accent-hover',
-  enterprise: 'bg-accent-hover',
+  free: 'bg-line-strong',
+  pro: 'bg-accent',
+  team: 'bg-fg-2',
+  api: 'bg-fg-2',
+  enterprise: 'bg-fg',
 }
 
 function formatRelative(iso: string): string {
@@ -144,11 +144,11 @@ export default function BillingAdminPage() {
     <div className="space-y-6">
       {/* P5: Migration required banner */}
       {setupStatus && !setupStatus.ready && (
-        <div className="rounded-xl border border-accent/60 bg-accent-soft p-4 space-y-3">
+        <div className="rounded-card border border-warning/30 bg-warning-soft p-4 space-y-3">
           <div className="flex items-center gap-2">
-            <span className="text-accent-text text-sm font-semibold">⚠ Billing tables chưa được tạo</span>
+            <span className="text-warning text-sm font-semibold">⚠ Billing tables chưa được tạo</span>
           </div>
-          <p className="text-xs text-accent-text">
+          <p className="text-xs text-warning">
             Các bảng sau chưa tồn tại trong Supabase:{' '}
             <span className="font-mono">{setupStatus.missing_tables.join(', ')}</span>.
             Hãy chạy migration SQL trong Supabase SQL Editor.
@@ -156,14 +156,14 @@ export default function BillingAdminPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowSql(s => !s)}
-              className="rounded-lg border border-accent/30 px-3 py-1.5 text-xs text-accent-text hover:bg-accent-soft transition-colors"
+              className="rounded-control border border-warning/30 px-3 py-1.5 text-xs text-warning hover:bg-warning-soft transition-colors"
             >
               {showSql ? 'Ẩn SQL' : 'Xem migration SQL'}
             </button>
-            <span className="text-[10px] text-accent-text font-mono">{setupStatus.migration_file}</span>
+            <span className="text-[10px] text-warning font-mono">{setupStatus.migration_file}</span>
           </div>
           {showSql && setupStatus.sql_hint && (
-            <pre className="rounded-lg bg-canvas border border-line p-3 text-[10px] font-mono text-fg-2 overflow-x-auto max-h-64 whitespace-pre-wrap">
+            <pre className="rounded-control bg-surface-2 border border-line p-3 text-[10px] font-mono text-fg-2 overflow-x-auto max-h-64 whitespace-pre-wrap">
               {setupStatus.sql_hint}
             </pre>
           )}
@@ -177,9 +177,9 @@ export default function BillingAdminPage() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-mono text-lg font-bold text-fg">Billing Overview</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Billing Overview</h1>
           <p className="mt-0.5 text-xs text-fg-muted">MRR, plans, usage events, credit grants</p>
         </div>
         <div className="flex items-center gap-2">
@@ -192,7 +192,7 @@ export default function BillingAdminPage() {
             <option value={30}>30d</option>
             <option value={90}>90d</option>
           </select>
-          <button onClick={fetchAll} className="rounded bg-surface-2 px-3 py-1.5 text-xs text-fg-2 hover:bg-line">
+          <button onClick={fetchAll} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
             ↺ Refresh
           </button>
         </div>
@@ -211,7 +211,7 @@ export default function BillingAdminPage() {
             { label: 'Paying Users', value: overview.paying_users.toLocaleString() },
             { label: 'Conversion', value: totalUsers > 0 ? `${((overview.paying_users / totalUsers) * 100).toFixed(1)}%` : '—' },
           ].map(c => (
-            <div key={c.label} className="rounded-lg border border-line bg-canvas p-4">
+            <div key={c.label} className="rounded-card border border-line bg-surface shadow-card p-4">
               <p className="font-mono text-xs text-fg-muted">{c.label}</p>
               <p className="mt-1 font-mono text-2xl font-bold text-fg">{c.value}</p>
             </div>
@@ -222,7 +222,7 @@ export default function BillingAdminPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Plan distribution */}
         {overview && (
-          <div className="rounded-lg border border-line bg-canvas p-4">
+          <div className="rounded-card border border-line bg-surface shadow-card p-4">
             <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-fg-muted">Plan Distribution</h2>
             <div className="space-y-2.5">
               {planCountEntries.map(([plan, count]) => {
@@ -248,7 +248,7 @@ export default function BillingAdminPage() {
 
         {/* Daily download activity */}
         {revenue && (
-          <div className="rounded-lg border border-line bg-canvas p-4">
+          <div className="rounded-card border border-line bg-surface shadow-card p-4">
             <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-fg-muted">
               Download Events — {days}d
             </h2>
@@ -287,7 +287,7 @@ export default function BillingAdminPage() {
 
         {/* Plans table */}
         {overview?.plans && overview.plans.length > 0 && (
-          <div className="rounded-lg border border-line bg-canvas p-4">
+          <div className="rounded-card border border-line bg-surface shadow-card p-4">
             <h2 className="mb-3 font-mono text-xs font-semibold uppercase text-fg-muted">Plan Catalog</h2>
             <table className="w-full text-xs">
               <thead>
@@ -324,7 +324,7 @@ export default function BillingAdminPage() {
         )}
 
         {/* Credit grant form + recent grants */}
-        <div className="rounded-lg border border-line bg-canvas p-4 space-y-4">
+        <div className="rounded-card border border-line bg-surface shadow-card p-4 space-y-4">
           <h2 className="font-mono text-xs font-semibold uppercase text-fg-muted">Grant Credits</h2>
           <form onSubmit={handleGrantCredits} className="space-y-2">
             <input
@@ -358,7 +358,7 @@ export default function BillingAdminPage() {
             <button
               type="submit"
               disabled={granting || !grantForm.user_id || !grantForm.amount}
-              className="rounded bg-accent-hover px-4 py-1.5 text-xs text-accent-fg hover:bg-accent-hover disabled:opacity-40"
+              className="rounded-control bg-accent px-4 py-1.5 text-xs text-accent-fg hover:bg-accent-hover disabled:opacity-40"
             >
               {granting ? 'Granting…' : 'Grant Credits'}
             </button>
@@ -394,14 +394,14 @@ export default function BillingAdminPage() {
 
       {/* Recent payment events */}
       {(overview?.recent_payment_events ?? []).length > 0 && (
-        <div className="rounded-lg border border-line bg-canvas p-4">
+        <div className="rounded-card border border-line bg-surface shadow-card p-4">
           <h2 className="mb-3 font-mono text-xs font-semibold uppercase text-fg-muted">Recent Payment Events</h2>
           <div className="space-y-1">
             {(overview?.recent_payment_events ?? []).map((ev, i) => (
               <div key={i} className="flex items-center justify-between rounded px-2.5 py-1.5 hover:bg-surface">
                 <span className="font-mono text-xs text-fg-muted">{ev.event_type}</span>
                 <div className="flex items-center gap-3">
-                  <span className={cn('font-mono text-[10px]', ev.processed ? 'text-success' : 'text-accent-text')}>
+                  <span className={cn('font-mono text-[10px]', ev.processed ? 'text-success' : 'text-warning')}>
                     {ev.processed ? '✓ processed' : '○ pending'}
                   </span>
                   <span className="font-mono text-[10px] text-fg-muted">{formatRelative(ev.created_at)}</span>

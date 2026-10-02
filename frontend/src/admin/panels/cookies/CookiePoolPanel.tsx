@@ -20,7 +20,7 @@ interface SummaryCardProps {
 const TONE_CLASSES: Record<SummaryCardProps['tone'], { text: string; icon: string }> = {
   neutral: { text: 'text-fg-2',  icon: 'text-fg-muted'  },
   green:   { text: 'text-success', icon: 'text-success' },
-  amber:   { text: 'text-accent-text',   icon: 'text-accent-text'   },
+  amber:   { text: 'text-warning',   icon: 'text-warning'   },
   red:     { text: 'text-danger',     icon: 'text-danger'     },
   blue:    { text: 'text-fg-2',    icon: 'text-fg-2'    },
 }
@@ -175,7 +175,7 @@ export function CookiePoolPanel({
           right={
             <button
               onClick={() => setModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg transition-colors hover:bg-accent-hover"
+              className="inline-flex items-center gap-1.5 rounded-control bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg transition-colors hover:bg-accent-hover"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />

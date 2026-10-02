@@ -72,13 +72,13 @@ export default function AccessPage() {
   }
 
   return (
-    <div className="min-h-screen bg-canvas text-fg p-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-fg">Access Control</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Access Control</h1>
           {data !== null && (
-            <span className="inline-flex items-center justify-center rounded-full bg-accent text-accent-fg text-xs font-semibold px-2.5 py-0.5 min-w-[1.5rem]">
+            <span className="inline-flex min-w-[1.5rem] items-center justify-center rounded-md border border-line bg-surface-2 px-2 py-0.5 font-mono text-xs font-semibold text-fg-2">
               {data.count}
             </span>
           )}
@@ -86,7 +86,7 @@ export default function AccessPage() {
         <button
           onClick={handleRevokeAll}
           disabled={revoking || loading || (data?.count ?? 0) === 0}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-danger hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed text-danger-fg text-sm font-medium transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-control bg-danger hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed text-danger-fg text-sm font-medium transition-colors"
         >
           {revoking ? (
             <>
@@ -101,13 +101,13 @@ export default function AccessPage() {
 
       {/* Revoke feedback */}
       {revokeMsg && (
-        <div className={`mb-4 rounded-lg px-4 py-3 text-sm ${revokeMsg.startsWith('Error') ? 'bg-danger-soft border border-danger/30 text-danger' : 'bg-success-soft border border-success/30 text-success'}`}>
+        <div className={`mb-4 rounded-control px-4 py-3 text-sm ${revokeMsg.startsWith('Error') ? 'bg-danger-soft border border-danger/30 text-danger' : 'bg-success-soft border border-success/30 text-success'}`}>
           {revokeMsg}
         </div>
       )}
 
       {/* Warning note */}
-      <div className="mb-5 rounded-lg bg-accent-soft border border-accent/50 px-4 py-3 text-accent-text text-sm">
+      <div className="mb-5 rounded-control bg-warning-soft border border-warning/30 px-4 py-3 text-warning text-sm">
         <span className="font-semibold">Note:</span> Revoking sessions will log out <strong>all users</strong>, including your current session. You will be redirected to the login page.
       </div>
 
@@ -118,7 +118,7 @@ export default function AccessPage() {
           Loading sessions...
         </div>
       ) : error ? (
-        <div className="rounded-lg bg-danger-soft border border-danger/30 px-4 py-3 text-danger text-sm">
+        <div className="rounded-control bg-danger-soft border border-danger/30 px-4 py-3 text-danger text-sm">
           {error}
         </div>
       ) : data && data.sessions.length === 0 ? (
@@ -126,9 +126,9 @@ export default function AccessPage() {
           No active sessions.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-line">
+        <div className="overflow-x-auto rounded-card border border-line">
           <table className="w-full text-sm">
-            <thead className="bg-canvas text-fg-muted uppercase text-xs tracking-wider">
+            <thead className="bg-surface-2 text-fg-muted uppercase font-mono text-[10px] tracking-widest">
               <tr>
                 <th className="px-4 py-3 text-left">Token</th>
                 <th className="px-4 py-3 text-left">Expires</th>

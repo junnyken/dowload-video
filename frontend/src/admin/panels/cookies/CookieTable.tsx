@@ -9,16 +9,16 @@ import { CookieActionsMenu } from './CookieActionsMenu'
 // ─── Platform abbreviation badge (local, no cross-panel dep) ──────────────────
 
 const PLAT_COLORS: Record<string, { text: string; bg: string }> = {
-  youtube:    { text: 'text-danger',    bg: 'bg-danger-soft'    },
+  youtube:    { text: 'text-fg-2', bg: 'bg-surface-2' },
   instagram:  { text: 'text-fg-2',   bg: 'bg-surface-2'   },
   tiktok:     { text: 'text-fg-2',    bg: 'bg-surface-2'    },
   twitter:    { text: 'text-fg-2',  bg: 'bg-surface'     },
   facebook:   { text: 'text-fg-2',   bg: 'bg-surface-2'   },
   bilibili:   { text: 'text-fg-2',   bg: 'bg-surface-2'   },
   douyin:     { text: 'text-fg-2',  bg: 'bg-surface'     },
-  soundcloud: { text: 'text-accent-text', bg: 'bg-accent-soft' },
-  pinterest:  { text: 'text-danger',   bg: 'bg-danger-soft'   },
-  reddit:     { text: 'text-accent-text', bg: 'bg-accent-soft' },
+  soundcloud: { text: 'text-fg-2', bg: 'bg-surface-2' },
+  pinterest:  { text: 'text-fg-2', bg: 'bg-surface-2' },
+  reddit:     { text: 'text-fg-2', bg: 'bg-surface-2' },
   vimeo:      { text: 'text-fg-2',   bg: 'bg-surface-2'   },
   threads:    { text: 'text-fg-2',  bg: 'bg-surface'     },
 }
@@ -63,7 +63,7 @@ function CooldownCell({ secs, status }: { secs: number; status: CookieItem['stat
     <span
       className={cn(
         'font-mono text-[11px] font-medium tabular-nums',
-        isHard ? 'text-danger' : 'text-accent-text',
+        isHard ? 'text-danger' : 'text-warning',
       )}
     >
       {formatCooldown(secs)}
@@ -134,7 +134,7 @@ export function CookieTable({
           onAddCookie && (
             <button
               onClick={onAddCookie}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg hover:bg-accent-hover"
+              className="inline-flex items-center gap-1.5 rounded-control bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg hover:bg-accent-hover"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -151,13 +151,13 @@ export function CookieTable({
     <div className="overflow-x-auto">
       <table className="min-w-[1080px] w-full text-sm">
         {/* Sticky header */}
-        <thead className="sticky top-0 z-10 bg-canvas">
+        <thead className="sticky top-0 z-10 bg-surface-2">
           <tr className="border-y border-line">
             {COLS.map(col => (
               <th
                 key={col.key}
                 className={cn(
-                  'py-2 pr-3 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-fg-muted first:pl-4',
+                  'py-2 pr-3 text-left font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted first:pl-4',
                   col.w,
                   col.key === 'actions' && 'text-center',
                 )}
@@ -226,7 +226,7 @@ export function CookieTable({
                         : cookie.failCount >= 7
                           ? 'text-danger'
                           : cookie.failCount >= 3
-                            ? 'text-accent-text'
+                            ? 'text-warning'
                             : 'text-fg-muted',
                     )}
                   >
@@ -249,7 +249,7 @@ export function CookieTable({
                         : cookie.expiryEstimate === 'Unknown'
                           ? 'text-fg-muted'
                           : cookie.expiryEstimate.startsWith('~1') || cookie.expiryEstimate.startsWith('~2')
-                            ? 'text-accent-text'
+                            ? 'text-warning'
                             : 'text-fg-muted',
                     )}
                   >

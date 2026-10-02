@@ -93,7 +93,7 @@ export function HealthStatCard({
         {iconPath && (
           <span
             className={cn(
-              'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg',
+              'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-control',
               t.iconBg,
               t.iconText,
             )}

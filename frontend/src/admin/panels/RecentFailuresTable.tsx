@@ -21,7 +21,7 @@ const PLATFORM_COLORS: Record<string, string> = {
   twitter:   'text-fg-2  bg-surface     border-line',
   facebook:  'text-fg-2   bg-surface-2   border-line',
   bilibili:  'text-fg-2   bg-surface-2   border-line',
-  soundcloud:'text-accent-text bg-accent-soft border-accent/60',
+  soundcloud:'text-warning bg-warning-soft border-warning/30',
 }
 
 function platformStyle(name: string) {
@@ -33,7 +33,7 @@ function platformStyle(name: string) {
 
 function PhaseBadge({ phase }: { phase: string }) {
   return (
-    <span className="inline-flex items-center rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted">
+    <span className="inline-flex items-center rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
       {phase}
     </span>
   )
@@ -94,7 +94,7 @@ export function RecentFailuresTable({
                   <th
                     key={h}
                     className={cn(
-                      'py-2 pr-3 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-fg-muted first:pl-4',
+                      'py-2 pr-3 text-left font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted first:pl-4',
                       h === '' && 'w-12 text-right last:pr-4',
                     )}
                   >

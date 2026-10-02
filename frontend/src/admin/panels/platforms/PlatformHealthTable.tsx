@@ -101,23 +101,8 @@ export function PlatformHealthTable({
 
   const filtered = useMemo(() => applyFilter(rows, filter), [rows, filter])
 
-  const healthyCount = rows.filter(r => r.status === 'healthy').length
-
   return (
     <div className="flex flex-col">
-      {/* ── Toolbar ── */}
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <h1 className="text-sm font-semibold text-fg">Platform Health</h1>
-          <p className="mt-0.5 text-[11px] text-fg-muted">
-            {healthyCount} / {rows.length} operational · circuit breakers + cookie pool status
-          </p>
-        </div>
-        <span className="font-mono text-[10px] text-fg-muted">
-          auto-refresh 30s
-        </span>
-      </div>
-
       <div className="rounded-card border border-line bg-surface shadow-card">
         {/* ── Filters ── */}
         <div className="px-4 pt-4 pb-3">
@@ -147,13 +132,13 @@ export function PlatformHealthTable({
           <div className="overflow-x-auto">
             <table className="min-w-[780px] w-full text-sm">
               {/* Sticky header */}
-              <thead className="sticky top-0 z-10 bg-canvas">
+              <thead className="sticky top-0 z-10 bg-surface-2">
                 <tr className="border-y border-line">
                   {COLUMNS.map(col => (
                     <th
                       key={col.key}
                       className={cn(
-                        'py-2 pr-3 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-fg-muted first:pl-4',
+                        'py-2 pr-3 text-left font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted first:pl-4',
                         col.minW,
                         col.key === 'actions' && 'text-center',
                       )}
@@ -177,7 +162,7 @@ export function PlatformHealthTable({
                         'cursor-pointer transition-colors',
                         !isLast && 'border-b border-line',
                         isSelected
-                          ? 'bg-surface-2 hover:bg-line'
+                          ? 'bg-surface-2 hover:bg-surface-2'
                           : 'hover:bg-surface-2',
                       )}
                     >

@@ -147,12 +147,12 @@ export default function ConfigPage() {
   }
 
   return (
-    <div className="min-h-screen bg-canvas text-fg p-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <h1 className="text-2xl font-bold text-fg">Config</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-fg">Config</h1>
         {!loading && (
-          <span className="inline-flex items-center justify-center rounded-full bg-accent text-accent-fg text-xs font-semibold px-2.5 py-0.5 min-w-[1.5rem]">
+          <span className="inline-flex min-w-[1.5rem] items-center justify-center rounded-md border border-line bg-surface-2 px-2 py-0.5 font-mono text-xs font-semibold text-fg-2">
             {entries.length}
           </span>
         )}
@@ -164,7 +164,7 @@ export default function ConfigPage() {
           Loading config...
         </div>
       ) : error ? (
-        <div className="rounded-lg bg-danger-soft border border-danger/30 px-4 py-3 text-danger text-sm mb-4">
+        <div className="rounded-control bg-danger-soft border border-danger/30 px-4 py-3 text-danger text-sm mb-4">
           {error}
         </div>
       ) : entries.length === 0 ? (
@@ -172,9 +172,9 @@ export default function ConfigPage() {
           No config entries yet. Add one below.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-line mb-8">
+        <div className="overflow-x-auto rounded-card border border-line mb-8">
           <table className="w-full text-sm">
-            <thead className="bg-canvas text-fg-muted uppercase text-xs tracking-wider">
+            <thead className="bg-surface-2 text-fg-muted uppercase font-mono text-[10px] tracking-widest">
               <tr>
                 <th className="px-4 py-3 text-left w-40">Key</th>
                 <th className="px-4 py-3 text-left">Value</th>
@@ -184,7 +184,7 @@ export default function ConfigPage() {
             </thead>
             <tbody className="divide-y divide-line">
               {entries.map((entry) => (
-                <tr key={entry.key} className="bg-surface-2 hover:bg-line transition-colors">
+                <tr key={entry.key} className="hover:bg-surface-2 transition-colors">
                   {/* Key */}
                   <td className="px-4 py-3 font-mono text-fg-2 align-top">
                     {entry.key}
@@ -245,7 +245,7 @@ export default function ConfigPage() {
       )}
 
       {/* Add form */}
-      <div className="rounded-xl border border-line bg-surface-2 p-5">
+      <div className="rounded-card border border-line bg-surface shadow-card p-5">
         <h2 className="text-sm font-semibold text-fg-2 mb-4 uppercase tracking-wider">Add / Update Entry</h2>
         <form onSubmit={handleAdd} className="flex flex-col gap-3">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -255,7 +255,7 @@ export default function ConfigPage() {
                 value={addKey}
                 onChange={(e) => setAddKey(e.target.value)}
                 placeholder="config_key"
-                className="w-full bg-surface border border-line focus:border-line rounded-lg px-3 py-2 text-sm text-fg font-mono outline-none focus:ring-1 focus:ring-line-strong transition-colors"
+                className="w-full bg-surface border border-line focus:border-line rounded-control px-3 py-2 text-sm text-fg font-mono outline-none focus:ring-1 focus:ring-line-strong transition-colors"
               />
             </div>
             <div>
@@ -264,7 +264,7 @@ export default function ConfigPage() {
                 value={addValue}
                 onChange={(e) => setAddValue(e.target.value)}
                 placeholder="value"
-                className="w-full bg-surface border border-line focus:border-line rounded-lg px-3 py-2 text-sm text-fg font-mono outline-none focus:ring-1 focus:ring-line-strong transition-colors"
+                className="w-full bg-surface border border-line focus:border-line rounded-control px-3 py-2 text-sm text-fg font-mono outline-none focus:ring-1 focus:ring-line-strong transition-colors"
               />
             </div>
             <div>
@@ -273,7 +273,7 @@ export default function ConfigPage() {
                 value={addDesc}
                 onChange={(e) => setAddDesc(e.target.value)}
                 placeholder="Optional description"
-                className="w-full bg-surface border border-line focus:border-line rounded-lg px-3 py-2 text-sm text-fg outline-none focus:ring-1 focus:ring-line-strong transition-colors"
+                className="w-full bg-surface border border-line focus:border-line rounded-control px-3 py-2 text-sm text-fg outline-none focus:ring-1 focus:ring-line-strong transition-colors"
               />
             </div>
           </div>
@@ -286,7 +286,7 @@ export default function ConfigPage() {
             <button
               type="submit"
               disabled={addSaving}
-              className="flex items-center gap-2 px-5 py-2 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-accent-fg text-sm font-medium transition-colors"
+              className="flex items-center gap-2 px-5 py-2 rounded-control bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-accent-fg text-sm font-medium transition-colors"
             >
               {addSaving ? (
                 <>

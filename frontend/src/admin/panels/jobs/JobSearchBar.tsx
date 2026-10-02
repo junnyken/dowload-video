@@ -80,7 +80,7 @@ export function JobSearchBar({ value, onChange, onSearch, loading }: JobSearchBa
           onClick={() => onSearch(value)}
           disabled={!value.trim() || loading}
           className={cn(
-            'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors',
+            'flex items-center gap-1.5 rounded-control border px-3 py-2 text-xs font-semibold transition-colors',
             'border-line bg-surface-2 text-fg-2 hover:bg-line hover:text-fg-2',
             'disabled:cursor-not-allowed disabled:opacity-40',
           )}
@@ -105,9 +105,9 @@ export function JobSearchBar({ value, onChange, onSearch, loading }: JobSearchBa
           <button
             key={h.label}
             onClick={() => { onChange(h.example); onSearch(h.example) }}
-            className="flex items-center gap-1 rounded border border-line bg-surface-2 px-2 py-0.5 transition-colors hover:border-line hover:bg-canvas"
+            className="flex items-center gap-1 rounded border border-line bg-surface-2 px-2 py-0.5 transition-colors hover:border-line-strong hover:bg-surface"
           >
-            <span className="text-[9px] font-semibold uppercase tracking-widest text-fg-muted">{h.label}</span>
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-fg-muted">{h.label}</span>
             <span className="font-mono text-[10px] text-fg-muted">{h.example}</span>
           </button>
         ))}

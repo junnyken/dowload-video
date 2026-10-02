@@ -49,21 +49,10 @@ interface ErrorsResponse {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PLATFORM_COLORS: Record<string, string> = {
-  youtube: 'var(--vg-danger)',
-  tiktok: 'var(--vg-accent)',
-  instagram: 'var(--vg-accent)',
-  twitter: 'var(--vg-accent)',
-  facebook: 'var(--vg-accent)',
-  soundcloud: 'var(--vg-accent)',
-  threads: 'var(--vg-accent)',
-  spotify: 'var(--vg-success)',
-  vimeo: '#06b6d4',
-  reddit: 'var(--vg-accent)',
-}
-
-function platformColor(name: string): string {
-  return PLATFORM_COLORS[name.toLowerCase()] ?? 'var(--vg-fg-muted)'
+// One series, one colour: platform identity is already in the label, so the
+// bar uses the accent token instead of a different hue per platform.
+function platformColor(_name: string): string {
+  return 'var(--vg-accent)'
 }
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
@@ -100,7 +89,7 @@ function StatCard({
   }[tone]
 
   return (
-    <div className="rounded-2xl border border-line bg-surface-2 p-5 flex flex-col gap-1">
+    <div className="rounded-card border border-line bg-surface shadow-card p-5 flex flex-col gap-1">
       <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">{label}</span>
       <span className={cn('text-2xl font-bold font-mono', toneClass)}>{value}</span>
       {sub && <span className="text-[10px] text-fg-muted">{sub}</span>}
@@ -165,7 +154,7 @@ function TrendChart({ stats }: { stats: DailyStat[] }) {
               x={PAD - 5} y={y + 4}
               textAnchor="end"
               fontSize={9}
-              fill="var(--vg-line-strong)"
+              fill="var(--vg-fg-muted)"
             >
               {label}
             </text>
@@ -182,7 +171,7 @@ function TrendChart({ stats }: { stats: DailyStat[] }) {
               y={H - PAD + 14}
               textAnchor="middle"
               fontSize={8}
-              fill="var(--vg-line-strong)"
+              fill="var(--vg-fg-muted)"
             >
               {shortDate(s.date)}
             </text>
@@ -338,7 +327,7 @@ function PlatformFailTable({ rows }: { rows: PlatformFailRate[] }) {
     return (
       <th
         className={cn(
-          'cursor-pointer select-none py-2 text-right font-mono text-[9px] uppercase tracking-widest',
+          'cursor-pointer select-none py-2 text-right font-mono text-[10px] uppercase tracking-widest',
           active ? 'text-fg-2' : 'text-fg-muted',
           'hover:text-fg-muted',
         )}
@@ -351,13 +340,13 @@ function PlatformFailTable({ rows }: { rows: PlatformFailRate[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-line">
+    <div className="overflow-x-auto rounded-card border border-line">
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-line bg-surface-2">
             <th
               className={cn(
-                'cursor-pointer select-none py-2 pl-3 text-left font-mono text-[9px] uppercase tracking-widest',
+                'cursor-pointer select-none py-2 pl-3 text-left font-mono text-[10px] uppercase tracking-widest',
                 sortKey === 'platform' ? 'text-fg-2' : 'text-fg-muted',
                 'hover:text-fg-muted',
               )}
@@ -448,9 +437,9 @@ export function AnalyticsPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Header + days toggle */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-mono text-sm font-semibold text-fg">Analytics</h2>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Analytics</h1>
           <p className="mt-0.5 text-xs text-fg-muted">
             Download job stats · last {days} days
           </p>
@@ -458,11 +447,11 @@ export function AnalyticsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => { fetchAnalytics(days); fetchErrors() }}
-            className="text-[10px] text-fg-muted hover:text-fg-2 mr-2"
+            className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2"
           >
             ↺ Refresh
           </button>
-          <div className="flex rounded-lg overflow-hidden border border-line">
+          <div className="flex rounded-control overflow-hidden border border-line">
             {([7, 30] as const).map(d => (
               <button
                 key={d}
@@ -471,7 +460,7 @@ export function AnalyticsPage() {
                   'px-3 py-1 font-mono text-xs transition-colors',
                   days === d
                     ? 'bg-surface-2 text-fg'
-                    : 'bg-canvas text-fg-muted hover:text-fg-2',
+                    : 'bg-surface text-fg-muted hover:text-fg',
                 )}
               >
                 {d}d
@@ -485,11 +474,11 @@ export function AnalyticsPage() {
       {loadingA && !analytics ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[0, 1, 2, 3].map(i => (
-            <div key={i} className="h-24 rounded-2xl border border-line bg-surface-2 animate-pulse" />
+            <div key={i} className="h-24 rounded-card border border-line bg-surface shadow-card animate-pulse" />
           ))}
         </div>
       ) : errorA && !analytics ? (
-        <div className="rounded-2xl border border-danger/40 bg-danger-soft p-4 text-sm text-danger">
+        <div className="rounded-card border border-danger/40 bg-danger-soft p-4 text-sm text-danger">
           {errorA}
           <button
             onClick={() => fetchAnalytics(days)}
@@ -527,12 +516,12 @@ export function AnalyticsPage() {
       ) : null}
 
       {/* Daily trend chart */}
-      <div className="rounded-2xl border border-line bg-surface-2 p-5">
+      <div className="rounded-card border border-line bg-surface shadow-card p-5">
         <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
           Daily Trend — {days}d
         </h3>
         {loadingA && !analytics ? (
-          <div className="h-48 animate-pulse rounded-xl bg-surface-2" />
+          <div className="h-48 animate-pulse rounded-card bg-surface-2" />
         ) : analytics?.daily_stats && analytics.daily_stats.length > 0 ? (
           <TrendChart stats={analytics.daily_stats} />
         ) : (
@@ -543,7 +532,7 @@ export function AnalyticsPage() {
       {/* Platform breakdown + error patterns side by side */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Platform breakdown */}
-        <div className="rounded-2xl border border-line bg-surface-2 p-5">
+        <div className="rounded-card border border-line bg-surface shadow-card p-5">
           <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
             Platform Breakdown
           </h3>
@@ -561,7 +550,7 @@ export function AnalyticsPage() {
         </div>
 
         {/* Error patterns */}
-        <div className="rounded-2xl border border-line bg-surface-2 p-5">
+        <div className="rounded-card border border-line bg-surface shadow-card p-5">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
               Top Error Patterns
@@ -591,13 +580,13 @@ export function AnalyticsPage() {
       </div>
 
       {/* Platform fail rates table */}
-      <div className="rounded-2xl border border-line bg-surface-2 p-5">
+      <div className="rounded-card border border-line bg-surface shadow-card p-5">
         <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
           Platform Fail Rates
           <span className="ml-2 normal-case font-normal text-fg-muted tracking-normal">(click header to sort)</span>
         </h3>
         {loadingE && !errors ? (
-          <div className="h-32 animate-pulse rounded-xl bg-surface-2" />
+          <div className="h-32 animate-pulse rounded-card bg-surface-2" />
         ) : errors?.platform_fail_rates ? (
           <PlatformFailTable rows={errors.platform_fail_rates} />
         ) : (

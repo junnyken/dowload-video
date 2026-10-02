@@ -61,10 +61,10 @@ export default function YouTubeGatePage() {
   const extra = Object.entries(snap ?? {}).filter(([k]) => !known.has(k))
 
   return (
-    <div className="min-h-screen bg-canvas text-fg p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-fg">YouTube Gate</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">YouTube Gate</h1>
           <p className="text-xs text-fg-muted">Công tắc, circuit breaker và trần băng thông · làm mới 20s</p>
         </div>
         <button onClick={() => toggle(!enabled)} disabled={busy || !snap}
@@ -79,24 +79,24 @@ export default function YouTubeGatePage() {
       {msg && <p className="text-xs text-success">{msg}</p>}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="rounded-lg border border-line bg-surface-2 p-3">
+        <div className="rounded-card border border-line bg-surface shadow-card p-3">
           <div className="text-[10px] uppercase tracking-wide text-fg-muted">Trạng thái</div>
           <div className={`mt-1 text-xl font-semibold ${enabled ? 'text-success' : 'text-danger'}`}>
             {snap ? (enabled ? 'Đang bật' : 'Đang tắt') : '…'}
           </div>
         </div>
-        <div className="rounded-lg border border-line bg-surface-2 p-3">
+        <div className="rounded-card border border-line bg-surface shadow-card p-3">
           <div className="text-[10px] uppercase tracking-wide text-fg-muted">Circuit breaker</div>
           <div className={`mt-1 text-xl font-semibold ${
-            circuit === 'open' ? 'text-danger' : circuit === 'half_open' ? 'text-accent-text' : 'text-success'}`}>
+            circuit === 'open' ? 'text-danger' : circuit === 'half_open' ? 'text-warning' : 'text-success'}`}>
             {circuit}
           </div>
         </div>
-        <div className="rounded-lg border border-line bg-surface-2 p-3">
+        <div className="rounded-card border border-line bg-surface shadow-card p-3">
           <div className="text-[10px] uppercase tracking-wide text-fg-muted">Băng thông hôm nay</div>
           <div className="mt-1 text-xl font-semibold text-fg">{fmtBytes(snap?.bytes_today)}</div>
         </div>
-        <div className="rounded-lg border border-line bg-surface-2 p-3">
+        <div className="rounded-card border border-line bg-surface shadow-card p-3">
           <div className="text-[10px] uppercase tracking-wide text-fg-muted">Chi phí ước tính</div>
           <div className="mt-1 text-xl font-semibold text-fg">
             {snap?.cost_today != null ? `$${Number(snap.cost_today).toFixed(2)}` : '—'}
@@ -105,7 +105,7 @@ export default function YouTubeGatePage() {
       </div>
 
       {extra.length > 0 && (
-        <div className="rounded-lg border border-line bg-surface-2 p-4">
+        <div className="rounded-card border border-line bg-surface shadow-card p-4">
           <h2 className="mb-2 text-sm font-semibold text-fg">Chi tiết khác</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             {extra.map(([k, v]) => (

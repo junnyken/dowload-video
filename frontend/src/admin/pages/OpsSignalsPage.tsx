@@ -32,7 +32,7 @@ function Stat({ label, value, tone, hint }: {
   const c = tone === 'bad' ? 'text-danger' : tone === 'warn' ? 'text-warning'
     : tone === 'ok' ? 'text-success' : 'text-fg'
   return (
-    <div className="rounded-lg border border-line bg-surface-2 p-3">
+    <div className="rounded-card border border-line bg-surface shadow-card p-3">
       <div className="text-[10px] uppercase tracking-wide text-fg-muted">{label}</div>
       <div className={`mt-1 text-xl font-semibold ${c}`}>{value}</div>
       {hint && <div className="mt-0.5 text-[10px] text-fg-muted">{hint}</div>}
@@ -62,9 +62,9 @@ export default function OpsSignalsPage() {
   const depleted = d?.depleted_cookie_platforms ?? []
 
   return (
-    <div className="min-h-screen bg-canvas text-fg p-6 space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-fg">Ops Signals</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-fg">Ops Signals</h1>
         <p className="text-xs text-fg-muted">
           Cửa sổ {d?.window_minutes ?? 30} phút · làm mới 20s
           {d?.generated_at ? ` · cập nhật ${String(d.generated_at).replace('T', ' ').slice(11, 19)}` : ''}
@@ -90,14 +90,14 @@ export default function OpsSignalsPage() {
       </div>
 
       {(open.length > 0 || depleted.length > 0) && (
-        <div className="rounded-lg border border-accent/50 bg-accent-soft p-4 space-y-2">
+        <div className="rounded-control border border-warning/30 bg-warning-soft p-4 space-y-2">
           {open.length > 0 && (
-            <div className="text-[11px] text-accent-text">
+            <div className="text-[11px] text-warning">
               <span className="font-semibold">Circuit đang mở:</span> {open.join(', ')}
             </div>
           )}
           {depleted.length > 0 && (
-            <div className="text-[11px] text-accent-text">
+            <div className="text-[11px] text-warning">
               <span className="font-semibold">Cookie đã cạn:</span> {depleted.join(', ')}
             </div>
           )}
@@ -105,7 +105,7 @@ export default function OpsSignalsPage() {
       )}
 
       {d?.queue_depths && Object.keys(d.queue_depths).length > 0 && (
-        <div className="rounded-lg border border-line bg-surface-2 p-4">
+        <div className="rounded-card border border-line bg-surface shadow-card p-4">
           <h2 className="mb-2 text-sm font-semibold text-fg">Độ sâu từng hàng đợi</h2>
           <div className="flex flex-wrap gap-2">
             {Object.entries(d.queue_depths).map(([k, v]) => (
@@ -118,14 +118,14 @@ export default function OpsSignalsPage() {
       )}
 
       {d?.provider_circuits && Object.keys(d.provider_circuits).length > 0 && (
-        <div className="rounded-lg border border-line bg-surface-2 p-4">
+        <div className="rounded-card border border-line bg-surface shadow-card p-4">
           <h2 className="mb-2 text-sm font-semibold text-fg">Circuit theo nền tảng</h2>
           <div className="flex flex-wrap gap-2">
             {Object.entries(d.provider_circuits).map(([k, v]) => (
               <span key={k}
                 className={`rounded border px-2 py-0.5 text-[11px] ${
                   v === 'open' ? 'border-danger/60 text-danger'
-                  : v === 'half_open' ? 'border-accent/60 text-accent-text'
+                  : v === 'half_open' ? 'border-warning/30 text-warning'
                   : 'border-line text-fg-2'}`}>
                 {k}: {String(v)}
               </span>
@@ -135,7 +135,7 @@ export default function OpsSignalsPage() {
       )}
 
       {!!d?.recovery_log?.length && (
-        <div className="rounded-lg border border-line bg-surface-2 p-4">
+        <div className="rounded-card border border-line bg-surface shadow-card p-4">
           <h2 className="mb-2 text-sm font-semibold text-fg">Nhật ký tự khôi phục</h2>
           <div className="max-h-64 overflow-y-auto">
             <table className="w-full text-[11px]">

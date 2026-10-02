@@ -13,9 +13,9 @@ interface HealthTone {
 
 function getHealthTone(score: number): HealthTone {
   if (score >= 80) return { text: 'text-success', bg: 'bg-success-soft', border: 'border-success/30', bar: 'bg-success', label: 'Healthy'  }
-  if (score >= 60) return { text: 'text-accent-text',   bg: 'bg-accent-soft',   border: 'border-accent/30',   bar: 'bg-accent',   label: 'Good'     }
-  if (score >= 40) return { text: 'text-accent-text',   bg: 'bg-accent-soft',border: 'border-accent/50',bar: 'bg-accent',   label: 'Fair'     }
-  if (score >= 20) return { text: 'text-accent-text',  bg: 'bg-accent-soft',  border: 'border-accent/30',  bar: 'bg-accent',  label: 'Poor'     }
+  if (score >= 60) return { text: 'text-success', bg: 'bg-success-soft', border: 'border-success/30', bar: 'bg-success', label: 'Good' }
+  if (score >= 40) return { text: 'text-warning', bg: 'bg-warning-soft', border: 'border-warning/30', bar: 'bg-warning', label: 'Fair' }
+  if (score >= 20) return { text: 'text-warning', bg: 'bg-warning-soft', border: 'border-warning/30', bar: 'bg-warning', label: 'Poor' }
   return            { text: 'text-danger',    bg: 'bg-danger-soft',     border: 'border-danger/30',     bar: 'bg-danger',     label: 'Critical' }
 }
 
@@ -49,7 +49,7 @@ export function CookieHealthBadge({ score, showBar = false, className }: CookieH
     >
       <span className={t.text}>{score}</span>
       <span className="text-fg-muted">·</span>
-      <span className={cn('text-[9px] uppercase tracking-wide', t.text)}>{t.label}</span>
+      <span className={cn('text-[10px] uppercase tracking-wide', t.text)}>{t.label}</span>
     </span>
   )
 }
@@ -57,12 +57,12 @@ export function CookieHealthBadge({ score, showBar = false, className }: CookieH
 // ─── Cookie status pill ────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<CookieStatus, { style: string; label: string; dot: string }> = {
-  active:       { style: 'text-success bg-success-soft border-success/30', label: 'Active',     dot: 'bg-success animate-pulse' },
-  soft_blocked: { style: 'text-accent-text   bg-accent-soft   border-accent/30',   label: 'Soft Block', dot: 'bg-accent animate-pulse'   },
-  hard_blocked: { style: 'text-danger     bg-danger-soft     border-danger/30',     label: 'Hard Block', dot: 'bg-danger animate-pulse'     },
-  expired:      { style: 'text-fg-muted   bg-surface   border-line',   label: 'Expired',    dot: 'bg-line'                 },
-  disabled:     { style: 'text-fg-muted   bg-surface   border-line',   label: 'Disabled',   dot: 'bg-surface-2'                 },
-  untested:     { style: 'text-fg-2    bg-surface-2    border-line',    label: 'Untested',   dot: 'bg-accent'                  },
+  active:       { style: 'text-success bg-success-soft border-success/30', label: 'Active',     dot: 'bg-success' },
+  soft_blocked: { style: 'text-warning bg-warning-soft border-warning/30', label: 'Soft Block', dot: 'bg-warning' },
+  hard_blocked: { style: 'text-danger     bg-danger-soft     border-danger/30',     label: 'Hard Block', dot: 'bg-danger' },
+  expired:      { style: 'text-fg-2 bg-surface-2 border-line', label: 'Expired', dot: 'bg-fg-muted' },
+  disabled:     { style: 'text-fg-2 bg-surface-2 border-line', label: 'Disabled', dot: 'bg-fg-muted' },
+  untested:     { style: 'text-fg-2 bg-surface-2 border-line', label: 'Untested', dot: 'bg-fg-muted' },
 }
 
 interface CookieStatusPillProps {
@@ -77,8 +77,8 @@ export function CookieStatusPill({ status, dot = false, size = 'sm', className }
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded border font-mono font-semibold uppercase tracking-widest',
-        size === 'xs' ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-[10px]',
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border font-mono font-semibold uppercase tracking-wider',
+        size === 'xs' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[10px]',
         cfg.style,
         className,
       )}

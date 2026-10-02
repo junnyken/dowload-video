@@ -16,10 +16,10 @@ function fmt(v: number | undefined | null, decimals = 0): string {
 type Tone = 'green' | 'blue' | 'amber' | 'red' | 'purple' | 'slate' | 'cyan'
 
 const TONE: Record<Tone, { val: string; border: string; dot: string }> = {
-  green:  { val: 'text-success', border: 'border-success/40', dot: 'bg-success' },
+  green:  { val: 'text-success', border: 'border-line', dot: 'bg-success' },
   blue:   { val: 'text-fg-2',    border: 'border-line',    dot: 'bg-accent'    },
-  amber:  { val: 'text-accent-text',   border: 'border-accent/40',   dot: 'bg-accent'   },
-  red:    { val: 'text-danger',     border: 'border-danger/40',     dot: 'bg-danger'     },
+  amber:  { val: 'text-warning',   border: 'border-line',   dot: 'bg-warning'  },
+  red:    { val: 'text-danger',     border: 'border-line',     dot: 'bg-danger'     },
   purple: { val: 'text-fg-2',  border: 'border-line',  dot: 'bg-accent'  },
   slate:  { val: 'text-fg-2',   border: 'border-line',      dot: 'bg-line-strong'   },
   cyan:   { val: 'text-fg-2',    border: 'border-line',    dot: 'bg-accent'    },
@@ -35,9 +35,9 @@ function MetricCard({
 }) {
   const t = TONE[tone]
   const body = (
-    <div className={`rounded-xl border bg-canvas px-4 py-3.5 space-y-1 h-full transition-colors hover:border-line ${t.border}`}>
+    <div className={`rounded-card border bg-surface px-4 py-3.5 space-y-1 h-full shadow-card transition-colors hover:border-line-strong ${t.border}`}>
       <div className="text-[10px] text-fg-muted uppercase tracking-widest font-mono">{label}</div>
-      <div className={`text-xl font-bold font-mono flex items-center gap-2 ${t.val}`}>
+      <div className={`text-xl font-semibold font-mono tabular-nums flex items-center gap-2 ${t.val}`}>
         {pulse && <span className={`inline-block h-2 w-2 rounded-full animate-pulse ${t.dot}`} />}
         {value}
       </div>
@@ -52,7 +52,7 @@ function MetricCard({
 function SectionTitle({ title, linkTo, linkLabel }: { title: string; linkTo?: string; linkLabel?: string }) {
   return (
     <div className="flex items-center justify-between mb-2.5">
-      <h2 className="text-[10px] font-semibold uppercase tracking-widest text-fg-muted">{title}</h2>
+      <h2 className="font-mono text-[10px] font-medium uppercase tracking-widest text-fg-muted">{title}</h2>
       {linkTo && (
         <Link to={linkTo} className="text-[11px] text-fg-muted hover:text-fg-2 transition-colors">{linkLabel ?? 'View all →'}</Link>
       )}
@@ -85,7 +85,6 @@ function MiniSparkline({
   function y(v: number) { return PT + iH - (v / maxV) * iH }
 
   const pts = data.map((d, i) => `${x(i)},${y(d[valueKey] ?? 0)}`).join(' ')
-  const fillPts = `${x(0)},${PT + iH} ${pts} ${x(data.length - 1)},${PT + iH}`
   const today = vals[vals.length - 1] ?? 0
 
   return (
@@ -95,19 +94,12 @@ function MiniSparkline({
         <span className="font-mono text-xs font-semibold" style={{ color }}>{fmt(today)}</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
-        <defs>
-          <linearGradient id={`sg-${valueKey}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-            <stop offset="100%" stopColor={color} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <polygon points={fillPts} fill={`url(#sg-${valueKey})`} />
         <polyline points={pts} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
         {/* Last point dot */}
         <circle cx={x(data.length - 1)} cy={y(today)} r={2.5} fill={color} />
         {/* X labels — first, mid, last */}
         {[0, Math.floor(data.length / 2), data.length - 1].map(i => (
-          <text key={i} x={x(i)} y={H} textAnchor={i === 0 ? 'start' : i === data.length - 1 ? 'end' : 'middle'} fontSize={7} fill="var(--vg-line-strong)">
+          <text key={i} x={x(i)} y={H} textAnchor={i === 0 ? 'start' : i === data.length - 1 ? 'end' : 'middle'} fontSize={7} fill="var(--vg-fg-muted)">
             {data[i]?.date?.slice(5) ?? ''}
           </text>
         ))}
@@ -135,7 +127,7 @@ function PlatformBar({ p, maxTotal }: { p: PlatformStatsTotal; maxTotal: number 
 
   return (
     <div className="flex items-center gap-3">
-      <div className="w-7 h-7 shrink-0 rounded-md bg-surface flex items-center justify-center font-mono text-[9px] font-bold text-fg-muted">
+      <div className="w-7 h-7 shrink-0 rounded-md border border-line bg-surface-2 flex items-center justify-center font-mono text-[10px] font-bold text-fg-muted">
         {abbr}
       </div>
       <div className="flex-1 space-y-1">
@@ -143,8 +135,8 @@ function PlatformBar({ p, maxTotal }: { p: PlatformStatsTotal; maxTotal: number 
           <span className="text-fg-2 capitalize">{p.platform}</span>
           <span className="font-mono text-fg-muted">{fmt(p.total)} req</span>
         </div>
-        <div className="h-1.5 bg-surface rounded-full overflow-hidden">
-          <div className="h-full bg-surface-2 rounded-full relative" style={{ width: `${pct}%` }}>
+        <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
+          <div className="h-full bg-line rounded-full relative" style={{ width: `${pct}%` }}>
             <div className={`absolute inset-0 ${barColor} rounded-full`} style={{ width: `${okPct}%` }} />
           </div>
         </div>
@@ -163,12 +155,12 @@ function ProxyPoolCard({ platform, redis, env, total }: { platform: string; redi
   const t = TONE[tone]
   const abbr = PLAT_ABBR[platform.toLowerCase()] ?? platform.slice(0, 2).toUpperCase()
   return (
-    <div className={`rounded-lg border bg-canvas px-3 py-2.5 ${t.border}`}>
+    <div className={`rounded-control border bg-surface px-3 py-2.5 ${t.border}`}>
       <div className="flex items-center justify-between mb-1">
         <span className="text-[10px] text-fg-muted uppercase font-mono">{abbr}</span>
         <span className={`text-xs font-bold font-mono ${t.val}`}>{total}</span>
       </div>
-      <div className="text-[9px] text-fg-muted space-y-0.5">
+      <div className="text-[10px] text-fg-muted space-y-0.5">
         {redis > 0 && <div>Redis: {redis}</div>}
         {env > 0 && <div>Env: {env}</div>}
         {total === 0 && <div className="text-danger">No proxies</div>}
@@ -182,7 +174,7 @@ function ProxyPoolCard({ platform, redis, env, total }: { platform: string; redi
 function FailureRow({ job }: { job: { platform?: string; phase?: string; error?: string; time?: string } }) {
   return (
     <div className="flex items-start gap-3 py-2 border-b border-line last:border-0 text-xs">
-      <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 font-mono text-[9px] uppercase text-fg-muted">
+      <span className="shrink-0 rounded-md border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] uppercase text-fg-2">
         {job.platform ?? '?'}
       </span>
       <div className="min-w-0 flex-1">
@@ -200,9 +192,9 @@ function ProviderPill({ name, credits }: { name: string; credits: number }) {
   const tone: Tone = credits > 5000 ? 'green' : credits > 1000 ? 'amber' : 'red'
   const t = TONE[tone]
   return (
-    <div className={`rounded-xl border bg-canvas px-3 py-3 ${t.border}`}>
+    <div className={`rounded-card border bg-surface px-3 py-3 shadow-card ${t.border}`}>
       <div className="text-[10px] text-fg-muted uppercase tracking-wider font-mono mb-1">{name}</div>
-      <div className={`text-xl font-bold font-mono ${t.val}`}>{credits.toLocaleString()}</div>
+      <div className={`text-xl font-semibold font-mono tabular-nums ${t.val}`}>{credits.toLocaleString()}</div>
       <div className="text-[10px] text-fg-muted mt-0.5">
         {credits > 5000 ? 'Credits OK' : credits > 1000 ? 'Low credits' : '⚠ Critical'}
       </div>
@@ -308,7 +300,7 @@ export function AdminHomePage() {
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-fg">Overview</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Overview</h1>
           <p className="text-[11px] text-fg-muted mt-0.5">
             {isFetching ? 'Refreshing…' : `Auto-refresh in ${countdown}s`}
           </p>
@@ -316,7 +308,7 @@ export function AdminHomePage() {
         <div className="flex items-center gap-3">
           {/* P4: Live active jobs badge */}
           {liveJobTotal > 0 && (
-            <div className="flex items-center gap-1.5 rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 text-[11px] text-fg-2">
+            <div className="flex items-center gap-1.5 rounded-control border border-line bg-surface px-2.5 py-1.5 text-[11px] text-fg-2">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
               <span className="font-mono font-semibold">{liveJobTotal}</span>
               <span className="text-fg-2">
@@ -335,7 +327,7 @@ export function AdminHomePage() {
           <button
             onClick={() => refetch()}
             disabled={isFetching}
-            className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs text-fg-muted hover:text-fg-2 hover:border-line-strong transition-colors disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-control border border-line px-3 py-1.5 text-xs text-fg-muted hover:text-fg-2 hover:border-line-strong transition-colors disabled:opacity-40"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -346,7 +338,7 @@ export function AdminHomePage() {
       </div>
 
       {errorMsg && (
-        <div className="rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-xs text-danger">{errorMsg}</div>
+        <div className="rounded-control border border-danger/30 bg-danger-soft px-4 py-3 text-xs text-danger">{errorMsg}</div>
       )}
 
       {/* ── Active alerts ── */}
@@ -433,13 +425,13 @@ export function AdminHomePage() {
         <section>
           <SectionTitle title="Trend 7 ngày" linkTo="/vid-admin/analytics" linkLabel="Full analytics →" />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="rounded-xl border border-line bg-canvas px-4 py-3">
+            <div className="rounded-card border border-line bg-surface shadow-card px-4 py-3">
               <MiniSparkline data={daily7d} color="var(--vg-accent)" label="Downloads / ngày" valueKey="total" />
             </div>
-            <div className="rounded-xl border border-line bg-canvas px-4 py-3">
+            <div className="rounded-card border border-line bg-surface shadow-card px-4 py-3">
               <MiniSparkline data={daily7d} color="var(--vg-success)" label="Success / ngày" valueKey="success" />
             </div>
-            <div className="rounded-xl border border-line bg-canvas px-4 py-3">
+            <div className="rounded-card border border-line bg-surface shadow-card px-4 py-3">
               <MiniSparkline data={daily7d} color="var(--vg-danger)" label="Failed / ngày" valueKey="failed" />
             </div>
           </div>
@@ -452,7 +444,7 @@ export function AdminHomePage() {
         {platformTotals.length > 0 && (
           <section>
             <SectionTitle title="Kênh tải hôm nay" linkTo="/vid-admin/analytics" linkLabel="Analytics →" />
-            <div className="rounded-xl border border-line bg-canvas p-4 space-y-3">
+            <div className="rounded-card border border-line bg-surface shadow-card p-4 space-y-3">
               {platformTotals.slice(0, 8).map(p => (
                 <PlatformBar key={p.platform} p={p} maxTotal={maxPlatTotal} />
               ))}
@@ -467,7 +459,7 @@ export function AdminHomePage() {
         {failedJobs.length > 0 && (
           <section>
             <SectionTitle title="Recent Failures" linkTo="/vid-admin/jobs" linkLabel="All jobs →" />
-            <div className="rounded-xl border border-line bg-canvas px-4 py-2">
+            <div className="rounded-card border border-line bg-surface shadow-card px-4 py-2">
               {failedJobs.map((f, i) => <FailureRow key={f.id ?? i} job={f} />)}
             </div>
           </section>
@@ -490,9 +482,9 @@ export function AdminHomePage() {
             ))}
           </div>
           {proxyEntries.some(([, p]) => p.total === 0) && (
-            <p className="mt-2 text-[11px] text-accent-text">
+            <p className="mt-2 text-[11px] text-warning">
               ⚠ Một số platform không có proxy — tải có thể bị chặn.{' '}
-              <Link to="/vid-admin/proxy" className="underline hover:text-accent-text">Thêm proxy →</Link>
+              <Link to="/vid-admin/proxy" className="underline hover:text-warning">Thêm proxy →</Link>
             </p>
           )}
         </section>
@@ -519,7 +511,7 @@ export function AdminHomePage() {
               const rate = info.success_rate ?? 100
               const tone: Tone = rate >= 95 ? 'green' : rate >= 80 ? 'amber' : 'red'
               return (
-                <div key={platform} className={`rounded-lg border bg-canvas px-3 py-2.5 ${TONE[tone].border}`}>
+                <div key={platform} className={`rounded-control border bg-surface px-3 py-2.5 ${TONE[tone].border}`}>
                   <div className="text-[10px] text-fg-muted uppercase font-mono mb-1">
                     {PLAT_ABBR[platform.toLowerCase()] ?? platform}
                   </div>
@@ -527,7 +519,7 @@ export function AdminHomePage() {
                     {rate.toFixed(0)}%
                   </div>
                   {info.top_layer && (
-                    <div className="text-[9px] text-fg-muted mt-0.5 truncate">{info.top_layer}</div>
+                    <div className="text-[10px] text-fg-muted mt-0.5 truncate">{info.top_layer}</div>
                   )}
                 </div>
               )
@@ -551,7 +543,7 @@ export function AdminHomePage() {
             <Link
               key={l.to}
               to={l.to}
-              className="rounded-lg border border-line bg-canvas px-3 py-2.5 text-center text-xs text-fg-muted hover:text-fg-2 hover:border-line transition-colors"
+              className="rounded-control border border-line bg-surface px-3 py-2.5 text-center text-xs text-fg-muted hover:text-fg-2 hover:border-line transition-colors"
             >
               {l.label}
             </Link>

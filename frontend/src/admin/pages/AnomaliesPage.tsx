@@ -20,7 +20,7 @@ const STATE_ORDER: Record<string, number> = {
 }
 const STATE_STYLE: Record<string, string> = {
   escalated:   'border-danger/60 bg-danger-soft text-danger',
-  under_watch: 'border-accent/60 bg-accent-soft text-accent-text',
+  under_watch: 'border-warning/30 bg-warning-soft text-warning',
   detected:    'border-line bg-surface-2 text-fg-2',
   resolved:    'border-line bg-surface-2 text-fg-muted',
 }
@@ -67,10 +67,10 @@ export default function AnomaliesPage() {
   const activeCount = items.filter(a => a.state !== 'resolved').length
 
   return (
-    <div className="min-h-screen bg-canvas text-fg p-6 space-y-5">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-fg">Anomalies</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Anomalies</h1>
           <p className="text-xs text-fg-muted">
             {activeCount} đang hoạt động · {items.length} tổng · làm mới 30s
           </p>
@@ -98,7 +98,7 @@ export default function AnomaliesPage() {
             ([k]) => !['id', 'state', 'metric', 'detected_at'].includes(k))
           return (
             <div key={a.id}
-                 className={`rounded-lg border p-3 ${STATE_STYLE[a.state ?? ''] ?? 'border-line bg-surface-2'}`}>
+                 className={`rounded-card border p-3 ${STATE_STYLE[a.state ?? ''] ?? 'border-line bg-surface shadow-card'}`}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">

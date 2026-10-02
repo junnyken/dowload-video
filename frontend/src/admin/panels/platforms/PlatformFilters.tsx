@@ -92,7 +92,7 @@ export function PlatformFilters({
             value={value.search}
             onChange={e => onChange({ ...value, search: e.target.value })}
             placeholder="Search platforms…"
-            className="w-full rounded-lg border border-line bg-surface py-1.5 pl-8 pr-3 text-xs text-fg-2 placeholder:text-fg-muted outline-none transition-colors focus:border-line-strong focus:bg-surface"
+            className="w-full rounded-control border border-line bg-surface py-1.5 pl-8 pr-3 text-xs text-fg-2 placeholder:text-fg-muted outline-none transition-colors focus:border-line-strong focus:bg-surface"
           />
           {value.search && (
             <button

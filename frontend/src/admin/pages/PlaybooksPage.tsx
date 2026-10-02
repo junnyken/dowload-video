@@ -56,9 +56,9 @@ export default function PlaybooksPage() {
   }
 
   return (
-    <div className="min-h-screen bg-canvas text-fg p-6 space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-fg">Playbooks</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-fg">Playbooks</h1>
         <p className="text-xs text-fg-muted">
           {data
             ? `${data.matched_playbook_count} playbook khớp · ${data.active_anomaly_count} bất thường đang hoạt động`
@@ -73,14 +73,14 @@ export default function PlaybooksPage() {
           const matched = !!pb.currently_matched
           return (
             <div key={pb.id}
-                 className={`rounded-lg border p-4 ${matched
-                   ? 'border-accent/50 bg-accent-soft' : 'border-line bg-surface-2'}`}>
+                 className={`rounded-control border p-4 ${matched
+                   ? 'border-warning/30 bg-warning-soft' : 'border-line bg-surface shadow-card'}`}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <h2 className="text-sm font-semibold text-fg">{pb.name}</h2>
                     {matched && (
-                      <span className="rounded bg-accent/40 px-1.5 py-0.5 text-[10px] text-accent-text">
+                      <span className="rounded bg-warning-soft px-1.5 py-0.5 text-[10px] text-warning">
                         đang khớp
                       </span>
                     )}
@@ -135,7 +135,7 @@ export default function PlaybooksPage() {
         })}
       </div>
 
-      <div className="rounded-lg border border-line bg-surface-2 p-4">
+      <div className="rounded-card border border-line bg-surface shadow-card p-4">
         <h2 className="mb-2 text-sm font-semibold text-fg">Lịch sử chạy</h2>
         {history.length === 0
           ? <p className="text-[11px] text-fg-muted">Chưa có lần chạy nào.</p>

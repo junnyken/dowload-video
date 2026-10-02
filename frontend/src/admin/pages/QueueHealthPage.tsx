@@ -29,7 +29,7 @@ function Stat({ label, value, hint, tone }: {
     : tone === 'warn' ? 'text-warning'
     : tone === 'ok' ? 'text-success' : 'text-fg'
   return (
-    <div className="rounded-lg border border-line bg-surface-2 p-3">
+    <div className="rounded-card border border-line bg-surface shadow-card p-3">
       <div className="text-[10px] uppercase tracking-wide text-fg-muted">{label}</div>
       <div className={`mt-1 text-xl font-semibold ${colour}`}>{value}</div>
       {hint && <div className="mt-0.5 text-[10px] text-fg-muted">{hint}</div>}
@@ -71,10 +71,10 @@ export default function QueueHealthPage() {
   const wait = health ? Math.round(health.estimated_wait_seconds) : 0
 
   return (
-    <div className="min-h-screen bg-canvas text-fg p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-fg">Queue Health</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Queue Health</h1>
           <p className="text-xs text-fg-muted">Tự làm mới mỗi 15s</p>
         </div>
         <button onClick={resetTuning} disabled={busy}
@@ -107,7 +107,7 @@ export default function QueueHealthPage() {
       )}
 
       {health && Object.keys(health.jobs_by_priority || {}).length > 0 && (
-        <div className="rounded-lg border border-line bg-surface-2 p-4">
+        <div className="rounded-card border border-line bg-surface shadow-card p-4">
           <h2 className="mb-2 text-sm font-semibold text-fg">Job theo mức ưu tiên</h2>
           <div className="flex flex-wrap gap-2">
             {Object.entries(health.jobs_by_priority).map(([k, v]) => (
@@ -120,7 +120,7 @@ export default function QueueHealthPage() {
       )}
 
       {tune && (
-        <div className="rounded-lg border border-line bg-surface-2 p-4">
+        <div className="rounded-card border border-line bg-surface shadow-card p-4">
           <h2 className="mb-2 text-sm font-semibold text-fg">Auto-tune</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
             {Object.entries(tune.params || {}).map(([k, v]) => (

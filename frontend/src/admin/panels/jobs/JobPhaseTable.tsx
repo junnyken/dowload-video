@@ -65,13 +65,13 @@ export function JobPhaseTable({ traces }: JobPhaseTableProps) {
   return (
     <div className="overflow-x-auto">
       <table className="min-w-[960px] w-full text-sm">
-        <thead className="sticky top-0 z-10 bg-canvas">
+        <thead className="sticky top-0 z-10 bg-surface-2">
           <tr className="border-y border-line">
             {COLS.map(col => (
               <th
                 key={col.key}
                 className={cn(
-                  'py-2 pr-3 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-fg-muted first:pl-4',
+                  'py-2 pr-3 text-left font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted first:pl-4',
                   col.w,
                 )}
               >
@@ -105,7 +105,7 @@ export function JobPhaseTable({ traces }: JobPhaseTableProps) {
                 <td className="py-2.5 pr-3">
                   <span
                     className={cn(
-                      'inline-block rounded border px-1.5 py-px font-mono text-[9px] font-bold uppercase tracking-widest',
+                      'inline-block rounded border px-1.5 py-px font-mono text-[10px] font-bold uppercase tracking-widest',
                       PILL[row.status],
                     )}
                   >

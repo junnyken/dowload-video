@@ -68,7 +68,7 @@ function CopyButton({ text }: { text: string }) {
       onClick={handleCopy}
       title="Copy key prefix"
       className={cn(
-        'ml-1 rounded px-1 py-0.5 font-mono text-[9px] transition-colors',
+        'ml-1 rounded px-1 py-0.5 font-mono text-[10px] transition-colors',
         copied
           ? 'bg-success-soft text-success'
           : 'bg-surface text-fg-muted hover:bg-surface-2 hover:text-fg-2',
@@ -83,7 +83,7 @@ const SCOPE_COLORS: Record<string, string> = {
   read: 'bg-surface-2 text-fg-2',
   write: 'bg-success-soft text-success',
   batch: 'bg-surface-2 text-fg-2',
-  webhook: 'bg-accent-soft text-accent-text',
+  webhook: 'bg-warning-soft text-warning',
   admin: 'bg-danger-soft text-danger',
 }
 
@@ -136,12 +136,12 @@ export default function ApiKeysPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-mono text-lg font-bold text-fg">Partner API Keys</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Partner API Keys</h1>
           <p className="mt-0.5 text-xs text-fg-muted">vgp_ prefixed keys for tenant partner access</p>
         </div>
-        <button onClick={fetchData} className="rounded bg-surface-2 px-3 py-1.5 text-xs text-fg-2 hover:bg-line">
+        <button onClick={fetchData} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
           ↺ Refresh
         </button>
       </div>
@@ -155,7 +155,7 @@ export default function ApiKeysPage() {
             { label: 'Req Today', value: data.total_requests_today.toLocaleString() },
             { label: 'Req Month', value: data.total_requests_month.toLocaleString() },
           ].map(c => (
-            <div key={c.label} className="rounded-lg border border-line bg-canvas p-4">
+            <div key={c.label} className="rounded-card border border-line bg-surface shadow-card p-4">
               <p className="font-mono text-xs text-fg-muted">{c.label}</p>
               <p className="mt-1 font-mono text-2xl font-bold text-fg">{c.value}</p>
             </div>
@@ -185,10 +185,10 @@ export default function ApiKeysPage() {
       {loading ? (
         <div className="py-12 text-center font-mono text-xs text-fg-muted">Loading API keys…</div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-line">
+        <div className="overflow-x-auto rounded-control border border-line">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-line bg-canvas">
+              <tr className="border-b border-line bg-surface-2">
                 {['Key', 'Tenant', 'Scopes', 'IP Allowlist', 'Created By', 'Requests', 'Rate Limits', 'Last Used', 'Expires', 'Status'].map(h => (
                   <th key={h} className="px-3 py-2.5 font-mono font-semibold text-fg-muted">{h}</th>
                 ))}

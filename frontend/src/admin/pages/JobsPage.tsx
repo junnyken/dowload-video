@@ -66,7 +66,7 @@ const STATUS_STYLE: Record<string, { pill: string; dot: string; label: string }>
     label: 'RUNNING',
   },
   pending: {
-    pill: 'border-accent/30 bg-accent-soft text-accent-text',
+    pill: 'border-warning/30 bg-warning-soft text-warning',
     dot: 'bg-accent',
     label: 'PENDING',
   },
@@ -95,19 +95,17 @@ function StatusPill({ status }: { status: string }) {
 // ─── Platform badge ───────────────────────────────────────────────────────────
 
 const PLATFORM_COLOR: Record<string, string> = {
-  youtube:     'bg-danger-soft text-danger border-danger/30',
   tiktok:      'bg-surface text-fg-2 border-line',
   instagram:   'bg-surface-2 text-fg-2 border-line',
   facebook:    'bg-surface-2 text-fg-2 border-line',
   'twitter/x': 'bg-surface text-fg-2 border-line',
-  soundcloud:  'bg-accent-soft text-accent-text border-accent/30',
   threads:     'bg-surface text-fg-2 border-line',
 }
 
 function PlatformBadge({ platform }: { platform: string }) {
-  const cls = PLATFORM_COLOR[platform.toLowerCase()] ?? 'bg-surface text-fg-muted border-line'
+  const cls = PLATFORM_COLOR[platform.toLowerCase()] ?? 'bg-surface-2 text-fg-2 border-line'
   return (
-    <span className={cn('rounded border px-1.5 py-0.5 text-[10px] font-semibold', cls)}>
+    <span className={cn('rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-semibold', cls)}>
       {platform}
     </span>
   )
@@ -136,7 +134,7 @@ function JobDetailPanel({ job, onClose }: { job: ActiveJob; onClose: () => void 
   const elapsed  = useElapsedSeconds(job.created_at)
 
   return (
-    <div className="rounded-xl border border-line bg-canvas p-4 space-y-3">
+    <div className="rounded-card border border-line bg-surface shadow-card p-4 space-y-3">
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm font-bold text-fg">{job.id}</span>
@@ -154,7 +152,7 @@ function JobDetailPanel({ job, onClose }: { job: ActiveJob; onClose: () => void 
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-lg border border-line bg-surface-2 px-4 py-3 text-xs">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-control border border-line bg-surface px-4 py-3 text-xs">
         <DetailRow label="Job ID"   value={job.id} mono />
         <DetailRow label="Batch ID" value={job.batch_id ?? '—'} mono />
         <DetailRow label="Status"   value={job.status} />
@@ -163,7 +161,7 @@ function JobDetailPanel({ job, onClose }: { job: ActiveJob; onClose: () => void 
         <DetailRow label="Elapsed"  value={fmtElapsed(elapsed)} mono />
       </div>
 
-      <div className="rounded-lg border border-line bg-surface-2 px-3 py-2">
+      <div className="rounded-control border border-line bg-surface px-3 py-2">
         <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-fg-muted">URL</p>
         <a
           href={job.original_url}
@@ -237,13 +235,13 @@ export function JobsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-base font-semibold text-fg">Active Jobs</h1>
+            <h1 className="text-lg font-semibold tracking-tight text-fg">Active Jobs</h1>
             {!isLoading && (
               <span
                 className={cn(
-                  'inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5',
+                  'inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-md px-1.5',
                   'font-mono text-[11px] font-bold tabular-nums',
-                  totalCount > 0 ? 'bg-accent text-accent-fg' : 'bg-surface text-fg-muted',
+                  'border border-line bg-surface-2 text-fg-2',
                 )}
               >
                 {totalCount}
@@ -268,7 +266,7 @@ export function JobsPage() {
             onClick={() => refetch()}
             disabled={isFetching}
             className={cn(
-              'flex items-center gap-1.5 rounded-lg border border-line bg-surface',
+              'flex items-center gap-1.5 rounded-control border border-line bg-surface',
               'px-3 py-1.5 text-xs text-fg-2 transition-colors',
               'hover:border-line-strong hover:text-fg disabled:opacity-40',
             )}
@@ -282,7 +280,7 @@ export function JobsPage() {
       </div>
 
       {errorMsg && (
-        <div className="rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">
+        <div className="rounded-control border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">
           Failed to fetch jobs: {errorMsg}
         </div>
       )}
@@ -295,7 +293,7 @@ export function JobsPage() {
       )}
 
       {!isLoading && totalCount > 0 && (
-        <div className="overflow-hidden rounded-xl border border-line bg-canvas">
+        <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -327,7 +325,7 @@ export function JobsPage() {
       )}
 
       {!isLoading && !errorMsg && totalCount === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-line bg-canvas py-16 gap-3">
+        <div className="flex flex-col items-center justify-center rounded-card border border-line bg-surface shadow-card py-16 gap-3">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="h-10 w-10 text-fg-muted">
             <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -341,7 +339,7 @@ export function JobsPage() {
       )}
 
       {isLoading && (
-        <div className="overflow-hidden rounded-xl border border-line bg-canvas">
+        <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
           {[...Array(5)].map((_, i) => (
             <div key={i} className={cn('flex gap-4 px-4 py-3 border-b border-line', i === 4 && 'border-b-0')}>
               <div className="h-4 w-20 animate-pulse rounded bg-surface" />

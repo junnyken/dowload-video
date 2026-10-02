@@ -41,7 +41,7 @@ function platformLabel(p: string): string {
 // ─── Mapping helpers ───────────────────────────────────────────────────────────
 
 function formatRelativeTime(unixSec: number): string {
-  const diffSec = Math.floor(Date.now() / 1000) - unixSec
+  const diffSec = Math.max(0, Math.floor(Date.now() / 1000 - unixSec))
   if (diffSec < 60) return `${diffSec}s ago`
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`
   if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`
@@ -194,11 +194,11 @@ export function CookiesPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-base font-semibold text-fg">Cookie Pool</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-fg">Cookie Pool</h1>
         <p className="mt-0.5 text-xs text-fg-muted">
           {summary.active} active · {summary.cooldown} in cooldown · {summary.disabled} disabled
           {summary.expiringSoon > 0 && (
-            <span className="ml-2 font-medium text-accent-text">
+            <span className="ml-2 font-medium text-warning">
               {summary.expiringSoon} expiring soon
             </span>
           )}
@@ -223,11 +223,11 @@ export function CookiesPage() {
                     : 'border-line text-fg-muted hover:border-line-strong hover:text-fg-2',
                 ].join(' ')}
               >
-                <span className="font-mono text-[9px] opacity-60">{PLATFORM_ICONS[p] ?? p.slice(0,2).toUpperCase()}</span>
+                <span className="font-mono text-[10px] opacity-60">{PLATFORM_ICONS[p] ?? p.slice(0,2).toUpperCase()}</span>
                 {platformLabel(p)}
                 {count > 0 && (
                   <span className={[
-                    'ml-0.5 rounded-full px-1 py-0 font-mono text-[9px]',
+                    'ml-0.5 rounded-full px-1 py-0 font-mono text-[10px]',
                     isActive ? 'bg-surface-2 text-fg-2' : 'bg-surface text-fg-muted',
                   ].join(' ')}>
                     {count}

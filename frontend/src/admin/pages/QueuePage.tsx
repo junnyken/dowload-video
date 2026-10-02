@@ -120,7 +120,7 @@ export function QueuePage() {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3">
         <p className="text-sm text-danger">{error ?? 'No data'}</p>
-        <button onClick={fetchWorkers} className="rounded-lg border border-line px-3 py-1.5 text-xs text-fg-2 hover:bg-surface">Retry</button>
+        <button onClick={fetchWorkers} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">Retry</button>
       </div>
     )
   }
@@ -131,19 +131,19 @@ export function QueuePage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-mono text-sm font-semibold text-fg">Queue & Workers</h2>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Queue & Workers</h1>
           <p className="mt-0.5 text-xs text-fg-muted">
             {data.active_count} active · {data.dead_letter_count} dead-letter · auto-refresh 15s
           </p>
         </div>
-        <button onClick={fetchWorkers} className="text-[10px] text-fg-muted hover:text-fg-2">↺ Refresh</button>
+        <button onClick={fetchWorkers} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">↺ Refresh</button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
         {/* Queue depths */}
-        <div className="rounded-2xl border border-line bg-surface-2 p-5">
+        <div className="rounded-card border border-line bg-surface shadow-card p-5">
           <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">Queue Depths</h3>
           <div className="flex flex-col gap-3">
             <QueueDepthBar name="default" count={queues.default ?? 0} max={maxQ} />
@@ -168,7 +168,7 @@ export function QueuePage() {
         </div>
 
         {/* Active jobs */}
-        <div className="rounded-2xl border border-line bg-surface-2 p-5">
+        <div className="rounded-card border border-line bg-surface shadow-card p-5">
           <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
             Active Jobs ({active_jobs.length})
           </h3>
@@ -179,11 +179,11 @@ export function QueuePage() {
               {active_jobs.map((j, i) => {
                 const id = j.job_id ?? j.id ?? String(i)
                 return (
-                  <div key={id} className="rounded-xl border border-line bg-canvas p-2.5">
+                  <div key={id} className="rounded-card border border-line bg-surface shadow-card p-2.5">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-mono text-[10px] text-fg-2 uppercase">{j.platform}</span>
                       {j.current_phase && (
-                        <span className="text-[9px] text-fg-muted">{j.current_phase}</span>
+                        <span className="text-[10px] text-fg-muted">{j.current_phase}</span>
                       )}
                     </div>
                     {j.url && (
@@ -191,12 +191,12 @@ export function QueuePage() {
                     )}
                     <div className="mt-1 flex items-center justify-between">
                       {j.elapsed_ms != null && (
-                        <span className="text-[9px] text-fg-muted">{Math.round(j.elapsed_ms / 1000)}s</span>
+                        <span className="text-[10px] text-fg-muted">{Math.round(j.elapsed_ms / 1000)}s</span>
                       )}
                       <button
                         onClick={() => handleCancel(id)}
                         disabled={cancelling === id}
-                        className="text-[9px] text-danger hover:text-danger disabled:opacity-40"
+                        className="text-[10px] text-danger hover:text-danger disabled:opacity-40"
                       >
                         {cancelling === id ? 'cancelling…' : 'cancel'}
                       </button>
@@ -210,22 +210,22 @@ export function QueuePage() {
       </div>
 
       {/* Dead letter */}
-      <div className="rounded-2xl border border-line bg-surface-2 p-5">
+      <div className="rounded-card border border-line bg-surface shadow-card p-5">
         <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
           Dead Letter — Failed Last 1h ({dead_letter.length})
         </h3>
         {dead_letter.length === 0 ? (
           <p className="text-xs text-fg-muted">No failed jobs in the last hour.</p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-line">
+          <div className="overflow-x-auto rounded-card border border-line">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-line bg-surface-2">
-                  <th className="py-2 pl-3 text-left font-mono text-[9px] uppercase tracking-widest text-fg-muted">Platform</th>
-                  <th className="py-2 text-left font-mono text-[9px] uppercase tracking-widest text-fg-muted">Error</th>
-                  <th className="py-2 text-right font-mono text-[9px] uppercase tracking-widest text-fg-muted">Retries</th>
-                  <th className="py-2 text-right font-mono text-[9px] uppercase tracking-widest text-fg-muted">Failed</th>
-                  <th className="py-2 pr-3 text-right font-mono text-[9px] uppercase tracking-widest text-fg-muted">Action</th>
+                  <th className="py-2 pl-3 text-left font-mono text-[10px] uppercase tracking-widest text-fg-muted">Platform</th>
+                  <th className="py-2 text-left font-mono text-[10px] uppercase tracking-widest text-fg-muted">Error</th>
+                  <th className="py-2 text-right font-mono text-[10px] uppercase tracking-widest text-fg-muted">Retries</th>
+                  <th className="py-2 text-right font-mono text-[10px] uppercase tracking-widest text-fg-muted">Failed</th>
+                  <th className="py-2 pr-3 text-right font-mono text-[10px] uppercase tracking-widest text-fg-muted">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -239,7 +239,7 @@ export function QueuePage() {
                       <button
                         onClick={() => handleRetry(j.id)}
                         disabled={retrying === j.id}
-                        className="rounded-lg border border-line px-2 py-0.5 text-[9px] text-fg-2 hover:bg-surface-2 disabled:opacity-40"
+                        className="rounded-control border border-line px-2 py-0.5 text-[10px] text-fg-2 hover:bg-surface-2 disabled:opacity-40"
                       >
                         {retrying === j.id ? '…' : 'retry'}
                       </button>

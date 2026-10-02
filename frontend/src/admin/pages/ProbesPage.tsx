@@ -42,10 +42,10 @@ export default function ProbesPage() {
   }
 
   if (isError) {
-    return <div className="max-w-2xl mx-auto mt-16 rounded-xl border border-danger/30 bg-danger-soft p-6">
+    return <div className="max-w-2xl mx-auto mt-16 rounded-card border border-danger/30 bg-danger-soft p-6">
       <p className="text-danger font-semibold mb-1">Không tải được</p>
       <p className="text-sm text-fg-muted mb-4">{(error as Error)?.message}</p>
-      <button onClick={() => refetch()} className="px-4 py-2 rounded-lg bg-surface-2 text-fg-2 text-sm">Thử lại</button>
+      <button onClick={() => refetch()} className="px-4 py-2 rounded-control bg-surface-2 text-fg-2 text-sm">Thử lại</button>
     </div>
   }
 
@@ -59,18 +59,18 @@ export default function ProbesPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+    <div className="space-y-6">
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-fg">Sức khoẻ nền tảng</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Sức khoẻ nền tảng</h1>
           <p className="text-sm text-fg-muted mt-0.5">Dò chủ động mỗi 30 phút · chỉ lấy metadata, không tải</p>
         </div>
         <button
           onClick={() => runNow.mutate()}
           disabled={runNow.isPending}
-          className="px-4 py-2 rounded-lg bg-accent-soft border border-accent/40 text-accent-text
-                     text-sm font-semibold hover:bg-accent-soft disabled:opacity-50 transition-colors"
+          className="px-4 py-2 rounded-control border border-accent bg-accent text-accent-fg
+                     text-sm font-semibold hover:bg-accent-hover disabled:opacity-50 transition-colors"
         >
           {runNow.isPending ? 'Đang xếp hàng…' : '▶ Dò ngay'}
         </button>
@@ -80,7 +80,7 @@ export default function ProbesPage() {
           this the only visible change was a 200ms flicker — identical to a
           button that does nothing, which is how it was first reported. */}
       {runNow.isSuccess && (
-        <div className="rounded-xl border border-success/30 bg-success-soft px-4 py-3">
+        <div className="rounded-card border border-success/30 bg-success-soft px-4 py-3">
           <p className="text-sm text-success font-semibold">Đã xếp hàng đợi</p>
           <p className="text-xs text-fg-muted mt-0.5">
             Mỗi nền tảng mất tới 30 giây, nên một lượt dò có thể chạy hơn một phút.
@@ -89,7 +89,7 @@ export default function ProbesPage() {
         </div>
       )}
       {runNow.isError && (
-        <div className="rounded-xl border border-danger/30 bg-danger-soft px-4 py-3">
+        <div className="rounded-card border border-danger/30 bg-danger-soft px-4 py-3">
           <p className="text-sm text-danger font-semibold">Không xếp được hàng đợi</p>
           <p className="text-xs text-fg-muted mt-0.5 break-words">
             {(runNow.error as Error)?.message || 'Lỗi không xác định.'}
@@ -99,15 +99,15 @@ export default function ProbesPage() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {([['ok', 'Tải được'], ['failed', 'Hỏng'], ['stale', 'Cũ'], ['not_configured', 'Chưa cấu hình']] as const).map(([k, lbl]) => (
-          <div key={k} className={`rounded-xl border px-3 py-2 ${TONE[k]}`}>
-            <div className="text-lg font-bold tabular-nums">{c[k] ?? 0}</div>
-            <div className="text-[11px] opacity-80">{lbl}</div>
+          <div key={k} className="rounded-card border border-line bg-surface px-4 py-3 shadow-card">
+            <div className="font-mono text-[10px] font-medium uppercase tracking-widest text-fg-muted">{lbl}</div>
+            <div className={`mt-1.5 font-mono text-2xl font-semibold tabular-nums ${TONE[k].split(' ')[0]}`}>{c[k] ?? 0}</div>
           </div>
         ))}
       </div>
 
       {unchecked > 0 && (
-        <div className="rounded-xl border border-line bg-surface-2 px-4 py-3">
+        <div className="rounded-card border border-line bg-surface shadow-card px-4 py-3">
           <p className="text-xs text-fg-muted leading-relaxed">
             <b className="text-fg-2">{unchecked}/{data?.total} nền tảng chưa có bằng chứng nào.</b>{' '}
             Chúng không được tính là khoẻ — nền tảng không ai dò trông y hệt lúc nó vừa chết.
@@ -119,7 +119,7 @@ export default function ProbesPage() {
 
       {data?.note && <p className="text-xs text-fg-muted leading-relaxed">{data.note}</p>}
 
-      <div className="rounded-xl border border-line overflow-hidden">
+      <div className="rounded-card border border-line overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-surface text-fg-muted text-xs">
             <tr>
@@ -151,11 +151,11 @@ export default function ProbesPage() {
                         autoFocus value={draft} onChange={e => setDraft(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') save(r.platform); if (e.key === 'Escape') setEditing(null) }}
                         placeholder="https://…"
-                        className="flex-1 min-w-0 px-2 py-1 rounded-md bg-canvas border border-line-strong
+                        className="flex-1 min-w-0 px-2 py-1 rounded-md bg-surface border border-line-strong
                                    text-xs text-fg-2 focus:outline-none focus:border-accent/60"
                       />
-                      <button onClick={() => save(r.platform)} className="px-2 py-1 rounded-md bg-accent-soft text-accent-text text-xs font-semibold">Lưu</button>
-                      <button onClick={() => setEditing(null)} className="px-2 py-1 rounded-md text-fg-muted text-xs">Huỷ</button>
+                      <button onClick={() => save(r.platform)} className="px-2 py-1 rounded-md border border-accent bg-accent text-accent-fg text-xs font-semibold">Lưu</button>
+                      <button onClick={() => setEditing(null)} className="px-2 py-1 rounded-md text-fg-2 text-xs">Huỷ</button>
                     </div>
                   ) : (
                     <button

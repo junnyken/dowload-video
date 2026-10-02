@@ -50,7 +50,7 @@ function InputBase({ className, ...props }: React.InputHTMLAttributes<HTMLInputE
   return (
     <input
       className={cn(
-        'w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs text-fg',
+        'w-full rounded-control border border-line bg-surface px-3 py-2 text-xs text-fg',
         'placeholder:text-fg-muted outline-none transition-colors',
         'focus:border-line focus:ring-1 focus:ring-line-strong',
         className,
@@ -64,7 +64,7 @@ function SelectBase({ className, ...props }: React.SelectHTMLAttributes<HTMLSele
   return (
     <select
       className={cn(
-        'w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs text-fg',
+        'w-full rounded-control border border-line bg-surface px-3 py-2 text-xs text-fg',
         'outline-none transition-colors focus:border-line',
         className,
       )}
@@ -138,7 +138,7 @@ export function AddCookieModal({ isOpen, onClose, onSave, onTest }: AddCookieMod
       {/* Dialog */}
       <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4">
         <div
-          className="relative w-full max-w-lg rounded-2xl border border-line bg-canvas shadow-2xl"
+          className="relative w-full max-w-lg rounded-card border border-line bg-surface shadow-2xl"
           onClick={e => e.stopPropagation()}
           role="dialog"
           aria-modal
@@ -202,7 +202,7 @@ export function AddCookieModal({ isOpen, onClose, onSave, onTest }: AddCookieMod
                     type="button"
                     onClick={() => set('importMode', m.value)}
                     className={cn(
-                      'flex-1 rounded-lg border py-1.5 text-center text-xs font-medium transition-colors',
+                      'flex-1 rounded-control border py-1.5 text-center text-xs font-medium transition-colors',
                       form.importMode === m.value
                         ? 'border-line bg-surface-2 text-fg-2'
                         : 'border-line text-fg-muted hover:border-line-strong hover:text-fg-2',
@@ -224,7 +224,7 @@ export function AddCookieModal({ isOpen, onClose, onSave, onTest }: AddCookieMod
                 placeholder={hint.placeholder}
                 rows={6}
                 className={cn(
-                  'w-full resize-y rounded-lg border border-line bg-surface px-3 py-2.5',
+                  'w-full resize-y rounded-control border border-line bg-surface px-3 py-2.5',
                   'font-mono text-[11px] text-fg-2 placeholder:text-fg-muted',
                   'outline-none transition-colors focus:border-line focus:ring-1 focus:ring-line-strong',
                 )}
@@ -269,7 +269,7 @@ export function AddCookieModal({ isOpen, onClose, onSave, onTest }: AddCookieMod
           {/* ── Test result ── */}
           {testResult && (
             <div className={cn(
-              'mx-5 mb-1 rounded-lg border px-3 py-2.5 text-xs space-y-1',
+              'mx-5 mb-1 rounded-control border px-3 py-2.5 text-xs space-y-1',
               testResult.ok
                 ? 'border-success/60 bg-success-soft text-success'
                 : 'border-danger/60 bg-danger-soft text-danger',
@@ -291,7 +291,7 @@ export function AddCookieModal({ isOpen, onClose, onSave, onTest }: AddCookieMod
           <div className="flex items-center justify-between border-t border-line px-5 py-3">
             <button
               onClick={onClose}
-              className="rounded-lg border border-line px-4 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:border-line-strong hover:text-fg-2"
+              className="rounded-control border border-line px-4 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:border-line-strong hover:text-fg-2"
             >
               Cancel
             </button>
@@ -301,7 +301,7 @@ export function AddCookieModal({ isOpen, onClose, onSave, onTest }: AddCookieMod
                 onClick={handleTest}
                 disabled={!form.platform || !form.rawCookie || testing}
                 className={cn(
-                  'flex items-center gap-1.5 rounded-lg border px-4 py-1.5 text-xs font-medium transition-colors',
+                  'flex items-center gap-1.5 rounded-control border px-4 py-1.5 text-xs font-medium transition-colors',
                   'border-line text-fg-2 hover:border-line-strong hover:bg-surface',
                   'disabled:cursor-not-allowed disabled:opacity-40',
                 )}
@@ -323,7 +323,7 @@ export function AddCookieModal({ isOpen, onClose, onSave, onTest }: AddCookieMod
                 onClick={() => onSave(form)}
                 disabled={!canSubmit}
                 className={cn(
-                  'rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-accent-fg transition-colors hover:bg-accent-hover',
+                  'rounded-control bg-accent px-4 py-1.5 text-xs font-semibold text-accent-fg transition-colors hover:bg-accent-hover',
                   'disabled:cursor-not-allowed disabled:opacity-40',
                 )}
               >

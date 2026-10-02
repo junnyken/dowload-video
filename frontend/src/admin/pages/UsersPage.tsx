@@ -122,7 +122,7 @@ function SignupChart({ stats, days }: { stats: DailySignup[]; days: number }) {
         {yTicks.map(({ y, label }) => (
           <g key={y}>
             <line x1={PAD_LEFT} y1={y} x2={W - PAD_RIGHT} y2={y} stroke="var(--vg-surface-2)" strokeWidth={1} />
-            <text x={PAD_LEFT - 4} y={y + 3.5} textAnchor="end" fontSize={8} fill="var(--vg-line-strong)">{label}</text>
+            <text x={PAD_LEFT - 4} y={y + 3.5} textAnchor="end" fontSize={8} fill="var(--vg-fg-muted)">{label}</text>
           </g>
         ))}
 
@@ -130,7 +130,7 @@ function SignupChart({ stats, days }: { stats: DailySignup[]; days: number }) {
         <line x1={PAD_LEFT} y1={PAD_TOP + innerH} x2={W - PAD_RIGHT} y2={PAD_TOP + innerH} stroke="var(--vg-surface-2)" strokeWidth={1} />
 
         {/* Area fill */}
-        <polygon points={fillPoints} fill="url(#signupGrad)" opacity={0.25} />
+        <polygon points={fillPoints} fill="var(--vg-success)" opacity={0.08} />
 
         {/* Line */}
         <polyline
@@ -141,14 +141,6 @@ function SignupChart({ stats, days }: { stats: DailySignup[]; days: number }) {
           strokeLinejoin="round"
           strokeLinecap="round"
         />
-
-        {/* Gradient */}
-        <defs>
-          <linearGradient id="signupGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--vg-success)" />
-            <stop offset="100%" stopColor="var(--vg-success)" stopOpacity={0} />
-          </linearGradient>
-        </defs>
 
         {/* Dots (only for <= 30d to avoid clutter) */}
         {stats.length <= 30 && stats.map((s, i) => (
@@ -161,7 +153,7 @@ function SignupChart({ stats, days }: { stats: DailySignup[]; days: number }) {
         {stats.map((s, i) => {
           if (i % step !== 0 && i !== stats.length - 1) return null
           return (
-            <text key={i} x={xOf(i)} y={H - PAD_BOT + 14} textAnchor="middle" fontSize={7.5} fill="var(--vg-line-strong)">
+            <text key={i} x={xOf(i)} y={H - PAD_BOT + 14} textAnchor="middle" fontSize={7.5} fill="var(--vg-fg-muted)">
               {shortDate(s.date, days)}
             </text>
           )
@@ -175,14 +167,14 @@ function SignupChart({ stats, days }: { stats: DailySignup[]; days: number }) {
 
 function TierBadge({ tier }: { tier: string }) {
   const classes: Record<string, string> = {
-    free:       'bg-surface-2 text-fg-2',
-    pro:        'bg-accent-hover text-fg-2',
-    team:       'bg-accent-hover text-fg-2',
-    enterprise: 'bg-accent-hover text-fg-2',
+    free:       'border-line bg-surface-2 text-fg-2',
+    pro:        'border-line-strong bg-surface text-fg',
+    team:       'border-line-strong bg-surface text-fg',
+    enterprise: 'border-line-strong bg-surface text-fg',
   }
-  const cls = classes[tier.toLowerCase()] ?? 'bg-surface-2 text-fg-2'
+  const cls = classes[tier.toLowerCase()] ?? 'border-line bg-surface-2 text-fg-2'
   return (
-    <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${cls}`}>
+    <span className={`inline-block whitespace-nowrap rounded-md border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider ${cls}`}>
       {tier}
     </span>
   )
@@ -194,14 +186,14 @@ function StatCard({ label, value, accent, hint }: {
   label: string; value: string; accent?: 'amber' | 'green' | 'blue'; hint?: string
 }) {
   const valueClass = {
-    amber: 'text-accent-text',
+    amber: 'text-warning',
     green: 'text-success',
     blue:  'text-fg-2',
     undefined: 'text-fg',
   }[accent ?? 'undefined']
 
   return (
-    <div className="rounded-xl border border-line bg-canvas px-5 py-4 space-y-1">
+    <div className="rounded-card border border-line bg-surface shadow-card px-5 py-4 space-y-1">
       <div className="text-[10px] text-fg-muted uppercase tracking-widest font-mono">{label}</div>
       <div className={`text-2xl font-bold font-mono ${valueClass}`}>{value}</div>
       {hint && <div className="text-[10px] text-fg-muted leading-snug">{hint}</div>}
@@ -217,14 +209,14 @@ function ResetButton({
   userId: string; loading: boolean; message?: string; onReset: (id: string) => void; accent?: 'amber'
 }) {
   const btnClass = accent === 'amber'
-    ? 'bg-accent hover:bg-accent-hover text-accent-text disabled:opacity-50'
-    : 'bg-surface-2 hover:bg-line text-fg-2 disabled:opacity-50'
+    ? 'border border-warning/30 bg-warning-soft text-warning hover:border-accent disabled:opacity-50'
+    : 'border border-line bg-surface text-fg-2 hover:border-line-strong hover:bg-surface-2 disabled:opacity-50'
   return (
     <div className="flex items-center gap-2">
       <button
         onClick={() => onReset(userId)}
         disabled={loading}
-        className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${btnClass}`}
+        className={`px-2.5 py-1 rounded-control text-xs font-medium transition-colors cursor-pointer ${btnClass}`}
       >
         {loading ? 'Resetting…' : 'Reset Quota'}
       </button>
@@ -360,10 +352,10 @@ export default function UsersPage() {
   const tierTotal = Object.values(tierBreakdown).reduce((s, v) => s + v, 0) || 1
 
   return (
-    <div className="min-h-screen bg-canvas text-fg p-6 space-y-8">
+    <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-fg">Users</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-lg font-semibold tracking-tight text-fg">Users</h1>
         <div className="flex items-center gap-3">
           {loading && <span className="text-xs text-fg-muted animate-pulse">Refreshing…</span>}
           {!loading && <span className="text-xs text-fg-muted">Auto-refresh 60s</span>}
@@ -375,7 +367,7 @@ export default function UsersPage() {
           opaque id, /users/signups counts registrations per day. Neither lists
           who actually signed up, so an operator could see "3 new accounts" and
           still have no way to put one of them on Pro. This is that roster. */}
-      <div className="rounded-lg border border-line bg-surface-2 p-4">
+      <div className="rounded-card border border-line bg-surface shadow-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <div>
             <h2 className="text-sm font-semibold text-fg">Tài khoản đăng ký</h2>
@@ -387,7 +379,7 @@ export default function UsersPage() {
             value={accQuery}
             onChange={e => setAccQuery(e.target.value)}
             placeholder="Tìm theo email…"
-            className="w-64 rounded-md border border-line bg-canvas px-3 py-1.5
+            className="w-64 rounded-control border border-line bg-surface px-3 py-1.5
                        text-xs text-fg placeholder:text-fg-muted focus:border-line
                        focus:outline-none"
           />
@@ -473,7 +465,7 @@ export default function UsersPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg bg-danger-soft border border-danger/30 px-4 py-3 text-danger text-sm">
+        <div className="rounded-control bg-danger-soft border border-danger/30 px-4 py-3 text-danger text-sm">
           {error}
         </div>
       )}
@@ -498,7 +490,7 @@ export default function UsersPage() {
       )}
 
       {/* ── Signup trend chart ─────────────────────────────────────────── */}
-      <section className="rounded-xl border border-line bg-canvas p-5 space-y-4">
+      <section className="rounded-card border border-line bg-surface shadow-card p-5 space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
             <h2 className="text-sm font-semibold text-fg">New Signups</h2>
@@ -512,7 +504,7 @@ export default function UsersPage() {
             <button onClick={() => fetchSignups(signupDays)} className="text-[10px] text-fg-muted hover:text-fg-2 mr-1">
               ↺
             </button>
-            <div className="flex rounded-lg overflow-hidden border border-line">
+            <div className="flex rounded-control overflow-hidden border border-line">
               {([7, 30, 90] as const).map(d => (
                 <button
                   key={d}
@@ -521,7 +513,7 @@ export default function UsersPage() {
                     'px-3 py-1 font-mono text-xs transition-colors',
                     signupDays === d
                       ? 'bg-surface-2 text-fg'
-                      : 'bg-canvas text-fg-muted hover:text-fg-2',
+                      : 'bg-surface text-fg-muted hover:text-fg',
                   ].join(' ')}
                 >
                   {d}d
@@ -534,7 +526,7 @@ export default function UsersPage() {
         {signups && signups.daily_signups.length > 0 ? (
           <SignupChart stats={signups.daily_signups} days={signupDays} />
         ) : (
-          <div className="h-40 animate-pulse rounded-xl bg-surface-2" />
+          <div className="h-40 animate-pulse rounded-card bg-surface-2" />
         )}
 
         {/* Tier breakdown bar */}
@@ -551,8 +543,8 @@ export default function UsersPage() {
                 const barColor = {
                   free:       'bg-line-strong',
                   pro:        'bg-accent',
-                  team:       'bg-accent',
-                  enterprise: 'bg-accent',
+                  team:       'bg-fg-2',
+                  enterprise: 'bg-fg',
                 }[tier]
                 return (
                   <div key={tier} className="flex items-center gap-3 text-xs">
@@ -573,18 +565,18 @@ export default function UsersPage() {
 
       {/* ── Flagged users ──────────────────────────────────────────────── */}
       {data && data.flagged_users.length > 0 && (
-        <section className="rounded-xl border border-accent/60 bg-accent-soft p-5 space-y-3">
-          <h2 className="text-base font-semibold text-accent-text flex items-center gap-2">
+        <section className="rounded-card border border-warning/30 bg-warning-soft p-5 space-y-3">
+          <h2 className="text-base font-semibold text-warning flex items-center gap-2">
             <span className="inline-block w-2 h-2 rounded-full bg-accent" />
             Flagged Users
-            <span className="ml-1 text-xs text-accent-text font-normal">
+            <span className="ml-1 text-xs text-warning font-normal">
               (&gt;{data.abuse_threshold} downloads today)
             </span>
           </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-accent-text border-b border-accent/30">
+                <tr className="text-left text-warning border-b border-warning/30">
                   <th className="pb-2 pr-4 font-medium">User ID</th>
                   <th className="pb-2 pr-4 font-medium">Downloads Today</th>
                   <th className="pb-2 pr-4 font-medium">Tier</th>
@@ -593,9 +585,9 @@ export default function UsersPage() {
               </thead>
               <tbody>
                 {data.flagged_users.map(u => (
-                  <tr key={u.user_id} className="border-b border-accent/20 hover:bg-accent-soft transition-colors">
-                    <td className="py-2 pr-4 font-mono text-accent-text">{maskUserId(u.user_id)}</td>
-                    <td className="py-2 pr-4 text-accent-text font-semibold">{u.downloads_today}</td>
+                  <tr key={u.user_id} className="border-b border-warning/30 hover:bg-warning-soft transition-colors">
+                    <td className="py-2 pr-4 font-mono text-warning">{maskUserId(u.user_id)}</td>
+                    <td className="py-2 pr-4 text-warning font-semibold">{u.downloads_today}</td>
                     <td className="py-2 pr-4"><TierBadge tier={u.tier ?? u.plan ?? 'free'} /></td>
                     <td className="py-2">
                       <ResetButton
@@ -616,7 +608,7 @@ export default function UsersPage() {
 
       {/* ── Top users ──────────────────────────────────────────────────── */}
       {data && (
-        <section className="rounded-xl border border-line bg-canvas p-5 space-y-3">
+        <section className="rounded-card border border-line bg-surface shadow-card p-5 space-y-3">
           <h2 className="text-base font-semibold text-fg-2">Top Users</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -661,7 +653,7 @@ export default function UsersPage() {
 
       {/* ── Batch distribution ─────────────────────────────────────────── */}
       {data && data.batch_distribution.length > 0 && (
-        <section className="rounded-xl border border-line bg-canvas p-5 space-y-3">
+        <section className="rounded-card border border-line bg-surface shadow-card p-5 space-y-3">
           <h2 className="text-base font-semibold text-fg-2">Batch Distribution (48h)</h2>
           <div className="space-y-2">
             {data.batch_distribution.map(b => {

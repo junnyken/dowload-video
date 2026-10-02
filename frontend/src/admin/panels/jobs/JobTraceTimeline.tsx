@@ -37,14 +37,14 @@ const STATUS_META: Record<PhaseStatus, StatusMeta> = {
   skipped: {
     dot:   'bg-surface',
     ring:  'border-line',
-    line:  'bg-canvas',
+    line:  'bg-line',
     badge: 'border-line bg-surface-2 text-fg-muted',
     label: 'SKIP',
   },
   pending: {
     dot:   'bg-transparent',
     ring:  'border-line border-dashed',
-    line:  'bg-canvas',
+    line:  'bg-line',
     badge: 'border-line bg-surface-2 text-fg-muted',
     label: 'WAIT',
   },
@@ -124,7 +124,7 @@ function TraceRow({ trace, isLast }: TraceRowProps) {
 
           <span
             className={cn(
-              'rounded border px-1.5 py-px font-mono text-[9px] font-bold uppercase tracking-widest',
+              'rounded border px-1.5 py-px font-mono text-[10px] font-bold uppercase tracking-widest',
               m.badge,
             )}
           >
@@ -148,25 +148,25 @@ function TraceRow({ trace, isLast }: TraceRowProps) {
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5">
             {trace.startedAt && (
               <span className="text-[10px] text-fg-muted">
-                <span className="text-[9px] uppercase tracking-widest text-fg-muted mr-1">start</span>
+                <span className="text-[10px] uppercase tracking-widest text-fg-muted mr-1">start</span>
                 <span className="font-mono">{trace.startedAt}</span>
               </span>
             )}
             {trace.endedAt && (
               <span className="text-[10px] text-fg-muted">
-                <span className="text-[9px] uppercase tracking-widest text-fg-muted mr-1">end</span>
+                <span className="text-[10px] uppercase tracking-widest text-fg-muted mr-1">end</span>
                 <span className="font-mono">{trace.endedAt}</span>
               </span>
             )}
             {trace.proxyUsed && (
               <span className="text-[10px]">
-                <span className="text-[9px] uppercase tracking-widest text-fg-muted mr-1">proxy</span>
+                <span className="text-[10px] uppercase tracking-widest text-fg-muted mr-1">proxy</span>
                 <span className="font-mono text-fg-2">{trace.proxyUsed}</span>
               </span>
             )}
             {trace.cookieUsed && (
               <span className="text-[10px]">
-                <span className="text-[9px] uppercase tracking-widest text-fg-muted mr-1">cookie</span>
+                <span className="text-[10px] uppercase tracking-widest text-fg-muted mr-1">cookie</span>
                 <span className="font-mono text-fg-2">{trace.cookieUsed}</span>
               </span>
             )}
@@ -175,7 +175,7 @@ function TraceRow({ trace, isLast }: TraceRowProps) {
 
         {/* Error message */}
         {trace.errorMessage && (
-          <div className="mt-2 flex items-start gap-2 rounded-lg border border-danger/60 bg-danger-soft px-3 py-2">
+          <div className="mt-2 flex items-start gap-2 rounded-control border border-danger/60 bg-danger-soft px-3 py-2">
             <svg
               viewBox="0 0 24 24"
               fill="none"

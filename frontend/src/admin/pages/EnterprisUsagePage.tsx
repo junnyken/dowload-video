@@ -101,9 +101,9 @@ export default function EnterprisUsagePage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-mono text-lg font-bold text-fg">Enterprise Usage</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Enterprise Usage</h1>
           <p className="mt-0.5 text-xs text-fg-muted">API calls, downloads, batch jobs across all tenants</p>
         </div>
         <div className="flex items-center gap-2">
@@ -127,7 +127,7 @@ export default function EnterprisUsagePage() {
               </button>
             ))}
           </div>
-          <button onClick={fetchData} className="rounded bg-surface-2 px-3 py-1.5 text-xs text-fg-2 hover:bg-line">
+          <button onClick={fetchData} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
             ↺
           </button>
         </div>
@@ -143,7 +143,7 @@ export default function EnterprisUsagePage() {
             { label: 'Webhook Deliveries', value: data.totals.webhook_deliveries.toLocaleString() },
             { label: 'Storage Used', value: formatBytes(data.totals.storage_bytes_used) },
           ].map(c => (
-            <div key={c.label} className="rounded-lg border border-line bg-canvas p-4">
+            <div key={c.label} className="rounded-card border border-line bg-surface shadow-card p-4">
               <p className="font-mono text-xs text-fg-muted">{c.label}</p>
               <p className="mt-1 font-mono text-xl font-bold text-fg">{c.value}</p>
             </div>
@@ -160,7 +160,7 @@ export default function EnterprisUsagePage() {
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Daily chart (bar sparkline) */}
-          <div className="rounded-lg border border-line bg-canvas p-4">
+          <div className="rounded-card border border-line bg-surface shadow-card p-4">
             <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-fg-muted">Daily Downloads — {days}d</h2>
             {dailyData.length === 0 ? (
               <p className="font-mono text-xs text-fg-muted">No data in range</p>
@@ -172,7 +172,7 @@ export default function EnterprisUsagePage() {
                     <div
                       key={d.date}
                       title={`${d.date}: ${d.downloads} downloads`}
-                      className="flex-1 rounded-sm bg-surface-2 hover:bg-accent-hover cursor-default transition-colors"
+                      className="flex-1 rounded-sm bg-accent/70 hover:bg-accent cursor-default transition-colors"
                       style={{ height: `${h}px` }}
                     />
                   )
@@ -186,7 +186,7 @@ export default function EnterprisUsagePage() {
           </div>
 
           {/* Per-tenant breakdown */}
-          <div className="rounded-lg border border-line bg-canvas p-4">
+          <div className="rounded-card border border-line bg-surface shadow-card p-4">
             <h2 className="mb-4 font-mono text-xs font-semibold uppercase text-fg-muted">Per-Tenant API Calls</h2>
             {tenantList.length === 0 ? (
               <p className="font-mono text-xs text-fg-muted">No tenant usage data</p>
@@ -207,10 +207,10 @@ export default function EnterprisUsagePage() {
 
           {/* Detailed table */}
           {view === 'table' && (
-            <div className="lg:col-span-2 overflow-x-auto rounded-lg border border-line">
+            <div className="lg:col-span-2 overflow-x-auto rounded-control border border-line">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-line bg-canvas">
+                  <tr className="border-b border-line bg-surface-2">
                     {['Date', 'Tenant', 'Plan', 'API Calls', 'Downloads', 'Batch Jobs', 'Webhooks', 'Storage'].map(h => (
                       <th key={h} className="px-3 py-2.5 font-mono font-semibold text-fg-muted">{h}</th>
                     ))}

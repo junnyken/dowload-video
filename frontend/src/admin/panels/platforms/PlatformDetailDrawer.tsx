@@ -16,7 +16,7 @@ function InfoGrid({ items }: { items: Array<{ label: string; value: string }> })
     <div className="grid grid-cols-2 gap-2">
       {items.map(({ label, value }) => (
         <div key={label} className="rounded-card border border-line bg-surface shadow-card p-3">
-          <p className="mb-1 text-[9px] font-semibold uppercase tracking-widest text-fg-muted">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
             {label}
           </p>
           <p className="font-mono text-sm font-semibold text-fg-2">{value}</p>
@@ -70,7 +70,7 @@ function JobsTab({ jobs }: { jobs: RecentJob[] }) {
             {job.error && (
               <p className="mt-0.5 text-[11px] text-danger">{job.error}</p>
             )}
-            <div className="mt-1 flex items-center gap-2 font-mono text-[9px] text-fg-muted">
+            <div className="mt-1 flex items-center gap-2 font-mono text-[10px] text-fg-muted">
               {job.phase && <span>phase:{job.phase}</span>}
               <span>{(job.durationMs / 1000).toFixed(1)}s</span>
               <span>{job.startedAt}</span>
@@ -139,12 +139,12 @@ function PhasesTab({ phases }: { phases: PhaseStatItem[] }) {
   return (
     <div className="flex flex-col gap-4">
       {/* Phase stats table */}
-      <div className="overflow-hidden rounded-xl border border-line">
+      <div className="overflow-x-auto rounded-card border border-line">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-line">
               {['Phase', 'Success Rate', 'Avg Duration', 'Jobs'].map(h => (
-                <th key={h} className="px-3 py-2 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-fg-muted first:pl-4">
+                <th key={h} className="px-3 py-2 text-left font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted first:pl-4">
                   {h}
                 </th>
               ))}
@@ -182,7 +182,7 @@ function PhasesTab({ phases }: { phases: PhaseStatItem[] }) {
       </div>
 
       {/* Heatmap placeholder */}
-      <div className="rounded-xl border border-dashed border-line p-4 text-center">
+      <div className="rounded-card border border-dashed border-line p-4 text-center">
         <p className="text-xs font-medium text-fg-muted">Phase × Time Heatmap</p>
         <p className="mt-1 text-[11px] text-fg-muted">
           Phase failure heatmap will render here — requires time-series phase data
@@ -202,7 +202,7 @@ function ConfigTab({ config }: { config: PlatformDetail['config'] }) {
   ]
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col divide-y divide-line rounded-xl border border-line">
+      <div className="flex flex-col divide-y divide-line rounded-card border border-line">
         {rows.map(row => (
           <div key={row.key} className="flex items-start justify-between gap-4 px-4 py-3">
             <span className="flex-shrink-0 text-[11px] font-medium text-fg-muted">{row.label}</span>
@@ -212,7 +212,7 @@ function ConfigTab({ config }: { config: PlatformDetail['config'] }) {
       </div>
 
       {/* Config overrides placeholder */}
-      <div className="rounded-xl border border-dashed border-line p-4">
+      <div className="rounded-card border border-dashed border-line p-4">
         <p className="text-xs font-medium text-fg-muted">Runtime Config Overrides</p>
         <p className="mt-1 text-[11px] text-fg-muted">
           Override per-platform settings at runtime without redeployment.
@@ -270,7 +270,7 @@ export function PlatformDetailDrawer({
       <aside
         className={cn(
           'fixed inset-y-0 right-0 z-40 flex w-full max-w-[480px] flex-col',
-          'border-l border-line bg-canvas shadow-2xl',
+          'border-l border-line bg-surface shadow-2xl',
           'transition-transform duration-200 ease-in-out',
           isOpen ? 'translate-x-0' : 'translate-x-full',
         )}
@@ -283,7 +283,7 @@ export function PlatformDetailDrawer({
               <div className="flex items-center gap-3">
                 <div
                   className={cn(
-                    'flex h-8 w-10 items-center justify-center rounded-lg font-mono text-xs font-bold',
+                    'flex h-8 w-10 items-center justify-center rounded-control font-mono text-xs font-bold',
                     detail.status === 'critical' ? 'bg-danger-soft text-danger' :
                     detail.status === 'warning'  ? 'bg-warning-soft text-warning' :
                     'bg-surface text-fg-2',
@@ -374,20 +374,20 @@ export function PlatformDetailDrawer({
                       {(detail.circuitState === 'open' || detail.circuitState === 'half') && (
                         <button
                           onClick={() => onAction?.(detail.platform, 'reset_circuit')}
-                          className="rounded-lg border border-success/30 bg-success-soft px-3 py-1.5 text-xs font-medium text-success transition-colors hover:bg-success/20"
+                          className="rounded-control border border-success/30 bg-success-soft px-3 py-1.5 text-xs font-medium text-success transition-colors hover:bg-success/20"
                         >
                           Reset Circuit
                         </button>
                       )}
                       <button
                         onClick={() => onAction?.(detail.platform, 'test_connection')}
-                        className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-fg-2 transition-colors hover:bg-surface"
+                        className="rounded-control border border-line px-3 py-1.5 text-xs font-medium text-fg-2 transition-colors hover:bg-surface"
                       >
                         Test Connection
                       </button>
                       <Link
                         to={`/vid-admin/jobs?platform=${detail.platform}`}
-                        className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-fg-2 transition-colors hover:bg-surface"
+                        className="rounded-control border border-line px-3 py-1.5 text-xs font-medium text-fg-2 transition-colors hover:bg-surface"
                       >
                         View Jobs →
                       </Link>

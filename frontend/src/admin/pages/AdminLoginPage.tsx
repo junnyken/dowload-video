@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import ThemeToggle from '../../components/ThemeToggle'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAdminAuth } from '../hooks/useAdminAuth'
 
@@ -32,12 +33,13 @@ export function AdminLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-canvas px-4">
+      <div className="absolute right-4 top-4"><ThemeToggle /></div>
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="mb-8 text-center">
           <div className="mb-3 flex justify-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-line bg-canvas text-xl">
+            <div className="flex h-10 w-10 items-center justify-center rounded-card border border-line bg-surface shadow-card text-xl">
               ▼
             </div>
           </div>
@@ -48,7 +50,7 @@ export function AdminLoginPage() {
         </div>
 
         {/* Form card */}
-        <div className="rounded-2xl border border-line bg-canvas p-6">
+        <div className="rounded-card border border-line bg-surface shadow-card p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="mb-1.5 block font-mono text-[10px] font-medium uppercase tracking-wider text-fg-muted">
@@ -60,7 +62,7 @@ export function AdminLoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@matbao.com"
-                className="w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted outline-none transition-colors focus:border-line-strong"
+                className="w-full rounded-card border border-line bg-surface shadow-card px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted outline-none transition-colors focus:border-line-strong"
               />
             </div>
 
@@ -74,7 +76,7 @@ export function AdminLoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted outline-none transition-colors focus:border-line-strong"
+                className="w-full rounded-card border border-line bg-surface shadow-card px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted outline-none transition-colors focus:border-line-strong"
               />
             </div>
 
@@ -87,7 +89,7 @@ export function AdminLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl border border-line-strong bg-surface-2 py-2.5 text-sm font-medium text-fg transition-colors hover:border-line-strong hover:bg-line disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-control border border-accent bg-accent py-2.5 text-sm font-medium text-accent-fg transition-colors hover:border-accent-hover hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? 'Signing in…' : 'Sign in'}
             </button>

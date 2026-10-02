@@ -27,9 +27,9 @@ const STATUS_CONFIG: Record<
   degraded: {
     label: 'Partial Degradation Detected',
     dot:   'bg-accent animate-pulse',
-    pill:  'text-accent-text bg-accent-soft border-accent/30',
-    border:'border-accent/30',
-    bg:    'bg-accent-soft',
+    pill:  'text-warning bg-warning-soft border-warning/30',
+    border:'border-warning/30',
+    bg:    'bg-warning-soft',
   },
   critical: {
     label: 'Critical — Immediate Action Required',
@@ -56,14 +56,14 @@ interface QuickStatProps {
 function QuickStat({ label, value, tone = 'neutral' }: QuickStatProps) {
   const textColor =
     tone === 'red'     ? 'text-danger' :
-    tone === 'amber'   ? 'text-accent-text' :
+    tone === 'amber'   ? 'text-warning' :
     tone === 'emerald' ? 'text-success' :
     tone === 'blue'    ? 'text-fg-2' :
     'text-fg-2'
 
   return (
     <div className="flex flex-col gap-0.5 border-l border-line pl-4 first:border-l-0 first:pl-0">
-      <p className="text-[9px] font-semibold uppercase tracking-widest text-fg-muted">{label}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-fg-muted">{label}</p>
       <p className={cn('font-mono text-lg font-bold leading-none tabular-nums', textColor)}>
         {value}
       </p>
@@ -93,7 +93,7 @@ export function SystemStatusOverview({
   return (
     <div
       className={cn(
-        'rounded-2xl border p-4',
+        'rounded-card border p-4',
         cfg.border,
         cfg.bg,
       )}

@@ -131,12 +131,12 @@ export default function WebhooksPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-mono text-lg font-bold text-fg">Webhooks</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Webhooks</h1>
           <p className="mt-0.5 text-xs text-fg-muted">HMAC-signed webhook endpoints per tenant</p>
         </div>
-        <button onClick={fetchData} className="rounded bg-surface-2 px-3 py-1.5 text-xs text-fg-2 hover:bg-line">
+        <button onClick={fetchData} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
           ↺ Refresh
         </button>
       </div>
@@ -150,7 +150,7 @@ export default function WebhooksPage() {
             { label: 'Total Delivered', value: data.total_deliveries.toLocaleString() },
             { label: 'Failed', value: data.total_failed.toLocaleString() },
           ].map(c => (
-            <div key={c.label} className="rounded-lg border border-line bg-canvas p-4">
+            <div key={c.label} className="rounded-card border border-line bg-surface shadow-card p-4">
               <p className="font-mono text-xs text-fg-muted">{c.label}</p>
               <p className="mt-1 font-mono text-2xl font-bold text-fg">{c.value}</p>
             </div>
@@ -167,7 +167,7 @@ export default function WebhooksPage() {
       ) : (
         <div className="space-y-2">
           {(data?.endpoints ?? []).map(ep => (
-            <div key={ep.id} className="rounded-lg border border-line bg-canvas">
+            <div key={ep.id} className="rounded-control border border-line bg-surface">
               {/* Endpoint row */}
               <div className="flex items-start gap-3 p-4">
                 <div className="flex-1 min-w-0 space-y-1">

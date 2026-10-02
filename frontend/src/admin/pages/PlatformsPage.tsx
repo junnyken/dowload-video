@@ -1,4 +1,8 @@
 import { useState } from 'react'
+import { PageHeader } from '../shared/PageHeader'
+import { Button } from '../shared/Button'
+import { Card } from '../shared/Card'
+import { ErrorState } from '../shared/ErrorState'
 import { PlatformHealthTable } from '../panels/platforms/PlatformHealthTable'
 import { PlatformDetailDrawer } from '../panels/platforms/PlatformDetailDrawer'
 import {
@@ -55,17 +59,13 @@ export function PlatformsPage() {
   if (isError) {
     const msg = error instanceof Error ? error.message : 'Failed to load platform health'
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3">
-        <p className="text-sm text-danger">{msg}</p>
-        <button
-          onClick={() => refetch()}
-          className="rounded-lg border border-line px-3 py-1.5 text-xs text-fg-2 hover:bg-surface"
-        >
-          Retry
-        </button>
-      </div>
+      <Card className="mx-auto mt-10 max-w-xl" padding="md">
+        <ErrorState message={msg} onRetry={() => refetch()} />
+      </Card>
     )
   }
+
+  const healthyCount = rows.filter(r => r.status === 'healthy').length
 
   const updatedStr = dataUpdatedAt
     ? new Date(dataUpdatedAt).toLocaleTimeString()
@@ -73,16 +73,21 @@ export function PlatformsPage() {
 
   return (
     <>
-      {updatedStr && (
-        <div className="mb-2 flex items-center justify-between px-1">
-          <span className="text-[10px] text-fg-muted">
-            Updated {updatedStr} · auto-refresh 30s
-          </span>
-          <button onClick={() => refetch()} className="text-[10px] text-fg-muted hover:text-fg-2">
-            ↺ Refresh
-          </button>
-        </div>
-      )}
+      <PageHeader
+        className="mb-4"
+        title="Platform Health"
+        description={`${healthyCount} / ${rows.length} operational · circuit breakers + cookie pool status`}
+        actions={
+          <>
+            {updatedStr && (
+              <span className="font-mono text-[11px] text-fg-muted">
+                Updated {updatedStr} · auto-refresh 30s
+              </span>
+            )}
+            <Button onClick={() => refetch()}>↺ Refresh</Button>
+          </>
+        }
+      />
 
       <PlatformHealthTable
         rows={rows}
