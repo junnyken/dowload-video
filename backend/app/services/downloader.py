@@ -1740,12 +1740,15 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             tikwm_res = asyncio.run(_try_tikwm(clean_url, quality))
             if tikwm_res and tikwm_res.get("direct_mp4_url"):
                 print(f"[Downloader] TikWM success for {clean_url}")
-                # Build multi-format list so frontend can show HD / SD / Watermark / MP3 buttons
+                # Build multi-format list so frontend can show HD / SD / Watermark / MP3 buttons.
+                # TikWM returns only URLs and sizes, never dimensions, so height stays 0
+                # ("unknown") instead of a guessed 1080/720/540. "HD" on hdplay is
+                # TikWM's own name for that stream; the others get no resolution claim.
                 tikwm_formats = []
                 if tikwm_res.get("hdplay_url"):
                     tikwm_formats.append({
                         "type": "video", "label": "H.265 (Dung lượng nhỏ)",
-                        "resolution": "HD", "height": 1080, "ext": "mp4",
+                        "resolution": "HD", "height": 0, "ext": "mp4",
                         "url": tikwm_res["hdplay_url"],
                         "filesize_mb": tikwm_res.get("hd_size_mb", 0),
                         "requires_merge": False,
@@ -1753,7 +1756,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 if tikwm_res.get("play_url"):
                     tikwm_formats.append({
                         "type": "video", "label": "H.264 (Chất lượng gốc)",
-                        "resolution": "SD", "height": 720, "ext": "mp4",
+                        "resolution": "", "height": 0, "ext": "mp4",
                         "url": tikwm_res["play_url"],
                         "filesize_mb": tikwm_res.get("size_mb", 0),
                         "requires_merge": False,
@@ -1761,14 +1764,14 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 if tikwm_res.get("wmplay_url"):
                     tikwm_formats.append({
                         "type": "video", "label": "With Watermark",
-                        "resolution": "SD", "height": 540, "ext": "mp4",
+                        "resolution": "", "height": 0, "ext": "mp4",
                         "url": tikwm_res["wmplay_url"],
                         "filesize_mb": 0, "requires_merge": False,
                     })
                 if tikwm_res.get("audio_url"):
                     tikwm_formats.append({
                         "type": "audio", "label": "Music MP3",
-                        "ext": "mp3", "filesize_mb": 0, "bitrate": 128,
+                        "ext": "mp3", "filesize_mb": 0, "bitrate": None,
                         "url": tikwm_res["audio_url"],
                     })
                 return {

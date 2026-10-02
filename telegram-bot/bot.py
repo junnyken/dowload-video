@@ -580,8 +580,9 @@ def _format_label(fmt: dict) -> str:
     if fmt.get("type") == "audio" or fmt.get("ext") in ("mp3", "m4a"):
         kbps = fmt.get("quality", "").replace("mp3_", "") or "320"
         return f"🎵 MP3 {kbps}kbps"
-    height = fmt.get("height") or fmt.get("resolution", "")
-    if height:
+    # height 0/None means "not measured" (e.g. TikWM formats) — show the label, not a guessed "p".
+    height = fmt.get("height")
+    if isinstance(height, int) and height > 0:
         return f"📹 {height}p"
     return f"📹 {fmt.get('label', 'Video')}"
 
