@@ -152,6 +152,9 @@ export default function DashboardContent() {
   const [downloadSubs, setDownloadSubs] = useState(false);
   const [subtitleMode, setSubtitleMode] = useState('off');   // off | file | burned | soft
   const [subtitleLang, setSubtitleLang] = useState('auto');   // auto | vi | en
+  // Result-card subtitle download: language picked from the video's own list.
+  const [srtLang, setSrtLang] = useState('');
+  const [srtBusy, setSrtBusy] = useState(false);
   const [showUserCookie, setShowUserCookie] = useState(false)
   const [userCookieText, setUserCookieText] = useState('')
   const [scheduledAt, setScheduledAt] = useState('')
@@ -1586,6 +1589,43 @@ export default function DashboardContent() {
     setShowCloudMenu(false);
   };
 
+  // Download the chosen subtitle language as a separate .srt (POST /process/subtitle).
+  const handleDownloadSrt = async () => {
+    const langs = videoInfo?.available_subtitle_languages || [];
+    const lang = srtLang && langs.includes(srtLang)
+      ? srtLang
+      : (['vi', 'en'].find(l => langs.includes(l)) || langs[0]);
+    if (!lang || srtBusy) return;
+    setSrtBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/process/subtitle`,
+        withAuth({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source_url: videoInfo.original_url || url.trim(),
+            language: lang,
+            format: 'srt',
+            filename: videoInfo.title || 'subtitle',
+          }),
+        })
+      );
+      const data = await safeJson(res);
+      if (!res.ok || !data.success || !data.download_url) {
+        throw new Error(data?.error === 'no_subtitles' ? data.message : '');
+      }
+      const a = document.createElement('a');
+      a.href = `${API_BASE}${data.download_url}`;
+      a.setAttribute('download', '');
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      showToast('Đã tải phụ đề.');
+    } catch (err) {
+      showToast(err.message || 'Không tải được phụ đề. Thử lại sau.');
+    } finally {
+      setSrtBusy(false);
+    }
+  };
+
   // Split formats
   const videoFormats = (videoInfo?.available_formats || []).filter(f => f.type === 'video');
   const audioFormats = (videoInfo?.available_formats || []).filter(f => f.type === 'audio');
@@ -2078,9 +2118,53 @@ export default function DashboardContent() {
                       {videoInfo.file_size_mb.toFixed(1)} MB
                     </span>
                   )}
+                  {(() => {
+                    // Chất lượng đầu ra: chỉ hiện khi backend đã trả giá trị thật.
+                    let label = null;
+                    if (videoInfo.is_audio_only) {
+                      const m = /^mp3_(\d+)$/.exec(String(videoInfo.quality || ''));
+                      if (m) label = `MP3 ${m[1]} kbps`;
+                    } else {
+                      const h = Number(videoInfo.downloaded_height) || 0;
+                      if (h > 0) label = h >= 2160 ? '4K' : h >= 1440 ? '2K' : `${h}p`;
+                    }
+                    return label ? (
+                      <span className="bg-surface border border-line px-3 py-1.5 rounded-lg font-mono">
+                        {label}
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
               </div>
             </div>
+
+            {/* ── Subtitle (.srt) download ───────────────────── */}
+            {videoInfo.available_subtitle_languages?.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 mb-4 text-xs">
+                <span className="font-semibold text-fg-2">Phụ đề</span>
+                <select
+                  aria-label="Ngôn ngữ phụ đề"
+                  value={srtLang && videoInfo.available_subtitle_languages.includes(srtLang)
+                    ? srtLang
+                    : (['vi', 'en'].find(l => videoInfo.available_subtitle_languages.includes(l)) || videoInfo.available_subtitle_languages[0])}
+                  onChange={e => setSrtLang(e.target.value)}
+                  className="font-mono px-2 py-1.5 rounded-lg bg-surface border border-line text-fg cursor-pointer outline-none focus:border-accent"
+                >
+                  {videoInfo.available_subtitle_languages.map(l => (
+                    <option key={l} value={l}>{l}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleDownloadSrt}
+                  disabled={srtBusy}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-surface text-fg-2 border border-line hover:border-accent/40 hover:text-accent-text transition-all disabled:opacity-60"
+                >
+                  {srtBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                  {srtBusy ? 'Đang tải phụ đề...' : 'Tải phụ đề (.srt)'}
+                </button>
+              </div>
+            )}
 
             {/* ── Feature Action Bar ─────────────────────────── */}
             <div className="flex flex-wrap items-center gap-2 mb-5">

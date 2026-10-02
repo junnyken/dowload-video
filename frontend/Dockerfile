@@ -16,6 +16,8 @@ ENV VITE_API_URL=$VITE_API_URL
 ARG VITE_SITE_URL=""
 ENV VITE_SITE_URL=$VITE_SITE_URL
 RUN npm run build
+# Files must be world-readable for nginx (a 600 checkout gave 403 on /icons/*.svg).
+RUN chmod -R a+rX /app/dist
 
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
