@@ -4,8 +4,8 @@
  * Unified post-processing modal.
  *
  * Props:
- *   videoInfo    — { title, thumbnail, duration, local_file_path, original_url, available_subtitle_languages }
- *   localPath    — server-side local_file_path (may be null)
+ *   videoInfo    — { title, thumbnail, duration, local_file_id, original_url, available_subtitle_languages }
+ *   localPath    — file id of the server-side copy (local_file_id; may be null)
  *   sourceUrl    — original source URL
  *   onClose()
  *   userTier     — 'free'|'pro'|'team'|'enterprise'
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useProcessing } from '../hooks/useProcessing';
 import ArtifactExpiry from './ArtifactExpiry';
+import { localFileId, localDownloadUrl } from '../lib/localFile';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -368,7 +369,7 @@ function SubtitleTab({ videoInfo, sourceUrl, processing, userTier }) {
       if (burn) {
         await processing.runBurnSub({
           source_url: sourceUrl,
-          video_path: videoInfo?.local_file_path,
+          video_path: localFileId(videoInfo),
           language:   lang,
           filename:   videoInfo?.title || 'video',
         });
@@ -455,8 +456,8 @@ function PackageTab({ videoInfo, sourceUrl }) {
     .replace('{date}',        date)
     .replace('{index:02d}',   '01');
 
-  const downloadUrl = videoInfo?.local_file_path
-    ? `${API}/api/v1/download-local?filepath=${encodeURIComponent(videoInfo.local_file_path)}&filename=${encodeURIComponent(preview)}`
+  const downloadUrl = localFileId(videoInfo)
+    ? localDownloadUrl(API, localFileId(videoInfo), preview)
     : null;
 
   return (

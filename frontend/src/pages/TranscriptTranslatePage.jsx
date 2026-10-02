@@ -5,6 +5,7 @@ import {
   FileText, Languages, X, AlertCircle, Film, Pencil, Save,
 } from 'lucide-react';
 import EmptyState from '../components/shared/EmptyState';
+import { localFileId } from '../lib/localFile';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -384,7 +385,7 @@ export default function TranscriptTranslatePage() {
       const d = await r.json();
       // Only videos whose server-side file is still plausibly on disk are
       // useful here — burning needs the real local file, not just a record.
-      const withLocalFile = (d.jobs || []).filter((j) => j.local_file_path);
+      const withLocalFile = (d.jobs || []).filter((j) => localFileId(j));
       setBurnHistory(withLocalFile);
       if (withLocalFile.length === 0) {
         setBurnError('Không tìm thấy video nào còn trên server. Tải lại video trước khi ghép phụ đề.');
@@ -413,7 +414,7 @@ export default function TranscriptTranslatePage() {
         {
           method: 'POST',
           headers: { ...authHeaders(session), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ video_local_path: historyItem.local_file_path }),
+          body: JSON.stringify({ video_local_path: localFileId(historyItem) }),
         }
       );
       const d = await r.json();

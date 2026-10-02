@@ -1124,7 +1124,7 @@ export default function FlowVeoCleanup() {
 
           {/* 4. Primary CTA */}
           <a
-            href={`${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(result.cleaned_path)}&filename=${encodeURIComponent(result.filename)}`}
+            href={`${API_BASE}${result.download_url}`}
             download={result.filename}
             className="flex items-center justify-center gap-2.5 w-full px-5 py-4 rounded-xl text-base font-bold bg-accent text-accent-fg shadow-md transition-all"
           >

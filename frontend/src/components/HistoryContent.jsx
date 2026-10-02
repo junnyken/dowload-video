@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { localAnyId, localMp3Id, toFileId } from '../lib/localFile';
 import {
   History,
   Search,
@@ -139,7 +140,8 @@ export default function HistoryContent() {
         downloadUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(slug || 'video')}`;
       } else {
         const fileExt = url.split('.').pop() || 'mp4';
-        downloadUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(url)}&filename=${encodeURIComponent(slug || 'video')}.${fileExt}`;
+        // A file id, or a legacy server path (old rows) reduced to its id.
+        downloadUrl = `${API_BASE}/api/v1/download-local?file=${encodeURIComponent(toFileId(url))}&filename=${encodeURIComponent(slug || 'video')}.${fileExt}`;
       }
       const a = document.createElement('a');
       a.href = downloadUrl;
@@ -468,14 +470,14 @@ export default function HistoryContent() {
                 </thead>
                 <tbody className="divide-y divide-border/50">
                   {applyTabFilter(filtered).map((job, idx) => {
-                    const hasDownload = job.status === 'success' && (job.direct_mp4_url || job.local_mp3_path || job.local_file_path);
+                    const hasDownload = job.status === 'success' && (job.direct_mp4_url || localAnyId(job) || job.direct_file_id);
                     return (
                       <tr key={job.id} className="hover:bg-surface-2/20 transition-colors">
                         <td className="px-6 py-3 text-fg-muted text-xs">{idx + 1}</td>
                         <td className="px-6 py-3 max-w-[360px]">
                           <div className="flex items-start gap-2">
                             <div className="mt-0.5">
-                              {job.local_mp3_path ? (
+                              {localMp3Id(job) ? (
                                 <Music className="w-4 h-4 text-accent-text flex-shrink-0" />
                               ) : job.source_surface === 'logo_inpaint' || job.job_kind === 'visible_logo_cleanup' ? (
                                 <Eraser className="w-4 h-4 text-fg-2 flex-shrink-0" />
@@ -517,7 +519,7 @@ export default function HistoryContent() {
                             {hasDownload && (
                               <button
                                 onClick={() => handleSmartDownload(
-                                  job.local_mp3_path || job.local_file_path || job.direct_mp4_url,
+                                  localAnyId(job) || job.direct_file_id || job.direct_mp4_url,
                                   job.slugified_name || job.title
                                 )}
                                 className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer"
@@ -564,11 +566,11 @@ export default function HistoryContent() {
             {/* Mobile Cards */}
             <div className="md:hidden space-y-2 p-3">
               {applyTabFilter(filtered).map((job, idx) => {
-                const hasDownload = job.status === 'success' && (job.direct_mp4_url || job.local_mp3_path || job.local_file_path);
+                const hasDownload = job.status === 'success' && (job.direct_mp4_url || localAnyId(job) || job.direct_file_id);
                 return (
                   <div key={job.id} className="p-3 rounded-xl bg-surface border border-line">
                     <div className="flex items-start gap-2 mb-2">
-                      {job.local_mp3_path ? (
+                      {localMp3Id(job) ? (
                         <Music className="w-4 h-4 text-accent-text flex-shrink-0 mt-0.5" />
                       ) : job.source_surface === 'logo_inpaint' || job.job_kind === 'visible_logo_cleanup' ? (
                         <Eraser className="w-4 h-4 text-fg-2 flex-shrink-0 mt-0.5" />
@@ -597,7 +599,7 @@ export default function HistoryContent() {
                         {hasDownload && (
                           <button
                             onClick={() => handleSmartDownload(
-                              job.local_mp3_path || job.local_file_path || job.direct_mp4_url,
+                              localAnyId(job) || job.direct_file_id || job.direct_mp4_url,
                               job.slugified_name || job.title
                             )}
                             className="p-1.5 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors"

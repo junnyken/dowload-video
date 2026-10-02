@@ -28,6 +28,7 @@ import { useResolveInput } from '../hooks/useResolveInput';
 import { useEntitlement } from '../hooks/useEntitlement';
 import CapabilityBadge from './CapabilityBadge';
 import PlatformStatusBanner from './PlatformStatusBanner';
+import { localFileId, localAnyId, localVideoFirstId, localDownloadUrl, toFileId } from '../lib/localFile';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -663,12 +664,12 @@ export default function DashboardContent() {
       const data = await safeJson(response);
       if (!response.ok) throw new Error(data.detail || 'Lỗi tải nhạc');
       if (data.success) {
-        const localPath = data.local_mp3_path || data.local_file_path;
+        const localPath = localAnyId(data);
         const title = track.title || data.title || 'audio';
         if (localPath) {
           const ext = localPath.split('.').pop() || 'mp3';
           const a = document.createElement('a');
-          a.href = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=${encodeURIComponent(title)}.${ext}`;
+          a.href = `${API_BASE}/api/v1/download-local?file=${encodeURIComponent(localPath)}&filename=${encodeURIComponent(title)}.${ext}`;
           a.setAttribute('download', ''); document.body.appendChild(a); a.click(); document.body.removeChild(a);
         } else if (data.direct_mp4_url) {
           const a = document.createElement('a');
@@ -708,10 +709,10 @@ export default function DashboardContent() {
         const data = await safeJson(res);
         if (!res.ok || !data.success) throw new Error(data.detail || 'Fetch thất bại');
 
-        const localPath = data.local_mp3_path || data.local_file_path;
+        const localPath = localAnyId(data);
         let downloadUrl;
         if (localPath) {
-          downloadUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=temp.mp3`;
+          downloadUrl = `${API_BASE}/api/v1/download-local?file=${encodeURIComponent(localPath)}&filename=temp.mp3`;
         } else if (data.direct_mp4_url) {
           downloadUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(data.direct_mp4_url)}&filename=temp&ext=mp3`;
         } else {
@@ -984,10 +985,10 @@ export default function DashboardContent() {
     }
     
     // Prioritize local file path if backend downloaded it automatically
-    const localPath = videoInfo.local_file_path || videoInfo.local_mp3_path;
+    const localPath = localVideoFirstId(videoInfo);
     if (localPath) {
       const fileExt = localPath.split('.').pop() || 'mp4';
-      const downloadUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=${encodeURIComponent(videoInfo.title || 'video')}.${fileExt}`;
+      const downloadUrl = `${API_BASE}/api/v1/download-local?file=${encodeURIComponent(localPath)}&filename=${encodeURIComponent(videoInfo.title || 'video')}.${fileExt}`;
       const a = document.createElement('a');
       a.href = downloadUrl; a.setAttribute('download', '');
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -1018,12 +1019,12 @@ export default function DashboardContent() {
     // Check if the initial download already has this quality available locally
     const requestedHeight = isAudioParam ? 0 : (typeof param === 'number' ? param : 0);
     const downloadedHeight = videoInfo?.downloaded_height || 0;
-    const localPath = videoInfo?.local_file_path;
+    const localPath = localFileId(videoInfo);
 
     if (!isAudioParam && localPath && requestedHeight > 0 && downloadedHeight >= requestedHeight) {
       // The initial fetch already downloaded at this quality or better — serve directly
       const fileExt = localPath.split('.').pop() || 'mp4';
-      const downloadUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=${encodeURIComponent(videoInfo.title || 'video')}.${fileExt}`;
+      const downloadUrl = `${API_BASE}/api/v1/download-local?file=${encodeURIComponent(localPath)}&filename=${encodeURIComponent(videoInfo.title || 'video')}.${fileExt}`;
       const a = document.createElement('a');
       a.href = downloadUrl; a.setAttribute('download', '');
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -1105,16 +1106,16 @@ export default function DashboardContent() {
           url: '/history',
         });
         // Determine file path and extension from the actual file
-        const dlPath = data.local_mp3_path || data.local_file_path;
+        const dlPath = localAnyId(data);
         if (dlPath) {
           const fileExt = dlPath.split('.').pop() || (isAudioParam ? 'mp3' : 'mp4');
-          const downloadUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(dlPath)}&filename=${encodeURIComponent(data.title || 'video')}.${fileExt}`;
+          const downloadUrl = `${API_BASE}/api/v1/download-local?file=${encodeURIComponent(dlPath)}&filename=${encodeURIComponent(data.title || 'video')}.${fileExt}`;
           const a = document.createElement('a');
           a.href = downloadUrl; a.setAttribute('download', '');
           document.body.appendChild(a); a.click(); document.body.removeChild(a);
           showToast('Bắt đầu tải về!');
-          if (data.local_file_path) {
-            setLastDownloadInfo({ file_path: data.local_file_path });
+          if (localFileId(data)) {
+            setLastDownloadInfo({ file_id: localFileId(data) });
           }
         } else if (data.direct_mp4_url) {
           handleFormatDownload({ url: data.direct_mp4_url, ext: isAudioParam ? 'mp3' : 'mp4' });
@@ -1157,9 +1158,9 @@ export default function DashboardContent() {
         throw new Error(data.detail || 'Không thể lấy âm thanh');
       }
       if (data.success) {
-        if (data.local_mp3_path || data.local_file_path) {
-          const path = data.local_mp3_path || data.local_file_path;
-          const downloadUrl = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(path)}&filename=${encodeURIComponent(data.title || 'audio')}.mp3`;
+        if (localAnyId(data)) {
+          const path = localAnyId(data);
+          const downloadUrl = `${API_BASE}/api/v1/download-local?file=${encodeURIComponent(path)}&filename=${encodeURIComponent(data.title || 'audio')}.mp3`;
           const a = document.createElement('a');
           a.href = downloadUrl; a.setAttribute('download', '');
           document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -1191,9 +1192,9 @@ export default function DashboardContent() {
 
   const getPreviewUrl = () => {
     if (!videoInfo) return null;
-    const localPath = videoInfo.local_file_path || videoInfo.local_mp3_path;
+    const localPath = localVideoFirstId(videoInfo);
     if (localPath) {
-      return `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=preview`;
+      return `${API_BASE}/api/v1/download-local?file=${encodeURIComponent(localPath)}&filename=preview`;
     }
     if (videoInfo.direct_mp4_url) {
       return `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(videoInfo.direct_mp4_url)}&filename=preview&ext=mp4`;
@@ -1225,17 +1226,15 @@ export default function DashboardContent() {
     setIsTrimming(true);
     try {
       // Prefer local file (YouTube merge, TikTok, etc.) served via download-local endpoint
-      const localPath = videoInfo.local_file_path || videoInfo.local_mp3_path;
-      const sourceUrl = localPath
-        ? `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=trim_source`
-        : videoInfo.direct_mp4_url;
-      if (!sourceUrl) { showToast('Không có nguồn để cắt.'); return; }
+      const localPath = localVideoFirstId(videoInfo);
+      const sourceUrl = videoInfo.direct_mp4_url;
+      if (!localPath && !sourceUrl) { showToast('Không có nguồn để cắt.'); return; }
 
       const response = await fetch(`${API_BASE}/api/v1/trim`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url: sourceUrl,
+          ...(localPath ? { local_path: localPath } : { url: sourceUrl }),
           start_time: trimStart,
           end_time: trimEnd,
           filename: videoInfo.title || 'video',
@@ -1244,9 +1243,9 @@ export default function DashboardContent() {
       });
       const data = await safeJson(response);
       if (!response.ok) throw new Error(data.detail || 'Trim failed');
-      if (data.success && data.trimmed_file_path) {
+      if (data.success && (data.trimmed_file_id || data.trimmed_file_path)) {
         const a = document.createElement('a');
-        a.href = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(data.trimmed_file_path)}&filename=${encodeURIComponent(data.filename)}`;
+        a.href = localDownloadUrl(API_BASE, data.trimmed_file_id || toFileId(data.trimmed_file_path), data.filename);
         a.setAttribute('download', '');
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         showToast(`Đã cắt thành công! (${data.file_size_mb} MB)`);
@@ -1272,7 +1271,7 @@ export default function DashboardContent() {
 
   const handleConvertGif = async () => {
     if (!videoInfo) return;
-    const localPath = videoInfo.local_file_path || videoInfo.local_mp3_path;
+    const localPath = localVideoFirstId(videoInfo);
     const sourceUrl = videoInfo.direct_mp4_url;
     if (!localPath && !sourceUrl) { showToast('Không có nguồn để chuyển GIF.'); return; }
     if (gifEnd - gifStart > 30) { showToast('Giới hạn 30 giây cho GIF.'); return; }
@@ -1297,9 +1296,9 @@ export default function DashboardContent() {
       });
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.detail || 'GIF conversion failed');
-      if (data.success && data.gif_path) {
+      if (data.success && (data.gif_file_id || data.gif_path)) {
         const a = document.createElement('a');
-        a.href = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(data.gif_path)}&filename=${encodeURIComponent(data.filename)}`;
+        a.href = localDownloadUrl(API_BASE, data.gif_file_id || toFileId(data.gif_path), data.filename);
         a.setAttribute('download', '');
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         showToast(`GIF tạo thành công! ${data.file_size_mb} MB · ${data.width}px · ${data.fps}fps`);
@@ -1312,11 +1311,9 @@ export default function DashboardContent() {
 
   // ── Chapter Download (reuses /trim endpoint) ─────────────
   const handleChapterDownload = async (chapter) => {
-    const localPath = videoInfo?.local_file_path;
-    const sourceUrl = localPath
-      ? `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=chapter_source`
-      : videoInfo?.direct_mp4_url;
-    if (!sourceUrl) { showToast('Không có nguồn để tải chapter.'); return; }
+    const localPath = localFileId(videoInfo);
+    const sourceUrl = videoInfo?.direct_mp4_url;
+    if (!localPath && !sourceUrl) { showToast('Không có nguồn để tải chapter.'); return; }
 
     setDownloadingChapter(chapter.title);
     try {
@@ -1324,7 +1321,7 @@ export default function DashboardContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url: sourceUrl,
+          ...(localPath ? { local_path: localPath } : { url: sourceUrl }),
           start_time: chapter.start_time,
           end_time: chapter.end_time,
           filename: chapter.title,
@@ -1333,9 +1330,9 @@ export default function DashboardContent() {
       });
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.detail || 'Chapter download failed');
-      if (data.success && data.trimmed_file_path) {
+      if (data.success && (data.trimmed_file_id || data.trimmed_file_path)) {
         const a = document.createElement('a');
-        a.href = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(data.trimmed_file_path)}&filename=${encodeURIComponent(data.filename)}`;
+        a.href = localDownloadUrl(API_BASE, data.trimmed_file_id || toFileId(data.trimmed_file_path), data.filename);
         a.setAttribute('download', '');
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         showToast(`Đã tải chapter: ${chapter.title}`);
@@ -1362,7 +1359,7 @@ export default function DashboardContent() {
       return;
     }
     if (showInpaint) { setShowInpaint(false); return; }
-    const localPath = videoInfo?.local_file_path;
+    const localPath = localFileId(videoInfo);
     if (!localPath) { showToast('Cần tải video về trước để xoá logo.'); return; }
     setShowInpaint(true);
     setInpaintStep('region');
@@ -1430,12 +1427,13 @@ export default function DashboardContent() {
       }));
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.detail || 'Xử lý thất bại.');
-      if (data.success && (data.cleaned_path || data.output_path)) {
-        const cleanedPath = data.cleaned_path || data.output_path;
-        const ext = cleanedPath.split('.').pop() || 'mp4';
+      if (data.success && data.download_url) {
+        const ext = (data.cleaned_file_id || '').split('.').pop() || 'mp4';
         const fname = `${videoInfo?.title || 'cleaned'}_nologin.${ext}`;
+        // The cleaned file lives in the session work dir, so the server
+        // hands back its own link (/flow-cleanup/result/<temp_id>/<file_id>).
         setInpaintFinalUrl(
-          `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(cleanedPath)}&filename=${encodeURIComponent(fname)}`
+          `${API_BASE}${data.download_url.split('?')[0]}?filename=${encodeURIComponent(fname)}`
         );
         setInpaintStep('done');
       } else {
@@ -1487,16 +1485,17 @@ export default function DashboardContent() {
   };
 
   const handleMergeClipsDownload = () => {
-    if (!mergeResult?.merged_path) return;
+    const mergedId = mergeResult?.merged_file_id || toFileId(mergeResult?.merged_path);
+    if (!mergedId) return;
     const a = document.createElement('a');
-    a.href = `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(mergeResult.merged_path)}&filename=merged_video.mp4`;
+    a.href = localDownloadUrl(API_BASE, mergedId, 'merged_video.mp4');
     a.download = 'merged_video.mp4';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
   // ── Watermark Embed ──────────────────────────────────────────
   const handleWatermarkRender = async (previewOnly = false) => {
-    const sourcePath = videoInfo?.local_file_path;
+    const sourcePath = localFileId(videoInfo);
     if (!sourcePath) { setWmError('Không có video nguồn.'); return; }
     if (wmType === 'text' && !wmText.trim()) { setWmError('Nhập nội dung watermark.'); return; }
     if (wmType === 'image' && !wmImageB64) { setWmError('Chọn ảnh watermark.'); return; }
@@ -1527,7 +1526,7 @@ export default function DashboardContent() {
         return;
       }
       if (previewOnly) {
-        setWmPreviewUrl(`${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(data.output_path)}&filename=preview.mp4`);
+        setWmPreviewUrl(localDownloadUrl(API_BASE, data.output_file_id || toFileId(data.output_path), 'preview.mp4'));
       } else {
         setWmResult(data);
       }
@@ -1564,10 +1563,10 @@ export default function DashboardContent() {
   // ── Cloud Save ───────────────────────────────────────────────
   const getDownloadUrl = () => {
     if (!videoInfo) return null;
-    const localPath = videoInfo.local_file_path || videoInfo.local_mp3_path;
+    const localPath = localVideoFirstId(videoInfo);
     if (localPath) {
       const ext = localPath.split('.').pop() || 'mp4';
-      return `${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(localPath)}&filename=${encodeURIComponent(videoInfo.title || 'video')}.${ext}`;
+      return `${API_BASE}/api/v1/download-local?file=${encodeURIComponent(localPath)}&filename=${encodeURIComponent(videoInfo.title || 'video')}.${ext}`;
     }
     if (videoInfo.direct_mp4_url) {
       return `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(videoInfo.direct_mp4_url)}&filename=${encodeURIComponent(videoInfo.title || 'video')}&ext=mp4`;
@@ -2254,7 +2253,7 @@ export default function DashboardContent() {
               )}
 
               {/* GIF Converter */}
-              {videoInfo.duration > 0 && !videoInfo.is_audio_only && (videoInfo.direct_mp4_url || videoInfo.local_file_path) && (
+              {videoInfo.duration > 0 && !videoInfo.is_audio_only && (videoInfo.direct_mp4_url || localFileId(videoInfo)) && (
                 <button
                   onClick={handleOpenGif}
                   className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
@@ -2269,7 +2268,7 @@ export default function DashboardContent() {
               )}
 
               {/* Logo Inpaint */}
-              {!HIDDEN_TOOLS.inpaint && videoInfo.local_file_path && !videoInfo.is_audio_only && (
+              {!HIDDEN_TOOLS.inpaint && localFileId(videoInfo) && !videoInfo.is_audio_only && (
                 <button
                   onClick={handleOpenInpaint}
                   className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
@@ -2298,7 +2297,7 @@ export default function DashboardContent() {
               </button>
 
               {/* Watermark Embed */}
-              {videoInfo.local_file_path && !videoInfo.is_audio_only && (
+              {localFileId(videoInfo) && !videoInfo.is_audio_only && (
                 <button
                   onClick={() => setShowWatermark(p => !p)}
                   className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
@@ -2765,7 +2764,7 @@ export default function DashboardContent() {
             )}
 
             {/* ── Watermark Embed Panel ─────────────────────────────── */}
-            {showWatermark && videoInfo?.local_file_path && !videoInfo?.is_audio_only && (
+            {showWatermark && localFileId(videoInfo) && !videoInfo?.is_audio_only && (
               <div className="mt-4 p-4 rounded-xl bg-accent-soft border border-accent/20">
                 <h3 className="text-sm font-bold text-accent-text mb-3 flex items-center gap-2">
                   <Stamp className="w-4 h-4" /> Them Watermark vao Video
@@ -2844,7 +2843,7 @@ export default function DashboardContent() {
                     <p className="text-xs text-success font-semibold mb-1">Render thanh cong!</p>
                     <p className="text-xs text-fg-muted">{wmResult.file_size_mb?.toFixed(1)} MB</p>
                     <a
-                      href={`${API_BASE}/api/v1/download-local?filepath=${encodeURIComponent(wmResult.output_path)}&filename=watermarked.mp4`}
+                      href={localDownloadUrl(API_BASE, wmResult.output_file_id || toFileId(wmResult.output_path), 'watermarked.mp4')}
                       download="watermarked.mp4"
                       className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success-soft text-success text-xs font-bold hover:bg-success/20 transition-colors"
                     >
@@ -2982,7 +2981,7 @@ export default function DashboardContent() {
                       {/* Combined video+audio formats and Video-only formats (Requires merge) */}
                       {videoFormats.map((fmt, i) => {
                         // Check if this format is already available from the initial download
-                        const isAlreadyDownloaded = fmt.requires_merge && videoInfo?.local_file_path && videoInfo?.downloaded_height >= fmt.height;
+                        const isAlreadyDownloaded = fmt.requires_merge && localFileId(videoInfo) && videoInfo?.downloaded_height >= fmt.height;
                         const displaySize = isAlreadyDownloaded && fmt.height === videoInfo?.downloaded_height ? videoInfo.file_size_mb : fmt.filesize_mb;
                         
                         return (
@@ -3189,7 +3188,7 @@ export default function DashboardContent() {
             {showProcessingHub && videoInfo && (
               <ProcessingHub
                 videoInfo={videoInfo}
-                localPath={videoInfo.local_file_path || null}
+                localPath={localFileId(videoInfo) || null}
                 sourceUrl={videoInfo.original_url || url}
                 onClose={() => setShowProcessingHub(false)}
                 userTier={userTier}

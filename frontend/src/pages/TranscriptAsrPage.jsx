@@ -5,6 +5,7 @@ import {
   Film, Languages, X, AlertCircle,
 } from 'lucide-react';
 import EmptyState from '../components/shared/EmptyState';
+import { localFileId } from '../lib/localFile';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -104,7 +105,7 @@ export default function TranscriptAsrPage() {
     try {
       const r = await fetch(`${API}/api/v1/history?limit=10&status=success`, { headers: authHeaders(session) });
       const d = await r.json();
-      const withLocalFile = (d.jobs || []).filter((j) => j.local_file_path);
+      const withLocalFile = (d.jobs || []).filter((j) => localFileId(j));
       setHistory(withLocalFile);
       if (withLocalFile.length === 0) {
         setHistoryError('Không tìm thấy video nào còn trên server. Tải video trước khi tạo phụ đề.');
@@ -132,7 +133,7 @@ export default function TranscriptAsrPage() {
         method: 'POST',
         headers: { ...authHeaders(session), 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          video_local_path: item.local_file_path,
+          video_local_path: localFileId(item),
           video_title: item.title || item.original_url,
         }),
       });

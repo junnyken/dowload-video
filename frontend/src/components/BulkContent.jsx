@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { trackEvent, EVENT } from '../utils/trackEvent';
 import { useAuth } from '../context/AuthContext';
+import { localAnyId, localMp3Id, toFileId } from '../lib/localFile';
 import {
   Layers,
   Play,
@@ -101,7 +102,7 @@ const JobActionCell = ({ job, onDownload, onRefresh }) => {
 
   if (job.status !== 'success') return <span className="text-xs text-fg-muted">Đang chờ...</span>;
 
-  const hasLink = job.direct_mp4_url || job.local_mp3_path || job.local_file_path;
+  const hasLink = job.direct_mp4_url || localAnyId(job) || job.direct_file_id;
   if (!hasLink) return <span className="text-xs text-fg-muted">-</span>;
 
   // Expired local file: show "Gia hạn link" CTA
@@ -132,7 +133,7 @@ const JobActionCell = ({ job, onDownload, onRefresh }) => {
   return (
     <div className="flex flex-col items-end gap-1.5">
       <button
-        onClick={() => onDownload(job.local_mp3_path || job.local_file_path || job.direct_mp4_url, job.slugified_name)}
+        onClick={() => onDownload(localAnyId(job) || job.direct_file_id || job.direct_mp4_url, job.slugified_name)}
         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer"
       >
         <Download className="w-3 h-3" />
@@ -433,7 +434,8 @@ export default function BulkContent() {
       } else {
         // Assume local path, extract extension from the path (e.g., .mp4 or .mp3)
         const fileExt = url.split('.').pop() || 'mp4';
-        downloadUrl = `${API}/download-local?filepath=${encodeURIComponent(url)}&filename=${encodeURIComponent(slug || 'video')}.${fileExt}`;
+        // A file id, or a legacy server path (old rows) reduced to its id.
+        downloadUrl = `${API}/download-local?file=${encodeURIComponent(toFileId(url))}&filename=${encodeURIComponent(slug || 'video')}.${fileExt}`;
       }
       
       const a = document.createElement('a');
@@ -484,7 +486,7 @@ export default function BulkContent() {
             if (autoDownload) {
               let _staggerIndex = 0;
               data.jobs.forEach(job => {
-                const dlPath = job.local_mp3_path || job.local_file_path || job.direct_mp4_url;
+                const dlPath = localAnyId(job) || job.direct_file_id || job.direct_mp4_url;
                 if (job.status === 'success' && dlPath && !autoDownloadedRefs.current.has(job.id)) {
                   autoDownloadedRefs.current.add(job.id);
                   const delay = _staggerIndex * 500;
@@ -609,7 +611,7 @@ export default function BulkContent() {
     return () => {};
   }, [isDiscovering, batchId]);
 
-  const successJobs = displayJobs.filter(j => j.status === 'success' && (j.direct_mp4_url || j.local_mp3_path || j.local_file_path));
+  const successJobs = displayJobs.filter(j => j.status === 'success' && (j.direct_mp4_url || localAnyId(j) || j.direct_file_id));
   
   // Progress computation (excluding zip job)
   let totalData = summary ? { ...summary } : { total: 0, success: 0, failed: 0, pending: 0, processing: 0 };
@@ -675,7 +677,7 @@ export default function BulkContent() {
     const toDownload = successJobs.filter(j => selectedJobIds.has(j.id));
     toDownload.forEach((job, index) => {
       setTimeout(() => {
-        handleSmartDownload(job.local_mp3_path || job.local_file_path || job.direct_mp4_url, job.slugified_name);
+        handleSmartDownload(localAnyId(job) || job.direct_file_id || job.direct_mp4_url, job.slugified_name);
       }, index * 500);
     });
   };
@@ -1702,7 +1704,7 @@ export default function BulkContent() {
                       <td className="px-6 py-3 max-w-[320px]">
                         <div className="flex items-start gap-2">
                           <div className="mt-0.5">
-                            {job.local_mp3_path ? (
+                            {localMp3Id(job) ? (
                               <Music className="w-4 h-4 text-accent-text flex-shrink-0" />
                             ) : (
                               <Video className="w-4 h-4 text-accent-text flex-shrink-0" />
