@@ -1,11 +1,12 @@
+import { useState } from 'react';
 import {
   Puzzle,
   Download,
-  FolderOpen,
-  MousePointerClick,
-  AlertTriangle,
+  Copy,
+  Check,
   Send,
   ArrowRight,
+  Info,
 } from 'lucide-react';
 import { trackEvent, EVENT } from '../utils/trackEvent';
 
@@ -55,25 +56,92 @@ const platforms = [
   { icon: SpotifyIcon, label: 'Spotify',  color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#1DB954]' },
 ];
 
-// ── Install step data ────────────────────────────────────────
+// ── Install guide ────────────────────────────────────────────
+const EXT_VERSION = '5.2.3';
+
+// Copyable mono chip — chrome:// links can't be opened from a web page.
+function CopyChip({ text }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch { /* ignore */ }
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <span className="inline-flex items-center gap-1 bg-surface border border-line rounded-lg pl-3 pr-1 py-1">
+      <code className="font-mono text-sm text-fg">{text}</code>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label={`Sao chép ${text}`}
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold text-accent-text hover:bg-accent-soft transition-colors"
+      >
+        {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+        {copied ? 'Đã chép' : 'Sao chép'}
+      </button>
+    </span>
+  );
+}
+
+const Code = ({ children }) => (
+  <code className="font-mono text-[0.85em] bg-surface border border-line rounded px-1.5 py-0.5 text-fg">{children}</code>
+);
+
 const steps = [
   {
-    num: 1,
-    icon: Download,
     title: 'Tải file ZIP',
-    desc: 'Nhấn nút "Tải Extension" ở trên để tải file ZIP về máy.',
+    body: (
+      <>
+        <p>Nhấn nút bên dưới để tải file ZIP (phiên bản {EXT_VERSION}) về máy.</p>
+        <a
+          href={`${API_BASE}/api/v1/extension/download`}
+          onClick={() => trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'extension_guide' })}
+          download
+          className="mt-3 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm hover:bg-accent-hover transition-colors"
+        >
+          <Download className="w-4 h-4" />
+          Tải Extension (.ZIP)
+        </a>
+      </>
+    ),
   },
   {
-    num: 2,
-    icon: FolderOpen,
-    title: 'Mở Extensions',
-    desc: 'Vào chrome://extensions trên thanh địa chỉ, sau đó bật Developer mode.',
+    title: 'Giải nén',
+    body: <p>Giải nén file ZIP ra một thư mục cố định. Đừng xoá thư mục này, trình duyệt cần nó để chạy extension.</p>,
   },
   {
-    num: 3,
-    icon: MousePointerClick,
-    title: 'Load Extension',
-    desc: 'Kéo thả file ZIP vào trang extensions hoặc nhấn "Load unpacked".',
+    title: 'Mở trang tiện ích',
+    body: (
+      <>
+        <p className="mb-2">Dán địa chỉ này vào thanh địa chỉ của trình duyệt rồi nhấn Enter:</p>
+        <CopyChip text="chrome://extensions" />
+      </>
+    ),
+  },
+  {
+    title: 'Bật chế độ nhà phát triển',
+    body: <p>Bật <strong className="text-fg">Chế độ dành cho nhà phát triển</strong> (Developer mode) ở góc trên bên phải.</p>,
+  },
+  {
+    title: 'Tải tiện ích đã giải nén',
+    body: <p>Nhấn <strong className="text-fg">Tải tiện ích đã giải nén</strong> (Load unpacked), rồi chọn thư mục vừa giải nén.</p>,
+  },
+  {
+    title: 'Ghim extension',
+    body: <p>Nhấn biểu tượng mảnh ghép trên thanh công cụ, rồi nhấn biểu tượng ghim cạnh VidGrab.</p>,
+  },
+  {
+    title: 'Cập nhật phiên bản mới',
+    body: <p>Tải file ZIP mới, giải nén đè lên thư mục cũ, rồi nhấn nút tải lại (mũi tên vòng) ở thẻ VidGrab trong trang <Code>chrome://extensions</Code>.</p>,
   },
 ];
 
@@ -163,43 +231,35 @@ export default function ExtensionPage() {
             Hướng dẫn cài đặt
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
-            {steps.map(({ num, icon: Icon, title, desc }) => (
-              <div
-                key={num}
-                className="relative flex flex-col gap-4 p-6 rounded-2xl bg-surface-2 border border-line backdrop-blur-sm hover:border-accent/30 transition-colors duration-300"
+          <ol className="flex flex-col gap-3">
+            {steps.map(({ title, body }, i) => (
+              <li
+                key={title}
+                className="flex gap-4 p-5 rounded-2xl bg-surface-2 border border-line"
               >
-                {/* Number badge */}
-                <div className="absolute -top-3.5 -left-3.5 w-8 h-8 rounded-xl bg-accent text-accent-fg font-black text-sm flex items-center justify-center shadow-md select-none">
-                  {num}
-                </div>
-
-                {/* Step icon */}
-                <div className="w-10 h-10 rounded-xl bg-accent-soft border border-accent/20 flex items-center justify-center">
-                  <Icon className="w-5 h-5 text-accent-text" />
-                </div>
-
-                {/* Text */}
-                <div>
+                <span className="w-8 h-8 shrink-0 rounded-xl bg-accent text-accent-fg font-black text-sm flex items-center justify-center select-none">
+                  {i + 1}
+                </span>
+                <div className="min-w-0 text-sm text-fg-muted leading-relaxed">
                   <h3 className="font-bold text-fg text-base mb-1">{title}</h3>
-                  <p className="text-sm text-fg-muted leading-relaxed">{desc}</p>
+                  {body}
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ol>
         </section>
 
-        {/* ── Warning note ──────────────────────────────────── */}
+        {/* ── Other browsers ────────────────────────────────── */}
         <div
           className="w-full flex items-start gap-3 p-4 rounded-2xl bg-accent-soft border border-accent/25"
           role="note"
-          aria-label="Lưu ý quan trọng"
+          aria-label="Trình duyệt khác"
         >
-          <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+          <Info className="w-5 h-5 text-accent-text flex-shrink-0 mt-0.5" />
           <p className="text-sm text-accent-text leading-relaxed">
-            <span className="font-bold">Lưu ý: </span>
-            Cần bật <span className="font-mono font-semibold text-accent-text">Developer mode</span> trong{' '}
-            <span className="font-mono font-semibold text-accent-text">chrome://extensions</span> trước khi cài extension thủ công.
+            Edge, Cốc Cốc và Brave cài tương tự. Trên Edge dùng{' '}
+            <span className="font-mono font-semibold">edge://extensions</span>, trên Brave dùng{' '}
+            <span className="font-mono font-semibold">brave://extensions</span>.
           </p>
         </div>
 
