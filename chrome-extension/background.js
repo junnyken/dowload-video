@@ -41,14 +41,13 @@ async function authHeaders(extra = {}) {
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 // ── First-party host (keep identical in background.js / popup.js / content.js) ──
 // vibe1.tinhgon.xyz is a SHARED multi-tenant domain: never trust a suffix or a
-// substring of it. Only these two exact hostnames are ours. `.matbao.ai` is the
-// legacy suffix rule, kept as-is for old builds.
+// substring of it. Only these two exact hostnames are ours - hostname equality,
+// no suffix rule of any kind (the old shared-suffix rule was removed in 5.2.4).
 const FIRST_PARTY_EXACT_HOSTS = ['dvid.vibe1.tinhgon.xyz', 'dvid-api.vibe1.tinhgon.xyz'];
-const FIRST_PARTY_SUFFIXES = ['.matbao.ai'];
-const LEGACY_API_HOST = 'dvid-api.cmc-1.vibenode.matbao.ai';   // dead since the Vibe Host move
+const LEGACY_API_HOST = 'dvid-api.cmc-1.vibenode.matbao.ai';   // dead host; ONLY used to migrate a stored old base to DEFAULT_API_BASE, never trusted
 function isFirstPartyHost(hostname) {
   const h = String(hostname || '').toLowerCase();
-  return FIRST_PARTY_EXACT_HOSTS.includes(h) || FIRST_PARTY_SUFFIXES.some((s) => h.endsWith(s));
+  return FIRST_PARTY_EXACT_HOSTS.includes(h);
 }
 // "Is this URL one of OUR servers?" — https + hostname equality, never includes().
 function isFirstPartyUrl(rawUrl) {
@@ -79,10 +78,16 @@ function normalizeApiBase(value) {
 function isCookieTrustedBase(base) {
   try {
     const u = new URL(base);
-    if (LOCAL_HOSTS.includes(u.hostname)) return true;
+    if (isLocalDevBase(base)) return true;   // dev only: the configured base itself is loopback
     if (u.protocol !== 'https:') return false;
     return isFirstPartyHost(u.hostname);
   } catch { return false; }
+}
+// True only when the (user-configured) API base is itself a loopback host.
+// getApiBase() falls back to the https first-party default, so this is false
+// unless the user explicitly set vg_api_base to localhost.
+function isLocalDevBase(base) {
+  try { return LOCAL_HOSTS.includes(new URL(base).hostname); } catch { return false; }
 }
 
 let _apiBase = DEFAULT_API_BASE;
@@ -466,31 +471,46 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const _fromExtensionPage =
     sender.id === chrome.runtime.id &&
     _senderOrigin() === `chrome-extension://${chrome.runtime.id}`;
-  function _isTrustedWebAppSender() {
+  // Exact first-party web origin (sync). Localhost is NOT here: it is dev-only
+  // and gated separately by _isLocalDevSender() on the user's explicit vg_api_base.
+  function _isFirstPartyWebSender() {
     if (sender.id !== chrome.runtime.id) return false;
     const origin = _senderOrigin();
     if (!origin) return false;
     try {
       const u = new URL(origin);
-      if (LOCAL_HOSTS.includes(u.hostname)) return true;
-      if (u.protocol !== 'https:') return false;
-      return isFirstPartyHost(u.hostname);
+      return u.protocol === 'https:' && isFirstPartyHost(u.hostname);
     } catch { return false; }
   }
-  const _mayWriteAuth = _fromExtensionPage || _isTrustedWebAppSender();
-
+  // Loopback sender: honoured only when the user has explicitly pointed
+  // vg_api_base at a loopback host (unpacked/dev use). With the default base a
+  // random local server on localhost:PORT can neither set nor clear the token.
+  async function _isLocalDevSender() {
+    if (sender.id !== chrome.runtime.id) return false;
+    const origin = _senderOrigin();
+    if (!origin) return false;
+    try {
+      if (!LOCAL_HOSTS.includes(new URL(origin).hostname)) return false;
+      return isLocalDevBase(await getApiBase());
+    } catch { return false; }
+  }
+  async function _mayWriteAuthAsync() {
+    return _fromExtensionPage || _isFirstPartyWebSender() || (await _isLocalDevSender());
+  }
   if (msg.type === 'VG_SET_AUTH_TOKEN') {
-    if (!_mayWriteAuth || typeof msg.token !== 'string' || !msg.token) {
-      sendResponse({ ok: false, error: 'Blocked: auth token may only be set by the extension UI or the VidGrab web app' });
-      return true;
-    }
-    const _write = { [AUTH_TOKEN_KEY]: msg.token };
-    if (typeof msg.email === 'string' && msg.email) _write.vg_auth_email = msg.email;
-    chrome.storage.local.set(_write, () => {
-      // Refresh the popup's account row if it happens to be open.
-      chrome.runtime.sendMessage({ type: 'VG_AUTH_CHANGED', authenticated: true, email: msg.email }).catch(() => {});
-      sendResponse({ ok: true });
-    });
+    (async () => {
+      if (!(await _mayWriteAuthAsync()) || typeof msg.token !== 'string' || !msg.token) {
+        sendResponse({ ok: false, error: 'Blocked: auth token may only be set by the extension UI or the VidGrab web app' });
+        return;
+      }
+      const _write = { [AUTH_TOKEN_KEY]: msg.token };
+      if (typeof msg.email === 'string' && msg.email) _write.vg_auth_email = msg.email;
+      chrome.storage.local.set(_write, () => {
+        // Refresh the popup's account row if it happens to be open.
+        chrome.runtime.sendMessage({ type: 'VG_AUTH_CHANGED', authenticated: true, email: msg.email }).catch(() => {});
+        sendResponse({ ok: true });
+      });
+    })();
     return true;
   }
 
@@ -503,11 +523,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'VG_CLEAR_AUTH_TOKEN') {
-    if (!_mayWriteAuth) { sendResponse({ ok: false }); return true; }
-    chrome.storage.local.remove([AUTH_TOKEN_KEY, 'vg_auth_email'], () => {
-      chrome.runtime.sendMessage({ type: 'VG_AUTH_CHANGED', authenticated: false }).catch(() => {});
-      sendResponse({ ok: true });
-    });
+    (async () => {
+      if (!(await _mayWriteAuthAsync())) { sendResponse({ ok: false }); return; }
+      chrome.storage.local.remove([AUTH_TOKEN_KEY, 'vg_auth_email'], () => {
+        chrome.runtime.sendMessage({ type: 'VG_AUTH_CHANGED', authenticated: false }).catch(() => {});
+        sendResponse({ ok: true });
+      });
+    })();
     return true;
   }
   if (msg.type === 'VG_GET_AUTH_STATUS') {

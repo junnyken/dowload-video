@@ -57,7 +57,7 @@ const platforms = [
 ];
 
 // ── Install guide ────────────────────────────────────────────
-const EXT_VERSION = '5.2.3';
+const EXT_VERSION = '5.2.4';
 
 // Copyable mono chip — chrome:// links can't be opened from a web page.
 function CopyChip({ text }) {
