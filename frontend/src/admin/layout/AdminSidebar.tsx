@@ -1,89 +1,15 @@
 import { NavLink, useNavigate } from 'react-router-dom'
+import { LogOut } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useAdminAuth } from '../hooks/useAdminAuth'
+import { NAV_SECTIONS } from './navConfig'
 
-interface NavItem {
-  href: string
-  label: string
-  icon: string
-  minRole?: 'viewer' | 'operator' | 'admin' | 'superadmin'
-  /**
-   * Kept out of the sidebar, still routed and reachable by URL.
-   *
-   * The menu had 24 entries and most of them could not show anything on this
-   * deployment: the whole Enterprise group is backed by tables holding either
-   * zero rows or leftovers from one "R27 Pilot Tenant" trial in August, and
-   * Billing in particular cannot ever populate because no STRIPE_* variable
-   * exists in the environment. A menu that lists mostly dead ends trains you
-   * to ignore it, which is how a real signal gets missed.
-   *
-   * Nothing is deleted — the routes stay in AdminRoutes.tsx, so bookmarks keep
-   * working, and re-listing one is deleting a single line.
-   */
-  hidden?: boolean
+interface AdminSidebarProps {
+  /** Called after a nav click — lets the mobile drawer close itself. */
+  onNavigate?: () => void
 }
 
-const NAV_OVERVIEW: NavItem[] = [
-  { href: '/vid-admin', label: 'Overview', icon: '◉', minRole: 'viewer' },
-]
-
-const NAV_MONITOR: NavItem[] = [
-  { href: '/vid-admin/platforms', label: 'Platforms', icon: '⬡', minRole: 'viewer' },
-  { href: '/vid-admin/cookies', label: 'Cookies', icon: '⬢', minRole: 'viewer' },
-  { href: '/vid-admin/proxy', label: 'Proxy', icon: '◈', minRole: 'viewer' },
-  { href: '/vid-admin/queue', label: 'Queue', icon: '◧', minRole: 'viewer' },
-  { href: '/vid-admin/jobs', label: 'Jobs', icon: '⊡', minRole: 'viewer' },
-  { href: '/vid-admin/analytics', label: 'Analytics', icon: '◫', minRole: 'viewer' },
-  { href: '/vid-admin/probes', label: 'Sức khoẻ nền tảng', icon: '◉', minRole: 'viewer' },
-  { href: '/vid-admin/funnel', label: 'Funnel', icon: '◩', minRole: 'viewer' },
-  { href: '/vid-admin/youtube-gate', label: 'YouTube Gate', icon: '⊙', minRole: 'operator' },
-  // Ops Signals is the aggregated "is anything wrong right now" view. Queue
-  // Health and Anomalies answer the same question from the same Redis state in
-  // a different arrangement, so they are folded behind it rather than listed
-  // three times. Queue Health also owns the auto-tune controls — reachable at
-  // /vid-admin/queue-health when those are needed.
-  { href: '/vid-admin/ops-signals', label: 'Ops Signals', icon: '◆', minRole: 'viewer' },
-  { href: '/vid-admin/queue-health', label: 'Queue Health', icon: '◍', minRole: 'viewer', hidden: true },
-  { href: '/vid-admin/anomalies', label: 'Anomalies', icon: '◇', minRole: 'viewer', hidden: true },
-]
-
-const NAV_MANAGE: NavItem[] = [
-  { href: '/vid-admin/users', label: 'Users', icon: '⊛', minRole: 'operator' },
-  { href: '/vid-admin/config', label: 'Config', icon: '⊜', minRole: 'admin' },
-  { href: '/vid-admin/playbooks', label: 'Playbooks', icon: '⊟', minRole: 'operator' },
-  { href: '/vid-admin/automation-history', label: 'Automation', icon: '⊠', minRole: 'viewer' },
-]
-
-// The partner/multi-tenant surface. Every page here reads a table that is
-// empty or holds only the August "R27 Pilot Tenant" trial data — api_keys,
-// webhook_endpoints, analysis_jobs, payment_events, user_credits and
-// user_presets are all at zero rows. Re-list a line here the day that feature
-// has real customers.
-const NAV_ENTERPRISE: NavItem[] = [
-  { href: '/vid-admin/tenants',     label: 'Tenants',    icon: '◨', minRole: 'admin', hidden: true },
-  { href: '/vid-admin/api-keys',    label: 'API Keys',   icon: '◪', minRole: 'admin', hidden: true },
-  { href: '/vid-admin/webhooks',    label: 'Webhooks',   icon: '◩', minRole: 'admin', hidden: true },
-  { href: '/vid-admin/usage',       label: 'Usage',      icon: '◬', minRole: 'admin', hidden: true },
-  { href: '/vid-admin/ai-analysis', label: 'AI Analysis', icon: '◭', minRole: 'admin', hidden: true },
-  { href: '/vid-admin/billing',     label: 'Billing',    icon: '◮', minRole: 'admin', hidden: true },
-  { href: '/vid-admin/presets',     label: 'Presets',    icon: '◯', minRole: 'admin', hidden: true },
-]
-
-const NAV_SYSTEM: NavItem[] = [
-  // Admin session management, superadmin-only, with a single admin account.
-  { href: '/vid-admin/access', label: 'Access', icon: '⊝', minRole: 'superadmin', hidden: true },
-  { href: '/vid-admin/audit', label: 'Audit Log', icon: '⊞', minRole: 'admin' },
-]
-
-const SECTIONS = [
-  { label: null, items: NAV_OVERVIEW },
-  { label: 'Monitor', items: NAV_MONITOR },
-  { label: 'Manage', items: NAV_MANAGE },
-  { label: 'Enterprise', items: NAV_ENTERPRISE },
-  { label: 'System', items: NAV_SYSTEM },
-]
-
-export function AdminSidebar() {
+export function AdminSidebar({ onNavigate }: AdminSidebarProps) {
   const navigate = useNavigate()
   const { user, logout, hasRole } = useAdminAuth()
 
@@ -94,74 +20,97 @@ export function AdminSidebar() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Logo */}
-      <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-line px-4">
-        <span className="text-lg">▼</span>
-        <span className="font-mono text-sm font-bold tracking-tight text-fg">
+      {/* Brand */}
+      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line px-4">
+        <span
+          aria-hidden
+          className="flex h-6 w-6 items-center justify-center rounded-control bg-accent font-mono text-xs font-bold text-accent-fg"
+        >
+          V
+        </span>
+        <span className="font-mono text-sm font-semibold tracking-tight text-fg">
           VidGrab <span className="text-fg-muted">Admin</span>
         </span>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-3">
-        {SECTIONS.map((section, si) => {
+      {/* Grouped nav */}
+      <nav aria-label="Admin" className="flex-1 overflow-y-auto px-2 py-3">
+        {NAV_SECTIONS.map((section, si) => {
           const visibleItems = section.items.filter(
             (item) => !item.hidden && (!item.minRole || hasRole(item.minRole)),
           )
           if (visibleItems.length === 0) return null
           return (
-            <div key={si} className="mb-1">
+            <div key={si} className={cn(si > 0 && 'mt-4')}>
               {section.label && (
-                <p className="mb-0.5 px-4 pt-3 font-mono text-[9px] font-semibold uppercase tracking-widest text-fg-muted">
+                <p className="mb-1 px-3 font-mono text-[10px] font-medium uppercase tracking-widest text-fg-muted">
                   {section.label}
                 </p>
               )}
-              {visibleItems.map((item) => (
-                <NavLink
-                  key={item.href}
-                  to={item.href}
-                  end={item.href === '/vid-admin'}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex items-center gap-2.5 rounded-lg mx-2 px-3 py-1.5 text-sm transition-colors',
-                      isActive
-                        ? 'bg-surface text-fg'
-                        : 'text-fg-muted hover:bg-surface hover:text-fg-2',
-                    )
-                  }
-                >
-                  <span className="font-mono text-base leading-none text-fg-muted">
-                    {item.icon}
-                  </span>
-                  <span>{item.label}</span>
-                </NavLink>
-              ))}
+              <ul className="space-y-0.5">
+                {visibleItems.map((item) => {
+                  const Icon = item.icon
+                  return (
+                    <li key={item.href}>
+                      <NavLink
+                        to={item.href}
+                        end={item.href === '/vid-admin'}
+                        onClick={onNavigate}
+                        className={({ isActive }) =>
+                          cn(
+                            'relative flex items-center gap-2.5 rounded-control px-3 py-2 text-sm transition-colors',
+                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                            isActive
+                              ? 'bg-surface-2 font-medium text-fg'
+                              : 'text-fg-2 hover:bg-surface-2 hover:text-fg',
+                          )
+                        }
+                      >
+                        {({ isActive }) => (
+                          <>
+                            {isActive && (
+                              <span aria-hidden className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-accent" />
+                            )}
+                            <Icon
+                              aria-hidden
+                              className={cn('h-4 w-4 shrink-0', isActive ? 'text-accent-text' : 'text-fg-muted')}
+                            />
+                            <span className="truncate">{item.label}</span>
+                          </>
+                        )}
+                      </NavLink>
+                    </li>
+                  )
+                })}
+              </ul>
             </div>
           )
         })}
       </nav>
 
       {/* User footer */}
-      <div className="shrink-0 border-t border-line p-3">
-        {user && (
-          <div className="flex items-center gap-2 rounded-lg px-2 py-1.5">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-2 font-mono text-xs text-fg-2">
+      {user && (
+        <div className="shrink-0 border-t border-line p-3">
+          <div className="flex items-center gap-2.5 px-1">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 font-mono text-xs text-fg-2">
               {user.email.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-fg-2">{user.email}</p>
-              <p className="font-mono text-[10px] uppercase text-fg-muted">{user.role}</p>
+              <p className="truncate text-xs font-medium text-fg">{user.email}</p>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">{user.role}</p>
             </div>
             <button
+              type="button"
               onClick={handleLogout}
               title="Logout"
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-muted transition-colors hover:text-danger"
+              aria-label="Logout"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
-              ⏻
+              <LogOut aria-hidden className="h-4 w-4" />
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
