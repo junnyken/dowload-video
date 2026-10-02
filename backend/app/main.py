@@ -511,6 +511,10 @@ app.include_router(processing_api.router, prefix="/api/v1", tags=["Processing"])
 from app.api import resolve_input as resolve_input_api
 app.include_router(resolve_input_api.router, prefix="/api/v1", tags=["Resolve Input"])
 
+# Measured resolution/codec for TikWM formats (ffprobe, issued URLs only)
+from app.api import format_probe as format_probe_api
+app.include_router(format_probe_api.router, prefix="/api/v1", tags=["Format Probe"])
+
 
 # ── Health Check ─────────────────────────────────────────────────────
 @app.get("/", tags=["Health"])
