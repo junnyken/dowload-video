@@ -94,18 +94,13 @@ const Toast = ({ message, show }) => (
 );
 
 // ── Resolution Badge ────────────────────────────────────────
-const ResBadge = ({ label, height }) => {
-  let colors = 'bg-surface-2 text-fg-2';
-  if (height >= 2160) colors = 'bg-accent text-accent-fg';
-  else if (height >= 1440) colors = 'bg-accent text-accent-fg';
-  else if (height >= 1080) colors = 'bg-success text-accent-fg';
-  else if (height >= 720) colors = 'bg-accent text-fg';
-  return (
-    <span className={`px-2.5 py-0.5 rounded-lg text-xs font-black tracking-wide ${colors}`}>
-      {label}
-    </span>
-  );
-};
+const ResBadge = ({ label }) => (
+  // Descriptive tag, not an action: neutral for every variant so it never
+  // reads as a button next to the real download icon.
+  <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-surface-2 text-fg-2 border border-line">
+    {label}
+  </span>
+);
 
 export default function DashboardContent() {
   const { withAuth, session } = useAuth();
@@ -2894,16 +2889,16 @@ export default function DashboardContent() {
             {hasFormats ? (
               <>
                 {/* Tab Switcher */}
-                <div className="flex gap-1 p-1 bg-surface rounded-xl mb-4 max-w-xs">
+                <div className="flex gap-1 p-1 bg-surface-2 border border-line rounded-xl mb-4 max-w-xs" role="tablist">
                   <button
                     onClick={() => setFormatTab('video')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${formatTab === 'video' ? 'bg-success text-accent-fg shadow-md' : 'text-fg-muted hover:text-accent-fg'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${formatTab === 'video' ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg'}`}
                   >
                     <Video className="w-4 h-4" /> Video ({videoFormats.length + (showMergeOption ? 1 : 0)})
                   </button>
                   <button
                     onClick={() => setFormatTab('audio')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${formatTab === 'audio' ? 'bg-accent text-accent-fg shadow-md' : 'text-fg-muted hover:text-accent-fg'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${formatTab === 'audio' ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg'}`}
                   >
                     <Music className="w-4 h-4" /> Âm thanh ({audioFormats.length})
                   </button>
@@ -2949,18 +2944,18 @@ export default function DashboardContent() {
                           className={`w-full flex items-center justify-between px-5 py-3.5 rounded-2xl ${
                             isAlreadyDownloaded
                               ? 'bg-success-soft border border-success/40 hover:border-success/70'
-                              : 'bg-surface border border-line hover:border-success/50 hover:bg-surface-2'
+                              : 'bg-surface border border-line hover:border-line-strong hover:bg-surface-2'
                           } text-fg transition-all disabled:opacity-60 active:scale-[0.99] group`}
                         >
                           <div className="flex items-center gap-3">
-                            <Video className="w-5 h-5 text-success" />
+                            <Video className="w-5 h-5 text-fg-muted" />
                             <div className="text-left">
                               <div className="flex items-center gap-2">
                                 <ResBadge label={fmt.label} height={fmt.height} />
                                 <span className="text-sm font-bold">{fmt.resolution}</span>
                                 <span className="text-xs text-fg-muted uppercase">{fmt.ext}</span>
                                 {fmt.recommended && (
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-success-soft text-success border border-success/30">
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-accent-soft text-accent-text border border-accent/30">
                                     ✓ MỌI THIẾT BỊ
                                   </span>
                                 )}
@@ -2984,7 +2979,7 @@ export default function DashboardContent() {
                                   </span>
                                 )}
                                 {fmt.label?.includes('With Watermark') && (
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-accent-soft text-accent-text border border-accent/30">
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-warning-soft text-warning border border-warning/30">
                                     CÓ LOGO
                                   </span>
                                 )}
@@ -2996,9 +2991,9 @@ export default function DashboardContent() {
                             </div>
                           </div>
                           {downloadingId === `merge_${fmt.height}` ? (
-                            <Loader2 className="w-5 h-5 animate-spin text-success" />
+                            <Loader2 className="w-5 h-5 animate-spin text-accent-text" />
                           ) : (
-                            <Download className="w-5 h-5 text-success group-hover:scale-110 transition-transform" />
+                            <Download className="w-5 h-5 text-accent-text group-hover:scale-110 transition-transform" />
                           )}
                         </button>
                       ); })}

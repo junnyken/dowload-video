@@ -86,8 +86,20 @@ export default function QuickActionBar({ platform, videoInfo, activePreset, onAc
     return base;
   }, [platform, videoInfo]);
 
+  // A preset whose settings equal a built-in action (e.g. "TikTok sạch
+  // watermark" == "Sạch WM") triggers the exact same handler, so it must not
+  // render a second button: the action takes the preset's clearer name instead.
+  const presetDup = activePreset ? actions.find((a) => (
+    !!a.settings.remove_watermark === !!activePreset.settings?.remove_watermark &&
+    a.settings.quality === activePreset.settings?.quality && !a.settings._trigger_gif
+  )) : null;
+
   const primary = actions.filter((a) => a.primary || actions.indexOf(a) < 2);
   const secondary = actions.filter((a) => !primary.includes(a));
+
+  function displayLabel(action) {
+    return presetDup && action.id === presetDup.id ? activePreset.name : action.label;
+  }
 
   function handleAction(action) {
     if (disabled) return;
@@ -119,18 +131,18 @@ export default function QuickActionBar({ platform, videoInfo, activePreset, onAc
             key={action.id}
             onClick={() => handleAction(action)}
             className={buttonCls(action, action.primary)}
-            title={locked ? `${action.label} — Yêu cầu Pro` : action.label}
+            title={locked ? `${displayLabel(action)} — Yêu cầu Pro` : displayLabel(action)}
             disabled={disabled}
           >
             <ActionIcon icon={action.icon} />
-            {action.label}
+            {displayLabel(action)}
             {locked && <Lock className="w-2.5 h-2.5 text-fg-muted" />}
           </button>
         );
       })}
 
       {/* Preset button (if user has an active preset for this platform) */}
-      {activePreset && (
+      {activePreset && !presetDup && (
         <button
           onClick={() => onAction(activePreset.settings)}
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-surface-2 hover:bg-line text-fg-2 border border-line transition-all cursor-pointer"
