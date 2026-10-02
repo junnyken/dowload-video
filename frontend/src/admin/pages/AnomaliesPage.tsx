@@ -1,3 +1,4 @@
+import { isResolvedAnomaly } from '../utils/anomalies'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { intelFetch, intelPost } from '../utils/adminFetch'
 import {
@@ -72,7 +73,7 @@ export default function AnomaliesPage() {
     setBusy(p => ({ ...p, [g.key]: true }))
     setMsg(p => ({ ...p, [g.key]: '' }))
     try {
-      for (const a of g.members.filter(m => m.state !== 'resolved')) {
+      for (const a of g.members.filter(m => !isResolvedAnomaly(m))) {
         await intelPost(`/anomalies/${encodeURIComponent(a.id)}/resolve`)
       }
       setMsg(p => ({ ...p, [g.key]: 'Đã đánh dấu xử lý xong.' }))
@@ -85,14 +86,14 @@ export default function AnomaliesPage() {
   }
 
   const groups = useMemo(() => {
-    const visible = showResolved ? items : items.filter(a => a.state !== 'resolved')
+    const visible = showResolved ? items : items.filter(a => !isResolvedAnomaly(a))
     return groupAnomalies(visible).sort((a, b) =>
       SEV_RANK[anomalySeverity(a.latest)] - SEV_RANK[anomalySeverity(b.latest)]
       || (b.lastSeen ?? '').localeCompare(a.lastSeen ?? ''))
   }, [items, showResolved])
 
-  const activeRecords = items.filter(a => a.state !== 'resolved').length
-  const activeGroups = groupAnomalies(items.filter(a => a.state !== 'resolved')).length
+  const activeRecords = items.filter(a => !isResolvedAnomaly(a)).length
+  const activeGroups = groupAnomalies(items.filter(a => !isResolvedAnomaly(a))).length
 
   return (
     <div className="space-y-5">
@@ -122,7 +123,7 @@ export default function AnomaliesPage() {
         {groups.map(g => {
           const a = g.latest
           const sev = anomalySeverity(a)
-          const resolved = g.members.every(m => m.state === 'resolved')
+          const resolved = g.members.every(m => isResolvedAnomaly(m))
           const cause = a.likely_cause ?? a.message ?? ''
           const repeat = g.count >= 2
           const tech = techFields(a)

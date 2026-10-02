@@ -120,3 +120,17 @@ export function groupAnomalies<T extends AnomalyLike>(items: T[]): AnomalyGroup<
   }
   return [...map.values()].sort((x, y) => (y.lastSeen ?? '').localeCompare(x.lastSeen ?? ''))
 }
+
+
+/**
+ * Resolved, whatever generation of the payload this is: the backend sends
+ * state "anomaly_resolved" (not "resolved") plus `active` / `status` since the
+ * dedupe change. Comparing state to 'resolved' alone showed every resolved
+ * anomaly as active.
+ */
+export function isResolvedAnomaly(a: { state?: string | null; status?: string | null; active?: boolean | null }): boolean {
+  if (a.active === false) return true
+  if (a.active === true) return false
+  const s = (a.status || a.state || '').toLowerCase()
+  return s === 'resolved' || s === 'anomaly_resolved'
+}

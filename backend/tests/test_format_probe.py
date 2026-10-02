@@ -20,8 +20,13 @@ from app.core import ssrf_guard
 from app.services import format_probe as fp
 
 FIXTURE = pathlib.Path(__file__).parent / "fixtures" / "ffprobe_tikwm_hdplay.json"
-HD = "https://v19-notes.tiktokcdn-us.com/abc/6abfa75b/video/tos/x/?a=0&mime_type=video_mp4"
-PLAY = "https://v16m.tiktokcdn-us.com/def/6abfa75b/video/tos/y/?a=1233"
+# The path segment is the CDN expiry (hex epoch). It used to be the literal
+# 6abfa75b captured live, which expired at 2026-10-02 12:45 UTC and turned two
+# tests red from then on. Derive it from "now + 6h" so the fixtures never age.
+_EXP = int(time.time()) + 6 * 3600
+_EXP_HEX = format(_EXP, "08x")
+HD = f"https://v19-notes.tiktokcdn-us.com/abc/{_EXP_HEX}/video/tos/x/?a=0&mime_type=video_mp4"
+PLAY = f"https://v16m.tiktokcdn-us.com/def/{_EXP_HEX}/video/tos/y/?a=1233"
 
 
 class FakeRedis:
@@ -82,11 +87,12 @@ def test_parse_rejects_audio_only_and_garbage():
 
 def test_ttl_never_outlives_signed_url():
     now = 1_790_923_507
-    # Path form seen live: 6abfa75b == now + ~6h
-    assert fp.url_expiry(HD, now) == 0x6abfa75b
+    # Fixed clock, so a fixed URL: the live-captured path form, 6abfa75b == now + ~6h.
+    hd_fixed = "https://v19-notes.tiktokcdn-us.com/abc/6abfa75b/video/tos/x/?a=0&mime_type=video_mp4"
+    assert fp.url_expiry(hd_fixed, now) == 0x6abfa75b
     # 0x6abfa75b is 6h00m08s out, so the 6 h cap wins; a 2 h URL caps at 2 h.
-    assert fp.ttl_for(HD, 6 * 3600, now) == 6 * 3600
-    two_h = HD.replace("6abfa75b", format(now + 7200, "x"))
+    assert fp.ttl_for(hd_fixed, 6 * 3600, now) == 6 * 3600
+    two_h = hd_fixed.replace("6abfa75b", format(now + 7200, "x"))
     assert fp.ttl_for(two_h, 6 * 3600, now) == 7200
     short = f"https://v16m.tiktokcdn-us.com/x/?x-expires={now + 120}"
     assert fp.ttl_for(short, 6 * 3600, now) == 120

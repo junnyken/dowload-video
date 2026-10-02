@@ -1,3 +1,4 @@
+import { isResolvedAnomaly } from './anomalies'
 import type { AlertItem } from '../panels/ActiveAlertsBanner'
 import type { SystemSnapshot } from '../api/system'
 import { anomalyLabel, anomalySeverity, groupAnomalies, isStale } from './anomalies'
@@ -49,7 +50,7 @@ export function buildAlerts(snapshot: SystemSnapshot): BuiltAlerts {
   }
 
   // Anomaly alerts: one row per type+platform, resolved ones dropped.
-  const active = (ops.active_anomalies ?? []).filter(a => a.state !== 'resolved')
+  const active = (ops.active_anomalies ?? []).filter(a => !isResolvedAnomaly(a))
   const groups = groupAnomalies(active)
 
   const anomalyAlerts: AlertItem[] = groups.map((g, i) => {
