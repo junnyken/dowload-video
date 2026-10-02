@@ -15,10 +15,14 @@ Endpoints:
 All outputs:
   - Are placed in the downloads directory.
   - Are scheduled for cleanup after 20 minutes via delete_local_file Celery task.
-  - Return {"success": True, "download_url": "...", "output_path": "...",
+  - Return {"success": True, "download_url": "...", "file_id": "<basename>",
              "file_size_mb": ..., "expires_in_seconds": 1200}
+    Never an absolute server path: download_url is
+    /download-local?file=<basename>, and file_id (the same basename) is what a
+    client passes back as local_path / video_path to chain another step.
   - Are rate-limited at 10/minute per IP.
-  - Apply path-traversal guard on every local_path input.
+  - Apply path-traversal guard on every local_path input (a bare file_id is
+    resolved inside the downloads directory; legacy absolute paths still work).
 """
 
 import ipaddress
@@ -60,11 +64,15 @@ def _safe_download_dir() -> str:
 def _guard_local_path(path: str) -> str:
     """
     Resolve path and confirm it is inside _DOWNLOADS_DIR.
-    Raises HTTPException 400/404 on failure. Returns realpath.
+    Accepts a bare file_id (basename, as returned by these endpoints) or a
+    legacy absolute path. Raises HTTPException 400/404 on failure. Returns realpath.
     """
     real_dl = os.path.realpath(_DOWNLOADS_DIR)
+    if path and os.sep not in path and "/" not in path:
+        path = os.path.join(real_dl, path)
     real_p  = os.path.realpath(path)
-    if not real_p.startswith(real_dl):
+    # Separator-terminated prefix: "/app/downloads_x" is not inside "/app/downloads".
+    if not real_p.startswith(real_dl + os.sep):
         raise HTTPException(status_code=400, detail="Invalid local_path: path traversal not allowed")
     if not os.path.exists(real_p):
         raise HTTPException(status_code=404, detail="Local file not found or expired")
@@ -138,9 +146,9 @@ async def _download_url_async(url: str, dest_path: str) -> None:
 
 
 def _build_download_url(output_path: str, filename: str) -> str:
-    """Build the /api/v1/download-local URL for a given output path + filename."""
-    from urllib.parse import quote as _quote
-    return f"/api/v1/download-local?filepath={_quote(output_path)}&filename={_quote(filename)}"
+    """/api/v1/download-local?file=<basename> — the directory is never sent."""
+    from app.core.local_download import download_url
+    return download_url(output_path, filename)
 
 
 def _file_size_mb(path: str) -> float:
@@ -154,7 +162,7 @@ def _success_response(output_path: str, filename: str, extra: Optional[dict] = N
     resp = {
         "success": True,
         "download_url": _build_download_url(output_path, filename),
-        "output_path": output_path,
+        "file_id": os.path.basename(output_path),
         "file_size_mb": _file_size_mb(output_path),
         "expires_in_seconds": _EXPIRES_IN_SECONDS,
     }
@@ -208,23 +216,42 @@ def _vtt_file_to_srt(vtt_path: str, srt_path: str) -> bool:
         return False
 
 
+_BURN_FFMPEG_TIMEOUT_SEC = int(os.getenv("BURN_FFMPEG_TIMEOUT_SEC", "300"))
+
+
+def _run_burn_ffmpeg(video_path: str, subtitle_path: str, output_path: str,
+                     timeout: float) -> bool:
+    """
+    Blocking. Hardcode subtitle into video. Returns True on success; lets
+    subprocess.TimeoutExpired through (subprocess.run kills ffmpeg first).
+    Thread count capped by ffmpeg_budget like every other re-encode.
+    """
+    from app.core.ffmpeg_budget import thread_args
+    escaped = subtitle_path.replace("\\", "/").replace(":", "\\:")
+    result = subprocess.run(
+        [
+            "ffmpeg", "-y", "-i", video_path,
+            "-vf", (
+                f"subtitles={escaped}:force_style="
+                "'FontSize=20,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,Outline=1'"
+            ),
+            *thread_args(),
+            "-c:a", "copy", "-c:v", "libx264", "-crf", "23", "-preset", "fast",
+            output_path,
+        ],
+        capture_output=True, timeout=timeout,
+    )
+    if result.returncode != 0:
+        print(f"[processing] burn-subtitle ffmpeg rc={result.returncode} "
+              f"err={result.stderr.decode(errors='replace')[-300:]}")
+    return result.returncode == 0 and os.path.exists(output_path)
+
+
 def _burn_subtitle(video_path: str, subtitle_path: str, output_path: str) -> bool:
     """Hardcode subtitle into video using FFmpeg. Returns True on success."""
     try:
-        escaped = subtitle_path.replace("\\", "/").replace(":", "\\:")
-        result = subprocess.run(
-            [
-                "ffmpeg", "-y", "-i", video_path,
-                "-vf", (
-                    f"subtitles={escaped}:force_style="
-                    "'FontSize=20,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,Outline=1'"
-                ),
-                "-c:a", "copy", "-c:v", "libx264", "-crf", "23", "-preset", "fast",
-                output_path,
-            ],
-            capture_output=True, timeout=300,
-        )
-        return result.returncode == 0 and os.path.exists(output_path)
+        return _run_burn_ffmpeg(video_path, subtitle_path, output_path,
+                                _BURN_FFMPEG_TIMEOUT_SEC)
     except Exception as e:
         print(f"[processing] burn-subtitle failed: {e}")
         return False
@@ -448,6 +475,10 @@ _SUBTITLE_MAX_BYTES = int(os.getenv("SUBTITLE_MAX_BYTES", str(5 * 1024 * 1024)))
 class _NoSubtitles(Exception):
     """The video answered but has no subtitle track for the requested language(s)."""
 
+    def __init__(self, code: str = "subtitle_language_unavailable"):
+        super().__init__(code)
+        self.code = code
+
 
 class _SubtitleFetchFailed(Exception):
     def __init__(self, status: int, code: str, raw: str):
@@ -536,6 +567,69 @@ def _subtitle_error_message(code: str) -> str:
     return f"Không tải được phụ đề: {get_error_meta(code)['user_message']}"
 
 
+def _youtube_gate_or_503(url: str) -> None:
+    """YouTube gate (flag / circuit / cost) — 503 {error, error_code, message}."""
+    if not _is_youtube_url(url):
+        return
+    from app.core import youtube_gate as _ytg
+    try:
+        _ytg.availability_check()
+    except _ytg.YouTubeBlocked as _yb:
+        raise HTTPException(status_code=_yb.http, detail={
+            "error": _yb.code, "error_code": _yb.code,
+            "message": _yb.message, **_yb.payload,
+        })
+
+
+def _no_subtitles_response(language: Optional[str], code: str):
+    from fastapi.responses import JSONResponse
+    lang = language or "auto"
+    msg = (f"Video không có phụ đề cho ngôn ngữ '{lang}'."
+           if code == "subtitle_language_unavailable"
+           and _LANG_CODE_RE.match(lang) and lang not in _SUBTITLE_LANG_MAP
+           else "Nguồn này không có phụ đề/captions")
+    return JSONResponse(status_code=404, content={
+        "success": False, "error": "no_subtitles",
+        "error_code": code, "message": msg,
+    })
+
+
+async def _fetch_subtitle_into(work_dir: str, url: str, language: Optional[str],
+                               ydl_fmt: str) -> str:
+    """
+    Fetch one subtitle track into work_dir through the shared yt-dlp builder
+    (direct, then proxy + cookies + PO token), off the event loop, bounded by
+    the subtitle budget and size cap. When ydl_fmt is "srt" and only a .vtt was
+    offered, it is converted. Returns the file path.
+
+    Raises _NoSubtitles(code) or ExtractionHTTPException (classified 4xx/5xx).
+    """
+    from fastapi.concurrency import run_in_threadpool
+    from app.core.extraction_errors import ExtractionHTTPException
+
+    langs = _subtitle_langs_for(language)
+    # YouTube etc. only offer vtt: accept it and convert to .srt below.
+    subtitles_format = "srt/vtt/best" if ydl_fmt == "srt" else ydl_fmt
+    try:
+        sub_file = await run_in_threadpool(
+            _fetch_subtitle_file, url, langs, subtitles_format, ydl_fmt, work_dir,
+        )
+    except _SubtitleFetchFailed as f:
+        raise ExtractionHTTPException(f.status, _subtitle_error_message(f.code), f.code)
+
+    if os.path.getsize(sub_file) > _SUBTITLE_MAX_BYTES:
+        raise ExtractionHTTPException(
+            413, "Không tải được phụ đề: tệp phụ đề quá lớn.", "subtitle_too_large")
+
+    if ydl_fmt == "srt" and sub_file.endswith(".vtt"):
+        # Only a .vtt was available — convert it so the user still gets an .srt.
+        srt = sub_file[:-4] + ".srt"
+        if not _vtt_file_to_srt(sub_file, srt):
+            raise _NoSubtitles("subtitle_empty")
+        sub_file = srt
+    return sub_file
+
+
 @router.post("/process/subtitle")
 @limiter.limit("10/minute")
 async def download_subtitle(payload: SubtitleRequest, request: Request):
@@ -549,9 +643,6 @@ async def download_subtitle(payload: SubtitleRequest, request: Request):
     """
     import shutil
     import tempfile
-    from fastapi.concurrency import run_in_threadpool
-    from fastapi.responses import JSONResponse
-    from app.core.extraction_errors import ExtractionHTTPException
 
     _assert_safe_url(payload.source_url)
 
@@ -559,56 +650,19 @@ async def download_subtitle(payload: SubtitleRequest, request: Request):
     if fmt not in ("srt", "vtt", "txt"):
         raise HTTPException(status_code=400, detail="format must be 'srt', 'vtt', or 'txt'")
 
-    if _is_youtube_url(payload.source_url):
-        from app.core import youtube_gate as _ytg
-        try:
-            _ytg.availability_check()
-        except _ytg.YouTubeBlocked as _yb:
-            raise HTTPException(status_code=_yb.http, detail={
-                "error": _yb.code, "error_code": _yb.code,
-                "message": _yb.message, **_yb.payload,
-            })
+    _youtube_gate_or_503(payload.source_url)
 
-    langs = _subtitle_langs_for(payload.language)
     ydl_fmt = fmt if fmt != "txt" else "srt"  # txt = post-process from srt
-    # YouTube etc. only offer vtt: accept it and convert to .srt below.
-    subtitles_format = "srt/vtt/best" if ydl_fmt == "srt" else ydl_fmt
 
     download_dir = _safe_download_dir()
     uid = uuid.uuid4().hex[:8]
     work_dir = tempfile.mkdtemp(prefix=f".subtmp_{uid}_", dir=download_dir)
     try:
         try:
-            sub_file = await run_in_threadpool(
-                _fetch_subtitle_file, payload.source_url, langs,
-                subtitles_format, ydl_fmt, work_dir,
-            )
-        except _NoSubtitles:
-            lang = payload.language or "auto"
-            msg = (f"Video không có phụ đề cho ngôn ngữ '{lang}'."
-                   if _LANG_CODE_RE.match(lang) and lang not in _SUBTITLE_LANG_MAP
-                   else "Nguồn này không có phụ đề/captions")
-            return JSONResponse(status_code=404, content={
-                "success": False, "error": "no_subtitles",
-                "error_code": "subtitle_language_unavailable", "message": msg,
-            })
-        except _SubtitleFetchFailed as f:
-            raise ExtractionHTTPException(f.status, _subtitle_error_message(f.code), f.code)
-
-        if os.path.getsize(sub_file) > _SUBTITLE_MAX_BYTES:
-            raise ExtractionHTTPException(
-                413, "Không tải được phụ đề: tệp phụ đề quá lớn.", "subtitle_too_large")
-
-        if ydl_fmt == "srt" and sub_file.endswith(".vtt"):
-            # Only a .vtt was available — convert it so the user still gets an .srt.
-            srt = sub_file[:-4] + ".srt"
-            if not _vtt_file_to_srt(sub_file, srt):
-                return JSONResponse(status_code=404, content={
-                    "success": False, "error": "no_subtitles",
-                    "error_code": "subtitle_empty",
-                    "message": "Nguồn này không có phụ đề/captions",
-                })
-            sub_file = srt
+            sub_file = await _fetch_subtitle_into(
+                work_dir, payload.source_url, payload.language, ydl_fmt)
+        except _NoSubtitles as e:
+            return _no_subtitles_response(payload.language, e.code)
 
         if fmt == "txt":
             with open(sub_file, "r", encoding="utf-8", errors="replace") as f:
@@ -619,7 +673,9 @@ async def download_subtitle(payload: SubtitleRequest, request: Request):
             sub_file = txt
 
         # work_dir/sub.<lang>.<ext> → downloads/sub_<uid>.<lang>.<ext>
-        output_path = os.path.join(download_dir, f"sub_{uid}{os.path.basename(sub_file)[3:]}")
+        # (lang comes from the provider: keep it to file-id-safe characters)
+        tail = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(sub_file)[3:])
+        output_path = os.path.join(download_dir, f"sub_{uid}{tail}")
         shutil.move(sub_file, output_path)
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
@@ -634,60 +690,60 @@ async def download_subtitle(payload: SubtitleRequest, request: Request):
 async def burn_subtitle(payload: BurnSubtitleRequest, request: Request):
     """
     Download subtitles from source_url and burn them into an existing local video.
-    video_path must be inside the downloads directory.
+    video_path must be inside the downloads directory (file_id or legacy path).
+
+    The subtitle fetch is the one /process/subtitle uses (shared yt-dlp builder,
+    YouTube gate, classified errors, time + size bounds). The video is not
+    downloaded here — it is the caller's already-downloaded file. ffmpeg runs
+    off the event loop with the shared thread cap and a hard timeout.
     """
-    import yt_dlp
+    import shutil
+    import tempfile
+    from fastapi.concurrency import run_in_threadpool
+    from app.core.extraction_errors import ExtractionHTTPException
 
     video_path = _guard_local_path(payload.video_path)
     _assert_safe_url(payload.source_url)
+    _youtube_gate_or_503(payload.source_url)
 
     download_dir = _safe_download_dir()
     uid = uuid.uuid4().hex[:8]
-    outtmpl_base = os.path.join(download_dir, f"bsub_{uid}")
-
-    ydl_opts = {
-        "skip_download": True,
-        "writesubtitles": True,
-        "writeautomaticsub": True,
-        "subtitleslangs": _subtitle_langs_for(payload.language),
-        "subtitlesformat": "srt",
-        "outtmpl": outtmpl_base,
-        "quiet": True,
-        "no_warnings": True,
-    }
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([payload.source_url])
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Subtitle download failed: {e}")
-
-    # Find the downloaded subtitle
-    sub_file: Optional[str] = None
-    for entry in os.listdir(download_dir):
-        if entry.startswith(f"bsub_{uid}") and entry.endswith(".srt"):
-            candidate = os.path.join(download_dir, entry)
-            if os.path.exists(candidate):
-                sub_file = candidate
-                break
-
-    if not sub_file:
-        raise HTTPException(
-            status_code=404,
-            detail="No subtitles found for this source URL",
-        )
-
-    # Determine output extension (preserve original video extension)
-    orig_ext = os.path.splitext(video_path)[1] or ".mp4"
+    # Preserve the original container; anything odd falls back to .mp4.
+    orig_ext = os.path.splitext(video_path)[1]
+    if not re.fullmatch(r"\.[A-Za-z0-9]{1,5}", orig_ext or ""):
+        orig_ext = ".mp4"
     output_path = os.path.join(download_dir, f"burned_{uid}{orig_ext}")
-
+    work_dir = tempfile.mkdtemp(prefix=f".bsubtmp_{uid}_", dir=download_dir)
+    ok = False
     try:
-        success = _burn_subtitle(video_path, sub_file, output_path)
-        if not success:
+        try:
+            sub_file = await _fetch_subtitle_into(
+                work_dir, payload.source_url, payload.language, "srt")
+        except _NoSubtitles as e:
+            return _no_subtitles_response(payload.language, e.code)
+
+        # Fixed name: nothing provider-controlled reaches ffmpeg's filter syntax.
+        burn_srt = os.path.join(work_dir, "burn.srt")
+        os.replace(sub_file, burn_srt)
+
+        try:
+            ok = await run_in_threadpool(
+                _run_burn_ffmpeg, video_path, burn_srt, output_path,
+                _BURN_FFMPEG_TIMEOUT_SEC)
+        except subprocess.TimeoutExpired:
+            raise ExtractionHTTPException(
+                504, "Ghép phụ đề quá thời gian cho phép. Thử video ngắn hơn.",
+                "processing_timeout")
+        except OSError as e:
+            print(f"[processing] burn-subtitle could not start ffmpeg: {e}")
+            ok = False
+        if not ok:
             raise HTTPException(status_code=500, detail="FFmpeg burn-in failed")
     finally:
-        try: os.remove(sub_file)
-        except: pass
+        shutil.rmtree(work_dir, ignore_errors=True)
+        if not ok and os.path.exists(output_path):
+            try: os.remove(output_path)
+            except OSError: pass
 
     slug = _slugify(payload.filename or "burned", "burned")
     out_filename = f"{slug}_subbed{orig_ext}"

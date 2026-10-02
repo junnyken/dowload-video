@@ -1442,11 +1442,36 @@ async def get_quota(req: Request):
 from fastapi.responses import FileResponse
 import os
 
+# Overridable in tests; None = <backend>/downloads, as before.
+_LOCAL_DOWNLOADS_DIR: Optional[str] = None
+
+
 @router.get("/download-local")
 @limiter.limit("120/minute")
-async def download_local_file(request: Request, filepath: str, filename: str):
-    # Resolve relative paths (e.g. "downloads/xxx.mp3") to absolute
+async def download_local_file(request: Request, filename: str,
+                              file: Optional[str] = None,
+                              filepath: Optional[str] = None):
+    """
+    Serve a file from downloads/.
+
+    `file`     — the bare basename (what every new link carries; see
+                 app.core.local_download). Never resolves outside downloads/.
+    `filepath` — legacy: absolute or "downloads/..." path. Still accepted
+                 because fetch-link / the extension build these links.
+    """
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if file is not None:
+        from app.core.local_download import resolve_file_id
+        real_path = resolve_file_id(file, _LOCAL_DOWNLOADS_DIR or os.path.join(base_dir, "downloads"))
+        if real_path is None:
+            raise HTTPException(status_code=400, detail="Invalid file.")
+        if not os.path.isfile(real_path):
+            raise HTTPException(status_code=404, detail="File expired or not found.")
+        return _local_file_response(real_path, filename)
+    if not filepath:
+        raise HTTPException(status_code=422, detail="file or filepath is required")
+
+    # Resolve relative paths (e.g. "downloads/xxx.mp3") to absolute
     if not os.path.isabs(filepath):
         filepath = os.path.join(base_dir, filepath)
 
@@ -1458,8 +1483,10 @@ async def download_local_file(request: Request, filepath: str, filename: str):
 
     if not os.path.exists(real_path):
         raise HTTPException(status_code=404, detail="File expired or not found.")
-    filepath = real_path
-    
+    return _local_file_response(real_path, filename)
+
+
+def _local_file_response(filepath: str, filename: str) -> FileResponse:
     # Detect media type from extension
     ext = os.path.splitext(filepath)[1].lower()
     media_types = {
@@ -1467,7 +1494,7 @@ async def download_local_file(request: Request, filepath: str, filename: str):
         ".srt": "text/plain; charset=utf-8", ".vtt": "text/vtt; charset=utf-8",
     }
     media_type = media_types.get(ext, "application/octet-stream")
-    
+
     return FileResponse(filepath, filename=filename, media_type=media_type)
 
 

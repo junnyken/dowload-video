@@ -95,27 +95,27 @@ class TestVttToSrt:
 
 
 class TestEndpoint:
-    def test_srt_only_source_is_returned_as_is(self, proc, monkeypatch):
+    def test_srt_only_source_is_returned_as_is(self, proc, monkeypatch, tmp_path):
         import yt_dlp
         cap = {}
         monkeypatch.setattr(yt_dlp, "YoutubeDL", _fake_ydl(cap, "srt", "1\n00:00:01,000 --> 00:00:02,000\nhi\n\n"))
         r = _call(proc, language="ja")
         assert r["success"] is True
         assert cap["subtitleslangs"] == ["ja"]
-        assert r["output_path"].endswith(".srt")
+        assert os.path.join(tmp_path, r["file_id"]).endswith(".srt")
 
-    def test_vtt_only_source_is_converted_to_srt(self, proc, monkeypatch):
+    def test_vtt_only_source_is_converted_to_srt(self, proc, monkeypatch, tmp_path):
         import yt_dlp
         cap = {}
         monkeypatch.setattr(yt_dlp, "YoutubeDL", _fake_ydl(cap, "vtt", VTT))
         r = _call(proc, language="ja", filename="clip")
         assert r["success"] is True
         assert cap["subtitlesformat"] == "srt/vtt/best"
-        assert r["output_path"].endswith(".srt")
-        assert "00:00:04,000 --> 00:00:06,000" in open(r["output_path"], encoding="utf-8").read()
+        assert os.path.join(tmp_path, r["file_id"]).endswith(".srt")
+        assert "00:00:04,000 --> 00:00:06,000" in open(os.path.join(tmp_path, r["file_id"]), encoding="utf-8").read()
         assert "clip.srt" in r["download_url"]
         # the intermediate .vtt is gone
-        assert not [f for f in os.listdir(os.path.dirname(r["output_path"])) if f.endswith(".vtt")]
+        assert not [f for f in os.listdir(tmp_path) if f.endswith(".vtt")]
 
     def test_no_track_means_no_subtitles(self, proc, monkeypatch):
         import json

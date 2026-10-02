@@ -166,8 +166,8 @@ class TestEndpointUsesBuilder:
         assert len(calls) == 2
         assert "proxy" not in calls[0]
         assert calls[1]["proxy"] == PROXY and calls[1]["cookiefile"] == COOKIES
-        assert r["output_path"].endswith(".en.srt")
-        out = open(r["output_path"], encoding="utf-8").read()
+        assert os.path.join(tmp_path, r["file_id"]).endswith(".en.srt")
+        out = open(os.path.join(tmp_path, r["file_id"]), encoding="utf-8").read()
         assert "00:00:01,200 --> 00:00:03,360" in out and "WEBVTT" not in out
         assert _leftover_tmp(tmp_path) == []
 
@@ -298,7 +298,7 @@ class TestTxtAndCleanup:
         calls = []
         monkeypatch.setattr(yt_dlp, "YoutubeDL", _ydl(calls, [("en", "vtt", VTT)]))
         r = _call(proc, format="txt")
-        assert r["output_path"].endswith(".txt")
-        text = open(r["output_path"], encoding="utf-8").read()
+        assert os.path.join(tmp_path, r["file_id"]).endswith(".txt")
+        text = open(os.path.join(tmp_path, r["file_id"]), encoding="utf-8").read()
         assert "really long trunks" in text and "-->" not in text
-        assert os.listdir(tmp_path) == [os.path.basename(r["output_path"])]
+        assert os.listdir(tmp_path) == [r["file_id"]]

@@ -157,7 +157,8 @@ async def bulk_zip_rename(
         raise HTTPException(400, detail="Không có file nào còn tồn tại trên server để nén.")
 
     # 4. Create ZIP
-    zip_name = f"renamed_{payload.batch_id[:8]}_{uuid.uuid4().hex[:6]}.zip"
+    _bid = re.sub(r"[^A-Za-z0-9-]", "", payload.batch_id[:8]) or "batch"
+    zip_name = f"renamed_{_bid}_{uuid.uuid4().hex[:6]}.zip"
     zip_path = os.path.join(_DOWNLOADS_DIR, zip_name)
 
     try:
@@ -176,7 +177,8 @@ async def bulk_zip_rename(
         pass
 
     zip_size = os.path.getsize(zip_path) / 1024 / 1024
-    zip_url = f"/api/v1/download-local?filepath={zip_path}&filename={zip_name}"
+    from app.core.local_download import download_url
+    zip_url = download_url(zip_path, zip_name)  # no server directory in the link
 
     return {
         "success":      True,
