@@ -4,6 +4,19 @@ Rolling-window heuristic anomaly detection using Redis stats.
 Keys consumed: vidgrab:stats:{YYYY-MM-DD} (hashes: platform:ok, platform:err)
 Keys written:  vidgrab:anomalies:active (list of JSON, max 100)
                vidgrab:anomalies:history (list of JSON, max 500)
+
+Lifecycle (one entry per condition, not one per check run)
+  * A check that fires while an unresolved entry with the same `metric`
+    (e.g. "success_drop:tiktok") exists UPDATES it — last_seen, magnitude,
+    likely_cause, occurrence_count — instead of inserting a duplicate. The
+    detector runs every 5 minutes, so before this a single TikTok dip produced
+    a new row every 5 minutes and filled all 100 slots.
+  * A check that evaluates its condition and finds it false auto-resolves the
+    open entry for that metric (auto_resolved=true, resolved_at).
+  * An unresolved entry not seen for STALE_AFTER_HOURS (24h) is not active:
+    get_active_anomalies() leaves it out, and run_all_checks() resolves it
+    (resolution_reason="stale"). A week-old schedule_drift can no longer stay
+    pinned on the dashboard.
 """
 
 from __future__ import annotations
@@ -38,6 +51,8 @@ ANOMALY_HISTORY_KEY = KEY_PREFIX + "anomalies:history"
 
 MAX_ACTIVE = 100
 MAX_HISTORY = 500
+
+STALE_AFTER_HOURS = float(os.environ.get("ANOMALY_STALE_HOURS", "24"))
 
 ROLLING_WINDOW_DAYS = 7
 
@@ -121,17 +136,264 @@ def _build_anomaly(
     }
 
 
-def _store_anomaly(anomaly: dict) -> None:
+# ---------------------------------------------------------------------------
+# Active-list storage (dedupe / resolve / staleness)
+# ---------------------------------------------------------------------------
+
+_SHORT_STATUS = {
+    AnomalyState.DETECTED.value: "detected",
+    AnomalyState.UNDER_WATCH.value: "under_watch",
+    AnomalyState.ESCALATED.value: "escalated",
+    AnomalyState.RESOLVED.value: "resolved",
+}
+
+
+def _parse_ts(value) -> Optional[datetime]:
+    if not value:
+        return None
     try:
-        payload = json.dumps(anomaly)
-        # Prepend to active list and trim
-        redis_client.lpush(ANOMALY_ACTIVE_KEY, payload)
-        redis_client.ltrim(ANOMALY_ACTIVE_KEY, 0, MAX_ACTIVE - 1)
-        # Also append to history
-        redis_client.rpush(ANOMALY_HISTORY_KEY, payload)
-        redis_client.ltrim(ANOMALY_HISTORY_KEY, -MAX_HISTORY, -1)
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
     except Exception:
-        pass
+        return None
+
+
+def _is_resolved(a: dict) -> bool:
+    return a.get("state") == AnomalyState.RESOLVED.value
+
+
+def _last_seen(a: dict) -> Optional[datetime]:
+    return _parse_ts(a.get("last_seen")) or _parse_ts(a.get("detected_at"))
+
+
+def _is_stale(a: dict, now: Optional[datetime] = None) -> bool:
+    seen = _last_seen(a)
+    if seen is None:
+        return True
+    now = now or datetime.now(timezone.utc)
+    return (now - seen) > timedelta(hours=STALE_AFTER_HOURS)
+
+
+def _decorate(a: dict, now: Optional[datetime] = None) -> dict:
+    """Read-side view: fill fields older rows lack and add derived flags."""
+    out = dict(a)
+    out.setdefault("first_seen", out.get("detected_at"))
+    out.setdefault("last_seen", out.get("detected_at"))
+    out.setdefault("occurrence_count", 1)
+    out.setdefault("auto_resolved", False)
+    out.setdefault("resolved_at", None)
+    stale = (not _is_resolved(out)) and _is_stale(out, now)
+    out["stale"] = stale
+    out["active"] = (not _is_resolved(out)) and not stale
+    out["status"] = _SHORT_STATUS.get(out.get("state"), out.get("state"))
+    return out
+
+
+def _decode_item(item) -> Optional[dict]:
+    try:
+        return json.loads(item.decode() if isinstance(item, bytes) else item)
+    except Exception:
+        return None
+
+
+def _trim(items: list[dict]) -> list[dict]:
+    """Keep at most MAX_ACTIVE, dropping the oldest resolved entries first."""
+    if len(items) <= MAX_ACTIVE:
+        return items
+    epoch = datetime.min.replace(tzinfo=timezone.utc)
+    resolved = sorted((i for i in items if _is_resolved(i)),
+                      key=lambda i: _parse_ts(i.get("resolved_at")) or _last_seen(i) or epoch)
+    drop = set()
+    for i in resolved:
+        if len(items) - len(drop) <= MAX_ACTIVE:
+            break
+        drop.add(id(i))
+    kept = [i for i in items if id(i) not in drop]
+    if len(kept) > MAX_ACTIVE:
+        kept.sort(key=lambda i: _last_seen(i) or epoch, reverse=True)
+        kept = kept[:MAX_ACTIVE]
+    return kept
+
+
+def _mutate_active(fn, *, dry_run: bool = False):
+    """Optimistic read-modify-write of the active list.
+
+    fn(items) -> (new_items, history_entries, result). Retries on concurrent
+    modification (WATCH). Returns `result`, or None if Redis is unavailable.
+    """
+    from redis.exceptions import WatchError
+
+    for _attempt in range(5):
+        try:
+            with redis_client.pipeline() as pipe:
+                pipe.watch(ANOMALY_ACTIVE_KEY)
+                raw = pipe.lrange(ANOMALY_ACTIVE_KEY, 0, -1) or []
+                items = [d for d in (_decode_item(r) for r in raw) if isinstance(d, dict)]
+                new_items, history, result = fn(items)
+                if dry_run:
+                    pipe.unwatch()
+                    return result
+                pipe.multi()
+                pipe.delete(ANOMALY_ACTIVE_KEY)
+                if new_items:
+                    pipe.rpush(ANOMALY_ACTIVE_KEY, *[json.dumps(i) for i in new_items])
+                for h in history or []:
+                    pipe.rpush(ANOMALY_HISTORY_KEY, json.dumps(h))
+                if history:
+                    pipe.ltrim(ANOMALY_HISTORY_KEY, -MAX_HISTORY, -1)
+                pipe.execute()
+                return result
+        except WatchError:
+            continue
+        except Exception:
+            return None
+    return None
+
+
+def _store_anomaly(anomaly: dict) -> dict:
+    """Insert `anomaly`, or fold it into the open entry for the same metric.
+
+    Returns the stored entry (merged when deduplicated)."""
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+
+    def fn(items):
+        history = []
+        for it in items:
+            if it.get("metric") != anomaly.get("metric") or _is_resolved(it):
+                continue
+            if _is_stale(it, now):
+                # Not seen for a day: close the old episode, start a new one.
+                it.update(state=AnomalyState.RESOLVED.value, auto_resolved=True,
+                          resolved_at=now_iso, resolution_reason="stale", updated_at=now_iso)
+                history.append(dict(it))
+                continue
+            it.setdefault("first_seen", it.get("detected_at"))
+            it["last_seen"] = now_iso
+            it["updated_at"] = now_iso
+            it["occurrence_count"] = int(it.get("occurrence_count") or 1) + 1
+            for k in ("magnitude", "likely_cause", "window", "auto_mitigated", "mitigation_applied"):
+                if k in anomaly:
+                    it[k] = anomaly[k]
+            # Severity may rise (disk 80% → 90%) but never silently drops an
+            # admin's escalate/watch decision.
+            if anomaly.get("state") == AnomalyState.ESCALATED.value:
+                it["state"] = AnomalyState.ESCALATED.value
+            return items, history, dict(it)
+        new = dict(anomaly)
+        new.setdefault("first_seen", new.get("detected_at") or now_iso)
+        new.setdefault("last_seen", new.get("detected_at") or now_iso)
+        new["occurrence_count"] = 1
+        new.setdefault("auto_resolved", False)
+        new.setdefault("resolved_at", None)
+        history.append(dict(new))
+        return _trim([new] + items), history, new
+
+    stored = _mutate_active(fn)
+    return stored if stored is not None else anomaly
+
+
+def _auto_resolve(metric: str, reason: str = "condition_cleared") -> int:
+    """Resolve open entries for `metric` because the condition no longer holds."""
+    now_iso = _now_iso()
+
+    def fn(items):
+        n, history = 0, []
+        for it in items:
+            if it.get("metric") == metric and not _is_resolved(it):
+                it.update(state=AnomalyState.RESOLVED.value, auto_resolved=True,
+                          resolved_at=now_iso, resolution_reason=reason, updated_at=now_iso)
+                history.append(dict(it))
+                n += 1
+        return items, history, n
+
+    try:
+        # Cheap pre-check so the common "nothing open" case does no write.
+        if not any(a.get("metric") == metric and not _is_resolved(a) for a in _load_all()):
+            return 0
+    except Exception:
+        return 0
+    return _mutate_active(fn) or 0
+
+
+def resolve_stale_anomalies(now: Optional[datetime] = None) -> int:
+    """Resolve every open entry not seen for STALE_AFTER_HOURS."""
+    now = now or datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+
+    def fn(items):
+        n, history = 0, []
+        for it in items:
+            if not _is_resolved(it) and _is_stale(it, now):
+                it.update(state=AnomalyState.RESOLVED.value, auto_resolved=True,
+                          resolved_at=now_iso, resolution_reason="stale", updated_at=now_iso)
+                history.append(dict(it))
+                n += 1
+        return items, history, n
+
+    return _mutate_active(fn) or 0
+
+
+def cleanup_anomalies(dry_run: bool = False) -> dict:
+    """One-time / idempotent repair of the active list written before dedupe.
+
+    * collapses every group of unresolved entries sharing a metric into one
+      (first_seen = earliest, last_seen/magnitude/likely_cause = latest,
+      occurrence_count = sum, state = the most severe of the group);
+    * resolves unresolved entries not seen for STALE_AFTER_HOURS;
+    * leaves resolved entries alone.
+    Running it again changes nothing.
+    """
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    epoch = datetime.min.replace(tzinfo=timezone.utc)
+    rank = {AnomalyState.ESCALATED.value: 0, AnomalyState.UNDER_WATCH.value: 1,
+            AnomalyState.DETECTED.value: 2}
+
+    def fn(items):
+        report = {"before": len(items), "duplicates_removed": 0,
+                  "stale_resolved": 0, "after": 0, "active_after": 0,
+                  "metrics_merged": {}}
+        groups: dict[str, list[dict]] = {}
+        out: list[dict] = []
+        for it in items:
+            if _is_resolved(it):
+                out.append(it)
+            else:
+                groups.setdefault(it.get("metric") or "", []).append(it)
+        history = []
+        for metric, group in groups.items():
+            group.sort(key=lambda i: _last_seen(i) or epoch, reverse=True)
+            keep = dict(group[0])
+            if len(group) > 1:
+                keep["first_seen"] = min(
+                    (str(i.get("first_seen") or i.get("detected_at") or "") for i in group),
+                    key=lambda v: _parse_ts(v) or epoch)
+                keep["occurrence_count"] = sum(int(i.get("occurrence_count") or 1) for i in group)
+                keep["state"] = min((i.get("state") for i in group), key=lambda st: rank.get(st, 9))
+                keep["updated_at"] = now_iso
+                report["duplicates_removed"] += len(group) - 1
+                report["metrics_merged"][metric] = len(group)
+            keep.setdefault("first_seen", keep.get("detected_at"))
+            keep.setdefault("last_seen", keep.get("detected_at"))
+            keep.setdefault("occurrence_count", 1)
+            if _is_stale(keep, now):
+                keep.update(state=AnomalyState.RESOLVED.value, auto_resolved=True,
+                            resolved_at=now_iso, resolution_reason="stale", updated_at=now_iso)
+                history.append(dict(keep))
+                report["stale_resolved"] += 1
+            out.append(keep)
+        out.sort(key=lambda i: _last_seen(i) or epoch, reverse=True)
+        out = _trim(out)
+        report["after"] = len(out)
+        report["active_after"] = sum(1 for i in out if _decorate(i, now)["active"])
+        report["dry_run"] = dry_run
+        return out, history, report
+
+    result = _mutate_active(fn, dry_run=dry_run)
+    if result is None:
+        return {"error": "redis_unavailable", "dry_run": dry_run}
+    return result
 
 
 def _get_platform_stats_for_day(date_str: str) -> dict[str, dict[str, int]]:
@@ -222,6 +484,7 @@ def check_failure_spike(platform: str) -> Optional[dict]:
             spike = True
 
         if not spike:
+            _auto_resolve(f"failure_spike:{platform}")
             return None
 
         magnitude = today_err_rate / avg_err_rate if avg_err_rate > 0 else float("inf")
@@ -236,8 +499,7 @@ def check_failure_spike(platform: str) -> Optional[dict]:
             magnitude=today_err_rate,
             likely_cause=likely_cause,
         )
-        _store_anomaly(anomaly)
-        return anomaly
+        return _store_anomaly(anomaly)
 
     except Exception:
         return None
@@ -271,6 +533,7 @@ def check_queue_lag() -> Optional[dict]:
                 redis_client.set(BASELINE_QUEUE_KEY, str(new_avg), ex=86400 * 8)
             except Exception:
                 pass
+            _auto_resolve("queue_lag")
             return None
 
         magnitude = current_len / avg_len if avg_len > 0 else float(current_len)
@@ -285,8 +548,7 @@ def check_queue_lag() -> Optional[dict]:
             magnitude=current_len,
             likely_cause=likely_cause,
         )
-        _store_anomaly(anomaly)
-        return anomaly
+        return _store_anomaly(anomaly)
 
     except Exception:
         return None
@@ -303,6 +565,7 @@ def check_disk_pressure() -> Optional[dict]:
         pct_used = (usage.used / usage.total) * 100.0 if usage.total > 0 else 0.0
 
         if pct_used < DISK_PRESSURE_WARNING:
+            _auto_resolve("disk_pressure")
             return None
 
         state = AnomalyState.ESCALATED if pct_used >= DISK_PRESSURE_CRITICAL else AnomalyState.DETECTED
@@ -320,8 +583,7 @@ def check_disk_pressure() -> Optional[dict]:
             likely_cause=likely_cause,
             state=state,
         )
-        _store_anomaly(anomaly)
-        return anomaly
+        return _store_anomaly(anomaly)
 
     except Exception:
         return None
@@ -360,6 +622,7 @@ def check_retry_rate() -> Optional[dict]:
                 redis_client.set(BASELINE_RETRY_KEY, str(new_avg), ex=86400 * 8)
             except Exception:
                 pass
+            _auto_resolve("high_retry_rate")
             return None
 
         magnitude = current_rate / avg_rate if avg_rate > 0 else float("inf")
@@ -375,8 +638,7 @@ def check_retry_rate() -> Optional[dict]:
             magnitude=current_rate,
             likely_cause=likely_cause,
         )
-        _store_anomaly(anomaly)
-        return anomaly
+        return _store_anomaly(anomaly)
 
     except Exception:
         return None
@@ -408,6 +670,7 @@ def check_platform_success_drop() -> list[dict]:
             drop = avg_sr - today_sr
 
             if drop < DROP_IN_SUCCESS_THRESHOLD:
+                _auto_resolve(f"success_drop:{platform}")
                 continue
 
             likely_cause = (
@@ -420,8 +683,7 @@ def check_platform_success_drop() -> list[dict]:
                 magnitude=drop,
                 likely_cause=likely_cause,
             )
-            _store_anomaly(anomaly)
-            anomalies.append(anomaly)
+            anomalies.append(_store_anomaly(anomaly))
 
     except Exception:
         pass
@@ -458,6 +720,7 @@ def check_schedule_drift() -> Optional[dict]:
             pass
 
         if elapsed <= max_allowed:
+            _auto_resolve("schedule_drift")
             return None
 
         drift_minutes = elapsed / 60
@@ -472,8 +735,7 @@ def check_schedule_drift() -> Optional[dict]:
             magnitude=round(elapsed, 1),
             likely_cause=likely_cause,
         )
-        _store_anomaly(anomaly)
-        return anomaly
+        return _store_anomaly(anomaly)
 
     except Exception:
         return None
@@ -520,6 +782,7 @@ def check_webhook_failures() -> Optional[dict]:
                 redis_client.set(BASELINE_WH_KEY, str(new_avg), ex=86400 * 8)
             except Exception:
                 pass
+            _auto_resolve("webhook_delivery_failures")
             return None
 
         magnitude = current_rate / avg_rate if avg_rate > 0 else float("inf")
@@ -535,8 +798,7 @@ def check_webhook_failures() -> Optional[dict]:
             magnitude=current_rate,
             likely_cause=likely_cause,
         )
-        _store_anomaly(anomaly)
-        return anomaly
+        return _store_anomaly(anomaly)
 
     except Exception:
         return None
@@ -568,6 +830,11 @@ def run_all_checks() -> list[dict]:
     check_platform_success_drop()
     check_webhook_failures()
 
+    try:
+        resolve_stale_anomalies()
+    except Exception:
+        pass
+
     return get_active_anomalies()
 
 
@@ -575,58 +842,68 @@ def run_all_checks() -> list[dict]:
 # State management
 # ---------------------------------------------------------------------------
 
+def _load_all() -> list[dict]:
+    raw_list = redis_client.lrange(ANOMALY_ACTIVE_KEY, 0, MAX_ACTIVE - 1) or []
+    return [d for d in (_decode_item(r) for r in raw_list) if isinstance(d, dict)]
+
+
 def get_active_anomalies() -> list[dict]:
-    """Fetch all active anomalies from Redis (newest first)."""
+    """Anomalies that are open AND seen within STALE_AFTER_HOURS, newest first.
+
+    This is what every count (Overview card, alert banner, bell, playbooks)
+    must use — resolved and stale entries are not "active"."""
     try:
-        raw_list = redis_client.lrange(ANOMALY_ACTIVE_KEY, 0, MAX_ACTIVE - 1) or []
-        result = []
-        for item in raw_list:
-            try:
-                decoded = item.decode() if isinstance(item, bytes) else item
-                result.append(json.loads(decoded))
-            except Exception:
+        now = datetime.now(timezone.utc)
+        items = [_decorate(a, now) for a in _load_all()]
+        active = [a for a in items if a["active"]]
+        active.sort(key=lambda a: _last_seen(a) or now, reverse=True)
+        # Rows written before dedupe existed can hold many open copies of one
+        # metric; count the condition once (newest copy) even before
+        # cleanup_anomalies() has collapsed them in storage.
+        seen: set = set()
+        unique = []
+        for a in active:
+            key = a.get("metric") or a.get("id")
+            if key in seen:
                 continue
-        return result
+            seen.add(key)
+            unique.append(a)
+        return unique
+    except Exception:
+        return []
+
+
+def list_anomalies() -> list[dict]:
+    """Every entry in the active list (incl. resolved / stale), decorated with
+    `active`, `stale` and the short `status`; active ones first."""
+    try:
+        now = datetime.now(timezone.utc)
+        items = [_decorate(a, now) for a in _load_all()]
+        items.sort(key=lambda a: (not a["active"], -(_last_seen(a) or now).timestamp()))
+        return items
     except Exception:
         return []
 
 
 def _update_anomaly_state(anomaly_id: str, new_state: AnomalyState) -> bool:
-    """
-    Find anomaly by id in the active list, update its state, re-store.
-    Returns True if found and updated.
-    """
-    try:
-        raw_list = redis_client.lrange(ANOMALY_ACTIVE_KEY, 0, MAX_ACTIVE - 1) or []
-        updated = False
-        new_list = []
-        for item in raw_list:
-            try:
-                decoded = item.decode() if isinstance(item, bytes) else item
-                obj = json.loads(decoded)
-                if obj.get("id") == anomaly_id:
-                    obj["state"] = new_state.value
-                    obj["updated_at"] = _now_iso()
-                    updated = True
-                new_list.append(json.dumps(obj))
-            except Exception:
-                new_list.append(item if isinstance(item, str) else item.decode(errors="replace"))
+    """Set the state of one entry by id. Returns True if found and updated."""
+    now_iso = _now_iso()
 
-        if updated:
-            # Rewrite the list atomically using a pipeline
-            try:
-                pipe = redis_client.pipeline()
-                pipe.delete(ANOMALY_ACTIVE_KEY)
-                for entry in new_list:
-                    pipe.rpush(ANOMALY_ACTIVE_KEY, entry)
-                pipe.ltrim(ANOMALY_ACTIVE_KEY, 0, MAX_ACTIVE - 1)
-                pipe.execute()
-            except Exception:
-                pass
+    def fn(items):
+        found, history = False, []
+        for it in items:
+            if it.get("id") == anomaly_id:
+                it["state"] = new_state.value
+                it["updated_at"] = now_iso
+                if new_state == AnomalyState.RESOLVED:
+                    it["resolved_at"] = now_iso
+                    it["auto_resolved"] = False
+                    it["resolution_reason"] = "manual"
+                    history.append(dict(it))
+                found = True
+        return items, history, found
 
-        return updated
-    except Exception:
-        return False
+    return bool(_mutate_active(fn))
 
 
 def resolve_anomaly(anomaly_id: str) -> bool:

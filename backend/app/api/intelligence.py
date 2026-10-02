@@ -113,10 +113,37 @@ async def list_anomalies():
     Public — returns active anomalies.
     No auth required; used by frontend dashboards.
     """
-    from app.core.anomaly_detector import get_active_anomalies
+    from app.core.anomaly_detector import list_anomalies
 
-    anomalies = get_active_anomalies()
-    return {"anomalies": anomalies, "count": len(anomalies)}
+    # Every entry (resolved/stale included, for the "show resolved" toggle),
+    # each flagged with `active`/`stale` and a short `status`
+    # (detected|under_watch|escalated|resolved). `count` is ACTIVE ones only:
+    # unresolved and seen within the last 24h.
+    anomalies = list_anomalies()
+    active = sum(1 for a in anomalies if a.get("active"))
+    return {"anomalies": anomalies, "count": active, "active_count": active,
+            "total": len(anomalies)}
+
+
+@router.post("/anomalies/cleanup")
+async def cleanup_anomalies_route(request: Request, dry_run: bool = True):
+    """Admin only — one-time, idempotent repair of the anomaly list.
+
+    Collapses duplicate open entries (same metric) into one and resolves
+    entries not seen for 24h. dry_run=true (default) only reports what would
+    change; pass ?dry_run=false to apply. Safe to run repeatedly.
+    """
+    from app.core.anomaly_detector import cleanup_anomalies
+    from app.core.audit import log_from_request
+
+    await _require_admin(request)
+    report = cleanup_anomalies(dry_run=dry_run)
+    if not dry_run:
+        try:
+            log_from_request(request, "admin.anomalies.cleanup", metadata=report)
+        except Exception:
+            pass
+    return {"success": "error" not in report, **report}
 
 
 @router.post("/anomalies/{anomaly_id}/resolve")
