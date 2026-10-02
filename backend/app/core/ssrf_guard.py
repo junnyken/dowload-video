@@ -70,6 +70,22 @@ def _blocked_reason(addr: ipaddress._BaseAddress) -> str | None:
     return None
 
 
+def blocked_reason(addr) -> str | None:
+    """Public name for the IP rule set. Accepts an ip_address object or a string;
+    an unparseable string is treated as blocked."""
+    if isinstance(addr, str):
+        try:
+            addr = ipaddress.ip_address(addr.split("%", 1)[0])
+        except ValueError:
+            return "unparseable address"
+    return _blocked_reason(addr)
+
+
+def ip_is_public(addr) -> bool:
+    """True iff `addr` passes the same rules `assert_safe_url` applies."""
+    return blocked_reason(addr) is None
+
+
 def _resolve(hostname: str) -> tuple[str, ...]:
     """Resolve `hostname` to every A/AAAA record, memoised for _DNS_TTL seconds."""
     now = time.monotonic()

@@ -3,10 +3,10 @@ Measured format facts for TikWM streams
 =======================================
 
 TikWM hands back stream URLs and byte sizes, never dimensions or codecs, so the
-format list used to print guesses. This module measures them for real with
-ffprobe against the remote URL — ffprobe reads only the container header (the
-moov box, ~a few hundred KB) over HTTP range requests, nothing is written to
-disk.
+format list used to print guesses. This module measures them for real: our own
+code downloads a bounded PREFIX of the file (the moov box sits at the front of
+TikTok's faststart MP4s) and ffprobe parses those bytes from stdin. Nothing is
+written to disk.
 
 It is called from POST /api/v1/formats/probe AFTER the format list has
 rendered, so /fetch-link stays exactly as fast as before.
@@ -18,37 +18,48 @@ Security — this is an SSRF surface (the server opens a URL the client names):
    If Redis is unreachable the check FAILS CLOSED (no probe), because we
    cannot prove issuance.
 2. Host allowlist (defence in depth): https only, hostname must end in one of
-   PROBE_HOST_SUFFIXES.
-3. SSRF guard: every redirect hop is resolved via `assert_safe_url` (DNS ->
-   reject private / loopback / link-local / CGNAT) AND re-checked against the
-   allowlist. ffprobe is then handed the FINAL url so its own redirect
-   following has nothing left to follow.
-4. ffprobe is restricted to `-protocol_whitelist https,tls,tcp` and forced to
-   the mp4 demuxer (`-f mp4`), so a playlist or `file:`/`http:` hop cannot be
-   smuggled in, and the mov demuxer's external-reference loading is off by
-   default.
-5. Short timeouts: `-rw_timeout` 6 s per socket op, 10 s for the whole process
-   (killed on expiry), bounded concurrency per worker.
-
-Residual risk: DNS rebinding between our resolution and ffprobe's own connect
-is not pinned (same residual as app.core.ssrf_guard); the allowlist limits it
-to TikTok-owned names.
+   PROBE_HOST_SUFFIXES — re-checked on every redirect hop.
+3. IP pinning: every hop's hostname is resolved exactly ONCE
+   (`socket.getaddrinfo`), every returned address must pass
+   `ssrf_guard.ip_is_public` (same rules as `assert_safe_url`), and the TCP
+   connection goes to that validated IP literal. TLS still sends SNI = the
+   hostname and verifies the certificate against the hostname
+   (`extensions={"sni_hostname": host}` -> ssl `server_hostname`), and the
+   Host header carries the hostname. No second DNS lookup exists for a
+   rebinding answer to land in. Each hop uses a fresh client, so a pooled
+   TLS session for one name is never reused for another. `trust_env=False`
+   keeps proxy env vars from re-routing the connection.
+4. Redirects are followed by hand (MAX_REDIRECTS), never by httpx.
+5. ffprobe never touches the network: `-protocol_whitelist pipe`, input
+   `pipe:0`, forced `-f mp4`. It only sees bytes we already fetched.
+6. Byte budget: at most MAX_TOTAL_BYTES per URL, enforced while streaming
+   (we stop reading once the budget is spent). Only one extra range fetch is
+   allowed, and only to complete a moov box that starts inside the prefix;
+   a moov placed after mdat gives `moov_not_in_prefix`.
+7. Short timeouts: per-hop httpx timeout, an overall fetch deadline, and the
+   ffprobe process is killed after PROC_TIMEOUT_S. Bounded concurrency.
 """
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
+import ipaddress
 import json
 import re
+import socket
 import time
 from typing import Any, Iterable, Optional
 from urllib.parse import parse_qs, urljoin, urlparse
 
 MAX_URLS = 4
-RW_TIMEOUT_US = 6_000_000          # ffprobe -rw_timeout, microseconds
 PROC_TIMEOUT_S = 10.0              # whole ffprobe process
-RESOLVE_TIMEOUT_S = 6.0            # redirect pre-resolution
+HOP_TIMEOUT_S = 6.0                # httpx read/write timeout per hop
+CONNECT_TIMEOUT_S = 3.0            # per pinned-IP TCP+TLS connect attempt
+MAX_CONNECT_TRIES = 2              # validated IPs tried per hop on connect failure
+FETCH_TIMEOUT_S = 15.0             # whole prefix fetch (all hops)
+PREFIX_BYTES = 2 * 1024 * 1024     # first range request: bytes=0-(PREFIX_BYTES-1)
+MAX_TOTAL_BYTES = 4 * 1024 * 1024  # hard cap on body bytes read per URL
 MAX_REDIRECTS = 3
 CACHE_TTL_MAX = 6 * 3600
 ISSUED_TTL_MAX = 6 * 3600
@@ -208,8 +219,14 @@ def _num(v, cast=float):
         return None
 
 
-def parse_ffprobe_json(raw: bytes | str) -> dict:
-    """ffprobe -show_streams -show_format JSON -> the fields the UI shows."""
+def parse_ffprobe_json(raw: bytes | str, size_bytes: Optional[int] = None) -> dict:
+    """
+    ffprobe -show_streams -show_format JSON -> the fields the UI shows.
+
+    ffprobe now reads a prefix from a pipe, so it cannot know the file size.
+    When the HTTP total size is known, bitrate = size*8/duration — the same
+    figure ffprobe reported when it opened the URL itself.
+    """
     try:
         data = json.loads(raw)
     except (TypeError, ValueError):
@@ -224,8 +241,11 @@ def parse_ffprobe_json(raw: bytes | str) -> dict:
     height = _num(v.get("height"), int)
     if not width or not height:
         raise ProbeError("no_dimensions")
-    bit_rate = _num(fmt.get("bit_rate")) or _num(v.get("bit_rate"))
     duration = _num(fmt.get("duration")) or _num(v.get("duration"))
+    bit_rate = None
+    if size_bytes and duration:
+        bit_rate = size_bytes * 8 / duration
+    bit_rate = bit_rate or _num(fmt.get("bit_rate")) or _num(v.get("bit_rate"))
     return {
         "width": width,
         "height": height,
@@ -236,62 +256,248 @@ def parse_ffprobe_json(raw: bytes | str) -> dict:
     }
 
 
-async def _resolve_final_url(url: str) -> str:
+# ── pinned, bounded fetch ─────────────────────────────────────────────
+
+_REDIRECTS = (301, 302, 303, 307, 308)
+_CONTENT_RANGE = re.compile(r"^bytes\s+(\d+)-(\d+)/(\d+|\*)$", re.I)
+
+
+def _tls_verify():
+    """httpx `verify=` value. True = system/certifi CAs with hostname checking.
+    Tests swap in an SSLContext that trusts a throwaway CA."""
+    return True
+
+
+def _new_client():
+    import httpx
+    return httpx.AsyncClient(
+        timeout=httpx.Timeout(HOP_TIMEOUT_S, connect=CONNECT_TIMEOUT_S),
+        verify=_tls_verify(),
+        trust_env=False,          # no proxy env: the socket must go to the pinned IP
+        follow_redirects=False,
+    )
+
+
+async def _resolve_pinned(host: str, port: int) -> list[str]:
     """
-    Follow redirects ourselves, validating every hop (https + allowlist +
-    DNS/private-IP guard), and return the URL that answers with content.
+    Resolve `host` ONCE, require EVERY address to be public, and return them
+    in resolver order. Connections for the hop go only to these addresses;
+    this is the only DNS lookup for the hop.
+    """
+    if not host:
+        raise ProbeError("invalid_url")
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        literal = None
+    if literal is not None:
+        # Allowlisted names are never IP literals; refuse rather than special-case.
+        raise ProbeError("blocked_address")
+    from app.core.ssrf_guard import ip_is_public
+    try:
+        infos = await asyncio.to_thread(
+            socket.getaddrinfo, host, port, 0, socket.SOCK_STREAM, socket.IPPROTO_TCP,
+        )
+    except (socket.gaierror, UnicodeError, OSError):
+        raise ProbeError("dns_failed")
+    addrs = [info[4][0] for info in infos]
+    if not addrs:
+        raise ProbeError("dns_failed")
+    if not all(ip_is_public(a) for a in addrs):
+        raise ProbeError("blocked_address")
+    return list(dict.fromkeys(addrs))
+
+
+class _Budget:
+    def __init__(self, limit: int):
+        self.left = limit
+        self.read = 0
+
+
+def _parse_total(resp) -> Optional[int]:
+    if resp.status_code == 206:
+        m = _CONTENT_RANGE.match(resp.headers.get("content-range", "").strip())
+        if m and m.group(3) != "*":
+            return int(m.group(3))
+        return None
+    cl = resp.headers.get("content-length")
+    return int(cl) if cl and cl.isdigit() else None
+
+
+async def _range_get(client, url: str, host: str, port: int, ip: str,
+                     start: int, end: int, budget: _Budget, stop=None):
+    """
+    One GET to the pinned `ip` for `url`, asking for bytes start..end.
+
+    Returns ("redirect", location) or ("data", bytes, total_size). Never reads
+    more than min(end-start+1, budget.left) body bytes: the loop stops as soon
+    as that many have arrived, whatever the server keeps sending. `stop(buf,
+    total)` may end the read earlier (e.g. once the moov box is complete).
     """
     import httpx
-    from fastapi import HTTPException
-    from app.core.ssrf_guard import assert_safe_url
+    pinned = httpx.URL(url).copy_with(host=ip)
+    host_header = host if port == 443 else f"{host}:{port}"
+    headers = {
+        "Host": host_header,
+        "Range": f"bytes={start}-{end}",
+        "Accept-Encoding": "identity",
+    }
+    async with client.stream("GET", pinned, headers=headers,
+                             extensions={"sni_hostname": host}) as resp:
+        if resp.status_code in _REDIRECTS:
+            loc = resp.headers.get("location")
+            if not loc:
+                raise ProbeError(f"http_{resp.status_code}")
+            return ("redirect", loc)
+        if resp.status_code >= 400:
+            raise ProbeError(f"http_{resp.status_code}")
+        if resp.status_code not in (200, 206):
+            raise ProbeError(f"http_{resp.status_code}")
+        enc = resp.headers.get("content-encoding", "identity").strip().lower()
+        if enc not in ("", "identity"):
+            raise ProbeError("unexpected_encoding")
+        if start > 0:
+            m = _CONTENT_RANGE.match(resp.headers.get("content-range", "").strip())
+            if resp.status_code != 206 or not m or int(m.group(1)) != start:
+                raise ProbeError("range_not_supported")
+        want = min(end - start + 1, budget.left)
+        if want <= 0:
+            raise ProbeError("byte_cap_exceeded")
+        total = _parse_total(resp)
+        buf = bytearray()
+        async for chunk in resp.aiter_raw():
+            buf += chunk[: want - len(buf)]
+            if len(buf) >= want or (stop is not None and stop(buf, total)):
+                break
+        budget.left -= len(buf)
+        budget.read += len(buf)
+        return ("data", bytes(buf), total)
 
+
+def scan_moov(buf: bytes, total: Optional[int] = None) -> tuple[str, int]:
+    """
+    Walk top-level MP4 boxes in `buf`.
+
+    ("ok", end)           moov is complete inside buf, ending at `end`
+    ("partial", end)      moov starts in buf but ends at `end` > len(buf)
+    ("after_mdat", 0)     mdat comes before moov (moov at the end of the file)
+    ("need_more", 0)      buf ends before any moov/mdat box header
+    ("bad", 0)            not a sane box structure
+    """
+    pos, n = 0, len(buf)
+    while pos + 8 <= n:
+        size = int.from_bytes(buf[pos:pos + 4], "big")
+        typ = bytes(buf[pos + 4:pos + 8])
+        hdr = 8
+        if size == 1:
+            if pos + 16 > n:
+                return ("need_more", 0)
+            size = int.from_bytes(buf[pos + 8:pos + 16], "big")
+            hdr = 16
+        elif size == 0:          # box runs to end of file
+            if total is None:
+                return ("after_mdat", 0) if typ == b"mdat" else ("bad", 0)
+            size = total - pos
+        if size < hdr:
+            return ("bad", 0)
+        if typ == b"moov":
+            box_end = pos + size
+            return ("ok", box_end) if box_end <= n else ("partial", box_end)
+        if typ == b"mdat":
+            return ("after_mdat", 0)
+        pos += size
+    return ("need_more", 0)
+
+
+def _moov_settled(buf, total) -> bool:
+    """Stop reading the prefix once more bytes cannot change the verdict."""
+    return scan_moov(buf, total)[0] in ("ok", "after_mdat", "bad")
+
+
+async def _fetch_prefix(url: str) -> tuple[bytes, Optional[int], int]:
+    """
+    Follow redirects by hand with per-hop allowlist + resolve-once + pin, then
+    fetch a bounded prefix that contains the whole moov box.
+
+    Returns (bytes_for_ffprobe, total_file_size_or_None, body_bytes_read).
+    """
+    import httpx
+    budget = _Budget(MAX_TOTAL_BYTES)
     current = url
-    async with httpx.AsyncClient(timeout=RESOLVE_TIMEOUT_S) as client:
-        for _ in range(MAX_REDIRECTS + 1):
-            p = urlparse(current)
-            if p.scheme != "https":
-                raise ProbeError("redirect_scheme_not_allowed")
-            if not host_allowed(p.hostname or ""):
-                raise ProbeError("redirect_host_not_allowed")
-            try:
-                assert_safe_url(current)
-            except HTTPException:
-                raise ProbeError("blocked_address")
-            async with client.stream(
-                "GET", current, headers={"Range": "bytes=0-0"}, follow_redirects=False,
-            ) as resp:
-                loc = resp.headers.get("location")
-                if resp.status_code in (301, 302, 303, 307, 308) and loc:
-                    current = urljoin(current, loc)
-                    continue
-                if resp.status_code >= 400:
-                    raise ProbeError(f"http_{resp.status_code}")
-                return current
+    last_exc: Optional[BaseException] = None
+    for _ in range(MAX_REDIRECTS + 1):
+        p = urlparse(current)
+        if p.scheme != "https":
+            raise ProbeError("redirect_scheme_not_allowed")
+        host = (p.hostname or "").strip().rstrip(".").lower()
+        if not host_allowed(host):
+            raise ProbeError("redirect_host_not_allowed")
+        try:
+            port = p.port or 443
+        except ValueError:
+            raise ProbeError("invalid_url")
+        ips = await _resolve_pinned(host, port)
+        # Fresh client per hop: a pooled TLS connection verified for one name
+        # must never be reused for another name that happens to share an IP.
+        async with _new_client() as client:
+            r, ip = None, None
+            for cand in ips[:MAX_CONNECT_TRIES]:
+                try:
+                    r = await _range_get(client, current, host, port, cand,
+                                         0, PREFIX_BYTES - 1, budget, stop=_moov_settled)
+                    ip = cand
+                    break
+                except (httpx.ConnectError, httpx.ConnectTimeout) as e:
+                    # Another address from the SAME validated answer; no re-resolve.
+                    last_exc = e
+            if r is None:
+                raise ProbeError("connect_failed") from last_exc
+            if r[0] == "redirect":
+                current = urljoin(current, r[1])
+                continue
+            _, data, total = r
+            verdict, moov_end = scan_moov(data, total)
+            if verdict == "partial":
+                if moov_end > MAX_TOTAL_BYTES or (total is not None and moov_end > total):
+                    raise ProbeError("moov_not_in_prefix")
+                r2 = await _range_get(client, current, host, port, ip,
+                                      len(data), moov_end - 1, budget)
+                if r2[0] != "data":
+                    raise ProbeError("moov_not_in_prefix")
+                data += r2[1]
+                verdict, moov_end = scan_moov(data, total)
+            if verdict == "bad":
+                raise ProbeError("not_mp4")
+            if verdict != "ok":
+                raise ProbeError("moov_not_in_prefix")
+            return data, total, budget.read
     raise ProbeError("too_many_redirects")
 
 
-def _ffprobe_args(url: str) -> list[str]:
+# ── ffprobe (stdin only) ──────────────────────────────────────────────
+
+def _ffprobe_args() -> list[str]:
     return [
         "ffprobe", "-v", "error",
-        "-protocol_whitelist", "https,tls,tcp",
-        "-rw_timeout", str(RW_TIMEOUT_US),
+        "-protocol_whitelist", "pipe",
         "-f", "mp4",
         "-print_format", "json", "-show_streams", "-show_format",
-        url,
+        "-i", "pipe:0",
     ]
 
 
-async def _run_ffprobe(url: str) -> bytes:
+async def _run_ffprobe(data: bytes) -> bytes:
     try:
         proc = await asyncio.create_subprocess_exec(
-            *_ffprobe_args(url),
+            *_ffprobe_args(),
+            stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
     except FileNotFoundError:
         raise ProbeError("ffprobe_unavailable")
     try:
-        out, _err = await asyncio.wait_for(proc.communicate(), timeout=PROC_TIMEOUT_S)
+        out, _err = await asyncio.wait_for(proc.communicate(input=data), timeout=PROC_TIMEOUT_S)
     except asyncio.TimeoutError:
         try:
             proc.kill()
@@ -321,8 +527,8 @@ async def probe_one(url: Any) -> dict:
     t0 = time.monotonic()
     try:
         async with _sem:
-            final = await asyncio.wait_for(_resolve_final_url(url), timeout=RESOLVE_TIMEOUT_S + 2)
-            result = parse_ffprobe_json(await _run_ffprobe(final))
+            data, total, nread = await asyncio.wait_for(_fetch_prefix(url), timeout=FETCH_TIMEOUT_S)
+            result = parse_ffprobe_json(await _run_ffprobe(data), size_bytes=total)
     except ProbeError as e:
         return {"url": url, "error": str(e)}
     except asyncio.TimeoutError:
@@ -331,7 +537,7 @@ async def probe_one(url: Any) -> dict:
         print(f"[FormatProbe] unexpected error: {type(e).__name__}: {e}")
         return {"url": url, "error": "probe_failed"}
     print(f"[FormatProbe] {urlparse(url).hostname} {result['width']}x{result['height']} "
-          f"{result['vcodec']} in {time.monotonic() - t0:.2f}s")
+          f"{result['vcodec']} {nread} B in {time.monotonic() - t0:.2f}s")
     _cache_set(url, result)
     return {"url": url, **result}
 
