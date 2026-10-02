@@ -31,6 +31,9 @@ import PlatformStatusBanner from './PlatformStatusBanner';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+// Temporarily hidden result-card tools. Flip to false to bring a tool back.
+const HIDDEN_TOOLS = { inpaint: true, cloud: true };
+
 // Returns true if this URL supports watermark removal (TikTok / Douyin only)
 function isWatermarkPlatform(url = '') {
   const u = url.toLowerCase();
@@ -2138,7 +2141,7 @@ export default function DashboardContent() {
               )}
 
               {/* Logo Inpaint */}
-              {videoInfo.local_file_path && !videoInfo.is_audio_only && (
+              {!HIDDEN_TOOLS.inpaint && videoInfo.local_file_path && !videoInfo.is_audio_only && (
                 <button
                   onClick={handleOpenInpaint}
                   className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
@@ -2198,6 +2201,7 @@ export default function DashboardContent() {
               )}
 
               {/* Cloud Save */}
+              {!HIDDEN_TOOLS.cloud && (
               <div className="relative">
                 <button
                   onClick={() => setShowCloudMenu(prev => !prev)}
@@ -2228,6 +2232,7 @@ export default function DashboardContent() {
                   </div>
                 )}
               </div>
+              )}
             </div>
 
             {/* ── Preview Player ──────────────────────────────── */}

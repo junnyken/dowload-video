@@ -36,6 +36,7 @@ const tools = [
     id: 'cloud',
     emoji: '☁️',
     label: 'Lưu Cloud',
+    hidden: true, // temporarily hidden, same as the result-card button
     desc: 'Drive/Dropbox',
     event: 'vidgrab:open-tool:cloud',
   },
@@ -177,7 +178,7 @@ export default function MobileQuickTools({ show, onClose, onNavigate }) {
 
         {/* Tool grid */}
         <div className="px-5 pt-4 pb-8 grid grid-cols-3 gap-3">
-          {tools.map((tool) => (
+          {tools.filter((tool) => !tool.hidden).map((tool) => (
             <button
               key={tool.id}
               onClick={() => handleTool(tool)}
