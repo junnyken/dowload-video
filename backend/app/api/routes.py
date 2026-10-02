@@ -908,7 +908,16 @@ async def fetch_link(
                 _ytq.refund(_yt_quota_id)
             if _yt_global:
                 _ytq.global_refund()
+        # A deliberate HTTPException raised inside the try (e.g. the 4K height
+        # guard's 403) has already decided its status — it used to be swallowed
+        # here and re-raised as a 500 carrying the repr of the exception.
+        if isinstance(e, HTTPException):
+            raise
         msg = str(e)
+        # Status is decided from the RAW message (it carries yt-dlp's own
+        # reason), before the friendly rewrite below discards it.
+        from app.core.extraction_errors import classify_extraction_error, ExtractionHTTPException
+        _status, _err_code = classify_extraction_error(msg, e)
         if "video unavailable" in msg.lower() or "unavailable" in msg.lower():
             msg = "🚫 Video không khả dụng — có thể đã bị xóa, giới hạn vùng (geo-block), hoặc bị ẩn."
         elif "sign in" in msg.lower() or "bot" in msg.lower():
@@ -921,7 +930,7 @@ async def fetch_link(
             pass  # keep original Vietnamese disk-full message as-is
         elif "copyright" in msg.lower() or "dmca" in msg.lower():
             msg = "⚠️ Video bị giới hạn bản quyền tại khu vực này — không thể tải."
-        raise HTTPException(status_code=500, detail=msg)
+        raise ExtractionHTTPException(_status, msg, _err_code)
     finally:
         _release_download_slot()
         # Phase 27C: release per-user per-platform fairness slot + promote next delayed job

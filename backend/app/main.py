@@ -311,6 +311,12 @@ setup_disk_guardrail(app)
 # Register SlowAPI
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Extraction failures carry an error_code next to the plain-string detail
+# (user-input errors are 4xx, real server faults 5xx — see extraction_errors).
+from app.core.extraction_errors import (  # noqa: E402
+    ExtractionHTTPException, extraction_http_exception_handler,
+)
+app.add_exception_handler(ExtractionHTTPException, extraction_http_exception_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 # ── Unhandled errors must still look like HTTP errors ────────────────
