@@ -559,7 +559,11 @@ async def fetch_link(
             )
         if _admission_result.decision == ADMIT_DELAYED:
             # Enqueue and return truthful 202 — NOT 200
-            import uuid
+            # (uuid is the module-level import. A local `import uuid` here made
+            # `uuid` a local name for the WHOLE function, so every other
+            # uuid.uuid4() in fetch_link raised UnboundLocalError: scheduled
+            # downloads always failed with "Lỗi lên lịch", and the signed-in
+            # history row + metering event were silently never written.)
             from app.core.delayed_queue import enqueue as _dq_enqueue
             from app.core.fairness_control import increment_queued
             _job_id = str(uuid.uuid4())
