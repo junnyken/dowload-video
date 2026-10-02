@@ -2078,6 +2078,22 @@ export default function DashboardContent() {
                       {videoInfo.file_size_mb.toFixed(1)} MB
                     </span>
                   )}
+                  {(() => {
+                    // Chất lượng đầu ra: chỉ hiện khi backend đã trả giá trị thật.
+                    let label = null;
+                    if (videoInfo.is_audio_only) {
+                      const m = /^mp3_(\d+)$/.exec(String(videoInfo.quality || ''));
+                      if (m) label = `MP3 ${m[1]} kbps`;
+                    } else {
+                      const h = Number(videoInfo.downloaded_height) || 0;
+                      if (h > 0) label = h >= 2160 ? '4K' : h >= 1440 ? '2K' : `${h}p`;
+                    }
+                    return label ? (
+                      <span className="bg-surface border border-line px-3 py-1.5 rounded-lg font-mono">
+                        {label}
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
               </div>
             </div>
