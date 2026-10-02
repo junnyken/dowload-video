@@ -174,18 +174,12 @@ def _platform_sleep(url: str):
     delay = random.uniform(lo, hi)
     time.sleep(delay)
 
-def _track_platform(url: str, success: bool) -> None:
-    """Record per-platform ok/err counter in Redis (same key as routes.py _track_download)."""
+def _track_platform(url: str, success: bool, error_code: Optional[str] = None) -> None:
+    """Count one finished attempt (same counters as routes.py _track_download —
+    see app.core.download_outcomes). Synchronous: a worker is off the request path."""
     try:
-        from app.core.redis_client import get_redis
-        import datetime as _dt
-        rc = get_redis()
-        date = _dt.date.today().isoformat()
-        plat = _get_platform(url)
-        field = f"{plat}:{'ok' if success else 'err'}"
-        redis_key = f"vidgrab:stats:{date}"
-        rc.hincrby(redis_key, field, 1)
-        rc.expire(redis_key, 86400 * 8)
+        from app.core.download_outcomes import record
+        record(_get_platform(url), success, error_code)
     except Exception:
         pass
 
@@ -507,7 +501,7 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
             "error_message": "Qua thoi gian xu ly. Video qua lon hoac nguon phan hoi cham — vui long thu lai.",
             "auto_retry_status": "not_applicable",
         }, job_id)
-        _track_platform(url, False)
+        _track_platform(url, False, "extraction_timeout")
         try:
             from app.core.metrics import emit_job_event as _emit
             _emit("failed", job_id=job_id, platform=platform)
@@ -528,7 +522,12 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
         except Exception:
             pass
 
-        _track_platform(url, False)
+        try:
+            from app.core.extraction_errors import classify_extraction_error as _oc_cls
+            _oc_code = _oc_cls(raw_error, e)[1]
+        except Exception:
+            _oc_code = "unknown"
+        _track_platform(url, False, _oc_code)
         try:
             from app.core.metrics import emit_job_event as _emit
             _emit("failed", job_id=job_id, platform=platform)

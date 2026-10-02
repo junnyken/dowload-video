@@ -347,6 +347,12 @@ class TestRedisConnectionReuse:
         next_def = source.index("\ndef ", start + 10)
         fn_body = source[start:next_def]
         assert "from_url" not in fn_body, "_track_download must not use redis.from_url()"
+        if "download_outcomes" in fn_body:
+            # Delegates to the shared outcome recorder — hold that to the same rule.
+            path = os.path.join(os.path.dirname(__file__), "..", "app", "core", "download_outcomes.py")
+            with open(path) as f:
+                fn_body = f.read()
+            assert "from_url" not in fn_body, "download_outcomes must not use redis.from_url()"
         assert "get_redis" in fn_body, "_track_download must use get_redis()"
 
     def test_acquire_slot_uses_get_redis(self):

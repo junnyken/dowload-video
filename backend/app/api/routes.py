@@ -34,17 +34,14 @@ def _get_platform_key(url: str) -> str:
     if "linkedin.com" in u:  return "linkedin"
     return "other"
 
-def _track_download(url: str, success: bool) -> None:
-    """Increment Redis counter: vidgrab:stats:YYYY-MM-DD → platform:(ok|err)"""
+def _track_download(url: str, success: bool, error_code: Optional[str] = None) -> None:
+    """Count one finished download attempt (vidgrab:stats:YYYY-MM-DD → platform:(ok|err),
+    plus hourly buckets, error codes and last-success time — see
+    app.core.download_outcomes). Queued on a background thread: never raises,
+    never makes /fetch-link wait on Redis."""
     try:
-        import datetime
-        from app.core.redis_client import get_redis as _get_redis
-        today = datetime.date.today().isoformat()
-        key   = f"vidgrab:stats:{today}"
-        field = f"{_get_platform_key(url)}:{'ok' if success else 'err'}"
-        r = _get_redis()
-        r.hincrby(key, field, 1)
-        r.expire(key, 8 * 86400)   # keep 8 days of history
+        from app.core.download_outcomes import record_async
+        record_async(_get_platform_key(url), success, error_code)
     except Exception:
         pass
 
@@ -699,6 +696,7 @@ async def fetch_link(
             print(f"[UserCookie] Failed to write cookie file: {_ck_err}")
             user_cookie_file = None
 
+    _outcome_counted = False
     try:
         info = await extract_video_info(
             payload.url,
@@ -720,6 +718,7 @@ async def fetch_link(
             raise ValueError("Không tạo được file nhạc từ nguồn này. Vui lòng thử lại sau.")
 
         _track_download(payload.url, True)
+        _outcome_counted = True
         try:
             from app.core.obs_recorder import record_success as _obs_ok
             _obs_ok(_get_platform_key(payload.url))
@@ -903,7 +902,19 @@ async def fetch_link(
             "subtitle_source":             info.get("subtitle_source", "none"),
         }
     except Exception as e:
-        _track_download(payload.url, False)
+        # Count the failure once, with its classified reason. A deliberate
+        # HTTPException raised after the success was already counted (the 4K
+        # height guard) must not count the same attempt a second time.
+        if not _outcome_counted:
+            try:
+                if isinstance(e, HTTPException):
+                    _oc_code = "http_" + str(e.status_code)
+                else:
+                    from app.core.extraction_errors import classify_extraction_error as _oc_cls
+                    _oc_code = _oc_cls(str(e), e)[1]
+            except Exception:
+                _oc_code = "unknown"
+            _track_download(payload.url, False, _oc_code)
         try:
             from app.core.obs_recorder import record_failure_reason as _obs_fail
             _obs_fail(_get_platform_key(payload.url), str(e))
@@ -1024,7 +1035,7 @@ async def fetch_threads(
         }
 
     ok = not result.get("error_code")
-    _track_download(url, ok)
+    _track_download(url, ok, None if ok else result.get("error_code"))
     return {"success": ok, **result}
 
 

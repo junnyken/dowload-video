@@ -247,6 +247,148 @@ class UpdateUserRequest(BaseModel):
 
 
 # ═════════════════════════════════════════════════════════════════════
+# Download outcome helpers — shared by /stats, /analytics, /platform-stats,
+# /platforms/health and the CSV export.
+#
+# Every download attempt (/fetch-link incl. guests and failures, /fetch-threads,
+# the Celery worker for bulk/scheduled/retried jobs) is counted in the Redis
+# hash vidgrab:stats:{date} — see app.core.download_outcomes. download_jobs
+# only holds a subset (signed-in successes + worker jobs), which is why the
+# dashboard used to read 0. A day is read from Redis when its hash exists and
+# from download_jobs only when it does not (expired before the TTL was raised,
+# or Redis unreachable) — never both, so nothing is counted twice.
+# ═════════════════════════════════════════════════════════════════════
+
+_PLATFORM_LABELS = {
+    "tiktok": "TikTok", "douyin": "Douyin", "youtube": "YouTube",
+    "facebook": "Facebook", "instagram": "Instagram", "twitter": "X (Twitter)",
+    "spotify": "Spotify", "threads": "Threads", "linkedin": "LinkedIn",
+    "reddit": "Reddit", "pinterest": "Pinterest", "other": "Other",
+}
+_LABEL_TO_KEY = {v: k for k, v in _PLATFORM_LABELS.items()}
+
+
+def _platform_label(key: str) -> str:
+    return _PLATFORM_LABELS.get(key, (key or "other").capitalize())
+
+
+def _job_platform_key(row: Dict[str, Any]) -> str:
+    plat = (row.get("platform") or "").strip().lower()
+    if plat:
+        return plat
+    return _LABEL_TO_KEY.get(_classify_platform(row.get("original_url") or ""), "other")
+
+
+def _outcome_days(days: int) -> Dict[str, Any]:
+    """Per-day, per-platform {ok, err} for the last `days` UTC days (today last).
+
+    Returns {"dates": [...], "per_day": {date: {plat: {ok, err}}},
+             "source_by_day": {date: "live"|"jobs_table"}, "redis_ok": bool}
+    """
+    from app.core import download_outcomes as _do
+
+    today = datetime.now(timezone.utc).date()
+    dates = [(today - timedelta(days=days - 1 - i)).isoformat() for i in range(days)]
+    per_day: Dict[str, Dict[str, Dict[str, int]]] = {}
+    source_by_day: Dict[str, str] = {}
+    redis_ok = True
+    try:
+        live = _do.read_days(dates)
+    except Exception as e:
+        print(f"[admin/outcomes] Redis read failed, using download_jobs: {e}")
+        live = {d: None for d in dates}
+        redis_ok = False
+
+    missing = [d for d in dates if live.get(d) is None]
+    for d in dates:
+        if live.get(d) is not None:
+            per_day[d] = live[d]
+            source_by_day[d] = "live"
+
+    if missing:
+        fallback: Dict[str, Dict[str, Dict[str, int]]] = {d: {} for d in missing}
+        try:
+            supabase = get_supabase_client()
+            start_iso = f"{min(missing)}T00:00:00+00:00"
+            end_iso = (datetime.fromisoformat(max(missing)) + timedelta(days=1)).strftime("%Y-%m-%dT00:00:00+00:00")
+            rows = (
+                supabase.table("download_jobs")
+                .select("status, platform, original_url, created_at")
+                .gte("created_at", start_iso)
+                .lt("created_at", end_iso)
+                .neq("original_url", "batch_zip")
+                .limit(20000)
+                .execute()
+            ).data or []
+            for row in rows:
+                d = (row.get("created_at") or "")[:10]
+                if d not in fallback:
+                    continue
+                st = row.get("status")
+                if st not in ("success", "failed"):
+                    continue   # pending/processing are not finished attempts
+                slot = fallback[d].setdefault(_job_platform_key(row), {"ok": 0, "err": 0})
+                slot["ok" if st == "success" else "err"] += 1
+        except Exception as e:
+            print(f"[admin/outcomes] download_jobs fallback failed: {e}")
+        for d in missing:
+            per_day[d] = fallback[d]
+            source_by_day[d] = "jobs_table"
+
+    return {"dates": dates, "per_day": per_day, "source_by_day": source_by_day, "redis_ok": redis_ok}
+
+
+def _download_outcome_summary() -> Dict[str, Any]:
+    """Today / last-24h download outcome block for /stats. Fields are None when
+    the Redis counters cannot be read (unknown is not zero)."""
+    from app.core import download_outcomes as _do
+
+    now = datetime.now(timezone.utc)
+    today = _do.day_str(now)
+    empty = {"attempts": None, "success": None, "failed": None, "success_rate": None}
+    out: Dict[str, Any] = {
+        "downloads_today": dict(empty),
+        "downloads_24h": dict(empty),
+        "failed_24h": None,
+        "platform_breakdown_today": [],
+        "top_errors_today": [],
+        "outcome_source": "redis:vidgrab:stats",
+    }
+    try:
+        per_plat = _do.read_days([today]).get(today) or {}
+        t = _do.sum_platforms(per_plat)
+        out["downloads_today"] = {
+            "attempts": t["total"], "success": t["ok"], "failed": t["err"],
+            "success_rate": _do.success_rate_pct(t["ok"], t["total"]),
+        }
+        rows = []
+        for plat, c in per_plat.items():
+            tot = c["ok"] + c["err"]
+            rows.append({
+                "platform": plat, "label": _platform_label(plat),
+                "success": c["ok"], "failed": c["err"], "total": tot,
+                "success_rate": _do.success_rate_pct(c["ok"], tot),
+            })
+        rows.sort(key=lambda r: -r["total"])
+        out["platform_breakdown_today"] = rows
+        out["top_errors_today"] = _do.top_errors([today], limit=10)
+    except Exception as e:
+        print(f"[admin/stats] outcome counters unavailable: {e}")
+        out["outcome_source"] = None
+        return out
+    try:
+        w = _do.sum_platforms(_do.window_24h(now=now))
+        out["downloads_24h"] = {
+            "attempts": w["total"], "success": w["ok"], "failed": w["err"],
+            "success_rate": _do.success_rate_pct(w["ok"], w["total"]),
+        }
+        out["failed_24h"] = w["err"]
+    except Exception as e:
+        print(f"[admin/stats] 24h window unavailable: {e}")
+    return out
+
+
+# ═════════════════════════════════════════════════════════════════════
 # GET /stats — Overview Dashboard Data
 # ═════════════════════════════════════════════════════════════════════
 
@@ -254,10 +396,14 @@ class UpdateUserRequest(BaseModel):
 async def get_admin_stats(_=Depends(verify_admin)):
     supabase = get_supabase_client()
     try:
-        # Sum of downloads_today
+        # Signed-in users' standard-quota counter (excludes guests, failures and
+        # cheap-platform downloads) — kept for reference, no longer the headline.
         usage_res = supabase.table("user_usage").select("downloads_today").execute()
-        total_downloads = sum(record.get("downloads_today", 0) for record in usage_res.data) if usage_res.data else 0
+        registered_downloads = sum(record.get("downloads_today", 0) for record in usage_res.data) if usage_res.data else 0
         total_users = len(usage_res.data) if usage_res.data else 0
+
+        # Every download attempt today / last 24h, all users, all paths.
+        outcome_block = _download_outcome_summary()
         
         # Provider credits
         providers = {}
@@ -301,7 +447,11 @@ async def get_admin_stats(_=Depends(verify_admin)):
         total_users = len(usage_res.data) if usage_res.data else 0
         return {
             "success": True,
-            "total_downloads_today": total_downloads,
+            # Successful downloads today (UTC), every user and path. None when
+            # the counters are unreachable — never a guessed 0.
+            "total_downloads_today": outcome_block["downloads_today"]["success"],
+            "registered_downloads_today": registered_downloads,
+            **outcome_block,
             "total_users": total_users,
             "providers": providers,
             # Admin pages show file ids, never server paths (whatever EXPOSE_LEGACY_PATHS says).
@@ -324,7 +474,13 @@ async def get_admin_stats(_=Depends(verify_admin)):
 async def get_admin_analytics(days: int = 7, _=Depends(verify_admin)):
     """
     Returns daily aggregated data for the admin charts.
-    Query parameter: days (default: 7, max: 30)
+    Query parameter: days (default: 7, max: 30). The window is the last `days`
+    UTC calendar days ending TODAY (days=1 → today only).
+
+    Counts are finished download attempts from the vidgrab:stats counters
+    (every path, guests and failures included); a day with no counter falls
+    back to download_jobs (daily_stats[].source = "jobs_table").
+    Every success_rate is a percent or null when there were 0 attempts.
 
     Response:
     {
@@ -346,84 +502,70 @@ async def get_admin_analytics(days: int = 7, _=Depends(verify_admin)):
     }
     """
     days = min(max(days, 1), 30)  # Clamp between 1-30
-    supabase = get_supabase_client()
 
     try:
-        # Calculate date range
-        now = datetime.now(timezone.utc)
-        start_date = (now - timedelta(days=days)).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
-        start_iso = start_date.isoformat()
+        from app.core import download_outcomes as _do
 
-        # Fetch all jobs in date range
-        jobs_res = (
-            supabase.table("download_jobs")
-            .select("status, original_url, created_at")
-            .gte("created_at", start_iso)
-            .order("created_at", desc=False)
-            .limit(5000)
-            .execute()
-        )
-
-        jobs = jobs_res.data if jobs_res.data else []
-
-        # ── Aggregate daily stats ────────────────────────
-        daily_map: Dict[str, Dict[str, int]] = {}
-        platform_map: Dict[str, int] = {}
-
-        for job in jobs:
-            created_at = job.get("created_at", "")
-            status = job.get("status", "")
-            url = job.get("original_url", "")
-
-            # Parse date (extract YYYY-MM-DD)
-            date_str = created_at[:10] if created_at else "unknown"
-
-            if date_str not in daily_map:
-                daily_map[date_str] = {"total": 0, "success": 0, "failed": 0, "processing": 0, "pending": 0}
-
-            daily_map[date_str]["total"] += 1
-            if status in daily_map[date_str]:
-                daily_map[date_str][status] += 1
-
-            # ── Platform classification ──────────────────
-            platform = _classify_platform(url)
-            platform_map[platform] = platform_map.get(platform, 0) + 1
-
-        # Fill in missing dates (so chart has no gaps)
+        data = _outcome_days(days)
         daily_stats = []
-        for i in range(days):
-            date = (start_date + timedelta(days=i)).strftime("%Y-%m-%d")
-            stats = daily_map.get(date, {"total": 0, "success": 0, "failed": 0, "processing": 0, "pending": 0})
-            daily_stats.append({"date": date, **stats})
+        platform_map: Dict[str, Dict[str, int]] = {}
+        for d in data["dates"]:
+            per_plat = data["per_day"].get(d) or {}
+            t = _do.sum_platforms(per_plat)
+            daily_stats.append({
+                "date": d,
+                "total": t["total"],
+                "success": t["ok"],
+                "failed": t["err"],
+                "success_rate": _do.success_rate_pct(t["ok"], t["total"]),
+                "source": data["source_by_day"].get(d),
+            })
+            _do.merge(platform_map, per_plat)
 
-        # Sort platform stats by count descending
-        platform_stats = sorted(
-            [{"platform": k, "count": v} for k, v in platform_map.items()],
-            key=lambda x: x["count"],
-            reverse=True,
-        )
+        platform_stats = []
+        for plat, c in platform_map.items():
+            tot = c["ok"] + c["err"]
+            if tot == 0:
+                continue
+            platform_stats.append({
+                "platform": _platform_label(plat),
+                "key": plat,
+                "count": tot,
+                "success": c["ok"],
+                "failed": c["err"],
+                "success_rate": _do.success_rate_pct(c["ok"], tot),
+            })
+        platform_stats.sort(key=lambda x: x["count"], reverse=True)
 
         # ── Summary calculations ─────────────────────────
         total_jobs = sum(d["total"] for d in daily_stats)
         total_success = sum(d["success"] for d in daily_stats)
         total_failed = sum(d["failed"] for d in daily_stats)
-        success_rate = round(total_success / total_jobs * 100, 1) if total_jobs > 0 else 100.0
         avg_daily = round(total_jobs / days, 1)
+
+        top_errors: List[dict] = []
+        try:
+            live_days = [d for d in data["dates"] if data["source_by_day"].get(d) == "live"]
+            if live_days:
+                top_errors = _do.top_errors(live_days, limit=10)
+        except Exception:
+            pass
 
         return {
             "success": True,
             "days": days,
             "daily_stats": daily_stats,
             "platform_stats": platform_stats,
+            "top_errors": top_errors,
             "summary": {
                 "total_jobs": total_jobs,
                 "total_success": total_success,
                 "total_failed": total_failed,
-                "success_rate": success_rate,
+                # None when there were no attempts — 0 attempts is not 100 %.
+                "success_rate": _do.success_rate_pct(total_success, total_jobs),
                 "avg_daily": avg_daily,
             },
+            "sources": sorted(set(data["source_by_day"].values())),
         }
 
     except Exception as e:
@@ -697,7 +839,7 @@ async def get_error_monitor(_=Depends(verify_admin)):
             "summary_24h": {
                 "total": total_24h,
                 "failed": total_failed_24h,
-                "fail_rate": round(total_failed_24h / total_24h * 100, 1) if total_24h > 0 else 0,
+                "fail_rate": round(total_failed_24h / total_24h * 100, 1) if total_24h > 0 else None,
             },
         }
     except Exception as e:
@@ -1197,7 +1339,7 @@ async def get_platform_stats(days: int = 7, _=Depends(verify_admin)):
             "ok": ok,
             "err": err,
             "total": total,
-            "success_rate": round(ok / total * 100, 1) if total > 0 else 100.0,
+            "success_rate": round(ok / total * 100, 1) if total > 0 else None,
         })
     totals_list.sort(key=lambda x: x["total"], reverse=True)
     result["totals"] = totals_list
@@ -1297,7 +1439,7 @@ async def get_platform_analytics_deep(days: int = 7, _=Depends(verify_admin)):
                 "total": total,
                 "success": success,
                 "failed": failed,
-                "success_rate": round(success / total * 100, 1) if total else 100.0,
+                "success_rate": round(success / total * 100, 1) if total else None,
                 "avg_file_size_mb": round(sum(sizes) / len(sizes), 2) if sizes else 0,
                 "retry_rate": round(len(retries) / total * 100, 1) if total else 0.0,
                 "top_errors": [{"msg": e[0], "count": e[1]} for e in top_errors],
@@ -2569,7 +2711,7 @@ async def get_ops_health(_=Depends(verify_admin)):
             ok = int(ok_raw) if ok_raw else 0
             err = int(err_raw) if err_raw else 0
             total = ok + err
-            success_rate = round(ok / total * 100, 1) if total > 0 else 100.0
+            success_rate = round(ok / total * 100, 1) if total > 0 else None
             # Determine top fallback layer by highest hit count
             plat_layers = layer_counts.get(plat, {})
             top_layer = max(plat_layers, key=lambda k: plat_layers[k]) if plat_layers else "primary"
@@ -2602,8 +2744,19 @@ async def get_ops_health(_=Depends(verify_admin)):
     # ── Schedule drift count ─────────────────────────────
     try:
         rc = get_redis()
-        drift_raw = rc.get("vidgrab:schedule:drift_alerts")
-        result["schedule_drift_count"] = int(drift_raw) if drift_raw else 0
+        # The key is a LIST of JSON alerts (schedule_tasks.detect_schedule_drift);
+        # GET on it raised WRONGTYPE and this always read 0. Count only alerts
+        # detected in the last 24h — older ones are history, not active.
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        recent = 0
+        for raw in rc.lrange("vidgrab:schedule:drift_alerts", 0, 49) or []:
+            try:
+                item = json.loads(raw.decode() if isinstance(raw, bytes) else raw)
+                if (item.get("detected_at") or "") >= cutoff:
+                    recent += 1
+            except Exception:
+                continue
+        result["schedule_drift_count"] = recent
     except Exception as e:
         result["schedule_drift_count"] = 0
 
@@ -2715,7 +2868,7 @@ async def get_surface_breakdown(days: int = 7, _=Depends(verify_admin)):
                 "total": c["total"],
                 "success": c["success"],
                 "failed": c["failed"],
-                "success_rate": round(c["success"] / max(c["total"], 1) * 100, 1),
+                "success_rate": (round(c["success"] / c["total"] * 100, 1) if c["total"] else None),
             })
         surfaces.sort(key=lambda x: -x["total"])
 
@@ -2812,7 +2965,7 @@ async def get_user_detail(user_id: str, days: int = 30, _=Depends(verify_admin))
                 "total_jobs": total,
                 "success": success,
                 "failed": failed,
-                "fail_rate": round(failed / max(total, 1) * 100, 1),
+                "fail_rate": (round(failed / total * 100, 1) if total else None),
                 "sources": sources,
                 "platforms": platforms,
             },
@@ -3020,6 +3173,31 @@ _PLATFORM_META: Dict[str, Dict[str, Any]] = {
 }
 
 
+def _do_last_success(platform: str) -> Optional[str]:
+    try:
+        from app.core.download_outcomes import last_timestamp
+        return last_timestamp(platform, "success")
+    except Exception:
+        return None
+
+
+def _latest_iso(*values: Optional[str]) -> Optional[str]:
+    """The most recent of several ISO timestamps (unparseable ones ignored)."""
+    best, best_dt = None, None
+    for v in values:
+        if not v:
+            continue
+        try:
+            dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        if best_dt is None or dt > best_dt:
+            best, best_dt = v, dt
+    return best
+
+
 def _fmt_ago(dt_str: Optional[str]) -> str:
     """Convert ISO timestamp → human-readable 'Xm ago'."""
     if not dt_str:
@@ -3047,31 +3225,44 @@ async def get_platforms_health(_=Depends(verify_admin)):
     from app.core.platform_circuit import get_state as cb_state, cooldown_remaining, _EXEMPT
 
     # 1h window
-    since = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
     platforms = list(_PLATFORM_META.keys())
 
-    # Fetch last-1h jobs per platform from Supabase
+    # Last-1h attempts per platform from the download outcome counters (every
+    # path, guests and failures included — download_jobs only ever saw a
+    # subset, and this used to look for status "completed", a value the
+    # job_status enum does not have, so "last success" was always "never").
+    from app.core import download_outcomes as _do
     jobs_by_platform: Dict[str, Dict[str, Any]] = {}
     try:
-        sb = get_supabase_client()
-        rows = (
-            sb.table("download_jobs")
-            .select("platform,status,created_at,completed_at")
-            .gte("created_at", since)
-            .execute()
-        ).data or []
-        for row in rows:
-            p = (row.get("platform") or "other").lower()
-            if p not in jobs_by_platform:
-                jobs_by_platform[p] = {"total": 0, "failed": 0, "last_success": None}
-            jobs_by_platform[p]["total"] += 1
-            if row.get("status") in ("failed", "error"):
-                jobs_by_platform[p]["failed"] += 1
-            elif row.get("status") == "completed":
+        for p, c in _do.window_1h().items():
+            jobs_by_platform[p] = {"total": c["ok"] + c["err"], "failed": c["err"], "last_success": None}
+    except Exception as e:
+        print(f"[admin/platforms/health] outcome counters unavailable: {e}")
+    for p in platforms:
+        ts = _do.last_timestamp(p, "success")
+        if ts:
+            jobs_by_platform.setdefault(p, {"total": 0, "failed": 0, "last_success": None})["last_success"] = ts
+    # Older history: a success recorded in download_jobs before the counters
+    # carried last-success for the worker path.
+    try:
+        need = [p for p in platforms if not (jobs_by_platform.get(p) or {}).get("last_success")]
+        if need:
+            sb = get_supabase_client()
+            rows = (
+                sb.table("download_jobs")
+                .select("platform,completed_at,created_at")
+                .eq("status", "success")
+                .in_("platform", need)
+                .order("created_at", desc=True)
+                .limit(500)
+                .execute()
+            ).data or []
+            for row in rows:
+                p = (row.get("platform") or "other").lower()
                 ts = row.get("completed_at") or row.get("created_at")
-                prev = jobs_by_platform[p]["last_success"]
-                if ts and (not prev or ts > prev):
-                    jobs_by_platform[p]["last_success"] = ts
+                slot = jobs_by_platform.setdefault(p, {"total": 0, "failed": 0, "last_success": None})
+                if ts and (not slot["last_success"] or ts > slot["last_success"]):
+                    slot["last_success"] = ts
     except Exception as e:
         print(f"[admin/platforms/health] Supabase error: {e}")
 
@@ -3096,15 +3287,15 @@ async def get_platforms_health(_=Depends(verify_admin)):
         stats = jobs_by_platform.get(p, {})
         total = stats.get("total", 0)
         failed = stats.get("failed", 0)
-        fail_rate = round(failed / total * 100) if total > 0 else 0
+        fail_rate = round(failed / total * 100) if total > 0 else None   # None = no attempts
         last_success = _fmt_ago(stats.get("last_success"))
 
         # Derive status
         if state == "open":
             status = "critical"
-        elif state == "half" or fail_rate >= 20:
+        elif state == "half" or (fail_rate or 0) >= 20:
             status = "warning"
-        elif fail_rate >= 10:
+        elif (fail_rate or 0) >= 10:
             status = "warning"
         else:
             status = "healthy"
@@ -3116,6 +3307,7 @@ async def get_platforms_health(_=Depends(verify_admin)):
             "status": status,
             "circuitState": state,
             "lastSuccessAt": last_success,
+            "lastSuccessAtIso": stats.get("last_success"),
             "failRate1h": fail_rate,
             "totalJobs1h": total,
             "activeJobs": active_by_platform.get(p, 0),
@@ -3208,7 +3400,7 @@ async def get_platform_detail(platform: str, _=Depends(verify_admin)):
 
         for row in rows[:20]:
             status = row.get("status", "pending")
-            result_label = "success" if status == "completed" else ("failed" if status in ("failed", "error") else "running")
+            result_label = "success" if status in ("success", "completed") else ("failed" if status in ("failed", "error") else "running")
             started = row.get("created_at", "")
             completed = row.get("completed_at")
             dur_ms = 0
@@ -3280,7 +3472,7 @@ async def get_platform_detail(platform: str, _=Depends(verify_admin)):
         "status": status,
         "circuitState": state,
         "description": desc,
-        "lastSuccessAt": _fmt_ago(last_success),
+        "lastSuccessAt": _fmt_ago(_latest_iso(last_success, _do_last_success(platform))),
         "recentJobs": recent_jobs,
         "errorBreakdown": error_breakdown,
         "phaseStats": list(phase_stats.values()),
@@ -3586,35 +3778,22 @@ async def export_audit_log_csv(limit: int = 1000, _=Depends(verify_admin)):
 
 @router.get("/analytics/export")
 async def export_analytics_csv(days: int = 30, _=Depends(verify_admin)):
-    """Download daily analytics as CSV."""
+    """Download daily analytics as CSV (same counts as GET /analytics)."""
+    days = min(max(days, 1), 30)
     try:
-        sb = get_supabase_client()
-        _since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-        jobs = sb.table("download_jobs").select("created_at, status, platform").gt("created_at", _since).execute()
-        rows_raw = jobs.data or []
+        from app.core import download_outcomes as _do
+        data = _outcome_days(days)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # Aggregate by date
-    from collections import defaultdict as _dd
-    by_date = _dd(lambda: {"total": 0, "success": 0, "failed": 0})
-    for j in rows_raw:
-        d = (j.get("created_at") or "")[:10]
-        if not d:
-            continue
-        by_date[d]["total"] += 1
-        if j.get("status") == "completed":
-            by_date[d]["success"] += 1
-        elif j.get("status") == "failed":
-            by_date[d]["failed"] += 1
-
     output = _io.StringIO()
     writer = _csv.writer(output)
-    writer.writerow(["date", "total", "success", "failed", "success_rate"])
-    for date in sorted(by_date.keys()):
-        s = by_date[date]
-        rate = round(s["success"] / s["total"] * 100, 1) if s["total"] else 0
-        writer.writerow([date, s["total"], s["success"], s["failed"], f"{rate}%"])
+    writer.writerow(["date", "total", "success", "failed", "success_rate", "source"])
+    for date in data["dates"]:
+        t = _do.sum_platforms(data["per_day"].get(date) or {})
+        rate = _do.success_rate_pct(t["ok"], t["total"])
+        writer.writerow([date, t["total"], t["ok"], t["err"],
+                         "" if rate is None else f"{rate}%", data["source_by_day"].get(date, "")])
     csv_bytes = output.getvalue().encode("utf-8")
 
     from fastapi.responses import Response as _Resp
