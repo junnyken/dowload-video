@@ -1025,6 +1025,81 @@ def _apply_tiktok_opts(opts: dict, url: str, remove_watermark: bool = True) -> d
     return opts
 
 
+# ── Subtitle-only fetch (POST /process/subtitle) ─────────────────────
+#
+# The subtitle endpoint used to build a bare YoutubeDL with no proxy, no
+# cookies and no PO token. It reuses _get_base_opts (the builder the video
+# extraction uses) so it gets the same proxy pool, cookie pool, YouTube
+# player-client / PO-token setup and logger. Everything that only matters for
+# fetching media bytes is stripped: this path never downloads video.
+
+_SUBTITLE_STRIP_KEYS = (
+    "format", "format_sort", "postprocessors", "merge_output_format",
+    "keepvideo", "concurrent_fragment_downloads", "outtmpl",
+)
+
+
+def _subtitle_overrides(langs: list, subtitles_format: str, outtmpl: str) -> dict:
+    return {
+        "skip_download": True,
+        "writesubtitles": True,
+        "writeautomaticsub": True,
+        "subtitleslangs": list(langs),
+        "subtitlesformat": subtitles_format,
+        "outtmpl": outtmpl,
+        "noplaylist": True,
+        # Captions can be present while a client offers no playable formats
+        # (e.g. a PO-token-less client). That must not fail a subtitle fetch.
+        "ignore_no_formats_error": True,
+        # Surface the real failure so it can be classified (4xx vs 5xx).
+        "ignoreerrors": False,
+        "retries": 2,
+        "extractor_retries": 1,
+        "socket_timeout": 20,
+    }
+
+
+def build_subtitle_attempts(url: str, langs: list, subtitles_format: str,
+                            outtmpl: str, error_sink: list | None = None) -> list:
+    """
+    Ordered yt-dlp option sets for a subtitle-only fetch: [(label, opts), ...].
+
+      1. "direct"  — base opts with the proxy removed (free). For YouTube it is
+                     also cookie-free, mirroring Phase A Layer 1: android_vr is
+                     skipped when a cookiefile is present, and the server IP
+                     reaches the caption endpoint without spending proxy bytes.
+      2. "full"    — the unmodified base opts: proxy from the pool, cookies,
+                     player_client + PO-token provider. Only added when it
+                     differs from attempt 1 (i.e. there is a proxy or cookies).
+
+    The caller tries attempt 2 only when attempt 1 failed server-side.
+    """
+    base = _get_base_opts(url, phase="metadata", quality="video_fast",
+                          error_sink=error_sink)
+    base = _apply_tiktok_opts(base, url, remove_watermark=False)
+    for k in _SUBTITLE_STRIP_KEYS:
+        base.pop(k, None)
+    over = _subtitle_overrides(langs, subtitles_format, outtmpl)
+
+    _u = url.lower()
+    is_youtube = "youtube.com" in _u or "youtu.be" in _u
+
+    direct = {k: v for k, v in base.items() if k != "proxy"}
+    if is_youtube:
+        direct.pop("cookiefile", None)
+        direct.pop("cookiesfrombrowser", None)
+        # yt-dlp's default client set (Layer 1b's last resort) + PO provider.
+        direct["extractor_args"] = dict(_bgutil_extractor_args())
+    direct.update(over)
+
+    attempts = [("direct", direct)]
+    full = dict(base)
+    full.update(over)
+    if full.get("proxy") or full.get("cookiefile"):
+        attempts.append(("full", full))
+    return attempts
+
+
 # ── Single Video Extraction ─────────────────────────────────────────
 
 def _extract_best_url(info: dict) -> tuple[str, float]:

@@ -278,11 +278,10 @@ class YouTubeBlocked(Exception):
         self.payload = payload or {}
 
 
-def preflight(quality: str, confirmed: bool = False) -> dict:
-    """Run all guards for a YouTube request. Returns {effective_height} on pass,
-    raises YouTubeBlocked otherwise. Order: flag → circuit → cost → tier."""
-    youtube_metric("requests")
-
+def availability_check() -> None:
+    """The quality-independent guards (flag → circuit → cost). Raises
+    YouTubeBlocked when YouTube must not be contacted. Used by preflight and by
+    the subtitle-only endpoint, which has no quality tier and no quota."""
     if not is_youtube_enabled():
         raise YouTubeBlocked("youtube_disabled",
                              "YouTube hiện tạm thời không khả dụng.", http=503)
@@ -298,6 +297,14 @@ def preflight(quality: str, confirmed: bool = False) -> dict:
         raise YouTubeBlocked("youtube_cost_limit",
                              "YouTube tạm thời không khả dụng do giới hạn băng thông.",
                              http=503, payload={"cost_today": cost_estimate_today()})
+
+
+def preflight(quality: str, confirmed: bool = False) -> dict:
+    """Run all guards for a YouTube request. Returns {effective_height} on pass,
+    raises YouTubeBlocked otherwise. Order: flag → circuit → cost → tier."""
+    youtube_metric("requests")
+
+    availability_check()
 
     decision = tier_decision(quality, confirmed=confirmed)
     if decision["needs_confirmation"]:

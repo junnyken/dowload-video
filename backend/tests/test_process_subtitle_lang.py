@@ -31,6 +31,11 @@ def proc(monkeypatch, tmp_path):
     monkeypatch.setattr(processing, "_DOWNLOADS_DIR", str(tmp_path))
     monkeypatch.setattr(processing, "_assert_safe_url", lambda u: None)
     monkeypatch.setattr(processing, "_schedule_cleanup", lambda p: None)
+    # No network: no proxy from the pool / env, no cookie pool.
+    import app.core.proxy_pool as pp
+    from app.services import downloader
+    monkeypatch.setattr(pp, "get_proxy_from_pool", lambda platform: None)
+    monkeypatch.setattr(downloader, "get_proxy_config_for_phase", lambda u, phase="metadata": None)
     return processing
 
 
@@ -46,9 +51,10 @@ def _fake_ydl(captured, ext, body):
         def __exit__(self, *a):
             return False
 
-        def download(self, urls):
+        def extract_info(self, url, download=True):
             with open(f"{self.opts['outtmpl']}.ja.{ext}", "w", encoding="utf-8") as f:
                 f.write(body)
+            return {"id": "x", "requested_subtitles": {"ja": {"ext": ext}}}
     return FakeYDL
 
 
@@ -111,14 +117,20 @@ class TestEndpoint:
         # the intermediate .vtt is gone
         assert not [f for f in os.listdir(os.path.dirname(r["output_path"])) if f.endswith(".vtt")]
 
-    def test_no_file_means_no_subtitles(self, proc, monkeypatch):
+    def test_no_track_means_no_subtitles(self, proc, monkeypatch):
+        import json
         import yt_dlp
 
         class Empty:
             def __init__(self, o): pass
             def __enter__(self): return self
             def __exit__(self, *a): return False
-            def download(self, u): pass
+            def extract_info(self, u, download=True):
+                return {"id": "x", "requested_subtitles": None}
         monkeypatch.setattr(yt_dlp, "YoutubeDL", Empty)
         r = _call(proc, language="ja")
-        assert r == {"success": False, "error": "no_subtitles", "message": r["message"]}
+        assert r.status_code == 404
+        body = json.loads(r.body)
+        assert body["success"] is False and body["error"] == "no_subtitles"
+        assert body["error_code"] == "subtitle_language_unavailable"
+        assert "'ja'" in body["message"]
