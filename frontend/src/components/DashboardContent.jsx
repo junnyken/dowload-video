@@ -102,6 +102,17 @@ const ResBadge = ({ label }) => (
   </span>
 );
 
+// Measured resolution label from ffprobe's width×height. Uses the SHORT side
+// so a vertical 540×960 TikTok reads "540p", same thresholds as elsewhere.
+const measuredResLabel = (p) => {
+  const w = Number(p?.width) || 0;
+  const h = Number(p?.height) || 0;
+  if (!w || !h) return null;
+  const s = Math.min(w, h);
+  return s >= 2160 ? '4K' : s >= 1440 ? '2K' : `${s}p`;
+};
+const CODEC_NAMES = { h264: 'H.264', hevc: 'H.265', h265: 'H.265', av1: 'AV1', vp9: 'VP9' };
+
 export default function DashboardContent() {
   const { withAuth, session } = useAuth();
 
@@ -126,6 +137,9 @@ export default function DashboardContent() {
   const [error, setError] = useState('');
   const [delayedInfo, setDelayedInfo] = useState(null); // Phase 27D: admission-control delayed state
   const [videoInfo, setVideoInfo] = useState(null);
+  // TikWM formats arrive without dimensions; POST /formats/probe measures them
+  // with ffprobe after the list renders. url -> {width,height,vcodec,...} | {error}
+  const [probe, setProbe] = useState({ key: '', map: {} });
   const [spotifyData, setSpotifyData] = useState(null); // playlist / album track list
   const [artistData, setArtistData] = useState(null);   // Spotify artist overview
   const [artistTab, setArtistTab] = useState('top');    // 'top' | 'albums' | 'singles'
@@ -1621,6 +1635,37 @@ export default function DashboardContent() {
     }
   };
 
+  // Measure unknown-height formats once per result. Never blocks downloads;
+  // a failed or missing measurement simply shows nothing (no guessed value).
+  const probeKey = /tiktok\.com/i.test(videoInfo?.original_url || '')
+    ? [...new Set((videoInfo?.available_formats || [])
+        .filter(f => f.type === 'video' && !(Number(f.height) > 0) && typeof f.url === 'string' && f.url.startsWith('https://'))
+        .map(f => f.url))].slice(0, 4).join('\n')
+    : '';
+  useEffect(() => {
+    if (!probeKey) return;
+    const ctrl = new AbortController();
+    fetch(`${API_BASE}/api/v1/formats/probe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ urls: probeKey.split('\n') }),
+      signal: ctrl.signal,
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        const map = {};
+        for (const r of data?.results || []) {
+          if (r?.url && !r.error && measuredResLabel(r)) map[r.url] = r;
+        }
+        return map;
+      })
+      .catch(() => ({}))
+      .then(map => { if (!ctrl.signal.aborted) setProbe({ key: probeKey, map }); });
+    return () => ctrl.abort();
+  }, [probeKey]);
+  const probeMap = probe.key === probeKey ? probe.map : {};
+  const probePending = !!probeKey && probe.key !== probeKey;
+
   // Split formats
   const videoFormats = (videoInfo?.available_formats || []).filter(f => f.type === 'video');
   const audioFormats = (videoInfo?.available_formats || []).filter(f => f.type === 'audio');
@@ -2953,6 +2998,21 @@ export default function DashboardContent() {
                               <div className="flex items-center gap-2">
                                 <ResBadge label={fmt.label} height={fmt.height} />
                                 <span className="text-sm font-bold">{fmt.resolution}</span>
+                                {!(fmt.height > 0) && (() => {
+                                  const m = probeMap[fmt.url];
+                                  if (m) {
+                                    const codec = CODEC_NAMES[String(m.vcodec || '').toLowerCase()];
+                                    return (
+                                      <>
+                                        <span className="text-sm font-bold" title={`${m.width}×${m.height} (đo thực tế)`}>{measuredResLabel(m)}</span>
+                                        {codec && <span className="text-[10px] font-mono text-fg-muted">{codec}</span>}
+                                      </>
+                                    );
+                                  }
+                                  return probePending ? (
+                                    <span className="inline-block h-3.5 w-9 rounded bg-surface-2 animate-pulse" aria-hidden="true" />
+                                  ) : null;
+                                })()}
                                 <span className="text-xs text-fg-muted uppercase">{fmt.ext}</span>
                                 {fmt.recommended && (
                                   <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-accent-soft text-accent-text border border-accent/30">
@@ -2978,6 +3038,7 @@ export default function DashboardContent() {
                                     KHÔNG LOGO
                                   </span>
                                 )}
+                                {/* Legacy label from cached results; TikWM now labels it "Có logo". */}
                                 {fmt.label?.includes('With Watermark') && (
                                   <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-warning-soft text-warning border border-warning/30">
                                     CÓ LOGO
