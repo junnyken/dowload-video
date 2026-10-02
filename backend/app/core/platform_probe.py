@@ -76,8 +76,10 @@ _DEFAULT_TARGETS: Dict[str, str] = {
 _TARGETS_KEY = "probe:targets"
 _STATE_KEY = "probe:state"          # hash: platform -> json
 # Generous on purpose: VK answered a real probe URL in 50s once (cold) and 3s
-# right after. A hung extractor must still not stall the whole sweep.
-_PROBE_TIMEOUT_SEC = int(os.getenv("PROBE_TIMEOUT_SEC", "60"))
+# right after; Odysee took 18s, 35s and then >60s on the same URL, and a 60s
+# cap turned that slowness into a false outage banner. A hung extractor must
+# still not stall the whole sweep (10 probes x 120s < the 30-min schedule).
+_PROBE_TIMEOUT_SEC = int(os.getenv("PROBE_TIMEOUT_SEC", "120"))
 # One failed probe is not an outage: platforms flap (slow cold start, a single
 # throttled request). A platform is reported failed — user banner + Telegram —
 # only after this many consecutive failed probes.

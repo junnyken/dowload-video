@@ -143,4 +143,4 @@ class TestProbeIsBounded:
         assert r["ok"] is True and r["title"] == "VK Звонки"
 
     def test_default_timeout_is_generous(self):
-        assert pp._PROBE_TIMEOUT_SEC >= 60, "VK answered a real probe in 50s"
+        assert pp._PROBE_TIMEOUT_SEC >= 120, "Odysee needed >60s on a real probe"
