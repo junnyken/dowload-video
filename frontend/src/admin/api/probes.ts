@@ -2,7 +2,7 @@ import { adminFetch } from '../utils/adminFetch'
 
 /** not_configured and stale are distinct from ok on purpose: "nobody has
  *  looked" must never render as "we looked and it was fine". */
-export type ProbeStatus = 'ok' | 'failed' | 'stale' | 'not_configured'
+export type ProbeStatus = 'ok' | 'failed' | 'unconfirmed' | 'stale' | 'not_configured'
 
 export interface ProbeRow {
   platform: string

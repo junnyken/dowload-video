@@ -2457,6 +2457,7 @@ async def get_platform_status():
             FAILED as _PROBE_FAILED,
             NOT_CONFIGURED as _PROBE_NOT_CONFIGURED,
             OK as _PROBE_OK,
+            UNCONFIRMED as _PROBE_UNCONFIRMED,
             PROBE_PLATFORMS,
             get_probe_states,
         )
@@ -2494,9 +2495,13 @@ async def get_platform_status():
                 # thường". A real lane problem (constrained/degraded) still
                 # shows — that is an observation, not a default.
                 status = "unknown"
-                reason = ("probe_not_configured"
-                          if probe_status in (None, _PROBE_NOT_CONFIGURED)
-                          else "probe_stale")
+                if probe_status in (None, _PROBE_NOT_CONFIGURED):
+                    reason = "probe_not_configured"
+                elif probe_status == _PROBE_UNCONFIRMED:
+                    # One failed probe, not yet confirmed: unknown, never a banner.
+                    reason = "probe_unconfirmed"
+                else:
+                    reason = "probe_stale"
 
             platforms.append({
                 "platform": name,

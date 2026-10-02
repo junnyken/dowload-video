@@ -50,8 +50,9 @@ def probe_all_platforms() -> Dict[str, str]:
     results: Dict[str, str] = {}
     for platform, url in sorted(targets.items()):
         outcome = probe_once(url)
-        record_probe(platform, outcome)
-        results[platform] = OK if outcome.get("ok") else FAILED
+        # The recorded status, not the raw outcome: a first failure is
+        # UNCONFIRMED and must neither alert nor count as a break.
+        results[platform] = record_probe(platform, outcome)
         print(f"[Probe] {platform}: {results[platform]} ({outcome.get('ms')}ms)"
               + (f" — {outcome.get('reason')}" if not outcome.get("ok") else ""))
 

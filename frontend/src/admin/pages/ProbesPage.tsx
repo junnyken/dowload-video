@@ -5,6 +5,7 @@ import type { ProbeRow, ProbeStatus } from '../api/probes'
 const LABEL: Record<ProbeStatus, string> = {
   ok:             'Tải được',
   failed:         'HỎNG',
+  unconfirmed:    'Lỗi 1 lần, chờ xác nhận',
   stale:          'Kết quả đã cũ',
   not_configured: 'Chưa cấu hình',
 }
@@ -14,6 +15,8 @@ const LABEL: Record<ProbeStatus, string> = {
 const TONE: Record<ProbeStatus, string> = {
   ok:             'text-success border-success/30 bg-success-soft',
   failed:         'text-danger border-danger/30 bg-danger-soft',
+  // One failed probe: worth a look, not an outage until the next one confirms it.
+  unconfirmed:    'text-warning border-warning/30 bg-warning-soft',
   stale:          'text-warning border-warning/30 bg-warning-soft',
   not_configured: 'text-fg-muted border-line-strong bg-surface-2',
 }

@@ -28,7 +28,9 @@ Configured targets live in Redis under `probe:targets` as a JSON object
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
+import os
 import time
 from typing import Any, Dict, Optional
 
@@ -73,7 +75,13 @@ _DEFAULT_TARGETS: Dict[str, str] = {
 
 _TARGETS_KEY = "probe:targets"
 _STATE_KEY = "probe:state"          # hash: platform -> json
-_PROBE_TIMEOUT_SEC = 25
+# Generous on purpose: VK answered a real probe URL in 50s once (cold) and 3s
+# right after. A hung extractor must still not stall the whole sweep.
+_PROBE_TIMEOUT_SEC = int(os.getenv("PROBE_TIMEOUT_SEC", "60"))
+# One failed probe is not an outage: platforms flap (slow cold start, a single
+# throttled request). A platform is reported failed — user banner + Telegram —
+# only after this many consecutive failed probes.
+_FAIL_CONFIRM = max(1, int(os.getenv("PROBE_FAIL_CONFIRM", "2")))
 _STALE_AFTER_SEC = 3 * 3600         # a result older than this is not evidence
 
 # Result statuses. `not_configured` is deliberately distinct from both ok and
@@ -82,6 +90,9 @@ OK = "ok"
 FAILED = "failed"
 NOT_CONFIGURED = "not_configured"
 STALE = "stale"
+# Last probe failed but not yet confirmed by a consecutive failure. Not
+# reported as ok (we just saw a failure) nor as failed (one failure is noise).
+UNCONFIRMED = "unconfirmed"
 
 
 def get_targets() -> Dict[str, str]:
@@ -169,10 +180,19 @@ def probe_once(url: str, timeout: int = _PROBE_TIMEOUT_SEC) -> Dict[str, Any]:
     except Exception as exc:
         return _done(False, f"probe_unavailable: {type(exc).__name__}: {exc}")
 
+    # Bounded: run the extractor on a worker thread and stop waiting after
+    # `timeout`. The thread cannot be killed, but the sweep moves on and the
+    # platform is recorded as a (timeout) failure instead of hanging forever.
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="probe")
     try:
-        info = extract_video_info_sync(url, quality="video")
+        future = pool.submit(extract_video_info_sync, url, quality="video")
+        info = future.result(timeout=timeout)
+    except concurrent.futures.TimeoutError:
+        return _done(False, f"timeout_after_{timeout}s")
     except Exception as exc:
         return _done(False, f"{type(exc).__name__}: {exc}")
+    finally:
+        pool.shutdown(wait=False)
 
     if not isinstance(info, dict) or not info:
         return _done(False, "no_metadata_returned")
@@ -186,18 +206,45 @@ def probe_once(url: str, timeout: int = _PROBE_TIMEOUT_SEC) -> Dict[str, Any]:
     return _done(True, None, (title or "")[:120] or None)
 
 
-def record_probe(platform: str, result: Dict[str, Any]) -> None:
+def record_probe(platform: str, result: Dict[str, Any]) -> str:
+    """
+    Store one probe result and return the status it produced.
+
+    Failures are counted: the status only becomes FAILED once `_FAIL_CONFIRM`
+    probes in a row have failed. Before that it is UNCONFIRMED, which the
+    public status renders as unknown — no red banner, no alert — because a
+    single slow or throttled request is not an outage.
+    """
+    prev: Dict[str, Any] = {}
+    rc = None
+    try:
+        rc = get_redis()
+        raw = rc.hget(_STATE_KEY, platform)
+        if raw:
+            prev = json.loads(raw.decode() if isinstance(raw, bytes) else raw) or {}
+    except Exception:
+        prev = {}
+
+    if result.get("ok"):
+        streak = 0
+        status = OK
+    else:
+        streak = int(prev.get("fail_streak") or 0) + 1
+        status = FAILED if streak >= _FAIL_CONFIRM else UNCONFIRMED
+
     payload = {
-        "status": OK if result.get("ok") else FAILED,
+        "status": status,
         "reason": result.get("reason"),
         "ms": result.get("ms"),
         "title": result.get("title"),
         "at": int(time.time()),
+        "fail_streak": streak,
     }
     try:
-        get_redis().hset(_STATE_KEY, platform, json.dumps(payload))
+        (rc or get_redis()).hset(_STATE_KEY, platform, json.dumps(payload))
     except Exception:
         pass
+    return status
 
 
 def get_probe_states() -> Dict[str, Dict[str, Any]]:
