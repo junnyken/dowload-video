@@ -7,6 +7,8 @@ import { useAuth } from '../context/AuthContext';
 import { hasUsedBefore } from '../lib/returningUser';
 import { trackEvent, EVENT } from '../utils/trackEvent';
 import DashboardContent from './DashboardContent';
+import { spaLink } from '../lib/spaLink';
+import { platformPages } from '../content/platformPages';
 import BulkContent from './BulkContent';
 import HistoryContent from './HistoryContent';
 import FlowVeoCleanup from './FlowVeoCleanup';
@@ -324,6 +326,21 @@ export default function LandingPage() {
           {activeTab === 'flow'    && <FlowVeoCleanup />}
           {activeTab === 'history' && <HistoryContent />}
         </div>
+
+        {/* Internal links to the per-platform SEO pages */}
+        <nav aria-label="Tải video theo nền tảng" className="w-full mt-10 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-fg-muted">
+          <span>Tải video theo nền tảng:</span>
+          {platformPages.map((p) => (
+            <a
+              key={p.slug}
+              href={`/${p.slug}`}
+              onClick={spaLink(`/${p.slug}`)}
+              className="hover:text-fg underline-offset-4 hover:underline transition-colors"
+            >
+              {p.platform}
+            </a>
+          ))}
+        </nav>
 
         {/* Share prompt */}
         {false && !shareShown && (

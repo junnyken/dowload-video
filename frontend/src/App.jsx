@@ -34,6 +34,8 @@ import PlatformsPage from './pages/PlatformsPage';
 import BillingPage from './pages/BillingPage';
 import TranscriptTranslatePage from './pages/TranscriptTranslatePage';
 import TranscriptAsrPage from './pages/TranscriptAsrPage';
+import PlatformLandingPage from './pages/PlatformLandingPage';
+import { platformPages } from './content/platformPages';
 import ErrorBoundary from './components/ErrorBoundary';
 import { NotificationProvider } from './context/NotificationContext';
 import NotificationCenter from './components/NotificationCenter';
@@ -78,6 +80,9 @@ const PATH_MAP = {
   '/active':              'active',
   '/search':              'search',
 };
+
+// SEO landing pages per platform (copy: content/platformPages.js). View id = 'p:<slug>'.
+for (const p of platformPages) PATH_MAP[`/${p.slug}`] = `p:${p.slug}`;
 
 function AppInner() {
   const { isAuthenticated, loading } = useAuth();
@@ -382,6 +387,7 @@ function AppInner() {
       <main className="pt-14 md:pt-16 pb-20 md:pb-0">
       <ErrorBoundary>
         {view === 'landing'      && <LandingPage />}
+        {view.startsWith('p:')   && <PlatformLandingPage slug={view.slice(2)} />}
         {view === 'extension'    && <ExtensionPage />}
 
         {view === 'preferences' && isAuthenticated && (
