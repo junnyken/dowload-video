@@ -13,6 +13,8 @@
   "lang": "vi",
   "categories": ["utilities", "entertainment"],
   "icons": [
+    { "src": "/icons/icon-192.png",          "sizes": "192x192", "type": "image/png",     "purpose": "any" },
+    { "src": "/icons/icon-512.png",          "sizes": "512x512", "type": "image/png",     "purpose": "any" },
     { "src": "/icons/icon-72.svg",           "sizes": "72x72",   "type": "image/svg+xml", "purpose": "any" },
     { "src": "/icons/icon-96.svg",           "sizes": "96x96",   "type": "image/svg+xml", "purpose": "any" },
     { "src": "/icons/icon-128.svg",          "sizes": "128x128", "type": "image/svg+xml", "purpose": "any" },
@@ -56,12 +58,12 @@
     }
   ],
   "share_target": {
-    "action": "/",
+    "action": "/share-target",
     "method": "GET",
     "params": {
-      "title": "share_title",
-      "text": "share_text",
-      "url": "share_url"
+      "title": "title",
+      "text": "text",
+      "url": "url"
     }
   },
   "protocol_handlers": [

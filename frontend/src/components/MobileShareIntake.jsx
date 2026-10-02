@@ -5,10 +5,10 @@ import { API_BASE } from '../lib/apiBase';
 function detectPlatform(url) {
   if (!url) return { name: 'Unknown', emoji: '🌐', color: 'var(--vg-fg-muted)' };
   const u = url.toLowerCase();
-  if (u.includes('tiktok.com'))                          return { name: 'TikTok',     emoji: '🎵', color: 'var(--vg-undefined)' };
-  if (u.includes('instagram.com'))                       return { name: 'Instagram',  emoji: '📸', color: 'var(--vg-undefined)' };
-  if (u.includes('youtube.com') || u.includes('youtu.be')) return { name: 'YouTube', emoji: '▶️', color: 'var(--vg-undefined)' };
-  if (u.includes('facebook.com') || u.includes('fb.watch')) return { name: 'Facebook', emoji: '🎬', color: 'var(--vg-undefined)' };
+  if (u.includes('tiktok.com'))                          return { name: 'TikTok',     emoji: '🎵', color: 'var(--vg-fg-2)' };
+  if (u.includes('instagram.com'))                       return { name: 'Instagram',  emoji: '📸', color: 'var(--vg-fg-2)' };
+  if (u.includes('youtube.com') || u.includes('youtu.be')) return { name: 'YouTube', emoji: '▶️', color: 'var(--vg-fg-2)' };
+  if (u.includes('facebook.com') || u.includes('fb.watch')) return { name: 'Facebook', emoji: '🎬', color: 'var(--vg-fg-2)' };
   if (u.includes('twitter.com') || u.includes('x.com')) return { name: 'X/Twitter', emoji: '🐦', color: '#1da1f2' };
   if (u.includes('spotify.com'))                         return { name: 'Spotify',    emoji: '🎵', color: '#1ed760' };
   if (u.includes('soundcloud.com'))                      return { name: 'SoundCloud', emoji: '🎶', color: 'var(--vg-accent-text)' };
@@ -34,7 +34,8 @@ export default function MobileShareIntake({ onNavigate }) {
       // Only intercept on mobile
       if (window.innerWidth >= 768) return;
 
-      const sharedUrl = e.detail?.url || (typeof e.detail === 'string' ? e.detail : '');
+      const raw = e.detail?.url || (typeof e.detail === 'string' ? e.detail : '');
+      const sharedUrl = (raw.match(/https?:\/\/[^\s<>"{}|\\^[\]]+/) || [])[0] || '';
       if (!sharedUrl) return;
 
       setUrl(sharedUrl);
@@ -154,8 +155,7 @@ export default function MobileShareIntake({ onNavigate }) {
         <div className="px-5 pt-4 pb-3">
           {/* Platform pill */}
           <div
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold mb-3"
-            style={{ backgroundColor: `${plat.color}20`, color: plat.color, border: `1px solid ${plat.color}40` }}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold mb-3 bg-surface-2 text-fg-2 border border-line"
           >
             <span>{plat.emoji}</span>
             <span>{plat.name}</span>
