@@ -31,15 +31,11 @@ _DOWNLOADS_DIR = os.path.join(
 
 
 def _safe_path(path: str) -> str:
-    """Resolve path and confirm it is inside _DOWNLOADS_DIR. Returns abs path."""
-    abs_path = os.path.realpath(path)
-    downloads_real = os.path.realpath(_DOWNLOADS_DIR)
-    if not abs_path.startswith(downloads_real):
-        raise HTTPException(
-            status_code=400,
-            detail={"error_code": "watermark_source_not_found"},
-        )
-    if not os.path.exists(abs_path):
+    """source_path (file_id or legacy path) → realpath inside _DOWNLOADS_DIR,
+    via the shared validator in app.core.local_download."""
+    from app.core.local_download import resolve_local_input
+    abs_path = resolve_local_input(path, _DOWNLOADS_DIR)
+    if abs_path is None or not os.path.isfile(abs_path):
         raise HTTPException(
             status_code=400,
             detail={"error_code": "watermark_source_not_found"},
@@ -241,8 +237,11 @@ def watermark_embed(
     file_size_mb = os.path.getsize(output_path) / 1024 / 1024
     expires_at = (datetime.now(timezone.utc) + timedelta(minutes=60)).isoformat().replace("+00:00", "Z")
 
+    from app.core.local_download import file_fields, download_url
     return {
-        "output_path": output_path,
+        **file_fields(output_path, "output_file_id", "output_path"),
+        "download_url": download_url(
+            output_path, "preview.mp4" if body.preview_only else "watermarked.mp4"),
         "preview": body.preview_only,
         "duration_seconds": round(output_duration, 2),
         "file_size_mb": round(file_size_mb, 2),

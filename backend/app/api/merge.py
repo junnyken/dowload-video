@@ -29,6 +29,11 @@ from app.main import limiter
 
 router = APIRouter()
 
+_DOWNLOADS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "downloads",
+)
+
 
 class MergeRequest(BaseModel):
     job_ids: List[str]        # 2–5 UUIDs
@@ -119,7 +124,14 @@ def merge_clips(
         )
 
     # ── 3. Verify files exist ────────────────────────────────────────
-    valid_rows = [r for r in rows if r.get("local_file_path") and os.path.exists(r["local_file_path"])]
+    # Stored paths go through the same validator as client input: only a
+    # file that really sits inside downloads/ may be concatenated.
+    from app.core.local_download import resolve_local_input
+    valid_rows = []
+    for r in rows:
+        real = resolve_local_input(r.get("local_file_path"), _DOWNLOADS_DIR)
+        if real and os.path.isfile(real):
+            valid_rows.append({**r, "local_file_path": real})
     if len(valid_rows) < 2:
         raise HTTPException(
             status_code=422,
@@ -150,7 +162,7 @@ def merge_clips(
     use_copy = len(set(vcodecs)) == 1 and len(set(acodecs)) == 1
 
     # ── 7. Write FFmpeg concat list ──────────────────────────────────
-    output_path = f"/app/downloads/merged_{uuid.uuid4().hex[:8]}.mp4"
+    output_path = os.path.join(_DOWNLOADS_DIR, f"merged_{uuid.uuid4().hex[:8]}.mp4")
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as concat_file:
         concat_file_path = concat_file.name
@@ -189,8 +201,10 @@ def merge_clips(
     file_size_mb = os.path.getsize(output_path) / 1024 / 1024
     expires_at = (datetime.now(timezone.utc) + timedelta(minutes=60)).isoformat().replace("+00:00", "Z")
 
+    from app.core.local_download import file_fields, download_url
     return {
-        "merged_path": output_path,
+        **file_fields(output_path, "merged_file_id", "merged_path"),
+        "download_url": download_url(output_path, "merged_video.mp4"),
         "title": body.output_name or "Merged Video",
         "duration_seconds": round(total_duration, 1),
         "file_size_mb": round(file_size_mb, 2),

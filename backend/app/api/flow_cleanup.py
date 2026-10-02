@@ -31,6 +31,7 @@ from pydantic import BaseModel
 from app.main import limiter
 from app.core.auth_middleware import get_optional_user
 from app.core.entitlements import get_entitlement, check_feature
+from app.core.local_download import file_fields, file_id_for, resolve_file_id, resolve_local_input
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -117,6 +118,12 @@ def _error_code(e: Exception) -> str:
     if isinstance(e, OSError):
         return "source_ingest_failed"
     return "processing_failed"
+
+
+def _result_url(temp_id: str, output_path: str, filename: str) -> str:
+    from urllib.parse import quote
+    return (f"/api/v1/flow-cleanup/result/{re.sub(r'[^a-f0-9]', '', temp_id)}/"
+            f"{quote(file_id_for(output_path), safe='')}?filename={quote(filename, safe='')}")
 
 
 def _safe_work_dir(temp_id: str) -> str:
@@ -706,7 +713,12 @@ def process_flow_cleanup(
             "suitability_level": payload.suitability_level,
             "suitability_outcome": suitability_outcome,
             "retry_count": retry_count,
-            "cleaned_path": output_path,
+            # The output lives in the session work dir, not at the top of
+            # downloads/, so it is served by /flow-cleanup/result/... rather
+            # than /download-local. cleaned_path stays only while
+            # EXPOSE_LEGACY_PATHS is on.
+            **file_fields(output_path, "cleaned_file_id", "cleaned_path"),
+            "download_url": _result_url(payload.temp_id, output_path, output_filename),
             "filename": output_filename,
             "file_size_mb": file_size_mb,
             "method_used": method,
@@ -744,6 +756,20 @@ def process_flow_cleanup(
         raise HTTPException(status_code=500, detail=f"Xử lý thất bại: {str(e)}")
 
 
+@router.get("/result/{temp_id}/{file_id}")
+async def get_cleaned_result(temp_id: str, file_id: str, filename: str = "cleaned.mp4"):
+    """Serve a cleaned output of a session by its file id (cleaned_*.mp4)."""
+    work_dir = _safe_work_dir(temp_id)
+    if not file_id.startswith("cleaned_"):
+        raise HTTPException(status_code=400, detail="Invalid file.")
+    real = resolve_file_id(file_id, work_dir)
+    if real is None:
+        raise HTTPException(status_code=400, detail="Invalid file.")
+    if not os.path.isfile(real):
+        raise HTTPException(status_code=404, detail="File không còn tồn tại hoặc đã hết hạn.")
+    return FileResponse(real, media_type="video/mp4", filename=filename)
+
+
 class FromLocalRequest(BaseModel):
     local_path: str
     title: Optional[str] = None
@@ -763,12 +789,11 @@ def cleanup_from_local_path(
     """
     import shutil as _shutil
 
-    # Validate path is inside downloads dir (path traversal guard)
-    abs_path = os.path.realpath(payload.local_path)
-    abs_dl   = os.path.realpath(_DOWNLOAD_DIR)
-    if not abs_path.startswith(abs_dl + os.sep) and abs_path != abs_dl:
+    # file_id or legacy path → shared validator (app.core.local_download)
+    abs_path = resolve_local_input(payload.local_path, _DOWNLOAD_DIR)
+    if abs_path is None:
         raise HTTPException(status_code=403, detail="Đường dẫn không hợp lệ.")
-    if not os.path.exists(abs_path):
+    if not os.path.isfile(abs_path):
         raise HTTPException(status_code=404, detail="File không còn tồn tại hoặc đã hết hạn. Tải lại video trước.")
 
     ext = os.path.splitext(abs_path)[1].lower()

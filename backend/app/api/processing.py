@@ -63,18 +63,15 @@ def _safe_download_dir() -> str:
 
 def _guard_local_path(path: str) -> str:
     """
-    Resolve path and confirm it is inside _DOWNLOADS_DIR.
-    Accepts a bare file_id (basename, as returned by these endpoints) or a
-    legacy absolute path. Raises HTTPException 400/404 on failure. Returns realpath.
+    Resolve a client-supplied server file (file_id or legacy path) inside
+    _DOWNLOADS_DIR via the shared validator (app.core.local_download.
+    resolve_local_input). Raises HTTPException 400/404. Returns realpath.
     """
-    real_dl = os.path.realpath(_DOWNLOADS_DIR)
-    if path and os.sep not in path and "/" not in path:
-        path = os.path.join(real_dl, path)
-    real_p  = os.path.realpath(path)
-    # Separator-terminated prefix: "/app/downloads_x" is not inside "/app/downloads".
-    if not real_p.startswith(real_dl + os.sep):
+    from app.core.local_download import resolve_local_input
+    real_p = resolve_local_input(path, _DOWNLOADS_DIR)
+    if real_p is None:
         raise HTTPException(status_code=400, detail="Invalid local_path: path traversal not allowed")
-    if not os.path.exists(real_p):
+    if not os.path.isfile(real_p):
         raise HTTPException(status_code=404, detail="Local file not found or expired")
     return real_p
 

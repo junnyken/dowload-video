@@ -858,19 +858,22 @@ async def fetch_link(
         if local_sub and os.path.exists(local_sub) and subtitle_mode_actual not in ("burned",):
             sub_ext = os.path.splitext(local_sub)[1].lstrip(".")
             sub_name = os.path.splitext(info.get("title") or "subtitle")[0]
-            subtitle_file_url = (
-                f"/api/v1/download-local"
-                f"?filepath={quote(local_sub)}&filename={quote(sub_name)}.{sub_ext}"
-            )
+            from app.core.local_download import download_url as _dl_url, safe_file_id as _sfid
+            if _sfid(local_sub):
+                subtitle_file_url = _dl_url(local_sub, f"{sub_name}.{sub_ext}")
             delete_local_file.apply_async((local_sub,), countdown=_EXPIRY_SECONDS)
 
+        from app.core.local_download import file_fields as _file_fields
         return {
             "success": True,
             "title": info.get("title"),
             "thumbnail_url": info.get("thumbnail_url"),
             "direct_mp4_url": info.get("direct_mp4_url"),
-            "local_mp3_path": info.get("local_mp3_path"),
-            "local_file_path": info.get("local_file_path"),
+            # *_file_id is what clients send back / put in download-local?file=.
+            # The absolute paths stay only while EXPOSE_LEGACY_PATHS is on
+            # (extension <= 5.2.4 still reads them).
+            **_file_fields(info.get("local_mp3_path"), "local_mp3_file_id", "local_mp3_path"),
+            **_file_fields(info.get("local_file_path"), "local_file_id", "local_file_path"),
             "original_url": info.get("original_url"),
             "quality": info.get("quality"),
             "duration": info.get("duration", 0),
@@ -1457,7 +1460,8 @@ async def download_local_file(request: Request, filename: str,
     `file`     — the bare basename (what every new link carries; see
                  app.core.local_download). Never resolves outside downloads/.
     `filepath` — legacy: absolute or "downloads/..." path. Still accepted
-                 because fetch-link / the extension build these links.
+                 because installed extensions <= 5.2.4 build these links.
+                 Both go through app.core.local_download.
     """
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     if file is not None:
@@ -1471,17 +1475,12 @@ async def download_local_file(request: Request, filename: str,
     if not filepath:
         raise HTTPException(status_code=422, detail="file or filepath is required")
 
-    # Resolve relative paths (e.g. "downloads/xxx.mp3") to absolute
-    if not os.path.isabs(filepath):
-        filepath = os.path.join(base_dir, filepath)
-
-    # Prevent path traversal: ensure the file is inside the downloads directory
-    allowed_dir = os.path.realpath(os.path.join(base_dir, "downloads"))
-    real_path = os.path.realpath(filepath)
-    if not real_path.startswith(allowed_dir + os.sep) and real_path != allowed_dir:
+    # Legacy: same validator as every other server-file input.
+    from app.core.local_download import resolve_local_input
+    real_path = resolve_local_input(filepath, _LOCAL_DOWNLOADS_DIR or os.path.join(base_dir, "downloads"))
+    if real_path is None:
         raise HTTPException(status_code=403, detail="Access denied.")
-
-    if not os.path.exists(real_path):
+    if not os.path.isfile(real_path):
         raise HTTPException(status_code=404, detail="File expired or not found.")
     return _local_file_response(real_path, filename)
 
@@ -1577,6 +1576,17 @@ async def download_thumbnail(request: Request, url: str, filename: str = "thumbn
 
 import subprocess
 
+def _resolve_local_input_or_raise(value: str, download_dir: str) -> str:
+    """local_path (file_id or legacy path) → realpath inside downloads/; 400/404 otherwise."""
+    from app.core.local_download import resolve_local_input
+    real = resolve_local_input(value, _LOCAL_DOWNLOADS_DIR or download_dir)
+    if real is None:
+        raise HTTPException(status_code=400, detail="Invalid local_path: path traversal not allowed")
+    if not os.path.isfile(real):
+        raise HTTPException(status_code=404, detail="Local file not found or expired")
+    return real
+
+
 class TrimRequest(BaseModel):
     url: Optional[str] = None
     local_path: Optional[str] = None  # Phase 22: server-side local file path
@@ -1604,7 +1614,7 @@ async def trim_media(payload: TrimRequest, request: Request):
         import uuid as _uuid
 
         ext = "mp3" if payload.is_audio else "mp4"
-        download_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "downloads")
+        download_dir = _LOCAL_DOWNLOADS_DIR or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "downloads")
         os.makedirs(download_dir, exist_ok=True)
 
         output_path = os.path.join(download_dir, f"trim_output_{_uuid.uuid4().hex[:8]}.{ext}")
@@ -1612,13 +1622,7 @@ async def trim_media(payload: TrimRequest, request: Request):
 
         # Phase 22: support local_path (skip download when file is already on server)
         if payload.local_path:
-            abs_path = os.path.realpath(payload.local_path)
-            abs_dl   = os.path.realpath(download_dir)
-            if not abs_path.startswith(abs_dl):
-                raise HTTPException(status_code=400, detail="Invalid local_path: path traversal not allowed")
-            if not os.path.exists(abs_path):
-                raise HTTPException(status_code=404, detail="Local file not found or expired")
-            input_path = abs_path
+            input_path = _resolve_local_input_or_raise(payload.local_path, download_dir)
         else:
             input_path = os.path.join(download_dir, f"trim_input_{_uuid.uuid4().hex[:8]}.{ext}")
             _trim_downloaded = True
@@ -1697,9 +1701,11 @@ async def trim_media(payload: TrimRequest, request: Request):
         file_size_mb = round(os.path.getsize(output_path) / (1024 * 1024), 2)
         output_size_ratio = round(file_size_mb / max(os.path.getsize(input_path) / (1024 * 1024), 0.001), 3)
 
+        from app.core.local_download import file_fields as _ff, download_url as _dl_url
         return {
             "success": True,
-            "trimmed_file_path": output_path,
+            **_ff(output_path, "trimmed_file_id", "trimmed_file_path"),
+            "download_url": _dl_url(output_path, f"{slugified}_trimmed.{ext}"),
             "filename": f"{slugified}_trimmed.{ext}",
             "file_size_mb": file_size_mb,
             "duration": round(payload.end_time - payload.start_time, 2),
@@ -1754,7 +1760,7 @@ async def convert_to_gif(payload: ToGifRequest, request: Request):
     try:
         import uuid as _uuid
 
-        download_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "downloads")
+        download_dir = _LOCAL_DOWNLOADS_DIR or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "downloads")
         os.makedirs(download_dir, exist_ok=True)
 
         uid = _uuid.uuid4().hex[:8]
@@ -1763,14 +1769,7 @@ async def convert_to_gif(payload: ToGifRequest, request: Request):
 
         # ── Step 1: Resolve input file ───────────────────────
         if payload.local_path:
-            # Sanitise: must be inside downloads dir (path traversal guard)
-            abs_path = os.path.realpath(payload.local_path)
-            abs_dl   = os.path.realpath(download_dir)
-            if not abs_path.startswith(abs_dl):
-                raise HTTPException(status_code=400, detail="Invalid local_path")
-            if not os.path.exists(abs_path):
-                raise HTTPException(status_code=404, detail="Local file not found")
-            input_path = abs_path
+            input_path = _resolve_local_input_or_raise(payload.local_path, download_dir)
         else:
             input_path = os.path.join(download_dir, f"gif_src_{uid}.mp4")
             _assert_safe_url(payload.url)
@@ -1814,8 +1813,9 @@ async def convert_to_gif(payload: ToGifRequest, request: Request):
         if r2.returncode != 0 or not os.path.exists(output_path):
             raise ValueError(f"GIF conversion failed: {r2.stderr.decode()[-200:]}")
 
-        # Clean up temp files
-        for p in (input_path, palette_path):
+        # Clean up temp files — never the caller's pre-existing local_path
+        # (it used to delete the user's downloaded original here).
+        for p in ((palette_path,) if payload.local_path else (input_path, palette_path)):
             try: os.remove(p)
             except: pass
 
@@ -1829,9 +1829,11 @@ async def convert_to_gif(payload: ToGifRequest, request: Request):
 
         gif_size_mb = round(os.path.getsize(output_path) / (1024 * 1024), 2)
 
+        from app.core.local_download import file_fields as _ff, download_url as _dl_url
         return {
             "success": True,
-            "gif_path": output_path,
+            **_ff(output_path, "gif_file_id", "gif_path"),
+            "download_url": _dl_url(output_path, f"{slug}.gif"),
             "filename": f"{slug}.gif",
             "file_size_mb": gif_size_mb,
             "width": width,
@@ -1842,7 +1844,8 @@ async def convert_to_gif(payload: ToGifRequest, request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        for p in [locals().get("input_path"), locals().get("palette_path"), locals().get("output_path")]:
+        _gif_src = None if payload.local_path else locals().get("input_path")
+        for p in [_gif_src, locals().get("palette_path"), locals().get("output_path")]:
             if p and os.path.exists(p):
                 try: os.remove(p)
                 except: pass
@@ -1995,9 +1998,10 @@ async def get_history(
             q = q.eq("status", status)
         q = q.range(offset, offset + limit - 1)
         response = q.execute()
+        from app.core.local_download import scrub_job_row
         return {
             "success": True,
-            "jobs": response.data if response.data else []
+            "jobs": [scrub_job_row(r) for r in (response.data or [])]
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -2109,8 +2113,9 @@ async def get_jobs_by_batch(batch_id: str):
             except Exception:
                 pass
 
+        from app.core.local_download import scrub_job_row as _scrub_job_row
         return {
-            "jobs": jobs,
+            "jobs": [_scrub_job_row(j) for j in jobs],
             "summary": {
                 "total": total,
                 "success": success,

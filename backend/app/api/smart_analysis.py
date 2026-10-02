@@ -21,6 +21,11 @@ from pydantic import BaseModel, field_validator
 
 logger = logging.getLogger(__name__)
 
+_DOWNLOADS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "downloads",
+)
+
 router = APIRouter(tags=["Smart Analysis"])
 
 # ---------------------------------------------------------------------------
@@ -364,6 +369,15 @@ async def submit_analyze_media(
                 f"{tier} tier limit of {max_duration:.0f}s."
             ),
         )
+
+    # media_path is a server file the worker opens: file_id or legacy path,
+    # through the shared validator. Stored as the resolved realpath.
+    if body.media_path:
+        from app.core.local_download import resolve_local_input
+        _real_media = resolve_local_input(body.media_path, _DOWNLOADS_DIR)
+        if _real_media is None:
+            raise HTTPException(status_code=400, detail="Invalid media_path.")
+        body.media_path = _real_media
 
     # Quota check
     allowed, reason = _check_analysis_quota(user, request)
