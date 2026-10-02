@@ -31,6 +31,38 @@ FREE_BATCH_LIMIT  = int(os.getenv("FREE_BATCH_LIMIT",    "5"))
 PRO_BATCH_LIMIT   = int(os.getenv("PRO_BATCH_LIMIT",   "100"))
 ANON_DAILY_LIMIT  = int(os.getenv("ANON_DAILY_LIMIT",    "5"))
 
+# ── Cheap-platform allowance ─────────────────────────────────────────
+# Platforms whose single-link downloads cost us next to nothing (no
+# residential proxy, no cookie pool, no paid API on the normal path) get their
+# own, larger daily counter. A cheap download counts ONLY against that counter
+# and never consumes the standard one, so a guest who saves 20 TikToks still
+# has their 5 standard downloads for YouTube/Instagram/Facebook.
+#
+# The list is explicit (env) rather than derived from the extractor registry's
+# cost_tier: TikTok, Douyin and Threads are not in that registry at all (they
+# are handled inline in downloader.py), and the registry's "low" tier contains
+# platforms (Bilibili, VK, Twitch…) the owner has not approved for the higher
+# allowance. Widening the list is an env change, not a deploy.
+GUEST_CHEAP_DAILY = int(os.getenv("GUEST_CHEAP_DAILY", "30"))
+FREE_CHEAP_DAILY  = int(os.getenv("FREE_CHEAP_DAILY",  "100"))
+CHEAP_PLATFORMS   = frozenset(
+    p.strip().lower()
+    for p in os.getenv("CHEAP_PLATFORMS", "tiktok,douyin,threads").split(",")
+    if p.strip()
+)
+
+QUOTA_BUCKET_STANDARD = "standard"
+QUOTA_BUCKET_CHEAP    = "cheap"
+
+
+def is_cheap_platform(platform: Optional[str]) -> bool:
+    return bool(platform) and platform.lower() in CHEAP_PLATFORMS
+
+
+def _cheap_platform_label() -> str:
+    names = {"tiktok": "TikTok", "douyin": "Douyin", "threads": "Threads"}
+    return ", ".join(names.get(p, p.title()) for p in sorted(CHEAP_PLATFORMS))
+
 # Quality strings that explicitly request 4K
 PRO_ONLY_QUALITY_STRINGS = {"mp4_4k", "4k", "2160"}
 
@@ -183,56 +215,138 @@ def _get_usage(user_id: str) -> Dict[str, Any]:
 
 # ── Anonymous quota (Redis, IP-based) ────────────────────────────────
 
-def _anon_quota_key(ip: str) -> str:
+def _anon_quota_key(ip: str, bucket: str = QUOTA_BUCKET_STANDARD) -> str:
     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if bucket == QUOTA_BUCKET_CHEAP:
+        return f"vidgrab:quota:anon_cheap:{ip}:{date}"
     return f"vidgrab:quota:anon:{ip}:{date}"
 
 
-def check_anon_quota(ip: str) -> Dict[str, Any]:
-    """Check daily quota for an anonymous user identified by IP."""
+def _user_cheap_key(user_id: str) -> str:
+    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return f"vidgrab:quota:user_cheap:{user_id}:{date}"
+
+
+def _redis_count(key: str) -> int:
     from app.core.redis_client import get_redis
-    r = get_redis()
-    key = _anon_quota_key(ip)
     try:
-        used = int(r.get(key) or 0)
+        return int(get_redis().get(key) or 0)
     except Exception:
-        used = 0
-    limit = ANON_DAILY_LIMIT
-
-    if used >= limit:
-        try:
-            from app.core.metrics import track_quota_denial
-            track_quota_denial(ERR_QUOTA_DAILY, platform="anon")
-        except Exception:
-            pass
-        return {
-            "allowed":        False,
-            "error_code":     ERR_QUOTA_DAILY,
-            "downloads_today": used,
-            "daily_limit":    limit,
-            "message":        (
-                f"Khách chỉ tải được {limit} lượt/ngày. "
-                "Đăng nhập để tải nhiều hơn."
-            ),
-        }
-    return {"allowed": True, "downloads_today": used, "daily_limit": limit}
+        return 0
 
 
-def increment_anon_usage(ip: str) -> None:
-    """Increment anon daily counter with auto-TTL until next UTC midnight."""
+def _redis_incr_until_midnight(key: str) -> None:
     from app.core.redis_client import get_redis
-    r = get_redis()
-    key = _anon_quota_key(ip)
     now = datetime.now(timezone.utc)
     midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     ttl = max(int((midnight - now).total_seconds()) + 60, 60)
+    pipe = get_redis().pipeline()
+    pipe.incr(key)
+    pipe.expire(key, ttl)
+    pipe.execute()
+
+
+def check_anon_quota(ip: str, platform: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Check daily quota for an anonymous user identified by IP.
+
+    `platform` selects the counter: a cheap platform (CHEAP_PLATFORMS) is
+    checked against GUEST_CHEAP_DAILY on its own counter; anything else (or
+    None, e.g. bulk) against the standard ANON_DAILY_LIMIT.
+    """
+    cheap = is_cheap_platform(platform)
+    bucket = QUOTA_BUCKET_CHEAP if cheap else QUOTA_BUCKET_STANDARD
+    used = _redis_count(_anon_quota_key(ip, bucket))
+    limit = GUEST_CHEAP_DAILY if cheap else ANON_DAILY_LIMIT
+
+    if limit != -1 and used >= limit:
+        try:
+            from app.core.metrics import track_quota_denial
+            track_quota_denial(ERR_QUOTA_DAILY, platform="anon_cheap" if cheap else "anon")
+        except Exception:
+            pass
+        if cheap:
+            message = (
+                f"Khách tải được tối đa {limit} lượt/ngày cho {_cheap_platform_label()}. "
+                "Đăng nhập để tải nhiều hơn."
+            )
+        else:
+            message = (
+                f"Khách chỉ tải được {limit} lượt/ngày. "
+                "Đăng nhập để tải nhiều hơn."
+            )
+        return {
+            "allowed":        False,
+            "error_code":     ERR_QUOTA_DAILY,
+            "quota_bucket":   bucket,
+            "platform":       platform,
+            "downloads_today": used,
+            "daily_limit":    limit,
+            "message":        message,
+        }
+    return {"allowed": True, "quota_bucket": bucket,
+            "downloads_today": used, "daily_limit": limit}
+
+
+def increment_anon_usage(ip: str, platform: Optional[str] = None) -> None:
+    """Increment the anon daily counter for this platform's bucket (TTL → next UTC midnight)."""
+    bucket = QUOTA_BUCKET_CHEAP if is_cheap_platform(platform) else QUOTA_BUCKET_STANDARD
     try:
-        pipe = r.pipeline()
-        pipe.incr(key)
-        pipe.expire(key, ttl)
-        pipe.execute()
+        _redis_incr_until_midnight(_anon_quota_key(ip, bucket))
     except Exception as e:
         print(f"[Quota] increment_anon_usage failed for {ip}: {e}")
+
+
+def _cheap_limit_for_tier(tier: str) -> int:
+    """
+    Cheap-platform daily allowance for a signed-in tier. -1 = unlimited.
+
+    Free gets FREE_CHEAP_DAILY. A paid tier never gets less than free, nor less
+    than its own standard daily limit — the cheap allowance exists to be MORE
+    generous, so it must not become the tighter of the two for anyone.
+    """
+    perms = get_tier_permissions(tier)
+    std = _enforced_daily_limit(tier, perms["daily_limit"])
+    if std == -1 or FREE_CHEAP_DAILY == -1:
+        return -1
+    if tier == "free":
+        return FREE_CHEAP_DAILY
+    return max(FREE_CHEAP_DAILY, std)
+
+
+def check_user_cheap_quota(user_id: str, platform: Optional[str] = None) -> Dict[str, Any]:
+    """Cheap-platform counter for a signed-in user (Redis, per UTC day)."""
+    tier = _get_tier(user_id)
+    limit = _cheap_limit_for_tier(tier)
+    used = _redis_count(_user_cheap_key(user_id))
+    if limit != -1 and used >= limit:
+        try:
+            from app.core.metrics import track_quota_denial
+            track_quota_denial(ERR_QUOTA_DAILY, platform="user_cheap", user_id=user_id)
+        except Exception:
+            pass
+        return {
+            "allowed":         False,
+            "error_code":      ERR_QUOTA_DAILY,
+            "quota_bucket":    QUOTA_BUCKET_CHEAP,
+            "platform":        platform,
+            "plan":            tier,
+            "downloads_today": used,
+            "daily_limit":     limit,
+            "message":         (
+                f"Đã đạt giới hạn {limit} lượt tải {_cheap_platform_label()} hôm nay. "
+                "Vui lòng thử lại vào ngày mai."
+            ),
+        }
+    return {"allowed": True, "quota_bucket": QUOTA_BUCKET_CHEAP, "plan": tier,
+            "downloads_today": used, "daily_limit": limit}
+
+
+def increment_user_cheap_usage(user_id: str) -> None:
+    try:
+        _redis_incr_until_midnight(_user_cheap_key(user_id))
+    except Exception as e:
+        print(f"[Quota] increment_user_cheap_usage failed for {user_id}: {e}")
 
 
 # ── Public API ────────────────────────────────────────────────────────
@@ -430,8 +544,14 @@ def check_batch_limit(user_id: Optional[str], count: int) -> Dict[str, Any]:
     return {"allowed": True, "tier": tier, "limit": limit}
 
 
-def increment_usage(user_id: str) -> None:
-    """Increment daily + monthly download counters for an authenticated user."""
+def increment_usage(user_id: str, count_daily: bool = True) -> None:
+    """
+    Increment daily + monthly download counters for an authenticated user.
+
+    count_daily=False bumps only the monthly total — used for cheap-platform
+    downloads, which are metered on their own Redis counter and must not
+    consume the standard daily quota.
+    """
     supabase = get_supabase_client()
     try:
         res = (
@@ -442,14 +562,16 @@ def increment_usage(user_id: str) -> None:
         )
         if res.data:
             row = res.data[0]
-            supabase.table("user_usage").update({
-                "downloads_today":      (row.get("downloads_today", 0) or 0) + 1,
+            update = {
                 "downloads_this_month": (row.get("downloads_this_month", 0) or 0) + 1,
-            }).eq("user_id", user_id).execute()
+            }
+            if count_daily:
+                update["downloads_today"] = (row.get("downloads_today", 0) or 0) + 1
+            supabase.table("user_usage").update(update).eq("user_id", user_id).execute()
         else:
             supabase.table("user_usage").insert({
                 "user_id":              user_id,
-                "downloads_today":      1,
+                "downloads_today":      1 if count_daily else 0,
                 "downloads_this_month": 1,
                 "last_reset_at":        _today_utc_str(),
                 "plan":                 "free",

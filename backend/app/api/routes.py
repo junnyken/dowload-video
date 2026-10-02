@@ -141,6 +141,8 @@ from app.core.quotas import (
     check_user_quota, increment_usage,
     check_quality_permission, check_batch_limit, check_feature_permission,
     check_anon_quota, increment_anon_usage, check_youtube_tier,
+    is_cheap_platform, check_user_cheap_quota, increment_user_cheap_usage,
+    QUOTA_BUCKET_CHEAP, QUOTA_BUCKET_STANDARD,
     ERR_QUOTA_DAILY, ERR_QUALITY, ERR_BATCH, ERR_FEATURE,
     ERR_YOUTUBE, ERR_SPOTIFY_FULL, ERR_BULK_ZIP,
 )
@@ -478,9 +480,16 @@ async def fetch_link(
     # Extract client IP once — used for anon quota and YouTube yt_quota
     _req_client_ip = get_client_ip(request)
 
+    # Cheap platforms (CHEAP_PLATFORMS: TikTok/Douyin/Threads by default) are
+    # metered on their own, larger daily counter and do not consume the
+    # standard one. The response says which bucket was exhausted.
+    _quota_platform = _get_platform_key(payload.url)
+    _is_cheap = is_cheap_platform(_quota_platform)
+
     # 1. Daily quota check (authenticated users)
     if user_id:
-        quota = check_user_quota(user_id)
+        quota = (check_user_cheap_quota(user_id, _quota_platform) if _is_cheap
+                 else check_user_quota(user_id))
         if not quota["allowed"]:
             raise HTTPException(
                 status_code=403,
@@ -488,12 +497,15 @@ async def fetch_link(
                     "message":         quota["message"],
                     "downloads_today": quota.get("downloads_today", 0),
                     "daily_limit":     quota.get("daily_limit", 30),
+                    "quota_bucket":    QUOTA_BUCKET_CHEAP if _is_cheap else QUOTA_BUCKET_STANDARD,
+                    "platform":        _quota_platform,
                 }),
             )
 
-    # 1b. Anonymous daily quota — 5 downloads/day per IP across all platforms
+    # 1b. Anonymous daily quota per IP — standard bucket (ANON_DAILY_LIMIT) or
+    #     cheap-platform bucket (GUEST_CHEAP_DAILY)
     if not user_id:
-        _anon_q = check_anon_quota(_req_client_ip)
+        _anon_q = check_anon_quota(_req_client_ip, _quota_platform)
         if not _anon_q["allowed"]:
             raise HTTPException(
                 status_code=429,
@@ -501,6 +513,8 @@ async def fetch_link(
                     "message":         _anon_q["message"],
                     "downloads_today": _anon_q["downloads_today"],
                     "daily_limit":     _anon_q["daily_limit"],
+                    "quota_bucket":    _anon_q.get("quota_bucket", QUOTA_BUCKET_STANDARD),
+                    "platform":        _quota_platform,
                 }),
             )
 
@@ -759,7 +773,11 @@ async def fetch_link(
         # 4. Increment usage counter
         if user_id:
             try:
-                increment_usage(user_id)
+                if _is_cheap:
+                    increment_user_cheap_usage(user_id)
+                # Cheap downloads still count toward the monthly total, just
+                # not toward the standard daily quota.
+                increment_usage(user_id, count_daily=not _is_cheap)
             except Exception as _inc_err:
                 print(f"[Quota] increment_usage failed silently: {_inc_err}")
             # Phase 20: record metering event (fire-and-forget)
@@ -773,7 +791,7 @@ async def fetch_link(
                 pass
         else:
             try:
-                increment_anon_usage(_req_client_ip)
+                increment_anon_usage(_req_client_ip, _quota_platform)
             except Exception as _anon_err:
                 print(f"[Quota] increment_anon_usage failed silently: {_anon_err}")
 
