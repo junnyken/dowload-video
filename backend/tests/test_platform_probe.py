@@ -171,8 +171,13 @@ class TestTargets:
         """Defaults are the one place a wrong URL turns the monitor into a liar
         on day one. Only platforms whose target was run through the real probe
         ship with one; the rest report not_configured until an operator sets
-        them. Measured 2026-09-24: youtube and vk resolved, 19 others did not."""
-        assert set(pp._DEFAULT_TARGETS) == {"youtube", "vk"}
+        them. Measured 2026-09-24: youtube and vk resolved, 19 others did not.
+        2026-10-02: six more verified through the live /fetch-link (official
+        accounts' posts) — see the comments on _DEFAULT_TARGETS."""
+        assert set(pp._DEFAULT_TARGETS) == {
+            "youtube", "vk",
+            "odysee", "soundcloud", "bilibili", "threads", "dailymotion", "twitch",
+        }
 
     def test_configured_target_overrides_the_default(self):
         with _with(_FakeRedis(targets={"youtube": "https://custom/v"})):
@@ -272,6 +277,43 @@ class TestCoverageIsNotConfidence:
         assert r["degraded_count"] == 1
         assert r["all_healthy"] is False and r["fully_checked"] is False
         assert next(p for p in r["platforms"] if p["platform"] == "tiktok")["reason"] == "probe_failed"
+
+    def _row(self, r, name):
+        return next(p for p in r["platforms"] if p["platform"] == name)
+
+    def test_unconfigured_platform_is_unknown_not_healthy(self):
+        """lane_observer defaults a platform with no traffic to "healthy", so an
+        unprobed platform rendered as "Hoạt động bình thường" — we never looked."""
+        r = self._status([], self._all_unconfigured())
+        row = self._row(r, "instagram")
+        assert row["status"] == "unknown"
+        assert row["message"] == "Chưa theo dõi"
+        assert row["reason"] == "probe_not_configured"
+        assert r["unknown_count"] == r["total_count"]
+
+    def test_stale_probe_is_unknown_too(self):
+        probes = self._all_unconfigured()
+        probes["youtube"] = {"status": pp.STALE}
+        row = self._row(self._status([], probes), "youtube")
+        assert row["status"] == "unknown" and row["reason"] == "probe_stale"
+
+    def test_probed_ok_platform_stays_healthy(self):
+        probes = self._all_unconfigured()
+        probes["youtube"] = {"status": pp.OK}
+        row = self._row(self._status([], probes), "youtube")
+        assert row["status"] == "healthy" and row["message"] == "Hoạt động bình thường"
+
+    def test_real_lane_problem_still_shows_without_probe(self):
+        lanes = [{"platform": "instagram", "laneState": "constrained",
+                  "constrainedReason": "cookies_blocked"}]
+        row = self._row(self._status(lanes, self._all_unconfigured()), "instagram")
+        assert row["status"] == "constrained"
+
+    def test_unknown_does_not_trip_the_user_banner(self):
+        """PlatformStatusBanner hides itself on all_healthy and only lists
+        degraded/constrained — unknown must not count as a problem."""
+        r = self._status([], self._all_unconfigured())
+        assert r["all_healthy"] is True and r["degraded_count"] == 0
 
     def test_counts_add_up(self):
         probes = self._all_unconfigured()

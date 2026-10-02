@@ -49,6 +49,26 @@ _DEFAULT_TARGETS: Dict[str, str] = {
     "youtube": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
     # Verified by running the real probe against it on 2026-09-24, not assumed.
     "vk": "https://vk.com/video-22822305_456241864",
+    # Added 2026-10-02. Each is a post by the platform's OWN official account,
+    # found from that account's listing (not guessed), and each returned 200
+    # with a title and a media URL from the live /api/v1/fetch-link — the same
+    # extract_video_info_sync entry point probe_once uses.
+    #   @Odysee channel — "VIDEO: The Future of Odysee" (17.9s)
+    "odysee": "https://odysee.com/@Odysee:8/FutureofOdyseeVideo:0",
+    #   soundcloud.com/soundcloud — "Upload Your First Track" (4.5s)
+    "soundcloud": "https://soundcloud.com/soundcloud/upload-your-first-track",
+    #   space.bilibili.com/8047632 (哔哩哔哩弹幕网) — "欢 迎 来 到 A G I 时 代" (6.3s)
+    "bilibili": "https://www.bilibili.com/video/BV1ECeJ65EZS",
+    #   @threads — "You can now DM videos, GIFS and stickers on Threads" (5.6s)
+    "threads": "https://www.threads.com/@threads/post/DOJPyNPEVvT",
+    #   api.dailymotion.com/user/dailymotion — "Dailymotion Hackathon Feb 2017" (17.6s).
+    #   The account's oldest video (x4u2q9g) was refused ("Kênh ngoại tuyến"),
+    #   which is why this is the second-oldest rather than the first.
+    "dailymotion": "https://www.dailymotion.com/video/x5e9eog",
+    #   A clip on twitch.tv/twitch — "F1 2017 E3 Gameplay!" (2.4s). A clip, not
+    #   a VOD: the official TwitchCon VOD made /fetch-link run past 150s
+    #   (it downloads the whole broadcast), unusable as a probe.
+    "twitch": "https://www.twitch.tv/twitch/clip/CrispyJollyGullHassaanChop-nPlLKGxGRcBj37e4",
 }
 
 _TARGETS_KEY = "probe:targets"

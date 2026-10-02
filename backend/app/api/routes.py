@@ -2408,6 +2408,7 @@ async def get_platform_status():
         "healthy":     "Hoạt động bình thường",
         "constrained": "Tốc độ có thể chậm hơn",
         "degraded":    "Đang gặp sự cố",
+        "unknown":     "Chưa theo dõi",
     }
     try:
         from app.core.lane_observer import observe_all_platforms
@@ -2444,6 +2445,17 @@ async def get_platform_status():
                 reason = "probe_failed"
             elif probe_status == _PROBE_OK and lane == "healthy":
                 reason = None
+            elif lane == "healthy":
+                # No current probe result (not configured, or stale/never run)
+                # and the lane has nothing bad to say. "healthy" is lane_observer's
+                # DEFAULT for a platform it has no traffic on, so reporting it
+                # would be "we did not look" presented as "Hoạt động bình
+                # thường". A real lane problem (constrained/degraded) still
+                # shows — that is an observation, not a default.
+                status = "unknown"
+                reason = ("probe_not_configured"
+                          if probe_status in (None, _PROBE_NOT_CONFIGURED)
+                          else "probe_stale")
 
             platforms.append({
                 "platform": name,
@@ -2476,6 +2488,7 @@ async def get_platform_status():
             "fully_checked":    degraded_count == 0 and unmonitored == 0,
             "monitored_count":  monitored,
             "unmonitored_count": unmonitored,
+            "unknown_count":    sum(1 for p in platforms if p["status"] == "unknown"),
             "total_count":      len(platforms),
         }
     except Exception:
