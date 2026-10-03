@@ -22,6 +22,12 @@ This module adds three siblings to it, written in the same pipeline:
         hour buckets for "last 24h" / "last 1h" windows        TTL 50h
   vidgrab:errcodes:{YYYY-MM-DD}         hash  {platform}|{error_code} → count
         classified failure reasons for "top errors"            TTL 35d
+  vidgrab:errcodes_hourly:{YYYY-MM-DDTHH} hash {platform}|{error_code} → count
+        the same codes per hour, so "errors in the last 24h" can be
+        broken down without borrowing whole days                TTL 50h
+  vidgrab:stats_hourly:since            string  first hour the two hourly
+        families above were written together (set once, NX). Hourly data
+        does not exist before it, which the 24h window reports as partial.
   p27a:ts:{platform}:success / :failure string ISO timestamp
         last success / failure (same key obs_recorder writes)  TTL 90d
 
@@ -54,10 +60,13 @@ DAY_KEY_TPL = "vidgrab:stats:{date}"
 HOUR_KEY_TPL = "vidgrab:stats_hourly:{hour}"
 ERRCODE_KEY_TPL = "vidgrab:errcodes:{date}"
 LAST_TS_KEY_TPL = "p27a:ts:{platform}:{kind}"   # shared with obs_recorder
+ERRCODE_HOUR_KEY_TPL = "vidgrab:errcodes_hourly:{hour}"
+HOURLY_SINCE_KEY = "vidgrab:stats_hourly:since"
 
 DAY_TTL = 35 * 86400
 HOUR_TTL = 50 * 3600
 LAST_TS_TTL = 90 * 86400
+SINCE_TTL = 400 * 86400
 
 _SLUG_RE = re.compile(r"[^a-z0-9_]+")
 _MAX_PENDING = 2000
@@ -102,6 +111,7 @@ def record(platform: str, success: bool, error_code: Optional[str] = None,
         pipe.expire(day_key, DAY_TTL)
         pipe.hincrby(hour_key, field, 1)
         pipe.expire(hour_key, HOUR_TTL)
+        pipe.set(HOURLY_SINCE_KEY, hour_str(now), nx=True, ex=SINCE_TTL)
         if success:
             pipe.set(LAST_TS_KEY_TPL.format(platform=plat, kind="success"),
                      now.isoformat(), ex=LAST_TS_TTL)
@@ -110,6 +120,9 @@ def record(platform: str, success: bool, error_code: Optional[str] = None,
             err_key = ERRCODE_KEY_TPL.format(date=day_str(now))
             pipe.hincrby(err_key, f"{plat}|{code}", 1)
             pipe.expire(err_key, DAY_TTL)
+            err_hour_key = ERRCODE_HOUR_KEY_TPL.format(hour=hour_str(now))
+            pipe.hincrby(err_hour_key, f"{plat}|{code}", 1)
+            pipe.expire(err_hour_key, HOUR_TTL)
             pipe.set(LAST_TS_KEY_TPL.format(platform=plat, kind="failure"),
                      now.isoformat(), ex=LAST_TS_TTL)
         pipe.execute()
@@ -303,3 +316,171 @@ def last_timestamp(platform: str, kind: str = "success") -> Optional[str]:
 def success_rate_pct(ok: int, total: int) -> Optional[float]:
     """Percent with one decimal, or None when there were no attempts."""
     return round(ok / total * 100, 1) if total > 0 else None
+
+
+# ── 24h window: ONE helper for every "last 24h" admin number ─────────────────
+
+def _parse_hour(h: Optional[str]) -> Optional[datetime]:
+    try:
+        return datetime.strptime(h, "%Y-%m-%dT%H").replace(tzinfo=timezone.utc) if h else None
+    except Exception:
+        return None
+
+
+def _parse_codes(raw: dict) -> Dict[Tuple[str, str], int]:
+    out: Dict[Tuple[str, str], int] = {}
+    for k, v in (raw or {}).items():
+        key = _decode(k)
+        if "|" not in key:
+            continue
+        plat, code = key.split("|", 1)
+        try:
+            out[(plat, code)] = out.get((plat, code), 0) + int(_decode(v))
+        except Exception:
+            continue
+    return out
+
+
+def _fold_top(codes: Dict[Tuple[str, str], int], limit: int) -> List[dict]:
+    by_code: Dict[str, Dict[str, int]] = {}
+    for (plat, code), n in codes.items():
+        by_code.setdefault(code, {})[plat] = by_code.get(code, {}).get(plat, 0) + n
+    rows = [{"error_code": c, "count": sum(p.values()), "platforms": p}
+            for c, p in by_code.items()]
+    rows.sort(key=lambda r: (-r["count"], r["error_code"]))
+    return rows[:limit]
+
+
+def window_summary(hours: int = 24, *, now: Optional[datetime] = None,
+                   jobs_loader=None, fallback_when_redis_down: bool = False,
+                   top_limit: int = 10) -> dict:
+    """The single source for every admin "last N hours" error / failure number.
+
+    Reads the hourly buckets (counts) and hourly error-code buckets (reasons)
+    of the outcome store, so ``err`` always equals the sum of the error codes.
+    Hourly data only exists since HOURLY_SINCE_KEY (the first deploy that wrote
+    it); earlier hours are NOT silently counted as zero:
+
+      * ``partial`` / ``coverage_hours`` / ``covered_since`` say how much of
+        the window the buckets cover;
+      * for an uncovered hour whose UTC DAY has no counter hash at all, the
+        ``jobs_loader`` (download_jobs) fills in — never for a day the store
+        knows, so nothing is counted twice; ``sources`` lists what was used.
+
+    ``jobs_loader(start_iso, end_iso)`` returns rows
+    ``{status, platform, error_code, created_at}`` (platform already resolved).
+    If Redis cannot be read: ``redis_ok`` False and, unless
+    ``fallback_when_redis_down``, every count is None (unknown is not zero).
+    """
+    now = now or _now()
+    keys = [hour_str(now - timedelta(hours=h)) for h in range(hours - 1, -1, -1)]
+    first_hour = _parse_hour(keys[0])
+    out: dict = {
+        "hours": hours, "redis_ok": True,
+        "window_start": first_hour.isoformat(), "window_end": now.isoformat(),
+        "coverage_hours": 0, "partial": True, "covered_since": None,
+        "sources": [], "ok": None, "err": None, "total": None,
+        "success_rate": None, "fail_rate": None,
+        "by_platform": {}, "top_errors": [],
+    }
+    agg: Dict[str, Dict[str, int]] = {}
+    codes: Dict[Tuple[str, str], int] = {}
+    since: Optional[datetime] = None
+    day_known: Dict[str, bool] = {}
+    try:
+        rc = _redis()
+        pipe = rc.pipeline(transaction=False)
+        pipe.get(HOURLY_SINCE_KEY)
+        for h in keys:
+            pipe.hgetall(HOUR_KEY_TPL.format(hour=h))
+        for h in keys:
+            pipe.hgetall(ERRCODE_HOUR_KEY_TPL.format(hour=h))
+        res = pipe.execute()
+        marker = _parse_hour(_decode(res[0]) if res[0] else None)
+        counters = res[1:1 + hours]
+        errcodes = res[1 + hours:]
+        if marker is None:
+            # Only pre-marker data exists (older build): trust the first
+            # non-empty bucket, but there are no hourly error codes yet.
+            for h, raw in zip(keys, counters):
+                if raw:
+                    marker = _parse_hour(h)
+                    break
+        if marker is not None:
+            since = max(marker, first_hour)
+            for h, raw, craw in zip(keys, counters, errcodes):
+                if _parse_hour(h) < since:
+                    continue
+                merge(agg, _parse_okerr(raw))
+                for k, n in _parse_codes(craw).items():
+                    codes[k] = codes.get(k, 0) + n
+            out["sources"].append("redis_hourly")
+    except Exception as exc:
+        log.debug("[download_outcomes] window_summary redis failed: %s", exc)
+        out["redis_ok"] = False
+        agg, codes, since = {}, {}, None
+        if not fallback_when_redis_down:
+            return out
+
+    cur_hour = _parse_hour(keys[-1])
+    if since is not None:
+        out["covered_since"] = since.isoformat()
+        out["coverage_hours"] = int((cur_hour - since).total_seconds() // 3600) + 1
+    out["partial"] = out["coverage_hours"] < hours
+
+    # Uncovered hours: fill from download_jobs, only for UTC days the store has no hash for.
+    gap_end = since if since is not None else cur_hour + timedelta(hours=1)
+    if jobs_loader is not None and gap_end > first_hour:
+        gap_days = sorted({(first_hour + timedelta(hours=i)).strftime("%Y-%m-%d")
+                           for i in range(int((gap_end - first_hour).total_seconds() // 3600))})
+        if out["redis_ok"]:
+            try:
+                known = read_days(gap_days)
+                day_known = {d: known.get(d) is not None for d in gap_days}
+            except Exception:
+                day_known = {d: True for d in gap_days}   # cannot tell → do not double count
+        else:
+            day_known = {d: False for d in gap_days}
+        if not all(day_known.values()):
+            try:
+                rows = jobs_loader(first_hour.isoformat(), gap_end.isoformat()) or []
+            except Exception as exc:
+                log.debug("[download_outcomes] jobs fallback failed: %s", exc)
+                rows = []
+            used = False
+            for r in rows:
+                created = (r.get("created_at") or "")
+                if day_known.get(created[:10], True):
+                    continue   # that day is the store's, or not in the gap
+                try:
+                    ts = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    if not (first_hour <= ts < gap_end):
+                        continue   # inside a covered hour: the store has it
+                except Exception:
+                    continue
+                st = r.get("status")
+                if st not in ("success", "failed"):
+                    continue
+                plat = r.get("platform") or "other"
+                slot = agg.setdefault(plat, {"ok": 0, "err": 0})
+                if st == "success":
+                    slot["ok"] += 1
+                else:
+                    slot["err"] += 1
+                    k = (plat, r.get("error_code") or "unknown")
+                    codes[k] = codes.get(k, 0) + 1
+                used = True
+            if used:
+                out["sources"].append("jobs_table")
+
+    t = sum_platforms(agg)
+    out.update({
+        "ok": t["ok"], "err": t["err"], "total": t["total"],
+        "success_rate": success_rate_pct(t["ok"], t["total"]),
+        "fail_rate": round(t["err"] / t["total"] * 100, 1) if t["total"] > 0 else None,
+        "by_platform": agg,
+        "top_errors": _fold_top(codes, top_limit),
+    })
+    return out

@@ -6,6 +6,7 @@ import { useAdminActiveJobs } from '../hooks/useAdminActiveJobs'
 import type { SystemSnapshot, PlatformStatsTotal, DailyStatEntry, SnapshotSource } from '../api/system'
 import { buildAlerts } from '../utils/alerts'
 import { NO_TRAFFIC_HINT, fmtRate, safeRate } from '../utils/rate'
+import { coverageHint } from '../utils/coverage'
 
 const UNAVAILABLE = 'Không tải được dữ liệu'
 
@@ -258,8 +259,13 @@ export function AdminHomePage() {
   const totalUsers     = s?.stats.total_users ?? 0
   const signupsToday   = s?.signups.today ?? 0
   const totalJobs24h   = s?.analytics.summary?.total_jobs ?? 0
-  const failedJobs24h  = s?.analytics.summary?.total_failed ?? 0
-  const successRate    = safeRate(s?.analytics.summary?.success_rate, totalJobs24h)
+  // One window, one source: /stats downloads_24h and /errors summary_24h are
+  // both built from the outcome store's hourly counters.
+  const d24            = s?.stats.downloads_24h
+  const failed24h      = d24?.failed ?? 0
+  const attempts24h    = d24?.attempts ?? 0
+  const successRate    = safeRate(d24?.success_rate, d24?.attempts)
+  const hint24h        = coverageHint(d24) ?? coverageHint(s?.errors)
   const queueDepth     = s?.ops.queue_health?.depth ?? 0
   const queueOk        = s?.ops.queue_health?.ok !== false
   const anomalyCount   = built.anomalyCount
@@ -279,10 +285,9 @@ export function AdminHomePage() {
       return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
     })
 
-  const errObj = s?.errors.summary_24h
-  const errors24h = typeof errObj === 'object' && errObj !== null
-    ? (errObj as Record<string, number>).total ?? 0
-    : (errObj as number | undefined) ?? 0
+  const errSummary = s?.errors.summary_24h
+  const errors24h = errSummary?.failed ?? 0
+  const errorsOf24h = errSummary?.total ?? 0
 
   const errorMsg = error instanceof Error ? error.message : error ? 'Failed to load' : null
 
@@ -380,9 +385,9 @@ export function AdminHomePage() {
           <MetricCard
             label="Success rate 24h"
             value={fmtRate(successRate)}
-            sub={successRate === null ? NO_TRAFFIC_HINT : failedJobs24h > 0 ? `${failedJobs24h} failed` : 'Không có lỗi'}
+            sub={hint24h ?? (successRate === null ? NO_TRAFFIC_HINT : failed24h > 0 ? `${failed24h} failed (/ ${fmt(attempts24h)} total)` : 'Không có lỗi')}
             tone={successRate === null ? 'slate' : successRate >= 99 ? 'green' : successRate >= 95 ? 'amber' : 'red'}
-            unavailable={bad('analytics')}
+            unavailable={bad('stats')}
             link="/vid-admin/analytics"
           />
           <MetricCard
@@ -407,7 +412,7 @@ export function AdminHomePage() {
       {/* ── Key metrics row 2 ── */}
       <section>
         <SectionTitle title="Hệ thống" />
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <MetricCard
             label="YouTube"
             value={ytValue}
@@ -419,6 +424,7 @@ export function AdminHomePage() {
           <MetricCard
             label="Lỗi 24h"
             value={fmt(errors24h)}
+            sub={hint24h ?? (errorsOf24h > 0 ? `/ ${fmt(errorsOf24h)} total` : undefined)}
             tone={errors24h === 0 ? 'green' : errors24h > 10 ? 'red' : 'amber'}
             unavailable={bad('errors')}
             link="/vid-admin/analytics"
@@ -437,14 +443,6 @@ export function AdminHomePage() {
             tone={queueOk ? 'green' : 'red'}
             unavailable={bad('ops')}
             link="/vid-admin/queue"
-          />
-          <MetricCard
-            label="Failed jobs 24h"
-            value={fmt(failedJobs24h)}
-            sub={totalJobs24h > 0 ? `/ ${fmt(totalJobs24h)} total` : undefined}
-            tone={failedJobs24h === 0 ? 'green' : failedJobs24h > 10 ? 'red' : 'amber'}
-            unavailable={bad('analytics')}
-            link="/vid-admin/jobs"
           />
         </div>
       </section>
@@ -487,7 +485,8 @@ export function AdminHomePage() {
         {/* Recent failures */}
         {failedJobs.length > 0 && (
           <section>
-            <SectionTitle title="Recent Failures" linkTo="/vid-admin/jobs" linkLabel="All jobs →" />
+            <SectionTitle title="Job lỗi gần đây" linkTo="/vid-admin/jobs" linkLabel="All jobs →" />
+            <p className="mb-2 text-[11px] text-fg-muted">Từ bảng job — chỉ gồm job hàng loạt / đặt lịch, không phải mọi lượt tải lỗi.</p>
             <div className="rounded-card border border-line bg-surface shadow-card px-4 py-2">
               {failedJobs.map((f, i) => <FailureRow key={f.id ?? i} job={f} />)}
             </div>

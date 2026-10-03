@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { adminFetch } from '../utils/adminFetch'
 import { cn } from '../utils/cn'
 import { NO_TRAFFIC_HINT, safeRate } from '../utils/rate'
+import { coverageHint } from '../utils/coverage'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,8 @@ interface AnalyticsResponse {
 interface ErrorPattern {
   pattern: string
   count: number
+  error_code?: string
+  platforms?: Record<string, number>
 }
 
 interface PlatformFailRate {
@@ -44,8 +47,11 @@ interface PlatformFailRate {
 
 interface ErrorsResponse {
   error_patterns: ErrorPattern[]
-  summary_24h: { total: number; failed: number; fail_rate: number } | number
+  summary_24h: { total: number; failed: number; fail_rate: number | null } | number
   platform_fail_rates: PlatformFailRate[]
+  partial?: boolean
+  coverage_hours?: number
+  covered_since?: string | null
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -276,7 +282,7 @@ function ErrorPatternBars({ patterns }: { patterns: ErrorPattern[] }) {
           <div key={i} className="flex items-center gap-3">
             <span
               className="w-40 truncate text-[10px] text-fg-muted"
-              title={p.pattern}
+              title={p.error_code && p.error_code !== p.pattern ? `${p.pattern} (${p.error_code})` : p.pattern}
             >
               {p.pattern}
             </span>
@@ -560,11 +566,14 @@ export function AnalyticsPage() {
             {errors?.summary_24h != null && (
               <span className="font-mono text-[10px] text-danger">
                 {typeof errors.summary_24h === 'object'
-                  ? errors.summary_24h.total
+                  ? errors.summary_24h.failed
                   : errors.summary_24h} errors (24h)
               </span>
             )}
           </div>
+          {coverageHint(errors) && (
+            <p className="-mt-2 mb-3 text-[11px] text-warning">{coverageHint(errors)}</p>
+          )}
           {loadingE && !errors ? (
             <div className="space-y-2">
               {[0, 1, 2, 3].map(i => (
@@ -584,9 +593,12 @@ export function AnalyticsPage() {
       {/* Platform fail rates table */}
       <div className="rounded-card border border-line bg-surface shadow-card p-5">
         <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
-          Platform Fail Rates
+          Platform Fail Rates (24h)
           <span className="ml-2 normal-case font-normal text-fg-muted tracking-normal">(click header to sort)</span>
         </h3>
+        {coverageHint(errors) && (
+          <p className="-mt-2 mb-3 text-[11px] text-warning">{coverageHint(errors)}</p>
+        )}
         {loadingE && !errors ? (
           <div className="h-32 animate-pulse rounded-card bg-surface-2" />
         ) : errors?.platform_fail_rates ? (

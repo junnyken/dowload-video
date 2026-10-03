@@ -338,6 +338,59 @@ def _outcome_days(days: int) -> Dict[str, Any]:
     return {"dates": dates, "per_day": per_day, "source_by_day": source_by_day, "redis_ok": redis_ok}
 
 
+def _error_label(code: str) -> str:
+    """Readable Vietnamese label for an error code: the copy that already exists
+    in error_codes.ERROR_META, else the code itself (never an invented label)."""
+    try:
+        from app.core.error_codes import ERROR_META
+        msg = (ERROR_META.get(code) or {}).get("user_message")
+        if msg:
+            return msg
+    except Exception:
+        pass
+    return code
+
+
+def _jobs_rows_for_window(start_iso: str, end_iso: str) -> List[Dict[str, Any]]:
+    """download_jobs rows in [start, end) shaped for download_outcomes.window_summary.
+    Only used for hours/days the outcome store does not cover."""
+    from app.core.extraction_errors import classify_extraction_error
+
+    supabase = get_supabase_client()
+    rows = (
+        supabase.table("download_jobs")
+        .select("status, platform, original_url, error_message, created_at")
+        .gte("created_at", start_iso)
+        .lt("created_at", end_iso)
+        .neq("original_url", "batch_zip")
+        .limit(20000)
+        .execute()
+    ).data or []
+    out = []
+    for r in rows:
+        code = None
+        if r.get("status") == "failed":
+            msg = r.get("error_message") or ""
+            code = classify_extraction_error(msg)[1] if msg else "unknown"
+        out.append({"status": r.get("status"), "platform": _job_platform_key(r),
+                    "error_code": code, "created_at": r.get("created_at") or ""})
+    return out
+
+
+def _window_24h(*, fallback_when_redis_down: bool = False) -> Dict[str, Any]:
+    """THE source of every admin "last 24h" download / error number."""
+    from app.core import download_outcomes as _do
+    return _do.window_summary(24, jobs_loader=_jobs_rows_for_window,
+                              fallback_when_redis_down=fallback_when_redis_down)
+
+
+def _coverage_fields(w: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "coverage_hours": w["coverage_hours"], "partial": w["partial"],
+        "covered_since": w["covered_since"], "sources": w["sources"],
+    }
+
+
 def _download_outcome_summary() -> Dict[str, Any]:
     """Today / last-24h download outcome block for /stats. Fields are None when
     the Redis counters cannot be read (unknown is not zero)."""
@@ -352,6 +405,7 @@ def _download_outcome_summary() -> Dict[str, Any]:
         "failed_24h": None,
         "platform_breakdown_today": [],
         "top_errors_today": [],
+        "top_errors_24h": [],
         "outcome_source": "redis:vidgrab:stats",
     }
     try:
@@ -377,12 +431,16 @@ def _download_outcome_summary() -> Dict[str, Any]:
         out["outcome_source"] = None
         return out
     try:
-        w = _do.sum_platforms(_do.window_24h(now=now))
-        out["downloads_24h"] = {
-            "attempts": w["total"], "success": w["ok"], "failed": w["err"],
-            "success_rate": _do.success_rate_pct(w["ok"], w["total"]),
-        }
-        out["failed_24h"] = w["err"]
+        w = _window_24h()
+        if w["redis_ok"]:
+            out["downloads_24h"] = {
+                "attempts": w["total"], "success": w["ok"], "failed": w["err"],
+                "success_rate": w["success_rate"], **_coverage_fields(w),
+            }
+            out["failed_24h"] = w["err"]
+            out["top_errors_24h"] = [
+                {**e, "label": _error_label(e["error_code"])} for e in w["top_errors"]
+            ]
     except Exception as e:
         print(f"[admin/stats] 24h window unavailable: {e}")
     return out
@@ -746,101 +804,73 @@ async def reset_user_quota(req: ResetQuotaRequest, request: Request, _=Depends(v
 @router.get("/errors")
 async def get_error_monitor(_=Depends(verify_admin)):
     """
-    Detailed error analysis:
-    - Recent 50 failed jobs
-    - Error pattern grouping (timeout / private / 403 / captcha / etc.)
-    - Per-platform failure rates
+    Error monitor. Every number and list for the last 24h comes from the
+    download outcome store (one helper, download_outcomes.window_summary — the
+    same one /stats uses), so Overview, Analytics and this endpoint agree:
+
+    - summary_24h        {total, failed, fail_rate} (+ ok, success_rate, hours,
+                         coverage_hours, partial, covered_since, sources)
+    - error_patterns     [{pattern, count}] (+ error_code, label, platforms),
+                         from the classified error codes
+    - platform_fail_rates [{platform, total, failed, fail_rate}] (+ key)
+    - recent_errors      the last 50 failed rows of download_jobs — a job
+                         table, NOT every attempt; see recent_errors_source
+    - coverage_hours / partial / covered_since: hourly counters only exist
+      since the build that wrote them; partial=true means the 24h window is
+      not fully covered yet (hours before covered_since are not counted unless
+      download_jobs covers a day the store has no counter for).
     """
-    supabase = get_supabase_client()
     try:
-        # Recent 50 failed jobs
-        failed_res = (
-            supabase.table("download_jobs")
-            .select("id, original_url, error_message, created_at")
-            .eq("status", "failed")
-            .order("created_at", desc=True)
-            .limit(50)
-            .execute()
-        )
-        failed_jobs = failed_res.data or []
+        w = _window_24h(fallback_when_redis_down=True)
 
-        # All jobs last 24h for failure rate calculation
-        since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
-        recent_res = (
-            supabase.table("download_jobs")
-            .select("status, original_url, error_message")
-            .gte("created_at", since)
-            .neq("original_url", "batch_zip")
-            .limit(2000)
-            .execute()
-        )
-        recent = recent_res.data or []
+        failed_jobs: List[Dict[str, Any]] = []
+        try:
+            failed_res = (
+                get_supabase_client().table("download_jobs")
+                .select("id, original_url, error_message, created_at")
+                .eq("status", "failed")
+                .order("created_at", desc=True)
+                .limit(50)
+                .execute()
+            )
+            failed_jobs = failed_res.data or []
+        except Exception as e:
+            print(f"[admin/errors] recent failed jobs unavailable: {e}")
 
-        # Error pattern grouping
-        pattern_map: Dict[str, int] = {}
-        platform_fail: Dict[str, Dict[str, int]] = {}
+        error_patterns = [
+            {"pattern": _error_label(e["error_code"]), "label": _error_label(e["error_code"]),
+             "count": e["count"], "error_code": e["error_code"], "platforms": e["platforms"]}
+            for e in w["top_errors"]
+        ]
 
-        for job in recent:
-            platform = _classify_platform(job.get("original_url", ""))
-            if platform not in platform_fail:
-                platform_fail[platform] = {"total": 0, "failed": 0}
-            platform_fail[platform]["total"] += 1
-            if job.get("status") == "failed":
-                platform_fail[platform]["failed"] += 1
-
-                msg = (job.get("error_message") or "").lower()
-                if "timeout" in msg or "quá thời gian" in msg:
-                    key = "⏱ Timeout / Captcha"
-                elif "private" in msg or "riêng tư" in msg:
-                    key = "🔒 Video riêng tư"
-                elif "not found" in msg or "không tồn tại" in msg or "404" in msg:
-                    key = "🚫 Video đã xóa / 404"
-                elif "403" in msg or "forbidden" in msg or "bị chặn" in msg:
-                    key = "🛡 IP bị block / 403"
-                elif "sabr" in msg or "cobalt" in msg:
-                    key = "🎬 YouTube SABR"
-                elif "captcha" in msg:
-                    key = "🤖 Captcha"
-                elif "extract" in msg or "trích xuất" in msg:
-                    key = "❌ Extract thất bại"
-                else:
-                    key = "❓ Lỗi khác"
-                pattern_map[key] = pattern_map.get(key, 0) + 1
-
-        # Build platform failure rate list
         platform_rates = []
-        for platform, counts in platform_fail.items():
-            if platform in ("ZIP", "Other") or counts["total"] == 0:
+        for plat, c in w["by_platform"].items():
+            tot = c["ok"] + c["err"]
+            if tot == 0:
                 continue
-            rate = round(counts["failed"] / counts["total"] * 100, 1)
             platform_rates.append({
-                "platform": platform,
-                "total": counts["total"],
-                "failed": counts["failed"],
-                "fail_rate": rate,
+                "platform": _platform_label(plat), "key": plat,
+                "total": tot, "failed": c["err"],
+                "fail_rate": round(c["err"] / tot * 100, 1),
             })
-        platform_rates.sort(key=lambda x: x["fail_rate"], reverse=True)
-
-        # Sort error patterns
-        error_patterns = sorted(
-            [{"pattern": k, "count": v} for k, v in pattern_map.items()],
-            key=lambda x: x["count"],
-            reverse=True,
-        )
-
-        total_24h = len(recent)
-        total_failed_24h = sum(1 for j in recent if j.get("status") == "failed")
+        platform_rates.sort(key=lambda x: (-x["fail_rate"], -x["total"]))
 
         return {
             "success": True,
             "recent_errors": failed_jobs,
+            "recent_errors_source": "download_jobs",
             "error_patterns": error_patterns,
             "platform_fail_rates": platform_rates,
             "summary_24h": {
-                "total": total_24h,
-                "failed": total_failed_24h,
-                "fail_rate": round(total_failed_24h / total_24h * 100, 1) if total_24h > 0 else None,
+                "total": w["total"] or 0,
+                "failed": w["err"] or 0,
+                "fail_rate": w["fail_rate"],
+                "ok": w["ok"] or 0,
+                "success_rate": w["success_rate"],
+                "hours": w["hours"],
             },
+            **_coverage_fields(w),
+            "outcome_source": "redis:vidgrab:stats_hourly" if w["redis_ok"] else "download_jobs",
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,7 +1,21 @@
 import { adminFetch } from '../utils/adminFetch'
 
+export interface OutcomeWindow {
+  attempts?: number | null
+  success?: number | null
+  failed?: number | null
+  success_rate?: number | null
+  // Hourly counters may not cover the whole 24h window yet.
+  partial?: boolean
+  coverage_hours?: number
+  covered_since?: string | null
+}
+
 export interface StatsResponse {
   total_downloads_today?: number
+  /** Every attempt in the last 24h (outcome store) — same source as ErrorsResponse.summary_24h. */
+  downloads_24h?: OutcomeWindow
+  failed_24h?: number | null
   total_users?: number
   providers?: Record<string, number>
   failed_jobs?: Array<{
@@ -66,8 +80,14 @@ export interface ErrorsResponse {
   summary_24h?: {
     total?: number
     failed?: number
-    fail_rate?: number
+    fail_rate?: number | null
+    ok?: number
+    success_rate?: number | null
+    hours?: number
   }
+  partial?: boolean
+  coverage_hours?: number
+  covered_since?: string | null
 }
 
 export interface PlatformStatsTotal {
