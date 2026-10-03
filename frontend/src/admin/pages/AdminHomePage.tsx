@@ -7,6 +7,7 @@ import type { SystemSnapshot, PlatformStatsTotal, DailyStatEntry, SnapshotSource
 import { buildAlerts } from '../utils/alerts'
 import { NO_TRAFFIC_HINT, fmtRate, safeRate } from '../utils/rate'
 import { coverageHint } from '../utils/coverage'
+import { APPROX_DAY_HINT, VN_TIME_HINT, vnDayLabel } from '../utils/vnTime'
 
 const UNAVAILABLE = 'Không tải được dữ liệu'
 
@@ -56,10 +57,13 @@ function MetricCard({
 
 // ─── Section header ───────────────────────────────────────────────────────────
 
-function SectionTitle({ title, linkTo, linkLabel }: { title: string; linkTo?: string; linkLabel?: string }) {
+function SectionTitle({ title, hint, linkTo, linkLabel }: { title: string; hint?: string; linkTo?: string; linkLabel?: string }) {
   return (
     <div className="flex items-center justify-between mb-2.5">
-      <h2 className="font-mono text-[10px] font-medium uppercase tracking-widest text-fg-muted">{title}</h2>
+      <h2 className="font-mono text-[10px] font-medium uppercase tracking-widest text-fg-muted">
+        {title}
+        {hint && <span className="ml-1.5 font-sans normal-case tracking-normal text-fg-muted opacity-70">({hint})</span>}
+      </h2>
       {linkTo && (
         <Link to={linkTo} className="text-[11px] text-fg-muted hover:text-fg-2 transition-colors">{linkLabel ?? 'View all →'}</Link>
       )}
@@ -93,6 +97,7 @@ function MiniSparkline({
 
   const pts = data.map((d, i) => `${x(i)},${y(d[valueKey] ?? 0)}`).join(' ')
   const today = vals[vals.length - 1] ?? 0
+  const approxIdx = data.map((d, i) => (d.approximate ? i : -1)).filter(i => i >= 0)
 
   return (
     <div>
@@ -102,12 +107,20 @@ function MiniSparkline({
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
         <polyline points={pts} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+        {/* Approximate days (UTC-day fallback): hollow dashed marker */}
+        {approxIdx.map(i => (
+          <circle key={`a${i}`} cx={x(i)} cy={y(vals[i])} r={2.5} fill="var(--vg-surface)"
+            stroke={color} strokeWidth={1} strokeDasharray="1.5 1.5">
+            <title>{`${vnDayLabel(data[i].date)} · ${APPROX_DAY_HINT}`}</title>
+          </circle>
+        ))}
         {/* Last point dot */}
-        <circle cx={x(data.length - 1)} cy={y(today)} r={2.5} fill={color} />
+        <circle cx={x(data.length - 1)} cy={y(today)} r={2.5}
+          fill={data[data.length - 1]?.approximate ? 'var(--vg-surface)' : color} stroke={color} strokeWidth={1} />
         {/* X labels — first, mid, last */}
         {[0, Math.floor(data.length / 2), data.length - 1].map(i => (
           <text key={i} x={x(i)} y={H} textAnchor={i === 0 ? 'start' : i === data.length - 1 ? 'end' : 'middle'} fontSize={7} fill="var(--vg-fg-muted)">
-            {data[i]?.date?.slice(5) ?? ''}
+            {vnDayLabel(data[i]?.date)}
           </text>
         ))}
       </svg>
@@ -256,6 +269,7 @@ export function AdminHomePage() {
 
   // Derived metrics
   const downloadsToday = s?.stats.total_downloads_today ?? 0
+  const todayApprox    = s?.stats.today?.approximate === true
   const totalUsers     = s?.stats.total_users ?? 0
   const signupsToday   = s?.signups.today ?? 0
   const totalJobs24h   = s?.analytics.summary?.total_jobs ?? 0
@@ -372,12 +386,12 @@ export function AdminHomePage() {
 
       {/* ── Key metrics row 1 ── */}
       <section>
-        <SectionTitle title="Hoạt động hôm nay" />
+        <SectionTitle title="Hoạt động hôm nay" hint={VN_TIME_HINT} />
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <MetricCard
             label="Lượt tải hôm nay"
             value={fmt(downloadsToday)}
-            sub={totalJobs24h > 0 ? `${fmt(totalJobs24h)} jobs ghi nhận` : undefined}
+            sub={todayApprox ? APPROX_DAY_HINT : totalJobs24h > 0 ? `${fmt(totalJobs24h)} jobs ghi nhận` : undefined}
             tone="blue"
             unavailable={bad('stats')}
             link="/vid-admin/analytics"

@@ -3,14 +3,19 @@ import { adminFetch } from '../utils/adminFetch'
 import { cn } from '../utils/cn'
 import { NO_TRAFFIC_HINT, safeRate } from '../utils/rate'
 import { coverageHint } from '../utils/coverage'
+import { APPROX_DAY_HINT, VN_TIME_HINT, vnDayLabel } from '../utils/vnTime'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface DailyStat {
+  /** Vietnam calendar date, YYYY-MM-DD */
   date: string
   total: number
   success: number
   failed: number
+  source?: string | null
+  /** True: not a whole VN day — the backend fell back to the UTC-day counter */
+  approximate?: boolean
 }
 
 interface PlatformStat {
@@ -68,12 +73,6 @@ function fmtRate(v: number | null) {
   return v === null ? '—' : `${v.toFixed(1)}%`
 }
 
-function shortDate(iso: string) {
-  // iso: "2026-06-30" → "6/30"
-  const parts = iso.split('-')
-  if (parts.length < 3) return iso
-  return `${parseInt(parts[1])}/${parseInt(parts[2])}`
-}
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -180,7 +179,7 @@ function TrendChart({ stats }: { stats: DailyStat[] }) {
               fontSize={8}
               fill="var(--vg-fg-muted)"
             >
-              {shortDate(s.date)}
+              {vnDayLabel(s.date)}
             </text>
           )
         })}
@@ -198,7 +197,7 @@ function TrendChart({ stats }: { stats: DailyStat[] }) {
           />
         ))}
 
-        {/* Dots */}
+        {/* Dots — an approximate day (UTC-day fallback) is hollow and dashed */}
         {series.map(({ name, getter, color }) =>
           stats.map((s, i) => (
             <circle
@@ -206,11 +205,12 @@ function TrendChart({ stats }: { stats: DailyStat[] }) {
               cx={xOf(i)}
               cy={yOf(getter(s))}
               r={3}
-              fill={color}
-              stroke="var(--vg-canvas)"
+              fill={s.approximate ? 'var(--vg-surface)' : color}
+              stroke={s.approximate ? color : 'var(--vg-canvas)'}
               strokeWidth={1.5}
+              strokeDasharray={s.approximate ? '2 1.5' : undefined}
             >
-              <title>{`${s.date} · ${name}: ${getter(s)}`}</title>
+              <title>{`${vnDayLabel(s.date)} · ${name}: ${getter(s)}${s.approximate ? ` · ${APPROX_DAY_HINT}` : ''}`}</title>
             </circle>
           ))
         )}
@@ -223,13 +223,19 @@ function TrendChart({ stats }: { stats: DailyStat[] }) {
       </svg>
 
       {/* Legend */}
-      <div className="mt-2 flex gap-5 px-2">
+      <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 px-2">
         {series.map(({ name, color }) => (
           <div key={name} className="flex items-center gap-1.5">
             <span className="inline-block h-2 w-6 rounded-full" style={{ background: color }} />
             <span className="text-[10px] text-fg-muted">{name}</span>
           </div>
         ))}
+        {stats.some(s => s.approximate) && (
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full border border-dashed border-fg-muted" />
+            <span className="text-[10px] text-fg-muted">{APPROX_DAY_HINT}</span>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -527,6 +533,7 @@ export function AnalyticsPage() {
       <div className="rounded-card border border-line bg-surface shadow-card p-5">
         <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">
           Daily Trend — {days}d
+          <span className="ml-1.5 font-sans font-normal normal-case tracking-normal opacity-70">({VN_TIME_HINT})</span>
         </h3>
         {loadingA && !analytics ? (
           <div className="h-48 animate-pulse rounded-card bg-surface-2" />

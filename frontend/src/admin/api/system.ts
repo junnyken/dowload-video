@@ -11,8 +11,22 @@ export interface OutcomeWindow {
   covered_since?: string | null
 }
 
+/** Which admin calendar day "today" is (Vietnam time) and how it was read. */
+export interface AdminDayMeta {
+  date?: string | null
+  timezone?: string
+  window_start?: string | null
+  window_end?: string | null
+  /** "hourly" = exact VN day; "utc_day" = approximated from the UTC day */
+  source?: string | null
+  approximate?: boolean
+}
+
 export interface StatsResponse {
+  /** Today = Vietnam calendar day (see `today`). */
   total_downloads_today?: number
+  timezone?: string
+  today?: AdminDayMeta
   /** Every attempt in the last 24h (outcome store) — same source as ErrorsResponse.summary_24h. */
   downloads_24h?: OutcomeWindow
   failed_24h?: number | null
@@ -29,13 +43,21 @@ export interface StatsResponse {
 }
 
 export interface DailyStatEntry {
+  /** Vietnam calendar date, YYYY-MM-DD */
   date: string
   total?: number
   success?: number
   failed?: number
+  source?: string | null
+  /** True: not a whole VN day — read from the UTC-day counter instead */
+  approximate?: boolean
+  window_start?: string | null
+  window_end?: string | null
 }
 
 export interface AnalyticsResponse {
+  timezone?: string
+  approximate_days?: string[]
   daily_stats?: DailyStatEntry[]
   summary?: {
     total_jobs?: number

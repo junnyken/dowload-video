@@ -1,3 +1,5 @@
+import { sameVnDay, vnDate, vnTime } from './vnTime'
+
 /**
  * The 24h admin numbers come from hourly counters that only exist since the
  * build that started writing them. The backend says so (partial /
@@ -16,9 +18,9 @@ export function coverageHint(c?: WindowCoverage | null): string | null {
   if (!c.covered_since) return 'Chưa có dữ liệu theo giờ'
   const d = new Date(c.covered_since)
   if (Number.isNaN(d.getTime())) return 'Dữ liệu theo giờ chưa đủ 24h'
-  const t = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-  const sameDay = d.toDateString() === new Date().toDateString()
-  return sameDay
+  // Times are Vietnam time, like every admin day.
+  const t = vnTime(d)
+  return sameVnDay(d, new Date())
     ? `Dữ liệu theo giờ mới có từ ${t}`
-    : `Dữ liệu theo giờ mới có từ ${t} ${d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`
+    : `Dữ liệu theo giờ mới có từ ${t} ${vnDate(d)}`
 }
