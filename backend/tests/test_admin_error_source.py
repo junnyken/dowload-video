@@ -39,7 +39,8 @@ def _rows_supabase(rows):
 
 
 def _seed_store():
-    """Oldest write first so the since-marker is the oldest hour."""
+    """Oldest write first: the oldest bucket is the writer's first (partial)
+    hour, so coverage starts one hour after it."""
     do.record("tiktok", True, now=_at(4))
     do.record("tiktok", False, "unsupported_url", now=_at(3))
     do.record("tiktok", False, "unsupported_url", now=_at(2))
@@ -66,12 +67,13 @@ def test_top_patterns_come_from_error_code_hash(rc):
 
 
 def test_partial_coverage_flag(rc):
-    _seed_store()                        # marker = 4h ago → hours 4..0 = 5 covered
+    _seed_store()                        # first bucket 4h ago (partial) → hours 3..0 = 4 covered
     w = do.window_summary(24, now=NOW)
-    assert w["partial"] is True and w["coverage_hours"] == 5
-    assert w["covered_since"] == _at(4).replace(minute=0).isoformat()
-    # a marker older than the window means every hour is covered
-    rc.set(do.HOURLY_SINCE_KEY, do.hour_str(NOW - timedelta(days=3)))
+    assert w["partial"] is True and w["coverage_hours"] == 4
+    assert w["covered_since"] == _at(3).replace(minute=0).isoformat()
+    assert w["total"] == 5               # the partial first hour is still counted
+    # a bucket older than the window means every hour is covered
+    do.record("tiktok", True, now=NOW - timedelta(days=3))
     w = do.window_summary(24, now=NOW)
     assert w["partial"] is False and w["coverage_hours"] == 24
 
@@ -83,14 +85,14 @@ def test_nothing_recorded_is_partial_zero_coverage_not_a_clean_zero(rc):
 
 
 def test_hours_older_than_the_window_are_not_counted(rc):
-    rc.set(do.HOURLY_SINCE_KEY, do.hour_str(NOW - timedelta(days=3)))
+    do.record("tiktok", True, now=NOW - timedelta(days=3))
     do.record("tiktok", False, "unsupported_url", now=_at(30))
     do.record("tiktok", False, "unsupported_url", now=_at(2))
     assert do.window_summary(24, now=NOW)["err"] == 1
 
 
 def test_uncovered_day_falls_back_to_jobs_but_known_day_and_covered_hours_do_not(rc):
-    # store covers 10-02 from 01:00 (marker); 10-01 has no counter hash at all
+    # store's first bucket is 10-02 01:00 (covered from 02:00); 10-01 has no counter hash at all
     do.record("tiktok", True, now=_at(4))          # 01:30
     do.record("tiktok", False, "unsupported_url", now=_at(0))
     rows = [
@@ -142,7 +144,9 @@ def test_errors_endpoint_reads_outcome_store_not_download_jobs(app, rc, admin, m
     assert pats["unsupported_url"]["count"] == 9
     assert pats["unsupported_url"]["pattern"] == "URL này không được hỗ trợ."   # existing Vietnamese copy
     assert body["outcome_source"].startswith("redis")
-    assert body["partial"] is True and body["coverage_hours"] >= 1 and body["covered_since"]
+    # only the current hour has a bucket: it is the writer's first (partial)
+    # hour, so it is counted but not claimed as covered
+    assert body["partial"] is True and body["coverage_hours"] == 0 and body["covered_since"]
 
 
 def test_errors_and_stats_agree_for_the_same_window(app, rc, admin):

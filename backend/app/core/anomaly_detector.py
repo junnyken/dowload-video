@@ -102,6 +102,9 @@ def _now_iso() -> str:
 
 
 def _today_str() -> str:
+    # UTC day on purpose: it must match the write-side day hash key
+    # vidgrab:stats:{UTC date}. Only the admin DISPLAY uses Vietnam-time days
+    # (download_outcomes.admin_day_window); detection is not moved.
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 

@@ -115,7 +115,24 @@ def _fail_extractor(routes, monkeypatch, msg=TIKTOK_404):
 
 
 def _today():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    """The UTC date the day hash is keyed on (follows a pinned do._now)."""
+    return do._now().strftime("%Y-%m-%d")
+
+
+# Admin views use the Vietnam-time day; pin "now" so these tests do not depend
+# on the hour they run at (05:30Z = 12:30 in Vietnam: same date in both).
+FIXED_NOW = datetime(2026, 10, 3, 5, 30, tzinfo=timezone.utc)
+
+
+@pytest.fixture
+def fixed_now(monkeypatch):
+    monkeypatch.setattr(do, "_now", lambda: FIXED_NOW)
+    return FIXED_NOW
+
+
+def _writer_running_since(rc, dt):
+    """An hourly bucket at `dt`: the hourly writer was live from then on."""
+    rc.hset(do.HOUR_KEY_TPL.format(hour=do.hour_str(dt)), "tiktok:ok", 0)
 
 
 def _post(app, url, ip="198.51.100.7"):
@@ -301,21 +318,24 @@ def _seed(now=None):
     do.record("instagram", False, "temporary_blocked", now=now)
 
 
-def test_admin_analytics_counts_fetch_link_outcomes(app, rc, admin):
+def test_admin_analytics_counts_fetch_link_outcomes(app, rc, admin, fixed_now):
+    _writer_running_since(rc, fixed_now - timedelta(days=3))
     _seed()
     body = app.get("/api/v1/admin/analytics?days=1").json()
     assert body["summary"]["total_jobs"] == 5
     assert body["summary"]["total_success"] == 3
     assert body["summary"]["total_failed"] == 2
     assert body["summary"]["success_rate"] == 60.0
-    assert body["daily_stats"][-1]["date"] == _today()      # days=1 is TODAY
-    assert body["daily_stats"][-1]["source"] == "live"
+    assert body["daily_stats"][-1]["date"] == "2026-10-03"   # days=1 is TODAY (VN)
+    assert body["daily_stats"][-1]["source"] == "hourly"
+    assert body["daily_stats"][-1]["approximate"] is False
+    assert body["timezone"] == "Asia/Ho_Chi_Minh"
     tt = next(p for p in body["platform_stats"] if p["key"] == "tiktok")
     assert tt["count"] == 4 and tt["platform"] == "TikTok"
     assert body["top_errors"][0]["error_code"] in ("video_unavailable", "temporary_blocked")
 
 
-def test_admin_analytics_route_to_counters_end_to_end(app, route, rc, admin, sync_outcomes, monkeypatch):
+def test_admin_analytics_route_to_counters_end_to_end(app, route, rc, admin, sync_outcomes, monkeypatch, fixed_now):
     _ok_extractor(route, monkeypatch)
     assert _post(app, "https://www.tiktok.com/@x/video/1").status_code == 200
     _fail_extractor(route, monkeypatch)
@@ -324,7 +344,7 @@ def test_admin_analytics_route_to_counters_end_to_end(app, route, rc, admin, syn
     assert (s["total_jobs"], s["total_success"], s["total_failed"]) == (2, 1, 1)
 
 
-def test_admin_analytics_success_rate_null_with_no_attempts(app, rc, admin):
+def test_admin_analytics_success_rate_null_with_no_attempts(app, rc, admin, fixed_now):
     rc.hset(f"vidgrab:stats:{_today()}", "placeholder", "0")   # day exists, no attempts
     body = app.get("/api/v1/admin/analytics?days=1").json()
     assert body["summary"]["total_jobs"] == 0
@@ -332,7 +352,8 @@ def test_admin_analytics_success_rate_null_with_no_attempts(app, rc, admin):
     assert body["daily_stats"][-1]["success_rate"] is None
 
 
-def test_admin_stats_today_and_24h(app, rc, admin):
+def test_admin_stats_today_and_24h(app, rc, admin, fixed_now):
+    _writer_running_since(rc, fixed_now - timedelta(days=3))
     _seed()
     body = app.get("/api/v1/admin/stats").json()
     assert body["total_downloads_today"] == 3
@@ -344,6 +365,10 @@ def test_admin_stats_today_and_24h(app, rc, admin):
     assert plats["tiktok"]["total"] == 4
     codes = {e["error_code"]: e["count"] for e in body["top_errors_today"]}
     assert codes == {"video_unavailable": 1, "temporary_blocked": 1}
+    assert body["timezone"] == "Asia/Ho_Chi_Minh"
+    assert body["today"]["date"] == "2026-10-03" and body["today"]["approximate"] is False
+    assert body["today"]["window_start"] == "2026-10-02T17:00:00+00:00"
+    assert body["today"]["window_end"] == "2026-10-03T17:00:00+00:00"
 
 
 def test_admin_stats_nulls_when_counters_unreachable(app, admin, monkeypatch):
@@ -354,7 +379,7 @@ def test_admin_stats_nulls_when_counters_unreachable(app, admin, monkeypatch):
     assert body["failed_24h"] is None
 
 
-def test_platform_stats_success_rate_null_when_zero(app, rc, admin):
+def test_platform_stats_success_rate_null_when_zero(app, rc, admin, fixed_now):
     rc.hset(f"vidgrab:stats:{_today()}", mapping={"tiktok:ok": "0", "tiktok:err": "0"})
     totals = app.get("/api/v1/admin/platform-stats?days=1").json()["totals"]
     assert totals[0]["success_rate"] is None
@@ -374,11 +399,12 @@ def test_platforms_health_last_success_from_counters(app, rc, admin, monkeypatch
     assert rows["reddit"]["lastSuccessAt"] == "never"
 
 
-def test_older_days_fall_back_to_download_jobs_without_double_count(app, rc, admin, monkeypatch):
+def test_older_days_fall_back_to_download_jobs_without_double_count(app, rc, admin, monkeypatch, fixed_now):
     """A day with a counter hash reads only Redis; a day without one reads only
-    download_jobs — the same attempt can never be counted from both."""
+    download_jobs — the same attempt can never be counted from both. (No
+    hourly coverage before this hour, so both days are UTC-day approximations.)"""
     today = _today()
-    yday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+    yday = (fixed_now - timedelta(days=1)).strftime("%Y-%m-%d")
     do.record("tiktok", True)
 
     class _Rows(_FakeSupabase):
@@ -400,7 +426,8 @@ def test_older_days_fall_back_to_download_jobs_without_double_count(app, rc, adm
     monkeypatch.setattr(admin, "get_supabase_client", lambda: _Rows())
     body = app.get("/api/v1/admin/analytics?days=2").json()
     by_day = {d["date"]: d for d in body["daily_stats"]}
-    assert by_day[today]["source"] == "live" and by_day[today]["total"] == 1
+    assert by_day[today]["source"] == "utc_day" and by_day[today]["total"] == 1
+    assert by_day[today]["approximate"] is True and by_day[yday]["approximate"] is True
     assert by_day[yday]["source"] == "jobs_table"
     assert (by_day[yday]["success"], by_day[yday]["failed"]) == (1, 1)
     assert body["summary"]["total_jobs"] == 3

@@ -216,6 +216,9 @@ def _get_usage(user_id: str) -> Dict[str, Any]:
 # ── Anonymous quota (Redis, IP-based) ────────────────────────────────
 
 def _anon_quota_key(ip: str, bucket: str = QUOTA_BUCKET_STANDARD) -> str:
+    # Quota days stay UTC: the admin's Vietnam-time "today" is a display
+    # concern only (download_outcomes.admin_day_window), and moving a running
+    # quota boundary would reset/extend users' limits mid-day.
     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     if bucket == QUOTA_BUCKET_CHEAP:
         return f"vidgrab:quota:anon_cheap:{ip}:{date}"

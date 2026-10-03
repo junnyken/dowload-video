@@ -19,21 +19,35 @@ read it too, and the two views can no longer disagree.
 This module adds three siblings to it, written in the same pipeline:
 
   vidgrab:stats_hourly:{YYYY-MM-DDTHH}  hash  {platform}:ok / {platform}:err
-        hour buckets for "last 24h" / "last 1h" windows        TTL 50h
+        hour buckets (UTC hours) for "last 24h" / "last 1h" windows and
+        for the admin's Vietnam-time calendar days              TTL 35d
   vidgrab:errcodes:{YYYY-MM-DD}         hash  {platform}|{error_code} → count
         classified failure reasons for "top errors"            TTL 35d
   vidgrab:errcodes_hourly:{YYYY-MM-DDTHH} hash {platform}|{error_code} → count
         the same codes per hour, so "errors in the last 24h" can be
-        broken down without borrowing whole days                TTL 50h
+        broken down without borrowing whole days                TTL 35d
   vidgrab:stats_hourly:since            string  first hour the two hourly
-        families above were written together (set once, NX). Hourly data
-        does not exist before it, which the 24h window reports as partial.
+        families above were written together (set once, NX). Still written,
+        but coverage is no longer read from it: see ``hourly_coverage``.
   p27a:ts:{platform}:success / :failure string ISO timestamp
         last success / failure (same key obs_recorder writes)  TTL 90d
 
 The day hash TTL is raised from 8 to 35 days so the 30-day analytics view has
 data. The anomaly detector only ever reads the last 7 days, so a longer TTL
 does not change its behaviour.
+
+The hourly TTLs were 50h; they are 35 days so the admin can build every day of
+its 30-day view from whole Vietnam-time days (see ``admin_day_window``). Cost:
+at most 35×24 = 840 live keys per hourly family, each holding one field per
+platform (≈ 2×12 counter fields, plus one per platform|error_code pair in the
+error-code family) — well under 1 MB of Redis in total.
+
+Day boundaries. The write-side day hash ``vidgrab:stats:{date}`` keeps its
+UTC-day meaning: user quotas, the anomaly detector's day comparisons and
+billing are not admin views and are not touched here. Only the admin read
+helpers below (``admin_day_window`` / ``read_admin_days``) use the admin's
+calendar day (ADMIN_TIMEZONE, default Asia/Ho_Chi_Minh), summed from hourly
+buckets.
 
 No URL, user id or IP is stored — only platform, outcome and a short error
 code, so nothing here needs redaction.
@@ -48,11 +62,14 @@ callers that are already off the request path (Celery workers).
 from __future__ import annotations
 
 import logging
+import os
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
+from functools import lru_cache
 from typing import Dict, Iterable, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 log = logging.getLogger(__name__)
 
@@ -64,7 +81,9 @@ ERRCODE_HOUR_KEY_TPL = "vidgrab:errcodes_hourly:{hour}"
 HOURLY_SINCE_KEY = "vidgrab:stats_hourly:since"
 
 DAY_TTL = 35 * 86400
-HOUR_TTL = 50 * 3600
+# 35 days, not 50h: the admin's 30-day view is built from VN-time days summed
+# from hourly buckets, which therefore must outlive the 30 days (+7h offset).
+HOUR_TTL = 35 * 86400
 LAST_TS_TTL = 90 * 86400
 SINCE_TTL = 400 * 86400
 
@@ -353,16 +372,18 @@ def _fold_top(codes: Dict[Tuple[str, str], int], limit: int) -> List[dict]:
 
 def window_summary(hours: int = 24, *, now: Optional[datetime] = None,
                    jobs_loader=None, fallback_when_redis_down: bool = False,
-                   top_limit: int = 10) -> dict:
+                   top_limit: int = 10, coverage: Optional[dict] = None) -> dict:
     """The single source for every admin "last N hours" error / failure number.
 
     Reads the hourly buckets (counts) and hourly error-code buckets (reasons)
-    of the outcome store, so ``err`` always equals the sum of the error codes.
-    Hourly data only exists since HOURLY_SINCE_KEY (the first deploy that wrote
-    it); earlier hours are NOT silently counted as zero:
+    of the outcome store, so ``err`` always equals the sum of the error codes
+    (failures in an hour written before the error-code buckets existed are
+    reported under the code ``unclassified``). Hourly data only exists since
+    the first build that wrote it (see ``hourly_coverage``); earlier hours are
+    NOT silently counted as zero:
 
       * ``partial`` / ``coverage_hours`` / ``covered_since`` say how much of
-        the window the buckets cover;
+        the window the buckets cover (from the first COMPLETE hour);
       * for an uncovered hour whose UTC DAY has no counter hash at all, the
         ``jobs_loader`` (download_jobs) fills in — never for a day the store
         knows, so nothing is counted twice; ``sources`` lists what was used.
@@ -385,48 +406,43 @@ def window_summary(hours: int = 24, *, now: Optional[datetime] = None,
     }
     agg: Dict[str, Dict[str, int]] = {}
     codes: Dict[Tuple[str, str], int] = {}
-    since: Optional[datetime] = None
+    counted_from: Optional[datetime] = None   # first hour whose bucket is read
+    covered: Optional[datetime] = None        # first COMPLETE hour
     day_known: Dict[str, bool] = {}
     try:
+        cov = coverage if coverage is not None else hourly_coverage(now=now)
         rc = _redis()
         pipe = rc.pipeline(transaction=False)
-        pipe.get(HOURLY_SINCE_KEY)
         for h in keys:
             pipe.hgetall(HOUR_KEY_TPL.format(hour=h))
         for h in keys:
             pipe.hgetall(ERRCODE_HOUR_KEY_TPL.format(hour=h))
         res = pipe.execute()
-        marker = _parse_hour(_decode(res[0]) if res[0] else None)
-        counters = res[1:1 + hours]
-        errcodes = res[1 + hours:]
-        if marker is None:
-            # Only pre-marker data exists (older build): trust the first
-            # non-empty bucket, but there are no hourly error codes yet.
-            for h, raw in zip(keys, counters):
-                if raw:
-                    marker = _parse_hour(h)
-                    break
-        if marker is not None:
-            since = max(marker, first_hour)
+        counters = res[:hours]
+        errcodes = res[hours:]
+        if cov["first_bucket"] is not None:
+            counted_from = max(cov["first_bucket"], first_hour)
+            covered = max(cov["covered_since"], first_hour)
             for h, raw, craw in zip(keys, counters, errcodes):
-                if _parse_hour(h) < since:
+                if _parse_hour(h) < counted_from:
                     continue
-                merge(agg, _parse_okerr(raw))
-                for k, n in _parse_codes(craw).items():
-                    codes[k] = codes.get(k, 0) + n
+                per_plat = _parse_okerr(raw)
+                merge(agg, per_plat)
+                _add_codes_with_remainder(codes, per_plat, _parse_codes(craw))
             out["sources"].append("redis_hourly")
     except Exception as exc:
         log.debug("[download_outcomes] window_summary redis failed: %s", exc)
         out["redis_ok"] = False
-        agg, codes, since = {}, {}, None
+        agg, codes, counted_from, covered = {}, {}, None, None
         if not fallback_when_redis_down:
             return out
 
     cur_hour = _parse_hour(keys[-1])
-    if since is not None:
-        out["covered_since"] = since.isoformat()
-        out["coverage_hours"] = int((cur_hour - since).total_seconds() // 3600) + 1
+    if covered is not None:
+        out["covered_since"] = covered.isoformat()
+        out["coverage_hours"] = max(0, int((cur_hour - covered).total_seconds() // 3600) + 1)
     out["partial"] = out["coverage_hours"] < hours
+    since = counted_from
 
     # Uncovered hours: fill from download_jobs, only for UTC days the store has no hash for.
     gap_end = since if since is not None else cur_hour + timedelta(hours=1)
@@ -484,3 +500,226 @@ def window_summary(hours: int = 24, *, now: Optional[datetime] = None,
         "top_errors": _fold_top(codes, top_limit),
     })
     return out
+
+
+# ── Hourly coverage: derived from the buckets themselves ─────────────────────
+
+UNCLASSIFIED = "unclassified"
+COVERAGE_SCAN_HOURS = HOUR_TTL // 3600 + 1
+
+
+def _hour_floor(dt: datetime) -> datetime:
+    return dt.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+
+
+def hourly_coverage(*, now: Optional[datetime] = None) -> dict:
+    """Where the hourly buckets start: ``{first_bucket, covered_since}``.
+
+    Scans every hour the buckets can still be alive for (HOUR_TTL, bounded:
+    one pipelined EXISTS per hour) and takes the earliest one that exists.
+    That hour is the first the writer saw — normally the deploy hour, written
+    for only part of the hour — so it is read as data but coverage starts at
+    the NEXT hour, the first complete one. Hours after it with no bucket had
+    no traffic (the writer was running). Buckets expire oldest-first, so the
+    rule still holds once old hours fall off the TTL (it then under-claims by
+    one hour at the far edge, never over-claims).
+
+    The ``stats_hourly:since`` marker is not used: it was introduced after the
+    hourly buckets (live 2026-10-03: marker 01:00Z, buckets since ~14:00Z the
+    day before), and a marker cannot tell when the hours after it have expired.
+
+    Raises if Redis cannot be read (callers decide what unknown means).
+    """
+    now_hour = _hour_floor(now or _now())
+    hours = [now_hour - timedelta(hours=i) for i in range(COVERAGE_SCAN_HOURS - 1, -1, -1)]
+    pipe = _redis().pipeline(transaction=False)
+    for h in hours:
+        pipe.exists(HOUR_KEY_TPL.format(hour=hour_str(h)))
+    first = next((h for h, e in zip(hours, pipe.execute()) if e), None)
+    return {"first_bucket": first,
+            "covered_since": first + timedelta(hours=1) if first is not None else None}
+
+
+def _add_codes_with_remainder(codes: Dict[Tuple[str, str], int],
+                              per_plat: Dict[str, Dict[str, int]],
+                              hour_codes: Dict[Tuple[str, str], int]) -> None:
+    """Add one hour's error codes; failures the hour has no code for (written
+    before the error-code buckets existed) go to ``unclassified`` so the codes
+    always add up to the failures."""
+    coded: Dict[str, int] = {}
+    for (plat, code), n in hour_codes.items():
+        codes[(plat, code)] = codes.get((plat, code), 0) + n
+        coded[plat] = coded.get(plat, 0) + n
+    for plat, c in per_plat.items():
+        rest = c.get("err", 0) - coded.get(plat, 0)
+        if rest > 0:
+            codes[(plat, UNCLASSIFIED)] = codes.get((plat, UNCLASSIFIED), 0) + rest
+
+
+# ── Admin calendar days (Vietnam time) ───────────────────────────────────────
+#
+# ADMIN ONLY. User quotas / daily limits (quotas.py, entitlements.py,
+# yt_quota), the anomaly detector's day comparisons and billing keep their own
+# (UTC) days on purpose: they are enforcement / detection keys whose meaning
+# must not shift under running counters. Only what the admin DISPLAYS as
+# "today" / per-day uses the helpers below.
+
+ADMIN_TIMEZONE_DEFAULT = "Asia/Ho_Chi_Minh"
+
+
+def admin_tz_name() -> str:
+    return (os.getenv("ADMIN_TIMEZONE") or "").strip() or ADMIN_TIMEZONE_DEFAULT
+
+
+@lru_cache(maxsize=8)
+def _zone(name: str):
+    try:
+        return ZoneInfo(name)
+    except Exception as exc:
+        log.warning("[download_outcomes] ADMIN_TIMEZONE %r unusable (%s); using %s",
+                    name, exc, ADMIN_TIMEZONE_DEFAULT)
+        return ZoneInfo(ADMIN_TIMEZONE_DEFAULT)
+
+
+def admin_tz():
+    return _zone(admin_tz_name())
+
+
+def admin_today(now: Optional[datetime] = None) -> date:
+    """The admin's calendar date right now (aware datetimes only)."""
+    return (now or _now()).astimezone(admin_tz()).date()
+
+
+def admin_day_window(date_local: date) -> Tuple[datetime, datetime]:
+    """THE admin day boundary: (start_utc, end_utc), end exclusive, for one
+    calendar day in ADMIN_TIMEZONE. For Asia/Ho_Chi_Minh (UTC+7, no DST) the
+    day D is [D-1 17:00Z, D 17:00Z)."""
+    tz = admin_tz()
+    start = datetime.combine(date_local, time(0), tzinfo=tz)
+    end = datetime.combine(date_local + timedelta(days=1), time(0), tzinfo=tz)
+    return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
+
+
+def _hours_between(start: datetime, end: datetime) -> List[datetime]:
+    out, h = [], start
+    while h < end:
+        out.append(h)
+        h += timedelta(hours=1)
+    return out
+
+
+def _sub_okerr(base: Dict[str, Dict[str, int]], minus: Dict[str, Dict[str, int]]) -> Dict[str, Dict[str, int]]:
+    out = {p: dict(c) for p, c in base.items()}
+    for p, c in minus.items():
+        slot = out.setdefault(p, {"ok": 0, "err": 0})
+        slot["ok"] = max(0, slot["ok"] - c.get("ok", 0))
+        slot["err"] = max(0, slot["err"] - c.get("err", 0))
+    return out
+
+
+def read_admin_days(dates: Iterable[date], *, now: Optional[datetime] = None,
+                    coverage: Optional[dict] = None) -> dict:
+    """Per admin-calendar-day counts and error codes, oldest first.
+
+    A day is EXACT (``source="hourly"``) when the hourly buckets cover the
+    whole day: its 24 UTC hours (up to the current hour for today) are summed.
+    Any other day is APPROXIMATE (``source="utc_day"``, ``approximate=True``):
+    the UTC-day hash with the same date label is used, minus every hour that an
+    exact day in the same request already counts — so a multi-day sum is a sum
+    of disjoint intervals and nothing is counted twice. ``counted_start`` /
+    ``counted_end`` give the interval a day's numbers really cover. A day with
+    neither (``source=None``) is left to the caller (download_jobs) for that
+    same counted interval.
+
+    Raises if Redis cannot be read.
+    """
+    now = now or _now()
+    dates = sorted(set(dates))
+    cov = coverage if coverage is not None else hourly_coverage(now=now)
+    covered = cov["covered_since"]
+    now_hour = _hour_floor(now)
+
+    plan = []
+    exact_hours: set = set()
+    for d in dates:
+        start, end = admin_day_window(d)
+        aligned = start == _hour_floor(start) and end == _hour_floor(end)
+        exact = bool(covered is not None and aligned and start >= covered)
+        hours = _hours_between(start, min(end, now_hour + timedelta(hours=1))) if exact else []
+        exact_hours.update(hours)
+        plan.append((d, start, end, exact, hours))
+
+    rc = _redis()
+    pipe = rc.pipeline(transaction=False)
+    reads: List[Tuple[str, object]] = []
+    for d, start, end, exact, hours in plan:
+        if exact:
+            for h in hours:
+                pipe.hgetall(HOUR_KEY_TPL.format(hour=hour_str(h)))
+                pipe.hgetall(ERRCODE_HOUR_KEY_TPL.format(hour=hour_str(h)))
+            continue
+        ds = d.isoformat()
+        pipe.hgetall(DAY_KEY_TPL.format(date=ds))
+        pipe.hgetall(ERRCODE_KEY_TPL.format(date=ds))
+        utc_start = datetime.combine(d, time(0), tzinfo=timezone.utc)
+        overlap = [h for h in _hours_between(utc_start, utc_start + timedelta(days=1))
+                   if h in exact_hours]
+        for h in overlap:
+            pipe.hgetall(HOUR_KEY_TPL.format(hour=hour_str(h)))
+            pipe.hgetall(ERRCODE_HOUR_KEY_TPL.format(hour=hour_str(h)))
+    res = iter(pipe.execute())
+
+    days = []
+    for d, start, end, exact, hours in plan:
+        row = {
+            "date": d.isoformat(),
+            "window_start": start.isoformat(), "window_end": end.isoformat(),
+            "source": None, "approximate": not exact,
+            "counted_start": None, "counted_end": None,
+            "per_platform": {}, "codes": {},
+        }
+        if exact:
+            per: Dict[str, Dict[str, int]] = {}
+            codes: Dict[Tuple[str, str], int] = {}
+            for _h in hours:
+                hp = _parse_okerr(next(res))
+                merge(per, hp)
+                _add_codes_with_remainder(codes, hp, _parse_codes(next(res)))
+            row.update(source="hourly", per_platform=per, codes=codes,
+                       counted_start=start.isoformat(),
+                       counted_end=min(end, now).isoformat())
+        else:
+            day_raw = next(res)
+            day_codes = _parse_codes(next(res))
+            utc_start = datetime.combine(d, time(0), tzinfo=timezone.utc)
+            utc_end = utc_start + timedelta(days=1)
+            overlap = [h for h in _hours_between(utc_start, utc_end) if h in exact_hours]
+            minus: Dict[str, Dict[str, int]] = {}
+            minus_codes: Dict[Tuple[str, str], int] = {}
+            for _h in overlap:
+                hp = _parse_okerr(next(res))
+                merge(minus, hp)
+                for k, n in _parse_codes(next(res)).items():
+                    minus_codes[k] = minus_codes.get(k, 0) + n
+            # exact days are always the most recent ones, so the overlap is a
+            # tail of the UTC day: what is left is [00:00Z, first overlap hour)
+            cut = min(overlap) if overlap else utc_end
+            row["counted_start"] = utc_start.isoformat()
+            row["counted_end"] = min(cut, now).isoformat()
+            if day_raw:
+                row["source"] = "utc_day"
+                row["per_platform"] = _sub_okerr(_parse_okerr(day_raw), minus)
+                row["codes"] = {k: max(0, n - minus_codes.get(k, 0)) for k, n in day_codes.items()
+                                if n - minus_codes.get(k, 0) > 0}
+        days.append(row)
+
+    return {
+        "timezone": admin_tz_name(),
+        "covered_since": covered.isoformat() if covered is not None else None,
+        "days": days,
+    }
+
+
+def fold_codes(codes: Dict[Tuple[str, str], int], limit: int = 10) -> List[dict]:
+    """[{error_code, count, platforms}] most frequent first (public _fold_top)."""
+    return _fold_top(codes, limit)
