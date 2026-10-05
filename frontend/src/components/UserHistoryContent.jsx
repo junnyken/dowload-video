@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../lib/apiBase';
+import DesktopHistorySection from './DesktopHistorySection';
 
 const apiBase = API_BASE;
 const API = `${apiBase}/api/v1`;
@@ -375,6 +376,8 @@ export default function UserHistoryContent({ onNavigate }) {
           )}
         </div>
       )}
+
+      <DesktopHistorySection session={session} />
     </div>
   );
 }

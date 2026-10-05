@@ -476,6 +476,10 @@ app.include_router(transcript_translate_api.router, prefix="/api/v1/transcript-t
 # Transcript ASR — auto-generate subtitles from a downloaded video's audio
 from app.api import transcript_asr as transcript_asr_api
 app.include_router(transcript_asr_api.router, prefix="/api/v1/transcript-asr", tags=["Transcript ASR"])
+
+# VidGrab Desktop C1 — history sync + version (behind CLIENT_API_ENABLED)
+from app.api import client_api as client_api_mod
+app.include_router(client_api_mod.router, prefix="/api/v1", tags=["Desktop Client"])
 from app.api.admin_asr import router as admin_asr_router
 app.include_router(admin_asr_router, prefix="/api/v1/admin", tags=["Admin ASR"])
 
