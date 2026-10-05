@@ -290,6 +290,10 @@ def test_schedule_drift_count_reads_the_list(app, rc, as_admin):
 
 
 def test_fallback_summary_success_rate_null_without_attempts(app, rc, as_admin):
-    rc.hset(f"vidgrab:stats:{_today()}", mapping={"tiktok:ok": 0, "tiktok:err": 0})
+    # ops-health reads the ADMIN calendar day (Vietnam time); with no hourly
+    # buckets it falls back to the day hash carrying that day's label. Seeding
+    # the UTC label instead failed every night 00:00-07:00 Vietnam time.
+    from app.core import download_outcomes as do
+    rc.hset(f"vidgrab:stats:{do.admin_today().isoformat()}", mapping={"tiktok:ok": 0, "tiktok:err": 0})
     body = app.get("/api/v1/admin/ops-health").json()
     assert body["fallback_summary"]["tiktok"]["success_rate"] is None
