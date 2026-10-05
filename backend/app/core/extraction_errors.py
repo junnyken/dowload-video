@@ -76,6 +76,38 @@ _UPSTREAM = ("http error 5", "service unavailable", "bad gateway", "connection r
              "typeerror", "attributeerror")
 
 
+# Codes our own (non-yt-dlp) extractors raise. Such an exception carries
+# `.error_code`, and its text ends in "(Lý do kỹ thuật: <code>)" so the code
+# survives paths that keep only the string (Celery). Checked before any
+# keyword matching: these extractors already know what went wrong.
+_EXTRACTOR_CODE_STATUS: dict[str, int] = {
+    # Kuaishou (app.services.kuaishou_extractor) — our server cannot reach the
+    # site / is challenged: server-side, 5xx, never the user's link.
+    "kuaishou_geo_blocked":           503,
+    "kuaishou_proxy_error":           503,
+    "kuaishou_upstream_unreachable":  503,
+    "kuaishou_challenge_page":        503,
+    "kuaishou_too_many_redirects":    502,
+    "kuaishou_unsafe_address":        502,
+    "kuaishou_parse_failed":          502,
+    "kuaishou_media_url_rejected":    502,
+    "kuaishou_response_too_large":    502,
+    # The link itself.
+    "kuaishou_invalid_url":           400,
+    "kuaishou_redirect_rejected":     400,
+    "kuaishou_not_found":             404,
+    "kuaishou_unsupported_post_type": 422,
+}
+
+
+def _own_code(message: str, exc: Optional[BaseException]) -> Optional[str]:
+    code = getattr(exc, "error_code", None)
+    if isinstance(code, str) and code in _EXTRACTOR_CODE_STATUS:
+        return code
+    reason = _reason(message).strip()
+    return reason if reason in _EXTRACTOR_CODE_STATUS else None
+
+
 def _reason(msg: str) -> str:
     m = _REASON_RE.search(msg or "")
     return m.group(1) if m else (msg or "")
@@ -86,6 +118,9 @@ def classify_extraction_error(
 ) -> Tuple[int, str]:
     """Return (http_status, error_code) for an extraction failure. Never raises."""
     try:
+        own = _own_code(message, exc)
+        if own:
+            return _EXTRACTOR_CODE_STATUS[own], own
         if isinstance(exc, TimeoutError):
             return 504, "extraction_timeout"
         text = _reason(message).lower()
