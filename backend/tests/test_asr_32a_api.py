@@ -399,3 +399,54 @@ def test_selftest_bad_output_reports_raw_and_stays_counted(asr_env, admin):
     assert r.status_code == 502
     assert r.json()["error_code"] == "provider_bad_output" and r.json()["raw_output"] == "garbage"
     assert budget.snapshot()["spend_usd"] == pytest.approx(0.003)
+
+
+# ── GET /transcript-asr/quota ─────────────────────────────────────────────
+
+def test_quota_reads_usage_and_reset(asr_env, identity, monkeypatch):
+    _enable(monkeypatch)
+    asr_env.db.tables["transcript_asr_usage"] = [
+        {"user_id": "user-1", "usage_date": "2030-01-15", "minutes_used": 37.5},
+        {"user_id": "user-1", "usage_date": "2030-01-14", "minutes_used": 99},
+        {"user_id": "other", "usage_date": "2030-01-15", "minutes_used": 5},
+    ]
+    with patch("app.api.transcript_asr._get_db", return_value=asr_env.db):
+        r = client.get("/api/v1/transcript-asr/quota")
+    assert r.status_code == 200
+    assert r.json() == {
+        "enabled": True, "unavailable_reason": None, "minutes_used": 37.5,
+        "minutes_limit": 120, "per_job_max_minutes": 45,
+        "reset_at_utc": "2030-01-16T00:00:00+00:00",
+    }
+
+
+def test_quota_no_row_today_is_true_zero(asr_env, identity, monkeypatch):
+    _enable(monkeypatch)
+    with patch("app.api.transcript_asr._get_db", return_value=asr_env.db):
+        assert client.get("/api/v1/transcript-asr/quota").json()["minutes_used"] == 0.0
+
+
+def test_quota_unreadable_usage_is_null_not_zero(asr_env, identity, monkeypatch):
+    _enable(monkeypatch)
+    asr_env.db.fail_on[("transcript_asr_usage", "select")] = True
+    with patch("app.api.transcript_asr._get_db", return_value=asr_env.db):
+        body = client.get("/api/v1/transcript-asr/quota").json()
+    assert body["minutes_used"] is None and body["enabled"] is True
+
+
+def test_quota_flag_off_and_killswitch_disable(asr_env, identity, monkeypatch):
+    with patch("app.api.transcript_asr._get_db", return_value=asr_env.db):
+        off = client.get("/api/v1/transcript-asr/quota").json()
+        assert (off["enabled"], off["unavailable_reason"]) == (False, "asr_disabled")
+        _enable(monkeypatch)
+        budget.set_killswitch(True)
+        paused = client.get("/api/v1/transcript-asr/quota").json()
+        assert (paused["enabled"], paused["unavailable_reason"]) == (False, "asr_paused")
+
+
+def test_quota_redis_down_fails_closed(asr_env, identity, monkeypatch):
+    _enable(monkeypatch)
+    monkeypatch.setattr(budget, "_r", lambda: (_ for _ in ()).throw(RuntimeError("redis down")))
+    with patch("app.api.transcript_asr._get_db", return_value=asr_env.db):
+        body = client.get("/api/v1/transcript-asr/quota").json()
+    assert (body["enabled"], body["unavailable_reason"]) == (False, "budget_unavailable")

@@ -4,6 +4,7 @@ Transcript ASR API
 Routes:
   POST   /transcript-asr/jobs                    — create an ASR job from an already-downloaded video
   GET    /transcript-asr/jobs                     — list jobs for resolved identity
+  GET    /transcript-asr/quota                    — remaining daily minutes + whether creating is currently possible
   GET    /transcript-asr/jobs/{job_id}/download    — ?format=srt|vtt|txt|json (default srt)
   POST   /transcript-asr/jobs/{job_id}/translate   — chain into transcript-translate (creates a translation job from this ASR result)
   DELETE /transcript-asr/jobs/{job_id}             — remove job + result file (never the source video);
@@ -297,6 +298,61 @@ async def _create_asr_job(payload: CreateAsrJobRequest, identity, quota_subject)
         "progress_pct": 0,
         "error": None,
         "error_code": None,
+    }
+
+
+@router.get("/quota")
+async def get_asr_quota(
+    identity: str | None = Depends(resolve_identity),
+    quota_subject: str | None = Depends(resolve_quota_subject),
+):
+    """What the UI needs to decide whether to offer the create button.
+
+    ``enabled`` is False when ASR_ENABLED is off OR the admin kill switch is on
+    OR the kill switch cannot be read (POST /jobs fails closed in that case, so
+    offering the button would only lead to an error); ``unavailable_reason``
+    says which. ``minutes_used`` is read straight from transcript_asr_usage
+    (the table reserve_transcript_asr_usage writes) with a plain select — no new
+    RPC. It is ``null`` when the row cannot be read, never a guessed 0.
+    """
+    from datetime import timedelta  # noqa: PLC0415
+
+    now = asr_budget.utcnow()
+    enabled = asr_config.asr_enabled()
+    reason: str | None = None if enabled else "asr_disabled"
+    if enabled:
+        try:
+            if asr_budget.killswitch_on():
+                enabled, reason = False, "asr_paused"
+        except Exception as exc:  # noqa: BLE001 — fail closed, same as POST /jobs
+            logger.warning("asr quota: kill switch unreadable: %s", exc)
+            enabled, reason = False, "budget_unavailable"
+
+    minutes_used: float | None = None
+    quota_key = quota_subject or identity
+    if quota_key:
+        try:
+            resp = (
+                _get_db().table("transcript_asr_usage")
+                .select("minutes_used")
+                .eq("user_id", quota_key)
+                .eq("usage_date", now.date().isoformat())
+                .execute()
+            )
+            rows = resp.data or []
+            # No row yet today = nothing reserved yet = a true 0.
+            minutes_used = round(float(rows[0].get("minutes_used") or 0), 2) if rows else 0.0
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("asr quota: usage unreadable for %s: %s", quota_key, exc)
+
+    reset_at = (now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1))
+    return {
+        "enabled": enabled,
+        "unavailable_reason": reason,
+        "minutes_used": minutes_used,
+        "minutes_limit": _DAILY_MINUTES_LIMIT,
+        "per_job_max_minutes": _MAX_DURATION_MINUTES,
+        "reset_at_utc": reset_at.isoformat(),
     }
 
 
