@@ -106,8 +106,18 @@ export function CookieActionsMenu({ cookie, onAction }: CookieActionsMenuProps) 
   const isHardBlocked = cookie.status === 'hard_blocked'
   const isDisabled    = cookie.status === 'disabled'
   const isExpired     = cookie.status === 'expired'
-  const isUntested    = cookie.status === 'untested'
-  const canTest       = !isExpired && !isDisabled
+  // Expired-by-date cookies CAN be re-tested: the date is the cookie's own
+  // claim and the platform may still accept it. Disabled ones stay as the
+  // admin left them; unsupported platforms have no real test to run.
+  const supported     = cookie.testSupported !== false
+  const canTest       = !isDisabled && supported
+  const testDesc      = isDisabled
+    ? 'Đang tắt — hãy bật lại trước'
+    : !supported
+      ? 'Chưa hỗ trợ kiểm tra thật cho nền tảng này'
+      : isExpired
+        ? 'Hạn trong cookie đã qua — hỏi nền tảng xem còn dùng được không'
+        : 'Hỏi nền tảng xem cookie còn dùng được không'
 
   const dropdown = open ? (
     <div
@@ -118,8 +128,8 @@ export function CookieActionsMenu({ cookie, onAction }: CookieActionsMenuProps) 
     >
           {/* Test */}
           <MenuItem
-            label={isUntested ? 'Verify Cookie' : 'Test Cookie'}
-            description="Run a probe request now"
+            label="Kiểm tra lại"
+            description={testDesc}
             iconPath="M13 10V3L4 14h7v7l9-11h-7z"
             onClick={() => act('test')}
             disabled={!canTest}
@@ -164,7 +174,8 @@ export function CookieActionsMenu({ cookie, onAction }: CookieActionsMenuProps) 
           {/* Enable / Disable toggle */}
           {isDisabled ? (
             <MenuItem
-              label="Re-enable Cookie"
+              label="Bật lại"
+              description="Cho cookie vào kho dùng lại"
               iconPath="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
               onClick={() => act('enable')}
             />

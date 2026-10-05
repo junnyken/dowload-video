@@ -5,6 +5,34 @@ import { TableSkeleton } from '../../shared/LoadingSkeleton'
 import type { CookieItem, CookieAction } from './cookie.types'
 import { CookieHealthBadge, CookieStatusPill } from './CookieHealthBadge'
 import { CookieActionsMenu } from './CookieActionsMenu'
+import { describeLifetime, formatAddedDate, formatStamp } from './cookieLifetime'
+import type { LiveTest } from './cookie.types'
+
+const LIVE_STYLE: Record<LiveTest['state'], { text: string; label: string }> = {
+  queued:           { text: 'text-fg-muted', label: 'Đang chờ đến lượt' },
+  running:          { text: 'text-fg-2',     label: 'Đang kiểm tra…' },
+  ok:               { text: 'text-success',  label: 'Còn dùng được' },
+  rejected:         { text: 'text-danger',   label: 'Bị từ chối' },
+  inconclusive:     { text: 'text-warning',  label: 'Chưa kết luận' },
+  unsupported:      { text: 'text-fg-muted', label: 'Chưa hỗ trợ kiểm tra' },
+  skipped_disabled: { text: 'text-fg-muted', label: 'Đang tắt, bỏ qua' },
+  rate_limited:     { text: 'text-warning',  label: 'Chờ giãn cách' },
+  error:            { text: 'text-danger',   label: 'Lỗi khi kiểm tra' },
+}
+
+function LiveTestCell({ test }: { test?: LiveTest }) {
+  if (!test) return <span className="text-[11px] text-fg-muted">Chưa kiểm tra</span>
+  const st = LIVE_STYLE[test.state]
+  return (
+    <div className="max-w-[220px]" data-testid="live-test">
+      <p className={cn('text-[11px] font-medium', st.text)}>{st.label}</p>
+      {test.message && test.state !== 'ok' && (
+        <p className="text-[10px] leading-snug text-fg-muted">{test.message}</p>
+      )}
+      {test.at ? <p className="font-mono text-[10px] text-fg-muted">{formatStamp(test.at)}</p> : null}
+    </div>
+  )
+}
 
 // ─── Platform abbreviation badge (local, no cross-panel dep) ──────────────────
 
@@ -82,7 +110,8 @@ const COLS = [
   { key: 'lastFailAt',    label: 'Last Fail',        w: 'min-w-[100px]' },
   { key: 'failCount',     label: 'Fail Count',       w: 'min-w-[80px]'  },
   { key: 'cooldown',      label: 'Cooldown',         w: 'min-w-[100px]' },
-  { key: 'expiry',        label: 'Expiry Est.',      w: 'min-w-[100px]' },
+  { key: 'expiry',        label: 'Hạn · ngày thêm',  w: 'min-w-[170px]' },
+  { key: 'livetest',      label: 'Kiểm tra thật',    w: 'min-w-[190px]' },
   { key: 'actions',       label: '',                 w: 'w-10'          },
 ]
 
@@ -148,8 +177,9 @@ export function CookieTable({
   }
 
   return (
+    <>
     <div className="overflow-x-auto">
-      <table className="min-w-[1080px] w-full text-sm">
+      <table className="min-w-[1280px] w-full text-sm">
         {/* Sticky header */}
         <thead className="sticky top-0 z-10 bg-surface-2">
           <tr className="border-y border-line">
@@ -239,22 +269,34 @@ export function CookieTable({
                   <CooldownCell secs={cookie.cooldownRemainingSec} status={cookie.status} />
                 </td>
 
-                {/* Expiry Estimate */}
+                {/* Hạn · ngày thêm */}
                 <td className="py-2.5 pr-3">
-                  <span
-                    className={cn(
-                      'font-mono text-[11px]',
-                      cookie.expiryEstimate === 'Expired'
-                        ? 'text-danger'
-                        : cookie.expiryEstimate === 'Unknown'
-                          ? 'text-fg-muted'
-                          : cookie.expiryEstimate.startsWith('~1') || cookie.expiryEstimate.startsWith('~2')
-                            ? 'text-warning'
-                            : 'text-fg-muted',
-                    )}
-                  >
-                    {cookie.expiryEstimate}
-                  </span>
+                  {(() => {
+                    const life = describeLifetime(cookie.expiresAt, Math.floor(Date.now() / 1000))
+                    const added = formatAddedDate(cookie.addedAt)
+                    return (
+                      <div>
+                        <p
+                          className={cn(
+                            'text-[11px] font-medium',
+                            life.tone === 'past' ? 'text-danger'
+                              : life.tone === 'soon' ? 'text-warning'
+                                : life.tone === 'ok' ? 'text-fg-2' : 'text-fg-muted',
+                          )}
+                        >
+                          {life.text}
+                        </p>
+                        <p className="text-[10px] text-fg-muted">
+                          {added ? `Thêm ngày ${added}` : 'Không rõ ngày thêm'}
+                        </p>
+                      </div>
+                    )
+                  })()}
+                </td>
+
+                {/* Kiểm tra thật */}
+                <td className="py-2.5 pr-3">
+                  <LiveTestCell test={cookie.liveTest} />
                 </td>
 
                 {/* Actions */}
@@ -270,5 +312,10 @@ export function CookieTable({
         </tbody>
       </table>
     </div>
+    <p className="border-t border-line px-4 py-2 text-[11px] text-fg-muted">
+      Hạn dùng là hạn do chính cookie tự khai; nền tảng có thể vô hiệu hoá sớm hơn
+      hoặc gia hạn phiên lâu hơn. Dùng &quot;Kiểm tra lại&quot; để hỏi thẳng nền tảng.
+    </p>
+    </>
   )
 }

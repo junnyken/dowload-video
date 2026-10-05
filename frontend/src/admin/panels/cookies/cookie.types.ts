@@ -24,6 +24,27 @@ export interface CookieItem {
   failCount: number
   cooldownRemainingSec: number  // 0 when not in cooldown
   expiryEstimate: string        // e.g. "~8 months" | "Expired" | "Unknown"
+  /** Pool hash (never the cookie value) — the key for live re-tests. */
+  hash?: string
+  /** The cookie's own claimed expiry, unix seconds; 0 = session cookie. */
+  expiresAt?: number
+  /** When it was added to the pool, unix seconds; 0/undefined = unknown. */
+  addedAt?: number
+  /** Whether the platform has a real live test (otherwise "unsupported"). */
+  testSupported?: boolean
+  /** Latest live-test outcome for this row (running, or a stored result). */
+  liveTest?: LiveTest
+}
+
+export type LiveTestState =
+  | 'queued' | 'running' | 'ok' | 'rejected' | 'inconclusive'
+  | 'unsupported' | 'skipped_disabled' | 'rate_limited' | 'error'
+
+export interface LiveTest {
+  state: LiveTestState
+  message?: string
+  /** unix seconds of the test, when known */
+  at?: number
 }
 
 // ─── Summary ───────────────────────────────────────────────────────────────────
