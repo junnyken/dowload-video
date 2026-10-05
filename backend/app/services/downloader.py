@@ -1523,6 +1523,16 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     _prog_key = f"dl_progress:{progress_token}" if progress_token else ""
     _progress_hook = _make_progress_hook(_prog_key) if _prog_key else None
 
+    # ── Kuaishou: OFF unless KUAISHOU_ENABLED (scaffold, UNVERIFIED) ─────
+    # With the flag off this branch is skipped and Kuaishou links take the
+    # generic yt-dlp path below exactly as before. When on, failures raise a
+    # classified KuaishouError (e.g. kuaishou_geo_blocked → 503) and never
+    # fall back to yt-dlp's generic extractor. See docs/KUAISHOU.md.
+    from app.services.kuaishou_extractor import should_handle as _ks_should_handle
+    if _ks_should_handle(original_input_url):
+        from app.services.kuaishou_extractor import extract_kuaishou_download_info
+        return extract_kuaishou_download_info(original_input_url.strip(), quality)
+
     # ── Douyin: Bypass yt-dlp entirely ─────────────────────────
     # yt-dlp cannot handle Douyin's anti-bot (JS VM + captcha).
     # Route through Apify (cloud) when token available, else multi-provider extractor.

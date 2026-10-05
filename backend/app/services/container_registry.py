@@ -409,6 +409,34 @@ _reg(_cap("podcast_rss", "podcast_feed", SupportLevel.full,
 ))
 
 
+# ── Kuaishou (flag-gated, see _active()) ─────────────────────────────────────
+# Kept OUT of _REGISTRY: while KUAISHOU_ENABLED is off no capability endpoint
+# may list or describe it. Experimental + proxy_required: nothing is verified
+# against the live site yet (docs/KUAISHOU.md).
+
+_FLAGGED: dict[tuple[str, str], CapabilityDescriptor] = {}
+for _ks_st in ("single_video", "single_post"):
+    _FLAGGED[("kuaishou", _ks_st)] = _cap("kuaishou", _ks_st, SupportLevel.experimental,
+        [ActionType.queue_video, ActionType.open_single_download],
+        _PROXY,
+        [_w(WarningCode.extraction_unstable,
+            "Kuaishou đang thử nghiệm, chưa được kiểm chứng với trang thật."),
+         _w(WarningCode.proxy_required,
+            "Kuaishou chỉ trả lời truy cập từ Trung Quốc; máy chủ cần proxy Trung Quốc.")],
+        EntryFlow.single_download,
+    )
+
+
+def _active() -> dict:
+    """_REGISTRY plus the flag-gated entries whose flag is on right now."""
+    from app.services.kuaishou_extractor import kuaishou_enabled
+    if not kuaishou_enabled():
+        return _REGISTRY
+    merged = dict(_REGISTRY)
+    merged.update(_FLAGGED)
+    return merged
+
+
 # Fallback for any (platform, source_type) not in registry
 _UNKNOWN_CAP = CapabilityDescriptor(
     platform="unknown",
@@ -454,7 +482,7 @@ def get_capability(platform: str, source_type: str) -> CapabilityDescriptor:
       - Partial-fallback for generic/unknown but valid URL.
       - UNKNOWN_CAP for truly unsupported cases.
     """
-    cap = _REGISTRY.get((platform, source_type))
+    cap = _active().get((platform, source_type))
     if cap:
         # Return a copy with the actual platform/source_type filled in
         return cap
@@ -474,7 +502,7 @@ def get_capability(platform: str, source_type: str) -> CapabilityDescriptor:
 
 def get_platform_source_types(platform: str) -> list[CapabilityDescriptor]:
     """All registered source types for a platform, sorted by support level."""
-    result = [v for (p, _), v in _REGISTRY.items() if p == platform]
+    result = [v for (p, _), v in _active().items() if p == platform]
     _LEVEL_ORDER = {
         SupportLevel.full: 0,
         SupportLevel.partial: 1,
@@ -491,7 +519,7 @@ def get_all_platforms() -> list[str]:
     """Unique platform slugs in the registry."""
     seen: set[str] = set()
     result = []
-    for (platform, _) in _REGISTRY:
+    for (platform, _) in _active():
         if platform not in seen:
             seen.add(platform)
             result.append(platform)
@@ -501,6 +529,6 @@ def get_all_platforms() -> list[str]:
 def get_full_matrix() -> dict[str, list[CapabilityDescriptor]]:
     """Full registry grouped by platform. Used by /platforms/capabilities."""
     matrix: dict[str, list[CapabilityDescriptor]] = {}
-    for (platform, _), cap in _REGISTRY.items():
+    for (platform, _), cap in _active().items():
         matrix.setdefault(platform, []).append(cap)
     return matrix

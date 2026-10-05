@@ -61,6 +61,10 @@ _SHORT_LINK_DOMAINS: frozenset[str] = frozenset({
     "fb.watch",
 })
 
+# Kuaishou short-link hosts — counted as short links only while
+# KUAISHOU_ENABLED is on (see normalize()).
+_KUAISHOU_SHORT_HOSTS: frozenset[str] = frozenset({"v.kuaishou.com", "v.kuaishou.cn"})
+
 # ── youtu.be shortlink rewrite → full YouTube URL ────────────────────────────
 _YOUTU_BE_RE = re.compile(r"(?:https?://)?youtu\.be/([A-Za-z0-9_-]{11})(.*)", re.I)
 
@@ -152,6 +156,10 @@ def normalize(raw: str) -> NormalizeResult:
     # 7. Short-link flag
     bare_host = canonical_host.lstrip("www.")
     is_short = bare_host in _SHORT_LINK_DOMAINS or canonical_host in _SHORT_LINK_DOMAINS
+    if not is_short and canonical_host in _KUAISHOU_SHORT_HOSTS:
+        # Flag-gated: with KUAISHOU_ENABLED off these stay ordinary URLs.
+        from app.services.kuaishou_extractor import kuaishou_enabled
+        is_short = kuaishou_enabled()
 
     return NormalizeResult(
         canonical_url=canonical,
