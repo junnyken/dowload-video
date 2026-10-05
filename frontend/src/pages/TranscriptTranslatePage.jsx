@@ -251,7 +251,7 @@ function JobCard({ job, onDownload, onDelete, onBurn, onEdit }) {
   );
 }
 
-export default function TranscriptTranslatePage() {
+export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } = {}) {
   const { session } = useAuth();
   const [files, setFiles]           = useState([]);
   const [targetLang, setTargetLang] = useState('');
@@ -489,20 +489,34 @@ export default function TranscriptTranslatePage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
+    <div className={embedded ? '' : 'max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12'}>
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-fg flex items-center gap-2">
-          <Languages className="w-6 h-6 text-accent-text" />
-          Dịch Phụ Đề
-        </h1>
-        <p className="text-sm text-fg-muted mt-1.5 leading-relaxed">
-          Tải lên transcript .srt/.vtt có sẵn, chọn ngôn ngữ đích — hệ thống dịch bám sát ngữ nghĩa nội dung
-          gốc (không dịch máy móc từng chữ) và giữ nguyên mốc thời gian gốc của file.
-        </p>
+        {embedded ? (
+          <p className="text-sm text-fg-muted leading-relaxed">
+            Tải lên transcript .srt/.vtt có sẵn, chọn ngôn ngữ đích — hệ thống dịch bám sát ngữ nghĩa nội dung
+            gốc (không dịch máy móc từng chữ) và giữ nguyên mốc thời gian gốc của file.
+          </p>
+        ) : (
+          <>
+            <h1 className="text-2xl font-bold text-fg flex items-center gap-2">
+              <Languages className="w-6 h-6 text-accent-text" />
+              Dịch Phụ Đề
+            </h1>
+            <p className="text-sm text-fg-muted mt-1.5 leading-relaxed">
+              Tải lên transcript .srt/.vtt có sẵn, chọn ngôn ngữ đích — hệ thống dịch bám sát ngữ nghĩa nội dung
+              gốc (không dịch máy móc từng chữ) và giữ nguyên mốc thời gian gốc của file.
+            </p>
+          </>
+        )}
         <a
           href="/transcript-asr"
-          onClick={(e) => { e.preventDefault(); window.history.pushState({}, '', '/transcript-asr'); window.dispatchEvent(new PopStateEvent('popstate')); }}
+          onClick={(e) => {
+            e.preventDefault();
+            if (onOpenAsr) { onOpenAsr(); return; }
+            window.history.pushState({}, '', '/transcript-asr');
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          }}
           className="inline-flex items-center gap-1.5 text-xs text-accent-text hover:underline mt-2 cursor-pointer"
         >
           Chưa có file phụ đề? Tự tạo bằng AI từ video đã tải →

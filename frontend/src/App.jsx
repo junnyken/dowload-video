@@ -32,8 +32,7 @@ import PlatformsPage from './pages/PlatformsPage';
 // was removed from PATH_MAP below. The file is kept — restoring the page means
 // re-adding this import, the PATH_MAP entry, and a render branch.
 import BillingPage from './pages/BillingPage';
-import TranscriptTranslatePage from './pages/TranscriptTranslatePage';
-import TranscriptAsrPage from './pages/TranscriptAsrPage';
+import SubtitleHubPage from './pages/SubtitleHubPage';
 import PlatformLandingPage from './pages/PlatformLandingPage';
 import { platformPages } from './content/platformPages';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -59,6 +58,7 @@ const PATH_MAP = {
   '/analytics':           'analytics',
   '/archive':             'archive',
   '/schedule':            'schedule',
+  '/phu-de':              'subtitle-hub',
   '/transcript-translate': 'transcript-translate',
   '/transcript-asr':      'transcript-asr',
   '/workspace-settings':  'workspace-settings',
@@ -196,7 +196,7 @@ function AppInner() {
     // Guard: authenticated-only views
     if (['preferences', 'usage', 'history', 'analytics', 'archive', 'schedule',
          'workspace-settings', 'audit', 'approvals', 'api-keys', 'active',
-         'transcript-translate', 'transcript-asr'].includes(newView) && !isAuthenticated) {
+         'transcript-translate', 'transcript-asr', 'subtitle-hub'].includes(newView) && !isAuthenticated) {
       setShowAuthModal(true);
       return;
     }
@@ -222,7 +222,7 @@ function AppInner() {
     ...(isAuthenticated ? [
       { key: 'archive', label: 'Archive', active: view === 'archive', onClick: () => goTo('archive', '/archive') },
       { key: 'schedule', label: 'Lịch Tải', active: view === 'schedule', onClick: () => goTo('schedule', '/schedule') },
-      { key: 'transcript-translate', label: 'Dịch Phụ Đề', title: 'Dịch transcript .srt/.vtt sang ngôn ngữ khác', icon: Languages, active: view === 'transcript-translate', onClick: () => goTo('transcript-translate', '/transcript-translate') },
+      { key: 'subtitle-hub', label: 'Phụ đề & Phiên âm', title: 'Trích phụ đề, phiên âm AI và dịch phụ đề', icon: Languages, active: ['subtitle-hub', 'transcript-asr', 'transcript-translate'].includes(view), onClick: () => goTo('subtitle-hub', '/phu-de') },
     ] : []),
     ...(pwaInstallReady ? [
       { key: 'pwa', label: 'Cài ứng dụng', title: 'Cài ứng dụng VidGrab về máy', active: false, onClick: () => { setMenuOpen(false); handlePwaInstall(); } },
@@ -432,12 +432,17 @@ function AppInner() {
           <SchedulePage onNavigate={navigateTo} />
         )}
 
+        {view === 'subtitle-hub' && isAuthenticated && (
+          <SubtitleHubPage onNavigate={navigateTo} />
+        )}
+
+        {/* Legacy deep links render the same hub on the matching tab. */}
         {view === 'transcript-translate' && isAuthenticated && (
-          <TranscriptTranslatePage />
+          <SubtitleHubPage initialTab="translate" onNavigate={navigateTo} />
         )}
 
         {view === 'transcript-asr' && isAuthenticated && (
-          <TranscriptAsrPage />
+          <SubtitleHubPage initialTab="asr" onNavigate={navigateTo} />
         )}
 
         {view === 'workspace-settings' && isAuthenticated && (

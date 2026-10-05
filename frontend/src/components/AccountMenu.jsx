@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { History, Settings2, BarChart2, LogOut, ChevronDown, Crown, ListVideo, Archive, Calendar, Building2, Shield, ClipboardCheck, Languages, Mic } from 'lucide-react';
+import { History, Settings2, BarChart2, LogOut, ChevronDown, Crown, ListVideo, Archive, Calendar, Building2, Shield, ClipboardCheck, Languages } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { API_BASE } from '../lib/apiBase';
@@ -131,10 +131,8 @@ export default function AccountMenu({ onNavigate }) {
               onClick={() => nav('playlists', '/playlists')} />
             <MenuItem icon={<BarChart2 className="w-4 h-4" />} label="Analytics"
               onClick={() => nav('analytics', '/analytics')} />
-            <MenuItem icon={<Languages className="w-4 h-4" />} label="Dịch Phụ Đề"
-              onClick={() => nav('transcript-translate', '/transcript-translate')} />
-            <MenuItem icon={<Mic className="w-4 h-4" />} label="Tạo Phụ Đề (AI)"
-              onClick={() => nav('transcript-asr', '/transcript-asr')} />
+            <MenuItem icon={<Languages className="w-4 h-4" />} label="Phụ đề & Phiên âm"
+              onClick={() => nav('subtitle-hub', '/phu-de')} />
           </div>
           <div className="py-1 border-t border-line">
             <MenuItem icon={<Settings2 className="w-4 h-4" />} label="Preferences"
