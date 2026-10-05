@@ -67,6 +67,8 @@ class ExtractorRegistry:
         Raises PlatformNotSupported if no extractor matches.
         """
         for ext in self._extractors:
+            if not ext.is_enabled():
+                continue
             if ext.detect_url(url):
                 if batch and not (
                     "batch" in ext.supported_features
@@ -93,7 +95,7 @@ class ExtractorRegistry:
         seen: set[str] = set()
         result = []
         for ext in self._extractors:
-            if ext.platform_name in seen:
+            if not ext.is_enabled() or ext.platform_name in seen:
                 continue
             seen.add(ext.platform_name)
             result.append({
@@ -193,6 +195,8 @@ def _load_extractors():
         "app.services.xiaohongshu_extractor",
         "app.services.lemon8_extractor",
         "app.services.podcast_extractor",
+        # Registers itself ONLY when KUAISHOU_ENABLED is on (default off).
+        "app.services.kuaishou_extractor",
     ]
     for mod in modules:
         try:

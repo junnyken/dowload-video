@@ -250,6 +250,13 @@ class BaseExtractor(ABC):
     # Fixture URLs for CI smoke tests — at least 1 per extractor
     _test_fixtures: list[str] = []
 
+    # ── Feature flag ───────────────────────────────────────────────────
+
+    def is_enabled(self) -> bool:
+        """False hides the extractor from detect() and all_platforms()
+        (e.g. a flag switched off after registration). Default: always on."""
+        return True
+
     # ── URL detection ──────────────────────────────────────────────────
 
     # Subclasses can either implement detect_url() or populate _URL_PATTERNS

@@ -295,6 +295,73 @@ ERROR_META: dict[str, dict] = {
         "suggested_action": "Cần tài khoản Bilibili Premium để tải nội dung này.",
     },
 
+    # ── Kuaishou (OFF by default, UNVERIFIED — see docs/KUAISHOU.md) ──
+    # user_message mirrors app.services.kuaishou_extractor.ERROR_MESSAGES.
+    "kuaishou_geo_blocked": {
+        "user_message": "Kuaishou chỉ trả lời các truy cập từ bên trong Trung Quốc. Máy chủ cần một proxy đặt tại Trung Quốc để tải được nội dung này. Link của bạn không có lỗi.",
+        "retryable": False,
+        "suggested_action": "Quản trị viên cần cấu hình KUAISHOU_PROXY_CN (proxy Trung Quốc).",
+    },
+    "kuaishou_proxy_error": {
+        "user_message": "Máy chủ không kết nối được tới Kuaishou qua proxy Trung Quốc đã cấu hình. Quản trị viên cần kiểm tra proxy. Link của bạn không có lỗi.",
+        "retryable": True,
+        "suggested_action": "Thử lại sau; nếu vẫn lỗi, báo quản trị viên kiểm tra proxy.",
+    },
+    "kuaishou_upstream_unreachable": {
+        "user_message": "Máy chủ không kết nối được tới Kuaishou lúc này. Vui lòng thử lại sau. Link của bạn không có lỗi.",
+        "retryable": True,
+        "suggested_action": "Thử lại sau vài phút.",
+    },
+    "kuaishou_challenge_page": {
+        "user_message": "Kuaishou đang yêu cầu máy chủ xác minh (mã captcha) nên chưa lấy được video. Vui lòng thử lại sau. Link của bạn không có lỗi.",
+        "retryable": True,
+        "suggested_action": "Thử lại sau vài phút.",
+    },
+    "kuaishou_invalid_url": {
+        "user_message": "Link Kuaishou này không đúng dạng hỗ trợ. Hãy dán link một video công khai, ví dụ kuaishou.com/short-video/... hoặc link chia sẻ v.kuaishou.com/...",
+        "retryable": False,
+        "suggested_action": "Dán link một video Kuaishou công khai.",
+    },
+    "kuaishou_redirect_rejected": {
+        "user_message": "Link chia sẻ này không dẫn tới một trang video Kuaishou nên hệ thống không mở tiếp.",
+        "retryable": False,
+        "suggested_action": "Mở link trong ứng dụng Kuaishou rồi sao chép lại link video.",
+    },
+    "kuaishou_too_many_redirects": {
+        "user_message": "Kuaishou chuyển hướng quá nhiều lần nên hệ thống dừng lại. Vui lòng thử lại sau.",
+        "retryable": True,
+        "suggested_action": "Thử lại sau.",
+    },
+    "kuaishou_unsafe_address": {
+        "user_message": "Địa chỉ Kuaishou trả về trỏ tới một mạng không công khai nên máy chủ từ chối mở.",
+        "retryable": False,
+        "suggested_action": "Thử link khác.",
+    },
+    "kuaishou_not_found": {
+        "user_message": "Không tìm thấy video Kuaishou này. Video có thể đã bị xoá hoặc không còn công khai.",
+        "retryable": False,
+        "suggested_action": "Kiểm tra lại link trong ứng dụng Kuaishou.",
+    },
+    "kuaishou_parse_failed": {
+        "user_message": "Đã mở được trang Kuaishou nhưng không đọc được dữ liệu video. Kuaishou có thể đã đổi cấu trúc trang; tính năng tải Kuaishou đang thử nghiệm.",
+        "retryable": True,
+        "suggested_action": "Thử lại sau hoặc liên hệ hỗ trợ.",
+    },
+    "kuaishou_unsupported_post_type": {
+        "user_message": "Bài đăng Kuaishou này không phải video hay album ảnh mà hệ thống đọc được.",
+        "retryable": False,
+        "suggested_action": "Thử một link video Kuaishou khác.",
+    },
+    "kuaishou_media_url_rejected": {
+        "user_message": "Địa chỉ tệp mà Kuaishou trả về không vượt qua kiểm tra an toàn nên đã bị từ chối.",
+        "retryable": False,
+        "suggested_action": "Thử lại sau hoặc liên hệ hỗ trợ.",
+    },
+    "kuaishou_response_too_large": {
+        "user_message": "Trang Kuaishou trả về lớn bất thường nên hệ thống dừng đọc. Vui lòng thử lại sau.",
+        "retryable": True,
+        "suggested_action": "Thử lại sau.",
+    },
     # ── Xiaohongshu / RedNote ─────────────────────────────────────────
     "xhs_geo_restricted": {
         "user_message": "Nội dung Xiaohongshu bị giới hạn địa lý.",

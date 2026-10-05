@@ -33,6 +33,7 @@ Per-platform cooldown (seconds between reuses of same cookie):
   reddit        15s
   bilibili      10s
   xiaohongshu   25s  — RedNote strict anti-bot
+  kuaishou      20s  — conservative; extractor is OFF by default + UNVERIFIED
   default       10s
 """
 
@@ -66,6 +67,7 @@ _COOLDOWN: dict[str, int] = {
     "bilibili":     10,
     "xiaohongshu":  25,
     "lemon8":       20,
+    "kuaishou":     20,
 }
 _DEFAULT_COOLDOWN = 10
 

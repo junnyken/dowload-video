@@ -67,6 +67,9 @@ _PLATFORM_DISPLAY: dict[str, str] = {
     "xiaohongshu": "Xiaohongshu", "lemon8": "Lemon8", "snapchat": "Snapchat",
     "vk": "VK", "twitch": "Twitch", "rumble": "Rumble", "odysee": "Odysee",
     "dailymotion": "Dailymotion", "podcast_rss": "Podcast RSS",
+    # Only ever looked up when the classifier returned "kuaishou", which it
+    # does only while KUAISHOU_ENABLED is on.
+    "kuaishou": "Kuaishou",
     "unknown": "Không xác định", "generic": "Generic",
 }
 

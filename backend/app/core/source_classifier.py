@@ -175,6 +175,19 @@ def classify(url: str) -> ClassifyResult:
     Classify a URL into (platform, source_type, normalized_id).
     Uses first-match-wins; returns UNKNOWN if nothing matches.
     """
+    # Kuaishou is known ONLY while KUAISHOU_ENABLED is on; off → "unknown",
+    # exactly as before the scaffold existed. Host matching is exact (no
+    # substring regex), so kuaishou.com.evil.com is never Kuaishou.
+    from app.services.kuaishou_extractor import kuaishou_enabled, parse_kuaishou_url
+    if kuaishou_enabled():
+        link = parse_kuaishou_url(url)
+        if link is not None:
+            return ClassifyResult(
+                platform="kuaishou",
+                source_type="single_video" if link.kind in ("short_video", "video") else "single_post",
+                normalized_id=link.code,
+                confidence=1.0,
+            )
     for platform, pattern, source_type, id_group in _RULES:
         m = pattern.search(url)
         if m:
