@@ -4,13 +4,21 @@ Transcript ASR API
 Routes:
   POST   /transcript-asr/jobs                    — create an ASR job from an already-downloaded video
   GET    /transcript-asr/jobs                     — list jobs for resolved identity
-  GET    /transcript-asr/jobs/{job_id}/download    — stream the generated .srt
+  GET    /transcript-asr/jobs/{job_id}/download    — ?format=srt|vtt|txt|json (default srt)
   POST   /transcript-asr/jobs/{job_id}/translate   — chain into transcript-translate (creates a translation job from this ASR result)
-  DELETE /transcript-asr/jobs/{job_id}             — remove job + result file (never the source video)
+  DELETE /transcript-asr/jobs/{job_id}             — remove job + result file (never the source video);
+                                                    cancels + refunds a job that has not finished
 
-Auto-generates a subtitle file from a downloaded video's audio via OpenAI
-Whisper (app.services.asr_service) — the HappyScribe-style "Transcribe
-files" feature. Reuses the exact identity/quota/cleanup conventions already
+Auto-generates a subtitle file from a downloaded video's audio via the
+configured ASR provider (app.services.asr — Gemini or Whisper) — the
+HappyScribe-style "Transcribe files" feature.
+
+Phase 32A: everything behind ASR_ENABLED (default off). POST /jobs check
+order, no paid call before all pass:
+  flag -> (auth, path, ffprobe, 45-min cap) -> per-user quota -> global
+  kill switch / spend ceiling / minutes cap -> disk guard -> provider key
+Errors added in 32A answer {"detail": "<Vietnamese message>", "error_code": "..."}
+so the current frontend (which renders `detail`) keeps working. Reuses the exact identity/quota/cleanup conventions already
 established in app.api.transcript_translate rather than inventing new ones.
 """
 from __future__ import annotations
@@ -21,8 +29,13 @@ import subprocess
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
+
+from app.services.asr import budget as asr_budget
+from app.services.asr import config as asr_config
+from app.services.asr.jobs import NON_TERMINAL, fail_job, parse_error, refund_quota
+from app.services.asr.types import ERROR_MESSAGES_VI, AsrError
 
 from app.api.transcript_translate import (  # same identity model, reused not duplicated
     resolve_identity,
@@ -66,7 +79,26 @@ def _get_transcribe_task():
         return None
 
 
+class AsrApiError(Exception):
+    def __init__(self, status_code: int, error_code: str, message: str | None = None):
+        self.status_code = status_code
+        self.error_code = error_code
+        self.message = message or ERROR_MESSAGES_VI.get(error_code, error_code)
+        super().__init__(self.message)
+
+
+def _error_response(exc: AsrApiError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.message, "error_code": exc.error_code},
+    )
+
+
+_BUDGET_STATUS = {"asr_paused": 503, "spend_ceiling_reached": 503, "budget_unavailable": 503}
+
+
 def _job_to_dict(row: dict) -> dict[str, Any]:
+    code, message = parse_error(row.get("error_message"))
     return {
         "id": row["id"],
         "video_title": row.get("video_title"),
@@ -74,7 +106,8 @@ def _job_to_dict(row: dict) -> dict[str, Any]:
         "duration_sec": row.get("duration_sec"),
         "detected_language": row.get("detected_language"),
         "progress_pct": row.get("progress_pct", 0),
-        "error": row.get("error_message"),
+        "error": message,
+        "error_code": code,
     }
 
 
@@ -118,15 +151,25 @@ async def create_asr_job(
     quota_subject: str | None = Depends(resolve_quota_subject),
 ):
     """Create a job that auto-generates subtitles from an already-downloaded
-    video's audio. Validates the video path, probes its duration to enforce
-    the per-job cap and reserve daily quota, then hands off to Celery."""
+    video's audio. See the module docstring for the check order."""
+    try:
+        return await _create_asr_job(payload, identity, quota_subject)
+    except AsrApiError as exc:
+        return _error_response(exc)
+
+
+async def _create_asr_job(payload: CreateAsrJobRequest, identity, quota_subject):
     from app.api.processing import _guard_local_path  # reuse the same path-traversal guard everywhere else in the app uses
+
+    # 1. Master flag — before anything else, no provider can be reached.
+    if not asr_config.asr_enabled():
+        raise AsrApiError(503, "asr_disabled")
 
     user_id = identity
     if not user_id:
         raise HTTPException(status_code=401, detail="Cần đăng nhập để sử dụng tính năng tạo phụ đề tự động.")
 
-    # Whisper minutes are billed per minute, so the daily cap cannot hang off a
+    # ASR minutes are billed per minute, so the daily cap cannot hang off a
     # client-supplied X-Session-ID — see resolve_quota_subject.
     quota_key = quota_subject or user_id
 
@@ -150,8 +193,10 @@ async def create_asr_job(
             detail=f"Video dài {duration_sec/60:.1f} phút, vượt giới hạn {_MAX_DURATION_MINUTES} phút.",
         )
 
+    # 2. Per-user daily quota.
     db = _get_db()
     duration_minutes = duration_sec / 60
+    usage_date = asr_budget.utcnow().date().isoformat()
     try:
         reserve_resp = db.rpc(
             "reserve_transcript_asr_usage",
@@ -168,6 +213,38 @@ async def create_asr_job(
             detail=f"Vượt quá hạn mức tạo phụ đề tự động trong ngày ({_DAILY_MINUTES_LIMIT} phút/ngày).",
         )
 
+    provider_name = asr_config.provider_name()
+    from app.services.asr import estimate_cost_usd, get_provider  # noqa: PLC0415
+    est_cost = estimate_cost_usd(provider_name, duration_sec)
+    spend_day: str | None = None
+
+    def _undo() -> None:
+        refund_quota(db, quota_key, duration_minutes, usage_date)
+        if spend_day:
+            asr_budget.release(spend_day, est_cost, duration_minutes)
+
+    # 3. Global kill switch / spend ceiling / minutes cap.
+    try:
+        spend_day = asr_budget.reserve(est_cost, duration_minutes)
+    except AsrError as exc:
+        _undo()
+        raise AsrApiError(_BUDGET_STATUS.get(exc.code, 503), exc.code) from exc
+
+    # 4. Disk guard (same 507 contract as /fetch-link).
+    try:
+        from app.api.routes import _preflight_disk_check  # noqa: PLC0415
+        _preflight_disk_check()
+    except HTTPException:
+        _undo()
+        raise
+
+    # 5. Provider configured (key present). Constructing it makes no call.
+    try:
+        get_provider(provider_name)
+    except AsrError as exc:
+        _undo()
+        raise AsrApiError(503, "provider_unavailable") from exc
+
     job_row = {
         "user_id": user_id,
         "video_local_path": video_path,
@@ -180,18 +257,36 @@ async def create_asr_job(
         insert_resp = db.table("transcript_asr_jobs").insert(job_row).execute()
         job_id = insert_resp.data[0]["id"]
     except Exception as exc:
+        _undo()
         logger.error("Failed to insert transcript_asr_jobs row: %s", exc)
         raise HTTPException(status_code=500, detail="Lỗi hệ thống khi tạo job.") from exc
 
+    asr_budget.meta_set(
+        job_id,
+        provider=provider_name,
+        quota_key=quota_key,
+        minutes=f"{duration_minutes:.4f}",
+        usage_date=usage_date,
+        spend_day=spend_day,
+        est_cost=f"{est_cost:.6f}",
+        created_ts=f"{asr_budget.utcnow().timestamp():.3f}",
+    )
+
+    # 6. Queue. A queueing failure must not leave a 'queued' row forever (D2).
     transcribe_task = _get_transcribe_task()
-    if transcribe_task is not None:
-        try:
-            async_result = transcribe_task.apply_async(args=[job_id])
-            db.table("transcript_asr_jobs").update({"celery_task_id": async_result.id}).eq("id", job_id).execute()
-        except Exception as exc:
-            logger.error("Failed to queue transcribe_video_task for %s: %s", job_id, exc)
-    else:
-        logger.warning("transcribe_video_task not importable — job %s queued in DB only", job_id)
+    try:
+        if transcribe_task is None:
+            raise RuntimeError("transcribe_video_task not importable")
+        async_result = transcribe_task.apply_async(args=[job_id])
+    except Exception as exc:
+        logger.error("Failed to queue transcribe_video_task for %s: %s", job_id, exc)
+        fail_job(db, job_id, "queue_unavailable", row={**job_row, "id": job_id})
+        asr_budget.settle(job_id, 0.0, paid_started=False)
+        raise AsrApiError(503, "queue_unavailable") from exc
+    try:
+        db.table("transcript_asr_jobs").update({"celery_task_id": async_result.id}).eq("id", job_id).execute()
+    except Exception as exc:
+        logger.warning("Failed to store celery_task_id for %s: %s", job_id, exc)
 
     return {
         "id": job_id,
@@ -201,6 +296,7 @@ async def create_asr_job(
         "detected_language": None,
         "progress_pct": 0,
         "error": None,
+        "error_code": None,
     }
 
 
@@ -223,8 +319,19 @@ async def list_asr_jobs(identity: str | None = Depends(resolve_identity)):
     return {"jobs": [_job_to_dict(r) for r in rows]}
 
 
+_DOWNLOAD_FORMATS = ("srt", "vtt", "txt", "json")
+
+
 @router.get("/jobs/{job_id}/download")
-async def download_asr_result(job_id: str, identity: str | None = Depends(resolve_identity)):
+async def download_asr_result(
+    job_id: str,
+    format: str = "srt",  # noqa: A002 — public query parameter name
+    identity: str | None = Depends(resolve_identity),
+):
+    fmt = (format or "srt").lower()
+    if fmt not in _DOWNLOAD_FORMATS:
+        raise HTTPException(status_code=422, detail=f"Định dạng không hỗ trợ. Chỉ hỗ trợ: {', '.join(_DOWNLOAD_FORMATS)}.")
+
     db = _get_db()
     row = _load_owned_job(db, job_id, identity, require_done=True)
 
@@ -233,7 +340,47 @@ async def download_asr_result(job_id: str, identity: str | None = Depends(resolv
         raise HTTPException(status_code=404, detail="File kết quả không còn tồn tại.")
 
     base = (row.get("video_title") or "transcript").strip() or "transcript"
-    return FileResponse(result_path, media_type="text/plain; charset=utf-8", filename=f"{base}.srt")
+    if fmt == "srt":
+        return FileResponse(result_path, media_type="text/plain; charset=utf-8", filename=f"{base}.srt")
+
+    from app.core.local_download import content_disposition  # noqa: PLC0415
+    from app.services.subtitle_format import parse_srt  # noqa: PLC0415
+
+    with open(result_path, "r", encoding="utf-8") as f:
+        cues = parse_srt(f.read())
+
+    if fmt == "vtt":
+        parts = ["WEBVTT"]
+        for c in cues:
+            parts.append(f"{c.index}\n{c.start.replace(',', '.')} --> {c.end.replace(',', '.')}\n{c.text}")
+        body, media = "\n\n".join(parts) + "\n", "text/vtt; charset=utf-8"
+    elif fmt == "txt":
+        body, media = "\n".join(c.text for c in cues) + "\n", "text/plain; charset=utf-8"
+    else:
+        import json as _json  # noqa: PLC0415
+        from app.services.subtitle_format import timestamp_to_seconds  # noqa: PLC0415
+        from app.tasks.transcript_asr_tasks import sidecar_json_path  # noqa: PLC0415
+
+        sidecar = sidecar_json_path(result_path)
+        if os.path.isfile(sidecar):
+            with open(sidecar, "r", encoding="utf-8") as f:
+                data = _json.load(f)
+        else:  # jobs created before 32A have no sidecar — derive from the SRT
+            data = {
+                "language": row.get("detected_language"),
+                "duration_sec": row.get("duration_sec"),
+                "segments": [
+                    {"start": timestamp_to_seconds(c.start), "end": timestamp_to_seconds(c.end), "text": c.text}
+                    for c in cues
+                ],
+            }
+        body, media = _json.dumps(data, ensure_ascii=False), "application/json; charset=utf-8"
+
+    return Response(
+        content=body.encode("utf-8"),
+        media_type=media,
+        headers={"Content-Disposition": content_disposition(f"{base}.{fmt}")},
+    )
 
 
 class ChainTranslateRequest(BaseModel):
@@ -360,13 +507,29 @@ async def delete_asr_job(job_id: str, identity: str | None = Depends(resolve_ide
     db = _get_db()
     row = _load_owned_job(db, job_id, identity)
 
+    # Deleting a job that has not finished is a cancel: fail it first so the
+    # reserved minutes are refunded exactly once, and revoke the queued task
+    # (best effort — a task already running finds the row gone or failed).
+    if row.get("status") in NON_TERMINAL:
+        fail_job(db, job_id, "cancelled", "Đã huỷ bởi người dùng.", row=row)
+        if row.get("status") == "queued":
+            asr_budget.settle(job_id, 0.0, paid_started=False)  # never reached a provider
+        if row.get("celery_task_id"):
+            try:
+                from app.core.celery_app import celery_app  # noqa: PLC0415
+                celery_app.control.revoke(row["celery_task_id"])
+            except Exception:
+                pass
+
     result_path = row.get("result_path")
     if result_path:
-        try:
-            if os.path.isfile(result_path):
-                os.remove(result_path)
-        except Exception:
-            pass
+        from app.tasks.transcript_asr_tasks import sidecar_json_path  # noqa: PLC0415
+        for p in (result_path, sidecar_json_path(result_path)):
+            try:
+                if os.path.isfile(p):
+                    os.remove(p)
+            except Exception:
+                pass
 
     try:
         db.table("transcript_asr_jobs").delete().eq("id", job_id).execute()

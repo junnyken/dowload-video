@@ -134,6 +134,7 @@ celery_app.conf.update(
         # Transcript ASR — same reasoning as translate above.
         'transcribe_video_task': {'queue': 'analysis'},
         'expire_transcript_asr_jobs_task': {'queue': 'analysis'},
+        'sweep_stuck_transcript_asr_jobs_task': {'queue': 'analysis'},
         # Webhook/partner delivery retries → light celery queue.
         'retry_webhook_delivery': {'queue': 'celery'},
         '*': {'queue': 'celery'},
@@ -286,6 +287,12 @@ celery_app.conf.update(
         'expire-transcript-asr-jobs-hourly': {
             'task': 'expire_transcript_asr_jobs_task',
             'schedule': crontab(minute=50),
+        },
+        # Transcript ASR (Phase 32A) — fail + refund jobs stuck past the hard
+        # time limit (hard kill / lost message), every 10 minutes.
+        'sweep-stuck-transcript-asr-jobs-10min': {
+            'task': 'sweep_stuck_transcript_asr_jobs_task',
+            'schedule': 600.0,
         },
         # Phase 14 — Add bulk queue + bulk queue
         'flush-bulk-queue-buffer-every-2min': {

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app as fastapi_app
+from tests._asr_fakes import asr_env  # noqa: F401 (fixture: fake Redis ledger + pinned clock)
 
 client = TestClient(fastapi_app, raise_server_exceptions=False)
 
@@ -24,7 +25,8 @@ def _mock_ffprobe(duration_sec: float):
     return result
 
 
-def test_create_job_rejects_video_over_duration_cap(tmp_path):
+def test_create_job_rejects_video_over_duration_cap(tmp_path, asr_env, monkeypatch):
+    monkeypatch.setenv("ASR_ENABLED", "true")
     video = tmp_path / "video.mp4"
     video.write_bytes(b"fake")
 
@@ -43,7 +45,11 @@ def test_create_job_rejects_video_over_duration_cap(tmp_path):
     assert "phút" in resp.json()["detail"]
 
 
-def test_create_job_succeeds_and_reserves_quota(tmp_path):
+def test_create_job_succeeds_and_reserves_quota(tmp_path, asr_env, monkeypatch):
+    monkeypatch.setenv("ASR_ENABLED", "true")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    task = MagicMock()
+    task.apply_async.return_value.id = "celery-1"
     video = tmp_path / "video.mp4"
     video.write_bytes(b"fake")
 
@@ -56,7 +62,8 @@ def test_create_job_succeeds_and_reserves_quota(tmp_path):
         with patch("app.api.processing._guard_local_path", return_value=str(video)), \
              patch("subprocess.run", return_value=_mock_ffprobe(120)), \
              patch("app.api.transcript_asr._get_db", return_value=db), \
-             patch("app.api.transcript_asr._get_transcribe_task", return_value=None):
+             patch("app.api.routes._preflight_disk_check"), \
+             patch("app.api.transcript_asr._get_transcribe_task", return_value=task):
             resp = client.post(
                 "/api/v1/transcript-asr/jobs",
                 json={"video_local_path": str(video), "video_title": "Short clip"},
@@ -75,7 +82,8 @@ def test_create_job_succeeds_and_reserves_quota(tmp_path):
     assert rpc_call[0][1]["p_minutes"] == 2.0  # 120s = 2min
 
 
-def test_create_job_rejects_quota_exceeded(tmp_path):
+def test_create_job_rejects_quota_exceeded(tmp_path, asr_env, monkeypatch):
+    monkeypatch.setenv("ASR_ENABLED", "true")
     video = tmp_path / "video.mp4"
     video.write_bytes(b"fake")
 

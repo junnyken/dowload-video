@@ -20,6 +20,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
+from tests._asr_fakes import asr_env  # noqa: F401,E402 (fixture: fake ASR ledger, Phase 32A)
 
 # Real-shaped production name (2026-10-02): yt-dlp's format join has a '+'.
 REAL_NAME = "jNQXAC9IVRw_230+140_9a8b655acfdbb63a.mp4"
@@ -443,10 +444,14 @@ class TestResponses:
             assert "gif_path" not in r
             assert_no_server_path(r, root)
 
-    def test_asr_create(self, root, video, legacy_off):
+    def test_asr_create(self, root, video, legacy_off, asr_env, monkeypatch):
         from fastapi.testclient import TestClient
         from app.main import app as fastapi_app
         from app.api.transcript_translate import resolve_identity
+        monkeypatch.setenv("ASR_ENABLED", "true")       # Phase 32A: off by default
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+        task = MagicMock()
+        task.apply_async.return_value.id = "celery-1"
         db = MagicMock()
         db.rpc.return_value.execute.return_value.data = True
         db.table.return_value.insert.return_value.execute.return_value.data = [{"id": "asr-1"}]
@@ -455,7 +460,8 @@ class TestResponses:
         try:
             with patch("subprocess.run", return_value=ff), \
                  patch("app.api.transcript_asr._get_db", return_value=db), \
-                 patch("app.api.transcript_asr._get_transcribe_task", return_value=None):
+                 patch("app.api.routes._preflight_disk_check"), \
+                 patch("app.api.transcript_asr._get_transcribe_task", return_value=task):
                 resp = TestClient(fastapi_app).post(
                     "/api/v1/transcript-asr/jobs", json={"video_local_path": REAL_NAME})
         finally:

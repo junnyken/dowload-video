@@ -414,9 +414,21 @@ Purely a **text-only** patch mechanism — deliberately narrow scope to avoid co
 | Var | Purpose | Required for |
 |---|---|---|
 | `GEMINI_API_KEY` | Primary LLM provider (translation + language detection) | Transcript Translate |
-| `OPENAI_API_KEY` | Fallback LLM provider (translation) AND the only ASR provider (Whisper) | Both — hard-required for ASR (no fallback), fallback-only for Translate |
+| `OPENAI_API_KEY` | Fallback LLM provider (translation); key for the `whisper` ASR provider | Translate fallback; ASR only when `ASR_PROVIDER=whisper` |
 | `TRANSCRIPT_TRANSLATE_DAILY_CUE_LIMIT` | Daily per-identity cue quota, default `6000` | Transcript Translate |
 | `TRANSCRIPT_ASR_DAILY_MINUTES_LIMIT` | Daily per-identity audio-minutes quota, default `120` | Transcript ASR |
+| `ASR_ENABLED` | Master flag, default `false` — POST /transcript-asr/jobs answers 503 `asr_disabled` | Transcript ASR (32A) |
+| `ASR_PROVIDER` | `gemini` (default) or `whisper`; no silent fallback between them | Transcript ASR (32A) |
+| `ASR_GEMINI_MODEL` | default = `llm_client._GEMINI_MODEL` | Transcript ASR (32A) |
+| `ASR_PRICE_PER_MIN_GEMINI` / `ASR_PRICE_PER_MIN_WHISPER` | USD/min used for the ceiling, defaults `0.003` / `0.006` — UNVERIFIED | Transcript ASR (32A) |
+| `ASR_SPEND_CEILING_USD` | Global daily (UTC) spend ceiling, default `3` | Transcript ASR (32A) |
+| `ASR_GLOBAL_DAILY_MINUTES_CAP` | Global daily (UTC) audio minutes, default `600` | Transcript ASR (32A) |
+| `ASR_CHUNK_SEC` / `ASR_CHUNK_MAX_RETRIES` | Chunk length (default `600`) / retries per chunk on transient errors (default `1`, each billed) | Transcript ASR (32A) |
+| `ASR_TASK_SOFT_LIMIT_SEC` / `ASR_TASK_HARD_LIMIT_SEC` | defaults `1500` / `1620` (clamped below the broker's 1800s visibility timeout) | Transcript ASR (32A) |
+| `ASR_DIARIZATION_ENABLED` | default `false`; Gemini speaker labels in SRT (`[S1] ...`) and JSON | Transcript ASR (32A) |
+| `ASR_SELFTEST_MAX_SEC` | Admin selftest clip length, default/max `60` | Transcript ASR (32A) |
+
+Phase 32A note (D6): in `docker-compose.small.yml` the `analysis` queue is consumed by the single combined worker (`-Q downloads,celery,media,analysis`), so a long ASR job (up to ~27 min) occupies one of its `CELERY_SMALL_CONCURRENCY` slots and can delay downloads.
 
 External binaries required on the host/container: `ffmpeg`, `ffprobe` (audio extraction, duration probing, subtitle burning).
 
