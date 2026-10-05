@@ -773,6 +773,10 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
                 f"/bestvideo[height<={height}]+bestaudio"
                 f"/bestvideo+bestaudio"
                 f"/best[height<={height}]"
+                # Last resort: formats with NO height (e.g. MangoTV). `<=?`
+                # keeps unknown-height formats but still rejects known ones
+                # above the cap.
+                f"/best[height<=?{height}]"
             )
         except:
             fmt = "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/bestvideo[ext=webm]+bestaudio[ext=webm]/bestvideo+bestaudio/best"
@@ -803,6 +807,8 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
             "/bestvideo[height<=1080]+bestaudio"
             "/bestvideo+bestaudio"
             "/best[height<=1080]"
+            # Last resort: formats with NO height (e.g. MangoTV).
+            "/best[height<=?1080]"
         )
 
     opts = {
