@@ -60,8 +60,9 @@ def _build_prompt(duration_sec: float, language: str | None, diarize: bool) -> s
         f'"text": "<what was said>"{speaker}}}]}}\n'
         f"Rules: start/end are SECONDS (decimal numbers, not strings, not MM:SS) measured from "
         f"the beginning of THIS clip, which is {duration_sec:.1f} seconds long. "
-        "Segments are in chronological order, do not overlap, and each covers one sentence "
-        "or at most about 7 seconds. Skip silence and music. "
+        "Segments are in chronological order and do not overlap. They are SUBTITLE cues: "
+        "each one at most 7 seconds and at most about 80 characters; split a long sentence "
+        "at a natural pause into several segments. Skip silence and music. "
         'If there is no speech at all, return {"language": "unknown", "segments": []}.'
     )
 

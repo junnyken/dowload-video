@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 
 from app.services.asr import budget, config
 from app.services.asr.chunking import cut_chunk, merge_chunk_results, plan_chunks
+from app.services.asr.cue_split import split_long_segments
 from app.services.asr.types import BudgetError, ProviderTransientError, TranscriptResult
 
 
@@ -102,4 +103,7 @@ def transcribe_chunked(
         if progress_cb:
             progress_cb(idx + 1, len(plan))
 
-    return merge_chunk_results(parts)
+    result = merge_chunk_results(parts)
+    result.segments = split_long_segments(
+        result.segments, max_sec=config.cue_max_sec(), max_chars=config.cue_max_chars())
+    return result

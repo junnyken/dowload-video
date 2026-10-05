@@ -116,3 +116,13 @@ def gemini_inline_max_bytes() -> int:
 
 def gemini_timeout_sec() -> int:
     return _int("ASR_GEMINI_TIMEOUT_SEC", 600)
+
+
+def cue_max_sec() -> float:
+    """Longest a subtitle cue may stay on screen; longer segments are split."""
+    return max(2.0, _float("ASR_CUE_MAX_SEC", 7.0))
+
+
+def cue_max_chars() -> int:
+    """Two subtitle lines of ~42 characters."""
+    return max(20, _int("ASR_CUE_MAX_CHARS", 84))
