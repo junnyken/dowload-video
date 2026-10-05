@@ -450,3 +450,14 @@ def test_quota_redis_down_fails_closed(asr_env, identity, monkeypatch):
     with patch("app.api.transcript_asr._get_db", return_value=asr_env.db):
         body = client.get("/api/v1/transcript-asr/quota").json()
     assert (body["enabled"], body["unavailable_reason"]) == (False, "budget_unavailable")
+
+
+def test_selftest_preview_is_cut_like_a_user_job(asr_env, admin):
+    """Live 2026-10-06: the preview showed Gemini's raw 17 s segments while
+    user jobs (transcribe_chunked) got them cut into 3-5 s cues."""
+    from tests.test_asr_cue_split import REAL
+    prov = _FakeProvider(TranscriptResult(list(REAL), "vi", 60))
+    body = _selftest(asr_env, prov).json()
+    assert body["ok"] is True
+    assert body["provider_segment_count"] == 3 and body["segment_count"] > 3
+    assert all(s["end"] - s["start"] <= 7.0 * 1.3 and len(s["text"]) <= 84 for s in body["segments"])

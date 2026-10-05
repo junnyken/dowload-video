@@ -254,6 +254,14 @@ async def asr_selftest(req: SelftestRequest, request: Request, _=Depends(verify_
         return _err(500, "internal_error", str(exc)[:300], provider=provider.name)
 
     result = out["result"]
+    # Show the admin what a user job would produce: the task path cuts long
+    # segments in pipeline.transcribe_chunked; the selftest calls the
+    # provider directly, so cut here too (2026-10-06: the preview showed
+    # 17 s segments while user jobs got 3-5 s cues).
+    from app.services.asr.cue_split import split_long_segments  # noqa: PLC0415
+    provider_segment_count = len(result.segments)
+    result.segments = split_long_segments(
+        result.segments, max_sec=asr_config.cue_max_sec(), max_chars=asr_config.cue_max_chars())
     from app.services.asr_service import segments_to_cues  # noqa: PLC0415
     from app.services.subtitle_format import serialize_srt  # noqa: PLC0415
 
@@ -267,6 +275,7 @@ async def asr_selftest(req: SelftestRequest, request: Request, _=Depends(verify_
         "source_duration_sec": duration,
         "language": result.language,
         "segment_count": len(result.segments),
+        "provider_segment_count": provider_segment_count,
         "segments": [
             {"start": s.start, "end": s.end, "text": s.text, **({"speaker": s.speaker} if s.speaker else {})}
             for s in result.segments
