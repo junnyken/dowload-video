@@ -12,6 +12,7 @@ Endpoints for admin dashboard:
 import glob
 import json
 import os
+import re
 import base64
 import secrets
 import datetime as _dt
@@ -2316,6 +2317,66 @@ async def cookie_pool_remove(req: CookieRemoveRequest, request: Request, _=Depen
         return {"success": True, "platform": req.platform, "pool_size": new_size}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/cookies/retest/{platform}/{cookie_hash}")
+async def cookie_pool_retest(
+    platform: str, cookie_hash: str, request: Request, _=Depends(verify_admin),
+):
+    """
+    Ask the platform whether one pooled cookie is still accepted.
+
+    Takes the cookie's hash, never its value, and returns a verdict plus a fixed
+    message — no cookie data ever leaves the server. Works on cookies marked
+    Expired by date (the date is only the cookie's own claim); never on
+    admin-disabled ones. Success clears the expired mark; failure keeps it.
+    Nothing is deleted. Limits (per-cookie cooldown, per-platform gap, hourly
+    cap) are enforced server-side in cookie_probe.retest_cookie.
+    """
+    if platform not in _VALID_PLATFORMS:
+        raise HTTPException(status_code=400, detail=f"Platform must be one of: {_VALID_PLATFORMS}")
+    if not re.fullmatch(r"[0-9a-f]{16}", cookie_hash):
+        raise HTTPException(status_code=400, detail="Invalid cookie hash")
+    try:
+        import asyncio
+        from app.core.cookie_probe import retest_cookie
+        result = await asyncio.to_thread(retest_cookie, platform, cookie_hash)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=type(e).__name__)
+    log_admin_action(
+        request, "admin.cookie.retested",
+        resource_type="cookie", resource_id=f"{platform}:{cookie_hash}",
+        metadata={"status": result.get("status"),
+                  "cleared_expired": bool(result.get("cleared_expired"))},
+    )
+    return {"success": True, "platform": platform, "hash": cookie_hash, **result}
+
+
+@router.get("/cookies/retest-info")
+async def cookie_retest_info(_=Depends(verify_admin)):
+    """Which platforms can be live-tested, and the server-side limits."""
+    from app.core import cookie_probe as cpr
+    return {
+        "success": True,
+        "supported_platforms": cpr.supported_platforms(),
+        "limits": {
+            "per_cookie_cooldown_s": cpr.PER_COOKIE_COOLDOWN_S,
+            "per_platform_gap_s": cpr.PER_PLATFORM_GAP_MS / 1000,
+            "hourly_cap": cpr.HOURLY_CAP,
+            "batch_cap": cpr.BATCH_CAP,
+        },
+    }
+
+
+@router.get("/cookies/storage-status")
+async def cookie_storage_status(_=Depends(verify_admin)):
+    """Where cookies live and whether Redis reports that it persists them."""
+    import asyncio
+    from app.core.cookie_probe import storage_status
+    try:
+        return {"success": True, **await asyncio.to_thread(storage_status)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=type(e).__name__)
 
 
 # ═════════════════════════════════════════════════════════════════════

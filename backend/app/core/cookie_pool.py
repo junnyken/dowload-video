@@ -50,6 +50,9 @@ from app.core.redis_client import get_redis
 SOFT_BLOCK_TTL = 15 * 60   # 15 min — 429 / temporary rate limit
 HARD_BLOCK_TTL =  6 * 60 * 60  # 6 h  — account suspended / challenge
 _META_TTL = 400 * 24 * 3600
+# How long a successful live test outranks the date inside the cookie. The
+# date is only the cookie's own claim; after this window the date wins again.
+VERIFIED_WINDOW_S = 7 * 24 * 3600
 
 # Per-cookie reuse cooldown (seconds) — prevents same cookie from being
 # called back-to-back when multiple workers fire simultaneously
@@ -199,7 +202,9 @@ def _parse_cookie_info(cookie_b64: str, platform: str) -> dict:
     auth_names = _AUTH_COOKIES.get(platform, set())
     min_expiry = 0
     account_hint = ""
-    hint_names = {"SID", "sessionid", "c_user", "ds_user_id"}
+    # Only public numeric account ids. SID / sessionid are the credential
+    # itself; their first characters must not be echoed into the admin UI.
+    hint_names = {"c_user", "ds_user_id"}
     now_ts = int(time.time())
 
     for line in decoded.splitlines():
@@ -225,6 +230,13 @@ def _parse_cookie_info(cookie_b64: str, platform: str) -> dict:
             account_hint = (value[:24] + "…") if len(value) > 24 else value
 
     return {"expires_at": min_expiry, "account_hint": account_hint}
+
+
+def recently_verified(meta: dict, expires_at: int, now: Optional[int] = None) -> bool:
+    """True if a live platform test succeeded AFTER the claimed expiry, lately."""
+    now = now or int(time.time())
+    v = int(meta.get("verified_ok_at") or 0)
+    return bool(v and expires_at and v > expires_at and now - v < VERIFIED_WINDOW_S)
 
 
 def _get_meta(rc, platform: str, h: str) -> dict:
@@ -283,7 +295,7 @@ def get_cookie_from_pool(platform: str) -> Optional[str]:
         # Auto-detect expired cookie at selection time (lazy check)
         meta = _get_meta(rc, platform, h)
         exp = meta.get("expires_at", 0)
-        if exp and exp < int(time.time()):
+        if exp and exp < int(time.time()) and not recently_verified(meta, exp):
             mark_cookie_expired(platform, c)
             continue
 
@@ -507,8 +519,10 @@ def get_expiry_report(platform: str) -> list[dict]:
         elif health_val == "expired":
             effective_health = "expired"
         elif expiry_status == "expired" and not health_val:
-            # cookie not yet auto-marked but visually expired
-            effective_health = "expired"
+            # cookie not yet auto-marked but visually expired — unless a live
+            # test after that date showed the platform still accepts it
+            if not recently_verified(meta, expires_at, now):
+                effective_health = "expired"
 
         disabled_reason = meta.get("disabled_reason", "") if health_val == "disabled" else ""
 
@@ -516,7 +530,10 @@ def get_expiry_report(platform: str) -> list[dict]:
             "index":           i,
             "hash":            h,
             "label":           meta.get("label", ""),
-            "account_hint":    meta.get("account_hint", ""),
+            # Old entries stored a prefix of sessionid/SID here; show only
+            # purely numeric ids (c_user / ds_user_id).
+            "account_hint":    (meta.get("account_hint", "")
+                                if str(meta.get("account_hint", "")).isdigit() else ""),
             "expires_at":      expires_at,
             "expires_at_str":  (
                 datetime.fromtimestamp(expires_at, tz=timezone.utc).strftime("%Y-%m-%d")
@@ -530,6 +547,11 @@ def get_expiry_report(platform: str) -> list[dict]:
             "cooldown_ttl_s":  cooldown_ttl,
             "last_used":       last_used,
             "disabled_reason": disabled_reason,
+            "added_at":        meta.get("added_at", 0) or 0,
+            "last_test_at":    meta.get("last_test_at", 0) or 0,
+            "last_test_status":  meta.get("last_test_status", ""),
+            "last_test_message": meta.get("last_test_message", ""),
+            "verified_ok_at":  meta.get("verified_ok_at", 0) or 0,
             "usable":          effective_health not in ("expired", "disabled", "hard", "soft", "blocked"),
         })
 
