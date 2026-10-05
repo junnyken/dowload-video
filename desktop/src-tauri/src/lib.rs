@@ -178,10 +178,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            // Registered for C2. The webview is NOT granted updater:* in C0;
-            // checks will be driven from Rust once the key pair exists.
-            #[cfg(desktop)]
+            // Only with `--features updater` (stage C2, needs the key pair).
+            // The webview is never granted updater:*; checks run from Rust.
+            #[cfg(all(desktop, feature = "updater"))]
             app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+            #[cfg(not(all(desktop, feature = "updater")))]
+            let _ = app;
             Ok(())
         })
         .manage(Jobs::default())

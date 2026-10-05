@@ -23,7 +23,13 @@ sha2 = "0.10"
 url = "2"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
-tauri-plugin-updater = "2"
+# Off in C0 (unsigned installer, no updater key yet). Build with
+# `--features updater` once the key pair exists (stage C2).
+tauri-plugin-updater = { version = "2", optional = true }
+
+[features]
+default = []
+updater = ["dep:tauri-plugin-updater"]
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

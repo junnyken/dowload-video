@@ -57,7 +57,7 @@
       "nsis"
     ],
     "publisher": "VidGrab",
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -80,17 +80,6 @@
         "languages": [
           "English"
         ]
-      }
-    }
-  },
-  "plugins": {
-    "updater": {
-      "pubkey": "PLACEHOLDER_REPLACE_WITH_CONTENT_OF_vidgrab-updater.key.pub",
-      "endpoints": [
-        "https://dvid-api.vibe1.tinhgon.xyz/api/v1/client/update/{{target}}/{{arch}}/{{current_version}}"
-      ],
-      "windows": {
-        "installMode": "passive"
       }
     }
   }

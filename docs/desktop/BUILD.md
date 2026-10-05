@@ -81,33 +81,28 @@ sidecars and refuses to start if any differs. A pin that is still
 `REPLACE_ME` compiles as "no pin" (cargo prints a warning), and the app
 refuses to run that binary. **Rebuild after changing the lock file.**
 
-## 4. Updater signing key (one-time, keep it secret)
+## 4. Updater (OFF in C0)
 
-The updater key pair is separate from any code-signing certificate.
+C0 ships an unsigned installer with no updater: `tauri-plugin-updater` is an
+optional cargo feature (`updater`, default off) and
+`bundle.createUpdaterArtifacts` is `false`, so no key is needed to build.
 
-```powershell
-npx tauri signer generate -w "$env:USERPROFILE\.tauri\vidgrab-updater.key"
-```
-
-- Paste the full content of `vidgrab-updater.key.pub` into
-  `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`, replacing
-  `PLACEHOLDER_REPLACE_WITH_CONTENT_OF_vidgrab-updater.key.pub`.
-- Store the private key and its password in the team secret store. If it is
-  lost, installed clients can never be updated again.
-- `bundle.createUpdaterArtifacts` is `true`, so `tauri build` **fails without
-  the private key**. Set it in the shell before building (environment
-  variables only; `.env` files are not read):
-  ```powershell
-  $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content -Raw "$env:USERPROFILE\.tauri\vidgrab-updater.key"
-  $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "<password>"
-  ```
-
-The updater endpoint
-`https://dvid-api.vibe1.tinhgon.xyz/api/v1/client/update/{{target}}/{{arch}}/{{current_version}}`
-is a **placeholder**. That route does not exist on the server yet. It must
-return Tauri's update JSON (`version`, `url`, `signature`, optional `notes`
-and `pub_date`) or HTTP 204 when no update is available. In C0 the webview
-has no `updater:*` permission, and nothing calls the updater.
+To turn it on (stage C2):
+1. `npx tauri signer generate -w "$env:USERPROFILE\.tauri\vidgrab-updater.key"`
+   (separate from any code-signing certificate; keep the private key and its
+   password in the team secret store — if lost, installed clients can never be
+   updated again).
+2. In `tauri.conf.json` set `bundle.createUpdaterArtifacts: true` and add
+   ```json
+   "plugins": { "updater": {
+     "pubkey": "<content of vidgrab-updater.key.pub>",
+     "endpoints": ["https://dvid-api.vibe1.tinhgon.xyz/api/v1/client/update/{{target}}/{{arch}}/{{current_version}}"],
+     "windows": { "installMode": "passive" } } }
+   ```
+   The endpoint does not exist on the server yet; it must return Tauri's update
+   JSON (`version`, `url`, `signature`, optional `notes`, `pub_date`) or 204.
+3. Build with `--features updater` and the key in the environment:
+   `$env:TAURI_SIGNING_PRIVATE_KEY = Get-Content -Raw "$env:USERPROFILE\.tauri\vidgrab-updater.key"`.
 
 ## 5. Build the NSIS installer
 
@@ -149,6 +144,26 @@ npm run tauri dev
 Tauri copies the sidecars next to the dev executable without the triple suffix
 (`target\debug\yt-dlp.exe` and so on). The app resolves them from there, as in
 the installed app.
+
+### Cross-build from Linux (how the first C0 installer was made, 2026-10-06)
+
+Tauri marks this experimental; a Windows host remains the reference build.
+Ubuntu 24.04, Rust 1.99, cargo-xwin 0.23.1, makensis 3.09:
+```bash
+sudo apt-get install -y nsis lld llvm clang
+rustup target add x86_64-pc-windows-msvc
+cargo install --locked cargo-xwin      # downloads the MSVC CRT + Windows SDK on first use
+cd desktop
+npm ci
+node scripts/fetch-binaries.mjs --target x86_64-pc-windows-msvc
+npm run tauri -- build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis
+```
+Output: `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/VidGrab_0.1.0_x64-setup.exe`
+(101 MiB; installer is unsigned — SmartScreen shows "Windows protected your PC",
+choose More info → Run anyway). Linker warnings `LNK4099` (missing Microsoft
+PDBs) are harmless. Checked after the build: the four bundled tools inside the
+installer have the SHA256 values pinned in `binaries.lock.json`, and those
+values are compiled into `vidgrab-desktop.exe`. The installer was NOT run.
 
 ## 6. C0 manual test checklist (clean Windows 10 and Windows 11)
 
