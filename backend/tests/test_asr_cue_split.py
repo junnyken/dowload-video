@@ -104,3 +104,25 @@ class TestPipelineApplies:
         assert len(res.segments) > 3
         assert all(len(s.text) <= 84 for s in res.segments)
         assert _words(res.segments) == _words(REAL)
+
+
+class TestPromptStyle:
+    """The "cue" wording's one live run returned timestamps to 108 s on a 60 s
+    clip; the default stays on the wording that came back correctly timed."""
+
+    def test_default_is_the_sentence_wording(self, monkeypatch):
+        from app.services.asr.gemini import _build_prompt
+        monkeypatch.delenv("ASR_GEMINI_PROMPT_STYLE", raising=False)
+        p = _build_prompt(60.0, "vi", False)
+        assert "each covers one sentence" in p and "SUBTITLE" not in p
+        assert "60.0 seconds long" in p
+
+    def test_cue_wording_is_opt_in(self, monkeypatch):
+        from app.services.asr.gemini import _build_prompt
+        monkeypatch.setenv("ASR_GEMINI_PROMPT_STYLE", "cue")
+        assert "SUBTITLE cues" in _build_prompt(60.0, None, False)
+
+    def test_unknown_style_falls_back_to_sentence(self, monkeypatch):
+        from app.services.asr.gemini import _build_prompt
+        monkeypatch.setenv("ASR_GEMINI_PROMPT_STYLE", "nonsense")
+        assert "each covers one sentence" in _build_prompt(60.0, None, False)

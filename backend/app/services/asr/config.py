@@ -126,3 +126,8 @@ def cue_max_sec() -> float:
 def cue_max_chars() -> int:
     """Two subtitle lines of ~42 characters."""
     return max(20, _int("ASR_CUE_MAX_CHARS", 84))
+
+
+def gemini_prompt_style() -> str:
+    """"sentence" (default) or "cue" — see gemini._SEGMENT_RULES."""
+    return (os.environ.get("ASR_GEMINI_PROMPT_STYLE") or "sentence").strip().lower()

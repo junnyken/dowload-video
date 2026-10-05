@@ -45,6 +45,30 @@ _AUTH_NAMES = {"PermissionDenied", "Unauthenticated", "Forbidden"}
 _FENCE_RE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL)
 
 
+# Segment-length instruction, chosen by ASR_GEMINI_PROMPT_STYLE.
+# "sentence" (default) is the wording of the first live selftest, which came
+# back with correct timestamps but 12-18 s segments (cue_split fixes those).
+# "cue" asks for subtitle-sized segments directly; its one live run
+# (2026-10-05) returned short segments but timestamps running to 108 s on a
+# 60 s clip, rejected by validate_payload. Kept selectable so both can be
+# measured on production without a redeploy of code.
+_SEGMENT_RULES = {
+    "sentence": (
+        "Segments are in chronological order, do not overlap, and each covers one sentence "
+        "or at most about 7 seconds. "
+    ),
+    "cue": (
+        "Segments are in chronological order and do not overlap. They are SUBTITLE cues: "
+        "each one at most 7 seconds and at most about 80 characters; split a long sentence "
+        "at a natural pause into several segments. "
+    ),
+}
+
+
+def _segment_rule() -> str:
+    return _SEGMENT_RULES.get(config.gemini_prompt_style(), _SEGMENT_RULES["sentence"])
+
+
 def _build_prompt(duration_sec: float, language: str | None, diarize: bool) -> str:
     speaker = (
         ', "speaker": "S1"  (label each distinct speaker S1, S2, ...)'
@@ -60,9 +84,7 @@ def _build_prompt(duration_sec: float, language: str | None, diarize: bool) -> s
         f'"text": "<what was said>"{speaker}}}]}}\n'
         f"Rules: start/end are SECONDS (decimal numbers, not strings, not MM:SS) measured from "
         f"the beginning of THIS clip, which is {duration_sec:.1f} seconds long. "
-        "Segments are in chronological order and do not overlap. They are SUBTITLE cues: "
-        "each one at most 7 seconds and at most about 80 characters; split a long sentence "
-        "at a natural pause into several segments. Skip silence and music. "
+        f"{_segment_rule()}Skip silence and music. "
         'If there is no speech at all, return {"language": "unknown", "segments": []}.'
     )
 
