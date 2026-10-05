@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "C0: the main window may call only VidGrab's four commands and listen to their events. No shell, fs, dialog, http or updater permissions are granted to the webview.",
+  "windows": ["main"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-start-download",
+    "allow-cancel-download",
+    "allow-pick-folder",
+    "allow-get-version"
+  ]
+}

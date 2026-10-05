@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VidGrab</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main>
+      <h1>VidGrab <small id="version"></small></h1>
+      <form id="form">
+        <input id="url" type="url" placeholder="https://www.tiktok.com/@user/video/..." required />
+        <div class="row">
+          <button type="button" id="pick">Folder…</button>
+          <span id="folder">(no folder)</span>
+        </div>
+        <div class="row">
+          <button type="submit" id="start">Start</button>
+          <button type="button" id="cancel" disabled>Cancel</button>
+        </div>
+      </form>
+      <pre id="log" aria-live="polite"></pre>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

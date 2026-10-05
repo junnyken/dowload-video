@@ -1,0 +1,52 @@
+use std::{env, fs, path::PathBuf};
+
+/// Sidecars the app checks at runtime. Must match bundle.externalBin.
+const SIDECARS: &[&str] = &["yt-dlp", "ffmpeg", "ffprobe", "deno"];
+
+/// Our own commands. Declaring them here makes tauri-build generate
+/// `allow-<command>` permissions, so a command is callable from the webview
+/// only if capabilities/default.json grants it.
+const COMMANDS: &[&str] = &["start_download", "cancel_download", "pick_folder", "get_version"];
+
+fn main() {
+    generate_pins();
+    tauri_build::try_build(
+        tauri_build::Attributes::new()
+            .app_manifest(tauri_build::AppManifest::new().commands(COMMANDS)),
+    )
+    .expect("tauri-build failed");
+}
+
+/// Reads ../binaries.lock.json and writes $OUT_DIR/pins.rs with the expected
+/// SHA256 of each sidecar for the target being compiled. A pin that is still
+/// REPLACE_ME (or missing) becomes `None`, and the app then refuses to run that
+/// sidecar instead of trusting an unverified file.
+fn generate_pins() {
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let lock_path = manifest_dir.join("..").join("binaries.lock.json");
+    println!("cargo:rerun-if-changed={}", lock_path.display());
+
+    let target = env::var("TARGET").unwrap();
+    let lock: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&lock_path).expect("cannot read binaries.lock.json"),
+    )
+    .expect("binaries.lock.json is not valid JSON");
+
+    let mut out = String::from("pub const PINS: &[(&str, Option<&str>)] = &[\n");
+    for name in SIDECARS {
+        let pin = lock["binaries"][name]["targets"][&target]["extractedSha256"]
+            .as_str()
+            .filter(|h| h.len() == 64 && h.chars().all(|c| c.is_ascii_hexdigit()))
+            .map(|h| h.to_ascii_lowercase());
+        match &pin {
+            Some(h) => out.push_str(&format!("    ({name:?}, Some({h:?})),\n")),
+            None => {
+                println!("cargo:warning=no SHA256 pin for {name} on {target}; the app will refuse to run it");
+                out.push_str(&format!("    ({name:?}, None),\n"));
+            }
+        }
+    }
+    out.push_str("];\n");
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("pins.rs");
+    fs::write(out_path, out).unwrap();
+}

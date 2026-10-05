@@ -1,0 +1,10 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; }
+main { max-width: 760px; margin: 0 auto; padding: 16px; }
+h1 small { font-size: 0.5em; opacity: 0.6; }
+form { display: grid; gap: 8px; }
+input { padding: 8px; font-size: 1rem; }
+.row { display: flex; gap: 8px; align-items: center; }
+#folder { opacity: 0.8; overflow-wrap: anywhere; }
+#log { height: 320px; overflow: auto; padding: 8px; font-size: 12px; white-space: pre-wrap;
+  border: 1px solid #8884; border-radius: 4px; }

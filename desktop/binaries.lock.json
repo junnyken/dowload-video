@@ -1,0 +1,84 @@
+{
+  "$comment": "Pinned sidecar binaries. Every sha256 here was copied from an official checksum file (see checksumSource) or must stay REPLACE_ME. Never type a hash by hand. extractedSha256 = hash of the binary itself (what the app checks at runtime); for archives it can be filled only by `node scripts/fetch-binaries.mjs --record-extracted` AFTER the archive hash verified.",
+  "schema": 1,
+  "binaries": {
+    "yt-dlp": {
+      "version": "2026.08.19",
+      "targets": {
+        "x86_64-pc-windows-msvc": {
+          "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe",
+          "sha256": "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a",
+          "checksumSource": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/SHA2-256SUMS",
+          "archive": null,
+          "extractedSha256": "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a"
+        },
+        "x86_64-unknown-linux-gnu": {
+          "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_linux",
+          "sha256": "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a",
+          "checksumSource": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/SHA2-256SUMS",
+          "archive": null,
+          "extractedSha256": "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a"
+        }
+      }
+    },
+    "ffmpeg": {
+      "version": "9.0.2 (gyan.dev essentials build, GPL)",
+      "targets": {
+        "x86_64-pc-windows-msvc": {
+          "url": "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip",
+          "sha256": "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba",
+          "checksumSource": "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip.sha256 (release-version was 9.0.2 on 2026-10-06; same value as the GitHub asset digest)",
+          "archive": { "type": "zip", "member": "ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe" },
+          "extractedSha256": "REPLACE_ME"
+        },
+        "x86_64-unknown-linux-gnu": {
+          "url": "REPLACE_ME",
+          "sha256": "REPLACE_ME",
+          "checksumSource": "not chosen yet (Linux is dev-only; e.g. a dated BtbN/FFmpeg-Builds release + its checksums.sha256)",
+          "archive": null,
+          "extractedSha256": "REPLACE_ME"
+        }
+      }
+    },
+    "ffprobe": {
+      "version": "9.0.2 (gyan.dev essentials build, GPL)",
+      "targets": {
+        "x86_64-pc-windows-msvc": {
+          "url": "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip",
+          "sha256": "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba",
+          "checksumSource": "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip.sha256 (same archive as ffmpeg)",
+          "archive": { "type": "zip", "member": "ffmpeg-9.0.2-essentials_build/bin/ffprobe.exe" },
+          "extractedSha256": "REPLACE_ME"
+        },
+        "x86_64-unknown-linux-gnu": {
+          "url": "REPLACE_ME",
+          "sha256": "REPLACE_ME",
+          "checksumSource": "not chosen yet (Linux is dev-only)",
+          "archive": null,
+          "extractedSha256": "REPLACE_ME"
+        }
+      }
+    },
+    "deno": {
+      "version": "2.9.7",
+      "targets": {
+        "x86_64-pc-windows-msvc": {
+          "url": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-pc-windows-msvc.zip",
+          "sha256": "a0c3101b4158d1dfb7d6a78a7bf0f3de80c96bb423c152beec8beb22786f2238",
+          "checksumSource": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-pc-windows-msvc.zip.sha256sum",
+          "archive": { "type": "zip", "member": "deno.exe" },
+          "extractedSha256": "e020f3e232bd16e33768dee528e5983349c962952051ced0a5d58ad42f5d9b33",
+          "extractedChecksumSource": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-pc-windows-msvc.sha256sum"
+        },
+        "x86_64-unknown-linux-gnu": {
+          "url": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-unknown-linux-gnu.zip",
+          "sha256": "c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490",
+          "checksumSource": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-unknown-linux-gnu.zip.sha256sum",
+          "archive": { "type": "zip", "member": "deno" },
+          "extractedSha256": "ce6a052beb97c2b92de67077e3f3924ba7c9661ede0d8dc2f66a116a3c841f21",
+          "extractedChecksumSource": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-unknown-linux-gnu.sha256sum"
+        }
+      }
+    }
+  }
+}

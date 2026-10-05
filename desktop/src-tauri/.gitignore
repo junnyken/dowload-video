@@ -1,0 +1,5 @@
+/target/
+/gen/schemas
+# Downloaded by scripts/fetch-binaries.mjs; never committed.
+/binaries/*
+!/binaries/.gitkeep
