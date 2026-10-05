@@ -311,7 +311,11 @@ def admin(monkeypatch):
 
 
 def _seed(now=None):
-    now = now or datetime.now(timezone.utc)
+    # Follow the pinned clock (`do._now`, set by the fixed_now fixture). It used
+    # to default to the real time, while the endpoints read at FIXED_NOW
+    # (2026-10-03): the two agreed only on that one calendar day, then both
+    # tests read 0 rows on every other day.
+    now = now or do._now()
     for _ in range(3):
         do.record("tiktok", True, now=now)
     do.record("tiktok", False, "video_unavailable", now=now)
