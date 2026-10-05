@@ -6,6 +6,10 @@ import {
   deleteCookie,
   addCookie,
   triggerCookieHealthCheck,
+  fetchStorageStatus,
+  fetchRetestInfo,
+  type StorageStatusResponse,
+  type RetestInfoResponse,
   type CookieListResponse,
   type CookieStatusResponse,
 } from '../api/cookies'
@@ -56,5 +60,21 @@ export function useTriggerCookieHealthCheck(platform: string) {
   return useMutation({
     mutationFn: triggerCookieHealthCheck,
     onSuccess:  () => qc.invalidateQueries({ queryKey: adminKeys.cookieList(platform) }),
+  })
+}
+
+export function useCookieStorageStatus() {
+  return useQuery<StorageStatusResponse>({
+    queryKey:        ['admin', 'cookies', 'storage'],
+    queryFn:         fetchStorageStatus,
+    refetchInterval: 60_000,
+  })
+}
+
+export function useCookieRetestInfo() {
+  return useQuery<RetestInfoResponse>({
+    queryKey: ['admin', 'cookies', 'retest-info'],
+    queryFn:  fetchRetestInfo,
+    staleTime: 10 * 60_000,
   })
 }
