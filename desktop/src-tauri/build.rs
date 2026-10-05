@@ -6,7 +6,29 @@ const SIDECARS: &[&str] = &["yt-dlp", "ffmpeg", "ffprobe", "deno"];
 /// Our own commands. Declaring them here makes tauri-build generate
 /// `allow-<command>` permissions, so a command is callable from the webview
 /// only if capabilities/default.json grants it.
-const COMMANDS: &[&str] = &["start_download", "cancel_download", "pick_folder", "get_version"];
+const COMMANDS: &[&str] = &[
+    "probe",
+    "cancel_probe",
+    "start_download",
+    "pause_download",
+    "cancel_download",
+    "pick_folder",
+    "default_download_dir",
+    "disk_free",
+    "reveal_path",
+    "open_path",
+    "open_url",
+    "history_list",
+    "history_add",
+    "history_delete",
+    "history_clear",
+    "history_mark_synced",
+    "auth_save",
+    "auth_load",
+    "auth_clear",
+    "get_version",
+    "tool_versions",
+];
 
 fn main() {
     generate_pins();

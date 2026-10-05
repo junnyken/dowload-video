@@ -1,0 +1,56 @@
+// Error code -> Vietnamese. Covers every code in C1-CONTRACT.md plus auth/API cases.
+
+export type AppError = { code: string; message: string };
+
+const MESSAGES: Record<string, string> = {
+  invalid_url: 'Liên kết không hợp lệ. Hãy kiểm tra lại đường dẫn.',
+  unsupported: 'Trang web này chưa được hỗ trợ hoặc liên kết không chứa video.',
+  private_or_login: 'Video riêng tư hoặc cần đăng nhập mới xem được.',
+  geo_blocked: 'Video bị chặn ở khu vực của bạn.',
+  not_found: 'Không tìm thấy video. Có thể đã bị xoá hoặc liên kết sai.',
+  network: 'Lỗi kết nối mạng. Hãy kiểm tra Internet rồi thử lại.',
+  disk_full: 'Ổ đĩa đã hết dung lượng. Hãy giải phóng chỗ trống hoặc chọn thư mục khác.',
+  tool_missing: 'Thiếu thành phần tải video của ứng dụng. Hãy cài đặt lại VidGrab.',
+  tool_tampered: 'Thành phần tải video không còn nguyên vẹn nên bị chặn. Hãy cài đặt lại VidGrab từ nguồn chính thức.',
+  timeout: 'Quá thời gian chờ. Hãy thử lại.',
+  cancelled: 'Đã huỷ.',
+  unknown: 'Đã xảy ra lỗi không xác định. Hãy thử lại.',
+  // UI / auth / API
+  invalid_credentials: 'Email hoặc mật khẩu không đúng.',
+  email_not_confirmed: 'Email chưa được xác nhận. Hãy mở email xác nhận trước khi đăng nhập.',
+  rate_limited: 'Thao tác quá nhanh. Vui lòng chờ một lát rồi thử lại.',
+  unauthorized: 'Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.',
+  server: 'Máy chủ đang gặp sự cố. Hãy thử lại sau.',
+  not_in_app: 'Tính năng này chỉ chạy trong ứng dụng VidGrab trên máy tính.',
+};
+
+export function errorMessage(code: string | null | undefined): string {
+  return MESSAGES[code ?? 'unknown'] ?? MESSAGES.unknown;
+}
+
+/** Normalises whatever invoke()/fetch/supabase threw into { code, message }. */
+export function toAppError(e: unknown): AppError {
+  if (e && typeof e === 'object') {
+    const o = e as Record<string, unknown>;
+    if (typeof o.code === 'string' && o.code in MESSAGES) {
+      return { code: o.code, message: typeof o.message === 'string' ? o.message : '' };
+    }
+    if (typeof o.code === 'string' && typeof o.message === 'string' && !('status' in o)) {
+      // Rust CommandError with a code we do not know yet.
+      return { code: 'unknown', message: o.message };
+    }
+  }
+  return { code: 'unknown', message: e instanceof Error ? e.message : String(e) };
+}
+
+/** Supabase auth errors -> our codes (message strings are English from GoTrue). */
+export function authErrorCode(e: unknown): string {
+  const o = (e ?? {}) as { message?: string; status?: number; name?: string; code?: string };
+  const msg = (o.message ?? '').toLowerCase();
+  if (o.code === 'invalid_credentials' || msg.includes('invalid login credentials')) return 'invalid_credentials';
+  if (o.code === 'email_not_confirmed' || msg.includes('email not confirmed')) return 'email_not_confirmed';
+  if (o.status === 429 || msg.includes('rate limit')) return 'rate_limited';
+  if (o.name === 'AuthRetryableFetchError' || msg.includes('fetch') || msg.includes('network') || o.status === 0) return 'network';
+  if ((o.status ?? 0) >= 500) return 'server';
+  return 'unknown';
+}

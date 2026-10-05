@@ -1,9 +1,9 @@
 [package]
 name = "vidgrab-desktop"
-version = "0.1.0"
-description = "VidGrab desktop client (Phase 32C, stage C0 spike)"
+version = "0.2.0"
+description = "VidGrab desktop client (Phase 32C, stage C1)"
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.88"
 
 [lib]
 # Tauri 2 template layout: logic lives in the lib, main.rs only calls run().
@@ -21,6 +21,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 url = "2"
+# Local history DB; "bundled" compiles SQLite in, no system library needed.
+rusqlite = { version = "0.40", features = ["bundled"] }
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 # Off in C0 (unsigned installer, no updater key yet). Build with
@@ -37,7 +39,16 @@ windows-sys = { version = "0.61", features = [
   "Win32_Security",
   "Win32_System_JobObjects",
   "Win32_System_Threading",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Com",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
 ] }
+# Session storage in Windows Credential Manager. keyring 4's `v1` API picks
+# the windows-native store (keyring-core + windows-native-keyring-store) on
+# Windows; it is declared for Windows only so Linux dev/test builds do not
+# pull the D-Bus secret-service stack.
+keyring = { version = "4", default-features = false, features = ["v1"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+/* Dark variant keyed to <html data-theme="dark">, same as the web app. */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* Design tokens copied from the VidGrab web app (frontend/src/index.css)
+   so the desktop client looks like the same product. */
+:root {
+  color-scheme: light;
+  --vg-canvas: #FAFAF9;
+  --vg-surface: #FFFFFF;
+  --vg-surface-2: #F4F4F2;
+  --vg-line: #E7E5E4;
+  --vg-line-strong: #D6D3D1;
+  --vg-fg: #1C1917;
+  --vg-fg-2: #57534E;
+  --vg-fg-muted: #736D68;
+  --vg-accent: #C9460A;
+  --vg-accent-hover: #A93B08;
+  --vg-accent-fg: #FFFFFF;
+  --vg-accent-soft: #FFF1E8;
+  --vg-hero-glow-core: rgb(255 243 233 / 0.96);
+  --vg-hero-glow-warm: rgb(234 88 12 / 0.10);
+  --vg-hero-glow-gold: rgb(251 191 36 / 0.10);
+  --vg-accent-text: #C2410C;
+  --vg-success: #15803D;
+  --vg-success-soft: #ECFDF3;
+  --vg-success-fg: #FFFFFF;
+  --vg-warning: #B45309;
+  --vg-warning-soft: #FFF7E6;
+  --vg-warning-fg: #FFFFFF;
+  --vg-danger: #D42222;
+  --vg-danger-soft: #FEF2F2;
+  --vg-danger-fg: #FFFFFF;
+  --vg-shadow-card: 0 1px 2px rgb(0 0 0 / .04), 0 1px 3px rgb(0 0 0 / .03);
+  --vg-shadow-sm: 0 1px 2px rgb(0 0 0 / .04);
+  --vg-shadow-md: 0 2px 6px rgb(0 0 0 / .05), 0 1px 2px rgb(0 0 0 / .04);
+  --vg-shadow-lg: 0 4px 12px rgb(0 0 0 / .06);
+  --vg-shadow-xl: 0 8px 24px rgb(0 0 0 / .07);
+  --vg-shadow-2xl: 0 12px 32px rgb(0 0 0 / .08);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --vg-canvas: #0E0E10;
+  --vg-surface: #17171A;
+  --vg-surface-2: #1F1F23;
+  --vg-line: #2A2A2F;
+  --vg-line-strong: #3A3A41;
+  --vg-fg: #F4F4F5;
+  --vg-fg-2: #C4C4CC;
+  --vg-fg-muted: #8E8E99;
+  --vg-accent: #F26B2A;
+  --vg-accent-hover: #FF8148;
+  /* White on #F26B2A is only 3.0:1; near-black on it is 6.4:1. */
+  --vg-accent-fg: #1A0A00;
+  --vg-accent-soft: #2A1A12;
+  --vg-hero-glow-core: rgb(30 22 18 / 0.92);
+  --vg-hero-glow-warm: rgb(242 107 42 / 0.16);
+  --vg-hero-glow-gold: rgb(251 191 36 / 0.06);
+  --vg-accent-text: #FF8A50;
+  --vg-success: #4ADE80;
+  --vg-success-soft: #10261A;
+  --vg-success-fg: #052E16;
+  --vg-warning: #FBBF24;
+  --vg-warning-soft: #2A2210;
+  --vg-warning-fg: #1A0A00;
+  --vg-danger: #F87171;
+  --vg-danger-soft: #2A1414;
+  --vg-danger-fg: #2A0A0A;
+  --vg-shadow-card: none;
+  --vg-shadow-sm: none;
+  --vg-shadow-md: none;
+  --vg-shadow-lg: 0 4px 16px rgb(0 0 0 / .4);
+  --vg-shadow-xl: 0 8px 28px rgb(0 0 0 / .45);
+  --vg-shadow-2xl: 0 12px 36px rgb(0 0 0 / .5);
+}
+
+@theme inline {
+  --color-canvas: var(--vg-canvas);
+  --color-surface: var(--vg-surface);
+  --color-surface-2: var(--vg-surface-2);
+  --color-line: var(--vg-line);
+  --color-line-strong: var(--vg-line-strong);
+  --color-fg: var(--vg-fg);
+  --color-fg-2: var(--vg-fg-2);
+  --color-fg-muted: var(--vg-fg-muted);
+  --color-accent: var(--vg-accent);
+  --color-accent-hover: var(--vg-accent-hover);
+  --color-accent-fg: var(--vg-accent-fg);
+  --color-accent-soft: var(--vg-accent-soft);
+  --color-accent-text: var(--vg-accent-text);
+  --color-success: var(--vg-success);
+  --color-success-soft: var(--vg-success-soft);
+  --color-success-fg: var(--vg-success-fg);
+  --color-warning: var(--vg-warning);
+  --color-warning-soft: var(--vg-warning-soft);
+  --color-warning-fg: var(--vg-warning-fg);
+  --color-danger: var(--vg-danger);
+  --color-danger-soft: var(--vg-danger-soft);
+  --color-danger-fg: var(--vg-danger-fg);
+
+  /* Legacy token names kept as aliases so nothing that still references
+     them breaks. New code should use the semantic names above. */
+  --color-primary: var(--vg-accent);
+  --color-primary-light: var(--vg-accent-hover);
+  --color-primary-dark: var(--vg-accent-hover);
+  --color-accent-light: var(--vg-accent-text);
+  --color-surface-light: var(--vg-surface-2);
+  --color-surface-lighter: var(--vg-line);
+  --color-surface-card: var(--vg-surface);
+  --color-text-primary: var(--vg-fg);
+  --color-text-secondary: var(--vg-fg-2);
+  --color-text-muted: var(--vg-fg-muted);
+  --color-error: var(--vg-danger);
+  --color-border: var(--vg-line);
+
+  --shadow-xs: var(--vg-shadow-sm);
+  --shadow-sm: var(--vg-shadow-sm);
+  --shadow-md: var(--vg-shadow-md);
+  --shadow-lg: var(--vg-shadow-lg);
+  --shadow-xl: var(--vg-shadow-xl);
+  --shadow-2xl: var(--vg-shadow-2xl);
+  --shadow-card: var(--vg-shadow-card);
+}
+
+@theme {
+  --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --radius-card: 12px;
+  --radius-control: 10px;
+}
+
+
+@layer base {
+  * { box-sizing: border-box; }
+  html, body, #root { height: 100%; }
+  html { background-color: var(--vg-canvas); }
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--vg-canvas);
+    color: var(--vg-fg);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    user-select: none;
+  }
+  input, textarea { user-select: text; }
+  button:not(:disabled) { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--vg-accent); outline-offset: 2px; }
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--vg-line-strong); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--vg-fg-muted); }
+
+@keyframes vg-shimmer { 0% { opacity: .55; } 50% { opacity: 1; } 100% { opacity: .55; } }
+.vg-skeleton { background: var(--vg-surface-2); animation: vg-shimmer 1.4s ease-in-out infinite; }
+@keyframes vg-slide-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+.vg-toast { animation: vg-slide-in .18s ease-out; }
+@media (prefers-reduced-motion: reduce) { .vg-skeleton, .vg-toast { animation: none; } }

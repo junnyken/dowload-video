@@ -1,14 +1,31 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "C0: the main window may call only VidGrab's four commands and listen to their events. No shell, fs, dialog, http or updater permissions are granted to the webview.",
+  "description": "C1: the main window may call only the commands of docs/desktop/C1-CONTRACT.md and listen to their events. No shell, fs, dialog, opener, http or updater permissions are granted to the webview; folder picking, revealing and opening files happen in Rust.",
   "windows": ["main"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
+    "allow-probe",
+    "allow-cancel-probe",
     "allow-start-download",
+    "allow-pause-download",
     "allow-cancel-download",
     "allow-pick-folder",
-    "allow-get-version"
+    "allow-default-download-dir",
+    "allow-disk-free",
+    "allow-reveal-path",
+    "allow-open-path",
+    "allow-open-url",
+    "allow-history-list",
+    "allow-history-add",
+    "allow-history-delete",
+    "allow-history-clear",
+    "allow-history-mark-synced",
+    "allow-auth-save",
+    "allow-auth-load",
+    "allow-auth-clear",
+    "allow-get-version",
+    "allow-tool-versions"
   ]
 }
