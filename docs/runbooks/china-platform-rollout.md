@@ -3,7 +3,7 @@
 Scope: **single public video only** — Douyin (Phase 32B-2 Stage A), and Kuaishou + Xiaohongshu (Phase 32B-3, section 8
 below). Bilibili and Lemon8 are not routed. Profiles / channels are not in scope for any of them.
 Modes are `off | benchmark | canary_admin | on`. There is no percentage canary: at about 110 downloads a week,
-5 % would give almost no samples. There is no admin UI page and no DB table. Everything below is env (Vibe Host)
+5 % would give almost no samples. There is no DB table. Apart from the Apify token pool and its cost page (section 9), everything below is env (Vibe Host)
 or an admin API call.
 
 Background: `docs/china-access/04-MIGRATION-ROLLBACK.md` (wave-1 rollout), `05-BENCHMARK-PLAN.md` (benchmark and
@@ -50,7 +50,8 @@ curl -s -X DELETE -H "$H" -H 'Content-Type: application/json' "$API/admin/china-
   -d '{"reason":"rotate"}'                                                    # env fallback applies again, if set
 ```
 
-The same controls are in the admin panel under Config → "Apify (lấy video Douyin)".
+Since task #6036 these four calls still work but only manage the pool's "legacy slot" entry (section 9). Use the
+pool API or the admin page MANAGE → "Chi phí Apify" (also the "Apify" card in Config) for everything else.
 
 Telegram alerts go through the existing `send_admin_alert`, so `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` must be set.
 
@@ -240,3 +241,104 @@ Same commands as section 6 with `kuaishou` or `xiaohongshu` instead of `douyin`.
 `CHINA_ACCESS_<P>_ENABLED=false`) sends that platform's links back to the old path: Xiaohongshu to the generic yt-dlp
 path, Kuaishou to the generic path (which fails as before unless `KUAISHOU_ENABLED` is set).
 
+
+## 9. Apify token pool (task #6036)
+
+Several Apify accounts are rotated per paid call. **Each token must belong to an Apify organization account or to a
+different legal owner with its own paid balance.** Apify Terms §4.3 forbid several personal accounts for one person;
+organizations are allowed (up to 10 per person) and billed separately
+(docs.apify.com/platform/collaboration/organization-account). `GET /v2/users/me` has no "is organization" field, so the
+pool cannot check this. The label you give each token is the only record.
+
+Admin page: MANAGE → **Chi phí Apify** (`/vid-admin/apify-costs`): per-platform numbers (today / 7 days / this
+month), per-token usage and projections, pool totals, add / edit / disable / delete / refresh. The Config page
+shows the same token list.
+
+### What happens on each paid call
+
+1. Entries that are `active`, enabled and under their own monthly ceiling are eligible.
+2. Pick order: **priority** (lower number first; default 100, env fallback 1000), then **most remaining credit**.
+   Remaining = min(Apify limit − usage, own ceiling − our month spend). Usage = Apify's `monthlyUsageUsd` at the last
+   refresh + what we recorded on that entry since, or our own month figure if that is higher. Entries with unknown
+   remaining go after known ones.
+3. The call's estimate is reserved on the entry, then settled to the same figure the provider budget records (never
+   below the estimate, as before). Platform / provider daily and monthly ceilings, kill switches and quotas are
+   unchanged and still apply first.
+4. If Apify **refuses to start** the run, the entry changes state:
+
+| Apify answer to `POST /v2/acts/{id}/runs` | Entry state | Same video retried? |
+|---|---|---|
+| 402 (any type), or `not-enough-usage-to-run-paid-actor`, `platform-feature-disabled`, `x402-payment-required` | `exhausted` | Yes, once, on the next entry |
+| 401 `invalid-token` / `token-not-provided`, 403 `insufficient-permissions`, `user-disabled`, `apify-plan-required-to-use-paid-actor` | `invalid` | Yes, once, on the next entry |
+| 429 `rate-limit-exceeded`, `concurrent-runs-limit-exceeded`, `actor-memory-limit-exceeded`, any 5xx | `cooldown` (5 min) | No |
+| Run started (201), or the start request timed out | — | **Never** (the run may be billed) |
+
+The retry is safe because nothing was billed on the first account and the second is a different billing account.
+The router's single budget reservation covers that one run. At most two entries are tried per request. Set
+`CHINA_ACCESS_APIFY_POOL_RETRY_NEXT_TOKEN=false` to switch the retry off.
+
+Sources: Apify OpenAPI (`https://docs.apify.com/api/openapi.json`), *Run Actor*
+(`https://docs.apify.com/api/v2/act-runs-post`): 401 `invalid-token`; 402 "the user has exceeded their usage limit,
+does not have enough credits…"; 403 `insufficient-permissions`; 429 `rate-limit-exceeded`
+(`https://docs.apify.com/api/v2` → Rate limiting). The other type names come from the spec's `ErrorType` enum. The
+exact type Apify sends for an organization that is out of credit was **not** observed live. Any 402 counts as
+exhausted, whatever the type.
+
+### What "exhausted" means and how it recovers
+
+`exhausted` = Apify said this account cannot pay for a run now, or a refresh showed `monthlyUsageUsd ≥
+maxMonthlyUsageUsd`, or `effectivePlatformFeatures.ACTORS.isEnabled = false`. It comes back to `active` without anyone
+doing anything at `exhausted_until`. That is the end of Apify's `monthlyUsageCycle` from `/users/me/limits`, or the
+start of the next UTC month when the cycle is unknown. It also comes back when "Làm mới" (refresh) shows remaining
+credit. `invalid` only comes back through a successful refresh. `cooldown` ends after
+`CHINA_ACCESS_APIFY_POOL_COOLDOWN_SEC`. `disabled` = switched off by the admin.
+
+### Alerts (Telegram, via `send_admin_alert`)
+
+| Alert | When | De-duplication |
+|---|---|---|
+| "Apify pool: token hết tiền / chạm giới hạn" (warning) | an entry turns `exhausted` | once per transition |
+| "Apify pool: token không dùng được" (critical) | an entry turns `invalid` | once per transition |
+| "Apify pool: không còn token dùng được" (critical) | a paid call finds no eligible entry | once, re-armed when an entry is picked again (max 1/day) |
+| "Apify pool: sắp hết tiền" (warning) | known remaining < `CHINA_ACCESS_APIFY_POOL_LOW_PCT` % of known capacity | once per UTC month |
+| "Apify pool: token chạm trần chi tiêu riêng" (warning) | an entry's own monthly ceiling would be exceeded | once per entry per month |
+
+Alerts name the label and `••••last4` only.
+
+### API
+
+```bash
+curl -s -H "$H" "$API/admin/china-platforms/apify/pool"            # entries (no tokens) + summary
+read -rs APIFY_TOK
+curl -s -X POST -H "$H" -H 'Content-Type: application/json' "$API/admin/china-platforms/apify/pool" \
+  -d "{\"token\":\"$APIFY_TOK\",\"label\":\"Tổ chức A\",\"priority\":10,\"monthly_ceiling_usd\":5,\"reason\":\"add org A\"}"; unset APIFY_TOK
+curl -s -X POST -H "$H" -H 'Content-Type: application/json' "$API/admin/china-platforms/apify/pool/2" \
+  -d '{"enabled": false, "reason": "pause org B"}'                   # label / priority / monthly_ceiling_usd / enabled
+curl -s -X POST -H "$H" "$API/admin/china-platforms/apify/pool/2/refresh"   # free: /users/me + /users/me/limits
+curl -s -X POST -H "$H" "$API/admin/china-platforms/apify/pool/refresh"     # all entries
+curl -s -X DELETE -H "$H" -H 'Content-Type: application/json' "$API/admin/china-platforms/apify/pool/2" \
+  -d '{"reason": "account closed"}'
+curl -s -H "$H" "$API/admin/china-platforms/apify/metrics"         # platforms today/7d/month + entries + pool
+```
+
+A token cannot be edited. Add the new one, then delete the old one. The env entry (`id` `env`) cannot be deleted
+here. Remove `CHINA_ACCESS_APIFY_TOKEN` on Vibe Host, or disable the entry. Every POST/DELETE except refresh needs
+`reason` and is audited (`admin.china_access.apify_pool_*`, with id + label + last4 only).
+
+### Migration
+
+No action. On the first read after deploy, the token saved by the old card (`china:secret:apify_token`) becomes entry
+`1` ("Token chính (đã lưu trước đây)") with its saved account and usage. The old key is kept as a mirror, so rolling the
+code back still finds it. Deleting that entry also deletes the old key.
+
+### Measurement and cost reductions
+
+* Rollups: `china:metrics:{yyyymmdd}:{platform}` and `china:apify_pool:spend|calls:{id}:day:{d}`, 40-day TTL, UTC days.
+* "Saved" = cache hits whose result came from a paid provider × that provider's estimate. It is an estimate.
+* The cache never serves a result whose media URL expires within `CHINA_ACCESS_CACHE_EXPIRY_MARGIN_SEC` (600 s), and
+  never stores one past its expiry. `CHINA_ACCESS_CACHE_EXTENDED_TTL_SEC` (off by default) lets results whose URLs
+  carry a known expiry stay cached longer, still bounded by that expiry. What is cached is the whole normalized result,
+  including the signed CDN URL. No metadata-only cache exists, because there is no cheap way to re-resolve a URL
+  (Douyin native is broken).
+* Order is unchanged: free route first (Douyin, Xiaohongshu). Managed-first only via `CHINA_ACCESS_<P>_PROVIDER_ORDER`.
+  The anonymous paid quota stays at `CHINA_ACCESS_ANON_DAILY_RESOLVE_LIMIT` (5) unless the owner lowers it.

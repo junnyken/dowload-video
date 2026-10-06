@@ -58,7 +58,7 @@ Details, actor research and prices: `09-XHS-KUAISHOU-PROVIDERS.md`; enable steps
 ## Apify (provider level)
 | Name | Default | Notes |
 |---|---|---|
-| `CHINA_ACCESS_APIFY_TOKEN` | *(empty)* | **Secret.** Fallback only: a token saved in the admin panel (Config → "Apify (lấy video Douyin)", Redis `china:secret:apify_token`) takes precedence. Neither set → `apify_douyin` is never eligible |
+| `CHINA_ACCESS_APIFY_TOKEN` | *(empty)* | **Secret.** Fallback entry of the token pool (id `env`, priority 1000 = used last). Tokens added in the admin panel (Chi phí Apify / Config → "Apify") come first. No eligible entry → no Apify provider is eligible |
 | `CHINA_ACCESS_APIFY_DAILY_CALL_LIMIT` | `50` | |
 | `CHINA_ACCESS_APIFY_DAILY_SPEND_CEILING_USD` | `1.00` | |
 | `CHINA_ACCESS_APIFY_MONTHLY_SPEND_CEILING_USD` | `5.00` | Calendar month, UTC |
@@ -66,6 +66,23 @@ Details, actor research and prices: `09-XHS-KUAISHOU-PROVIDERS.md`; enable steps
 | `CHINA_ACCESS_APIFY_DOUYIN_EST_COST_USD` | `0.0071` | FREE-tier list price per result + start event (01 §2) |
 | `CHINA_ACCESS_APIFY_RUN_MAX_CHARGE_USD` | `0.02` | Sent as `maxTotalChargeUsd` per run |
 | `CHINA_ACCESS_APIFY_REQUIRE_DURATION` | `false` | The documented output has no video duration |
+
+## Apify token pool and cost reduction (task #6036)
+Operations: `docs/runbooks/china-platform-rollout.md` §9. Code: `apify_pool.py`, `cost_metrics.py`.
+
+| Name | Default | Notes |
+|---|---|---|
+| `CHINA_ACCESS_APIFY_POOL_COOLDOWN_SEC` | `300` | An entry rests this long after Apify answered 429 / 5xx to a run start (min 30) |
+| `CHINA_ACCESS_APIFY_POOL_RETRY_NEXT_TOKEN` | `true` | When Apify **refused to start** a run (402 / out of credit, 401/403), try the same video once on the next entry. Never after a run started |
+| `CHINA_ACCESS_APIFY_POOL_LOW_PCT` | `20` | Telegram alert (once per UTC month) when the pool's known remaining credit is below this % of its known capacity |
+| `CHINA_ACCESS_APIFY_POOL_MAX_ENTRIES` | `10` | Admin-added entries (env fallback not counted) |
+| `CHINA_ACCESS_CACHE_EXTENDED_TTL_SEC` | `0` (off) | When > 0, a result whose media URL carries a known expiry (`x-expires` / `expires` / TikTok hex path) may stay cached up to this long, never past the expiry minus the margin. Results without a known expiry keep `CHINA_ACCESS_CACHE_TTL_SEC` |
+| `CHINA_ACCESS_CACHE_EXPIRY_MARGIN_SEC` | `600` | Always on: a cached result is dropped (never served) within this many seconds of its media URL's expiry, and never written with a TTL past it |
+
+Unchanged on purpose: `CHINA_ACCESS_ANON_DAILY_RESOLVE_LIMIT` (5) stays the anonymous paid-path quota; lower it only
+if the owner decides to. Provider order is unchanged: free/native first where a native route exists (Douyin,
+Xiaohongshu); managed-first only through `CHINA_ACCESS_<P>_PROVIDER_ORDER`. `CHINA_ACCESS_COST_FLOOR_AT_ESTIMATE`
+(true) also governs the per-entry spend.
 
 ## Benchmark
 | Name | Default | Notes |
@@ -105,8 +122,11 @@ Details, actor research and prices: `09-XHS-KUAISHOU-PROVIDERS.md`; enable steps
 
 ## Owner actions
 1. Create a **separate** Apify account and set a monthly spending limit in the Apify console (hard stop independent of this code).
-2. Save its API token in the admin panel (Config → "Apify (lấy video Douyin)"). It is validated with a free Apify call
-   before it is stored, and it can be replaced later without a redeploy. Alternative: `CHINA_ACCESS_APIFY_TOKEN` on Vibe Host
+2. Save its API token in the admin panel (MANAGE → "Chi phí Apify" → "Thêm token", or Config → "Apify"). It is validated
+   with a free Apify call before it is stored, and more tokens can be added later without a redeploy. Each extra token
+   must belong to an Apify **organization** account or a different legal owner with its own balance (Apify Terms
+   §4.3 forbids several personal accounts per person; organizations are allowed, up to 10 per person, billed
+   separately: docs.apify.com/platform/collaboration/organization-account). Alternative: `CHINA_ACCESS_APIFY_TOKEN` on Vibe Host
    (backend + worker). Do not paste it anywhere else.
 3. Supply 20–30 public Douyin fixture URLs (`CHINA_ACCESS_BENCHMARK_DOUYIN_URLS`).
 4. Follow the rollout steps in 04.

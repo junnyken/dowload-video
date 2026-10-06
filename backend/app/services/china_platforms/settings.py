@@ -90,6 +90,20 @@ def cache_ttl_sec() -> int:
     return max(0, _int("CHINA_ACCESS_CACHE_TTL_SEC", 1800))
 
 
+def cache_extended_ttl_sec() -> int:
+    """Cost reduction (task #6036). 0 = off (default). When > 0, a result whose
+    media URL carries a known expiry (x-expires / expires) may stay cached up
+    to this long — never past that expiry minus the margin below. Results
+    without a known expiry keep the normal TTL."""
+    return min(7 * 86400, max(0, _int("CHINA_ACCESS_CACHE_EXTENDED_TTL_SEC", 0)))
+
+
+def cache_expiry_margin_sec() -> int:
+    """A cached result is never served within this many seconds of its media
+    URL's expiry (always on: the user still has to download the bytes)."""
+    return max(0, _int("CHINA_ACCESS_CACHE_EXPIRY_MARGIN_SEC", 600))
+
+
 def dedupe_ttl_sec() -> int:
     return max(30, _int("CHINA_ACCESS_DEDUPE_TTL_SEC", 1800))
 
@@ -169,13 +183,46 @@ def provider_monthly_spend_micros(budget_class: str) -> int:
 # ── Apify ───────────────────────────────────────────────────────────────────
 
 def apify_token() -> str:
-    """Admin-stored token (Redis, set from the admin panel) > env
-    CHINA_ACCESS_APIFY_TOKEN > "". Read on every call.
+    """Token of the best currently-eligible entry of the Apify token pool
+    (apify_pool.py: admin entries, the migrated single admin token, then env
+    CHINA_ACCESS_APIFY_TOKEN), or "". Read on every call. Paid calls do not use
+    this: ApifyProvider leases an entry per call (rotation + per-entry spend).
 
     Own variable on purpose: setting APIFY_TOKEN would also switch on the
     legacy, unbudgeted Apify path in downloader.py (see docs 01 C6)."""
-    from app.services.china_platforms.secret_store import resolve_apify_token  # noqa: PLC0415
-    return resolve_apify_token()[0]
+    from app.services.china_platforms.apify_pool import first_eligible_token  # noqa: PLC0415
+    return first_eligible_token()
+
+
+def apify_configured() -> bool:
+    """At least one pool entry is eligible for a paid call right now."""
+    from app.services.china_platforms.apify_pool import has_eligible  # noqa: PLC0415
+    return has_eligible()
+
+
+# ── Apify token pool (task #6036) ───────────────────────────────────────────
+
+def apify_pool_cooldown_sec() -> int:
+    """How long an entry rests after Apify answered 429 / 5xx to a run start."""
+    return max(30, _int("CHINA_ACCESS_APIFY_POOL_COOLDOWN_SEC", 300))
+
+
+def apify_pool_retry_next_token() -> bool:
+    """When Apify REFUSED to start a run (out of credit / invalid token), try
+    the same video once on the next token. Never after a run started."""
+    return _bool("CHINA_ACCESS_APIFY_POOL_RETRY_NEXT_TOKEN", True)
+
+
+def apify_pool_low_pct() -> float:
+    """Telegram alert once per UTC month when the pool's known remaining credit
+    falls below this share of its known capacity."""
+    return min(100.0, max(0.0, _float("CHINA_ACCESS_APIFY_POOL_LOW_PCT", 20.0)))
+
+
+def apify_pool_max_entries() -> int:
+    """Admin-added entries (env fallback not counted). Apify allows up to 10
+    organizations per person."""
+    return min(50, max(1, _int("CHINA_ACCESS_APIFY_POOL_MAX_ENTRIES", 10)))
 
 
 def apify_douyin_actor_id() -> str:
@@ -246,7 +293,8 @@ def secret_values() -> list[str]:
     """Literal secret values the redactor must remove wherever they appear."""
     from app.services.china_platforms.secret_store import admin_token  # noqa: PLC0415
     # APIFY_TOKEN is only READ here, so a legacy token is scrubbed too.
-    vals = [admin_token(), _str("CHINA_ACCESS_APIFY_TOKEN"), _str("APIFY_TOKEN")]
+    from app.services.china_platforms.apify_pool import all_tokens  # noqa: PLC0415
+    vals = [admin_token(), _str("CHINA_ACCESS_APIFY_TOKEN"), _str("APIFY_TOKEN"), *all_tokens()]
     return [v for v in vals if len(v) >= 6]
 
 

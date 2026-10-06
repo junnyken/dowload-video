@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Globe, Cookie, Network, ListOrdered, Briefcase, ChartColumn,
   HeartPulse, Funnel, Radio, Users, Settings, BookOpen, History, ScrollText,
   Gauge, Siren, Play, Building2, KeyRound, Webhook, Wallet, Sparkles,
-  SlidersHorizontal, Shield, Activity, Mic,
+  SlidersHorizontal, Shield, Activity, Mic, CircleDollarSign,
   type LucideIcon,
 } from 'lucide-react'
 import type { AdminRole } from '../types/admin.types'
@@ -61,6 +61,7 @@ const NAV_MANAGE: NavItem[] = [
   { href: '/vid-admin/users', label: 'Users', icon: Users, minRole: 'operator' },
   { href: '/vid-admin/config', label: 'Config', icon: Settings, minRole: 'admin' },
   { href: '/vid-admin/asr', label: 'Phiên âm (ASR)', icon: Mic, minRole: 'operator' },
+  { href: '/vid-admin/apify-costs', label: 'Chi phí Apify', icon: CircleDollarSign, minRole: 'admin' },
   { href: '/vid-admin/playbooks', label: 'Playbooks', icon: BookOpen, minRole: 'operator' },
   { href: '/vid-admin/automation-history', label: 'Automation', icon: History, minRole: 'viewer' },
 ]

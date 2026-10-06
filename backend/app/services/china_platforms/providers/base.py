@@ -29,6 +29,12 @@ class RunRecord:
     elapsed_ms: int = 0
     duration_missing: bool = False
     media_url_expiry: Optional[str] = None
+    # Apify token pool (task #6036): the entry whose account ran this call and
+    # its reservation; the router settles it with the recorded cost.
+    pool_lease: Optional[object] = None
+    pool_entry_id: Optional[str] = None
+    # Entries that refused to START a run before this one ("<id>:<state>").
+    pool_refusals: Optional[list] = None
 
 
 @runtime_checkable

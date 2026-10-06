@@ -28,7 +28,7 @@ import time
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
-from app.services.china_platforms import budget_guard, registry, request_cache, settings
+from app.services.china_platforms import apify_pool, budget_guard, cost_metrics, registry, request_cache, settings
 from app.services.china_platforms import media_validation, provider_health, rollout_guard, watermark
 from app.services.china_platforms.errors import (
     AlreadyProcessing,
@@ -121,7 +121,8 @@ class ProviderRouter:
                  latency_ms=0, result: Optional[NormalizedMediaResult] = None, est_usd=0.0,
                  actual_usd=None, cost_source="none", health_state=None, budget_check="n/a",
                  duration_missing=False, expiry=None, media: Optional[dict] = None,
-                 cost: Optional[dict] = None) -> dict:
+                 cost: Optional[dict] = None, pool_entry: Optional[str] = None,
+                 pool_refusals: Optional[list] = None) -> dict:
         a = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "platform": platform,
@@ -151,6 +152,9 @@ class ProviderRouter:
             "media_url_present": bool(result and result.primary_video_url()),
             "cost_delta_usd": (cost or {}).get("cost_delta_usd"),
             "cost_flag": (cost or {}).get("cost_flag"),
+            # task #6036: which pool entry paid (id only, never the token)
+            "apify_entry": pool_entry,
+            "apify_refusals": pool_refusals,
         }
         m = media or media_validation.not_run()
         for k in media_validation.RESULT_FIELDS:
@@ -243,6 +247,7 @@ class ProviderRouter:
             if hit is not None:
                 self._attempt(request=req, platform=platform, provider_name=hit.provider_name,
                               mode=hit.provider_mode, h=h, ctx=ctx, outcome="success", result=hit)
+                cost_metrics.record_cache_hit(platform, hit.provider_name, hit.provider_mode)
                 return hit
 
         self.trace.append("dedupe")
@@ -256,6 +261,7 @@ class ProviderRouter:
                     waited += self._poll
                     hit = request_cache.get_cached(platform, op, h)
                     if hit is not None:
+                        cost_metrics.record_cache_hit(platform, hit.provider_name, hit.provider_mode)
                         return hit
                 raise AlreadyProcessing(platform, h)
 
@@ -358,6 +364,11 @@ class ProviderRouter:
                 else:
                     actual_usd, cost_source = 0.0, "none"
                 budget_guard.check_spend_alerts(prov.budget_class)
+                lease = getattr(run, "pool_lease", None) if run else None
+                if lease is not None:
+                    # Same recorded figure (floor at the estimate) on the token entry.
+                    apify_pool.settle(lease, reservation.recorded_micros or 0,
+                                      dispatched=bool(run.run_started))
 
             media: Optional[dict] = None
             if result is not None:
@@ -374,7 +385,14 @@ class ProviderRouter:
                           latency_ms=latency, est_usd=est_usd, actual_usd=actual_usd, cost_source=cost_source,
                           health_state=health.state, budget_check="reserved" if reservation else "n/a",
                           duration_missing=bool(run and run.duration_missing),
-                          expiry=run.media_url_expiry if run else None, media=media, cost=cost)
+                          expiry=run.media_url_expiry if run else None, media=media, cost=cost,
+                          pool_entry=getattr(run, "pool_entry_id", None) if run else None,
+                          pool_refusals=(getattr(run, "pool_refusals", None) or None) if run else None)
+            if reservation is not None:
+                usable = (media or {}).get("usable_media_url")    # True / False / None = not checked
+                cost_metrics.record_paid(platform, success=result is not None,
+                                         usable=None if usable is None else bool(usable),
+                                         recorded_micros=reservation.recorded_micros or 0)
             if prov.paid:
                 rollout_guard.record_managed_outcome(
                     platform, name, ctx.origin, success=result is not None,

@@ -11,6 +11,11 @@ Vibe Host env or redeploying. Same idea as the ScraperAPI key pool
                                   usage {monthly_usage_usd, max_monthly_usage_usd,
                                   cycle_start, cycle_end}. Never the token.
 
+Since task #6036 this single token is the "legacy slot" of the token pool
+(apify_pool.py): apify_pool.sync() mirrors it into the pool as entry #1, and
+the paid providers take their token from the pool, not from here. The
+functions below stay for the back-compat /apify/token endpoints.
+
 Precedence (resolve_apify_token): admin-stored > env CHINA_ACCESS_APIFY_TOKEN
 > none. The legacy APIFY_TOKEN is never read or written here, so the legacy
 apify_service path is unaffected.
@@ -122,6 +127,20 @@ async def validate(token: str, *, transport: Optional[httpx.AsyncBaseTransport] 
             account = {"username": d.get("username"),
                        "plan": plan.get("id") if isinstance(plan, dict) else None,
                        "is_paying": d.get("isPaying")}
+            # effectivePlatformFeatures.ACTORS.{isEnabled, disabledReason}
+            # (EffectivePlatformFeature in the OpenAPI spec): false = this
+            # account cannot start Actors right now (e.g. over its limit).
+            feats = d.get("effectivePlatformFeatures") or {}
+            actors = feats.get("ACTORS") if isinstance(feats, dict) else None
+            if isinstance(actors, dict) and isinstance(actors.get("isEnabled"), bool):
+                account["actors_enabled"] = actors["isEnabled"]
+                if not actors["isEnabled"]:
+                    account["actors_disabled_reason"] = str(actors.get("disabledReasonType")
+                                                            or actors.get("disabledReason") or "")[:120]
+            # GET /v2/users/me exposes no organization flag (fields: id, username,
+            # profile, email, proxy, plan, effectivePlatformFeatures, createdAt,
+            # isPaying). Whether an entry is an organization account is the
+            # owner's label, not something we can verify.
             usage = None
             try:
                 lim = await client.get(f"{base_url}/users/me/limits")

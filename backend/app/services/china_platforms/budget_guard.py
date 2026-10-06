@@ -135,6 +135,7 @@ class Reservation:
     requester: str
     est_micros: int
     done: list = field(default_factory=list)   # (key, amount) increments applied
+    recorded_micros: Optional[int] = None      # set by settle(): what this call now counts for
 
 
 def precheck(platform: str, requester: str, candidates: list[PaidCandidate]) -> Optional[BudgetDenied]:
@@ -220,6 +221,7 @@ def settle(res: Reservation, actual_usd: Optional[float], run_started: bool) -> 
     if not run_started:
         actual_micros = 0
     elif actual_usd is None:
+        res.recorded_micros = res.est_micros
         return res.est_micros
     else:
         actual_micros = settings.usd_to_micros(actual_usd)
@@ -232,6 +234,7 @@ def settle(res: Reservation, actual_usd: Optional[float], run_started: bool) -> 
         # higher one raises it.
         if settings.cost_floor_at_estimate() and actual_micros < res.est_micros:
             actual_micros = res.est_micros
+    res.recorded_micros = actual_micros
     delta = actual_micros - res.est_micros
     if delta:
         try:

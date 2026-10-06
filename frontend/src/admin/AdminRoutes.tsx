@@ -29,6 +29,7 @@ import YouTubeGatePage from './pages/YouTubeGatePage'
 import AnomaliesPage from './pages/AnomaliesPage'
 import OpsSignalsPage from './pages/OpsSignalsPage'
 import AsrPage from './pages/AsrPage'
+import ApifyCostsPage from './pages/ApifyCostsPage'
 
 function Shell({ children }: { children: React.ReactNode }) {
   return <AdminShell>{children}</AdminShell>
@@ -56,6 +57,7 @@ export function AdminRoutes() {
       <Route path="/vid-admin/anomalies"          element={<Shell><AnomaliesPage /></Shell>} />
       <Route path="/vid-admin/ops-signals"        element={<Shell><OpsSignalsPage /></Shell>} />
       <Route path="/vid-admin/asr"                element={<Shell><AsrPage /></Shell>} />
+      <Route path="/vid-admin/apify-costs"        element={<Shell><ApifyCostsPage /></Shell>} />
       <Route path="/vid-admin/audit"     element={<Shell><AuditLogPage /></Shell>} />
 
       {/* Phase 3+ — Analytics now live */}

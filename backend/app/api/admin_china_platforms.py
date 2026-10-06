@@ -24,6 +24,18 @@ Apify token managed from the admin panel (secret_store; admin-stored > env > non
   POST   /admin/china-platforms/apify/token        {"token","reason"}: validated with a free Apify call, then stored
   DELETE /admin/china-platforms/apify/token        {"reason"}: env CHINA_ACCESS_APIFY_TOKEN (if set) applies again
   POST   /admin/china-platforms/apify/token/test   re-validate the current token (free call, no actor run)
+  (Since task #6036 these four are back-compat wrappers: that token is the
+  pool's "legacy slot" entry, mirrored by apify_pool.sync().)
+
+Apify token pool (task #6036; rotation per paid call, see apify_pool.py):
+  GET    /admin/china-platforms/apify/pool                 entries (never tokens) + pool summary
+  POST   /admin/china-platforms/apify/pool                 {"token","label","priority"?,"monthly_ceiling_usd"?,"reason"}
+                                                           validated with /users/me first; body parsed by hand
+  POST   /admin/china-platforms/apify/pool/{id}            {"label"?,"priority"?,"monthly_ceiling_usd"?,"enabled"?,"reason"}
+  DELETE /admin/china-platforms/apify/pool/{id}            {"reason"}
+  POST   /admin/china-platforms/apify/pool/{id}/refresh    free: /users/me + /users/me/limits
+  POST   /admin/china-platforms/apify/pool/refresh         same for every entry
+  GET    /admin/china-platforms/apify/metrics              per platform today/7d/month + per entry + totals
 
 Responses never contain tokens, cookies or signed media URLs: attempts carry
 the canonical-URL hash only, and every free-text field passes errors.redact.
@@ -41,7 +53,9 @@ from pydantic import BaseModel, Field
 from app.api.admin import verify_admin
 from app.core.audit import log_admin_action
 from app.services.china_platforms import (
+    apify_pool,
     budget_guard,
+    cost_metrics,
     provider_health,
     registry,
     request_cache,
@@ -127,7 +141,7 @@ async def china_overview(_=Depends(verify_admin)) -> dict:
     return {
         "master_enabled": settings.master_enabled(),
         "global_killswitch": global_kill,
-        "apify_configured": bool(settings.apify_token()),
+        "apify_configured": settings.apify_configured(),
         "apify_token_source": secret_store.resolve_apify_token()[1],
         "platforms": [_overview_row(p) for p in CHINA_PLATFORM_POLICIES],
     }
@@ -167,7 +181,13 @@ def _client_ip(request: Request):
 
 @router.get("/china-platforms/apify/token")
 async def china_apify_token_status(_=Depends(verify_admin)) -> dict:
-    return secret_store.status()
+    out = secret_store.status()
+    out["deprecated"] = "use /admin/china-platforms/apify/pool"
+    try:
+        out["pool"] = apify_pool.summary()
+    except Exception:  # noqa: BLE001
+        out["pool"] = None
+    return out
 
 
 @router.post("/china-platforms/apify/token")
@@ -239,9 +259,256 @@ async def china_apify_token_test(request: Request, _=Depends(verify_admin)) -> d
         raise HTTPException(status_code=exc.status, detail={"error": exc.code, "message": exc.message})
     info = {**info, "last4": secret_store.last4(token)}
     secret_store.record_validation(info, now_iso=budget_guard.utcnow().isoformat(), source=source)
+    _pool_record_legacy_refresh(source, info)
     log_admin_action(request, "admin.china_access.apify_token_tested", resource_type="china_secret",
                      resource_id="apify_token", metadata={"source": source, "last4": secret_store.last4(token)})
     return {**secret_store.status(), "valid": True}
+
+
+def _pool_record_legacy_refresh(source: str, info: dict) -> None:
+    """The old /apify/token/test also refreshes the matching pool entry."""
+    try:
+        for v in apify_pool.list_views():
+            if (source == "admin" and v.get("legacy_slot")) or (source == "env" and v["id"] == apify_pool.ENV_ID):
+                apify_pool.apply_refresh(v["id"], info)
+                return
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("apify pool legacy refresh failed: %s", type(exc).__name__)
+
+
+# ── Apify token pool (task #6036) ───────────────────────────────────────────
+
+def _pool_503():
+    return HTTPException(status_code=503, detail={"error": "redis_unavailable",
+                                                  "message": "Không đọc được Redis. Thử lại sau."})
+
+
+def _pool_error(exc: "apify_pool.PoolError"):
+    return HTTPException(status_code=exc.status, detail={"error": exc.code, "message": exc.message})
+
+
+def _pool_payload() -> dict:
+    views = apify_pool.list_views()
+    return {"entries": views, "summary": apify_pool.summary(views=views),
+            "env_fallback_configured": bool(secret_store.env_token())}
+
+
+async def _json_body(request: Request) -> dict:
+    try:
+        payload = await request.json()
+    except Exception:  # noqa: BLE001
+        payload = None
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail={"error": "bad_body", "message": "Cần JSON hợp lệ."})
+    return payload
+
+
+def _reason_of(payload: dict, secret: str = "") -> str:
+    reason = str(payload.get("reason") or "").strip()
+    if not (3 <= len(reason) <= 500):
+        raise HTTPException(status_code=400, detail={"error": "reason_required",
+                                                     "message": "Cần nhập lý do (3–500 ký tự)."})
+    safe = redact(reason)
+    if secret and len(secret.strip()) >= 6:
+        safe = safe.replace(secret.strip(), "<redacted>")
+    return safe
+
+
+def _clean_label(raw) -> str:
+    label = " ".join(str(raw or "").split())[:60]
+    if len(label) < 1:
+        raise HTTPException(status_code=400, detail={"error": "label_required",
+                                                     "message": "Cần đặt tên cho token (ví dụ: \"Tổ chức A\")."})
+    return redact(label)
+
+
+def _clean_priority(raw):
+    if raw is None or raw == "":
+        return None
+    try:
+        v = int(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail={"error": "bad_priority",
+                                                     "message": "Thứ tự ưu tiên phải là số nguyên 0–1000."})
+    if not 0 <= v <= 1000:
+        raise HTTPException(status_code=400, detail={"error": "bad_priority",
+                                                     "message": "Thứ tự ưu tiên phải là số nguyên 0–1000."})
+    return v
+
+
+def _clean_ceiling(raw):
+    if raw is None or raw == "":
+        return None
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        v = -1
+    if not 0 < v <= 10000:
+        raise HTTPException(status_code=400, detail={"error": "bad_ceiling",
+                                                     "message": "Trần chi tiêu tháng phải là số USD lớn hơn 0."})
+    return round(v, 2)
+
+
+def _audit_entry(v: dict) -> dict:
+    return {"id": v.get("id"), "label": v.get("label"), "last4": v.get("last4")}
+
+
+@router.get("/china-platforms/apify/pool")
+async def china_apify_pool_list(_=Depends(verify_admin)) -> dict:
+    try:
+        return _pool_payload()
+    except Exception:  # noqa: BLE001
+        raise _pool_503()
+
+
+@router.post("/china-platforms/apify/pool")
+async def china_apify_pool_add(request: Request, _=Depends(verify_admin)) -> dict:
+    # Parsed by hand: a FastAPI 422 would echo the submitted token.
+    payload = await _json_body(request)
+    raw_token = payload.get("token") if isinstance(payload.get("token"), str) else ""
+    reason = _reason_of(payload, raw_token)
+    label = _clean_label(payload.get("label"))
+    priority = _clean_priority(payload.get("priority"))
+    ceiling = _clean_ceiling(payload.get("monthly_ceiling_usd"))
+    try:
+        token = secret_store.sanitize(raw_token)
+        info = await _apify_validator()(token)
+    except secret_store.TokenRejected as exc:
+        log_admin_action(request, "admin.china_access.apify_pool_rejected", resource_type="china_secret",
+                         resource_id="apify_pool", metadata={"code": exc.code, "label": label, "reason": reason})
+        raise HTTPException(status_code=exc.status, detail={"error": exc.code, "message": exc.message})
+    try:
+        view = apify_pool.add(token, info, label=label, priority=priority, ceiling=ceiling,
+                              ip=_client_ip(request))
+    except apify_pool.PoolError as exc:
+        raise _pool_error(exc)
+    except Exception:  # noqa: BLE001
+        raise _pool_503()
+    log_admin_action(request, "admin.china_access.apify_pool_added", resource_type="china_secret",
+                     resource_id=f"apify_pool:{view['id']}",
+                     metadata={"new": _audit_entry(view), "account": (view.get("account") or {}).get("username"),
+                               "priority": view.get("priority"), "monthly_ceiling_usd": ceiling, "reason": reason})
+    return {"entry": view, **_pool_payload()}
+
+
+@router.post("/china-platforms/apify/pool/refresh")
+async def china_apify_pool_refresh_all(request: Request, _=Depends(verify_admin)) -> dict:
+    try:
+        ids = [v["id"] for v in apify_pool.list_views()]
+    except Exception:  # noqa: BLE001
+        raise _pool_503()
+    results = {}
+    for eid in ids:
+        results[eid] = await _refresh_one(eid)
+    log_admin_action(request, "admin.china_access.apify_pool_refreshed", resource_type="china_secret",
+                     resource_id="apify_pool", metadata={"entries": results})
+    return {"results": results, **_pool_payload()}
+
+
+async def _refresh_one(entry_id: str) -> str:
+    """'ok' | 'invalid_token' | 'apify_unreachable'. Free Apify calls only."""
+    token, _meta = apify_pool.token_of(entry_id)
+    if not token:
+        return "not_configured"
+    try:
+        info = await _apify_validator()(token)
+    except secret_store.TokenRejected as exc:
+        apify_pool.apply_refresh(entry_id, None, rejected_code=exc.code)
+        return exc.code
+    apify_pool.apply_refresh(entry_id, info)
+    return "ok"
+
+
+@router.post("/china-platforms/apify/pool/{entry_id}/refresh")
+async def china_apify_pool_refresh(entry_id: str, request: Request, _=Depends(verify_admin)) -> dict:
+    try:
+        outcome = await _refresh_one(entry_id)
+        view = apify_pool.get_view(entry_id)
+    except apify_pool.PoolError as exc:
+        raise _pool_error(exc)
+    log_admin_action(request, "admin.china_access.apify_pool_refreshed", resource_type="china_secret",
+                     resource_id=f"apify_pool:{entry_id}", metadata={**_audit_entry(view), "outcome": outcome})
+    return {"outcome": outcome, "entry": view}
+
+
+@router.post("/china-platforms/apify/pool/{entry_id}")
+async def china_apify_pool_update(entry_id: str, request: Request, _=Depends(verify_admin)) -> dict:
+    payload = await _json_body(request)
+    if "token" in payload:
+        raise HTTPException(status_code=400, detail={
+            "error": "token_not_editable",
+            "message": "Không sửa được token. Thêm token mới rồi xoá token cũ."})
+    reason = _reason_of(payload)
+    fields: dict = {}
+    if "label" in payload:
+        fields["label"] = _clean_label(payload.get("label"))
+    if "priority" in payload:
+        p = _clean_priority(payload.get("priority"))
+        fields["priority"] = apify_pool.DEFAULT_PRIORITY if p is None else p
+    if "monthly_ceiling_usd" in payload:
+        fields["monthly_ceiling_usd"] = _clean_ceiling(payload.get("monthly_ceiling_usd"))
+    if "enabled" in payload:
+        if not isinstance(payload.get("enabled"), bool):
+            raise HTTPException(status_code=400, detail={"error": "bad_enabled", "message": "Giá trị bật/tắt không hợp lệ."})
+        fields["enabled"] = payload["enabled"]
+    if not fields:
+        raise HTTPException(status_code=400, detail={"error": "nothing_to_update", "message": "Không có gì để đổi."})
+    try:
+        prior, new = apify_pool.update(entry_id, fields)
+    except apify_pool.PoolError as exc:
+        raise _pool_error(exc)
+    except Exception:  # noqa: BLE001
+        raise _pool_503()
+    keys = ("label", "priority", "monthly_ceiling_usd", "enabled")
+    log_admin_action(request, "admin.china_access.apify_pool_updated", resource_type="china_secret",
+                     resource_id=f"apify_pool:{entry_id}",
+                     metadata={"entry": _audit_entry(new), "prior": {k: prior.get(k) for k in keys},
+                               "new": {k: new.get(k) for k in keys}, "reason": reason})
+    return {"entry": new, **_pool_payload()}
+
+
+@router.delete("/china-platforms/apify/pool/{entry_id}")
+async def china_apify_pool_delete(entry_id: str, request: Request, _=Depends(verify_admin)) -> dict:
+    payload = await _json_body(request)
+    reason = _reason_of(payload)
+    try:
+        view = apify_pool.delete(entry_id)
+    except apify_pool.PoolError as exc:
+        raise _pool_error(exc)
+    except Exception:  # noqa: BLE001
+        raise _pool_503()
+    log_admin_action(request, "admin.china_access.apify_pool_deleted", resource_type="china_secret",
+                     resource_id=f"apify_pool:{entry_id}",
+                     metadata={"prior": _audit_entry(view), "reason": reason})
+    return {"removed": _audit_entry(view), **_pool_payload()}
+
+
+@router.get("/china-platforms/apify/metrics")
+async def china_apify_metrics(_=Depends(verify_admin)) -> dict:
+    try:
+        views = apify_pool.list_views()
+        report = cost_metrics.platform_report()
+    except Exception:  # noqa: BLE001
+        raise _pool_503()
+    snap = budget_guard.snapshot(list(cost_metrics.PLATFORMS), _PROVIDER_BUDGET_CLASSES)
+    return {
+        "day_utc": budget_guard.day_key(),
+        "month_utc": budget_guard.month_key(),
+        **report,
+        "entries": views,
+        "pool": apify_pool.summary(views=views),
+        "ceilings": snap,
+        "estimated_cost_per_call_usd": {p: cost_metrics.est_micros_for(f"apify_{p}") / 1e6
+                                        for p in cost_metrics.PLATFORMS},
+        "cache": {"ttl_sec": settings.cache_ttl_sec(), "extended_ttl_sec": settings.cache_extended_ttl_sec(),
+                  "expiry_margin_sec": settings.cache_expiry_margin_sec()},
+        "notes": {
+            "spend": "recorded by us per call, never below the estimate (Apify's usageTotalUsd leaves out "
+                     "pay-per-result charges)",
+            "saved": "estimate: cache hits on a paid result x that provider's estimated cost per call",
+            "apify_usage": "Apify's monthlyUsageUsd at the last refresh + our spend recorded since",
+        },
+    }
 
 
 @router.get("/china-platforms/{platform}")

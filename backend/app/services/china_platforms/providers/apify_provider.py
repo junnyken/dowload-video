@@ -16,6 +16,15 @@ max 60 s, maxItems, maxTotalChargeUsd) and
 https://docs.apify.com/api/v2/actor-run-get (run.usageTotalUsd = "Total cost
 in USD for this run. Represents what you actually pay.").
 
+Token pool (task #6036): without an explicit token the provider leases one
+entry of apify_pool per call (priority, then most remaining credit). When
+Apify REFUSES to start the run — 402 / out of credit, 401/403 invalid token —
+the entry is marked exhausted/invalid and the SAME video is tried once on the
+next entry: nothing was billed on the first account, the second one is a
+different billing account, and the router's budget reservation still covers a
+single run. Once a run has started (201, or a start request that timed out)
+there is never a second attempt. 429/5xx put the entry in cooldown, no retry.
+
 Never logs the token (it goes only in the Authorization header), response
 bodies, or media URLs.
 """
@@ -28,7 +37,7 @@ from typing import Optional
 import httpx
 
 from app.services.apify_service import APIFY_BASE
-from app.services.china_platforms import settings
+from app.services.china_platforms import apify_pool, settings
 from app.services.china_platforms.providers.managed_actor_provider import (
     ActorSpec,
     ManagedActorProvider,
@@ -59,15 +68,16 @@ class ApifyProvider(ManagedActorProvider):
 
     @property
     def _token(self) -> str:
-        """Resolved at call time (admin-stored > env), so a token changed in the
-        admin panel applies to the next call without a restart."""
-        return self._explicit_token if self._explicit_token is not None else settings.apify_token()
+        """Explicit token (tests, tools) or "" — the pool is used otherwise."""
+        return self._explicit_token or ""
 
     def is_configured(self) -> bool:
-        return bool(self._token)
+        if self._explicit_token is not None:
+            return bool(self._explicit_token)
+        return settings.apify_configured()
 
-    def _client(self, timeout: float) -> httpx.AsyncClient:
-        kw = {"timeout": timeout, "headers": {"Authorization": f"Bearer {self._token}"}}
+    def _client(self, timeout: float, token: str) -> httpx.AsyncClient:
+        kw = {"timeout": timeout, "headers": {"Authorization": f"Bearer {token}"}}
         if self._transport is not None:
             kw["transport"] = self._transport
         return httpx.AsyncClient(**kw)
@@ -82,14 +92,32 @@ class ApifyProvider(ManagedActorProvider):
         return self._fail("provider_unavailable", f"apify {where} HTTP {status}")
 
     async def _run_actor(self, actor_input: dict) -> list:
-        if not self._token:
-            raise self._fail("provider_unavailable", "apify token not configured")
         deadline = self._clock() + self.spec.timeout_sec
 
         def remaining() -> int:
             return max(0, int(deadline - self._clock()))
 
-        async with self._client(timeout=_MAX_WAIT + 15) as client:
+        use_pool = self._explicit_token is None
+        if not use_pool and not self._explicit_token:
+            raise self._fail("provider_unavailable", "apify token not configured")
+        est_micros = settings.usd_to_micros(self.spec.est_cost_usd)
+        max_tokens = 2 if (use_pool and settings.apify_pool_retry_next_token()) else 1
+        tried: set = set()
+        refusals: list = []
+        self.last_run.pool_refusals = refusals
+
+        for attempt in range(max_tokens):
+            lease = None
+            if use_pool:
+                lease = apify_pool.pick(est_micros, exclude=tried)
+                if lease is None:
+                    raise self._fail("provider_unavailable",
+                                     "no eligible apify token" + (" after refusal" if refusals else ""))
+                tried.add(lease.entry_id)
+                token = lease.token
+            else:
+                token = self._explicit_token
+            client = self._client(timeout=_MAX_WAIT + 15, token=token)
             # ── start: the ONLY billable call ───────────────────────────────
             try:
                 resp = await client.post(
@@ -104,14 +132,37 @@ class ApifyProvider(ManagedActorProvider):
                 )
             except httpx.TimeoutException:
                 # The run may or may not exist; we have no id to abort or
-                # price. Counted as started so the estimate stays reserved.
+                # price. Counted as started so the estimate stays reserved
+                # (on the router budget AND on this pool entry). No retry.
+                await client.aclose()
                 self.last_run.run_started = True
+                if lease is not None:
+                    self.last_run.pool_lease = lease
+                    self.last_run.pool_entry_id = lease.entry_id
                 raise self._fail("provider_timeout", "apify start request timed out")
             except httpx.HTTPError as exc:
+                await client.aclose()
+                if lease is not None:
+                    apify_pool.release(lease)
                 raise self._fail("provider_unavailable", f"apify start: {type(exc).__name__}")
             if resp.status_code not in (200, 201):
+                await client.aclose()
+                if lease is None:
+                    raise self._http_fail(resp.status_code, "start")
+                apify_pool.release(lease)       # refused before any run: nothing billed
+                state, reason = apify_pool.classify_start_error(resp.status_code, resp.text)
+                if state is not None:
+                    apify_pool.mark(lease.entry_id, state, reason)
+                    refusals.append(f"{lease.entry_id}:{state}")
+                if state in ("exhausted", "invalid") and attempt + 1 < max_tokens:
+                    continue                    # same video, next billing account, once
                 raise self._http_fail(resp.status_code, "start")
+            break
+        if lease is not None:
+            self.last_run.pool_lease = lease
+            self.last_run.pool_entry_id = lease.entry_id
 
+        try:
             run = (resp.json() or {}).get("data") or {}
             self.last_run.run_started = True
             self.last_run.run_id = run.get("id")
@@ -168,3 +219,5 @@ class ApifyProvider(ManagedActorProvider):
                 raise self._http_fail(r3.status_code, "dataset")
             items = r3.json()
             return items if isinstance(items, list) else []
+        finally:
+            await client.aclose()

@@ -91,7 +91,7 @@ def managed_route_open_for_current_request(platform: str) -> bool:
     if not _layer_active(platform):
         return False
     try:
-        if not settings.apify_token():
+        if not settings.apify_configured():
             return False
         mode = registry.effective_managed_mode(platform)
         return registry.managed_allowed_for(mode, current_context())
