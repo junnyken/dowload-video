@@ -36,7 +36,7 @@ Never put a value in source, chat, or a commit. Names only below, with the safe 
 ## Apify (provider level)
 | Name | Default | Notes |
 |---|---|---|
-| `CHINA_ACCESS_APIFY_TOKEN` | *(empty)* | **Secret.** Empty → `apify_douyin` is never eligible |
+| `CHINA_ACCESS_APIFY_TOKEN` | *(empty)* | **Secret.** Fallback only: a token saved in the admin panel (Config → "Apify (lấy video Douyin)", Redis `china:secret:apify_token`) takes precedence. Neither set → `apify_douyin` is never eligible |
 | `CHINA_ACCESS_APIFY_DAILY_CALL_LIMIT` | `50` | |
 | `CHINA_ACCESS_APIFY_DAILY_SPEND_CEILING_USD` | `1.00` | |
 | `CHINA_ACCESS_APIFY_MONTHLY_SPEND_CEILING_USD` | `5.00` | Calendar month, UTC |
@@ -52,6 +52,29 @@ Never put a value in source, chat, or a commit. Names only below, with the safe 
 | `CHINA_ACCESS_BENCHMARK_FIXTURES_FILE` | *(empty)* | JSON file alternative (05) |
 | `CHINA_ACCESS_BENCHMARK_DIR` | `backend/downloads/china_benchmark` | Output directory |
 
+## Phase 32B-2 Stage A (Douyin): validation, cost, alerts, rollback, watermark, report
+| Name | Default | Notes |
+|---|---|---|
+| `CHINA_ACCESS_BENCHMARK_VALIDATE_MEDIA` | `true` | Benchmark checks every successful media URL (range fetch + ffprobe) |
+| `CHINA_ACCESS_ROUTER_VALIDATE_MEDIA` | `false` | Same check inside the router on live traffic; an `unusable` URL becomes `parse_failed` (fallback-eligible). Costs up to a few MB of CDN traffic per request |
+| `CHINA_ACCESS_MEDIA_VALIDATE_MAX_BYTES` | `2097152` | First range request (clamped to 64 KiB–4 MiB); one more request only to complete a moov box (4 MiB cap) |
+| `CHINA_ACCESS_MEDIA_VALIDATE_MIN_BYTES` | `65536` | Smaller body = `body_too_small` |
+| `CHINA_ACCESS_MEDIA_VALIDATE_TIMEOUT_SEC` | `20` | httpx timeout |
+| `CHINA_ACCESS_COST_OVERRUN_FLAG_PCT` | `50` | Flag a run when actual > estimate × (1 + pct/100) |
+| `CHINA_ACCESS_SPEND_ALERTS_ENABLED` | `true` | Telegram alert at 50/80/100 % of the provider daily and monthly ceilings, once per threshold per period |
+| `CHINA_ACCESS_AUTO_ROLLBACK_ENABLED` | `true` | Douyin only; lowers the runtime mode to `benchmark`, never raises |
+| `CHINA_ACCESS_AUTO_ROLLBACK_PROBE_FAILURES` | `2` | Consecutive managed probe failures |
+| `CHINA_ACCESS_AUTO_ROLLBACK_WINDOW` | `10` | Last N managed attempts (users, workers, probes; benchmark excluded) |
+| `CHINA_ACCESS_AUTO_ROLLBACK_MIN_USABLE_RATE` | `0.5` | Rollback when the usable-media success rate over the full window is below this |
+| `CHINA_ACCESS_WATERMARK_MIN_REVIEWED` | `10` | Reviews needed before a route may report `watermark_free` |
+| `CHINA_ACCESS_WATERMARK_MIN_FREE_RATE` | `0.9` | Share of reviews that must be `watermark_free` |
+| `CHINA_ACCESS_BENCH_MIN_SAMPLE` | `20` | Report rule R1 |
+| `CHINA_ACCESS_BENCH_PROMOTE_USABLE_RATE` | `0.8` | Rules N1, M4, M6 |
+| `CHINA_ACCESS_BENCH_REJECT_USABLE_RATE` | `0.5` | Rules N2, M1 |
+| `CHINA_ACCESS_BENCH_NATIVE_MARGIN` | `0.2` | Rule M6: managed must beat the best native by this margin |
+| `CHINA_ACCESS_BENCH_MAX_COST_PER_USABLE_USD` | `0.01` | Rule M3 |
+| `CHINA_ACCESS_BENCH_MAX_TIMEOUT_SHARE` | `0.2` | Rule M2 |
+
 ## Do NOT set
 - **`APIFY_TOKEN`**: it activates the **legacy** unbudgeted Apify path for every Douyin download
   (`downloader.py:1559`) and channel (`downloader.py:3474`). That path can bill two runs per request
@@ -60,6 +83,8 @@ Never put a value in source, chat, or a commit. Names only below, with the safe 
 
 ## Owner actions
 1. Create a **separate** Apify account and set a monthly spending limit in the Apify console (hard stop independent of this code).
-2. Put its API token in `CHINA_ACCESS_APIFY_TOKEN` on Vibe Host (backend + worker). Do not paste it anywhere else.
+2. Save its API token in the admin panel (Config → "Apify (lấy video Douyin)"). It is validated with a free Apify call
+   before it is stored, and it can be replaced later without a redeploy. Alternative: `CHINA_ACCESS_APIFY_TOKEN` on Vibe Host
+   (backend + worker). Do not paste it anywhere else.
 3. Supply 20–30 public Douyin fixture URLs (`CHINA_ACCESS_BENCHMARK_DOUYIN_URLS`).
 4. Follow the rollout steps in 04.

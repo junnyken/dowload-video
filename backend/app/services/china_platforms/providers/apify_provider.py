@@ -52,10 +52,16 @@ class ApifyProvider(ManagedActorProvider):
                  transport: Optional[httpx.AsyncBaseTransport] = None,
                  base_url: str = APIFY_BASE, clock=time.monotonic):
         super().__init__(spec)
-        self._token = token if token is not None else settings.apify_token()
+        self._explicit_token = token
         self._transport = transport
         self._base = base_url.rstrip("/")
         self._clock = clock
+
+    @property
+    def _token(self) -> str:
+        """Resolved at call time (admin-stored > env), so a token changed in the
+        admin panel applies to the next call without a restart."""
+        return self._explicit_token if self._explicit_token is not None else settings.apify_token()
 
     def is_configured(self) -> bool:
         return bool(self._token)

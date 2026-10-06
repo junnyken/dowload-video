@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { adminFetch, adminPost } from '../utils/adminFetch'
+import { getAdminToken } from '../hooks/useAdminAuth'
+import { API_BASE } from '../../lib/apiBase'
 
 interface ConfigEntry {
   key: string
@@ -16,6 +18,229 @@ const TRUNCATE_LEN = 60
 function truncate(val: string) {
   if (val.length <= TRUNCATE_LEN) return val
   return val.slice(0, TRUNCATE_LEN) + '…'
+}
+
+// ── Apify token (China access layer, Douyin) ────────────────────────────────
+// The backend never returns the token: only source, last 4 characters,
+// account and usage. The input is cleared right after a save attempt.
+
+interface ApifyTokenStatus {
+  configured: boolean
+  source: 'admin' | 'env' | 'none'
+  last4: string | null
+  set_at: string | null
+  validated_at: string | null
+  account: { username?: string | null; plan?: string | null } | null
+  usage: { monthly_usage_usd?: number | null; max_monthly_usage_usd?: number | null } | null
+  env_fallback_configured?: boolean
+  note?: string
+}
+
+const APIFY_PATH = '/china-platforms/apify/token'
+
+async function apifyCall<T>(path: string, method: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = getAdminToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const res = await fetch(`${API_BASE}/api/v1/admin${path}`, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`
+    try {
+      const data = await res.json()
+      const d = data?.detail
+      msg = typeof d === 'string' ? d : d?.message ?? msg
+    } catch { /* ignore */ }
+    throw new Error(msg)
+  }
+  return res.json() as Promise<T>
+}
+
+function fmtTime(iso: string | null) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('vi-VN')
+}
+
+function fmtUsd(v: number | null | undefined) {
+  return typeof v === 'number' ? `$${v.toFixed(2)}` : '—'
+}
+
+function ApifyTokenCard() {
+  const [status, setStatus] = useState<ApifyTokenStatus | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [tokenInput, setTokenInput] = useState('')
+  const [busy, setBusy] = useState<null | 'save' | 'test' | 'delete'>(null)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const load = async () => {
+    try {
+      setStatus(await apifyCall<ApifyTokenStatus>(APIFY_PATH, 'GET'))
+      setLoadError(null)
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Không tải được trạng thái token')
+    }
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const value = tokenInput.trim()
+    if (!value) {
+      setMsg({ ok: false, text: 'Hãy dán token Apify trước khi lưu.' })
+      return
+    }
+    const reason = window.prompt('Lý do lưu token (bắt buộc):')
+    if (!reason || reason.trim().length < 3) {
+      setMsg({ ok: false, text: 'Cần nhập lý do (ít nhất 3 ký tự).' })
+      return
+    }
+    setBusy('save')
+    setMsg(null)
+    try {
+      const next = await apifyCall<ApifyTokenStatus>(APIFY_PATH, 'POST', { token: value, reason: reason.trim() })
+      setStatus(next)
+      setMsg({ ok: true, text: 'Đã kiểm tra và lưu token.' })
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : 'Lưu token thất bại' })
+    } finally {
+      setTokenInput('')
+      setBusy(null)
+    }
+  }
+
+  const retest = async () => {
+    setBusy('test')
+    setMsg(null)
+    try {
+      setStatus(await apifyCall<ApifyTokenStatus>(`${APIFY_PATH}/test`, 'POST'))
+      setMsg({ ok: true, text: 'Token vẫn hợp lệ.' })
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : 'Kiểm tra thất bại' })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const remove = async () => {
+    if (!window.confirm('Xoá token Apify đã lưu trong admin?')) return
+    const reason = window.prompt('Lý do xoá token (bắt buộc):')
+    if (!reason || reason.trim().length < 3) {
+      setMsg({ ok: false, text: 'Cần nhập lý do (ít nhất 3 ký tự).' })
+      return
+    }
+    setBusy('delete')
+    setMsg(null)
+    try {
+      const next = await apifyCall<ApifyTokenStatus>(APIFY_PATH, 'DELETE', { reason: reason.trim() })
+      setStatus(next)
+      setMsg({ ok: true, text: next.note ?? 'Đã xoá token.' })
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : 'Xoá token thất bại' })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const sourceLabel = status?.source === 'admin' ? 'Admin' : status?.source === 'env' ? 'biến môi trường' : '—'
+  const btn =
+    'px-4 py-2 rounded-control border border-line bg-surface hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed text-sm text-fg-2 transition-colors'
+
+  return (
+    <div className="rounded-card border border-line bg-surface shadow-card p-5">
+      <h2 className="text-sm font-semibold text-fg-2 mb-4 uppercase tracking-wider">Apify (lấy video Douyin)</h2>
+
+      {loadError ? (
+        <div className="rounded-control bg-danger-soft border border-danger/30 px-4 py-3 text-danger text-sm mb-4">
+          {loadError}
+        </div>
+      ) : !status ? (
+        <div className="flex items-center gap-2 text-fg-muted text-sm mb-4">
+          <span className="inline-block h-4 w-4 rounded-full border-2 border-line-strong border-t-transparent animate-spin" />
+          Đang tải...
+        </div>
+      ) : (
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm mb-4">
+          <div className="flex gap-2">
+            <dt className="text-fg-muted">Trạng thái:</dt>
+            <dd className={status.configured ? 'text-success' : 'text-fg-muted'}>
+              {status.configured ? 'Đã cấu hình' : 'Chưa cấu hình'}
+            </dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="text-fg-muted">Nguồn:</dt>
+            <dd className="text-fg-2">{sourceLabel}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="text-fg-muted">Token:</dt>
+            <dd className="font-mono text-fg-2">{status.last4 ? `••••${status.last4}` : '—'}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="text-fg-muted">Tài khoản:</dt>
+            <dd className="text-fg-2">
+              {status.account?.username ?? '—'}
+              {status.account?.plan ? ` (${status.account.plan})` : ''}
+            </dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="text-fg-muted">Lần kiểm tra gần nhất:</dt>
+            <dd className="text-fg-2">{fmtTime(status.validated_at)}</dd>
+          </div>
+          {status.usage && (
+            <div className="flex gap-2">
+              <dt className="text-fg-muted">Mức dùng tháng / giới hạn:</dt>
+              <dd className="font-mono text-fg-2">
+                {fmtUsd(status.usage.monthly_usage_usd)} / {fmtUsd(status.usage.max_monthly_usage_usd)}
+              </dd>
+            </div>
+          )}
+        </dl>
+      )}
+
+      <form onSubmit={save} className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="password"
+            autoComplete="off"
+            value={tokenInput}
+            onChange={(e) => setTokenInput(e.target.value)}
+            placeholder="Dán token Apify mới"
+            className="flex-1 bg-surface border border-line rounded-control px-3 py-2 text-sm text-fg font-mono outline-none focus:ring-1 focus:ring-line-strong transition-colors"
+          />
+          <button
+            type="submit"
+            disabled={busy !== null}
+            className="px-5 py-2 rounded-control bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-accent-fg text-sm font-medium transition-colors"
+          >
+            {busy === 'save' ? 'Đang kiểm tra...' : 'Lưu token'}
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={retest} disabled={busy !== null || !status?.configured} className={btn}>
+            {busy === 'test' ? 'Đang kiểm tra...' : 'Kiểm tra lại'}
+          </button>
+          <button
+            type="button"
+            onClick={remove}
+            disabled={busy !== null || status?.source !== 'admin'}
+            className="px-4 py-2 rounded-control text-sm text-fg-muted hover:text-danger hover:bg-danger-soft disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {busy === 'delete' ? 'Đang xoá...' : 'Xoá token'}
+          </button>
+        </div>
+        {msg && <p className={`text-xs ${msg.ok ? 'text-success' : 'text-danger'}`}>{msg.text}</p>}
+        <p className="text-xs text-fg-muted">
+          Đặt giới hạn chi tiêu trong trang Billing của Apify trước khi lưu token.
+        </p>
+      </form>
+    </div>
+  )
 }
 
 export default function ConfigPage() {
@@ -243,6 +468,8 @@ export default function ConfigPage() {
           </table>
         </div>
       )}
+
+      <ApifyTokenCard />
 
       {/* Add form */}
       <div className="rounded-card border border-line bg-surface shadow-card p-5">

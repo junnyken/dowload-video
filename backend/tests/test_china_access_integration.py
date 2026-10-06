@@ -361,6 +361,12 @@ class TestAdminEndpoints:
 
 # ── benchmark harness ───────────────────────────────────────────────────────
 
+async def _fake_validator(url, platform="douyin"):
+    # No network in tests: media validation is covered in test_china_access_stage_a.py.
+    from app.services.china_platforms.media_validation import _result
+    return _result("usable", None, media_url_http_status=206, media_duration_sec=10.0)
+
+
 class TestBenchmark:
 
     def _routers(self, calls, paid_outcome="ok"):
@@ -375,7 +381,8 @@ class TestBenchmark:
         calls = []
         fx = [{"url": DY_URL, "case": "public_single"}, {"url": DY_URL2, "case": "short_url"}]
         rep = asyncio.run(run_benchmark("douyin", fixtures=fx, out_dir=str(tmp_path),
-                                        router_factory=self._routers(calls)))
+                                        router_factory=self._routers(calls),
+                                        media_validator=_fake_validator))
         assert [c[0] for c in calls] == ["native_douyin", "native_douyin"]   # no paid call
         with open(tmp_path / rep["files"]["csv"], encoding="utf-8") as fh:
             rows = list(csv.DictReader(fh))
@@ -391,7 +398,8 @@ class TestBenchmark:
         calls = []
         fx = [{"url": u, "case": "c"} for u in (DY_URL, DY_URL2, "https://www.douyin.com/video/7300000000000000003")]
         rep = asyncio.run(run_benchmark("douyin", include_managed=True, fixtures=fx, out_dir=str(tmp_path),
-                                        router_factory=self._routers(calls)))
+                                        router_factory=self._routers(calls),
+                                        media_validator=_fake_validator))
         assert [c[0] for c in calls].count("apify_douyin") == 1
         s = rep["summary"]["apify_douyin"]
         assert s["successes"] == 1 and s["cost_per_success_usd"] == pytest.approx(0.007)
@@ -401,7 +409,8 @@ class TestBenchmark:
         flags_on.setenv("CHINA_ACCESS_DOUYIN_MANAGED_MODE", "off")
         calls = []
         asyncio.run(run_benchmark("douyin", include_managed=True, fixtures=[{"url": DY_URL, "case": "c"}],
-                                  out_dir=str(tmp_path), router_factory=self._routers(calls)))
+                                  out_dir=str(tmp_path), router_factory=self._routers(calls),
+                                        media_validator=_fake_validator))
         assert "apify_douyin" not in [c[0] for c in calls]
 
     def test_fixtures_come_from_config(self, flags_on, tmp_path):

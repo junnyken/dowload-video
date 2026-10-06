@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from typing import Callable, Optional
 
 from app.services.china_platforms import budget_guard, registry, request_cache, settings
-from app.services.china_platforms import provider_health
+from app.services.china_platforms import media_validation, provider_health, rollout_guard, watermark
 from app.services.china_platforms.errors import (
     AlreadyProcessing,
     ChinaAccessFailure,
@@ -120,7 +120,8 @@ class ProviderRouter:
     def _attempt(self, *, request, platform, provider_name, mode, h, ctx, outcome, category=None,
                  latency_ms=0, result: Optional[NormalizedMediaResult] = None, est_usd=0.0,
                  actual_usd=None, cost_source="none", health_state=None, budget_check="n/a",
-                 duration_missing=False, expiry=None) -> dict:
+                 duration_missing=False, expiry=None, media: Optional[dict] = None,
+                 cost: Optional[dict] = None) -> dict:
         a = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "platform": platform,
@@ -146,7 +147,18 @@ class ProviderRouter:
             "cache_hit": bool(result and result.cache_hit),
             "health_state": health_state,
             "budget_check_result": budget_check,
+            # 32B-2 Stage A
+            "media_url_present": bool(result and result.primary_video_url()),
+            "cost_delta_usd": (cost or {}).get("cost_delta_usd"),
+            "cost_flag": (cost or {}).get("cost_flag"),
         }
+        m = media or media_validation.not_run()
+        for k in media_validation.RESULT_FIELDS:
+            if k == "usable_media_url" and m.get("media_check") == "not_run":
+                continue    # not validated: keep "a media URL is present"
+            if k == "media_url_expiry_if_known" and m.get(k) is None:
+                continue
+            a[k] = m.get(k)
         self.attempts.append(a)
         record_attempt(a)
         return a
@@ -335,21 +347,39 @@ class ProviderRouter:
 
             run = getattr(prov, "last_run", None)
             actual_usd, cost_source = None, "none"
+            cost: Optional[dict] = None
             if reservation is not None:
-                micros = budget_guard.settle(reservation, run.actual_cost_usd if run else None,
-                                             bool(run and run.run_started))
+                cost = budget_guard.reconcile(reservation, run.actual_cost_usd if run else None,
+                                              bool(run and run.run_started))
                 if run and run.run_started and run.actual_cost_usd is not None:
-                    actual_usd, cost_source = run.actual_cost_usd, "actual"
+                    actual_usd, cost_source = cost["actual_cost_usd"], "actual"
                 elif run and run.run_started:
-                    actual_usd, cost_source = micros / 1e6, "estimated"
+                    actual_usd, cost_source = cost["estimated_cost_usd"], "estimated"
                 else:
                     actual_usd, cost_source = 0.0, "none"
+                budget_guard.check_spend_alerts(prov.budget_class)
+
+            media: Optional[dict] = None
+            if result is not None:
+                result = result.model_copy(update={"watermark_state": watermark.gated_state(platform, name)})
+                if settings.router_validate_media():
+                    media = await media_validation.validate_media_url(result.primary_video_url(),
+                                                                      platform=platform)
+                    if media.get("media_check") == "unusable":
+                        failure = make_failure(platform, name, "parse_failed",
+                                               f"media url unusable: {media.get('media_check_reason')}")
+                        result = None
 
             common = dict(request=req, platform=platform, provider_name=name, mode=prov.mode, h=h, ctx=ctx,
                           latency_ms=latency, est_usd=est_usd, actual_usd=actual_usd, cost_source=cost_source,
                           health_state=health.state, budget_check="reserved" if reservation else "n/a",
                           duration_missing=bool(run and run.duration_missing),
-                          expiry=run.media_url_expiry if run else None)
+                          expiry=run.media_url_expiry if run else None, media=media, cost=cost)
+            if prov.paid:
+                rollout_guard.record_managed_outcome(
+                    platform, name, ctx.origin, success=result is not None,
+                    usable=(media or {}).get("usable_media_url"),
+                    category=failure.category if failure else None)
             if result is not None:
                 provider_health.record_success(name, platform)
                 result = result.model_copy(update={"resolution_time_ms": latency, "cache_hit": False})

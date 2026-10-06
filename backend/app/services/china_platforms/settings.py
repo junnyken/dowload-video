@@ -147,9 +147,13 @@ def provider_monthly_spend_micros(budget_class: str) -> int:
 # ── Apify ───────────────────────────────────────────────────────────────────
 
 def apify_token() -> str:
-    """Own variable on purpose: setting APIFY_TOKEN would also switch on the
+    """Admin-stored token (Redis, set from the admin panel) > env
+    CHINA_ACCESS_APIFY_TOKEN > "". Read on every call.
+
+    Own variable on purpose: setting APIFY_TOKEN would also switch on the
     legacy, unbudgeted Apify path in downloader.py (see docs 01 C6)."""
-    return _str("CHINA_ACCESS_APIFY_TOKEN")
+    from app.services.china_platforms.secret_store import resolve_apify_token  # noqa: PLC0415
+    return resolve_apify_token()[0]
 
 
 def apify_douyin_actor_id() -> str:
@@ -191,5 +195,94 @@ def benchmark_env_urls(platform: str) -> list[str]:
 
 def secret_values() -> list[str]:
     """Literal secret values the redactor must remove wherever they appear."""
-    vals = [apify_token(), _str("APIFY_TOKEN")]
+    from app.services.china_platforms.secret_store import admin_token  # noqa: PLC0415
+    # APIFY_TOKEN is only READ here, so a legacy token is scrubbed too.
+    vals = [admin_token(), _str("CHINA_ACCESS_APIFY_TOKEN"), _str("APIFY_TOKEN")]
     return [v for v in vals if len(v) >= 6]
+
+
+# ── Phase 32B-2 Stage A (Douyin) ────────────────────────────────────────────
+
+def media_validate_max_bytes() -> int:
+    """First range request size for usable-media validation (bounded)."""
+    return min(4 * 1024 * 1024, max(64 * 1024, _int("CHINA_ACCESS_MEDIA_VALIDATE_MAX_BYTES", 2 * 1024 * 1024)))
+
+
+def media_validate_min_bytes() -> int:
+    """Below this the media body is treated as trivial (an error page, a stub)."""
+    return max(1, _int("CHINA_ACCESS_MEDIA_VALIDATE_MIN_BYTES", 64 * 1024))
+
+
+def media_validate_timeout_sec() -> float:
+    return max(2.0, _float("CHINA_ACCESS_MEDIA_VALIDATE_TIMEOUT_SEC", 20.0))
+
+
+def router_validate_media() -> bool:
+    """Run the usable-media check inside the router after a provider success.
+    Default off: it costs up to a few MB of CDN bandwidth per request."""
+    return _bool("CHINA_ACCESS_ROUTER_VALIDATE_MEDIA")
+
+
+def benchmark_validate_media() -> bool:
+    return _bool("CHINA_ACCESS_BENCHMARK_VALIDATE_MEDIA", True)
+
+
+def cost_overrun_flag_ratio() -> float:
+    """Flag a managed run when actual > estimate × (1 + pct/100)."""
+    return 1.0 + max(0.0, _float("CHINA_ACCESS_COST_OVERRUN_FLAG_PCT", 50.0)) / 100.0
+
+
+def spend_alerts_enabled() -> bool:
+    return _bool("CHINA_ACCESS_SPEND_ALERTS_ENABLED", True)
+
+
+SPEND_ALERT_THRESHOLDS = (50, 80, 100)
+
+
+def auto_rollback_enabled() -> bool:
+    return _bool("CHINA_ACCESS_AUTO_ROLLBACK_ENABLED", True)
+
+
+def auto_rollback_probe_failures() -> int:
+    return max(1, _int("CHINA_ACCESS_AUTO_ROLLBACK_PROBE_FAILURES", 2))
+
+
+def auto_rollback_window() -> int:
+    return max(2, _int("CHINA_ACCESS_AUTO_ROLLBACK_WINDOW", 10))
+
+
+def auto_rollback_min_usable_rate() -> float:
+    return min(1.0, max(0.0, _float("CHINA_ACCESS_AUTO_ROLLBACK_MIN_USABLE_RATE", 0.5)))
+
+
+def watermark_min_reviewed() -> int:
+    return max(1, _int("CHINA_ACCESS_WATERMARK_MIN_REVIEWED", 10))
+
+
+def watermark_min_free_rate() -> float:
+    return min(1.0, max(0.0, _float("CHINA_ACCESS_WATERMARK_MIN_FREE_RATE", 0.9)))
+
+
+def bench_min_sample() -> int:
+    return max(1, _int("CHINA_ACCESS_BENCH_MIN_SAMPLE", 20))
+
+
+def bench_promote_usable_rate() -> float:
+    return _float("CHINA_ACCESS_BENCH_PROMOTE_USABLE_RATE", 0.8)
+
+
+def bench_reject_usable_rate() -> float:
+    return _float("CHINA_ACCESS_BENCH_REJECT_USABLE_RATE", 0.5)
+
+
+def bench_native_margin() -> float:
+    """How far the managed usable rate must beat native to promote."""
+    return _float("CHINA_ACCESS_BENCH_NATIVE_MARGIN", 0.2)
+
+
+def bench_max_cost_per_usable_usd() -> float:
+    return _float("CHINA_ACCESS_BENCH_MAX_COST_PER_USABLE_USD", 0.01)
+
+
+def bench_max_timeout_share() -> float:
+    return _float("CHINA_ACCESS_BENCH_MAX_TIMEOUT_SHARE", 0.2)

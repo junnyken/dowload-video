@@ -278,3 +278,115 @@ def snapshot(platforms: list[str], providers: list[str]) -> dict:
     except Exception:  # noqa: BLE001
         out["redis_ok"] = False
     return out
+
+
+# ── Phase 32B-2 Stage A: actual-cost reconciliation + spend alerts ─────────
+
+def k_reconcile(day: str, provider: str) -> str:
+    return f"china:reconcile:{day}:{provider}"
+
+
+def reconcile(res: Reservation, actual_usd: Optional[float], run_started: bool) -> dict:
+    """settle() + a record of how far the estimate was off.
+
+    flag:
+      None            actual known and within the overrun ratio, or no run started
+      "actual_missing" a run started but the vendor gave no usageTotalUsd — the
+                       estimate stays reserved (settle) and the run is flagged
+      "over_estimate"  actual > estimate × CHINA_ACCESS_COST_OVERRUN_FLAG_PCT
+    Daily per-provider tallies live in china:reconcile:{day}:{provider}
+    (runs, flagged_over, flagged_missing, delta_usd_micros)."""
+    recorded = settle(res, actual_usd, run_started)
+    est = res.est_micros
+    if not run_started:
+        out = {"estimated_cost_usd": est / 1e6, "actual_cost_usd": 0.0, "cost_delta_usd": -est / 1e6,
+               "cost_flag": None}
+    elif actual_usd is None:
+        out = {"estimated_cost_usd": est / 1e6, "actual_cost_usd": None, "cost_delta_usd": None,
+               "cost_flag": "actual_missing"}
+    else:
+        delta = recorded - est
+        over = recorded > est * settings.cost_overrun_flag_ratio() if est > 0 else recorded > 0
+        out = {"estimated_cost_usd": est / 1e6, "actual_cost_usd": recorded / 1e6,
+               "cost_delta_usd": round(delta / 1e6, 6), "cost_flag": "over_estimate" if over else None}
+    if run_started:
+        try:
+            r = _r()
+            k = k_reconcile(res.day, res.budget_class)
+            r.hincrby(k, "runs", 1)
+            if out["cost_flag"] == "over_estimate":
+                r.hincrby(k, "flagged_over", 1)
+            elif out["cost_flag"] == "actual_missing":
+                r.hincrby(k, "flagged_missing", 1)
+            if out["cost_delta_usd"] is not None:
+                r.hincrby(k, "delta_usd_micros", int(round(out["cost_delta_usd"] * 1e6)))
+            r.expire(k, _MONTH_TTL)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("china_access reconcile record failed: %s", type(exc).__name__)
+    if out["cost_flag"]:
+        logger.warning("china_access cost %s: provider=%s est=%.6f actual=%s", out["cost_flag"],
+                       res.budget_class, est / 1e6, out["actual_cost_usd"])
+    return out
+
+
+def reconcile_snapshot(provider: str, day: Optional[str] = None) -> dict:
+    day = day or day_key()
+    try:
+        h = _r().hgetall(k_reconcile(day, provider)) or {}
+    except Exception:  # noqa: BLE001
+        return {"day_utc": day, "redis_ok": False}
+    return {"day_utc": day, "runs": _i(h.get("runs")), "flagged_over": _i(h.get("flagged_over")),
+            "flagged_missing": _i(h.get("flagged_missing")),
+            "delta_usd": _i(h.get("delta_usd_micros")) / 1e6}
+
+
+def k_spend_alert(period: str, period_key: str, provider: str, pct: int) -> str:
+    return f"china:spend_alert:{period}:{period_key}:{provider}:{pct}"
+
+
+def check_spend_alerts(budget_class: str) -> list[tuple[str, int]]:
+    """Telegram alert when the provider's daily or monthly spend crosses 50/80/100%
+    of its ceiling. One alert per threshold per period: SET NX on
+    china:spend_alert:{daily|monthly}:{period}:{provider}:{pct}. When several
+    thresholds are crossed at once all are claimed and ONE message names the
+    highest. Redis unreadable → no alert (no storm). Returns what was sent."""
+    if not settings.spend_alerts_enabled():
+        return []
+    sent: list[tuple[str, int]] = []
+    day, month = day_key(), month_key()
+    try:
+        r = _r()
+        periods = (
+            ("daily", day, _i(r.get(k_provider_spend(day, budget_class))),
+             settings.provider_daily_spend_micros(budget_class), 2 * 86400),
+            ("monthly", month, _i(r.get(k_provider_month(month, budget_class))),
+             settings.provider_monthly_spend_micros(budget_class), _MONTH_TTL),
+        )
+        for period, pkey, spent, ceiling, ttl in periods:
+            if ceiling <= 0:
+                continue
+            pct_used = spent * 100.0 / ceiling
+            newly = [t for t in settings.SPEND_ALERT_THRESHOLDS
+                     if pct_used >= t and r.set(k_spend_alert(period, pkey, budget_class, t), "1", nx=True, ex=ttl)]
+            if newly:
+                top = max(newly)
+                sent.append((period, top))
+                _send_spend_alert(period, pkey, budget_class, top, spent, ceiling)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("china_access spend alert check failed: %s", type(exc).__name__)
+    return sent
+
+
+def _send_spend_alert(period: str, pkey: str, provider: str, pct: int, spent: int, ceiling: int) -> None:
+    level = "critical" if pct >= 100 else ("warning" if pct >= 80 else "info")
+    label = "ngày" if period == "daily" else "tháng"
+    try:
+        from app.core.alerts import send_admin_alert  # noqa: PLC0415
+        send_admin_alert(
+            level,
+            f"China access: chi phí {provider} đạt {pct}% trần {label}",
+            f"Kỳ {pkey} (UTC): đã dùng ${spent / 1e6:.4f} / trần ${ceiling / 1e6:.2f}."
+            + (" Lượt gọi trả phí mới sẽ bị từ chối." if pct >= 100 else ""),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("china_access spend alert send failed: %s", type(exc).__name__)
