@@ -12,9 +12,9 @@ Never put a value in source, chat, or a commit. Names only below, with the safe 
 ## Guardrails
 | Name | Default | Notes |
 |---|---|---|
-| `CHINA_ACCESS_ANON_DAILY_RESOLVE_LIMIT` | `5` | Paid path only, per IP (and the shared `unknown` worker bucket) |
-| `CHINA_ACCESS_FREE_DAILY_RESOLVE_LIMIT` | `20` | Paid path only, per signed-in user |
-| `CHINA_ACCESS_ADMIN_DAILY_RESOLVE_LIMIT` | `50` | Paid path only, admin canary |
+| `CHINA_ACCESS_ANON_DAILY_RESOLVE_LIMIT` | `5` | Paid path only, per IP per platform (and the shared `unknown` bucket for worker jobs with no requester). Negative = unlimited |
+| `CHINA_ACCESS_FREE_DAILY_RESOLVE_LIMIT` | `20` | Paid path only, per signed-in user per platform. Negative = unlimited |
+| `CHINA_ACCESS_ADMIN_DAILY_RESOLVE_LIMIT` | `-1` (unlimited) | Paid path only, admin session. Was 50 before 2026-10-06 |
 | `CHINA_ACCESS_MANAGED_TIMEOUT_SEC` | `90` | Whole managed call, including polling; on deadline the run is aborted |
 | `CHINA_ACCESS_MANAGED_MAX_RETRIES` | `0` | Clamped to 0 in wave 1 |
 | `CHINA_ACCESS_CACHE_TTL_SEC` | `1800` | Upper bound; the policy may be lower |
@@ -30,7 +30,7 @@ Never put a value in source, chat, or a commit. Names only below, with the safe 
 | `CHINA_ACCESS_DOUYIN_ENABLED` | `false` | Routes Douyin single media through the layer (native without ScraperAPI, then managed if the mode allows) |
 | `CHINA_ACCESS_DOUYIN_MANAGED_MODE` | `off` | `off` \| `benchmark` \| `canary_admin` \| `on`. This is the ceiling; the admin can lower it at runtime |
 | `CHINA_ACCESS_DOUYIN_PROVIDER_ORDER` | `native_douyin,apify_douyin` | Correction #3: `apify_douyin,native_douyin` = managed-first, after the benchmark only |
-| `CHINA_ACCESS_DOUYIN_MANAGED_DAILY_CALL_LIMIT` | `50` | Platform level |
+| `CHINA_ACCESS_DOUYIN_MANAGED_DAILY_CALL_LIMIT` | `-1` (unlimited) | Platform level. Was 50; spend ceilings are the safety net since 2026-10-06 |
 | `CHINA_ACCESS_DOUYIN_MANAGED_DAILY_SPEND_CEILING_USD` | `1.00` | Platform level |
 
 ## Kuaishou and Xiaohongshu (Phase 32B-3, single video)
@@ -40,14 +40,14 @@ Details, actor research and prices: `09-XHS-KUAISHOU-PROVIDERS.md`; enable steps
 |---|---|---|
 | `CHINA_ACCESS_KUAISHOU_ENABLED` | `false` | Kuaishou single video through the layer (managed only). Also gates recognition in the classifier, the short-link flag for `v.kuaishou.com` and the capability entry. `KUAISHOU_ENABLED` (old scaffold) is separate and wins when on |
 | `CHINA_ACCESS_KUAISHOU_MANAGED_MODE` | `off` | `off` \| `benchmark` \| `canary_admin` \| `on` |
-| `CHINA_ACCESS_KUAISHOU_MANAGED_DAILY_CALL_LIMIT` | `20` | Platform level |
+| `CHINA_ACCESS_KUAISHOU_MANAGED_DAILY_CALL_LIMIT` | `-1` (unlimited) | Platform level. Was 20 |
 | `CHINA_ACCESS_KUAISHOU_MANAGED_DAILY_SPEND_CEILING_USD` | `0.10` | Platform level |
 | `CHINA_ACCESS_APIFY_KUAISHOU_ACTOR_ID` | `natanielsantos~kuaishou-scraper` | |
 | `CHINA_ACCESS_APIFY_KUAISHOU_EST_COST_USD` | `0.00405` | $0.004/video + $0.00005 start |
 | `CHINA_ACCESS_XIAOHONGSHU_ENABLED` | `false` | Xiaohongshu single video note through the layer: native extractor, then managed |
 | `CHINA_ACCESS_XIAOHONGSHU_MANAGED_MODE` | `off` | as above |
 | `CHINA_ACCESS_XIAOHONGSHU_PROVIDER_ORDER` | `native_xiaohongshu,apify_xiaohongshu` | |
-| `CHINA_ACCESS_XIAOHONGSHU_MANAGED_DAILY_CALL_LIMIT` | `20` | Platform level |
+| `CHINA_ACCESS_XIAOHONGSHU_MANAGED_DAILY_CALL_LIMIT` | `-1` (unlimited) | Platform level. Was 20 |
 | `CHINA_ACCESS_XIAOHONGSHU_MANAGED_DAILY_SPEND_CEILING_USD` | `0.10` | Platform level |
 | `CHINA_ACCESS_APIFY_XIAOHONGSHU_ACTOR_ID` | `blue_puppy~rednote-video-downloader` | Alternative: `agentflow~xiaohongshu-video-downloader` (estimate `0.007`) |
 | `CHINA_ACCESS_APIFY_XIAOHONGSHU_EST_COST_USD` | `0.00255` | $0.0025/item (FREE tier) + $0.00005 start |
@@ -59,7 +59,7 @@ Details, actor research and prices: `09-XHS-KUAISHOU-PROVIDERS.md`; enable steps
 | Name | Default | Notes |
 |---|---|---|
 | `CHINA_ACCESS_APIFY_TOKEN` | *(empty)* | **Secret.** Fallback entry of the token pool (id `env`, priority 1000 = used last). Tokens added in the admin panel (Chi phí Apify / Config → "Apify") come first. No eligible entry → no Apify provider is eligible |
-| `CHINA_ACCESS_APIFY_DAILY_CALL_LIMIT` | `50` | |
+| `CHINA_ACCESS_APIFY_DAILY_CALL_LIMIT` | `-1` (unlimited) | Was 50. Daily/monthly spend ceilings still apply |
 | `CHINA_ACCESS_APIFY_DAILY_SPEND_CEILING_USD` | `1.00` | |
 | `CHINA_ACCESS_APIFY_MONTHLY_SPEND_CEILING_USD` | `5.00` | Calendar month, UTC |
 | `CHINA_ACCESS_APIFY_DOUYIN_ACTOR_ID` | `natanielsantos~douyin-scraper` | |

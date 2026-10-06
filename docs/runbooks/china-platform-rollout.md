@@ -195,21 +195,21 @@ downloader hook runs first and the access layer never sees Kuaishou links.
 | `CHINA_ACCESS_ENABLED` | `false` | Master switch, shared with Douyin |
 | `CHINA_ACCESS_KUAISHOU_ENABLED` | `false` | Routes Kuaishou single video through the layer; also makes `/resolve-input` and the classifier recognise Kuaishou links |
 | `CHINA_ACCESS_KUAISHOU_MANAGED_MODE` | `off` | `off` \| `benchmark` \| `canary_admin` \| `on` (env = ceiling) |
-| `CHINA_ACCESS_KUAISHOU_MANAGED_DAILY_CALL_LIMIT` | `20` | Platform level |
+| `CHINA_ACCESS_KUAISHOU_MANAGED_DAILY_CALL_LIMIT` | `-1` (unlimited since 2026-10-06; was 20) | Platform level |
 | `CHINA_ACCESS_KUAISHOU_MANAGED_DAILY_SPEND_CEILING_USD` | `0.10` | Platform level |
 | `CHINA_ACCESS_APIFY_KUAISHOU_ACTOR_ID` | `natanielsantos~kuaishou-scraper` | |
 | `CHINA_ACCESS_APIFY_KUAISHOU_EST_COST_USD` | `0.00405` | Effective price in our counters (cost floor) |
 | `CHINA_ACCESS_XIAOHONGSHU_ENABLED` | `false` | Routes Xiaohongshu single video notes (explore / discovery/item / xhslink.com / xhslink.cn) through the layer |
 | `CHINA_ACCESS_XIAOHONGSHU_MANAGED_MODE` | `off` | as above |
 | `CHINA_ACCESS_XIAOHONGSHU_PROVIDER_ORDER` | `native_xiaohongshu,apify_xiaohongshu` | `apify_xiaohongshu` alone = managed only |
-| `CHINA_ACCESS_XIAOHONGSHU_MANAGED_DAILY_CALL_LIMIT` | `20` | Platform level |
+| `CHINA_ACCESS_XIAOHONGSHU_MANAGED_DAILY_CALL_LIMIT` | `-1` (unlimited since 2026-10-06; was 20) | Platform level |
 | `CHINA_ACCESS_XIAOHONGSHU_MANAGED_DAILY_SPEND_CEILING_USD` | `0.10` | Platform level |
 | `CHINA_ACCESS_APIFY_XIAOHONGSHU_ACTOR_ID` | `blue_puppy~rednote-video-downloader` | `agentflow~xiaohongshu-video-downloader` is the documented alternative (set its estimate to `0.007`) |
 | `CHINA_ACCESS_APIFY_XIAOHONGSHU_EST_COST_USD` | `0.00255` | |
 | `CHINA_ACCESS_SHORT_LINK_TIMEOUT_SEC` | `6` | One free 302 lookup for `v.kuaishou.com` / `xhslink.com` links |
 | `CHINA_ACCESS_MANAGED_SERVER_DOWNLOAD_BUDGET_SEC` | `45` | Shared with Douyin: a managed result's server copy stops after this, then the user's browser gets the CDN URL. No CN proxy is ever used for these two platforms |
 
-Unchanged and shared by all three platforms: `CHINA_ACCESS_APIFY_DAILY_CALL_LIMIT` (50),
+Unchanged and shared by all three platforms: `CHINA_ACCESS_APIFY_DAILY_CALL_LIMIT` (-1 = unlimited since 2026-10-06; was 50),
 `CHINA_ACCESS_APIFY_DAILY_SPEND_CEILING_USD` (1.00), `CHINA_ACCESS_APIFY_MONTHLY_SPEND_CEILING_USD` (5.00), the Apify
 token (admin panel / `CHINA_ACCESS_APIFY_TOKEN`), the anonymous / signed-in / admin managed quotas and the kill switches.
 Auto-rollback (section 5) now covers both platforms too.

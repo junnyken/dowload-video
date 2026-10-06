@@ -266,7 +266,8 @@ def test_lane_redispatch_is_not_an_attempt_and_carries_the_retry_count(worker, m
     day, codes = _outcomes(worker["rc"])
     assert day == {} and codes == {}, "a deferral ran nothing and must record nothing"
     (sent,) = worker["calls"]["dispatched"]
-    assert sent["kwargs"] == {"_lane_try": 1, "_prior_retries": 2}
+    assert sent["kwargs"] == {"_lane_try": 1, "_prior_retries": 2,
+                              "_requester": None, "_quota_precounted": False}
     # the deferred run's lease is released, so the re-dispatched task (a new
     # task id) is not skipped as a "duplicate" of it
     assert job_lease.get_lease_holder("job-1") is None
@@ -330,8 +331,8 @@ def test_bulk_douyin_with_a_pool_cookie_is_accepted(app, route, no_douyin_cookie
     import base64
     no_douyin_cookie.rpush("cookie_pool:douyin", base64.b64encode(b"# Netscape\n").decode())
     monkeypatch.setattr(route.process_video_task, "apply_async", lambda *a, **k: None)
-    monkeypatch.setattr(route, "check_anon_quota", lambda *a, **k: {"allowed": True})
-    monkeypatch.setattr(route, "increment_anon_usage", lambda *a, **k: None)
+    monkeypatch.setattr(route, "check_platform_quota", lambda *a, **k: {"allowed": True})
+    monkeypatch.setattr(route, "record_platform_download", lambda *a, **k: False)
     r = _bulk(app, [DOUYIN])
     assert r.status_code != 422, r.text
 

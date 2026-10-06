@@ -467,12 +467,13 @@ class TestPolicyOrder:
 class TestPerPlatformBudget:
 
     def test_defaults(self, clean_env):
-        assert settings.platform_managed_daily_call_limit("kuaishou") == 20
-        assert settings.platform_managed_daily_call_limit("xiaohongshu") == 20
+        # Call caps default to unlimited since 2026-10-06 (per-person limits
+        # bound traffic); the spend ceilings are unchanged.
+        assert settings.platform_managed_daily_call_limit("kuaishou") == -1
+        assert settings.platform_managed_daily_call_limit("xiaohongshu") == -1
         assert settings.platform_managed_daily_spend_micros("kuaishou") == 100_000
         assert settings.platform_managed_daily_spend_micros("xiaohongshu") == 100_000
-        # Douyin keeps its wave-1 values
-        assert settings.platform_managed_daily_call_limit("douyin") == 50
+        assert settings.platform_managed_daily_call_limit("douyin") == -1
         assert settings.platform_managed_daily_spend_micros("douyin") == 1_000_000
 
     def test_each_platform_has_its_own_call_cap(self, layer_on):

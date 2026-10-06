@@ -120,7 +120,7 @@ Considered and not chosen:
 | `apify_kuaishou` | $0.00405 | 20 calls, $0.10 | $0.081 |
 | `apify_xiaohongshu` | $0.00255 | 20 calls, $0.10 | $0.051 |
 
-All three also count against the shared provider ceilings (`CHINA_ACCESS_APIFY_DAILY_CALL_LIMIT` 50,
+All three also count against the shared provider ceilings (`CHINA_ACCESS_APIFY_DAILY_CALL_LIMIT` -1 = unlimited since 2026-10-06 (was 50),
 `..._DAILY_SPEND_CEILING_USD` 1.00, `..._MONTHLY_SPEND_CEILING_USD` 5.00). The Apify account's own spending limit is
 the hard stop outside this code.
 

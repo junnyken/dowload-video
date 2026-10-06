@@ -111,7 +111,17 @@ def set_killswitch(scope: str, on: bool) -> None:
 
 # ── limits ──────────────────────────────────────────────────────────────────
 
+_COUNT_LEVELS = ("user_quota", "platform_calls", "provider_calls")
+
+
+def _over(count: int, limit: int) -> bool:
+    """count has reached a call/quota limit; a negative limit = unlimited."""
+    return limit >= 0 and count >= limit
+
+
 def requester_limit(requester: str) -> int:
+    """Per-person paid-path limit per platform per UTC day; -1 = unlimited
+    (admin by default)."""
     if requester == "admin":
         return settings.admin_daily_limit()
     if requester.startswith("user:"):
@@ -147,17 +157,17 @@ def precheck(platform: str, requester: str, candidates: list[PaidCandidate]) -> 
         r = _r()
         day, month = day_key(), month_key()
         # 5. user/IP quota (paid path only — owner correction #8)
-        if _i(r.get(k_user(day, requester, platform))) >= requester_limit(requester):
+        if _over(_i(r.get(k_user(day, requester, platform))), requester_limit(requester)):
             return BudgetDenied("user_quota", f"{requester.split(':', 1)[0]} daily managed limit")
         # 6. platform calls + spend
         est_max = max(c.est_micros for c in candidates)
-        if _i(r.get(k_platform_calls(day, platform))) >= settings.platform_managed_daily_call_limit(platform):
+        if _over(_i(r.get(k_platform_calls(day, platform))), settings.platform_managed_daily_call_limit(platform)):
             return BudgetDenied("platform_calls", f"{platform} daily managed call limit")
         if _i(r.get(k_platform_spend(day, platform))) + est_max > settings.platform_managed_daily_spend_micros(platform):
             return BudgetDenied("platform_spend", f"{platform} daily spend ceiling")
         # 7. provider daily calls/spend + monthly spend (each candidate vendor)
         for c in candidates:
-            if _i(r.get(k_provider_calls(day, c.budget_class))) >= settings.provider_daily_call_limit(c.budget_class):
+            if _over(_i(r.get(k_provider_calls(day, c.budget_class))), settings.provider_daily_call_limit(c.budget_class)):
                 return BudgetDenied("provider_calls", f"{c.budget_class} daily call limit")
             if _i(r.get(k_provider_spend(day, c.budget_class))) + c.est_micros > settings.provider_daily_spend_micros(c.budget_class):
                 return BudgetDenied("provider_spend", f"{c.budget_class} daily spend ceiling")
@@ -189,7 +199,10 @@ def reserve(platform: str, requester: str, cand: PaidCandidate) -> Reservation:
             new = _i(r.incrby(key, amount))
             r.expire(key, ttl)
             res.done.append((key, amount))
-            if new > limit:
+            # A call/quota level with a negative limit is unlimited (still
+            # counted). Spend levels never are: a negative ceiling stays
+            # "nothing may be spent".
+            if new > limit and (limit >= 0 or level not in _COUNT_LEVELS):
                 rollback(res)
                 if level in ("platform_spend", "provider_spend", "provider_month"):
                     alert_ceiling_once(level, platform, cand.budget_class)

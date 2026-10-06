@@ -213,13 +213,12 @@ def test_signed_in_success_increments_quota_exactly_once_and_queues_nothing(
     from app.core.auth_middleware import get_optional_user
     import app.main as main_mod
     _ok_extractor(route, monkeypatch)
-    calls = {"usage": 0, "cheap": 0}
-    monkeypatch.setattr(route, "check_user_quota", lambda uid: {"allowed": True})
-    monkeypatch.setattr(route, "check_user_cheap_quota", lambda uid, p: {"allowed": True})
+    calls = {"usage": 0, "platform": 0}
+    monkeypatch.setattr(route, "check_platform_quota", lambda *a, **k: {"allowed": True})
     monkeypatch.setattr(route, "increment_usage",
                         lambda uid, count_daily=True: calls.__setitem__("usage", calls["usage"] + 1))
-    monkeypatch.setattr(route, "increment_user_cheap_usage",
-                        lambda uid: calls.__setitem__("cheap", calls["cheap"] + 1))
+    monkeypatch.setattr(route, "record_platform_download",
+                        lambda *a, **k: calls.__setitem__("platform", calls["platform"] + 1))
 
     async def _noop(*a, **k):
         return None
@@ -233,7 +232,7 @@ def test_signed_in_success_increments_quota_exactly_once_and_queues_nothing(
     finally:
         main_mod.app.dependency_overrides.pop(get_optional_user, None)
     assert r.status_code == 200, r.text[:300]
-    assert calls == {"usage": 1, "cheap": 0}
+    assert calls == {"usage": 1, "platform": 1}
     assert sync_outcomes == [("instagram", True, None)]
     # Recording adds no download_jobs row: the only insert is the existing
     # personal-history row, already terminal, so no worker can pick it up.
@@ -248,7 +247,7 @@ def test_guest_failure_writes_no_job_row_and_no_quota(app, route, rc, sync_outco
     r = _post(app, "https://www.tiktok.com/@x/video/7000000000000000000", ip="198.51.100.9")
     assert r.status_code == 404
     assert route._test_sb.inserts == []
-    assert int(rc.get(quotas._anon_quota_key("198.51.100.9", "cheap")) or 0) == 0
+    assert quotas.platform_used(quotas.QuotaRequester(quotas.REQ_ANON, "198.51.100.9"), "tiktok") == 0
 
 
 def test_4k_guard_after_success_is_not_counted_twice(app, route, rc, sync_outcomes, monkeypatch):
@@ -259,7 +258,7 @@ def test_4k_guard_after_success_is_not_counted_twice(app, route, rc, sync_outcom
     async def _4k(url, *a, **k):
         return {"title": "t", "direct_mp4_url": "x", "downloaded_height": 2160}
     monkeypatch.setattr(route, "extract_video_info", _4k)
-    monkeypatch.setattr(route, "check_user_quota", lambda uid: {"allowed": True})
+    monkeypatch.setattr(route, "check_platform_quota", lambda *a, **k: {"allowed": True})
     monkeypatch.setattr(route, "check_youtube_tier", lambda *a, **k: {"allowed": True})
     monkeypatch.setattr(route, "check_quality_permission",
                         lambda *a, **k: {"allowed": False, "message": "no", "tier": "free"})

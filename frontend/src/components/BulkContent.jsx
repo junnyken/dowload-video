@@ -358,6 +358,11 @@ export default function BulkContent() {
           setShowUpgradeModal(true);
           return;
         }
+        // Per-platform daily allowance used up for every link: the server's
+        // message names the platform and when it resets.
+        if (data.detail && typeof data.detail === 'object' && data.detail.error_code === 'quota_exceeded_daily') {
+          throw new Error(data.detail.message || 'Failed to submit bulk jobs');
+        }
         // detail is a plain string for cookie_required (e.g. Douyin without a
         // server cookie) — show it instead of the generic alert below.
         throw new Error(typeof data.detail === 'string' ? data.detail : 'Failed to submit bulk jobs');

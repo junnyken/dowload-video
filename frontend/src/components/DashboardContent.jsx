@@ -578,6 +578,12 @@ export default function DashboardContent() {
             || (_d && typeof _d === 'object' ? (_d.error_code || _d.error) : null)
             || null;
         }
+        // Per-platform daily allowance (guest 429 / signed-in 403): show the
+        // server's message — it names the platform and the reset time.
+        if (data?.detail && typeof data.detail === 'object'
+            && data.detail.error_code === 'quota_exceeded_daily' && data.detail.message) {
+          throw new Error(data.detail.message);
+        }
         if (response.status === 429) {
           // Check if it's a fairness cap rejection (has retryAfter) — show as delayed, not error
           if (data?.error === 'fairness_cap_reached' && data?.retryAfter) {
@@ -675,11 +681,11 @@ export default function DashboardContent() {
     const key = track.search_query;
     setTrackDownloads(prev => ({ ...prev, [key]: 'loading' }));
     try {
-      const response = await fetch(`${API_BASE}/api/v1/fetch-link`, {
+      const response = await fetch(`${API_BASE}/api/v1/fetch-link`, withAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: key, quality: 'mp3_128' }),
-      });
+      }));
       const data = await safeJson(response);
       if (!response.ok) throw new Error(data.detail || 'Lỗi tải nhạc');
       if (data.success) {
@@ -720,11 +726,11 @@ export default function DashboardContent() {
       const key = track.search_query;
       setTrackDownloads(prev => ({ ...prev, [key]: 'loading' }));
       try {
-        const res = await fetch(`${API_BASE}/api/v1/fetch-link`, {
+        const res = await fetch(`${API_BASE}/api/v1/fetch-link`, withAuth({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: key, quality: 'mp3_320' }),
-        });
+        }));
         const data = await safeJson(res);
         if (!res.ok || !data.success) throw new Error(data.detail || 'Fetch thất bại');
 
@@ -1058,7 +1064,7 @@ export default function DashboardContent() {
       // 409 needs_confirmation (costlier proxy bytes) → ask, then resend
       // confirmed=true. 4K / over-cap return a 400/503 with a friendly message
       // + suggested lower tier. `detail` is now an object, not a string.
-      const send = (confirmed) => fetch(`${API_BASE}/api/v1/fetch-link`, {
+      const send = (confirmed) => fetch(`${API_BASE}/api/v1/fetch-link`, withAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1067,13 +1073,16 @@ export default function DashboardContent() {
           remove_watermark: !isAudioParam && removeWatermark,
           confirmed,
         }),
-      });
+      }));
       let response = await send(false);
       let data = await safeJson(response);
       if (!response.ok) {
         const det = data.detail;
         const code = det && typeof det === 'object' ? det.error : null;
         const dmsg = det && typeof det === 'object' ? det.message : det;
+        if (det && typeof det === 'object' && det.error_code === 'quota_exceeded_daily' && dmsg) {
+          throw new Error(dmsg);
+        }
         if (response.status === 429) {
           throw new Error('⏳ Quá nhiều yêu cầu. Vui lòng chờ 1 phút rồi thử lại.');
         }
@@ -1159,7 +1168,7 @@ export default function DashboardContent() {
   const handleAudioDownload = async () => {
     setDownloadingId('audio_mp3');
     try {
-      const response = await fetch(`${API_BASE}/api/v1/fetch-link`, {
+      const response = await fetch(`${API_BASE}/api/v1/fetch-link`, withAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1167,9 +1176,13 @@ export default function DashboardContent() {
           quality: 'mp3_320',
           remove_watermark: false,
         }),
-      });
+      }));
       const data = await safeJson(response);
       if (!response.ok) {
+        if (data?.detail && typeof data.detail === 'object'
+            && data.detail.error_code === 'quota_exceeded_daily' && data.detail.message) {
+          throw new Error(data.detail.message);
+        }
         if (response.status === 403 && data.detail === 'QUOTA_EXCEEDED') {
           setUpgradeErrorCode('quota_exceeded_daily');
           setShowUpgradeModal(true); return;

@@ -31,11 +31,15 @@ export default function AccountMenu({ onNavigate }) {
       .then(data => {
         // Accept either { used, limit, tier } or { downloads_today, daily_limit, tier }
         const tier = (data.tier || data.plan || 'free').toLowerCase();
+        // `used`/`limit` = the platform closest to its daily limit (the
+        // allowance is per platform since 2026-10-06).
         const rawLimit = data.limit ?? data.daily_limit ?? 10;
         setUsage({
           used:      data.used ?? data.downloads_today ?? 0,
           limit:     rawLimit,
-          unlimited: rawLimit === -1 || ['enterprise', 'team'].includes(tier),
+          unlimited: rawLimit === -1,
+          platformLabel: data.used_platform_label || null,
+          perPlatform: !!data.platform_quota,
           tier,
         });
       })
@@ -103,9 +107,12 @@ export default function AccountMenu({ onNavigate }) {
                 <span className="text-fg font-medium">{usage.used}</span>
                 {usage.unlimited
                   ? <span className="text-accent-text font-medium"> / Không giới hạn</span>
-                  : <> / {usage.limit} lượt hôm nay</>
+                  : <> / {usage.limit} lượt hôm nay{usage.platformLabel ? ` · ${usage.platformLabel}` : ''}</>
                 }
               </p>
+              {usage.perPlatform && !usage.unlimited && (
+                <p className="text-[10px] text-fg-muted mb-1.5">Giới hạn tính riêng cho từng nền tảng</p>
+              )}
               <div className="h-1 w-full rounded-full bg-surface-2 overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all ${

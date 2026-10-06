@@ -304,10 +304,9 @@ def fetch_route(monkeypatch, root):
     for lim in {id(x): x for x in (main_mod.limiter, routes.limiter,
                                      getattr(main_mod.app.state, "limiter", None)) if x}.values():
         monkeypatch.setattr(lim, "enabled", False)
-    for name in ("check_anon_quota",):
-        monkeypatch.setattr(routes, name, lambda *a, **k: {"allowed": True, "downloads_today": 0,
-                                                            "daily_limit": 99})
-    monkeypatch.setattr(routes, "increment_anon_usage", lambda *a, **k: None)
+    monkeypatch.setattr(routes, "check_platform_quota", lambda *a, **k: {"allowed": True, "downloads_today": 0,
+                                                                        "daily_limit": 99})
+    monkeypatch.setattr(routes, "record_platform_download", lambda *a, **k: False)
     return routes
 
 

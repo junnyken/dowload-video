@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { API_BASE } from '../lib/apiBase';
+import { adminSessionToken } from '../lib/adminSession';
 
 const AuthContext = createContext(null);
 
@@ -138,13 +139,17 @@ export function AuthProvider({ children }) {
   }, [session]);
 
   // ── Utility: add auth header to existing fetch options ───────────
+  // Also carries a live admin-panel session (X-Admin-Token): admins have no
+  // daily download limit on any platform.
   const withAuth = useCallback((opts = {}) => {
-    if (!session?.access_token) return opts;
+    const adminToken = adminSessionToken();
+    if (!session?.access_token && !adminToken) return opts;
     return {
       ...opts,
       headers: {
         ...(opts.headers || {}),
-        Authorization: `Bearer ${session.access_token}`,
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        ...(adminToken ? { 'X-Admin-Token': adminToken } : {}),
       },
     };
   }, [session]);

@@ -11,7 +11,11 @@ from app.core.twitter_host import is_twitter_url
 from app.core.celery_app import celery_app
 from app.core.database import get_supabase_client
 from app.core.cache import get_cached_result
-from app.core.quotas import check_user_quota, increment_usage
+from app.core.quotas import (
+    increment_usage, QuotaRequester, check_platform_quota, record_platform_download,
+    REQ_ADMIN, REQ_USER,
+)
+from app.core.platform_key import platform_key as _quota_platform_key
 from app.services.downloader import extract_video_info_sync, scrape_channel_entries_sync
 from app.utils.helpers import slugify
 from app.services.archive_service import create_batch_zip_sync
@@ -124,6 +128,32 @@ def _sb_update(supabase, data: dict, job_id: str) -> None:
                 raise
 
 
+def _bind_china_worker_context(requester):
+    """Give the China access layer the job's real requester (its per-person
+    paid-path quota: guest 5 / user 20 / admin unlimited) instead of the
+    shared "unknown" bucket. No-op (one env read) while the layer is off."""
+    try:
+        from app.services.china_platforms import settings as _cs
+        if requester is None or not _cs.master_enabled():
+            return None
+        from app.services.china_platforms.normalized_models import RequestContext, set_context
+        return set_context(RequestContext(requester_key=requester.key,
+                                          is_admin=requester.kind == REQ_ADMIN,
+                                          origin="worker"))
+    except Exception:
+        return None
+
+
+def _reset_china_worker_context(token) -> None:
+    if token is None:
+        return
+    try:
+        from app.services.china_platforms.normalized_models import reset_context
+        reset_context(token)
+    except Exception:
+        pass
+
+
 def _get_platform(url: str) -> str:
     url = url.lower()
     if "youtube.com" in url or "youtu.be" in url: return "youtube"
@@ -194,7 +224,8 @@ def _track_platform(url: str, success: bool, error_code: Optional[str] = None) -
     soft_time_limit=int(os.getenv("VIDEO_TASK_SOFT_LIMIT", "300")),   # 5 min
     time_limit=int(os.getenv("VIDEO_TASK_HARD_LIMIT", "360")),        # 6 min
 )
-def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = None, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False, _lane_try: int = 0, _prior_retries: int = 0):
+def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = None, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False, _lane_try: int = 0, _prior_retries: int = 0,
+                       _requester: Optional[str] = None, _quota_precounted: bool = False):
     """Extract the direct MP4 link for a single video and update Supabase.
 
     Attempts per job. ``self.request.retries`` restarts at 0 whenever the job is
@@ -204,6 +235,13 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
     budget is therefore counted as the largest of: Celery's counter plus
     ``_prior_retries`` (carried over by the lane re-dispatch) and the job row's
     ``retry_count`` (written on every scheduled retry, survives any re-queue).
+
+    Per-platform daily allowance: ``_requester`` is the quota requester key
+    ("admin" | "user:<id>" | "ip:<ip>") set by the endpoint that queued the
+    job; without it a job with ``user_id`` counts against that user, and a job
+    with neither (crash recovery, partner API) is not metered here. The job is
+    checked before it runs and counted on success, unless
+    ``_quota_precounted`` (guest bulk items are counted at dispatch).
     """
     supabase = get_supabase_client()
     task_start = time.time()
@@ -283,7 +321,8 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
         process_video_task.apply_async(
             args=[job_id, url, user_id, quality, remove_watermark, download_subs],
             kwargs={"_lane_try": _lane_try + 1,
-                    "_prior_retries": _prior_retries + self.request.retries},
+                    "_prior_retries": _prior_retries + self.request.retries,
+                    "_requester": _requester, "_quota_precounted": _quota_precounted},
             countdown=4 + (_lane_try % 7),
         )
         _deregister_pending_task(_task_id)
@@ -294,10 +333,23 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
                 pass
         return
 
-    try:
-        # Check quotas if user_id provided
+    _q_req = QuotaRequester.from_key(_requester) or (
+        QuotaRequester(REQ_USER, str(user_id)) if user_id else None)
+    _q_platform = _quota_platform_key(url)
+    _q_meter = _q_req is not None and _q_req.kind != REQ_ADMIN and not _quota_precounted
+    _china_token = _bind_china_worker_context(_q_req)
+
+    def _count_success():
+        if _q_meter:
+            record_platform_download(_q_req, _q_platform, url)
         if user_id:
-            c_info = check_user_quota(user_id)
+            increment_usage(user_id)
+
+    try:
+        # Per-platform daily allowance (checked before any work; counted on
+        # success below — same moments as the old daily quota).
+        if _q_meter:
+            c_info = check_platform_quota(_q_req, _q_platform, url)
             if not c_info["allowed"]:
                 _sb_update(supabase, {
                     "status": "failed",
@@ -311,7 +363,7 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
         cached = get_cached_result(url)
         if cached:
             print(f"[Cache Hit] Task - URL: {url}")
-            if user_id: increment_usage(user_id)
+            _count_success()
             title = cached.get("title", "Unknown")
             slug = slugify(title)
             _sb_update(supabase, {
@@ -361,8 +413,8 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
         title = info.get("title", "Unknown")
         slug = slugify(title)
 
-        # Increment quota usage on successful fetch
-        if user_id: increment_usage(user_id)
+        # Count the download on successful fetch
+        _count_success()
 
         # 5. Mark as success with stage checkpoint and expiry
         now_utc = datetime.now(timezone.utc)
@@ -659,6 +711,7 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
             print(f"[Telegram] Failed to send job failure notification: {tg_err}")
 
     finally:
+        _reset_china_worker_context(_china_token)
         # Always free the concurrency slots (also runs on self.retry / success).
         if _lane_held:
             _lanes.release_platform(platform)
@@ -682,7 +735,8 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
     soft_time_limit=int(os.getenv("SCRAPE_TASK_SOFT_LIMIT", "300")),  # 5 min
     time_limit=int(os.getenv("SCRAPE_TASK_HARD_LIMIT", "330")),       # 5.5 min
 )
-def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: str, max_videos: int = 100, min_views: int = 0, user_id: Optional[str] = None, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False):
+def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: str, max_videos: int = 100, min_views: int = 0, user_id: Optional[str] = None, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False,
+                        _requester: Optional[str] = None):
     """
     Scrape a channel/playlist URL with wave-based processing:
 
@@ -819,6 +873,9 @@ def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: s
             try:
                 process_video_task.apply_async(
                     args=[job_id, video_url, user_id, quality, remove_watermark, download_subs],
+                    # Each expanded video is checked + counted by the worker
+                    # against the requester's per-platform allowance.
+                    kwargs={"_requester": _requester},
                     countdown=countdown,
                 )
             except Exception as dispatch_err:

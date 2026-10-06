@@ -1,10 +1,14 @@
 """
 Quota & Tier System — VidGrab
 ==============================
-Tier limits (env-tunable):
-  Free:      10 downloads/day, batch ≤ 5, YouTube audio-only, history 7 days
-  Pro:      100 downloads/day, batch ≤ 100, YouTube video+audio, history 90 days
-  Anonymous:  5 downloads/day (IP-based, Redis, auto-TTL)
+Download allowance (since 2026-10-06): PER PLATFORM per UTC day — guest 5
+(PLATFORM_DAILY_LIMIT_ANON), signed-in free 20 (PLATFORM_DAILY_LIMIT_USER),
+paid tiers their configured daily_limit (never less than free), admin
+unlimited. See "Per-platform daily allowance" below.
+
+Tier settings (env-tunable): batch sizes, max quality, features, history.
+FREE_DAILY_LIMIT / ANON_DAILY_LIMIT no longer block downloads (legacy /quota
+output only).
 
 Grace period: billing_status='canceling' + subscription_expiry > now → still Pro
 
@@ -30,38 +34,6 @@ PRO_DAILY_LIMIT   = int(os.getenv("PRO_DAILY_LIMIT",   "100"))
 FREE_BATCH_LIMIT  = int(os.getenv("FREE_BATCH_LIMIT",    "5"))
 PRO_BATCH_LIMIT   = int(os.getenv("PRO_BATCH_LIMIT",   "100"))
 ANON_DAILY_LIMIT  = int(os.getenv("ANON_DAILY_LIMIT",    "5"))
-
-# ── Cheap-platform allowance ─────────────────────────────────────────
-# Platforms whose single-link downloads cost us next to nothing (no
-# residential proxy, no cookie pool, no paid API on the normal path) get their
-# own, larger daily counter. A cheap download counts ONLY against that counter
-# and never consumes the standard one, so a guest who saves 20 TikToks still
-# has their 5 standard downloads for YouTube/Instagram/Facebook.
-#
-# The list is explicit (env) rather than derived from the extractor registry's
-# cost_tier: TikTok, Douyin and Threads are not in that registry at all (they
-# are handled inline in downloader.py), and the registry's "low" tier contains
-# platforms (Bilibili, VK, Twitch…) the owner has not approved for the higher
-# allowance. Widening the list is an env change, not a deploy.
-GUEST_CHEAP_DAILY = int(os.getenv("GUEST_CHEAP_DAILY", "30"))
-FREE_CHEAP_DAILY  = int(os.getenv("FREE_CHEAP_DAILY",  "100"))
-CHEAP_PLATFORMS   = frozenset(
-    p.strip().lower()
-    for p in os.getenv("CHEAP_PLATFORMS", "tiktok,douyin,threads").split(",")
-    if p.strip()
-)
-
-QUOTA_BUCKET_STANDARD = "standard"
-QUOTA_BUCKET_CHEAP    = "cheap"
-
-
-def is_cheap_platform(platform: Optional[str]) -> bool:
-    return bool(platform) and platform.lower() in CHEAP_PLATFORMS
-
-
-def _cheap_platform_label() -> str:
-    names = {"tiktok": "TikTok", "douyin": "Douyin", "threads": "Threads"}
-    return ", ".join(names.get(p, p.title()) for p in sorted(CHEAP_PLATFORMS))
 
 # Quality strings that explicitly request 4K
 PRO_ONLY_QUALITY_STRINGS = {"mp4_4k", "4k", "2160"}
@@ -213,21 +185,382 @@ def _get_usage(user_id: str) -> Dict[str, Any]:
         return {}
 
 
-# ── Anonymous quota (Redis, IP-based) ────────────────────────────────
+# ── Per-platform daily allowance (owner decision 2026-10-06) ─────────
+#
+# "Khách chưa đăng ký 5 lượt/ngày mỗi nền tảng; tài khoản đăng ký 20 lượt/ngày
+# mỗi nền tảng; admin không giới hạn — cho mọi nền tảng."
+#
+# One counter per (requester, platform, UTC day). The platform is
+# app.core.platform_key.platform_key — the same slug download stats use; every
+# unrecognised site shares the single "other" counter. This replaced the
+# standard/cheap buckets (ANON_DAILY_LIMIT, FREE_DAILY_LIMIT as the enforced
+# total, GUEST_CHEAP_DAILY/FREE_CHEAP_DAILY/CHEAP_PLATFORMS) as what blocks a
+# download. FREE_DAILY_LIMIT & co. still feed TIER_PERMISSIONS (batch sizes,
+# the paid tiers' per-platform numbers below, legacy /quota output).
+#
+# Requesters:
+#   admin  a valid admin SESSION token in X-Admin-Token (POST /admin/login) —
+#          unlimited, nothing counted. The raw admin password is not accepted.
+#   user   signed-in Supabase account — PLATFORM_DAILY_LIMIT_USER for free;
+#          paid tiers get their configured daily_limit, never less than free;
+#          enterprise (-1) unlimited.
+#   anon   guest, by client IP — PLATFORM_DAILY_LIMIT_ANON.
+# A limit of -1 means unlimited.
+#
+# What counts: one SUCCESSFUL download (same moment as before: after the
+# extractor returned). The same URL downloaded again by the same requester on
+# the same UTC day is not counted twice — "analyse" then "download in 720p"
+# is one video, one lượt — and is never refused for being over the limit.
+#
+# Day boundary: UTC midnight = 07:00 in Vietnam (UTC+7, no DST). The text
+# shown to users is computed from the actual reset instant, never hardcoded.
 
-def _anon_quota_key(ip: str, bucket: str = QUOTA_BUCKET_STANDARD) -> str:
-    # Quota days stay UTC: the admin's Vietnam-time "today" is a display
-    # concern only (download_outcomes.admin_day_window), and moving a running
-    # quota boundary would reset/extend users' limits mid-day.
-    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    if bucket == QUOTA_BUCKET_CHEAP:
-        return f"vidgrab:quota:anon_cheap:{ip}:{date}"
-    return f"vidgrab:quota:anon:{ip}:{date}"
+REQ_ADMIN = "admin"
+REQ_USER  = "user"
+REQ_ANON  = "anon"
+
+QUOTA_SCOPE_PLATFORM = "per_platform"
+_VN_TZ = timezone(timedelta(hours=7))   # Asia/Ho_Chi_Minh has no DST
 
 
-def _user_cheap_key(user_id: str) -> str:
-    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    return f"vidgrab:quota:user_cheap:{user_id}:{date}"
+def _env_limit(name: str, default: int) -> int:
+    try:
+        v = int(str(os.getenv(name, "")).strip() or default)
+    except (TypeError, ValueError):
+        return default
+    return -1 if v < 0 else v
+
+
+def platform_limit_anon() -> int:
+    return _env_limit("PLATFORM_DAILY_LIMIT_ANON", 5)
+
+
+def platform_limit_user() -> int:
+    return _env_limit("PLATFORM_DAILY_LIMIT_USER", 20)
+
+
+def platform_limit_for_tier(tier: str) -> int:
+    """Per-platform daily limit of a signed-in tier. -1 = unlimited.
+
+    free → PLATFORM_DAILY_LIMIT_USER. A paid tier keeps its configured
+    daily_limit (PRO_DAILY_LIMIT 100, TEAM_DAILY_LIMIT 500, enterprise -1) and
+    never gets less than free. FREE_DAILY_LIMIT plays no part here: production
+    sets it to 1000 as the old TOTAL, which would make every paid tier 1000
+    per platform."""
+    base = platform_limit_user()
+    if tier == "free" or tier not in TIER_PERMISSIONS:
+        return base
+    configured = TIER_PERMISSIONS[tier]["daily_limit"]
+    if configured == -1 or base == -1:
+        return -1
+    return max(int(configured), base)
+
+
+def is_admin_request(request) -> bool:
+    """True only for a live admin SESSION token in X-Admin-Token (issued by
+    POST /admin/login; same check the China access layer's admin canary uses).
+    The raw admin password is deliberately not accepted: this is read on public
+    download endpoints, where accepting it would add a brute-force surface
+    without verify_admin's lockout. Redis down → False (fail closed)."""
+    if request is None:
+        return False
+    try:
+        token = (request.headers.get("X-Admin-Token") or "").strip()
+        if not token:
+            return False
+        from app.api.admin import _redis, _session_is_valid  # noqa: PLC0415
+        return bool(_session_is_valid(_redis(), token))
+    except Exception:
+        return False
+
+
+class QuotaRequester:
+    """Who a download is counted against. `key` is also the China access
+    layer's requester key ("admin" | "user:<id>" | "ip:<ip>")."""
+
+    __slots__ = ("kind", "ident", "_tier")
+
+    def __init__(self, kind: str, ident: str = "", tier: Optional[str] = None):
+        self.kind = kind
+        self.ident = ident or ""
+        self._tier = tier
+
+    @property
+    def key(self) -> str:
+        if self.kind == REQ_ADMIN:
+            return "admin"
+        if self.kind == REQ_USER:
+            return f"user:{self.ident}"
+        return f"ip:{self.ident or 'unknown'}"
+
+    @property
+    def tier(self) -> str:
+        if self.kind != REQ_USER:
+            return "free"
+        if self._tier is None:
+            self._tier = _get_tier(self.ident)
+        return self._tier
+
+    @classmethod
+    def from_key(cls, key: Optional[str]) -> Optional["QuotaRequester"]:
+        """Inverse of .key, for Celery kwargs. None/unknown → None."""
+        key = (key or "").strip()
+        if key == "admin":
+            return cls(REQ_ADMIN)
+        if key.startswith("user:") and len(key) > 5:
+            return cls(REQ_USER, key[5:])
+        if key.startswith("ip:") and len(key) > 3 and key != "ip:unknown":
+            return cls(REQ_ANON, key[3:])
+        return None
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"QuotaRequester({self.key!r})"
+
+
+def resolve_requester(request=None, user_id: Optional[str] = None,
+                      ip: Optional[str] = None, is_admin: Optional[bool] = None) -> QuotaRequester:
+    """admin session > signed-in user > guest IP."""
+    if is_admin is None:
+        is_admin = is_admin_request(request)
+    if is_admin:
+        return QuotaRequester(REQ_ADMIN)
+    if user_id:
+        return QuotaRequester(REQ_USER, str(user_id))
+    if ip is None and request is not None:
+        from app.core.client_ip import get_client_ip  # noqa: PLC0415
+        ip = get_client_ip(request)
+    return QuotaRequester(REQ_ANON, ip or "unknown")
+
+
+def platform_limit(requester: QuotaRequester) -> int:
+    if requester.kind == REQ_ADMIN:
+        return -1
+    if requester.kind == REQ_USER:
+        return platform_limit_for_tier(requester.tier)
+    return platform_limit_anon()
+
+
+def _utc_day(now: Optional[datetime] = None) -> str:
+    return (now or datetime.now(timezone.utc)).astimezone(timezone.utc).strftime("%Y-%m-%d")
+
+
+def next_reset_utc(now: Optional[datetime] = None) -> datetime:
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    return (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def reset_time_vn_text(now: Optional[datetime] = None) -> str:
+    """'07:00' — the next reset instant in Vietnam time, independent of the
+    server's TZ."""
+    return next_reset_utc(now).astimezone(_VN_TZ).strftime("%H:%M")
+
+
+def _plat_key(requester: QuotaRequester, platform: str, day: Optional[str] = None) -> str:
+    return f"vidgrab:quota:plat:{requester.key}:{platform}:{day or _utc_day()}"
+
+
+def _seen_key(requester: QuotaRequester, day: Optional[str] = None) -> str:
+    return f"vidgrab:quota:plat_seen:{requester.key}:{day or _utc_day()}"
+
+
+def _url_fingerprint(platform: str, url: Optional[str]) -> Optional[str]:
+    u = (url or "").strip()
+    if not u:
+        return None
+    u = u.split("#", 1)[0].rstrip("/").lower()
+    import hashlib  # noqa: PLC0415
+    return f"{platform}:{hashlib.sha1(u.encode('utf-8')).hexdigest()[:20]}"
+
+
+def _ttl_to_midnight() -> int:
+    now = datetime.now(timezone.utc)
+    return max(int((next_reset_utc(now) - now).total_seconds()) + 60, 60)
+
+
+def _already_counted(requester: QuotaRequester, platform: str, url: Optional[str]) -> bool:
+    fp = _url_fingerprint(platform, url)
+    if not fp:
+        return False
+    from app.core.redis_client import get_redis  # noqa: PLC0415
+    try:
+        return bool(get_redis().sismember(_seen_key(requester), fp))
+    except Exception:
+        return False
+
+
+def platform_used(requester: QuotaRequester, platform: str) -> int:
+    return _redis_count(_plat_key(requester, platform))
+
+
+def platform_quota_message(requester: QuotaRequester, platform: str, limit: int) -> str:
+    from app.core.platform_key import platform_label  # noqa: PLC0415
+    label = platform_label(platform)
+    if requester.kind == REQ_ANON:
+        user_limit = platform_limit_user()
+        signin = ("Đăng nhập để tải không giới hạn." if user_limit == -1
+                  else f"Đăng nhập để tải {user_limit} lượt/ngày.")
+        return f"Khách tải được tối đa {limit} lượt/ngày cho {label}. {signin}"
+    return (f"Bạn đã dùng hết {limit} lượt hôm nay cho {label}. "
+            f"Lượt mới được cộng lại lúc {reset_time_vn_text()}.")
+
+
+def bulk_item_quota_message(requester: QuotaRequester, platform: str, limit: int) -> str:
+    """Per-item text written on a bulk/queue job refused for the allowance."""
+    from app.core.platform_key import platform_label  # noqa: PLC0415
+    label = platform_label(platform)
+    if requester.kind == REQ_ANON:
+        user_limit = platform_limit_user()
+        signin = ("Đăng nhập để tải không giới hạn." if user_limit == -1
+                  else f"Đăng nhập để tải {user_limit} lượt/ngày.")
+        return f"Đã hết {limit} lượt/ngày của khách cho {label}, mục này chưa được tải. {signin}"
+    return (f"Đã hết {limit} lượt hôm nay cho {label}, mục này chưa được tải. "
+            f"Lượt mới được cộng lại lúc {reset_time_vn_text()}.")
+
+
+def check_platform_quota(requester: QuotaRequester, platform: str,
+                         url: Optional[str] = None) -> Dict[str, Any]:
+    """Read-only check. Redis errors fail open (as the old counters did).
+
+    The result carries the old field names too (downloads_today, daily_limit,
+    quota_bucket) so existing clients reading a 403/429 body keep working."""
+    platform = platform or "other"
+    limit = platform_limit(requester)
+    used = 0 if requester.kind == REQ_ADMIN else platform_used(requester, platform)
+    remaining = -1 if limit == -1 else max(0, limit - used)
+    base = {
+        "quota_scope":     QUOTA_SCOPE_PLATFORM,
+        "quota_bucket":    "platform",
+        "requester":       requester.kind,
+        "platform":        platform,
+        "downloads_today": used,
+        "daily_limit":     limit,
+        "remaining":       remaining,
+        "reset_at":        next_reset_utc().isoformat(),
+        "reset_time_vn":   reset_time_vn_text(),
+    }
+    if limit == -1 or used < limit:
+        return {"allowed": True, **base}
+    if _already_counted(requester, platform, url):
+        # Same video again today (another quality, a retry): already paid for.
+        return {"allowed": True, "already_counted": True, **base}
+    try:
+        from app.core.metrics import track_quota_denial  # noqa: PLC0415
+        track_quota_denial(ERR_QUOTA_DAILY, platform=f"{requester.kind}:{platform}",
+                           **({"user_id": requester.ident} if requester.kind == REQ_USER else {}))
+    except Exception:
+        pass
+    return {
+        "allowed":    False,
+        "error_code": ERR_QUOTA_DAILY,
+        "message":    platform_quota_message(requester, platform, limit),
+        **base,
+    }
+
+
+def record_platform_download(requester: QuotaRequester, platform: str,
+                             url: Optional[str] = None) -> bool:
+    """Count one successful download. Returns True when the counter moved.
+    Admin: never counted. A URL already counted today for this requester:
+    not counted again. Never raises."""
+    if requester.kind == REQ_ADMIN:
+        return False
+    platform = platform or "other"
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        r = get_redis()
+        fp = _url_fingerprint(platform, url)
+        ttl = _ttl_to_midnight()
+        if fp:
+            sk = _seen_key(requester)
+            added = r.sadd(sk, fp)
+            r.expire(sk, ttl)
+            if not added:
+                return False
+        _redis_incr_until_midnight(_plat_key(requester, platform))
+        return True
+    except Exception as e:
+        print(f"[Quota] record_platform_download failed for {requester.kind}: {type(e).__name__}")
+        return False
+
+
+class BatchAllowance:
+    """Plans a bulk / queue request against the per-platform allowance: each
+    item either fits in what is left today (counting the items already taken
+    by this same batch) or gets a per-item refusal message — the rest of the
+    batch still runs. A URL already counted today, or repeated inside the
+    batch, does not take a second slot. Read-only: nothing is counted here."""
+
+    def __init__(self, requester: QuotaRequester):
+        self.requester = requester
+        self.limit = platform_limit(requester)
+        self._used: Dict[str, int] = {}
+        self._taken: Dict[str, int] = {}
+        self._seen: set = set()
+
+    def remaining(self, platform: str) -> int:
+        if self.limit == -1:
+            return -1
+        if platform not in self._used:
+            self._used[platform] = platform_used(self.requester, platform)
+        return max(0, self.limit - self._used[platform] - self._taken.get(platform, 0))
+
+    def take(self, platform: str, url: Optional[str] = None) -> Optional[str]:
+        """None when the item may run (slot taken); else the refusal text."""
+        platform = platform or "other"
+        if self.limit == -1:
+            return None
+        fp = _url_fingerprint(platform, url)
+        if fp and fp in self._seen:
+            return None
+        if fp and _already_counted(self.requester, platform, url):
+            self._seen.add(fp)
+            return None
+        if self.remaining(platform) <= 0:
+            return bulk_item_quota_message(self.requester, platform, self.limit)
+        self._taken[platform] = self._taken.get(platform, 0) + 1
+        if fp:
+            self._seen.add(fp)
+        return None
+
+
+def platform_usage_snapshot(requester: QuotaRequester) -> Dict[str, Any]:
+    """Per-platform usage for the usage endpoints. Platforms with nothing used
+    today are listed too, so a client can show "0/20" for any of them."""
+    from app.core.platform_key import PLATFORM_LABELS  # noqa: PLC0415
+    limit = platform_limit(requester)
+    platforms = []
+    for slug, label in PLATFORM_LABELS.items():
+        used = 0 if requester.kind == REQ_ADMIN else platform_used(requester, slug)
+        platforms.append({
+            "platform":  slug,
+            "label":     label,
+            "used":      used,
+            "limit":     limit,
+            "remaining": -1 if limit == -1 else max(0, limit - used),
+        })
+    return {
+        "scope":         QUOTA_SCOPE_PLATFORM,
+        "requester":     requester.kind,
+        "limit":         limit,
+        "unlimited":     limit == -1,
+        "reset_at":      next_reset_utc().isoformat(),
+        "reset_time_vn": reset_time_vn_text(),
+        "platforms":     platforms,
+    }
+
+
+def legacy_usage_fields(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    """`used` / `limit` for clients written before the per-platform rule (the
+    account menu and the Chrome extension read `used ?? downloads_today` and
+    `limit ?? daily_limit`): the platform closest to its limit, so "x/y" is
+    always a real, enforced pair and never shows more used than allowed."""
+    rows = snapshot.get("platforms") or []
+    top = max(rows, key=lambda r: r["used"]) if rows else None
+    if top is None or top["used"] == 0:
+        return {"used": 0, "limit": snapshot.get("limit", 0),
+                "used_platform": None, "used_platform_label": None}
+    return {"used": top["used"], "limit": snapshot.get("limit", 0),
+            "used_platform": top["platform"], "used_platform_label": top["label"]}
 
 
 def _redis_count(key: str) -> int:
@@ -240,117 +573,10 @@ def _redis_count(key: str) -> int:
 
 def _redis_incr_until_midnight(key: str) -> None:
     from app.core.redis_client import get_redis
-    now = datetime.now(timezone.utc)
-    midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    ttl = max(int((midnight - now).total_seconds()) + 60, 60)
     pipe = get_redis().pipeline()
     pipe.incr(key)
-    pipe.expire(key, ttl)
+    pipe.expire(key, _ttl_to_midnight())
     pipe.execute()
-
-
-def check_anon_quota(ip: str, platform: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Check daily quota for an anonymous user identified by IP.
-
-    `platform` selects the counter: a cheap platform (CHEAP_PLATFORMS) is
-    checked against GUEST_CHEAP_DAILY on its own counter; anything else (or
-    None, e.g. bulk) against the standard ANON_DAILY_LIMIT.
-    """
-    cheap = is_cheap_platform(platform)
-    bucket = QUOTA_BUCKET_CHEAP if cheap else QUOTA_BUCKET_STANDARD
-    used = _redis_count(_anon_quota_key(ip, bucket))
-    limit = GUEST_CHEAP_DAILY if cheap else ANON_DAILY_LIMIT
-
-    if limit != -1 and used >= limit:
-        try:
-            from app.core.metrics import track_quota_denial
-            track_quota_denial(ERR_QUOTA_DAILY, platform="anon_cheap" if cheap else "anon")
-        except Exception:
-            pass
-        if cheap:
-            message = (
-                f"Khách tải được tối đa {limit} lượt/ngày cho {_cheap_platform_label()}. "
-                "Đăng nhập để tải nhiều hơn."
-            )
-        else:
-            message = (
-                f"Khách chỉ tải được {limit} lượt/ngày. "
-                "Đăng nhập để tải nhiều hơn."
-            )
-        return {
-            "allowed":        False,
-            "error_code":     ERR_QUOTA_DAILY,
-            "quota_bucket":   bucket,
-            "platform":       platform,
-            "downloads_today": used,
-            "daily_limit":    limit,
-            "message":        message,
-        }
-    return {"allowed": True, "quota_bucket": bucket,
-            "downloads_today": used, "daily_limit": limit}
-
-
-def increment_anon_usage(ip: str, platform: Optional[str] = None) -> None:
-    """Increment the anon daily counter for this platform's bucket (TTL → next UTC midnight)."""
-    bucket = QUOTA_BUCKET_CHEAP if is_cheap_platform(platform) else QUOTA_BUCKET_STANDARD
-    try:
-        _redis_incr_until_midnight(_anon_quota_key(ip, bucket))
-    except Exception as e:
-        print(f"[Quota] increment_anon_usage failed for {ip}: {e}")
-
-
-def _cheap_limit_for_tier(tier: str) -> int:
-    """
-    Cheap-platform daily allowance for a signed-in tier. -1 = unlimited.
-
-    Free gets FREE_CHEAP_DAILY. A paid tier never gets less than free, nor less
-    than its own standard daily limit — the cheap allowance exists to be MORE
-    generous, so it must not become the tighter of the two for anyone.
-    """
-    perms = get_tier_permissions(tier)
-    std = _enforced_daily_limit(tier, perms["daily_limit"])
-    if std == -1 or FREE_CHEAP_DAILY == -1:
-        return -1
-    if tier == "free":
-        return FREE_CHEAP_DAILY
-    return max(FREE_CHEAP_DAILY, std)
-
-
-def check_user_cheap_quota(user_id: str, platform: Optional[str] = None) -> Dict[str, Any]:
-    """Cheap-platform counter for a signed-in user (Redis, per UTC day)."""
-    tier = _get_tier(user_id)
-    limit = _cheap_limit_for_tier(tier)
-    used = _redis_count(_user_cheap_key(user_id))
-    if limit != -1 and used >= limit:
-        try:
-            from app.core.metrics import track_quota_denial
-            track_quota_denial(ERR_QUOTA_DAILY, platform="user_cheap", user_id=user_id)
-        except Exception:
-            pass
-        return {
-            "allowed":         False,
-            "error_code":      ERR_QUOTA_DAILY,
-            "quota_bucket":    QUOTA_BUCKET_CHEAP,
-            "platform":        platform,
-            "plan":            tier,
-            "downloads_today": used,
-            "daily_limit":     limit,
-            "message":         (
-                f"Đã đạt giới hạn {limit} lượt tải {_cheap_platform_label()} hôm nay. "
-                "Vui lòng thử lại vào ngày mai."
-            ),
-        }
-    return {"allowed": True, "quota_bucket": QUOTA_BUCKET_CHEAP, "plan": tier,
-            "downloads_today": used, "daily_limit": limit}
-
-
-def increment_user_cheap_usage(user_id: str) -> None:
-    try:
-        _redis_incr_until_midnight(_user_cheap_key(user_id))
-    except Exception as e:
-        print(f"[Quota] increment_user_cheap_usage failed for {user_id}: {e}")
-
 
 # ── Public API ────────────────────────────────────────────────────────
 
@@ -395,6 +621,10 @@ def _enforced_daily_limit(tier: str, configured: int) -> int:
 
 def check_user_quota(user_id: str) -> Dict[str, Any]:
     """
+    LEGACY — no download path calls this since 2026-10-06 (the per-platform
+    allowance, check_platform_quota, replaced it). Kept read-only for callers
+    that report the account's total downloads today against the tier setting.
+
     Check daily quota for an authenticated user.
     Respects grace period (canceling/past_due with future expiry → Pro).
     Returns: {allowed, plan, downloads_today, daily_limit, permissions}
@@ -551,9 +781,9 @@ def increment_usage(user_id: str, count_daily: bool = True) -> None:
     """
     Increment daily + monthly download counters for an authenticated user.
 
-    count_daily=False bumps only the monthly total — used for cheap-platform
-    downloads, which are metered on their own Redis counter and must not
-    consume the standard daily quota.
+    These are account statistics (all platforms together). What limits a
+    download is the per-platform Redis counter (record_platform_download).
+    count_daily=False bumps only the monthly total.
     """
     supabase = get_supabase_client()
     try:

@@ -197,19 +197,43 @@ async def _create_bulk_jobs(
     batch_id: str,
     quality: str,
     user_id: Optional[str],
+    requester=None,
 ) -> int:
     """
     Insert download_jobs rows and dispatch process_video_task for each URL.
-    Mirrors the logic in POST /bulk-download (routes.py) without repeating
-    quota enforcement (container workflow assumes session is already authenticated).
+
+    Per-platform daily allowance (app.core.quotas): with a `requester`, each
+    item must fit in what that requester has left today on its platform;
+    items that do not get a failed row with the reason, the rest are queued.
+    The worker re-checks each job and counts it on success.
     """
     from app.core.database import get_supabase_client
+    from app.core.platform_key import platform_key
+    from app.core.quotas import BatchAllowance
     from app.tasks.video_tasks import process_video_task
 
     supabase = get_supabase_client()
+    allowance = BatchAllowance(requester) if requester is not None else None
     queued = 0
     for url in urls:
         job_id = str(uuid.uuid4())
+        refused = allowance.take(platform_key(url), url) if allowance is not None else None
+        if refused:
+            try:
+                supabase.table("download_jobs").insert({
+                    "id": job_id,
+                    "batch_id": batch_id,
+                    "original_url": url,
+                    "status": "failed",
+                    "job_stage": "failed",
+                    "error_message": refused,
+                    "selected_quality": quality,
+                    "user_id": user_id,
+                    "job_type": "bulk",
+                }).execute()
+            except Exception:
+                pass
+            continue
         try:
             supabase.table("download_jobs").insert({
                 "id": job_id,
@@ -223,6 +247,7 @@ async def _create_bulk_jobs(
             }).execute()
             process_video_task.apply_async(
                 args=[job_id, url, user_id, quality],
+                kwargs={"_requester": requester.key if requester is not None else None},
                 queue="downloads",
             )
             queued += 1
@@ -887,7 +912,9 @@ async def queue_container(container_id: str, req: QueueRequest, request: Request
     urls = [i.url for i in items if i.url]
     item_ids = [i.id for i in items if i.id]
 
-    jobs_queued = await _create_bulk_jobs(urls, batch_id, req.quality, user_id)
+    from app.core.quotas import resolve_requester
+    jobs_queued = await _create_bulk_jobs(urls, batch_id, req.quality, user_id,
+                                          requester=resolve_requester(request, user_id=user_id))
 
     # ── Persist source provenance + idempotency record ────────────────────────
     save_batch_source_meta(batch_id, container_id, meta.platform, item_ids, req.section_key or "")

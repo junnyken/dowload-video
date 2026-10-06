@@ -65,16 +65,30 @@ def platform_env_enabled(platform: str) -> bool:
 
 # ── guardrails ──────────────────────────────────────────────────────────────
 
+UNLIMITED = -1
+
+
+def _limit(name: str, default: int) -> int:
+    """A call/quota limit: any negative value means unlimited (-1)."""
+    v = _int(name, default)
+    return UNLIMITED if v < 0 else v
+
+
+# Per-person limits on the PAID path (owner decision 2026-10-06): guest 5 and
+# signed-in 20 per platform per UTC day; admin unlimited. They match the
+# site-wide per-platform download allowance (app.core.quotas), which limits
+# every download, paid or not.
+
 def anon_daily_limit() -> int:
-    return _int("CHINA_ACCESS_ANON_DAILY_RESOLVE_LIMIT", 5)
+    return _limit("CHINA_ACCESS_ANON_DAILY_RESOLVE_LIMIT", 5)
 
 
 def free_daily_limit() -> int:
-    return _int("CHINA_ACCESS_FREE_DAILY_RESOLVE_LIMIT", 20)
+    return _limit("CHINA_ACCESS_FREE_DAILY_RESOLVE_LIMIT", 20)
 
 
 def admin_daily_limit() -> int:
-    return _int("CHINA_ACCESS_ADMIN_DAILY_RESOLVE_LIMIT", 50)
+    return _limit("CHINA_ACCESS_ADMIN_DAILY_RESOLVE_LIMIT", UNLIMITED)
 
 
 def managed_timeout_sec() -> int:
@@ -136,26 +150,29 @@ def env_provider_order(platform: str) -> list[str]:
     return [p.strip() for p in raw.split(",") if p.strip()]
 
 
-# Per-platform paid defaults. Douyin keeps its wave-1 values. Kuaishou and
-# Xiaohongshu share the same Apify account ($5/month in total, owner decision
-# 2026-10-06), so each gets a small daily cap of its own: 20 calls and
-# $0.10/day is ~25x the estimated per-call price of either actor
-# (docs/china-access/09). The shared provider-level Apify ceilings below still
-# apply on top.
+# Per-platform paid defaults: (daily CALL limit, daily SPEND ceiling USD).
+# Since 2026-10-06 the call limit defaults to -1 (unlimited): the per-person
+# limits above are what bound normal traffic, and a platform-wide call count
+# must not refuse a user who is still within their own 20/day. Money stays
+# capped: the platform spend ceiling, the provider daily/monthly spend
+# ceilings and each Apify token's own ceiling are the safety net. Set a
+# positive CHINA_ACCESS_<P>_MANAGED_DAILY_CALL_LIMIT to bring a call cap back.
+# Kuaishou and Xiaohongshu share the same Apify account, so their spend
+# ceilings are small (docs/china-access/09).
 _PLATFORM_MANAGED_DEFAULTS = {
-    "douyin": (50, 1.00),
-    "kuaishou": (20, 0.10),
-    "xiaohongshu": (20, 0.10),
+    "douyin": (UNLIMITED, 1.00),
+    "kuaishou": (UNLIMITED, 0.10),
+    "xiaohongshu": (UNLIMITED, 0.10),
 }
 
 
 def platform_managed_daily_call_limit(platform: str) -> int:
-    default = _PLATFORM_MANAGED_DEFAULTS.get(platform, (50, 1.00))[0]
-    return max(0, _int(f"CHINA_ACCESS_{platform.upper()}_MANAGED_DAILY_CALL_LIMIT", default))
+    default = _PLATFORM_MANAGED_DEFAULTS.get(platform, (UNLIMITED, 1.00))[0]
+    return _limit(f"CHINA_ACCESS_{platform.upper()}_MANAGED_DAILY_CALL_LIMIT", default)
 
 
 def platform_managed_daily_spend_micros(platform: str) -> int:
-    default = _PLATFORM_MANAGED_DEFAULTS.get(platform, (50, 1.00))[1]
+    default = _PLATFORM_MANAGED_DEFAULTS.get(platform, (UNLIMITED, 1.00))[1]
     return usd_to_micros(_float(f"CHINA_ACCESS_{platform.upper()}_MANAGED_DAILY_SPEND_CEILING_USD", default))
 
 
@@ -169,7 +186,10 @@ def layer_env_on(platform: str) -> bool:
 # ── per provider (budget class) ─────────────────────────────────────────────
 
 def provider_daily_call_limit(budget_class: str) -> int:
-    return max(0, _int(f"CHINA_ACCESS_{budget_class.upper()}_DAILY_CALL_LIMIT", 50))
+    """Vendor-wide call count per UTC day (all platforms on that vendor).
+    -1 (default since 2026-10-06) = unlimited, for the same reason as the
+    platform call limit; the vendor's daily/monthly SPEND ceilings remain."""
+    return _limit(f"CHINA_ACCESS_{budget_class.upper()}_DAILY_CALL_LIMIT", UNLIMITED)
 
 
 def provider_daily_spend_micros(budget_class: str) -> int:

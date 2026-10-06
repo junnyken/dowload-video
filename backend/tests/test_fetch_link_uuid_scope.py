@@ -89,7 +89,7 @@ def test_signed_in_success_writes_history_row(app, route, monkeypatch):
     async def _ok(url, *a, **k):
         return {"title": "t", "direct_mp4_url": "https://cdn.example.com/v.mp4", "original_url": url}
     monkeypatch.setattr(route, "extract_video_info", _ok)
-    monkeypatch.setattr(route, "check_user_quota", lambda uid: {"allowed": True})
+    monkeypatch.setattr(route, "check_platform_quota", lambda *a, **k: {"allowed": True})
     monkeypatch.setattr(route, "increment_usage", lambda *a, **k: None)
 
     async def _noop(*a, **k):

@@ -404,7 +404,9 @@ app.add_middleware(
     allow_origin_regex=_ext_origin_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-API-Key", "X-VG-Source", "X-Session-ID"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-API-Key", "X-VG-Source", "X-Session-ID",
+                   # admin session on download endpoints (per-platform allowance + China canary)
+                   "X-Admin-Token"],
 )
 
 

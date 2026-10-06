@@ -19,7 +19,7 @@ import secrets
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -133,7 +133,7 @@ async def update_preferences(
 # ── GET /usage ────────────────────────────────────────────────────────
 
 @router.get("/usage")
-async def get_usage(user: Dict[str, Any] = Depends(get_required_user)):
+async def get_usage(request: Request, user: Dict[str, Any] = Depends(get_required_user)):
     supabase = get_supabase_client()
     try:
         res = (
@@ -165,7 +165,22 @@ async def get_usage(user: Dict[str, Any] = Depends(get_required_user)):
     perms = get_tier_permissions(tier)
     daily_limit = perms["daily_limit"]   # 30 free / 200 pro
 
+    # What actually limits downloads since 2026-10-06: N per PLATFORM per UTC
+    # day. `platform_quota` is the full picture; `used`/`limit` are the
+    # closest-to-limit platform, for clients that show one "x/y" (account
+    # menu, Chrome extension). downloads_today / daily_limit / limits keep
+    # their old meaning (account totals, tier setting) for older callers.
+    from app.core.quotas import (  # noqa: PLC0415
+        QuotaRequester, REQ_ADMIN, REQ_USER, is_admin_request,
+        platform_usage_snapshot, legacy_usage_fields,
+    )
+    _rq = (QuotaRequester(REQ_ADMIN) if is_admin_request(request)
+           else QuotaRequester(REQ_USER, user["id"], tier=tier))
+    platform_quota = platform_usage_snapshot(_rq)
+
     return {
+        **legacy_usage_fields(platform_quota),
+        "platform_quota":         platform_quota,
         # "tier" and "daily_limit" are what the account menu actually reads —
         # it looked for `data.tier ?? data.plan` and `data.limit ?? data.daily_limit`,
         # found neither at the top level, and fell back to a hardcoded 10.

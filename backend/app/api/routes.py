@@ -22,18 +22,9 @@ from fastapi.responses import StreamingResponse
 
 # ── Platform download tracking (Redis counters) ──────────────────────
 
-def _get_platform_key(url: str) -> str:
-    u = url.lower()
-    if "youtube.com" in u or "youtu.be" in u: return "youtube"
-    if "tiktok.com" in u:    return "tiktok"
-    if "instagram.com" in u: return "instagram"
-    if "facebook.com" in u or "fb.watch" in u: return "facebook"
-    if "douyin.com" in u:    return "douyin"
-    if "threads.net" in u or "threads.com" in u: return "threads"
-    if "spotify.com" in u:   return "spotify"
-    if is_twitter_url(u): return "twitter"
-    if "linkedin.com" in u:  return "linkedin"
-    return "other"
+# One function for stats, job rows and the per-platform daily allowance —
+# moved to app.core.platform_key so the worker can share it.
+from app.core.platform_key import platform_key as _get_platform_key  # noqa: E402
 
 def _track_download(url: str, success: bool, error_code: Optional[str] = None) -> None:
     """Count one finished download attempt (vidgrab:stats:YYYY-MM-DD → platform:(ok|err),
@@ -168,11 +159,11 @@ from app.services.downloader import extract_video_info, classify_url
 from app.core.database import get_supabase_client
 from app.core.client_ip import get_client_ip
 from app.core.quotas import (
-    check_user_quota, increment_usage,
+    increment_usage,
     check_quality_permission, check_batch_limit, check_feature_permission,
-    check_anon_quota, increment_anon_usage, check_youtube_tier,
-    is_cheap_platform, check_user_cheap_quota, increment_user_cheap_usage,
-    QUOTA_BUCKET_CHEAP, QUOTA_BUCKET_STANDARD,
+    check_youtube_tier,
+    resolve_requester, check_platform_quota, record_platform_download,
+    bulk_item_quota_message, BatchAllowance, REQ_ADMIN, REQ_USER,
     ERR_QUOTA_DAILY, ERR_QUALITY, ERR_BATCH, ERR_FEATURE,
     ERR_YOUTUBE, ERR_SPOTIFY_FULL, ERR_BULK_ZIP,
 )
@@ -438,6 +429,24 @@ def _mux_subtitle(video_path: str, subtitle_path: str, output_path: str) -> bool
         return False
 
 
+def _quota_error_extra(q: dict) -> dict:
+    """403/429 body fields for a per-platform refusal. downloads_today,
+    daily_limit, quota_bucket and platform keep their old names (clients read
+    them); the rest is new."""
+    return {
+        "message":         q.get("message", ""),
+        "downloads_today": q.get("downloads_today", 0),
+        "daily_limit":     q.get("daily_limit", 0),
+        "quota_bucket":    q.get("quota_bucket", "platform"),
+        "quota_scope":     q.get("quota_scope"),
+        "platform":        q.get("platform"),
+        "remaining":       q.get("remaining", 0),
+        "reset_at":        q.get("reset_at"),
+        "reset_time_vn":   q.get("reset_time_vn"),
+        "requester":       q.get("requester"),
+    }
+
+
 @router.post("/fetch-link")
 @limiter.limit("30/minute")
 async def fetch_link(
@@ -496,10 +505,13 @@ async def fetch_link(
                 "selected_quality": payload.quality or "video",
                 "source":       "scheduled",
             }).execute()
+            # The per-platform allowance is checked and counted by the worker
+            # when the job runs (it is a different day's allowance, maybe).
             process_video_task.apply_async(
                 args=[_sched_job_id, payload.url, _sched_user_id,
                       payload.quality or "video",
                       bool(payload.remove_watermark), bool(payload.download_subs)],
+                kwargs={"_requester": resolve_requester(request, user_id=_sched_user_id).key},
                 eta=_sched_dt,
             )
             from fastapi.responses import JSONResponse
@@ -528,43 +540,17 @@ async def fetch_link(
     # Extract client IP once — used for anon quota and YouTube yt_quota
     _req_client_ip = get_client_ip(request)
 
-    # Cheap platforms (CHEAP_PLATFORMS: TikTok/Douyin/Threads by default) are
-    # metered on their own, larger daily counter and do not consume the
-    # standard one. The response says which bucket was exhausted.
+    # 1. Per-platform daily allowance (owner decision 2026-10-06): guest 5,
+    #    signed-in 20 (paid tiers more), admin session unlimited — per platform,
+    #    per UTC day. Counted on success (step 4 below).
     _quota_platform = _get_platform_key(payload.url)
-    _is_cheap = is_cheap_platform(_quota_platform)
-
-    # 1. Daily quota check (authenticated users)
-    if user_id:
-        quota = (check_user_cheap_quota(user_id, _quota_platform) if _is_cheap
-                 else check_user_quota(user_id))
-        if not quota["allowed"]:
-            raise HTTPException(
-                status_code=403,
-                detail=make_error(ERR_QUOTA_DAILY, extra={
-                    "message":         quota["message"],
-                    "downloads_today": quota.get("downloads_today", 0),
-                    "daily_limit":     quota.get("daily_limit", 30),
-                    "quota_bucket":    QUOTA_BUCKET_CHEAP if _is_cheap else QUOTA_BUCKET_STANDARD,
-                    "platform":        _quota_platform,
-                }),
-            )
-
-    # 1b. Anonymous daily quota per IP — standard bucket (ANON_DAILY_LIMIT) or
-    #     cheap-platform bucket (GUEST_CHEAP_DAILY)
-    if not user_id:
-        _anon_q = check_anon_quota(_req_client_ip, _quota_platform)
-        if not _anon_q["allowed"]:
-            raise HTTPException(
-                status_code=429,
-                detail=make_error(ERR_QUOTA_DAILY, extra={
-                    "message":         _anon_q["message"],
-                    "downloads_today": _anon_q["downloads_today"],
-                    "daily_limit":     _anon_q["daily_limit"],
-                    "quota_bucket":    _anon_q.get("quota_bucket", QUOTA_BUCKET_STANDARD),
-                    "platform":        _quota_platform,
-                }),
-            )
+    _quota_req = resolve_requester(request, user_id=user_id, ip=_req_client_ip)
+    _pq = check_platform_quota(_quota_req, _quota_platform, payload.url)
+    if not _pq["allowed"]:
+        raise HTTPException(
+            status_code=403 if _quota_req.kind == REQ_USER else 429,
+            detail=make_error(ERR_QUOTA_DAILY, extra=_quota_error_extra(_pq)),
+        )
 
     # 2. Quality cap: free users cannot request 4K explicitly
     if payload.quality in ("mp4_4k", "4k") and user_id:
@@ -678,8 +664,13 @@ async def fetch_link(
                 and not (_quality.startswith("mp3") or _quality.startswith("audio")):
             _quality = "mp3_128"
 
-        _yt_quota_id = _ytq.yt_identity(user_id, _ip)
-        _ok, _used, _lim = _ytq.reserve(_yt_quota_id, bool(user_id))
+        # Admin session: no per-person YouTube cap (owner: admin unlimited on
+        # every platform). The site-wide budget ceiling below still applies.
+        if _quota_req.kind == REQ_ADMIN:
+            _yt_quota_id, _ok, _lim = None, True, -1
+        else:
+            _yt_quota_id = _ytq.yt_identity(user_id, _ip)
+            _ok, _used, _lim = _ytq.reserve(_yt_quota_id, bool(user_id))
         if not _ok:
             _yt_quota_id = None  # nothing to refund
             _msg = (f"Bạn đã đạt giới hạn {_lim} video YouTube hôm nay."
@@ -824,14 +815,12 @@ async def fetch_link(
                     }),
                 )
 
-        # 4. Increment usage counter
+        # 4. Count the download: per-platform allowance (once per URL per
+        #    day; admin never counted) + the account's statistics row.
+        record_platform_download(_quota_req, _quota_platform, payload.url)
         if user_id:
             try:
-                if _is_cheap:
-                    increment_user_cheap_usage(user_id)
-                # Cheap downloads still count toward the monthly total, just
-                # not toward the standard daily quota.
-                increment_usage(user_id, count_daily=not _is_cheap)
+                increment_usage(user_id)
             except Exception as _inc_err:
                 print(f"[Quota] increment_usage failed silently: {_inc_err}")
             # Phase 20: record metering event (fire-and-forget)
@@ -843,11 +832,6 @@ async def fetch_link(
                 asyncio.ensure_future(_record_dl(user_id, job_id=_job_id, plan=_tier))
             except Exception:
                 pass
-        else:
-            try:
-                increment_anon_usage(_req_client_ip, _quota_platform)
-            except Exception as _anon_err:
-                print(f"[Quota] increment_anon_usage failed silently: {_anon_err}")
 
         # Save to download_jobs for authenticated users (personal history)
         if user:
@@ -1194,33 +1178,39 @@ async def bulk_download(
             }),
         )
 
-    # ── Daily quota gate — bulk previously skipped this entirely, letting
-    # anon/free users bypass the per-day download cap that /fetch-link
-    # enforces for single downloads. Gate the whole batch up front; each
-    # individual job still re-checks (authenticated) inside process_video_task.
+    # ── Per-platform daily allowance, per item ──────────────────────
+    # Each link counts against its own platform. Links beyond what is left
+    # today get a failed job row with a per-item message; the rest of the
+    # batch runs. Only when NOT ONE link fits is the whole request refused
+    # (same 403/429 body as /fetch-link). The worker re-checks every job
+    # before it runs (process_video_task), which also covers channel
+    # expansions, whose size is unknown here.
     _bulk_client_ip = get_client_ip(request)
-    if auth_user_id:
-        _bulk_quota = check_user_quota(auth_user_id)
-        if not _bulk_quota["allowed"]:
-            raise HTTPException(
-                status_code=403,
-                detail=make_error(ERR_QUOTA_DAILY, extra={
-                    "message":         _bulk_quota["message"],
-                    "downloads_today": _bulk_quota.get("downloads_today", 0),
-                    "daily_limit":     _bulk_quota.get("daily_limit", 30),
-                }),
-            )
-    else:
-        _bulk_anon_q = check_anon_quota(_bulk_client_ip)
-        if not _bulk_anon_q["allowed"]:
-            raise HTTPException(
-                status_code=429,
-                detail=make_error(ERR_QUOTA_DAILY, extra={
-                    "message":         _bulk_anon_q["message"],
-                    "downloads_today": _bulk_anon_q["downloads_today"],
-                    "daily_limit":     _bulk_anon_q["daily_limit"],
-                }),
-            )
+    _bulk_req = resolve_requester(request, user_id=auth_user_id, ip=_bulk_client_ip)
+    _bulk_allow = BatchAllowance(_bulk_req)
+    _bulk_refused: dict = {}          # index in payload.urls → refusal text
+    for _i, _raw in enumerate(payload.urls):
+        _u = (_raw or "").strip()
+        if not _u:
+            continue
+        _p = _get_platform_key(_u)
+        if payload.channel_mode or classify_url(_u) == "channel":
+            if _bulk_allow.remaining(_p) == 0:
+                _bulk_refused[_i] = bulk_item_quota_message(_bulk_req, _p, _bulk_allow.limit)
+            continue
+        _why = _bulk_allow.take(_p, _u)
+        if _why:
+            _bulk_refused[_i] = _why
+    _bulk_nonempty = [i for i, u in enumerate(payload.urls) if (u or "").strip()]
+    if _bulk_nonempty and all(i in _bulk_refused for i in _bulk_nonempty):
+        _first = payload.urls[_bulk_nonempty[0]].strip()
+        _pq = check_platform_quota(_bulk_req, _get_platform_key(_first), _first)
+        if _pq.get("allowed"):   # only refused as a batch total → still say so
+            _pq = {**_pq, "message": _bulk_refused[_bulk_nonempty[0]]}
+        raise HTTPException(
+            status_code=403 if _bulk_req.kind == REQ_USER else 429,
+            detail=make_error(ERR_QUOTA_DAILY, extra=_quota_error_extra(_pq)),
+        )
 
     # Also enforce max_videos per channel against tier limit
     if payload.channel_mode and auth_user_id:
@@ -1235,9 +1225,28 @@ async def bulk_download(
     channel_count = 0
     video_count = 0
 
-    for raw_url in payload.urls:
+    _bulk_refused_count = 0
+    for _idx, raw_url in enumerate(payload.urls):
         url = raw_url.strip()
         if not url:
+            continue
+
+        if _idx in _bulk_refused:
+            try:
+                supabase.table("download_jobs").insert({
+                    "batch_id": batch_id,
+                    "original_url": url,
+                    "status": "failed",
+                    "error_message": _bulk_refused[_idx],
+                    "user_id": auth_user_id,
+                    "source_surface": "web",
+                    "selected_quality": payload.quality,
+                    "source": x_vg_source or "web",
+                    "platform": _get_platform_key(url),
+                }).execute()
+            except Exception as _rf_err:
+                print(f"[Quota] refused-item row failed: {type(_rf_err).__name__}")
+            _bulk_refused_count += 1
             continue
 
         from app.utils.link_resolver import resolve_short_url
@@ -1284,6 +1293,7 @@ async def bulk_download(
                 safe_max_videos = min(payload.max_videos or 100, 500)
                 scrape_channel_task.apply_async(
                     args=[url, batch_id, channel_job_id, safe_max_videos, payload.min_views, auth_user_id, payload.quality, payload.remove_watermark, payload.download_subs],
+                    kwargs={"_requester": _bulk_req.key},
                     priority=3,
                 )
                 channel_count += 1
@@ -1326,20 +1336,21 @@ async def bulk_download(
                     except Exception:
                         pass
 
+                # Counting, unchanged in WHEN: a signed-in user's job counts
+                # in process_video_task on success; a guest's counts here at
+                # dispatch (the worker is told so and does not count again).
+                _anon_now = _bulk_req.kind not in (REQ_USER, REQ_ADMIN)
                 if not _dedup_resolved:
                     process_video_task.apply_async(
                         args=[job_id, url, auth_user_id, payload.quality, payload.remove_watermark, payload.download_subs],
+                        kwargs={"_requester": _bulk_req.key, "_quota_precounted": _anon_now},
                         priority=5,
                     )
-                # Authenticated usage is counted inside process_video_task on
-                # completion (via the now-correct auth_user_id above). Anon
-                # usage has no task-side hook, so count it here at dispatch —
-                # matches check_anon_quota's per-IP daily gate above.
-                if not auth_user_id:
-                    try:
-                        increment_anon_usage(_bulk_client_ip)
-                    except Exception:
-                        pass
+                elif _bulk_req.kind == REQ_USER:
+                    # Served from cache: no task will run to count it.
+                    record_platform_download(_bulk_req, _get_platform_key(url), url)
+                if _anon_now:
+                    record_platform_download(_bulk_req, _get_platform_key(url), url)
                 video_count += 1
 
         except Exception as e:
@@ -1371,6 +1382,9 @@ async def bulk_download(
         "success": True,
         "channels_detected": channel_count,
         "videos_queued": video_count,
+        # Links refused by the per-platform daily allowance (each has a
+        # failed job row carrying the reason).
+        "quota_refused": _bulk_refused_count,
         "queue_depth": _queue_depth,
         "estimated_wait_seconds": _estimated_wait,
     }
@@ -1513,13 +1527,27 @@ async def zip_stream(
 # ── GET /quota  (user quota info) ──────────────────────────────────
 
 @router.get("/quota")
-async def get_quota(req: Request):
-    user_id = get_client_ip(req)
+async def get_quota(req: Request, user=Depends(get_optional_user)):
+    """The caller's per-platform daily allowance (guest by IP, signed-in user,
+    or admin session). This used to pass the client IP as a user id to
+    check_user_quota, so it always answered for a nonexistent free account.
+    The old keys stay: quota.allowed / plan / downloads_today / daily_limit
+    (now the closest-to-limit platform's numbers)."""
+    from app.core.quotas import platform_usage_snapshot, legacy_usage_fields
+    rq = resolve_requester(req, user_id=(user or {}).get("id"))
     try:
-        info = check_user_quota(user_id)
+        snap = platform_usage_snapshot(rq)
+        top = legacy_usage_fields(snap)
         return {
             "success": True,
-            "quota": info
+            "quota": {
+                "allowed":         snap["unlimited"] or any(p["remaining"] > 0 for p in snap["platforms"]),
+                "plan":            rq.tier if rq.kind == REQ_USER else rq.kind,
+                "downloads_today": top["used"],
+                "daily_limit":     snap["limit"],
+                **top,
+                "platform_quota":  snap,
+            },
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

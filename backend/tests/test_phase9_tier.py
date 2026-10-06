@@ -261,17 +261,23 @@ class TestAnonQuota:
         from app.core import quotas as q
         return q
 
+    # Since 2026-10-06 the guest allowance is per platform (5/day each);
+    # tests/test_platform_quota.py covers it in full.
+
+    def _anon(self, ip):
+        return self.q.QuotaRequester(self.q.REQ_ANON, ip)
+
     def test_anon_allowed_within_limit(self, monkeypatch):
         """Case 7: First 5 downloads allowed."""
         q = self._get_module()
         fake_r = _fake_redis_client()
         monkeypatch.setattr("app.core.redis_client.get_redis", lambda: fake_r)
 
-        ip = "1.2.3.4"
+        rq = self._anon("1.2.3.4")
         for i in range(5):
-            result = q.check_anon_quota(ip)
+            result = q.check_platform_quota(rq, "instagram")
             assert result["allowed"] is True, f"Call {i+1} should be allowed"
-            q.increment_anon_usage(ip)
+            q.record_platform_download(rq, "instagram", f"https://www.instagram.com/p/{i}/")
 
     def test_anon_blocked_at_limit(self, monkeypatch):
         """Case 7: 6th download blocked."""
@@ -279,12 +285,10 @@ class TestAnonQuota:
         fake_r = _fake_redis_client()
         monkeypatch.setattr("app.core.redis_client.get_redis", lambda: fake_r)
 
-        ip = "5.6.7.8"
-        # Pre-fill to 5
-        key = f"vidgrab:quota:anon:{ip}:{datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
-        fake_r.set(key, "5")
+        rq = self._anon("5.6.7.8")
+        fake_r.set(q._plat_key(rq, "instagram"), "5")
 
-        result = q.check_anon_quota(ip)
+        result = q.check_platform_quota(rq, "instagram")
         assert result["allowed"] is False
         assert result["error_code"] == "quota_exceeded_daily"
         assert result["downloads_today"] == 5
@@ -296,10 +300,9 @@ class TestAnonQuota:
         fake_r = _fake_redis_client()
         monkeypatch.setattr("app.core.redis_client.get_redis", lambda: fake_r)
 
-        ip = "9.10.11.12"
-        q.increment_anon_usage(ip)
-        key = f"vidgrab:quota:anon:{ip}:{datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
-        ttl = fake_r.ttl(key)
+        rq = self._anon("9.10.11.12")
+        q.record_platform_download(rq, "instagram", "https://www.instagram.com/p/x/")
+        ttl = fake_r.ttl(q._plat_key(rq, "instagram"))
         # TTL should be positive and ≤ 86460 (24h + 60s buffer)
         assert ttl > 0
         assert ttl <= 86460
@@ -309,11 +312,10 @@ class TestAnonQuota:
         fake_r = _fake_redis_client()
         monkeypatch.setattr("app.core.redis_client.get_redis", lambda: fake_r)
 
-        ip_a, ip_b = "10.0.0.1", "10.0.0.2"
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        fake_r.set(f"vidgrab:quota:anon:{ip_a}:{today}", "5")  # ip_a exhausted
-        assert q.check_anon_quota(ip_a)["allowed"] is False
-        assert q.check_anon_quota(ip_b)["allowed"] is True   # ip_b unaffected
+        a, b = self._anon("10.0.0.1"), self._anon("10.0.0.2")
+        fake_r.set(q._plat_key(a, "instagram"), "5")  # ip_a exhausted
+        assert q.check_platform_quota(a, "instagram")["allowed"] is False
+        assert q.check_platform_quota(b, "instagram")["allowed"] is True   # ip_b unaffected
 
 
 # ══════════════════════════════════════════════════════════════════════

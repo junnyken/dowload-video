@@ -53,7 +53,13 @@ export default function UsageContent() {
     <div className="text-center py-16 text-fg-muted">Không tải được dữ liệu. Thử lại sau.</div>
   );
 
-  const dailyPct  = usage.limits.daily  > 0 ? Math.min(100, (usage.downloads_today  / usage.limits.daily)  * 100) : 0;
+  // Daily allowance is per platform (platform_quota); the "Hôm nay" card shows
+  // the platform closest to its limit (used/limit), older servers fall back.
+  const pq        = usage.platform_quota || null;
+  const dayUsed   = pq ? (usage.used ?? 0) : usage.downloads_today;
+  const dayLimit  = pq ? pq.limit : usage.limits.daily;
+  const dailyPct  = dayLimit > 0 ? Math.min(100, (dayUsed / dayLimit) * 100) : 0;
+  const usedPlatforms = pq ? pq.platforms.filter(p => p.used > 0) : [];
   const monthPct  = usage.limits.monthly > 0 ? Math.min(100, (usage.downloads_this_month / usage.limits.monthly) * 100) : 0;
   const isPro     = usage.plan === 'pro';
 
@@ -208,7 +214,9 @@ export default function UsageContent() {
             {isPro ? 'Pro Plan' : 'Free Plan'}
           </p>
           <p className="text-fg-muted text-xs">
-            {isPro ? 'Tải không giới hạn' : `Tối đa ${usage.limits.daily}/ngày, ${usage.limits.monthly}/tháng`}
+            {pq
+              ? (pq.unlimited ? 'Không giới hạn lượt tải' : `Tối đa ${pq.limit} lượt/ngày cho mỗi nền tảng`)
+              : (isPro ? 'Tải không giới hạn' : `Tối đa ${usage.limits.daily}/ngày, ${usage.limits.monthly}/tháng`)}
           </p>
         </div>
         {!isPro && (
@@ -222,11 +230,11 @@ export default function UsageContent() {
       <div className="grid grid-cols-2 gap-3">
         <StatCard
           icon={<Zap className="w-4 h-4" />}
-          label="Hôm nay"
-          value={usage.downloads_today}
-          limit={usage.limits.daily}
+          label={pq && usage.used_platform_label ? `Hôm nay · ${usage.used_platform_label}` : 'Hôm nay'}
+          value={dayUsed}
+          limit={dayLimit}
           pct={dailyPct}
-          isPro={isPro}
+          isPro={pq ? false : isPro}
         />
         <StatCard
           icon={<Calendar className="w-4 h-4" />}
@@ -236,6 +244,22 @@ export default function UsageContent() {
           pct={monthPct}
           isPro={isPro}
         />
+        {pq && (
+          <div className="col-span-2 bg-surface-2 border border-line rounded-xl p-4 space-y-1.5">
+            <p className="text-fg-muted text-xs">Lượt đã dùng hôm nay theo nền tảng</p>
+            {usedPlatforms.length === 0
+              ? <p className="text-fg text-sm">Chưa tải video nào hôm nay.</p>
+              : usedPlatforms.map(p => (
+                <div key={p.platform} className="flex justify-between text-sm">
+                  <span className="text-fg">{p.label}</span>
+                  <span className="text-fg-muted">{pq.unlimited ? p.used : `${p.used} / ${p.limit}`}</span>
+                </div>
+              ))}
+            {!pq.unlimited && (
+              <p className="text-fg-muted text-[11px] pt-1">Lượt mới được cộng lại lúc {pq.reset_time_vn} mỗi ngày.</p>
+            )}
+          </div>
+        )}
         <div className="col-span-2 bg-surface-2 border border-line rounded-xl p-4 flex items-center gap-3">
           <Archive className="w-4 h-4 text-fg-muted" />
           <div>

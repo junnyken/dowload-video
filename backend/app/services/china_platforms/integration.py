@@ -35,17 +35,11 @@ logger = logging.getLogger("app.china_access")
 
 def _is_admin_session(request) -> bool:
     """Valid admin SESSION token in X-Admin-Token (issued by POST /admin/login).
-    The raw admin password is deliberately not accepted here: this header is
-    read on a public endpoint, and accepting the password would give it a
-    brute-force surface without verify_admin's lockout."""
-    try:
-        token = (request.headers.get("X-Admin-Token") or "").strip()
-        if not token:
-            return False
-        from app.api.admin import _redis, _session_is_valid  # noqa: PLC0415
-        return _session_is_valid(_redis(), token)
-    except Exception:  # noqa: BLE001
-        return False
+    Same definition of "admin" as the per-platform download allowance
+    (app.core.quotas.is_admin_request): the raw admin password is deliberately
+    not accepted here — this header is read on a public endpoint."""
+    from app.core.quotas import is_admin_request  # noqa: PLC0415
+    return is_admin_request(request)
 
 
 def bind_request_context(request, user: Optional[dict], *, has_user_cookie: bool = False):
@@ -163,8 +157,10 @@ def _resolve_via_access_layer(platform: str, url: str, original_url: str, qualit
     ctx = current_context()
     if user_cookies_file:
         ctx = ctx.with_(private=True, user_cookies_file=user_cookies_file)
-    # Celery jobs carry no requester context: they use the shared "unknown"
-    # quota bucket at the anonymous limit (docs/china-access/01 C8).
+    # Celery jobs get their requester from process_video_task (_requester /
+    # user_id, see video_tasks._bind_china_worker_context); jobs with neither
+    # (crash recovery, partner API) use the shared "unknown" bucket at the
+    # anonymous limit (docs/china-access/01 C8).
     req = ChinaResolveRequest(url=url, operation="single_media", requested_quality=quality)
     try:
         result = asyncio.run(ProviderRouter().resolve(req, ctx))

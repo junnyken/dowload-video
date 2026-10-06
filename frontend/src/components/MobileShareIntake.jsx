@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, ChevronDown, ChevronUp } from 'lucide-react';
 import { API_BASE } from '../lib/apiBase';
+import { useAuth } from '../context/AuthContext';
 
 function detectPlatform(url) {
   if (!url) return { name: 'Unknown', emoji: '🌐', color: 'var(--vg-fg-muted)' };
@@ -28,6 +29,11 @@ export default function MobileShareIntake({ onNavigate }) {
   const [expanded, setExpanded]     = useState(false);
   const [visible, setVisible]       = useState(false); // for CSS animation
   const abortRef                    = useRef(null);
+  // Signed-in / admin headers, read at share time (the listener below is
+  // registered once): the download counts against the right daily allowance.
+  const { withAuth }                = useAuth();
+  const withAuthRef                 = useRef(withAuth);
+  useEffect(() => { withAuthRef.current = withAuth; }, [withAuth]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -51,12 +57,12 @@ export default function MobileShareIntake({ onNavigate }) {
       const ctrl = new AbortController();
       abortRef.current = ctrl;
 
-      fetch(`${API_BASE}/api/v1/fetch-link`, {
+      fetch(`${API_BASE}/api/v1/fetch-link`, withAuthRef.current({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: sharedUrl }),
         signal: ctrl.signal,
-      })
+      }))
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data) setVideoInfo(data);
