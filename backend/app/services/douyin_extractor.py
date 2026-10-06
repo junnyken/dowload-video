@@ -141,7 +141,17 @@ def douyin_server_access_available() -> bool:
     cookie the extractor would pick, or DOUYIN_COOKIES_B64 is set. Read-only.
     Fails OPEN (True) when Redis cannot be read: unknown is not "no cookie",
     and the per-job classifier still stops retries if the cookie is missing.
+
+    Phase 32B-1: also True when the China access layer's managed route is
+    open for the current request (e.g. an admin canary request). That check
+    reads one env var and returns False while CHINA_ACCESS_ENABLED is off.
     """
+    try:
+        from app.services.china_platforms.integration import managed_route_open_for_current_request
+        if managed_route_open_for_current_request("douyin"):
+            return True
+    except Exception as e:
+        _safe_print(f"[DouyinExtractor] china access check unavailable: {type(e).__name__}")
     if os.getenv("APIFY_TOKEN", "").strip():
         return True
     if os.getenv("DOUYIN_COOKIES_B64", "").strip():
@@ -737,6 +747,8 @@ async def extract_douyin_video(
     url: str,
     quality: str = "video",
     user_cookies_file: Optional[str] = None,
+    *,
+    skip_scraperapi: bool = False,
 ) -> Dict[str, Any]:
     """
     Extract a Douyin video using the multi-provider waterfall.
@@ -749,6 +761,9 @@ async def extract_douyin_video(
     Args:
         url:     Any Douyin URL (short or canonical)
         quality: "video", "video_4k", "mp3_128", "mp3_320"
+        skip_scraperapi: skip the paid ScraperAPI step. Set by the China
+                 access layer (Phase 32B-1), which does not budget ScraperAPI
+                 in wave 1; every legacy caller keeps the default (False).
 
     Returns:
         Dict with: title, thumbnail_url, direct_mp4_url, file_size_mb, quality, provider
@@ -792,8 +807,8 @@ async def extract_douyin_video(
         result["original_url"] = original_url
         return result
 
-    # Provider 3: ScraperAPI SSR
-    if canonical_url and "douyin.com" in canonical_url:
+    # Provider 3: ScraperAPI SSR (paid — skipped when the access layer calls)
+    if canonical_url and "douyin.com" in canonical_url and not skip_scraperapi:
         result = await _try_scraperapi_ssr(canonical_url, quality)
         if result:
             result["original_url"] = original_url

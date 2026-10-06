@@ -454,6 +454,12 @@ async def fetch_link(
     # an internal URL reached the extractor and came back as a generic 500).
     _assert_safe_url(payload.url)
 
+    # Phase 32B-1: requester/admin context for the China access layer (budget
+    # bucket, admin canary). No-op while CHINA_ACCESS_ENABLED is off. Bound
+    # before the Douyin gate so an admin canary request can pass it.
+    from app.services.china_platforms.integration import bind_request_context as _china_bind
+    _china_bind(request, user, has_user_cookie=bool(payload.user_cookies_b64))
+
     # Douyin without any usable cookie fails every time, after several paid
     # fallback providers (ScraperAPI) — answer at once instead.
     _dy_block = _douyin_cookie_gate([payload.url], bool(payload.user_cookies_b64), single=True)

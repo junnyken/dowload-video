@@ -187,7 +187,10 @@ def probe_once(url: str, timeout: int = _PROBE_TIMEOUT_SEC) -> Dict[str, Any]:
     # platform is recorded as a (timeout) failure instead of hanging forever.
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="probe")
     try:
-        future = pool.submit(extract_video_info_sync, url, quality="video")
+        # run_as_probe marks the context origin="probe" so the China access
+        # layer never spends on a managed provider for a probe (plan §14.1).
+        from app.services.china_platforms.probes import run_as_probe
+        future = pool.submit(run_as_probe, extract_video_info_sync, url, quality="video")
         info = future.result(timeout=timeout)
     except concurrent.futures.TimeoutError:
         return _done(False, f"timeout_after_{timeout}s")

@@ -27,6 +27,7 @@ import yt_dlp
 import re
 import signal
 import concurrent.futures
+import contextvars
 from typing import Dict, Any, List, Optional
 import httpx
 
@@ -549,7 +550,10 @@ def _run_with_timeout(func, args=(), kwargs=None, timeout=EXTRACTION_TIMEOUT_SEC
     # Manage the executor manually and shut it down WITHOUT waiting so the
     # timeout is actually enforced; the orphaned thread dies on its own.
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    future = executor.submit(func, *args, **kwargs)
+    # copy_context(): executor threads do not inherit contextvars, so without
+    # it the request context bound in /fetch-link (China access layer, admin
+    # canary) would be lost here. Same func, same args.
+    future = executor.submit(contextvars.copy_context().run, func, *args, **kwargs)
     try:
         return future.result(timeout=timeout)
     except concurrent.futures.TimeoutError:
@@ -1556,7 +1560,23 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             _dy_id = _dy_video_id(original_input_url) or _dy_video_id(url)
             douyin_input = _dy_canonical(_dy_id) if _dy_id else original_input_url
 
-            if os.getenv("APIFY_TOKEN", ""):
+            # Phase 32B-1 China access layer. Returns None while
+            # CHINA_ACCESS_ENABLED / CHINA_ACCESS_DOUYIN_ENABLED are off (default)
+            # so everything below runs exactly as before. When on, it owns the
+            # metadata step (native chain without the paid ScraperAPI step,
+            # then a budgeted managed actor if allowed) — native Douyin is
+            # 0/1245 on prod since 2026-10-05 (signature cookies required).
+            try:
+                from app.services.china_platforms.integration import (
+                    resolve_douyin_via_access_layer as _china_resolve,
+                )
+            except Exception as _china_imp_err:
+                print(f"[Downloader] china access layer unavailable: {_china_imp_err}")
+                _china_resolve = None
+            if _china_resolve is not None:
+                result = _china_resolve(douyin_input, original_input_url, quality, user_cookies_file)
+
+            if result is None and os.getenv("APIFY_TOKEN", ""):
                 try:
                     from app.services.apify_service import extract_douyin_apify_sync
                     result = extract_douyin_apify_sync(douyin_input, quality)

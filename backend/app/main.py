@@ -482,6 +482,9 @@ from app.api import client_api as client_api_mod
 app.include_router(client_api_mod.router, prefix="/api/v1", tags=["Desktop Client"])
 from app.api.admin_asr import router as admin_asr_router
 app.include_router(admin_asr_router, prefix="/api/v1/admin", tags=["Admin ASR"])
+# Phase 32B-1 — China Platform Access Layer admin (read + kill switch/mode)
+from app.api.admin_china_platforms import router as admin_china_router
+app.include_router(admin_china_router, prefix="/api/v1/admin", tags=["Admin China Access"])
 
 # Phase 19 — Mobile / PWA endpoints
 from app.api import mobile as mobile_api
