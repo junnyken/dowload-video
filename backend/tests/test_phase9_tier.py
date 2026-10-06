@@ -286,7 +286,7 @@ class TestAnonQuota:
         monkeypatch.setattr("app.core.redis_client.get_redis", lambda: fake_r)
 
         rq = self._anon("5.6.7.8")
-        fake_r.set(q._plat_key(rq, "instagram"), "5")
+        fake_r.set(q._plat_key(rq, q._TOTAL_BUCKET), "5")
 
         result = q.check_platform_quota(rq, "instagram")
         assert result["allowed"] is False
@@ -302,7 +302,7 @@ class TestAnonQuota:
 
         rq = self._anon("9.10.11.12")
         q.record_platform_download(rq, "instagram", "https://www.instagram.com/p/x/")
-        ttl = fake_r.ttl(q._plat_key(rq, "instagram"))
+        ttl = fake_r.ttl(q._plat_key(rq, q._TOTAL_BUCKET))
         # TTL should be positive and ≤ 86460 (24h + 60s buffer)
         assert ttl > 0
         assert ttl <= 86460
@@ -313,7 +313,7 @@ class TestAnonQuota:
         monkeypatch.setattr("app.core.redis_client.get_redis", lambda: fake_r)
 
         a, b = self._anon("10.0.0.1"), self._anon("10.0.0.2")
-        fake_r.set(q._plat_key(a, "instagram"), "5")  # ip_a exhausted
+        fake_r.set(q._plat_key(a, q._TOTAL_BUCKET), "5")  # ip_a exhausted
         assert q.check_platform_quota(a, "instagram")["allowed"] is False
         assert q.check_platform_quota(b, "instagram")["allowed"] is True   # ip_b unaffected
 

@@ -220,6 +220,22 @@ REQ_USER  = "user"
 REQ_ANON  = "anon"
 
 QUOTA_SCOPE_PLATFORM = "per_platform"
+QUOTA_SCOPE_TOTAL = "total"
+_TOTAL_BUCKET = "_all"
+
+
+def quota_scope() -> str:
+    """Owner 2026-10-06 (correction after the per-platform release): a guest
+    gets 5 downloads a day IN TOTAL across all platforms, a signed-in user 20
+    in total. QUOTA_SCOPE=per_platform restores one allowance per platform.
+    Per-platform counters are always kept for display either way."""
+    v = (os.getenv("QUOTA_SCOPE") or QUOTA_SCOPE_TOTAL).strip().lower()
+    return QUOTA_SCOPE_PLATFORM if v == QUOTA_SCOPE_PLATFORM else QUOTA_SCOPE_TOTAL
+
+
+def _enforced_bucket(platform: str) -> str:
+    """Which counter the allowance is checked against."""
+    return platform if quota_scope() == QUOTA_SCOPE_PLATFORM else _TOTAL_BUCKET
 _VN_TZ = timezone(timedelta(hours=7))   # Asia/Ho_Chi_Minh has no DST
 
 
@@ -395,12 +411,13 @@ def platform_used(requester: QuotaRequester, platform: str) -> int:
 def platform_quota_message(requester: QuotaRequester, platform: str, limit: int) -> str:
     from app.core.platform_key import platform_label  # noqa: PLC0415
     label = platform_label(platform)
+    for_label = f" cho {label}" if quota_scope() == QUOTA_SCOPE_PLATFORM else ""
     if requester.kind == REQ_ANON:
         user_limit = platform_limit_user()
         signin = ("Đăng nhập để tải không giới hạn." if user_limit == -1
                   else f"Đăng nhập để tải {user_limit} lượt/ngày.")
-        return f"Khách tải được tối đa {limit} lượt/ngày cho {label}. {signin}"
-    return (f"Bạn đã dùng hết {limit} lượt hôm nay cho {label}. "
+        return f"Khách tải được tối đa {limit} lượt/ngày{for_label}. {signin}"
+    return (f"Bạn đã dùng hết {limit} lượt hôm nay{for_label}. "
             f"Lượt mới được cộng lại lúc {reset_time_vn_text()}.")
 
 
@@ -408,12 +425,13 @@ def bulk_item_quota_message(requester: QuotaRequester, platform: str, limit: int
     """Per-item text written on a bulk/queue job refused for the allowance."""
     from app.core.platform_key import platform_label  # noqa: PLC0415
     label = platform_label(platform)
+    for_label = f" cho {label}" if quota_scope() == QUOTA_SCOPE_PLATFORM else ""
     if requester.kind == REQ_ANON:
         user_limit = platform_limit_user()
         signin = ("Đăng nhập để tải không giới hạn." if user_limit == -1
                   else f"Đăng nhập để tải {user_limit} lượt/ngày.")
-        return f"Đã hết {limit} lượt/ngày của khách cho {label}, mục này chưa được tải. {signin}"
-    return (f"Đã hết {limit} lượt hôm nay cho {label}, mục này chưa được tải. "
+        return f"Đã hết {limit} lượt/ngày của khách{for_label}, mục này chưa được tải. {signin}"
+    return (f"Đã hết {limit} lượt hôm nay{for_label}, mục này chưa được tải. "
             f"Lượt mới được cộng lại lúc {reset_time_vn_text()}.")
 
 
@@ -425,10 +443,10 @@ def check_platform_quota(requester: QuotaRequester, platform: str,
     quota_bucket) so existing clients reading a 403/429 body keep working."""
     platform = platform or "other"
     limit = platform_limit(requester)
-    used = 0 if requester.kind == REQ_ADMIN else platform_used(requester, platform)
+    used = 0 if requester.kind == REQ_ADMIN else platform_used(requester, _enforced_bucket(platform))
     remaining = -1 if limit == -1 else max(0, limit - used)
     base = {
-        "quota_scope":     QUOTA_SCOPE_PLATFORM,
+        "quota_scope":     quota_scope(),
         "quota_bucket":    "platform",
         "requester":       requester.kind,
         "platform":        platform,
@@ -477,6 +495,7 @@ def record_platform_download(requester: QuotaRequester, platform: str,
             if not added:
                 return False
         _redis_incr_until_midnight(_plat_key(requester, platform))
+        _redis_incr_until_midnight(_plat_key(requester, _TOTAL_BUCKET))
         return True
     except Exception as e:
         print(f"[Quota] record_platform_download failed for {requester.kind}: {type(e).__name__}")
@@ -500,9 +519,10 @@ class BatchAllowance:
     def remaining(self, platform: str) -> int:
         if self.limit == -1:
             return -1
-        if platform not in self._used:
-            self._used[platform] = platform_used(self.requester, platform)
-        return max(0, self.limit - self._used[platform] - self._taken.get(platform, 0))
+        bucket = _enforced_bucket(platform)
+        if bucket not in self._used:
+            self._used[bucket] = platform_used(self.requester, bucket)
+        return max(0, self.limit - self._used[bucket] - self._taken.get(bucket, 0))
 
     def take(self, platform: str, url: Optional[str] = None) -> Optional[str]:
         """None when the item may run (slot taken); else the refusal text."""
@@ -517,7 +537,8 @@ class BatchAllowance:
             return None
         if self.remaining(platform) <= 0:
             return bulk_item_quota_message(self.requester, platform, self.limit)
-        self._taken[platform] = self._taken.get(platform, 0) + 1
+        bucket = _enforced_bucket(platform)
+        self._taken[bucket] = self._taken.get(bucket, 0) + 1
         if fp:
             self._seen.add(fp)
         return None
@@ -538,10 +559,13 @@ def platform_usage_snapshot(requester: QuotaRequester) -> Dict[str, Any]:
             "limit":     limit,
             "remaining": -1 if limit == -1 else max(0, limit - used),
         })
+    total_used = 0 if requester.kind == REQ_ADMIN else platform_used(requester, _TOTAL_BUCKET)
     return {
-        "scope":         QUOTA_SCOPE_PLATFORM,
+        "scope":         quota_scope(),
         "requester":     requester.kind,
         "limit":         limit,
+        "used_total":    total_used,
+        "remaining_total": -1 if limit == -1 else max(0, limit - total_used),
         "unlimited":     limit == -1,
         "reset_at":      next_reset_utc().isoformat(),
         "reset_time_vn": reset_time_vn_text(),
@@ -554,6 +578,9 @@ def legacy_usage_fields(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     account menu and the Chrome extension read `used ?? downloads_today` and
     `limit ?? daily_limit`): the platform closest to its limit, so "x/y" is
     always a real, enforced pair and never shows more used than allowed."""
+    if snapshot.get("scope") == QUOTA_SCOPE_TOTAL:
+        return {"used": snapshot.get("used_total", 0), "limit": snapshot.get("limit", 0),
+                "used_platform": None, "used_platform_label": None}
     rows = snapshot.get("platforms") or []
     top = max(rows, key=lambda r: r["used"]) if rows else None
     if top is None or top["used"] == 0:

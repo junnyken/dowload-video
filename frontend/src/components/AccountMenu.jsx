@@ -39,7 +39,7 @@ export default function AccountMenu({ onNavigate }) {
           limit:     rawLimit,
           unlimited: rawLimit === -1,
           platformLabel: data.used_platform_label || null,
-          perPlatform: !!data.platform_quota,
+          perPlatform: data.platform_quota?.scope === 'per_platform',
           tier,
         });
       })

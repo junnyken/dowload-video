@@ -215,7 +215,7 @@ export default function UsageContent() {
           </p>
           <p className="text-fg-muted text-xs">
             {pq
-              ? (pq.unlimited ? 'Không giới hạn lượt tải' : `Tối đa ${pq.limit} lượt/ngày cho mỗi nền tảng`)
+              ? (pq.unlimited ? 'Không giới hạn lượt tải' : (pq.scope === 'per_platform' ? `Tối đa ${pq.limit} lượt/ngày cho mỗi nền tảng` : `Tối đa ${pq.limit} lượt/ngày cho tất cả nền tảng`))
               : (isPro ? 'Tải không giới hạn' : `Tối đa ${usage.limits.daily}/ngày, ${usage.limits.monthly}/tháng`)}
           </p>
         </div>

@@ -39,6 +39,11 @@ IG = "https://www.instagram.com/p/{}/"
 def _default_limits(monkeypatch):
     for k in ("PLATFORM_DAILY_LIMIT_ANON", "PLATFORM_DAILY_LIMIT_USER"):
         monkeypatch.delenv(k, raising=False)
+    # The tests in this file were written for one allowance PER platform; the
+    # owner then chose one allowance for ALL platforms (the default). They
+    # still guard the per-platform mode (QUOTA_SCOPE=per_platform); the total
+    # mode has its own tests in test_quota_total_scope.py.
+    monkeypatch.setenv("QUOTA_SCOPE", "per_platform")
 
 
 def anon(ip=IP):
