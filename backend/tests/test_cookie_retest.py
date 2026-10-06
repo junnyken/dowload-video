@@ -298,3 +298,83 @@ def test_routes_are_behind_verify_admin_and_audit_logged():
         assert admin.verify_admin in deps, path
     import inspect
     assert "log_admin_action" in inspect.getsource(admin.cookie_pool_retest)
+
+
+# ── rejected takes the cookie out of rotation ────────────────────────────────
+
+def test_rejected_takes_active_cookie_out_of_rotation_and_report_shows_it():
+    from app.core.cookie_probe import retest_cookie
+    from app.core import cookie_pool as cp
+    from app.core.redis_client import get_redis
+    b64, h = _add()
+    assert cp.get_expiry_report("tiktok")[0]["usable"] is True
+
+    msg = "TikTok báo phiên đăng nhập không còn hiệu lực"
+    res = retest_cookie("tiktok", h, probe=Probe("rejected", msg))
+
+    assert res["status"] == "rejected"
+    assert get_redis().get(f"cookie_health:tiktok:{h}") == "expired"
+    assert get_redis().lrange("cookie_pool:tiktok", 0, -1) == [b64]   # never deleted
+    row = cp.get_expiry_report("tiktok")[0]
+    assert row["health_status"] == "expired" and row["usable"] is False
+    assert row["expired_reason"] == msg and row["last_test_status"] == "rejected"
+    assert cp.get_cookie_from_pool("tiktok") is None
+    assert cp.has_selectable_cookie("tiktok") is False
+
+
+def test_rejected_overrides_a_temporary_block():
+    from app.core.cookie_probe import retest_cookie
+    from app.core import cookie_pool as cp
+    from app.core.redis_client import get_redis
+    b64, h = _add()
+    cp.mark_cookie_soft_blocked("tiktok", b64)
+    retest_cookie("tiktok", h, probe=Probe("rejected"))
+    assert get_redis().get(f"cookie_health:tiktok:{h}") == "expired"
+
+
+def test_inconclusive_leaves_active_cookie_selectable():
+    from app.core.cookie_probe import retest_cookie
+    from app.core import cookie_pool as cp
+    from app.core.redis_client import get_redis
+    b64, h = _add()
+    retest_cookie("tiktok", h, probe=Probe("inconclusive", "timeout"))
+    assert get_redis().get(f"cookie_health:tiktok:{h}") is None
+    assert cp.get_cookie_from_pool("tiktok") == b64
+    assert cp.get_expiry_report("tiktok")[0]["usable"] is True
+
+
+def test_later_ok_restores_a_cookie_rejected_by_retest():
+    from app.core.cookie_probe import retest_cookie
+    from app.core import cookie_pool as cp
+    from app.core.redis_client import get_redis
+    b64, h = _add()
+    retest_cookie("tiktok", h, probe=Probe("rejected", "x"))
+    get_redis().delete(f"cookie_retest_cd:tiktok:{h}", "cookie_retest_gap:tiktok")
+    res = retest_cookie("tiktok", h, probe=Probe("ok", "ok"))
+    assert res["status"] == "ok" and res["cleared_expired"] is True
+    row = cp.get_expiry_report("tiktok")[0]
+    assert row["health_status"] == "healthy" and row["usable"] and row["expired_reason"] == ""
+    assert cp.get_cookie_from_pool("tiktok") == b64
+
+
+def test_admin_disabled_cookie_is_not_changed_by_rejected_or_ok():
+    from app.core.cookie_probe import retest_cookie
+    from app.core import cookie_pool as cp
+    from app.core.redis_client import get_redis
+    b64, h = _add()
+    cp.mark_cookie_disabled("tiktok", b64, "manual")
+    assert retest_cookie("tiktok", h, probe=Probe("rejected"))["status"] == "skipped_disabled"
+    assert get_redis().get(f"cookie_health:tiktok:{h}") == "disabled"
+
+
+def test_disabled_during_probe_is_not_overwritten(monkeypatch):
+    from app.core.cookie_probe import retest_cookie
+    from app.core import cookie_pool as cp
+    from app.core.redis_client import get_redis
+    b64, h = _add()
+
+    def probe(c, p):
+        cp.mark_cookie_disabled("tiktok", b64, "manual")   # admin acts mid-probe
+        return "rejected", "m"
+    retest_cookie("tiktok", h, probe=probe)
+    assert get_redis().get(f"cookie_health:tiktok:{h}") == "disabled"

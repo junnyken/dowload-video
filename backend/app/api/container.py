@@ -249,7 +249,12 @@ async def resolve_input(req: ResolveInputRequest):
     from app.core.source_classifier import classify
     from app.services.youtube_proxy_health import get_youtube_proxy_health_async
 
-    norm = normalize(req.url)
+    from app.core.url_normalizer import extract_share_url
+    from app.core.error_codes import make_error
+    _raw = extract_share_url(req.url)
+    if _raw is None:  # free text with no http(s) URL in it
+        raise HTTPException(status_code=400, detail=make_error("invalid_url"))
+    norm = normalize(_raw)
     url  = norm.canonical_url
     clf  = classify(url)
 

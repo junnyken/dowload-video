@@ -577,6 +577,8 @@ def get_expiry_report(platform: str) -> list[dict]:
             "last_test_status":  meta.get("last_test_status", ""),
             "last_test_message": meta.get("last_test_message", ""),
             "verified_ok_at":  meta.get("verified_ok_at", 0) or 0,
+            "expired_reason":  (meta.get("expired_reason", "")
+                                if health_val == "expired" else ""),
             "usable":          effective_health not in ("expired", "disabled", "hard", "soft", "blocked"),
         })
 

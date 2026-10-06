@@ -448,6 +448,11 @@ async def fetch_link(
 ):
     if not payload.url:
         raise HTTPException(status_code=400, detail="URL is required")
+    # Share text ("… https://v.douyin.com/x/ 复制此链接…") -> the URL itself.
+    # Text without any http(s) URL is left as-is and fails the guard below
+    # with 400 invalid_url. The SSRF guard runs on the extracted URL.
+    from app.core.url_normalizer import extract_share_url
+    payload.url = extract_share_url(payload.url) or payload.url
     # yt-dlp will fetch whatever it is handed, so the URL must clear the SSRF
     # guard here — otherwise /fetch-link is a blind request-forgery primitive
     # against the internal network (found while live-verifying this release:
@@ -1140,6 +1145,18 @@ async def bulk_download(
 ):
     if not payload.urls or len(payload.urls) == 0:
         raise HTTPException(status_code=400, detail="No URLs provided")
+    # Each line / item may be pasted share text: reduce it to its URL before
+    # the SSRF guard. An item holding several lines is handled line by line.
+    from app.core.url_normalizer import extract_share_url
+    _clean_urls: list[str] = []
+    for _item in payload.urls:
+        _lines = _item.splitlines() if isinstance(_item, str) and ("\n" in _item or "\r" in _item) else [_item]
+        for _ln in _lines:
+            if isinstance(_ln, str) and not _ln.strip():
+                continue
+            _clean_urls.append(extract_share_url(_ln) or _ln)
+    if _clean_urls:
+        payload.urls = _clean_urls
     for _u in payload.urls:
         _assert_safe_url(_u)
 

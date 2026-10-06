@@ -72,6 +72,48 @@ _YOUTU_BE_RE = re.compile(r"(?:https?://)?youtu\.be/([A-Za-z0-9_-]{11})(.*)", re
 _INSTAGR_AM_RE = re.compile(r"(?:https?://)?instagr\.am/(.*)", re.I)
 
 
+# ── Share-text → URL extraction ──────────────────────────────────────────────
+# Platform share sheets paste prose around the link ("8.94 :1pm anD:/ ...
+# https://v.douyin.com/x/ 复制此链接，打开Dou音搜索…"). API clients (extension,
+# desktop app, bulk) send that verbatim, so the server reduces it to the URL.
+# A URL ends at whitespace or at CJK / full-width punctuation.
+_FULLWIDTH_STOP = (
+    "\u3000-\u303f"      # CJK symbols & punctuation (、。〈〉《》「」『』【】 …)
+    "\uff00-\uffef"      # full-width forms (，！？：；（）＂ …)
+    "\u2018\u2019\u201c\u201d\u2026"  # curly quotes, ellipsis
+)
+_SHARE_URL_RE = re.compile(
+    r"https?://[^\s<>\"'`" + _FULLWIDTH_STOP + r"]+", re.I,
+)
+_NEEDS_EXTRACT_RE = re.compile(r"[\s" + _FULLWIDTH_STOP + r"]")
+_TRAILING_PUNCT = ".,;:!?)]}>*~|"
+
+
+def extract_share_url(text):
+    """
+    Reduce pasted share text to a single http(s) URL.
+
+    * Input without whitespace or full-width punctuation (already a single
+      token — including scheme-less ones the normalizer handles) is returned
+      byte-identical.
+    * Otherwise the FIRST http(s) URL in the text is returned, with trailing
+      punctuation stripped; None when the text contains no http(s) URL.
+    * Non-str / empty input -> None.
+    """
+    if not isinstance(text, str):
+        return None
+    stripped = text.strip()
+    if not stripped:
+        return None
+    if not _NEEDS_EXTRACT_RE.search(stripped):
+        return text
+    m = _SHARE_URL_RE.search(stripped)
+    if not m:
+        return None
+    url = m.group(0).rstrip(_TRAILING_PUNCT)
+    return url if re.match(r"https?://.", url, re.I) else None
+
+
 @dataclass
 class NormalizeResult:
     canonical_url: str

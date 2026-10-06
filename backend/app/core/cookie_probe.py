@@ -11,9 +11,11 @@ Verdicts a probe may return:
   rejected      platform clearly answered "not logged in"
   inconclusive  blocked / rate-limited / unexpected answer — proves nothing
 
-Only `ok` clears an "expired" mark. Nothing here ever deletes a cookie, and a
-`rejected`/`inconclusive` result never changes pool selection state — it is
-only recorded in the cookie's meta so the admin can read the reason.
+Only `ok` clears an "expired" mark. Nothing here ever deletes a cookie.
+`rejected` takes the cookie out of rotation (same "expired" state the pool
+already uses, reason = the probe message, flagged `expired_by_retest`) so a
+session the platform says is dead is not handed to downloads. `inconclusive`
+never changes pool state — it is only recorded in the cookie's meta.
 
 Safety:
   * per-cookie cooldown, per-platform minimum gap, global hourly cap — all in
@@ -267,6 +269,14 @@ def retest_cookie(platform: str, cookie_hash: str,
         if health == "expired":
             rc.delete(f"cookie_health:{platform}:{cookie_hash}")
             cleared = True
+        meta.pop("expired_by_retest", None)
+        meta.pop("expired_reason", None)
+    elif verdict == REJECTED:
+        # Re-read: admin may have disabled it while the probe was in flight.
+        if rc.get(f"cookie_health:{platform}:{cookie_hash}") != "disabled":
+            cp.mark_cookie_expired(platform, cookie)
+            meta["expired_by_retest"] = True
+            meta["expired_reason"] = message
     cp._set_meta(rc, platform, cookie_hash, meta)
 
     return _result(verdict, message, cleared_expired=cleared, tested_at=now)

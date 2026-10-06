@@ -368,7 +368,7 @@ def get_score_breakdown(platform: str) -> list[dict]:
                 "penalty":           debug.get("pen", 0),
                 "c429":              debug.get("c429", 0),
                 "cfail":             debug.get("cfail", 0),
-                "eligibleForScoring": not in_cd and health not in ("hard", "soft", "blocked") and not disabled,
+                "eligibleForScoring": not in_cd and health not in ("hard", "soft", "blocked", "expired", "disabled") and not disabled,
             })
         result.sort(key=lambda x: x["score"], reverse=True)
         return result

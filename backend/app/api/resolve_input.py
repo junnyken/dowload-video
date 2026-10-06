@@ -24,7 +24,7 @@ from typing import Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
-from app.core.url_normalizer import normalize
+from app.core.url_normalizer import normalize, extract_share_url
 from app.core.source_classifier import classify
 from app.schemas.container import (
     CONTAINER_SOURCE_TYPES,
@@ -87,7 +87,7 @@ def _build_routing(cap: CapabilityDescriptor, source_type: str) -> RoutingInfo:
 
 
 def _resolve_one(raw: str) -> ResolveInputItem:
-    norm = normalize(raw)
+    norm = normalize(extract_share_url(raw) or raw)
     clf  = classify(norm.canonical_url)
     cap  = get_capability(clf.platform, clf.source_type)
 
@@ -131,11 +131,19 @@ async def resolve_input(payload: ResolveInputRequest, request: Request):  # noqa
     if payload.raw_inputs is not None:
         raw_lines = [u.strip() for u in payload.raw_inputs if u.strip()]
     else:
-        raw_lines = [
-            line.strip()
-            for line in re.split(r"[\n,]+", payload.raw_input)
-            if line.strip()
-        ]
+        raw_lines = []
+        for line in re.split(r"[\r\n]+", payload.raw_input):
+            line = line.strip()
+            if not line:
+                continue
+            # Comma list ("https://a, https://b") -> one item per part. If any
+            # part is prose / share text, the line is ONE share text: don't
+            # cut it on the commas inside the prose.
+            parts = [p.strip() for p in line.split(",") if p.strip()]
+            if any(extract_share_url(p) != p for p in parts):
+                raw_lines.append(line)
+                continue
+            raw_lines.extend(parts)
 
     items = [_resolve_one(raw) for raw in raw_lines]
 
