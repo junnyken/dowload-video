@@ -546,11 +546,17 @@ export default function DashboardContent() {
       return;
     }
 
+    // For the fetch_failed event: the backend's error_code (or the HTTP
+    // status) so the admin funnel can group failures by cause, not only by
+    // free-text reason.
+    let fetchStatus = null;
+    let fetchErrCode = null;
     try {
       const _schedPayload = scheduledAt ? { scheduled_at: new Date(scheduledAt).toISOString() } : {};
       const response = await fetch(`${API_BASE}/api/v1/fetch-link`,
         withAuth({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: effUrl.trim(), quality: 'video', remove_watermark: removeWatermark, download_subs: subtitleMode !== 'off', subtitle_mode: subtitleMode, subtitle_language: subtitleLang, progress_token: progressToken, user_cookies_b64: encodeUserCookies(userCookieText), ..._schedPayload }) })
       );
+      fetchStatus = response.status;
       const data = await safeJson(response);
       // Scheduled download: 202 + data.scheduled=true → show success toast, reset picker
       if (response.status === 202 && data?.scheduled === true) {
@@ -566,6 +572,12 @@ export default function DashboardContent() {
         return;
       }
       if (!response.ok) {
+        {
+          const _d = data?.detail;
+          fetchErrCode = data?.error_code
+            || (_d && typeof _d === 'object' ? (_d.error_code || _d.error) : null)
+            || null;
+        }
         if (response.status === 429) {
           // Check if it's a fairness cap rejection (has retryAfter) — show as delayed, not error
           if (data?.error === 'fairness_cap_reached' && data?.retryAfter) {
@@ -643,6 +655,9 @@ export default function DashboardContent() {
       // return above rather than throwing, so they do not land here.
       trackEvent(EVENT.FETCH_FAILED, {
         platform: detectedPlatform || 'unknown',
+        error_code: fetchErrCode
+          || (fetchStatus == null ? 'network_error'
+            : fetchStatus >= 400 ? `http_${fetchStatus}` : 'unexpected_response'),
         reason: String(err?.message || '').slice(0, 120),
       });
       setError(err.message || 'Đã xảy ra lỗi khi xử lý link.');

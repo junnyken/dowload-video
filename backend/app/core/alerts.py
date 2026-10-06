@@ -13,6 +13,7 @@ Alert types:
   • daily_digest        — daily ops summary
 """
 
+from app.core.twitter_host import is_twitter_url
 import os
 import time
 from datetime import datetime, timezone, timedelta
@@ -31,7 +32,7 @@ def _classify_platform(url: str) -> str:
     if "instagram.com" in u: return "instagram"
     if "douyin.com" in u: return "douyin"
     if "threads.net" in u or "threads.com" in u: return "threads"
-    if "twitter.com" in u or "x.com" in u: return "twitter"
+    if is_twitter_url(u): return "twitter"
     if "reddit.com" in u: return "reddit"
     if "pinterest.com" in u or "pin.it" in u: return "pinterest"
     if "linkedin.com" in u: return "linkedin"

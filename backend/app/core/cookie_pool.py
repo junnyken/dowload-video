@@ -260,6 +260,29 @@ def _set_meta(rc, platform: str, h: str, meta: dict) -> None:
 
 # ── Public API ───────────────────────────────────────────────────────
 
+def has_selectable_cookie(platform: str) -> bool:
+    """Read-only: would get_cookie_from_pool(platform) return a cookie?
+
+    Same exclusions (health expired/disabled, expiry passed and not recently
+    verified) but no side effects — no cooldown set, nothing marked expired —
+    so a pre-flight check (bulk Douyin gate) does not consume a cookie's turn.
+    Blocked / cooling-down cookies count: the selector falls back to them.
+    Raises if Redis cannot be read (callers decide what unknown means).
+    """
+    rc = get_redis()
+    now = int(time.time())
+    for c in rc.lrange(f"cookie_pool:{platform}", 0, -1) or []:
+        h = _hash(c)
+        if rc.get(f"cookie_health:{platform}:{h}") in ("expired", "disabled"):
+            continue
+        meta = _get_meta(rc, platform, h)
+        exp = meta.get("expires_at", 0)
+        if exp and exp < now and not recently_verified(meta, exp):
+            continue
+        return True
+    return False
+
+
 def get_cookie_from_pool(platform: str) -> Optional[str]:
     """
     LRU selection with cooldown:

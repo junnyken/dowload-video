@@ -18,6 +18,7 @@ Endpoints:
   DELETE /api/v1/archive/collections/{coll_id}/remove/{item_id}
 """
 
+from app.core.twitter_host import is_twitter_url
 import csv
 import io
 import json
@@ -79,7 +80,7 @@ def _get_platform(url: str) -> str:
     if "facebook.com" in url or "fb.watch" in url: return "facebook"
     if "tiktok.com" in url:  return "tiktok"
     if "instagram.com" in url: return "instagram"
-    if "twitter.com" in url or "x.com" in url: return "twitter"
+    if is_twitter_url(url): return "twitter"
     if "threads.net" in url or "threads.com" in url: return "threads"
     if "reddit.com" in url: return "reddit"
     if "pinterest.com" in url or "pin.it" in url: return "pinterest"

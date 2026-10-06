@@ -358,7 +358,9 @@ export default function BulkContent() {
           setShowUpgradeModal(true);
           return;
         }
-        throw new Error(data.detail || 'Failed to submit bulk jobs');
+        // detail is a plain string for cookie_required (e.g. Douyin without a
+        // server cookie) — show it instead of the generic alert below.
+        throw new Error(typeof data.detail === 'string' ? data.detail : 'Failed to submit bulk jobs');
       }
       
       if (data.batch_id) {
@@ -366,7 +368,7 @@ export default function BulkContent() {
       }
     } catch (err) {
       console.error(err);
-      alert('Failed to submit bulk jobs');
+      alert(err?.message || 'Failed to submit bulk jobs');
     } finally {
       setIsSubmitting(false);
     }

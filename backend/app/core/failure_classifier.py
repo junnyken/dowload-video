@@ -25,6 +25,48 @@ class FailureClass(str, Enum):
     USER_ACTION = "user_action"    # user must fix before retry
 
 
+# ── Cookie / login required — phrases OUR code writes when the server has no
+# usable cookie for the platform. Retrying cannot help: nothing changes until a
+# cookie is added. 2026-10-05: ~175 Douyin jobs created in one second each
+# failed with the Douyin message below; it matched no list, defaulted to
+# RETRYABLE and every job ran 4+ times (1233 failed outcomes in one day).
+#
+# Only the definitive gate messages are listed. The catch-all messages written
+# after a yt-dlp failure ("Không thể tải video Instagram. Instagram yêu cầu
+# đăng nhập. ...") are printed for EVERY failure on that platform, so they are
+# deliberately not matched here (see extraction_errors' module docstring).
+COOKIE_REQUIRED_SIGNALS = (
+    # app.services.douyin_extractor.DOUYIN_COOKIE_REQUIRED_MSG
+    "douyin hiện yêu cầu cookie hợp lệ",
+    # app.services.downloader — no-cookie gates for Instagram / Twitter/X
+    "instagram yêu cầu đăng nhập để tải video",
+    "twitter/x yêu cầu đăng nhập để tải video",
+    "twitter spaces yêu cầu đăng nhập để tải audio",
+    # app.services.instagram_extractor (story), reddit_extractor (NSFW),
+    # xiaohongshu_extractor (note / profile)
+    "story instagram yêu cầu đăng nhập",
+    "nội dung nsfw yêu cầu đăng nhập",
+    "xiaohongshu yêu cầu cookie",
+    "profile xhs yêu cầu cookie đăng nhập",
+    # app.services.cookie_capability (cookie_unavailable)
+    "chưa cấu hình cookie cho nền tảng này",
+)
+# English login/cookie wording comes from yt-dlp, not from our extractors, and
+# is already covered by _USER_ACTION_SIGNALS below ("login required", ...).
+
+
+def is_cookie_required(error_msg: str) -> bool:
+    """True when the message says the server lacks a usable cookie/login."""
+    msg = (error_msg or "").lower()
+    return any(sig in msg for sig in COOKIE_REQUIRED_SIGNALS)
+
+
+# Hard ceiling on how many times ONE job may run automatically (first attempt
+# + auto-retries), whatever the class. An unrecognised error still retries,
+# but a job can no longer run 4-5 times on its own.
+MAX_TOTAL_ATTEMPTS = 3
+
+
 # ── Signal lists (checked in order: PERMANENT > USER_ACTION > RETRYABLE > TRANSIENT)
 
 _PERMANENT_SIGNALS = [
@@ -65,7 +107,12 @@ _TRANSIENT_SIGNALS = [
 
 def classify_failure(error_msg: str) -> FailureClass:
     """Return the failure class for a given error message."""
-    msg = error_msg.lower()
+    msg = (error_msg or "").lower()
+
+    # Our own "no cookie" messages first: they are exact phrases we wrote, and
+    # the Douyin one would otherwise fall through to the RETRYABLE default.
+    if is_cookie_required(msg):
+        return FailureClass.USER_ACTION
 
     # Check PERMANENT first — do not loop on these
     if any(sig in msg for sig in _PERMANENT_SIGNALS):
@@ -103,13 +150,16 @@ def backoff_seconds(attempt: int, failure_class: FailureClass) -> int:
 
 
 def max_retries_for_class(failure_class: FailureClass) -> int:
-    """Maximum auto-retry count per failure class."""
-    return {
+    """Maximum auto-retry count per failure class, capped so that the first
+    attempt plus retries never exceeds MAX_TOTAL_ATTEMPTS (was 4 / 3 retries,
+    i.e. up to 5 runs of one job)."""
+    per_class = {
         FailureClass.TRANSIENT:   4,
         FailureClass.RETRYABLE:   3,
         FailureClass.PERMANENT:   0,
         FailureClass.USER_ACTION: 0,
     }[failure_class]
+    return min(per_class, MAX_TOTAL_ATTEMPTS - 1)
 
 
 def auto_retry_status(failure_class: FailureClass, attempt: int) -> str:

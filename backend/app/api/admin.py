@@ -9,6 +9,7 @@ Endpoints for admin dashboard:
   POST /send-test-notification — Send test Telegram message
 """
 
+from app.core.twitter_host import is_twitter_url
 import glob
 import json
 import os
@@ -982,9 +983,28 @@ async def get_error_monitor(_=Depends(verify_admin)):
             },
             **_coverage_fields(w),
             "outcome_source": "redis:vidgrab:stats_hourly" if w["redis_ok"] else "download_jobs",
+            "other_domains_24h": _other_domains_block(
+                datetime.fromisoformat(w["window_start"]), datetime.fromisoformat(w["window_end"])),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _other_domains_block(start: datetime, end: datetime) -> Optional[Dict[str, Any]]:
+    """Platform "other" broken down by registrable domain for [start, end):
+    {rows: [{domain, ok, err, total, success_rate}], distinct, first_hour,
+    window_start, window_end}. None when Redis cannot be read (unknown, not
+    empty). Recorded only since 2026-10-06 — see download_outcomes."""
+    from app.core import download_outcomes as _do
+    try:
+        out = _do.other_domains(start, end)
+    except Exception as e:
+        print(f"[admin] other-domain breakdown unavailable: {e}")
+        return None
+    out.update(window_start=start.isoformat(), window_end=end.isoformat(),
+               overflow_key=_do.OTHER_DOMAIN_OVERFLOW,
+               max_domains_per_day=_do.MAX_OTHER_DOMAINS_PER_DAY)
+    return out
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -1478,6 +1498,8 @@ async def get_platform_stats(days: int = 7, _=Depends(verify_admin)):
         })
     totals_list.sort(key=lambda x: x["total"], reverse=True)
     result["totals"] = totals_list
+    # New key (backwards compatible): what "other" is made of, same days.
+    result["other_domains"] = _other_domains_block(_do.admin_day_window(day_objs[0])[0], now)
     return result
 
 
@@ -1502,7 +1524,7 @@ def _classify_platform(url: str) -> str:
         return "Facebook"
     elif "instagram.com" in url_lower:
         return "Instagram"
-    elif "twitter.com" in url_lower or "x.com" in url_lower:
+    elif is_twitter_url(url_lower):
         return "X (Twitter)"
     elif "spotify.com" in url_lower:
         return "Spotify"
@@ -1970,6 +1992,9 @@ async def get_funnel(days: int = 7, _=Depends(verify_admin)):
     people: Dict[str, set] = {}
     counts: Dict[str, int] = {}
     platforms: Dict[str, Dict[str, set]] = {}
+    # fetch_failed by (platform, error_code). The web client sends error_code
+    # since 2026-10-06; older events have none and group under "unknown".
+    ff_groups: Dict[tuple, Dict[str, Any]] = {}
 
     for r in rows:
         name = r.get("event_name")
@@ -1977,6 +2002,14 @@ async def get_funnel(days: int = 7, _=Depends(verify_admin)):
             continue
         who = r.get("user_id") or r.get("anonymous_id")
         counts[name] = counts.get(name, 0) + 1
+        if name == "fetch_failed":
+            _p = r.get("properties") or {}
+            g = ff_groups.setdefault(
+                (str(_p.get("platform") or "unknown"), str(_p.get("error_code") or "unknown")),
+                {"events": 0, "people": set()})
+            g["events"] += 1
+            if who:
+                g["people"].add(who)
         if who:
             people.setdefault(name, set()).add(who)
             props = r.get("properties") or {}
@@ -2043,6 +2076,11 @@ async def get_funnel(days: int = 7, _=Depends(verify_admin)):
         "steps":       steps,
         "failures":    failures,
         "by_platform": by_platform[:25],
+        "fetch_failed_breakdown": sorted(
+            ({"platform": p, "error_code": c, "users": len(g["people"]), "events": g["events"]}
+             for (p, c), g in ff_groups.items()),
+            key=lambda x: (-x["users"], -x["events"], x["platform"], x["error_code"]),
+        )[:50],
     }
 
 

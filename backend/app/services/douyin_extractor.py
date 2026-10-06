@@ -123,6 +123,37 @@ def _canonical_douyin_url(video_id: str) -> str:
     return f"https://www.douyin.com/video/{video_id}"
 
 
+# Shown when Douyin cannot be served. failure_classifier.COOKIE_REQUIRED_SIGNALS
+# matches it, so a job failing with it is not auto-retried and is counted as
+# cookie_required (2026-10-05: 1233 Douyin failures, all this message).
+DOUYIN_COOKIE_REQUIRED_MSG = (
+    "Không tải được video Douyin này. Douyin hiện yêu cầu cookie hợp lệ cho "
+    "mọi video, kể cả video công khai. Hãy bật \"Dùng cookie của tôi\" và dán "
+    "cookie douyin.com lấy từ trình duyệt, hoặc nhờ quản trị viên thêm cookie "
+    "Douyin vào kho cookie dùng chung."
+)
+
+
+def douyin_server_access_available() -> bool:
+    """Can the SERVER (without a user's own cookie) plausibly fetch Douyin?
+
+    True when Apify is configured (it needs no cookie), the shared pool holds a
+    cookie the extractor would pick, or DOUYIN_COOKIES_B64 is set. Read-only.
+    Fails OPEN (True) when Redis cannot be read: unknown is not "no cookie",
+    and the per-job classifier still stops retries if the cookie is missing.
+    """
+    if os.getenv("APIFY_TOKEN", "").strip():
+        return True
+    if os.getenv("DOUYIN_COOKIES_B64", "").strip():
+        return True
+    try:
+        from app.core.cookie_pool import has_selectable_cookie
+        return has_selectable_cookie("douyin")
+    except Exception as e:
+        _safe_print(f"[DouyinExtractor] cookie pre-check unavailable, allowing: {e}")
+        return True
+
+
 def _resolve_cookie_file(user_cookies_file: Optional[str] = None) -> tuple[Optional[str], bool]:
     """
     Pick the best Douyin cookie file.
@@ -768,12 +799,7 @@ async def extract_douyin_video(
             result["original_url"] = original_url
             return result
 
-    raise ValueError(
-        "Không tải được video Douyin này. Douyin hiện yêu cầu cookie hợp lệ cho "
-        "mọi video, kể cả video công khai. Hãy bật \"Dùng cookie của tôi\" và dán "
-        "cookie douyin.com lấy từ trình duyệt, hoặc nhờ quản trị viên thêm cookie "
-        "Douyin vào kho cookie dùng chung."
-    )
+    raise ValueError(DOUYIN_COOKIE_REQUIRED_MSG)
 
 
 def extract_douyin_video_sync(

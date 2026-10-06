@@ -7,6 +7,7 @@ create_zip_task     — create ZIP file from batch downloads + send Telegram not
 daily_summary_task  — send daily operations report via Telegram
 """
 
+from app.core.twitter_host import is_twitter_url
 from app.core.celery_app import celery_app
 from app.core.database import get_supabase_client
 from app.core.cache import get_cached_result
@@ -131,7 +132,7 @@ def _get_platform(url: str) -> str:
     if "instagram.com" in url: return "instagram"
     if "douyin.com" in url:  return "douyin"
     if "threads.net" in url or "threads.com" in url: return "threads"
-    if "twitter.com" in url or "x.com" in url: return "twitter"
+    if is_twitter_url(url): return "twitter"
     if "reddit.com" in url: return "reddit"
     if "pinterest.com" in url or "pin.it" in url: return "pinterest"
     if "linkedin.com" in url: return "linkedin"
@@ -179,7 +180,9 @@ def _track_platform(url: str, success: bool, error_code: Optional[str] = None) -
     see app.core.download_outcomes). Synchronous: a worker is off the request path."""
     try:
         from app.core.download_outcomes import record
-        record(_get_platform(url), success, error_code)
+        plat = _get_platform(url)
+        # "other" is also counted per domain so the admin can break it down.
+        record(plat, success, error_code, domain=url if plat == "other" else None)
     except Exception:
         pass
 
@@ -191,8 +194,17 @@ def _track_platform(url: str, success: bool, error_code: Optional[str] = None) -
     soft_time_limit=int(os.getenv("VIDEO_TASK_SOFT_LIMIT", "300")),   # 5 min
     time_limit=int(os.getenv("VIDEO_TASK_HARD_LIMIT", "360")),        # 6 min
 )
-def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = None, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False, _lane_try: int = 0):
-    """Extract the direct MP4 link for a single video and update Supabase."""
+def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = None, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False, _lane_try: int = 0, _prior_retries: int = 0):
+    """Extract the direct MP4 link for a single video and update Supabase.
+
+    Attempts per job. ``self.request.retries`` restarts at 0 whenever the job is
+    sent as a NEW task — the lane re-dispatch below, crash recovery
+    (app.core.recovery) — so it alone let one failing job run many times
+    (2026-10-05: ~175 Douyin jobs → 1233 failed outcomes in a day). The retry
+    budget is therefore counted as the largest of: Celery's counter plus
+    ``_prior_retries`` (carried over by the lane re-dispatch) and the job row's
+    ``retry_count`` (written on every scheduled retry, survives any re-queue).
+    """
     supabase = get_supabase_client()
     task_start = time.time()
     platform = _get_platform(url)
@@ -214,8 +226,18 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
         pass
 
     # ── Phase 11: idempotency — skip if job already succeeded ───────────
+    _db_retry_count = 0
     try:
-        _ex = supabase.table("download_jobs").select("status").eq("id", job_id).single().execute()
+        try:
+            _ex = supabase.table("download_jobs").select("status, retry_count").eq("id", job_id).single().execute()
+        except Exception:
+            # retry_count is an optional column (see _OPTIONAL_COLS): keep the
+            # idempotency check working even where it does not exist yet.
+            _ex = supabase.table("download_jobs").select("status").eq("id", job_id).single().execute()
+        try:
+            _db_retry_count = int((_ex.data or {}).get("retry_count") or 0)
+        except (TypeError, ValueError):
+            _db_retry_count = 0
         if (_ex.data or {}).get("status") == "success":
             print(f"[Idempotency] job={job_id} already succeeded, skipping duplicate execution.")
             _deregister_pending_task(_task_id)
@@ -254,11 +276,22 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
             _lanes.release_platform(platform)
             _lane_held = False
     if not _lane_held and _lane_try < _MAX_LANE_REDISPATCH:
+        # A deferral, not an attempt: nothing ran, so no outcome is recorded.
+        # The new task starts with request.retries=0, so carry the retries
+        # already used — otherwise a retry that lands on a full lane gets a
+        # fresh retry budget.
         process_video_task.apply_async(
             args=[job_id, url, user_id, quality, remove_watermark, download_subs],
-            kwargs={"_lane_try": _lane_try + 1},
+            kwargs={"_lane_try": _lane_try + 1,
+                    "_prior_retries": _prior_retries + self.request.retries},
             countdown=4 + (_lane_try % 7),
         )
+        _deregister_pending_task(_task_id)
+        if _job_lease is not None:
+            try:
+                _job_lease.stop()
+            except Exception:
+                pass
         return
 
     try:
@@ -511,7 +544,8 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
     except Exception as e:
         raw_error = str(e)[:500]
         fc = classify_failure(raw_error)
-        retries = self.request.retries
+        # Retries already used by THIS job, not just this Celery task (see docstring).
+        retries = max(self.request.retries + _prior_retries, _db_retry_count)
 
         print(f"[process_video_task] job={job_id} fc={fc} retry={retries} err={raw_error[:120]}")
 
@@ -527,12 +561,17 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
             _oc_code = _oc_cls(raw_error, e)[1]
         except Exception:
             _oc_code = "unknown"
-        _track_platform(url, False, _oc_code)
-        try:
-            from app.core.metrics import emit_job_event as _emit
-            _emit("failed", job_id=job_id, platform=platform)
-        except Exception:
-            pass
+
+        def _record_final_failure():
+            # ONE outcome per job, written when it is finally failed — not per
+            # attempt. Counting every retry made one failing job weigh 4+ in
+            # the admin success rate (Douyin 2026-10-05).
+            _track_platform(url, False, _oc_code)
+            try:
+                from app.core.metrics import emit_job_event as _emit
+                _emit("failed", job_id=job_id, platform=platform)
+            except Exception:
+                pass
 
         # ── Per-platform circuit breaker: count block/rate-limit signals ──
         try:
@@ -561,6 +600,11 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
             # No retry — these will not resolve on their own
             final_auto_status = auto_retry_status(fc, 0)
             final_msg = user_recovery_message(fc, retries, 0)
+            if _oc_code == "cookie_required":
+                # The extractor's own text says WHICH cookie and how to add it;
+                # the generic "Cần đăng nhập..." line does not.
+                final_msg = raw_error
+            _record_final_failure()
             _sb_update(supabase, {
                 "status":            "failed",
                 "job_stage":         "failed",
@@ -595,6 +639,7 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
             # Retries exhausted (or unclassified exhausted)
             final_auto_status = "retry_limit_reached"
             final_msg = user_recovery_message(fc, retries, 0)
+            _record_final_failure()
             _sb_update(supabase, {
                 "status":            "failed",
                 "job_stage":         "failed",
@@ -683,6 +728,23 @@ def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: s
         _wave_reason       = "fallback_static"
 
     supabase = get_supabase_client()
+
+    # Douyin with no server-side cookie (and no Apify): every video job would
+    # fail with the cookie message, so do not create them. 2026-10-05: a
+    # channel/bulk run created ~175 such jobs in one second, 0 succeeded.
+    # Bulk jobs carry no user cookie, so the server's access is all there is.
+    # (POST /bulk-download already rejects this up front; this covers the
+    # other callers, e.g. scheduled channel downloads.)
+    if platform == "douyin":
+        from app.services.douyin_extractor import (
+            DOUYIN_COOKIE_REQUIRED_MSG, douyin_server_access_available,
+        )
+        if not douyin_server_access_available():
+            _sb_update(supabase, {
+                "status":        "failed",
+                "error_message": DOUYIN_COOKIE_REQUIRED_MSG,
+            }, channel_job_id)
+            return
 
     try:
         # ── Phase 1: Discover videos ─────────────────────

@@ -7,6 +7,7 @@ GET  /jobs/{batch_id}  — poll job progress for a batch
 GET  /proxy-download   — proxy video stream to bypass CORS
 """
 
+from app.core.twitter_host import is_twitter_url
 import ipaddress
 import os
 import threading
@@ -30,7 +31,7 @@ def _get_platform_key(url: str) -> str:
     if "douyin.com" in u:    return "douyin"
     if "threads.net" in u or "threads.com" in u: return "threads"
     if "spotify.com" in u:   return "spotify"
-    if "twitter.com" in u or "x.com" in u: return "twitter"
+    if is_twitter_url(u): return "twitter"
     if "linkedin.com" in u:  return "linkedin"
     return "other"
 
@@ -41,9 +42,41 @@ def _track_download(url: str, success: bool, error_code: Optional[str] = None) -
     never makes /fetch-link wait on Redis."""
     try:
         from app.core.download_outcomes import record_async
-        record_async(_get_platform_key(url), success, error_code)
+        plat = _get_platform_key(url)
+        if plat == "other":   # also counted per domain (admin "other" breakdown)
+            record_async(plat, success, error_code, domain=url)
+        else:
+            record_async(plat, success, error_code)
     except Exception:
         pass
+
+
+def _douyin_cookie_gate(urls: List[str], user_has_cookies: bool = False, single: bool = False):
+    """ExtractionHTTPException(422, cookie_required) when the request has Douyin
+    links that cannot be served: no user cookie and no server-side Douyin access
+    (shared cookie pool / DOUYIN_COOKIES_B64 / Apify). None otherwise.
+
+    2026-10-05: ~175 Douyin jobs were created in one second and 0 succeeded —
+    every one failed with the extractor's cookie message after several tries.
+    Saying so before creating anything is cheaper and clearer for the user.
+    """
+    n = sum(1 for u in urls if (u or "").strip() and _get_platform_key(u) == "douyin")
+    if not n or user_has_cookies:
+        return None
+    from app.services.douyin_extractor import (
+        DOUYIN_COOKIE_REQUIRED_MSG, douyin_server_access_available,
+    )
+    if douyin_server_access_available():
+        return None
+    from app.core.extraction_errors import ExtractionHTTPException
+    if single:   # /fetch-link: the user CAN supply a cookie there
+        return ExtractionHTTPException(422, DOUYIN_COOKIE_REQUIRED_MSG, "cookie_required")
+    # Bulk has no "Dùng cookie của tôi". Wording pending BA review.
+    msg = (f"Danh sách có {n} link Douyin nhưng máy chủ hiện chưa có cookie Douyin "
+           "hợp lệ, nên không thể tải các link này. Hãy bỏ các link Douyin ra khỏi "
+           "danh sách rồi gửi lại, hoặc nhờ quản trị viên thêm cookie Douyin vào kho "
+           "cookie dùng chung.")
+    return ExtractionHTTPException(422, msg, "cookie_required")
 
 
 # ── Global concurrency limiter for /fetch-link ───────────────────────
@@ -420,6 +453,13 @@ async def fetch_link(
     # against the internal network (found while live-verifying this release:
     # an internal URL reached the extractor and came back as a generic 500).
     _assert_safe_url(payload.url)
+
+    # Douyin without any usable cookie fails every time, after several paid
+    # fallback providers (ScraperAPI) — answer at once instead.
+    _dy_block = _douyin_cookie_gate([payload.url], bool(payload.user_cookies_b64), single=True)
+    if _dy_block is not None:
+        _track_download(payload.url, False, "cookie_required")
+        raise _dy_block
 
     # ── Scheduled download: dispatch to Celery with eta and return 202 ──
     if payload.scheduled_at:
@@ -1096,6 +1136,13 @@ async def bulk_download(
         raise HTTPException(status_code=400, detail="No URLs provided")
     for _u in payload.urls:
         _assert_safe_url(_u)
+
+    # Bulk jobs carry no user cookie: reject Douyin up front when the server
+    # cannot serve it, before any job row is created (nothing is counted as a
+    # download outcome — nothing was attempted).
+    _dy_block = _douyin_cookie_gate(payload.urls)
+    if _dy_block is not None:
+        raise _dy_block
 
     # ── Phase 11: disk pre-flight check ──────────────────────────────
     _preflight_disk_check()

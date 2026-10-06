@@ -12,6 +12,7 @@ Status policy (kept deliberately small so callers can rely on it):
   400  unsupported_url            not a supported site / not a video page
   404  video_unavailable          video removed, deleted or does not exist
   422  private_or_login_required  exists but private / members-only / age-gated
+  422  cookie_required            our server has no usable cookie for the platform
   422  drm_protected | geo_blocked  exists but cannot be served by us
   502  provider_unavailable       upstream 5xx, extractor crash on a known site
   503  temporary_blocked          platform rate-limits / bot-checks OUR server
@@ -123,6 +124,12 @@ def classify_extraction_error(
             return _EXTRACTOR_CODE_STATUS[own], own
         if isinstance(exc, TimeoutError):
             return 504, "extraction_timeout"
+        # Our own "no usable cookie" gate messages (Douyin, Instagram, X, ...).
+        # Before 2026-10-06 the Douyin one fell through to processing_failed,
+        # so the admin showed 1245 Douyin failures as "lỗi không xác định".
+        from app.core.failure_classifier import is_cookie_required
+        if is_cookie_required(message):
+            return 422, "cookie_required"
         text = _reason(message).lower()
         full = (message or "").lower()
 

@@ -31,6 +31,20 @@ This module adds three siblings to it, written in the same pipeline:
         but coverage is no longer read from it: see ``hourly_coverage``.
   p27a:ts:{platform}:success / :failure string ISO timestamp
         last success / failure (same key obs_recorder writes)  TTL 90d
+  vidgrab:other_domains_hourly:{YYYY-MM-DDTHH} hash {domain}:ok / {domain}:err
+        platform "other" only, broken down by registrable domain
+        (bilibili.com, vimeo.com, ...) so the admin can see what "other"
+        is made of                                              TTL 35d
+  vidgrab:other_domains_seen:{YYYY-MM-DD} set  the distinct domains of that
+        UTC day; caps cardinality at MAX_OTHER_DOMAINS_PER_DAY, later ones
+        are counted under OTHER_DOMAIN_OVERFLOW                 TTL 35d
+
+What one record means. /fetch-link and /fetch-threads record one outcome per
+request. The Celery worker (bulk, channel, scheduled, retried jobs) records ONE
+outcome per job, when the job is finally done — not one per auto-retry: until
+2026-10-06 every retry was counted, so one failing job weighed 4+ failures
+(Douyin, 2026-10-05: ~175 jobs → 1233 failed outcomes). A lane deferral
+(re-queue because the platform lane is full) runs nothing and records nothing.
 
 The day hash TTL is raised from 8 to 35 days so the 30-day analytics view has
 data. The anomaly detector only ever reads the last 7 days, so a longer TTL
@@ -49,8 +63,9 @@ helpers below (``admin_day_window`` / ``read_admin_days``) use the admin's
 calendar day (ADMIN_TIMEZONE, default Asia/Ho_Chi_Minh), summed from hourly
 buckets.
 
-No URL, user id or IP is stored — only platform, outcome and a short error
-code, so nothing here needs redaction.
+No URL, user id or IP is stored — only platform, outcome, a short error code
+and, for "other", the registrable domain (never a path or query), so nothing
+here needs redaction.
 
 Fail-soft contract
 ------------------
@@ -79,6 +94,11 @@ ERRCODE_KEY_TPL = "vidgrab:errcodes:{date}"
 LAST_TS_KEY_TPL = "p27a:ts:{platform}:{kind}"   # shared with obs_recorder
 ERRCODE_HOUR_KEY_TPL = "vidgrab:errcodes_hourly:{hour}"
 HOURLY_SINCE_KEY = "vidgrab:stats_hourly:since"
+OTHER_DOMAIN_HOUR_KEY_TPL = "vidgrab:other_domains_hourly:{hour}"
+OTHER_DOMAIN_SEEN_KEY_TPL = "vidgrab:other_domains_seen:{date}"
+MAX_OTHER_DOMAINS_PER_DAY = 200
+OTHER_DOMAIN_OVERFLOW = "_overflow"       # domains past the daily cap
+OTHER_DOMAIN_UNKNOWN = "_unknown"         # no parsable host / IP address
 
 DAY_TTL = 35 * 86400
 # 35 days, not 50h: the admin's 30-day view is built from VN-time days summed
@@ -105,6 +125,54 @@ def _slug(value: Optional[str], default: str) -> str:
     return s or default
 
 
+# Public suffixes with two labels that are common in our traffic. Not the full
+# Public Suffix List (no new dependency): a host under an unlisted multi-label
+# suffix is grouped one level too high (e.g. "foo.gov.xx" → "gov.xx"), which
+# still groups it consistently.
+_TWO_LEVEL_SUFFIXES = frozenset({
+    "co.uk", "org.uk", "ac.uk", "gov.uk", "com.vn", "net.vn", "org.vn",
+    "edu.vn", "gov.vn", "com.au", "net.au", "org.au", "co.jp", "ne.jp",
+    "or.jp", "co.kr", "or.kr", "com.cn", "net.cn", "org.cn", "com.tw",
+    "com.hk", "com.sg", "com.my", "co.id", "co.th", "com.br", "com.mx",
+    "com.ar", "com.tr", "co.in", "co.nz", "co.za", "com.ph",
+})
+_HOST_RE = re.compile(r"^[a-z0-9.-]+$")
+
+
+def registrable_domain(url: Optional[str]) -> str:
+    """eTLD+1-ish domain of a URL: "https://www.bilibili.com/video/x" →
+    "bilibili.com", "news.bbc.co.uk" → "bbc.co.uk". Never raises; returns
+    OTHER_DOMAIN_UNKNOWN for anything without a usable host name."""
+    try:
+        from urllib.parse import urlsplit
+        raw = (url or "").strip()
+        if "://" not in raw:
+            raw = "http://" + raw
+        host = (urlsplit(raw).hostname or "").strip(".").lower()
+        if not host or not _HOST_RE.match(host) or "." not in host:
+            return OTHER_DOMAIN_UNKNOWN
+        labels = host.split(".")
+        if all(p.isdigit() for p in labels):      # IPv4 literal
+            return OTHER_DOMAIN_UNKNOWN
+        n = 3 if ".".join(labels[-2:]) in _TWO_LEVEL_SUFFIXES and len(labels) >= 3 else 2
+        return ".".join(labels[-n:])[:80]
+    except Exception:
+        return OTHER_DOMAIN_UNKNOWN
+
+
+def _other_domain_field(rc, domain_url: str, now: datetime) -> str:
+    """The domain to count under, enforcing the per-day cardinality cap."""
+    dom = registrable_domain(domain_url)
+    seen_key = OTHER_DOMAIN_SEEN_KEY_TPL.format(date=day_str(now))
+    if rc.sismember(seen_key, dom):
+        return dom
+    if rc.scard(seen_key) >= MAX_OTHER_DOMAINS_PER_DAY:
+        return OTHER_DOMAIN_OVERFLOW
+    rc.sadd(seen_key, dom)
+    rc.expire(seen_key, DAY_TTL)
+    return dom
+
+
 def day_str(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%d")
 
@@ -116,16 +184,32 @@ def hour_str(dt: datetime) -> str:
 # ── Write path ───────────────────────────────────────────────────────────────
 
 def record(platform: str, success: bool, error_code: Optional[str] = None,
-           *, now: Optional[datetime] = None) -> None:
-    """Count one finished download attempt. Synchronous, never raises."""
+           *, now: Optional[datetime] = None, domain: Optional[str] = None) -> None:
+    """Count one finished download. Synchronous, never raises.
+
+    ``domain`` (the URL, or a host) is only used when the platform is
+    "other": it is reduced to its registrable domain and counted per hour."""
     try:
         now = now or _now()
         plat = _slug(platform, "other")
-        field = f"{plat}:{'ok' if success else 'err'}"
+        kind = "ok" if success else "err"
+        field = f"{plat}:{kind}"
         day_key = DAY_KEY_TPL.format(date=day_str(now))
         hour_key = HOUR_KEY_TPL.format(hour=hour_str(now))
 
-        pipe = _redis().pipeline(transaction=False)
+        rc = _redis()
+        dom_field = None
+        if plat == "other" and domain:
+            try:
+                dom_field = f"{_other_domain_field(rc, domain, now)}:{kind}"
+            except Exception as exc:   # the breakdown must never cost the count
+                log.debug("[download_outcomes] other-domain failed: %s", exc)
+
+        pipe = rc.pipeline(transaction=False)
+        if dom_field:
+            dkey = OTHER_DOMAIN_HOUR_KEY_TPL.format(hour=hour_str(now))
+            pipe.hincrby(dkey, dom_field, 1)
+            pipe.expire(dkey, HOUR_TTL)
         pipe.hincrby(day_key, field, 1)
         pipe.expire(day_key, DAY_TTL)
         pipe.hincrby(hour_key, field, 1)
@@ -163,16 +247,20 @@ def _get_executor() -> ThreadPoolExecutor:
         return _executor
 
 
-def _run(platform, success, error_code, now):
+def _run(platform, success, error_code, now, domain=None):
     global _pending
     try:
-        record(platform, success, error_code, now=now)
+        if domain is None:
+            record(platform, success, error_code, now=now)
+        else:
+            record(platform, success, error_code, now=now, domain=domain)
     finally:
         with _pending_lock:
             _pending -= 1
 
 
-def record_async(platform: str, success: bool, error_code: Optional[str] = None) -> None:
+def record_async(platform: str, success: bool, error_code: Optional[str] = None,
+                 *, domain: Optional[str] = None) -> None:
     """Queue ``record`` on a background thread. Never raises, never blocks on Redis.
 
     The timestamp is taken now, so a slow queue still lands the count in the
@@ -186,7 +274,7 @@ def record_async(platform: str, success: bool, error_code: Optional[str] = None)
                 return
             _pending += 1
         try:
-            _get_executor().submit(_run, platform, success, error_code, _now())
+            _get_executor().submit(_run, platform, success, error_code, _now(), domain)
         except Exception:
             with _pending_lock:
                 _pending -= 1
@@ -500,6 +588,42 @@ def window_summary(hours: int = 24, *, now: Optional[datetime] = None,
         "top_errors": _fold_top(codes, top_limit),
     })
     return out
+
+
+# ── "other" broken down by domain ────────────────────────────────────────────
+
+def other_domains(start: datetime, end: datetime, *, limit: int = 50) -> dict:
+    """Per-domain ok/err of platform "other" for the UTC hours in [start, end).
+
+    ``{"rows": [{domain, ok, err, total, success_rate}], "distinct": n,
+    "first_hour": first hour in the range with any domain data or None}``.
+    Domains are only recorded since the build that added them (2026-10-06),
+    so hours before ``first_hour`` are unknown, not zero. Raises if Redis
+    cannot be read."""
+    hours = _hours_between(_hour_floor(start), end)
+    pipe = _redis().pipeline(transaction=False)
+    for h in hours:
+        pipe.hgetall(OTHER_DOMAIN_HOUR_KEY_TPL.format(hour=hour_str(h)))
+    agg: Dict[str, Dict[str, int]] = {}
+    first = None
+    for h, raw in zip(hours, pipe.execute()):
+        if raw and first is None:
+            first = h
+        for k, v in (raw or {}).items():
+            key = _decode(k)
+            dom, _, kind = key.rpartition(":")
+            if not dom or kind not in ("ok", "err"):
+                continue
+            try:
+                agg.setdefault(dom, {"ok": 0, "err": 0})[kind] += int(_decode(v))
+            except Exception:
+                continue
+    rows = [{"domain": d, "ok": c["ok"], "err": c["err"], "total": c["ok"] + c["err"],
+             "success_rate": success_rate_pct(c["ok"], c["ok"] + c["err"])}
+            for d, c in agg.items()]
+    rows.sort(key=lambda r: (-r["total"], r["domain"]))
+    return {"rows": rows[:limit], "distinct": len(rows),
+            "first_hour": first.isoformat() if first else None}
 
 
 # ── Hourly coverage: derived from the buckets themselves ─────────────────────

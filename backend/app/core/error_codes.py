@@ -29,6 +29,13 @@ ERROR_META: dict[str, dict] = {
         "retryable": False,
         "suggested_action": "Kiểm tra xem video có công khai không.",
     },
+    # Server has no usable cookie for the platform (Douyin since 2026-10).
+    # Wording pending BA review.
+    "cookie_required": {
+        "user_message": "Nền tảng này cần cookie đăng nhập hợp lệ để tải.",
+        "retryable": False,
+        "suggested_action": "Bật \"Dùng cookie của tôi\" và dán cookie của nền tảng, hoặc nhờ quản trị viên thêm cookie vào kho dùng chung.",
+    },
     "rate_limited": {
         "user_message": "Nền tảng đang giới hạn tốc độ. Vui lòng đợi.",
         "retryable": True,

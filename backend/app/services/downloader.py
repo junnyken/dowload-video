@@ -14,6 +14,7 @@ Proxy strategy:
   • Download/CDN fetch -> always server IP (CDNs rarely geo-block)
 """
 
+from app.core.twitter_host import is_twitter_url
 import os
 import asyncio
 import base64
@@ -897,7 +898,7 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
                 "facebook"  if "facebook.com" in url or "fb.watch" in url else
                 "instagram" if "instagram.com" in url else
                 "douyin"    if "douyin.com"   in url else
-                "twitter"   if "twitter.com"  in url or "x.com" in url else
+                "twitter"   if is_twitter_url(url) else
                 "reddit"    if "reddit.com"   in url or "redd.it" in url else
                 "default"
             )
@@ -1004,7 +1005,7 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
         else:
             opts["extractor_args"] = {"instagram": {"api": ["1"]}}
 
-    if "twitter.com" in url.lower() or "x.com" in url.lower():
+    if is_twitter_url(url):
         tw_cookies = _get_twitter_cookies_file()
         if tw_cookies:
             opts["cookiefile"] = tw_cookies
@@ -1761,7 +1762,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     # _get_base_opts already injects: cookie (line ~571) + IPROYAL_PROXY via
     # _PLATFORM_RULES (RESIDENTIAL tier). CDN (video.twimg.com) is not IP-locked
     # → bytes always go direct, never through proxy.
-    if "twitter.com" in url.lower() or "x.com" in url.lower():
+    if is_twitter_url(url):
         _is_spaces = bool(re.search(
             r"(?:twitter|x)\.com/i/spaces/[A-Za-z0-9]+", url, re.IGNORECASE
         ))
@@ -2038,7 +2039,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         "youtube"   if is_youtube_url else
         "facebook"  if is_facebook    else
         "instagram" if is_instagram   else
-        "twitter"   if ("twitter.com" in url.lower() or "x.com" in url.lower()) else
+        "twitter"   if is_twitter_url(url) else
         "threads"   if ("threads.net" in url.lower() or "threads.com" in url.lower()) else
         None
     )
@@ -2667,7 +2668,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                     else:
                         print(f"[Downloader] YouTube Phase B failed: {_pb_str[:120]} — Cobalt")
                         info = None  # trigger Cobalt fallback at Phase 1.5b
-        elif should_download and (is_tiktok or is_instagram or "twitter.com" in url.lower() or "x.com" in url.lower()):
+        elif should_download and (is_tiktok or is_instagram or is_twitter_url(url)):
             # Two-phase for proxy platforms: metadata via proxy, CDN download direct
             # CDN URLs for TikTok/Instagram/X are IP-independent once obtained
             import json as _json_dl2
@@ -3104,7 +3105,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         if _fail_reason:
             print(f"[Downloader] Extraction failed for {url} — reason: {_fail_reason}")
 
-        _is_twitter = "twitter.com" in url.lower() or "x.com" in url.lower()
+        _is_twitter = is_twitter_url(url)
         if is_youtube_url:
             raise ValueError(
                 "Không thể tải video YouTube. YouTube đang chặn bot — "
@@ -3681,7 +3682,7 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 100, min_vi
             print(f"[Downloader] TikWM user-posts failed ({str(_tk_err)[:80]}) — falling back to yt-dlp")
 
     # ── Twitter/X: Route to dedicated scraper ────────────────────
-    if "twitter.com" in channel_url.lower() or "x.com" in channel_url.lower():
+    if is_twitter_url(channel_url):
         from app.services.twitter_extractor import scrape_twitter_timeline
         return scrape_twitter_timeline(channel_url, max_videos)
 

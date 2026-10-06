@@ -794,6 +794,25 @@ async def queue_container(container_id: str, req: QueueRequest, request: Request
                 },
             )
 
+    # Douyin profile → N video jobs that would all fail without a cookie
+    # (2026-10-05 incident: ~175 jobs, 0 succeeded). Queued jobs carry no
+    # user cookie, so only server-side access counts.
+    if meta.platform == "douyin":
+        from app.services.douyin_extractor import (
+            DOUYIN_COOKIE_REQUIRED_MSG, douyin_server_access_available,
+        )
+        if not douyin_server_access_available():
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code":                "cookie_required",
+                    "error_code":          "cookie_required",
+                    "message":             DOUYIN_COOKIE_REQUIRED_MSG,
+                    "availability_reason": "cookie_required",
+                    "retryable":           False,
+                },
+            )
+
     # ── Idempotency check ─────────────────────────────────────────────────────
     req_hash = _queue_request_hash(container_id, req)
     existing_batch = check_queue_dedup(req_hash)

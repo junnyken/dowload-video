@@ -44,9 +44,9 @@ def sync_outcomes(monkeypatch):
     """Run the background write inline so a test can read it back at once."""
     calls = []
 
-    def _inline(platform, success, error_code=None):
+    def _inline(platform, success, error_code=None, domain=None):
         calls.append((platform, success, error_code))
-        do.record(platform, success, error_code)
+        do.record(platform, success, error_code, domain=domain)
 
     monkeypatch.setattr(do, "record_async", _inline)
     return calls
