@@ -11,10 +11,11 @@ export type Settings = {
   defaultQuality: Quality;
   theme: Theme;
   autoSync: boolean;
+  closeToTray: boolean;
 };
 
 const KEY = 'vg.settings';
-const DEFAULTS: Settings = { outDir: null, concurrency: 2, defaultQuality: 'best', theme: 'system', autoSync: true };
+const DEFAULTS: Settings = { outDir: null, concurrency: 2, defaultQuality: 'best', theme: 'system', autoSync: true, closeToTray: true };
 
 function load(): Settings {
   try {

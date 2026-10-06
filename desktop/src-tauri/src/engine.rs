@@ -60,6 +60,19 @@ pub fn probe_args(tools: &Tools<'_>, url: &str) -> Vec<OsString> {
     a
 }
 
+/// Channel / playlist listing (C1 §4). `--flat-playlist` lists entries
+/// without resolving each video; `youtubetab:approximate_date` makes the
+/// YouTube tab extractor fill `timestamp` from "3 weeks ago" so the UI can
+/// filter by date (ignored by other extractors).
+pub fn channel_fetch_args(tools: &Tools<'_>, url: &str, limit: u32) -> Vec<OsString> {
+    let mut a = common(tools);
+    a.extend(["--flat-playlist", "-J", "--playlist-end"].map(OsString::from));
+    a.push(limit.to_string().into());
+    a.extend(["--extractor-args", "youtubetab:approximate_date", "--"].map(OsString::from));
+    a.push(url.into());
+    a
+}
+
 pub fn download_args(
     tools: &Tools<'_>,
     url: &str,
@@ -137,6 +150,7 @@ mod tests {
         let t = Tools { ffmpeg: &f, deno: &d };
         for args in [
             probe_args(&t, "https://x/--exec=calc"),
+            channel_fetch_args(&t, "https://x/--exec=calc", 200),
             download_args(&t, "https://x/--exec=calc", Path::new("/out"), Some("137+ba"), false),
         ] {
             let s = strs(&args);
@@ -147,6 +161,17 @@ mod tests {
             assert!(s.contains(&"deno:/app/deno".into()));
             assert!(!s.iter().any(|a| a.starts_with("--exec")), "{s:?}");
         }
+    }
+
+    #[test]
+    fn channel_fetch_flags() {
+        let (f, d) = tools();
+        let t = Tools { ffmpeg: &f, deno: &d };
+        let s = strs(&channel_fetch_args(&t, "u", 50));
+        assert!(s.contains(&"--flat-playlist".into()));
+        assert!(s.contains(&"-J".into()));
+        assert!(s.windows(2).any(|w| w[0] == "--playlist-end" && w[1] == "50"));
+        assert!(!s.contains(&"--no-playlist".into()));
     }
 
     #[test]

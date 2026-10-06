@@ -1,12 +1,14 @@
 //! Local SQLite store (rusqlite, bundled SQLite) in the app data dir.
 //!
-//! Tables (schema v1, tracked with PRAGMA user_version):
+//! Tables (schema v2, tracked with PRAGMA user_version):
 //! - history: the contract's HistoryItem, written by the UI via history_add.
 //! - produced_paths: canonical paths of files finished downloads produced.
 //!   Written ONLY by Rust at completion; reveal_path/open_path check it. The
 //!   UI cannot add to it (history_add's filePath is not trusted for that).
 //! - job_partials: paths yt-dlp reported while downloading a job, so cancel
 //!   still knows what to delete after a pause or an app restart.
+//! - v2: channels (§4 Channel; pendingNew as JSON text) and channel_seen
+//!   (channel_id, video_id). Queries live in channels.rs.
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -14,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 #[cfg(test)]
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -62,7 +64,16 @@ pub struct Db {
 }
 
 fn migrate(conn: &Connection) -> rusqlite::Result<()> {
-    let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    migrate_v1(conn)?;
+    migrate_v2(conn)
+}
+
+fn user_version(conn: &Connection) -> rusqlite::Result<i64> {
+    conn.query_row("PRAGMA user_version", [], |r| r.get(0))
+}
+
+fn migrate_v1(conn: &Connection) -> rusqlite::Result<()> {
+    let v = user_version(conn)?;
     if v < 1 {
         conn.execute_batch(
             "BEGIN;
@@ -93,6 +104,40 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
                PRIMARY KEY (job_id, path)
              );
              PRAGMA user_version = 1;
+             COMMIT;",
+        )?;
+    }
+    Ok(())
+}
+
+/// v2 (C1 §4 channels). Additive only: v1 tables and rows are untouched.
+fn migrate_v2(conn: &Connection) -> rusqlite::Result<()> {
+    if user_version(conn)? < 2 {
+        conn.execute_batch(
+            "BEGIN;
+             CREATE TABLE IF NOT EXISTS channels (
+               id TEXT PRIMARY KEY,
+               url TEXT NOT NULL,
+               title TEXT NOT NULL,
+               platform TEXT NOT NULL,
+               thumbnail TEXT,
+               mode TEXT NOT NULL CHECK (mode IN ('download','notify')),
+               quality TEXT NOT NULL,
+               out_dir TEXT NOT NULL,
+               check_every_hours INTEGER NOT NULL,
+               enabled INTEGER NOT NULL DEFAULT 1,
+               last_checked_at TEXT,
+               last_error TEXT,
+               pending_new TEXT NOT NULL DEFAULT '[]',
+               created_at TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS channel_seen (
+               channel_id TEXT NOT NULL,
+               video_id TEXT NOT NULL,
+               seen_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+               PRIMARY KEY (channel_id, video_id)
+             );
+             PRAGMA user_version = 2;
              COMMIT;",
         )?;
     }
@@ -139,7 +184,7 @@ impl Db {
         Ok(Db { conn: Mutex::new(conn) })
     }
 
-    fn c(&self) -> std::sync::MutexGuard<'_, Connection> {
+    pub(crate) fn c(&self) -> std::sync::MutexGuard<'_, Connection> {
         // A panic while holding the lock leaves the connection usable.
         self.conn.lock().unwrap_or_else(|e| e.into_inner())
     }
@@ -300,7 +345,46 @@ mod tests {
             db.upsert(&item("a", "2026-10-06T10:00:00Z", "x")).unwrap();
         }
         let db = Db::open(&p).unwrap(); // re-open runs migrate again
-        assert_eq!(db.schema_version().unwrap(), 1);
+        assert_eq!(db.schema_version().unwrap(), SCHEMA_VERSION);
+        assert_eq!(db.list(None, None, None).unwrap().len(), 1);
+        drop(db);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn migration_v1_to_v2_keeps_history() {
+        let dir = std::env::temp_dir().join(format!("vg-db-v1-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("vidgrab.db");
+        {
+            // A v0.2.x database: v1 schema with rows in every table.
+            let conn = Connection::open(&p).unwrap();
+            migrate_v1(&conn).unwrap();
+            assert_eq!(user_version(&conn).unwrap(), 1);
+            conn.execute(
+                "INSERT INTO history (id,url,title,platform,format_label,state,created_at,synced)
+                 VALUES ('old','https://e/1','Old','youtube','720p','completed','2026-10-01T00:00:00Z',1)",
+                [],
+            )
+            .unwrap();
+            conn.execute("INSERT INTO produced_paths (path, job_id) VALUES ('/d/old.mp4','old')", []).unwrap();
+            let has_channels: i64 = conn
+                .query_row("SELECT count(*) FROM sqlite_master WHERE name='channels'", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(has_channels, 0);
+        }
+        let db = Db::open(&p).unwrap();
+        assert_eq!(db.schema_version().unwrap(), 2);
+        let items = db.list(None, None, None).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, "old");
+        assert!(items[0].synced);
+        assert!(db.is_produced(Path::new("/d/old.mp4")));
+        assert!(db.channel_list().unwrap().is_empty());
+        drop(db);
+        let db = Db::open(&p).unwrap(); // idempotent
+        assert_eq!(db.schema_version().unwrap(), 2);
         assert_eq!(db.list(None, None, None).unwrap().len(), 1);
         drop(db);
         let _ = std::fs::remove_dir_all(&dir);

@@ -166,6 +166,12 @@ pub fn delete_files(files: &[PathBuf]) -> Vec<(PathBuf, String)> {
     failed
 }
 
+/// The path itself or its nearest existing ancestor (for free-space checks
+/// on a channel folder that has not been created yet).
+pub fn nearest_existing(p: &Path) -> Option<&Path> {
+    p.ancestors().find(|a| !a.as_os_str().is_empty() && a.exists())
+}
+
 /// Job ids come from the UI and are used as DB keys and in event payloads.
 pub fn valid_job_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
@@ -342,6 +348,14 @@ mod tests {
         assert_eq!(display_form(Path::new(r"\\?\C:\a\b.mp4")), PathBuf::from(r"C:\a\b.mp4"));
         assert_eq!(display_form(Path::new(r"\\?\UNC\srv\s\b.mp4")), PathBuf::from(r"\\srv\s\b.mp4"));
         assert_eq!(display_form(Path::new("/x/y")), PathBuf::from("/x/y"));
+    }
+
+    #[test]
+    fn nearest_existing_walks_up() {
+        let d = tmpdir("near");
+        assert_eq!(nearest_existing(&d), Some(d.as_path()));
+        let deep = d.join("Kênh mới").join("sub");
+        assert_eq!(nearest_existing(&deep), Some(d.as_path()));
     }
 
     #[test]

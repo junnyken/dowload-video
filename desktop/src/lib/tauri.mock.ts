@@ -1,7 +1,7 @@
 // DEV-ONLY browser mock of the Tauri commands, events, API and auth, so the UI
 // can run in a normal browser via `npm run dev`. Never loaded in a production
 // build or inside Tauri (see lib/tauri.ts). Everything here is simulated.
-import type { DoneEvent, HistoryItem, ProbeFormat, ProbeResult, ProgressEvent } from './types';
+import type { Channel, ChannelListing, ChannelVideo, DoneEvent, HistoryItem, ProbeFormat, ProbeResult, ProgressEvent } from './types';
 
 if (!import.meta.env.DEV || '__TAURI_INTERNALS__' in window) {
   throw new Error('tauri.mock must never run outside a dev browser');
@@ -111,6 +111,47 @@ const history: HistoryItem[] = [
   { id: 'h4', url: 'https://www.youtube.com/watch?v=podc', title: 'Podcast: Khởi nghiệp từ con số 0', platform: 'youtube', formatLabel: 'Chỉ âm thanh', filePath: 'C:\\Users\\demo\\Downloads\\VidGrab\\podcast.m4a', fileSize: 38e6, state: 'completed', errorCode: null, createdAt: ago(3000), finishedAt: ago(2998), synced: true },
 ];
 
+
+// ---- channels ---------------------------------------------------------------
+const MOCK_CHANNEL_ID = 'UCmockbep0000';
+const day = (n: number) => { const d = new Date(Date.now() - n * 86_400_000); return d.toISOString().slice(0, 10).replace(/-/g, ''); };
+const TOPICS = ['Phở bò', 'Bún chả', 'Cơm tấm', 'Bánh xèo', 'Gỏi cuốn', 'Chè đậu xanh', 'Canh chua', 'Bò kho', 'Xôi gấc', 'Bánh mì'];
+function mockVideo(i: number): ChannelVideo {
+  return {
+    id: `mv${i}`, url: `https://www.youtube.com/watch?v=mv${i}`,
+    title: `${TOPICS[i % TOPICS.length]} — công thức số ${i >= 1000 ? 300 + i - 999 : 300 - i}, làm tại nhà cực dễ${i % 7 === 0 ? ' và rất ngon, ai xem cũng mê' : ''}`,
+    duration: 180 + ((i * 53) % 900), uploadDate: day(i >= 1000 ? 0 : i * 2), thumbnail: thumb('mv' + i),
+  };
+}
+const MOCK_VIDEOS = Array.from({ length: 300 }, (_, i) => mockVideo(i));
+
+async function mockChannelFetch(url: string, limit?: number): Promise<ChannelListing> {
+  await sleep(url.includes('slow') ? 6000 : 900);
+  if (url.includes('private')) throw err('private_or_login', 'login required');
+  if (url.includes('notfound')) throw err('not_found', '404');
+  const lim = Math.min(limit ?? 200, 5000);
+  // Dev knob: localStorage mock.newVideos=N makes N extra, newer videos appear.
+  const extra = Number(localStorage.getItem('mock.newVideos') ?? 0);
+  const fresh = Array.from({ length: extra }, (_, i) => mockVideo(1000 + i));
+  const all = [...fresh, ...MOCK_VIDEOS];
+  return {
+    channelId: MOCK_CHANNEL_ID, url, title: 'Bếp Nhà Mình (mô phỏng)', platform: platformOf(url), uploader: 'Bếp Nhà Mình',
+    thumbnail: thumb('chan'), videos: all.slice(0, lim), truncated: all.length > lim,
+  };
+}
+
+const mockChannels: Channel[] = [];
+const mockSeen = new Map<string, Set<string>>();
+if (localStorage.getItem('mock.seedChannels') === '1') {
+  const base = { platform: 'youtube', mode: 'download' as const, quality: '1080', checkEveryHours: 6 as const, enabled: true, lastError: null, createdAt: ago(9000) };
+  mockChannels.push(
+    { ...base, id: MOCK_CHANNEL_ID, url: 'https://www.youtube.com/@bepnhaminh', title: 'Bếp Nhà Mình (mô phỏng)', thumbnail: thumb('chan'), outDir: 'C:\\Users\\demo\\Downloads\\VidGrab\\Bếp Nhà Mình', lastCheckedAt: ago(95), pendingNew: [] },
+    { ...base, id: 'UCmocktech', url: 'https://www.youtube.com/@techvn', title: 'TechVN Review', thumbnail: thumb('tech'), mode: 'notify', checkEveryHours: 3, quality: 'best', outDir: 'D:\\Videos\\TechVN', lastCheckedAt: ago(40), pendingNew: [1001, 1002, 1003, 1004].map(mockVideo) },
+    { ...base, id: 'UCmocktt', url: 'https://www.tiktok.com/@vuive', title: '@vuive', platform: 'tiktok', thumbnail: null, quality: '720', checkEveryHours: 12, enabled: false, outDir: 'C:\\Users\\demo\\Downloads\\VidGrab\\vuive', lastCheckedAt: ago(2000), lastError: 'network', pendingNew: [] },
+  );
+}
+let autostart = false;
+
 // ---- invoke ----------------------------------------------------------------
 let authBlob: string | null = null;
 export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promise<unknown> {
@@ -153,6 +194,32 @@ export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promi
     case 'auth_save': authBlob = a.session as string; return null;
     case 'auth_load': return authBlob;
     case 'auth_clear': authBlob = null; return null;
+    case 'channel_fetch': return mockChannelFetch(a.url as string, a.limit as number | undefined);
+    case 'cancel_channel_fetch': return null;
+    case 'channel_save': {
+      const c = a.channel as Channel;
+      const i = mockChannels.findIndex((x) => x.id === c.id);
+      if (i >= 0) mockChannels[i] = c; else mockChannels.push(c);
+      return null;
+    }
+    case 'channel_list': return structuredClone(mockChannels);
+    case 'channel_delete': {
+      const i = mockChannels.findIndex((x) => x.id === a.id);
+      if (i >= 0) mockChannels.splice(i, 1);
+      mockSeen.delete(a.id as string);
+      return null;
+    }
+    case 'channel_seen_add': {
+      const set = mockSeen.get(a.channelId as string) ?? new Set<string>();
+      (a.videoIds as string[]).forEach((v) => set.add(v));
+      mockSeen.set(a.channelId as string, set);
+      return null;
+    }
+    case 'channel_seen_list': return [...(mockSeen.get(a.channelId as string) ?? new Set<string>(MOCK_VIDEOS.map((v) => v.id)))];
+    case 'notify': console.info('[mock notify]', a.title, a.body); return null;
+    case 'autostart_get': return autostart;
+    case 'autostart_set': autostart = a.enabled as boolean; return null;
+    case 'set_close_to_tray': return null;
     case 'get_version': return '0.1.0-dev';
     case 'tool_versions': return { ytdlp: '2026.09.30', ffmpeg: '7.1', deno: '2.5.0' };
   }

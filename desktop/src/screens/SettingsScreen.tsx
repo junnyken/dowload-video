@@ -66,6 +66,23 @@ export function SettingsScreen() {
   }, []);
   useEffect(() => { void check(); }, [check]);
 
+  const [autostart, setAutostart] = useState<boolean | null>(null);
+  useEffect(() => { api.autostartGet().then(setAutostart).catch(() => setAutostart(false)); }, []);
+  function setTray(v: boolean) {
+    updateSettings({ closeToTray: v });
+    api.setCloseToTray(v).catch((e) => toast('error', errorMessage(toAppError(e).code)));
+  }
+  async function setAuto(v: boolean) {
+    setAutostart(v);
+    try {
+      await api.autostartSet(v);
+      setAutostart(await api.autostartGet());
+    } catch (e) {
+      setAutostart(!v);
+      toast('error', errorMessage(toAppError(e).code));
+    }
+  }
+
   const newer = !!(latest && version && versionLess(version, latest.latest));
 
   async function pick() {
@@ -97,6 +114,15 @@ export function SettingsScreen() {
               <Select label="Chất lượng mặc định" value={st.defaultQuality} onChange={(v) => updateSettings({ defaultQuality: v as Quality })} className="w-[170px]">
                 {(Object.keys(QUALITY_LABEL) as Quality[]).map((q) => <option key={q} value={q}>{QUALITY_LABEL[q]}</option>)}
               </Select>
+            </Row>
+          </Section>
+
+          <Section title="Chạy nền">
+            <Row label="Thu nhỏ xuống khay khi đóng cửa sổ" hint="Bấm X chỉ ẩn cửa sổ, ứng dụng vẫn chạy để theo dõi kênh. Chọn Thoát ở biểu tượng khay để tắt hẳn.">
+              <Toggle checked={st.closeToTray} onChange={setTray} label="Thu nhỏ xuống khay khi đóng cửa sổ" />
+            </Row>
+            <Row label="Khởi động cùng Windows" hint="App mở ẩn dưới khay đồng hồ.">
+              {autostart == null ? <Spinner /> : <Toggle checked={autostart} onChange={(v) => void setAuto(v)} label="Khởi động cùng Windows" />}
             </Row>
           </Section>
 

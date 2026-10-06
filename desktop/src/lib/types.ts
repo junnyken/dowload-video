@@ -70,4 +70,44 @@ export type ClientVersionInfo = {
   downloadUrl?: string;
 };
 
-export type Screen = 'download' | 'queue' | 'history' | 'settings';
+export type ChannelVideo = {
+  id: string;
+  url: string;
+  title: string;
+  duration: number | null;
+  uploadDate: string | null; // YYYYMMDD
+  thumbnail: string | null;
+};
+
+export type ChannelListing = {
+  channelId: string;
+  url: string;
+  title: string;
+  platform: string;
+  uploader: string | null;
+  thumbnail: string | null;
+  videos: ChannelVideo[];
+  truncated: boolean;
+};
+
+export type ChannelMode = 'download' | 'notify';
+export type ChannelInterval = 1 | 3 | 6 | 12 | 24;
+
+export type Channel = {
+  id: string;
+  url: string;
+  title: string;
+  platform: string;
+  thumbnail: string | null;
+  mode: ChannelMode;
+  quality: string; // preset id or "best"
+  outDir: string;
+  checkEveryHours: ChannelInterval;
+  enabled: boolean;
+  lastCheckedAt: string | null;
+  lastError: string | null;
+  pendingNew: ChannelVideo[];
+  createdAt: string;
+};
+
+export type Screen = 'download' | 'channels' | 'queue' | 'history' | 'settings';

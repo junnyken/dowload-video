@@ -1,11 +1,13 @@
-import { Download, History, ListChecks, Settings as Cog, User } from 'lucide-react';
+import { Download, History, ListChecks, Settings as Cog, Tv, User } from 'lucide-react';
 import { nav, go, openSignIn } from '../lib/ui';
 import { queue, activeCount } from '../lib/queue';
 import { auth } from '../lib/auth';
+import { channels, totalPending } from '../lib/channels';
 import type { Screen } from '../lib/types';
 
 const ITEMS: { id: Screen; label: string; icon: typeof Download }[] = [
   { id: 'download', label: 'Tải xuống', icon: Download },
+  { id: 'channels', label: 'Kênh', icon: Tv },
   { id: 'queue', label: 'Hàng đợi', icon: ListChecks },
   { id: 'history', label: 'Lịch sử', icon: History },
   { id: 'settings', label: 'Cài đặt', icon: Cog },
@@ -15,6 +17,7 @@ export function Sidebar() {
   const { screen } = nav.use();
   const active = activeCount(queue.use());
   const a = auth.use();
+  const pendingNew = totalPending(channels.use());
   return (
     <aside className="flex w-[208px] shrink-0 flex-col border-r border-line bg-surface">
       <div className="flex items-center gap-2.5 px-4 pb-4 pt-5">
@@ -38,6 +41,11 @@ export function Sidebar() {
             >
               <Icon size={18} aria-hidden />
               <span className="flex-1 text-left">{label}</span>
+              {id === 'channels' && pendingNew > 0 && (
+                <span aria-label={`${pendingNew} video mới từ các kênh`} className="min-w-5 rounded-full bg-accent px-1.5 text-center text-xs font-semibold leading-5 text-accent-fg">
+                  {pendingNew}
+                </span>
+              )}
               {id === 'queue' && active > 0 && (
                 <span aria-label={`${active} mục đang chờ hoặc đang tải`} className="min-w-5 rounded-full bg-accent px-1.5 text-center text-xs font-semibold leading-5 text-accent-fg">
                   {active}

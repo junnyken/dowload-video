@@ -28,6 +28,17 @@ const COMMANDS: &[&str] = &[
     "auth_clear",
     "get_version",
     "tool_versions",
+    "channel_fetch",
+    "cancel_channel_fetch",
+    "channel_save",
+    "channel_list",
+    "channel_delete",
+    "channel_seen_add",
+    "channel_seen_list",
+    "notify",
+    "autostart_get",
+    "autostart_set",
+    "set_close_to_tray",
 ];
 
 fn main() {

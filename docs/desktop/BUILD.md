@@ -150,7 +150,7 @@ the installed app.
 Tauri marks this experimental; a Windows host remains the reference build.
 Ubuntu 24.04, Rust 1.99, cargo-xwin 0.23.1, makensis 3.09:
 ```bash
-sudo apt-get install -y nsis lld llvm clang
+sudo apt-get install -y nsis lld llvm clang libayatana-appindicator3-dev   # appindicator: tauri-cli checks for it once the tray-icon feature is on, even for a Windows target
 rustup target add x86_64-pc-windows-msvc
 cargo install --locked cargo-xwin      # downloads the MSVC CRT + Windows SDK on first use
 cd desktop

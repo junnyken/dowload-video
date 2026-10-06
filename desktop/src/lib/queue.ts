@@ -82,7 +82,15 @@ export function enqueue(job: NewJob): string {
   return item.id;
 }
 
+let quitting = false;
+/** App is really quitting: pause everything and never start another job. */
+export function pauseAllForQuit() {
+  quitting = true;
+  for (const i of queue.get()) if (i.state === 'running') void pause(i.id);
+}
+
 export function pump() {
+  if (quitting) return;
   const limit = settings.get().concurrency;
   for (;;) {
     const l = queue.get();

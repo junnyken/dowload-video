@@ -6,8 +6,14 @@
 //! with fixed argument vectors (engine.rs), after a SHA256 check of every
 //! sidecar (checksum.rs), in a Job Object so the whole tree dies on
 //! pause/cancel/app exit (proc.rs).
+//!
+//! §4 adds channel listing/storage, a tray icon (the window hides to the
+//! tray on close), start-with-Windows and single-instance. Notification and
+//! autostart plugins are driven only from Rust; the webview gets no
+//! permission of theirs.
 
 mod auth;
+mod channels;
 mod checksum;
 mod engine;
 mod error;
@@ -27,17 +33,28 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
 
 const EVENT_PROGRESS: &str = "download://progress";
 const EVENT_LOG: &str = "download://log";
 const EVENT_DONE: &str = "download://done";
 const SIDECARS: &[&str] = &["yt-dlp", "ffmpeg", "ffprobe", "deno"];
+const EVENT_CHECK_NOW: &str = "channels://check-now";
+const EVENT_QUITTING: &str = "app://quitting";
+const MAIN_WINDOW: &str = "main";
+const MINIMIZED_ARG: &str = "--minimized";
 const PROBE_TIMEOUT: Duration = Duration::from_secs(90);
+const CHANNEL_FETCH_TIMEOUT: Duration = Duration::from_secs(180);
+/// How long "Thoát" waits for the UI to pause downloads before killing.
+const QUIT_GRACE: Duration = Duration::from_secs(3);
+/// WebView2 throttles JS timers while the window is hidden in the tray, so
+/// Rust also nudges the UI scheduler. The UI only checks channels whose
+/// interval has elapsed, so extra ticks are harmless.
+const CHECK_TICK: Duration = Duration::from_secs(5 * 60);
 const MIN_FREE_BYTES: u64 = 1 << 30; // 1 GiB
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(250); // ≤ 4/s
 const STDERR_TAIL: usize = 200;
@@ -51,11 +68,43 @@ struct Running {
     stop: AtomicU8,
 }
 
+/// Short-lived yt-dlp runs keyed by URL (several may share one URL).
+type Registry = Mutex<HashMap<String, Vec<Arc<Running>>>>;
+
 #[derive(Default)]
 struct Jobs {
     downloads: Mutex<HashMap<String, Arc<Running>>>,
-    probes: Mutex<HashMap<String, Vec<Arc<Running>>>>,
+    probes: Registry,
+    channel_fetches: Registry,
     tool_versions: Mutex<Option<ToolVersions>>,
+}
+
+impl Jobs {
+    /// Kills every process tree we started (used on quit).
+    fn kill_all(&self) {
+        for r in lock(&self.downloads).values() {
+            r.stop.store(STOP_PAUSE, Ordering::SeqCst);
+            let _ = r.tree.kill();
+        }
+        for reg in [&self.probes, &self.channel_fetches] {
+            for r in lock(reg).values().flatten() {
+                r.stop.store(STOP_CANCEL, Ordering::SeqCst);
+                let _ = r.tree.kill();
+            }
+        }
+    }
+}
+
+/// Window/tray behaviour (in memory; the UI re-applies its setting at start).
+struct AppFlags {
+    close_to_tray: AtomicBool,
+    quitting: AtomicBool,
+}
+
+impl Default for AppFlags {
+    fn default() -> Self {
+        AppFlags { close_to_tray: AtomicBool::new(true), quitting: AtomicBool::new(false) }
+    }
 }
 
 /// None when the DB could not be opened; downloads still work, history and
@@ -145,6 +194,11 @@ fn valid_url(raw: &str) -> CmdResult<String> {
 
 fn valid_out_dir(raw: &str) -> CmdResult<PathBuf> {
     let p = PathBuf::from(raw);
+    // Channel folders (`<default dir>\<channel title>`) are created on the
+    // first download; only absolute paths, and only directories.
+    if p.is_absolute() && !p.exists() {
+        std::fs::create_dir_all(&p).map_err(|e| CommandError::unknown(format!("cannot create output folder: {e}")))?;
+    }
     if !p.is_absolute() || !p.is_dir() {
         return Err(CommandError::unknown("output folder does not exist"));
     }
@@ -162,22 +216,43 @@ fn lines_of<R: Read>(pipe: R) -> impl Iterator<Item = String> {
 
 // ---------------------------------------------------------------- probe
 
-#[tauri::command]
-async fn probe(jobs: State<'_, Jobs>, url: String) -> CmdResult<formats::ProbeResult> {
-    let url = valid_url(&url)?;
-    let paths = verified_sidecars().await?;
-    let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3] };
-    let cmd = ytdlp_command(&paths[0], engine::probe_args(&tools, &url));
+/// Output of a short yt-dlp run (probe, channel listing).
+struct Collected {
+    status: Option<std::process::ExitStatus>,
+    timed_out: bool,
+    cancelled: bool,
+    out: Vec<u8>,
+    err: Vec<String>,
+}
+
+impl Collected {
+    fn ok(&self) -> bool {
+        self.status.is_some_and(|s| s.success())
+    }
+
+    fn message(&self) -> String {
+        error::last_error_line(&self.err).map(String::from).unwrap_or_else(|| match self.status.and_then(|s| s.code()) {
+            Some(c) => format!("yt-dlp exited with code {c}"),
+            None => "yt-dlp failed".into(),
+        })
+    }
+}
+
+/// Spawns `cmd` in a killable tree registered under `key` (so a cancel
+/// command can find it), collects stdout (≤ 64 MB) and the stderr tail, and
+/// kills the tree after `timeout`.
+async fn run_collect(registry: &Registry, key: &str, cmd: Command, timeout: Duration) -> CmdResult<Collected> {
     let (mut child, tree) =
         proc::spawn_tree(cmd).map_err(|e| CommandError::new(Code::ToolMissing, format!("cannot start yt-dlp: {e}")))?;
     let running = Arc::new(Running { tree, stop: AtomicU8::new(STOP_NONE) });
-    lock(&jobs.probes).entry(url.clone()).or_default().push(running.clone());
+    lock(registry).entry(key.to_string()).or_default().push(running.clone());
 
     let stdout = child.stdout.take().expect("piped");
     let stderr = child.stderr.take().expect("piped");
     let out_t = std::thread::spawn(move || {
         let mut buf = Vec::new();
-        // -J output for a long YouTube video is a few MB; cap at 64 MB.
+        // -J output for a long YouTube video is a few MB; a 5000-entry flat
+        // channel listing ~10 MB. Cap at 64 MB.
         let _ = stdout.take(64 << 20).read_to_end(&mut buf);
         buf
     });
@@ -194,7 +269,7 @@ async fn probe(jobs: State<'_, Jobs>, url: String) -> CmdResult<formats::ProbeRe
 
     let r = running.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        let deadline = Instant::now() + PROBE_TIMEOUT;
+        let deadline = Instant::now() + timeout;
         let mut timed_out = false;
         let status = loop {
             match child.try_wait() {
@@ -215,46 +290,227 @@ async fn probe(jobs: State<'_, Jobs>, url: String) -> CmdResult<formats::ProbeRe
     .map_err(|e| CommandError::unknown(e.to_string()));
 
     {
-        let mut probes = lock(&jobs.probes);
-        if let Some(v) = probes.get_mut(&url) {
+        let mut reg = lock(registry);
+        if let Some(v) = reg.get_mut(key) {
             v.retain(|x| !Arc::ptr_eq(x, &running));
             if v.is_empty() {
-                probes.remove(&url);
+                reg.remove(key);
             }
         }
     }
     let (status, timed_out, out, err) = result?;
+    Ok(Collected { status, timed_out, cancelled: running.stop.load(Ordering::SeqCst) == STOP_CANCEL, out, err })
+}
 
-    if running.stop.load(Ordering::SeqCst) == STOP_CANCEL {
+fn cancel_in(registry: &Registry, key: &str) {
+    let list = lock(registry).get(key).cloned().unwrap_or_default();
+    for r in list {
+        r.stop.store(STOP_CANCEL, Ordering::SeqCst);
+        let _ = r.tree.kill();
+    }
+}
+
+#[tauri::command]
+async fn probe(jobs: State<'_, Jobs>, url: String) -> CmdResult<formats::ProbeResult> {
+    let url = valid_url(&url)?;
+    let paths = verified_sidecars().await?;
+    let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3] };
+    let cmd = ytdlp_command(&paths[0], engine::probe_args(&tools, &url));
+    let c = run_collect(&jobs.probes, &url, cmd, PROBE_TIMEOUT).await?;
+
+    if c.cancelled {
         return Err(CommandError::new(Code::Cancelled, "probe cancelled"));
     }
-    if timed_out {
+    if c.timed_out {
         return Err(CommandError::new(Code::Timeout, "yt-dlp did not answer within 90 s"));
     }
-    let ok = status.is_some_and(|s| s.success());
-    if ok {
-        if let Ok(j) = serde_json::from_slice::<serde_json::Value>(&out) {
+    if c.ok() {
+        if let Ok(j) = serde_json::from_slice::<serde_json::Value>(&c.out) {
             if j.is_object() {
                 return Ok(formats::map_probe(&url, &j));
             }
         }
     }
-    let code = error::classify(&err);
-    let msg = error::last_error_line(&err).map(String::from).unwrap_or_else(|| match status.and_then(|s| s.code()) {
-        Some(c) => format!("yt-dlp exited with code {c}"),
-        None => "yt-dlp failed".into(),
-    });
-    Err(CommandError::new(code, msg))
+    Err(CommandError::new(error::classify(&c.err), c.message()))
 }
 
 #[tauri::command]
 fn cancel_probe(jobs: State<'_, Jobs>, url: String) -> CmdResult<()> {
     let Ok(url) = validate::url(&url) else { return Ok(()) };
-    let list = lock(&jobs.probes).get(&url).cloned().unwrap_or_default();
-    for r in list {
-        r.stop.store(STOP_CANCEL, Ordering::SeqCst);
-        let _ = r.tree.kill();
+    cancel_in(&jobs.probes, &url);
+    Ok(())
+}
+
+// ---------------------------------------------------------------- channels
+
+#[tauri::command]
+async fn channel_fetch(jobs: State<'_, Jobs>, url: String, limit: Option<u32>) -> CmdResult<channels::ChannelListing> {
+    let url = channels::normalize_url(&url).map_err(|e| CommandError::new(Code::InvalidUrl, e))?;
+    let limit = channels::clamp_limit(limit);
+    let paths = verified_sidecars().await?;
+    let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3] };
+    let cmd = ytdlp_command(&paths[0], engine::channel_fetch_args(&tools, &url, limit));
+    let c = run_collect(&jobs.channel_fetches, &url, cmd, CHANNEL_FETCH_TIMEOUT).await?;
+
+    if c.cancelled {
+        return Err(CommandError::new(Code::Cancelled, "channel fetch cancelled"));
     }
+    if c.timed_out {
+        return Err(CommandError::new(Code::Timeout, "yt-dlp did not list the channel within 180 s"));
+    }
+    // yt-dlp may print a playlist AND exit 1 when some entries failed; a
+    // listing with at least one video is still useful.
+    let map_err = match serde_json::from_slice::<serde_json::Value>(&c.out) {
+        Ok(j) if j.is_object() => match channels::map_listing(&url, &j, limit) {
+            Ok(listing) => return Ok(listing),
+            Err(e) => Some(e),
+        },
+        _ => None,
+    };
+    let code = channels::failure_code(map_err.as_ref(), c.ok(), &c.err);
+    let message = match (&map_err, c.ok()) {
+        (Some(channels::MapError::NotAPlaylist), true) => "this URL is a single video, not a channel or playlist".into(),
+        (Some(channels::MapError::Empty), true) => "the channel lists no videos".into(),
+        _ => c.message(),
+    };
+    Err(CommandError::new(code, message))
+}
+
+#[tauri::command]
+fn cancel_channel_fetch(jobs: State<'_, Jobs>, url: String) -> CmdResult<()> {
+    let Ok(url) = channels::normalize_url(&url) else { return Ok(()) };
+    cancel_in(&jobs.channel_fetches, &url);
+    Ok(())
+}
+
+#[tauri::command]
+fn channel_save(store: State<'_, Store>, channel: channels::Channel) -> CmdResult<()> {
+    channel.validate().map_err(CommandError::unknown)?;
+    store.db()?.channel_upsert(&channel).map_err(db_err)
+}
+
+#[tauri::command]
+fn channel_list(store: State<'_, Store>) -> CmdResult<Vec<channels::Channel>> {
+    store.db()?.channel_list().map_err(db_err)
+}
+
+#[tauri::command]
+fn channel_delete(store: State<'_, Store>, id: String) -> CmdResult<()> {
+    if !channels::valid_id(&id) {
+        return Err(CommandError::unknown("invalid channel id"));
+    }
+    store.db()?.channel_delete(&id).map_err(db_err)
+}
+
+#[tauri::command]
+fn channel_seen_add(store: State<'_, Store>, channel_id: String, video_ids: Vec<String>) -> CmdResult<()> {
+    channels::validate_seen_ids(&channel_id, &video_ids).map_err(CommandError::unknown)?;
+    store.db()?.channel_seen_add(&channel_id, &video_ids).map_err(db_err)
+}
+
+#[tauri::command]
+fn channel_seen_list(store: State<'_, Store>, channel_id: String) -> CmdResult<Vec<String>> {
+    if !channels::valid_id(&channel_id) {
+        return Err(CommandError::unknown("invalid channel id"));
+    }
+    store.db()?.channel_seen_list(&channel_id).map_err(db_err)
+}
+
+/// Windows toast. The plugin is used from Rust only; texts are capped.
+#[tauri::command]
+fn notify(app: AppHandle, title: String, body: String) -> CmdResult<()> {
+    use tauri_plugin_notification::NotificationExt;
+    let title = channels::cap_chars(title.trim(), channels::NOTIFY_TITLE_MAX);
+    let body = channels::cap_chars(body.trim(), channels::NOTIFY_BODY_MAX);
+    app.notification()
+        .builder()
+        .title(if title.is_empty() { "VidGrab".to_string() } else { title })
+        .body(body)
+        .show()
+        .map_err(|e| CommandError::unknown(format!("cannot show notification: {e}")))
+}
+
+// ---------------------------------------------------------------- tray, autostart
+
+#[tauri::command]
+fn autostart_get(app: AppHandle) -> CmdResult<bool> {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch().is_enabled().map_err(|e| CommandError::unknown(format!("autostart: {e}")))
+}
+
+#[tauri::command]
+fn autostart_set(app: AppHandle, enabled: bool) -> CmdResult<()> {
+    use tauri_plugin_autostart::ManagerExt;
+    let m = app.autolaunch();
+    let r = if enabled { m.enable() } else { m.disable() };
+    r.map_err(|e| CommandError::unknown(format!("autostart: {e}")))
+}
+
+#[tauri::command]
+fn set_close_to_tray(flags: State<'_, AppFlags>, enabled: bool) -> CmdResult<()> {
+    flags.close_to_tray.store(enabled, Ordering::SeqCst);
+    Ok(())
+}
+
+fn show_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window(MAIN_WINDOW) {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
+/// "Thoát": tell the UI to pause downloads, give it QUIT_GRACE, then kill
+/// whatever is still running and exit. Runs at most once.
+fn quit(app: &AppHandle) {
+    let flags = app.state::<AppFlags>();
+    if flags.quitting.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let _ = app.emit(EVENT_QUITTING, ());
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let deadline = Instant::now() + QUIT_GRACE;
+        let jobs = app.state::<Jobs>();
+        while Instant::now() < deadline && !lock(&jobs.downloads).is_empty() {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        jobs.kill_all();
+        app.exit(0);
+    });
+}
+
+#[cfg(desktop)]
+fn build_tray(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{MenuBuilder, MenuItemBuilder};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+    let open = MenuItemBuilder::with_id("open", "Mở VidGrab").build(app)?;
+    let check = MenuItemBuilder::with_id("check", "Kiểm tra kênh ngay").build(app)?;
+    let exit = MenuItemBuilder::with_id("quit", "Thoát").build(app)?;
+    let menu = MenuBuilder::new(app).items(&[&open, &check]).separator().item(&exit).build()?;
+
+    let mut tray = TrayIconBuilder::with_id("main")
+        .tooltip("VidGrab")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "open" => show_main(app),
+            "check" => {
+                let _ = app.emit(EVENT_CHECK_NOW, ());
+            }
+            "quit" => quit(app),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                show_main(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
     Ok(())
 }
 
@@ -538,7 +794,9 @@ fn disk_free(path: String) -> CmdResult<u64> {
     if !p.is_absolute() {
         return Err(CommandError::unknown("path must be absolute"));
     }
-    sys::disk_free(&p).map_err(|e| CommandError::unknown(format!("cannot read free space: {e}")))
+    // A channel folder may not exist yet: measure the volume it will be on.
+    let existing = paths::nearest_existing(&p).ok_or_else(|| CommandError::unknown("no existing parent folder"))?;
+    sys::disk_free(existing).map_err(|e| CommandError::unknown(format!("cannot read free space: {e}")))
 }
 
 fn produced_or_refuse(store: &Store, path: &str, need_media: bool) -> CmdResult<PathBuf> {
@@ -693,8 +951,25 @@ async fn tool_versions(jobs: State<'_, Jobs>) -> CmdResult<ToolVersions> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // Must be the first plugin: a second launch hands its args to us and
+    // exits; we bring the window up unless it is the autostart launch.
+    #[cfg(desktop)]
+    {
+        builder = builder
+            .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+                if !args.iter().any(|a| a == MINIMIZED_ARG) {
+                    show_main(app);
+                }
+            }))
+            .plugin(tauri_plugin_autostart::init(
+                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                Some(vec![MINIMIZED_ARG]),
+            ));
+    }
+    builder
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             // Only with `--features updater` (stage C2, needs the key pair).
             // The webview is never granted updater:*; checks run from Rust.
@@ -708,9 +983,38 @@ pub fn run() {
                 .and_then(|d| std::fs::create_dir_all(&d).ok().map(|_| d.join("vidgrab.db")))
                 .and_then(|p| Db::open(&p).ok());
             app.manage(Store(db));
+
+            #[cfg(desktop)]
+            build_tray(app)?;
+            let handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(CHECK_TICK);
+                if handle.state::<AppFlags>().quitting.load(Ordering::SeqCst) {
+                    break;
+                }
+                let _ = handle.emit(EVENT_CHECK_NOW, ());
+            });
+            // The window is created hidden (tauri.conf.json visible:false) so an
+            // autostart launch (--minimized) never flashes it.
+            if !std::env::args().any(|a| a == MINIMIZED_ARG) {
+                show_main(app.handle());
+            }
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let flags = window.app_handle().state::<AppFlags>();
+                if window.label() == MAIN_WINDOW
+                    && flags.close_to_tray.load(Ordering::SeqCst)
+                    && !flags.quitting.load(Ordering::SeqCst)
+                {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .manage(Jobs::default())
+        .manage(AppFlags::default())
         .invoke_handler(tauri::generate_handler![
             probe,
             cancel_probe,
@@ -732,7 +1036,18 @@ pub fn run() {
             auth_load,
             auth_clear,
             get_version,
-            tool_versions
+            tool_versions,
+            channel_fetch,
+            cancel_channel_fetch,
+            channel_save,
+            channel_list,
+            channel_delete,
+            channel_seen_add,
+            channel_seen_list,
+            notify,
+            autostart_get,
+            autostart_set,
+            set_close_to_tray
         ])
         .run(tauri::generate_context!())
         .expect("error while running VidGrab");

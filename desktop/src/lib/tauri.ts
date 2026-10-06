@@ -6,7 +6,7 @@
 // absent. Inside Tauri the real invoke() is always used.
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { DoneEvent, HistoryItem, LogEvent, ProbeResult, ProgressEvent, ToolVersions } from './types';
+import type { Channel, ChannelListing, DoneEvent, HistoryItem, LogEvent, ProbeResult, ProgressEvent, ToolVersions } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 export const mockMode = import.meta.env.DEV && !inTauri;
@@ -55,8 +55,23 @@ export const api = {
   authClear: () => call<null>('auth_clear'),
   getVersion: () => call<string>('get_version'),
   toolVersions: () => call<ToolVersions>('tool_versions'),
+  // Channels (C1-CONTRACT.md section 4)
+  channelFetch: (url: string, limit?: number) => call<ChannelListing>('channel_fetch', { url, limit }),
+  cancelChannelFetch: (url: string) => call<null>('cancel_channel_fetch', { url }),
+  channelSave: (channel: Channel) => call<null>('channel_save', { channel }),
+  channelList: () => call<Channel[]>('channel_list'),
+  channelDelete: (id: string) => call<null>('channel_delete', { id }),
+  channelSeenAdd: (channelId: string, videoIds: string[]) => call<null>('channel_seen_add', { channelId, videoIds }),
+  channelSeenList: (channelId: string) => call<string[]>('channel_seen_list', { channelId }),
+  notify: (title: string, body: string) => call<null>('notify', { title, body }),
+  autostartGet: () => call<boolean>('autostart_get'),
+  autostartSet: (enabled: boolean) => call<null>('autostart_set', { enabled }),
+  setCloseToTray: (enabled: boolean) => call<null>('set_close_to_tray', { enabled }),
 };
 
 export const onProgress = (cb: (e: ProgressEvent) => void) => on<ProgressEvent>('download://progress', cb);
 export const onLog = (cb: (e: LogEvent) => void) => on<LogEvent>('download://log', cb);
 export const onDone = (cb: (e: DoneEvent) => void) => on<DoneEvent>('download://done', cb);
+// Tray menu "Kiểm tra kênh ngay" and the real quit (downloads must be paused within the 3 s grace).
+export const onCheckNow = (cb: () => void) => on<unknown>('channels://check-now', () => cb());
+export const onQuitting = (cb: () => void) => on<unknown>('app://quitting', () => cb());

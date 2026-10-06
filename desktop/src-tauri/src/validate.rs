@@ -75,6 +75,9 @@ mod tests {
         assert!(format_id("137+140").is_ok());
         assert!(format_id("bv*+ba/b").is_ok());
         assert!(format_id("best[height<=720]").is_ok());
+        // Channel downloads pass formats::preset_selector output; keep it valid.
+        assert!(format_id("bv*[height<=1080]+ba/b[height<=1080]").is_ok());
+        assert!(format_id("bv*[height<=1920]+ba/b[height<=1920]").is_ok());
         assert!(format_id("a;rm -rf /").is_err());
         assert!(format_id("").is_err());
     }

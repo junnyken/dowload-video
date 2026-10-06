@@ -32,3 +32,10 @@ export function redownload(url: string) {
   prefill.set(url);
   go('download');
 }
+
+// ---- "Mở ở mục Kênh": hand a channel URL to the Channels screen ----------------------
+export const channelPrefill = createStore<string | null>(null);
+export function openInChannels(url: string) {
+  channelPrefill.set(url);
+  go('channels');
+}

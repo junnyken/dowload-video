@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
-import { ClipboardPaste, ListPlus, Search, Link2, X } from 'lucide-react';
+import { ClipboardPaste, ListPlus, Search, Link2, Tv, X } from 'lucide-react';
 import { Button, EmptyState, ScreenHeader } from '../components/ui';
 import { ProbeCard, cardSelection } from '../components/ProbeCard';
-import { analyze, clearInvalid, probes, removeCard, type Card } from '../lib/probes';
+import { analyze, clearInvalid, parseUrls, probes, removeCard, type Card } from '../lib/probes';
 import { createStore } from '../lib/store';
 import { ensureOutDir, settings } from '../lib/settings';
 import { enqueue } from '../lib/queue';
 import { api } from '../lib/tauri';
-import { prefill, toast } from '../lib/ui';
+import { go, openInChannels, prefill, toast } from '../lib/ui';
+import { looksLikeChannelUrl } from '../lib/channels';
 
 const draft = createStore('');
 const PLATFORMS = ['YouTube', 'TikTok', 'Instagram', 'Facebook', 'X (Twitter)', 'Threads', 'Reddit', 'Vimeo'];
@@ -52,9 +53,12 @@ export function DownloadScreen() {
 
   function run() {
     if (!text.trim()) return;
-    analyze(text);
+    // Channel links are not single videos: keep them in the box (banner offers the Channels screen).
+    const { valid, invalid: bad } = parseUrls(text);
+    const channelUrls = valid.filter(looksLikeChannelUrl);
+    analyze([...valid.filter((u) => !looksLikeChannelUrl(u)), ...bad].join('\n'));
     // Invalid lines are reported under the box (probes.invalid).
-    draft.set('');
+    draft.set(channelUrls.join('\n'));
     setPasteMsg(null);
   }
 
@@ -69,6 +73,7 @@ export function DownloadScreen() {
     }
   }
 
+  const channelUrl = parseUrls(text).valid.find(looksLikeChannelUrl);
   const ready = cards.filter((c) => c.status === 'ready');
   async function addAll() {
     let n = 0;
@@ -97,6 +102,13 @@ export function DownloadScreen() {
             <span className="hidden text-xs text-fg-muted min-[1000px]:inline">Ctrl + Enter để phân tích</span>
             <Button variant="primary" className="ml-auto" icon={<Search size={16} />} disabled={!text.trim()} onClick={run}>Phân tích</Button>
           </div>
+          {channelUrl && (
+            <div role="status" className="mt-2 flex items-center gap-3 rounded-lg bg-accent-soft px-3 py-2 text-[13px] text-fg">
+              <Tv size={18} className="shrink-0 text-accent-text" aria-hidden />
+              <p className="min-w-0 flex-1"><span className="font-medium">Đây là liên kết kênh</span> — mở ở mục Kênh để chọn video cần tải hoặc theo dõi video mới.</p>
+              <Button size="sm" variant="primary" onClick={() => { draft.set(text.split(/[\s,;]+/).filter((t) => t && t !== channelUrl).join('\n')); openInChannels(channelUrl); }}>Mở ở mục Kênh</Button>
+            </div>
+          )}
           {pasteMsg && <p className="mt-2 text-[13px] text-warning" role="status">{pasteMsg}</p>}
           {invalid.length > 0 && (
             <div role="alert" className="mt-2 flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-[13px] text-danger">
@@ -119,6 +131,10 @@ export function DownloadScreen() {
               {PLATFORMS.map((p) => <span key={p} className="rounded-full border border-line bg-surface px-2.5 py-1 text-xs text-fg-2">{p}</span>)}
               <span className="rounded-full px-2.5 py-1 text-xs text-fg-muted">và nhiều trang khác</span>
             </div>
+            <p className="mt-3 text-[13px] text-fg-muted">
+              Muốn tải cả kênh?{' '}
+              <button type="button" onClick={() => go('channels')} className="font-medium text-accent-text underline-offset-2 hover:underline">Vào mục Kênh</button>
+            </p>
           </EmptyState>
         ) : (
           <section className="mt-4 flex flex-col gap-3" aria-label="Kết quả phân tích">
