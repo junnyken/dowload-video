@@ -36,14 +36,28 @@ pub struct ProbeResult {
     pub formats: Vec<ProbeFormat>,
 }
 
-/// Preset heights, high to low. A preset is offered when at least one video
-/// format falls in (next lower preset, this preset].
+/// Preset classes, high to low. A preset is offered when at least one video
+/// format's class (`res`) falls in (next lower preset, this preset].
 pub const PRESET_HEIGHTS: &[u32] = &[2160, 1440, 1080, 720, 480, 360];
 
-/// Selector for the "≤ H" preset: best video ≤ H plus best audio, or the best
-/// single file ≤ H when the site has no separate streams.
-pub fn preset_selector(h: u32) -> String {
-    format!("bv*[height<={h}]+ba/b[height<={h}]")
+/// Selector for a preset: best video whose height is ≤ `max_h` plus best
+/// audio, or the best single file ≤ `max_h` when the site has no separate
+/// streams. `max_h` is the tallest real format in that preset's class, so a
+/// portrait 1080x1920 video selects with height<=1920.
+pub fn preset_selector(max_h: u32) -> String {
+    format!("bv*[height<={max_h}]+ba/b[height<={max_h}]")
+}
+
+/// Resolution class of a video format: the SHORT side when both sides are
+/// known. "1080p" means 1080 lines on the short side; using `height` alone
+/// put a portrait TikTok (1080x1920) under "2160p (4K)" (seen on Windows,
+/// 2026-10-06).
+fn res(v: &Value) -> Option<u32> {
+    match (f(v, "width"), f(v, "height")) {
+        (Some(w), Some(h)) if w > 0.0 && h > 0.0 => Some(w.min(h) as u32),
+        (_, Some(h)) => Some(h as u32),
+        _ => None,
+    }
 }
 
 /// Audio presets. `start_download` with `audioOnly: true` converts with -x;
@@ -120,12 +134,13 @@ pub fn map_probe(url: &str, j: &Value) -> ProbeResult {
 
     for (i, &h) in PRESET_HEIGHTS.iter().enumerate() {
         let lower = PRESET_HEIGHTS.get(i + 1).copied().unwrap_or(0);
-        let best = videos
+        let in_class: Vec<&Value> = videos
             .iter()
             .copied()
-            .filter(|v| f(v, "height").is_some_and(|x| x as u32 > lower && x as u32 <= h))
-            .max_by_key(|v| rank(v));
-        let Some(best) = best else { continue };
+            .filter(|v| res(v).is_some_and(|x| x > lower && x <= h))
+            .collect();
+        let Some(best) = in_class.iter().copied().max_by_key(|v| rank(v)) else { continue };
+        let max_h = in_class.iter().filter_map(|v| f(v, "height")).fold(0.0_f64, f64::max) as u32;
         let needs_merge = !has_audio(best) && best_audio.is_some();
         let filesize = match (size(best), needs_merge) {
             (Some(a), true) => best_audio.and_then(size).map(|b| a + b),
@@ -133,7 +148,7 @@ pub fn map_probe(url: &str, j: &Value) -> ProbeResult {
             (None, true) => None,
         };
         out.push(ProbeFormat {
-            id: preset_selector(h),
+            id: preset_selector(max_h),
             label: format!("{h}p"),
             height: Some(h),
             ext: if needs_merge { "mp4".into() } else { s(best, "ext").unwrap_or_else(|| "mp4".into()) },
@@ -281,10 +296,31 @@ mod tests {
         let j = json!({"id": "1", "title": "tt", "extractor_key": "TikTok",
             "formats": [{"format_id": "h264_540p", "ext": "mp4", "height": 1024, "width": 576, "vcodec": "h264", "acodec": "aac"}]});
         let r = map_probe("u", &j);
-        assert_eq!(r.formats[0].id, "bv*[height<=1080]+ba/b[height<=1080]");
+        // Portrait 576x1024: class 720p (short side), selected by its real height.
+        assert_eq!(r.formats[0].id, "bv*[height<=1024]+ba/b[height<=1024]");
+        assert_eq!(r.formats[0].height, Some(720));
         assert!(!r.formats[0].requires_merge);
         assert!(r.formats.iter().any(|f| f.id == "h264_540p"));
         assert_eq!(r.platform, "tiktok");
+    }
+
+    #[test]
+    fn portrait_video_is_classed_by_its_short_side() {
+        // Windows run 2026-10-06: a portrait TikTok was offered "2160p (4K)"
+        // and "1440p (2K)" because presets used the height (1920) alone.
+        let j = json!({"extractor_key": "TikTok", "title": "t",
+            "formats": [
+                {"format_id": "h264_1080", "ext": "mp4", "width": 1080, "height": 1920, "vcodec": "h264", "acodec": "aac", "tbr": 2000.0},
+                {"format_id": "h264_720", "ext": "mp4", "width": 720, "height": 1280, "vcodec": "h264", "acodec": "aac", "tbr": 1200.0}
+            ]});
+        let r = map_probe("u", &j);
+        let presets: Vec<(Option<u32>, &str)> = r.formats.iter()
+            .filter(|f| f.id.starts_with("bv*"))
+            .map(|f| (f.height, f.id.as_str())).collect();
+        assert_eq!(presets, vec![
+            (Some(1080), "bv*[height<=1920]+ba/b[height<=1920]"),
+            (Some(720), "bv*[height<=1280]+ba/b[height<=1280]"),
+        ]);
     }
 
     #[test]
