@@ -223,6 +223,15 @@ def settle(res: Reservation, actual_usd: Optional[float], run_started: bool) -> 
         return res.est_micros
     else:
         actual_micros = settings.usd_to_micros(actual_usd)
+        # 2026-10-06 first live canary: 3 Douyin runs reported usageTotalUsd
+        # $0.00005 each (the run-start fee) while the actor's pay-per-event
+        # price is ~$0.007 per result — the per-result charge did not show
+        # up in usageTotalUsd. Settling down to it would let the daily
+        # ceiling admit ~140x the intended runs. So by default a reported
+        # cost below the estimate never lowers the recorded spend; only a
+        # higher one raises it.
+        if settings.cost_floor_at_estimate() and actual_micros < res.est_micros:
+            actual_micros = res.est_micros
     delta = actual_micros - res.est_micros
     if delta:
         try:

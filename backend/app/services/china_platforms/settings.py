@@ -232,6 +232,12 @@ def cost_overrun_flag_ratio() -> float:
     return 1.0 + max(0.0, _float("CHINA_ACCESS_COST_OVERRUN_FLAG_PCT", 50.0)) / 100.0
 
 
+def cost_floor_at_estimate() -> bool:
+    """Never settle a managed run below its estimate (see budget_guard.settle:
+    Apify's usageTotalUsd left out the per-result charge on 2026-10-06)."""
+    return _bool("CHINA_ACCESS_COST_FLOOR_AT_ESTIMATE", True)
+
+
 def spend_alerts_enabled() -> bool:
     return _bool("CHINA_ACCESS_SPEND_ALERTS_ENABLED", True)
 

@@ -71,6 +71,10 @@ def flags_on(clean_env, rc):
     clean_env.setenv("CHINA_ACCESS_DOUYIN_ENABLED", "true")
     clean_env.setenv("CHINA_ACCESS_DOUYIN_MANAGED_MODE", "on")
     clean_env.setenv("CHINA_ACCESS_DEDUPE_WAIT_SEC", "2")
+    # Most tests exercise exact settle-to-actual arithmetic; the production
+    # default (floor at the estimate) has its own tests in
+    # test_china_access_cost_floor.py.
+    clean_env.setenv("CHINA_ACCESS_COST_FLOOR_AT_ESTIMATE", "false")
     return clean_env
 
 
