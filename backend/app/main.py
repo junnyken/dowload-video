@@ -216,6 +216,14 @@ async def lifespan(app: FastAPI):
     except Exception as _rec_err:
         print(f"[Startup] Recovery scan skipped: {_rec_err}")
 
+    # JS runtime yt-dlp's iq.com (iQIYI) extractor needs (PhantomJS).
+    try:
+        import asyncio as _asyncio
+        from app.core.js_runtimes import startup_line as _js_startup_line
+        print(await _asyncio.to_thread(_js_startup_line))
+    except Exception as _js_err:
+        print(f"[Startup] PhantomJS check skipped: {_js_err}")
+
     # Send Telegram startup notification (non-blocking, failure is OK)
     try:
         from app.core.notifications import notify_system_startup
@@ -531,6 +539,14 @@ async def root():
     return {"status": "ok"}
 
 
+def _js_runtimes_status() -> dict:
+    try:
+        from app.core.js_runtimes import phantomjs_status
+        return {"phantomjs": phantomjs_status()}
+    except Exception:
+        return {"phantomjs": {"found": False, "path": None, "version": None}}
+
+
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Detailed health: disk, Redis, Celery workers, pending jobs, yt-dlp version."""
@@ -634,6 +650,9 @@ async def health_check():
         },
         "youtube_circuit_breaker": youtube_cb_state,
         "ytdlp_version": ytdlp_version,
+        # PhantomJS for yt-dlp's iq.com (iQIYI) extractor (cached after the
+        # first check, so /health does not spawn a process every call).
+        "js_runtimes": _js_runtimes_status(),
         # Is the thing that watches the workers itself alive? Without this the
         # only answer was "grep the logs and hope the line has not rotated".
         "worker_watchdog": _watchdog_status(),

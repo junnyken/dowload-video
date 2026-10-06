@@ -1,6 +1,7 @@
-# Runbook — China platform rollout (Douyin, Phase 32B-2 Stage A)
+# Runbook — China platform rollout (Douyin, Kuaishou, Xiaohongshu)
 
-Scope: **Douyin single public video only.** Kuaishou, Xiaohongshu, Bilibili and Lemon8 are not routed.
+Scope: **single public video only** — Douyin (Phase 32B-2 Stage A), and Kuaishou + Xiaohongshu (Phase 32B-3, section 8
+below). Bilibili and Lemon8 are not routed. Profiles / channels are not in scope for any of them.
 Modes are `off | benchmark | canary_admin | on`. There is no percentage canary: at about 110 downloads a week,
 5 % would give almost no samples. There is no admin UI page and no DB table. Everything below is env (Vibe Host)
 or an admin API call.
@@ -168,3 +169,74 @@ Undo a kill switch with the same call and `{"on": false, ...}`. Kill switches an
 - Export the attempts: `GET $API/admin/china-platforms/douyin` (scrubbed: URL hashes only, no signed URLs).
 - Compare `costs` with the Apify console invoice for the same UTC day.
 - Note the incident, the rollback time and the `auto_rollback` / kill-switch audit rows in the task log.
+
+## 8. Kuaishou and Xiaohongshu (Phase 32B-3)
+
+Routes (provider research and prices: `docs/china-access/09-XHS-KUAISHOU-PROVIDERS.md`):
+
+| Platform | Order | Managed actor | Estimate/call |
+|---|---|---|---|
+| Kuaishou | `apify_kuaishou` only (www.kuaishou.com does not answer from our servers) | `natanielsantos~kuaishou-scraper` | $0.00405 |
+| Xiaohongshu | `native_xiaohongshu` (existing extractor + cookie pool `xiaohongshu`), then `apify_xiaohongshu` | `blue_puppy~rednote-video-downloader` | $0.00255 |
+
+Xiaohongshu goes to the paid actor only after a native failure that the actor can fix (no/stale cookie, API not
+answering, timeout, parse failure). A private note never reaches it; an image-only note reaches it (and costs one
+$0.0025 `not_video` row) only when the native extractor could not see the note, i.e. without a working XHS cookie. With the managed mode `off`
+Xiaohongshu runs native only; Kuaishou then has no route and every link fails with `provider_unavailable`.
+
+The old Kuaishou scaffold (`KUAISHOU_ENABLED`, docs/KUAISHOU.md) is separate. Leave it unset: when it is on, its
+downloader hook runs first and the access layer never sees Kuaishou links.
+
+### Env (backend **and** Celery worker), names and defaults
+
+| Variable | Default | Notes |
+|---|---|---|
+| `CHINA_ACCESS_ENABLED` | `false` | Master switch, shared with Douyin |
+| `CHINA_ACCESS_KUAISHOU_ENABLED` | `false` | Routes Kuaishou single video through the layer; also makes `/resolve-input` and the classifier recognise Kuaishou links |
+| `CHINA_ACCESS_KUAISHOU_MANAGED_MODE` | `off` | `off` \| `benchmark` \| `canary_admin` \| `on` (env = ceiling) |
+| `CHINA_ACCESS_KUAISHOU_MANAGED_DAILY_CALL_LIMIT` | `20` | Platform level |
+| `CHINA_ACCESS_KUAISHOU_MANAGED_DAILY_SPEND_CEILING_USD` | `0.10` | Platform level |
+| `CHINA_ACCESS_APIFY_KUAISHOU_ACTOR_ID` | `natanielsantos~kuaishou-scraper` | |
+| `CHINA_ACCESS_APIFY_KUAISHOU_EST_COST_USD` | `0.00405` | Effective price in our counters (cost floor) |
+| `CHINA_ACCESS_XIAOHONGSHU_ENABLED` | `false` | Routes Xiaohongshu single video notes (explore / discovery/item / xhslink.com / xhslink.cn) through the layer |
+| `CHINA_ACCESS_XIAOHONGSHU_MANAGED_MODE` | `off` | as above |
+| `CHINA_ACCESS_XIAOHONGSHU_PROVIDER_ORDER` | `native_xiaohongshu,apify_xiaohongshu` | `apify_xiaohongshu` alone = managed only |
+| `CHINA_ACCESS_XIAOHONGSHU_MANAGED_DAILY_CALL_LIMIT` | `20` | Platform level |
+| `CHINA_ACCESS_XIAOHONGSHU_MANAGED_DAILY_SPEND_CEILING_USD` | `0.10` | Platform level |
+| `CHINA_ACCESS_APIFY_XIAOHONGSHU_ACTOR_ID` | `blue_puppy~rednote-video-downloader` | `agentflow~xiaohongshu-video-downloader` is the documented alternative (set its estimate to `0.007`) |
+| `CHINA_ACCESS_APIFY_XIAOHONGSHU_EST_COST_USD` | `0.00255` | |
+| `CHINA_ACCESS_SHORT_LINK_TIMEOUT_SEC` | `6` | One free 302 lookup for `v.kuaishou.com` / `xhslink.com` links |
+| `CHINA_ACCESS_MANAGED_SERVER_DOWNLOAD_BUDGET_SEC` | `45` | Shared with Douyin: a managed result's server copy stops after this, then the user's browser gets the CDN URL. No CN proxy is ever used for these two platforms |
+
+Unchanged and shared by all three platforms: `CHINA_ACCESS_APIFY_DAILY_CALL_LIMIT` (50),
+`CHINA_ACCESS_APIFY_DAILY_SPEND_CEILING_USD` (1.00), `CHINA_ACCESS_APIFY_MONTHLY_SPEND_CEILING_USD` (5.00), the Apify
+token (admin panel / `CHINA_ACCESS_APIFY_TOKEN`), the anonymous / signed-in / admin managed quotas and the kill switches.
+Auto-rollback (section 5) now covers both platforms too.
+
+### Enable, one platform at a time
+
+1. Native-only first (Xiaohongshu): `CHINA_ACCESS_ENABLED=true`, `CHINA_ACCESS_XIAOHONGSHU_ENABLED=true`, mode `off`.
+   Restart backend + worker. Make sure the cookie pool has a fresh `xiaohongshu` cookie. Try 5 public video notes on
+   `/fetch-link`; `GET $API/admin/china-platforms/xiaohongshu` → `recent_attempts` shows `native_xiaohongshu` outcomes.
+2. Benchmark (paid, about $0.08 for 30 URLs): put the owner's public URLs in
+   `CHINA_ACCESS_BENCHMARK_KUAISHOU_URLS` / `CHINA_ACCESS_BENCHMARK_XIAOHONGSHU_URLS`, set the platform mode to
+   `benchmark`, restart, then:
+   ```bash
+   curl -s -X POST -H "$H" -H 'Content-Type: application/json' "$API/admin/china-platforms/kuaishou/benchmark/run" \
+     -d '{"include_managed": true, "max_urls": 20, "reason": "managed benchmark"}'
+   curl -s -H "$H" "$API/admin/china-platforms/kuaishou/benchmark/report"
+   ```
+   Same with `xiaohongshu`. Compare `cost_per_attempt_usd` with the Apify console for the same runs.
+3. Admin canary: mode `canary_admin`, restart, send `/fetch-link` with `X-Admin-Token: $TOKEN` (section 4.3).
+   Check the media plays and that the server copy or the hand-off to the browser works (`provider` in the response,
+   backend log line `[Downloader] <platform> via access layer (...)`).
+4. `on` only with the owner's approval.
+
+Kuaishou has no free route, so step 1 does not apply: start at step 2.
+
+### Roll back
+
+Same commands as section 6 with `kuaishou` or `xiaohongshu` instead of `douyin`. A platform kill switch (or
+`CHINA_ACCESS_<P>_ENABLED=false`) sends that platform's links back to the old path: Xiaohongshu to the generic yt-dlp
+path, Kuaishou to the generic path (which fails as before unless `KUAISHOU_ENABLED` is set).
+

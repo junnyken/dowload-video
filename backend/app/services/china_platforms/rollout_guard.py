@@ -34,7 +34,9 @@ from app.services.china_platforms.errors import NON_HEALTH_CATEGORIES
 
 logger = logging.getLogger("app.china_access")
 
-AUTO_ROLLBACK_PLATFORMS = frozenset({"douyin"})
+# Kuaishou / Xiaohongshu added in Phase 32B-3: same protection for every
+# platform with a paid route.
+AUTO_ROLLBACK_PLATFORMS = frozenset({"douyin", "kuaishou", "xiaohongshu"})
 ROLLBACK_TARGET = "benchmark"
 
 PROBE_FAILS_KEY = "china:rollback:probe_fails:{platform}"

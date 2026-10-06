@@ -136,7 +136,11 @@ async def china_overview(_=Depends(verify_admin)) -> dict:
 @router.get("/china-platforms/costs")
 async def china_costs(_=Depends(verify_admin)) -> dict:
     snap = budget_guard.snapshot(list(CHINA_PLATFORM_POLICIES), _PROVIDER_BUDGET_CLASSES)
-    snap["estimated_cost_per_call_usd"] = {"apify_douyin": settings.apify_douyin_est_cost_usd()}
+    snap["estimated_cost_per_call_usd"] = {
+        "apify_douyin": settings.apify_douyin_est_cost_usd(),
+        "apify_kuaishou": settings.apify_kuaishou_est_cost_usd(),
+        "apify_xiaohongshu": settings.apify_xiaohongshu_est_cost_usd(),
+    }
     snap["proxy_bytes"] = 0   # no metadata-proxy provider in wave 1
     snap["reconcile_today"] = {b: budget_guard.reconcile_snapshot(b) for b in _PROVIDER_BUDGET_CLASSES}
     return snap

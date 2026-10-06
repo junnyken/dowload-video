@@ -427,14 +427,32 @@ for _ks_st in ("single_video", "single_post"):
     )
 
 
+# Same entries when Kuaishou is routed by the China access layer (managed
+# actor, no Chinese proxy needed) instead of the KUAISHOU_ENABLED scaffold.
+# Wording pending BA review.
+_FLAGGED_LAYER: dict[tuple[str, str], CapabilityDescriptor] = {}
+for _ks_st in ("single_video", "single_post"):
+    _FLAGGED_LAYER[("kuaishou", _ks_st)] = _cap("kuaishou", _ks_st, SupportLevel.experimental,
+        [ActionType.queue_video, ActionType.open_single_download],
+        _PUB,
+        [_w(WarningCode.extraction_unstable, "Kuaishou đang thử nghiệm: chỉ hỗ trợ video công khai.")],
+        EntryFlow.single_download,
+    )
+
+
 def _active() -> dict:
     """_REGISTRY plus the flag-gated entries whose flag is on right now."""
     from app.services.kuaishou_extractor import kuaishou_enabled
-    if not kuaishou_enabled():
-        return _REGISTRY
-    merged = dict(_REGISTRY)
-    merged.update(_FLAGGED)
-    return merged
+    from app.services.china_platforms.settings import layer_env_on
+    if kuaishou_enabled():
+        merged = dict(_REGISTRY)
+        merged.update(_FLAGGED)
+        return merged
+    if layer_env_on("kuaishou"):
+        merged = dict(_REGISTRY)
+        merged.update(_FLAGGED_LAYER)
+        return merged
+    return _REGISTRY
 
 
 # Fallback for any (platform, source_type) not in registry

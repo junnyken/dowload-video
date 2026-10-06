@@ -3,9 +3,11 @@ China platform policies (plan §7) — a policy skeleton, NOT a claim that any
 route works. Named ChinaPlatformPolicy because app/core/platform_policy.py
 already defines PlatformPolicy (Phase 28 throughput policy).
 
-Wave 1 (owner decisions 2026-10-06): only Douyin single media is routable.
-Kuaishou / Xiaohongshu / Lemon8 are registry entries; Bilibili is registered
-but NOT routed (native works; plan §21.12). Weibo is not registered at all.
+Wave 1 (owner decisions 2026-10-06): Douyin single media is routable.
+Phase 32B-3 (owner decisions 2026-10-06): Kuaishou and Xiaohongshu single
+video are routable too — each still needs its own CHINA_ACCESS_<P>_ENABLED.
+Lemon8 is a registry entry; Bilibili is registered but NOT routed (native
+works; plan §21.12). Weibo is not registered at all.
 """
 from __future__ import annotations
 
@@ -19,6 +21,19 @@ from dataclasses import dataclass, field
 # link is not: paying an actor would not change the answer.
 _DOUYIN_FALLBACK = frozenset({
     "cookie_required", "cookie_invalid", "signature_or_verification_failed",
+    "upstream_rate_limited", "provider_timeout", "provider_unavailable",
+    "parse_failed", "unknown",
+})
+
+
+# Xiaohongshu native (xiaohongshu_extractor) fails with "cookie required" when
+# the pool has no XHS cookie and with "API did not answer" when the cookie is
+# stale or the web API blocks us — both are what a managed actor can solve.
+# Not eligible: private/login-only, an unsupported link, or an image-only note
+# (reported as unsupported_url: the chosen actor is video-only, paying it
+# would buy a `not_video` row).
+_XHS_FALLBACK = frozenset({
+    "cookie_required", "cookie_invalid", "signature_or_verification_failed", "geo_restricted",
     "upstream_rate_limited", "provider_timeout", "provider_unavailable",
     "parse_failed", "unknown",
 })
@@ -70,28 +85,39 @@ CHINA_PLATFORM_POLICIES: dict[str, ChinaPlatformPolicy] = {
         fallback_categories=_DOUYIN_FALLBACK,
         budget_class="douyin",
     ),
+    # Managed only: www.kuaishou.com does not answer from the workspace or
+    # production (connect/read timeouts, 2026-10-05) and yt-dlp has no
+    # Kuaishou extractor. The scaffold in kuaishou_extractor.py stays behind
+    # its own KUAISHOU_ENABLED flag, outside this layer (its downloader hook
+    # runs first, so with both flags on the old path wins).
     "kuaishou": ChinaPlatformPolicy(
         platform="kuaishou",
-        routable_in_wave1=False,
+        routable_in_wave1=True,
         supported_operations=frozenset({"single_media"}),
-        provider_order={"single_media": ("native_kuaishou",)},
-        allowed_providers=frozenset({"native_kuaishou"}),
-        managed_provider_allowed=False,
+        provider_order={"single_media": ("apify_kuaishou",)},
+        allowed_providers=frozenset({"apify_kuaishou"}),
+        managed_provider_allowed=True,
         metadata_proxy_profile="china_or_hk_optional",
         cache_ttl_sec=1800,
         max_container_items=30,
+        fallback_categories=frozenset(),
+        budget_class="kuaishou",
     ),
+    # Free route first (owner decision 2026-10-06): the existing extractor
+    # (yt-dlp, then the web API with the shared cookie pool), then the actor.
     "xiaohongshu": ChinaPlatformPolicy(
         platform="xiaohongshu",
-        routable_in_wave1=False,
+        routable_in_wave1=True,
         supported_operations=frozenset({"single_media"}),
-        provider_order={"single_media": ("native_xiaohongshu",)},
-        allowed_providers=frozenset({"native_xiaohongshu"}),
-        managed_provider_allowed=False,
+        provider_order={"single_media": ("native_xiaohongshu", "apify_xiaohongshu")},
+        allowed_providers=frozenset({"native_xiaohongshu", "apify_xiaohongshu"}),
+        managed_provider_allowed=True,
         metadata_proxy_profile="china_or_hk_optional",
         requires_cookie_for={"container_discovery": True},
         cache_ttl_sec=900,
         max_container_items=20,
+        fallback_categories=_XHS_FALLBACK,
+        budget_class="xiaohongshu",
     ),
     "bilibili": ChinaPlatformPolicy(
         platform="bilibili",

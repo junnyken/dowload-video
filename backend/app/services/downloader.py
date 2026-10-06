@@ -1495,6 +1495,89 @@ def _parse_upload_date(s):
     return None
 
 
+# Referer the CDN of each access-layer platform is most likely to expect.
+# UNVERIFIED against the live CDNs (docs/china-access/09 lists what the owner
+# must check); a 403 only means the user's browser gets the CDN URL instead.
+_CHINA_LAYER_REFERERS = {
+    "kuaishou": "https://www.kuaishou.com/",
+    "xiaohongshu": "https://www.xiaohongshu.com/",
+}
+
+
+def _china_layer_server_copy(result: Dict[str, Any], quality: str, platform: str) -> Dict[str, Any]:
+    """Server copy for a Kuaishou / Xiaohongshu result from the China access
+    layer. Same rules as the Douyin managed branch (measured 2026-10-06):
+    a managed (Apify) result gets CHINA_ACCESS_MANAGED_SERVER_DOWNLOAD_BUDGET_SEC
+    and then the browser gets the CDN URL; the CN residential proxy is never
+    used for these platforms. mp3: the video is copied, then ffmpeg extracts
+    the audio; if that fails the mp4 stays and the log says so."""
+    import time as _t
+    import subprocess
+
+    cdn_url = result.get("direct_mp4_url")
+    if not cdn_url or result.get("local_file_path"):
+        return result
+    _deadline = None
+    if result.get("managed"):
+        try:
+            _budget = float(os.getenv("CHINA_ACCESS_MANAGED_SERVER_DOWNLOAD_BUDGET_SEC", "45"))
+        except ValueError:
+            _budget = 45.0
+        _deadline = _t.monotonic() + max(5.0, _budget)
+
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    local_path = new_download_path(DOWNLOAD_DIR, f"{platform}_", "mp4")
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Referer": _CHINA_LAYER_REFERERS.get(platform, ""),
+        "Accept": "*/*",
+    }
+    ok = False
+    try:
+        with httpx.Client(follow_redirects=True, timeout=120.0, headers=headers) as client:
+            with client.stream("GET", cdn_url) as resp:
+                resp.raise_for_status()
+                with open(local_path, "wb") as f:
+                    for chunk in resp.iter_bytes(chunk_size=65536):
+                        f.write(chunk)
+                        if _deadline is not None and _t.monotonic() > _deadline:
+                            raise TimeoutError("managed server download budget exceeded")
+        ok = os.path.exists(local_path) and os.path.getsize(local_path) > 0
+    except Exception as dl_err:
+        print(f"[Downloader] {platform}: server copy failed ({type(dl_err).__name__}) — handing the CDN URL to the client")
+        ok = False
+    if not ok:
+        if os.path.exists(local_path):
+            os.remove(local_path)
+        return result
+
+    result["local_file_path"] = local_path
+    result["file_size_mb"] = round(os.path.getsize(local_path) / (1024 * 1024), 2)
+    result["direct_mp4_url"] = None
+    if (quality or "").startswith("mp3"):
+        mp3_path = local_path[:-4] + ".mp3"
+        try:
+            subprocess.run(
+                ["ffmpeg", "-nostdin", "-y", "-loglevel", "error", "-i", local_path,
+                 "-vn", "-acodec", "libmp3lame", "-q:a", "2", mp3_path],
+                check=True, timeout=120,
+            )
+            if os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 0:
+                os.remove(local_path)
+                result["local_file_path"] = mp3_path
+                result["local_mp3_path"] = mp3_path
+                result["is_audio_only"] = True
+                result["file_size_mb"] = round(os.path.getsize(mp3_path) / (1024 * 1024), 2)
+        except Exception as mp3_err:
+            print(f"[Downloader] {platform}: mp3 extraction failed ({type(mp3_err).__name__}) — keeping the mp4")
+            if os.path.exists(mp3_path):
+                os.remove(mp3_path)
+    return result
+
+
 def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False, progress_token: str = "", subtitle_language: str = "auto", user_cookies_file: str = None) -> Dict[str, Any]:
     """
     Extract info for a single video URL (synchronous).
@@ -1543,6 +1626,31 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     if _ks_should_handle(original_input_url):
         from app.services.kuaishou_extractor import extract_kuaishou_download_info
         return extract_kuaishou_download_info(original_input_url.strip(), quality)
+
+    # ── Kuaishou / Xiaohongshu: China access layer (Phase 32B-3) ──────────
+    # china_platform_for_download() returns None unless CHINA_ACCESS_ENABLED
+    # and CHINA_ACCESS_<PLATFORM>_ENABLED are on (and no kill switch), so with
+    # the flags off both platforms take the path below exactly as before.
+    # Kuaishou's KUAISHOU_ENABLED scaffold above still wins when it is on.
+    try:
+        from app.services.china_platforms.integration import (
+            china_platform_for_download as _cn_platform_for,
+            resolve_platform_via_access_layer as _cn_resolve_platform,
+        )
+        _cn_input = url
+        _cn_platform = _cn_platform_for(url)
+        if not _cn_platform and original_input_url != url:
+            _cn_input = original_input_url
+            _cn_platform = _cn_platform_for(original_input_url)
+    except Exception as _cn_imp_err:
+        print(f"[Downloader] china access layer unavailable: {_cn_imp_err}")
+        _cn_platform = None
+    if _cn_platform:
+        _cn_result = _cn_resolve_platform(_cn_platform, _cn_input.strip(), original_input_url, quality,
+                                          user_cookies_file)
+        if _cn_result is not None:
+            print(f"[Downloader] {_cn_platform} via access layer ({_cn_result.get('provider')})")
+            return _china_layer_server_copy(_cn_result, quality, _cn_platform)
 
     # ── Douyin: Bypass yt-dlp entirely ─────────────────────────
     # yt-dlp cannot handle Douyin's anti-bot (JS VM + captcha).

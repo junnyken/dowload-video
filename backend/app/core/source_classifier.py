@@ -175,11 +175,13 @@ def classify(url: str) -> ClassifyResult:
     Classify a URL into (platform, source_type, normalized_id).
     Uses first-match-wins; returns UNKNOWN if nothing matches.
     """
-    # Kuaishou is known ONLY while KUAISHOU_ENABLED is on; off → "unknown",
-    # exactly as before the scaffold existed. Host matching is exact (no
-    # substring regex), so kuaishou.com.evil.com is never Kuaishou.
+    # Kuaishou is known ONLY while KUAISHOU_ENABLED is on, or while the China
+    # access layer routes it (CHINA_ACCESS_ENABLED + CHINA_ACCESS_KUAISHOU_ENABLED);
+    # off → "unknown", exactly as before the scaffold existed. Host matching
+    # is exact (no substring regex), so kuaishou.com.evil.com is never Kuaishou.
     from app.services.kuaishou_extractor import kuaishou_enabled, parse_kuaishou_url
-    if kuaishou_enabled():
+    from app.services.china_platforms.settings import layer_env_on
+    if kuaishou_enabled() or layer_env_on("kuaishou"):
         link = parse_kuaishou_url(url)
         if link is not None:
             return ClassifyResult(
@@ -188,6 +190,15 @@ def classify(url: str) -> ClassifyResult:
                 normalized_id=link.code,
                 confidence=1.0,
             )
+    # Xiaohongshu note forms the rules below do not know (/discovery/item/,
+    # a note under /user/profile/<uid>/, xhslink.cn) — recognised only while
+    # the access layer routes Xiaohongshu, so nothing changes with flags off.
+    if layer_env_on("xiaohongshu"):
+        from app.services.china_platforms.adapters.xiaohongshu import is_short_link, note_id
+        nid = note_id(url)
+        if nid is not None or is_short_link(url):
+            return ClassifyResult(platform="xiaohongshu", source_type="single_post",
+                                  normalized_id=nid, confidence=1.0)
     for platform, pattern, source_type, id_group in _RULES:
         m = pattern.search(url)
         if m:

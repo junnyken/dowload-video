@@ -52,6 +52,11 @@ PLATFORM_HEADERS: dict[str, dict[str, str]] = {
         "Accept": "*/*",
     },
 }
+# Phase 32B-3: the same headers downloader._china_layer_server_copy sends, so
+# a benchmark check measures what a real download would get. UNVERIFIED
+# against the live CDNs (docs/china-access/09).
+for _p, _ref in (("kuaishou", "https://www.kuaishou.com/"), ("xiaohongshu", "https://www.xiaohongshu.com/")):
+    PLATFORM_HEADERS[_p] = {**PLATFORM_HEADERS["douyin"], "Referer": _ref}
 
 _BAD_CT = ("text/", "application/json", "application/xml", "application/xhtml", "application/javascript")
 _OK_CT_PREFIX = ("video/", "application/octet-stream", "binary/octet-stream", "application/mp4")

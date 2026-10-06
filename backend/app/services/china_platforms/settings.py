@@ -122,12 +122,34 @@ def env_provider_order(platform: str) -> list[str]:
     return [p.strip() for p in raw.split(",") if p.strip()]
 
 
+# Per-platform paid defaults. Douyin keeps its wave-1 values. Kuaishou and
+# Xiaohongshu share the same Apify account ($5/month in total, owner decision
+# 2026-10-06), so each gets a small daily cap of its own: 20 calls and
+# $0.10/day is ~25x the estimated per-call price of either actor
+# (docs/china-access/09). The shared provider-level Apify ceilings below still
+# apply on top.
+_PLATFORM_MANAGED_DEFAULTS = {
+    "douyin": (50, 1.00),
+    "kuaishou": (20, 0.10),
+    "xiaohongshu": (20, 0.10),
+}
+
+
 def platform_managed_daily_call_limit(platform: str) -> int:
-    return max(0, _int(f"CHINA_ACCESS_{platform.upper()}_MANAGED_DAILY_CALL_LIMIT", 50))
+    default = _PLATFORM_MANAGED_DEFAULTS.get(platform, (50, 1.00))[0]
+    return max(0, _int(f"CHINA_ACCESS_{platform.upper()}_MANAGED_DAILY_CALL_LIMIT", default))
 
 
 def platform_managed_daily_spend_micros(platform: str) -> int:
-    return usd_to_micros(_float(f"CHINA_ACCESS_{platform.upper()}_MANAGED_DAILY_SPEND_CEILING_USD", 1.00))
+    default = _PLATFORM_MANAGED_DEFAULTS.get(platform, (50, 1.00))[1]
+    return usd_to_micros(_float(f"CHINA_ACCESS_{platform.upper()}_MANAGED_DAILY_SPEND_CEILING_USD", default))
+
+
+def layer_env_on(platform: str) -> bool:
+    """Master flag AND the platform flag (env only — no Redis). Used by the
+    classifier / normalizer / capability registry so a platform is recognised
+    for /fetch-link only while its access-layer flags are on."""
+    return master_enabled() and platform_env_enabled(platform)
 
 
 # ── per provider (budget class) ─────────────────────────────────────────────
@@ -164,6 +186,33 @@ def apify_douyin_est_cost_usd() -> float:
     # $0.007/result (FREE tier) + $0.00005 actor-start event, read from the
     # actor's pricingInfos on 2026-10-06.
     return max(0.0, _float("CHINA_ACCESS_APIFY_DOUYIN_EST_COST_USD", 0.0071))
+
+
+def apify_kuaishou_actor_id() -> str:
+    return _str("CHINA_ACCESS_APIFY_KUAISHOU_ACTOR_ID", "natanielsantos~kuaishou-scraper")
+
+
+def apify_kuaishou_est_cost_usd() -> float:
+    # $0.004 per video (apify-default-dataset-item, flat, not tiered) + one
+    # $0.00005 actor-start event (256 MB default memory = 1 event), read from
+    # the actor's pricingInfos on 2026-10-06 (docs/china-access/09).
+    return max(0.0, _float("CHINA_ACCESS_APIFY_KUAISHOU_EST_COST_USD", 0.00405))
+
+
+def apify_xiaohongshu_actor_id() -> str:
+    return _str("CHINA_ACCESS_APIFY_XIAOHONGSHU_ACTOR_ID", "blue_puppy~rednote-video-downloader")
+
+
+def apify_xiaohongshu_est_cost_usd() -> float:
+    # $0.0025 per dataset item (FREE tier; error rows are dataset items too)
+    # + one $0.00005 actor-start event (512 MB default memory = 1 event),
+    # read from the actor's pricingInfos on 2026-10-06 (docs/china-access/09).
+    return max(0.0, _float("CHINA_ACCESS_APIFY_XIAOHONGSHU_EST_COST_USD", 0.00255))
+
+
+def short_link_timeout_sec() -> float:
+    """One free redirect lookup for v.kuaishou.com / xhslink.com share links."""
+    return min(15.0, max(1.0, _float("CHINA_ACCESS_SHORT_LINK_TIMEOUT_SEC", 6.0)))
 
 
 def apify_run_max_charge_usd() -> float:

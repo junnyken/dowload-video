@@ -9,6 +9,11 @@ paths behave exactly as before.
 When on (and CHINA_ACCESS_DOUYIN_ENABLED on), Douyin single media is resolved
 by the router: native chain first (ScraperAPI skipped — paid, unbudgeted),
 then the managed actor if the managed mode allows it for this request.
+
+Phase 32B-3: the same holds for Kuaishou (managed only) and Xiaohongshu
+(native extractor, then managed) behind CHINA_ACCESS_KUAISHOU_ENABLED /
+CHINA_ACCESS_XIAOHONGSHU_ENABLED. china_platform_for_download() is the gate
+the downloader uses; with the master flag off it returns after one env read.
 """
 from __future__ import annotations
 
@@ -124,13 +129,35 @@ def _user_message(exc: ChinaAccessFailure) -> str:
     return exc.user_message
 
 
-def resolve_douyin_via_access_layer(douyin_input: str, original_url: str, quality: str,
-                                    user_cookies_file: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """None → access layer inactive, caller runs the legacy path unchanged.
-    dict → resolved metadata in the legacy shape. Raises ValueError (with a
-    user-safe message) when the layer is active and resolution failed."""
-    if not _layer_active("douyin"):
+# Platforms the downloader hands to the layer through
+# china_platform_for_download(). Douyin has its own hook inside the Douyin
+# branch (resolve_douyin_via_access_layer) and is not listed here.
+DOWNLOAD_HOOK_PLATFORMS = ("kuaishou", "xiaohongshu")
+
+_DISPLAY = {"douyin": "Douyin", "kuaishou": "Kuaishou", "xiaohongshu": "Xiaohongshu"}
+
+
+def china_platform_for_download(url: str) -> Optional[str]:
+    """Kuaishou / Xiaohongshu single-video URL whose access layer is active →
+    the platform name; anything else → None (the caller runs its legacy path
+    unchanged). Order: master env flag, platform env flag, URL match, then the
+    Redis kill switches — so with flags off nothing but env is read."""
+    if not settings.master_enabled():
         return None
+    try:
+        for platform in DOWNLOAD_HOOK_PLATFORMS:
+            if not settings.platform_env_enabled(platform):
+                continue
+            adapter = registry.get_adapter(platform)
+            if adapter is not None and adapter.matches(url or ""):
+                return platform if _layer_active(platform) else None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("china_access platform gate failed: %s", type(exc).__name__)
+    return None
+
+
+def _resolve_via_access_layer(platform: str, url: str, original_url: str, quality: str,
+                              user_cookies_file: Optional[str]) -> Dict[str, Any]:
     from app.services.china_platforms.provider_router import ProviderRouter  # noqa: PLC0415
 
     ctx = current_context()
@@ -138,12 +165,38 @@ def resolve_douyin_via_access_layer(douyin_input: str, original_url: str, qualit
         ctx = ctx.with_(private=True, user_cookies_file=user_cookies_file)
     # Celery jobs carry no requester context: they use the shared "unknown"
     # quota bucket at the anonymous limit (docs/china-access/01 C8).
-    req = ChinaResolveRequest(url=douyin_input, operation="single_media", requested_quality=quality)
+    req = ChinaResolveRequest(url=url, operation="single_media", requested_quality=quality)
     try:
         result = asyncio.run(ProviderRouter().resolve(req, ctx))
     except ChinaAccessFailure as exc:
         raise ValueError(_user_message(exc)) from None
     except AlreadyProcessing:
         # Wording pending BA review.
-        raise ValueError("Video Douyin này đang được xử lý cho một yêu cầu khác. Vui lòng thử lại sau ít phút.") from None
-    return _to_legacy_dict(result, original_url, quality)
+        raise ValueError(f"Video {_DISPLAY.get(platform, platform)} này đang được xử lý cho một yêu cầu khác. "
+                         "Vui lòng thử lại sau ít phút.") from None
+    out = _to_legacy_dict(result, original_url, quality)
+    if platform != "douyin":
+        out["platform"] = platform
+        out["uploader"] = result.uploader
+        out["managed"] = result.provider_mode == "managed"
+    return out
+
+
+def resolve_douyin_via_access_layer(douyin_input: str, original_url: str, quality: str,
+                                    user_cookies_file: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """None → access layer inactive, caller runs the legacy path unchanged.
+    dict → resolved metadata in the legacy shape. Raises ValueError (with a
+    user-safe message) when the layer is active and resolution failed."""
+    if not _layer_active("douyin"):
+        return None
+    return _resolve_via_access_layer("douyin", douyin_input, original_url, quality, user_cookies_file)
+
+
+def resolve_platform_via_access_layer(platform: str, url: str, original_url: str, quality: str,
+                                      user_cookies_file: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Kuaishou / Xiaohongshu counterpart of resolve_douyin_via_access_layer:
+    None when the layer is not active for `platform`, else the legacy-shaped
+    dict (plus "platform", "uploader", "managed"), or ValueError."""
+    if platform not in DOWNLOAD_HOOK_PLATFORMS or not _layer_active(platform):
+        return None
+    return _resolve_via_access_layer(platform, url, original_url, quality, user_cookies_file)

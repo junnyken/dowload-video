@@ -33,6 +33,28 @@ Never put a value in source, chat, or a commit. Names only below, with the safe 
 | `CHINA_ACCESS_DOUYIN_MANAGED_DAILY_CALL_LIMIT` | `50` | Platform level |
 | `CHINA_ACCESS_DOUYIN_MANAGED_DAILY_SPEND_CEILING_USD` | `1.00` | Platform level |
 
+## Kuaishou and Xiaohongshu (Phase 32B-3, single video)
+Details, actor research and prices: `09-XHS-KUAISHOU-PROVIDERS.md`; enable steps: `docs/runbooks/china-platform-rollout.md` §8.
+
+| Name | Default | Notes |
+|---|---|---|
+| `CHINA_ACCESS_KUAISHOU_ENABLED` | `false` | Kuaishou single video through the layer (managed only). Also gates recognition in the classifier, the short-link flag for `v.kuaishou.com` and the capability entry. `KUAISHOU_ENABLED` (old scaffold) is separate and wins when on |
+| `CHINA_ACCESS_KUAISHOU_MANAGED_MODE` | `off` | `off` \| `benchmark` \| `canary_admin` \| `on` |
+| `CHINA_ACCESS_KUAISHOU_MANAGED_DAILY_CALL_LIMIT` | `20` | Platform level |
+| `CHINA_ACCESS_KUAISHOU_MANAGED_DAILY_SPEND_CEILING_USD` | `0.10` | Platform level |
+| `CHINA_ACCESS_APIFY_KUAISHOU_ACTOR_ID` | `natanielsantos~kuaishou-scraper` | |
+| `CHINA_ACCESS_APIFY_KUAISHOU_EST_COST_USD` | `0.00405` | $0.004/video + $0.00005 start |
+| `CHINA_ACCESS_XIAOHONGSHU_ENABLED` | `false` | Xiaohongshu single video note through the layer: native extractor, then managed |
+| `CHINA_ACCESS_XIAOHONGSHU_MANAGED_MODE` | `off` | as above |
+| `CHINA_ACCESS_XIAOHONGSHU_PROVIDER_ORDER` | `native_xiaohongshu,apify_xiaohongshu` | |
+| `CHINA_ACCESS_XIAOHONGSHU_MANAGED_DAILY_CALL_LIMIT` | `20` | Platform level |
+| `CHINA_ACCESS_XIAOHONGSHU_MANAGED_DAILY_SPEND_CEILING_USD` | `0.10` | Platform level |
+| `CHINA_ACCESS_APIFY_XIAOHONGSHU_ACTOR_ID` | `blue_puppy~rednote-video-downloader` | Alternative: `agentflow~xiaohongshu-video-downloader` (estimate `0.007`) |
+| `CHINA_ACCESS_APIFY_XIAOHONGSHU_EST_COST_USD` | `0.00255` | $0.0025/item (FREE tier) + $0.00005 start |
+| `CHINA_ACCESS_SHORT_LINK_TIMEOUT_SEC` | `6` | One free redirect lookup for `v.kuaishou.com` / `xhslink.com` |
+| `CHINA_ACCESS_MANAGED_SERVER_DOWNLOAD_BUDGET_SEC` | `45` | Shared with Douyin: managed results' server copy time budget; never the CN proxy |
+| `CHINA_ACCESS_BENCHMARK_KUAISHOU_URLS` / `CHINA_ACCESS_BENCHMARK_XIAOHONGSHU_URLS` | *(empty)* | Owner-supplied public fixture URLs |
+
 ## Apify (provider level)
 | Name | Default | Notes |
 |---|---|---|

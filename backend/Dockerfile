@@ -68,6 +68,37 @@ ENV DENO_DIR=/opt/deno-cache
 # container user having a usable home directory.
 ENV XDG_CACHE_HOME=/opt/bgutil-cache
 
+# PhantomJS for yt-dlp's iq.com (iQIYI) extractor. yt-dlp 2026.08.19 runs the
+# iQIYI signature code ONLY through PhantomJSwrapper, which needs an executable
+# named `phantomjs` on PATH ("PhantomJS not found" on 2026-10-05). Deno and
+# --js-runtimes do not apply to it (yt-dlp issue #17570). PhantomJS is
+# discontinued; 2.1.1 is its last release and still what yt-dlp calls.
+# Official build, pinned by SHA-256 (same file on bitbucket.org/ariya and the
+# github.com/Medium mirror, checked 2026-10-06). Downloaded and unpacked with
+# Python so no wget/bzip2 is added to the image; only libfontconfig1 (the
+# binary's one missing shared library on slim) is installed.
+# The wrapper sets OPENSSL_CONF=/dev/null for this process only: the binary
+# links OpenSSL 1.0 statically, which cannot parse Debian's OpenSSL 3 config
+# and exits with "Auto configuration failed" otherwise.
+ARG PHANTOMJS_VERSION=2.1.1
+ARG PHANTOMJS_SHA256=86dd9a4bf4aee45f1a84c9f61cf1947c1d6dce9b9e8d2a907105da7852460d2f
+# Optional: a failed download or checksum mismatch must not break the whole
+# backend build for one extra extractor — iq.com then stays unavailable (as
+# before) and /health reports js_runtimes.phantomjs = not found.
+RUN apt-get update && apt-get install -y --no-install-recommends libfontconfig1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && ( python3 -c "import urllib.request; urllib.request.urlretrieve('https://github.com/Medium/phantomjs/releases/download/v${PHANTOMJS_VERSION}/phantomjs-${PHANTOMJS_VERSION}-linux-x86_64.tar.bz2', '/tmp/phantomjs.tar.bz2')" \
+    && echo "${PHANTOMJS_SHA256}  /tmp/phantomjs.tar.bz2" | sha256sum -c - \
+    && python3 -c "import tarfile; tarfile.open('/tmp/phantomjs.tar.bz2').extract('phantomjs-${PHANTOMJS_VERSION}-linux-x86_64/bin/phantomjs', '/opt', filter='data')" \
+    && mv /opt/phantomjs-${PHANTOMJS_VERSION}-linux-x86_64 /opt/phantomjs \
+    && chmod 0755 /opt/phantomjs/bin/phantomjs \
+    && rm /tmp/phantomjs.tar.bz2 \
+    && printf '#!/bin/sh\nOPENSSL_CONF=/dev/null exec /opt/phantomjs/bin/phantomjs "$@"\n' > /usr/local/bin/phantomjs \
+    && chmod 0755 /usr/local/bin/phantomjs \
+    && phantomjs -v ) \
+    || ( echo "WARNING: PhantomJS not installed - iq.com (iQIYI) stays unavailable" \
+         && rm -rf /tmp/phantomjs.tar.bz2 /opt/phantomjs /opt/phantomjs-${PHANTOMJS_VERSION}-linux-x86_64 /usr/local/bin/phantomjs )
+
 # Copy yêu cầu và cài đặt môi trường
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

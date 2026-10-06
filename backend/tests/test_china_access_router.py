@@ -64,8 +64,10 @@ class TestHardGuards:
 
     @pytest.mark.parametrize("url", [
         "https://www.bilibili.com/video/BV1ECeJ65EZS",   # registered, NOT routed (correction #5)
+        # Phase 32B-3: routable now, but disabled without their own
+        # CHINA_ACCESS_<P>_ENABLED (flags_on enables Douyin only).
         "https://www.kuaishou.com/short-video/3x123",
-        "https://www.xiaohongshu.com/explore/abc",
+        "https://www.xiaohongshu.com/explore/6a06c9360000000036001d5a",
         "https://www.lemon8-app.com/@u/123",
     ])
     def test_non_routable_platforms_are_disabled(self, flags_on, url):

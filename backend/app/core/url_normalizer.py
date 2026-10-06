@@ -62,7 +62,8 @@ _SHORT_LINK_DOMAINS: frozenset[str] = frozenset({
 })
 
 # Kuaishou short-link hosts — counted as short links only while
-# KUAISHOU_ENABLED is on (see normalize()).
+# KUAISHOU_ENABLED or the access-layer Kuaishou flags are on (see normalize()).
+# xhslink.cn likewise only while the access layer routes Xiaohongshu.
 _KUAISHOU_SHORT_HOSTS: frozenset[str] = frozenset({"v.kuaishou.com", "v.kuaishou.cn"})
 
 # ── youtu.be shortlink rewrite → full YouTube URL ────────────────────────────
@@ -199,9 +200,14 @@ def normalize(raw: str) -> NormalizeResult:
     bare_host = canonical_host.lstrip("www.")
     is_short = bare_host in _SHORT_LINK_DOMAINS or canonical_host in _SHORT_LINK_DOMAINS
     if not is_short and canonical_host in _KUAISHOU_SHORT_HOSTS:
-        # Flag-gated: with KUAISHOU_ENABLED off these stay ordinary URLs.
+        # Flag-gated: with KUAISHOU_ENABLED and the access-layer Kuaishou
+        # flags off these stay ordinary URLs.
         from app.services.kuaishou_extractor import kuaishou_enabled
-        is_short = kuaishou_enabled()
+        from app.services.china_platforms.settings import layer_env_on
+        is_short = kuaishou_enabled() or layer_env_on("kuaishou")
+    if not is_short and bare_host == "xhslink.cn":
+        from app.services.china_platforms.settings import layer_env_on
+        is_short = layer_env_on("xiaohongshu")
 
     return NormalizeResult(
         canonical_url=canonical,

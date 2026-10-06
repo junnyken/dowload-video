@@ -1,0 +1,26 @@
+{
+  "_source": "https://apify.com/blue_puppy/rednote-video-downloader README 'Output' example (build 2026-07-17, read 2026-10-06)",
+  "item": {
+    "url": "https://www.xiaohongshu.com/explore/abc123?xsec_token=XYZ",
+    "status": "ok",
+    "downloadUrl": "https://sns-video-bd.xhscdn.com/xyz123",
+    "id": "abc123",
+    "title": "Hello",
+    "description": "A description",
+    "type": "video",
+    "publishedAt": "2023-11-14T22:13:20+00:00",
+    "updatedAt": "2023-11-14T22:15:00+00:00",
+    "authorName": "Alice",
+    "authorId": "uid1",
+    "authorUrl": "https://www.xiaohongshu.com/user/profile/uid1",
+    "favoriteCount": 5,
+    "commentCount": 3,
+    "shareCount": 2,
+    "likeCount": 12,
+    "tags": [
+      "tag1",
+      "tag2"
+    ],
+    "error": null
+  }
+}

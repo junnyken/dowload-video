@@ -1,5 +1,13 @@
 # Kuaishou (快手) — scaffold, OFF, UNVERIFIED
 
+## Second route: China access layer (2026-10-06)
+
+Kuaishou single public videos can also go through the China access layer with a managed Apify actor
+(`natanielsantos~kuaishou-scraper`), which needs no Chinese proxy: `CHINA_ACCESS_ENABLED` +
+`CHINA_ACCESS_KUAISHOU_ENABLED` + a managed mode. See `docs/china-access/09-XHS-KUAISHOU-PROVIDERS.md` and
+`docs/runbooks/china-platform-rollout.md` §8. Keep `KUAISHOU_ENABLED` unset when using it: this scaffold's hook runs
+first in the downloader. Nothing below changed.
+
 ## Current state (2026-10-05)
 
 - **OFF by default.** `KUAISHOU_ENABLED` is unset in every environment. While it

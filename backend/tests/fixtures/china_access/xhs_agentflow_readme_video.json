@@ -1,0 +1,12 @@
+{
+  "_source": "https://apify.com/agentflow/xiaohongshu-video-downloader README 'Output example (video note)' (read 2026-10-06)",
+  "item": {
+    "input": "http://xhslink.com/o/7AFFiALSxVp",
+    "platform": "xiaohongshu",
+    "success": true,
+    "type": "video",
+    "title": "周末去了这家小店",
+    "desc": "地址在评论区～",
+    "download_url": "https://sns-video-hw.xhscdn.com/....mp4"
+  }
+}

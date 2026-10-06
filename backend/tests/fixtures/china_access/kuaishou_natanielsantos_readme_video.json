@@ -1,0 +1,54 @@
+{
+  "_source": "https://apify.com/natanielsantos/kuaishou-scraper README 'Video Output Example' (build 0.0.26, read 2026-10-06)",
+  "item": {
+    "id": "5246975106670222075",
+    "text": "2022年2月20日拳击比赛：布洛克VS卡汉 #体育 #拳王 #KO",
+    "createTime": 1645366735771,
+    "createDate": "20/02/2022",
+    "thumb": "https://p2.a.yximgs.com/upic/2022/02/20/22/BMjAyMjAyMjAyMjE2MjVfMTc0NTI5NDQzNV82ODA1MjU2MzE5OF8yXzM=_B3d4f038cae5397286f4007922a8dd821.jpg?clientCacheKey=3xhf4kv5ahrt8cy.jpg&di=c0d2ed05&bp=10000",
+    "url": "https://www.kuaishou.com/short-video/5246975106670222075",
+    "authorMeta": {
+      "id": "1745294435",
+      "name": "糙老爷们看拳",
+      "username": "3x984ye63jkct29",
+      "verified": false,
+      "avatar": "https://p22.a.yximgs.com/uhead/AB/2021/12/17/19/BMjAyMTEyMTcxOTU1MDBfMTc0NTI5NDQzNV8yX2hkODU3XzkzMQ==_s.jpg",
+      "followingCount": 63,
+      "followersCount": 6154,
+      "gender": "male",
+      "photoCount": 866,
+      "collectionCount": 9
+    },
+    "musicMeta": {
+      "id": "8612998810",
+      "name": "糙老爷们看拳的作品原声",
+      "artist": "糙老爷们看拳",
+      "type": 9,
+      "hasCopyright": true,
+      "loudness": -15,
+      "isOriginal": true,
+      "audioUrl": "https://hw.a.yximgs.com/bs2/ost/NjgwNTI1NjMxOThfMTc0NTI5NDQzNQ.m4a"
+    },
+    "duration": 332,
+    "cover": "https://p2.a.yximgs.com/upic/2022/02/20/22/BMjAyMjAyMjAyMjE2MjVfMTc0NTI5NDQzNV82ODA1MjU2MzE5OF8yXzM=_B3d4f038cae5397286f4007922a8dd821.jpg?clientCacheKey=3xhf4kv5ahrt8cy.jpg&di=c0d2ed05&bp=10000",
+    "width": 1270,
+    "height": 720,
+    "playUrl": "https://v1.kwaicdn.com/upic/2022/02/20/22/BMjAyMjAyMjAyMjE2MjVfMTc0NTI5NDQzNV82ODA1MjU2MzE5OF8yXzM=_b_Bd4734d091c465219b7172debc8193362.mp4?pkey=AAXHd86Mp3k2XQHCzyxAm9tNkY1-WNsbZvgdiXEgjUkFemfg-ikpRks2VIe2_cE7WqnynyW-CsGxf_isHsEOC6xGELUOXVEnOjFEfK81BuBqjzXONt_-nzM9CXoIiOMrfww&tag=1-1768946212-unknown-0-npnnr2vdrj-9090fffb60b17b90&clientCacheKey=3xhf4kv5ahrt8cy_b.mp4&di=c0d2ed05&bp=10000&kwai-not-alloc=35&tt=b&ss=vpm",
+    "allPlayUrls": [
+      {
+        "url": "https://v1.kwaicdn.com/upic/2022/02/20/22/BMjAyMjAyMjAyMjE2MjVfMTc0NTI5NDQzNV82ODA1MjU2MzE5OF8yXzM=_b_Bd4734d091c465219b7172debc8193362.mp4?pkey=AAXHd86Mp3k2XQHCzyxAm9tNkY1-WNsbZvgdiXEgjUkFemfg-ikpRks2VIe2_cE7WqnynyW-CsGxf_isHsEOC6xGELUOXVEnOjFEfK81BuBqjzXONt_-nzM9CXoIiOMrfww&tag=1-1768946212-unknown-0-npnnr2vdrj-9090fffb60b17b90&clientCacheKey=3xhf4kv5ahrt8cy_b.mp4&di=c0d2ed05&bp=10000&kwai-not-alloc=35&tt=b&ss=vpm",
+        "qualityType": "720p",
+        "videoCodec": "avc",
+        "avgBitrate": 2238
+      }
+    ],
+    "likeCount": 117,
+    "commentCount": 8,
+    "viewCount": 12926,
+    "hashtags": [
+      "体育",
+      "拳王",
+      "KO"
+    ]
+  }
+}
