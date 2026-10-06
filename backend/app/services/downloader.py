@@ -1600,6 +1600,24 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 local_path = new_download_path(DOWNLOAD_DIR, "douyin_", ext)
                 cdn_url = result["direct_mp4_url"]
 
+                # Results from the managed provider (Apify) get two limits,
+                # measured 2026-10-06 on a 33 MB / 151 s video whose CDN node
+                # served ~0.2 MB/s from outside China: the server copy took
+                # 72-125 s and then handed the CDN URL over anyway. So (a) the
+                # server copy stops after a time budget and the user's browser
+                # downloads the (not IP-bound) CDN URL directly, and (b) no
+                # video bytes go through the per-GB CN residential proxy
+                # (Phase 32B-1 section 10: proxy is metadata-only).
+                import time as _t
+                _managed = str(result.get("provider") or "").startswith("apify")
+                _deadline = None
+                if _managed:
+                    try:
+                        _budget = float(os.getenv("CHINA_ACCESS_MANAGED_SERVER_DOWNLOAD_BUDGET_SEC", "45"))
+                    except ValueError:
+                        _budget = 45.0
+                    _deadline = _t.monotonic() + max(5.0, _budget)
+
                 def _stream_to_file(client: httpx.Client) -> bool:
                     try:
                         with client.stream("GET", cdn_url) as resp:
@@ -1607,6 +1625,8 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                             with open(local_path, "wb") as f:
                                 for chunk in resp.iter_bytes(chunk_size=65536):
                                     f.write(chunk)
+                                    if _deadline is not None and _t.monotonic() > _deadline:
+                                        raise TimeoutError("managed server download budget exceeded")
                         return os.path.exists(local_path) and os.path.getsize(local_path) > 0
                     except Exception:
                         if os.path.exists(local_path):
@@ -1636,8 +1656,11 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 except Exception:
                     pass
 
-                # Attempt 2: CN proxy fallback (only if direct failed)
-                if not _downloaded and IPROYAL_PROXY_CN:
+                # Attempt 2: CN proxy fallback (only if direct failed; never
+                # for managed results — see the budget note above)
+                if not _downloaded and _managed:
+                    print("[Downloader] Douyin (managed): server copy not finished in budget — handing the CDN URL to the client")
+                if not _downloaded and IPROYAL_PROXY_CN and not _managed:
                     print("[Downloader] Douyin: direct failed — retrying via CN proxy")
                     try:
                         with httpx.Client(
