@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Sidebar } from '../components/Sidebar';
 import { ConfirmDialog, Toasts } from '../components/Toasts';
 import { SignInModal } from '../components/SignInModal';
+import { UpdateRequired } from '../components/UpdateRequired';
 import { DownloadScreen } from '../screens/DownloadScreen';
 import { ChannelsScreen } from '../screens/ChannelsScreen';
 import { QueueScreen } from '../screens/QueueScreen';
@@ -16,6 +17,7 @@ import { initCookies } from '../lib/cookies';
 import { initSync, refreshPending } from '../lib/sync';
 import { startChannels } from '../lib/channels';
 import { mockMode } from '../lib/tauri';
+import { initUpdateGate } from '../lib/update';
 
 let booted = false;
 
@@ -29,6 +31,7 @@ export function App() {
     mq.addEventListener('change', applyTheme);
     if (!booted) {
       booted = true;
+      initUpdateGate();
       initSync();
       // The queue's first pump reads the saved-account state (PLAN-32D route), so it starts after it.
       void initCookies().finally(() => void initQueue());
@@ -58,6 +61,7 @@ export function App() {
       {signIn && <SignInModal />}
       <ConfirmDialog />
       <Toasts />
+      <UpdateRequired />
     </div>
   );
 }

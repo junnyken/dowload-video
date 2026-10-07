@@ -323,8 +323,9 @@ export async function mockApi<T>(path: string, opts: { method?: string; body?: u
     // localStorage mock.serverFallback=youtube,tiktok (default: every platform the server knows; "" = none).
     const fb = localStorage.getItem('mock.serverFallback');
     const serverFallbackPlatforms = fb == null ? ALL_FALLBACK : fb.split(',').map((x) => x.trim()).filter(Boolean);
+    // localStorage mock.minSupported=9.0.0 → the blocking update screen (PLAN-32E P1).
     return r(200, {
-      latest: '0.2.0', minSupported: '0.1.0', notes: 'Bản mô phỏng', downloadUrl: 'https://dvid.vibe1.tinhgon.xyz/download',
+      latest: '0.2.0', minSupported: localStorage.getItem('mock.minSupported') ?? '0.1.0', notes: 'Bản mô phỏng', downloadUrl: 'https://dvid.vibe1.tinhgon.xyz/download',
       features: { clientQuota: true, clientQuotaMode: 'enforce', offlineGrace: 3, cookiePlatforms, serverFallbackPlatforms },
     });
   }

@@ -1,6 +1,7 @@
 import { API_BASE } from './config';
 import { loadMock, mockMode } from './tauri';
 import { vgHeaders } from './device';
+import { noteApiAnswer } from './update';
 
 export type HttpResult<T = unknown> = { status: number; data: T | null };
 
@@ -29,6 +30,7 @@ export async function apiFetch<T = unknown>(
     } catch {
       /* empty or non-JSON body */
     }
+    noteApiAnswer(res.status, data); // 426 update_required → blocking screen (PLAN-32E P1)
     return { status: res.status, data };
   } catch {
     throw { code: 'network', message: 'fetch failed' };
