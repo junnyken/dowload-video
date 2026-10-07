@@ -191,3 +191,24 @@ class TestRetroAndBatch:
         r = client.get("/api/v1/client/quota", headers={"X-VG-Device": dev(7)}).json()
         assert r["deviceCode"] == dev(7)[:8].upper() and r["usedToday"] == 1 and r["limit"] == 5
         assert r["enforced"] is True and r["offlineGrace"] == 3
+
+
+class TestCorsForTheWindowsApp:
+    """The app calls the API from its webview: origin http://tauri.localhost,
+    custom X-VG-* headers → a preflight that must pass."""
+
+    @pytest.mark.parametrize("origin", ["http://tauri.localhost", "tauri://localhost"])
+    def test_preflight_allows_app_origin_and_headers(self, origin):
+        r = client.options("/api/v1/client/quota/claim", headers={
+            "Origin": origin, "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type,authorization,x-vg-device,x-vg-client,x-vg-device-name"})
+        assert r.status_code == 200, r.text
+        assert r.headers["access-control-allow-origin"] == origin
+        allowed = r.headers["access-control-allow-headers"].lower()
+        for h in ("x-vg-device", "x-vg-client", "x-vg-device-name", "authorization"):
+            assert h in allowed
+
+    def test_unknown_origin_still_refused(self):
+        r = client.options("/api/v1/client/quota/claim", headers={
+            "Origin": "https://evil.example", "Access-Control-Request-Method": "POST"})
+        assert r.status_code == 400

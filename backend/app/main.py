@@ -370,6 +370,13 @@ origins = [
     "http://127.0.0.1:3000",
     "https://dowload-video-trieunt.dev.matbao.ai",  # Production preview
     "https://dowload-video.mk.dev.matbao.ai",
+    # VidGrab Windows app (Tauri 2 webview origin on Windows; macOS/Linux use
+    # tauri://localhost). Without it every API call from the app — history
+    # sync, /client/version, /client/douyin/*, /client/quota/* — is blocked by
+    # CORS in the webview (found 2026-10-07, task #6087; curl never shows it).
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+    "tauri://localhost",
 ]
 
 # Also allow any configured production domain
@@ -406,7 +413,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-API-Key", "X-VG-Source", "X-Session-ID",
                    # admin session on download endpoints (per-platform allowance + China canary)
-                   "X-Admin-Token"],
+                   "X-Admin-Token",
+                   # Windows app machine id / version / name (task #6087, /client/quota)
+                   "X-VG-Device", "X-VG-Client", "X-VG-Device-Name"],
 )
 
 
