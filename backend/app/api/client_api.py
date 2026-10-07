@@ -242,4 +242,18 @@ def _features() -> Dict[str, Any]:
         "clientQuota": client_quota.quota_enabled(),
         "clientQuotaMode": client_quota.quota_mode(),
         "offlineGrace": client_quota.offline_grace(),
+        # Task #6088 (PLAN-32D P1): platforms the app may download with the
+        # user's own cookies (in-app sign-in). Empty = none; rollout one by one.
+        "cookiePlatforms": cookie_platforms(),
     }
+
+
+# Slugs the app knows (desktop/src/lib/cookies.ts). Anything else is dropped.
+COOKIE_PLATFORM_SLUGS = ("douyin", "instagram", "facebook", "twitter", "youtube", "bilibili",
+                         "threads", "reddit", "pinterest", "tiktok", "vimeo")
+
+
+def cookie_platforms() -> List[str]:
+    raw = os.environ.get("CLIENT_COOKIES_PLATFORMS") or ""
+    want = [p.strip().lower() for p in raw.split(",") if p.strip()]
+    return [p for p in COOKIE_PLATFORM_SLUGS if p in want]
