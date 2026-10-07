@@ -140,6 +140,47 @@ export interface StatsPayload {
   flags: DesktopFlags
 }
 
+/** PLAN-32E P2 (task #6126): abnormal-use hints. Hints only, nothing is blocked. */
+export type SignalKind =
+  | 'ip_many_machines' | 'device_many_accounts' | 'offline_repeat' | 'refund_high' | 'unclaimed_downloads'
+
+export type SignalSubject =
+  | { kind: 'ip'; ip: string }
+  | { kind: 'device'; code: string; device_id: string }
+  | { kind: 'user'; user_id: string; email?: string | null; device_id?: string }
+  | { kind: 'other'; code: string }
+
+export interface SignalRow {
+  signal: SignalKind
+  subject: SignalSubject
+  value: number
+  days_hit: number
+  last_day: string
+  /** ip_many_machines: days the IP's shared guest cap was hit. */
+  ip_limit_days?: number
+  /** refund_high / unclaimed_downloads: downloads the server let through that day. */
+  downloads?: number
+}
+
+export interface SignalsPayload {
+  days: number
+  /** Newest first. */
+  day_keys: string[]
+  redis_ok: boolean
+  history_ok: boolean
+  signals: SignalRow[]
+  versions: Record<string, Record<string, number>>
+  thresholds: {
+    ip_machines: number
+    ip_limit_days: number
+    device_accounts: number
+    offline_days: number
+    offline_grace: number
+    refund_min: number
+    refund_share: number
+  }
+}
+
 async function call<T>(path: string): Promise<T> {
   const headers: Record<string, string> = {}
   const token = getAdminToken()
@@ -159,6 +200,7 @@ async function call<T>(path: string): Promise<T> {
 
 export const desktopAppApi = {
   stats: (days = 7) => call<StatsPayload>(`/stats?days=${days}`),
+  signals: (days = 7) => call<SignalsPayload>(`/signals?days=${days}`),
   devices: (q: string, limit: number, offset: number) =>
     call<DevicesPayload>(`/devices?${new URLSearchParams({ q, limit: String(limit), offset: String(offset) })}`),
 }

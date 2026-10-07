@@ -566,6 +566,8 @@ async def fetch_link(
         from app.api import client_quota as _cq
         if _cq.ip_cap_exceeded(_quota_req, _req_client_ip, _quota_platform, payload.url):
             _cq.record_route_stat("server", "refused", _quota_req)
+            from app.core.desktop_signals import note_ip_limit as _note_ipl
+            _note_ipl(_req_client_ip)
             raise HTTPException(status_code=429, detail=make_error(ERR_QUOTA_DAILY, extra={
                 **_quota_error_extra(_pq), "message": _cq.ip_cap_message(),
                 "remaining": 0, "reason": "ip_limit"}))
@@ -839,6 +841,8 @@ async def fetch_link(
         if _from_app:
             from app.api.client_quota import note_device_counted as _note_dev
             _note_dev(_quota_req, _req_client_ip, _counted)
+            from app.core.desktop_signals import note_app_download as _note_app_dl
+            _note_app_dl(_quota_req, _req_client_ip, request.headers.get("X-VG-Device"))
         if user_id:
             try:
                 increment_usage(user_id)

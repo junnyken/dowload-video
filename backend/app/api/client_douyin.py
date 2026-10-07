@@ -150,6 +150,7 @@ async def douyin_video(payload: VideoIn, request: Request, user=Depends(get_opti
         return _err(503, "Tải Douyin trên app tạm thời chưa mở. Bạn có thể tải trên web.", "platform_disabled")
 
     from app.api import client_quota  # noqa: PLC0415
+    from app.core import desktop_signals  # noqa: PLC0415
     from app.core.client_ip import get_client_ip  # noqa: PLC0415
     req = _requester(request, user)
     ip = get_client_ip(request) or "unknown"
@@ -160,6 +161,7 @@ async def douyin_video(payload: VideoIn, request: Request, user=Depends(get_opti
                     "quota_exceeded_daily", remaining=0, reset_time_vn=q.get("reset_time_vn"))
     if not q.get("already_counted") and client_quota.ip_cap_exceeded(req, ip, PLATFORM, url):
         client_quota.record_route_stat("server", "refused", req)
+        desktop_signals.note_ip_limit(ip)
         return _err(429, client_quota.ip_cap_message(), "quota_exceeded_daily", remaining=0,
                     reason="ip_limit", reset_time_vn=q.get("reset_time_vn"))
 
@@ -181,6 +183,7 @@ async def douyin_video(payload: VideoIn, request: Request, user=Depends(get_opti
     if req.kind != quotas.REQ_ADMIN:
         counted = await asyncio.to_thread(quotas.record_platform_download, req, PLATFORM, url)
         client_quota.note_device_counted(req, ip, counted)
+        desktop_signals.note_app_download(req, ip, request.headers.get("X-VG-Device"))
     client_quota.record_route_stat("server", "ok", req)   # admin "App Windows" stats (task #6090)
     from app.services.china_platforms.request_cache import media_expiry_ts  # noqa: PLC0415
     exp = media_expiry_ts(result)

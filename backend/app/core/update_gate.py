@@ -77,6 +77,10 @@ def update_required_response() -> JSONResponse:
 
 class UpdateGateMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        if request.method != "OPTIONS" and request.url.path.startswith(GATED_PREFIXES) and from_app(request):
+            # app version mix for the admin page (task #6126, PLAN-32E §5.3); never raises
+            from app.core.desktop_signals import note_version  # noqa: PLC0415
+            note_version(request.headers.get("x-vg-client"))
         if should_gate(request):
             return update_required_response()
         return await call_next(request)

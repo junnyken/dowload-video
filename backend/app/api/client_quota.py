@@ -51,7 +51,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core import quotas
+from app.core import desktop_signals, quotas
 from app.core.auth_middleware import get_optional_user
 from app.main import limiter
 
@@ -306,7 +306,8 @@ def _ip_cap_message() -> str:
             f"Đăng nhập để có {quotas.platform_limit_user()} lượt/ngày.")
 
 
-def _claim_one(req: "quotas.QuotaRequester", ip: str, url: str, route: str, retro: bool) -> dict:
+def _claim_one(req: "quotas.QuotaRequester", ip: str, url: str, route: str, retro: bool,
+               device: Optional[str] = None) -> dict:
     """Check, then count at once (reserve-first). Shadow mode never refuses
     but reports overLimit. Never raises on Redis errors (counters fail open,
     as on the web)."""
@@ -319,6 +320,7 @@ def _claim_one(req: "quotas.QuotaRequester", ip: str, url: str, route: str, retr
             over, message = True, q.get("message") or ""
         elif not q.get("already_counted") and ip_cap_exceeded(req, ip, platform, url):
             over, message, reason = True, _ip_cap_message(), "ip_limit"
+            desktop_signals.note_ip_limit(ip)  # admin signals (task #6126), shadow mode too
         if over and _enforced(req):
             _stat(route, "refused", req)
             return _refusal(req, message, reason)
@@ -337,6 +339,9 @@ def _claim_one(req: "quotas.QuotaRequester", ip: str, url: str, route: str, retr
     except Exception as exc:  # noqa: BLE001
         logger.warning("client_quota claim store failed: %s", type(exc).__name__)
     _stat(route, "retro" if retro else ("over_shadow" if over else "ok"), req)
+    desktop_signals.note_app_download(req, ip, device)
+    if retro:
+        desktop_signals.note_retro(req)
     return {"allowed": True, "claimId": claim_id, "platform": platform,
             "alreadyCounted": (not counted) and req.kind != quotas.REQ_ADMIN,
             "overLimit": over, "mode": quota_mode(), **_usage(req)}
@@ -382,7 +387,7 @@ async def claim(payload: ClaimIn, request: Request, user=Depends(get_optional_us
     route = payload.route if payload.route in _ROUTES else "local"
     req = _requester(request, user)
     retro = bool(payload.retro) and _take_retro(req)
-    out = _claim_one(req, _ip(request), url, route, retro)
+    out = _claim_one(req, _ip(request), url, route, retro, _device_header(request))
     if not out["allowed"]:
         return JSONResponse(status_code=_status_for(req), content=out)
     return out
@@ -394,7 +399,7 @@ async def claim_batch(payload: ClaimBatchIn, request: Request, user=Depends(get_
     if not quota_enabled():
         return _disabled()
     route = payload.route if payload.route in _ROUTES else "local"
-    req, ip = _requester(request, user), _ip(request)
+    req, ip, dev = _requester(request, user), _ip(request), _device_header(request)
     results = []
     for it in payload.items:
         url = _http_url(it.url)
@@ -402,7 +407,7 @@ async def claim_batch(payload: ClaimBatchIn, request: Request, user=Depends(get_
             results.append({"url": it.url, "allowed": False, "error_code": "invalid_url",
                             "detail": "Link không hợp lệ."})
             continue
-        results.append({"url": url, **_claim_one(req, ip, url, route, False)})
+        results.append({"url": url, **_claim_one(req, ip, url, route, False, dev)})
     return {"items": results, "mode": quota_mode(), **_usage(req)}
 
 
@@ -433,6 +438,7 @@ async def settle(payload: SettleIn, request: Request, user=Depends(get_optional_
                 if refunded:
                     quotas._redis_incr_until_midnight(_refund_key(req))
                     _kind_stat(req, "refunded")
+                    desktop_signals.note_refund(req)
                     if req.kind == quotas.REQ_DEVICE:
                         quotas.device_ip_add(c.get("ip") or "unknown", -1)
             _stat(c.get("route") or "local", f"settle_{payload.outcome}", req)

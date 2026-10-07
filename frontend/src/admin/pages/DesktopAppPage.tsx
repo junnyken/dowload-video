@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { desktopAppApi, postDesktopAllowance, resetDesktopIp } from '../api/desktopApp'
-import type { DesktopDevice, DesktopRoute, DevicesPayload, KindSummary, RouteGrid, StatsPayload } from '../api/desktopApp'
+import type { DesktopDevice, DesktopRoute, DevicesPayload, KindSummary, RouteGrid, SignalKind, SignalRow, SignalsPayload, StatsPayload } from '../api/desktopApp'
 import { PageHeader } from '../shared/PageHeader'
 import { StatCard } from '../shared/StatCard'
 import { Card } from '../shared/Card'
@@ -514,6 +514,177 @@ function pageList(current: number, count: number): (number | '…')[] {
   return out
 }
 
+// wording: BA review
+const SIGNAL_VI: Record<SignalKind, string> = {
+  ip_many_machines: 'Nhiều máy sau một IP',
+  device_many_accounts: 'Nhiều tài khoản trên một máy',
+  offline_repeat: 'Tải ngoại tuyến lặp lại',
+  refund_high: 'Hoàn lượt bất thường',
+  unclaimed_downloads: 'Tải xong nhiều hơn số lượt đã xin',
+}
+
+function signalSubject(r: SignalRow): string {
+  const s = r.subject
+  if (s.kind === 'ip') return s.ip
+  // wording: BA review
+  if (s.kind === 'device') return `Máy ${s.code}`
+  if (s.kind === 'user') return s.email || s.user_id.slice(0, 8)
+  return s.code
+}
+
+function signalDetail(r: SignalRow): string | null {
+  // wording: BA review
+  if (r.signal === 'ip_many_machines' && r.ip_limit_days != null) return `chạm trần lượt khách ${r.ip_limit_days} ngày`
+  if ((r.signal === 'refund_high' || r.signal === 'unclaimed_downloads') && r.downloads != null) return `máy chủ cho tải ${n(r.downloads)}`
+  return null
+}
+
+/** Build the minimal device the allowance dialog needs from a signal subject. */
+function signalDevice(r: SignalRow): DesktopDevice | null {
+  const s = r.subject
+  const base = {
+    display_name: null, client_version: null, first_seen: null, last_seen: null,
+  }
+  const today = (counted_as: 'user' | 'device') => ({ counted_as, used: 0, limit: null, refunds: 0, retro: 0 })
+  if (s.kind === 'ip') {
+    return { ...base, id: '', code: '', user_id: null, user_email: null, last_ip: s.ip, today: today('device') }
+  }
+  if (s.kind === 'device') {
+    return { ...base, id: s.device_id, code: s.code, user_id: null, user_email: null, last_ip: null, today: today('device') }
+  }
+  if (s.kind === 'user' && s.device_id) {
+    return { ...base, id: s.device_id, code: s.device_id.slice(0, 8), user_id: s.user_id, user_email: s.email ?? null, last_ip: null, today: today('user') }
+  }
+  return null
+}
+
+function SignalsPanel() {
+  const [data, setData] = useState<SignalsPayload | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [dlg, setDlg] = useState<{ device: DesktopDevice; action: AllowanceAction } | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      setData(await desktopAppApi.signals(7))
+      setErr(null)
+    } catch (e) {
+      setErr((e as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const today = data?.day_keys[0]
+  const mix = today ? Object.entries(data?.versions[today] ?? {}).sort((a, b) => b[1] - a[1]) : []
+
+  return (
+    <Card as="section">
+      {/* wording: BA review */}
+      <SectionHeader title="Dấu hiệu bất thường (7 ngày)"
+        subtitle="Chỉ là gợi ý để bạn xem xét, hệ thống không tự chặn ai. Bạn quyết định có cộng lượt hay đặt lại hay không." />
+      <div className="flex flex-col gap-3 p-4">
+        {notice && (
+          <div role="status" className="flex items-center justify-between gap-2 rounded-control border border-success/30 bg-success-soft px-3 py-2 text-xs text-success">
+            <span>{notice}</span>
+            <Button size="sm" variant="ghost" onClick={() => setNotice(null)}>Đóng</Button>
+          </div>
+        )}
+        {loading && !data ? <TableSkeleton rows={4} />
+          : err && !data ? <ErrorState compact title="Không tải được dấu hiệu bất thường" message={err} onRetry={load} />
+          : data && (
+            <>
+              {err && <ErrorState compact title="Không làm mới được" message={err} onRetry={load} />}
+              {!data.redis_ok && (
+                <div className="rounded-control border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-warning">
+                  {/* wording: BA review */}
+                  Không đọc được số liệu (Redis), danh sách bên dưới có thể thiếu.
+                </div>
+              )}
+              {!data.history_ok && (
+                <p className="text-[11px] text-fg-muted">
+                  {/* wording: BA review */}
+                  Đã bỏ qua kiểm tra "tải xong nhiều hơn số lượt đã xin" vì chưa đọc được lịch sử tải đã đồng bộ.
+                </p>
+              )}
+              {data.signals.length === 0
+                ? <EmptyState compact title="Chưa thấy dấu hiệu bất thường trong 7 ngày." />
+                : (
+                  <div className={TABLE_SCROLL}>
+                    <table className={TABLE}>
+                      <thead>
+                        <tr>
+                          {/* wording: BA review */}
+                          <th className={TH}>Đối tượng</th>
+                          <th className={TH}>Dấu hiệu</th>
+                          <th className={TH_NUM}>Giá trị</th>
+                          <th className={TH_NUM}>Số ngày</th>
+                          <th className={TH}>Gần nhất</th>
+                          <th className={TH}>Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.signals.map((r, i) => {
+                          const dev = signalDevice(r)
+                          const detail = signalDetail(r)
+                          return (
+                            <tr key={`${r.signal}-${signalSubject(r)}-${i}`} className={TR}>
+                              <td className={TD_MONO}>
+                                <span className="block max-w-[240px] truncate" title={signalSubject(r)}>{signalSubject(r)}</span>
+                              </td>
+                              <td className={TD}>{SIGNAL_VI[r.signal] ?? r.signal}</td>
+                              <td className={`${TD_NUM} font-semibold text-warning`}>
+                                {n(r.value)}
+                                {detail && <span className="block text-[11px] font-normal text-fg-muted">{detail}</span>}
+                              </td>
+                              <td className={TD_NUM}>{n(r.days_hit)}</td>
+                              <td className={`${TD} text-xs`}>{r.last_day}</td>
+                              <td className={TD}>
+                                {dev && (
+                                  <div className="flex gap-1">
+                                    {r.subject.kind === 'ip'
+                                      ? (
+                                        // wording: BA review
+                                        <Button size="sm" variant="ghost" title="Xoá lượt khách dùng chung hôm nay của mạng này"
+                                          onClick={() => setDlg({ device: dev, action: 'ip' })}>Đặt lại IP</Button>
+                                      ) : (
+                                        <>
+                                          {/* wording: BA review */}
+                                          <Button size="sm" onClick={() => setDlg({ device: dev, action: 'grant' })}>Cộng lượt</Button>
+                                          <Button size="sm" variant="ghost" onClick={() => setDlg({ device: dev, action: 'reset' })}>Đặt lại</Button>
+                                        </>
+                                      )}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              {mix.length > 0 && (
+                <p className="text-[11px] text-fg-muted">
+                  {/* wording: BA review */}
+                  Lời gọi từ app hôm nay theo phiên bản: {mix.map(([v, c]) => `${v === 'none' ? 'không rõ' : v}: ${n(c)}`).join(' · ')}
+                </p>
+              )}
+            </>
+          )}
+      </div>
+      {dlg && (
+        <AllowanceDialog device={dlg.device} action={dlg.action} onClose={() => setDlg(null)}
+          onDone={(msg) => { setDlg(null); setNotice(msg); load() }} />
+      )}
+    </Card>
+  )
+}
+
 function DevicesPanel() {
   const [query, setQuery] = useState('')
   const [q, setQ] = useState('')
@@ -754,6 +925,8 @@ export default function DesktopAppPage() {
           </Card>
         </>
       ) : null}
+
+      <SignalsPanel />
 
       <DevicesPanel />
     </div>

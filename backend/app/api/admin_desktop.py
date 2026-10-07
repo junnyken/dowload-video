@@ -35,6 +35,13 @@ All routes require verify_admin, mounted under /api/v1/admin.
       Today only: clears the network's app-guest counter (the IP cap,
       reason "ip_limit"); each machine's own allowance stays. Audited.
 
+  GET /admin/desktop/signals?days=7   (1..31; task #6126, PLAN-32E §5.3)
+      soft anomaly hints, display only: many machines behind one IP / IP cap
+      hit on several days; several accounts on one machine; offline reports
+      at the grace on several days; many refunds; finished downloads in the
+      synced history beyond what the server let through (accounts only);
+      app call versions per day. Facts from app.core.desktop_signals.
+
 Table missing (migration 037 not applied) → 200 with storage_ready=false.
 """
 from __future__ import annotations
@@ -616,3 +623,195 @@ def _stats(days: int) -> dict:
         "top_over_today": top_over,
         "flags": _flags(),
     }
+
+
+# ── signals (task #6126, PLAN-32E §5.3, P2) ──────────────────────────────
+# Display only: soft hints for an admin to look at, never an automatic lock.
+# Raw facts are written by app.core.desktop_signals.
+
+SIG_IP_MACHINES = 4          # machines behind one IP in a day
+SIG_IP_LIMIT_DAYS = 3        # days the IP cap was hit in the period
+SIG_DEVICE_USERS = 3         # accounts signed in on one machine in a day
+SIG_RETRO_DAYS = 3           # days with offline reports >= the offline grace
+SIG_REFUND_MIN = 3           # refunds in a day, and
+SIG_REFUND_SHARE = 0.5       # ... at least this share of that day's downloads
+SIG_ROWS_MAX = 100
+
+
+def _hash_ints(r, key: str) -> Dict[str, int]:
+    out: Dict[str, int] = {}
+    for k, v in (r.hgetall(key) or {}).items():
+        try:
+            out[_s(k)] = int(_s(v))
+        except ValueError:
+            pass
+    return out
+
+
+def _members(r, key: str) -> List[str]:
+    return [_s(m) for m in (r.smembers(key) or [])]
+
+
+def _completed_by_user_day(start: datetime) -> Optional[Dict[str, Dict[str, int]]]:
+    """Synced app history (migration 034, signed-in only, G7): completed
+    downloads per user per UTC day. None when the table cannot be read."""
+    try:
+        res = (_db().table("desktop_downloads").select("user_id, finished_at, state")
+               .gte("finished_at", start.isoformat()).limit(50_000).execute())
+    except Exception as exc:  # noqa: BLE001
+        logger.info("admin_desktop signals: history unreadable: %s", type(exc).__name__)
+        return None
+    out: Dict[str, Dict[str, int]] = {}
+    for row in res.data or []:
+        if row.get("state") != "completed" or not row.get("user_id"):
+            continue
+        try:
+            d = datetime.fromisoformat(str(row["finished_at"]).replace("Z", "+00:00"))
+        except (KeyError, ValueError):
+            continue
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+        per = out.setdefault(str(row["user_id"]), {})
+        per[_day(d)] = per.get(_day(d), 0) + 1
+    return out
+
+
+def _subject(req_key: str) -> dict:
+    kind, _, ident = req_key.partition(":")
+    if kind == "dev":
+        return {"kind": "device", "code": ident[:8].upper(), "device_id": ident[:16]}
+    if kind == "user":
+        return {"kind": "user", "user_id": ident}
+    return {"kind": "other", "code": ident[:16]}
+
+
+def _attach_people(rows: List[dict]) -> None:
+    """Email for account rows, and a machine to act on (the account's most
+    recently seen one) so "Cộng lượt" / "Đặt lại" work from the list."""
+    uids = sorted({r["subject"]["user_id"] for r in rows if r["subject"].get("user_id")})
+    if not uids:
+        return
+    profs = _profiles(uids)
+    last_dev: Dict[str, str] = {}
+    try:
+        res = (_db().table(TABLE).select("device_hash, user_id, last_seen").in_("user_id", uids)
+               .order("last_seen", desc=True).limit(1000).execute())
+        for row in res.data or []:
+            last_dev.setdefault(str(row.get("user_id")), str(row.get("device_hash") or ""))
+    except Exception as exc:  # noqa: BLE001
+        logger.info("admin_desktop signals: device lookup skipped: %s", type(exc).__name__)
+    for r in rows:
+        uid = r["subject"].get("user_id")
+        if uid:
+            r["subject"]["email"] = (profs.get(uid) or {}).get("email")
+            dev = last_dev.get(uid)
+            if dev:
+                r["subject"].setdefault("device_id", dev[:16])
+
+
+def _signals(days: int) -> dict:
+    from app.api import client_quota  # noqa: PLC0415
+    days = max(1, min(int(days), 31))
+    today = _today_start()
+    day_keys = [_day(today - timedelta(days=i)) for i in range(days)]  # newest first
+    grace = client_quota.offline_grace()
+    rows: List[dict] = []
+    versions: Dict[str, Dict[str, int]] = {}
+    try:
+        r = _r()
+        app_dl = {d: _hash_ints(r, f"vidgrab:sig:app_dl:{d}") for d in day_keys}
+
+        # 1. many machines behind one IP / the IP cap hit on several days
+        ip_days: Dict[str, Dict[str, Any]] = {}
+        for d in day_keys:
+            for ip in _members(r, f"vidgrab:sig:ips:{d}"):
+                n = int(r.scard(f"vidgrab:sig:ipdev:{ip}:{d}") or 0)
+                e = ip_days.setdefault(ip, {"max": 0, "busy": [], "limit": []})
+                e["max"] = max(e["max"], n)
+                if n >= SIG_IP_MACHINES:
+                    e["busy"].append(d)
+            for ip, n in _hash_ints(r, f"vidgrab:sig:iplimit:{d}").items():
+                if n > 0:
+                    ip_days.setdefault(ip, {"max": 0, "busy": [], "limit": []})["limit"].append(d)
+        for ip, e in ip_days.items():
+            if e["busy"] or len(e["limit"]) >= SIG_IP_LIMIT_DAYS:
+                hit = sorted(set(e["busy"]) | set(e["limit"]), reverse=True)
+                rows.append({"signal": "ip_many_machines", "subject": {"kind": "ip", "ip": ip},
+                             "value": e["max"], "days_hit": len(hit), "last_day": hit[0],
+                             "ip_limit_days": len(e["limit"])})
+
+        # 2. several accounts signed in on one machine in a day
+        dev_max: Dict[str, Dict[str, Any]] = {}
+        for d in day_keys:
+            for dev in _members(r, f"vidgrab:sig:devs:{d}"):
+                n = int(r.scard(f"vidgrab:sig:devusers:{dev}:{d}") or 0)
+                if n >= SIG_DEVICE_USERS:
+                    e = dev_max.setdefault(dev, {"max": 0, "days": []})
+                    e["max"] = max(e["max"], n)
+                    e["days"].append(d)
+        for dev, e in dev_max.items():
+            rows.append({"signal": "device_many_accounts", "subject": _subject(f"dev:{dev}"),
+                         "value": e["max"], "days_hit": len(e["days"]), "last_day": e["days"][0]})
+
+        # 3. offline reports at the grace on several days
+        retro_days: Dict[str, List[str]] = {}
+        refund_rows: Dict[str, Dict[str, Any]] = {}
+        for d in day_keys:
+            for req, n in _hash_ints(r, f"vidgrab:sig:retro:{d}").items():
+                if grace > 0 and n >= grace:
+                    retro_days.setdefault(req, []).append(d)
+            # 4. refunds: many, and a large share of the day's downloads
+            for req, n in _hash_ints(r, f"vidgrab:sig:refund:{d}").items():
+                base = app_dl[d].get(req, 0)
+                if n >= SIG_REFUND_MIN and n >= SIG_REFUND_SHARE * max(base, 1):
+                    e = refund_rows.setdefault(req, {"max": 0, "days": [], "base": 0})
+                    if n > e["max"]:
+                        e["max"], e["base"] = n, base
+                    e["days"].append(d)
+        for req, ds in retro_days.items():
+            if len(ds) >= SIG_RETRO_DAYS:
+                rows.append({"signal": "offline_repeat", "subject": _subject(req),
+                             "value": len(ds), "days_hit": len(ds), "last_day": ds[0]})
+        for req, e in refund_rows.items():
+            rows.append({"signal": "refund_high", "subject": _subject(req), "value": e["max"],
+                         "downloads": e["base"], "days_hit": len(e["days"]), "last_day": e["days"][0]})
+
+        # 5. version mix of app calls per day
+        for d in day_keys:
+            versions[d] = _hash_ints(r, f"vidgrab:sig:ver:{d}")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("admin_desktop signals: redis unavailable: %s", type(exc).__name__)
+        return {"days": days, "day_keys": day_keys, "redis_ok": False, "history_ok": False,
+                "signals": [], "versions": {}, "thresholds": _thresholds(grace)}
+
+    # 6. finished downloads in the synced history beyond what the server let
+    #    through (+ the offline grace) — signed-in accounts only (G7)
+    hist = _completed_by_user_day(today - timedelta(days=days - 1))
+    if hist is not None:
+        for uid, per in hist.items():
+            hit = [(d, n) for d, n in per.items()
+                   if d in app_dl and n > app_dl[d].get(f"user:{uid}", 0) + grace]
+            if hit:
+                hit.sort(reverse=True)
+                worst = max(hit, key=lambda x: x[1] - app_dl[x[0]].get(f"user:{uid}", 0))
+                rows.append({"signal": "unclaimed_downloads", "subject": _subject(f"user:{uid}"),
+                             "value": worst[1], "downloads": app_dl[worst[0]].get(f"user:{uid}", 0),
+                             "days_hit": len(hit), "last_day": hit[0][0]})
+
+    rows.sort(key=lambda x: (x["days_hit"], x["last_day"], x["value"]), reverse=True)
+    rows = rows[:SIG_ROWS_MAX]
+    _attach_people(rows)
+    return {"days": days, "day_keys": day_keys, "redis_ok": True, "history_ok": hist is not None,
+            "signals": rows, "versions": versions, "thresholds": _thresholds(grace)}
+
+
+def _thresholds(grace: int) -> dict:
+    return {"ip_machines": SIG_IP_MACHINES, "ip_limit_days": SIG_IP_LIMIT_DAYS,
+            "device_accounts": SIG_DEVICE_USERS, "offline_days": SIG_RETRO_DAYS,
+            "offline_grace": grace, "refund_min": SIG_REFUND_MIN, "refund_share": SIG_REFUND_SHARE}
+
+
+@router.get("/desktop/signals")
+async def desktop_signals_view(days: int = Query(7), _=Depends(verify_admin)) -> dict:
+    import asyncio  # noqa: PLC0415
+    return await asyncio.to_thread(_signals, days)
