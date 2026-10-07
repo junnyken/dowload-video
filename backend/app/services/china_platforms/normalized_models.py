@@ -59,6 +59,9 @@ class NormalizedMediaResult(BaseModel):
     media_id: Optional[str] = None
     title: str
     uploader: Optional[str] = None
+    # Platform id of the author's profile when the provider gives one
+    # (Douyin: authorMeta.secUid → douyin.com/user/<id>; task #6055).
+    uploader_id: Optional[str] = None
     thumbnail_url: Optional[str] = None
     duration_sec: Optional[float] = None
     formats: list[NormalizedMediaFormat] = []

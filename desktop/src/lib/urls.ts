@@ -60,9 +60,12 @@ export function isChannelOnDownloadScreen(raw: string): boolean {
   return looksLikeChannelUrl(raw) && !isDouyinShortUrl(raw);
 }
 
-/** The numeric video id of a douyin.com/video/<id> style link, if visible in the URL. */
+/** The numeric video id of a douyin.com/video/<id> (or ?modal_id=<id>) link, if visible in the URL. */
 export function douyinVideoId(raw: string): string | null {
   const u = parse(raw);
-  const m = u ? /\/(?:share\/)?video\/(\d+)/.exec(u.pathname) : null;
-  return m ? m[1] : null;
+  if (!u) return null;
+  const m = /\/(?:share\/)?video\/(\d+)/.exec(u.pathname);
+  if (m) return m[1];
+  const modal = u.searchParams.get('modal_id');
+  return modal && /^\d{15,25}$/.test(modal) ? modal : null;
 }

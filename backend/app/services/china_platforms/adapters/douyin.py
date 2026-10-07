@@ -84,6 +84,8 @@ def parse_actor_item(item: dict) -> ParsedActorItem:
         duration_sec=duration if isinstance(duration, (int, float)) else None,
         thumbnail_url=thumb or None,
         uploader=(author.get("name") or author.get("nickname") or None),
+        # Actor README (read 2026-10-07): authorMeta.secUid = the profile id.
+        uploader_id=(str(author.get("secUid") or author.get("sec_uid") or "").strip() or None),
         media_id=str(item.get("id")) if item.get("id") else None,
         audio_url=audio or None,
         width=width,

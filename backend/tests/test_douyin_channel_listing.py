@@ -206,7 +206,7 @@ class TestFailures:
 
     def test_bad_url(self, on, rc):
         with pytest.raises(channel_listing.ChannelListingError) as ei:
-            _list(USER, 5, Api(), url="https://www.douyin.com/video/7300000000000000001")
+            _list(USER, 5, Api(), url="https://www.douyin.com/jingxuan")
         assert ei.value.code == "unsupported_url"
 
     def test_platform_spend_ceiling_refuses_before_any_run(self, on, rc):
@@ -259,3 +259,51 @@ class TestLegacyApifyTokenGone:
                      "scrape_douyin_user_apify", "scrape_douyin_user_apify_sync"):
             assert not hasattr(legacy, name)
         assert legacy.APIFY_BASE.startswith("https://api.apify.com")
+
+
+class TestVideoLinkScansTheAuthor:
+    """Owner 2026-10-07: people paste a VIDEO of the channel they want."""
+
+    def _router(self, monkeypatch, uploader_id=SEC_UID, calls=None):
+        from tests._china_fakes import media_result
+
+        async def fake(self, req, ctx=None, **kw):
+            if calls is not None:
+                calls.append((req.url, kw.get("only_provider")))
+            return media_result("apify_douyin", "managed", req.url).model_copy(update={"uploader_id": uploader_id})
+        monkeypatch.setattr("app.services.china_platforms.provider_router.ProviderRouter.resolve", fake)
+
+    @pytest.mark.parametrize("url", [
+        "https://www.douyin.com/jingxuan?modal_id=7689009727547895282",
+        "https://www.douyin.com/video/7689009727547895282",
+    ])
+    def test_video_link_lists_the_authors_channel(self, on, rc, monkeypatch, url):
+        calls: list = []
+        self._router(monkeypatch, calls=calls)
+        api = Api()
+        listing = _list(USER, 5, api, url=url)
+        assert listing.sec_uid == SEC_UID and len(listing.videos) == 5
+        assert calls == [("https://www.douyin.com/video/7689009727547895282", "apify_douyin")]
+        assert json.loads(api.starts()[0].content)["profileUrls"] == [PROFILE]
+
+    def test_video_without_author_id_says_how_to_get_the_profile_link(self, on, rc, monkeypatch):
+        self._router(monkeypatch, uploader_id=None)
+        api = Api()
+        with pytest.raises(channel_listing.ChannelListingError) as ei:
+            _list(USER, 5, api, url="https://www.douyin.com/video/7689009727547895282")
+        assert ei.value.code == "no_media_found" and "Sao chép liên kết" in str(ei.value)
+        assert api.starts() == []
+
+    def test_no_allowance_refuses_before_resolving_the_video(self, on, rc, monkeypatch):
+        calls: list = []
+        self._router(monkeypatch, calls=calls)
+        _use_downloads(rc, GUEST.requester_key, 5)
+        with pytest.raises(channel_listing.ChannelListingError) as ei:
+            _list(GUEST, 5, Api(), url="https://www.douyin.com/video/7689009727547895282")
+        assert ei.value.code == "quota_exceeded" and calls == []
+
+    def test_actor_item_carries_the_author_sec_uid(self):
+        from app.services.china_platforms.adapters.douyin import parse_actor_item
+        item = {**_item(1), "authorMeta": {"name": "x", "secUid": SEC_UID}}
+        assert parse_actor_item(item).uploader_id == SEC_UID
+        assert parse_actor_item(_item(2)).uploader_id is None

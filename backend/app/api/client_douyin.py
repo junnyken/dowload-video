@@ -7,7 +7,8 @@ Apify route of the China access layer — and hand the app a direct media URL
 it downloads itself.
 
   POST /client/douyin/channel  {url, limit}
-      List the newest videos of a Douyin profile. Nothing is counted; the
+      List the newest videos of a Douyin profile (or of the author of a
+      Douyin video link: one extra managed call to read the author id). Nothing is counted; the
       scan is capped at what the requester can still download today (guest
       ≤ 5, signed-in ≤ 20, admin ≤ 100), and every listed video is cached so
       the call below costs nothing more for it.
@@ -98,11 +99,8 @@ async def douyin_channel(payload: ChannelIn, request: Request, user=Depends(get_
     url = _clean_url(payload.url)
     if not url:
         return _err(400, channel_listing.MSG_BAD_URL, "unsupported_url")
-    if not channel_listing.sec_uid_of(url):
-        from app.services.douyin_extractor import _resolve_short_url  # noqa: PLC0415
-        url = await _resolve_short_url(url)
-        if not (_DOUYIN_HOST.match(url or "") and channel_listing.sec_uid_of(url)):
-            return _err(400, channel_listing.MSG_BAD_URL, "unsupported_url")
+    # A profile link, a v.douyin.com short link or a VIDEO link (its author's
+    # channel is scanned) — list_douyin_profile sorts them out.
 
     token, ctx = _bind(request, user)
     try:

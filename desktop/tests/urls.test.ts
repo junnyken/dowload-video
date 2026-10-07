@@ -26,6 +26,8 @@ test('Douyin video links are not channel links', () => {
   }
   assert.equal(douyinVideoId('https://www.douyin.com/video/7311111111111111111'), '7311111111111111111');
   assert.equal(douyinVideoId('https://www.douyin.com/user/abc'), null);
+  assert.equal(douyinVideoId('https://www.douyin.com/jingxuan?modal_id=7689009727547895282'), '7689009727547895282');
+  assert.equal(isDouyinVideoUrl('https://www.douyin.com/jingxuan?modal_id=7689009727547895282'), true);
 });
 
 test('short links: channel on Channels screen, video on Download screen', () => {

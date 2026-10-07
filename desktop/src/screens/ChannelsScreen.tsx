@@ -124,7 +124,7 @@ export function ChannelsScreen() {
             />
             <Button variant="primary" icon={loading ? <Spinner /> : <ListVideo size={16} />} disabled={loading || !text.trim()} onClick={() => start()}>Lấy danh sách video</Button>
           </div>
-          {isDouyinUrl(text.trim()) && <p className="mt-2 text-xs text-fg-muted">Douyin: ứng dụng lấy danh sách qua máy chủ VidGrab, giới hạn theo số lượt tải bạn còn trong hôm nay. Kênh Douyin chỉ được quét khi bạn bấm, không tự kiểm tra nền.</p>}
+          {isDouyinUrl(text.trim()) && <p className="mt-2 text-xs text-fg-muted">Douyin: dán link trang cá nhân hoặc link một video của kênh — ứng dụng tìm kênh của tác giả. Danh sách lấy qua máy chủ VidGrab, giới hạn theo số lượt tải bạn còn trong hôm nay. Kênh Douyin chỉ được quét khi bạn bấm, không tự kiểm tra nền.</p>}
           {msg && <p role="alert" className="mt-2 text-[13px] text-danger">{msg}</p>}
           {f.phase === 'error' && (
             <div role="alert" className="mt-2 flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-[13px] text-danger">

@@ -58,7 +58,10 @@ MSG_BUDGET = "Hệ thống đã dùng hết ngân sách quét Douyin hôm nay. V
 MSG_UPSTREAM = "Nền tảng nguồn tạm thời không phản hồi. Thử lại sau vài phút."
 MSG_EMPTY = ("Không tìm thấy video nào trên kênh này. Kênh có thể để riêng tư, "
              "chưa đăng video, hoặc link không phải trang cá nhân Douyin.")
-MSG_BAD_URL = "Link không phải trang cá nhân Douyin. Hãy dùng link dạng douyin.com/user/…"
+MSG_BAD_URL = ("Link không phải kênh hay video Douyin. Hãy dán link trang cá nhân (douyin.com/user/…) "
+               "hoặc link một video của kênh đó.")
+MSG_NO_AUTHOR = ("Không tìm được kênh của tác giả video này. Hãy mở trang cá nhân tác giả trong app Douyin, "
+                 "bấm … → Chia sẻ → Sao chép liên kết rồi dán link đó.")
 
 
 class ChannelListingError(ValueError):
@@ -239,14 +242,50 @@ def _attempt(ctx: RequestContext, h: str, outcome: str, *, category=None, latenc
 
 # ── main entry ──────────────────────────────────────────────────────────────
 
+async def profile_url_from_video(url: str, ctx: RequestContext) -> str:
+    """A Douyin VIDEO link (douyin.com/video/<id>, jingxuan?modal_id=<id>,
+    v.douyin.com/<code>) → its author's profile URL (task #6055: people paste
+    a video of the channel they want). The video is resolved through the
+    managed route (a cache hit after a scan, else one budgeted call ≈ one
+    video's price) and authorMeta.secUid gives the profile. Raises
+    ChannelListingError."""
+    from app.services.china_platforms.adapters.douyin import DouyinAdapter  # noqa: PLC0415
+    from app.services.china_platforms.errors import AlreadyProcessing, ChinaAccessFailure  # noqa: PLC0415
+    from app.services.china_platforms.provider_router import ProviderRouter  # noqa: PLC0415
+
+    vid = DouyinAdapter.video_id(url)
+    if not vid and "v.douyin.com" in (url or "").lower():
+        from app.services.douyin_extractor import _resolve_short_url  # noqa: PLC0415
+        target = await _resolve_short_url(url)
+        if sec_uid_of(target):
+            return target
+        vid = DouyinAdapter.video_id(target)
+    if not vid:
+        raise ChannelListingError(MSG_BAD_URL, "unsupported_url")
+    req = ChinaResolveRequest(url=_canonical_video_url(vid), operation="single_media")
+    try:
+        # Managed route only: the free native chain never returns the author id.
+        result = await ProviderRouter().resolve(req, ctx, only_provider="apify_douyin")
+    except AlreadyProcessing:
+        raise ChannelListingError(MSG_BUSY, "already_processing") from None
+    except ChinaAccessFailure as exc:
+        if exc.category == "budget_exceeded":
+            raise ChannelListingError(MSG_BUDGET, "budget_exceeded") from None
+        if exc.category in ("parse_failed", "unsupported_url", "private_or_login_required"):
+            raise ChannelListingError(MSG_NO_AUTHOR, "no_media_found") from None
+        raise ChannelListingError(MSG_UPSTREAM, "provider_unavailable") from None
+    sec = (result.uploader_id or "").strip()
+    if not _SEC_UID.search(f"/user/{sec}"):
+        raise ChannelListingError(MSG_NO_AUTHOR, "no_media_found")
+    return f"https://www.douyin.com/user/{sec}"
+
+
 async def list_douyin_profile(profile_url: str, max_videos: int, ctx: Optional[RequestContext] = None,
                               *, provider_factory=None) -> ChannelListing:
     """List up to min(max_videos, listing_cap) newest videos of a Douyin
-    profile. Raises ChannelListingError (str = user-facing text)."""
+    profile — or of the author of a Douyin video link. Raises
+    ChannelListingError (str = user-facing text)."""
     ctx = ctx or current_context()
-    sec_uid = sec_uid_of(profile_url)
-    if not sec_uid:
-        raise ChannelListingError(MSG_BAD_URL, "unsupported_url")
     if not route_open(ctx):
         raise ChannelListingError(MSG_NOT_AVAILABLE, "platform_disabled")
 
@@ -254,6 +293,11 @@ async def list_douyin_profile(profile_url: str, max_videos: int, ctx: Optional[R
     n = max(0, min(int(max_videos or 0), cap))
     if n <= 0:
         raise ChannelListingError(no_allowance_message(ctx), "quota_exceeded")
+
+    sec_uid = sec_uid_of(profile_url)
+    if not sec_uid:
+        # Checked after the allowance: a refused request pays nothing.
+        sec_uid = sec_uid_of(await profile_url_from_video(profile_url, ctx))
 
     cached = _read_cached_listing(sec_uid, n)
     if cached is not None:

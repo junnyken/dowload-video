@@ -3605,18 +3605,12 @@ def _scrape_douyin_channel(channel_url: str, max_videos: int = 20) -> Dict[str, 
     """
     print(f"[Downloader] Using dedicated Douyin channel scraper for: {channel_url}")
 
-    # Extract sec_uid from URL
-    sec_uid_match = re.search(r'/user/([A-Za-z0-9_-]+)', channel_url)
-    if not sec_uid_match:
-        raise ValueError("Không thể xác định sec_uid từ URL Douyin. Vui lòng dùng link dạng: douyin.com/user/...")
-
-    sec_uid = sec_uid_match.group(1)
-    canonical_url = f"https://www.douyin.com/user/{sec_uid}"
-
     # ── Method 0: managed Apify route of the China access layer (task #6055) ──
     # Token pool from admin, budgeted, capped at the requester's remaining
     # downloads today; each listed video is cached so its job is not billed
     # again. None = route not open → the free scrapers below, as before.
+    # Runs before the sec_uid check: it also takes a VIDEO link and scans
+    # that video's author.
     try:
         from app.services.china_platforms.integration import (
             list_douyin_channel_via_access_layer as _china_list_channel,
@@ -3625,10 +3619,18 @@ def _scrape_douyin_channel(channel_url: str, max_videos: int = 20) -> Dict[str, 
         print(f"[Douyin Channel] china access layer unavailable: {_china_imp_err}")
         _china_list_channel = None
     if _china_list_channel is not None:
-        listed = _china_list_channel(canonical_url, max_videos)
+        listed = _china_list_channel(channel_url, max_videos)
         if listed is not None:
             print(f"[Douyin Channel] access layer listed {listed['total_queued']} videos")
             return listed
+
+    # Extract sec_uid from URL
+    sec_uid_match = re.search(r'/user/([A-Za-z0-9_-]+)', channel_url)
+    if not sec_uid_match:
+        raise ValueError("Không thể xác định sec_uid từ URL Douyin. Vui lòng dùng link dạng: douyin.com/user/...")
+
+    sec_uid = sec_uid_match.group(1)
+    canonical_url = f"https://www.douyin.com/user/{sec_uid}"
 
     # ── Method 1: ScraperAPI with JS rendering ──────────────
     from app.core.scraperapi_pool import get_active_key as _sa_key

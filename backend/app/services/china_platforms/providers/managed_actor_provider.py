@@ -36,6 +36,7 @@ class ParsedActorItem:
     duration_sec: Optional[float] = None
     thumbnail_url: Optional[str] = None
     uploader: Optional[str] = None
+    uploader_id: Optional[str] = None
     media_id: Optional[str] = None
     audio_url: Optional[str] = None
     width: Optional[int] = None
@@ -145,6 +146,7 @@ class ManagedActorProvider(BaseProvider):
             media_id=parsed.media_id,
             title=parsed.title.strip()[:500],
             uploader=parsed.uploader,
+            uploader_id=parsed.uploader_id,
             thumbnail_url=parsed.thumbnail_url,
             duration_sec=parsed.duration_sec,
             formats=formats,
