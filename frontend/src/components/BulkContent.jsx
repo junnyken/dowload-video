@@ -1026,6 +1026,10 @@ export default function BulkContent() {
                 Số lượng video muốn tải
               </label>
               <p className="text-xs text-fg-muted mb-2">Chọn số video muốn quét từ kênh. Nếu mới dùng, hãy thử 10–50 video trước.</p>
+              {/douyin\.com/i.test(urls) && (
+                // Server caps a Douyin channel scan at the remaining downloads today (task #6055).
+                <p className="text-xs text-fg-muted mb-2">Kênh Douyin: chỉ quét tối đa bằng số lượt tải còn lại hôm nay của bạn.</p>
+              )}
               <div className="flex flex-wrap gap-2 mb-2">
                 {[
                   { value: 10, label: '10' },

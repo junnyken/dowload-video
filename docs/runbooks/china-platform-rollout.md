@@ -9,7 +9,7 @@ or an admin API call.
 Background: `docs/china-access/04-MIGRATION-ROLLBACK.md` (wave-1 rollout), `05-BENCHMARK-PLAN.md` (benchmark and
 recommendation rules) and `06-FLAGS-ENV.md` (every variable and its default).
 
-> **Never set `APIFY_TOKEN`.** It switches on the legacy, unbudgeted Apify path. The access layer uses
+> **`APIFY_TOKEN` is no longer read** (legacy path removed in task #6055). It used to switch on the legacy, unbudgeted Apify path. The access layer uses
 > `CHINA_ACCESS_APIFY_TOKEN` only.
 
 ## 0. Before you start

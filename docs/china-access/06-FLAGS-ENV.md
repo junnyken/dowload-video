@@ -114,11 +114,22 @@ Xiaohongshu); managed-first only through `CHINA_ACCESS_<P>_PROVIDER_ORDER`. `CHI
 | `CHINA_ACCESS_BENCH_MAX_COST_PER_USABLE_USD` | `0.01` | Rule M3 |
 | `CHINA_ACCESS_BENCH_MAX_TIMEOUT_SHARE` | `0.2` | Rule M2 |
 
-## Do NOT set
-- **`APIFY_TOKEN`**: it activates the **legacy** unbudgeted Apify path for every Douyin download
-  (`downloader.py:1559`) and channel (`downloader.py:3474`). That path can bill two runs per request
-  (`apify_service.py:161-168`) and opens the bulk/channel 422 gates (`douyin_extractor.py:145`). Use
-  `CHINA_ACCESS_APIFY_TOKEN` only.
+## Douyin whole-channel scan (task #6055)
+| Variable | Default | Effect |
+|---|---|---|
+| `CHINA_ACCESS_DOUYIN_CHANNEL_ENABLED` | `true` | Channel scan through the managed route (web Channel tab, app "Kênh"). The Douyin flags, managed mode, kill switches and budget still apply. |
+| `CHINA_ACCESS_DOUYIN_CHANNEL_ADMIN_MAX` | `100` | Videos per scan for admin / unlimited tiers. Everyone else: what they can still download today (guest 5, signed-in 20). |
+| `CHINA_ACCESS_DOUYIN_CHANNEL_TIMEOUT_SEC` | `150` | One profile run (30–280). |
+| `CHINA_ACCESS_DOUYIN_CHANNEL_LISTING_CACHE_SEC` | `1500` | A scanned list is reused for the same profile (never past the media URL expiry). |
+
+Cost: one Apify run per scan, pay-per-result ≈ N × `CHINA_ACCESS_APIFY_DOUYIN_EST_COST_USD`; the
+whole estimate is reserved before the run. Every listed video is cached, so downloading it costs
+nothing more.
+
+## Removed
+- **`APIFY_TOKEN`** (legacy env var): no longer read anywhere since task #6055 (2026-10-07). It used
+  to switch on an unbudgeted Apify path that could bill two runs per request. Tokens live in the admin
+  pool ("Chi phí Apify") or `CHINA_ACCESS_APIFY_TOKEN`.
 
 ## Owner actions
 1. Create a **separate** Apify account and set a monthly spending limit in the Apify console (hard stop independent of this code).
