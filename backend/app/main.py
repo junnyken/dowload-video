@@ -360,6 +360,12 @@ class UnhandledErrorMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(UnhandledErrorMiddleware)
 
+# Task #6125 (PLAN-32E P1): 426 for Windows app builds below DESKTOP_MIN_VERSION
+# on the app routes. Off unless CLIENT_UPDATE_GATE_ENABLED. Inside CORS (added
+# below) so the app's webview can read the 426.
+from app.core.update_gate import UpdateGateMiddleware  # noqa: E402
+app.add_middleware(UpdateGateMiddleware)
+
 
 # ── CORS Configuration ──────────────────────────────────────────────
 # Only allow known frontend origins
