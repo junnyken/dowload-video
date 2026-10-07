@@ -11,7 +11,7 @@ export type CookiePlatform = { slug: string; label: string; hosts: readonly stri
 
 // wording: BA review (labels, hint)
 export const COOKIE_PLATFORMS: readonly CookiePlatform[] = [
-  { slug: 'douyin', label: 'Douyin', hosts: ['douyin.com', 'iesdouyin.com'], hint: 'Không cần đăng nhập: mở một video Douyin và bấm phát, rồi bấm Xong.' },
+  { slug: 'douyin', label: 'Douyin', hosts: ['douyin.com', 'iesdouyin.com'], hint: 'Không cần đăng nhập: mở một video Douyin và bấm phát, rồi bấm Xong (hoặc đóng cửa sổ Douyin).' },
   { slug: 'instagram', label: 'Instagram', hosts: ['instagram.com', 'instagr.am'] },
   { slug: 'facebook', label: 'Facebook', hosts: ['facebook.com', 'fb.watch', 'fb.com'] },
   { slug: 'twitter', label: 'X (Twitter)', hosts: ['x.com', 'twitter.com'] },

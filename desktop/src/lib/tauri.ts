@@ -94,4 +94,5 @@ export const onDone = (cb: (e: DoneEvent) => void) => on<DoneEvent>('download://
 export const onCheckNow = (cb: () => void) => on<unknown>('channels://check-now', () => cb());
 export const onQuitting = (cb: () => void) => on<unknown>('app://quitting', () => cb());
 // A login-<platform> window was closed (by "Xong", "Xoá" or the user).
-export const onLoginClosed = (cb: (p: { platform: string }) => void) => on<{ platform: string }>('cookies://login-closed', cb);
+export const onLoginClosed = (cb: (p: { platform: string; saved?: boolean | null }) => void) =>
+  on<{ platform: string; saved?: boolean | null }>('cookies://login-closed', cb);

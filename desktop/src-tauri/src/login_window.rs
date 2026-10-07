@@ -17,6 +17,7 @@
 //! async command.
 
 use crate::cookies::{self, RawCookie};
+use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 pub const LABEL_PREFIX: &str = "login-";
@@ -46,6 +47,8 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, slug: &'static str) -> Result<(), St
         return Ok(());
     }
     let start = url::Url::parse(p.login_url).map_err(|_| "bad login url")?;
+    let app_nw = app.clone();
+    let lbl_nw = lbl.clone();
     WebviewWindowBuilder::new(app, &lbl, WebviewUrl::External(start))
         // wording: BA review
         .title(format!("VidGrab — kết nối {}", display_name(slug)))
@@ -53,6 +56,22 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, slug: &'static str) -> Result<(), St
         .center()
         .incognito(true)
         .on_navigation(navigation_allowed)
+        // Owner test 2026-10-07: Douyin opens a video in a new tab/window,
+        // which the webview refused, so "click a video and play it" did
+        // nothing. Open it in THIS window instead (same navigation rule);
+        // never a second window. navigate() is dispatched, not called inline.
+        .on_new_window(move |url, _features| {
+            if navigation_allowed(&url) {
+                let app = app_nw.clone();
+                let lbl = lbl_nw.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Some(w) = app.get_webview_window(&lbl) {
+                        let _ = w.navigate(url);
+                    }
+                });
+            }
+            NewWindowResponse::Deny
+        })
         // A login page has no business saving files on the user's disk.
         .on_download(|_, _| false)
         .build()

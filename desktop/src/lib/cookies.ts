@@ -167,6 +167,12 @@ export async function initCookies() {
   await onLoginClosed((p) => {
     cookieState.set((s) => ({ ...s, pending: s.pending === p.platform ? null : s.pending }));
     void refreshCookieStatus();
+    // Closing the login window saves (Rust, owner test 2026-10-07).
+    // wording: BA review
+    if (p.saved === true) toast('success', `Đã kết nối ${platformLabelOf(p.platform)}.`);
+    else if (p.saved === false) {
+      toast('error', `Chưa lấy được phiên ${platformLabelOf(p.platform)}. Bấm Kết nối, mở một video và bấm phát rồi đóng cửa sổ.`);
+    }
   });
   await refreshCookieStatus(); // local and fast; the server switch is cached (FEATURES_KEY)
   void loadFeatures();

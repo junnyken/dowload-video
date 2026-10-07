@@ -1123,7 +1123,17 @@ async fn cookies_login_finish(app: AppHandle, platform: String) -> CmdResult<coo
     let slug = valid_platform(&platform)?;
     let w = login_window::window(&app, slug)
         .ok_or_else(|| CommandError::new(Code::Cancelled, "the login window is not open"))?;
-    let dir = cookie_dir(&app)?;
+    let saved = save_login_cookies(&app, slug, w.clone()).await?;
+    // destroy(), not close(): close() would raise CloseRequested, which saves again.
+    let _ = w.destroy();
+    Ok(saved)
+}
+
+/// Reads the login window's cookies off the main thread (WebView2 deadlocks
+/// otherwise), keeps the platform's own domains, stores them encrypted.
+/// Leaves the window open. Never returns or logs a cookie.
+async fn save_login_cookies(app: &AppHandle, slug: &'static str, w: tauri::WebviewWindow) -> CmdResult<cookies::Saved> {
+    let dir = cookie_dir(app)?;
     tauri::async_runtime::spawn_blocking(move || {
         let p = cookies::def(slug).ok_or_else(|| CommandError::unknown("unknown platform"))?;
         let all = login_window::read_cookies(&w).map_err(CommandError::unknown)?;
@@ -1133,9 +1143,7 @@ async fn cookies_login_finish(app: AppHandle, platform: String) -> CmdResult<coo
             // Keep the window open: the user may still need to sign in / play a video.
             return Err(CommandError::new(Code::CookieRequired, "no cookie of this platform in the login window yet"));
         }
-        let saved = cookies::save(&dir, slug, &text, &kept, n).map_err(CommandError::unknown)?;
-        let _ = w.close();
-        Ok(saved)
+        cookies::save(&dir, slug, &text, &kept, n).map_err(CommandError::unknown)
     })
     .await
     .map_err(|e| CommandError::unknown(e.to_string()))?
@@ -1173,6 +1181,9 @@ async fn cookies_clear(app: AppHandle, platform: String) -> CmdResult<()> {
 #[derive(Clone, Serialize)]
 struct LoginClosed {
     platform: String,
+    /// Some(true/false) when the user closed the window and we tried to save;
+    /// None for the plain "window gone" notice.
+    saved: Option<bool>,
 }
 
 // ---------------------------------------------------------------- versions
@@ -1295,7 +1306,26 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let WindowEvent::Destroyed = event {
                 if let Some(slug) = window.label().strip_prefix(login_window::LABEL_PREFIX) {
-                    let _ = window.app_handle().emit_to(MAIN_WINDOW, EVENT_LOGIN_CLOSED, LoginClosed { platform: slug.to_string() });
+                    let _ = window.app_handle().emit_to(MAIN_WINDOW, EVENT_LOGIN_CLOSED,
+                        LoginClosed { platform: slug.to_string(), saved: None });
+                }
+            }
+            // Owner test 2026-10-07: people close the login window when they are
+            // done instead of pressing "Xong" in the main window. Closing now
+            // SAVES (the InPrivate cookies vanish with the window), then destroys.
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let slug = window.label().strip_prefix(login_window::LABEL_PREFIX)
+                    .and_then(|s| valid_platform(s).ok());
+                if let (Some(slug), Some(w)) = (slug, window.app_handle().get_webview_window(window.label())) {
+                    api.prevent_close();
+                    let app = window.app_handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        let saved = save_login_cookies(&app, slug, w.clone()).await.is_ok();
+                        let _ = app.emit_to(MAIN_WINDOW, EVENT_LOGIN_CLOSED,
+                            LoginClosed { platform: slug.to_string(), saved: Some(saved) });
+                        let _ = w.destroy();
+                    });
+                    return;
                 }
             }
             if let WindowEvent::CloseRequested { api, .. } = event {
