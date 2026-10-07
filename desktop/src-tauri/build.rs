@@ -26,6 +26,8 @@ const COMMANDS: &[&str] = &[
     "auth_save",
     "auth_load",
     "auth_clear",
+    "browser_login",
+    "cancel_browser_login",
     "get_version",
     "tool_versions",
     "channel_fetch",

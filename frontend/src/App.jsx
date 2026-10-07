@@ -7,6 +7,7 @@ import LandingPage from './components/LandingPage';
 import ExtensionPage from './components/ExtensionPage';
 import SettingsContent from './components/SettingsContent';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import DesktopLoginPage from './pages/DesktopLoginPage';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import AccountMenu from './components/AccountMenu';
 import ThemeToggle from './components/ThemeToggle';
@@ -65,6 +66,8 @@ const PATH_MAP = {
   '/audit':               'audit',
   '/approvals':           'approvals',
   '/reset-password':      'reset-password',
+  // Opened by the Windows app's "Đăng nhập qua trình duyệt" (task #6039).
+  '/desktop-login':       'desktop-login',
   '/privacy':             'privacy',
   '/api-docs':            'api-docs',
   '/api-keys':            'api-keys',
@@ -466,6 +469,12 @@ function AppInner() {
         {view === 'reset-password' && (
           <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
             <ResetPasswordPage />
+          </div>
+        )}
+
+        {view === 'desktop-login' && (
+          <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
+            <DesktopLoginPage />
           </div>
         )}
 

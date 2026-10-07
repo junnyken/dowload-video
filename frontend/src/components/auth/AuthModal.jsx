@@ -1,12 +1,16 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { X, Mail, Lock, User, Eye, EyeOff, Loader2, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import TurnstileWidget from './TurnstileWidget';
+import { TURNSTILE_SITE_KEY } from '../../lib/turnstile';
+import { authErrorMessage, MSG } from '../../lib/authErrors';
+import { isDisposableEmail } from '../../lib/disposableEmail';
 
 const VIEWS = { SIGNIN: 'signin', SIGNUP: 'signup', RESET: 'reset' };
 
-export default function AuthModal({ onClose }) {
+export default function AuthModal({ onClose, initialView = VIEWS.SIGNIN }) {
   const { signIn, signUp, resetPassword } = useAuth();
-  const [view, setView]       = useState(VIEWS.SIGNIN);
+  const [view, setView]       = useState(Object.values(VIEWS).includes(initialView) ? initialView : VIEWS.SIGNIN);
   const [email, setEmail]     = useState('');
   const [password, setPassword] = useState('');
   const [name, setName]       = useState('');
@@ -14,18 +18,31 @@ export default function AuthModal({ onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
   const [success, setSuccess] = useState('');
+  // Turnstile (anti-spam). Empty site key -> no widget and no token.
+  const [captcha, setCaptcha] = useState('');
+  const turnstile = useRef(null);
 
   const reset = (nextView) => {
-    setError(''); setSuccess(''); setPassword('');
+    setError(''); setSuccess(''); setPassword(''); setCaptcha('');
     setView(nextView);
   };
 
+  /** false (with a message) when the widget is on but not solved yet. */
+  const captchaReady = () => {
+    if (TURNSTILE_SITE_KEY && !captcha) { setError(MSG.captchaNeeded); return false; }
+    return true;
+  };
+  // A Turnstile token is single-use: get a fresh one after every attempt.
+  const spendCaptcha = () => turnstile.current?.reset();
+
   const handleSignIn = async (e) => {
     e.preventDefault();
+    if (!captchaReady()) return;
     setLoading(true); setError('');
-    const { error } = await signIn(email, password);
+    const { error } = await signIn(email, password, captcha);
     setLoading(false);
-    if (error) { setError(error.message); return; }
+    spendCaptcha();
+    if (error) { setError(authErrorMessage(error)); return; }
     onClose();
   };
 
@@ -33,18 +50,28 @@ export default function AuthModal({ onClose }) {
     e.preventDefault();
     if (password.length < 6) { setError('Mật khẩu ít nhất 6 ký tự'); return; }
     setLoading(true); setError('');
-    const { error } = await signUp(email, password, name);
+    // Early hint only; the database trigger (migration 036) is the real gate.
+    if (await isDisposableEmail(email)) {
+      setLoading(false);
+      setError(MSG.disposableEmail);
+      return;
+    }
+    if (!captchaReady()) { setLoading(false); return; }
+    const { error } = await signUp(email, password, name, captcha);
     setLoading(false);
-    if (error) { setError(error.message); return; }
+    spendCaptcha();
+    if (error) { setError(authErrorMessage(error)); return; }
     setSuccess('Kiểm tra email để xác nhận tài khoản!');
   };
 
   const handleReset = async (e) => {
     e.preventDefault();
+    if (!captchaReady()) return;
     setLoading(true); setError('');
-    const { error } = await resetPassword(email);
+    const { error } = await resetPassword(email, captcha);
     setLoading(false);
-    if (error) { setError(error.message); return; }
+    spendCaptcha();
+    if (error) { setError(authErrorMessage(error)); return; }
     setSuccess('Đã gửi link đặt lại mật khẩu. Kiểm tra email nhé!');
   };
 
@@ -102,6 +129,7 @@ export default function AuthModal({ onClose }) {
           <form onSubmit={handleSignIn} className="space-y-3">
             <InputField icon={<Mail />} type="email" placeholder="Email" value={email} onChange={setEmail} />
             <PasswordField value={password} onChange={setPassword} show={showPw} toggle={() => setShowPw(p => !p)} />
+            <TurnstileWidget key="signin" ref={turnstile} onToken={setCaptcha} />
             <SubmitBtn loading={loading} label="Đăng nhập" />
             <button type="button" onClick={() => reset(VIEWS.RESET)}
               className="w-full text-center text-fg-muted hover:text-accent-text text-xs transition-colors">
@@ -115,6 +143,7 @@ export default function AuthModal({ onClose }) {
             <InputField icon={<User />} type="text" placeholder="Tên hiển thị" value={name} onChange={setName} />
             <InputField icon={<Mail />} type="email" placeholder="Email" value={email} onChange={setEmail} />
             <PasswordField value={password} onChange={setPassword} show={showPw} toggle={() => setShowPw(p => !p)} />
+            <TurnstileWidget key="signup" ref={turnstile} onToken={setCaptcha} />
             <SubmitBtn loading={loading} label="Tạo tài khoản" />
           </form>
         )}
@@ -122,6 +151,7 @@ export default function AuthModal({ onClose }) {
         {view === VIEWS.RESET && !success && (
           <form onSubmit={handleReset} className="space-y-3">
             <InputField icon={<Mail />} type="email" placeholder="Email" value={email} onChange={setEmail} />
+            <TurnstileWidget key="reset" ref={turnstile} onToken={setCaptcha} />
             <SubmitBtn loading={loading} label="Gửi link đặt lại" />
           </form>
         )}

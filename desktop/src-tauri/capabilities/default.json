@@ -25,6 +25,8 @@
     "allow-auth-save",
     "allow-auth-load",
     "allow-auth-clear",
+    "allow-browser-login",
+    "allow-cancel-browser-login",
     "allow-get-version",
     "allow-tool-versions",
     "allow-channel-fetch",

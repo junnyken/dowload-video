@@ -194,6 +194,8 @@ export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promi
     case 'auth_save': authBlob = a.session as string; return null;
     case 'auth_load': return authBlob;
     case 'auth_clear': authBlob = null; return null;
+    case 'browser_login': return mockBrowserLogin();
+    case 'cancel_browser_login': mockLoginCancel?.(); return null;
     case 'channel_fetch': return mockChannelFetch(a.url as string, a.limit as number | undefined);
     case 'cancel_channel_fetch': return null;
     case 'channel_save': {
@@ -250,9 +252,21 @@ export async function mockApi<T>(path: string, opts: { method?: string; body?: u
 }
 
 // ---- auth ------------------------------------------------------------------
-export async function mockSignIn(email: string, password: string) {
-  await sleep(500);
-  if (password === 'wrong') throw { message: 'Invalid login credentials', status: 400, code: 'invalid_credentials' };
-  if (password === 'offline') throw { message: 'fetch failed', name: 'AuthRetryableFetchError', status: 0 };
-  return { access_token: 'mock-token', user: { email } };
+// Browser sign-in: "the user signs in in the browser" after 2.5 s, unless
+// cancelled. localStorage mock.login = 'timeout' simulates the 5-minute timeout.
+let mockLoginCancel: (() => void) | null = null;
+function mockBrowserLogin(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      mockLoginCancel = null;
+      if (localStorage.getItem('mock.login') === 'timeout') reject(err('timeout', 'browser sign-in timed out'));
+      else resolve('mockrefreshtoken');
+    }, 2500);
+    mockLoginCancel = () => { clearTimeout(t); mockLoginCancel = null; reject(err('cancelled', 'browser sign-in cancelled')); };
+  });
+}
+export async function mockExchange(refreshToken: string) {
+  await sleep(300);
+  if (refreshToken !== 'mockrefreshtoken') throw { message: 'Invalid Refresh Token', status: 400, code: 'refresh_token_not_found' };
+  return { access_token: 'mock-token', user: { email: 'ban@example.com' } };
 }

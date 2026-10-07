@@ -22,6 +22,7 @@ const MESSAGES: Record<string, string> = {
   unauthorized: 'Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.',
   server: 'Máy chủ đang gặp sự cố. Hãy thử lại sau.',
   not_in_app: 'Tính năng này chỉ chạy trong ứng dụng VidGrab trên máy tính.',
+  login_link_invalid: 'Phiên đăng nhập từ trình duyệt không dùng được hoặc đã hết hạn. Hãy bấm “Đăng nhập qua trình duyệt” lần nữa.',
 };
 
 export function errorMessage(code: string | null | undefined): string {
@@ -49,6 +50,8 @@ export function authErrorCode(e: unknown): string {
   const msg = (o.message ?? '').toLowerCase();
   if (o.code === 'invalid_credentials' || msg.includes('invalid login credentials')) return 'invalid_credentials';
   if (o.code === 'email_not_confirmed' || msg.includes('email not confirmed')) return 'email_not_confirmed';
+  if (o.code === 'refresh_token_not_found' || o.code === 'refresh_token_already_used' || o.code === 'session_not_found'
+      || msg.includes('refresh token')) return 'login_link_invalid';
   if (o.status === 429 || msg.includes('rate limit')) return 'rate_limited';
   if (o.name === 'AuthRetryableFetchError' || msg.includes('fetch') || msg.includes('network') || o.status === 0) return 'network';
   if ((o.status ?? 0) >= 500) return 'server';

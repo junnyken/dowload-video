@@ -53,6 +53,9 @@ export const api = {
   authSave: (session: string) => call<null>('auth_save', { session }),
   authLoad: () => call<string | null>('auth_load'),
   authClear: () => call<null>('auth_clear'),
+  // Browser sign-in (C1-CONTRACT.md §5): resolves with a Supabase refresh token.
+  browserLogin: () => call<string>('browser_login'),
+  cancelBrowserLogin: () => call<null>('cancel_browser_login'),
   getVersion: () => call<string>('get_version'),
   toolVersions: () => call<ToolVersions>('tool_versions'),
   // Channels (C1-CONTRACT.md section 4)

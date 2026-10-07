@@ -79,6 +79,7 @@ Sign-in uses `@supabase/supabase-js` directly (same project as the web:
 `https://wtwnbagcqyedindtcadv.supabase.co`, public anon key taken from the web
 build — it is the same public key the website ships). Session persisted only via
 `auth_save`/`auth_load` (custom storage adapter), never localStorage.
+Since 0.4.0 the app no longer signs in with email + password: see §5.
 
 CSP (`tauri.conf.json`, owned by the Rust part): `connect-src` adds the
 Supabase URL; `img-src 'self' data: https:` for thumbnails.
@@ -134,3 +135,43 @@ Scheduler (UI, runs while the app runs, also hidden in tray): every minute pick
 enabled channels whose interval elapsed; fetch latest 50; new = not in seen;
 mode download → enqueue + seen_add + notify; notify → add to pendingNew + notify.
 Settings: "Thu nhỏ xuống khay khi đóng" (on), "Khởi động cùng Windows" (off).
+
+## 5. Browser sign-in (0.4.0, task #6039 — anti-spam)
+
+Sign-up / sign-in / password reset on the website are protected by Cloudflare
+Turnstile through Supabase captcha protection. Once that is on, Supabase
+rejects `POST /auth/v1/token?grant_type=password` without a captcha token, so
+the app's old email+password form would stop working. The app therefore never
+takes a password any more:
+
+| Command | Args | Returns | Notes |
+|---|---|---|---|
+| `browser_login` | `{}` | `string` (Supabase refresh token) | Binds `127.0.0.1:0` (OS-chosen port), makes `state` = 32 bytes from the OS CSPRNG as 64 lower-case hex, opens `https://dvid.vibe1.tinhgon.xyz/desktop-login?port=<port>&state=<state>` through the same allowlist as `open_url`, then waits up to 5 min for one valid `GET /callback?state=<state>&refresh_token=<token>` with `Host: 127.0.0.1:<port>`. Other requests get 404/405/400 and waiting continues (max 32 requests). The port closes after the first valid callback. Errors: `timeout`, `cancelled`, `unknown`. A new call cancels an older one. |
+| `cancel_browser_login` | `{}` | `null` | Stops the wait (dialog closed / "Huỷ"). |
+
+Web side (`frontend/src/pages/DesktopLoginPage.jsx`, `lib/desktopHandoff.js`):
+validates `port` (1024–65535) and `state` (`^[0-9a-f]{64}$`), signs in with
+email + password + captcha on a **throw-away Supabase client** (nothing
+persisted; the website's own session is not used or touched), then navigates
+the tab to `http://127.0.0.1:<port>/callback?state=…&refresh_token=…` — never
+any other host. Query string, not fragment: a fragment is not sent to the
+listener. The listener's success page ("Đã đăng nhập, quay lại ứng dụng")
+removes the query from the address bar/history with `history.replaceState`
+(CSP allows only that script by hash), and the app immediately calls
+`supabase.auth.refreshSession({ refresh_token })`, which rotates the token, so
+the copy that passed through the browser is spent.
+
+Why a separate session rather than the website's: Supabase refresh tokens are
+single-use and reusing one outside the 10 s reuse interval revokes the whole
+session (https://supabase.com/docs/guides/auth/sessions). The refresh-token
+grant itself does not need a captcha (`isIgnoreCaptchaRoute` in
+supabase/auth `internal/api/middleware.go`).
+
+Sign-out in the app uses `signOut({ scope: 'local' })` so it ends only the
+app's session (the default `global` would also sign the user out of the
+website and other devices).
+
+Rust: `src-tauri/src/browser_login.rs` (no Tauri types; unit-tested: state
+mismatch, wrong path/method/Host, duplicated params, one-shot close, cancel,
+timeout, request cap, CSP script hash).
+

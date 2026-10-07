@@ -78,6 +78,11 @@ self.addEventListener('fetch', (event) => {
   // Skip Chrome extension requests
   if (url.protocol === 'chrome-extension:') return;
 
+  // Cloudflare Turnstile (anti-spam on the auth forms): never cache. Cloudflare
+  // requires api.js to be fetched from its exact URL every time, and the
+  // cache-first rule for *.js below would otherwise pin an old copy forever.
+  if (url.hostname === 'challenges.cloudflare.com') return;
+
   // History API: stale-while-revalidate with TTL
   const isHistoryUrl = HISTORY_URLS.some((h) => url.pathname.startsWith(h));
   if (isHistoryUrl) {

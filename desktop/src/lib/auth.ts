@@ -1,10 +1,14 @@
-// Supabase email+password auth. The session lives ONLY in Windows Credential
-// Manager through auth_save/auth_load/auth_clear (never localStorage).
+// Supabase auth. Since 0.4.0 the app never asks for the password: the user
+// signs in on the website ("Đăng nhập qua trình duyệt", Rust browser_login,
+// docs/desktop/C1-CONTRACT.md §5), which hands back a refresh token over a
+// one-shot 127.0.0.1 callback; we swap it for this app's own session. The
+// session lives ONLY in Windows Credential Manager through
+// auth_save/auth_load/auth_clear (never localStorage).
 import { createClient, type SupabaseClient, type Session } from '@supabase/supabase-js';
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from './config';
 import { createStore } from './store';
 import { api, loadMock, mockMode } from './tauri';
-import { authErrorCode, type AppError } from './errors';
+import { authErrorCode, toAppError, type AppError } from './errors';
 
 export type AuthState = { status: 'loading' | 'out' | 'in'; email: string | null };
 export const auth = createStore<AuthState>({ status: 'loading', email: null });
@@ -77,22 +81,39 @@ export async function initAuth() {
   }
 }
 
-/** Throws AppError with a code understood by errors.ts. */
-export async function signIn(email: string, password: string): Promise<void> {
+/**
+ * Opens the website's sign-in page in the default browser and waits (up to
+ * 5 minutes) for it to hand back a refresh token, then swaps that token for
+ * the app's own session (refresh tokens are single-use, so the copy that
+ * passed through the browser is spent). Throws AppError (errors.ts); code
+ * 'cancelled' when cancelBrowserSignIn() was called.
+ */
+export async function signInWithBrowser(): Promise<void> {
+  let refreshToken: string;
+  try {
+    refreshToken = await api.browserLogin();
+  } catch (e) {
+    throw toAppError(e);
+  }
   try {
     if (mockMode) {
       const m = await loadMock();
-      const s = await m.mockSignIn(email, password);
+      const s = await m.mockExchange(refreshToken);
       mockToken = s.access_token;
-      auth.set({ status: 'in', email });
+      auth.set({ status: 'in', email: s.user.email });
       return;
     }
-    const { error } = await getClient().auth.signInWithPassword({ email, password });
+    const { error } = await getClient().auth.refreshSession({ refresh_token: refreshToken });
     if (error) throw error;
   } catch (e) {
     const err: AppError = { code: authErrorCode(e), message: (e as Error)?.message ?? '' };
     throw err;
   }
+}
+
+/** Stops waiting for the browser (closing the sign-in dialog). */
+export function cancelBrowserSignIn(): void {
+  api.cancelBrowserLogin().catch(() => { /* nothing waiting */ });
 }
 
 export async function signOut(): Promise<void> {
@@ -102,7 +123,10 @@ export async function signOut(): Promise<void> {
     return;
   }
   try {
-    await getClient().auth.signOut(); // clears storage via removeItem -> auth_clear
+    // 'local': end only this app's session. Each device has its own session
+    // since 0.4.0, so the default ('global') would also sign the user out of
+    // the website and every other device.
+    await getClient().auth.signOut({ scope: 'local' }); // clears storage via removeItem -> auth_clear
   } catch { /* offline: still drop the local session */ }
   try { await api.authClear(); } catch { /* ignore */ }
   auth.set({ status: 'out', email: null });

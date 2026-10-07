@@ -70,7 +70,11 @@ export function AuthProvider({ children }) {
   }, [session]);
 
   // ── Auth actions ──────────────────────────────────────────────────
-  const signUp = useCallback(async (email, password, displayName) => {
+  // captchaToken: Cloudflare Turnstile token from the form, or '' when the
+  // widget is off (VITE_TURNSTILE_SITE_KEY empty). Supabase checks it only
+  // once captcha protection is enabled in the dashboard; until then an absent
+  // token is fine. See docs/runbooks/antispam-signup.md.
+  const signUp = useCallback(async (email, password, displayName, captchaToken) => {
     // Without emailRedirectTo, Supabase falls back to the project's Site URL.
     // That is still the default http://localhost:3000, so every confirmation
     // email sent to a real user landed on ERR_CONNECTION_REFUSED — the account
@@ -87,13 +91,18 @@ export function AuthProvider({ children }) {
       options: {
         data: { display_name: displayName },
         emailRedirectTo: `${window.location.origin}/`,
+        ...(captchaToken ? { captchaToken } : {}),
       },
     });
     return { data, error };
   }, []);
 
-  const signIn = useCallback(async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const signIn = useCallback(async (email, password, captchaToken) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      ...(captchaToken ? { options: { captchaToken } } : {}),
+    });
     return { data, error };
   }, []);
 
@@ -107,9 +116,10 @@ export function AuthProvider({ children }) {
     );
   }, []);
 
-  const resetPassword = useCallback(async (email) => {
+  const resetPassword = useCallback(async (email, captchaToken) => {
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
+      ...(captchaToken ? { captchaToken } : {}),
     });
     return { data, error };
   }, []);

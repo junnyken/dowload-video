@@ -15,6 +15,11 @@ ENV VITE_API_URL=$VITE_API_URL
 # Empty -> script default https://dvid.vibe1.tinhgon.xyz
 ARG VITE_SITE_URL=""
 ENV VITE_SITE_URL=$VITE_SITE_URL
+# Cloudflare Turnstile SITE key (public). Empty -> no captcha widget, no token
+# sent. The SECRET key never comes here: it lives only in the Supabase
+# dashboard (Auth -> Attack Protection). See docs/runbooks/antispam-signup.md.
+ARG VITE_TURNSTILE_SITE_KEY=""
+ENV VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
 RUN npm run build
 # Files must be world-readable for nginx (a 600 checkout gave 403 on /icons/*.svg).
 RUN chmod -R a+rX /app/dist

@@ -13,6 +13,7 @@
 //! permission of theirs.
 
 mod auth;
+mod browser_login;
 mod channels;
 mod checksum;
 mod engine;
@@ -889,6 +890,60 @@ async fn auth_load() -> CmdResult<Option<String>> {
         .map_err(CommandError::unknown)
 }
 
+/// The browser sign-in waiting right now, if any (browser_login.rs).
+#[derive(Default)]
+struct BrowserLogin {
+    cancel: Mutex<Option<Arc<AtomicBool>>>,
+}
+
+/// "Đăng nhập qua trình duyệt": opens /desktop-login in the default browser
+/// and waits (up to 5 minutes) for the one-shot loopback callback. Returns the
+/// Supabase refresh token; the UI exchanges it for the app's own session.
+/// Starting a new attempt cancels an older one.
+#[tauri::command]
+async fn browser_login(login: State<'_, BrowserLogin>) -> CmdResult<String> {
+    let cancel = Arc::new(AtomicBool::new(false));
+    if let Some(old) = lock(&login.cancel).replace(cancel.clone()) {
+        old.store(true, Ordering::SeqCst);
+    }
+    let state = browser_login::new_state().map_err(CommandError::unknown)?;
+    let (listener, port) =
+        browser_login::bind().map_err(|e| CommandError::unknown(format!("cannot listen on 127.0.0.1: {e}")))?;
+    let url = validate::open_url(&browser_login::login_url(port, &state)).map_err(|e| CommandError::new(Code::InvalidUrl, e))?;
+    tauri::async_runtime::spawn_blocking(move || sys::open_url(&url))
+        .await
+        .map_err(|e| CommandError::unknown(e.to_string()))?
+        .map_err(|e| CommandError::unknown(format!("cannot open browser: {e}")))?;
+    let c = cancel.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let deadline = Instant::now() + browser_login::TIMEOUT;
+        let r = browser_login::wait_for_callback(&listener, port, &state, deadline, &c);
+        drop(listener); // one-shot: the port closes here
+        r
+    })
+    .await
+    .map_err(|e| CommandError::unknown(e.to_string()))?;
+    {
+        let mut slot = lock(&login.cancel);
+        if slot.as_ref().is_some_and(|a| Arc::ptr_eq(a, &cancel)) {
+            *slot = None;
+        }
+    }
+    result.map_err(|e| match e {
+        browser_login::WaitError::Timeout => CommandError::new(Code::Timeout, "browser sign-in timed out"),
+        browser_login::WaitError::Cancelled => CommandError::new(Code::Cancelled, "browser sign-in cancelled"),
+        browser_login::WaitError::TooManyRequests => CommandError::unknown("too many unexpected requests on the sign-in port"),
+        browser_login::WaitError::Io(m) => CommandError::unknown(format!("sign-in listener failed: {m}")),
+    })
+}
+
+#[tauri::command]
+fn cancel_browser_login(login: State<'_, BrowserLogin>) {
+    if let Some(c) = lock(&login.cancel).take() {
+        c.store(true, Ordering::SeqCst);
+    }
+}
+
 #[tauri::command]
 async fn auth_clear() -> CmdResult<()> {
     tauri::async_runtime::spawn_blocking(auth::clear)
@@ -1015,6 +1070,7 @@ pub fn run() {
         })
         .manage(Jobs::default())
         .manage(AppFlags::default())
+        .manage(BrowserLogin::default())
         .invoke_handler(tauri::generate_handler![
             probe,
             cancel_probe,
@@ -1035,6 +1091,8 @@ pub fn run() {
             auth_save,
             auth_load,
             auth_clear,
+            browser_login,
+            cancel_browser_login,
             get_version,
             tool_versions,
             channel_fetch,
