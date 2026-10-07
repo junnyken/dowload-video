@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { desktopAppApi } from '../api/desktopApp'
+import type { FormEvent } from 'react'
+import { desktopAppApi, postDesktopAllowance } from '../api/desktopApp'
 import type { DesktopDevice, DesktopRoute, DevicesPayload, KindSummary, RouteGrid, StatsPayload } from '../api/desktopApp'
 import { PageHeader } from '../shared/PageHeader'
 import { StatCard } from '../shared/StatCard'
@@ -394,6 +395,106 @@ function usageText(d: DesktopDevice) {
   return t.limit == null || t.limit === -1 ? n(t.used) : `${n(t.used)}/${n(t.limit)}`
 }
 
+type AllowanceAction = 'grant' | 'reset'
+
+/** Task #6125: grant extra downloads for today / reset today's count for one machine. */
+function AllowanceDialog({ device, action, onClose, onDone }: {
+  device: DesktopDevice
+  action: AllowanceAction
+  onClose: () => void
+  onDone: (notice: string) => void
+}) {
+  const [amount, setAmount] = useState('5')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    function onEsc(e: KeyboardEvent) { if (e.key === 'Escape' && !busy) onClose() }
+    document.addEventListener('keydown', onEsc)
+    return () => document.removeEventListener('keydown', onEsc)
+  }, [busy, onClose])
+
+  const grant = action === 'grant'
+  const amountNum = Number(amount)
+  const amountOk = !grant || (Number.isInteger(amountNum) && amountNum >= 1 && amountNum <= 50)
+  const reasonLen = reason.trim().length
+  const reasonOk = reasonLen >= 3 && reasonLen <= 300
+  const byAccount = device.today.counted_as === 'user'
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    if (busy || !amountOk || !reasonOk) return
+    setBusy(true)
+    setError(null)
+    try {
+      await postDesktopAllowance({
+        device_id: device.id, action, reason: reason.trim(),
+        ...(grant ? { amount: amountNum } : {}),
+      })
+      // wording: BA review
+      const who = byAccount ? `tài khoản ${device.user_email || device.user_id}` : `máy ${device.code}`
+      onDone(grant ? `Đã cộng ${amountNum} lượt hôm nay cho ${who}.` : `Đã đặt lại lượt hôm nay của ${who}.`)
+    } catch (err) {
+      setError((err as Error).message)
+      setBusy(false)
+    }
+  }
+
+  const field = 'w-full rounded-control border border-line bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-surface-2 backdrop-blur-sm" onClick={busy ? undefined : onClose} aria-hidden />
+      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4">
+        {/* wording: BA review */}
+        <form onSubmit={submit} role="dialog" aria-modal aria-label={grant ? 'Cộng lượt' : 'Đặt lại lượt'}
+          className="relative w-full max-w-md rounded-card border border-line bg-surface shadow-2xl">
+          <div className="border-b border-line px-5 py-4">
+            <h2 className="text-sm font-semibold text-fg">{grant ? 'Cộng lượt tải hôm nay' : 'Đặt lại lượt hôm nay'}</h2>
+            <p className="mt-1 text-xs text-fg-muted">
+              Chỉ áp dụng cho hôm nay (ngày tính theo giờ UTC), sang ngày mới trở về mặc định.{' '}
+              {byAccount
+                ? <>Lượt đang tính cho <b className="text-fg-2">tài khoản {device.user_email || device.user_id}</b>, nên áp dụng cho cả web và mọi máy của tài khoản này.</>
+                : <>Lượt đang tính cho <b className="text-fg-2">máy {device.code}</b>.</>}
+            </p>
+          </div>
+          <div className="flex flex-col gap-4 px-5 py-4">
+            {grant && (
+              <div>
+                <label htmlFor="allow-amount" className="mb-1.5 block text-xs font-medium text-fg-muted">Số lượt cộng thêm (1–50)</label>
+                <input id="allow-amount" type="number" min={1} max={50} step={1} className={field}
+                  value={amount} onChange={(e) => setAmount(e.target.value)} disabled={busy} />
+                {!amountOk && <p className="mt-1 text-[11px] text-danger">Nhập số nguyên từ 1 đến 50.</p>}
+              </div>
+            )}
+            <div>
+              <label htmlFor="allow-reason" className="mb-1.5 block text-xs font-medium text-fg-muted">
+                Lý do<span className="ml-0.5 text-danger">*</span>
+              </label>
+              <textarea id="allow-reason" rows={3} maxLength={300} className={`${field} resize-y`}
+                value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy}
+                placeholder="Ví dụ: khách báo lỗi tải, đã xác nhận qua email" />
+              <p className={`mt-1 text-[11px] ${reasonLen > 0 && !reasonOk ? 'text-danger' : 'text-fg-muted'}`}>
+                {reasonLen}/300 ký tự, tối thiểu 3.
+              </p>
+            </div>
+            {error && (
+              <div role="alert" className="rounded-control border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger">{error}</div>
+            )}
+          </div>
+          <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
+            <Button variant="ghost" onClick={onClose} disabled={busy}>Huỷ</Button>
+            <Button type="submit" variant="primary" disabled={busy || !amountOk || !reasonOk}>
+              {busy ? 'Đang xử lý…' : grant ? 'Cộng lượt' : 'Đặt lại'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </>
+  )
+}
+
 function pageList(current: number, count: number): (number | '…')[] {
   const keep = new Set([1, count, current - 1, current, current + 1])
   const out: (number | '…')[] = []
@@ -411,6 +512,8 @@ function DevicesPanel() {
   const [data, setData] = useState<DevicesPayload | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [dlg, setDlg] = useState<{ device: DesktopDevice; action: AllowanceAction } | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   // Search runs on the server; wait for the admin to stop typing.
   useEffect(() => {
@@ -432,6 +535,12 @@ function DevicesPanel() {
 
   useEffect(() => { load() }, [load])
 
+  useEffect(() => {
+    if (!notice) return
+    const t = setTimeout(() => setNotice(null), 5000)
+    return () => clearTimeout(t)
+  }, [notice])
+
   const total = data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const devices = data?.devices ?? []
@@ -448,6 +557,10 @@ function DevicesPanel() {
           value={query} onChange={(e) => setQuery(e.target.value)}
           // wording: BA review
           placeholder="Tìm theo mã máy, tên máy, email hoặc mã tài khoản" aria-label="Tìm máy" />
+
+        {notice && (
+          <div role="status" className="rounded-control border border-success/30 bg-success-soft px-4 py-2 text-sm text-success">{notice}</div>
+        )}
 
         {err ? (
           <ErrorState compact title="Không tải được danh sách máy" message={err} onRetry={load} />
@@ -475,6 +588,7 @@ function DevicesPanel() {
                     <th className={TH_NUM}>Hôm nay đã dùng</th>
                     <th className={TH}>Lần đầu</th>
                     <th className={TH}>Lần cuối</th>
+                    <th className={TH}>Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -501,9 +615,20 @@ function DevicesPanel() {
                               d.today.retro > 0 ? `mất mạng ${d.today.retro}` : null].filter(Boolean).join(' · ')}
                           </span>
                         )}
+                        {(d.today.bonus ?? 0) > 0 && (
+                          // wording: BA review
+                          <span className="block text-[11px] text-accent">(+{n(d.today.bonus)} admin)</span>
+                        )}
                       </td>
                       <td className={`${TD} text-xs`}>{fmtTime(d.first_seen)}</td>
                       <td className={`${TD} text-xs`}>{fmtTime(d.last_seen)}</td>
+                      <td className={TD}>
+                        <div className="flex gap-1">
+                          {/* wording: BA review */}
+                          <Button size="sm" onClick={() => setDlg({ device: d, action: 'grant' })}>Cộng lượt</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setDlg({ device: d, action: 'reset' })}>Đặt lại</Button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -522,6 +647,10 @@ function DevicesPanel() {
           </>
         )}
       </div>
+      {dlg && (
+        <AllowanceDialog device={dlg.device} action={dlg.action} onClose={() => setDlg(null)}
+          onDone={(msg) => { setDlg(null); setNotice(msg); load() }} />
+      )}
     </Card>
   )
 }

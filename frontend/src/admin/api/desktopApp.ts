@@ -28,6 +28,8 @@ export interface DesktopDevice {
     limit: number | null
     refunds: number
     retro: number
+    /** Task #6125: extra downloads an admin granted today (already inside `limit`). Absent on older backends. */
+    bonus?: number
   }
 }
 
@@ -159,4 +161,46 @@ export const desktopAppApi = {
   stats: (days = 7) => call<StatsPayload>(`/stats?days=${days}`),
   devices: (q: string, limit: number, offset: number) =>
     call<DevicesPayload>(`/devices?${new URLSearchParams({ q, limit: String(limit), offset: String(offset) })}`),
+}
+
+export interface AllowanceBody {
+  /** The device's 16-hex `id`. */
+  device_id: string
+  action: 'grant' | 'reset'
+  /** 1..50, grant only. */
+  amount?: number
+  /** 3..300 chars. */
+  reason: string
+}
+
+export interface AllowanceResult {
+  device_id: string
+  action: 'grant' | 'reset'
+  amount: number
+  counted_as: 'user' | 'device'
+  removed: number | null
+  bonus_today: number
+  limit_today: number
+  used_today: number
+  day_utc: string
+}
+
+/** Task #6125: grant extra downloads for today, or reset today's count. */
+export async function postDesktopAllowance(body: AllowanceBody): Promise<AllowanceResult> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = getAdminToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const res = await fetch(`${API_BASE}/api/v1/admin/desktop/allowance`, {
+    method: 'POST', headers, body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    let msg = 'Không thực hiện được, vui lòng thử lại.'
+    try {
+      const data = await res.json()
+      const m = data?.detail?.message
+      if (typeof m === 'string' && m) msg = m
+    } catch { /* keep the generic message */ }
+    throw new Error(msg)
+  }
+  return res.json() as Promise<AllowanceResult>
 }
