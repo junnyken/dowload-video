@@ -121,6 +121,7 @@ celery_app.conf.update(
         # Phase 18 — AI analysis jobs → dedicated analysis worker.
         'analyze_media_task': {'queue': 'analysis'},
         'probe_all_platforms': {'queue': 'light'},
+        'retest_cookie_pool_daily': {'queue': 'light'},   # network probes, up to minutes (task #6127)
         'expire_analysis_jobs_task': {'queue': 'analysis'},
         # Transcript translation — reuses the 'analysis' worker (also
         # LLM-bound, bounded, moderate-concurrency work) rather than a new
@@ -170,6 +171,11 @@ celery_app.conf.update(
         'refresh-po-token-every-3h': {
             'task': 'refresh_po_token',
             'schedule': crontab(minute=5, hour='*/3'),
+        },
+        # Daily cookie re-test at 9:00 UTC, before the expiry check (task #6127)
+        'retest-cookie-pool-daily': {
+            'task': 'retest_cookie_pool_daily',
+            'schedule': crontab(hour=9, minute=0),
         },
         # Daily cookie expiry check at 9:30 AM UTC (4:30 PM UTC+7)
         'check-cookie-expiry-daily': {

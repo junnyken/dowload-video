@@ -22,7 +22,7 @@ import hashlib
 import hmac
 import secrets
 import tempfile
-from time import sleep
+from time import sleep, monotonic as _monotonic
 import yt_dlp
 import re
 import signal
@@ -41,24 +41,89 @@ _TIKTOK_COOKIES_B64    = os.getenv("TIKTOK_COOKIES_B64", "")
 _FACEBOOK_COOKIES_B64  = os.getenv("FACEBOOK_COOKIES_B64", "")
 _TWITTER_COOKIES_B64   = os.getenv("TWITTER_COOKIES_B64", "")
 
-# Per-process cache: {platform: (cookie_b64, tmp_file_path)}
-_cookies_cache: dict[str, str | None] = {}
-_active_cookie_b64: dict[str, str] = {}
+# Task #6127: a cookie is picked PER REQUEST (pool cooldown, LRU and the daily
+# cap apply to every download, instead of one cookie per worker process until
+# it got blocked) and kept for that request only: every _get_cookies_file call
+# of the same platform in the same thread within _COOKIE_STICKY_S returns the
+# same pick, so the layers of one download never mix accounts.
+# Each pool cookie has its own file (platform + content hash + pid). yt-dlp
+# re-saves its jar there after every use, so the next time that cookie is
+# picked the session the platform refreshed is written back to the pool
+# (_harvest_refreshed) instead of being lost on the next restart.
+import threading as _threading
+_COOKIE_DIR = os.path.join(tempfile.gettempdir(), "vg_cookies")
+_COOKIE_STICKY_S = 120
+_cookie_tls = _threading.local()
+
+
+def _request_cookies() -> dict:
+    m = getattr(_cookie_tls, "m", None)
+    if m is None:
+        m = _cookie_tls.m = {}
+    return m
+
+
+def _reset_request_cookies() -> None:
+    """Start of a download: the next cookie lookup picks afresh."""
+    _request_cookies().clear()
+
+
+def _active_cookie(platform: str) -> str | None:
+    e = _request_cookies().get(platform)
+    return e[0] if e else None
+
+
+def _cookie_path(platform: str, b64: str) -> str:
+    h = hashlib.md5(b64.encode()).hexdigest()[:16]
+    return os.path.join(_COOKIE_DIR, f"{platform}_{h}_{os.getpid()}.txt")
+
+
+def _write_private(path: str, text: str) -> None:
+    os.makedirs(_COOKIE_DIR, mode=0o700, exist_ok=True)
+    tmp = f"{path}.{_threading.get_ident()}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
+def _harvest_refreshed(platform: str, b64: str) -> str:
+    """If yt-dlp left a refreshed session in this cookie's file on its last
+    use, save it to the pool and use it. Returns the cookie to use now."""
+    path = _cookie_path(platform, b64)
+    if not os.path.exists(path):
+        return b64
+    try:
+        from app.core.cookie_pool import (refreshed_session_ok, replace_cookie_content,
+                                          sanitize_netscape_cookies)
+        with open(path, encoding="utf-8") as f:
+            saved, kept, _ = sanitize_netscape_cookies(f.read())
+        old = base64.b64decode(b64).decode("utf-8", errors="ignore")
+        if not kept or not refreshed_session_ok(platform, old, saved):
+            return b64
+        new_b64 = base64.b64encode(saved.encode()).decode()
+        if replace_cookie_content(platform, b64, new_b64):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            return new_b64
+    except Exception as e:
+        print(f"[Cookies] {platform}: refreshed session not saved ({type(e).__name__})")
+    return b64
 
 
 def _get_cookies_file(platform: str, env_b64: str) -> str | None:
     """
-    Get cookies temp file for a platform.
-    Tries Redis pool first (rotating), falls back to env var.
-    Result is cached per worker process — clears on block detection.
+    Get the cookies file for a platform for THIS request.
+    Redis pool first (rotation, cooldown, daily cap), env var fallback; the
+    pick is kept for the rest of the request (see _request_cookies).
     """
-    if platform in _cookies_cache:
-        path = _cookies_cache[platform]
-        if path and os.path.exists(path):
-            return path
-        # Stale cache entry — reset
-        _cookies_cache.pop(platform, None)
-        _active_cookie_b64.pop(platform, None)
+    req = _request_cookies()
+    e = req.get(platform)
+    if e and _monotonic() - e[2] < _COOKIE_STICKY_S and os.path.exists(e[1]):
+        return e[1]
+    req.pop(platform, None)
 
     # Pick cookie: pool first, env var fallback
     b64_to_use = None
@@ -67,12 +132,14 @@ def _get_cookies_file(platform: str, env_b64: str) -> str | None:
         b64_to_use = get_cookie_from_pool(platform)
     except Exception:
         pass
+    from_pool = bool(b64_to_use)
     if not b64_to_use:
         b64_to_use = env_b64
 
     if not b64_to_use:
-        _cookies_cache[platform] = None
         return None
+    if from_pool:
+        b64_to_use = _harvest_refreshed(platform, b64_to_use)
 
     try:
         decoded = base64.b64decode(b64_to_use).decode("utf-8")
@@ -91,7 +158,7 @@ def _get_cookies_file(platform: str, env_b64: str) -> str | None:
         if _kept == 0:
             print(f"[Cookies] {platform}: cookie holds no usable Netscape entries "
                   f"— ignoring it (re-upload a real cookies.txt export)")
-            if b64_to_use != env_b64:
+            if from_pool:
                 try:
                     from app.core.cookie_pool import mark_cookie_disabled
                     mark_cookie_disabled(
@@ -100,22 +167,16 @@ def _get_cookies_file(platform: str, env_b64: str) -> str | None:
                     )
                 except Exception:
                     pass
-            _cookies_cache[platform] = None
             return None
 
-        tmp = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False, prefix=f"{platform}_cookies_"
-        )
-        tmp.write(decoded)
-        tmp.close()
-        _cookies_cache[platform] = tmp.name
-        _active_cookie_b64[platform] = b64_to_use
-        src = "pool" if b64_to_use != env_b64 else "env"
-        print(f"[Cookies] Loaded {platform} cookies ({src}) → {tmp.name}")
-        return tmp.name
+        path = _cookie_path(platform, b64_to_use)
+        _write_private(path, decoded)
+        req[platform] = (b64_to_use, path, _monotonic())
+        src = "pool" if from_pool else "env"
+        print(f"[Cookies] Loaded {platform} cookies ({src}) → {os.path.basename(path)}")
+        return path
     except Exception as e:
-        print(f"[Cookies] Failed to decode {platform} cookies: {e}")
-        _cookies_cache[platform] = None
+        print(f"[Cookies] Failed to decode {platform} cookies: {type(e).__name__}")
         return None
 
 
@@ -126,17 +187,40 @@ def _rotate_cookie(platform: str, hard: bool = False) -> None:
     hard=True: challenge/suspended → 6 h block
     Next request picks a fresh cookie via LRU selection.
     """
-    b64 = _active_cookie_b64.get(platform)
+    b64 = _active_cookie(platform)
     if b64:
         try:
             from app.core.cookie_pool import mark_cookie_blocked
             mark_cookie_blocked(platform, b64, hard=hard)
         except Exception:
             pass
-    _cookies_cache.pop(platform, None)
-    _active_cookie_b64.pop(platform, None)
+    _request_cookies().pop(platform, None)
     label = "hard" if hard else "soft"
     print(f"[Cookies] Rotated {platform} cookie ({label} block)")
+
+
+# Task #6127 (A1): platforms whose public posts download anonymously first;
+# the pool cookie is only spent when that attempt fails. Every download that
+# carries an account cookie makes the account look more like a bot, and most
+# public videos never needed it. Default empty = old behaviour (cookie first).
+_COOKIE_LAST_SUPPORTED = ("facebook", "instagram", "twitter")
+# Answers no cookie can change: spending an account on them is pure cost.
+_COOKIE_RETRY_USELESS = ("404", "not found", "does not exist", "has been removed",
+                         "video unavailable", "no longer available", "unsupported url",
+                         "is not a valid url", "deleted")
+
+
+def cookie_last(platform: str) -> bool:
+    raw = os.getenv("COOKIE_LAST_PLATFORMS") or ""
+    wanted = {p.strip().lower() for p in raw.split(",") if p.strip()}
+    if "x" in wanted:
+        wanted.add("twitter")
+    return platform in _COOKIE_LAST_SUPPORTED and platform in wanted
+
+
+def cookie_retry_worthwhile(err: str) -> bool:
+    e = (err or "").lower()
+    return not any(s in e for s in _COOKIE_RETRY_USELESS)
 
 
 # ── Unguessable download paths ───────────────────────────────────────
@@ -722,7 +806,7 @@ def _youtube_proxy_download_enabled() -> bool:
 
 
 def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
-                   error_sink: list | None = None) -> dict:
+                   error_sink: list | None = None, force_cookie: bool = False) -> dict:
     """
     Return base yt-dlp options with PHASE-AWARE proxy selection.
 
@@ -734,6 +818,8 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
                  YoutubeDL built with these opts. Pass the SAME list to every
                  _get_base_opts call in one request so the failure reason
                  survives whichever attempt produced it.
+        force_cookie: attach the pool cookie even for a COOKIE_LAST_PLATFORMS
+                 platform (the retry after the anonymous attempt failed).
     """
     if quality == "video_4k":
         # 4K/2K: request highest quality video+audio, merge with FFmpeg.
@@ -991,7 +1077,7 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
             print("[Downloader] YouTube: no cookies (android_vr client works without them)")
 
     if "facebook.com" in url.lower():
-        fb_cookies = _get_facebook_cookies_file()
+        fb_cookies = None if (cookie_last("facebook") and not force_cookie) else _get_facebook_cookies_file()
         if fb_cookies:
             opts["cookiefile"] = fb_cookies
             print("[Downloader] Facebook cookies loaded")
@@ -1003,14 +1089,14 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
         from app.core.proxy_manager import IPROYAL_PROXY
         if not IPROYAL_PROXY and "proxy" in opts:
             del opts["proxy"]
-        ig_cookies = _get_instagram_cookies_file()
+        ig_cookies = None if (cookie_last("instagram") and not force_cookie) else _get_instagram_cookies_file()
         if ig_cookies:
             opts["cookiefile"] = ig_cookies
         else:
             opts["extractor_args"] = {"instagram": {"api": ["1"]}}
 
     if is_twitter_url(url):
-        tw_cookies = _get_twitter_cookies_file()
+        tw_cookies = None if (cookie_last("twitter") and not force_cookie) else _get_twitter_cookies_file()
         if tw_cookies:
             opts["cookiefile"] = tw_cookies
             opts["extractor_args"] = {"twitter": {"api": ["graphql"]}}
@@ -1579,6 +1665,7 @@ def _china_layer_server_copy(result: Dict[str, Any], quality: str, platform: str
 
 
 def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False, progress_token: str = "", subtitle_language: str = "auto", user_cookies_file: str = None) -> Dict[str, Any]:
+    _reset_request_cookies()  # task #6127: one cookie pick per download
     """
     Extract info for a single video URL (synchronous).
     Returns title, thumbnail, and direct MP4 URL.
@@ -2217,6 +2304,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             print(f"[Throttle] {_throttle_platform}: {_te}")
 
     info = None
+    primary_err_str = ""
     _yt_already_downloaded = False  # initialized here so all code paths below are safe
 
     # ── Spotify music: SoundCloud-FIRST (user preference) ────────────
@@ -2934,9 +3022,11 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 "youtube"   if is_youtube_url else
                 "tiktok"    if is_tiktok      else
                 "facebook"  if is_facebook    else
-                "instagram" if is_instagram   else None
+                "instagram" if is_instagram   else
+                "twitter"   if is_twitter_url(url) else None
             )
-            if _platform_name:
+            # a cookie-less first attempt (COOKIE_LAST_PLATFORMS) proves nothing about the cookie
+            if _platform_name and not user_cookies_file and opts.get("cookiefile"):
                 _rotate_cookie(_platform_name, hard=_is_hard_block)
             if is_youtube_url:
                 # Invalidate cached PO token so next request gets a fresh one
@@ -2948,6 +3038,40 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                     pass
         if is_youtube_url and ("Sign in to confirm" in primary_err_str or "LOGIN_REQUIRED" in primary_err_str):
             print("[Downloader] YouTube bot detection confirmed — PO Token invalidated, will refresh on next request")
+
+    # ── Phase 1.4: cookie-last retry (task #6127, COOKIE_LAST_PLATFORMS) ──
+    # The anonymous attempt failed: now — and only now — spend one account.
+    _cl_platform = ("facebook" if is_facebook else "instagram" if is_instagram
+                    else "twitter" if is_twitter_url(url) else None)
+    # base opts set ignoreerrors: a failure usually comes back as info=None
+    # with the reason only in the error sink, not as an exception
+    if (info is None and _cl_platform and cookie_last(_cl_platform) and not user_cookies_file
+            and not opts.get("cookiefile")
+            and cookie_retry_worthwhile(" ".join([primary_err_str, *_ytdlp_errors]))):
+        _ck_opts = _get_base_opts(url, phase="download", quality=quality,
+                                  error_sink=_ytdlp_errors, force_cookie=True)
+        if _ck_opts.get("cookiefile"):
+            _ck_opts["extract_flat"] = False
+            if _progress_hook:
+                _ck_opts["progress_hooks"] = [_progress_hook]
+            print(f"[Downloader] {_cl_platform}: anonymous attempt failed — retrying once with a pool cookie")
+            _ck_seen = len(_ytdlp_errors)
+            _ck_str = ""
+            try:
+                with yt_dlp.YoutubeDL(_ck_opts) as ydl:
+                    info = ydl.extract_info(url, download=should_download)
+            except Exception as _ck_err:
+                _ck_str = str(_ck_err)
+                info = None
+            if info:
+                print(f"[Downloader] {_cl_platform}: recovered with the pool cookie")
+            else:
+                _ck_l = " ".join([_ck_str, *_ytdlp_errors[_ck_seen:]]).lower()
+                print(f"[Downloader] {_cl_platform}: cookie retry failed too")
+                _ck_hard = any(s in _ck_l for s in ("login_required", "challenge", "suspended",
+                                                    "checkpoint", "unusual activity"))
+                if _ck_hard or any(s in _ck_l for s in ("rate limit", "too many requests", "429")):
+                    _rotate_cookie(_cl_platform, hard=_ck_hard)
 
     # ── Phase 1.5a: YouTube SABR Recovery via Cobalt (safety net) ──────
     # With android_vr client, SABR is usually bypassed successfully.

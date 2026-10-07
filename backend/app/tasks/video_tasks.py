@@ -1666,7 +1666,9 @@ def check_cookie_expiry(self):
     from app.core.cookie_pool import get_expiry_report
     from app.core.notifications import send_telegram_message_sync
 
-    platforms = ["youtube", "tiktok", "facebook", "instagram"]
+    # every platform that holds cookies (task #6127), not only the first four
+    from app.core.cookie_pool import pooled_platforms
+    platforms = pooled_platforms() or ["youtube", "tiktok", "facebook", "instagram"]
     expired_lines = []
     critical_lines = []
     soon_lines = []
@@ -2033,3 +2035,57 @@ def aggregate_platform_health_task(self):
     except Exception as e:
         print(f"[aggregate_platform_health] Error: {e}")
         raise self.retry(exc=e, countdown=300)
+
+
+# =════════════════════════════════════════════════════════════════════
+# Cookie daily re-test (task #6127) — 09:00 UTC, before the expiry check
+# =════════════════════════════════════════════════════════════════════
+
+RETEST_DAILY_MAX = 40   # cookies per run; the probe module also caps 60/hour
+
+
+@celery_app.task(name="retest_cookie_pool_daily", bind=True)
+def retest_cookie_pool_daily(self):
+    """Re-test every pooled cookie of the platforms that have a probe, once a
+    day, so a session the platform killed is marked expired before a user's
+    download pays for it, and one that still works past its claimed expiry
+    stays usable (verified_ok_at). Same limits as the admin "Kiểm tra lại".
+    Telegram only when a cookie was newly found dead."""
+    import time as _t
+    from app.core import cookie_pool as cp, cookie_probe
+    from app.core.redis_client import get_redis
+
+    rc = get_redis()
+    done, dead, summary = 0, [], {}
+    for platform in cookie_probe.supported_platforms():
+        for cookie in rc.lrange(f"cookie_pool:{platform}", 0, -1) or []:
+            if done >= RETEST_DAILY_MAX:
+                break
+            h = cp._hash(cookie)
+            if rc.get(f"cookie_health:{platform}:{h}") in ("disabled", "expired"):
+                continue
+            res = cookie_probe.retest_cookie(platform, h)
+            if res["status"] == "rate_limited" and res.get("reason") == "platform_gap":
+                _t.sleep(min(10, res.get("retry_after_s") or 3))
+                res = cookie_probe.retest_cookie(platform, h)
+            if res["status"] == "rate_limited" and res.get("reason") == "hourly_cap":
+                print("[CookieRetest] hourly cap reached — stopping this run")
+                done = RETEST_DAILY_MAX
+                break
+            done += 1
+            summary[res["status"]] = summary.get(res["status"], 0) + 1
+            if res["status"] == "rejected":
+                meta = cp._get_meta(rc, platform, h)
+                dead.append(f"  - <b>[{platform.upper()}]</b> {meta.get('label') or meta.get('account_hint') or h[:8]}")
+    print(f"[CookieRetest] {done} tested: {summary}")
+    if dead:
+        try:
+            from app.core.notifications import send_telegram_message_sync
+            send_telegram_message_sync(
+                "<b>Cookie bi nen tang tu choi — VidGrab</b>\n"
+                "Da danh dau het han, se khong dung nua:\n" + "\n".join(dead)
+                + "\n\n-> Upload cookie moi: <code>POST /admin/cookies/upload</code>")
+        except Exception as e:
+            print(f"[CookieRetest] alert not sent: {type(e).__name__}")
+    return {"tested": done, "summary": summary, "dead": len(dead)}
+

@@ -41,6 +41,7 @@ import base64
 import hashlib
 import json
 import re
+import os
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -70,6 +71,63 @@ _COOLDOWN: dict[str, int] = {
     "kuaishou":     20,
 }
 _DEFAULT_COOLDOWN = 10
+
+# Soft daily cap per account (task #6127). One account doing hundreds of
+# downloads a day is what gets it checkpointed; past its cap a cookie is only
+# picked when every other one is past its cap too — a download is never
+# refused for it. Override with COOKIE_DAILY_CAP="instagram=40,facebook=60";
+# 0 = no cap for that platform.
+_DAILY_CAP_DEFAULT: dict[str, int] = {
+    "instagram": 40,
+    "facebook":  60,
+    "twitter":   60,
+    "tiktok":   150,
+    "youtube":  150,
+}
+_USES_TTL = 2 * 24 * 3600
+# A session the platform refreshed is written back at most this often per
+# account (yt-dlp re-saves the jar on every use).
+REFRESH_MIN_INTERVAL_S = 10 * 60
+
+
+def pooled_platforms() -> list[str]:
+    """Platforms that currently hold at least one pooled cookie."""
+    try:
+        rc = get_redis()
+        names = {k.split(":", 1)[1] for k in rc.scan_iter(match="cookie_pool:*", count=200)}
+        return sorted(n for n in names if n and rc.llen(f"cookie_pool:{n}"))
+    except Exception:
+        return []
+
+
+def daily_cap(platform: str) -> Optional[int]:
+    caps = dict(_DAILY_CAP_DEFAULT)
+    for part in (os.getenv("COOKIE_DAILY_CAP") or "").split(","):
+        name, _, val = part.strip().partition("=")
+        if name and val.strip().isdigit():
+            caps[name.strip().lower()] = int(val)
+    cap = caps.get(platform)
+    return cap if cap else None
+
+
+def _uses_key(platform: str, h: str) -> str:
+    return f"cookie_uses:{platform}:{h}:{time.strftime('%Y-%m-%d', time.gmtime())}"
+
+
+def uses_today(platform: str, cookie_b64: str) -> int:
+    try:
+        return int(get_redis().get(_uses_key(platform, _hash(cookie_b64))) or 0)
+    except Exception:
+        return 0
+
+
+def _count_use(rc, platform: str, h: str) -> None:
+    try:
+        k = _uses_key(platform, h)
+        rc.incr(k)
+        rc.expire(k, _USES_TTL)
+    except Exception:
+        pass
 
 _AUTH_COOKIES: dict[str, set[str]] = {
     "youtube": {
@@ -333,6 +391,15 @@ def get_cookie_from_pool(platform: str) -> Optional[str]:
         last_used = float(rc.get(f"cookie_lastused:{platform}:{h}") or 0)
         eligible.append((last_used, c))
 
+    cap = daily_cap(platform)
+    if eligible and cap:
+        under = [(t, c) for t, c in eligible
+                 if int(rc.get(_uses_key(platform, _hash(c))) or 0) < cap]
+        if under:
+            eligible = under
+        else:
+            print(f"[CookiePool] {platform}: every cookie is past its daily cap ({cap}), using the least recently used")
+
     if eligible:
         # Phase 27B — scored selection (feature-flag gated, falls back to LRU on any error)
         _scored_chosen = None
@@ -344,6 +411,7 @@ def get_cookie_from_pool(platform: str) -> Optional[str]:
             print(f"[CookiePool] scored selection error ({platform}), using LRU: {_sc_err}")
 
         if _scored_chosen is not None and not is_shadow_mode():
+            _count_use(rc, platform, _hash(_scored_chosen))
             return _scored_chosen
 
         # Legacy LRU (default path AND shadow-mode fallback)
@@ -352,6 +420,7 @@ def get_cookie_from_pool(platform: str) -> Optional[str]:
         h = _hash(chosen)
         rc.setex(f"cookie_cooldown:{platform}:{h}", cooldown_s, "1")
         rc.set(f"cookie_lastused:{platform}:{h}", now)
+        _count_use(rc, platform, h)
         return chosen
 
     if in_cooldown:
@@ -360,6 +429,7 @@ def get_cookie_from_pool(platform: str) -> Optional[str]:
         chosen = in_cooldown[0][1]
         h = _hash(chosen)
         rc.set(f"cookie_lastused:{platform}:{h}", now)
+        _count_use(rc, platform, h)
         print(f"[CookiePool] {platform}: all cookies in cooldown, using soonest ({in_cooldown[0][0]:.0f}s remaining)")
         return chosen
 
@@ -367,6 +437,7 @@ def get_cookie_from_pool(platform: str) -> Optional[str]:
         # All blocked — return least-blocked as last resort
         blocked.sort(key=lambda x: x[0])
         chosen = blocked[0][1]
+        _count_use(rc, platform, _hash(chosen))
         print(f"[CookiePool] {platform}: all cookies blocked, using least-blocked (TTL {blocked[0][0]}s)")
         return chosen
 
@@ -441,6 +512,99 @@ def unmark_cookie_disabled(platform: str, cookie_b64: str) -> None:
         meta.pop("disabled_at", None)
         _set_meta(rc, platform, h, meta)
         print(f"[CookiePool] {platform} cookie {h} RE-ENABLED by admin")
+
+
+def _cookie_names(text: str) -> dict[str, str]:
+    """name -> value of every loadable Netscape entry (last one wins)."""
+    out: dict[str, str] = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or (line.startswith("#") and not line.startswith(_HTTPONLY_PREFIX)):
+            continue
+        parts = line.split("\t")
+        if len(parts) >= 7:
+            out[parts[5]] = parts[6]
+    return out
+
+
+def _canonical(text: str) -> list[str]:
+    return sorted(l.strip() for l in text.splitlines()
+                  if l.strip() and (not l.strip().startswith("#") or l.strip().startswith(_HTTPONLY_PREFIX)))
+
+
+def refreshed_session_ok(platform: str, old_text: str, new_text: str) -> bool:
+    """May the jar yt-dlp saved after a download replace the stored cookie?
+
+    Only when it still carries every login cookie the stored one had, each
+    with a value, and every other cookie name too. A jar where the platform
+    cleared the session (logged out, checkpoint) must never overwrite the
+    cookie an admin uploaded, and neither may a half-written file (another
+    download of the same process saving the jar) that lost e.g. Facebook's
+    datr device cookie."""
+    old, new = _cookie_names(old_text), _cookie_names(new_text)
+    needed = [n for n in _AUTH_COOKIES.get(platform, set()) if old.get(n)]
+    if not needed:
+        return False
+    return (all(new.get(n) for n in needed) and set(old) <= set(new)
+            and _canonical(old_text) != _canonical(new_text))
+
+
+def replace_cookie_content(platform: str, old_b64: str, new_b64: str) -> bool:
+    """Swap a pool cookie for its refreshed jar, keeping its identity: list
+    position, label, added_at, health/cooldown/usage state move to the new
+    content's hash. Returns False when nothing was replaced (old one gone,
+    new one already present, written back too recently, or a concurrent
+    writer won the race)."""
+    if not new_b64 or new_b64 == old_b64:
+        return False
+    rc = get_redis()
+    pool_key = f"cookie_pool:{platform}"
+    oh, nh = _hash(old_b64), _hash(new_b64)
+    if rc.exists(f"cookie_refreshed:{platform}:{oh}"):
+        return False
+    meta = _get_meta(rc, platform, oh)
+    info = _parse_cookie_info(new_b64, platform)
+    meta.update({
+        "expires_at": info["expires_at"] or meta.get("expires_at", 0),
+        "account_hint": info["account_hint"] or meta.get("account_hint", ""),
+        "refreshed_at": int(time.time()),
+        "refresh_count": int(meta.get("refresh_count") or 0) + 1,
+    })
+    moved = []
+    for prefix in ("cookie_health", "cookie_cooldown", "cookie_lastused"):
+        k = f"{prefix}:{platform}:{oh}"
+        v = rc.get(k)
+        if v is not None:
+            moved.append((prefix, v, rc.ttl(k)))
+    uk_old, uk_new = _uses_key(platform, oh), _uses_key(platform, nh)
+    uses = rc.get(uk_old)
+    try:
+        with rc.pipeline() as p:
+            p.watch(pool_key)
+            cookies = p.lrange(pool_key, 0, -1)
+            if old_b64 not in cookies or new_b64 in cookies:
+                p.unwatch()
+                return False
+            idx = cookies.index(old_b64)
+            p.multi()
+            p.lset(pool_key, idx, new_b64)
+            p.setex(f"cookie_meta:{platform}:{nh}", _META_TTL, json.dumps(meta))
+            for prefix, v, ttl in moved:
+                if ttl and ttl > 0:
+                    p.setex(f"{prefix}:{platform}:{nh}", ttl, v)
+                else:
+                    p.set(f"{prefix}:{platform}:{nh}", v)
+            if uses is not None:
+                p.setex(uk_new, _USES_TTL, uses)
+            p.setex(f"cookie_refreshed:{platform}:{nh}", REFRESH_MIN_INTERVAL_S, "1")
+            p.delete(f"cookie_meta:{platform}:{oh}", f"cookie_health:{platform}:{oh}",
+                     f"cookie_cooldown:{platform}:{oh}", f"cookie_lastused:{platform}:{oh}", uk_old)
+            p.execute()
+    except Exception as exc:  # WatchError (lost the race) or Redis down
+        print(f"[CookiePool] {platform} cookie {oh} refresh not saved: {type(exc).__name__}")
+        return False
+    print(f"[CookiePool] {platform} cookie {oh} → {nh}: session refreshed by the platform, saved back")
+    return True
 
 
 def add_cookie(platform: str, cookie_b64: str, label: str = "") -> int:

@@ -1,0 +1,342 @@
+"""
+Task #6127 — make pool cookies last longer and spend them less.
+
+A1  COOKIE_LAST_PLATFORMS: Facebook / Instagram / X try anonymously first; a
+    pool cookie is spent only when that fails, and never on an answer no
+    cookie can change (video gone).
+B1  The session the platform refreshed (yt-dlp re-saves its jar into the
+    cookie file after each use) is written back to the pool — only while
+    every login cookie is still there — keeping the cookie's identity.
+B2  A cookie is picked per request (not per worker process), kept for the
+    whole request, with a soft per-account daily cap; X failures rotate too.
+B3  Daily re-test of every pooled cookie the probes support.
+fakeredis + a stub YoutubeDL; no network.
+"""
+from __future__ import annotations
+
+import base64
+import os
+import time
+
+import pytest
+
+fakeredis = pytest.importorskip("fakeredis")
+
+from app.core import cookie_pool as cp  # noqa: E402
+from app.services import downloader  # noqa: E402
+
+FB_URL = "https://www.facebook.com/reel/1608261137553863"
+FUTURE = int(time.time()) + 200 * 86400
+
+
+def jar(*extra: tuple[str, str], logged_in: bool = True, domain: str = ".facebook.com") -> str:
+    rows = [("datr", "d1")]
+    if logged_in:
+        rows += [("c_user", "100000000000001"), ("xs", "xs-secret"), ("fr", "fr1")]
+    rows += list(extra)
+    lines = ["# Netscape HTTP Cookie File"]
+    lines += [f"{domain}\tTRUE\t/\tTRUE\t{FUTURE}\t{n}\t{v}" for n, v in rows]
+    return "\n".join(lines) + "\n"
+
+
+def b64(text: str) -> str:
+    return base64.b64encode(text.encode()).decode()
+
+
+@pytest.fixture
+def rc(monkeypatch):
+    r = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr("app.core.redis_client._client", r)
+    monkeypatch.setattr(downloader, "_FACEBOOK_COOKIES_B64", "", raising=False)
+    monkeypatch.setattr(downloader, "_COOKIE_DIR", str(_tmpdir()))
+    for k in ("COOKIE_LAST_PLATFORMS", "COOKIE_DAILY_CAP"):
+        monkeypatch.delenv(k, raising=False)
+    downloader._reset_request_cookies()
+    yield r
+    downloader._reset_request_cookies()
+
+
+_TMP = None
+
+
+def _tmpdir():
+    import tempfile
+    global _TMP
+    _TMP = tempfile.mkdtemp(prefix="vgck_")
+    return _TMP
+
+
+def add(platform="facebook", text=None, label="acc") -> str:
+    v = b64(text or jar())
+    cp.add_cookie(platform, v, label=label)
+    return v
+
+
+# ── B2: soft daily cap ──────────────────────────────────────────────────────
+
+def test_daily_cap_prefers_an_account_under_its_cap_but_never_refuses(rc, monkeypatch):
+    monkeypatch.setenv("COOKIE_DAILY_CAP", "facebook=2")
+    a = add(text=jar(("a", "1")), label="A")
+    b = add(text=jar(("b", "1")), label="B")
+    rc.set(cp._uses_key("facebook", cp._hash(a)), 2)          # A at its cap, and least recently used
+    assert cp.get_cookie_from_pool("facebook") == b
+    assert cp.uses_today("facebook", b) == 1
+    rc.set(cp._uses_key("facebook", cp._hash(b)), 5)
+    rc.delete(f"cookie_cooldown:facebook:{cp._hash(a)}", f"cookie_cooldown:facebook:{cp._hash(b)}")
+    assert cp.get_cookie_from_pool("facebook") in (a, b)     # all over the cap: still a cookie
+
+
+def test_cap_parsing():
+    assert cp.daily_cap("instagram") == 40
+    os.environ["COOKIE_DAILY_CAP"] = "instagram=0, reddit=7"
+    try:
+        assert cp.daily_cap("instagram") is None and cp.daily_cap("reddit") == 7
+    finally:
+        del os.environ["COOKIE_DAILY_CAP"]
+    assert cp.daily_cap("pinterest") is None
+
+
+# ── B2: per request, sticky within it ───────────────────────────────────────
+
+def test_one_pick_per_request_and_rotation_between_requests(rc):
+    a = add(text=jar(("a", "1")), label="A")
+    b = add(text=jar(("b", "1")), label="B")
+    p1 = downloader._get_facebook_cookies_file()
+    assert downloader._get_facebook_cookies_file() == p1           # same request: same account
+    first = downloader._active_cookie("facebook")
+    assert cp.uses_today("facebook", first) == 1                   # counted once, not per layer
+    downloader._reset_request_cookies()                            # next download
+    downloader._get_facebook_cookies_file()
+    assert downloader._active_cookie("facebook") == ({a, b} - {first}).pop()
+    assert oct(os.stat(p1).st_mode & 0o777) == "0o600"
+
+
+def test_rotation_blocks_the_request_cookie_and_picks_another(rc):
+    add(text=jar(("a", "1")), label="A")
+    add(text=jar(("b", "1")), label="B")
+    downloader._get_facebook_cookies_file()
+    bad = downloader._active_cookie("facebook")
+    downloader._rotate_cookie("facebook", hard=True)
+    assert rc.get(f"cookie_health:facebook:{cp._hash(bad)}") == "hard"
+    downloader._get_facebook_cookies_file()
+    assert downloader._active_cookie("facebook") != bad
+
+
+# ── B1: refreshed session written back ──────────────────────────────────────
+
+def test_refreshed_session_rules():
+    old = jar()
+    assert cp.refreshed_session_ok("facebook", old, jar(("presence", "p2")))
+    assert not cp.refreshed_session_ok("facebook", old, jar(logged_in=False))          # logged out
+    no_datr = "\n".join(l for l in jar(("presence", "p2")).splitlines() if "\tdatr\t" not in l) + "\n"
+    assert not cp.refreshed_session_ok("facebook", old, no_datr)                      # half-written / lost a cookie
+    assert not cp.refreshed_session_ok("facebook", old, "# saved by yt-dlp\n" + old)   # nothing new
+    reordered = "\n".join(reversed(old.strip().splitlines())) + "\n"
+    assert not cp.refreshed_session_ok("facebook", old, reordered)
+    assert not cp.refreshed_session_ok("facebook", jar(logged_in=False), jar(("x", "1"), logged_in=False))
+
+
+def test_harvest_saves_the_refreshed_jar_and_keeps_identity(rc):
+    v = add(label="tai-khoan-1")
+    rc.set(f"cookie_lastused:facebook:{cp._hash(v)}", 123)
+    path = downloader._get_facebook_cookies_file()
+    with open(path, "w", encoding="utf-8") as f:                    # what yt-dlp leaves after a download
+        f.write("# Netscape HTTP Cookie File\n# This file is generated by yt-dlp.\n" + jar(("presence", "new")))
+    downloader._reset_request_cookies()
+    new_path = downloader._get_facebook_cookies_file()
+    pool = rc.lrange("cookie_pool:facebook", 0, -1)
+    assert len(pool) == 1 and pool[0] != v
+    saved = base64.b64decode(pool[0]).decode()
+    assert "presence\tnew" in saved and "xs\txs-secret" in saved
+    meta = cp._get_meta(rc, "facebook", cp._hash(pool[0]))
+    assert meta["label"] == "tai-khoan-1" and meta["refresh_count"] == 1
+    assert rc.get(f"cookie_meta:facebook:{cp._hash(v)}") is None
+    assert downloader._active_cookie("facebook") == pool[0] and new_path != path
+    assert not os.path.exists(path)
+
+
+def test_harvest_never_saves_a_logged_out_jar(rc):
+    v = add()
+    path = downloader._get_facebook_cookies_file()
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(jar(("presence", "new"), logged_in=False))
+    downloader._reset_request_cookies()
+    downloader._get_facebook_cookies_file()
+    assert rc.lrange("cookie_pool:facebook", 0, -1) == [v]
+
+
+def test_write_back_is_rate_limited_per_account(rc):
+    v = add()
+    v2 = b64(jar(("presence", "2")))
+    assert cp.replace_cookie_content("facebook", v, v2)
+    assert not cp.replace_cookie_content("facebook", v2, b64(jar(("presence", "3"))))   # within 10 min
+    assert not cp.replace_cookie_content("facebook", "gone", b64(jar(("p", "4"))))
+
+
+def test_replace_moves_health_and_usage(rc):
+    v = add()
+    h = cp._hash(v)
+    rc.setex(f"cookie_health:facebook:{h}", 900, "soft")
+    rc.set(cp._uses_key("facebook", h), 7)
+    v2 = b64(jar(("presence", "2")))
+    assert cp.replace_cookie_content("facebook", v, v2)
+    h2 = cp._hash(v2)
+    assert rc.get(f"cookie_health:facebook:{h2}") == "soft" and 0 < rc.ttl(f"cookie_health:facebook:{h2}") <= 900
+    assert cp.uses_today("facebook", v2) == 7
+    assert rc.get(f"cookie_health:facebook:{h}") is None
+
+
+# ── A1: cookie last ─────────────────────────────────────────────────────────
+
+def test_flag_parsing_and_base_opts(rc, monkeypatch):
+    add()
+    assert downloader._get_base_opts(FB_URL).get("cookiefile")                 # default: cookie first
+    monkeypatch.setenv("COOKIE_LAST_PLATFORMS", "facebook, X")
+    assert downloader.cookie_last("twitter") and not downloader.cookie_last("youtube")
+    assert not downloader._get_base_opts(FB_URL).get("cookiefile")
+    assert downloader._get_base_opts(FB_URL, force_cookie=True).get("cookiefile")
+    assert not downloader.cookie_retry_worthwhile("ERROR: [facebook] 1: Video unavailable")
+    assert downloader.cookie_retry_worthwhile("ERROR: [facebook] 1: login required")
+
+
+class _StubYDL:
+    """yt-dlp under ignoreerrors: failure = logger.error + None."""
+    calls: list = []
+    LOGIN_WALL = "ERROR: [facebook] 1608261137553863: This video is only available for registered users"
+    anon_error = LOGIN_WALL
+    anon_raises = False
+    cookie_error = None
+
+    def __init__(self, opts):
+        self.opts = opts
+        type(self).calls.append(opts)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def extract_info(self, url, download=False):
+        log = self.opts.get("logger")
+        if self.opts.get("cookiefile"):
+            if self.cookie_error:
+                log and log.error(self.cookie_error)
+                return None
+            return {"id": "1608261137553863", "title": "reel", "ext": "mp4",
+                    "url": "https://video.xx.fbcdn.net/v/reel.mp4",
+                    "formats": [{"format_id": "hd", "url": "https://video.xx.fbcdn.net/v/reel.mp4", "ext": "mp4"}]}
+        if self.anon_error:
+            if self.anon_raises:
+                raise Exception(self.anon_error)
+            log and log.error(self.anon_error)
+            return None
+        return {"id": "1608261137553863", "title": "public reel", "ext": "mp4",
+                "url": "https://video.xx.fbcdn.net/v/pub.mp4",
+                "formats": [{"format_id": "sd", "url": "https://video.xx.fbcdn.net/v/pub.mp4", "ext": "mp4"}]}
+
+
+@pytest.fixture
+def stub(rc, monkeypatch):
+    _StubYDL.calls = []
+    _StubYDL.anon_error = _StubYDL.LOGIN_WALL
+    _StubYDL.cookie_error = None
+    _StubYDL.anon_raises = False
+    monkeypatch.setattr(downloader.yt_dlp, "YoutubeDL", _StubYDL)
+    monkeypatch.setattr(downloader, "is_cobalt_available", lambda: False)
+    monkeypatch.setattr(downloader, "_impersonate_target", lambda: None)
+    return _StubYDL
+
+
+def run():
+    return downloader._extract_video_info_impl(FB_URL, quality="video_fast")
+
+
+def test_flag_off_keeps_cookie_first(stub):
+    v = add()
+    stub.anon_error = None
+    run()
+    assert stub.calls[0].get("cookiefile")
+    assert cp.uses_today("facebook", v) == 1
+
+
+def test_public_video_spends_no_cookie(stub, monkeypatch):
+    monkeypatch.setenv("COOKIE_LAST_PLATFORMS", "facebook")
+    v = add()
+    stub.anon_error = None
+    out = run()
+    assert out and all(not o.get("cookiefile") for o in stub.calls)
+    assert cp.uses_today("facebook", v) == 0
+
+
+def test_login_wall_retries_once_with_the_cookie(stub, monkeypatch):
+    monkeypatch.setenv("COOKIE_LAST_PLATFORMS", "facebook")
+    v = add()
+    out = run()
+    assert out and out.get("title") == "reel"
+    assert [bool(o.get("cookiefile")) for o in stub.calls][:2] == [False, True]
+    assert sum(bool(o.get("cookiefile")) for o in stub.calls) == 1
+    assert cp.uses_today("facebook", v) == 1
+
+
+def test_a_gone_video_never_spends_a_cookie(stub, monkeypatch):
+    monkeypatch.setenv("COOKIE_LAST_PLATFORMS", "facebook")
+    v = add()
+    stub.anon_error = "ERROR: [facebook] 1608261137553863: Video unavailable"
+    with pytest.raises(ValueError):
+        run()
+    assert all(not o.get("cookiefile") for o in stub.calls)
+    assert cp.uses_today("facebook", v) == 0
+
+
+def test_cookie_retry_hitting_a_checkpoint_blocks_that_cookie(stub, monkeypatch):
+    monkeypatch.setenv("COOKIE_LAST_PLATFORMS", "facebook")
+    v = add()
+    stub.cookie_error = "ERROR: [facebook] 1: checkpoint required"
+    with pytest.raises(ValueError):
+        run()
+    assert rc_get_health(v) == "hard"
+
+
+def test_anonymous_failure_does_not_blame_a_cookie_it_never_used(stub, monkeypatch):
+    monkeypatch.setenv("COOKIE_LAST_PLATFORMS", "facebook")
+    v = add()
+    stub.anon_error = "ERROR: [facebook] 1: HTTP Error 429: Too Many Requests"
+    stub.anon_raises = True        # the except branch, where rotation lives
+    stub.cookie_error = "ERROR: [facebook] 1: Cannot parse data"
+    with pytest.raises(ValueError):
+        run()
+    assert rc_get_health(v) is None
+
+
+def rc_get_health(v):
+    from app.core.redis_client import get_redis
+    return get_redis().get(f"cookie_health:facebook:{cp._hash(v)}")
+
+
+# ── B3: daily re-test ───────────────────────────────────────────────────────
+
+def test_daily_retest_marks_dead_cookies_and_alerts(rc, monkeypatch):
+    from app.core import cookie_probe
+    from app.tasks import video_tasks
+    alive = add("tiktok", jar(domain=".tiktok.com"), label="song")
+    dead = add("tiktok", jar(("x", "1"), domain=".tiktok.com"), label="chet")
+    add("tiktok", jar(("y", "1"), domain=".tiktok.com"), label="tat")
+    cp.mark_cookie_disabled("tiktok", rc.lrange("cookie_pool:tiktok", 0, -1)[2])
+    monkeypatch.setitem(cookie_probe.PROBES, "tiktok",
+                        lambda c, proxy: ("rejected", "đăng xuất") if c == dead else ("ok", "ok"))
+    monkeypatch.setattr(cookie_probe, "PER_PLATFORM_GAP_MS", 1)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    sent = []
+    monkeypatch.setattr("app.core.notifications.send_telegram_message_sync", lambda m: sent.append(m))
+    out = video_tasks.retest_cookie_pool_daily.run()
+    assert out["tested"] == 2 and out["dead"] == 1
+    assert rc.get(f"cookie_health:tiktok:{cp._hash(dead)}") == "expired"
+    assert rc.get(f"cookie_health:tiktok:{cp._hash(alive)}") is None
+    assert len(sent) == 1 and "chet" in sent[0] and "song" not in sent[0]
+
+
+def test_expiry_check_covers_every_platform_with_cookies(rc, monkeypatch):
+    add("reddit", jar(domain=".reddit.com"))
+    add("facebook")
+    assert cp.pooled_platforms() == ["facebook", "reddit"]

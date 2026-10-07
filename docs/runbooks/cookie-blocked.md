@@ -54,6 +54,25 @@ for c in report: print(c[\"index\"], c[\"health_status\"], c[\"expiry_status\"],
 
 ---
 
+## Making cookies last (task #6127, 2026-10-07)
+
+What the server does now, and the knobs:
+
+| Mechanism | What it does | Knob |
+|---|---|---|
+| Cookie last | Facebook / Instagram / X try the post anonymously first; a pool cookie is spent only when that fails, and never on "video unavailable / not found / removed". | `COOKIE_LAST_PLATFORMS=facebook,instagram,twitter` (default empty = cookie first, old behaviour). Remove a platform to roll back. |
+| Per-request pick | Each download picks a cookie from the pool (cooldown, LRU, daily cap); the layers of one download keep that pick. Before: one cookie per worker process until it got blocked. | — |
+| Soft daily cap | Past its cap an account is only used when every other one is past its cap too. Never refuses a download. Defaults: instagram 40, facebook 60, twitter 60, tiktok 150, youtube 150. | `COOKIE_DAILY_CAP="instagram=30,facebook=0"` (0 = no cap) |
+| Session write-back | yt-dlp re-saves the jar after each use; the next pick of that cookie saves it to the pool when every login cookie is still present (a logged-out jar is never saved). At most once per 10 min per account. Label, expiry, health and usage move with it (`cookie_meta.refresh_count`). | — |
+| Daily re-test | `retest_cookie_pool_daily` 09:00 UTC (queue `light`): youtube, tiktok, instagram, reddit, bilibili; up to 40 cookies; a cookie the platform rejects is marked expired + Telegram. | probe limits in `cookie_probe.py` |
+| Expiry alert | `check_cookie_expiry` 09:30 UTC now covers every platform holding cookies. | — |
+
+Operating rules (no code):
+- Use aged secondary accounts, not new ones. 2–3 accounts per platform.
+- Export from a private/incognito window, then **close the window — do not log out**. Logging out kills the exported session immediately.
+- Do not use the same account in a browser elsewhere while it is in the pool.
+- Telegram alerts need a working `TELEGRAM_BOT_TOKEN` — a `[Telegram] Sync API error: 403` in the log means alerts are not arriving.
+
 ## Recovery Steps
 
 ### Step 1 — View current pool state and identify the worst platform

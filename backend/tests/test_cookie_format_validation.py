@@ -146,8 +146,7 @@ class TestTheDownloadPathRefusesAnUnusableCookie:
         quote it — a log line is exactly where it must not end up."""
         from app.services import downloader
 
-        monkeypatch.setattr(downloader, "_cookies_cache", {}, raising=False)
-        monkeypatch.setattr(downloader, "_active_cookie_b64", {}, raising=False)
+        downloader._reset_request_cookies()
 
         b64 = base64.b64encode(BROWSER_HEADER_LINE.encode()).decode()
         buf = io.StringIO()
@@ -164,8 +163,7 @@ class TestTheDownloadPathRefusesAnUnusableCookie:
     def test_a_good_cookie_still_reaches_yt_dlp(self, monkeypatch):
         from app.services import downloader
 
-        monkeypatch.setattr(downloader, "_cookies_cache", {}, raising=False)
-        monkeypatch.setattr(downloader, "_active_cookie_b64", {}, raising=False)
+        downloader._reset_request_cookies()
 
         b64 = base64.b64encode(VALID_NETSCAPE.encode()).decode()
         path = downloader._get_cookies_file("facebook", b64)
