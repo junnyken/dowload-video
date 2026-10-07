@@ -4,7 +4,7 @@ import { Badge, Button, EmptyState, IconButton, PlatformBadge, ProgressBar, Scre
 import { QuotaBadge, QuotaNotice } from '../components/QuotaBadge';
 import { cancel, clearFinished, pause, queue, removeItem, resume, retry, type QueueItem } from '../lib/queue';
 import { formatBytes, formatEta, formatSpeed } from '../lib/format';
-import { errorMessage } from '../lib/errors';
+import { errorAction, errorMessage } from '../lib/errors';
 import { api } from '../lib/tauri';
 import { confirmDialog, go, toast } from '../lib/ui';
 
@@ -36,6 +36,7 @@ function Row({ it }: { it: QueueItem }) {
           <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-fg select-text" title={it.title}>{it.title}</h3>
           <PlatformBadge platform={it.platform} />
           <Badge tone="neutral">{it.formatLabel}</Badge>
+          {it.route === 'local_cookie' && <Badge tone="accent">Tải bằng tài khoản của bạn</Badge>}{/* wording: BA review */}
         </div>
 
         {(it.state === 'running' || it.state === 'paused' || it.state === 'queued') && (
@@ -61,6 +62,9 @@ function Row({ it }: { it: QueueItem }) {
         )}
         {it.state === 'failed' && (
           <p className="flex items-start gap-1.5 text-xs text-danger"><AlertCircle size={14} className="mt-px shrink-0" aria-hidden />{errorMessage(it.errorCode)}</p>
+        )}
+        {it.state === 'failed' && errorAction(it.errorCode) && (
+          <div><Button size="sm" variant="secondary" onClick={() => go('settings')}>{errorAction(it.errorCode)!.label}</Button></div>
         )}
       </div>
       <div className="flex shrink-0 items-center gap-1 self-center">

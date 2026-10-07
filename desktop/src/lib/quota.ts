@@ -1,8 +1,9 @@
 // Daily allowance for downloads the app makes itself (PLAN-32D §5, server:
 // backend/app/api/client_quota.py). Reserve-first: claim before the download
 // starts, settle when it ends (a failed/cancelled download may be refunded).
-// Pure rules live in quota-core.ts. Douyin downloads are NOT claimed here:
-// POST /client/douyin/video already counts them on the server.
+// Pure rules live in quota-core.ts. Douyin downloads through the server are
+// NOT claimed here (POST /client/douyin/video counts them); Douyin downloads
+// with the user's own cookies (PLAN-32D L1) are, with route "local_cookie".
 import { createStore } from './store';
 import { apiFetch } from './http';
 import { auth, getAccessToken } from './auth';
@@ -121,9 +122,9 @@ export async function flushOffline(): Promise<void> {
 export type StartVerdict = { ok: true; claimId: string } | { ok: false };
 
 /** Called by the queue before a local download starts. */
-export async function claimForStart(url: string): Promise<StartVerdict> {
+export async function claimForStart(url: string, route: 'local' | 'local_cookie' = 'local'): Promise<StartVerdict> {
   const v = (await appVersion()) ?? '';
-  const r = await call('/api/v1/client/quota/claim', 'POST', { url, route: 'local', clientVersion: v });
+  const r = await call('/api/v1/client/quota/claim', 'POST', { url, route, clientVersion: v });
   const d = decideClaim(r.status, r.data);
   if (d.kind === 'proceed') {
     if (d.counted) setSnap(mergeCounters(quota.get().snap, d.data));

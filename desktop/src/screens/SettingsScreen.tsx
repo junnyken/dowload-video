@@ -4,6 +4,7 @@ import { Badge, Button, ScreenHeader, Select, Spinner, Toggle } from '../compone
 import { SyncStatus } from '../components/SyncStatus';
 import { deviceInfo, type DeviceInfo } from '../lib/device';
 import { CopyLink } from '../components/CopyLink';
+import { PlatformAccounts } from '../components/PlatformAccounts';
 import { settings, updateSettings, ensureOutDir, type Quality, type Theme } from '../lib/settings';
 import { QUALITY_LABEL } from '../lib/quality';
 import { auth, signOut } from '../lib/auth';
@@ -169,6 +170,8 @@ export function SettingsScreen() {
               Tạo tài khoản hoặc đặt lại mật khẩu tại website: <CopyLink url={WEBSITE_URL} />
             </div>
           </Section>
+
+          <PlatformAccounts />
 
           <Section title="Máy này">{/* wording: BA review */}
             <Row label={device ? `Mã máy: ${device.code}` : 'Mã máy'} hint={device?.displayName}>

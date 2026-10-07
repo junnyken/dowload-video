@@ -34,8 +34,17 @@ const MESSAGES: Record<string, string> = {
   'api:platform_disabled': 'Tính năng Douyin đang tạm tắt. Hãy thử lại sau.',
   'api:provider_unavailable': 'Dịch vụ Douyin tạm thời không dùng được. Hãy thử lại sau.',
   'api:other': 'Không lấy được dữ liệu Douyin. Hãy thử lại sau.',
+  // Platform accounts (PLAN-32D §3). wording: BA review
+  cookie_required: 'Video này cần đăng nhập. Hãy kết nối tài khoản của nền tảng này trong Cài đặt → Tài khoản nền tảng rồi tải lại.',
+  cookie_expired: 'Phiên đăng nhập đã lưu có thể đã hết hạn. Hãy kết nối lại tài khoản trong Cài đặt → Tài khoản nền tảng rồi tải lại.',
   login_link_invalid: 'Phiên đăng nhập từ trình duyệt không dùng được hoặc đã hết hạn. Hãy bấm “Đăng nhập qua trình duyệt” lần nữa.',
 };
+
+/** A button shown next to the error text (QueueScreen). wording: BA review */
+export type ErrorAction = { kind: 'reconnect_cookies'; label: string };
+export function errorAction(code: string | null | undefined): ErrorAction | null {
+  return code === 'cookie_required' || code === 'cookie_expired' ? { kind: 'reconnect_cookies', label: 'Kết nối lại' } : null;
+}
 
 // Vietnamese text the server sent with an error code (latest one per code).
 const serverMessages = new Map<string, string>();

@@ -46,6 +46,12 @@ pub fn file_id(id: &str) -> Result<(), String> {
     if ok { Ok(()) } else { Err("invalid file id".into()) }
 }
 
+/// Platform slug for the cookie commands (cookies.rs table). Exact,
+/// lowercase match only; returns the table's own &'static str.
+pub fn cookie_platform(raw: &str) -> Result<&'static str, String> {
+    crate::cookies::def(raw).map(|p| p.slug).ok_or_else(|| "unknown platform".to_string())
+}
+
 /// Hosts `open_url` may open in the browser (sign-up, password reset,
 /// installer download). Exact match, https only, default port, no userinfo.
 pub const OPEN_URL_HOSTS: &[&str] = &["dvid.vibe1.tinhgon.xyz", "dvid-api.vibe1.tinhgon.xyz"];
@@ -108,6 +114,20 @@ mod tests {
         assert!(file_id("7311_a-B").is_ok());
         assert!(file_id("a b").is_err());
         assert!(file_id("").is_err());
+    }
+
+    #[test]
+    fn cookie_platform_allowlist() {
+        for ok in ["douyin", "instagram", "facebook", "twitter", "youtube", "bilibili", "threads", "reddit", "pinterest", "tiktok", "vimeo"] {
+            assert_eq!(cookie_platform(ok), Ok(ok));
+        }
+        for bad in ["", "Douyin", "douyin ", "../douyin", "douyin.com", "kuaishou", "suno", "douyin\0"] {
+            assert!(cookie_platform(bad).is_err(), "{bad}");
+        }
+        // Cookies only ever reach yt-dlp as a --cookies file, never as a header.
+        for name in ["Cookie", "cookie", " COOKIE ", "Set-Cookie"] {
+            assert!(download_header(name, "sessionid=x").is_err(), "{name}");
+        }
     }
 
     #[test]

@@ -22,6 +22,8 @@ pub enum Code {
     ToolTampered,
     Timeout,
     Cancelled,
+    /// cookies_login_finish found no cookie of the platform in the login window.
+    CookieRequired,
     Unknown,
 }
 
@@ -40,6 +42,7 @@ impl Code {
             Code::ToolTampered => "tool_tampered",
             Code::Timeout => "timeout",
             Code::Cancelled => "cancelled",
+            Code::CookieRequired => "cookie_required",
             Code::Unknown => "unknown",
         }
     }
@@ -124,6 +127,8 @@ const RULES: &[(Code, &[&str])] = &[
             "join this channel",
             "only available for registered users",
             "use --cookies",
+            // yt-dlp DouyinIE without fresh cookies (PLAN-32D §2: Douyin L1).
+            "fresh cookies",
             "--cookies-from-browser",
             "requires a subscription",
             "age-restricted",
@@ -238,6 +243,8 @@ mod tests {
         assert_eq!(c("ERROR: Postprocessing: ffprobe and ffmpeg not found. Please install or provide the path using --ffmpeg-location"), Code::ToolMissing);
         assert_eq!(c("ERROR: unable to download video data: HTTP Error 403: Forbidden"), Code::Forbidden);
         assert_eq!(c("ERROR: something nobody has seen before"), Code::Unknown);
+        // yt-dlp/extractor/tiktok.py DouyinIE
+        assert_eq!(c("ERROR: [Douyin] 7311: Fresh cookies (not necessarily logged in) are needed"), Code::PrivateOrLogin);
     }
 
     #[test]
@@ -258,5 +265,9 @@ mod tests {
     fn serializes_as_contract_shape() {
         let e = CommandError::new(Code::DiskFull, "x");
         assert_eq!(serde_json::to_string(&e).unwrap(), r#"{"code":"disk_full","message":"x"}"#);
+        // serde's snake_case and as_str() agree for the newest code too
+        let e = CommandError::new(Code::CookieRequired, "x");
+        assert_eq!(serde_json::to_string(&e).unwrap(), r#"{"code":"cookie_required","message":"x"}"#);
+        assert_eq!(Code::CookieRequired.as_str(), "cookie_required");
     }
 }

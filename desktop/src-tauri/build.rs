@@ -42,6 +42,10 @@ const COMMANDS: &[&str] = &[
     "autostart_get",
     "autostart_set",
     "set_close_to_tray",
+    "cookies_login_open",
+    "cookies_login_finish",
+    "cookies_status",
+    "cookies_clear",
 ];
 
 fn main() {

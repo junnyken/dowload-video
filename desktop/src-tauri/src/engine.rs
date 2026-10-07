@@ -53,9 +53,22 @@ fn common(tools: &Tools<'_>) -> Vec<OsString> {
     a
 }
 
-pub fn probe_args(tools: &Tools<'_>, url: &str) -> Vec<OsString> {
+/// `--cookies <file>` and, only then, the slow-down flags (PLAN-32D §3.3: a
+/// signed-in account that fetches in bursts gets rate limited or checked).
+/// The path is its own argv item, so it is never parsed as an option.
+fn cookie_args(a: &mut Vec<OsString>, cookies: Option<&Path>) {
+    if let Some(p) = cookies {
+        a.push("--cookies".into());
+        a.push(p.as_os_str().to_owned());
+        a.extend(["--sleep-requests", "1", "--sleep-interval", "2", "--max-sleep-interval", "5"].map(OsString::from));
+    }
+}
+
+pub fn probe_args(tools: &Tools<'_>, url: &str, cookies: Option<&Path>) -> Vec<OsString> {
     let mut a = common(tools);
-    a.extend(["-J", "--no-playlist", "--"].map(OsString::from));
+    a.extend(["-J", "--no-playlist"].map(OsString::from));
+    cookie_args(&mut a, cookies);
+    a.push("--".into());
     a.push(url.into());
     a
 }
@@ -64,11 +77,13 @@ pub fn probe_args(tools: &Tools<'_>, url: &str) -> Vec<OsString> {
 /// without resolving each video; `youtubetab:approximate_date` makes the
 /// YouTube tab extractor fill `timestamp` from "3 weeks ago" so the UI can
 /// filter by date (ignored by other extractors).
-pub fn channel_fetch_args(tools: &Tools<'_>, url: &str, limit: u32) -> Vec<OsString> {
+pub fn channel_fetch_args(tools: &Tools<'_>, url: &str, limit: u32, cookies: Option<&Path>) -> Vec<OsString> {
     let mut a = common(tools);
     a.extend(["--flat-playlist", "-J", "--playlist-end"].map(OsString::from));
     a.push(limit.to_string().into());
-    a.extend(["--extractor-args", "youtubetab:approximate_date", "--"].map(OsString::from));
+    a.extend(["--extractor-args", "youtubetab:approximate_date"].map(OsString::from));
+    cookie_args(&mut a, cookies);
+    a.push("--".into());
     a.push(url.into());
     a
 }
@@ -120,6 +135,7 @@ pub fn download_args(
     audio_only: bool,
     headers: &[(String, String)],
     name: Option<&OutName<'_>>,
+    cookies: Option<&Path>,
 ) -> Vec<OsString> {
     let mut a = common(tools);
     a.extend(
@@ -174,6 +190,7 @@ pub fn download_args(
         a.push("--add-header".into());
         a.push(format!("{k}:{v}").into());
     }
+    cookie_args(&mut a, cookies);
     a.push("--".into());
     a.push(url.into());
     a
@@ -196,9 +213,9 @@ mod tests {
         let (f, d) = tools();
         let t = Tools { ffmpeg: &f, deno: &d };
         for args in [
-            probe_args(&t, "https://x/--exec=calc"),
-            channel_fetch_args(&t, "https://x/--exec=calc", 200),
-            download_args(&t, "https://x/--exec=calc", Path::new("/out"), Some("137+ba"), false, &[], None),
+            probe_args(&t, "https://x/--exec=calc", None),
+            channel_fetch_args(&t, "https://x/--exec=calc", 200, None),
+            download_args(&t, "https://x/--exec=calc", Path::new("/out"), Some("137+ba"), false, &[], None, None),
             download_args(
                 &t,
                 "https://x/--exec=calc",
@@ -207,7 +224,11 @@ mod tests {
                 false,
                 &[("Referer".into(), "https://www.douyin.com/".into()), ("User-Agent".into(), "UA/1.0".into())],
                 Some(&OutName { title: "a", id: "1" }),
+                None,
             ),
+            probe_args(&t, "https://x/--exec=calc", Some(Path::new("/tmp/ck-j.txt"))),
+            channel_fetch_args(&t, "https://x/--exec=calc", 50, Some(Path::new("/tmp/ck-j.txt"))),
+            download_args(&t, "https://x/--exec=calc", Path::new("/out"), None, true, &[], None, Some(Path::new("/tmp/ck-j.txt"))),
         ] {
             let s = strs(&args);
             assert_eq!(s[s.len() - 2], "--");
@@ -223,7 +244,7 @@ mod tests {
     fn channel_fetch_flags() {
         let (f, d) = tools();
         let t = Tools { ffmpeg: &f, deno: &d };
-        let s = strs(&channel_fetch_args(&t, "u", 50));
+        let s = strs(&channel_fetch_args(&t, "u", 50, None));
         assert!(s.contains(&"--flat-playlist".into()));
         assert!(s.contains(&"-J".into()));
         assert!(s.windows(2).any(|w| w[0] == "--playlist-end" && w[1] == "50"));
@@ -234,19 +255,19 @@ mod tests {
     fn download_progress_and_audio_flags() {
         let (f, d) = tools();
         let t = Tools { ffmpeg: &f, deno: &d };
-        let s = strs(&download_args(&t, "u", Path::new("/out"), None, false, &[], None));
+        let s = strs(&download_args(&t, "u", Path::new("/out"), None, false, &[], None, None));
         assert!(s.contains(&"download:VGDL %(progress)j".into()));
         assert!(s.contains(&"postprocess:VGPP %(progress)j".into()));
         assert!(s.contains(&"after_move:VGFILE %(filepath)j".into()));
         assert!(!s.contains(&"-x".into()));
         assert!(!s.contains(&"-f".into()));
 
-        let s = strs(&download_args(&t, "u", Path::new("/out"), None, true, &[], None));
+        let s = strs(&download_args(&t, "u", Path::new("/out"), None, true, &[], None, None));
         let i = s.iter().position(|a| a == "--audio-format").unwrap();
         assert_eq!(s[i + 1], "mp3");
         assert!(s.windows(2).any(|w| w[0] == "-f" && w[1] == "ba/b"));
 
-        let s = strs(&download_args(&t, "u", Path::new("/out"), Some("ba[ext=m4a]/ba/b"), true, &[], None));
+        let s = strs(&download_args(&t, "u", Path::new("/out"), Some("ba[ext=m4a]/ba/b"), true, &[], None, None));
         let i = s.iter().position(|a| a == "--audio-format").unwrap();
         assert_eq!(s[i + 1], "m4a");
     }
@@ -256,14 +277,14 @@ mod tests {
         let (f, d) = tools();
         let t = Tools { ffmpeg: &f, deno: &d };
         let h = [("Referer".to_string(), "https://www.douyin.com/".to_string()), ("User-Agent".to_string(), "Mozilla/5.0 X".to_string())];
-        let s = strs(&download_args(&t, "https://cdn/x.mp4", Path::new("/out"), None, false, &h, None));
+        let s = strs(&download_args(&t, "https://cdn/x.mp4", Path::new("/out"), None, false, &h, None, None));
         assert!(s.windows(2).any(|w| w[0] == "--add-header" && w[1] == "Referer:https://www.douyin.com/"));
         assert!(s.windows(2).any(|w| w[0] == "--add-header" && w[1] == "User-Agent:Mozilla/5.0 X"));
         assert_eq!(s[s.len() - 2], "--");
         assert_eq!(s[s.len() - 1], "https://cdn/x.mp4");
         assert!(s.iter().position(|a| a == "--add-header").unwrap() < s.len() - 2);
         // No headers -> no flag at all.
-        let s = strs(&download_args(&t, "u", Path::new("/out"), None, false, &[], None));
+        let s = strs(&download_args(&t, "u", Path::new("/out"), None, false, &[], None, None));
         assert!(!s.contains(&"--add-header".into()));
     }
 
@@ -273,10 +294,10 @@ mod tests {
         let t = Tools { ffmpeg: &f, deno: &d };
         let n = OutName { title: "Clip: a/b %(x)s? \"q\"\n", id: "7311" };
         assert_eq!(named_template(&n).as_deref(), Some("Clip a b (x)s q [7311].%(ext)s"));
-        let s = strs(&download_args(&t, "u", Path::new("/out"), None, false, &[], Some(&n)));
+        let s = strs(&download_args(&t, "u", Path::new("/out"), None, false, &[], Some(&n), None));
         let i = s.iter().position(|a| a == "-o").unwrap();
         assert_eq!(s[i + 1], "Clip a b (x)s q [7311].%(ext)s");
-        let s = strs(&download_args(&t, "u", Path::new("/out"), None, false, &[], None));
+        let s = strs(&download_args(&t, "u", Path::new("/out"), None, false, &[], None, None));
         let i = s.iter().position(|a| a == "-o").unwrap();
         assert_eq!(s[i + 1], OUTPUT_TEMPLATE);
         // Unusable id or empty title -> fall back to the default template.
@@ -287,5 +308,42 @@ mod tests {
         let out = named_template(&OutName { title: &long, id: "1" }).unwrap();
         assert!(out.len() <= 150 + " [1].%(ext)s".len());
         assert!(out.starts_with('ệ'));
+    }
+
+    const SLEEP: [&str; 6] = ["--sleep-requests", "1", "--sleep-interval", "2", "--max-sleep-interval", "5"];
+
+    #[test]
+    fn cookies_only_when_given_and_before_the_url() {
+        let (f, d) = tools();
+        let t = Tools { ffmpeg: &f, deno: &d };
+        let ck = Path::new("/tmp/ck-job-1.txt");
+        let with = [
+            probe_args(&t, "https://www.douyin.com/video/1", Some(ck)),
+            channel_fetch_args(&t, "https://www.douyin.com/video/1", 50, Some(ck)),
+            download_args(&t, "https://www.douyin.com/video/1", Path::new("/out"), None, false, &[], None, Some(ck)),
+        ];
+        for args in with {
+            let s = strs(&args);
+            let i = s.iter().position(|a| a == "--cookies").expect("--cookies");
+            assert_eq!(s[i + 1], "/tmp/ck-job-1.txt");
+            assert_eq!(s.iter().filter(|a| *a == "--cookies").count(), 1);
+            let dd = s.iter().position(|a| a == "--").unwrap();
+            assert!(i < dd);
+            assert_eq!(dd, s.len() - 2);
+            assert_eq!(s[s.len() - 1], "https://www.douyin.com/video/1");
+            assert!(s.windows(6).any(|w| w == SLEEP), "{s:?}");
+        }
+        let without = [
+            probe_args(&t, "u", None),
+            channel_fetch_args(&t, "u", 50, None),
+            download_args(&t, "u", Path::new("/out"), None, false, &[], None, None),
+        ];
+        for args in without {
+            let s = strs(&args);
+            assert!(!s.iter().any(|a| a.contains("cookie")), "{s:?}");
+            for flag in ["--sleep-requests", "--sleep-interval", "--max-sleep-interval"] {
+                assert!(!s.contains(&flag.to_string()), "{flag}");
+            }
+        }
     }
 }

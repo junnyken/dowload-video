@@ -12,6 +12,7 @@ import { applyTheme, settings } from '../lib/settings';
 import { initAuth } from '../lib/auth';
 import { initQueue } from '../lib/queue';
 import { initQuota } from '../lib/quota';
+import { initCookies } from '../lib/cookies';
 import { initSync, refreshPending } from '../lib/sync';
 import { startChannels } from '../lib/channels';
 import { mockMode } from '../lib/tauri';
@@ -29,7 +30,8 @@ export function App() {
     if (!booted) {
       booted = true;
       initSync();
-      void initQueue();
+      // The queue's first pump reads the saved-account state (PLAN-32D route), so it starts after it.
+      void initCookies().finally(() => void initQueue());
       initQuota();
       void initAuth();
       void refreshPending();

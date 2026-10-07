@@ -59,6 +59,8 @@ export type DoneEvent = {
   fileSize?: number;
   errorCode?: string;
   errorMessage?: string;
+  /** true when the run used the user's saved cookies (PLAN-32D L1). */
+  cookiesUsed?: boolean;
 };
 
 export type ToolVersions = { ytdlp: string; ffmpeg: string; deno: string };

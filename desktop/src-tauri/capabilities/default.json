@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "C1: the main window may call only the commands of docs/desktop/C1-CONTRACT.md and listen to their events. No shell, fs, dialog, opener, http, updater, notification or autostart permissions are granted to the webview; folder picking, revealing and opening files, toasts and the Windows Run key happen in Rust.",
+  "description": "C1: the main window may call only the commands of docs/desktop/C1-CONTRACT.md and listen to their events. No shell, fs, dialog, opener, http, updater, notification or autostart permissions are granted to the webview; folder picking, revealing and opening files, toasts and the Windows Run key happen in Rust. Only the window labelled \"main\" gets these; the login-<platform> windows (remote platform pages, PLAN-32D) get none.",
   "windows": ["main"],
   "permissions": [
     "core:event:allow-listen",
@@ -40,6 +40,10 @@
     "allow-notify",
     "allow-autostart-get",
     "allow-autostart-set",
-    "allow-set-close-to-tray"
+    "allow-set-close-to-tray",
+    "allow-cookies-login-open",
+    "allow-cookies-login-finish",
+    "allow-cookies-status",
+    "allow-cookies-clear"
   ]
 }

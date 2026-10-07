@@ -7,6 +7,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { DeviceInfo } from './device';
+import type { CookieStatus } from './cookies-core';
 import type { Channel, ChannelListing, DoneEvent, HistoryItem, LogEvent, ProbeResult, ProgressEvent, ToolVersions } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -33,12 +34,15 @@ async function on<T>(event: string, cb: (p: T) => void): Promise<UnlistenFn> {
 }
 
 export const api = {
-  probe: (url: string) => call<ProbeResult>('probe', { url }),
+  // useCookies: Rust picks the platform from the URL host and uses its saved blob, if any.
+  probe: (url: string, useCookies?: boolean) => call<ProbeResult>('probe', { url, useCookies }),
   cancelProbe: (url: string) => call<null>('cancel_probe', { url }),
   startDownload: (a: {
     jobId: string; url: string; outDir: string; formatId?: string; audioOnly?: boolean;
     // Direct-link downloads (Douyin): request headers, and the file name parts (the URL has none).
     headers?: { name: string; value: string }[]; fileTitle?: string; fileId?: string;
+    // The user's own cookies for this URL's platform (PLAN-32D L1); Rust decides which blob from the host.
+    useCookies?: boolean;
   }) =>
     call<null>('start_download', a),
   pauseDownload: (jobId: string) => call<null>('pause_download', { jobId }),
@@ -65,7 +69,7 @@ export const api = {
   deviceInfo: () => call<DeviceInfo>('device_info'),
   toolVersions: () => call<ToolVersions>('tool_versions'),
   // Channels (C1-CONTRACT.md section 4)
-  channelFetch: (url: string, limit?: number) => call<ChannelListing>('channel_fetch', { url, limit }),
+  channelFetch: (url: string, limit?: number, useCookies?: boolean) => call<ChannelListing>('channel_fetch', { url, limit, useCookies }),
   cancelChannelFetch: (url: string) => call<null>('cancel_channel_fetch', { url }),
   channelSave: (channel: Channel) => call<null>('channel_save', { channel }),
   channelList: () => call<Channel[]>('channel_list'),
@@ -76,6 +80,11 @@ export const api = {
   autostartGet: () => call<boolean>('autostart_get'),
   autostartSet: (enabled: boolean) => call<null>('autostart_set', { enabled }),
   setCloseToTray: (enabled: boolean) => call<null>('set_close_to_tray', { enabled }),
+  // Platform accounts (PLAN-32D §3). No command ever returns a cookie.
+  cookiesLoginOpen: (platform: string) => call<null>('cookies_login_open', { platform }),
+  cookiesLoginFinish: (platform: string) => call<{ platform: string; cookieCount: number; savedAt: number }>('cookies_login_finish', { platform }),
+  cookiesStatus: () => call<CookieStatus[]>('cookies_status'),
+  cookiesClear: (platform: string) => call<null>('cookies_clear', { platform }),
 };
 
 export const onProgress = (cb: (e: ProgressEvent) => void) => on<ProgressEvent>('download://progress', cb);
@@ -84,3 +93,5 @@ export const onDone = (cb: (e: DoneEvent) => void) => on<DoneEvent>('download://
 // Tray menu "Kiểm tra kênh ngay" and the real quit (downloads must be paused within the 3 s grace).
 export const onCheckNow = (cb: () => void) => on<unknown>('channels://check-now', () => cb());
 export const onQuitting = (cb: () => void) => on<unknown>('app://quitting', () => cb());
+// A login-<platform> window was closed (by "Xong", "Xoá" or the user).
+export const onLoginClosed = (cb: (p: { platform: string }) => void) => on<{ platform: string }>('cookies://login-closed', cb);

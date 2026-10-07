@@ -73,8 +73,17 @@ const sims = new Map<string, Sim>();
 const partial = new Map<string, number>();
 
 const forbiddenOnce = new Set<string>();
-function startSim(a: { jobId: string; url: string; outDir: string; audioOnly?: boolean }) {
+function startSim(a: { jobId: string; url: string; outDir: string; audioOnly?: boolean; useCookies?: boolean }) {
   if (sims.has(a.jobId)) return;
+  // Like Rust: cookies only when asked AND a blob is saved for the URL's platform.
+  const ck = a.useCookies ? mockCookiePlatform(a.url) : null;
+  const cookiesUsed = ck != null && mockCookies.has(ck) ? true : undefined;
+  if (cookiesUsed && localStorage.getItem('mock.cookieExpired') === '1') {
+    // localStorage mock.cookieExpired=1: every run with cookies fails like yt-dlp's "Fresh cookies are needed".
+    mockCookies.get(ck!)!.suspectExpired = true;
+    setTimeout(() => emit('download://done', { jobId: a.jobId, state: 'failed', errorCode: 'private_or_login', errorMessage: 'ERROR: [Douyin] 1: Fresh cookies (not necessarily logged in) are needed', cookiesUsed } satisfies DoneEvent), 600);
+    return;
+  }
   if (a.url.includes('example.invalid') && localStorage.getItem('mock.douyin403') === '1' && !forbiddenOnce.has(a.jobId)) {
     forbiddenOnce.add(a.jobId); // first direct link "expired": the app must ask the server for a fresh one
     setTimeout(() => emit('download://done', { jobId: a.jobId, state: 'failed', errorCode: 'forbidden', errorMessage: 'HTTP Error 403: Forbidden' } satisfies DoneEvent), 300);
@@ -96,7 +105,7 @@ function startSim(a: { jobId: string; url: string; outDir: string; audioOnly?: b
       emit('download://progress', { jobId: a.jobId, stage: 'merging', percent: 100, downloadedBytes: total, totalBytes: total, speedBps: null, etaSec: null } satisfies ProgressEvent);
       setTimeout(() => {
         sims.delete(a.jobId); partial.delete(a.jobId);
-        emit('download://done', { jobId: a.jobId, state: 'completed', filePath: `${a.outDir}\\video-${a.jobId.slice(0, 6)}.${a.audioOnly ? 'm4a' : 'mp4'}`, fileSize: total } satisfies DoneEvent);
+        emit('download://done', { jobId: a.jobId, state: 'completed', filePath: `${a.outDir}\\video-${a.jobId.slice(0, 6)}.${a.audioOnly ? 'm4a' : 'mp4'}`, fileSize: total, cookiesUsed } satisfies DoneEvent);
       }, 1200);
       return;
     }
@@ -157,6 +166,46 @@ if (localStorage.getItem('mock.seedChannels') === '1') {
   );
 }
 let autostart = false;
+
+// ---- platform accounts (cookies_*): nothing real, no cookie values at all ------------
+// localStorage switches: mock.cookiePlatforms=douyin,instagram (server list in /client/version),
+// mock.cookieEmpty=1 ("Xong" finds no cookie), mock.cookieExpired=1 (runs with cookies fail with a login error).
+const mockCookies = new Map<string, { savedAt: number; suspectExpired: boolean }>();
+const mockLoginOpen = new Set<string>();
+const COOKIE_SLUGS = ['douyin', 'instagram', 'facebook', 'twitter', 'youtube', 'bilibili', 'threads', 'reddit', 'pinterest', 'tiktok', 'vimeo'];
+function mockCookiePlatform(url: string): string | null {
+  const h = new URL(url).hostname.replace(/^www\./, '');
+  if (/(^|\.)(douyin|iesdouyin)\.com$/.test(h)) return 'douyin';
+  if (h === 'x.com' || h === 'twitter.com') return 'twitter';
+  if (h === 'youtu.be' || h.endsWith('youtube.com')) return 'youtube';
+  const p = h.split('.').slice(-2, -1)[0] ?? '';
+  return COOKIE_SLUGS.includes(p) ? p : null;
+}
+function mockCookieCmd(cmd: string, platform: string): unknown {
+  if (cmd !== 'cookies_status' && !COOKIE_SLUGS.includes(platform)) throw err('unknown', 'unknown platform');
+  switch (cmd) {
+    case 'cookies_login_open': mockLoginOpen.add(platform); return null;
+    case 'cookies_login_finish': {
+      if (!mockLoginOpen.has(platform)) throw err('cancelled', 'the login window is not open');
+      if (localStorage.getItem('mock.cookieEmpty') === '1') throw err('cookie_required', 'no cookie of this platform in the login window yet');
+      mockLoginOpen.delete(platform);
+      const savedAt = Math.floor(Date.now() / 1000);
+      mockCookies.set(platform, { savedAt, suspectExpired: false });
+      setTimeout(() => emit('cookies://login-closed', { platform }), 50);
+      return { platform, cookieCount: 7, savedAt };
+    }
+    case 'cookies_clear':
+      mockCookies.delete(platform);
+      if (mockLoginOpen.delete(platform)) setTimeout(() => emit('cookies://login-closed', { platform }), 50);
+      return null;
+    case 'cookies_status':
+      return COOKIE_SLUGS.map((p) => {
+        const c = mockCookies.get(p);
+        return { platform: p, saved: !!c, savedAt: c?.savedAt ?? null, suspectExpired: !!c?.suspectExpired };
+      });
+  }
+  throw err('unknown', cmd);
+}
 
 // ---- invoke ----------------------------------------------------------------
 let authBlob: string | null = null;
@@ -228,7 +277,9 @@ export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promi
     case 'autostart_get': return autostart;
     case 'autostart_set': autostart = a.enabled as boolean; return null;
     case 'set_close_to_tray': return null;
-    case 'get_version': return '0.6.0-dev';
+    case 'get_version': return '0.7.0-dev';
+    case 'cookies_login_open': case 'cookies_login_finish': case 'cookies_clear': case 'cookies_status':
+      return mockCookieCmd(cmd, (a.platform as string) ?? '');
     case 'device_info': return { hash: 'a1b2c3d4'.repeat(8), code: 'A1B2C3D4', displayName: 'PC-MOCK (Windows 11 24H2, build 26100)', source: 'machine' };
     case 'tool_versions': return { ytdlp: '2026.09.30', ffmpeg: '7.1', deno: '2.5.0' };
   }
@@ -239,7 +290,13 @@ export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promi
 export async function mockApi<T>(path: string, opts: { method?: string; body?: unknown; token?: string | null }): Promise<{ status: number; data: T | null }> {
   await sleep(250);
   const r = (status: number, data: unknown) => ({ status, data: data as T });
-  if (path.startsWith('/api/v1/client/version')) return r(200, { latest: '0.2.0', minSupported: '0.1.0', notes: 'Bản mô phỏng', downloadUrl: 'https://dvid.vibe1.tinhgon.xyz/download' });
+  if (path.startsWith('/api/v1/client/version')) {
+    const cookiePlatforms = (localStorage.getItem('mock.cookiePlatforms') ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+    return r(200, {
+      latest: '0.2.0', minSupported: '0.1.0', notes: 'Bản mô phỏng', downloadUrl: 'https://dvid.vibe1.tinhgon.xyz/download',
+      features: { clientQuota: true, clientQuotaMode: 'enforce', offlineGrace: 3, cookiePlatforms },
+    });
+  }
   if (path.startsWith('/api/v1/client/quota')) return mockQuota(path, opts.method ?? 'GET', opts.body as { url?: string; retro?: boolean; claimId?: string; outcome?: string }, !!opts.token) as { status: number; data: T | null };
   if (path.startsWith('/api/v1/client/douyin/')) return mockDouyin(path, opts.body as { url?: string; limit?: number }, !!opts.token) as { status: number; data: T | null };
   if (!opts.token) return r(401, { detail: 'unauthorized' });

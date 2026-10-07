@@ -1,6 +1,6 @@
 [package]
 name = "vidgrab-desktop"
-version = "0.6.0"
+version = "0.7.0"
 description = "VidGrab desktop client (Phase 32C, stage C1)"
 edition = "2021"
 rust-version = "1.88"
@@ -46,6 +46,8 @@ updater = ["dep:tauri-plugin-updater"]
 windows-sys = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Security",
+  # DPAPI (CryptProtectData) for the saved platform cookies (cookies.rs).
+  "Win32_Security_Cryptography",
   "Win32_System_JobObjects",
   "Win32_System_Threading",
   "Win32_Storage_FileSystem",

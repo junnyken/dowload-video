@@ -16,11 +16,13 @@ mod auth;
 mod browser_login;
 mod channels;
 mod checksum;
+mod cookies;
 mod device;
 mod engine;
 mod error;
 mod formats;
 mod history;
+mod login_window;
 mod paths;
 mod proc;
 mod progress;
@@ -47,6 +49,8 @@ const EVENT_DONE: &str = "download://done";
 const SIDECARS: &[&str] = &["yt-dlp", "ffmpeg", "ffprobe", "deno"];
 const EVENT_CHECK_NOW: &str = "channels://check-now";
 const EVENT_QUITTING: &str = "app://quitting";
+/// A login window (login_window.rs) was closed; payload `{ platform }`.
+const EVENT_LOGIN_CLOSED: &str = "cookies://login-closed";
 const MAIN_WINDOW: &str = "main";
 const MINIMIZED_ARG: &str = "--minimized";
 const PROBE_TIMEOUT: Duration = Duration::from_secs(90);
@@ -159,6 +163,9 @@ struct DoneEvent {
     error_code: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     error_message: Option<String>,
+    /// Present (true) when this run used the user's saved cookies.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cookies_used: Option<bool>,
 }
 
 #[derive(Clone, Serialize, Default)]
@@ -209,6 +216,77 @@ fn valid_out_dir(raw: &str) -> CmdResult<PathBuf> {
         .map_err(|e| CommandError::unknown(format!("output folder: {e}")))
 }
 
+// ---------------------------------------------------------------- cookies (PLAN-32D §3)
+
+/// `<app data>/cookies`: the encrypted blobs (next to vidgrab.db).
+fn cookie_dir(app: &AppHandle) -> CmdResult<PathBuf> {
+    app.path()
+        .app_data_dir()
+        .map(|d| d.join("cookies"))
+        .map_err(|e| CommandError::unknown(format!("no app data folder: {e}")))
+}
+
+/// `<local app data>/tmp`: per-run cookie files, deleted after each run.
+fn cookie_tmp_dir(app: &AppHandle) -> CmdResult<PathBuf> {
+    app.path()
+        .app_local_data_dir()
+        .map(|d| d.join("tmp"))
+        .map_err(|e| CommandError::unknown(format!("no local app data folder: {e}")))
+}
+
+fn valid_platform(raw: &str) -> CmdResult<&'static str> {
+    validate::cookie_platform(raw).map_err(CommandError::unknown)
+}
+
+/// Cookies for one yt-dlp run. Rust picks the platform from the URL host; the
+/// webview only says whether it wants cookies at all. None when the URL is not
+/// a cookie platform or nothing is saved for it. A blob that cannot be
+/// decrypted is flagged "suspect" and the run goes on without cookies.
+struct RunCookies {
+    file: cookies::TempCookieFile,
+    slug: &'static str,
+    dir: PathBuf,
+}
+
+impl RunCookies {
+    fn path(&self) -> &Path {
+        self.file.path()
+    }
+    fn needle(&self) -> String {
+        self.file.needle().to_string()
+    }
+    /// A login / forbidden failure while using these cookies: flag the blob.
+    fn after_failure(&self, code: Code) {
+        if matches!(code, Code::PrivateOrLogin | Code::Forbidden) {
+            cookies::mark_suspect(&self.dir, self.slug);
+        }
+    }
+}
+
+async fn run_cookies(app: &AppHandle, url: &str, wanted: Option<bool>) -> CmdResult<Option<RunCookies>> {
+    if wanted != Some(true) {
+        return Ok(None);
+    }
+    let Some(slug) = cookies::platform_for_url(url) else { return Ok(None) };
+    let dir = cookie_dir(app)?;
+    let tmp = cookie_tmp_dir(app)?;
+    let key = cookies::random_key().map_err(CommandError::unknown)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let text = match cookies::load(&dir, slug) {
+            Ok(Some(t)) => t,
+            Ok(None) => return Ok(None),
+            Err(_) => {
+                cookies::mark_suspect(&dir, slug);
+                return Ok(None);
+            }
+        };
+        let file = cookies::write_temp(&tmp, &key, &text).map_err(CommandError::unknown)?;
+        Ok(Some(RunCookies { file, slug, dir }))
+    })
+    .await
+    .map_err(|e| CommandError::unknown(e.to_string()))?
+}
+
 fn lines_of<R: Read>(pipe: R) -> impl Iterator<Item = String> {
     BufReader::new(pipe)
         .split(b'\n')
@@ -243,7 +321,13 @@ impl Collected {
 /// Spawns `cmd` in a killable tree registered under `key` (so a cancel
 /// command can find it), collects stdout (≤ 64 MB) and the stderr tail, and
 /// kills the tree after `timeout`.
-async fn run_collect(registry: &Registry, key: &str, cmd: Command, timeout: Duration) -> CmdResult<Collected> {
+async fn run_collect(
+    registry: &Registry,
+    key: &str,
+    cmd: Command,
+    timeout: Duration,
+    secret: Option<String>,
+) -> CmdResult<Collected> {
     let (mut child, tree) =
         proc::spawn_tree(cmd).map_err(|e| CommandError::new(Code::ToolMissing, format!("cannot start yt-dlp: {e}")))?;
     let running = Arc::new(Running { tree, stop: AtomicU8::new(STOP_NONE) });
@@ -261,6 +345,9 @@ async fn run_collect(registry: &Registry, key: &str, cmd: Command, timeout: Dura
     let err_t = std::thread::spawn(move || {
         let mut tail = VecDeque::new();
         for l in lines_of(stderr) {
+            if cookies::is_secret_line(&l, secret.as_deref()) {
+                continue; // names the temp cookie file
+            }
             if tail.len() == STDERR_TAIL {
                 tail.pop_front();
             }
@@ -313,12 +400,19 @@ fn cancel_in(registry: &Registry, key: &str) {
 }
 
 #[tauri::command]
-async fn probe(jobs: State<'_, Jobs>, url: String) -> CmdResult<formats::ProbeResult> {
+async fn probe(app: AppHandle, jobs: State<'_, Jobs>, url: String, use_cookies: Option<bool>) -> CmdResult<formats::ProbeResult> {
     let url = valid_url(&url)?;
     let paths = verified_sidecars().await?;
     let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3] };
-    let cmd = ytdlp_command(&paths[0], engine::probe_args(&tools, &url));
-    let c = run_collect(&jobs.probes, &url, cmd, PROBE_TIMEOUT).await?;
+    let ck = run_cookies(&app, &url, use_cookies).await?;
+    let cmd = ytdlp_command(&paths[0], engine::probe_args(&tools, &url, ck.as_ref().map(RunCookies::path)));
+    let c = run_collect(&jobs.probes, &url, cmd, PROBE_TIMEOUT, ck.as_ref().map(RunCookies::needle)).await?;
+    if let Some(k) = ck {
+        if !c.ok() && !c.cancelled && !c.timed_out {
+            k.after_failure(error::classify(&c.err));
+        }
+        drop(k); // deletes the temp file
+    }
 
     if c.cancelled {
         return Err(CommandError::new(Code::Cancelled, "probe cancelled"));
@@ -346,13 +440,26 @@ fn cancel_probe(jobs: State<'_, Jobs>, url: String) -> CmdResult<()> {
 // ---------------------------------------------------------------- channels
 
 #[tauri::command]
-async fn channel_fetch(jobs: State<'_, Jobs>, url: String, limit: Option<u32>) -> CmdResult<channels::ChannelListing> {
+async fn channel_fetch(
+    app: AppHandle,
+    jobs: State<'_, Jobs>,
+    url: String,
+    limit: Option<u32>,
+    use_cookies: Option<bool>,
+) -> CmdResult<channels::ChannelListing> {
     let url = channels::normalize_url(&url).map_err(|e| CommandError::new(Code::InvalidUrl, e))?;
     let limit = channels::clamp_limit(limit);
     let paths = verified_sidecars().await?;
     let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3] };
-    let cmd = ytdlp_command(&paths[0], engine::channel_fetch_args(&tools, &url, limit));
-    let c = run_collect(&jobs.channel_fetches, &url, cmd, CHANNEL_FETCH_TIMEOUT).await?;
+    let ck = run_cookies(&app, &url, use_cookies).await?;
+    let cmd = ytdlp_command(&paths[0], engine::channel_fetch_args(&tools, &url, limit, ck.as_ref().map(RunCookies::path)));
+    let c = run_collect(&jobs.channel_fetches, &url, cmd, CHANNEL_FETCH_TIMEOUT, ck.as_ref().map(RunCookies::needle)).await?;
+    if let Some(k) = ck {
+        if !c.ok() && !c.cancelled && !c.timed_out {
+            k.after_failure(error::classify(&c.err));
+        }
+        drop(k); // deletes the temp file
+    }
 
     if c.cancelled {
         return Err(CommandError::new(Code::Cancelled, "channel fetch cancelled"));
@@ -526,9 +633,14 @@ struct JobIo {
     tracked: Mutex<HashSet<PathBuf>>,
     final_path: Mutex<Option<String>>,
     stderr_tail: Mutex<VecDeque<String>>,
+    /// Lines containing this (the temp cookie file name) are dropped.
+    secret: Option<String>,
 }
 
 fn handle_line(app: &AppHandle, io: &JobIo, line: &str, is_stderr: bool) {
+    if cookies::is_secret_line(line, io.secret.as_deref()) {
+        return;
+    }
     match progress::parse_line(line) {
         Line::Progress { update, files } => {
             if !files.is_empty() {
@@ -625,6 +737,7 @@ async fn start_download(
     headers: Option<Vec<HeaderArg>>,
     file_title: Option<String>,
     file_id: Option<String>,
+    use_cookies: Option<bool>,
 ) -> CmdResult<()> {
     if !paths::valid_job_id(&job_id) {
         return Err(CommandError::unknown("invalid job id"));
@@ -662,7 +775,19 @@ async fn start_download(
 
     let paths = verified_sidecars().await?;
     let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3] };
-    let args = engine::download_args(&tools, &url, &out_dir, format_id.as_deref(), audio_only, &headers, out_name.as_ref());
+    // Random file name per run (not the job id): a second start of the same job
+    // that is refused below must not delete the file the first run is using.
+    let ck = run_cookies(&app, &url, use_cookies).await?;
+    let args = engine::download_args(
+        &tools,
+        &url,
+        &out_dir,
+        format_id.as_deref(),
+        audio_only,
+        &headers,
+        out_name.as_ref(),
+        ck.as_ref().map(RunCookies::path),
+    );
     let cmd = ytdlp_command(&paths[0], args);
 
     // Insert under the lock right after spawning so a concurrent start with
@@ -686,6 +811,7 @@ async fn start_download(
         tracked: Mutex::new(HashSet::new()),
         final_path: Mutex::new(None),
         stderr_tail: Mutex::new(VecDeque::new()),
+        secret: ck.as_ref().map(RunCookies::needle),
     });
     let out = pump(app.clone(), io.clone(), child.stdout.take().expect("piped"), false);
     let err = pump(app.clone(), io.clone(), child.stderr.take().expect("piped"), true);
@@ -700,7 +826,7 @@ async fn start_download(
         let success = status.as_ref().is_ok_and(|s| s.success());
         let final_path = lock(&io.final_path).clone();
         let stop = running.stop.load(Ordering::SeqCst);
-        let mut ev = DoneEvent { job_id: job_id.clone(), ..Default::default() };
+        let mut ev = DoneEvent { job_id: job_id.clone(), cookies_used: ck.as_ref().map(|_| true), ..Default::default() };
 
         if success && final_path.is_some() {
             // Finished, even if pause/cancel was pressed in the last instant.
@@ -735,6 +861,9 @@ async fn start_download(
             let tail: Vec<String> = lock(&io.stderr_tail).iter().cloned().collect();
             ev.state = "failed";
             let code = if success { Code::Unknown } else { error::classify(&tail) };
+            if let Some(k) = &ck {
+                k.after_failure(code);
+            }
             ev.error_code = Some(code.as_str());
             ev.error_message = Some(if success {
                 "yt-dlp finished without reporting an output file".into()
@@ -745,6 +874,7 @@ async fn start_download(
                 })
             });
         }
+        drop(ck); // yt-dlp has exited: delete the temp cookie file before telling the UI
         let _ = app.emit(EVENT_DONE, ev);
     });
 
@@ -976,6 +1106,75 @@ async fn auth_clear() -> CmdResult<()> {
         .map_err(CommandError::unknown)
 }
 
+// ---------------------------------------------------------------- platform accounts (cookies)
+
+/// Opens the platform's own page in a `login-<platform>` window (no IPC access).
+#[tauri::command]
+async fn cookies_login_open(app: AppHandle, platform: String) -> CmdResult<()> {
+    let slug = valid_platform(&platform)?;
+    login_window::open(&app, slug).map_err(CommandError::unknown)
+}
+
+/// "Xong": reads the login window's cookies (off the main thread: WebView2
+/// deadlocks otherwise), keeps the platform's own domains, stores them
+/// encrypted, closes the window. Never returns or logs a cookie.
+#[tauri::command]
+async fn cookies_login_finish(app: AppHandle, platform: String) -> CmdResult<cookies::Saved> {
+    let slug = valid_platform(&platform)?;
+    let w = login_window::window(&app, slug)
+        .ok_or_else(|| CommandError::new(Code::Cancelled, "the login window is not open"))?;
+    let dir = cookie_dir(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = cookies::def(slug).ok_or_else(|| CommandError::unknown("unknown platform"))?;
+        let all = login_window::read_cookies(&w).map_err(CommandError::unknown)?;
+        let kept = cookies::filter_for(p, all);
+        let (text, n, _dropped) = cookies::to_netscape(&kept);
+        if n == 0 {
+            // Keep the window open: the user may still need to sign in / play a video.
+            return Err(CommandError::new(Code::CookieRequired, "no cookie of this platform in the login window yet"));
+        }
+        let saved = cookies::save(&dir, slug, &text, &kept, n).map_err(CommandError::unknown)?;
+        let _ = w.close();
+        Ok(saved)
+    })
+    .await
+    .map_err(|e| CommandError::unknown(e.to_string()))?
+}
+
+/// One row per platform: saved?, when, maybe expired. No cookie data.
+#[tauri::command]
+async fn cookies_status(app: AppHandle) -> CmdResult<Vec<cookies::Status>> {
+    let dir = cookie_dir(&app)?;
+    tauri::async_runtime::spawn_blocking(move || cookies::status(&dir, cookies::now_secs()))
+        .await
+        .map_err(|e| CommandError::unknown(e.to_string()))
+}
+
+/// "Xoá": deletes the saved blob; an open login window is wiped and closed.
+#[tauri::command]
+async fn cookies_clear(app: AppHandle, platform: String) -> CmdResult<()> {
+    let slug = valid_platform(&platform)?;
+    let dir = cookie_dir(&app)?;
+    let w = login_window::window(&app, slug);
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Some(w) = w {
+            // Only on Windows, where the login window's InPrivate profile is its
+            // own: on Linux WebKit this would wipe the main window's data too.
+            #[cfg(windows)]
+            let _ = w.clear_all_browsing_data();
+            let _ = w.close();
+        }
+        cookies::clear(&dir, slug).map_err(CommandError::unknown)
+    })
+    .await
+    .map_err(|e| CommandError::unknown(e.to_string()))?
+}
+
+#[derive(Clone, Serialize)]
+struct LoginClosed {
+    platform: String,
+}
+
 // ---------------------------------------------------------------- versions
 
 /// Machine code for quota counting and the Settings card (device.rs).
@@ -1070,6 +1269,12 @@ pub fn run() {
                 .and_then(|p| Db::open(&p).ok());
             app.manage(Store(db));
 
+            // A crash between spawning yt-dlp and deleting its cookie file
+            // leaves `ck-*.txt` behind; nothing is running yet, so sweep them.
+            if let Ok(tmp) = cookie_tmp_dir(app.handle()) {
+                std::thread::spawn(move || cookies::sweep_temp(&tmp));
+            }
+
             #[cfg(desktop)]
             build_tray(app)?;
             let handle = app.handle().clone();
@@ -1088,6 +1293,11 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if let WindowEvent::Destroyed = event {
+                if let Some(slug) = window.label().strip_prefix(login_window::LABEL_PREFIX) {
+                    let _ = window.app_handle().emit_to(MAIN_WINDOW, EVENT_LOGIN_CLOSED, LoginClosed { platform: slug.to_string() });
+                }
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let flags = window.app_handle().state::<AppFlags>();
                 if window.label() == MAIN_WINDOW
@@ -1137,7 +1347,11 @@ pub fn run() {
             notify,
             autostart_get,
             autostart_set,
-            set_close_to_tray
+            set_close_to_tray,
+            cookies_login_open,
+            cookies_login_finish,
+            cookies_status,
+            cookies_clear
         ])
         .run(tauri::generate_context!())
         .expect("error while running VidGrab");

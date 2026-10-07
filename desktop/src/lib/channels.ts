@@ -10,6 +10,7 @@ import { errorMessage, toAppError } from './errors';
 import { newId } from './format';
 import { fetchDouyinListing } from './douyin';
 import { isDouyinUrl } from './urls';
+import { planFor } from './cookies';
 import { toast } from './ui';
 import type { Channel, ChannelListing, ChannelVideo } from './types';
 
@@ -36,9 +37,13 @@ export { looksLikeChannelUrl } from './urls';
 /** Douyin channels are never scanned in the background: every scan costs the server money. */
 export const isManualOnly = (c: { platform: string }) => c.platform === 'douyin';
 
-/** Channel listing: Douyin goes through the server, everything else through the local yt-dlp. */
+/**
+ * Channel listing: Douyin goes through the server (P1 keeps it there), everything else through
+ * the local yt-dlp, with the user's cookies when that platform is connected (PLAN-32D §6).
+ */
 export function fetchChannelListing(url: string, limit: number): Promise<ChannelListing> {
-  return isDouyinUrl(url) ? fetchDouyinListing(url, limit) : api.channelFetch(url, limit);
+  if (isDouyinUrl(url)) return fetchDouyinListing(url, limit);
+  return api.channelFetch(url, limit, planFor(url).useCookies || undefined);
 }
 
 /** Puts videos into the download queue exactly like the Download screen does (without a per-video probe). */
