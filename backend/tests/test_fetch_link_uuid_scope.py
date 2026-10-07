@@ -106,3 +106,25 @@ def test_signed_in_success_writes_history_row(app, route, monkeypatch):
     assert len(rows) == 1
     assert rows[0]["status"] == "success" and rows[0]["user_id"] == "u-1"
     assert rows[0]["batch_id"].startswith("single_")
+
+
+@pytest.mark.parametrize("source,expected", [("desktop", "1"), (None, None), ("web", None)])
+def test_desktop_server_route_is_counted_for_admin_stats(app, route, monkeypatch, source, expected):
+    """Task #6090: the Windows app's server route (fetchlink.ts sends
+    X-VG-Source: desktop) shows up in the admin 'App Windows' stats."""
+    async def _ok(url, *a, **k):
+        return {"title": "t", "direct_mp4_url": "https://cdn.example.com/v.mp4", "original_url": url}
+    monkeypatch.setattr(route, "extract_video_info", _ok)
+    monkeypatch.setattr(route, "check_platform_quota", lambda *a, **k: {"allowed": True})
+    monkeypatch.setattr(route, "increment_usage", lambda *a, **k: None)
+
+    async def _noop(*a, **k):
+        return None
+    monkeypatch.setattr("app.core.metering.record_download", _noop)
+    headers = {"X-VG-Source": source} if source else {}
+    r = app.post("/api/v1/fetch-link", json={"url": "https://www.instagram.com/p/abc/", "quality": "video"},
+                 headers=headers)
+    assert r.status_code == 200, r.text[:300]
+    from app.core.quotas import _utc_day
+    from app.core.redis_client import get_redis
+    assert get_redis().hget(f"vidgrab:stats:route:{_utc_day()}", "server|ok") == expected

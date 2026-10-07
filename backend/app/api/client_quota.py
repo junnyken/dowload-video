@@ -186,6 +186,12 @@ def _take_retro(req: "quotas.QuotaRequester") -> bool:
         return False
 
 
+def record_route_stat(route: str, outcome: str) -> None:
+    """Public: one count in the daily route stats (admin "App Windows").
+    Used by /fetch-link and /client/douyin/video for the app's server route."""
+    _stat(route, outcome)
+
+
 def _stat(route: str, outcome: str) -> None:
     try:
         r = _r()

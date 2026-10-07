@@ -163,6 +163,8 @@ async def douyin_video(payload: VideoIn, request: Request, user=Depends(get_opti
         return _err(404, "Không tìm thấy nội dung video trong URL này.", "no_media_found")
     if req.kind != quotas.REQ_ADMIN:
         await asyncio.to_thread(quotas.record_platform_download, req, PLATFORM, url)
+    from app.api.client_quota import record_route_stat  # noqa: PLC0415
+    record_route_stat("server", "ok")   # admin "App Windows" stats (task #6090)
     from app.services.china_platforms.request_cache import media_expiry_ts  # noqa: PLC0415
     exp = media_expiry_ts(result)
     from datetime import datetime, timezone  # noqa: PLC0415

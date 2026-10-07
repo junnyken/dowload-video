@@ -93,6 +93,8 @@ class TestVideo:
         from app.core import quotas
         req = quotas.QuotaRequester(quotas.REQ_ANON, "testclient")
         assert quotas.platform_used(req, "douyin") == 1
+        from app.core.quotas import _utc_day
+        assert rc.hget(f"vidgrab:stats:route:{_utc_day()}", "server|ok") == "1"   # admin stats (#6090)
 
     def test_guest_out_of_downloads_gets_quota_body(self, on, rc):
         from app.core import quotas

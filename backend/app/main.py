@@ -510,6 +510,9 @@ app.include_router(admin_asr_router, prefix="/api/v1/admin", tags=["Admin ASR"])
 # Phase 32B-1 — China Platform Access Layer admin (read + kill switch/mode)
 from app.api.admin_china_platforms import router as admin_china_router
 app.include_router(admin_china_router, prefix="/api/v1/admin", tags=["Admin China Access"])
+# Task #6087 — Windows app: machines + local/server download stats (read-only)
+from app.api.admin_desktop import router as admin_desktop_router
+app.include_router(admin_desktop_router, prefix="/api/v1/admin", tags=["Admin Desktop App"])
 
 # Phase 19 — Mobile / PWA endpoints
 from app.api import mobile as mobile_api

@@ -901,6 +901,11 @@ async def fetch_link(
                 subtitle_file_url = _dl_url(local_sub, f"{sub_name}.{sub_ext}")
             delete_local_file.apply_async((local_sub,), countdown=_EXPIRY_SECONDS)
 
+        # Windows app server route (fetchlink.ts sends X-VG-Source: desktop):
+        # counted in the admin "App Windows" stats (task #6090).
+        if (x_vg_source or "").strip().lower() == "desktop":
+            from app.api.client_quota import record_route_stat as _route_stat
+            _route_stat("server", "ok")
         from app.core.local_download import file_fields as _file_fields
         return {
             "success": True,
