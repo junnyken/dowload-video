@@ -207,6 +207,56 @@ pub fn to_netscape(cookies: &[RawCookie]) -> (String, usize, usize) {
     (s, kept, dropped)
 }
 
+/// Reads back what `to_netscape` wrote (the stored blob), for the hidden
+/// Douyin resolver window (douyin_local.rs), which injects the cookies into a
+/// webview instead of handing yt-dlp a file. Lines that are not exactly 7
+/// tab-separated fields, or fail the same checks `to_netscape` applies, are
+/// skipped (never printed). `#HttpOnly_` marks http-only; expiry 0 = session.
+/// The leading dot of the domain is kept off (RawCookie convention).
+pub fn from_netscape(text: &str) -> Vec<RawCookie> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let (http_only, rest) = match line.strip_prefix(HTTPONLY_PREFIX) {
+            Some(r) => (true, r),
+            None if line.starts_with('#') || line.trim().is_empty() => continue,
+            None => (false, line),
+        };
+        let f: Vec<&str> = rest.split('\t').collect();
+        if f.len() != 7 {
+            continue;
+        }
+        let domain = f[0].trim_start_matches('.').to_ascii_lowercase();
+        let (path, name, value) = (f[2], f[5], f[6]);
+        let secure = match f[3] {
+            "TRUE" => true,
+            "FALSE" => false,
+            _ => continue,
+        };
+        let Ok(exp) = f[4].parse::<i64>() else { continue };
+        let ok = clean_domain(&domain)
+            && !name.is_empty()
+            && !name.starts_with('#')
+            && clean_field(name)
+            && clean_field(value)
+            && clean_field(path)
+            && path.starts_with('/')
+            && name.len() + value.len() <= 8192;
+        if !ok {
+            continue;
+        }
+        out.push(RawCookie {
+            name: name.to_string(),
+            value: value.to_string(),
+            domain,
+            path: path.to_string(),
+            secure,
+            http_only,
+            expires: (exp > 0).then_some(exp),
+        });
+    }
+    out
+}
+
 // ---------------------------------------------------------------- store
 
 /// What the UI may know about a saved blob. Never a cookie name or value.
@@ -629,6 +679,50 @@ mod tests {
         }
         // Nothing of a dropped cookie reaches the text.
         assert!(!text.contains("v\n") && !text.contains("#c") && !text.contains("dom"));
+    }
+
+    #[test]
+    fn netscape_parse_round_trip() {
+        let mut http_only = ck("sessionid", "abc", "www.douyin.com");
+        http_only.http_only = true;
+        let mut session = ck("ttwid", "x y", "douyin.com");
+        session.expires = None;
+        session.secure = false;
+        session.path = "/aweme".into();
+        let all = vec![http_only.clone(), session.clone(), ck("s_v_web_id", "v=1;x", "iesdouyin.com")];
+        let (text, kept, _) = to_netscape(&all);
+        assert_eq!(kept, 3);
+        assert_eq!(from_netscape(&text), all);
+        // CRLF line ends (a blob edited on Windows) still parse.
+        assert_eq!(from_netscape(&text.replace('\n', "\r\n")).len(), 3);
+    }
+
+    #[test]
+    fn netscape_parse_skips_bad_lines() {
+        let text = [
+            NETSCAPE_HEADER,
+            "",
+            "# a comment",
+            ".douyin.com\tTRUE\t/\tTRUE\t0\tok\t1",
+            ".douyin.com\tTRUE\t/\tMAYBE\t0\tbadsecure\t1",
+            ".douyin.com\tTRUE\t/\tTRUE\tsoon\tbadexp\t1",
+            ".douyin.com\tTRUE\t/\tTRUE\t0\tsix",
+            ".douyin.com\tTRUE\t/\tTRUE\t0\tx\ty\tz",
+            ".bad domain.com\tTRUE\t/\tTRUE\t0\tbaddom\t1",
+            ".douyin.com\tTRUE\tnoslash\tTRUE\t0\tbadpath\t1",
+            ".douyin.com\tTRUE\t/\tTRUE\t0\t\tempty",
+            "#HttpOnly_.douyin.com\tTRUE\t/\tFALSE\t1900000000\tho\t2",
+        ]
+        .join("\n");
+        let got = from_netscape(&text);
+        let names: Vec<_> = got.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, vec!["ok", "ho"]);
+        assert_eq!(got[0].expires, None);
+        assert!(got[0].secure && !got[0].http_only);
+        assert!(got[1].http_only && !got[1].secure);
+        assert_eq!(got[1].expires, Some(1_900_000_000));
+        assert_eq!(got[1].domain, "douyin.com");
+        assert!(from_netscape("").is_empty());
     }
 
     #[test]

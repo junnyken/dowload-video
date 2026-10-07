@@ -88,9 +88,4 @@ export function isExpired(v: Pick<DouyinVideo, 'expiresAt'>, resolvedAt: number,
   return Number.isFinite(exp) ? exp - 15_000 <= now : now - resolvedAt > 20 * 60_000;
 }
 
-/** Headers the local yt-dlp must send with the direct link (Rust allows Referer / User-Agent only). */
-export function toHeaderList(h: Record<string, string> | null | undefined): { name: string; value: string }[] {
-  return Object.entries(h ?? {})
-    .filter(([k, v]) => /^(referer|user-agent)$/i.test(k) && typeof v === 'string' && v)
-    .map(([name, value]) => ({ name, value }));
-}
+export { toHeaderList } from './cookies-core';

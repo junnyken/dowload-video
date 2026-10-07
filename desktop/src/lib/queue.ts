@@ -10,10 +10,12 @@ import type { HistoryItem, Stage } from './types';
 import { syncSoon } from './sync';
 import { douyinVideo, isExpired, toHeaderList, type DouyinVideo } from './douyin';
 import { isDouyinUrl } from './urls';
-import { claimForStart, clearGate, quotaGate, settle } from './quota';
+import { claimForStart, clearGate, quotaGate, refreshQuota, settle } from './quota';
 import { gatePaused } from './quota-core';
 import { cookieState, planFor, refreshCookieStatus } from './cookies';
-import { cookieErrorCode, cookiePlatformOf, pickNext, settleThenFallback, shouldFallbackToServer, type Plan, type Route } from './cookies-core';
+import {
+  cookieErrorCode, cookiePlatformOf, douyinLocalArgs, pickNext, settleThenFallback, shouldFallbackToServer, type Plan, type Route,
+} from './cookies-core';
 
 export type QueueState = 'queued' | 'running' | 'paused' | 'completed' | 'failed';
 
@@ -129,6 +131,7 @@ async function douyinArgs(item: QueueItem) {
   let r = resolved.get(item.id);
   if (!r || isExpired(r.v, r.at)) {
     r = { v: await douyinVideo(item.url), at: Date.now() }; // counts one download on the server
+    void refreshQuota(); // the server counted it itself (no claim to settle): update the badge now
     resolved.set(item.id, r);
     patch(item.id, { title: r.v.title || item.title, thumbnail: r.v.thumbnail ?? item.thumbnail, uploader: r.v.uploader ?? item.uploader });
   }
@@ -163,8 +166,19 @@ async function start(item: QueueItem) {
         if (!queue.get().some((i) => i.id === item.id)) { void settle(v.claimId, 'cancelled'); return; } // cancelled while claiming
       }
       if (isDouyinUrl(item.url)) {
-        // Douyin L1: yt-dlp's Douyin extractor on the douyin.com link with the user's cookies.
-        extra = { formatId: undefined, useCookies: true };
+        // Douyin L1 (0.7.2): yt-dlp's Douyin extractor cannot sign Douyin's API
+        // ("Fresh cookies are needed"), so a hidden Douyin page with the user's
+        // cookies resolves the direct link, and yt-dlp downloads that link.
+        let r;
+        try {
+          r = await api.douyinResolveLocal(item.url);
+        } catch (e) {
+          const cur = queue.get().find((i) => i.id === item.id);
+          if (cur && cur.state === 'running') void fallBackToServer(cur, toAppError(e).code);
+          return;
+        }
+        patch(item.id, { title: r.title || item.title, uploader: r.author ?? item.uploader });
+        extra = douyinLocalArgs(r, item);
       } else if (plan.useCookies) {
         extra = { useCookies: true };
       }
@@ -177,9 +191,10 @@ async function start(item: QueueItem) {
 }
 
 /**
- * Douyin L1 failed with a login / forbidden error: Rust has flagged the blob
- * "maybe expired". Refund the local claim FIRST (the server route counts on its
- * own), then run the same job once through the server.
+ * Douyin L1 failed: the hidden page gave no link (timeout, verification, no
+ * saved cookies) or the CDN refused the link (forbidden). Refund the local
+ * claim FIRST (the server route counts on its own), then run the same job once
+ * through the server.
  */
 async function fallBackToServer(it: QueueItem, code: string) {
   forget(it.id);
@@ -192,7 +207,9 @@ async function fallBackToServer(it: QueueItem, code: string) {
     () => patch(it.id, { claimId: null, route: 'server', state: 'queued', errorCode: null }),
   );
   // wording: BA review
-  if (moved) toast('info', `Phiên Douyin trên máy có thể đã hết hạn. Đang tải lại qua máy chủ VidGrab: ${it.title}`);
+  if (moved) toast('info', code === 'private_or_login'
+    ? `Phiên Douyin trên máy có thể đã hết hạn. Đang tải lại qua máy chủ VidGrab: ${it.title}`
+    : `Không tải được video Douyin trực tiếp trên máy này. Đang tải qua máy chủ VidGrab: ${it.title}`); // wording: BA review
   pump();
 }
 

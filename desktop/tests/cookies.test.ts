@@ -2,8 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  COOKIE_PLATFORMS, DOUYIN_FALLBACK_CODES, cookieErrorCode, cookiePlatformOf, domainMatches, parseCookiePlatforms, pickNext,
-  planRoute, rowState, settleThenFallback, shouldFallbackToServer, type CookieCtx, type PumpItem, type Route,
+  COOKIE_PLATFORMS, DOUYIN_FALLBACK_CODES, cookieErrorCode, cookiePlatformOf, domainMatches, douyinLocalArgs, parseCookiePlatforms, pickNext,
+  planRoute, rowState, settleThenFallback, shouldFallbackToServer, toHeaderList, type CookieCtx, type DouyinLocal, type PumpItem, type Route,
 } from '../src/lib/cookies-core.ts';
 
 const DY = 'https://www.douyin.com/video/7311111111111111111';
@@ -116,4 +116,28 @@ test('settings row state', () => {
   assert.equal(rowState({ platform: 'douyin', saved: false, savedAt: null, suspectExpired: false }), 'none');
   assert.equal(rowState({ platform: 'douyin', saved: true, savedAt: 1, suspectExpired: false }), 'saved');
   assert.equal(rowState({ platform: 'douyin', saved: true, savedAt: 1, suspectExpired: true }), 'suspect');
+});
+
+test('Douyin local (0.7.2): the resolved direct link is downloaded like the server route, without cookies', () => {
+  const r: DouyinLocal = {
+    id: '7311111111111111111', url: 'https://v26-web.douyinvod.com/x/?a=1', title: 'Mèo con', author: 'A', durationSec: 15,
+    headers: { Referer: 'https://www.douyin.com/', 'User-Agent': 'Mozilla/5.0 Edg/140' },
+  };
+  const a = douyinLocalArgs(r, { id: 'job-1', title: 'Video Douyin 7311' });
+  assert.deepEqual(a, {
+    url: 'https://v26-web.douyinvod.com/x/?a=1', formatId: undefined,
+    headers: [{ name: 'Referer', value: 'https://www.douyin.com/' }, { name: 'User-Agent', value: 'Mozilla/5.0 Edg/140' }],
+    fileTitle: 'Mèo con', fileId: '7311111111111111111', useCookies: false,
+  });
+  // No title from the page -> the queue title; an odd id -> cleaned, or the job id.
+  const b = douyinLocalArgs({ ...r, title: '', id: '73/../11' }, { id: 'job-1', title: 'Video Douyin 7311' });
+  assert.equal(b.fileTitle, 'Video Douyin 7311');
+  assert.equal(b.fileId, '7311');
+  assert.equal(douyinLocalArgs({ ...r, id: '' }, { id: 'ab$c-1', title: 't' }).fileId, 'abc-1');
+});
+
+test('header list: Referer / User-Agent only, empty values dropped', () => {
+  assert.deepEqual(toHeaderList({ referer: 'https://www.douyin.com/', Cookie: 'a=b', 'User-Agent': '', Authorization: 'x' }),
+    [{ name: 'referer', value: 'https://www.douyin.com/' }]);
+  assert.deepEqual(toHeaderList(null), []);
 });

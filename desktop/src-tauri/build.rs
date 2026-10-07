@@ -46,6 +46,7 @@ const COMMANDS: &[&str] = &[
     "cookies_login_finish",
     "cookies_status",
     "cookies_clear",
+    "douyin_resolve_local",
 ];
 
 fn main() {

@@ -7,7 +7,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { DeviceInfo } from './device';
-import type { CookieStatus } from './cookies-core';
+import type { CookieStatus, DouyinLocal } from './cookies-core';
 import type { Channel, ChannelListing, DoneEvent, HistoryItem, LogEvent, ProbeResult, ProgressEvent, ToolVersions } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -85,6 +85,8 @@ export const api = {
   cookiesLoginFinish: (platform: string) => call<{ platform: string; cookieCount: number; savedAt: number }>('cookies_login_finish', { platform }),
   cookiesStatus: () => call<CookieStatus[]>('cookies_status'),
   cookiesClear: (platform: string) => call<null>('cookies_clear', { platform }),
+  // Douyin on this machine (0.7.2): a hidden Douyin page with the saved cookies resolves the direct link (Rust checks it).
+  douyinResolveLocal: (url: string) => call<DouyinLocal>('douyin_resolve_local', { url }),
 };
 
 export const onProgress = (cb: (e: ProgressEvent) => void) => on<ProgressEvent>('download://progress', cb);

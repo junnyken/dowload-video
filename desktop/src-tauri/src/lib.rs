@@ -18,6 +18,8 @@ mod channels;
 mod checksum;
 mod cookies;
 mod device;
+mod douyin_local;
+mod douyin_window;
 mod engine;
 mod error;
 mod formats;
@@ -1178,6 +1180,41 @@ async fn cookies_clear(app: AppHandle, platform: String) -> CmdResult<()> {
     .map_err(|e| CommandError::unknown(e.to_string()))?
 }
 
+/// Douyin on this machine (app 0.7.2 experiment, douyin_local.rs): a hidden
+/// InPrivate window with the user's saved Douyin cookies opens the video page,
+/// Douyin's own JS signs the request, and the direct media link comes back
+/// (checked: https, public DNS host). The webview then downloads it with
+/// start_download + Referer/User-Agent. Never returns or logs a cookie; the
+/// link is returned to the webview only.
+#[tauri::command]
+async fn douyin_resolve_local(app: AppHandle, url: String) -> CmdResult<douyin_local::Resolved> {
+    let target = douyin_local::target(&url).map_err(|e| CommandError::new(Code::InvalidUrl, e))?;
+    let dir = cookie_dir(&app)?;
+    let p = cookies::def("douyin").ok_or_else(|| CommandError::unknown("unknown platform"))?;
+    let jar = tauri::async_runtime::spawn_blocking(move || cookies::load(&dir, "douyin"))
+        .await
+        .map_err(|e| CommandError::unknown(e.to_string()))?
+        .map_err(|e| CommandError::new(Code::CookieRequired, e))?
+        .map(|text| cookies::filter_for(p, cookies::from_netscape(&text)))
+        .unwrap_or_default();
+    if jar.is_empty() {
+        return Err(CommandError::new(Code::CookieRequired, "no saved Douyin cookies"));
+    }
+    douyin_window::resolve(&app, target, jar).await.map_err(|f| match f {
+        douyin_window::Failure::Timeout => CommandError::new(Code::Timeout, "the Douyin page did not give the video within 30 s"),
+        douyin_window::Failure::Page(douyin_local::PageError::Verify) => {
+            CommandError::new(Code::Forbidden, "Douyin asked for a verification on this machine")
+        }
+        douyin_window::Failure::Page(douyin_local::PageError::NotFound) => {
+            CommandError::new(Code::NotFound, "no video link found on the Douyin page")
+        }
+        douyin_window::Failure::Page(douyin_local::PageError::Bad) => {
+            CommandError::unknown("the Douyin page gave an unusable answer")
+        }
+        douyin_window::Failure::Window(e) => CommandError::unknown(e),
+    })
+}
+
 #[derive(Clone, Serialize)]
 struct LoginClosed {
     platform: String,
@@ -1381,7 +1418,8 @@ pub fn run() {
             cookies_login_open,
             cookies_login_finish,
             cookies_status,
-            cookies_clear
+            cookies_clear,
+            douyin_resolve_local
         ])
         .run(tauri::generate_context!())
         .expect("error while running VidGrab");

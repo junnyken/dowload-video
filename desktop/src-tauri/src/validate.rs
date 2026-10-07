@@ -11,6 +11,35 @@ pub fn url(raw: &str) -> Result<String, String> {
     Ok(url.to_string())
 }
 
+/// A media link that came from an untrusted source (the Douyin page in the
+/// hidden resolver window, douyin_local.rs): https only, a DNS name (no IP
+/// literal, no localhost / single-label / .local / .internal host), default
+/// port, no userinfo, at most 4096 bytes. Checked on the parsed URL, so
+/// "https://evil@127.0.0.1" or "https://0x7f000001/" are refused too.
+pub fn media_url(raw: &str) -> Result<String, String> {
+    if raw.len() > 4096 {
+        return Err("URL is too long".into());
+    }
+    let u = url::Url::parse(raw.trim()).map_err(|_| "not a valid URL".to_string())?;
+    if u.scheme() != "https" || !u.username().is_empty() || u.password().is_some() || u.port().is_some() {
+        return Err("only plain https links are allowed".into());
+    }
+    let host = match u.host() {
+        Some(url::Host::Domain(d)) => d.trim_end_matches('.').to_ascii_lowercase(),
+        _ => return Err("IP addresses are not allowed".into()),
+    };
+    let label_ok = |l: &str| !l.is_empty() && l.len() <= 63 && l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+    let tld = host.rsplit('.').next().unwrap_or_default();
+    if !host.contains('.')
+        || !host.split('.').all(label_ok)
+        || tld.chars().all(|c| c.is_ascii_digit())
+        || matches!(tld, "localhost" | "local" | "internal" | "lan" | "home" | "arpa")
+    {
+        return Err("this host is not allowed".into());
+    }
+    Ok(u.to_string())
+}
+
 /// yt-dlp format selectors look like `137+140`, `bv*+ba/b`, `best[height<=720]`.
 /// Allow that alphabet only; the value is passed as a separate argv item after
 /// `-f`, so it can never be read as another option.
@@ -79,6 +108,38 @@ mod tests {
         assert!(url("file:///etc/passwd").is_err());
         assert!(url("--exec calc").is_err());
         assert!(url("javascript:alert(1)").is_err());
+    }
+
+    #[test]
+    fn media_url_refuses_local_and_odd_hosts() {
+        assert!(media_url("https://v26-web.douyinvod.com/abc/video/tos/cn/x.mp4?a=1&b=2").is_ok());
+        assert!(media_url("https://www.douyin.com/aweme/v1/play/?video_id=v0200").is_ok());
+        assert!(media_url(&format!("https://v3-web.douyinvod.com/{}", "a".repeat(3000))).is_ok());
+        for bad in [
+            "http://v26-web.douyinvod.com/x.mp4",
+            "blob:https://www.douyin.com/1234",
+            "data:video/mp4;base64,AAAA",
+            "javascript:alert(1)",
+            "file:///C:/x.mp4",
+            "https://127.0.0.1/x.mp4",
+            "https://0x7f000001/x.mp4",
+            "https://2130706433/x.mp4",
+            "https://[::1]/x.mp4",
+            "https://10.0.0.5/x.mp4",
+            "https://192.168.1.1/x.mp4",
+            "https://localhost/x.mp4",
+            "https://a.localhost/x.mp4",
+            "https://printer.local/x.mp4",
+            "https://intranet/x.mp4",
+            "https://u:p@v26-web.douyinvod.com/x.mp4",
+            "https://u@v26-web.douyinvod.com/x.mp4",
+            "https://v26-web.douyinvod.com:8443/x.mp4",
+            "https://1.2.3.4.5/x.mp4",
+            "not a url",
+        ] {
+            assert!(media_url(bad).is_err(), "{bad}");
+        }
+        assert!(media_url(&format!("https://v3-web.douyinvod.com/{}", "a".repeat(4100))).is_err());
     }
 
     #[test]

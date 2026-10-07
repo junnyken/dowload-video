@@ -75,11 +75,43 @@ export function planRoute(url: string, ctx: CookieCtx): Plan {
   return { route: cookie ? 'local_cookie' : 'local', useCookies: cookie, platform };
 }
 
-/** Errors after which a Douyin L1 download is retried ONCE through the server (login, forbidden, "Fresh cookies"). */
+/** Errors of the L1 download after which a Douyin job is retried ONCE through the server (login, forbidden = the CDN refused the link). A failed local resolve always falls back (queue.ts). */
 export const DOUYIN_FALLBACK_CODES: ReadonlySet<string> = new Set(['private_or_login', 'forbidden']);
 
 export function shouldFallbackToServer(it: { url: string; route?: Route; cookieFallback?: boolean }, code: string): boolean {
   return it.route === 'local_cookie' && cookiePlatformOf(it.url) === 'douyin' && !it.cookieFallback && DOUYIN_FALLBACK_CODES.has(code);
+}
+
+// ---- Douyin L1 through the hidden webview (app 0.7.2) ------------------------------------
+
+/** What Rust `douyin_resolve_local` returns: the direct media link the Douyin page itself resolved. */
+export type DouyinLocal = {
+  id: string; url: string; title: string; author: string | null; durationSec: number | null;
+  headers: Record<string, string>;
+};
+
+/** Headers the local yt-dlp must send with a direct link (Rust allows Referer / User-Agent only). */
+export function toHeaderList(h: Record<string, string> | null | undefined): { name: string; value: string }[] {
+  return Object.entries(h ?? {})
+    .filter(([k, v]) => /^(referer|user-agent)$/i.test(k) && typeof v === 'string' && v)
+    .map(([name, value]) => ({ name, value }));
+}
+
+/**
+ * start_download arguments for a Douyin link resolved on this machine: the
+ * direct link with its headers and a title/id file name, exactly like the
+ * server route's direct download. No cookies: the CDN link does not need them.
+ */
+export function douyinLocalArgs(r: DouyinLocal, item: { id: string; title: string }) {
+  const safeId = r.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+  return {
+    url: r.url,
+    formatId: undefined, // a direct file has one format; height selectors would match nothing
+    headers: toHeaderList(r.headers),
+    fileTitle: r.title || item.title,
+    fileId: safeId || item.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 12),
+    useCookies: false,
+  };
 }
 
 /**

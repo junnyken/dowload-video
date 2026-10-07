@@ -207,6 +207,21 @@ function mockCookieCmd(cmd: string, platform: string): unknown {
   throw err('unknown', cmd);
 }
 
+// ---- Douyin on this machine (douyin_resolve_local, 0.7.2): no hidden window here ------
+// localStorage mock.douyinLocalFail=1: the hidden page gives no link (timeout) -> the queue
+// refunds the claim and falls back to the server route. mock.douyin403=1 also hits this
+// local link once (example.invalid), which exercises the download-403 fallback.
+async function mockDouyinLocal(url: string) {
+  if (!mockCookies.has('douyin')) throw err('cookie_required', 'no saved Douyin cookies');
+  await sleep(1200);
+  if (localStorage.getItem('mock.douyinLocalFail') === '1') throw err('timeout', 'the Douyin page did not give the video within 30 s');
+  const id = /(\d{8,25})/.exec(url)?.[1] ?? '7000000000000000100';
+  return {
+    id, url: `https://example.invalid/local/${id}.mp4`, title: `Video Douyin trên máy ${id.slice(-3)}`, author: 'Kênh Douyin mô phỏng',
+    durationSec: 31, headers: { Referer: 'https://www.douyin.com/', 'User-Agent': 'MockWebView/1.0' },
+  };
+}
+
 // ---- invoke ----------------------------------------------------------------
 let authBlob: string | null = null;
 export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promise<unknown> {
@@ -277,9 +292,10 @@ export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promi
     case 'autostart_get': return autostart;
     case 'autostart_set': autostart = a.enabled as boolean; return null;
     case 'set_close_to_tray': return null;
-    case 'get_version': return '0.7.0-dev';
+    case 'get_version': return '0.7.2-dev';
     case 'cookies_login_open': case 'cookies_login_finish': case 'cookies_clear': case 'cookies_status':
       return mockCookieCmd(cmd, (a.platform as string) ?? '');
+    case 'douyin_resolve_local': return mockDouyinLocal(a.url as string);
     case 'device_info': return { hash: 'a1b2c3d4'.repeat(8), code: 'A1B2C3D4', displayName: 'PC-MOCK (Windows 11 24H2, build 26100)', source: 'machine' };
     case 'tool_versions': return { ytdlp: '2026.09.30', ffmpeg: '7.1', deno: '2.5.0' };
   }
