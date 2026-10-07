@@ -30,6 +30,11 @@ All routes require verify_admin, mounted under /api/v1/admin.
       machine). grant raises today's limit (total ≤ quotas.BONUS_DAY_MAX);
       reset sets today's used count to 0. Audited via log_admin_action.
 
+  POST /admin/desktop/ip/reset   (task #6125, PLAN-32E §6)
+      {ip: <the machine's last IP from the list>, reason: 3..300 chars}
+      Today only: clears the network's app-guest counter (the IP cap,
+      reason "ip_limit"); each machine's own allowance stays. Audited.
+
 Table missing (migration 037 not applied) → 200 with storage_ready=false.
 """
 from __future__ import annotations
@@ -321,6 +326,41 @@ async def desktop_allowance(request: Request, payload: dict = Body(...), _=Depen
                      metadata={"counted_as": out["counted_as"], "amount": out["amount"],
                                "bonus_today": out["bonus_today"], "removed": out["removed"],
                                "reason": out.pop("reason")[:300], "day_utc": out["day_utc"]})
+    return out
+
+
+def _ip_reset(payload: dict) -> dict:
+    import ipaddress  # noqa: PLC0415
+    raw = str(payload.get("ip") or "").strip()
+    try:
+        ip = str(ipaddress.ip_address(raw))
+    except ValueError:
+        _bad("bad_ip", "Địa chỉ IP không hợp lệ.")
+    reason = str(payload.get("reason") or "").strip()
+    if not 3 <= len(reason) <= 300:
+        _bad("reason_required", "Cần nhập lý do (3–300 ký tự).")
+    try:
+        removed = quotas.reset_device_ip(ip)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("admin_desktop ip reset failed: %s", type(exc).__name__)
+        _bad("redis_unavailable", "Không ghi được (Redis lỗi). Thử lại sau.", 503)
+    lim = quotas.platform_limit_anon()
+    return {"ip": ip, "removed": removed, "reason": reason,
+            "ip_cap": None if lim == -1 else lim * _ip_mult(), "day_utc": quotas._utc_day()}
+
+
+def _ip_mult() -> int:
+    from app.api import client_quota  # noqa: PLC0415
+    return client_quota.ip_mult()
+
+
+@router.post("/desktop/ip/reset")
+async def desktop_ip_reset(request: Request, payload: dict = Body(...), _=Depends(verify_admin)) -> dict:
+    import asyncio  # noqa: PLC0415
+    out = await asyncio.to_thread(_ip_reset, payload if isinstance(payload, dict) else {})
+    log_admin_action(request, "admin.desktop.ip_reset", resource_type="ip", resource_id=out["ip"],
+                     metadata={"removed": out["removed"], "reason": out.pop("reason")[:300],
+                               "day_utc": out["day_utc"]})
     return out
 
 

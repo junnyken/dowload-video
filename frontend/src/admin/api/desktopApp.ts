@@ -204,3 +204,30 @@ export async function postDesktopAllowance(body: AllowanceBody): Promise<Allowan
   }
   return res.json() as Promise<AllowanceResult>
 }
+
+export interface IpResetResult {
+  ip: string
+  removed: number
+  ip_cap: number | null
+  day_utc: string
+}
+
+/** PLAN-32E: clear today's shared guest counter (IP cap) of one network. */
+export async function resetDesktopIp(ip: string, reason: string): Promise<IpResetResult> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = getAdminToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const res = await fetch(`${API_BASE}/api/v1/admin/desktop/ip/reset`, {
+    method: 'POST', headers, body: JSON.stringify({ ip, reason }),
+  })
+  if (!res.ok) {
+    let msg = 'Không thực hiện được, vui lòng thử lại.'
+    try {
+      const data = await res.json()
+      const m = data?.detail?.message
+      if (typeof m === 'string' && m) msg = m
+    } catch { /* keep the generic message */ }
+    throw new Error(msg)
+  }
+  return res.json() as Promise<IpResetResult>
+}

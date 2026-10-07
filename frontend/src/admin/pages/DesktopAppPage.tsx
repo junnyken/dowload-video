@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { desktopAppApi, postDesktopAllowance } from '../api/desktopApp'
+import { desktopAppApi, postDesktopAllowance, resetDesktopIp } from '../api/desktopApp'
 import type { DesktopDevice, DesktopRoute, DevicesPayload, KindSummary, RouteGrid, StatsPayload } from '../api/desktopApp'
 import { PageHeader } from '../shared/PageHeader'
 import { StatCard } from '../shared/StatCard'
@@ -395,9 +395,9 @@ function usageText(d: DesktopDevice) {
   return t.limit == null || t.limit === -1 ? n(t.used) : `${n(t.used)}/${n(t.limit)}`
 }
 
-type AllowanceAction = 'grant' | 'reset'
+type AllowanceAction = 'grant' | 'reset' | 'ip'
 
-/** Task #6125: grant extra downloads for today / reset today's count for one machine. */
+/** Task #6125: grant extra downloads for today / reset today's count for one machine. Mode 'ip' (PLAN-32E): clear today's shared guest count of the machine's network. */
 function AllowanceDialog({ device, action, onClose, onDone }: {
   device: DesktopDevice
   action: AllowanceAction
@@ -416,6 +416,7 @@ function AllowanceDialog({ device, action, onClose, onDone }: {
   }, [busy, onClose])
 
   const grant = action === 'grant'
+  const ipMode = action === 'ip'
   const amountNum = Number(amount)
   const amountOk = !grant || (Number.isInteger(amountNum) && amountNum >= 1 && amountNum <= 50)
   const reasonLen = reason.trim().length
@@ -428,6 +429,12 @@ function AllowanceDialog({ device, action, onClose, onDone }: {
     setBusy(true)
     setError(null)
     try {
+      if (ipMode) {
+        const res = await resetDesktopIp(device.last_ip ?? '', reason.trim())
+        // wording: BA review
+        onDone(`Đã đặt lại lượt khách của mạng ${res.ip} (${res.removed} lượt hôm nay).`)
+        return
+      }
       await postDesktopAllowance({
         device_id: device.id, action, reason: reason.trim(),
         ...(grant ? { amount: amountNum } : {}),
@@ -448,13 +455,15 @@ function AllowanceDialog({ device, action, onClose, onDone }: {
       <div className="fixed inset-0 z-40 bg-surface-2 backdrop-blur-sm" onClick={busy ? undefined : onClose} aria-hidden />
       <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4">
         {/* wording: BA review */}
-        <form onSubmit={submit} role="dialog" aria-modal aria-label={grant ? 'Cộng lượt' : 'Đặt lại lượt'}
+        <form onSubmit={submit} role="dialog" aria-modal aria-label={grant ? 'Cộng lượt' : ipMode ? 'Đặt lại IP' : 'Đặt lại lượt'}
           className="relative w-full max-w-md rounded-card border border-line bg-surface shadow-2xl">
           <div className="border-b border-line px-5 py-4">
-            <h2 className="text-sm font-semibold text-fg">{grant ? 'Cộng lượt tải hôm nay' : 'Đặt lại lượt hôm nay'}</h2>
+            <h2 className="text-sm font-semibold text-fg">{grant ? 'Cộng lượt tải hôm nay' : ipMode ? 'Đặt lại lượt khách của mạng' : 'Đặt lại lượt hôm nay'}</h2>
             <p className="mt-1 text-xs text-fg-muted">
               Chỉ áp dụng cho hôm nay (ngày tính theo giờ UTC), sang ngày mới trở về mặc định.{' '}
-              {byAccount
+              {ipMode
+                ? <>Xoá lượt khách dùng chung hôm nay của mạng <b className="font-mono text-fg-2">{device.last_ip}</b> (ví dụ nhiều máy khách cùng một văn phòng). Lượt riêng của từng máy giữ nguyên.</>
+                : byAccount
                 ? <>Lượt đang tính cho <b className="text-fg-2">tài khoản {device.user_email || device.user_id}</b>, nên áp dụng cho cả web và mọi máy của tài khoản này.</>
                 : <>Lượt đang tính cho <b className="text-fg-2">máy {device.code}</b>.</>}
             </p>
@@ -486,7 +495,7 @@ function AllowanceDialog({ device, action, onClose, onDone }: {
           <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
             <Button variant="ghost" onClick={onClose} disabled={busy}>Huỷ</Button>
             <Button type="submit" variant="primary" disabled={busy || !amountOk || !reasonOk}>
-              {busy ? 'Đang xử lý…' : grant ? 'Cộng lượt' : 'Đặt lại'}
+              {busy ? 'Đang xử lý…' : grant ? 'Cộng lượt' : ipMode ? 'Đặt lại IP' : 'Đặt lại'}
             </Button>
           </div>
         </form>
@@ -597,7 +606,14 @@ function DevicesPanel() {
                       <td className={TD_MONO}>{d.code}</td>
                       <td className={TD}>
                         <span className="block max-w-[240px] truncate" title={d.display_name ?? undefined}>{d.display_name || dash}</span>
-                        {d.last_ip && <span className="block font-mono text-[11px] text-fg-muted">{d.last_ip}</span>}
+                        {d.last_ip && (
+                          <span className="flex items-center gap-1 font-mono text-[11px] text-fg-muted">
+                            {d.last_ip}
+                            {/* wording: BA review */}
+                            <Button size="sm" variant="ghost" title="Xoá lượt khách dùng chung hôm nay của mạng này"
+                              onClick={() => setDlg({ device: d, action: 'ip' })}>Đặt lại IP</Button>
+                          </span>
+                        )}
                       </td>
                       <td className={TD_MONO}>{d.client_version || dash}</td>
                       <td className={TD}>

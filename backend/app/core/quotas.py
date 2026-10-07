@@ -611,6 +611,22 @@ def device_ip_add(ip: str, delta: int) -> None:
         pass
 
 
+def reset_device_ip(ip: str) -> int:
+    """Admin "Đặt lại IP" (PLAN-32E §6): today's app-guest counter for this
+    network back to 0, so machines behind it are no longer stopped by the IP
+    cap. Each machine's own allowance is untouched. Returns the count that
+    was removed (0 when there was none). Raises on Redis errors."""
+    from app.core.redis_client import get_redis  # noqa: PLC0415
+    r = get_redis()
+    k = _device_ip_key(ip)
+    try:
+        before = int(r.get(k) or 0)
+    except (TypeError, ValueError):
+        before = 0
+    r.delete(k)
+    return before
+
+
 class BatchAllowance:
     """Plans a bulk / queue request against the per-platform allowance: each
     item either fits in what is left today (counting the items already taken
