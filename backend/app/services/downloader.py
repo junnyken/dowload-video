@@ -223,6 +223,21 @@ def cookie_retry_worthwhile(err: str) -> bool:
     return not any(s in e for s in _COOKIE_RETRY_USELESS)
 
 
+def sabr_shortfall(info: dict, actual_height: int, target_height: int) -> bool:
+    """Did yt-dlp land well below the best the video offers (YouTube SABR)?
+    Compared with min(requested, best listed height): a 240p-only upload
+    downloaded at 240p is not a shortfall. Until 07/10 the comparison was
+    with the requested height alone; no Cobalt was configured so it never
+    ran, and once Cobalt was, every low-resolution video was downloaded a
+    second time through it."""
+    best = 0
+    for f in (info or {}).get("formats") or []:
+        if f.get("vcodec") not in (None, "none"):
+            best = max(best, int(f.get("height") or 0))
+    want = min(target_height, best) if best else target_height
+    return actual_height == 0 or actual_height < want * 0.8
+
+
 def cookie_last_stat(platform: str, outcome: str) -> None:
     """Per UTC day: which step served a COOKIE_LAST_PLATFORMS download —
     anon_ok | cobalt_ok | cookie_ok | all_fail | gone (no cookie tried).
@@ -3139,8 +3154,9 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 dl0 = info["requested_downloads"][0]
                 actual_height = dl0.get("height") or info.get("height") or 0
 
-            # SABR triggered: downloaded quality is significantly below target
-            if actual_height == 0 or actual_height < target_height * 0.8:
+            # SABR triggered: downloaded quality is significantly below what
+            # the video actually offers (not below the requested ceiling)
+            if sabr_shortfall(info, actual_height, target_height):
                 print(f"[Downloader] SABR: yt-dlp got {actual_height}p (need {target_height}p). Cobalt fallback...")
                 if is_cobalt_available():
                     cobalt_path = download_from_cobalt(url, str(target_height), DOWNLOAD_DIR)

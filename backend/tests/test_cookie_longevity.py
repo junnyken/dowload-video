@@ -447,3 +447,12 @@ def test_cobalt_image_answer_is_not_served(media, monkeypatch):
     monkeypatch.setattr(cs, "_download_social_via_cobalt",
                         lambda u, d, p: {"filepath": str(vid), "extractor": "cobalt_instagram"})
     assert cs.download_social_via_cobalt("https://www.instagram.com/reel/x/", "/tmp", "instagram")
+
+
+def test_sabr_shortfall_compares_with_what_the_video_offers():
+    f = lambda *hs: {"formats": [{"vcodec": "avc1", "height": h} for h in hs] + [{"vcodec": "none", "height": None}]}
+    assert not downloader.sabr_shortfall(f(144, 240), 240, 4320)        # 240p-only video: nothing missing
+    assert downloader.sabr_shortfall(f(240, 720, 1080), 240, 1080)      # SABR cut it to 240p
+    assert not downloader.sabr_shortfall(f(240, 720, 1080), 1080, 4320)
+    assert downloader.sabr_shortfall({}, 0, 1080)                       # nothing downloaded
+    assert downloader.sabr_shortfall({}, 240, 1080)                     # no format list: old rule
