@@ -23,7 +23,7 @@ use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindo
 
 pub const LABEL_PREFIX: &str = "resolve-douyin-";
 /// Whole resolve, window creation to answer.
-const TOTAL: Duration = Duration::from_secs(30);
+const TOTAL: Duration = Duration::from_secs(50);
 /// How often the page script is (re-)evaluated; it runs once per document.
 const TICK: Duration = Duration::from_secs(2);
 
@@ -92,7 +92,10 @@ pub async fn resolve<R: Runtime>(app: &AppHandle<R>, target: Target, cookies: Ve
         .skip_taskbar(!debug)
         .inner_size(1280.0, 800.0)
         .incognito(true)
-        .initialization_script(douyin_local::INIT_SCRIPT)
+        // 0.7.4: NO initialization script. 0.7.2/0.7.3 wrapped the page's
+        // fetch/XHR to copy its signed answers; on the owner's Windows test the
+        // page then stuck at "视频数据加载中" (Douyin's anti-bot very likely checks
+        // that fetch is native). The page now runs untouched; PAGE_SCRIPT only reads.
         .on_navigation(move |u| {
             if !douyin_local::navigation_allowed(u) {
                 return false;

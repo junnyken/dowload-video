@@ -110,39 +110,12 @@ pub fn navigation_allowed(u: &url::Url) -> bool {
 
 // ---------------------------------------------------------------- page scripts
 
-/// Runs before the page's own scripts (initialization script): keeps a copy
-/// of the page's own signed `aweme/detail` answers, by aweme id (at most 20).
-/// Read-only wrappers; the page's requests go out unchanged.
-pub const INIT_SCRIPT: &str = r#"(function () {
-  if (window.__vgHook) return; window.__vgHook = 1;
-  var box = {}, n = 0;
-  try { Object.defineProperty(window, '__vgDetails', { value: box }); } catch (e) { return; }
-  function keep(j) { try { var d = j && j.aweme_detail; if (d && d.aweme_id != null && n < 20) { box[String(d.aweme_id)] = d; n++; } } catch (e) {} }
-  function hit(u) { return String(u || '').indexOf('/aweme/v1/web/aweme/detail') >= 0; }
-  try {
-    var of = window.fetch;
-    if (typeof of === 'function') window.fetch = function (input) {
-      var u = typeof input === 'string' ? input : (input && input.url) || '';
-      var p = of.apply(this, arguments);
-      if (hit(u)) p.then(function (r) { try { r.clone().json().then(keep, function () {}); } catch (e) {} }, function () {});
-      return p;
-    };
-  } catch (e) {}
-  try {
-    var oo = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function (m, u) {
-      if (hit(u)) this.addEventListener('load', function () {
-        try { keep(this.responseType === 'json' ? this.response : JSON.parse(this.responseText)); } catch (e) {}
-      });
-      return oo.apply(this, arguments);
-    };
-  } catch (e) {}
-})();"#;
-
-/// Evaluated by Rust every few seconds; runs once per document. Polls up to
-/// 20 s for the video data: (1) the captured aweme/detail answer, (2)
-/// `<script id="RENDER_DATA">` (URL-encoded JSON), (3) `window._ROUTER_DATA`,
-/// (4) a `<video>`/`<source>` with a non-blob https src. Then reports
+/// Evaluated by Rust every few seconds; runs once per document. READ-ONLY:
+/// it patches nothing on the page (0.7.4). Polls up to 40 s for the video
+/// data: (1) `<script id="RENDER_DATA">` (URL-encoded JSON), (2)
+/// `window._ROUTER_DATA`, (3) a `<video>`/`<source>` with a non-blob https
+/// src, (4) the page's own resource list (performance entries) — the player
+/// fetches the MP4 from Douyin's video CDN even when the element shows blob:. Then reports
 /// `VGRES:` + encodeURIComponent(JSON {u, title, author, dur, ua}) or
 /// `VGERR:<reason>` in document.title.
 const PAGE_SCRIPT: &str = r#"(function () {
@@ -203,16 +176,26 @@ const PAGE_SCRIPT: &str = r#"(function () {
     }
     return null;
   }
+  function fromResources() {
+    var es = (performance.getEntriesByType && performance.getEntriesByType('resource')) || [];
+    for (var i = es.length - 1; i >= 0; i--) {
+      var n = es[i] && es[i].name;
+      if (typeof n !== 'string') continue;
+      if (!/(douyinvod\.com|zjcdn\.com|bytevod|douyinstatic\.com\/obj\/tos|\/video\/tos\/)/.test(n)) continue;
+      if (/\.(jpe?g|png|webp|gif|image|css|js)(\?|$)/i.test(n) || /tos-cn-i-|~tplv-/.test(n)) continue;
+      var u = abs(n);
+      if (u) return { u: u, title: s(document.title, 300).replace(/\s*-\s*抖音\s*$/, ''), author: '', dur: 0 };
+    }
+    return null;
+  }
   function look() {
-    var a = window.__vgDetails && window.__vgDetails[ID];
-    var r = a && fromAweme(a);
-    if (r) return r;
+    var a, r;
     var el = document.getElementById('RENDER_DATA');
     if (el && el.textContent) {
       try { a = find(JSON.parse(decodeURIComponent(el.textContent)), 0); r = a && fromAweme(a); if (r) return r; } catch (e) {}
     }
     try { a = find(window._ROUTER_DATA, 0); r = a && fromAweme(a); if (r) return r; } catch (e) {}
-    return Date.now() - t0 > 8000 ? fromVideoTag() : null;
+    return fromVideoTag() || fromResources();
   }
   function report(t) {
     var n = 0;
@@ -222,7 +205,7 @@ const PAGE_SCRIPT: &str = r#"(function () {
     var r = null;
     try { r = look(); } catch (e) {}
     if (r) { r.ua = s(navigator.userAgent, 512); report('VGRES:' + encodeURIComponent(JSON.stringify(r))); return; }
-    if (Date.now() - t0 > 20000) {
+    if (Date.now() - t0 > 40000) {
       var verify = document.querySelector('iframe[src*="verify"],iframe[src*="captcha"],#captcha_container,#captcha-verify-image');
       report('VGERR:' + (verify ? 'verify' : 'not_found'));
       return;
@@ -440,14 +423,13 @@ mod tests {
     fn scripts_get_the_id_and_nothing_else() {
         let id = "7311234567890123456";
         let p = page_script(id);
-        let i = INIT_SCRIPT.to_string();
-        assert!(!p.contains("__VG_ID__") && !i.contains("__VG_ID__"));
+        assert!(!p.contains("__VG_ID__"));
         assert!(p.contains(&format!("var ID = '{id}';")));
         assert!(p.contains("VGRES:") && p.contains("VGERR:"));
         // The scripts never touch cookies or the app's IPC.
-        for s in [&p, &i] {
-            assert!(!s.contains("document.cookie") && !s.contains("__TAURI") && !s.contains("ipc"));
-        }
+        assert!(!p.contains("document.cookie") && !p.contains("__TAURI") && !p.contains("ipc"));
+        // 0.7.4: read-only — never replaces the page's own functions.
+        assert!(!p.contains("window.fetch =") && !p.contains("XMLHttpRequest.prototype"));
     }
 
     #[test]
