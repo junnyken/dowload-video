@@ -55,3 +55,14 @@ test('existing YouTube / TikTok rules are unchanged', () => {
   assert.equal(looksLikeChannelUrl('https://www.tiktok.com/@user'), true);
   assert.equal(looksLikeChannelUrl('https://www.tiktok.com/@user/video/1'), false);
 });
+
+test('share text: words around the link are not reported as invalid lines', async () => {
+  const { parseUrls } = await import('../src/lib/urls.ts');
+  const text = '7.97 V@L.Jv 06/03 reO:/ :2pm 《隐秘的力量》 https://v.douyin.com/hrADJ8V82a0/ 复制此链接，打开Dou音搜索，直接观看视频！';
+  const r = parseUrls(text);
+  assert.deepEqual(r.valid, ['https://v.douyin.com/hrADJ8V82a0/']);
+  assert.deepEqual(r.invalid, []);
+  assert.deepEqual(parseUrls('hello world').invalid, ['hello', 'world']);
+  assert.deepEqual(parseUrls('https://a.com/x htps://bad').invalid, []);
+  assert.deepEqual(parseUrls('https://a.com/x https:/bad').invalid, ['https:/bad']);
+});

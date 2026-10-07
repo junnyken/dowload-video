@@ -69,3 +69,26 @@ export function douyinVideoId(raw: string): string | null {
   const modal = u.searchParams.get('modal_id');
   return modal && /^\d{15,25}$/.test(modal) ? modal : null;
 }
+
+/** Links in pasted text, one per line or separated by spaces/commas. */
+export function parseUrls(text: string): { valid: string[]; invalid: string[] } {
+  const valid: string[] = [];
+  const invalid: string[] = [];
+  for (const raw of text.split(/[\s,;]+/)) {
+    const t = raw.trim();
+    if (!t) continue;
+    let ok = false;
+    try {
+      const u = new URL(t);
+      ok = (u.protocol === 'http:' || u.protocol === 'https:') && u.hostname.includes('.');
+    } catch { /* not a URL */ }
+    if (ok) { if (!valid.includes(t)) valid.push(t); } else invalid.push(t);
+  }
+  // Share text from Douyin/TikTok apps ("7.97 V@L.Jv 06/03 reO:/ 《…》 https://v.douyin.com/x/ 复制此链接…")
+  // wraps the link in words. When at least one link was found, only report
+  // pieces that look like a broken link, not the words around it (owner test 2026-10-07).
+  if (valid.length > 0) {
+    return { valid, invalid: invalid.filter((t) => /^(https?:|www\.)/i.test(t)) };
+  }
+  return { valid, invalid };
+}

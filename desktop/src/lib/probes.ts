@@ -24,21 +24,8 @@ export const probes = createStore<{ cards: Card[]; invalid: string[] }>({ cards:
 let running = 0;
 const pending: string[] = [];
 
-export function parseUrls(text: string): { valid: string[]; invalid: string[] } {
-  const valid: string[] = [];
-  const invalid: string[] = [];
-  for (const raw of text.split(/[\s,;]+/)) {
-    const t = raw.trim();
-    if (!t) continue;
-    let ok = false;
-    try {
-      const u = new URL(t);
-      ok = (u.protocol === 'http:' || u.protocol === 'https:') && u.hostname.includes('.');
-    } catch { /* not a URL */ }
-    if (ok) { if (!valid.includes(t)) valid.push(t); } else invalid.push(t);
-  }
-  return { valid, invalid };
-}
+import { parseUrls } from './urls';
+export { parseUrls };
 
 function patchCard(url: string, p: Partial<Card>) {
   probes.set((s) => ({ ...s, cards: s.cards.map((c) => (c.url === url ? { ...c, ...p } : c)) }));
