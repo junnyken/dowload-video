@@ -240,9 +240,10 @@ def apify_pool_low_pct() -> float:
 
 
 def apify_pool_max_entries() -> int:
-    """Admin-added entries (env fallback not counted). Apify allows up to 10
-    organizations per person."""
-    return min(50, max(1, _int("CHINA_ACCESS_APIFY_POOL_MAX_ENTRIES", 10)))
+    """Admin-added entries (env fallback not counted). Owner 2026-10-07
+    (task #6062): up to 50 paid accounts. Apify allows up to 10 organizations
+    per person — entries past that must belong to other legal owners."""
+    return min(50, max(1, _int("CHINA_ACCESS_APIFY_POOL_MAX_ENTRIES", 50)))
 
 
 def apify_douyin_actor_id() -> str:

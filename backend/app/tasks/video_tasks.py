@@ -754,6 +754,7 @@ def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: s
     platform = _get_platform(channel_url)
     # Phase 27D: use adaptive wave params (reads auto_tuner + lane state from 27A).
     # Falls back to static profile defaults when adaptive is disabled.
+    _wave_disabled = False
     try:
         from app.core.wave_scheduler import get_wave_params as _gwp
         _wp = _gwp(platform)
@@ -768,11 +769,7 @@ def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: s
                 "[WaveScheduler:%s] mode=disabled reason=%s — aborting wave dispatch",
                 platform, _wave_reason,
             )
-            supabase.table("download_jobs").update({
-                "status":        "failed",
-                "error_message": f"Nền tảng {platform} tạm thời không khả dụng. Thử lại sau.",
-            }).eq("batch_id", batch_id).neq("original_url", "batch_zip").execute()
-            return
+            _wave_disabled = True
     except Exception as _wp_err:
         import logging as _log27d
         _log27d.getLogger(__name__).debug("[WaveScheduler] fallback to static: %s", _wp_err)
@@ -782,6 +779,18 @@ def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: s
         _wave_reason       = "fallback_static"
 
     supabase = get_supabase_client()
+
+    # Disabled platform: stop before scanning. This branch used to call
+    # `supabase` before it was assigned (task #6062): the NameError was
+    # swallowed by the fallback above and the channel was scanned anyway with
+    # the static wave. Only THIS channel's job is failed — a bulk batch can
+    # hold channels of other platforms that are not disabled.
+    if _wave_disabled:
+        _sb_update(supabase, {
+            "status":        "failed",
+            "error_message": f"Nền tảng {platform} tạm thời không khả dụng. Thử lại sau.",
+        }, channel_job_id)
+        return
 
     # The China access layer needs the requester for the Douyin channel scan
     # (task #6055: list at most what they can still download today, budget

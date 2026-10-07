@@ -235,6 +235,27 @@ class TestRotation:
         assert TOK_A not in repr(lease) and TOK_A not in str(lease)
 
 
+class TestCapacity:
+    """Owner 2026-10-07 (task #6062): up to 50 paid accounts; past the cap
+    the new token is refused and nothing already stored is touched."""
+
+    def test_default_cap_is_50_and_51st_is_refused_without_loss(self, clean_env, rc, clock):
+        for i in range(50):
+            _add(f"apify_api_CAPTEST{i:04d}xxxxxxxxxxxxxxxx", f"Org {i}")
+        with pytest.raises(apify_pool.PoolError) as ei:
+            _add("apify_api_CAPTEST_ONE_TOO_MANY_xxxxxxxx", "Org 50")
+        assert ei.value.code == "pool_full" and "50" in str(ei.value.message)
+        views = apify_pool.list_views()
+        assert len(views) == 50 and {v["label"] for v in views} == {f"Org {i}" for i in range(50)}
+
+    def test_env_can_lower_the_cap(self, clean_env, rc, clock):
+        clean_env.setenv("CHINA_ACCESS_APIFY_POOL_MAX_ENTRIES", "2")
+        _add(TOK_A, "A")
+        _add(TOK_B, "B")
+        with pytest.raises(apify_pool.PoolError):
+            _add(TOK_C, "C")
+
+
 # ── classification from the documented shapes ─────────────────────────────
 
 class TestClassify:

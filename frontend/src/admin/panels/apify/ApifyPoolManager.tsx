@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apifyPoolApi } from '../../api/apifyPool'
 import type { PoolEntry, PoolPayload, PoolState } from '../../api/apifyPool'
 import { Button } from '../../shared/Button'
@@ -54,6 +54,16 @@ const INPUT_BASE =
 const INPUT = `${INPUT_BASE} w-full`
 
 interface EditDraft { label: string; priority: string; ceiling: string }
+
+/** Tokens per page (owner 2026-10-07, task #6062: page 1, 2, 3… past 10). */
+export const PAGE_SIZE = 10
+
+/** Search by name, last 4 characters or Apify account. */
+export function matchesQuery(e: PoolEntry, q: string): boolean {
+  const s = q.trim().toLowerCase()
+  if (!s) return true
+  return [e.label, e.last4, e.account?.username].some((v) => (v ?? '').toLowerCase().includes(s))
+}
 
 export function ApifyPoolManager({ onChanged }: { onChanged?: () => void }) {
   const [data, setData] = useState<PoolPayload | null>(null)
@@ -140,6 +150,13 @@ export function ApifyPoolManager({ onChanged }: { onChanged?: () => void }) {
   }
 
   const entries = data?.entries ?? []
+  const [query, setQuery] = useState('')
+  const [page, setPage] = useState(1)
+  const filtered = useMemo(() => entries.filter((e) => matchesQuery(e, query)), [entries, query])
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  // A delete or a narrower search can leave the current page past the end.
+  const current = Math.min(page, pageCount)
+  const shown = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE)
 
   return (
     <div className="flex flex-col gap-3">
@@ -198,6 +215,19 @@ export function ApifyPoolManager({ onChanged }: { onChanged?: () => void }) {
           Chưa có token Apify nào. Lượt lấy video trả phí (Douyin, Kuaishou, Xiaohongshu) sẽ không chạy cho tới khi thêm token.
         </p>
       ) : (
+        <>
+        {entries.length > PAGE_SIZE && (
+          <div className="flex flex-wrap items-center gap-2">
+            <input className={`${INPUT_BASE} w-64`} value={query} placeholder="Tìm theo tên, 4 ký tự cuối, tài khoản"
+              aria-label="Tìm token" onChange={(ev) => { setQuery(ev.target.value); setPage(1) }} />
+            <span className="text-xs text-fg-muted">
+              {query.trim() ? `${filtered.length} / ${entries.length} token` : `${entries.length} token`}
+            </span>
+          </div>
+        )}
+        {filtered.length === 0 ? (
+          <p className="text-sm text-fg-muted">Không có token nào khớp “{query.trim()}”.</p>
+        ) : (
         <div className={`${TABLE_SCROLL} rounded-control border border-line`}>
           <table className={TABLE}>
             <thead>
@@ -210,7 +240,7 @@ export function ApifyPoolManager({ onChanged }: { onChanged?: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {entries.map((e) => {
+              {shown.map((e) => {
                 const st = STATE_VI[e.state] ?? STATE_VI.active
                 const hint = stateHint(e)
                 const isEditing = editing === e.id
@@ -294,6 +324,21 @@ export function ApifyPoolManager({ onChanged }: { onChanged?: () => void }) {
             </tbody>
           </table>
         </div>
+        )}
+        {pageCount > 1 && (
+          <nav className="flex flex-wrap items-center gap-1" aria-label="Phân trang token">
+            <Button size="sm" variant="ghost" disabled={current <= 1} onClick={() => setPage(current - 1)}>‹ Trước</Button>
+            {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
+              <Button key={n} size="sm" variant={n === current ? 'primary' : 'ghost'} aria-current={n === current ? 'page' : undefined}
+                onClick={() => setPage(n)}>{n}</Button>
+            ))}
+            <Button size="sm" variant="ghost" disabled={current >= pageCount} onClick={() => setPage(current + 1)}>Sau ›</Button>
+            <span className="ml-2 text-xs text-fg-muted">
+              {(current - 1) * PAGE_SIZE + 1}–{Math.min(current * PAGE_SIZE, filtered.length)} / {filtered.length}
+            </span>
+          </nav>
+        )}
+        </>
       )}
 
       {msg && <p className={`text-xs ${msg.ok ? 'text-success' : 'text-danger'}`}>{msg.text}</p>}

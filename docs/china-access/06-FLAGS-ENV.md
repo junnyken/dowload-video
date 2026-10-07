@@ -75,7 +75,7 @@ Operations: `docs/runbooks/china-platform-rollout.md` §9. Code: `apify_pool.py`
 | `CHINA_ACCESS_APIFY_POOL_COOLDOWN_SEC` | `300` | An entry rests this long after Apify answered 429 / 5xx to a run start (min 30) |
 | `CHINA_ACCESS_APIFY_POOL_RETRY_NEXT_TOKEN` | `true` | When Apify **refused to start** a run (402 / out of credit, 401/403), try the same video once on the next entry. Never after a run started |
 | `CHINA_ACCESS_APIFY_POOL_LOW_PCT` | `20` | Telegram alert (once per UTC month) when the pool's known remaining credit is below this % of its known capacity |
-| `CHINA_ACCESS_APIFY_POOL_MAX_ENTRIES` | `10` | Admin-added entries (env fallback not counted) |
+| `CHINA_ACCESS_APIFY_POOL_MAX_ENTRIES` | `50` | Admin-added entries (env fallback not counted); max 50. Past 10, tokens must belong to other legal owners (Apify: 10 organizations per person) |
 | `CHINA_ACCESS_CACHE_EXTENDED_TTL_SEC` | `0` (off) | When > 0, a result whose media URL carries a known expiry (`x-expires` / `expires` / TikTok hex path) may stay cached up to this long, never past the expiry minus the margin. Results without a known expiry keep `CHINA_ACCESS_CACHE_TTL_SEC` |
 | `CHINA_ACCESS_CACHE_EXPIRY_MARGIN_SEC` | `600` | Always on: a cached result is dropped (never served) within this many seconds of its media URL's expiry, and never written with a TTL past it |
 

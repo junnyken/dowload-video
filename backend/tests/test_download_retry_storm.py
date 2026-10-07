@@ -295,6 +295,23 @@ def test_channel_scrape_for_douyin_without_cookie_creates_no_jobs(monkeypatch, r
     assert db.row["error_message"] == DOUYIN_COOKIE_REQUIRED_MSG
 
 
+def test_channel_scrape_stops_when_wave_scheduler_disables_the_platform(monkeypatch, rc):
+    """Task #6062: the disabled branch used `supabase` before assignment; the
+    NameError was swallowed and the channel was scanned anyway."""
+    import app.tasks.video_tasks as vt
+    from types import SimpleNamespace
+    db = _JobsDB({"id": "chan-2", "status": "processing"})
+    monkeypatch.setattr(vt, "get_supabase_client", lambda: db)
+    monkeypatch.setattr("app.core.wave_scheduler.get_wave_params",
+                        lambda p: SimpleNamespace(wave_size=0, wave_delay=0, mode="disabled", reason="circuit_open"))
+    scraped = MagicMock()
+    monkeypatch.setattr(vt, "scrape_channel_entries_sync", scraped)
+    vt.scrape_channel_task.run("https://www.tiktok.com/@someone", "b2", "chan-2", 20)
+    scraped.assert_not_called()
+    assert db.row["status"] == "failed"
+    assert "tiktok tạm thời không khả dụng" in db.row["error_message"]
+
+
 # ── 3. Bulk / single Douyin without any cookie: reject before creating jobs ──
 
 DOUYIN = "https://www.douyin.com/video/7000000000000000001"
