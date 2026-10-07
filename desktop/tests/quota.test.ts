@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  NO_CLAIM, badgeText, capIds, decideBatch, decideClaim, selectionCap, emptyLedger, flushLedger, gatePaused, graceLeft, mergeCounters, normalizeLedger, parseSnapshot, tryGrace, utcDay,
+  NO_CLAIM, badgeText, capIds, decideBatch, decideClaim, selectionCap, emptyLedger, flushLedger, gatePaused, graceLeft, isIpLimit, mergeCounters, normalizeLedger, parseHint, parseSnapshot, tryGrace, utcDay,
 } from '../src/lib/quota-core.ts';
 import { presetFormat, qualityFormat } from '../src/lib/quality.ts';
 
@@ -167,4 +167,24 @@ test('claim-batch: 503 disabled = before P2; anything odd = offline', () => {
   assert.deepEqual(decideBatch(500, { detail: 'x' }, ['u']), { kind: 'offline' });
   assert.deepEqual(decideBatch(200, { items: [] }, ['u']), { kind: 'offline' }); // count mismatch
   assert.deepEqual(decideBatch(429, { detail: 'rate' }, ['u']), { kind: 'offline' });
+});
+
+test('426 update_required -> stop without offline grace; a bare 426 is still offline', () => {
+  assert.equal(decideClaim(426, { error_code: 'update_required', minSupported: '0.9.1' }).kind, 'update_required');
+  assert.equal(decideClaim(426, null).kind, 'offline');
+});
+
+test('hint is fail-closed: nothing stored or junk = on; only an explicit false turns it off', () => {
+  assert.deepEqual(parseHint(null), { enabled: true, grace: 3 });
+  assert.deepEqual(parseHint('junk'), { enabled: true, grace: 3 });
+  assert.deepEqual(parseHint({ enabled: true, grace: 5 }), { enabled: true, grace: 5 });
+  assert.deepEqual(parseHint({ enabled: false, grace: 2 }), { enabled: false, grace: 2 });
+  assert.deepEqual(parseHint({ grace: -4 }), { enabled: true, grace: 0 });
+});
+
+test('ip_limit refusals are told apart from the personal daily limit', () => {
+  const d = decideClaim(429, { error_code: 'quota_exceeded_daily', reason: 'ip_limit', detail: 'Mạng này…', limit: 5, usedToday: 2 });
+  assert.ok(d.kind === 'refused' && isIpLimit(d.refusal));
+  const p = decideClaim(429, { error_code: 'quota_exceeded_daily', reason: 'daily_limit', detail: 'Hết', limit: 5, usedToday: 5 });
+  assert.ok(p.kind === 'refused' && !isIpLimit(p.refusal));
 });

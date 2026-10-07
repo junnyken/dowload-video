@@ -454,6 +454,13 @@ function mockQuota(path: string, method: string, body: { url?: string; retro?: b
   if (localStorage.getItem('mock.quotaOffline') === '1') throw { code: 'network', message: 'mock offline' };
   if (localStorage.getItem('mock.quotaDisabled') === '1') return r(503, { detail: 'Tính năng đếm lượt tải của app Windows chưa được bật.', error_code: 'client_quota_disabled' });
   const limit = signedIn ? 20 : 5;
+  // mock.quotaIp=1: a guest behind a network that used the guest cap (PLAN-32E, reason ip_limit)
+  if (!signedIn && localStorage.getItem('mock.quotaIp') === '1' && path.endsWith('/quota/claim') && method === 'POST' && !body?.retro) {
+    return r(429, {
+      allowed: false, error_code: 'quota_exceeded_daily', reason: 'ip_limit', upsell: 'signin', limit, usedToday: Math.min(qMock.used, limit), remaining: 0, resetTimeVn: '07:00', requester: 'device',
+      detail: 'Mạng này đã dùng hết lượt tải của khách hôm nay (bản mô phỏng). Đăng nhập để có 20 lượt/ngày.',
+    });
+  }
   const used = localStorage.getItem('mock.quotaLeft') === '0' ? limit : qMock.used;
   const refusal = () => ({
     allowed: false, error_code: 'quota_exceeded_daily', reason: 'daily_limit', upsell: signedIn ? 'upgrade' : 'signin', limit, usedToday: limit, remaining: 0, resetTimeVn: '07:00', requester: signedIn ? 'user' : 'device',

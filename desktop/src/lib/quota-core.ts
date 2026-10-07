@@ -31,6 +31,7 @@ export type Refusal = {
 export type ClaimDecision =
   | { kind: 'proceed'; claimId: string; counted: boolean; data: Record<string, unknown> | null }
   | { kind: 'refused'; refusal: Refusal }
+  | { kind: 'update_required' }
   | { kind: 'offline' };
 
 const obj = (d: unknown): Record<string, unknown> => (d && typeof d === 'object' ? (d as Record<string, unknown>) : {});
@@ -38,11 +39,28 @@ const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFi
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
 
 /**
+ * Last known "is the allowance on?" fact, read back from storage. Fail-closed
+ * (PLAN-32E §5.2): with nothing stored, or anything unreadable, the feature is
+ * assumed ON so a fresh install that starts offline gets the offline grace and
+ * then stops, instead of downloading without limit. Only an explicit `false`
+ * (the server said 503 client_quota_disabled) turns it off.
+ */
+export function parseHint(raw: unknown): { enabled: boolean; grace: number } {
+  const o = obj(raw);
+  const g = num(o.grace);
+  return { enabled: o.enabled !== false, grace: g != null ? Math.max(0, Math.floor(g)) : DEFAULT_OFFLINE_GRACE };
+}
+
+/** A refusal for the network's guest cap, not for this person's own allowance (their counters are not used up). */
+export const isIpLimit = (r: Pick<Refusal, 'reason'>): boolean => r.reason === 'ip_limit';
+
+/**
  * What to do with the answer of POST /client/quota/claim. `status` 0 means the
  * request never got an answer (network error).
  *  - 200 allowed         -> proceed with the claimId
  *  - 503 client_quota_disabled / 400 invalid_url -> proceed, nothing counted
  *  - 403 / 429 quota_exceeded_daily -> refused (the server's text is shown)
+ *  - 426 update_required -> stop, no offline grace (the update screen takes over)
  *  - network error, 5xx, any other answer -> offline (the caller applies the grace)
  */
 export function decideClaim(status: number, data: unknown): ClaimDecision {
@@ -56,6 +74,7 @@ export function decideClaim(status: number, data: unknown): ClaimDecision {
   if (status === 400 && o.error_code === 'invalid_url') {
     return { kind: 'proceed', claimId: NO_CLAIM, counted: false, data: null };
   }
+  if (status === 426 && o.error_code === 'update_required') return { kind: 'update_required' };
   if ((status === 403 || status === 429) && o.error_code === 'quota_exceeded_daily') {
     const up = o.upsell === 'signin' || o.upsell === 'upgrade' ? o.upsell : null;
     return {

@@ -176,7 +176,10 @@ test('fetch-link answer: server file first, then direct link', () => {
 test('fetch-link refusals and errors', () => {
   const o = { apiBase: API, audioOnly: false, fallbackTitle: 'T' };
   const q = parseFetchLink(429, { detail: { error_code: 'quota_exceeded_daily', message: 'Hết lượt', daily_limit: 5, downloads_today: 5, reset_time_vn: '07:00' } }, o);
-  assert.deepEqual(q, { kind: 'quota', refusal: { detail: 'Hết lượt', upsell: 'signin', limit: 5, usedToday: 5, resetTimeVn: '07:00' } });
+  assert.deepEqual(q, { kind: 'quota', refusal: { detail: 'Hết lượt', upsell: 'signin', limit: 5, usedToday: 5, resetTimeVn: '07:00', reason: null } });
+  // the network's guest cap keeps its reason (the app must not zero the person's own counters)
+  const ip = parseFetchLink(429, { detail: { error_code: 'quota_exceeded_daily', message: 'Mạng này đã dùng hết', reason: 'ip_limit', daily_limit: 5, downloads_today: 2 } }, o);
+  assert.ok(ip.kind === 'quota' && ip.refusal.reason === 'ip_limit');
   const q2 = parseFetchLink(403, { detail: { error_code: 'quota_exceeded_daily', user_message: 'Hết lượt (user)' } }, o);
   assert.ok(q2.kind === 'quota' && q2.refusal.upsell === 'upgrade' && q2.refusal.detail === 'Hết lượt (user)');
   // other 429s are errors, not the allowance

@@ -188,6 +188,7 @@ export function fetchLinkBody(url: string, quality: string) {
 
 export type ServerRefusal = {
   detail: string; upsell: 'signin' | 'upgrade'; limit: number | null; usedToday: number | null; resetTimeVn: string | null;
+  reason: string | null; // daily_limit | ip_limit
 };
 
 export type FetchLinkOutcome =
@@ -252,6 +253,7 @@ export function parseFetchLink(status: number, data: unknown, o: { apiBase: stri
         detail: str(det.message) ?? str(det.user_message) ?? str(d.detail) ?? '',
         upsell: status === 403 ? 'upgrade' : 'signin',
         limit: num(det.daily_limit), usedToday: num(det.downloads_today), resetTimeVn: str(det.reset_time_vn),
+        reason: str(det.reason),
       },
     };
   }

@@ -11,8 +11,8 @@ import { rememberServerMessage } from './errors';
 import { toast } from './ui';
 import { deviceInfo, appVersion } from './device';
 import {
-  DEFAULT_OFFLINE_GRACE, NO_CLAIM, decideBatch, decideClaim, emptyLedger, flushLedger, gatePaused, graceLeft, mergeCounters, normalizeLedger,
-  parseSnapshot, tryGrace, utcDay, type BatchDecision, type Gate, type Ledger, type QuotaSnapshot, type Refusal,
+  NO_CLAIM, decideBatch, decideClaim, emptyLedger, flushLedger, gatePaused, graceLeft, isIpLimit, mergeCounters, normalizeLedger,
+  parseHint, parseSnapshot, tryGrace, utcDay, type BatchDecision, type Gate, type Ledger, type QuotaSnapshot, type Refusal,
 } from './quota-core';
 import type { ServerRefusal } from './routes-core';
 
@@ -28,12 +28,12 @@ const HINT_KEY = 'vg.quota.hint';
 const LEDGER_KEY = 'vg.quota.ledger';
 
 // Last known facts, so the offline grace still works when the app starts without a network.
+// Nothing stored yet = assumed on (fail-closed, PLAN-32E §5.2; parseHint).
 function readHint(): { enabled: boolean; grace: number } {
   try {
-    const h = JSON.parse(localStorage.getItem(HINT_KEY) ?? 'null');
-    return { enabled: h?.enabled === true, grace: Number.isFinite(h?.grace) ? Math.max(0, h.grace) : DEFAULT_OFFLINE_GRACE };
+    return parseHint(JSON.parse(localStorage.getItem(HINT_KEY) ?? 'null'));
   } catch {
-    return { enabled: false, grace: DEFAULT_OFFLINE_GRACE };
+    return parseHint(null);
   }
 }
 function writeHint(enabled: boolean, grace: number) {
@@ -109,7 +109,8 @@ export async function flushOffline(): Promise<void> {
       const r = await call('/api/v1/client/quota/claim', 'POST', { url: e.url, route: 'local', clientVersion: v, retro: true });
       if (r.status === 200) setSnap(mergeCounters(quota.get().snap, r.data));
       const d = decideClaim(r.status, r.data);
-      return d.kind === 'offline' ? 'retry' : 'drop'; // proceed / refused / disabled: the server has had its say
+      // update_required: keep the report for the updated app; proceed / refused / disabled: the server has had its say
+      return d.kind === 'offline' || d.kind === 'update_required' ? 'retry' : 'drop';
     });
     // Keep entries added while we were sending.
     const now = readLedger();
@@ -136,7 +137,8 @@ export async function claimForStart(url: string, route: 'local' | 'local_cookie'
     refuse(d.refusal);
     return { ok: false };
   }
-  // Offline grace: only when we know the feature is on (hint); otherwise behave as before.
+  if (d.kind === 'update_required') return { ok: false }; // the update screen says why; no offline grace
+  // Offline grace: unless the server last said the feature is off (hint, fail-closed).
   const hint = readHint();
   if (!hint.enabled) return { ok: true, claimId: NO_CLAIM };
   const grace = quota.get().snap?.offlineGrace ?? hint.grace;
@@ -178,7 +180,7 @@ export async function claimBatch(urls: string[], route: 'local' | 'local_cookie'
 
 /** POST /fetch-link refused the download (daily allowance): same gate and toast as a refused claim. */
 export function refuseFromServer(r: ServerRefusal) {
-  refuse({ detail: r.detail, upsell: r.upsell, reason: 'daily_limit', resetTimeVn: r.resetTimeVn, limit: r.limit, usedToday: r.usedToday });
+  refuse({ detail: r.detail, upsell: r.upsell, reason: r.reason ?? 'daily_limit', resetTimeVn: r.resetTimeVn, limit: r.limit, usedToday: r.usedToday });
 }
 
 /** Offline downloads still allowed today (for the UI). */
@@ -188,7 +190,8 @@ function refuse(refusal: Refusal) {
   rememberServerMessage('api:quota_exceeded_daily', refusal.detail);
   const first = !gatePaused(quotaGate.get(), Date.now());
   quotaGate.set({ day: utcDay(Date.now()), refusal });
-  if (refusal.limit != null && refusal.usedToday != null) {
+  // The network's guest cap leaves this person's own counters as they are.
+  if (!isIpLimit(refusal) && refusal.limit != null && refusal.usedToday != null) {
     quota.set((q) => ({ status: 'enabled', snap: mergeCounters(q.snap, { limit: refusal.limit, usedToday: refusal.usedToday, remaining: 0, resetTimeVn: refusal.resetTimeVn }) }));
   }
   if (first) toast('error', refusal.detail || 'Bạn đã hết lượt tải hôm nay.'); // ONE toast per refusal episode
