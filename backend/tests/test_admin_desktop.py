@@ -292,6 +292,8 @@ def test_stats_aggregates_days(rc, db, admin, monkeypatch):
     assert f["client_quota_enabled"] is True and f["client_quota_mode"] == "shadow"
     assert f["cookie_platforms"] == ["douyin", "instagram"] and f["server_fallback_platforms"] == ["youtube"]
     assert f["desktop_latest_version"] == "0.8.0" and f["limit_anon"] == 5 and f["limit_user"] == 20
+    # task #6125: canary count + update gate (off by default)
+    assert f["client_quota_enforce_users_count"] == 0 and f["client_update_gate_enabled"] is False
     assert b["devices"]["storage_ready"] is True and b["devices"]["total"] == 3
     assert b["devices"]["active_today"] >= 1  # seeded 1-5 minutes ago (may cross UTC midnight)
     # h(2) first seen yesterday, h(1) 3 days ago (outside), h(3) 20 days ago

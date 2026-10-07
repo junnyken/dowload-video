@@ -114,8 +114,22 @@ def ip_mult() -> int:
     return max(1, _int_env("CLIENT_QUOTA_IP_MULT", 3))
 
 
+def enforce_users() -> set:
+    """Canary (task #6125, owner decision 1): when non-empty, only these
+    signed-in user ids are enforced among accounts; other accounts behave as
+    shadow. Empty (default) = every account when "user" is in ENFORCE_FOR."""
+    raw = _env("CLIENT_QUOTA_ENFORCE_USERS", "")
+    return {p.strip() for p in raw.split(",") if p.strip()}
+
+
 def _enforced(req: "quotas.QuotaRequester") -> bool:
-    return quota_mode() == "enforce" and req.kind in enforce_for()
+    if quota_mode() != "enforce" or req.kind not in enforce_for():
+        return False
+    if req.kind == quotas.REQ_USER:
+        canary = enforce_users()
+        if canary and req.ident not in canary:
+            return False
+    return True
 
 
 def _disabled() -> JSONResponse:

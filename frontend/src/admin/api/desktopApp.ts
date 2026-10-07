@@ -45,6 +45,9 @@ export interface DesktopFlags {
   client_quota_enabled: boolean
   client_quota_mode: 'shadow' | 'enforce'
   client_quota_enforce_for: string[]
+  /** Task #6125 — canary accounts (count) and the update gate; optional for older backends. */
+  client_quota_enforce_users_count?: number
+  client_update_gate_enabled?: boolean
   cookie_platforms: string[]
   server_fallback_platforms: string[]
   desktop_latest_version: string

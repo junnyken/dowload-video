@@ -36,7 +36,7 @@ def _env(monkeypatch, rc):
     prev = [(x, x.enabled) for x in lims]
     for x in lims:
         x.enabled = False
-    for k in ("CLIENT_QUOTA_MODE", "CLIENT_QUOTA_ENFORCE_FOR", "CLIENT_QUOTA_OFFLINE_GRACE",
+    for k in ("CLIENT_QUOTA_MODE", "CLIENT_QUOTA_ENFORCE_FOR", "CLIENT_QUOTA_ENFORCE_USERS", "CLIENT_QUOTA_OFFLINE_GRACE",
               "CLIENT_QUOTA_REFUND_DAILY_MAX", "CLIENT_QUOTA_IP_MULT", "PLATFORM_DAILY_LIMIT_ANON",
               "PLATFORM_DAILY_LIMIT_USER", "QUOTA_SCOPE"):
         monkeypatch.delenv(k, raising=False)
@@ -212,3 +212,36 @@ class TestCorsForTheWindowsApp:
         r = client.options("/api/v1/client/quota/claim", headers={
             "Origin": "https://evil.example", "Access-Control-Request-Method": "POST"})
         assert r.status_code == 400
+
+
+class TestCanaryUsers:
+    """Task #6125: CLIENT_QUOTA_ENFORCE_USERS limits enforcement to listed accounts."""
+
+    def _use_up(self, uid):
+        as_user(uid)
+        req = quotas.QuotaRequester(quotas.REQ_USER, uid)
+        for i in range(20):
+            quotas.record_platform_download(req, "tiktok", f"https://www.tiktok.com/@c/video/{i}")
+
+    def test_listed_user_is_refused(self, monkeypatch):
+        monkeypatch.setenv("CLIENT_QUOTA_ENFORCE_USERS", "u-canary, u-other")
+        self._use_up("u-canary")
+        r = claim(V(999))
+        assert r.status_code == 403 and r.json()["upsell"] == "upgrade"
+
+    def test_unlisted_user_is_only_counted(self, monkeypatch):
+        monkeypatch.setenv("CLIENT_QUOTA_ENFORCE_USERS", "u-canary")
+        self._use_up("u-normal")
+        r = claim(V(999))
+        assert r.status_code == 200 and r.json()["overLimit"] is True
+
+    def test_empty_list_enforces_every_account(self, monkeypatch):
+        monkeypatch.delenv("CLIENT_QUOTA_ENFORCE_USERS", raising=False)
+        self._use_up("u-normal")
+        assert claim(V(999)).status_code == 403
+
+    def test_canary_does_not_relax_guests(self, monkeypatch):
+        monkeypatch.setenv("CLIENT_QUOTA_ENFORCE_USERS", "u-canary")
+        for i in range(5):
+            claim(V(i), device=dev(3))
+        assert claim(V(99), device=dev(3)).status_code == 429

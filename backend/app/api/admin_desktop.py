@@ -35,6 +35,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, Query
 
 from app.api.admin import verify_admin
+from app.core import update_gate
 from app.core import quotas
 
 logger = logging.getLogger(__name__)
@@ -244,6 +245,9 @@ def _flags() -> dict:
         "client_quota_enabled": client_quota.quota_enabled(),
         "client_quota_mode": client_quota.quota_mode(),
         "client_quota_enforce_for": sorted(client_quota.enforce_for()),
+        # Task #6125: canary accounts (count only on the page)
+        "client_quota_enforce_users_count": len(client_quota.enforce_users()),
+        "client_update_gate_enabled": update_gate.gate_enabled(),
         "cookie_platforms": client_api.cookie_platforms(),
         "server_fallback_platforms": client_api.server_fallback_platforms(),
         "desktop_latest_version": (env("DESKTOP_LATEST_VERSION") or "0.1.0").strip(),

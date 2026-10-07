@@ -312,6 +312,16 @@ function ModeCard({ s }: { s: StatsPayload }) {
         <FlagRow label="Áp dụng chặn cho"
           value={f.client_quota_enforce_for.map((k) => ENFORCE_FOR_VI[k] ?? k).join(', ') || dash}
           hint={f.client_quota_mode === 'enforce' ? undefined : 'Chỉ có tác dụng khi chuyển sang "Chặn thật".'} />
+        {/* wording: BA review */}
+        {f.client_quota_enforce_users_count != null && (
+          <FlagRow label="Chặn thử cho tài khoản"
+            value={f.client_quota_enforce_users_count > 0 ? `${n(f.client_quota_enforce_users_count)} tài khoản được chọn` : 'Mọi tài khoản'}
+            hint="Khi có danh sách, chỉ các tài khoản này bị chặn thật; tài khoản khác vẫn chỉ đếm." />
+        )}
+        {f.client_update_gate_enabled != null && (
+          <FlagRow label="Bắt cập nhật app cũ" value={f.client_update_gate_enabled ? 'Đang bật' : 'Tắt'}
+            hint={`App cũ hơn ${f.desktop_min_version ?? '—'} sẽ được yêu cầu cập nhật trước khi tải.`} />
+        )}
         <FlagRow label="Hạn mức mỗi ngày" value={`Khách ${n(f.limit_anon)} · Tài khoản ${n(f.limit_user)}`}
           hint={`Khách dùng app tính theo máy, mỗi mạng tối đa ${n(f.limit_anon * f.ip_mult)} lượt. Tài khoản dùng chung lượt với web.`} />
         <FlagRow label="Tải khi mất mạng" value={`${n(f.offline_grace)} lượt/ngày`} hint="Có mạng lại thì app báo bù, vẫn được tính vào hạn mức." />
