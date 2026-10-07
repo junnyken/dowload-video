@@ -241,6 +241,25 @@ class TestNoDuplicatePaidCalls:
         assert _names(calls).count("apify_douyin") == 1
         assert _names(calls).count("native_douyin") == 2
 
+    def test_refused_before_any_run_does_not_block_the_url(self, flags_on):
+        """Owner incident 2026-10-07: broken Apify tokens (refused, nothing
+        billed) left every tried video blocked for the dedupe TTL."""
+        calls: list = []
+        n = FakeProvider("native_douyin", outcome="cookie_required", calls=calls)
+        a = FakeProvider("apify_douyin", paid=True, outcome="provider_unavailable", run_started=False, calls=calls)
+        _fail(ProviderRouter(factory(n, a)))
+        a.outcome, a.run_started = "ok", True          # tokens fixed
+        assert _run(ProviderRouter(factory(n, a))).title == "t"
+        assert _names(calls).count("apify_douyin") == 2
+
+    def test_started_run_still_blocks_a_second_paid_attempt(self, flags_on):
+        calls: list = []
+        n = FakeProvider("native_douyin", outcome="cookie_required", calls=calls)
+        a = FakeProvider("apify_douyin", paid=True, outcome="provider_unavailable", run_started=True, calls=calls)
+        _fail(ProviderRouter(factory(n, a)))
+        _fail(ProviderRouter(factory(n, a)))
+        assert _names(calls).count("apify_douyin") == 1
+
     def test_concurrent_identical_urls_one_paid_run(self, flags_on, rc):
         n, a, calls = _pair(native="cookie_required", delay=0.3)
 

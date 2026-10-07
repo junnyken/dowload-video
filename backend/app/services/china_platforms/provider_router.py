@@ -352,6 +352,9 @@ class ProviderRouter:
             latency = int((time.monotonic() - t0) * 1000)
 
             run = getattr(prov, "last_run", None)
+            if prov.paid and reservation is not None and not (run and run.run_started):
+                # Nothing was billed: let the next request for this URL try again.
+                request_cache.release_paid_attempt(name, h)
             actual_usd, cost_source = None, "none"
             cost: Optional[dict] = None
             if reservation is not None:

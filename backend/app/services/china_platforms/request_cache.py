@@ -147,5 +147,17 @@ def claim_paid_attempt(provider: str, h: str) -> bool:
         return False
 
 
+def release_paid_attempt(provider: str, h: str) -> None:
+    """Undo claim_paid_attempt when NO run was started (the vendor refused
+    before billing: 401/402/403 on every token, no eligible token, start
+    request failed). Owner incident 2026-10-07: while the Apify tokens were
+    broken, every Douyin video tried got the marker and stayed blocked for the
+    whole dedupe TTL after the tokens were fixed. Never raises."""
+    try:
+        _r().delete(paid_key(provider, h))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def dumps(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, default=str)
