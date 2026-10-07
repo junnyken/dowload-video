@@ -33,6 +33,7 @@ async function addToQueue(card: Card): Promise<boolean> {
     url: r.url, title: r.title, thumbnail: r.thumbnail, platform: r.platform, uploader: r.uploader, outDir,
     formatId: option.value === 'best' || option.value === 'audio' ? undefined : option.format?.id,
     audioOnly: option.value === 'audio', formatLabel: option.label, estSize: est,
+    quality: option.value, startAt: card.serverOnly ? 'S0' : undefined,
   });
   removeCard(card.url);
   return true;

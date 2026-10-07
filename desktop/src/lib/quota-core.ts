@@ -167,3 +167,46 @@ export function mergeCounters(prev: QuotaSnapshot | null, d: unknown): QuotaSnap
     requester: str(o.requester) ?? base.requester, mode: o.mode === 'enforce' ? 'enforce' : o.mode === 'shadow' ? 'shadow' : base.mode,
   };
 }
+
+// ---- channels: claim-batch (PLAN-32D §6) -------------------------------------------
+
+export type BatchItem = { url: string; allowed: boolean; claimId: string; detail: string | null };
+export type BatchDecision =
+  | { kind: 'ok'; items: BatchItem[]; data: Record<string, unknown> }
+  | { kind: 'disabled' }
+  | { kind: 'offline' };
+
+/**
+ * POST /client/quota/claim-batch answer, one entry per requested URL (same
+ * order: the server answers item by item). invalid_url = nothing counted
+ * (enqueue without a claim, like a single claim's 400). 503
+ * client_quota_disabled = today's behaviour. Anything unexpected = offline
+ * (the queue then claims each item on its own when it starts).
+ */
+export function decideBatch(status: number, data: unknown, urls: readonly string[]): BatchDecision {
+  const o = obj(data);
+  if (status === 503 && o.error_code === 'client_quota_disabled') return { kind: 'disabled' };
+  if (status !== 200 || !Array.isArray(o.items) || o.items.length !== urls.length) return { kind: 'offline' };
+  const items = (o.items as unknown[]).map((raw, i): BatchItem => {
+    const it = obj(raw);
+    if (it.allowed === true && str(it.claimId)) return { url: urls[i], allowed: true, claimId: it.claimId as string, detail: null };
+    if (it.error_code === 'invalid_url') return { url: urls[i], allowed: true, claimId: NO_CLAIM, detail: null };
+    return { url: urls[i], allowed: false, claimId: NO_CLAIM, detail: str(it.detail) };
+  });
+  return { kind: 'ok', items, data: o };
+}
+
+/**
+ * How many videos the channel picker lets the user select: the remaining
+ * downloads of today when the server enforces the allowance for this
+ * requester; null = no cap (shadow mode, unlimited, unknown or disabled).
+ */
+export function selectionCap(q: { status: string; snap: QuotaSnapshot | null }): number | null {
+  if (q.status !== 'enabled' || !q.snap || !q.snap.enforced || isUnlimited(q.snap)) return null;
+  return Math.max(0, q.snap.remaining);
+}
+
+/** Keeps the first `cap` ids (the list order is the picker's: newest first). */
+export function capIds<T>(ids: readonly T[], cap: number | null): T[] {
+  return cap == null ? [...ids] : ids.slice(0, Math.max(0, cap));
+}

@@ -19,6 +19,10 @@ function emit(event: string, payload: unknown) {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Call log for click-through tests (Playwright reads window.__vgMockLog): "POST /api/v1/..." and "start_download <url>".
+export const mockLog: string[] = [];
+(window as unknown as { __vgMockLog: string[] }).__vgMockLog = mockLog;
 const err = (code: string, message: string) => ({ code, message });
 
 // ---- fake media ------------------------------------------------------------
@@ -75,6 +79,13 @@ const partial = new Map<string, number>();
 const forbiddenOnce = new Set<string>();
 function startSim(a: { jobId: string; url: string; outDir: string; audioOnly?: boolean; useCookies?: boolean }) {
   if (sims.has(a.jobId)) return;
+  // localStorage mock.localFail=1: every local yt-dlp run fails like an extractor error (L0/L1), so the queue
+  // moves to the server step (S0). Downloads of the server's file / direct link (S0, Douyin) still work.
+  const serverFile = a.url.includes('/api/v1/download-local') || a.url.includes('example.invalid');
+  if (localStorage.getItem('mock.localFail') === '1' && !serverFile) {
+    setTimeout(() => emit('download://done', { jobId: a.jobId, state: 'failed', errorCode: 'unknown', errorMessage: 'ERROR: Unable to extract video data (mock)', cookiesUsed: a.useCookies && mockCookiePlatform(a.url) != null && mockCookies.has(mockCookiePlatform(a.url)!) ? true : undefined } satisfies DoneEvent), 500);
+    return;
+  }
   // Like Rust: cookies only when asked AND a blob is saved for the URL's platform.
   const ck = a.useCookies ? mockCookiePlatform(a.url) : null;
   const cookiesUsed = ck != null && mockCookies.has(ck) ? true : undefined;
@@ -229,7 +240,7 @@ export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promi
   switch (cmd) {
     case 'probe': return mockProbe(a.url as string);
     case 'cancel_probe': return null;
-    case 'start_download': startSim(a as never); return null;
+    case 'start_download': mockLog.push(`start_download ${a.url as string}`); startSim(a as never); return null;
     case 'pause_download': {
       const s = sims.get(a.jobId as string);
       if (s) { clearInterval(s.timer); partial.set(a.jobId as string, s.pct); sims.delete(a.jobId as string); }
@@ -304,15 +315,20 @@ export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promi
 
 // ---- API (dvid-api) --------------------------------------------------------
 export async function mockApi<T>(path: string, opts: { method?: string; body?: unknown; token?: string | null }): Promise<{ status: number; data: T | null }> {
+  mockLog.push(`${opts.method ?? 'GET'} ${path.split('?')[0]}`);
   await sleep(250);
   const r = (status: number, data: unknown) => ({ status, data: data as T });
   if (path.startsWith('/api/v1/client/version')) {
     const cookiePlatforms = (localStorage.getItem('mock.cookiePlatforms') ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+    // localStorage mock.serverFallback=youtube,tiktok (default: every platform the server knows; "" = none).
+    const fb = localStorage.getItem('mock.serverFallback');
+    const serverFallbackPlatforms = fb == null ? ALL_FALLBACK : fb.split(',').map((x) => x.trim()).filter(Boolean);
     return r(200, {
       latest: '0.2.0', minSupported: '0.1.0', notes: 'Bản mô phỏng', downloadUrl: 'https://dvid.vibe1.tinhgon.xyz/download',
-      features: { clientQuota: true, clientQuotaMode: 'enforce', offlineGrace: 3, cookiePlatforms },
+      features: { clientQuota: true, clientQuotaMode: 'enforce', offlineGrace: 3, cookiePlatforms, serverFallbackPlatforms },
     });
   }
+  if (path.startsWith('/api/v1/fetch-link')) return mockFetchLink(opts.body as { url?: string; quality?: string }, !!opts.token) as { status: number; data: T | null };
   if (path.startsWith('/api/v1/client/quota')) return mockQuota(path, opts.method ?? 'GET', opts.body as { url?: string; retro?: boolean; claimId?: string; outcome?: string }, !!opts.token) as { status: number; data: T | null };
   if (path.startsWith('/api/v1/client/douyin/')) return mockDouyin(path, opts.body as { url?: string; limit?: number }, !!opts.token) as { status: number; data: T | null };
   if (!opts.token) return r(401, { detail: 'unauthorized' });
@@ -389,33 +405,86 @@ function mockDouyin(path: string, body: { url?: string; limit?: number }, signed
 }
 
 // ---- daily allowance (client_quota.py). localStorage switches: mock.quotaDisabled=1 (503),
-// mock.quotaLeft=0 (everything refused), mock.quotaOffline=1 (network error). Guest 5/day, signed in 20.
-const qMock = { used: 0, claims: new Map<string, string>() };
-function mockQuota(path: string, method: string, body: { url?: string; retro?: boolean; claimId?: string; outcome?: string }, signedIn: boolean) {
+// mock.quotaLeft=0 (everything refused), mock.quotaOffline=1 (network error), mock.quotaUsed=N (used at page load),
+// mock.quotaStale=1 (GET /client/quota keeps saying nothing is used: the claim answers are the truth).
+// Guest 5/day, signed in 20. Like the server, a URL counts once a day (claim, claim-batch and /fetch-link share it).
+const qMock = { used: Number(localStorage.getItem('mock.quotaUsed') ?? 0) || 0, claims: new Map<string, string>(), counted: new Set<string>() };
+/** One counted download for `url` unless it already counted today. false = the allowance is used up. */
+function qCount(url: string, limit: number): boolean {
+  if (qMock.counted.has(url)) return true;
+  if (localStorage.getItem('mock.quotaLeft') === '0' || qMock.used >= limit) return false;
+  qMock.used++;
+  qMock.counted.add(url);
+  return true;
+}
+const ALL_FALLBACK = ['youtube', 'tiktok', 'instagram', 'facebook', 'twitter', 'threads', 'reddit', 'pinterest', 'vimeo', 'bilibili', 'soundcloud', 'youku', 'mgtv', 'iqiyi', 'kuaishou', 'xiaohongshu'];
+
+// ---- POST /fetch-link (routes.py), the S0 route. localStorage mock.fetchShape=direct answers with a
+// direct_mp4_url (no server file); default: the server's own file (local_file_id / local_mp3_file_id).
+// mock.fetchFail=1 answers like an extraction failure.
+function mockFetchLink(body: { url?: string; quality?: string }, signedIn: boolean) {
+  const r = (status: number, data: unknown) => ({ status, data });
+  const url = body?.url ?? '';
+  const limit = signedIn ? 20 : 5;
+  if (!qCount(url, limit)) {
+    return r(signedIn ? 403 : 429, { detail: {
+      error_code: 'quota_exceeded_daily', user_message: 'Bạn đã hết lượt tải hôm nay.',
+      message: 'Bạn đã dùng hết lượt tải hôm nay (bản mô phỏng, máy chủ). Lượt mới lúc 07:00.',
+      downloads_today: limit, daily_limit: limit, remaining: 0, reset_time_vn: '07:00', requester: signedIn ? 'user' : 'anon',
+    } });
+  }
+  if (localStorage.getItem('mock.fetchFail') === '1') {
+    return r(500, { detail: 'Máy chủ không lấy được video này (bản mô phỏng).', error_code: 'processing_failed', user_message: 'x', retryable: true });
+  }
+  const id = Array.from(url).reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(16).padStart(8, '0');
+  const audio = (body.quality ?? '').startsWith('mp3');
+  const title = `Video qua máy chủ ${id.slice(0, 4)} (mô phỏng)`;
+  if (localStorage.getItem('mock.fetchShape') === 'direct') {
+    return r(200, { success: true, title, thumbnail_url: thumb(url), direct_mp4_url: `https://example.invalid/server/${id}.mp4`, local_file_id: null, local_mp3_file_id: null, duration: 60, file_size_mb: 12 });
+  }
+  return r(200, {
+    success: true, title, thumbnail_url: thumb(url), direct_mp4_url: '',
+    local_file_id: `${id}${'0'.repeat(24)}.mp4`, local_mp3_file_id: audio ? `${id}${'1'.repeat(24)}.mp3` : null, duration: 60, file_size_mb: 12,
+  });
+}
+
+function mockQuota(path: string, method: string, body: { url?: string; retro?: boolean; claimId?: string; outcome?: string; items?: { url: string }[]; route?: string }, signedIn: boolean) {
   const r = (status: number, data: unknown) => ({ status, data });
   if (localStorage.getItem('mock.quotaOffline') === '1') throw { code: 'network', message: 'mock offline' };
   if (localStorage.getItem('mock.quotaDisabled') === '1') return r(503, { detail: 'Tính năng đếm lượt tải của app Windows chưa được bật.', error_code: 'client_quota_disabled' });
   const limit = signedIn ? 20 : 5;
   const used = localStorage.getItem('mock.quotaLeft') === '0' ? limit : qMock.used;
+  const refusal = () => ({
+    allowed: false, error_code: 'quota_exceeded_daily', reason: 'daily_limit', upsell: signedIn ? 'upgrade' : 'signin', limit, usedToday: limit, remaining: 0, resetTimeVn: '07:00', requester: signedIn ? 'user' : 'device',
+    detail: signedIn ? 'Bạn đã dùng hết 20 lượt tải hôm nay (bản mô phỏng). Lượt mới được cộng lại lúc 07:00.' : 'Bạn đã dùng hết 5 lượt tải của khách hôm nay (bản mô phỏng). Lượt mới được cộng lại lúc 07:00.',
+  });
+  const live = () => ({ limit, usedToday: Math.min(qMock.used, limit), remaining: Math.max(0, limit - qMock.used), resetTimeVn: '07:00', requester: signedIn ? 'user' : 'device' });
+  if (path.endsWith('/quota/claim-batch') && method === 'POST') {
+    const items = (body?.items ?? []).map(({ url }) => {
+      if (!url || url.length < 8) return { url, allowed: false, error_code: 'invalid_url', detail: 'Link không hợp lệ.' };
+      if (!qCount(url, limit)) return { url, ...refusal() };
+      const claimId = `mockclaim${qMock.claims.size + 1}`;
+      qMock.claims.set(claimId, url);
+      return { url, allowed: true, claimId, platform: 'youtube', alreadyCounted: false, overLimit: false, mode: 'enforce', ...live() };
+    });
+    return r(200, { items, mode: 'enforce', ...live() });
+  }
   const counters = () => ({ limit, usedToday: Math.min(used, limit), remaining: Math.max(0, limit - used), resetTimeVn: '07:00', requester: signedIn ? 'user' : 'device' });
   if (path.endsWith('/quota/claim') && method === 'POST') {
     if (!body?.url || body.url.length < 8) return r(400, { detail: 'Liên kết không hợp lệ.', error_code: 'invalid_url' });
-    if (!body.retro && used >= limit) {
-      return r(signedIn ? 403 : 429, {
-        allowed: false, error_code: 'quota_exceeded_daily', reason: 'daily_limit', upsell: signedIn ? 'upgrade' : 'signin', ...counters(), remaining: 0,
-        detail: signedIn ? 'Bạn đã dùng hết 20 lượt tải hôm nay (bản mô phỏng). Lượt mới được cộng lại lúc 07:00.' : 'Bạn đã dùng hết 5 lượt tải của khách hôm nay (bản mô phỏng). Lượt mới được cộng lại lúc 07:00.',
-      });
-    }
-    qMock.used++;
+    if (body.retro) { qMock.used++; qMock.counted.add(body.url); }
+    else if (!qCount(body.url, limit)) return r(signedIn ? 403 : 429, refusal());
     const claimId = `mockclaim${qMock.claims.size + 1}`;
     qMock.claims.set(claimId, body.url);
     return r(200, { allowed: true, claimId, platform: 'youtube', alreadyCounted: false, overLimit: false, mode: 'enforce', ...{ ...counters(), usedToday: Math.min(qMock.used, limit), remaining: Math.max(0, limit - qMock.used) } });
   }
   if (path.endsWith('/quota/settle') && method === 'POST') {
+    const claimed = qMock.claims.get(body?.claimId ?? '');
     const refunded = body?.outcome !== 'completed' && qMock.claims.delete(body?.claimId ?? '') && qMock.used > 0;
-    if (refunded) qMock.used--;
-    return r(200, { refunded: !!refunded, ...counters() });
+    if (refunded) { qMock.used--; if (claimed) qMock.counted.delete(claimed); }
+    return r(200, { refunded: !!refunded, ...live() });
   }
+  if (method === 'GET' && localStorage.getItem('mock.quotaStale') === '1') return r(200, { limit, usedToday: 0, remaining: limit, resetTimeVn: '07:00', requester: signedIn ? 'user' : 'device', deviceCode: 'A1B2C3D4', mode: 'enforce', enforced: true, offlineGrace: 3, refundDailyMax: 10 });
   if (method === 'GET') return r(200, { ...counters(), deviceCode: 'A1B2C3D4', mode: 'enforce', enforced: true, offlineGrace: 3, refundDailyMax: 10 });
   return r(404, null);
 }

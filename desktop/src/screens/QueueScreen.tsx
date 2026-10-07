@@ -7,6 +7,13 @@ import { formatBytes, formatEta, formatSpeed } from '../lib/format';
 import { errorAction, errorMessage } from '../lib/errors';
 import { api } from '../lib/tauri';
 import { confirmDialog, go, toast } from '../lib/ui';
+import { routeLabel, type RouteId } from '../lib/routes-core';
+
+/** Route step of the card; queue items saved by 0.7.x only have the old route name. */
+function stepOfItem(it: QueueItem): RouteId | undefined {
+  if (it.step) return it.step;
+  return it.route === 'local_cookie' ? 'L1' : it.route === 'server' ? 'DOUYIN_SERVER' : it.route === 'local' ? 'L0' : undefined;
+}
 
 type Tab = 'active' | 'done' | 'failed';
 const STAGE: Record<string, string> = { downloading: 'Đang tải', merging: 'Đang ghép', processing: 'Đang xử lý' };
@@ -36,7 +43,7 @@ function Row({ it }: { it: QueueItem }) {
           <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-fg select-text" title={it.title}>{it.title}</h3>
           <PlatformBadge platform={it.platform} />
           <Badge tone="neutral">{it.formatLabel}</Badge>
-          {it.route === 'local_cookie' && <Badge tone="accent">Tải bằng tài khoản của bạn</Badge>}{/* wording: BA review */}
+          {routeLabel(stepOfItem(it)) && <Badge tone={stepOfItem(it) === 'L1' ? 'accent' : 'neutral'}>{routeLabel(stepOfItem(it))}</Badge>}{/* wording: BA review (routes-core.ts routeLabel) */}
         </div>
 
         {(it.state === 'running' || it.state === 'paused' || it.state === 'queued') && (
@@ -61,7 +68,7 @@ function Row({ it }: { it: QueueItem }) {
           <p className="flex items-center gap-1.5 text-xs text-success"><CheckCircle2 size={14} aria-hidden />Hoàn tất · {formatBytes(it.fileSize)}</p>
         )}
         {it.state === 'failed' && (
-          <p className="flex items-start gap-1.5 text-xs text-danger"><AlertCircle size={14} className="mt-px shrink-0" aria-hidden />{errorMessage(it.errorCode)}</p>
+          <p className="flex items-start gap-1.5 text-xs text-danger"><AlertCircle size={14} className="mt-px shrink-0" aria-hidden />{it.errorText || errorMessage(it.errorCode)}</p>
         )}
         {it.state === 'failed' && errorAction(it.errorCode) && (
           <div><Button size="sm" variant="secondary" onClick={() => go('settings')}>{errorAction(it.errorCode)!.label}</Button></div>

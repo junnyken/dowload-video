@@ -5,8 +5,10 @@ import { toAppError } from './errors';
 import { PROBE_CONCURRENCY } from './config';
 import { douyinPlaceholder } from './douyin';
 import { isDouyinUrl } from './urls';
-import { cookieState, planFor } from './cookies';
+import { cookieState, planFor, routesFor } from './cookies';
 import { cookieErrorCode } from './cookies-core';
+import { NO_FALLTHROUGH, platformOf } from './routes-core';
+import { platformLabel } from './format';
 import type { ProbeResult } from './types';
 import type { Quality } from './settings';
 
@@ -17,7 +19,27 @@ export type Card = {
   errorCode?: string;
   quality?: Quality; // user's explicit choice; default resolved at render time
   outDir?: string; // user's explicit choice
+  /** Not analysed on this PC: the download goes straight through the VidGrab server (route S0). */
+  serverOnly?: boolean;
 };
+
+/** A card for a link the app does not analyse locally (server-only platform, or the user chose the server after a local error). */
+export function serverPlaceholder(url: string): ProbeResult {
+  const platform = platformOf(url);
+  const base = { height: null, fps: null, filesize: null, vcodec: null, acodec: null, requiresMerge: false };
+  return {
+    url, platform, title: `Video ${platform === 'other' ? '' : platformLabel(platform)}`.trim(), thumbnail: null, duration: null, uploader: null, // wording: BA review
+    formats: [
+      { ...base, id: 'server-mp4', label: 'Video (MP4)', ext: 'mp4', audioOnly: false },
+      { ...base, id: 'server-audio', label: 'Âm thanh (MP3)', ext: 'mp3', audioOnly: true },
+    ],
+  };
+}
+
+/** After a local analysis error: may this link still be downloaded through the VidGrab server? */
+export function serverCanTry(url: string, code: string | undefined): boolean {
+  return !NO_FALLTHROUGH.has(code ?? 'unknown') && routesFor(url).includes('S0');
+}
 
 export const probes = createStore<{ cards: Card[]; invalid: string[] }>({ cards: [], invalid: [] });
 
@@ -39,8 +61,12 @@ function drain() {
     // would count a download; with cookies (L1) a probe would be one more signed-in request to
     // Douyin per pasted link for a video that has a single MP4 anyway. The queue picks the route.
     const plan = planFor(url);
-    (isDouyinUrl(url) ? Promise.resolve<ProbeResult>(douyinPlaceholder(url)) : api.probe(url, plan.useCookies || undefined))
-      .then((r) => patchCard(url, { status: 'ready', result: r, errorCode: undefined }))
+    // Server-only platforms (Kuaishou, Xiaohongshu, iQIYI when the server allows it): nothing to analyse here.
+    const serverOnly = !isDouyinUrl(url) && routesFor(url)[0] === 'S0';
+    (isDouyinUrl(url) ? Promise.resolve<ProbeResult>(douyinPlaceholder(url))
+      : serverOnly ? Promise.resolve<ProbeResult>(serverPlaceholder(url))
+      : api.probe(url, plan.useCookies || undefined))
+      .then((r) => patchCard(url, { status: 'ready', result: r, errorCode: undefined, serverOnly: serverOnly || undefined }))
       .catch((e) => patchCard(url, {
         status: 'error',
         errorCode: cookieErrorCode(toAppError(e).code, { cookiesUsed: plan.useCookies, platform: plan.platform, enabled: cookieState.get().enabled ?? [] }),
@@ -64,6 +90,11 @@ export function retryCard(url: string) {
   patchCard(url, { status: 'loading', errorCode: undefined });
   pending.push(url);
   drain();
+}
+
+/** "Tải qua máy chủ VidGrab" on an error card: the card becomes a server-only download. */
+export function switchToServer(url: string) {
+  patchCard(url, { status: 'ready', result: serverPlaceholder(url), errorCode: undefined, serverOnly: true });
 }
 
 export function setCard(url: string, p: Partial<Card>) {

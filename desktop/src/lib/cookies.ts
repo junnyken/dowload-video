@@ -10,12 +10,15 @@ import { apiFetch } from './http';
 import { confirmDialog, toast } from './ui';
 import { errorMessage, toAppError } from './errors';
 import {
-  COOKIE_PLATFORMS, parseCookiePlatforms, planRoute, platformLabelOf, type CookieStatus, type Plan,
+  COOKIE_PLATFORMS, cookiePlatformOf, parseCookiePlatforms, planRoute, platformLabelOf, type CookieStatus, type Plan,
 } from './cookies-core';
+import { parseServerFallback, planRoutes, type RouteId } from './routes-core';
 
 export type CookieState = {
   /** null until GET /client/version answered once (or the cached copy was read). */
   enabled: string[] | null;
+  /** features.serverFallbackPlatforms (PLAN-32D P2): platforms whose failed local download may go through /fetch-link. */
+  serverFallback: string[];
   status: Record<string, CookieStatus>;
   /** Platform whose login window is open (the "Xong" button shows for it). */
   pending: string | null;
@@ -24,6 +27,7 @@ export type CookieState = {
 
 const FEATURES_KEY = 'vg.cookies.features';
 const CONSENT_KEY = 'vg.cookies.consent';
+const FALLBACK_KEY = 'vg.routes.serverFallback';
 
 function readJson<T>(key: string, fallback: T): T {
   try { return (JSON.parse(localStorage.getItem(key) ?? 'null') as T) ?? fallback; } catch { return fallback; }
@@ -35,6 +39,7 @@ function writeJson(key: string, v: unknown) {
 // The last known server switch, so an offline start still knows (cookies work offline).
 export const cookieState = createStore<CookieState>({
   enabled: (() => { const v = readJson<unknown>(FEATURES_KEY, null); return v == null ? null : parseCookiePlatforms(v); })(),
+  serverFallback: parseServerFallback(readJson<unknown>(FALLBACK_KEY, [])),
   status: {},
   pending: null,
   busy: null,
@@ -58,6 +63,17 @@ export function planFor(url: string): Plan {
   return planRoute(url, { enabled: cookieState.get().enabled ?? [], usable });
 }
 
+/** L1 possible for this URL: the server allows cookies for its platform and a blob is saved (with consent). */
+export function cookiesUsableFor(url: string): boolean {
+  const p = cookiePlatformOf(url);
+  return p != null && (cookieState.get().enabled ?? []).includes(p) && usable(p);
+}
+
+/** The route steps of a URL right now (PLAN-32D §2, routes-core.ts). */
+export function routesFor(url: string): RouteId[] {
+  return planRoutes(url, { cookies: cookiesUsableFor(url), serverFallback: cookieState.get().serverFallback });
+}
+
 /** Platforms the server allows, in table order (what Settings lists). */
 export function offeredPlatforms(enabled: string[] | null) {
   return COOKIE_PLATFORMS.filter((p) => (enabled ?? []).includes(p.slug));
@@ -68,11 +84,13 @@ let featuresP: Promise<void> | null = null;
 export function loadFeatures(): Promise<void> {
   featuresP ??= (async () => {
     try {
-      const r = await apiFetch<{ features?: { cookiePlatforms?: unknown } }>('/api/v1/client/version');
+      const r = await apiFetch<{ features?: { cookiePlatforms?: unknown; serverFallbackPlatforms?: unknown } }>('/api/v1/client/version');
       if (r.status === 200 && r.data) {
         const list = parseCookiePlatforms(r.data.features?.cookiePlatforms);
+        const fallback = parseServerFallback(r.data.features?.serverFallbackPlatforms);
         writeJson(FEATURES_KEY, list);
-        cookieState.set((s) => ({ ...s, enabled: list }));
+        writeJson(FALLBACK_KEY, fallback);
+        cookieState.set((s) => ({ ...s, enabled: list, serverFallback: fallback }));
       }
     } catch { /* offline: keep what we know */ }
   })().finally(() => { featuresP = null; });

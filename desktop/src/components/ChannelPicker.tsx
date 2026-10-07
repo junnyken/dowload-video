@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Download, FolderOpen, Info, Search, Tv } from 'lucide-react';
 import { Badge, Button, PlatformBadge, Select, Spinner, Thumb, Toggle } from './ui';
 import { api } from '../lib/tauri';
@@ -7,7 +7,13 @@ import { QUALITY_LABEL } from '../lib/quality';
 import { formatBytes, formatDuration } from '../lib/format';
 import { errorMessage, toAppError } from '../lib/errors';
 import { toast } from '../lib/ui';
-import { enqueueVideos, fetchListing, flow, joinPath, newChannelFromListing, resetFlow, sanitizeFolderName, saveChannel, channels } from '../lib/channels';
+import {
+  addRefused, enqueueWithClaims, fetchListing, flow, joinPath, newChannelFromListing, refusedText, resetFlow, sanitizeFolderName, saveChannel, channels, usesCookies,
+} from '../lib/channels';
+import { quota, refreshQuota } from '../lib/quota';
+import { capIds, selectionCap } from '../lib/quota-core';
+import { routesFor } from '../lib/cookies';
+import { isLocalStep } from '../lib/routes-core';
 import type { ChannelInterval, ChannelListing, ChannelMode } from '../lib/types';
 
 const PAGE = 50;
@@ -52,10 +58,16 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
   const [customDir, setCustomDir] = useState<string | null>(null);
   const [free, setFree] = useState<number | null>(null);
   const [follow, setFollow] = useState(true);
-  const [mode, setMode] = useState<ChannelMode>('download');
+  // A channel read with the user's own cookies: only notify by default, so it does not spend the day's downloads on its own (PLAN-32D §6).
+  const [mode, setMode] = useState<ChannelMode>(() => (usesCookies(listing) ? 'notify' : 'download'));
   const [every, setEvery] = useState<ChannelInterval>(6);
   const [busy, setBusy] = useState(false);
   const douyin = listing.platform === 'douyin';
+  // Downloads left today (when the server enforces the allowance): the picker never selects more (PLAN-32D §6).
+  const q = quota.use();
+  const localFirst = !douyin && isLocalStep(routesFor(listing.url)[0]);
+  const cap = localFirst ? selectionCap(q) : null;
+  useEffect(() => { void refreshQuota(); }, []);
 
   useEffect(() => { void ensureOutDir().then(setBaseDir); }, []);
   const dir = customDir ?? (baseDir ? joinPath(baseDir, sanitizeFolderName(listing.title)) : null);
@@ -91,8 +103,25 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
   const rows = shown.slice(cur * PAGE, cur * PAGE + PAGE);
   const filtered = !!query.trim() || !!since;
 
-  const toggle = (id: string) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const selectIds = (ids: string[]) => setSel(new Set(ids));
+  // wording: BA review
+  const lastNote = useRef(0);
+  const capNote = () => { // one note per burst of clicks
+    if (Date.now() - lastNote.current < 5000) return;
+    lastNote.current = Date.now();
+    toast('info', cap === 0 ? 'Bạn đã hết lượt tải hôm nay.' : `Hôm nay bạn chỉ còn ${cap} lượt tải.`);
+  };
+  const toggle = (id: string) => {
+    if (!sel.has(id) && cap != null && sel.size >= cap) { capNote(); return; }
+    setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  };
+  const selectIds = (ids: string[]) => {
+    const uniq = [...new Set(ids)];
+    const kept = capIds(uniq, cap);
+    if (kept.length < uniq.length) capNote();
+    setSel(new Set(kept));
+  };
+  // The remaining allowance went down (another download): drop the extra selection.
+  useEffect(() => { if (cap != null && sel.size > cap) setSel((s) => new Set(capIds([...s], cap))); }, [cap, sel.size]);
   const selectedVideos = listing.videos.filter((v) => sel.has(v.id));
   const n = selectedVideos.length;
   const allShownOn = shown.length > 0 && shown.every((v) => sel.has(v.id));
@@ -109,7 +138,9 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
     setBusy(true);
     try {
       const ch = newChannelFromListing(listing, { mode, quality, outDir: dir, checkEveryHours: every });
-      if (n > 0) enqueueVideos(selectedVideos, ch);
+      const res = n > 0 ? await enqueueWithClaims(selectedVideos, ch) : { enqueued: [], refused: [] };
+      addRefused(res.refused, ch); // each with the server's reason in Hàng đợi → Lỗi
+      const added = res.enqueued.length;
       // Everything shown here counts as "seen", so later checks only bring NEW videos.
       const seenIds = follow ? listing.videos.map((v) => v.id) : selectedVideos.map((v) => v.id);
       if (follow) {
@@ -119,8 +150,9 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
         await api.channelSeenAdd(ch.id, seenIds).catch(() => {}); // channel not saved: best effort
       }
       toast('success', follow
-        ? (n > 0 ? `Đã thêm ${n} video vào hàng đợi và bắt đầu theo dõi kênh.` : 'Đã bắt đầu theo dõi kênh.')
-        : `Đã thêm ${n} video vào hàng đợi.`);
+        ? (added > 0 ? `Đã thêm ${added} video vào hàng đợi và bắt đầu theo dõi kênh.` : 'Đã bắt đầu theo dõi kênh.')
+        : `Đã thêm ${added} video vào hàng đợi.`);
+      if (res.refused.length) toast('error', refusedText(res.refused.length, res.refused[0].detail)); // ONE toast for all refused
       resetFlow();
     } catch (e) {
       toast('error', errorMessage(toAppError(e).code));
@@ -257,6 +289,7 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
       <footer className="shrink-0 border-t border-line bg-surface px-6 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[13px] font-semibold text-fg">{n} đã chọn</span>
+          {cap != null && <Badge tone={cap === 0 ? 'danger' : 'neutral'}>Còn {cap} lượt hôm nay</Badge>}{/* wording: BA review */}
           <Select label="Chất lượng" value={quality} onChange={(v) => setQuality(v as Quality)} className="w-[160px]">
             {QUALITIES.map((q) => <option key={q} value={q}>{QUALITY_LABEL[q]}</option>)}
           </Select>

@@ -1,6 +1,6 @@
-import { AlertCircle, Clock, Download, FolderOpen, RotateCw, User, X } from 'lucide-react';
-import { Button, IconButton, PlatformBadge, Select, Thumb } from './ui';
-import { type Card, removeCard, retryCard, setCard } from '../lib/probes';
+import { AlertCircle, Clock, Download, FolderOpen, RotateCw, Server, User, X } from 'lucide-react';
+import { Badge, Button, IconButton, PlatformBadge, Select, Thumb } from './ui';
+import { type Card, removeCard, retryCard, serverCanTry, setCard, switchToServer } from '../lib/probes';
 import { qualityOptions, resolveQuality } from '../lib/quality';
 import { settings, type Quality } from '../lib/settings';
 import { formatBytes, formatDuration } from '../lib/format';
@@ -38,6 +38,10 @@ export function ProbeCard({ card, onAdd }: { card: Card; onAdd: (c: Card) => voi
           <p className="truncate text-[13px] font-medium text-fg select-text">{card.url}</p>
           <p className="mt-0.5 text-[13px] text-danger">{errorMessage(card.errorCode)}</p>
         </div>
+        {serverCanTry(card.url, card.errorCode) && (
+          // wording: BA review
+          <Button size="sm" icon={<Server size={14} />} onClick={() => switchToServer(card.url)}>Tải qua máy chủ VidGrab</Button>
+        )}
         <Button size="sm" icon={<RotateCw size={14} />} onClick={() => retryCard(card.url)}>Thử lại</Button>
         <IconButton label="Bỏ liên kết này" onClick={() => removeCard(card.url)}><X size={16} /></IconButton>
       </article>
@@ -56,6 +60,7 @@ export function ProbeCard({ card, onAdd }: { card: Card; onAdd: (c: Card) => voi
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
           <PlatformBadge platform={r.platform} />
+          {card.serverOnly && <Badge tone="neutral">Qua máy chủ VidGrab</Badge>}{/* wording: BA review */}
           {r.uploader && <span className="inline-flex min-w-0 items-center gap-1"><User size={12} aria-hidden /><span className="truncate">{r.uploader}</span></span>}
           {r.duration != null && <span className="inline-flex items-center gap-1"><Clock size={12} aria-hidden />{formatDuration(r.duration)}</span>}
         </div>

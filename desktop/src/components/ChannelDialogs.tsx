@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { FolderOpen } from 'lucide-react';
 import { Button, Modal, Select, Spinner, Thumb } from './ui';
 import { IntervalSelect, ModeSelect, fmtUploadDate } from './ChannelPicker';
-import { channels, downloadPending, dismissPending, saveChannel } from '../lib/channels';
+import { channels, downloadPending, dismissPending, refusedText, saveChannel } from '../lib/channels';
 import { QUALITY_LABEL } from '../lib/quality';
 import type { Quality } from '../lib/settings';
 import { api } from '../lib/tauri';
@@ -25,8 +25,9 @@ export function ReviewDialog({ channelId, onClose }: { channelId: string; onClos
     setBusy(true);
     try {
       if (kind === 'download') {
-        await downloadPending(channelId, ids);
-        toast('info', `Đã thêm ${ids.length} video vào hàng đợi.`);
+        const r = await downloadPending(channelId, ids);
+        if (r.enqueued) toast('info', `Đã thêm ${r.enqueued} video vào hàng đợi.`);
+        if (r.refused.length) toast('error', refusedText(r.refused.length, r.refused[0].detail)); // refused ones stay in this list
       } else {
         await dismissPending(channelId, ids);
         toast('info', `Đã bỏ qua ${ids.length} video.`);

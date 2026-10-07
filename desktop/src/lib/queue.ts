@@ -3,19 +3,21 @@
 import { createStore } from './store';
 import { api, onDone, onProgress } from './tauri';
 import { settings } from './settings';
-import { errorMessage, toAppError } from './errors';
+import { errorMessage, rememberServerMessage, toAppError } from './errors';
 import { toast } from './ui';
 import { newId } from './format';
 import type { HistoryItem, Stage } from './types';
 import { syncSoon } from './sync';
 import { douyinVideo, isExpired, toHeaderList, type DouyinVideo } from './douyin';
 import { isDouyinUrl } from './urls';
-import { claimForStart, clearGate, quotaGate, refreshQuota, settle } from './quota';
+import { claimForStart, clearGate, quotaGate, refreshQuota, refuseFromServer, settle } from './quota';
 import { gatePaused } from './quota-core';
-import { cookieState, planFor, refreshCookieStatus } from './cookies';
+import { cookieState, refreshCookieStatus, routesFor } from './cookies';
+import { cookieErrorCode, cookiePlatformOf, pickNext, settleThenFallback, type Plan, type Route } from './cookies-core';
 import {
-  cookieErrorCode, cookiePlatformOf, douyinLocalArgs, pickNext, settleThenFallback, shouldFallbackToServer, type Plan, type Route,
-} from './cookies-core';
+  claimRoute, currentStep, isLocalStep, legacyRoute, nextRoute, triedBefore, type FetchLinkOutcome, type RouteId,
+} from './routes-core';
+import { fetchLink } from './fetchlink';
 
 export type QueueState = 'queued' | 'running' | 'paused' | 'completed' | 'failed';
 
@@ -44,10 +46,18 @@ export type QueueItem = {
   errorCode: string | null;
   /** Server claim for the daily allowance (quota.ts); NO_CLAIM = nothing to settle. Persisted, so a resume after a restart does not claim twice. */
   claimId?: string | null;
-  /** Route of the current/last run (PLAN-32D §2). 'server' is sticky once a Douyin job fell back to it. */
+  /** Old route name of the current/last run (0.7.x; pickNext keeps one 'local_cookie' job per platform). */
   route?: Route;
-  /** The one Douyin L1 -> server fallback already happened. */
+  /** 0.7.x: the one Douyin L1 -> server fallback already happened. Unused since 0.8.0 (Douyin is server-only). */
   cookieFallback?: boolean;
+  /** Route step of the current/last run (PLAN-32D §2, routes-core.ts): shown on the card. */
+  step?: RouteId;
+  /** Steps this job already used (each step runs at most once per job). */
+  tried?: RouteId[];
+  /** Quality preset picked by the user ('best' | '1080' | ... | 'audio'): the quality asked from the server on S0. */
+  quality?: string;
+  /** The server's own text for this item's error (channel claim-batch refusal); wins over errorMessage(errorCode). */
+  errorText?: string | null;
   addedAt: string;
 };
 
@@ -84,15 +94,35 @@ export function activeCount(l: QueueItem[]): number {
   return l.filter((i) => i.state === 'queued' || i.state === 'running' || i.state === 'paused').length;
 }
 
-export type NewJob = Pick<QueueItem, 'url' | 'title' | 'thumbnail' | 'platform' | 'uploader' | 'outDir' | 'formatId' | 'audioOnly' | 'formatLabel' | 'estSize'>;
+export type NewJob = Pick<QueueItem, 'url' | 'title' | 'thumbnail' | 'platform' | 'uploader' | 'outDir' | 'formatId' | 'audioOnly' | 'formatLabel' | 'estSize'> & {
+  quality?: string;
+  /** A claim made before enqueueing (channel claim-batch): start() does not claim again. */
+  claimId?: string | null;
+  /** 'S0': skip the local steps (the local analysis already failed and the user chose the server). */
+  startAt?: 'S0';
+};
 
 export function enqueue(job: NewJob): string {
+  const { startAt, claimId, ...rest } = job;
   const item: QueueItem = {
-    ...job, id: newId(), state: 'queued', stage: null, percent: null, downloadedBytes: null, totalBytes: null,
+    ...rest, id: newId(), state: 'queued', stage: null, percent: null, downloadedBytes: null, totalBytes: null,
     speedBps: null, etaSec: null, filePath: null, fileSize: null, errorCode: null, addedAt: new Date().toISOString(),
+    claimId: claimId || null, tried: startAt === 'S0' ? ['L0', 'L1'] : [],
   };
   queue.set((l) => [...l, item]);
   pump();
+  return item.id;
+}
+
+/** A channel video the daily allowance refused (claim-batch): shown as failed with the server's reason, never started. */
+export function enqueueRefused(job: NewJob, detail: string | null): string {
+  const { startAt: _s, claimId: _c, ...rest } = job;
+  const item: QueueItem = {
+    ...rest, id: newId(), state: 'failed', stage: null, percent: null, downloadedBytes: null, totalBytes: null,
+    speedBps: null, etaSec: null, filePath: null, fileSize: null, errorCode: 'api:quota_exceeded_daily', errorText: detail,
+    addedAt: new Date().toISOString(), claimId: null, tried: [],
+  };
+  queue.set((l) => [...l, item]);
   return item.id;
 }
 
@@ -115,17 +145,24 @@ export function pump() {
   }
 }
 
-const SERVER: Plan = { route: 'server', useCookies: false, platform: 'douyin' };
-/** Route for this run: a Douyin job that already fell back stays on the server; otherwise decided now. */
+/** The step this item runs next (or is running): the first step of its plan it has not used yet. */
+function stepOf(item: QueueItem): RouteId | null {
+  return currentStep(routesFor(item.url), item.tried ?? []);
+}
+/** pickNext's view: the old route name of the step this item would take now. */
 function planOf(item: QueueItem): Plan {
-  return item.route === 'server' && isDouyinUrl(item.url) ? SERVER : planFor(item.url);
+  const step = stepOf(item) ?? 'L0';
+  return { route: legacyRoute(step), useCookies: step === 'L1', platform: cookiePlatformOf(item.url) };
 }
 
 // Douyin: the queue item keeps the douyin.com link; the signed CDN link the
 // server resolved it to lives only here (never persisted, never logged).
 const resolved = new Map<string, { v: DouyinVideo; at: number }>();
 const refreshed = new Set<string>(); // jobs that already got their one fresh link after an HTTP 403
-const forget = (id: string) => { resolved.delete(id); refreshed.delete(id); };
+// S0: the server's answer for a job (a resume after a pause reuses it; the server keeps its file 2 h).
+const serverLinks = new Map<string, { v: Extract<FetchLinkOutcome, { kind: 'ok' }>; at: number }>();
+const SERVER_LINK_TTL = 60 * 60_000;
+const forget = (id: string) => { resolved.delete(id); refreshed.delete(id); serverLinks.delete(id); };
 
 async function douyinArgs(item: QueueItem) {
   let r = resolved.get(item.id);
@@ -145,43 +182,68 @@ async function douyinArgs(item: QueueItem) {
   };
 }
 
+const fileIdOf = (item: QueueItem) => item.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 12) || 'video';
+
+/**
+ * S0: POST /fetch-link, then the app downloads the server's file (or direct
+ * link) itself. null = the server refused by the daily allowance (the item is
+ * failed and the queue gated, like a refused claim). Other errors throw.
+ */
+async function serverArgs(item: QueueItem) {
+  let r = serverLinks.get(item.id);
+  if (!r || Date.now() - r.at > SERVER_LINK_TTL) {
+    const out = await fetchLink(item); // counts one download on the server (once per URL a day)
+    if (out.kind === 'quota') {
+      refuseFromServer(out.refusal);
+      refusedByQuota(item.id);
+      return null;
+    }
+    if (out.kind === 'error') {
+      rememberServerMessage(out.code, out.message);
+      throw { code: out.code, message: out.message };
+    }
+    void refreshQuota(); // the server counted it itself (no claim to settle): update the badge now
+    r = { v: out, at: Date.now() };
+    serverLinks.set(item.id, r);
+    patch(item.id, { title: out.title || item.title, thumbnail: item.thumbnail ?? out.thumbnail });
+  }
+  return {
+    url: r.v.url,
+    formatId: undefined, // one file: height selectors would match nothing
+    headers: r.v.headers,
+    fileTitle: r.v.title || item.title, fileId: fileIdOf(item),
+    useCookies: false,
+  };
+}
+
 async function start(item: QueueItem) {
-  const plan = planOf(item);
+  const step = stepOf(item);
+  if (!step) { finishFailed(item.id, item.errorCode ?? 'unknown'); return; } // every step of its plan was used
   // Synchronous, before any await: pump() reads `route` to keep one cookie job per platform.
-  patch(item.id, { state: 'running', pausing: false, stage: 'downloading', errorCode: null, route: plan.route });
+  patch(item.id, { state: 'running', pausing: false, stage: 'downloading', errorCode: null, step, route: legacyRoute(step) });
   try {
     let extra = {};
-    if (plan.route === 'server') {
+    if (step === 'DOUYIN_SERVER' || step === 'S0') {
       if (item.claimId) {
-        // An earlier L1 attempt claimed locally but its cookies are gone now: refund before the server counts.
-        await settle(item.claimId, 'cancelled');
+        // A local claim is still open (e.g. the cookies were removed meanwhile): refund BEFORE the server counts.
+        await settle(item.claimId, 'failed', 'server_fallback');
         patch(item.id, { claimId: null });
       }
-      extra = await douyinArgs(item); // the server already counts this one
+      if (step === 'DOUYIN_SERVER') {
+        extra = await douyinArgs(item); // the server already counts this one
+      } else {
+        const a = await serverArgs(item);
+        if (!a) return;
+        extra = a;
+      }
     } else {
       if (!item.claimId) {
-        const v = await claimForStart(item.url, plan.route); // daily allowance (PLAN-32D §5); resumed items keep their claim
+        const v = await claimForStart(item.url, claimRoute(step)); // daily allowance (PLAN-32D §5); resumed items keep their claim
         if (!v.ok) { refusedByQuota(item.id); return; }
         patch(item.id, { claimId: v.claimId });
         if (!queue.get().some((i) => i.id === item.id)) { void settle(v.claimId, 'cancelled'); return; } // cancelled while claiming
       }
-      if (isDouyinUrl(item.url)) {
-        // Douyin L1 (0.7.2): yt-dlp's Douyin extractor cannot sign Douyin's API
-        // ("Fresh cookies are needed"), so a hidden Douyin page with the user's
-        // cookies resolves the direct link, and yt-dlp downloads that link.
-        let r;
-        try {
-          r = await api.douyinResolveLocal(item.url, settings.get().douyinDebugWindow);
-        } catch (e) {
-          const cur = queue.get().find((i) => i.id === item.id);
-          if (cur && cur.state === 'running') void fallBackToServer(cur, toAppError(e).code);
-          return;
-        }
-        patch(item.id, { title: r.title || item.title, uploader: r.author ?? item.uploader });
-        extra = douyinLocalArgs(r, item);
-      } else if (plan.useCookies) {
-        extra = { useCookies: true };
-      }
+      if (step === 'L1') extra = { useCookies: true };
     }
     if (!queue.get().some((i) => i.id === item.id && i.state === 'running')) return; // cancelled / paused while resolving
     await api.startDownload({ jobId: item.id, url: item.url, outDir: item.outDir, formatId: item.formatId, audioOnly: item.audioOnly, ...extra });
@@ -191,38 +253,29 @@ async function start(item: QueueItem) {
 }
 
 /**
- * Douyin L1 failed: the hidden page gave no link (timeout, verification, no
- * saved cookies) or the CDN refused the link (forbidden). Refund the local
- * claim FIRST (the server route counts on its own), then run the same job once
- * through the server.
+ * A local step failed and the route table has a next step (routes-core
+ * nextRoute). L0 -> L1 keeps the claim (same URL, same day). L0/L1 -> S0
+ * refunds the local claim FIRST and only then queues the server step: the
+ * server counts /fetch-link on its own, an open claim would count twice.
  */
-/** Why the local Douyin route failed, in the toast (debug, owner test 2026-10-07). */
-function douyinLocalReason(code: string): string {
-  // wording: BA review
-  switch (code) {
-    case 'timeout': return 'trang Douyin không trả video kịp';
-    case 'forbidden': return 'Douyin yêu cầu xác minh';
-    case 'not_found': return 'trang không có link video';
-    case 'cookie_required': return 'chưa kết nối Douyin';
-    case 'private_or_login': return 'phiên đăng nhập';
-    default: return `mã lỗi: ${code}`;
-  }
-}
-
-async function fallBackToServer(it: QueueItem, code: string) {
+async function moveOn(it: QueueItem, plan: RouteId[], next: RouteId, code: string) {
   forget(it.id);
-  patch(it.id, { cookieFallback: true, stage: null, speedBps: null, etaSec: null, pausing: false }); // stays 'running' meanwhile
-  void refreshCookieStatus();
+  const tried = triedBefore(plan, it.tried ?? [], next);
+  const reset = { stage: null, speedBps: null, etaSec: null, pausing: false, percent: null, downloadedBytes: null, totalBytes: null } as const;
+  if (next === 'L1') {
+    patch(it.id, { ...reset, tried, step: next, route: legacyRoute(next), state: 'queued', errorCode: null });
+    pump();
+    return;
+  }
+  patch(it.id, reset); // stays 'running' while the refund is sent
   const claimId = it.claimId;
   const moved = await settleThenFallback(
     () => settle(claimId, 'failed', code),
     () => queue.get().some((i) => i.id === it.id && i.state === 'running'),
-    () => patch(it.id, { claimId: null, route: 'server', state: 'queued', errorCode: null }),
+    () => patch(it.id, { claimId: null, tried, step: next, route: legacyRoute(next), state: 'queued', errorCode: null }),
   );
   // wording: BA review
-  if (moved) toast('info', code === 'private_or_login'
-    ? `Phiên Douyin trên máy có thể đã hết hạn. Đang tải lại qua máy chủ VidGrab: ${it.title}`
-    : `Không tải được video Douyin trực tiếp trên máy này (${douyinLocalReason(code)}). Đang tải qua máy chủ VidGrab: ${it.title}`); // wording: BA review
+  if (moved) toast('info', `Không tải được trực tiếp trên máy này. Đang thử qua máy chủ VidGrab: ${it.title}`);
   pump();
 }
 
@@ -276,12 +329,18 @@ export async function initQueue() {
         toast('success', `Đã tải xong: ${it.title}`);
         pump();
         break;
-      case 'failed':
-        if (shouldFallbackToServer(it, e.errorCode ?? 'unknown')) {
-          void fallBackToServer(it, e.errorCode ?? 'unknown');
-          break;
+      case 'failed': {
+        const code = e.errorCode ?? 'unknown';
+        if (isLocalStep(it.step)) {
+          const plan = routesFor(it.url);
+          const next = nextRoute(plan, it.tried ?? [], it.step, code);
+          if (next) {
+            if (e.cookiesUsed) void refreshCookieStatus(); // Rust may have flagged the blob
+            void moveOn(it, plan, next, code);
+            break;
+          }
         }
-        if (e.errorCode === 'forbidden' && isDouyinUrl(it.url) && it.route === 'server' && !refreshed.has(e.jobId)) {
+        if (code === 'forbidden' && isDouyinUrl(it.url) && it.route === 'server' && !refreshed.has(e.jobId)) {
           // The signed link expired or was refused: ask the server for a new one, once.
           refreshed.add(e.jobId);
           resolved.delete(e.jobId);
@@ -290,10 +349,11 @@ export async function initQueue() {
           break;
         }
         if (e.cookiesUsed) void refreshCookieStatus(); // Rust may have flagged the blob
-        finishFailed(e.jobId, cookieErrorCode(e.errorCode ?? 'unknown', {
+        finishFailed(e.jobId, cookieErrorCode(code, {
           cookiesUsed: !!e.cookiesUsed, platform: cookiePlatformOf(it.url), enabled: cookieState.get().enabled ?? [],
         }));
         break;
+      }
       case 'paused':
         patch(e.jobId, { state: 'paused', pausing: false, speedBps: null, etaSec: null });
         pump();
@@ -329,7 +389,7 @@ export function resume(id: string) {
 export function retry(id: string) {
   forget(id);
   clearGate();
-  patch(id, { state: 'queued', claimId: null, route: undefined, cookieFallback: false, errorCode: null, percent: null, downloadedBytes: null, speedBps: null, etaSec: null });
+  patch(id, { state: 'queued', claimId: null, route: undefined, step: undefined, tried: [], cookieFallback: false, errorCode: null, errorText: null, percent: null, downloadedBytes: null, speedBps: null, etaSec: null });
   pump();
 }
 

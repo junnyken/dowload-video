@@ -37,6 +37,10 @@ const MESSAGES: Record<string, string> = {
   // Platform accounts (PLAN-32D §3). wording: BA review
   cookie_required: 'Video này cần đăng nhập. Hãy kết nối tài khoản của nền tảng này trong Cài đặt → Tài khoản nền tảng rồi tải lại.',
   cookie_expired: 'Phiên đăng nhập đã lưu có thể đã hết hạn. Hãy kết nối lại tài khoản trong Cài đặt → Tài khoản nền tảng rồi tải lại.',
+  // Through the VidGrab server (/fetch-link, PLAN-32D S0). The server's own text wins when it sent one. wording: BA review
+  drm: 'Video được bảo vệ bản quyền (DRM) nên không tải được.',
+  server_fetch_failed: 'Máy chủ VidGrab cũng không tải được video này. Hãy thử lại sau.',
+  server_busy: 'Máy chủ VidGrab đang bận. Hãy thử lại sau ít phút.',
   login_link_invalid: 'Phiên đăng nhập từ trình duyệt không dùng được hoặc đã hết hạn. Hãy bấm “Đăng nhập qua trình duyệt” lần nữa.',
 };
 

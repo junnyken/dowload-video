@@ -11,9 +11,10 @@ import { rememberServerMessage } from './errors';
 import { toast } from './ui';
 import { deviceInfo, appVersion } from './device';
 import {
-  DEFAULT_OFFLINE_GRACE, NO_CLAIM, decideClaim, emptyLedger, flushLedger, gatePaused, graceLeft, mergeCounters, normalizeLedger,
-  parseSnapshot, tryGrace, utcDay, type Gate, type Ledger, type QuotaSnapshot, type Refusal,
+  DEFAULT_OFFLINE_GRACE, NO_CLAIM, decideBatch, decideClaim, emptyLedger, flushLedger, gatePaused, graceLeft, mergeCounters, normalizeLedger,
+  parseSnapshot, tryGrace, utcDay, type BatchDecision, type Gate, type Ledger, type QuotaSnapshot, type Refusal,
 } from './quota-core';
+import type { ServerRefusal } from './routes-core';
 
 export { NO_CLAIM };
 
@@ -147,6 +148,37 @@ export async function claimForStart(url: string, route: 'local' | 'local_cookie'
   // wording: BA review
   toast('error', `Không kết nối được máy chủ và đã dùng hết ${grace} lượt tải ngoại tuyến của hôm nay. Hãy kết nối Internet rồi thử lại.`);
   return { ok: false };
+}
+
+/**
+ * POST /client/quota/claim-batch for videos picked in a channel (PLAN-32D §6).
+ * One answer for the whole list; refused items are NOT a gate (the allowed ones
+ * already hold their claims and must run).
+ */
+export async function claimBatch(urls: string[], route: 'local' | 'local_cookie'): Promise<BatchDecision> {
+  if (!urls.length) return { kind: 'ok', items: [], data: {} };
+  // The server takes at most 100 items per call.
+  const items: Extract<BatchDecision, { kind: 'ok' }>['items'] = [];
+  for (let i = 0; i < urls.length; i += 100) {
+    const part = urls.slice(i, i + 100);
+    const r = await call('/api/v1/client/quota/claim-batch', 'POST', { items: part.map((url) => ({ url })), route });
+    const d = decideBatch(r.status, r.data, part);
+    if (d.kind === 'disabled') { setDisabled(); return d; }
+    if (d.kind === 'offline') {
+      // claimId '' = not claimed: the rest is claimed one by one when each item starts (claimForStart, with the offline grace).
+      items.push(...urls.slice(i).map((url) => ({ url, allowed: true, claimId: '', detail: null })));
+      break;
+    }
+    const s = mergeCounters(quota.get().snap, d.data);
+    if (s) setSnap(s);
+    items.push(...d.items);
+  }
+  return { kind: 'ok', items, data: {} };
+}
+
+/** POST /fetch-link refused the download (daily allowance): same gate and toast as a refused claim. */
+export function refuseFromServer(r: ServerRefusal) {
+  refuse({ detail: r.detail, upsell: r.upsell, reason: 'daily_limit', resetTimeVn: r.resetTimeVn, limit: r.limit, usedToday: r.usedToday });
 }
 
 /** Offline downloads still allowed today (for the UI). */
