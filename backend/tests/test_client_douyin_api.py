@@ -75,6 +75,42 @@ class TestChannel:
         r = _channel()
         assert r.status_code == 503 and r.json()["error_code"] == "platform_disabled"
 
+    # Task #6125: a guest app machine's scan cap comes from ITS allowance
+    # (dev:<32 hex>), while provider budgets stay on the IP.
+    def test_guest_machine_cap_is_per_machine(self, on, rc, monkeypatch):
+        from app.core import quotas
+        from app.services.china_platforms import budget_guard
+        dev_a, dev_b = "a" * 64, "b" * 64
+        ip = quotas.QuotaRequester(quotas.REQ_ANON, "testclient")
+        for i in range(5):  # the IP's web bucket is full
+            quotas.record_platform_download(ip, "tiktok", f"https://www.tiktok.com/@a/video/{i}")
+        machine_a = quotas.QuotaRequester(quotas.REQ_DEVICE, dev_a[:32])
+        for i in range(3):
+            quotas.record_platform_download(machine_a, "tiktok", f"https://www.tiktok.com/@b/video/{i}")
+        keys = []
+        real_reserve = budget_guard.reserve
+        monkeypatch.setattr(budget_guard, "reserve",
+                            lambda platform, key, cand, *a, **k: keys.append(key) or real_reserve(platform, key, cand, *a, **k))
+
+        r = client.post("/api/v1/client/douyin/channel", json={"url": PROFILE, "limit": 20},
+                        headers={"X-VG-Device": dev_a})
+        assert r.status_code == 200 and r.json()["cap"] == 2
+        r = client.post("/api/v1/client/douyin/channel", json={"url": PROFILE, "limit": 20},
+                        headers={"X-VG-Device": dev_b})
+        assert r.status_code == 200 and r.json()["cap"] == 5
+        assert keys and all(k.startswith("ip:") for k in keys)
+
+    def test_guest_machine_out_of_downloads_cannot_scan(self, on, rc):
+        from app.core import quotas
+        dev = "c" * 64
+        m = quotas.QuotaRequester(quotas.REQ_DEVICE, dev[:32])
+        for i in range(5):
+            quotas.record_platform_download(m, "tiktok", f"https://www.tiktok.com/@c/video/{i}")
+        r = client.post("/api/v1/client/douyin/channel", json={"url": PROFILE, "limit": 20},
+                        headers={"X-VG-Device": dev})
+        assert r.status_code == 422 and r.json()["error_code"] == "quota_exceeded"
+        assert on.starts() == []
+
 
 class TestVideo:
 

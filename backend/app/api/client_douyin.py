@@ -107,8 +107,13 @@ async def douyin_channel(payload: ChannelIn, request: Request, user=Depends(get_
     # channel is scanned) — list_douyin_profile sorts them out.
 
     token, ctx = _bind(request, user)
+    # Task #6125: a guest's scan cap is what THIS machine can still download
+    # (dev:<32 hex>, the bucket its claims count against), not its IP's web
+    # bucket. Provider budgets stay on the IP.
+    req = _requester(request, user)
+    cap_key = req.key if req.kind == "device" else None
     try:
-        listing = await channel_listing.list_douyin_profile(url, payload.limit, ctx)
+        listing = await channel_listing.list_douyin_profile(url, payload.limit, ctx, cap_key=cap_key)
     except channel_listing.ChannelListingError as exc:
         return _err(_STATUS.get(exc.code, 503), str(exc), exc.code)
     finally:

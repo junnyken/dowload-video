@@ -281,18 +281,24 @@ async def profile_url_from_video(url: str, ctx: RequestContext) -> str:
 
 
 async def list_douyin_profile(profile_url: str, max_videos: int, ctx: Optional[RequestContext] = None,
-                              *, provider_factory=None) -> ChannelListing:
+                              *, provider_factory=None, cap_key: Optional[str] = None) -> ChannelListing:
     """List up to min(max_videos, listing_cap) newest videos of a Douyin
     profile — or of the author of a Douyin video link. Raises
-    ChannelListingError (str = user-facing text)."""
+    ChannelListingError (str = user-facing text).
+
+    cap_key (task #6125): the allowance the cap is read from when it differs
+    from ctx.requester_key — the app's guest machine (dev:<32 hex>). Only the
+    cap uses it; budgets stay on ctx.requester_key (the IP), so a made-up
+    machine id cannot mint provider budget."""
     ctx = ctx or current_context()
     if not route_open(ctx):
         raise ChannelListingError(MSG_NOT_AVAILABLE, "platform_disabled")
 
-    cap = listing_cap(ctx)
+    cap_ctx = ctx.with_(requester_key=cap_key) if cap_key else ctx
+    cap = listing_cap(cap_ctx)
     n = max(0, min(int(max_videos or 0), cap))
     if n <= 0:
-        raise ChannelListingError(no_allowance_message(ctx), "quota_exceeded")
+        raise ChannelListingError(no_allowance_message(cap_ctx), "quota_exceeded")
 
     sec_uid = sec_uid_of(profile_url)
     if not sec_uid:
