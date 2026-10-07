@@ -302,6 +302,25 @@ ERROR_META: dict[str, dict] = {
         "suggested_action": "Cần tài khoản Bilibili Premium để tải nội dung này.",
     },
 
+    # ── China access layer, Kuaishou / Xiaohongshu (task #6055) ──
+    # user_message is a template; the text actually shown is built in
+    # app.services.china_platforms.integration (platform name, limits).
+    "china_daily_limit": {
+        "user_message": "Bạn đã dùng hết lượt tải hôm nay.",
+        "retryable": False,
+        "suggested_action": "Đăng nhập để có thêm lượt, hoặc đợi lượt mới được cộng lại.",
+    },
+    "china_link_unavailable": {
+        "user_message": "Link này không còn video hoặc đã hết hạn.",
+        "retryable": False,
+        "suggested_action": "Mở app của nền tảng, bấm Chia sẻ → Sao chép liên kết rồi dán lại.",
+    },
+    "china_source_unavailable": {
+        "user_message": "Nền tảng nguồn tạm thời không phản hồi. Thử lại sau vài phút.",
+        "retryable": True,
+        "suggested_action": "Thử lại sau vài phút.",
+    },
+
     # ── Kuaishou (OFF by default, UNVERIFIED — see docs/KUAISHOU.md) ──
     # user_message mirrors app.services.kuaishou_extractor.ERROR_MESSAGES.
     "kuaishou_geo_blocked": {

@@ -1684,14 +1684,6 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             if _china_resolve is not None:
                 result = _china_resolve(douyin_input, original_input_url, quality, user_cookies_file)
 
-            if result is None and os.getenv("APIFY_TOKEN", ""):
-                try:
-                    from app.services.apify_service import extract_douyin_apify_sync
-                    result = extract_douyin_apify_sync(douyin_input, quality)
-                    print(f"[Downloader] Douyin via Apify: {result.get('title','')[:60]}")
-                except Exception as apify_err:
-                    print(f"[Downloader] Apify Douyin failed, falling back: {apify_err}")
-                    result = None
             if result is None:
                 # Douyin requires signature cookies — forward the cookies the user
                 # supplied via "Dùng cookie của tôi" instead of dropping them.
@@ -3621,17 +3613,22 @@ def _scrape_douyin_channel(channel_url: str, max_videos: int = 20) -> Dict[str, 
     sec_uid = sec_uid_match.group(1)
     canonical_url = f"https://www.douyin.com/user/{sec_uid}"
 
-    # ── Method 0: Apify cloud scraper (best reliability, needs APIFY_TOKEN) ──
-    if os.getenv("APIFY_TOKEN", ""):
-        print(f"[Douyin Channel] Trying Apify for {canonical_url}")
-        try:
-            from app.services.apify_service import scrape_douyin_user_apify_sync
-            result = scrape_douyin_user_apify_sync(channel_url, max_videos=max_videos)
-            if result and result.get("total_queued", 0) > 0:
-                print(f"[Douyin Channel] Apify returned {result['total_queued']} videos")
-                return result
-        except Exception as apify_err:
-            print(f"[Douyin Channel] Apify failed, falling back: {apify_err}")
+    # ── Method 0: managed Apify route of the China access layer (task #6055) ──
+    # Token pool from admin, budgeted, capped at the requester's remaining
+    # downloads today; each listed video is cached so its job is not billed
+    # again. None = route not open → the free scrapers below, as before.
+    try:
+        from app.services.china_platforms.integration import (
+            list_douyin_channel_via_access_layer as _china_list_channel,
+        )
+    except Exception as _china_imp_err:
+        print(f"[Douyin Channel] china access layer unavailable: {_china_imp_err}")
+        _china_list_channel = None
+    if _china_list_channel is not None:
+        listed = _china_list_channel(canonical_url, max_videos)
+        if listed is not None:
+            print(f"[Douyin Channel] access layer listed {listed['total_queued']} videos")
+            return listed
 
     # ── Method 1: ScraperAPI with JS rendering ──────────────
     from app.core.scraperapi_pool import get_active_key as _sa_key
@@ -3982,7 +3979,15 @@ def scrape_channel_entries_sync(channel_url: str, max_videos: int = 100, min_vie
     try:
         # Douyin channels need longer timeout due to ScraperAPI JS rendering
         is_douyin = "douyin.com" in channel_url.lower()
-        timeout = 90 if is_douyin else 120  # YouTube pagination needs more time for large channels
+        timeout = 120  # YouTube pagination needs more time for large channels
+        if is_douyin:
+            # One managed Apify profile run (task #6055) may take up to its own
+            # timeout; keep room for the reservation and the dataset read.
+            try:
+                from app.services.china_platforms.settings import douyin_channel_timeout_sec
+                timeout = max(90, douyin_channel_timeout_sec() + 30)
+            except Exception:
+                timeout = 90
         return _run_with_timeout(
             _scrape_channel_entries_impl,
             args=(channel_url, max_videos, min_views),

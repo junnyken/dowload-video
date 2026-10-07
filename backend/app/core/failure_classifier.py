@@ -76,6 +76,8 @@ _PERMANENT_SIGNALS = [
     "geo_restriction", "not available in your region", "this content isn't available",
     "this playlist does not exist", "account has been terminated",
     "content may not be available", "no media", "no formats", "webpage not found",
+    # app.services.china_platforms.integration — dead / expired share link
+    "không còn video hoặc đã hết hạn",
     "unable to extract", "404", "410",
 ]
 
@@ -85,6 +87,9 @@ _USER_ACTION_SIGNALS = [
     "purchase required", "this video is only available to", "age-restricted",
     "confirm your age", "age verification", "not available to anonymous",
     "content is age-restricted",
+    # app.services.china_platforms (integration, channel_listing) — the
+    # requester's daily allowance is used up; a retry today cannot succeed.
+    "đã dùng hết lượt tải",
 ]
 
 _RETRYABLE_SIGNALS = [

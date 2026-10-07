@@ -111,6 +111,52 @@ def _to_legacy_dict(result, original_url: str, quality: str) -> Dict[str, Any]:
     }
 
 
+class ChinaUserError(ValueError):
+    """User-facing failure of the access layer for Kuaishou / Xiaohongshu.
+    str() is the Vietnamese text; error_code drives the HTTP status
+    (app.core.extraction_errors) on /fetch-link."""
+
+    def __init__(self, message: str, error_code: str):
+        super().__init__(message)
+        self.error_code = error_code
+
+
+# Failure categories that mean "this link has no video we can get" (dead or
+# expired share link, deleted video, a link that is not a video).
+_LINK_DEAD = ("parse_failed", "unsupported_url")
+
+
+def _hit_daily_limit(exc: ChinaAccessFailure) -> bool:
+    """budget_exceeded at the per-person level (router detail "user_quota: …"),
+    not a platform / vendor spending ceiling."""
+    return any(f.category == "budget_exceeded" and (f.internal_detail or "").startswith("user_quota")
+               for f in exc.failures)
+
+
+def _hook_platform_error(platform: str, exc: ChinaAccessFailure, ctx) -> ChinaUserError:
+    """Owner 2026-10-07 (task #6055): one message per cause instead of
+    "Nền tảng nguồn tạm thời không phản hồi." for everything."""
+    name = _DISPLAY.get(platform, platform)
+    if _hit_daily_limit(exc):
+        from app.core import quotas  # noqa: PLC0415
+        if (ctx.requester_key or "").startswith("user:"):
+            msg = (f"Bạn đã dùng hết lượt tải {name} hôm nay. "
+                   f"Lượt mới được cộng lại lúc {quotas.reset_time_vn_text()} (giờ Việt Nam).")
+        else:
+            msg = (f"Bạn đã dùng hết lượt tải {name} của khách hôm nay. "
+                   f"Đăng nhập để có {quotas.platform_limit_user()} lượt/ngày.")
+        return ChinaUserError(msg, "china_daily_limit")
+    if exc.category in _LINK_DEAD:
+        return ChinaUserError(
+            f"Link {name} này không còn video hoặc đã hết hạn. "
+            f"Hãy mở app {name}, bấm Chia sẻ → Sao chép liên kết rồi dán lại.",
+            "china_link_unavailable")
+    if exc.category == "private_or_login_required":
+        return ChinaUserError(exc.user_message, "private_or_login_required")
+    return ChinaUserError("Nền tảng nguồn tạm thời không phản hồi. Thử lại sau vài phút.",
+                          "china_source_unavailable")
+
+
 def _user_message(exc: ChinaAccessFailure) -> str:
     """Keep the existing Douyin wording whenever the chain ended on the cookie
     requirement: failure_classifier matches it (USER_ACTION, no retry) and the
@@ -165,6 +211,8 @@ def _resolve_via_access_layer(platform: str, url: str, original_url: str, qualit
     try:
         result = asyncio.run(ProviderRouter().resolve(req, ctx))
     except ChinaAccessFailure as exc:
+        if platform in DOWNLOAD_HOOK_PLATFORMS:
+            raise _hook_platform_error(platform, exc, ctx) from None
         raise ValueError(_user_message(exc)) from None
     except AlreadyProcessing:
         # Wording pending BA review.
@@ -186,6 +234,21 @@ def resolve_douyin_via_access_layer(douyin_input: str, original_url: str, qualit
     if not _layer_active("douyin"):
         return None
     return _resolve_via_access_layer("douyin", douyin_input, original_url, quality, user_cookies_file)
+
+
+def list_douyin_channel_via_access_layer(channel_url: str, max_videos: int) -> Optional[Dict[str, Any]]:
+    """Douyin profile → the downloader's channel-scrape shape (task #6055).
+    None when the managed channel route is not open for the current requester
+    (the caller keeps its legacy scrapers). Otherwise one budgeted Apify run,
+    capped at what the requester can still download today; a refusal or
+    failure raises ChannelListingError (a ValueError, user-safe text) and the
+    legacy scrapers are NOT tried — their per-video jobs would bypass the cap."""
+    from app.services.china_platforms import channel_listing  # noqa: PLC0415
+    ctx = current_context()
+    if not channel_listing.route_open(ctx):
+        return None
+    listing = asyncio.run(channel_listing.list_douyin_profile(channel_url, max_videos, ctx))
+    return listing.to_bulk_result()
 
 
 def resolve_platform_via_access_layer(platform: str, url: str, original_url: str, quality: str,

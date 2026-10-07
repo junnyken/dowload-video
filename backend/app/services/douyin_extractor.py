@@ -137,8 +137,10 @@ DOUYIN_COOKIE_REQUIRED_MSG = (
 def douyin_server_access_available() -> bool:
     """Can the SERVER (without a user's own cookie) plausibly fetch Douyin?
 
-    True when Apify is configured (it needs no cookie), the shared pool holds a
-    cookie the extractor would pick, or DOUYIN_COOKIES_B64 is set. Read-only.
+    True when the shared pool holds a cookie the extractor would pick, or
+    DOUYIN_COOKIES_B64 is set. Read-only. (The legacy APIFY_TOKEN env var is
+    no longer read — task #6055; Apify tokens live in the admin pool and count
+    through the managed-route check below.)
     Fails OPEN (True) when Redis cannot be read: unknown is not "no cookie",
     and the per-job classifier still stops retries if the cookie is missing.
 
@@ -152,8 +154,6 @@ def douyin_server_access_available() -> bool:
             return True
     except Exception as e:
         _safe_print(f"[DouyinExtractor] china access check unavailable: {type(e).__name__}")
-    if os.getenv("APIFY_TOKEN", "").strip():
-        return True
     if os.getenv("DOUYIN_COOKIES_B64", "").strip():
         return True
     try:

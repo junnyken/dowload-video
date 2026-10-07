@@ -255,6 +255,28 @@ def apify_douyin_est_cost_usd() -> float:
     return max(0.0, _float("CHINA_ACCESS_APIFY_DOUYIN_EST_COST_USD", 0.0071))
 
 
+def douyin_channel_enabled() -> bool:
+    """Whole-channel Douyin listing through the managed route (task #6055).
+    On by default; the Douyin flags, managed mode and kill switches still apply."""
+    return _bool("CHINA_ACCESS_DOUYIN_CHANNEL_ENABLED", True)
+
+
+def douyin_channel_admin_max() -> int:
+    """Videos per scan for admin / unlimited tiers (owner 2026-10-07: 100).
+    Everyone else is capped at what they can still download today."""
+    return min(500, max(1, _int("CHINA_ACCESS_DOUYIN_CHANNEL_ADMIN_MAX", 100)))
+
+
+def douyin_channel_timeout_sec() -> int:
+    """One profile run lists up to 100 videos — longer than a single video."""
+    return min(280, max(30, _int("CHINA_ACCESS_DOUYIN_CHANNEL_TIMEOUT_SEC", 150)))
+
+
+def douyin_channel_listing_cache_sec() -> int:
+    """How long a scanned list is reused for the same profile (no new run)."""
+    return max(0, _int("CHINA_ACCESS_DOUYIN_CHANNEL_LISTING_CACHE_SEC", 1500))
+
+
 def apify_kuaishou_actor_id() -> str:
     return _str("CHINA_ACCESS_APIFY_KUAISHOU_ACTOR_ID", "natanielsantos~kuaishou-scraper")
 

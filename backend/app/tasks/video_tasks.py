@@ -783,6 +783,24 @@ def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: s
 
     supabase = get_supabase_client()
 
+    # The China access layer needs the requester for the Douyin channel scan
+    # (task #6055: list at most what they can still download today, budget
+    # per person). Bound for the whole task; scrape_channel_entries_sync
+    # copies the context into its worker thread.
+    _ch_req = QuotaRequester.from_key(_requester) or (
+        QuotaRequester(REQ_USER, str(user_id)) if user_id else None)
+    _china_token = _bind_china_worker_context(_ch_req)
+    try:
+        _scrape_channel_body(supabase, channel_url, batch_id, channel_job_id, max_videos, min_views,
+                             user_id, quality, remove_watermark, download_subs, _requester, platform,
+                             WAVE_SIZE, WAVE_DELAY_SECONDS, _wave_mode)
+    finally:
+        _reset_china_worker_context(_china_token)
+
+
+def _scrape_channel_body(supabase, channel_url, batch_id, channel_job_id, max_videos, min_views,
+                         user_id, quality, remove_watermark, download_subs, _requester, platform,
+                         WAVE_SIZE, WAVE_DELAY_SECONDS, _wave_mode):
     # Douyin with no server-side cookie (and no Apify): every video job would
     # fail with the cookie message, so do not create them. 2026-10-05: a
     # channel/bulk run created ~175 such jobs in one second, 0 succeeded.
@@ -928,10 +946,19 @@ def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: s
 
     except Exception as e:
         error_msg = str(e)[:500]
+        try:
+            from app.services.china_platforms.channel_listing import ChannelListingError
+            _user_facing = isinstance(e, ChannelListingError)
+        except Exception:
+            _user_facing = False
         supabase.table("download_jobs").update({
             "status": "failed",
-            "error_message": f"Channel scrape failed: {error_msg}",
+            # A Douyin channel refusal is already a Vietnamese sentence for
+            # the user (quota, budget, empty channel) — no English prefix.
+            "error_message": error_msg if _user_facing else f"Channel scrape failed: {error_msg}",
         }).eq("id", channel_job_id).execute()
+        if _user_facing:
+            return
 
         # ── Telegram: Notify channel scrape failure ──────
         try:

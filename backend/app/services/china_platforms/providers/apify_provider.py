@@ -59,9 +59,12 @@ class ApifyProvider(ManagedActorProvider):
 
     def __init__(self, spec: ActorSpec, *, token: Optional[str] = None,
                  transport: Optional[httpx.AsyncBaseTransport] = None,
-                 base_url: str = APIFY_BASE, clock=time.monotonic):
+                 base_url: str = APIFY_BASE, clock=time.monotonic, max_items: int = 1):
         super().__init__(spec)
         self._explicit_token = token
+        # 1 for a single video; a profile listing (channel_listing.py) asks
+        # for up to N items in the SAME single run.
+        self._max_items = max(1, int(max_items))
         self._transport = transport
         self._base = base_url.rstrip("/")
         self._clock = clock
@@ -124,7 +127,7 @@ class ApifyProvider(ManagedActorProvider):
                     f"{self._base}/acts/{self.spec.actor_id}/runs",
                     params={
                         "waitForFinish": min(_MAX_WAIT, remaining()),
-                        "maxItems": 1,
+                        "maxItems": self._max_items,
                         "maxTotalChargeUsd": f"{self.spec.max_charge_usd:.4f}",
                         "timeout": self.spec.timeout_sec,
                     },
@@ -211,7 +214,7 @@ class ApifyProvider(ManagedActorProvider):
             try:
                 r3 = await client.get(
                     f"{self._base}/datasets/{dataset_id}/items",
-                    params={"clean": "true", "limit": 1, "format": "json"},
+                    params={"clean": "true", "limit": self._max_items, "format": "json"},
                 )
             except httpx.HTTPError as exc:
                 raise self._fail("provider_unavailable", f"apify dataset: {type(exc).__name__}")

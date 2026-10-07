@@ -78,7 +78,9 @@ def legacy_douyin(monkeypatch):
         return {"title": "legacy-apify", "direct_mp4_url": "", "provider": "apify"}
 
     monkeypatch.setattr(downloader, "extract_douyin_video_sync", native)
-    monkeypatch.setattr("app.services.apify_service.extract_douyin_apify_sync", apify)
+    # The legacy Apify function was removed (task #6055); planted here so a
+    # regression that re-adds a call to it is caught by calls["apify"].
+    monkeypatch.setattr("app.services.apify_service.extract_douyin_apify_sync", apify, raising=False)
     return calls
 
 
@@ -93,12 +95,12 @@ class TestFlagsOffUnchanged:
         assert legacy_douyin["native"] == [(DY_URL, "video", "/tmp/ck.txt")]
         assert legacy_douyin["apify"] == []
 
-    def test_legacy_apify_branch_still_runs_when_apify_token_set(self, clean_env, rc, layer_spy, legacy_douyin):
-        # Documents the trap in docs/china-access/06: APIFY_TOKEN alone turns
-        # on the legacy, unbudgeted path — behaviour preserved, not endorsed.
+    def test_legacy_apify_token_env_var_is_ignored(self, clean_env, rc, layer_spy, legacy_douyin):
+        # Task #6055 removed the trap documented in docs/china-access/06:
+        # APIFY_TOKEN alone used to switch on an unbudgeted Apify path.
         clean_env.setenv("APIFY_TOKEN", "legacy-token-value")
         out = downloader._extract_video_info_impl(DY_URL, "video")
-        assert out["title"] == "legacy-apify" and legacy_douyin["apify"] == [(DY_URL, "video")]
+        assert out["title"] == "legacy" and legacy_douyin["apify"] == []
 
     def test_extract_douyin_video_default_keeps_scraperapi(self, monkeypatch):
         seen = []

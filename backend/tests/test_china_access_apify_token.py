@@ -110,12 +110,11 @@ class TestPrecedence:
             asyncio.run(prov.resolve(ChinaResolveRequest(url=DY_URL), PUBLIC_CTX))
         assert sent == [f"Bearer {ADMIN_TOK}"]
 
-    def test_legacy_apify_token_untouched(self, clean_env, rc):
+    def test_admin_token_never_becomes_the_legacy_env_var(self, clean_env, rc):
         import app.services.apify_service as legacy
-        before = legacy.APIFY_TOKEN
         secret_store.store(ADMIN_TOK, {"account": {}}, now_iso="t", ip=None)
-        assert os.getenv("APIFY_TOKEN") is None and legacy.APIFY_TOKEN == before
-        # the legacy gates (downloader.py:1579, douyin_extractor.py:155) read only the env var
+        assert os.getenv("APIFY_TOKEN") is None
+        assert not hasattr(legacy, "APIFY_TOKEN")      # legacy path removed, task #6055
         assert rc.keys("*APIFY_TOKEN*") == [] and rc.keys("apify*") == []
 
     def test_admin_token_is_redacted_everywhere(self, clean_env, rc):

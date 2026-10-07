@@ -82,6 +82,12 @@ _UPSTREAM = ("http error 5", "service unavailable", "bad gateway", "connection r
 # survives paths that keep only the string (Celery). Checked before any
 # keyword matching: these extractors already know what went wrong.
 _EXTRACTOR_CODE_STATUS: dict[str, int] = {
+    # China access layer (Kuaishou / Xiaohongshu, task #6055). 422 not 429 for
+    # the daily limit: the web answers any 429 with "too many requests".
+    "china_daily_limit":              422,
+    "china_link_unavailable":         404,
+    "china_source_unavailable":       503,
+    "private_or_login_required":      422,
     # Kuaishou (app.services.kuaishou_extractor) — our server cannot reach the
     # site / is challenged: server-side, 5xx, never the user's link.
     "kuaishou_geo_blocked":           503,
