@@ -246,6 +246,9 @@ Rollback: tắt `CLIENT_QUOTA_ENABLED` (app về hành vi cũ trong ≤ 1 lượ
 
 ### 9.2 Câu hỏi mở cho chủ sản phẩm
 
+> **Đã chốt 07-10-2026 (chủ sản phẩm):** 1. Có offline grace 3 lượt/ngày · 2. Đồng ý khách theo máy + trần IP ×3 · 3. Mã máy KHÔNG gộp tên PC · 4. Hoàn lượt khi lỗi, tối đa 10/ngày · 5. Đồng ý shadow 7 ngày rồi ép `DESKTOP_MIN_VERSION=0.6.0` · 6. Kuaishou/Xiaohongshu giữ đường máy chủ (Apify) · 7. "OK cho tất cả": dùng cookie cho mọi nền tảng đọc được bằng yt-dlp + cookie — bật lần lượt qua `CLIENT_COOKIES_PLATFORMS`, Douyin trước, sau đó Instagram, Facebook, X, YouTube, Bilibili, Threads, Reddit, Pinterest… · 8. Giới hạn số máy cho gói trả phí: để sau · 9. Firefox / cookies.txt: đợt P3 · 10. BA duyệt câu chữ trước khi code UI.
+
+
 1. **Offline grace** 3 lượt/ngày hay 0 (chặt hơn, nhưng mất mạng chốc lát là không tải được)?
 2. **Khách theo máy + trần IP ×3**: chấp nhận văn phòng chung NAT có thể bị chạm trần 15/ngày?
 3. **Mã máy có gộp tên PC như VoxDub không?** Đề xuất KHÔNG (đổi tên máy không đổi mã).
