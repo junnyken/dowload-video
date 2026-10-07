@@ -28,6 +28,7 @@ import ApiDocsPage from './pages/ApiDocsPage';
 import ApiKeysPage from './pages/ApiKeysPage';
 import LinkBotPage from './pages/LinkBotPage';
 import InstallPage from './pages/InstallPage';
+import DownloadPage from './pages/DownloadPage';
 import PlatformsPage from './pages/PlatformsPage';
 // PricingPage is not imported: the route that reached it renders nothing and
 // was removed from PATH_MAP below. The file is kept — restoring the page means
@@ -73,6 +74,7 @@ const PATH_MAP = {
   '/api-keys':            'api-keys',
   '/link-bot':            'link-bot',
   '/install':             'install',
+  '/download':            'download',
   '/platforms':           'platforms',
   '/share-target':        'landing',
   // '/pricing' removed from the map on purpose. The view it pointed at
@@ -500,6 +502,9 @@ function AppInner() {
 
         {view === 'install' && (
           <InstallPage />
+        )}
+        {view === 'download' && (
+          <DownloadPage />
         )}
         {view === 'platforms' && (
           <PlatformsPage />
