@@ -231,4 +231,15 @@ async def get_client_version(request: Request):
         "minSupported": (env("DESKTOP_MIN_VERSION") or "0.1.0").strip(),
         "notes": env("DESKTOP_RELEASE_NOTES") or "",
         "downloadUrl": env("DESKTOP_DOWNLOAD_URL") or "",
+        # Task #6087: the app reads its quota mode here without an extra call.
+        "features": _features(),
+    }
+
+
+def _features() -> Dict[str, Any]:
+    from app.api import client_quota  # noqa: PLC0415
+    return {
+        "clientQuota": client_quota.quota_enabled(),
+        "clientQuotaMode": client_quota.quota_mode(),
+        "offlineGrace": client_quota.offline_grace(),
     }

@@ -490,6 +490,9 @@ app.include_router(transcript_asr_api.router, prefix="/api/v1/transcript-asr", t
 # VidGrab Desktop C1 — history sync + version (behind CLIENT_API_ENABLED)
 from app.api import client_api as client_api_mod
 app.include_router(client_api_mod.router, prefix="/api/v1", tags=["Desktop Client"])
+# Task #6087 — Windows app downloads count toward the daily allowance (PLAN-32D)
+from app.api import client_quota as client_quota_mod
+app.include_router(client_quota_mod.router, prefix="/api/v1", tags=["Desktop Client"])
 # Task #6055 — Douyin channel listing + direct video URL for the Windows app
 from app.api import client_douyin as client_douyin_mod
 app.include_router(client_douyin_mod.router, prefix="/api/v1", tags=["Desktop Client"])

@@ -194,14 +194,18 @@ def test_other_storage_error_is_500_not_leaky(db, as_user):
 
 
 def test_version_defaults_and_env(monkeypatch):
-    for k in ("DESKTOP_LATEST_VERSION", "DESKTOP_MIN_VERSION", "DESKTOP_DOWNLOAD_URL", "DESKTOP_RELEASE_NOTES"):
+    for k in ("DESKTOP_LATEST_VERSION", "DESKTOP_MIN_VERSION", "DESKTOP_DOWNLOAD_URL", "DESKTOP_RELEASE_NOTES",
+              "CLIENT_QUOTA_ENABLED", "CLIENT_QUOTA_MODE", "CLIENT_QUOTA_OFFLINE_GRACE"):
         monkeypatch.delenv(k, raising=False)
     r = client.get("/api/v1/client/version")
     assert r.status_code == 200
-    assert r.json() == {"latest": "0.1.0", "minSupported": "0.1.0", "notes": "", "downloadUrl": ""}
+    feats = {"clientQuota": False, "clientQuotaMode": "shadow", "offlineGrace": 3}
+    assert r.json() == {"latest": "0.1.0", "minSupported": "0.1.0", "notes": "", "downloadUrl": "",
+                        "features": feats}
     monkeypatch.setenv("DESKTOP_LATEST_VERSION", "0.2.0")
     monkeypatch.setenv("DESKTOP_MIN_VERSION", "0.1.5")
     monkeypatch.setenv("DESKTOP_DOWNLOAD_URL", "https://example.com/setup.exe")
     monkeypatch.setenv("DESKTOP_RELEASE_NOTES", "Fixes")
     assert client.get("/api/v1/client/version").json() == {
-        "latest": "0.2.0", "minSupported": "0.1.5", "notes": "Fixes", "downloadUrl": "https://example.com/setup.exe"}
+        "latest": "0.2.0", "minSupported": "0.1.5", "notes": "Fixes", "downloadUrl": "https://example.com/setup.exe",
+        "features": feats}

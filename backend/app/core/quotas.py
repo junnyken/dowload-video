@@ -23,6 +23,7 @@ Error codes (returned in 402/403/429 responses):
 """
 
 import os
+import re
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
 
@@ -218,6 +219,16 @@ def _get_usage(user_id: str) -> Dict[str, Any]:
 REQ_ADMIN = "admin"
 REQ_USER  = "user"
 REQ_ANON  = "anon"
+# Windows app guest, counted per machine (task #6087, PLAN-32D §4): key
+# "dev:<first 32 hex of the device hash>". Same limit and wording as a guest.
+REQ_DEVICE = "device"
+_DEVICE_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def valid_device_hash(value: Optional[str]) -> Optional[str]:
+    """The X-VG-Device header value when it is a 64-hex hash, else None."""
+    v = (value or "").strip().lower()
+    return v if _DEVICE_HASH_RE.match(v) else None
 
 QUOTA_SCOPE_PLATFORM = "per_platform"
 QUOTA_SCOPE_TOTAL = "total"
@@ -307,6 +318,8 @@ class QuotaRequester:
             return "admin"
         if self.kind == REQ_USER:
             return f"user:{self.ident}"
+        if self.kind == REQ_DEVICE:
+            return f"dev:{self.ident}"
         return f"ip:{self.ident or 'unknown'}"
 
     @property
@@ -327,6 +340,8 @@ class QuotaRequester:
             return cls(REQ_USER, key[5:])
         if key.startswith("ip:") and len(key) > 3 and key != "ip:unknown":
             return cls(REQ_ANON, key[3:])
+        if key.startswith("dev:") and len(key) > 4:
+            return cls(REQ_DEVICE, key[4:])
         return None
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
@@ -334,14 +349,19 @@ class QuotaRequester:
 
 
 def resolve_requester(request=None, user_id: Optional[str] = None,
-                      ip: Optional[str] = None, is_admin: Optional[bool] = None) -> QuotaRequester:
-    """admin session > signed-in user > guest IP."""
+                      ip: Optional[str] = None, is_admin: Optional[bool] = None,
+                      device_id: Optional[str] = None) -> QuotaRequester:
+    """admin session > signed-in user > Windows app machine > guest IP.
+    device_id: the app's X-VG-Device hash (validated; anything else ignored)."""
     if is_admin is None:
         is_admin = is_admin_request(request)
     if is_admin:
         return QuotaRequester(REQ_ADMIN)
     if user_id:
         return QuotaRequester(REQ_USER, str(user_id))
+    dev = valid_device_hash(device_id)
+    if dev:
+        return QuotaRequester(REQ_DEVICE, dev[:32])
     if ip is None and request is not None:
         from app.core.client_ip import get_client_ip  # noqa: PLC0415
         ip = get_client_ip(request)
@@ -412,7 +432,7 @@ def platform_quota_message(requester: QuotaRequester, platform: str, limit: int)
     from app.core.platform_key import platform_label  # noqa: PLC0415
     label = platform_label(platform)
     for_label = f" cho {label}" if quota_scope() == QUOTA_SCOPE_PLATFORM else ""
-    if requester.kind == REQ_ANON:
+    if requester.kind in (REQ_ANON, REQ_DEVICE):
         user_limit = platform_limit_user()
         signin = ("Đăng nhập để tải không giới hạn." if user_limit == -1
                   else f"Đăng nhập để tải {user_limit} lượt/ngày.")
@@ -426,7 +446,7 @@ def bulk_item_quota_message(requester: QuotaRequester, platform: str, limit: int
     from app.core.platform_key import platform_label  # noqa: PLC0415
     label = platform_label(platform)
     for_label = f" cho {label}" if quota_scope() == QUOTA_SCOPE_PLATFORM else ""
-    if requester.kind == REQ_ANON:
+    if requester.kind in (REQ_ANON, REQ_DEVICE):
         user_limit = platform_limit_user()
         signin = ("Đăng nhập để tải không giới hạn." if user_limit == -1
                   else f"Đăng nhập để tải {user_limit} lượt/ngày.")
@@ -500,6 +520,55 @@ def record_platform_download(requester: QuotaRequester, platform: str,
     except Exception as e:
         print(f"[Quota] record_platform_download failed for {requester.kind}: {type(e).__name__}")
         return False
+
+
+def url_fingerprint(platform: str, url: Optional[str]) -> Optional[str]:
+    """Public alias of the per-day "same video" key (desktop claims, task #6087)."""
+    return _url_fingerprint(platform or "other", url)
+
+
+def refund_platform_download(requester: QuotaRequester, platform: str, fp: Optional[str]) -> bool:
+    """Undo one record_platform_download (a desktop download that failed,
+    task #6087). Both counters go down (never below 0) and the URL is
+    forgotten so a retry counts again. Never raises; False on any error."""
+    if requester.kind == REQ_ADMIN:
+        return False
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        r = get_redis()
+        for key in (_plat_key(requester, platform or "other"), _plat_key(requester, _TOTAL_BUCKET)):
+            if int(r.get(key) or 0) > 0:
+                r.decr(key)
+        if fp:
+            r.srem(_seen_key(requester), fp)
+        return True
+    except Exception as e:
+        print(f"[Quota] refund_platform_download failed for {requester.kind}: {type(e).__name__}")
+        return False
+
+
+def _device_ip_key(ip: str, day: Optional[str] = None) -> str:
+    return f"vidgrab:quota:devip:{ip or 'unknown'}:{day or _utc_day()}"
+
+
+def device_ip_used(ip: str) -> int:
+    """Downloads counted today for app machines behind this IP (all devices)."""
+    return _redis_count(_device_ip_key(ip))
+
+
+def device_ip_add(ip: str, delta: int) -> None:
+    """+1 when a machine's download is counted, -1 on a refund. Never raises."""
+    try:
+        if delta > 0:
+            _redis_incr_until_midnight(_device_ip_key(ip))
+        else:
+            from app.core.redis_client import get_redis  # noqa: PLC0415
+            r = get_redis()
+            k = _device_ip_key(ip)
+            if int(r.get(k) or 0) > 0:
+                r.decr(k)
+    except Exception:
+        pass
 
 
 class BatchAllowance:
