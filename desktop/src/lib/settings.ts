@@ -11,10 +11,12 @@ export type Settings = {
   theme: Theme;
   autoSync: boolean;
   closeToTray: boolean;
+  /** Show the Douyin link window and keep it open on failure (debug, owner test 2026-10-07). */
+  douyinDebugWindow: boolean;
 };
 
 const KEY = 'vg.settings';
-const DEFAULTS: Settings = { outDir: null, concurrency: 2, defaultQuality: 'best', theme: 'system', autoSync: true, closeToTray: true };
+const DEFAULTS: Settings = { outDir: null, concurrency: 2, defaultQuality: 'best', theme: 'system', autoSync: true, closeToTray: true, douyinDebugWindow: false };
 
 function load(): Settings {
   try {

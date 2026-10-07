@@ -35,13 +35,22 @@ pub enum Failure {
     Page(PageError),
 }
 
-/// Destroys the window when dropped (success, error, timeout, panic).
-struct Destroy<R: Runtime>(WebviewWindow<R>);
+/// Destroys the window when dropped (success, error, timeout, panic) unless
+/// `keep` was set (debug mode after a failure: the user looks at the page).
+struct Destroy<R: Runtime> {
+    w: WebviewWindow<R>,
+    keep: bool,
+}
 impl<R: Runtime> Drop for Destroy<R> {
     fn drop(&mut self) {
-        let _ = self.0.destroy();
+        if !self.keep {
+            let _ = self.w.destroy();
+        }
     }
 }
+
+/// Debug mode (owner test 2026-10-07): the window is shown and waits longer.
+const TOTAL_DEBUG: Duration = Duration::from_secs(90);
 
 fn to_cookie(c: &RawCookie) -> Cookie<'static> {
     // Leading dot = a domain cookie (all subdomains), as the stored blob says.
@@ -58,7 +67,9 @@ fn to_cookie(c: &RawCookie) -> Cookie<'static> {
 
 /// Opens the hidden window, waits for the answer, destroys the window.
 /// MUST be called from an async command (it blocks only inside spawn_blocking).
-pub async fn resolve<R: Runtime>(app: &AppHandle<R>, target: Target, cookies: Vec<RawCookie>) -> Result<Resolved, Failure> {
+/// `debug`: show the window (title says so), wait up to 90 s, and leave it
+/// open after a failure so the user can see what Douyin showed.
+pub async fn resolve<R: Runtime>(app: &AppHandle<R>, target: Target, cookies: Vec<RawCookie>, debug: bool) -> Result<Resolved, Failure> {
     let label = format!("{LABEL_PREFIX}{}", crate::cookies::random_key().map_err(Failure::Window)?);
     // The video id: known now, or read from the short link's redirect.
     let id: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(match &target {
@@ -74,10 +85,11 @@ pub async fn resolve<R: Runtime>(app: &AppHandle<R>, target: Target, cookies: Ve
     let id_title = id.clone();
     let tx_title: SyncSender<_> = tx.clone();
     let builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::External(start))
-        .title("VidGrab")
-        .visible(false)
-        .focused(false)
-        .skip_taskbar(true)
+        // wording: BA review
+        .title(if debug { "VidGrab — gỡ lỗi Douyin (cửa sổ này tự đóng khi lấy được video)" } else { "VidGrab" })
+        .visible(debug)
+        .focused(debug)
+        .skip_taskbar(!debug)
         .inner_size(1280.0, 800.0)
         .incognito(true)
         .initialization_script(douyin_local::INIT_SCRIPT)
@@ -116,7 +128,7 @@ pub async fn resolve<R: Runtime>(app: &AppHandle<R>, target: Target, cookies: Ve
         });
     drop(tx);
     let w = builder.build().map_err(|e| Failure::Window(format!("cannot open the hidden Douyin window: {e}")))?;
-    let guard = Destroy(w.clone());
+    let mut guard = Destroy { w: w.clone(), keep: false };
 
     let first = match &target {
         Target::Video(vid) => douyin_local::video_page(vid),
@@ -129,7 +141,7 @@ pub async fn resolve<R: Runtime>(app: &AppHandle<R>, target: Target, cookies: Ve
             w2.set_cookie(to_cookie(c)).map_err(|e| Failure::Window(format!("cannot set a cookie: {e}")))?;
         }
         w2.navigate(first).map_err(|e| Failure::Window(format!("cannot open the Douyin page: {e}")))?;
-        let deadline = Instant::now() + TOTAL;
+        let deadline = Instant::now() + if debug { TOTAL_DEBUG } else { TOTAL };
         loop {
             let left = deadline.saturating_duration_since(Instant::now());
             if left.is_zero() {
@@ -151,6 +163,7 @@ pub async fn resolve<R: Runtime>(app: &AppHandle<R>, target: Target, cookies: Ve
     .await
     .map_err(|e| Failure::Window(e.to_string()))
     .and_then(|r| r);
+    guard.keep = debug && outcome.is_err();
     drop(guard);
     outcome
 }

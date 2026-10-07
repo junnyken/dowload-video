@@ -1187,7 +1187,8 @@ async fn cookies_clear(app: AppHandle, platform: String) -> CmdResult<()> {
 /// start_download + Referer/User-Agent. Never returns or logs a cookie; the
 /// link is returned to the webview only.
 #[tauri::command]
-async fn douyin_resolve_local(app: AppHandle, url: String) -> CmdResult<douyin_local::Resolved> {
+async fn douyin_resolve_local(app: AppHandle, url: String, debug: Option<bool>) -> CmdResult<douyin_local::Resolved> {
+    let debug = debug.unwrap_or(false);
     let target = douyin_local::target(&url).map_err(|e| CommandError::new(Code::InvalidUrl, e))?;
     let dir = cookie_dir(&app)?;
     let p = cookies::def("douyin").ok_or_else(|| CommandError::unknown("unknown platform"))?;
@@ -1200,8 +1201,8 @@ async fn douyin_resolve_local(app: AppHandle, url: String) -> CmdResult<douyin_l
     if jar.is_empty() {
         return Err(CommandError::new(Code::CookieRequired, "no saved Douyin cookies"));
     }
-    douyin_window::resolve(&app, target, jar).await.map_err(|f| match f {
-        douyin_window::Failure::Timeout => CommandError::new(Code::Timeout, "the Douyin page did not give the video within 30 s"),
+    douyin_window::resolve(&app, target, jar, debug).await.map_err(|f| match f {
+        douyin_window::Failure::Timeout => CommandError::new(Code::Timeout, "the Douyin page did not give the video in time"),
         douyin_window::Failure::Page(douyin_local::PageError::Verify) => {
             CommandError::new(Code::Forbidden, "Douyin asked for a verification on this machine")
         }

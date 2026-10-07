@@ -86,7 +86,7 @@ export const api = {
   cookiesStatus: () => call<CookieStatus[]>('cookies_status'),
   cookiesClear: (platform: string) => call<null>('cookies_clear', { platform }),
   // Douyin on this machine (0.7.2): a hidden Douyin page with the saved cookies resolves the direct link (Rust checks it).
-  douyinResolveLocal: (url: string) => call<DouyinLocal>('douyin_resolve_local', { url }),
+  douyinResolveLocal: (url: string, debug = false) => call<DouyinLocal>('douyin_resolve_local', { url, debug }),
 };
 
 export const onProgress = (cb: (e: ProgressEvent) => void) => on<ProgressEvent>('download://progress', cb);

@@ -5,6 +5,7 @@ import { Check, Link2, Trash2 } from 'lucide-react';
 import { Badge, Button, Spinner } from './ui';
 import { clearPlatform, connect, cookieState, finish, loadFeatures, offeredPlatforms, refreshCookieStatus } from '../lib/cookies';
 import { rowState } from '../lib/cookies-core';
+import { settings, updateSettings } from '../lib/settings';
 
 function savedAtText(sec: number | null | undefined): string {
   if (!sec) return '';
@@ -14,6 +15,7 @@ function savedAtText(sec: number | null | undefined): string {
 
 export function PlatformAccounts() {
   const st = cookieState.use();
+  const debugWin = settings.use().douyinDebugWindow;
   useEffect(() => { void loadFeatures(); void refreshCookieStatus(); }, []);
   const rows = offeredPlatforms(st.enabled);
 
@@ -43,6 +45,13 @@ export function PlatformAccounts() {
                 </p>
                 {pending && <p className="mt-0.5 text-xs text-accent-text">{p.hint ?? `Đăng nhập trong cửa sổ ${p.label} vừa mở, rồi bấm Xong.`}</p>}
                 {!pending && p.hint && state === 'none' && <p className="mt-0.5 text-xs text-fg-muted">{p.hint}</p>}
+                {p.slug === 'douyin' && state !== 'none' && (
+                  // wording: BA review
+                  <label className="mt-1 flex items-center gap-2 text-xs text-fg-muted">
+                    <input type="checkbox" checked={debugWin} onChange={(e) => updateSettings({ douyinDebugWindow: e.target.checked })} />
+                    Gỡ lỗi: hiện cửa sổ Douyin khi tải (để xem Douyin hiển thị gì)
+                  </label>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {busy && <Spinner />}

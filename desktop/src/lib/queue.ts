@@ -171,7 +171,7 @@ async function start(item: QueueItem) {
         // cookies resolves the direct link, and yt-dlp downloads that link.
         let r;
         try {
-          r = await api.douyinResolveLocal(item.url);
+          r = await api.douyinResolveLocal(item.url, settings.get().douyinDebugWindow);
         } catch (e) {
           const cur = queue.get().find((i) => i.id === item.id);
           if (cur && cur.state === 'running') void fallBackToServer(cur, toAppError(e).code);
@@ -196,6 +196,19 @@ async function start(item: QueueItem) {
  * claim FIRST (the server route counts on its own), then run the same job once
  * through the server.
  */
+/** Why the local Douyin route failed, in the toast (debug, owner test 2026-10-07). */
+function douyinLocalReason(code: string): string {
+  // wording: BA review
+  switch (code) {
+    case 'timeout': return 'trang Douyin không trả video kịp';
+    case 'forbidden': return 'Douyin yêu cầu xác minh';
+    case 'not_found': return 'trang không có link video';
+    case 'cookie_required': return 'chưa kết nối Douyin';
+    case 'private_or_login': return 'phiên đăng nhập';
+    default: return `mã lỗi: ${code}`;
+  }
+}
+
 async function fallBackToServer(it: QueueItem, code: string) {
   forget(it.id);
   patch(it.id, { cookieFallback: true, stage: null, speedBps: null, etaSec: null, pausing: false }); // stays 'running' meanwhile
@@ -209,7 +222,7 @@ async function fallBackToServer(it: QueueItem, code: string) {
   // wording: BA review
   if (moved) toast('info', code === 'private_or_login'
     ? `Phiên Douyin trên máy có thể đã hết hạn. Đang tải lại qua máy chủ VidGrab: ${it.title}`
-    : `Không tải được video Douyin trực tiếp trên máy này. Đang tải qua máy chủ VidGrab: ${it.title}`); // wording: BA review
+    : `Không tải được video Douyin trực tiếp trên máy này (${douyinLocalReason(code)}). Đang tải qua máy chủ VidGrab: ${it.title}`); // wording: BA review
   pump();
 }
 

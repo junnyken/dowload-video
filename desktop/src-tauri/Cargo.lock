@@ -4985,7 +4985,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vidgrab-desktop"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "getrandom 0.3.4",
  "keyring",
