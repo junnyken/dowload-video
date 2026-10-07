@@ -372,8 +372,48 @@ def platform_limit(requester: QuotaRequester) -> int:
     if requester.kind == REQ_ADMIN:
         return -1
     if requester.kind == REQ_USER:
-        return platform_limit_for_tier(requester.tier)
-    return platform_limit_anon()
+        base = platform_limit_for_tier(requester.tier)
+    else:
+        base = platform_limit_anon()
+    return base if base == -1 else base + platform_bonus(requester)
+
+
+# ── Admin grant / reset (task #6125, PLAN-32E P1 step 4) ──────────────────
+# Day-only, Redis-only: a grant raises today's limit for one requester and
+# expires at UTC midnight with the counters. No migration, no lasting change.
+BONUS_DAY_MAX = 200
+
+
+def _bonus_key(requester: QuotaRequester, day: Optional[str] = None) -> str:
+    return f"vidgrab:quota:bonus:{requester.key}:{day or _utc_day()}"
+
+
+def platform_bonus(requester: QuotaRequester) -> int:
+    """Extra downloads an admin granted this requester today (0 on Redis errors)."""
+    if requester.kind == REQ_ADMIN:
+        return 0
+    return max(0, _redis_count(_bonus_key(requester)))
+
+
+def grant_platform_bonus(requester: QuotaRequester, amount: int) -> int:
+    """Add `amount` to today's grant, capped at BONUS_DAY_MAX in total.
+    Returns today's grant after the change. Raises on Redis errors."""
+    from app.core.redis_client import get_redis  # noqa: PLC0415
+    r = get_redis()
+    key = _bonus_key(requester)
+    total = min(BONUS_DAY_MAX, max(0, int(r.get(key) or 0)) + max(0, int(amount)))
+    r.set(key, total, ex=_ttl_to_midnight())
+    return total
+
+
+def reset_platform_usage(requester: QuotaRequester) -> int:
+    """Today's used count back to 0 (every platform bucket and the total).
+    Videos already counted today stay free to fetch again. Returns the number
+    of counters removed. Raises on Redis errors."""
+    from app.core.redis_client import get_redis  # noqa: PLC0415
+    r = get_redis()
+    keys = list(r.scan_iter(match=f"vidgrab:quota:plat:{requester.key}:*:{_utc_day()}", count=500))
+    return int(r.delete(*keys)) if keys else 0
 
 
 def _utc_day(now: Optional[datetime] = None) -> str:

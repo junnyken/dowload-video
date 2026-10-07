@@ -272,7 +272,8 @@ def ip_cap_exceeded(req: "quotas.QuotaRequester", ip: str, platform: str, url: O
         return False
     if quotas._already_counted(req, platform or "other", url):
         return False
-    return quotas.device_ip_used(ip) >= lim * ip_mult()
+    # an admin grant for this machine (task #6125) also widens its IP's share
+    return quotas.device_ip_used(ip) >= lim * ip_mult() + quotas.platform_bonus(req)
 
 
 def note_device_counted(req: "quotas.QuotaRequester", ip: str, counted: bool) -> None:

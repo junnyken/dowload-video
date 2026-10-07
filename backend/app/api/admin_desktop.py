@@ -22,6 +22,14 @@ All routes require verify_admin, mounted under /api/v1/admin.
       accounts by over-limit today (display code only); machines active in
       the period per app version (desktop_devices.client_version).
 
+  POST /admin/desktop/allowance   (task #6125, PLAN-32E P1 step 4)
+      {device_id: <16 hex from the list>, action: "grant"|"reset",
+       amount: 1..50 (grant), reason: 3..300 chars}
+      Today only, Redis only. Applies to the allowance the machine is counted
+      under (signed-in → the account, shared with the web; guest → the
+      machine). grant raises today's limit (total ≤ quotas.BONUS_DAY_MAX);
+      reset sets today's used count to 0. Audited via log_admin_action.
+
 Table missing (migration 037 not applied) → 200 with storage_ready=false.
 """
 from __future__ import annotations
@@ -32,9 +40,10 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
 from app.api.admin import verify_admin
+from app.core.audit import log_admin_action
 from app.core import update_gate
 from app.core import quotas
 
@@ -53,6 +62,8 @@ KIND_OUTCOMES = OUTCOMES + ("refunded",)
 TOP_OVER_MAX = 10
 _Q_SAFE = re.compile(r"[^\w\s.@\-]", re.UNICODE)
 _HEX = re.compile(r"^[0-9a-fA-F]{1,64}$")
+_DEVICE_ID = re.compile(r"^[0-9a-f]{16}$")
+GRANT_MAX = 50
 _UID = re.compile(r"^[0-9a-fA-F-]{4,36}$")
 
 
@@ -132,8 +143,8 @@ def _search_filter(q: str) -> Optional[str]:
 
 
 def _usage_today(rows: List[dict], profiles: Dict[str, dict]) -> List[dict]:
-    """used/limit of today for each row, plus refunds and offline (retro)
-    claims, in one MGET."""
+    """used/limit of today for each row, plus refunds, offline (retro)
+    claims and today's admin grant (included in limit), in one MGET."""
     day = quotas._utc_day()
     reqs = []
     for row in rows:
@@ -146,7 +157,8 @@ def _usage_today(rows: List[dict], profiles: Dict[str, dict]) -> List[dict]:
     for req in reqs:
         keys += [f"vidgrab:quota:plat:{req.key}:{quotas._TOTAL_BUCKET}:{day}",
                  f"vidgrab:quota:refund:{req.key}:{day}",
-                 f"vidgrab:quota:retro:{req.key}:{day}"]
+                 f"vidgrab:quota:retro:{req.key}:{day}",
+                 f"vidgrab:quota:bonus:{req.key}:{day}"]
     vals: List[Any] = [None] * len(keys)
     if keys:
         try:
@@ -167,9 +179,12 @@ def _usage_today(rows: List[dict], profiles: Dict[str, dict]) -> List[dict]:
             limit = quotas.platform_limit_for_tier(quotas._effective_tier(prof)) if prof else None
         else:
             limit = quotas.platform_limit_anon()
+        bonus = num(vals[4 * i + 3]) or 0
+        if limit is not None and limit != -1:
+            limit += bonus  # admin grant today (task #6125)
         out.append({"counted_as": "user" if req.kind == quotas.REQ_USER else "device",
-                    "used": num(vals[3 * i]), "limit": limit,
-                    "refunds": num(vals[3 * i + 1]), "retro": num(vals[3 * i + 2])})
+                    "used": num(vals[4 * i]), "limit": limit, "bonus": bonus,
+                    "refunds": num(vals[4 * i + 1]), "retro": num(vals[4 * i + 2])})
     return out
 
 
@@ -234,6 +249,79 @@ def _list_devices(q: str, limit: int, offset: int) -> dict:
         "limit": limit, "offset": offset, "day_utc": quotas._utc_day(),
         "limits": {"anon": quotas.platform_limit_anon(), "user": quotas.platform_limit_user()},
     }
+
+
+# ── allowance grant / reset (task #6125) ─────────────────────────────────
+
+def _bad(code: str, message: str, status: int = 400):
+    raise HTTPException(status_code=status, detail={"error": code, "message": message})
+
+
+def _requester_for_device(device_id: str) -> "quotas.QuotaRequester":
+    """The machine with this list id (first 16 hex of its hash), counted the
+    same way the device list shows it."""
+    try:
+        res = (_db().table(TABLE).select("device_hash, user_id")
+               .like("device_hash", f"{device_id}%").limit(2).execute())
+    except Exception as exc:  # noqa: BLE001
+        if _storage_not_ready(exc):
+            _bad("storage_not_ready", "Chưa có bảng máy (migration 037).", 503)
+        raise
+    rows = res.data or []
+    if len(rows) != 1:
+        _bad("device_not_found", "Không tìm thấy máy này.", 404)
+    row = rows[0]
+    if row.get("user_id"):
+        return quotas.QuotaRequester(quotas.REQ_USER, str(row["user_id"]))
+    return quotas.QuotaRequester(quotas.REQ_DEVICE, str(row.get("device_hash") or "")[:32])
+
+
+def _allowance(payload: dict) -> dict:
+    device_id = str(payload.get("device_id") or "").strip().lower()
+    action = payload.get("action")
+    if not _DEVICE_ID.match(device_id):
+        _bad("bad_device_id", "Mã máy không hợp lệ.")
+    if action not in ("grant", "reset"):
+        _bad("bad_action", "Thao tác không hợp lệ.")
+    amount = 0
+    if action == "grant":
+        amount = payload.get("amount")
+        if isinstance(amount, bool) or not isinstance(amount, int) or not 1 <= amount <= GRANT_MAX:
+            _bad("bad_amount", f"Số lượt cộng phải từ 1 đến {GRANT_MAX}.")
+    reason = str(payload.get("reason") or "").strip()
+    if not 3 <= len(reason) <= 300:
+        _bad("reason_required", "Cần nhập lý do (3–300 ký tự).")
+    req = _requester_for_device(device_id)
+    try:
+        if action == "grant":
+            bonus = quotas.grant_platform_bonus(req, amount)
+            removed = None
+        else:
+            removed = quotas.reset_platform_usage(req)
+            bonus = quotas.platform_bonus(req)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("admin_desktop allowance failed: %s", type(exc).__name__)
+        _bad("redis_unavailable", "Không ghi được (Redis lỗi). Thử lại sau.", 503)
+    counted_as = "user" if req.kind == quotas.REQ_USER else "device"
+    return {"device_id": device_id, "action": action, "amount": amount, "reason": reason,
+            "counted_as": counted_as, "removed": removed, "bonus_today": bonus,
+            "limit_today": quotas.platform_limit(req),
+            "used_today": quotas.platform_used(req, quotas._TOTAL_BUCKET),
+            "day_utc": quotas._utc_day()}
+
+
+@router.post("/desktop/allowance")
+async def desktop_allowance(request: Request, payload: dict = Body(...), _=Depends(verify_admin)) -> dict:
+    import asyncio  # noqa: PLC0415
+    out = await asyncio.to_thread(_allowance, payload if isinstance(payload, dict) else {})
+    log_admin_action(request, f"admin.desktop.allowance_{out['action']}", resource_type="desktop_device",
+                     resource_id=out["device_id"],
+                     metadata={"counted_as": out["counted_as"], "amount": out["amount"],
+                               "bonus_today": out["bonus_today"], "removed": out["removed"],
+                               "reason": out.pop("reason")[:300], "day_utc": out["day_utc"]})
+    return out
 
 
 # ── stats ────────────────────────────────────────────────────────────────

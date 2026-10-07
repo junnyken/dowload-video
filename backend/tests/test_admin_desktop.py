@@ -78,6 +78,11 @@ class _Q:
         self.f.append(lambda r: _like(p, r.get(c)))
         return self
 
+    def like(self, c, p):
+        self.f.append(lambda r: r.get(c) is not None and _like(p, r.get(c))
+                      and str(r.get(c)).startswith(p.rstrip("%*")))
+        return self
+
     def gte(self, c, v):
         self.f.append(lambda r: r.get(c) is not None and r.get(c) >= v)
         return self
@@ -191,7 +196,7 @@ def test_devices_shape_order_and_usage(rc, db, admin):
     assert codes == [h(2)[:8].upper(), h(1)[:8].upper(), h(3)[:8].upper()]  # last_seen desc
     d2, d1, d3 = body["devices"]
     assert d1["id"] == h(1)[:16] and d1["display_name"].startswith("PC-KETOAN")
-    assert d1["today"] == {"counted_as": "device", "used": 3, "limit": 5, "refunds": 2, "retro": 0}
+    assert d1["today"] == {"counted_as": "device", "used": 3, "limit": 5, "bonus": 0, "refunds": 2, "retro": 0}
     assert d2["today"]["counted_as"] == "user" and d2["today"]["used"] == 7 and d2["today"]["limit"] == 20
     assert d2["user_email"] == "an@example.com" and d1["user_email"] is None
     assert d3["today"]["used"] == 0
