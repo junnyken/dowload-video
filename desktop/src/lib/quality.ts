@@ -27,6 +27,11 @@ export function qualityOptions(formats: ProbeFormat[]): QualityOption[] {
   });
   const audio = formats.filter((f) => f.audioOnly).sort((a, b) => (b.filesize ?? 0) - (a.filesize ?? 0))[0];
   out.push({ value: 'audio', label: QUALITY_LABEL.audio, format: audio });
+  // Douyin cannot be probed locally (lib/douyin.ts placeholder): one MP4 option plus audio.
+  if (formats.some((f) => f.id === 'douyin-mp4')) {
+    out[0].label = 'Video (MP4)';
+    out[out.length - 1].label = 'Chỉ âm thanh (MP3)';
+  }
   return out;
 }
 

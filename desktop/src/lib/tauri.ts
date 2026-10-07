@@ -34,7 +34,11 @@ async function on<T>(event: string, cb: (p: T) => void): Promise<UnlistenFn> {
 export const api = {
   probe: (url: string) => call<ProbeResult>('probe', { url }),
   cancelProbe: (url: string) => call<null>('cancel_probe', { url }),
-  startDownload: (a: { jobId: string; url: string; outDir: string; formatId?: string; audioOnly?: boolean }) =>
+  startDownload: (a: {
+    jobId: string; url: string; outDir: string; formatId?: string; audioOnly?: boolean;
+    // Direct-link downloads (Douyin): request headers, and the file name parts (the URL has none).
+    headers?: { name: string; value: string }[]; fileTitle?: string; fileId?: string;
+  }) =>
     call<null>('start_download', a),
   pauseDownload: (jobId: string) => call<null>('pause_download', { jobId }),
   cancelDownload: (jobId: string) => call<null>('cancel_download', { jobId }),

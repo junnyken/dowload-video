@@ -8,6 +8,8 @@ import { QUALITY_LABEL } from './quality';
 import { settings, type Quality } from './settings';
 import { errorMessage, toAppError } from './errors';
 import { newId } from './format';
+import { fetchDouyinListing } from './douyin';
+import { isDouyinUrl } from './urls';
 import { toast } from './ui';
 import type { Channel, ChannelListing, ChannelVideo } from './types';
 
@@ -29,19 +31,14 @@ export function joinPath(base: string, name: string): string {
   return `${base.replace(/[\\/]+$/, '')}\\${name}`;
 }
 
-/** Channel / playlist links (not a single video). */
-export function looksLikeChannelUrl(raw: string): boolean {
-  let u: URL;
-  try { u = new URL(raw.trim()); } catch { return false; }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
-  const host = u.hostname.replace(/^(www|m)\./, '');
-  const path = u.pathname;
-  if (host === 'youtube.com') {
-    if (/^\/(@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)/.test(path)) return true;
-    return path === '/playlist' && u.searchParams.has('list');
-  }
-  if (host === 'tiktok.com') return /^\/@[^/]+\/?$/.test(path);
-  return false;
+export { looksLikeChannelUrl } from './urls';
+
+/** Douyin channels are never scanned in the background: every scan costs the server money. */
+export const isManualOnly = (c: { platform: string }) => c.platform === 'douyin';
+
+/** Channel listing: Douyin goes through the server, everything else through the local yt-dlp. */
+export function fetchChannelListing(url: string, limit: number): Promise<ChannelListing> {
+  return isDouyinUrl(url) ? fetchDouyinListing(url, limit) : api.channelFetch(url, limit);
 }
 
 export function qualityFormat(q: string): { formatId?: string; audioOnly: boolean; label: string } {
@@ -57,6 +54,7 @@ export function enqueueVideos(
   ch: { platform: string; title: string; quality: string; outDir: string },
 ) {
   const f = qualityFormat(ch.quality);
+  if (ch.platform === 'douyin') f.formatId = undefined; // a direct MP4 has no height to select on
   for (const v of videos) {
     enqueue({
       url: v.url, title: v.title, thumbnail: v.thumbnail, platform: ch.platform, uploader: ch.title, outDir: ch.outDir,
@@ -136,7 +134,7 @@ export async function fetchListing(url: string, limit: number, more = false) {
   const prev = flow.get().listing;
   flow.set({ phase: more && prev ? 'ready' : 'loading', url, limit, listing: more ? prev : undefined, more });
   try {
-    const listing = await api.channelFetch(url, limit);
+    const listing = await fetchChannelListing(url, limit);
     if (token !== flowToken) return;
     flow.set({ phase: 'ready', url, limit, listing });
   } catch (e) {
@@ -176,7 +174,7 @@ function dueAt(c: Channel): number {
 }
 
 export function nextCheckAt(c: Channel): number | null {
-  if (!c.enabled) return null;
+  if (!c.enabled || isManualOnly(c)) return null;
   return Math.max(dueAt(c), c.lastCheckedAt ? 0 : Date.now());
 }
 
@@ -195,7 +193,7 @@ async function doCheck(id: string): Promise<number | null> {
   if (!ch) return null;
   const stamp = () => new Date().toISOString();
   try {
-    const listing = await api.channelFetch(ch.url, 50);
+    const listing = await fetchChannelListing(ch.url, 50);
     const seen = new Set(await api.channelSeenList(id));
     const pending = new Set(ch.pendingNew.map((v) => v.id));
     const fresh = listing.videos.filter((v) => !seen.has(v.id) && !pending.has(v.id));
@@ -225,7 +223,7 @@ async function doCheck(id: string): Promise<number | null> {
 async function tick(force = false) {
   const now = Date.now();
   for (const c of channels.get()) {
-    if (!c.enabled) continue;
+    if (!c.enabled || isManualOnly(c)) continue; // manual "Kiểm tra ngay" on the card still works
     if (!force && dueAt(c) > now) continue;
     await checkChannel(c.id);
   }

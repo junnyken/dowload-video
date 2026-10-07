@@ -1,0 +1,55 @@
+// Run: npm test   (node's built-in runner, no dependencies)
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  douyinVideoId, isChannelOnDownloadScreen, isDouyinChannelUrl, isDouyinShortUrl, isDouyinUrl, isDouyinVideoUrl, looksLikeChannelUrl,
+} from '../src/lib/urls.ts';
+
+test('Douyin profile links are channel links', () => {
+  for (const u of [
+    'https://www.douyin.com/user/MS4wLjABAAAAabc-_123',
+    'https://douyin.com/user/MS4wLjABAAAAabc?from_tab_name=main',
+    'https://www.iesdouyin.com/share/user/MS4wLjABAAAAabc?sec_uid=MS4wLjABAAAAabc',
+    'https://v.douyin.com/iAbCdEf/',
+    'https://v.douyin.com/iAbCdEf',
+  ]) {
+    assert.equal(looksLikeChannelUrl(u), true, u);
+    assert.equal(isDouyinChannelUrl(u), true, u);
+    assert.equal(isDouyinUrl(u), true, u);
+  }
+});
+
+test('Douyin video links are not channel links', () => {
+  for (const u of ['https://www.douyin.com/video/7311111111111111111', 'https://www.iesdouyin.com/share/video/7311111111111111111/', 'https://www.douyin.com/']) {
+    assert.equal(looksLikeChannelUrl(u), false, u);
+    assert.equal(isDouyinVideoUrl(u), true, u);
+  }
+  assert.equal(douyinVideoId('https://www.douyin.com/video/7311111111111111111'), '7311111111111111111');
+  assert.equal(douyinVideoId('https://www.douyin.com/user/abc'), null);
+});
+
+test('short links: channel on Channels screen, video on Download screen', () => {
+  const u = 'https://v.douyin.com/iAbCdEf/';
+  assert.equal(isDouyinShortUrl(u), true);
+  assert.equal(looksLikeChannelUrl(u), true);
+  assert.equal(isChannelOnDownloadScreen(u), false);
+  assert.equal(isDouyinVideoUrl(u), true);
+  assert.equal(isChannelOnDownloadScreen('https://www.douyin.com/user/abc'), true);
+  assert.equal(isChannelOnDownloadScreen('https://www.youtube.com/@x'), true);
+});
+
+test('lookalike hosts and other schemes are rejected', () => {
+  for (const u of ['https://evildouyin.com/user/abc', 'https://douyin.com.evil.io/user/abc', 'https://v.douyin.com.evil.io/abc', 'ftp://www.douyin.com/user/abc', 'not a url', 'https://tiktokv.com/user/abc']) {
+    assert.equal(isDouyinUrl(u), false, u);
+    assert.equal(looksLikeChannelUrl(u), false, u);
+  }
+});
+
+test('existing YouTube / TikTok rules are unchanged', () => {
+  assert.equal(looksLikeChannelUrl('https://www.youtube.com/@name'), true);
+  assert.equal(looksLikeChannelUrl('https://www.youtube.com/channel/UC123'), true);
+  assert.equal(looksLikeChannelUrl('https://www.youtube.com/playlist?list=PL1'), true);
+  assert.equal(looksLikeChannelUrl('https://www.youtube.com/watch?v=abc'), false);
+  assert.equal(looksLikeChannelUrl('https://www.tiktok.com/@user'), true);
+  assert.equal(looksLikeChannelUrl('https://www.tiktok.com/@user/video/1'), false);
+});

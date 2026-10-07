@@ -29,7 +29,7 @@ mod validate;
 use error::{CmdResult, Code, CommandError};
 use history::{Db, HistoryItem};
 use progress::{Line, Stage, Throttle};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -604,6 +604,13 @@ fn delete_partials(app: &AppHandle, job_id: &str, out_dir: Option<&Path>, extra:
     failed.into_iter().map(|(p, e)| format!("could not delete {}: {e}", p.display())).collect()
 }
 
+/// One extra request header for a direct-link download (validate::download_header).
+#[derive(Deserialize)]
+struct HeaderArg {
+    name: String,
+    value: String,
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 async fn start_download(
@@ -614,11 +621,27 @@ async fn start_download(
     out_dir: String,
     format_id: Option<String>,
     audio_only: Option<bool>,
+    headers: Option<Vec<HeaderArg>>,
+    file_title: Option<String>,
+    file_id: Option<String>,
 ) -> CmdResult<()> {
     if !paths::valid_job_id(&job_id) {
         return Err(CommandError::unknown("invalid job id"));
     }
     let url = valid_url(&url)?;
+    let headers = headers
+        .unwrap_or_default()
+        .iter()
+        .map(|h| validate::download_header(&h.name, &h.value))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(CommandError::unknown)?;
+    let out_name = match (&file_title, &file_id) {
+        (Some(t), Some(i)) => {
+            validate::file_id(i).map_err(CommandError::unknown)?;
+            Some(engine::OutName { title: t, id: i })
+        }
+        _ => None,
+    };
     let out_dir = valid_out_dir(&out_dir)?;
     if let Some(f) = &format_id {
         validate::format_id(f).map_err(CommandError::unknown)?;
@@ -638,7 +661,7 @@ async fn start_download(
 
     let paths = verified_sidecars().await?;
     let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3] };
-    let args = engine::download_args(&tools, &url, &out_dir, format_id.as_deref(), audio_only);
+    let args = engine::download_args(&tools, &url, &out_dir, format_id.as_deref(), audio_only, &headers, out_name.as_ref());
     let cmd = ytdlp_command(&paths[0], args);
 
     // Insert under the lock right after spawning so a concurrent start with

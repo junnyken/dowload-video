@@ -72,8 +72,14 @@ type Sim = { timer: ReturnType<typeof setInterval>; pct: number; url: string; ou
 const sims = new Map<string, Sim>();
 const partial = new Map<string, number>();
 
+const forbiddenOnce = new Set<string>();
 function startSim(a: { jobId: string; url: string; outDir: string; audioOnly?: boolean }) {
   if (sims.has(a.jobId)) return;
+  if (a.url.includes('example.invalid') && localStorage.getItem('mock.douyin403') === '1' && !forbiddenOnce.has(a.jobId)) {
+    forbiddenOnce.add(a.jobId); // first direct link "expired": the app must ask the server for a fresh one
+    setTimeout(() => emit('download://done', { jobId: a.jobId, state: 'failed', errorCode: 'forbidden', errorMessage: 'HTTP Error 403: Forbidden' } satisfies DoneEvent), 300);
+    return;
+  }
   let pct = partial.get(a.jobId) ?? 0;
   const total = 142e6;
   const timer = setInterval(() => {
@@ -233,6 +239,7 @@ export async function mockApi<T>(path: string, opts: { method?: string; body?: u
   await sleep(250);
   const r = (status: number, data: unknown) => ({ status, data: data as T });
   if (path.startsWith('/api/v1/client/version')) return r(200, { latest: '0.2.0', minSupported: '0.1.0', notes: 'Bản mô phỏng', downloadUrl: 'https://dvid.vibe1.tinhgon.xyz/download' });
+  if (path.startsWith('/api/v1/client/douyin/')) return mockDouyin(path, opts.body as { url?: string; limit?: number }, !!opts.token) as { status: number; data: T | null };
   if (!opts.token) return r(401, { detail: 'unauthorized' });
   if (path.startsWith('/api/v1/client/history') && opts.method === 'POST') {
     if (localStorage.getItem('mock.sync503') === '1') return r(503, { detail: 'client_api_disabled' });
@@ -269,4 +276,39 @@ export async function mockExchange(refreshToken: string) {
   await sleep(300);
   if (refreshToken !== 'mockrefreshtoken') throw { message: 'Invalid Refresh Token', status: 400, code: 'refresh_token_not_found' };
   return { access_token: 'mock-token', user: { email: 'ban@example.com' } };
+}
+
+// ---- Douyin via the server (MOCK: invented names and ids, nothing real) ---------
+// Daily allowance like the server's: guest 5, signed in 20. localStorage
+// mock.douyinQuota=0 makes every video call answer "hết lượt"; mock.douyin403=1
+// makes the first direct link of each video look expired (to see the retry).
+const dyUsed = { n: 0 };
+function mockDouyin(path: string, body: { url?: string; limit?: number }, signedIn: boolean) {
+  const r = (status: number, data: unknown) => ({ status, data });
+  const url = body?.url ?? '';
+  if (!/douyin\.com|iesdouyin\.com/.test(url)) return r(400, { detail: 'Liên kết này không phải của Douyin.', error_code: 'unsupported_url' });
+  const allow = signedIn ? 20 : 5;
+  const left = localStorage.getItem('mock.douyinQuota') === '0' ? 0 : Math.max(0, allow - dyUsed.n);
+  if (path.endsWith('/channel')) {
+    const n = Math.min(body.limit ?? 50, 40, left);
+    if (n <= 0) return r(422, { detail: 'Bạn đã hết lượt tải hôm nay (bản mô phỏng).', error_code: 'quota_exceeded' });
+    const items = Array.from({ length: n }, (_, i) => ({
+      id: `7000000000000000${100 + i}`, url: `https://www.douyin.com/video/7000000000000000${100 + i}`,
+      title: `Video Douyin mô phỏng số ${i + 1}`, thumbnail: thumb('dy' + i), durationSec: 12 + i * 7,
+    }));
+    return r(200, { platform: 'douyin', channelTitle: 'Kênh Douyin mô phỏng', channelUrl: 'https://www.douyin.com/user/MS4wLjABAAAAmockmockmock', cap: left, fromCache: false, items });
+  }
+  if (path.endsWith('/video')) {
+    if (left <= 0) {
+      return r(signedIn ? 403 : 429, { detail: 'Bạn đã hết lượt tải trong hôm nay (bản mô phỏng).', error_code: 'quota_exceeded_daily' });
+    }
+    dyUsed.n++;
+    const id = /(\d{6,})/.exec(url)?.[1] ?? '7000000000000000100';
+    return r(200, {
+      platform: 'douyin', id, url: `https://www.douyin.com/video/${id}`, title: `Video Douyin mô phỏng ${id.slice(-3)}`, uploader: 'Kênh Douyin mô phỏng',
+      thumbnail: thumb('dy' + id), durationSec: 31, directUrl: `https://example.invalid/mock/${id}.mp4`, audioUrl: null,
+      headers: { Referer: 'https://www.douyin.com/', 'User-Agent': 'MockAgent/1.0' }, expiresAt: new Date(Date.now() + 3_600_000).toISOString(), cacheHit: false,
+    });
+  }
+  return r(404, null);
 }

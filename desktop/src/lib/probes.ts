@@ -3,6 +3,8 @@ import { createStore } from './store';
 import { api } from './tauri';
 import { toAppError } from './errors';
 import { PROBE_CONCURRENCY } from './config';
+import { douyinPlaceholder } from './douyin';
+import { isDouyinUrl } from './urls';
 import type { ProbeResult } from './types';
 import type { Quality } from './settings';
 
@@ -44,7 +46,8 @@ function drain() {
   while (running < PROBE_CONCURRENCY && pending.length) {
     const url = pending.shift()!;
     running++;
-    api.probe(url)
+    // Douyin: the local yt-dlp cannot read it, and asking the server now would use up a download.
+    (isDouyinUrl(url) ? Promise.resolve<ProbeResult>(douyinPlaceholder(url)) : api.probe(url))
       .then((r) => patchCard(url, { status: 'ready', result: r, errorCode: undefined }))
       .catch((e) => patchCard(url, { status: 'error', errorCode: toAppError(e).code }))
       .finally(() => { running--; drain(); });

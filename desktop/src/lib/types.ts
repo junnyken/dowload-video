@@ -88,6 +88,7 @@ export type ChannelListing = {
   thumbnail: string | null;
   videos: ChannelVideo[];
   truncated: boolean;
+  cap?: number; // Douyin: how many downloads the person still has today (the listing is cut to this)
 };
 
 export type ChannelMode = 'download' | 'notify';

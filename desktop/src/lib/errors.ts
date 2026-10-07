@@ -8,6 +8,7 @@ const MESSAGES: Record<string, string> = {
   private_or_login: 'Video riêng tư hoặc cần đăng nhập mới xem được.',
   geo_blocked: 'Video bị chặn ở khu vực của bạn.',
   not_found: 'Không tìm thấy video. Có thể đã bị xoá hoặc liên kết sai.',
+  forbidden: 'Máy chủ từ chối cho tải video này (liên kết tải có thể đã hết hạn). Hãy thử lại.',
   network: 'Lỗi kết nối mạng. Hãy kiểm tra Internet rồi thử lại.',
   disk_full: 'Ổ đĩa đã hết dung lượng. Hãy giải phóng chỗ trống hoặc chọn thư mục khác.',
   tool_missing: 'Thiếu thành phần tải video của ứng dụng. Hãy cài đặt lại VidGrab.',
@@ -22,11 +23,28 @@ const MESSAGES: Record<string, string> = {
   unauthorized: 'Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.',
   server: 'Máy chủ đang gặp sự cố. Hãy thử lại sau.',
   not_in_app: 'Tính năng này chỉ chạy trong ứng dụng VidGrab trên máy tính.',
+  // Douyin through the VidGrab server (lib/douyin.ts). The server's own Vietnamese
+  // text wins when we have it (rememberServerMessage); these are the fallbacks.
+  'api:unsupported_url': 'Liên kết Douyin này chưa được hỗ trợ. Hãy dán liên kết kênh hoặc video Douyin.',
+  'api:quota_exceeded': 'Bạn đã hết lượt tải còn lại trong hôm nay.',
+  'api:quota_exceeded_daily': 'Bạn đã hết lượt tải trong hôm nay. Hãy thử lại vào ngày mai hoặc đăng nhập để có thêm lượt.',
+  'api:budget_exceeded': 'Dịch vụ Douyin đã hết hạn mức hôm nay. Hãy thử lại sau.',
+  'api:already_processing': 'Liên kết này đang được xử lý. Hãy đợi một lát.',
+  'api:no_media_found': 'Không tìm thấy video nào ở liên kết Douyin này.',
+  'api:platform_disabled': 'Tính năng Douyin đang tạm tắt. Hãy thử lại sau.',
+  'api:provider_unavailable': 'Dịch vụ Douyin tạm thời không dùng được. Hãy thử lại sau.',
+  'api:other': 'Không lấy được dữ liệu Douyin. Hãy thử lại sau.',
   login_link_invalid: 'Phiên đăng nhập từ trình duyệt không dùng được hoặc đã hết hạn. Hãy bấm “Đăng nhập qua trình duyệt” lần nữa.',
 };
 
+// Vietnamese text the server sent with an error code (latest one per code).
+const serverMessages = new Map<string, string>();
+export function rememberServerMessage(code: string, text: string) {
+  if (code in MESSAGES && text.trim()) serverMessages.set(code, text.trim());
+}
+
 export function errorMessage(code: string | null | undefined): string {
-  return MESSAGES[code ?? 'unknown'] ?? MESSAGES.unknown;
+  return serverMessages.get(code ?? '') ?? MESSAGES[code ?? 'unknown'] ?? MESSAGES.unknown;
 }
 
 /** Normalises whatever invoke()/fetch/supabase threw into { code, message }. */

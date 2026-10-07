@@ -16,6 +16,7 @@ pub enum Code {
     GeoBlocked,
     NotFound,
     Network,
+    Forbidden,
     DiskFull,
     ToolMissing,
     ToolTampered,
@@ -33,6 +34,7 @@ impl Code {
             Code::GeoBlocked => "geo_blocked",
             Code::NotFound => "not_found",
             Code::Network => "network",
+            Code::Forbidden => "forbidden",
             Code::DiskFull => "disk_full",
             Code::ToolMissing => "tool_missing",
             Code::ToolTampered => "tool_tampered",
@@ -143,6 +145,9 @@ const RULES: &[(Code, &[&str])] = &[
             "not found",
         ],
     ),
+    // A signed CDN link that expired (Douyin) or a refused request. Before
+    // Network, which also matches the "Unable to download" prefix.
+    (Code::Forbidden, &["http error 403", "403: forbidden"]),
     (
         Code::Network,
         &[
@@ -231,6 +236,7 @@ mod tests {
         assert_eq!(c("ERROR: unable to write data: [Errno 28] No space left on device"), Code::DiskFull);
         assert_eq!(c("ERROR: unable to write data: [WinError 112] There is not enough space on the disk"), Code::DiskFull);
         assert_eq!(c("ERROR: Postprocessing: ffprobe and ffmpeg not found. Please install or provide the path using --ffmpeg-location"), Code::ToolMissing);
+        assert_eq!(c("ERROR: unable to download video data: HTTP Error 403: Forbidden"), Code::Forbidden);
         assert_eq!(c("ERROR: something nobody has seen before"), Code::Unknown);
     }
 

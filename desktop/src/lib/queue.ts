@@ -8,6 +8,8 @@ import { toast } from './ui';
 import { newId } from './format';
 import type { HistoryItem, Stage } from './types';
 import { syncSoon } from './sync';
+import { douyinVideo, isExpired, toHeaderList, type DouyinVideo } from './douyin';
+import { isDouyinUrl } from './urls';
 
 export type QueueState = 'queued' | 'running' | 'paused' | 'completed' | 'failed';
 
@@ -101,10 +103,35 @@ export function pump() {
   }
 }
 
+// Douyin: the queue item keeps the douyin.com link; the signed CDN link the
+// server resolved it to lives only here (never persisted, never logged).
+const resolved = new Map<string, { v: DouyinVideo; at: number }>();
+const refreshed = new Set<string>(); // jobs that already got their one fresh link after an HTTP 403
+const forget = (id: string) => { resolved.delete(id); refreshed.delete(id); };
+
+async function douyinArgs(item: QueueItem) {
+  let r = resolved.get(item.id);
+  if (!r || isExpired(r.v, r.at)) {
+    r = { v: await douyinVideo(item.url), at: Date.now() }; // counts one download on the server
+    resolved.set(item.id, r);
+    patch(item.id, { title: r.v.title || item.title, thumbnail: r.v.thumbnail ?? item.thumbnail, uploader: r.v.uploader ?? item.uploader });
+  }
+  const v = r.v;
+  const safeId = v.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+  return {
+    url: item.audioOnly && v.audioUrl ? v.audioUrl : v.directUrl,
+    formatId: undefined, // a direct file has one format; height selectors would match nothing
+    headers: toHeaderList(v.headers),
+    fileTitle: v.title || item.title, fileId: safeId || item.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 12),
+  };
+}
+
 async function start(item: QueueItem) {
   patch(item.id, { state: 'running', pausing: false, stage: 'downloading', errorCode: null });
   try {
-    await api.startDownload({ jobId: item.id, url: item.url, outDir: item.outDir, formatId: item.formatId, audioOnly: item.audioOnly });
+    const extra = isDouyinUrl(item.url) ? await douyinArgs(item) : {};
+    if (!queue.get().some((i) => i.id === item.id && i.state === 'running')) return; // cancelled / paused while resolving
+    await api.startDownload({ jobId: item.id, url: item.url, outDir: item.outDir, formatId: item.formatId, audioOnly: item.audioOnly, ...extra });
   } catch (e) {
     finishFailed(item.id, toAppError(e).code);
   }
@@ -121,6 +148,7 @@ function toHistory(i: QueueItem, state: 'completed' | 'failed', extra: Partial<H
 function finishFailed(id: string, code: string) {
   const it = queue.get().find((i) => i.id === id);
   if (!it) return;
+  forget(id);
   patch(id, { state: 'failed', errorCode: code, speedBps: null, etaSec: null, pausing: false });
   void api.historyAdd(toHistory(it, 'failed', { errorCode: code })).then(() => syncSoon()).catch(() => {});
   toast('error', `Tải thất bại: ${it.title}. ${errorMessage(code)}`);
@@ -144,12 +172,21 @@ export async function initQueue() {
     if (!it) return; // cancelled & already removed, or unknown job
     switch (e.state) {
       case 'completed':
+        forget(e.jobId);
         patch(e.jobId, { state: 'completed', percent: 100, stage: null, speedBps: null, etaSec: null, filePath: e.filePath ?? null, fileSize: e.fileSize ?? it.totalBytes, pausing: false });
         void api.historyAdd(toHistory(it, 'completed', { filePath: e.filePath ?? null, fileSize: e.fileSize ?? it.totalBytes })).then(() => syncSoon()).catch(() => {});
         toast('success', `Đã tải xong: ${it.title}`);
         pump();
         break;
       case 'failed':
+        if (e.errorCode === 'forbidden' && isDouyinUrl(it.url) && !refreshed.has(e.jobId)) {
+          // The signed link expired or was refused: ask the server for a new one, once.
+          refreshed.add(e.jobId);
+          resolved.delete(e.jobId);
+          patch(e.jobId, { state: 'queued', stage: null, speedBps: null, etaSec: null, pausing: false, errorCode: null });
+          pump();
+          break;
+        }
         finishFailed(e.jobId, e.errorCode ?? 'unknown');
         break;
       case 'paused':
@@ -157,6 +194,7 @@ export async function initQueue() {
         pump();
         break;
       case 'cancelled':
+        forget(e.jobId);
         queue.set((l) => l.filter((i) => i.id !== e.jobId));
         pump();
         break;
@@ -181,6 +219,7 @@ export function resume(id: string) {
 }
 
 export function retry(id: string) {
+  forget(id);
   patch(id, { state: 'queued', errorCode: null, percent: null, downloadedBytes: null, speedBps: null, etaSec: null });
   pump();
 }
@@ -188,6 +227,7 @@ export function retry(id: string) {
 export async function cancel(id: string) {
   const it = queue.get().find((i) => i.id === id);
   if (!it) return;
+  forget(id);
   queue.set((l) => l.filter((i) => i.id !== id));
   if (it.state === 'running' || it.state === 'paused') {
     try { await api.cancelDownload(id); } catch { /* process may already be gone */ }

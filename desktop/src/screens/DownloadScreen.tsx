@@ -8,10 +8,10 @@ import { ensureOutDir, settings } from '../lib/settings';
 import { enqueue } from '../lib/queue';
 import { api } from '../lib/tauri';
 import { go, openInChannels, prefill, toast } from '../lib/ui';
-import { looksLikeChannelUrl } from '../lib/channels';
+import { isChannelOnDownloadScreen as looksLikeChannelUrl } from '../lib/urls';
 
 const draft = createStore('');
-const PLATFORMS = ['YouTube', 'TikTok', 'Instagram', 'Facebook', 'X (Twitter)', 'Threads', 'Reddit', 'Vimeo'];
+const PLATFORMS = ['YouTube', 'TikTok', 'Douyin', 'Instagram', 'Facebook', 'X (Twitter)', 'Threads', 'Reddit', 'Vimeo'];
 
 async function addToQueue(card: Card): Promise<boolean> {
   const st = settings.get();

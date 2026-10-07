@@ -4,9 +4,10 @@ import { Badge, Button, EmptyState, IconButton, PlatformBadge, ScreenHeader, Spi
 import { ChannelAvatar, ChannelPicker, intervalLabel } from '../components/ChannelPicker';
 import { EditDialog, ReviewDialog } from '../components/ChannelDialogs';
 import {
-  cancelFlow, channels, channelsLoaded, checkChannel, checking, fetchListing, flow, nextCheckAt, removeChannel, saveChannel,
+  cancelFlow, channels, channelsLoaded, checkChannel, checking, fetchListing, flow, isManualOnly, nextCheckAt, removeChannel, saveChannel,
 } from '../lib/channels';
 import { parseUrls } from '../lib/probes';
+import { isDouyinUrl } from '../lib/urls';
 import { QUALITY_LABEL } from '../lib/quality';
 import type { Quality } from '../lib/settings';
 import { errorMessage, toAppError } from '../lib/errors';
@@ -18,6 +19,7 @@ function ChannelCard({ c, onReview, onEdit }: { c: Channel; onReview: () => void
   const busy = checking.use().includes(c.id);
   const next = nextCheckAt(c);
   const pending = c.pendingNew.length;
+  const manual = isManualOnly(c);
 
   async function toggleEnabled() {
     try { await saveChannel({ ...c, enabled: !c.enabled }); } catch (e) { toast('error', errorMessage(toAppError(e).code)); }
@@ -55,13 +57,13 @@ function ChannelCard({ c, onReview, onEdit }: { c: Channel; onReview: () => void
             {c.enabled
               ? <Badge tone={c.mode === 'download' ? 'success' : 'neutral'}>{c.mode === 'download' ? 'Tự tải về' : <><BellRing size={11} aria-hidden /> Chỉ báo</>}</Badge>
               : <Badge tone="warning">Đang tạm dừng</Badge>}
-            <span className="text-xs text-fg-muted">Kiểm tra mỗi {intervalLabel(c.checkEveryHours)} · {QUALITY_LABEL[c.quality as Quality] ?? c.quality}</span>
+            <span className="text-xs text-fg-muted">{manual ? 'Douyin: chỉ quét khi bạn bấm' : `Kiểm tra mỗi ${intervalLabel(c.checkEveryHours)}`} · {QUALITY_LABEL[c.quality as Quality] ?? c.quality}</span>
           </div>
         </div>
       </div>
       <dl className="mt-2.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-fg-muted">
         <dt>Kiểm tra lúc</dt><dd className="text-fg-2">{busy ? 'Đang kiểm tra…' : c.lastCheckedAt ? formatDate(c.lastCheckedAt) : 'Chưa kiểm tra'}</dd>
-        <dt>Lần tới</dt><dd className="text-fg-2">{!c.enabled ? 'Đang tạm dừng' : next ? formatDate(new Date(next).toISOString()) : '—'}</dd>
+        <dt>Lần tới</dt><dd className="text-fg-2">{!c.enabled ? 'Đang tạm dừng' : manual ? 'Không tự quét — bấm “Kiểm tra ngay”' : next ? formatDate(new Date(next).toISOString()) : '—'}</dd>
         <dt>Thư mục</dt><dd className="truncate text-fg-2 select-text" title={c.outDir}>{c.outDir}</dd>
       </dl>
       {c.lastError && (
@@ -122,6 +124,7 @@ export function ChannelsScreen() {
             />
             <Button variant="primary" icon={loading ? <Spinner /> : <ListVideo size={16} />} disabled={loading || !text.trim()} onClick={() => start()}>Lấy danh sách video</Button>
           </div>
+          {isDouyinUrl(text.trim()) && <p className="mt-2 text-xs text-fg-muted">Douyin: ứng dụng lấy danh sách qua máy chủ VidGrab, giới hạn theo số lượt tải bạn còn trong hôm nay. Kênh Douyin chỉ được quét khi bạn bấm, không tự kiểm tra nền.</p>}
           {msg && <p role="alert" className="mt-2 text-[13px] text-danger">{msg}</p>}
           {f.phase === 'error' && (
             <div role="alert" className="mt-2 flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-[13px] text-danger">
@@ -154,6 +157,7 @@ export function ChannelsScreen() {
               <button type="button" className="rounded-lg px-2 py-1 hover:bg-surface-2" onClick={() => setText('https://www.youtube.com/@tenkenh')}>https://www.youtube.com/@tenkenh</button>
               <button type="button" className="rounded-lg px-2 py-1 hover:bg-surface-2" onClick={() => setText('https://www.youtube.com/playlist?list=…')}>https://www.youtube.com/playlist?list=…</button>
               <button type="button" className="rounded-lg px-2 py-1 hover:bg-surface-2" onClick={() => setText('https://www.tiktok.com/@tenkenh')}>https://www.tiktok.com/@tenkenh</button>
+              <button type="button" className="rounded-lg px-2 py-1 hover:bg-surface-2" onClick={() => setText('https://www.douyin.com/user/…')}>https://www.douyin.com/user/…</button>
             </div>
           </EmptyState>
         )}

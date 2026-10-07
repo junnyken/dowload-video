@@ -109,7 +109,9 @@ export function EditDialog({ channelId, onClose }: { channelId: string; onClose:
     <Modal title={`Sửa kênh: ${ch.title}`} onClose={onClose}>
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3"><span className="text-sm text-fg">Khi có video mới</span><ModeSelect mode={mode} onChange={setMode} /></div>
-        <div className="flex items-center justify-between gap-3"><span className="text-sm text-fg">Kiểm tra mỗi</span><IntervalSelect value={every} onChange={setEvery} /></div>
+        {ch.platform === 'douyin'
+          ? <p className="text-xs text-fg-muted">Douyin: chỉ quét khi bạn bấm “Kiểm tra ngay”, không tự kiểm tra nền.</p>
+          : <div className="flex items-center justify-between gap-3"><span className="text-sm text-fg">Kiểm tra mỗi</span><IntervalSelect value={every} onChange={setEvery} /></div>}
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm text-fg">Chất lượng</span>
           <Select label="Chất lượng" value={quality} onChange={setQuality} className="w-[190px]">
