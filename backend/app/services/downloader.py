@@ -223,6 +223,32 @@ def cookie_retry_worthwhile(err: str) -> bool:
     return not any(s in e for s in _COOKIE_RETRY_USELESS)
 
 
+def cookie_last_stat(platform: str, outcome: str) -> None:
+    """Per UTC day: which step served a COOKIE_LAST_PLATFORMS download —
+    anon_ok | cobalt_ok | cookie_ok | all_fail | gone (no cookie tried).
+    The numbers that decide whether a platform stays cookie-last."""
+    try:
+        from app.core.redis_client import get_redis
+        rc = get_redis()
+        import time as _tm
+        k = f"cookie_last:stats:{_tm.strftime('%Y-%m-%d', _tm.gmtime())}"
+        rc.hincrby(k, f"{platform}|{outcome}", 1)
+        rc.expire(k, 40 * 86400)
+    except Exception:
+        pass
+
+
+def _anon_fast_fail(opts: dict, phase: str) -> None:
+    """The cookie-less first attempt should fail fast: a login wall answers at
+    once, and every second spent here is added to the download that then
+    goes to Cobalt / the cookie. Metadata phase only — byte downloads keep
+    their retries."""
+    if phase == "metadata":
+        opts["extractor_retries"] = 0
+        opts["retries"] = 0
+        opts["socket_timeout"] = min(int(opts.get("socket_timeout") or 10), 10)
+
+
 # ── Unguessable download paths ───────────────────────────────────────
 # GET /download-local serves any file under downloads/ to anyone who can name
 # it — no session, no ownership check (verified against production: a bare
@@ -550,7 +576,7 @@ from app.services.threads_extractor import (
     is_threads_url, is_threads_post_url, is_threads_share_url,
     extract_threads_sync, to_download_info,
 )
-from app.services.cobalt_service import is_cobalt_available, extract_youtube_formats_via_cobalt, download_from_cobalt, download_instagram_via_cobalt, download_facebook_via_cobalt, fetch_cobalt_stream
+from app.services.cobalt_service import is_cobalt_available, extract_youtube_formats_via_cobalt, download_from_cobalt, download_instagram_via_cobalt, download_facebook_via_cobalt, fetch_cobalt_stream, download_social_via_cobalt
 from app.core.local_download import new_download_path, TOKEN_HEX_LEN
 
 # Ensure Deno is discoverable for yt-dlp JS challenges
@@ -1081,6 +1107,8 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
         if fb_cookies:
             opts["cookiefile"] = fb_cookies
             print("[Downloader] Facebook cookies loaded")
+        elif cookie_last("facebook") and not force_cookie:
+            opts["extractor_retries"] = 0
 
     if "instagram.com" in url.lower():
         opts["http_headers"] = {"User-Agent": _INSTAGRAM_MOBILE_UA}
@@ -1094,6 +1122,8 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
             opts["cookiefile"] = ig_cookies
         else:
             opts["extractor_args"] = {"instagram": {"api": ["1"]}}
+            if cookie_last("instagram") and not force_cookie:
+                _anon_fast_fail(opts, phase)
 
     if is_twitter_url(url):
         tw_cookies = None if (cookie_last("twitter") and not force_cookie) else _get_twitter_cookies_file()
@@ -1105,6 +1135,8 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
             # X requires auth for most content since 2023.
             # Try graphql first (needs cookies for videos), fall through to legacy.
             opts["extractor_args"] = {"twitter": {"api": ["graphql", "legacy"]}}
+            if cookie_last("twitter") and not force_cookie:
+                _anon_fast_fail(opts, phase)
 
     return opts
 
@@ -3039,18 +3071,34 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         if is_youtube_url and ("Sign in to confirm" in primary_err_str or "LOGIN_REQUIRED" in primary_err_str):
             print("[Downloader] YouTube bot detection confirmed — PO Token invalidated, will refresh on next request")
 
-    # ── Phase 1.4: cookie-last retry (task #6127, COOKIE_LAST_PLATFORMS) ──
-    # The anonymous attempt failed: now — and only now — spend one account.
+    # ── Phase 1.4: cookie-last (task #6127, COOKIE_LAST_PLATFORMS) ──
+    # The anonymous attempt failed: try Cobalt (still no account), and only
+    # then spend one pool cookie.
     _cl_platform = ("facebook" if is_facebook else "instagram" if is_instagram
                     else "twitter" if is_twitter_url(url) else None)
+    _cl_on = bool(_cl_platform and cookie_last(_cl_platform) and not user_cookies_file
+                  and not opts.get("cookiefile"))
     # base opts set ignoreerrors: a failure usually comes back as info=None
     # with the reason only in the error sink, not as an exception
-    if (info is None and _cl_platform and cookie_last(_cl_platform) and not user_cookies_file
-            and not opts.get("cookiefile")
-            and cookie_retry_worthwhile(" ".join([primary_err_str, *_ytdlp_errors]))):
-        _ck_opts = _get_base_opts(url, phase="download", quality=quality,
-                                  error_sink=_ytdlp_errors, force_cookie=True)
-        if _ck_opts.get("cookiefile"):
+    if _cl_on and info is not None:
+        cookie_last_stat(_cl_platform, "anon_ok")
+    elif _cl_on and not cookie_retry_worthwhile(" ".join([primary_err_str, *_ytdlp_errors])):
+        cookie_last_stat(_cl_platform, "gone")
+    elif _cl_on:
+        try:
+            if is_cobalt_available():
+                info = download_social_via_cobalt(url, DOWNLOAD_DIR, _cl_platform)
+        except Exception as _cb_err:
+            print(f"[Downloader] {_cl_platform}: Cobalt step failed ({type(_cb_err).__name__})")
+            info = None
+        if info:
+            print(f"[Downloader] {_cl_platform}: served by Cobalt — no cookie spent")
+            cookie_last_stat(_cl_platform, "cobalt_ok")
+        _ck_opts = ({} if info else _get_base_opts(url, phase="download", quality=quality,
+                                                    error_sink=_ytdlp_errors, force_cookie=True))
+        if not info and not _ck_opts.get("cookiefile"):
+            cookie_last_stat(_cl_platform, "all_fail")
+        if not info and _ck_opts.get("cookiefile"):
             _ck_opts["extract_flat"] = False
             if _progress_hook:
                 _ck_opts["progress_hooks"] = [_progress_hook]
@@ -3065,7 +3113,9 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 info = None
             if info:
                 print(f"[Downloader] {_cl_platform}: recovered with the pool cookie")
+                cookie_last_stat(_cl_platform, "cookie_ok")
             else:
+                cookie_last_stat(_cl_platform, "all_fail")
                 _ck_l = " ".join([_ck_str, *_ytdlp_errors[_ck_seen:]]).lower()
                 print(f"[Downloader] {_cl_platform}: cookie retry failed too")
                 _ck_hard = any(s in _ck_l for s in ("login_required", "challenge", "suspended",

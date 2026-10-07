@@ -340,3 +340,110 @@ def test_expiry_check_covers_every_platform_with_cookies(rc, monkeypatch):
     add("reddit", jar(domain=".reddit.com"))
     add("facebook")
     assert cp.pooled_platforms() == ["facebook", "reddit"]
+
+
+# ── Cobalt before the cookie, outcome stats, fast-failing anonymous attempt ──
+
+def stats(rc):
+    import time as _tm
+    return rc.hgetall(f"cookie_last:stats:{_tm.strftime('%Y-%m-%d', _tm.gmtime())}")
+
+
+def test_cobalt_serves_before_any_cookie_is_spent(stub, rc, monkeypatch):
+    monkeypatch.setenv("COOKIE_LAST_PLATFORMS", "facebook")
+    v = add()
+    monkeypatch.setattr(downloader, "is_cobalt_available", lambda: True)
+    got = []
+    monkeypatch.setattr(downloader, "download_social_via_cobalt",
+                        lambda url, d, p: got.append(p) or {"url": None, "title": "via cobalt", "ext": "mp4",
+                                                            "id": "c1", "extractor": "cobalt_facebook",
+                                                            "filepath": __file__})
+    run()
+    assert got == ["facebook"]
+    assert all(not o.get("cookiefile") for o in stub.calls)
+    assert cp.uses_today("facebook", v) == 0
+    assert stats(rc) == {"facebook|cobalt_ok": "1"}
+
+
+def test_stats_per_step(stub, rc, monkeypatch):
+    monkeypatch.setenv("COOKIE_LAST_PLATFORMS", "facebook")
+    add()
+    run()                                                   # login wall → cookie
+    stub.anon_error = None
+    run()                                                   # public → anonymous
+    stub.anon_error = "ERROR: [facebook] 1: Video unavailable"
+    with pytest.raises(ValueError):
+        run()                                               # gone → nothing tried
+    assert stats(rc) == {"facebook|cookie_ok": "1", "facebook|anon_ok": "1", "facebook|gone": "1"}
+
+
+def test_all_fail_is_counted_once(stub, rc, monkeypatch):
+    monkeypatch.setenv("COOKIE_LAST_PLATFORMS", "facebook")
+    add()
+    stub.cookie_error = "ERROR: [facebook] 1: Cannot parse data"
+    with pytest.raises(ValueError):
+        run()
+    assert stats(rc) == {"facebook|all_fail": "1"}
+
+
+def test_anonymous_metadata_attempt_fails_fast(rc, monkeypatch):
+    add("instagram", jar(("ds_user_id", "1"), ("sessionid", "s"), ("csrftoken", "c"), domain=".instagram.com"))
+    ig = "https://www.instagram.com/reel/DFQe23tOWKz/"
+    slow = downloader._get_base_opts(ig, phase="metadata")
+    assert slow.get("cookiefile") and slow.get("retries") == 2          # cookie-first: unchanged
+    monkeypatch.setenv("COOKIE_LAST_PLATFORMS", "instagram")
+    fast = downloader._get_base_opts(ig, phase="metadata")
+    assert not fast.get("cookiefile") and fast["retries"] == 0 and fast["socket_timeout"] <= 10
+    assert downloader._get_base_opts(ig, phase="download")["retries"] == 2   # bytes keep retries
+    assert downloader._get_base_opts(ig, phase="metadata", force_cookie=True)["retries"] == 2
+
+
+def test_cobalt_api_key_is_sent_when_configured(monkeypatch):
+    from app.services import cobalt_service as cs
+    sent = []
+
+    class R:
+        def json(self):
+            return {"status": "error", "error": {"code": "x"}}
+
+    monkeypatch.setattr(cs, "_healthy_cobalt_instances", lambda: ["http://cobalt.test/"])
+    monkeypatch.setattr(cs.httpx, "post", lambda url, json, headers, timeout: sent.append(headers) or R())
+    monkeypatch.delenv("COBALT_API_KEY", raising=False)
+    cs.fetch_cobalt_stream("https://x.com/a/status/1")
+    monkeypatch.setenv("COBALT_API_KEY", "k-123")
+    cs.fetch_cobalt_stream("https://x.com/a/status/1")
+    assert "Authorization" not in sent[0] and sent[1]["Authorization"] == "Api-Key k-123"
+
+
+@pytest.fixture
+def media(tmp_path):
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg not installed")
+    jpg = tmp_path / "cover.mp4"           # what Cobalt handed back for a reel: a JPEG named .mp4
+    vid = tmp_path / "real.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=red:s=64x64", "-frames:v", "1",
+                    "-f", "image2", "-c:v", "mjpeg", str(jpg)], check=True)
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=s=64x64:d=1", "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p", str(vid)], check=True)
+    return jpg, vid
+
+
+def test_an_image_is_not_a_video(media):
+    from app.services.cobalt_service import is_real_video
+    jpg, vid = media
+    assert not is_real_video(str(jpg)) and is_real_video(str(vid))
+    assert not is_real_video(str(jpg.parent / "missing.mp4"))
+
+
+def test_cobalt_image_answer_is_not_served(media, monkeypatch):
+    from app.services import cobalt_service as cs
+    jpg, vid = media
+    monkeypatch.setattr(cs, "_download_social_via_cobalt",
+                        lambda u, d, p: {"filepath": str(jpg), "extractor": "cobalt_instagram"})
+    assert cs.download_social_via_cobalt("https://www.instagram.com/reel/x/", "/tmp", "instagram") is None
+    assert not jpg.exists()
+    monkeypatch.setattr(cs, "_download_social_via_cobalt",
+                        lambda u, d, p: {"filepath": str(vid), "extractor": "cobalt_instagram"})
+    assert cs.download_social_via_cobalt("https://www.instagram.com/reel/x/", "/tmp", "instagram")

@@ -75,6 +75,8 @@ def cobalt(monkeypatch):
         monkeypatch.setattr(cobalt_service, "fetch_cobalt_stream", lambda *a, **k: {
             "status": "tunnel", "url": "http://cobalt-api:9000/tunnel?id=1", "filename": filename})
         monkeypatch.setattr(cobalt_service.httpx, "Client", _FakeClient)
+        # the fake bytes are not a video; content checks live in test_cookie_longevity
+        monkeypatch.setattr(cobalt_service, "is_real_video", lambda path: True)
         return cobalt_service
     return _set
 

@@ -38,6 +38,14 @@ COBALT_API_URLS = [
 _COBALT_COOLDOWN_S = int(os.getenv("COBALT_INSTANCE_COOLDOWN_S", "120"))
 
 
+def _auth_headers() -> dict:
+    """Our own instance requires an API key (API_AUTH_REQUIRED=1, task #6127)
+    so a public URL cannot be used by anyone else. Read at call time; the key
+    itself is never logged."""
+    key = (os.getenv("COBALT_API_KEY") or "").strip()
+    return {"Authorization": f"Api-Key {key}"} if key else {}
+
+
 def _cobalt_down_key(instance_url: str) -> str:
     import hashlib
     return f"cobalt:down:{hashlib.md5(instance_url.encode()).hexdigest()[:12]}"
@@ -148,6 +156,7 @@ def fetch_cobalt_stream(url: str, video_quality: str = "1080",
                 headers={
                     "Accept": "application/json",
                     "Content-Type": "application/json",
+                    **_auth_headers(),
                 },
                 timeout=30.0,
             )
@@ -356,6 +365,10 @@ def download_instagram_via_cobalt(url: str, output_dir: str) -> "dict | None":
             if os.path.exists(output_path): os.remove(output_path)
             return None
 
+        if not is_real_video(output_path):
+            print("[Cobalt/IG] answer is not a video (image or broken file) — not used")
+            os.remove(output_path)
+            return None
         print(f"[Cobalt/IG] Downloaded {file_size/(1024*1024):.1f}MB → {output_path}")
         import uuid as _uuid2
         return {
@@ -411,6 +424,10 @@ def download_facebook_via_cobalt(url: str, output_dir: str) -> "dict | None":
             if os.path.exists(output_path): os.remove(output_path)
             return None
 
+        if not is_real_video(output_path):
+            print("[Cobalt/FB] answer is not a video (image or broken file) — not used")
+            os.remove(output_path)
+            return None
         print(f"[Cobalt/FB] Downloaded {file_size/(1024*1024):.1f}MB → {output_path}")
         import uuid as _uuid2
         return {
@@ -427,4 +444,78 @@ def download_facebook_via_cobalt(url: str, output_dir: str) -> "dict | None":
         if os.path.exists(output_path):
             try: os.remove(output_path)
             except Exception: pass
+        return None
+
+
+_STILL_IMAGE_CODECS = {"mjpeg", "png", "webp", "gif", "bmp", "tiff"}
+
+
+def is_real_video(path: str) -> bool:
+    """ffprobe finds a moving-picture video stream. Cobalt answers some posts
+    (photo posts, a reel's cover) with an image, and a non-empty file is not
+    a video: measured 07/10 — an Instagram "reel" came back as a 640x1026
+    JPEG that the old helpers would have served as .mp4."""
+    import json as _json
+    import subprocess
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,codec_name",
+             "-of", "json", path], capture_output=True, text=True, timeout=20)
+        streams = _json.loads(out.stdout or "{}").get("streams") or []
+    except Exception:
+        return False
+    return any(s.get("codec_type") == "video" and s.get("codec_name") not in _STILL_IMAGE_CODECS
+               for s in streams)
+
+
+def download_social_via_cobalt(url: str, output_dir: str, platform: str) -> "dict | None":
+    r = _download_social_via_cobalt(url, output_dir, platform)
+    if r and not is_real_video(r.get("filepath") or ""):
+        print(f"[Cobalt/{platform}] answer is not a video (image or broken file) — not used")
+        try:
+            os.remove(r["filepath"])
+        except Exception:
+            pass
+        return None
+    return r
+
+
+def _download_social_via_cobalt(url: str, output_dir: str, platform: str) -> "dict | None":
+    """Instagram / Facebook / X post via Cobalt (task #6127: tried after the
+    anonymous yt-dlp attempt and BEFORE a pool cookie is spent). Same result
+    shape as download_instagram_via_cobalt; None on any failure, including a
+    multi-item "picker" post (no single stream)."""
+    if platform == "instagram":
+        return download_instagram_via_cobalt(url, output_dir)
+    if platform == "facebook":
+        return download_facebook_via_cobalt(url, output_dir)
+    result = fetch_cobalt_stream(url, video_quality="1080", download_mode="auto")
+    stream_url = result.get("url") if result.get("status") != "error" else None
+    if not stream_url:
+        print(f"[Cobalt/{platform}] no single stream (status={result.get('status')})")
+        return None
+    output_path = new_download_path(output_dir, f"{platform}_", ".mp4")
+    try:
+        with httpx.Client(timeout=300.0, follow_redirects=True) as client:
+            with client.stream("GET", stream_url) as resp:
+                resp.raise_for_status()
+                with open(output_path, "wb") as f:
+                    for chunk in resp.iter_bytes(chunk_size=65536):
+                        if chunk:
+                            f.write(chunk)
+        if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+            if os.path.exists(output_path):
+                os.remove(output_path)
+            return None
+        import uuid as _uuid3
+        return {"url": None, "title": _title_from_cobalt_filename(result, f"{platform} video"),
+                "thumbnail": "", "ext": "mp4", "id": _uuid3.uuid4().hex[:8],
+                "extractor": f"cobalt_{platform}", "filepath": output_path}
+    except Exception as e:
+        print(f"[Cobalt/{platform}] download error: {type(e).__name__}")
+        if os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except Exception:
+                pass
         return None
