@@ -221,3 +221,16 @@ Tổng P0–P3: ~9,5 ngày dev tay / ~19 giờ AI, chưa tính BA duyệt chữ 
 6. **Cấp thêm**: chỉ theo ngày (Redis, hết nửa đêm) hay thêm "miễn hạn mức cho máy/tài khoản này N ngày" (cần cột trong `desktop_devices`/`profiles` + migration)?
 
 **Bước đầu khi duyệt**: tạo task AI Factory cho P0 (hạn 10/10), xin BA duyệt 5 chuỗi chữ (màn cập nhật, hết lượt khách, hết lượt tài khoản, trần IP, ngoại tuyến), và kiểm trên Vibe Host điểm **chưa kiểm** rẻ nhất: nginx frontend phục vụ được file ~100 MB không (việc đổi env cần redeploy đã kiểm 07/10).
+
+## Quyết định của chủ sản phẩm (07-10-2026)
+
+Chủ sản phẩm đồng ý cả 6 đề xuất của người duyệt:
+1. **Có** canary theo tài khoản (`CLIENT_QUOTA_ENFORCE_USERS`) trước khi mở cho mọi tài khoản.
+2. Trần hoàn lượt cho khách **2/ngày** (tài khoản giữ 10).
+3. App < 0.6.0 ở S5: **có** — 426 `update_required` kèm link cập nhật cho các lời gọi cần máy chủ.
+4. Bộ cài đặt ở **`dvid.vibe1.tinhgon.xyz/download/`** — kiểm trước nginx frontend phục vụ file ~100 MB.
+5. Chữ ký claim (P3): **chờ** bằng chứng từ P2.
+6. Cấp thêm lượt: **chỉ trong ngày** (Redis, hết lúc reset), không migration.
+
+Bổ sung ngưỡng cổng 14/10 còn trống: **15–30 %** → bật theo thứ tự như 2–15 % nhưng S2 (tài khoản) kéo dài 5 ngày thay vì 3 và xem lại mức 5 khách sau S3.
+
