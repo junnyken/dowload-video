@@ -196,11 +196,12 @@ def test_other_storage_error_is_500_not_leaky(db, as_user):
 def test_version_defaults_and_env(monkeypatch):
     for k in ("DESKTOP_LATEST_VERSION", "DESKTOP_MIN_VERSION", "DESKTOP_DOWNLOAD_URL", "DESKTOP_RELEASE_NOTES",
               "CLIENT_QUOTA_ENABLED", "CLIENT_QUOTA_MODE", "CLIENT_QUOTA_OFFLINE_GRACE",
-              "CLIENT_COOKIES_PLATFORMS"):
+              "CLIENT_COOKIES_PLATFORMS", "CLIENT_SERVER_FALLBACK_PLATFORMS"):
         monkeypatch.delenv(k, raising=False)
     r = client.get("/api/v1/client/version")
     assert r.status_code == 200
-    feats = {"clientQuota": False, "clientQuotaMode": "shadow", "offlineGrace": 3, "cookiePlatforms": []}
+    feats = {"clientQuota": False, "clientQuotaMode": "shadow", "offlineGrace": 3, "cookiePlatforms": [],
+             "serverFallbackPlatforms": []}
     assert r.json() == {"latest": "0.1.0", "minSupported": "0.1.0", "notes": "", "downloadUrl": "",
                         "features": feats}
     monkeypatch.setenv("DESKTOP_LATEST_VERSION", "0.2.0")
@@ -215,3 +216,10 @@ def test_version_defaults_and_env(monkeypatch):
 def test_cookie_platforms_are_allowlisted_and_ordered(monkeypatch):
     monkeypatch.setenv("CLIENT_COOKIES_PLATFORMS", " Instagram,douyin, evil.com ,douyin")
     assert client.get("/api/v1/client/version").json()["features"]["cookiePlatforms"] == ["douyin", "instagram"]
+
+
+def test_server_fallback_platforms(monkeypatch):
+    monkeypatch.setenv("CLIENT_SERVER_FALLBACK_PLATFORMS", "tiktok, YouTube ,nope")
+    assert client.get("/api/v1/client/version").json()["features"]["serverFallbackPlatforms"] == ["youtube", "tiktok"]
+    monkeypatch.setenv("CLIENT_SERVER_FALLBACK_PLATFORMS", "all")
+    assert "kuaishou" in client.get("/api/v1/client/version").json()["features"]["serverFallbackPlatforms"]

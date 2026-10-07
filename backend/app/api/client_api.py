@@ -245,7 +245,24 @@ def _features() -> Dict[str, Any]:
         # Task #6088 (PLAN-32D P1): platforms the app may download with the
         # user's own cookies (in-app sign-in). Empty = none; rollout one by one.
         "cookiePlatforms": cookie_platforms(),
+        # Task #6089 (PLAN-32D P2): platforms whose failed LOCAL download may
+        # be retried once through the server (/fetch-link). Empty = none.
+        "serverFallbackPlatforms": server_fallback_platforms(),
     }
+
+
+# Server-side platform slugs (app.core.platform_key) the app may fall back for.
+SERVER_FALLBACK_SLUGS = ("youtube", "tiktok", "instagram", "facebook", "twitter", "threads", "reddit",
+                         "pinterest", "vimeo", "bilibili", "soundcloud", "youku", "mgtv", "iqiyi",
+                         "kuaishou", "xiaohongshu")
+
+
+def server_fallback_platforms() -> List[str]:
+    raw = os.environ.get("CLIENT_SERVER_FALLBACK_PLATFORMS") or ""
+    want = {p.strip().lower() for p in raw.split(",") if p.strip()}
+    if "all" in want:
+        return list(SERVER_FALLBACK_SLUGS)
+    return [p for p in SERVER_FALLBACK_SLUGS if p in want]
 
 
 # Slugs the app knows (desktop/src/lib/cookies.ts). Anything else is dropped.
