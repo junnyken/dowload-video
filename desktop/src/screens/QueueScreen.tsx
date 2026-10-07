@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AlertCircle, CheckCircle2, FolderOpen, ListChecks, Pause, Play, RotateCw, Trash2, X, ExternalLink } from 'lucide-react';
 import { Badge, Button, EmptyState, IconButton, PlatformBadge, ProgressBar, ScreenHeader, Tabs, Thumb } from '../components/ui';
+import { QuotaBadge, QuotaNotice } from '../components/QuotaBadge';
 import { cancel, clearFinished, pause, queue, removeItem, resume, retry, type QueueItem } from '../lib/queue';
 import { formatBytes, formatEta, formatSpeed } from '../lib/format';
 import { errorMessage } from '../lib/errors';
@@ -96,8 +97,9 @@ export function QueueScreen() {
       <ScreenHeader
         title="Hàng đợi"
         subtitle="Các video đang tải, đang chờ và đã tải xong."
-        actions={<Button size="sm" icon={<Trash2 size={14} />} disabled={finished === 0} onClick={clearFinished}>Xoá mục đã xong</Button>}
+        actions={<><QuotaBadge /><Button size="sm" icon={<Trash2 size={14} />} disabled={finished === 0} onClick={clearFinished}>Xoá mục đã xong</Button></>}
       />
+      <QuotaNotice />
       <div className="px-6 pb-3">
         <Tabs<Tab> value={tab} onChange={setTab} items={[
           { value: 'active', label: 'Đang chạy', count: groups.active.length },

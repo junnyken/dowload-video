@@ -45,7 +45,7 @@ pub const PRESET_HEIGHTS: &[u32] = &[2160, 1440, 1080, 720, 480, 360];
 /// streams. `max_h` is the tallest real format in that preset's class, so a
 /// portrait 1080x1920 video selects with height<=1920.
 pub fn preset_selector(max_h: u32) -> String {
-    format!("bv*[height<={max_h}]+ba/b[height<={max_h}]")
+    format!("bv*[height<={max_h}]+ba/b[height<={max_h}]/b")
 }
 
 /// Resolution class of a video format: the SHORT side when both sides are
@@ -262,11 +262,11 @@ mod tests {
     fn presets_follow_available_heights() {
         let r = map_probe("https://youtu.be/abc", &yt_like());
         let ids: Vec<&str> = r.formats.iter().map(|f| f.id.as_str()).collect();
-        assert_eq!(ids[0], "bv*[height<=1080]+ba/b[height<=1080]");
-        assert_eq!(ids[1], "bv*[height<=720]+ba/b[height<=720]");
-        assert_eq!(ids[2], "bv*[height<=360]+ba/b[height<=360]");
-        assert!(!ids.contains(&"bv*[height<=2160]+ba/b[height<=2160]"));
-        assert!(!ids.contains(&"bv*[height<=480]+ba/b[height<=480]"));
+        assert_eq!(ids[0], "bv*[height<=1080]+ba/b[height<=1080]/b");
+        assert_eq!(ids[1], "bv*[height<=720]+ba/b[height<=720]/b");
+        assert_eq!(ids[2], "bv*[height<=360]+ba/b[height<=360]/b");
+        assert!(!ids.contains(&"bv*[height<=2160]+ba/b[height<=2160]/b"));
+        assert!(!ids.contains(&"bv*[height<=480]+ba/b[height<=480]/b"));
         let p1080 = &r.formats[0];
         assert!(p1080.requires_merge);
         assert_eq!(p1080.filesize, Some(43_200_000)); // 137 (approx) + 251 best audio
@@ -297,7 +297,7 @@ mod tests {
             "formats": [{"format_id": "h264_540p", "ext": "mp4", "height": 1024, "width": 576, "vcodec": "h264", "acodec": "aac"}]});
         let r = map_probe("u", &j);
         // Portrait 576x1024: class 720p (short side), selected by its real height.
-        assert_eq!(r.formats[0].id, "bv*[height<=1024]+ba/b[height<=1024]");
+        assert_eq!(r.formats[0].id, "bv*[height<=1024]+ba/b[height<=1024]/b");
         assert_eq!(r.formats[0].height, Some(720));
         assert!(!r.formats[0].requires_merge);
         assert!(r.formats.iter().any(|f| f.id == "h264_540p"));
@@ -318,8 +318,8 @@ mod tests {
             .filter(|f| f.id.starts_with("bv*"))
             .map(|f| (f.height, f.id.as_str())).collect();
         assert_eq!(presets, vec![
-            (Some(1080), "bv*[height<=1920]+ba/b[height<=1920]"),
-            (Some(720), "bv*[height<=1280]+ba/b[height<=1280]"),
+            (Some(1080), "bv*[height<=1920]+ba/b[height<=1920]/b"),
+            (Some(720), "bv*[height<=1280]+ba/b[height<=1280]/b"),
         ]);
     }
 

@@ -11,6 +11,7 @@ import { nav } from '../lib/ui';
 import { applyTheme, settings } from '../lib/settings';
 import { initAuth } from '../lib/auth';
 import { initQueue } from '../lib/queue';
+import { initQuota } from '../lib/quota';
 import { initSync, refreshPending } from '../lib/sync';
 import { startChannels } from '../lib/channels';
 import { mockMode } from '../lib/tauri';
@@ -29,6 +30,7 @@ export function App() {
       booted = true;
       initSync();
       void initQueue();
+      initQuota();
       void initAuth();
       void refreshPending();
       void startChannels();

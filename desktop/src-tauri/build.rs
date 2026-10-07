@@ -29,6 +29,7 @@ const COMMANDS: &[&str] = &[
     "browser_login",
     "cancel_browser_login",
     "get_version",
+    "device_info",
     "tool_versions",
     "channel_fetch",
     "cancel_channel_fetch",

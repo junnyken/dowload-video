@@ -28,6 +28,7 @@
     "allow-browser-login",
     "allow-cancel-browser-login",
     "allow-get-version",
+    "allow-device-info",
     "allow-tool-versions",
     "allow-channel-fetch",
     "allow-cancel-channel-fetch",

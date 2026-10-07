@@ -4,8 +4,8 @@
 import { createStore } from './store';
 import { api, onCheckNow, onQuitting } from './tauri';
 import { enqueue, pauseAllForQuit } from './queue';
-import { QUALITY_LABEL } from './quality';
-import { settings, type Quality } from './settings';
+import { qualityFormat } from './quality';
+import { settings } from './settings';
 import { errorMessage, toAppError } from './errors';
 import { newId } from './format';
 import { fetchDouyinListing } from './douyin';
@@ -39,13 +39,6 @@ export const isManualOnly = (c: { platform: string }) => c.platform === 'douyin'
 /** Channel listing: Douyin goes through the server, everything else through the local yt-dlp. */
 export function fetchChannelListing(url: string, limit: number): Promise<ChannelListing> {
   return isDouyinUrl(url) ? fetchDouyinListing(url, limit) : api.channelFetch(url, limit);
-}
-
-export function qualityFormat(q: string): { formatId?: string; audioOnly: boolean; label: string } {
-  const label = QUALITY_LABEL[q as Quality] ?? QUALITY_LABEL.best;
-  if (q === 'audio') return { audioOnly: true, label };
-  if (/^\d+$/.test(q)) return { formatId: `bv*[height<=${q}]+ba/b[height<=${q}]`, audioOnly: false, label };
-  return { audioOnly: false, label };
 }
 
 /** Puts videos into the download queue exactly like the Download screen does (without a per-video probe). */

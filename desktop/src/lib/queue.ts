@@ -10,6 +10,8 @@ import type { HistoryItem, Stage } from './types';
 import { syncSoon } from './sync';
 import { douyinVideo, isExpired, toHeaderList, type DouyinVideo } from './douyin';
 import { isDouyinUrl } from './urls';
+import { claimForStart, clearGate, quotaGate, settle } from './quota';
+import { gatePaused } from './quota-core';
 
 export type QueueState = 'queued' | 'running' | 'paused' | 'completed' | 'failed';
 
@@ -36,6 +38,8 @@ export type QueueItem = {
   filePath: string | null;
   fileSize: number | null;
   errorCode: string | null;
+  /** Server claim for the daily allowance (quota.ts); NO_CLAIM = nothing to settle. Persisted, so a resume after a restart does not claim twice. */
+  claimId?: string | null;
   addedAt: string;
 };
 
@@ -93,6 +97,7 @@ export function pauseAllForQuit() {
 
 export function pump() {
   if (quitting) return;
+  if (gatePaused(quotaGate.get(), Date.now())) return; // the server refused (daily limit): wait for sign-in / retry / next day
   const limit = settings.get().concurrency;
   for (;;) {
     const l = queue.get();
@@ -129,7 +134,15 @@ async function douyinArgs(item: QueueItem) {
 async function start(item: QueueItem) {
   patch(item.id, { state: 'running', pausing: false, stage: 'downloading', errorCode: null });
   try {
-    const extra = isDouyinUrl(item.url) ? await douyinArgs(item) : {};
+    let extra = {};
+    if (isDouyinUrl(item.url)) {
+      extra = await douyinArgs(item); // the server already counts this one
+    } else if (!item.claimId) {
+      const v = await claimForStart(item.url); // daily allowance (PLAN-32D §5); resumed items keep their claim
+      if (!v.ok) { refusedByQuota(item.id); return; }
+      patch(item.id, { claimId: v.claimId });
+      if (!queue.get().some((i) => i.id === item.id)) { void settle(v.claimId, 'cancelled'); return; } // cancelled while claiming
+    }
     if (!queue.get().some((i) => i.id === item.id && i.state === 'running')) return; // cancelled / paused while resolving
     await api.startDownload({ jobId: item.id, url: item.url, outDir: item.outDir, formatId: item.formatId, audioOnly: item.audioOnly, ...extra });
   } catch (e) {
@@ -145,10 +158,18 @@ function toHistory(i: QueueItem, state: 'completed' | 'failed', extra: Partial<H
   };
 }
 
+/** The daily limit refused this item: it fails with the server's own text. No history row, no toast per item (quota.ts shows one). */
+function refusedByQuota(id: string) {
+  patch(id, { state: 'failed', errorCode: 'api:quota_exceeded_daily', speedBps: null, etaSec: null, pausing: false, stage: null });
+  pump();
+}
+
 function finishFailed(id: string, code: string) {
   const it = queue.get().find((i) => i.id === id);
   if (!it) return;
   forget(id);
+  void settle(it.claimId, 'failed', code); // refund when the server allows it
+  patch(id, { claimId: null });
   patch(id, { state: 'failed', errorCode: code, speedBps: null, etaSec: null, pausing: false });
   void api.historyAdd(toHistory(it, 'failed', { errorCode: code })).then(() => syncSoon()).catch(() => {});
   toast('error', `Tải thất bại: ${it.title}. ${errorMessage(code)}`);
@@ -173,6 +194,7 @@ export async function initQueue() {
     switch (e.state) {
       case 'completed':
         forget(e.jobId);
+        void settle(it.claimId, 'completed');
         patch(e.jobId, { state: 'completed', percent: 100, stage: null, speedBps: null, etaSec: null, filePath: e.filePath ?? null, fileSize: e.fileSize ?? it.totalBytes, pausing: false });
         void api.historyAdd(toHistory(it, 'completed', { filePath: e.filePath ?? null, fileSize: e.fileSize ?? it.totalBytes })).then(() => syncSoon()).catch(() => {});
         toast('success', `Đã tải xong: ${it.title}`);
@@ -195,11 +217,13 @@ export async function initQueue() {
         break;
       case 'cancelled':
         forget(e.jobId);
+        void settle(it.claimId, 'cancelled');
         queue.set((l) => l.filter((i) => i.id !== e.jobId));
         pump();
         break;
     }
   });
+  quotaGate.subscribe(() => { if (!gatePaused(quotaGate.get(), Date.now())) pump(); });
   pump();
 }
 
@@ -214,13 +238,15 @@ export async function pause(id: string) {
 }
 
 export function resume(id: string) {
+  clearGate();
   patch(id, { state: 'queued' });
   pump();
 }
 
 export function retry(id: string) {
   forget(id);
-  patch(id, { state: 'queued', errorCode: null, percent: null, downloadedBytes: null, speedBps: null, etaSec: null });
+  clearGate();
+  patch(id, { state: 'queued', claimId: null, errorCode: null, percent: null, downloadedBytes: null, speedBps: null, etaSec: null });
   pump();
 }
 
@@ -228,6 +254,7 @@ export async function cancel(id: string) {
   const it = queue.get().find((i) => i.id === id);
   if (!it) return;
   forget(id);
+  void settle(it.claimId, 'cancelled');
   queue.set((l) => l.filter((i) => i.id !== id));
   if (it.state === 'running' || it.state === 'paused') {
     try { await api.cancelDownload(id); } catch { /* process may already be gone */ }

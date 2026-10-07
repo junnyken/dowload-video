@@ -16,6 +16,7 @@ mod auth;
 mod browser_login;
 mod channels;
 mod checksum;
+mod device;
 mod engine;
 mod error;
 mod formats;
@@ -977,6 +978,13 @@ async fn auth_clear() -> CmdResult<()> {
 
 // ---------------------------------------------------------------- versions
 
+/// Machine code for quota counting and the Settings card (device.rs).
+#[tauri::command]
+fn device_info(app: AppHandle) -> device::DeviceInfo {
+    let dir = app.path().app_data_dir().ok();
+    device::device_info(dir.as_deref())
+}
+
 #[tauri::command]
 fn get_version(app: AppHandle) -> String {
     app.package_info().version.to_string()
@@ -1117,6 +1125,7 @@ pub fn run() {
             browser_login,
             cancel_browser_login,
             get_version,
+            device_info,
             tool_versions,
             channel_fetch,
             cancel_channel_fetch,

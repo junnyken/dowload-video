@@ -1,6 +1,5 @@
 import { createStore } from './store';
 import { api } from './tauri';
-import { newId } from './format';
 
 export type Quality = 'best' | '2160' | '1440' | '1080' | '720' | '480' | '360' | 'audio';
 export type Theme = 'system' | 'light' | 'dark';
@@ -35,16 +34,6 @@ export function updateSettings(patch: Partial<Settings>) {
   settings.set((s) => ({ ...s, ...patch }));
   try { localStorage.setItem(KEY, JSON.stringify(settings.get())); } catch { /* quota */ }
   if (patch.theme) applyTheme();
-}
-
-/** Stable per-install id sent with synced history (never personal). */
-export function deviceId(): string {
-  let id = localStorage.getItem('vg.deviceId');
-  if (!id) {
-    id = newId();
-    localStorage.setItem('vg.deviceId', id);
-  }
-  return id;
 }
 
 export function applyTheme() {

@@ -44,3 +44,15 @@ export function resolveQuality(opts: QualityOption[], want: Quality): Quality {
   if (below != null) return String(below) as Quality;
   return 'best';
 }
+
+/** Height preset selector. The trailing `/b` keeps sites whose formats carry no height (MangoTV) downloadable. */
+export function presetFormat(h: number): string {
+  return `bv*[height<=${h}]+ba/b[height<=${h}]/b`;
+}
+
+export function qualityFormat(q: string): { formatId?: string; audioOnly: boolean; label: string } {
+  const label = QUALITY_LABEL[q as Quality] ?? QUALITY_LABEL.best;
+  if (q === 'audio') return { audioOnly: true, label };
+  if (/^\d+$/.test(q)) return { formatId: presetFormat(Number(q)), audioOnly: false, label };
+  return { audioOnly: false, label };
+}

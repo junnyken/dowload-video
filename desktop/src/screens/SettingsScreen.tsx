@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { FolderOpen, LogIn, LogOut, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Check, Copy, FolderOpen, LogIn, LogOut, RefreshCw, ShieldCheck } from 'lucide-react';
 import { Badge, Button, ScreenHeader, Select, Spinner, Toggle } from '../components/ui';
 import { SyncStatus } from '../components/SyncStatus';
+import { deviceInfo, type DeviceInfo } from '../lib/device';
 import { CopyLink } from '../components/CopyLink';
 import { settings, updateSettings, ensureOutDir, type Quality, type Theme } from '../lib/settings';
 import { QUALITY_LABEL } from '../lib/quality';
@@ -43,9 +44,20 @@ export function SettingsScreen() {
   const [latest, setLatest] = useState<ClientVersionInfo | null>(null);
   const [checking, setChecking] = useState(false);
   const [checkMsg, setCheckMsg] = useState<string | null>(null);
+  const [device, setDevice] = useState<DeviceInfo | null>(null);
+  const [codeCopied, setCodeCopied] = useState(false);
+  async function copyCode() {
+    if (!device) return;
+    try {
+      await navigator.clipboard.writeText(device.code);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 1800);
+    } catch { toast('error', 'Không sao chép được. Hãy bôi đen mã và nhấn Ctrl+C.'); } // wording: BA review
+  }
 
   useEffect(() => {
     void ensureOutDir();
+    void deviceInfo().then(setDevice);
     api.getVersion().then(setVersion).catch(() => setVersion(null));
     api.toolVersions().then(setTools).catch(() => setTools(null));
   }, []);
@@ -156,6 +168,20 @@ export function SettingsScreen() {
             <div className="flex flex-wrap items-center gap-2 px-4 py-3 text-[13px] text-fg-muted">
               Tạo tài khoản hoặc đặt lại mật khẩu tại website: <CopyLink url={WEBSITE_URL} />
             </div>
+          </Section>
+
+          <Section title="Máy này">{/* wording: BA review */}
+            <Row label={device ? `Mã máy: ${device.code}` : 'Mã máy'} hint={device?.displayName}>
+              {device && (
+                <Button size="sm" icon={codeCopied ? <Check size={14} /> : <Copy size={14} />} onClick={() => void copyCode()}>
+                  {codeCopied ? 'Đã chép' : 'Sao chép mã'}
+                </Button>
+              )}
+            </Row>
+            {/* wording: BA review */}
+            <p className="px-4 py-3 text-[13px] text-fg-muted">
+              Mã gắn với máy này, không gắn với tài khoản. Cài lại ứng dụng không làm đổi mã; cài lại Windows hoặc đổi máy thì mã đổi theo. Đọc mã này cho bộ phận hỗ trợ khi cần.
+            </p>
           </Section>
 
           <Section title="Thông tin phiên bản">

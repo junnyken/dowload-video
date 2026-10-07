@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ClipboardPaste, ListPlus, Search, Link2, Tv, X } from 'lucide-react';
 import { Button, EmptyState, ScreenHeader } from '../components/ui';
+import { QuotaBadge, QuotaNotice } from '../components/QuotaBadge';
 import { ProbeCard, cardSelection } from '../components/ProbeCard';
 import { analyze, clearInvalid, parseUrls, probes, removeCard, type Card } from '../lib/probes';
 import { createStore } from '../lib/store';
@@ -83,7 +84,8 @@ export function DownloadScreen() {
 
   return (
     <div className="flex h-full flex-col">
-      <ScreenHeader title="Tải xuống" subtitle="Dán một hoặc nhiều liên kết video, mỗi liên kết một dòng." />
+      <ScreenHeader title="Tải xuống" subtitle="Dán một hoặc nhiều liên kết video, mỗi liên kết một dòng." actions={<QuotaBadge />} />
+      <QuotaNotice />
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
         <div className="rounded-xl border border-line bg-surface p-3 shadow-card">
           <textarea

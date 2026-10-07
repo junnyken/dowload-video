@@ -6,6 +6,7 @@
 // absent. Inside Tauri the real invoke() is always used.
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { DeviceInfo } from './device';
 import type { Channel, ChannelListing, DoneEvent, HistoryItem, LogEvent, ProbeResult, ProgressEvent, ToolVersions } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -61,6 +62,7 @@ export const api = {
   browserLogin: () => call<string>('browser_login'),
   cancelBrowserLogin: () => call<null>('cancel_browser_login'),
   getVersion: () => call<string>('get_version'),
+  deviceInfo: () => call<DeviceInfo>('device_info'),
   toolVersions: () => call<ToolVersions>('tool_versions'),
   // Channels (C1-CONTRACT.md section 4)
   channelFetch: (url: string, limit?: number) => call<ChannelListing>('channel_fetch', { url, limit }),

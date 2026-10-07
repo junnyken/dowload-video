@@ -5,7 +5,8 @@ import { createStore } from './store';
 import { api } from './tauri';
 import { apiFetch } from './http';
 import { auth, getAccessToken } from './auth';
-import { deviceId, settings } from './settings';
+import { settings } from './settings';
+import { deviceHash } from './device';
 import type { HistoryItem } from './types';
 
 
@@ -69,7 +70,7 @@ export async function syncNow(): Promise<void> {
       let token = await getAccessToken();
       if (!token) { syncState.set((s) => ({ ...s, status: 'signedout' })); return; }
       const body = {
-        deviceId: deviceId(),
+        deviceId: (await deviceHash()) ?? '', // machine hash (device.rs); was a per-install random id
         clientVersion,
         items: batch.map((h) => ({
           clientId: h.id, url: h.url, title: h.title, platform: h.platform, formatLabel: h.formatLabel,

@@ -228,7 +228,8 @@ export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promi
     case 'autostart_get': return autostart;
     case 'autostart_set': autostart = a.enabled as boolean; return null;
     case 'set_close_to_tray': return null;
-    case 'get_version': return '0.1.0-dev';
+    case 'get_version': return '0.6.0-dev';
+    case 'device_info': return { hash: 'a1b2c3d4'.repeat(8), code: 'A1B2C3D4', displayName: 'PC-MOCK (Windows 11 24H2, build 26100)', source: 'machine' };
     case 'tool_versions': return { ytdlp: '2026.09.30', ffmpeg: '7.1', deno: '2.5.0' };
   }
   throw err('unknown', `mock: unknown command ${cmd}`);
@@ -239,6 +240,7 @@ export async function mockApi<T>(path: string, opts: { method?: string; body?: u
   await sleep(250);
   const r = (status: number, data: unknown) => ({ status, data: data as T });
   if (path.startsWith('/api/v1/client/version')) return r(200, { latest: '0.2.0', minSupported: '0.1.0', notes: 'Bản mô phỏng', downloadUrl: 'https://dvid.vibe1.tinhgon.xyz/download' });
+  if (path.startsWith('/api/v1/client/quota')) return mockQuota(path, opts.method ?? 'GET', opts.body as { url?: string; retro?: boolean; claimId?: string; outcome?: string }, !!opts.token) as { status: number; data: T | null };
   if (path.startsWith('/api/v1/client/douyin/')) return mockDouyin(path, opts.body as { url?: string; limit?: number }, !!opts.token) as { status: number; data: T | null };
   if (!opts.token) return r(401, { detail: 'unauthorized' });
   if (path.startsWith('/api/v1/client/history') && opts.method === 'POST') {
@@ -310,5 +312,37 @@ function mockDouyin(path: string, body: { url?: string; limit?: number }, signed
       headers: { Referer: 'https://www.douyin.com/', 'User-Agent': 'MockAgent/1.0' }, expiresAt: new Date(Date.now() + 3_600_000).toISOString(), cacheHit: false,
     });
   }
+  return r(404, null);
+}
+
+// ---- daily allowance (client_quota.py). localStorage switches: mock.quotaDisabled=1 (503),
+// mock.quotaLeft=0 (everything refused), mock.quotaOffline=1 (network error). Guest 5/day, signed in 20.
+const qMock = { used: 0, claims: new Map<string, string>() };
+function mockQuota(path: string, method: string, body: { url?: string; retro?: boolean; claimId?: string; outcome?: string }, signedIn: boolean) {
+  const r = (status: number, data: unknown) => ({ status, data });
+  if (localStorage.getItem('mock.quotaOffline') === '1') throw { code: 'network', message: 'mock offline' };
+  if (localStorage.getItem('mock.quotaDisabled') === '1') return r(503, { detail: 'Tính năng đếm lượt tải của app Windows chưa được bật.', error_code: 'client_quota_disabled' });
+  const limit = signedIn ? 20 : 5;
+  const used = localStorage.getItem('mock.quotaLeft') === '0' ? limit : qMock.used;
+  const counters = () => ({ limit, usedToday: Math.min(used, limit), remaining: Math.max(0, limit - used), resetTimeVn: '07:00', requester: signedIn ? 'user' : 'device' });
+  if (path.endsWith('/quota/claim') && method === 'POST') {
+    if (!body?.url || body.url.length < 8) return r(400, { detail: 'Liên kết không hợp lệ.', error_code: 'invalid_url' });
+    if (!body.retro && used >= limit) {
+      return r(signedIn ? 403 : 429, {
+        allowed: false, error_code: 'quota_exceeded_daily', reason: 'daily_limit', upsell: signedIn ? 'upgrade' : 'signin', ...counters(), remaining: 0,
+        detail: signedIn ? 'Bạn đã dùng hết 20 lượt tải hôm nay (bản mô phỏng). Lượt mới được cộng lại lúc 07:00.' : 'Bạn đã dùng hết 5 lượt tải của khách hôm nay (bản mô phỏng). Lượt mới được cộng lại lúc 07:00.',
+      });
+    }
+    qMock.used++;
+    const claimId = `mockclaim${qMock.claims.size + 1}`;
+    qMock.claims.set(claimId, body.url);
+    return r(200, { allowed: true, claimId, platform: 'youtube', alreadyCounted: false, overLimit: false, mode: 'enforce', ...{ ...counters(), usedToday: Math.min(qMock.used, limit), remaining: Math.max(0, limit - qMock.used) } });
+  }
+  if (path.endsWith('/quota/settle') && method === 'POST') {
+    const refunded = body?.outcome !== 'completed' && qMock.claims.delete(body?.claimId ?? '') && qMock.used > 0;
+    if (refunded) qMock.used--;
+    return r(200, { refunded: !!refunded, ...counters() });
+  }
+  if (method === 'GET') return r(200, { ...counters(), deviceCode: 'A1B2C3D4', mode: 'enforce', enforced: true, offlineGrace: 3, refundDailyMax: 10 });
   return r(404, null);
 }

@@ -118,6 +118,7 @@ mod tests {
         // Channel downloads pass formats::preset_selector output; keep it valid.
         assert!(format_id("bv*[height<=1080]+ba/b[height<=1080]").is_ok());
         assert!(format_id("bv*[height<=1920]+ba/b[height<=1920]").is_ok());
+        assert!(format_id("bv*[height<=2160]+ba/b[height<=2160]/b").is_ok()); // longest preset incl. the /b fallback
         assert!(format_id("a;rm -rf /").is_err());
         assert!(format_id("").is_err());
     }
