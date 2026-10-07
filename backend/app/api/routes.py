@@ -543,14 +543,32 @@ async def fetch_link(
     # 1. Per-platform daily allowance (owner decision 2026-10-06): guest 5,
     #    signed-in 20 (paid tiers more), admin session unlimited — per platform,
     #    per UTC day. Counted on success (step 4 below).
+    #    PLAN-32E G2: the Windows app (X-VG-Source: desktop) is counted under
+    #    its machine (X-VG-Device → dev:<32 hex>), the same bucket as its own
+    #    local downloads (/client/quota/claim) — not under the IP the web
+    #    shares. The web never sends X-VG-Device; it is ignored without the
+    #    desktop source header. Machines behind one IP share a cap (below).
+    _from_app = (x_vg_source or "").strip().lower() == "desktop"
     _quota_platform = _get_platform_key(payload.url)
-    _quota_req = resolve_requester(request, user_id=user_id, ip=_req_client_ip)
+    _quota_req = resolve_requester(
+        request, user_id=user_id, ip=_req_client_ip,
+        device_id=request.headers.get("X-VG-Device") if _from_app else None)
     _pq = check_platform_quota(_quota_req, _quota_platform, payload.url)
     if not _pq["allowed"]:
+        if _from_app:
+            from app.api.client_quota import record_route_stat as _route_stat
+            _route_stat("server", "refused", _quota_req)
         raise HTTPException(
             status_code=403 if _quota_req.kind == REQ_USER else 429,
             detail=make_error(ERR_QUOTA_DAILY, extra=_quota_error_extra(_pq)),
         )
+    if _from_app and not _pq.get("already_counted"):
+        from app.api import client_quota as _cq
+        if _cq.ip_cap_exceeded(_quota_req, _req_client_ip, _quota_platform, payload.url):
+            _cq.record_route_stat("server", "refused", _quota_req)
+            raise HTTPException(status_code=429, detail=make_error(ERR_QUOTA_DAILY, extra={
+                **_quota_error_extra(_pq), "message": _cq.ip_cap_message(),
+                "remaining": 0, "reason": "ip_limit"}))
 
     # 2. Quality cap: free users cannot request 4K explicitly
     if payload.quality in ("mp4_4k", "4k") and user_id:
@@ -817,7 +835,10 @@ async def fetch_link(
 
         # 4. Count the download: per-platform allowance (once per URL per
         #    day; admin never counted) + the account's statistics row.
-        record_platform_download(_quota_req, _quota_platform, payload.url)
+        _counted = record_platform_download(_quota_req, _quota_platform, payload.url)
+        if _from_app:
+            from app.api.client_quota import note_device_counted as _note_dev
+            _note_dev(_quota_req, _req_client_ip, _counted)
         if user_id:
             try:
                 increment_usage(user_id)
@@ -903,9 +924,9 @@ async def fetch_link(
 
         # Windows app server route (fetchlink.ts sends X-VG-Source: desktop):
         # counted in the admin "App Windows" stats (task #6090).
-        if (x_vg_source or "").strip().lower() == "desktop":
+        if _from_app:
             from app.api.client_quota import record_route_stat as _route_stat
-            _route_stat("server", "ok")
+            _route_stat("server", "ok", _quota_req)
         from app.core.local_download import file_fields as _file_fields
         return {
             "success": True,

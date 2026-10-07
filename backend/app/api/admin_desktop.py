@@ -15,6 +15,12 @@ All routes require verify_admin, mounted under /api/v1/admin.
       machines active today, the client-quota flags (non-secret values only)
       and a short summary: share local vs server, over-limit-in-shadow,
       refunds today.
+      PLAN-32E P0 (gate 14/10): the V/C ratio (over_shadow / counted) overall
+      and per requester kind (guest = machine + guest IP, account = signed
+      in) from the "kind:<kind>|<outcome>" fields of the same hash, per day
+      too; refunds and offline (retro) claims per day; the top 10 machines /
+      accounts by over-limit today (display code only); machines active in
+      the period per app version (desktop_devices.client_version).
 
 Table missing (migration 037 not applied) → 200 with storage_ready=false.
 """
@@ -41,6 +47,9 @@ OUTCOMES = ("ok", "over_shadow", "refused", "retro",
             "settle_completed", "settle_failed", "settle_cancelled")
 # Outcomes where the download went ahead and was counted against the allowance.
 _COUNTED = ("ok", "over_shadow", "retro")
+KINDS = ("user", "device", "anon", "admin")
+KIND_OUTCOMES = OUTCOMES + ("refunded",)
+TOP_OVER_MAX = 10
 _Q_SAFE = re.compile(r"[^\w\s.@\-]", re.UNICODE)
 _HEX = re.compile(r"^[0-9a-fA-F]{1,64}$")
 _UID = re.compile(r"^[0-9a-fA-F-]{4,36}$")
@@ -241,6 +250,7 @@ def _flags() -> dict:
         "desktop_min_version": (env("DESKTOP_MIN_VERSION") or "0.1.0").strip(),
         "offline_grace": client_quota.offline_grace(),
         "refund_daily_max": client_quota.refund_daily_max(),
+        "refund_daily_max_guest": client_quota.refund_daily_max_guest(),
         "ip_mult": client_quota.ip_mult(),
         "limit_anon": quotas.platform_limit_anon(),
         "limit_user": quotas.platform_limit_user(),
@@ -264,6 +274,73 @@ def _read_day(r, day: str) -> Dict[str, Dict[str, int]]:
     return grid
 
 
+def _empty_kinds() -> Dict[str, Dict[str, int]]:
+    return {k: {o: 0 for o in KIND_OUTCOMES} for k in KINDS}
+
+
+def _read_kinds(r, day: str) -> Dict[str, Dict[str, int]]:
+    """"kind:<kind>|<outcome>" fields of the day's hash (client_quota._stat)."""
+    out = _empty_kinds()
+    raw = r.hgetall(f"vidgrab:stats:route:{day}") or {}
+    for k, v in raw.items():
+        key = _s(k)
+        if not key.startswith("kind:"):
+            continue
+        kind, _, outcome = key[5:].partition("|")
+        if kind in out and outcome in out[kind]:
+            try:
+                out[kind][outcome] += int(_s(v))
+            except ValueError:
+                pass
+    return out
+
+
+def _ratio(num: int, den: int) -> Optional[float]:
+    return round(num / den, 4) if den else None
+
+
+def _kind_summary(cells: List[Dict[str, int]]) -> dict:
+    """Sum of several kinds' outcome cells → counted / over / V/C ratio."""
+    tot = {o: sum(c[o] for c in cells) for o in KIND_OUTCOMES}
+    counted = sum(tot[o] for o in _COUNTED)
+    return {"counted": counted, "over_shadow": tot["over_shadow"], "refused": tot["refused"],
+            "retro": tot["retro"], "refunded": tot["refunded"],
+            "settle_failed": tot["settle_failed"], "settle_cancelled": tot["settle_cancelled"],
+            "vc_ratio": _ratio(tot["over_shadow"], counted)}
+
+
+def _split(kinds: Dict[str, Dict[str, int]]) -> dict:
+    return {"guest": _kind_summary([kinds["device"], kinds["anon"]]),
+            "account": _kind_summary([kinds["user"]]),
+            "device": _kind_summary([kinds["device"]]),
+            "anon": _kind_summary([kinds["anon"]])}
+
+
+def _top_over_today(r) -> List[dict]:
+    """Top machines / accounts by over-limit-in-shadow claims today. Only the
+    8-char display code leaves the server (machine: hash prefix as on the
+    device list; account: user id prefix)."""
+    # read a little more than shown, in case a member of another kind is in it
+    rows = r.zrevrange(f"vidgrab:stats:over_top:{quotas._utc_day()}", 0, 2 * TOP_OVER_MAX - 1,
+                       withscores=True) or []
+    out = []
+    for member, score in rows:
+        key = _s(member)
+        kind, _, ident = key.partition(":")
+        if kind == "dev":
+            out.append({"kind": "device", "code": ident[:8].upper(), "over": int(score)})
+        elif kind == "user":
+            out.append({"kind": "user", "code": ident[:8], "over": int(score)})
+    return out[:TOP_OVER_MAX]
+
+
+def _version_key(v: Optional[str]):
+    parts = []
+    for p in re.split(r"[.\-+]", v or ""):
+        parts.append(int(p) if p.isdigit() else -1)
+    return (v is not None, parts)
+
+
 def _refunds_today(r) -> int:
     """Sum of every requester's refund counter today (those keys expire at
     UTC midnight, so only today exists)."""
@@ -280,8 +357,10 @@ def _refunds_today(r) -> int:
 
 
 def _device_counts(start: datetime) -> dict:
-    """New machines per UTC day since `start`, active today, total."""
-    out: Dict[str, Any] = {"storage_ready": True, "new_by_day": {}, "active_today": 0, "total": 0}
+    """New machines per UTC day since `start`, active today, total, and the
+    machines active since `start` per app version."""
+    out: Dict[str, Any] = {"storage_ready": True, "new_by_day": {}, "active_today": 0, "total": 0,
+                           "versions": []}
     try:
         db = _db()
         res = (db.table(TABLE).select("first_seen").gte("first_seen", start.isoformat())
@@ -300,6 +379,14 @@ def _device_counts(start: datetime) -> dict:
         out["active_today"] = act.count if isinstance(getattr(act, "count", None), int) else len(act.data or [])
         tot = db.table(TABLE).select("device_hash", count="exact").limit(1).execute()
         out["total"] = tot.count if isinstance(getattr(tot, "count", None), int) else len(tot.data or [])
+        ver = (db.table(TABLE).select("client_version").gte("last_seen", start.isoformat())
+               .limit(10_000).execute())
+        by_ver: Dict[Optional[str], int] = {}
+        for row in ver.data or []:
+            v = (str(row.get("client_version") or "").strip() or None)
+            by_ver[v] = by_ver.get(v, 0) + 1
+        out["versions"] = [{"version": v, "machines": c}
+                           for v, c in sorted(by_ver.items(), key=lambda kv: _version_key(kv[0]), reverse=True)]
     except Exception as exc:  # noqa: BLE001
         if _storage_not_ready(exc):
             out["storage_ready"] = False
@@ -330,26 +417,38 @@ def _stats(days: int) -> dict:
     day_keys = [_day(today - timedelta(days=i)) for i in range(days)]  # newest first
     redis_ok = True
     grids: Dict[str, Dict[str, Dict[str, int]]] = {}
+    kinds: Dict[str, Dict[str, Dict[str, int]]] = {}
     refunds = 0
+    top_over: List[dict] = []
     try:
         r = _r()
         for d in day_keys:
             grids[d] = _read_day(r, d)
+            kinds[d] = _read_kinds(r, d)
         refunds = _refunds_today(r)
+        top_over = _top_over_today(r)
     except Exception as exc:  # noqa: BLE001
         logger.info("admin_desktop stats read failed: %s", type(exc).__name__)
         redis_ok = False
         grids = {d: _empty_grid() for d in day_keys}
+        kinds = {d: _empty_kinds() for d in day_keys}
     dev = _device_counts(today - timedelta(days=days - 1))
 
     per_day = []
     for d in day_keys:
         g = grids[d]
+        day_counted = sum(g[r][o] for r in ROUTES for o in _COUNTED)
+        day_over = sum(g[r]["over_shadow"] for r in ROUTES)
         per_day.append({
             "day": d, "routes": g,
-            "over_shadow": sum(g[r]["over_shadow"] for r in ROUTES),
+            "over_shadow": day_over,
             "refused": sum(g[r]["refused"] for r in ROUTES),
             "new_devices": dev["new_by_day"].get(d, 0),
+            "counted": day_counted,
+            "vc_ratio": _ratio(day_over, day_counted),
+            "retro": sum(g[r]["retro"] for r in ROUTES),
+            "refunds": sum(kinds[d][k]["refunded"] for k in KINDS),
+            "by_kind": _split(kinds[d]),
         })
     totals = _sum_grid(list(grids.values()))
     counted = {r: sum(totals[r][o] for o in _COUNTED) for r in ROUTES}
@@ -366,13 +465,22 @@ def _stats(days: int) -> dict:
         "settle_failed": sum(totals[r]["settle_failed"] for r in ROUTES),
         "settle_cancelled": sum(totals[r]["settle_cancelled"] for r in ROUTES),
         "refunds_today": refunds,
+        "vc_ratio": _ratio(sum(totals[r]["over_shadow"] for r in ROUTES), all_counted),
     }
+    kind_totals = _empty_kinds()
+    for d in day_keys:
+        for k in KINDS:
+            for o in KIND_OUTCOMES:
+                kind_totals[k][o] += kinds[d][k][o]
+    summary["by_kind"] = _split(kind_totals)
     return {
         "days": days, "day_utc": day_keys[0], "redis_ok": redis_ok,
         "routes": list(ROUTES), "outcomes": list(OUTCOMES),
         "per_day": per_day, "totals": totals, "summary": summary,
         "devices": {"storage_ready": dev["storage_ready"], "active_today": dev["active_today"],
                     "total": dev["total"],
-                    "new_in_period": sum(dev["new_by_day"].get(d, 0) for d in day_keys)},
+                    "new_in_period": sum(dev["new_by_day"].get(d, 0) for d in day_keys),
+                    "versions": dev["versions"]},
+        "top_over_today": top_over,
         "flags": _flags(),
     }

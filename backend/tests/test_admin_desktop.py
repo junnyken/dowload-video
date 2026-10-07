@@ -311,3 +311,74 @@ def test_stats_empty_and_redis_down(db, admin, monkeypatch):
     monkeypatch.setattr("app.api.admin_desktop._r", lambda: Down())
     b = client.get(STATS).json()
     assert b["redis_ok"] is False and b["summary"]["over_shadow"] == 0 and b["summary"]["local_share"] is None
+
+
+# ── PLAN-32E P0: V/C, guest vs account, top machines, versions ──────────────
+
+def test_stats_vc_ratio_kind_split_top_and_versions(rc, db, admin):
+    now = datetime.now(timezone.utc)
+    seed_devices(db, now)       # h(1) 0.8.0 & h(2) 0.7.1 active now; h(3) 0.6.0 last seen 2 days ago
+    db.tables["desktop_devices"].append(
+        {"device_hash": h(4), "display_name": "NO-HEADER", "client_version": None, "user_id": None,
+         "last_ip": "203.0.113.7", "first_seen": iso(now), "last_seen": iso(now)})
+    db.tables["desktop_devices"].append(
+        {"device_hash": h(5), "display_name": "PC-2", "client_version": "0.8.0", "user_id": None,
+         "last_ip": "203.0.113.8", "first_seen": iso(now), "last_seen": iso(now)})
+    d0, d1 = (quotas._utc_day(now - timedelta(days=i)) for i in range(2))
+    _seed_stats(rc, d0, local__ok=16, local__over_shadow=4, server__retro=0)
+    _seed_stats(rc, d1, local__ok=10)
+    k0 = f"vidgrab:stats:route:{d0}"
+    rc.hset(k0, mapping={"kind:device|ok": 6, "kind:device|over_shadow": 3, "kind:anon|ok": 1,
+                         "kind:user|ok": 9, "kind:user|over_shadow": 1, "kind:user|refunded": 2,
+                         "kind:device|refunded": 1, "kind:device|retro": 2, "kind:bogus|ok": 50,
+                         "kind:user|weird": 7})
+    rc.hset(f"vidgrab:stats:route:{d1}", mapping={"kind:user|ok": 10})
+    top = f"vidgrab:stats:over_top:{quotas._utc_day()}"
+    for i in range(12):
+        rc.zadd(top, {f"dev:{h(10 + i)[:32]}": i + 1})
+    rc.zadd(top, {"user:11111111-aaaa-bbbb-cccc-000000000001": 50, "ip:203.0.113.5": 99})
+
+    b = client.get(STATS, params={"days": 2}).json()
+    s = b["summary"]
+    # V/C overall from the route grid: 4 over / (16 + 4 + 10) counted
+    assert s["vc_ratio"] == round(4 / 30, 4)
+    g, a = s["by_kind"]["guest"], s["by_kind"]["account"]
+    assert g["counted"] == 6 + 3 + 1 + 2 and g["over_shadow"] == 3 and g["vc_ratio"] == round(3 / 12, 4)
+    assert g["refunded"] == 1 and g["retro"] == 2
+    assert a["counted"] == 9 + 1 + 10 and a["over_shadow"] == 1 and a["vc_ratio"] == round(1 / 20, 4)
+    assert a["refunded"] == 2
+    assert s["by_kind"]["device"]["counted"] == 11 and s["by_kind"]["anon"]["counted"] == 1
+    p0, p1 = b["per_day"]
+    assert p0["counted"] == 20 and p0["vc_ratio"] == 0.2 and p0["refunds"] == 3 and p0["retro"] == 0
+    assert p0["by_kind"]["guest"]["over_shadow"] == 3 and p1["by_kind"]["account"]["counted"] == 10
+    assert p1["vc_ratio"] == 0.0 and p1["by_kind"]["guest"]["vc_ratio"] is None
+    # top: max 10, highest first, display code only, IP members never listed
+    t = b["top_over_today"]
+    assert len(t) == 10 and t[0] == {"kind": "user", "code": "11111111", "over": 50}
+    assert t[1] == {"kind": "device", "code": h(21)[:8].upper(), "over": 12}
+    assert all(x["kind"] in ("device", "user") for x in t)
+    assert "203.0.113.5" not in str(t) and h(21)[:32] not in str(t)
+    # versions of machines active in the 2-day period, newest version first, unknown last
+    assert b["devices"]["versions"] == [{"version": "0.8.0", "machines": 2}, {"version": "0.7.1", "machines": 1},
+                                        {"version": None, "machines": 1}]
+    assert b["flags"]["refund_daily_max"] == 10 and b["flags"]["refund_daily_max_guest"] == 2
+
+
+def test_stats_version_sort_is_numeric(rc, db, admin):
+    now = datetime.now(timezone.utc)
+    db.tables["desktop_devices"] = [
+        {"device_hash": h(i), "display_name": None, "client_version": v, "user_id": None, "last_ip": None,
+         "first_seen": iso(now), "last_seen": iso(now)}
+        for i, v in enumerate(["0.10.0", "0.9.1", "0.9.1", "0.5.0"])]
+    vs = [x["version"] for x in client.get(STATS).json()["devices"]["versions"]]
+    assert vs == ["0.10.0", "0.9.1", "0.5.0"]
+
+
+def test_stats_redis_down_has_empty_kind_split(db, admin, monkeypatch):
+    class Down:
+        def __getattr__(self, _):
+            raise ConnectionError("down")
+    monkeypatch.setattr("app.api.admin_desktop._r", lambda: Down())
+    b = client.get(STATS).json()
+    assert b["summary"]["vc_ratio"] is None and b["summary"]["by_kind"]["guest"]["counted"] == 0
+    assert b["top_over_today"] == []

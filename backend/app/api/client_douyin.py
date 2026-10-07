@@ -69,8 +69,12 @@ def _clean_url(raw: str) -> Optional[str]:
 
 
 def _requester(request: Request, user: Optional[dict]):
+    """PLAN-32E G2: this route is app-only, so a guest is counted under the
+    app's machine (X-VG-Device → dev:<32 hex>, the bucket of its local
+    downloads), capped per IP like /client/quota/claim."""
     from app.core.quotas import resolve_requester  # noqa: PLC0415
-    return resolve_requester(request, user_id=(user or {}).get("id"))
+    return resolve_requester(request, user_id=(user or {}).get("id"),
+                             device_id=request.headers.get("X-VG-Device"))
 
 
 def _bind(request: Request, user: Optional[dict]):
@@ -140,11 +144,19 @@ async def douyin_video(payload: VideoIn, request: Request, user=Depends(get_opti
     if not _layer_active(PLATFORM):
         return _err(503, "Tải Douyin trên app tạm thời chưa mở. Bạn có thể tải trên web.", "platform_disabled")
 
+    from app.api import client_quota  # noqa: PLC0415
+    from app.core.client_ip import get_client_ip  # noqa: PLC0415
     req = _requester(request, user)
+    ip = get_client_ip(request) or "unknown"
     q = quotas.check_platform_quota(req, PLATFORM, url)
     if not q.get("allowed"):
+        client_quota.record_route_stat("server", "refused", req)
         return _err(403 if req.kind == quotas.REQ_USER else 429, q.get("message") or "Đã hết lượt tải hôm nay.",
                     "quota_exceeded_daily", remaining=0, reset_time_vn=q.get("reset_time_vn"))
+    if not q.get("already_counted") and client_quota.ip_cap_exceeded(req, ip, PLATFORM, url):
+        client_quota.record_route_stat("server", "refused", req)
+        return _err(429, client_quota.ip_cap_message(), "quota_exceeded_daily", remaining=0,
+                    reason="ip_limit", reset_time_vn=q.get("reset_time_vn"))
 
     token, ctx = _bind(request, user)
     try:
@@ -162,9 +174,9 @@ async def douyin_video(payload: VideoIn, request: Request, user=Depends(get_opti
     if not media:
         return _err(404, "Không tìm thấy nội dung video trong URL này.", "no_media_found")
     if req.kind != quotas.REQ_ADMIN:
-        await asyncio.to_thread(quotas.record_platform_download, req, PLATFORM, url)
-    from app.api.client_quota import record_route_stat  # noqa: PLC0415
-    record_route_stat("server", "ok")   # admin "App Windows" stats (task #6090)
+        counted = await asyncio.to_thread(quotas.record_platform_download, req, PLATFORM, url)
+        client_quota.note_device_counted(req, ip, counted)
+    client_quota.record_route_stat("server", "ok", req)   # admin "App Windows" stats (task #6090)
     from app.services.china_platforms.request_cache import media_expiry_ts  # noqa: PLC0415
     exp = media_expiry_ts(result)
     from datetime import datetime, timezone  # noqa: PLC0415

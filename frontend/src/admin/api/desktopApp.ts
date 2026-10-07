@@ -51,9 +51,44 @@ export interface DesktopFlags {
   desktop_min_version: string
   offline_grace: number
   refund_daily_max: number
+  /** PLAN-32E: refunds a day for machines / guests (users: refund_daily_max). */
+  refund_daily_max_guest?: number
   ip_mult: number
   limit_anon: number
   limit_user: number
+}
+
+/** PLAN-32E P0: one requester group over a day or the period. */
+export interface KindSummary {
+  counted: number
+  over_shadow: number
+  refused: number
+  retro: number
+  refunded: number
+  settle_failed: number
+  settle_cancelled: number
+  /** over_shadow / counted; null when nothing was counted. */
+  vc_ratio: number | null
+}
+
+export interface KindSplit {
+  guest: KindSummary
+  account: KindSummary
+  device: KindSummary
+  anon: KindSummary
+}
+
+export interface TopOverRow {
+  kind: 'device' | 'user'
+  /** 8-char machine code, or the first 8 chars of the account id. */
+  code: string
+  over: number
+}
+
+export interface VersionRow {
+  /** null = the app did not send its version. */
+  version: string | null
+  machines: number
 }
 
 export interface StatsPayload {
@@ -62,7 +97,18 @@ export interface StatsPayload {
   redis_ok: boolean
   routes: DesktopRoute[]
   outcomes: DesktopOutcome[]
-  per_day: { day: string; routes: RouteGrid; over_shadow: number; refused: number; new_devices: number }[]
+  per_day: {
+    day: string
+    routes: RouteGrid
+    over_shadow: number
+    refused: number
+    new_devices: number
+    counted?: number
+    vc_ratio?: number | null
+    retro?: number
+    refunds?: number
+    by_kind?: KindSplit
+  }[]
   totals: RouteGrid
   summary: {
     counted_local: number
@@ -75,8 +121,17 @@ export interface StatsPayload {
     settle_failed: number
     settle_cancelled: number
     refunds_today: number
+    vc_ratio?: number | null
+    by_kind?: KindSplit
   }
-  devices: { storage_ready: boolean; active_today: number; total: number; new_in_period: number }
+  devices: {
+    storage_ready: boolean
+    active_today: number
+    total: number
+    new_in_period: number
+    versions?: VersionRow[]
+  }
+  top_over_today?: TopOverRow[]
   flags: DesktopFlags
 }
 

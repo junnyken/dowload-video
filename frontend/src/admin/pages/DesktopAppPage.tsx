@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { desktopAppApi } from '../api/desktopApp'
-import type { DesktopDevice, DesktopRoute, DevicesPayload, RouteGrid, StatsPayload } from '../api/desktopApp'
+import type { DesktopDevice, DesktopRoute, DevicesPayload, KindSummary, RouteGrid, StatsPayload } from '../api/desktopApp'
 import { PageHeader } from '../shared/PageHeader'
 import { StatCard } from '../shared/StatCard'
 import { Card } from '../shared/Card'
@@ -50,6 +50,232 @@ const COLS: { key: string; label: string; get: (g: RouteGrid, r: DesktopRoute) =
   { key: 'failed', label: 'Lỗi / huỷ', get: (g, r) => g[r].settle_failed + g[r].settle_cancelled },
 ]
 
+const pct = (v: number | null | undefined) =>
+  v == null ? dash : `${(v * 100).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} %`
+
+/**
+ * PLAN-32E §2 decision table for the 14/10 gate (owner 07-10 filled 15–30 %).
+ * Exported for tests.
+ */
+export function vcBand(r: number | null | undefined): { key: string; label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' } | null {
+  // wording: BA review
+  if (r == null) return null
+  if (r < 0.02) return { key: 'lt2', label: 'Bật ngay', tone: 'success' }
+  if (r <= 0.15) return { key: '2to15', label: 'Bật theo thứ tự', tone: 'success' }
+  if (r <= 0.30) return { key: '15to30', label: 'Bật chậm, bước tài khoản 5 ngày', tone: 'warning' }
+  return { key: 'gt30', label: 'Xem lại mức 5 lượt của khách', tone: 'danger' }
+}
+
+// wording: BA review
+const VC_BANDS: { key: string; range: string; text: string }[] = [
+  { key: 'lt2', range: '< 2 %', text: 'bật ngay' },
+  { key: '2to15', range: '2–15 %', text: 'bật theo thứ tự, mỗi bước 3 ngày' },
+  { key: '15to30', range: '15–30 %', text: 'bật chậm, bước tài khoản (S2) giữ 5 ngày' },
+  { key: 'gt30', range: '> 30 %', text: 'xem lại mức 5 lượt của khách trước khi bật' },
+]
+
+function VcCard({ s }: { s: StatsPayload }) {
+  const sum = s.summary
+  const ratio = sum.vc_ratio ?? null
+  const band = vcBand(ratio)
+  const g = sum.by_kind?.guest
+  const a = sum.by_kind?.account
+  return (
+    <Card as="section" className="ring-2 ring-warning/60">
+      {/* wording: BA review */}
+      <SectionHeader title="Tỉ lệ vượt lượt (V/C)"
+        subtitle={`Lượt vượt hạn mức khi chỉ đếm chia cho lượt đã đếm, ${s.days} ngày. Dùng để quyết định có bật chặn 5/20 lượt.`} />
+      <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-start">
+        <div className="flex min-w-[200px] flex-col gap-2">
+          <p className={`font-mono text-4xl font-semibold tabular-nums ${band?.tone === 'danger' ? 'text-danger' : band?.tone === 'warning' ? 'text-warning' : 'text-fg'}`}
+            data-testid="vc-ratio">{pct(ratio)}</p>
+          <p className="text-xs text-fg-muted">
+            {/* wording: BA review */}
+            V = {n(sum.over_shadow)} · C = {n(sum.counted_local + sum.counted_local_cookie + sum.counted_server)}
+          </p>
+          {band ? <StatusPill tone={band.tone} label={band.label} />
+            : <span className="text-xs text-fg-muted">Chưa có lượt nào được đếm.</span>}
+          {g && a && (
+            <p className="text-xs text-fg-muted">
+              {/* wording: BA review */}
+              Khách {pct(g.vc_ratio)} · Tài khoản {pct(a.vc_ratio)}
+            </p>
+          )}
+        </div>
+        <ul className="flex-1 space-y-1 text-xs">
+          {VC_BANDS.map((b) => (
+            <li key={b.key}
+              className={`rounded-control px-2 py-1 ${band?.key === b.key ? 'bg-warning-soft font-semibold text-fg' : 'text-fg-muted'}`}>
+              <span className="inline-block w-16 font-mono">{b.range}</span>{b.text}
+            </li>
+          ))}
+          {/* wording: BA review */}
+          <li className="px-2 pt-1 text-[11px] text-fg-muted">
+            Gợi ý theo kế hoạch 32E §2; nếu ≥ 70 % lượt vượt là của khách thì có thể bật cho khách sớm hơn. Chủ sản phẩm quyết định.
+          </li>
+        </ul>
+      </div>
+    </Card>
+  )
+}
+
+/** Guest vs account rows for the period, and per day. */
+function KindRow({ label, k }: { label: string; k: KindSummary }) {
+  return (
+    <tr className={TR}>
+      <td className={TD}>{label}</td>
+      <td className={TD_NUM}>{n(k.counted)}</td>
+      <td className={`${TD_NUM} ${k.over_shadow > 0 ? 'font-semibold text-warning' : ''}`}>{n(k.over_shadow)}</td>
+      <td className={TD_NUM}>{pct(k.vc_ratio)}</td>
+      <td className={TD_NUM}>{n(k.refused)}</td>
+      <td className={TD_NUM}>{n(k.refunded)}</td>
+      <td className={TD_NUM}>{n(k.retro)}</td>
+    </tr>
+  )
+}
+
+function KindPanel({ s }: { s: StatsPayload }) {
+  const bk = s.summary.by_kind
+  if (!bk) return null
+  const days = s.per_day.filter((d) => d.by_kind)
+  return (
+    <Card as="section">
+      {/* wording: BA review */}
+      <SectionHeader title="Khách và tài khoản"
+        subtitle="Khách = máy chưa đăng nhập (và khách không gửi mã máy). Tài khoản dùng chung lượt với web. Chỉ có số từ khi bản đo P0 chạy." />
+      <div className="flex flex-col gap-4 p-4">
+        <div className={TABLE_SCROLL}>
+          <table className={TABLE}>
+            <thead>
+              <tr>
+                {/* wording: BA review */}
+                <th className={TH}>{s.days} ngày</th>
+                <th className={TH_NUM}>Đã đếm</th>
+                <th className={TH_NUM}>Vượt lượt</th>
+                <th className={TH_NUM}>V/C</th>
+                <th className={TH_NUM}>Bị chặn</th>
+                <th className={TH_NUM}>Hoàn lượt</th>
+                <th className={TH_NUM}>Tải khi mất mạng</th>
+              </tr>
+            </thead>
+            <tbody>
+              <KindRow label="Khách" k={bk.guest} />
+              <KindRow label="Tài khoản" k={bk.account} />
+            </tbody>
+          </table>
+        </div>
+        {days.length > 0 && (
+          <div className={TABLE_SCROLL}>
+            <table className={TABLE}>
+              <thead>
+                <tr>
+                  {/* wording: BA review */}
+                  <th className={TH}>Ngày (UTC)</th>
+                  <th className={TH_NUM}>Khách đếm / vượt</th>
+                  <th className={TH_NUM}>Tài khoản đếm / vượt</th>
+                  <th className={TH_NUM}>V/C cả ngày</th>
+                  <th className={TH_NUM}>Hoàn lượt</th>
+                  <th className={TH_NUM}>Tải khi mất mạng</th>
+                </tr>
+              </thead>
+              <tbody>
+                {days.map((d) => (
+                  <tr key={d.day} className={TR}>
+                    <td className={TD_MONO}>{fmtDay(d.day)}</td>
+                    <td className={TD_NUM}>{n(d.by_kind!.guest.counted)} / {n(d.by_kind!.guest.over_shadow)}</td>
+                    <td className={TD_NUM}>{n(d.by_kind!.account.counted)} / {n(d.by_kind!.account.over_shadow)}</td>
+                    <td className={TD_NUM}>{pct(d.vc_ratio)}</td>
+                    <td className={TD_NUM}>{n(d.refunds)}</td>
+                    <td className={TD_NUM}>{n(d.retro)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+function TopOverPanel({ s }: { s: StatsPayload }) {
+  const rows = s.top_over_today
+  if (!rows) return null
+  return (
+    <Card as="section">
+      {/* wording: BA review */}
+      <SectionHeader title="Máy vượt lượt nhiều nhất hôm nay" subtitle="Tối đa 10, chỉ hiện mã. Tra mã ở bảng máy bên dưới." />
+      <div className="p-4">
+        {rows.length === 0
+          ? <EmptyState compact title="Hôm nay chưa có máy nào vượt lượt" />
+          : (
+            <div className={TABLE_SCROLL}>
+              <table className={TABLE}>
+                <thead>
+                  <tr>
+                    {/* wording: BA review */}
+                    <th className={TH}>Mã</th>
+                    <th className={TH}>Loại</th>
+                    <th className={TH_NUM}>Lượt vượt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={`${r.kind}-${r.code}`} className={TR}>
+                      <td className={TD_MONO}>{r.code}</td>
+                      <td className={TD}>{r.kind === 'user' ? 'Tài khoản' : 'Máy (khách)'}</td>
+                      <td className={`${TD_NUM} font-semibold text-warning`}>{n(r.over)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </div>
+    </Card>
+  )
+}
+
+function VersionPanel({ s }: { s: StatsPayload }) {
+  const rows = s.devices.versions
+  if (!rows || !s.devices.storage_ready) return null
+  const all = rows.reduce((a, r) => a + r.machines, 0)
+  return (
+    <Card as="section">
+      {/* wording: BA review */}
+      <SectionHeader title="Phiên bản app đang dùng"
+        subtitle={`Máy mở app trong ${s.days} ngày, theo phiên bản. App dưới 0.6.0 không báo về nên không có ở đây.`} />
+      <div className="p-4">
+        {rows.length === 0
+          ? <EmptyState compact title="Chưa có máy nào mở app trong thời gian này" />
+          : (
+            <div className={TABLE_SCROLL}>
+              <table className={TABLE}>
+                <thead>
+                  <tr>
+                    {/* wording: BA review */}
+                    <th className={TH}>Phiên bản</th>
+                    <th className={TH_NUM}>Số máy</th>
+                    <th className={TH_NUM}>Tỉ lệ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.version ?? 'none'} className={TR}>
+                      <td className={TD_MONO}>{r.version ?? 'Không rõ'}</td>
+                      <td className={TD_NUM}>{n(r.machines)}</td>
+                      <td className={TD_NUM}>{pct(all ? r.machines / all : null)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </div>
+    </Card>
+  )
+}
+
 function fmtDay(day: string) {
   const [y, m, d] = day.split('-')
   return y && m && d ? `${d}/${m}` : day
@@ -89,7 +315,11 @@ function ModeCard({ s }: { s: StatsPayload }) {
         <FlagRow label="Hạn mức mỗi ngày" value={`Khách ${n(f.limit_anon)} · Tài khoản ${n(f.limit_user)}`}
           hint={`Khách dùng app tính theo máy, mỗi mạng tối đa ${n(f.limit_anon * f.ip_mult)} lượt. Tài khoản dùng chung lượt với web.`} />
         <FlagRow label="Tải khi mất mạng" value={`${n(f.offline_grace)} lượt/ngày`} hint="Có mạng lại thì app báo bù, vẫn được tính vào hạn mức." />
-        <FlagRow label="Hoàn lượt khi tải lỗi" value={`Tối đa ${n(f.refund_daily_max)} lượt/ngày`} />
+        {/* wording: BA review */}
+        <FlagRow label="Hoàn lượt khi tải lỗi"
+          value={f.refund_daily_max_guest == null
+            ? `Tối đa ${n(f.refund_daily_max)} lượt/ngày`
+            : `Tài khoản tối đa ${n(f.refund_daily_max)} · Khách tối đa ${n(f.refund_daily_max_guest)} lượt/ngày`} />
         <FlagRow label="Tải bằng đăng nhập trong app" value={list(f.cookie_platforms)} />
         <FlagRow label="Lỗi trên máy thì thử qua máy chủ" value={list(f.server_fallback_platforms)} />
         <FlagRow label="Phiên bản app" value={`Mới nhất ${f.desktop_latest_version} · Tối thiểu ${f.desktop_min_version}`} />
@@ -345,6 +575,13 @@ export default function DesktopAppPage() {
               hint={stats.devices.storage_ready ? `Tổng ${n(stats.devices.total)} máy · mới 7 ngày: ${n(stats.devices.new_in_period)}` : 'Chưa có bảng lưu máy (migration 037)'} />
             <StatCard label="Hoàn lượt hôm nay" value={n(sum.refunds_today)}
               hint={`Lỗi / huỷ 7 ngày: ${n(sum.settle_failed + sum.settle_cancelled)}`} />
+          </div>
+
+          {sum.vc_ratio !== undefined && <VcCard s={stats} />}
+          <KindPanel s={stats} />
+          <div className="grid gap-5 lg:grid-cols-2">
+            <TopOverPanel s={stats} />
+            <VersionPanel s={stats} />
           </div>
 
           <ModeCard s={stats} />
