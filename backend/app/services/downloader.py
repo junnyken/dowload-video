@@ -3777,6 +3777,15 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     elif info.get("height"):
         downloaded_height = _stream_short_side(info)
     result["downloaded_height"] = downloaded_height
+    # task #6134: the codec of the file itself, so a client can say "plays
+    # everywhere" from facts, not from guessing which list row it came from
+    _dl_vcodec = ""
+    if info.get("requested_downloads"):
+        _dl_vcodec = str(info["requested_downloads"][0].get("vcodec") or "")
+    _dl_vcodec = _dl_vcodec or str(info.get("vcodec") or "")
+    result["downloaded_vcodec"] = _dl_vcodec if _dl_vcodec != "none" else ""
+    result["downloaded_universal"] = (
+        _dl_vcodec.lower().startswith(("avc1", "h264")) if _dl_vcodec and _dl_vcodec != "none" else None)
 
     # ── YouTube Chapters ─────────────────────────────────────
     # yt-dlp exposes chapters as a list of {title, start_time, end_time} dicts.

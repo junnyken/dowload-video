@@ -78,7 +78,16 @@ export default function QuickActionBar({ platform, videoInfo, activePreset, onAc
   const isPro = PRO_PLATFORMS.has(userTier);
 
   const actions = useMemo(() => {
-    const base = PLATFORM_ACTIONS[platform] || PLATFORM_ACTIONS._default;
+    let base = PLATFORM_ACTIONS[platform] || PLATFORM_ACTIONS._default;
+    // Task #6134: once a result exists, only offer "HD 1080p" if the video really has >= 1080p.
+    if (videoInfo) {
+      const heights = [
+        Number(videoInfo.downloaded_height) || 0,
+        Number(videoInfo.max_merge_height) || 0,
+        ...(videoInfo.available_formats || []).filter((f) => f.type === 'video').map((f) => Number(f.height) || 0),
+      ];
+      if (Math.max(...heights) < 1080) base = base.filter((a) => a.settings.quality !== '1080');
+    }
     // For very short videos (<15s), remove GIF quick (not worth it)
     if (videoInfo?.duration && videoInfo.duration < 15) {
       return base.filter((a) => a.id !== 'gif15');

@@ -1707,7 +1707,25 @@ export default function DashboardContent() {
   const hasFormats = videoFormats.length > 0 || audioFormats.length > 0;
   const maxMergeHeight = videoInfo?.max_merge_height || 0;
   const maxCombinedHeight = videoFormats.length > 0 ? Math.max(...videoFormats.map(f => f.height)) : 0;
-  const showMergeOption = maxMergeHeight > maxCombinedHeight;
+  // Task #6134: the file the server already downloaded is the primary item.
+  const downloadedH = videoInfo && !videoInfo.is_audio_only ? (Number(videoInfo.downloaded_height) || 0) : 0;
+  const hasDownloadedItem = downloadedH > 0 && !!(localVideoFirstId(videoInfo) || videoInfo?.direct_mp4_url);
+  // Default file is the H.264 "plays everywhere" one, unless the only row at that height is VP9/AV1.
+  // Server-reported codec of the downloaded file (task #6134); older responses
+  // lack it, then infer from the list row at that height.
+  const downloadedUniversal = typeof videoInfo?.downloaded_universal === 'boolean'
+    ? videoInfo.downloaded_universal
+    : !videoFormats.some(f => f.height === downloadedH && f.universal === false)
+    || videoFormats.some(f => f.height === downloadedH && f.universal === true);
+  const isDownloadedRow = (f) => hasDownloadedItem && f.height === downloadedH && f.universal === downloadedUniversal;
+  const otherVideoFormats = videoFormats.filter(f => !isDownloadedRow(f));
+  const showMergeOption = maxMergeHeight > maxCombinedHeight
+    && (!hasDownloadedItem || (maxMergeHeight > downloadedH && otherVideoFormats.length > 0));
+  const qualityNote = videoInfo?.quality_note?.message ? String(videoInfo.quality_note.message) : '';
+  const qualityNoteEl = qualityNote ? (
+    <p className="text-xs text-fg-2 bg-surface-2 border border-line rounded-lg px-3 py-2" role="note">{qualityNote}</p>
+  ) : null;
+  const downloadedLabel = downloadedH >= 2160 ? '4K' : downloadedH >= 1440 ? '2K' : `${downloadedH}p`;
 
   return (
     <div className="w-full flex flex-col items-center">
@@ -2974,7 +2992,7 @@ export default function DashboardContent() {
                     onClick={() => setFormatTab('video')}
                     className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${formatTab === 'video' ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg'}`}
                   >
-                    <Video className="w-4 h-4" /> Video ({videoFormats.length + (showMergeOption ? 1 : 0)})
+                    <Video className="w-4 h-4" /> Video ({(hasDownloadedItem ? 1 : 0) + otherVideoFormats.length + (showMergeOption ? 1 : 0)})
                   </button>
                   <button
                     onClick={() => setFormatTab('audio')}
@@ -2988,6 +3006,27 @@ export default function DashboardContent() {
                 <div className="flex flex-col gap-2.5">
                   {formatTab === 'video' && (
                     <>
+                      {/* Already-downloaded item (primary): the server's default plays-everywhere file */}
+                      {hasDownloadedItem && (
+                        <>
+                          <button
+                            onClick={handleDefaultDownload}
+                            className="w-full flex items-center justify-between px-5 py-3.5 rounded-2xl bg-success-soft border border-success/40 hover:border-success/70 text-fg transition-all active:scale-[0.99] group"
+                          >
+                            <div className="flex items-center gap-3">
+                              <Video className="w-5 h-5 text-success" />
+                              <div className="text-left">
+                                {/* wording: BA review */}
+                                <span className="text-sm font-bold">Đã tải: {downloadedLabel}{downloadedUniversal ? ' · Mọi máy' : ''}</span>
+                                {videoInfo.file_size_mb > 0 && <p className="text-xs text-fg-muted mt-0.5">{videoInfo.file_size_mb.toFixed(1)} MB</p>}
+                              </div>
+                            </div>
+                            <Download className="w-5 h-5 text-success group-hover:scale-110 transition-transform" />
+                          </button>
+                          {qualityNoteEl /* wording: BA review (message comes from server) */}
+                        </>
+                      )}
+
                       {/* 4K Merge Option (if available) */}
                       {showMergeOption && (
                         <button
@@ -3011,7 +3050,7 @@ export default function DashboardContent() {
                       )}
 
                       {/* Combined video+audio formats and Video-only formats (Requires merge) */}
-                      {videoFormats.map((fmt, i) => {
+                      {otherVideoFormats.map((fmt, i) => {
                         // Check if this format is already available from the initial download
                         const isAlreadyDownloaded = fmt.requires_merge && localFileId(videoInfo) && videoInfo?.downloaded_height >= fmt.height;
                         const displaySize = isAlreadyDownloaded && fmt.height === videoInfo?.downloaded_height ? videoInfo.file_size_mb : fmt.filesize_mb;
@@ -3082,7 +3121,8 @@ export default function DashboardContent() {
                               </div>
                               {displaySize > 0 && <p className="text-xs text-fg-muted mt-0.5">{fmt.size_estimated && !isAlreadyDownloaded ? '~' : ''}{displaySize.toFixed(1)} MB{isAlreadyDownloaded ? ' (đã tải)' : ''}</p>}
                               {fmt.universal === false && (
-                                <p className="text-[11px] text-accent-text mt-0.5">⚠ Định dạng VP9/AV1 — nếu máy không phát được, mở bằng VLC (miễn phí, mọi nền tảng)</p>
+                                // wording: BA review
+                                <p className="text-[11px] text-accent-text mt-0.5" title="Nếu máy không phát được, mở bằng VLC (miễn phí, mọi nền tảng)">Nét hơn · có thể không mở được trên máy cũ</p>
                               )}
                             </div>
                           </div>
@@ -3094,7 +3134,7 @@ export default function DashboardContent() {
                         </button>
                       ); })}
 
-                      {videoFormats.length === 0 && !showMergeOption && (
+                      {otherVideoFormats.length === 0 && !showMergeOption && !hasDownloadedItem && (
                         <div className="text-center py-6 text-fg-muted text-sm">
                           Không tìm thấy định dạng video riêng lẻ.
                           <button onClick={handleDefaultDownload} className="block mx-auto mt-3 px-6 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm">
@@ -3161,13 +3201,16 @@ export default function DashboardContent() {
             ) : (
               /* Fallback: no format list (TikTok/Douyin) */
               <div className="flex flex-col gap-3 max-w-lg mx-auto w-full">
+                {qualityNoteEl /* wording: BA review (message comes from server) */}
                 <button onClick={handleDefaultDownload} className="w-full flex items-center justify-between px-6 py-4 rounded-2xl bg-accent text-accent-fg font-bold shadow-lg transition-all active:scale-[0.98]">
                   <div className="flex items-center gap-3">
                     <Video className="w-6 h-6" />
-                    <span className="text-base">{removeWatermark ? 'Tải Video (Không logo)' : 'Tải Video'}</span>
+                    {/* wording: BA review */}
+                    <span className="text-base">{downloadedH > 0 ? `Đã tải: ${downloadedLabel}${downloadedUniversal ? ' · Mọi máy' : ''}` : (removeWatermark ? 'Tải Video (Không logo)' : 'Tải Video')}</span>
                   </div>
                   <Download className="w-5 h-5" />
                 </button>
+                {maxMergeHeight > downloadedH && (
                 <button
                   onClick={handleMergeDownload}
                   disabled={downloadingId === 'merge_4k'}
@@ -3179,6 +3222,7 @@ export default function DashboardContent() {
                   </div>
                   {downloadingId === 'merge_4k' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
                 </button>
+                )}
                 <button
                   onClick={handleAudioDownload}
                   disabled={downloadingId === 'audio_mp3'}
