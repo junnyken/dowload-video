@@ -300,6 +300,74 @@ def apify_xiaohongshu_est_cost_usd() -> float:
     return max(0.0, _float("CHINA_ACCESS_APIFY_XIAOHONGSHU_EST_COST_USD", 0.00255))
 
 
+# ── Task #6171: Xiaohongshu / Kuaishou whole-channel listing ────────────────
+# Owner 2026-10-08: signed-in users only, at most 20 videos per scan, capped
+# at what the user may still download today; flags OFF by default.
+
+CHINA_CHANNEL_PLATFORMS = ("xiaohongshu", "kuaishou")
+CHINA_CHANNEL_HARD_MAX = 20
+
+
+def china_channel_enabled(platform: str) -> bool:
+    """CHINA_ACCESS_XIAOHONGSHU_CHANNEL_ENABLED / CHINA_ACCESS_KUAISHOU_CHANNEL_ENABLED.
+    Off by default (unlike Douyin's): the platform flags, managed mode and
+    kill switches still apply on top."""
+    if platform not in CHINA_CHANNEL_PLATFORMS:
+        return False
+    return _bool(f"CHINA_ACCESS_{platform.upper()}_CHANNEL_ENABLED", False)
+
+
+def china_channel_max(platform: str) -> int:
+    """Videos per scan; may be lowered by env, never raised past 20."""
+    return min(CHINA_CHANNEL_HARD_MAX,
+               max(1, _int(f"CHINA_ACCESS_{platform.upper()}_CHANNEL_MAX", CHINA_CHANNEL_HARD_MAX)))
+
+
+def china_channel_timeout_sec(platform: str) -> int:
+    return min(280, max(30, _int(f"CHINA_ACCESS_{platform.upper()}_CHANNEL_TIMEOUT_SEC", 150)))
+
+
+def china_channel_listing_cache_sec(platform: str) -> int:
+    """How long a scanned list is reused for the same profile (no new run)."""
+    return max(0, _int(f"CHINA_ACCESS_{platform.upper()}_CHANNEL_LISTING_CACHE_SEC", 1500))
+
+
+def apify_kuaishou_channel_actor_id() -> str:
+    # Same actor as single videos: its README lists kuaishou.com/profile/<id>
+    # as a start URL (docs/plans/PLAN-6171-xhs-kuaishou-channel.md).
+    return _str("CHINA_ACCESS_APIFY_KUAISHOU_CHANNEL_ACTOR_ID", "natanielsantos~kuaishou-scraper")
+
+
+def apify_kuaishou_channel_est_cost_per_video_usd() -> float:
+    # $0.004 per video (flat); the $0.00005 start event is added once per run.
+    return max(0.0, _float("CHINA_ACCESS_APIFY_KUAISHOU_CHANNEL_EST_COST_USD", 0.004))
+
+
+def apify_xiaohongshu_channel_actor_id() -> str:
+    return _str("CHINA_ACCESS_APIFY_XIAOHONGSHU_CHANNEL_ACTOR_ID", "vulnv~xiaohongshu-scraper")
+
+
+def apify_xiaohongshu_channel_est_cost_per_video_usd() -> float:
+    # vulnv~xiaohongshu-scraper: "note" event $0.004, no start event
+    # (pricingInfos read 2026-10-08).
+    return max(0.0, _float("CHINA_ACCESS_APIFY_XIAOHONGSHU_CHANNEL_EST_COST_USD", 0.004))
+
+
+def apify_xiaohongshu_channel_min_max_charge_usd() -> float:
+    """vulnv~xiaohongshu-scraper declares minimalMaxTotalChargeUsd = 0.10:
+    Apify refuses a run whose maxTotalChargeUsd is below it. This is only the
+    vendor-side cap of one run; the budget reservation stays the estimate."""
+    return max(0.0, _float("CHINA_ACCESS_APIFY_XIAOHONGSHU_CHANNEL_MIN_MAX_CHARGE_USD", 0.10))
+
+
+def xiaohongshu_channel_free_first() -> bool:
+    """Try the existing cookie-pool scraper (xiaohongshu_extractor.
+    scrape_xiaohongshu_profile, free) before the paid actor. Off by default:
+    never verified live — it calls user_posted without the x-s signature and
+    returns note links without xsec_token (docs/plans/PLAN-6171)."""
+    return _bool("CHINA_ACCESS_XIAOHONGSHU_CHANNEL_FREE_FIRST", False)
+
+
 def short_link_timeout_sec() -> float:
     """One free redirect lookup for v.kuaishou.com / xhslink.com share links."""
     return min(15.0, max(1.0, _float("CHINA_ACCESS_SHORT_LINK_TIMEOUT_SEC", 6.0)))

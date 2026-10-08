@@ -70,6 +70,25 @@ def _douyin_cookie_gate(urls: List[str], user_has_cookies: bool = False, single:
     return ExtractionHTTPException(422, msg, "cookie_required")
 
 
+def _china_channel_guest_refusals(urls: List[str], channel_mode: bool, requester) -> dict:
+    """{index: Vietnamese sign-in message} for each Xiaohongshu / Kuaishou
+    CHANNEL link sent by a guest (task #6171). A channel link is one sent
+    with channel_mode, or one classify_url() calls a channel. Empty for a
+    signed-in user or admin."""
+    from app.core.quotas import REQ_ADMIN, REQ_USER  # noqa: PLC0415
+    if requester is not None and requester.kind in (REQ_USER, REQ_ADMIN):
+        return {}
+    from app.services.china_platforms import profile_listing  # noqa: PLC0415
+    from app.services.downloader import classify_url as _classify  # noqa: PLC0415
+    out: dict = {}
+    for i, raw in enumerate(urls):
+        u = (raw or "").strip()
+        plat = profile_listing.platform_of(u) if u else None
+        if plat and (channel_mode or _classify(u) == "channel"):
+            out[i] = profile_listing._msg(profile_listing.MSG_SIGN_IN, plat)
+    return out
+
+
 # ── Global concurrency limiter for /fetch-link ───────────────────────
 _MAX_CONCURRENT_DL = int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "10"))
 _ACTIVE_DL_KEY = "vidgrab:active_downloads"
@@ -1320,9 +1339,17 @@ async def bulk_download(
     _bulk_req = resolve_requester(request, user_id=auth_user_id, ip=_bulk_client_ip)
     _bulk_allow = BatchAllowance(_bulk_req)
     _bulk_refused: dict = {}          # index in payload.urls → refusal text
+    # Xiaohongshu / Kuaishou channels: signed-in users only (owner
+    # 2026-10-08, task #6171). Whole request of such links → 401 up front;
+    # mixed batch → a failed row for each, the rest runs.
+    _cn_guest = _china_channel_guest_refusals(payload.urls, payload.channel_mode, _bulk_req)
+    _bulk_nonempty0 = [i for i, u in enumerate(payload.urls) if (u or "").strip()]
+    if _cn_guest and all(i in _cn_guest for i in _bulk_nonempty0):
+        raise HTTPException(status_code=401, detail=_cn_guest[_bulk_nonempty0[0]])
+    _bulk_refused.update(_cn_guest)
     for _i, _raw in enumerate(payload.urls):
         _u = (_raw or "").strip()
-        if not _u:
+        if not _u or _i in _bulk_refused:
             continue
         _p = _get_platform_key(_u)
         if payload.channel_mode or classify_url(_u) == "channel":
@@ -1397,6 +1424,20 @@ async def bulk_download(
                         "original_url": url,
                         "status": "failed",
                         "error_message": "Đăng nhập để tải kênh YouTube.",
+                        "source_surface": "web",
+                        "source": x_vg_source or "web",
+                        "platform": _get_platform_key(url),
+                    }).execute()
+                    continue
+                # ── Xiaohongshu / Kuaishou channel = signed-in only ──
+                # (a share link that only resolved to a profile here).
+                _cn_late = _china_channel_guest_refusals([resolved_url], True, _bulk_req)
+                if _cn_late:
+                    supabase.table("download_jobs").insert({
+                        "batch_id": batch_id,
+                        "original_url": url,
+                        "status": "failed",
+                        "error_message": _cn_late[0],
                         "source_surface": "web",
                         "source": x_vg_source or "web",
                         "platform": _get_platform_key(url),

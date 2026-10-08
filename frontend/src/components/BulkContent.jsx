@@ -1030,6 +1030,10 @@ export default function BulkContent() {
                 // Server caps a Douyin channel scan at the remaining downloads today (task #6055).
                 <p className="text-xs text-fg-muted mb-2">Kênh Douyin: chỉ quét tối đa bằng số lượt tải còn lại hôm nay của bạn.</p>
               )}
+              {/(xiaohongshu\.com|xhslink\.c|kuaishou\.c|chenzhongtech\.c)/i.test(urls) && (
+                // Task #6171 — wording: BA review. Server rule: signed-in only, ≤ 20 per scan, ≤ remaining today.
+                <p className="text-xs text-fg-muted mb-2">Kênh Xiaohongshu/Kuaishou: cần đăng nhập; mỗi lần quét tối đa 20 video và không quá số lượt tải còn lại hôm nay của bạn.</p>
+              )}
               <div className="flex flex-wrap gap-2 mb-2">
                 {[
                   { value: 10, label: '10' },

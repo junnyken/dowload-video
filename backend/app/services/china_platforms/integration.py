@@ -251,6 +251,18 @@ def list_douyin_channel_via_access_layer(channel_url: str, max_videos: int) -> O
     return listing.to_bulk_result()
 
 
+def list_china_profile_channel(platform: str, channel_url: str, max_videos: int) -> Dict[str, Any]:
+    """Xiaohongshu / Kuaishou profile → the downloader's channel-scrape shape
+    (task #6171). Unlike the Douyin hook this never returns None: there is no
+    legacy channel scraper for these platforms, so every refusal (flag off,
+    guest, no allowance left, spend ceiling, empty channel) is raised as a
+    ChannelListingError (a ValueError whose text is shown to the user)."""
+    from app.services.china_platforms import profile_listing  # noqa: PLC0415
+    ctx = current_context()
+    listing = asyncio.run(profile_listing.list_profile(platform, channel_url, max_videos, ctx))
+    return profile_listing.to_bulk_result(platform, listing)
+
+
 def resolve_platform_via_access_layer(platform: str, url: str, original_url: str, quality: str,
                                       user_cookies_file: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Kuaishou / Xiaohongshu counterpart of resolve_douyin_via_access_layer:

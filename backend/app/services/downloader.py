@@ -846,6 +846,10 @@ CHANNEL_PATTERNS = [
     r"reddit\.com/user/[\w.-]+/?$",
     # Pinterest boards
     r"pinterest\.(com|co\.uk)/[\w.-]+/[\w.-]+/?$",
+    # Xiaohongshu / Kuaishou profiles (task #6171). A note opened from a
+    # profile (/user/profile/<uid>/<note id>) stays a single video.
+    r"xiaohongshu\.com/user/profile/[0-9a-fA-F]{24}/?(\?|#|$)",
+    r"kuaishou\.(com|cn)/profile/[\w-]+/?(\?|#|$)",
 ]
 
 
@@ -4182,6 +4186,24 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 100, min_vi
     if channel_url != original_channel_url:
         print(f"[Downloader] Unshortened channel URL: {original_channel_url} -> {channel_url}")
 
+    # ── Xiaohongshu / Kuaishou: managed profile listing (task #6171) ──
+    # Signed-in users only, ≤ 20 videos, capped at today's allowance; any
+    # refusal is a ChannelListingError carrying the Vietnamese message.
+    # There is no legacy channel scraper for these hosts (yt-dlp has none).
+    try:
+        from app.services.china_platforms.profile_listing import platform_of as _cn_channel_platform
+    except Exception as _cn_imp_err:
+        print(f"[Channel] china profile listing unavailable: {_cn_imp_err}")
+        _cn_channel_platform = None
+    if _cn_channel_platform is not None:
+        _cn_plat = _cn_channel_platform(original_channel_url) or _cn_channel_platform(channel_url)
+        if _cn_plat:
+            from app.services.china_platforms.integration import list_china_profile_channel
+            # The original link: list_profile reads a share link's first
+            # redirect itself (bounded to the share-link host).
+            _src = channel_url if _cn_channel_platform(channel_url) == _cn_plat else original_channel_url
+            return list_china_profile_channel(_cn_plat, _src, max_videos)
+
     # ── Douyin: Route to dedicated scraper ────────────────────
     if is_douyin_url(channel_url) or is_douyin_url(original_channel_url):
         return _scrape_douyin_channel(channel_url, max_videos)
@@ -4349,6 +4371,15 @@ def scrape_channel_entries_sync(channel_url: str, max_videos: int = 100, min_vie
         # Douyin channels need longer timeout due to ScraperAPI JS rendering
         is_douyin = "douyin.com" in channel_url.lower()
         timeout = 120  # YouTube pagination needs more time for large channels
+        # Xiaohongshu / Kuaishou: one managed profile run (task #6171).
+        try:
+            from app.services.china_platforms.profile_listing import platform_of as _cn_pf
+            from app.services.china_platforms.settings import china_channel_timeout_sec
+            _cn = _cn_pf(channel_url)
+            if _cn:
+                timeout = max(90, china_channel_timeout_sec(_cn) + 30)
+        except Exception:
+            pass
         if is_douyin:
             # One managed Apify profile run (task #6055) may take up to its own
             # timeout; keep room for the reservation and the dataset read.

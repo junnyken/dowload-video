@@ -1387,6 +1387,18 @@ async function getApiBaseLocal() {
 // ══════════════════════════════════════════════════════════════════
 let _spotifyTracksCache = [];
 
+// The server's own sentence for a refused bulk request (e.g. "sign in to
+// download a whole Xiaohongshu / Kuaishou channel", task #6171), else HTTP <n>.
+async function bulkErrorText(resp) {
+  try {
+    const data = await resp.json();
+    const d = data && data.detail;
+    if (typeof d === 'string' && d) return d;
+    if (d && typeof d === 'object' && (d.message || d.user_message)) return d.message || d.user_message;
+  } catch { /* not JSON */ }
+  return `HTTP ${resp.status}`;
+}
+
 document.getElementById('ch-scrape-btn').addEventListener('click', async () => {
   if (!_activeTabId) return;
   const btn = document.getElementById('ch-scrape-btn');
@@ -1427,7 +1439,7 @@ document.getElementById('ch-scrape-btn').addEventListener('click', async () => {
     try {
       const payload = { urls, quality: 'video', remove_watermark: true, channel_mode: true, max_videos: _chMaxVideos };
       const resp = await fetch(`${API_BASE}/api/v1/bulk-download`, { method: 'POST', headers: await vgAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(payload) });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      if (!resp.ok) throw new Error(await bulkErrorText(resp));
       const data = await resp.json();
       if (data.success) {
         batchDiv.classList.remove('hidden');
@@ -1480,7 +1492,7 @@ document.getElementById('ch-send-btn').addEventListener('click', async () => {
     const resp = await fetch(`${API_BASE}/api/v1/bulk-download`, {
       method: 'POST', headers: await vgAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(payload),
     });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    if (!resp.ok) throw new Error(await bulkErrorText(resp));
     const data = await resp.json();
     if (data.success) {
       batchDiv.classList.remove('hidden');
