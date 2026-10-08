@@ -207,7 +207,9 @@ def quality_note(requested: str | None, delivered: int, formats: list,
         return None
     best = max([int(f.get("height") or 0) for f in formats if f.get("type") == "video"] + [delivered])
     limit = int((cap or {}).get("height") or 0)
-    if limit and want > limit:
+    # the account limit is the reason only when the video HAS more than the
+    # limit (live 08/10: a 720p-only reel was told "guests stop at 1080p")
+    if limit and want > limit and best > limit:
         reason = (cap or {}).get("reason")
         # wording: BA review
         msg = (f"Tài khoản khách tải tối đa {limit}p. Đăng nhập để tải chất lượng cao hơn. Đã tải bản {delivered}p."

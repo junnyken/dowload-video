@@ -186,3 +186,11 @@ def test_a_signed_in_user_gets_2k_4k(app, route, monkeypatch):
     assert seen["quality"] == "video_2160"
     assert body["max_allowed_height"] == 0
     assert all(not f.get("locked") for f in body["available_formats"])
+
+
+
+def test_a_video_below_the_limit_is_not_blamed_on_the_account():
+    fm = [{"type": "video", "height": 720}, {"type": "video", "height": 360}]
+    n = quality_note("video_2160", 720, fm, {"height": 1080, "reason": "signin"})
+    assert n["message"] == "Video này không có bản 2160p. Đã tải bản 720p."
+    assert "limit" not in n
