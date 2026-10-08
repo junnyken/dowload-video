@@ -257,6 +257,77 @@ def cobalt_first(platform: str | None, quality: str) -> bool:
     return platform in wanted
 
 
+_PLATFORM_LABEL = {"facebook": "Video Facebook", "instagram": "Video Instagram", "twitter": "Video X"}
+_COBALT_META_WAIT_S = 8
+
+
+def _quick_meta(url: str) -> dict | None:
+    """Title / thumbnail / duration for a Cobalt-served download: one
+    anonymous yt-dlp metadata call (no download, no cookie, no retries).
+    Cobalt hands back only a file, and without this the user saw
+    "facebook_1C4v85UPtY", no thumbnail and 0 s (measured 08/10)."""
+    try:
+        opts = _get_base_opts(url, phase="metadata", anon=True)
+        opts.update({"skip_download": True, "extract_flat": False})
+        _anon_fast_fail(opts, "metadata")
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            m = ydl.extract_info(url, download=False)
+        return m if isinstance(m, dict) else None
+    except Exception as e:
+        print(f"[Downloader] Cobalt metadata lookup failed ({type(e).__name__})")
+        return None
+
+
+def _file_duration(path: str) -> float:
+    import subprocess
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                              "-of", "default=nw=1:nk=1", path], capture_output=True, text=True, timeout=15)
+        return round(float(out.stdout.strip()), 3)
+    except Exception:
+        return 0
+
+
+def enrich_cobalt_info(info: dict, meta: dict | None, platform: str) -> dict:
+    """Merge real metadata into a Cobalt result. Without metadata: a readable
+    title instead of Cobalt's "<platform>_<id>" filename, and the duration
+    read from the file itself."""
+    m = meta or {}
+    title = m.get("title") or ""
+    if not title or title == m.get("id"):
+        title = m.get("description", "")[:120] if m.get("description") else ""
+    if title:
+        info["title"] = title
+    elif re.fullmatch(rf"{platform}_[A-Za-z0-9_-]+", str(info.get("title") or "")) or not info.get("title"):
+        info["title"] = _PLATFORM_LABEL.get(platform, "Video")
+    if m.get("thumbnail"):
+        info["thumbnail"] = m["thumbnail"]
+    for k in ("uploader", "webpage_url"):
+        if m.get(k) and not info.get(k):
+            info[k] = m[k]
+    info["duration"] = m.get("duration") or info.get("duration") or _file_duration(info.get("filepath") or "")
+    return info
+
+
+def cobalt_with_meta(url: str, platform: str) -> dict | None:
+    """Cobalt download and the metadata lookup run side by side; the result
+    waits for the metadata at most _COBALT_META_WAIT_S."""
+    import concurrent.futures as _cf
+    ex = _cf.ThreadPoolExecutor(max_workers=1)
+    fut = ex.submit(_quick_meta, url)
+    try:
+        info = download_social_via_cobalt(url, DOWNLOAD_DIR, platform)
+        if not info:
+            return None
+        try:
+            meta = fut.result(timeout=_COBALT_META_WAIT_S)
+        except Exception:
+            meta = None
+        return enrich_cobalt_info(info, meta, platform)
+    finally:
+        ex.shutdown(wait=False)
+
+
 def cookie_last_stat(platform: str, outcome: str) -> None:
     """Per UTC day: which step served a COOKIE_LAST_PLATFORMS download —
     anon_ok | cobalt_ok | cookie_ok | all_fail | gone (no cookie tried).
@@ -866,7 +937,8 @@ def _youtube_proxy_download_enabled() -> bool:
 
 
 def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
-                   error_sink: list | None = None, force_cookie: bool = False) -> dict:
+                   error_sink: list | None = None, force_cookie: bool = False,
+                   anon: bool = False) -> dict:
     """
     Return base yt-dlp options with PHASE-AWARE proxy selection.
 
@@ -880,6 +952,8 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
                  survives whichever attempt produced it.
         force_cookie: attach the pool cookie even for a COOKIE_LAST_PLATFORMS
                  platform (the retry after the anonymous attempt failed).
+        anon:    never attach a Facebook / Instagram / X pool cookie (and never
+                 pick one, so no account use is counted) — metadata-only calls.
     """
     if quality == "video_4k":
         # 4K/2K: request highest quality video+audio, merge with FFmpeg.
@@ -1148,7 +1222,7 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
             print("[Downloader] YouTube: no cookies (android_vr client works without them)")
 
     if "facebook.com" in url.lower():
-        fb_cookies = None if (cookie_last("facebook") and not force_cookie) else _get_facebook_cookies_file()
+        fb_cookies = None if anon or (cookie_last("facebook") and not force_cookie) else _get_facebook_cookies_file()
         if fb_cookies:
             opts["cookiefile"] = fb_cookies
             print("[Downloader] Facebook cookies loaded")
@@ -1162,7 +1236,7 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
         from app.core.proxy_manager import IPROYAL_PROXY
         if not IPROYAL_PROXY and "proxy" in opts:
             del opts["proxy"]
-        ig_cookies = None if (cookie_last("instagram") and not force_cookie) else _get_instagram_cookies_file()
+        ig_cookies = None if anon or (cookie_last("instagram") and not force_cookie) else _get_instagram_cookies_file()
         if ig_cookies:
             opts["cookiefile"] = ig_cookies
         else:
@@ -1171,7 +1245,7 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
                 _anon_fast_fail(opts, phase)
 
     if is_twitter_url(url):
-        tw_cookies = None if (cookie_last("twitter") and not force_cookie) else _get_twitter_cookies_file()
+        tw_cookies = None if anon or (cookie_last("twitter") and not force_cookie) else _get_twitter_cookies_file()
         if tw_cookies:
             opts["cookiefile"] = tw_cookies
             opts["extractor_args"] = {"twitter": {"api": ["graphql"]}}
@@ -2419,7 +2493,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     if not user_cookies_file and cobalt_first(_cf_platform, quality):
         try:
             if is_cobalt_available():
-                info = download_social_via_cobalt(url, DOWNLOAD_DIR, _cf_platform)
+                info = cobalt_with_meta(url, _cf_platform)
         except Exception as _cf_err:
             print(f"[Downloader] {_cf_platform}: Cobalt-first failed ({type(_cf_err).__name__})")
             info = None
@@ -3155,6 +3229,8 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             # not twice: Cobalt-first already missed for this request
             if not cobalt_first(_cl_platform, quality) and is_cobalt_available():
                 info = download_social_via_cobalt(url, DOWNLOAD_DIR, _cl_platform)
+                if info:
+                    info = enrich_cobalt_info(info, None, _cl_platform)
         except Exception as _cb_err:
             print(f"[Downloader] {_cl_platform}: Cobalt step failed ({type(_cb_err).__name__})")
             info = None
@@ -3393,7 +3469,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         print(f"[Downloader] Trying Cobalt for Instagram: {url}")
         cobalt_info = download_instagram_via_cobalt(url, DOWNLOAD_DIR)
         if cobalt_info:
-            info = cobalt_info
+            info = enrich_cobalt_info(cobalt_info, None, "instagram")
         else:
             print(f"[Downloader] Cobalt failed, trying embed scraper for Instagram")
             info = asyncio.run(_try_instagram_embed(url))
@@ -3429,7 +3505,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         if is_cobalt_available():
             cobalt_info = download_facebook_via_cobalt(url, DOWNLOAD_DIR)
             if cobalt_info:
-                info = cobalt_info
+                info = enrich_cobalt_info(cobalt_info, None, "facebook")
                 print("[Downloader] Facebook: Cobalt fallback OK")
             else:
                 print("[Downloader] Facebook: Cobalt also failed")

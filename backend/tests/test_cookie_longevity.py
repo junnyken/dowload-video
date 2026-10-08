@@ -44,26 +44,16 @@ def b64(text: str) -> str:
 
 
 @pytest.fixture
-def rc(monkeypatch):
+def rc(monkeypatch, tmp_path):
     r = fakeredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr("app.core.redis_client._client", r)
     monkeypatch.setattr(downloader, "_FACEBOOK_COOKIES_B64", "", raising=False)
-    monkeypatch.setattr(downloader, "_COOKIE_DIR", str(_tmpdir()))
+    monkeypatch.setattr(downloader, "_COOKIE_DIR", str(tmp_path / "vg_cookies"))
     for k in ("COOKIE_LAST_PLATFORMS", "COOKIE_DAILY_CAP"):
         monkeypatch.delenv(k, raising=False)
     downloader._reset_request_cookies()
     yield r
     downloader._reset_request_cookies()
-
-
-_TMP = None
-
-
-def _tmpdir():
-    import tempfile
-    global _TMP
-    _TMP = tempfile.mkdtemp(prefix="vgck_")
-    return _TMP
 
 
 def add(platform="facebook", text=None, label="acc") -> str:
@@ -516,7 +506,8 @@ def test_cobalt_first_serves_without_touching_yt_dlp(stub, rc, monkeypatch):
                         lambda url, d, p: {"url": None, "title": "via cobalt", "ext": "mp4", "id": "c1",
                                            "extractor": "cobalt_facebook", "filepath": __file__})
     out = run()
-    assert out and stub.calls == []
+    # yt-dlp only for title/thumbnail: metadata, no download, no cookie
+    assert out and stub.calls and all(o.get("skip_download") and not o.get("cookiefile") for o in stub.calls)
     assert cp.uses_today("facebook", v) == 0
     assert stats(rc) == {"facebook|cobalt_first_ok": "1"}
 
@@ -531,3 +522,45 @@ def test_cobalt_first_miss_falls_back_and_is_not_retried(stub, rc, monkeypatch):
     out = run()                                     # anon login wall → cookie
     assert out and calls == ["facebook"]            # Cobalt asked once, not again before the cookie
     assert stats(rc) == {"facebook|cobalt_first_miss": "1", "facebook|cookie_ok": "1"}
+
+
+# ── Cobalt results keep title / thumbnail / duration ─────────────────────────
+
+def test_enrich_with_metadata_and_without(media):
+    jpg, vid = media
+    meta = {"id": "1C4", "title": "Vui lắm à mà cười", "thumbnail": "https://cdn/t.jpg", "duration": 6.3, "uploader": "Bên Bển"}
+    out = downloader.enrich_cobalt_info({"title": "facebook_1C4v85UPtY", "thumbnail": "", "filepath": str(vid)}, meta, "facebook")
+    assert out["title"] == "Vui lắm à mà cười" and out["thumbnail"] == "https://cdn/t.jpg"
+    assert out["duration"] == 6.3 and out["uploader"] == "Bên Bển"
+    bare = downloader.enrich_cobalt_info({"title": "instagram_DeJjs2ipNPr", "thumbnail": "", "filepath": str(vid)}, None, "instagram")
+    assert bare["title"] == "Video Instagram" and 0.9 < bare["duration"] < 1.2     # read from the file
+    kept = downloader.enrich_cobalt_info({"title": "Real name from Cobalt", "filepath": str(vid)}, None, "twitter")
+    assert kept["title"] == "Real name from Cobalt"
+
+
+def test_cobalt_with_meta_runs_both_and_never_spends_a_cookie(rc, monkeypatch, media):
+    jpg, vid = media
+    add()
+    monkeypatch.setattr(downloader, "download_social_via_cobalt",
+                        lambda url, d, p: {"title": "facebook_x", "thumbnail": "", "filepath": str(vid)})
+    seen = []
+
+    class Meta:
+        def __init__(self, opts):
+            seen.append(opts)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *e):
+            return False
+
+        def extract_info(self, url, download=False):
+            assert download is False
+            return {"title": "Tiêu đề thật", "thumbnail": "https://cdn/t.jpg", "duration": 12}
+
+    monkeypatch.setattr(downloader.yt_dlp, "YoutubeDL", Meta)
+    out = downloader.cobalt_with_meta(FB_URL, "facebook")
+    assert out["title"] == "Tiêu đề thật" and out["duration"] == 12
+    assert seen and not seen[0].get("cookiefile") and seen[0]["skip_download"]
+    assert cp.uses_today("facebook", rc.lrange("cookie_pool:facebook", 0, -1)[0]) == 0
