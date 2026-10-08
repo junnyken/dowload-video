@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { adminFetch, adminPost } from '../utils/adminFetch'
 import { cn } from '../utils/cn'
+import { ScraperApiPanel } from '../panels/ScraperApiPanel'
 
 interface ProxyPoolItem {
   redis_pool: number
@@ -389,6 +390,8 @@ export function ProxyPage() {
         </form>
         {addError && <p className="mt-2 text-xs text-danger">{addError}</p>}
       </div>
+
+      <ScraperApiPanel />
 
       {/* ENV var reference */}
       <div className="rounded-card border border-line bg-surface shadow-card p-5">

@@ -297,8 +297,9 @@ def get_proxy_stats() -> Dict[str, Any]:
     return {
         "iproyal_configured": bool(IPROYAL_PROXY),
         "iproyal_cn_configured": bool(os.getenv("IPROYAL_PROXY_CN", "")),
-        "scraperapi_configured": bool(SCRAPERAPI_API_KEY),
-        "scraperapi_proxy_active": not IPROYAL_PROXY and bool(SCRAPERAPI_API_KEY),
+        # the key pool, not the env var: the admin can empty the pool (#6150)
+        "scraperapi_configured": bool(_pool_active_key()),
+        "scraperapi_proxy_active": not IPROYAL_PROXY and bool(_pool_active_key()),
         "youtube_proxy": yt_proxy[:40] + "..." if len(yt_proxy) > 40 else yt_proxy,
         "tiktok_proxy": tiktok_proxy[:40] + "..." if len(tiktok_proxy) > 40 else tiktok_proxy,
         "douyin_proxy": douyin_proxy[:40] + "..." if len(douyin_proxy) > 40 else douyin_proxy,

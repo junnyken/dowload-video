@@ -562,6 +562,11 @@ async def get_admin_stats(_=Depends(verify_admin)):
         try:
             from app.core.scraperapi_pool import fetch_credits, get_active_key
             _active_key = get_active_key()
+            if not _active_key:
+                # Pool empty = ScraperAPI off (#6150). provider_status keeps
+                # the last balance forever; showing it read as "741 Critical"
+                # for a service no longer in use.
+                providers.pop("ScraperAPI", None)
             if _active_key:
                 _credits = fetch_credits(_active_key, use_cache=True)
                 if _credits is not None:
@@ -2574,6 +2579,19 @@ async def scraperapi_remove_key(index: int, request: Request, _=Depends(verify_a
         metadata={"index": index, "pool_size": pool_size},
     )
     return {"success": True, "pool_size": pool_size}
+
+
+@router.delete("/scraperapi/keys")
+async def scraperapi_remove_all_keys(request: Request, _=Depends(verify_admin)):
+    """Remove every key = stop using ScraperAPI (env is not re-imported).
+    Add a key again from the Proxy page to switch it back on (#6150)."""
+    from app.core.scraperapi_pool import remove_all_keys
+    removed = remove_all_keys()
+    log_admin_action(
+        request, "admin.scraperapi.keys_cleared",
+        resource_type="scraperapi_pool", metadata={"removed": removed},
+    )
+    return {"success": True, "removed": removed, "pool_size": 0}
 
 
 @router.post("/scraperapi/rotate")

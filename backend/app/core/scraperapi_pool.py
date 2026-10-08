@@ -4,8 +4,12 @@ ScraperAPI Key Pool
 Redis-backed key pool. Keys can be added/removed from the admin UI
 without touching .env.
 
-On first boot (Redis list empty), keys are imported from SCRAPERAPI_API_KEY
-env var (comma-separated) so existing setups keep working.
+On first boot, keys are imported from SCRAPERAPI_API_KEY env var
+(comma-separated) so existing setups keep working — ONCE: the marker
+scraperapi:seeded records it. Until 08/10 (task #6150) an empty list was
+re-imported from env on every read, so removing the last key from the admin
+page brought it straight back and ScraperAPI could not be switched off.
+An empty pool = ScraperAPI off: every layer that needs a key skips itself.
 
 Redis keys:
     scraperapi:keys              — LIST of API key strings (source of truth)
@@ -28,6 +32,7 @@ import httpx
 from app.core.redis_client import get_redis
 
 _KEYS_KEY       = "scraperapi:keys"
+_SEEDED_KEY     = "scraperapi:seeded"   # env imported once; never again
 _CREDITS_TTL    = 600
 _EXHAUSTED_TTL  = 86_400
 EXHAUST_THRESHOLD = 50
@@ -41,12 +46,15 @@ def _hash(key: str) -> str:
 # ── Key list (Redis-backed, env-seeded) ───────────────────────────
 
 def _ensure_seeded(rc) -> None:
-    """Import env var keys into Redis if pool is empty."""
+    """Import env var keys into Redis the first time only (see module doc)."""
+    if rc.exists(_SEEDED_KEY):
+        return
     if rc.llen(_KEYS_KEY) == 0:
         raw = os.getenv("SCRAPERAPI_API_KEY", "")
         for k in [x.strip() for x in raw.split(",") if x.strip()]:
             if k not in rc.lrange(_KEYS_KEY, 0, -1):
                 rc.rpush(_KEYS_KEY, k)
+    rc.set(_SEEDED_KEY, "1")
 
 
 def get_all_keys() -> list[str]:
@@ -58,9 +66,9 @@ def get_all_keys() -> list[str]:
         return [k if isinstance(k, str) else k.decode() for k in raw]
     except Exception as e:
         print(f"[ScraperAPIPool] get_all_keys failed: {e}")
-        # Fallback to env var
-        raw = os.getenv("SCRAPERAPI_API_KEY", "")
-        return [k.strip() for k in raw.split(",") if k.strip()]
+        # Redis down: no key. Falling back to env here would switch a pool the
+        # admin emptied back on (paid calls) whenever Redis hiccups.
+        return []
 
 
 def add_key(key: str) -> int:
@@ -111,6 +119,20 @@ def remove_key(index: int) -> int:
     except Exception as e:
         print(f"[ScraperAPIPool] remove_key failed: {e}")
         return len(get_all_keys())
+
+
+def remove_all_keys() -> int:
+    """Empty the pool = ScraperAPI off (env is not re-imported). Returns the
+    number of keys removed."""
+    rc = get_redis()
+    keys = get_all_keys()          # seeds once first, so env can't come back later
+    for k in keys:
+        h = _hash(k)
+        rc.delete(f"scraperapi:credits:{h}", f"scraperapi:exhausted:{h}")
+    rc.delete(_KEYS_KEY, "scraperapi:active_idx")
+    rc.set(_SEEDED_KEY, "1")
+    print(f"[ScraperAPIPool] Removed all {len(keys)} key(s) — ScraperAPI off")
+    return len(keys)
 
 
 # ── Active key selection ───────────────────────────────────────────
