@@ -773,6 +773,20 @@ async def fetch_link(
             if _req_h > _cap:
                 _quality = f"video_{_cap}"
 
+    # Guests stop at GUEST_MAX_HEIGHT (1080) on EVERY platform; 2K/4K needs an
+    # account — free or paid (owner 08/10, task #6134: "để khách phải đăng ký").
+    # The rows above stay visible, locked "signin", and the note says why.
+    if not user_id:
+        _guest_cap = int(os.getenv("GUEST_MAX_HEIGHT", "1080") or 0)
+        if _guest_cap > 0:
+            if not _height_cap["height"] or _guest_cap < _height_cap["height"]:
+                _height_cap = {"height": _guest_cap, "reason": "signin"}
+            _q = str(_quality or "")
+            _asks_more = _q in ("video_4k", "4k", "mp4_4k") or (
+                _q.startswith("video_") and _q[6:].isdigit() and int(_q[6:]) > _guest_cap)
+            if _asks_more:
+                _quality = f"video_{_guest_cap}"
+
     # Global concurrency guard — prevent CPU/memory overload under burst traffic
     _acquired, _active = _acquire_download_slot()
     if not _acquired:

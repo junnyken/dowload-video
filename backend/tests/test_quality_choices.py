@@ -139,3 +139,50 @@ def test_lock_reflects_the_account_cap_not_the_request():
     src = inspect.getsource(routes)
     i, j = src.index('_height_cap = {"height": _cap'), src.index("_cap = min(_cap, _gate_h)")
     assert i < j, "the account cap must be recorded before the per-request gate narrows _cap"
+
+
+def _stub(route, monkeypatch, seen):
+    async def _ok(url, quality="video", *a, **k):
+        seen["quality"] = quality
+        return {"title": "t", "direct_mp4_url": "", "original_url": url, "downloaded_height": 1080,
+                "available_formats": [{"type": "video", "height": 2160, "universal": False},
+                                      {"type": "video", "height": 1440, "universal": False},
+                                      {"type": "video", "height": 1080, "universal": True}]}
+    monkeypatch.setattr(route, "extract_video_info", _ok)
+    monkeypatch.setattr(route, "check_platform_quota", lambda *a, **k: {"allowed": True})
+    monkeypatch.setattr(route, "increment_usage", lambda *a, **k: None)
+
+    async def _noop(*a, **k):
+        return None
+    monkeypatch.setattr("app.core.metering.record_download", _noop)
+
+
+@pytest.mark.parametrize("asked", ["video_2160", "video_4k", "4k"])
+def test_a_guest_gets_1080_and_the_2k_4k_rows_say_sign_in(app, route, monkeypatch, asked):
+    seen = {}
+    _stub(route, monkeypatch, seen)
+    r = app.post("/api/v1/fetch-link", json={"url": "https://vimeo.com/123", "quality": asked})
+    assert r.status_code == 200, r.text[:300]
+    body = r.json()
+    assert seen["quality"] == "video_1080"
+    assert body["max_allowed_height"] == 1080 and body["height_cap_reason"] == "signin"
+    assert {f["height"]: f.get("locked") for f in body["available_formats"]} == {2160: "signin", 1440: "signin", 1080: None}
+    if asked == "video_2160":
+        assert "Đăng nhập" in body["quality_note"]["message"]
+
+
+def test_a_signed_in_user_gets_2k_4k(app, route, monkeypatch):
+    from app.core.auth_middleware import get_optional_user
+    import app.main as main_mod
+    seen = {}
+    _stub(route, monkeypatch, seen)
+    main_mod.app.dependency_overrides[get_optional_user] = lambda: {"id": "u-1", "tier": "free"}
+    try:
+        r = app.post("/api/v1/fetch-link", json={"url": "https://vimeo.com/123", "quality": "video_2160"})
+    finally:
+        main_mod.app.dependency_overrides.pop(get_optional_user, None)
+    assert r.status_code == 200, r.text[:300]
+    body = r.json()
+    assert seen["quality"] == "video_2160"
+    assert body["max_allowed_height"] == 0
+    assert all(not f.get("locked") for f in body["available_formats"])
