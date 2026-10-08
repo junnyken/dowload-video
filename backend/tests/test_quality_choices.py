@@ -22,7 +22,7 @@ def test_quality_note():
     fm = [{"type": "video", "height": 720}, {"type": "video", "height": 540}, {"type": "audio", "height": 0}]
     n = quality_note("video_1080", 720, fm)
     assert n["requested"] == 1080 and n["delivered"] == 720 and n["best_available"] == 720
-    assert "1080p" in n["message"] and "720p" in n["message"]
+    assert n["message"] == "Video này không có bản 1080p. Đã tải bản 720p."
     assert quality_note("video_1080", 1080, fm) is None          # delivered what was asked
     assert quality_note("video_720", 640, fm) is None            # within 80 %: same class
     assert quality_note("video", 360, fm) is None                # default: no specific ask

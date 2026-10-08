@@ -196,7 +196,7 @@ def quality_note(requested: str | None, delivered: int, formats: list) -> dict |
     return {
         "requested": want, "delivered": delivered, "best_available": best,
         # wording: BA review
-        "message": f"Video này không có bản {want}p. Đã tải bản tốt nhất có sẵn: {delivered}p.",
+        "message": f"Video này không có bản {want}p. Đã tải bản {delivered}p.",
     }
 
 

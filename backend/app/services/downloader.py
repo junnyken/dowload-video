@@ -1018,6 +1018,10 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
                 # and behaves exactly as before.
                 f"bestvideo[width<={height}][height>{height}][vcodec^=avc1]+bestaudio[acodec^=mp4a]"
                 f"/bestvideo[width<={height}][height>{height}][ext=mp4]+bestaudio[ext=m4a]"
+                # progressive portrait (X lists no codecs): measured 08/10 —
+                # video_1080 on a 716x1276 X post downloaded the 480x854 one
+                f"/best[width<={height}][height>{height}][vcodec^=avc1]"
+                f"/best[width<={height}][height>{height}][ext=mp4]"
                 f"/bestvideo[height<={height}][vcodec^=avc1]+bestaudio[acodec^=mp4a]"
                 f"/bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]"
                 f"/best[height<={height}][ext=mp4]"

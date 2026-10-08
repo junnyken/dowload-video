@@ -450,10 +450,10 @@ def test_sabr_shortfall_compares_with_what_the_video_offers():
 
 # ── default HD: portrait capped by its short side; Cobalt-first ──────────────
 
-def _pick(formats):
+def _pick(formats, quality="video"):
     """formats worst → best, the order every yt-dlp extractor hands over."""
     import yt_dlp
-    fmt = downloader._get_base_opts("https://example.com/v")["format"]
+    fmt = downloader._get_base_opts("https://example.com/v", quality=quality)["format"]
     with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
         sel = ydl.build_format_selector(fmt)
         ctx = {"formats": formats, "incomplete_formats": False, "has_merged_format": True}
@@ -566,3 +566,15 @@ def test_cobalt_with_meta_runs_both_and_never_spends_a_cookie(rc, monkeypatch, m
     assert out["title"] == "Tiêu đề thật" and out["duration"] == 12
     assert seen and not seen[0].get("cookiefile") and seen[0]["skip_download"]
     assert cp.uses_today("facebook", rc.lrange("cookie_pool:facebook", 0, -1)[0]) == 0
+
+
+
+def test_explicit_1080_takes_the_portrait_progressive_stream():
+    """Measured 08/10: video_1080 on a 716x1276 X post downloaded 480x854."""
+    x = [_f("http-632", 320, 570, v=None, a=None), _f("http-950", 480, 854, v=None, a=None),
+         _f("http-2176", 716, 1276, v=None, a=None)]
+    assert _pick(x, "video_1080") == "http-2176"
+    assert _pick(x, "video_480") == "http-950"
+    land = [_f("140", None, None, a="mp4a.40.2", ext="m4a"), _f("136", 1280, 720, v="avc1.4d401f"),
+            _f("137", 1920, 1080, v="avc1.640028")]
+    assert _pick(land, "video_720") == "136+140"
