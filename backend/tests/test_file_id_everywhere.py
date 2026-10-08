@@ -479,9 +479,16 @@ class TestResponses:
                "direct_mp4_url": f"/app/downloads/{REAL_NAME}"}
         sb = MagicMock()
         q = sb.table.return_value.select.return_value.order.return_value
-        q.is_.return_value.range.return_value.execute.return_value.data = [row]
+        q.eq.return_value.range.return_value.execute.return_value.data = [row]
         monkeypatch.setattr(routes, "get_supabase_client", lambda: sb)
-        body = app.get("/api/v1/history").json()
+        # signed in: a guest gets no server history since task #6137
+        from app.core.auth_middleware import get_optional_user
+        import app.main as main_mod
+        main_mod.app.dependency_overrides[get_optional_user] = lambda: {"id": "u-1"}
+        try:
+            body = app.get("/api/v1/history").json()
+        finally:
+            main_mod.app.dependency_overrides.pop(get_optional_user, None)
         job = body["jobs"][0]
         assert job["local_file_id"] == REAL_NAME and job["direct_file_id"] == REAL_NAME
         if mode == "legacy_off":

@@ -2190,10 +2190,16 @@ async def get_history(
 
     This selected from download_jobs with no owner filter at all, on a route
     with no auth dependency — so any visitor, signed in or not, read back every
-    account's history: URLs, filenames, error messages, user ids. Anonymous
-    downloads are stored with user_id NULL and have no owner, so they stay a
-    shared pool; a signed-in user now sees only their own rows.
+    account's history: URLs, filenames, error messages, user ids. A signed-in
+    user now sees only their own rows.
+
+    Anonymous downloads are stored with user_id NULL and have no owner. Serving
+    them as "your recent downloads" showed every guest the last downloads of
+    all OTHER guests — source URL, title and the download link (task #6137,
+    08/10). A guest's history now lives in their own browser (local_only).
     """
+    if not (user and user.get("id")):
+        return {"success": True, "jobs": [], "local_only": True}
     try:
         supabase = get_supabase_client()
         q = (
@@ -2201,10 +2207,7 @@ async def get_history(
             .select("*")
             .order("created_at", desc=True)
         )
-        if user and user.get("id"):
-            q = q.eq("user_id", user["id"])
-        else:
-            q = q.is_("user_id", "null")
+        q = q.eq("user_id", user["id"])
         if platform:
             q = q.eq("platform", platform)
         if status in ("success", "failed", "processing"):
@@ -2264,16 +2267,14 @@ async def delete_history_job(job_id: str, user=Depends(get_optional_user)):
     """Delete one history entry the caller owns.
 
     Unauthenticated and unscoped before, so any job id deleted anyone's row.
+    An anonymous caller could still delete any OTHER guest's un-owned row
+    (task #6137); a guest's history is local to their browser now.
     """
+    if not (user and user.get("id")):
+        raise HTTPException(status_code=401, detail="Cần đăng nhập để xóa lịch sử tải.")
     try:
         supabase = get_supabase_client()
-        q = supabase.table("download_jobs").delete().eq("id", job_id)
-        if user and user.get("id"):
-            q = q.eq("user_id", user["id"])
-        else:
-            # An anonymous caller may only remove un-owned rows, never a
-            # signed-in user's.
-            q = q.is_("user_id", "null")
+        q = supabase.table("download_jobs").delete().eq("id", job_id).eq("user_id", user["id"])
         res = q.execute()
         if not (res.data or []):
             raise HTTPException(status_code=404, detail="Không tìm thấy mục lịch sử này.")

@@ -281,13 +281,14 @@ class TestHistoryScoping:
         assert rec.call_args.kwargs["scope"] == "user_id=user-7"
 
     def test_anonymous_history_read_excludes_owned_rows(self):
+        """Task #6137: not even other guests' un-owned rows — a guest gets
+        nothing from the server (their history is local to their browser)."""
         import app.api.routes as routes
         sb = self._sb()
-        self._run(routes.get_history, sb, limit=5, offset=0,
-                  platform=None, status=None, user=None)
-        assert sb._q.is_.call_args[0] == ("user_id", "null"), (
-            "an anonymous caller must not be served signed-in users' history"
-        )
+        out = self._run(routes.get_history, sb, limit=5, offset=0,
+                        platform=None, status=None, user=None)
+        assert out == {"success": True, "jobs": [], "local_only": True}
+        assert not sb.table.called, "the table must not be read for a guest"
 
     def test_signed_in_history_read_is_filtered_to_that_user(self):
         import app.api.routes as routes
