@@ -1580,18 +1580,54 @@ async function downloadSingleTrack(track, btn) {
 // ══════════════════════════════════════════════════════════════════
 // MULTI-FORMAT POPUP
 // ══════════════════════════════════════════════════════════════════
+function showQualityNote(note) {
+  const el = document.getElementById('quality-note');
+  if (!el) return;
+  const msg = note && typeof note.message === 'string' ? note.message : '';
+  el.textContent = msg; // textContent: server text, never HTML
+  el.classList.toggle('hidden', !msg);
+}
+
+async function openSitePage(kind) {
+  if (kind === 'signin') chrome.tabs.create({ url: `${WEB_BASE}/?connect_extension=1` });
+  else chrome.tabs.create({ url: `${await getApiBaseLocal()}/upgrade` });
+}
+
 function showMultiFormat(data) {
   const panel = document.getElementById('formats-panel');
   const list = document.getElementById('formats-list');
   if (!panel || !list) return;
 
-  const formats = data.available_formats || [];
-  if (formats.length === 0) return;
+  showQualityNote(data.quality_note);
+
+  const all = data.available_formats || [];
+  const dlH = Number(data.downloaded_height) || 0;
+  // Downloaded item is shown first as its own header row; skip the duplicate
+  // video row for the same height (codec is not exposed per row, so height is
+  // the match key; the recommended/universal row at that height is the one we got).
+  const formats = all.filter((f) => !(f.type === 'video' && dlH && Number(f.height) === dlH && f.universal !== false));
+  const videoRows = formats.filter((f) => f.type === 'video');
+  // Single-output video: no other resolutions to offer -> no extra video rows.
+  const visible = formats.filter((f) => f.type !== 'video' || videoRows.length > 0);
 
   const videoUrl = data.original_url || '';
   list.innerHTML = '';
 
-  formats.forEach((fmt) => {
+  if (dlH) {
+    const head = document.createElement('div');
+    head.className = 'fmt-item';
+    head.style.cursor = 'default';
+    const universalTxt = data.downloaded_universal === true ? ' · Mọi máy' : ''; // wording: BA review
+    head.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:14px;">🎬</span>
+        <div><div class="fmt-label">Đã tải: ${dlH}p${universalTxt}</div></div>
+      </div>
+      <span style="font-size:12px;">✅</span>`; // wording: BA review
+    list.appendChild(head);
+  }
+
+  visible.forEach((fmt) => {
     const row = document.createElement('div');
     row.className = 'fmt-item';
 
@@ -1601,19 +1637,35 @@ function showMultiFormat(data) {
     const needsMerge = fmt.requires_merge || !fmt.url;
     const mergeBadge = needsMerge ? `<span class="fmt-badge fmt-badge-merge">GHÉP TỆP</span>` : '';
     const sizeMB = fmt.filesize_mb || fmt.file_size_mb || 0;
-    const sizeBadge = sizeMB ? `<span style="font-size:10px;color:#f97316;font-weight:600;">${sizeMB} MB</span>` : '';
-    const codecBadge = '';
+    const sizeBadge = sizeMB ? `<span style="font-size:10px;color:#f97316;font-weight:600;">${escapeHtml(String(sizeMB))} MB</span>` : '';
+    const sharperNote = isVideo && fmt.universal === false
+      ? `<div style="font-size:9px;color:#fbbf24;">Nét hơn · có thể không mở được trên máy cũ</div>` : ''; // wording: BA review
+    const locked = fmt.locked === 'signin' || fmt.locked === 'plan' ? fmt.locked : '';
+    const lockedTxt = locked === 'signin' ? 'Đăng nhập để tải' : 'Nâng cấp để tải'; // wording: BA review
+    const actionHtml = locked
+      ? `<span class="fmt-dl-btn" style="opacity:.75;">🔒 ${lockedTxt}</span>`
+      : `<span class="fmt-dl-btn">⬇ Tải</span>`;
 
     row.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;">
         <span style="font-size:14px;">${icon}</span>
         <div>
-          <div class="fmt-label">${label}</div>
+          <div class="fmt-label">${escapeHtml(label)}</div>
           <div class="fmt-meta">${mergeBadge}${sizeBadge}</div>
+          ${sharperNote}
         </div>
       </div>
-      <span class="fmt-dl-btn">⬇ Tải</span>
+      ${actionHtml}
     `;
+
+    if (locked) {
+      // Disabled row: no download; the label itself leads to sign-in / upgrade.
+      row.style.opacity = '0.6';
+      row.setAttribute('aria-disabled', 'true');
+      row.addEventListener('click', () => { openSitePage(locked); });
+      list.appendChild(row);
+      return;
+    }
 
     row.addEventListener('click', async () => {
       const dlBtn = row.querySelector('span:last-child');
@@ -1628,6 +1680,7 @@ function showMultiFormat(data) {
           if (!result?.ok || !result.data?.success) { dlBtn.textContent = '❌'; return; }
 
           const r = result.data;
+          showQualityNote(r.quality_note);
           let finalUrl;
           const audioPath = ext === 'mp3'
             ? (vgFileId(r.local_mp3_file_id, r.local_mp3_path) || vgFileId(r.local_file_id, r.local_file_path))
@@ -1658,6 +1711,7 @@ function showMultiFormat(data) {
     list.appendChild(row);
   });
 
+  if (list.children.length === 0 && !data.quality_note?.message) { panel.classList.add('hidden'); return; }
   panel.classList.remove('hidden');
 }
 

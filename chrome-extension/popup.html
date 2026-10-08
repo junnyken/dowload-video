@@ -552,16 +552,7 @@
           🎬 Tốt nhất
           <span class="q-sub">Cao nhất có sẵn</span>
         </label>
-        <label class="q-pill">
-          <input type="radio" name="quality" value="video_1080" style="display:none">
-          🎯 1080p
-          <span class="q-sub">Full HD</span>
-        </label>
-        <label class="q-pill">
-          <input type="radio" name="quality" value="video_720" style="display:none">
-          ⚡ 720p
-          <span class="q-sub">Nhẹ hơn</span>
-        </label>
+        <!-- wording: BA review — 1080p/720p pills removed (#6134): real qualities are listed after the download -->
         <label class="q-pill">
           <input type="radio" name="quality" value="mp3_320" style="display:none">
           🎵 MP3
@@ -575,8 +566,6 @@
          download handler reads it back. First option is the default. -->
     <select id="qualitySelect" style="display:none">
       <option value="video">MP4 (tốt nhất có sẵn)</option>
-      <option value="video_1080">MP4 1080p</option>
-      <option value="video_720">MP4 720p</option>
       <option value="mp3_320">MP3 (âm thanh 320kbps)</option>
     </select>
 
@@ -644,6 +633,7 @@
         <span class="formats-label">Tất cả chất lượng</span>
         <button id="formats-close" class="formats-close">✕</button>
       </div>
+      <div id="quality-note" class="hidden" style="font-size:10px;color:#fbbf24;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.25);border-radius:8px;padding:6px 8px;margin-bottom:8px;"></div>
       <div id="formats-list" style="max-height:220px;overflow-y:auto;"></div>
     </div>
 
