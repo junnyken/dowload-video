@@ -491,11 +491,25 @@ def check_failure_spike(platform: str) -> Optional[dict]:
             return None
 
         magnitude = today_err_rate / avg_err_rate if avg_err_rate > 0 else float("inf")
-        likely_cause = (
-            f"Platform '{platform}' error rate today {today_err_rate:.1%} "
-            f"vs 7-day avg {avg_err_rate:.1%} "
-            f"({magnitude:.1f}x spike)"
-        )
+        if magnitude >= FAILURE_SPIKE_MULTIPLIER:
+            likely_cause = (
+                f"Platform '{platform}' error rate today {today_err_rate:.1%} "
+                f"vs 7-day avg {avg_err_rate:.1%} "
+                f"({magnitude:.1f}x spike)"
+            )
+        else:
+            # Fired on the absolute threshold, not a rise: "0.6x spike" read
+            # as a surge on a platform that was failing LESS than its week
+            # (Douyin 62.5% vs 99.4%, 08/10 — task #6148).
+            likely_cause = (
+                f"Platform '{platform}' error rate today {today_err_rate:.1%} "
+                f"is above the {FAILURE_ABS_THRESHOLD:.0%} alert line "
+                f"(7-day avg {avg_err_rate:.1%} — failing for days, not a new spike)"
+                if avg_err_rate >= FAILURE_ABS_THRESHOLD else
+                f"Platform '{platform}' error rate today {today_err_rate:.1%} "
+                f"is above the {FAILURE_ABS_THRESHOLD:.0%} alert line "
+                f"(7-day avg {avg_err_rate:.1%})"
+            )
         anomaly = _build_anomaly(
             metric=f"failure_spike:{platform}",
             window="today_vs_7d",

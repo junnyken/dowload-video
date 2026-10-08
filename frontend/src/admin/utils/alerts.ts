@@ -33,11 +33,15 @@ export function buildAlerts(snapshot: SystemSnapshot): BuiltAlerts {
   }
 
   // Cookie pool alerts
-  const pools = cookiePoolStatus?.platforms ?? {}
+  const pools = cookiePoolStatus?.pools ?? {}
+  // An empty pool only means "will fail" where nothing else serves the
+  // platform; with Cobalt-first / cookie-last, public videos need no cookie
+  // (Twitter was 9/9 while this said it would fail — 08/10, task #6148).
+  const noCookieRoute = cookiePoolStatus?.no_cookie_route ?? {}
   const twitterTotal = (pools['twitter']?.total ?? pools['x']?.total ?? 0)
   if (failedSrc.has('cookiePoolStatus')) {
     // Fetch failed: an empty pool here would be a false "no cookie" alarm.
-  } else if (twitterTotal === 0) {
+  } else if (twitterTotal === 0 && !(noCookieRoute['twitter']?.length)) {
     alerts.push({ id: 'tw-no-cookie', severity: 'warning', message: 'Twitter/X chưa có cookie — tải Twitter sẽ thất bại', time: 'Hiện tại', platform: 'Twitter' })
   }
   const igTotal = pools['instagram']?.total ?? 0
@@ -45,7 +49,7 @@ export function buildAlerts(snapshot: SystemSnapshot): BuiltAlerts {
     // see above
   } else if (igTotal > 0 && igTotal < 3) {
     alerts.push({ id: 'ig-low-pool', severity: 'warning', message: `Instagram cookie pool thấp (${igTotal} account) — dễ bị rate limit`, time: 'Hiện tại', platform: 'Instagram' })
-  } else if (igTotal === 0) {
+  } else if (igTotal === 0 && !(noCookieRoute['instagram']?.length)) {
     alerts.push({ id: 'ig-no-cookie', severity: 'warning', message: 'Instagram chưa có cookie — tải Instagram private sẽ thất bại', time: 'Hiện tại', platform: 'Instagram' })
   }
 

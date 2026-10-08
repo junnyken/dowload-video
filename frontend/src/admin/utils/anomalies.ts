@@ -11,7 +11,7 @@ export const SEVERITY_LABEL: Record<AlertSeverity, string> = {
 
 const TYPE_LABEL: Record<string, string> = {
   success_drop:   'Tỉ lệ tải thành công giảm',
-  failure_spike:  'Lỗi tăng đột biến',
+  failure_spike:  'Tỉ lệ lỗi cao',   // wording: BA review — fires on a rise OR on >50% alone (#6148)
   disk_pressure:  'Ổ đĩa sắp đầy',
   schedule_drift: 'Lịch chạy bị trễ',
 }

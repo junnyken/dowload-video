@@ -2096,9 +2096,25 @@ async def cookie_pool_status(_=Depends(verify_admin)):
     """Show healthy/blocked count per platform."""
     try:
         from app.core.cookie_pool import get_pool_status
-        return {"success": True, "pools": get_pool_status()}
+        return {"success": True, "pools": get_pool_status(),
+                "no_cookie_route": no_cookie_routes()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def no_cookie_routes() -> dict:
+    """Platforms whose public videos download without any pool cookie, and
+    how (task #6148): Cobalt first, or yt-dlp anonymous before a cookie. An
+    empty pool there is not "downloads will fail" — the Overview said so for
+    Twitter while it served 9/9 through Cobalt."""
+    from app.services.downloader import cobalt_first, cookie_last
+    out = {}
+    for p in ("facebook", "instagram", "twitter"):
+        routes = [name for name, on in (("cobalt", cobalt_first(p, "video")),
+                                        ("anonymous", cookie_last(p))) if on]
+        if routes:
+            out[p] = routes
+    return out
 
 
 @router.get("/cookies/list/{platform}")
@@ -2872,6 +2888,43 @@ async def get_flow_cleanup_job(temp_id: str, _=Depends(verify_admin)):
 # GET /ops-health — Phase 12 Operational Health Summary
 # ═════════════════════════════════════════════════════════════════════
 
+
+def fallback_summary(rc, per_platform: Dict[str, Dict[str, int]]) -> Dict[str, Any]:
+    """Today's success rate per platform + the fallback layer that served it
+    most. vidgrab:fallback:<platform>:<layer> are HASHES (adaptive_fallback:
+    success_count / fail_count); they were read with GET, Redis answered
+    WRONGTYPE and the whole block became {"error": ...} (08/10, task #6148).
+    `total` rides along: the page shows "—" for a rate without attempts."""
+    layer_hits: Dict[str, Dict[str, int]] = {}
+    for fk in rc.scan_iter(match="vidgrab:fallback:*", count=200):
+        key = fk.decode() if isinstance(fk, bytes) else fk
+        parts = key.split(":")
+        if len(parts) < 4:
+            continue
+        try:
+            data = rc.hgetall(key) or {}
+        except Exception:
+            continue   # a stray non-hash key must not blank the panel
+        data = {(k.decode() if isinstance(k, bytes) else k): v for k, v in data.items()}
+        try:
+            hits = int(data.get("success_count") or 0)
+        except (TypeError, ValueError):
+            hits = 0
+        layer = ":".join(parts[3:])
+        plat_layers = layer_hits.setdefault(parts[2], {})
+        plat_layers[layer] = plat_layers.get(layer, 0) + hits
+    out: Dict[str, Any] = {}
+    for plat, counts in (per_platform or {}).items():
+        ok, err = int(counts.get("ok", 0) or 0), int(counts.get("err", 0) or 0)
+        total = ok + err
+        layers = {k: v for k, v in layer_hits.get(plat, {}).items() if v > 0}
+        out[plat] = {
+            "success_rate": round(ok / total * 100, 1) if total else None,
+            "total": total,
+            "top_layer": max(layers, key=lambda k: layers[k]) if layers else "primary",
+        }
+    return out
+
 @router.get("/ops-health")
 async def get_ops_health(_=Depends(verify_admin)):
     """
@@ -2908,55 +2961,15 @@ async def get_ops_health(_=Depends(verify_admin)):
     except Exception as e:
         result["auto_tune_params"] = {"error": str(e)}
 
-    # ── Fallback summary (platform → {success_rate, top_layer}) ──
+    # ── Fallback summary (platform → {success_rate, total, top_layer}) ──
     try:
-        rc = get_redis()
-        now = datetime.now(timezone.utc)
-        fallback_summary: Dict[str, Any] = {}
-        # Today's platform stats — the admin calendar day (ADMIN_TIMEZONE)
         from app.core import download_outcomes as _do
         _today_row = _do.read_admin_days([_do.admin_today()])["days"][0]
-        raw_today = {f"{p}:{k}": n for p, c in _today_row["per_platform"].items()
-                     for k, n in c.items()}
-        # Also pull fallback-layer counters: vidgrab:fallback:<platform>:<layer>
-        fallback_keys = rc.keys("vidgrab:fallback:*") or []
-        layer_counts: Dict[str, Dict[str, int]] = {}
-        for fk in fallback_keys:
-            fk_str = fk.decode() if isinstance(fk, bytes) else fk
-            parts = fk_str.split(":")
-            if len(parts) >= 4:
-                plat = parts[2]
-                layer = parts[3]
-                val_raw = rc.get(fk_str)
-                val = int(val_raw) if val_raw else 0
-                if plat not in layer_counts:
-                    layer_counts[plat] = {}
-                layer_counts[plat][layer] = layer_counts[plat].get(layer, 0) + val
-
-        # Build per-platform summary from today's stats hash
-        platform_set: set = set()
-        for field_raw in raw_today:
-            field = field_raw.decode() if isinstance(field_raw, bytes) else field_raw
-            if ":" in field:
-                platform_set.add(field.split(":")[0])
-
-        for plat in platform_set:
-            ok_raw = raw_today.get(f"{plat}:ok".encode(), raw_today.get(f"{plat}:ok", 0))
-            err_raw = raw_today.get(f"{plat}:err".encode(), raw_today.get(f"{plat}:err", 0))
-            ok = int(ok_raw) if ok_raw else 0
-            err = int(err_raw) if err_raw else 0
-            total = ok + err
-            success_rate = round(ok / total * 100, 1) if total > 0 else None
-            # Determine top fallback layer by highest hit count
-            plat_layers = layer_counts.get(plat, {})
-            top_layer = max(plat_layers, key=lambda k: plat_layers[k]) if plat_layers else "primary"
-            fallback_summary[plat] = {
-                "success_rate": success_rate,
-                "top_layer": top_layer,
-            }
-        result["fallback_summary"] = fallback_summary
+        result["fallback_summary"] = fallback_summary(get_redis(), _today_row["per_platform"])
     except Exception as e:
-        result["fallback_summary"] = {"error": str(e)}
+        # Never as a fake platform: {"error": ...} was drawn as a card "ERROR —".
+        result["fallback_summary"] = {}
+        result["fallback_summary_error"] = type(e).__name__
 
     # ── Last intelligence run ────────────────────────────
     try:

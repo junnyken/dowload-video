@@ -32,13 +32,15 @@ export interface StatsResponse {
   failed_24h?: number | null
   total_users?: number
   providers?: Record<string, number>
+  /** Raw download_jobs rows (status=failed): the reason is error_message,
+   *  the time created_at — there is no error / time column. */
   failed_jobs?: Array<{
     id?: string
     platform?: string
-    phase?: string
-    error?: string
-    time?: string
-    action?: string
+    error_message?: string | null
+    error_type?: string | null
+    job_stage?: string | null
+    created_at?: string
   }>
 }
 
@@ -156,12 +158,17 @@ export interface YoutubeStatusResponse {
 }
 
 export interface CookiePoolStatusResponse {
-  platforms?: Record<string, {
+  /** GET /admin/cookies/status answers `pools` (the Cookies page reads it).
+   *  This read `platforms`, which never exists, so the Overview said
+   *  "chưa có cookie" for every platform whatever the pool held. */
+  pools?: Record<string, {
     total?: number
     healthy?: number
     soft_blocked?: number
     hard_blocked?: number
   }>
+  /** Platforms whose public videos download with no pool cookie, and how. */
+  no_cookie_route?: Record<string, Array<'cobalt' | 'anonymous'>>
 }
 
 export type SnapshotSource =

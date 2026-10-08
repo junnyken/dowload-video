@@ -5,6 +5,7 @@ import { useAdminSystemStatus } from '../hooks/useAdminSystemStatus'
 import { useAdminActiveJobs } from '../hooks/useAdminActiveJobs'
 import type { SystemSnapshot, PlatformStatsTotal, DailyStatEntry, SnapshotSource } from '../api/system'
 import { buildAlerts } from '../utils/alerts'
+import { absoluteTime, relativeTimeVi } from '../utils/anomalies'
 import { NO_TRAFFIC_HINT, fmtRate, safeRate } from '../utils/rate'
 import { coverageHint } from '../utils/coverage'
 import { APPROX_DAY_HINT, VN_TIME_HINT, vnDayLabel } from '../utils/vnTime'
@@ -192,17 +193,20 @@ function ProxyPoolCard({ platform, redis, env, total }: { platform: string; redi
 
 // ─── Failure row ──────────────────────────────────────────────────────────────
 
-function FailureRow({ job }: { job: { platform?: string; phase?: string; error?: string; time?: string } }) {
+// download_jobs has error_message / error_type / created_at. The row read
+// error / phase / time, which no job carries, so every failure showed
+// "Unknown error" and "—" (08/10, task #6148).
+function FailureRow({ job }: { job: NonNullable<SystemSnapshot['stats']['failed_jobs']>[number] }) {
   return (
     <div className="flex items-start gap-3 py-2 border-b border-line last:border-0 text-xs">
       <span className="shrink-0 rounded-md border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] uppercase text-fg-2">
         {job.platform ?? '?'}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-fg-2 truncate">{job.error ?? 'Unknown error'}</p>
-        <p className="text-fg-muted text-[10px]">{job.phase ?? '—'}</p>
+        <p className="text-fg-2 truncate" title={job.error_message ?? undefined}>{job.error_message || 'Không ghi lý do'}</p>
+        <p className="text-fg-muted text-[10px]">{job.error_type || job.job_stage || '—'}</p>
       </div>
-      <span className="shrink-0 text-fg-muted text-[10px] font-mono">{job.time ?? '—'}</span>
+      <span className="shrink-0 text-fg-muted text-[10px] font-mono" title={absoluteTime(job.created_at)}>{relativeTimeVi(job.created_at)}</span>
     </div>
   )
 }
