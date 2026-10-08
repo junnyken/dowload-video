@@ -62,3 +62,27 @@ def test_youtube_keeps_its_real_list_without_urls():
     src = inspect.getsource(routes)
     assert 'info["available_formats"] = []' not in src
     assert '{**f, "url": "", "requires_merge": True}' in src
+
+
+# ── the fields must actually reach the client through /fetch-link ───────────
+from tests.test_fetch_link_uuid_scope import route  # noqa: E402,F401
+
+
+def test_fetch_link_returns_the_new_fields(app, route, monkeypatch):
+    async def _ok(url, *a, **k):
+        return {"title": "t", "direct_mp4_url": "", "original_url": url,
+                "downloaded_height": 720, "downloaded_vcodec": "vp09", "downloaded_universal": False,
+                "available_formats": [{"type": "video", "height": 720, "universal": False},
+                                      {"type": "video", "height": 540, "universal": False}]}
+    monkeypatch.setattr(route, "extract_video_info", _ok)
+    monkeypatch.setattr(route, "check_platform_quota", lambda *a, **k: {"allowed": True})
+    monkeypatch.setattr(route, "increment_usage", lambda *a, **k: None)
+
+    async def _noop(*a, **k):
+        return None
+    monkeypatch.setattr("app.core.metering.record_download", _noop)
+    r = app.post("/api/v1/fetch-link", json={"url": "https://www.instagram.com/p/abc/", "quality": "video_1080"})
+    assert r.status_code == 200, r.text[:300]
+    body = r.json()
+    assert body["downloaded_vcodec"] == "vp09" and body["downloaded_universal"] is False
+    assert body["quality_note"]["requested"] == 1080 and body["quality_note"]["delivered"] == 720

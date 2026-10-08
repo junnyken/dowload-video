@@ -975,6 +975,10 @@ async def fetch_link(
             "available_formats": info.get("available_formats", []),
             "max_merge_height": info.get("max_merge_height", 0),
             "downloaded_height": info.get("downloaded_height", 0),
+            # task #6134: codec of the downloaded file + "not the resolution you asked for"
+            "downloaded_vcodec": info.get("downloaded_vcodec") or "",
+            "downloaded_universal": info.get("downloaded_universal"),
+            "quality_note": info.get("quality_note"),
             "subtitle_url": info.get("subtitle_url"),
             "subtitle_file_url": subtitle_file_url,
             "subtitle_error": info.get("subtitle_error"),
