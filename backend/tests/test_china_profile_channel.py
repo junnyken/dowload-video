@@ -416,3 +416,27 @@ class TestWiring:
         assert updates[-1] == {"status": "failed",
                                "error_message": "Bạn cần đăng nhập để tải cả kênh Kuaishou. "
                                                 "Đăng nhập miễn phí rồi thử lại."}
+
+
+# ── first live run (08/10): paid $0.08, kept 0 rows ─────────────────────────
+
+class TestUnlistableRows:
+
+    def test_alternative_url_and_id_keys_are_read(self, on, rc):
+        row = ks_item(0)
+        vid = row.pop("id")
+        url = row.pop("url")
+        row.update({"photoId": vid, "shareUrl": url})
+        listing = _list("kuaishou", USER, 1, Api([row]))
+        assert listing.videos[0].url == f"https://www.kuaishou.com/short-video/{vid}"
+
+    def test_rows_nobody_can_list_are_reported_by_field_name(self, on, rc, caplog):
+        rows = [{"secretValue": "do-not-log", "author": {"x": 1}, "kind": "profile"}] * 3
+        with caplog.at_level("WARNING", logger="app.china_access"):
+            with pytest.raises(ChannelListingError) as ei:
+                _list("kuaishou", USER, 3, Api(rows))
+        assert ei.value.code == "no_media_found"
+        text = caplog.text
+        assert "3 row(s), none listable" in text
+        assert "'author', 'kind', 'secretValue'" in text
+        assert "do-not-log" not in text                  # names only, never values

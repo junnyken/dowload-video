@@ -329,10 +329,18 @@ def _video_url(platform: str, item: dict) -> Optional[tuple[str, str]]:
             url += "?" + urlencode({"xsec_token": token, "xsec_source": "pc_user"})
         return nid, XiaohongshuAdapter().canonicalize(url)
     from app.services.china_platforms.adapters.kuaishou import KuaishouAdapter  # noqa: PLC0415
-    vid = str(item.get("id") or "").strip()
-    raw = item.get("url") if isinstance(item.get("url"), str) else ""
+    # README shape: id + url (…/short-video/<id>). The first live profile run
+    # (08/10, $0.08, 0 rows kept) showed the profile shape may differ, so the
+    # common alternatives are read too (task #6171).
+    vid = str(item.get("id") or item.get("photoId") or item.get("photo_id") or "").strip()
     adapter = KuaishouAdapter()
-    if raw and adapter.matches(raw):
+    raw = ""
+    for key in ("url", "shareUrl", "webUrl", "link"):
+        val = item.get(key)
+        if isinstance(val, str) and adapter.matches(val):
+            raw = val
+            break
+    if raw:
         return (vid or adapter.photo_id(raw) or ""), adapter.canonicalize(raw)
     if re.fullmatch(r"[A-Za-z0-9_-]{4,64}", vid):
         return vid, f"https://www.kuaishou.com/short-video/{vid}"
@@ -540,6 +548,12 @@ async def _run_listing(platform: str, pid: str, n: int, ctx: RequestContext, h: 
     rows = len(items or []) if isinstance(items, list) else 0
     if failure is None:
         videos, results, title = _store_items(platform, items or [], n, prov)
+        if not videos:
+            # Paid for, nothing kept: say what came back (field NAMES only —
+            # never values) so the parser can be fixed from the log alone.
+            first = items[0] if rows and isinstance(items[0], dict) else None
+            logger.warning("china_access %s profile listing: %d row(s), none listable; first row keys=%s",
+                           platform, rows, sorted(first.keys())[:40] if first else None)
     cost_metrics.record_paid(platform, success=bool(videos), usable=None,
                              recorded_micros=reservation.recorded_micros or 0)
     _attempt(platform, ctx, h, "success" if videos else "failure",
