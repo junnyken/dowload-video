@@ -239,7 +239,10 @@ def sabr_shortfall(info: dict, actual_height: int, target_height: int) -> bool:
 
 
 _COBALT_FIRST_SUPPORTED = ("facebook", "instagram", "twitter")
-_COBALT_FIRST_QUALITIES = ("video", "video_fast", "video_360", "video_480", "video_720", "video_1080")
+# The default only (task #6134): an explicit height (video_<N>) is a request
+# for THAT resolution, codec as available — yt-dlp, which can reach the
+# VP9 / AV1 1080p that Cobalt (H.264 720p) cannot.
+_COBALT_FIRST_QUALITIES = ("video", "video_fast")
 
 
 def cobalt_first(platform: str | None, quality: str) -> bool:
@@ -281,6 +284,22 @@ def _quick_meta(url: str) -> dict | None:
         return None
 
 
+def _file_video_stream(path: str) -> dict:
+    """width / height / vcodec of the first video stream (ffprobe)."""
+    import json as _json
+    import subprocess
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                              "stream=width,height,codec_name", "-of", "json", path],
+                             capture_output=True, text=True, timeout=15)
+        st = (_json.loads(out.stdout or "{}").get("streams") or [{}])[0]
+        codec = {"h264": "avc1", "hevc": "hvc1", "av1": "av01", "vp9": "vp09"}.get(
+            st.get("codec_name") or "", st.get("codec_name") or "")
+        return {"width": int(st.get("width") or 0), "height": int(st.get("height") or 0), "vcodec": codec}
+    except Exception:
+        return {}
+
+
 def _file_duration(path: str) -> float:
     import subprocess
     try:
@@ -309,6 +328,12 @@ def enrich_cobalt_info(info: dict, meta: dict | None, platform: str) -> dict:
         if m.get(k) and not info.get(k):
             info[k] = m[k]
     info["duration"] = m.get("duration") or info.get("duration") or _file_duration(info.get("filepath") or "")
+    # task #6134: what the file really is (the "already downloaded" height and
+    # codec), and the source's own format list for the quality choices
+    if not info.get("height"):
+        info.update({k: v for k, v in _file_video_stream(info.get("filepath") or "").items() if v})
+    if m.get("formats") and not info.get("formats"):
+        info["_meta_formats"] = m["formats"]
     return info
 
 
@@ -3610,7 +3635,11 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         filesize_mb = round(filesize / (1024 * 1024), 2)
 
     # ── Extract all available formats for user selection ─────
-    fmt_info = _extract_available_formats(info)
+    # A Cobalt-served file has no yt-dlp format list of its own: offer the
+    # source's formats from the side metadata lookup (task #6134).
+    fmt_info = _extract_available_formats(
+        info if info.get("formats") or not info.get("_meta_formats")
+        else {"formats": info["_meta_formats"], "duration": info.get("duration")})
 
     # ── Cobalt Fallback for YouTube SABR-blocked formats ─────
     # Only for video quality requests on actual YouTube URLs (not Spotify/ytsearch/audio)

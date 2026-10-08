@@ -488,7 +488,9 @@ def test_default_hd_takes_the_1080p_portrait_stream():
 def test_cobalt_first_flag():
     os.environ["COBALT_FIRST_PLATFORMS"] = "instagram, X"
     try:
-        assert downloader.cobalt_first("instagram", "video") and downloader.cobalt_first("twitter", "video_720")
+        assert downloader.cobalt_first("instagram", "video") and downloader.cobalt_first("twitter", "video_fast")
+        # an explicit height is a request for THAT resolution: yt-dlp (task #6134)
+        assert not downloader.cobalt_first("twitter", "video_720")
         assert not downloader.cobalt_first("facebook", "video")
         assert not downloader.cobalt_first("instagram", "mp3_128")      # audio: not Cobalt-first
         assert not downloader.cobalt_first("instagram", "video_4k")

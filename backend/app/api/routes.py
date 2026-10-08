@@ -182,6 +182,24 @@ async def ping():
 
 # ── Request / Response Models ────────────────────────────────────────
 
+def quality_note(requested: str | None, delivered: int, formats: list) -> dict | None:
+    """Task #6134: the server never swaps a resolution silently. When a
+    video_<N> request was served below N (the video does not have it), say
+    what was delivered and the best this video offers."""
+    q = str(requested or "")
+    if not (q.startswith("video_") and q[6:].isdigit()) or not delivered:
+        return None
+    want = int(q[6:])
+    if delivered >= want * 0.8:
+        return None
+    best = max([int(f.get("height") or 0) for f in formats if f.get("type") == "video"] + [delivered])
+    return {
+        "requested": want, "delivered": delivered, "best_available": best,
+        # wording: BA review
+        "message": f"Video này không có bản {want}p. Đã tải bản tốt nhất có sẵn: {delivered}p.",
+    }
+
+
 class FetchLinkRequest(BaseModel):
     url: str
     quality: Optional[str] = "video"
@@ -817,7 +835,15 @@ async def fetch_link(
             info.get("local_file_path") or info.get("local_mp3_path")
         ):
             info["direct_mp4_url"] = ""
-            info["available_formats"] = []
+            # task #6134: keep the REAL quality list (it used to be emptied, so
+            # the page fell back to fixed "HD / 4K" buttons) — each choice is
+            # downloaded by the server (requires_merge), never by its URL.
+            info["available_formats"] = [
+                {**f, "url": "", "requires_merge": True}
+                for f in (info.get("available_formats") or [])
+            ]
+        info["quality_note"] = quality_note(payload.quality, info.get("downloaded_height") or 0,
+                                            info.get("available_formats") or [])
 
         # 3. Post-extraction 4K height guard (catches merge-4K scenario for free users)
         # Only applies to YouTube — other platforms (Twitter, Instagram, Reddit, TikTok…)
