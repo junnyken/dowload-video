@@ -196,9 +196,15 @@ class TestPortraitResolutionSemantics:
             assert f"width<={h}" in fmt and f"height<={h}" in fmt
 
     def test_best_quality_is_left_uncapped(self):
-        """'video' must not acquire a cap from this change."""
+        """'video' (HD) must not acquire a TIGHTER cap from this change. Since
+        task #6127 it carries the same portrait rule — width<=1080 only
+        together with height>1080, i.e. a 1080x1920 stream counts as 1080p —
+        which loosens, never tightens; landscape keeps height<=1080."""
         fmt = self._fmt("video")
-        assert "width<=" not in fmt
+        for part in fmt.split("/"):
+            if "width<=" in part:
+                assert "[height>1080]" in part, part
+        assert "bestvideo[height<=1080][vcodec^=avc1]+bestaudio[acodec^=mp4a]" in fmt
 
 
 class TestFallbackIsPreserved:

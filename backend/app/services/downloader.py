@@ -238,6 +238,25 @@ def sabr_shortfall(info: dict, actual_height: int, target_height: int) -> bool:
     return actual_height == 0 or actual_height < want * 0.8
 
 
+_COBALT_FIRST_SUPPORTED = ("facebook", "instagram", "twitter")
+_COBALT_FIRST_QUALITIES = ("video", "video_fast", "video_360", "video_480", "video_720", "video_1080")
+
+
+def cobalt_first(platform: str | None, quality: str) -> bool:
+    """COBALT_FIRST_PLATFORMS (task #6127): our Cobalt before yt-dlp for a
+    plain video download. Measured 08/10 on real links: Cobalt answered in
+    ~1.8 s with H.264 (FB 720x720, IG 720x1280, X 716x1276) where yt-dlp
+    anonymous offered Facebook only AV1 and Instagram only VP9 above 360p —
+    files many phones and QuickTime cannot open. Not for audio or 4K."""
+    if not platform or platform not in _COBALT_FIRST_SUPPORTED or quality not in _COBALT_FIRST_QUALITIES:
+        return False
+    raw = os.getenv("COBALT_FIRST_PLATFORMS") or ""
+    wanted = {p.strip().lower() for p in raw.split(",") if p.strip()}
+    if "x" in wanted:
+        wanted.add("twitter")
+    return platform in wanted
+
+
 def cookie_last_stat(platform: str, outcome: str) -> None:
     """Per UTC day: which step served a COOKIE_LAST_PLATFORMS download —
     anon_ok | cobalt_ok | cookie_ok | all_fail | gone (no cookie tried).
@@ -931,7 +950,18 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
         # QuickTime / Apple devices; only fall back to VP9/webm if AVC is
         # genuinely unavailable (otherwise QuickTime rejects the file).
         fmt = (
-            "bestvideo[height<=1080][vcodec^=avc1]+bestaudio[acodec^=mp4a]"
+            # Portrait first ("1080p" names the SHORTER side, see the
+            # video_<N> branch above). Without this a 1080x1920 reel or a
+            # 716x1276 X video was capped by its LONG side: measured 08/10 on
+            # real links, default HD gave Instagram 360x640 and X 480x854
+            # while 1080x1920 / 716x1276 were on offer. The height>1080
+            # clause keeps these lines portrait-only.
+            "bestvideo[width<=1080][height>1080][vcodec^=avc1]+bestaudio[acodec^=mp4a]"
+            # "best" = a format carrying both picture and sound (X's http-*
+            # formats list no codecs at all, so no codec filter here)
+            "/best[width<=1080][height>1080][vcodec^=avc1]"
+            "/best[width<=1080][height>1080][ext=mp4]"
+            "/bestvideo[height<=1080][vcodec^=avc1]+bestaudio[acodec^=mp4a]"
             "/bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]"
             "/best[height<=1080][ext=mp4]"
             "/bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]"
@@ -2382,8 +2412,29 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         except Exception as _scf_err:
             print(f"[Spotify] SoundCloud-first failed ({str(_scf_err)[:60]}) — trying YouTube")
 
+    # ── Cobalt-first (task #6127, COBALT_FIRST_PLATFORMS) ──────────
+    _cf_platform = ("facebook" if is_facebook else "instagram" if is_instagram
+                    else "twitter" if is_twitter_url(url) else None)
+    _served_by_cobalt_first = False
+    if not user_cookies_file and cobalt_first(_cf_platform, quality):
+        try:
+            if is_cobalt_available():
+                info = download_social_via_cobalt(url, DOWNLOAD_DIR, _cf_platform)
+        except Exception as _cf_err:
+            print(f"[Downloader] {_cf_platform}: Cobalt-first failed ({type(_cf_err).__name__})")
+            info = None
+        if info:
+            _served_by_cobalt_first = True
+            print(f"[Downloader] {_cf_platform}: served by Cobalt-first")
+            cookie_last_stat(_cf_platform, "cobalt_first_ok")
+        else:
+            info = None
+            cookie_last_stat(_cf_platform, "cobalt_first_miss")
+
     try:
-        if is_youtube_url and should_download:
+        if info is not None:
+            pass  # served by Cobalt-first above
+        elif is_youtube_url and should_download:
             # YouTube two-phase: proxy for auth/metadata only, direct CDN for download
             # Phase A: extract info (signed CDN URLs) via residential proxy
             # Cache Phase A result in Redis — same URL within TTL skips proxy entirely
@@ -3092,7 +3143,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     _cl_platform = ("facebook" if is_facebook else "instagram" if is_instagram
                     else "twitter" if is_twitter_url(url) else None)
     _cl_on = bool(_cl_platform and cookie_last(_cl_platform) and not user_cookies_file
-                  and not opts.get("cookiefile"))
+                  and not opts.get("cookiefile") and not _served_by_cobalt_first)
     # base opts set ignoreerrors: a failure usually comes back as info=None
     # with the reason only in the error sink, not as an exception
     if _cl_on and info is not None:
@@ -3101,7 +3152,8 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         cookie_last_stat(_cl_platform, "gone")
     elif _cl_on:
         try:
-            if is_cobalt_available():
+            # not twice: Cobalt-first already missed for this request
+            if not cobalt_first(_cl_platform, quality) and is_cobalt_available():
                 info = download_social_via_cobalt(url, DOWNLOAD_DIR, _cl_platform)
         except Exception as _cb_err:
             print(f"[Downloader] {_cl_platform}: Cobalt step failed ({type(_cb_err).__name__})")

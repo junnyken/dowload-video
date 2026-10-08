@@ -456,3 +456,78 @@ def test_sabr_shortfall_compares_with_what_the_video_offers():
     assert not downloader.sabr_shortfall(f(240, 720, 1080), 1080, 4320)
     assert downloader.sabr_shortfall({}, 0, 1080)                       # nothing downloaded
     assert downloader.sabr_shortfall({}, 240, 1080)                     # no format list: old rule
+
+
+# ── default HD: portrait capped by its short side; Cobalt-first ──────────────
+
+def _pick(formats):
+    """formats worst → best, the order every yt-dlp extractor hands over."""
+    import yt_dlp
+    fmt = downloader._get_base_opts("https://example.com/v")["format"]
+    with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
+        sel = ydl.build_format_selector(fmt)
+        ctx = {"formats": formats, "incomplete_formats": False, "has_merged_format": True}
+        out = list(sel(ctx))
+    return out[0]["format_id"] if out else None
+
+
+def _f(fid, w, h, v="none", a="none", ext="mp4", **kw):
+    return {"format_id": fid, "width": w, "height": h, "vcodec": v, "acodec": a, "ext": ext,
+            "url": f"https://cdn.test/{fid}", "protocol": "https", **kw}
+
+
+def test_default_hd_takes_the_1080p_portrait_stream():
+    # X: progressive formats with no codec info (measured 08/10: 480x854 was picked over 716x1276)
+    x = [_f("http-632", 320, 570, v=None, a=None), _f("http-950", 480, 854, v=None, a=None),
+         _f("http-2176", 716, 1276, v=None, a=None)]
+    assert _pick(x) == "http-2176"
+    # YouTube-like portrait: 1080x1920 avc1 is "1080p"
+    yt = [_f("140", None, None, a="mp4a.40.2", ext="m4a"), _f("136", 720, 1280, v="avc1.4d401f"),
+          _f("137", 1080, 1920, v="avc1.640028")]
+    assert _pick(yt) == "137+140"
+    # landscape unchanged: still capped at 1080 tall
+    land = [_f("140", None, None, a="mp4a.40.2", ext="m4a"), _f("137", 1920, 1080, v="avc1.640028"),
+            _f("401", 3840, 2160, v="avc1.640033")]
+    assert _pick(land) == "137+140"
+    # 4K portrait (2160x3840) is not "1080p"
+    tall = [_f("140", None, None, a="mp4a.40.2", ext="m4a"), _f("p1080", 1080, 1920, v="avc1.640028"),
+            _f("p4k", 2160, 3840, v="avc1.640033")]
+    assert _pick(tall) == "p1080+140"
+
+
+def test_cobalt_first_flag():
+    os.environ["COBALT_FIRST_PLATFORMS"] = "instagram, X"
+    try:
+        assert downloader.cobalt_first("instagram", "video") and downloader.cobalt_first("twitter", "video_720")
+        assert not downloader.cobalt_first("facebook", "video")
+        assert not downloader.cobalt_first("instagram", "mp3_128")      # audio: not Cobalt-first
+        assert not downloader.cobalt_first("instagram", "video_4k")
+        assert not downloader.cobalt_first(None, "video")
+    finally:
+        del os.environ["COBALT_FIRST_PLATFORMS"]
+
+
+def test_cobalt_first_serves_without_touching_yt_dlp(stub, rc, monkeypatch):
+    monkeypatch.setenv("COBALT_FIRST_PLATFORMS", "facebook")
+    monkeypatch.setenv("COOKIE_LAST_PLATFORMS", "facebook")
+    v = add()
+    monkeypatch.setattr(downloader, "is_cobalt_available", lambda: True)
+    monkeypatch.setattr(downloader, "download_social_via_cobalt",
+                        lambda url, d, p: {"url": None, "title": "via cobalt", "ext": "mp4", "id": "c1",
+                                           "extractor": "cobalt_facebook", "filepath": __file__})
+    out = run()
+    assert out and stub.calls == []
+    assert cp.uses_today("facebook", v) == 0
+    assert stats(rc) == {"facebook|cobalt_first_ok": "1"}
+
+
+def test_cobalt_first_miss_falls_back_and_is_not_retried(stub, rc, monkeypatch):
+    monkeypatch.setenv("COBALT_FIRST_PLATFORMS", "facebook")
+    monkeypatch.setenv("COOKIE_LAST_PLATFORMS", "facebook")
+    add()
+    monkeypatch.setattr(downloader, "is_cobalt_available", lambda: True)
+    calls = []
+    monkeypatch.setattr(downloader, "download_social_via_cobalt", lambda url, d, p: calls.append(p) or None)
+    out = run()                                     # anon login wall → cookie
+    assert out and calls == ["facebook"]            # Cobalt asked once, not again before the cookie
+    assert stats(rc) == {"facebook|cobalt_first_miss": "1", "facebook|cookie_ok": "1"}
