@@ -188,7 +188,7 @@ async def douyin_video(payload: VideoIn, request: Request, user=Depends(get_opti
     from app.services.china_platforms.request_cache import media_expiry_ts  # noqa: PLC0415
     exp = media_expiry_ts(result)
     from datetime import datetime, timezone  # noqa: PLC0415
-    return {
+    out = {
         "platform": PLATFORM,
         "id": result.media_id,
         "url": result.canonical_url,
@@ -202,3 +202,11 @@ async def douyin_video(payload: VideoIn, request: Request, user=Depends(get_opti
         "expiresAt": datetime.fromtimestamp(exp, tz=timezone.utc).isoformat() if exp else None,
         "cacheHit": bool(result.cache_hit),
     }
+    # PLAN-32E P3 (task #6172): Rust in app >= 0.10 needs a signed token for
+    # these CDN links (counted above). Absent without CLIENT_QUOTA_SIGNING_KEY.
+    from app.core.claim_signing import server_route_token  # noqa: PLC0415
+    vg = server_route_token([out["directUrl"], out["audioUrl"]],
+                            quotas.valid_device_hash(request.headers.get("X-VG-Device")))
+    if vg:
+        out["vgToken"] = vg
+    return out

@@ -34,6 +34,9 @@ sentry-sdk[fastapi]
 opencv-contrib-python-headless
 numpy
 pywebpush>=2.0.0
+# Ed25519 claim tokens (app/core/claim_signing.py, PLAN-32E P3). Already
+# installed through pywebpush/google-auth; listed so it cannot silently go away.
+cryptography>=42
 openai>=1.40.0
 google-generativeai>=0.8.0
 # S3-compatible uploads: off-site database backups (app/tasks/backup_tasks.py)

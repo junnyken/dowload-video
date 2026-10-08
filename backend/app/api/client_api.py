@@ -3,7 +3,8 @@ Desktop client API (VidGrab Desktop C1)
 =======================================
   POST /client/history   — app uploads finished-download metadata (upsert on user + clientId)
   GET  /client/history   — the signed-in user's own rows (limit<=200, `before` cursor on createdAt)
-  GET  /client/version   — update info from env, no auth
+  GET  /client/version   — update info from env, no auth; + signed "policy"
+                           when CLIENT_QUOTA_SIGNING_KEY is set (PLAN-32E P3)
 
 Both /client/history routes sit behind CLIENT_API_ENABLED (default OFF, read
 at call time) and answer 503 {detail, error_code:"client_api_disabled"} when
@@ -226,14 +227,31 @@ async def get_client_history(
 async def get_client_version(request: Request):
     env = os.environ.get
     latest = (env("DESKTOP_LATEST_VERSION") or "0.1.0").strip()
-    return {
+    min_supported = (env("DESKTOP_MIN_VERSION") or "0.1.0").strip()
+    out: Dict[str, Any] = {
         "latest": latest,
-        "minSupported": (env("DESKTOP_MIN_VERSION") or "0.1.0").strip(),
+        "minSupported": min_supported,
         "notes": env("DESKTOP_RELEASE_NOTES") or "",
         "downloadUrl": env("DESKTOP_DOWNLOAD_URL") or "",
         # Task #6087: the app reads its quota mode here without an extra call.
         "features": _features(),
     }
+    signed = _signed_policy(min_supported)
+    if signed:
+        out["policy"] = signed
+    return out
+
+
+def _signed_policy(min_supported: str) -> Optional[str]:
+    """PLAN-32E P3 (task #6172): the policy app >= 0.10 reads FROM RUST (not
+    via the webview) to know whether a download needs a signed claim token and
+    how many offline downloads a day it may grant itself. Absent without
+    CLIENT_QUOTA_SIGNING_KEY (field left out; app 0.10 then behaves like 0.9)."""
+    from app.api import client_quota  # noqa: PLC0415
+    from app.core import claim_signing  # noqa: PLC0415
+    require = (client_quota.quota_enabled() and client_quota.quota_mode() == "enforce"
+               and bool(client_quota.enforce_for()))
+    return claim_signing.policy(require, client_quota.offline_grace(), min_supported)
 
 
 def _features() -> Dict[str, Any]:

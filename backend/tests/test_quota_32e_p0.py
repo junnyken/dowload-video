@@ -305,3 +305,60 @@ class TestKindStats:
         assert claim(IG(10), device=dev(1), retro=True).status_code == 200
         h = rc.hgetall(f"vidgrab:stats:route:{quotas._utc_day()}")
         assert h["kind:device|refused"] == "1" and h["kind:device|retro"] == "1"
+
+
+# ── P3 (task #6172): server-route tokens for the app's Rust check ────────
+
+class TestServerRouteTokens:
+
+    @pytest.fixture
+    def key(self, monkeypatch):
+        import base64
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        k = Ed25519PrivateKey.generate()
+        seed = k.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+                               serialization.NoEncryption())
+        monkeypatch.setenv("CLIENT_QUOTA_SIGNING_KEY", base64.b64encode(seed).decode())
+        monkeypatch.setenv("CLIENT_QUOTA_SIGNING_KID", "t1")
+        return {"t1": k.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)}
+
+    def test_fetch_link_direct_link_token(self, rc, key):
+        from app.core import claim_signing
+        body = fetch(IG(1), device=dev(1)).json()
+        p = claim_signing.verify(body["vgToken"], key)
+        assert p and claim_signing.token_matches(p, "https://cdn.example.com/v.mp4", dev(1))
+
+    def test_fetch_link_no_token_for_web_or_without_key(self, rc, key, monkeypatch):
+        assert "vgToken" not in fetch(IG(1), device=dev(1), source=None).json()   # web
+        assert "vgToken" not in fetch(IG(2), source="desktop").json()             # no machine header
+        monkeypatch.delenv("CLIENT_QUOTA_SIGNING_KEY")
+        assert "vgToken" not in fetch(IG(3), device=dev(1)).json()                # no key = as before
+
+    def test_douyin_video_token(self, rc, key, monkeypatch):
+        from app.core import claim_signing
+        from app.services.china_platforms import integration
+        from app.services.china_platforms.provider_router import ProviderRouter
+        monkeypatch.setattr(integration, "_layer_active", lambda p: True)
+
+        class Res:
+            media_id, canonical_url, title, uploader = "1", DY, "t", "u"
+            thumbnail_url, duration_sec, cache_hit = None, 1, False
+
+            def primary_video_url(self):
+                return "https://cdn.example.com/v.mp4"
+
+            def audio_url(self):
+                return "https://cdn.example.com/a.m4a"
+
+        async def _resolve(self, req, ctx):
+            return Res()
+        monkeypatch.setattr(ProviderRouter, "resolve", _resolve)
+        monkeypatch.setattr("app.services.china_platforms.request_cache.media_expiry_ts", lambda r: None)
+        body = client.post("/api/v1/client/douyin/video", json={"url": DY}, headers={"X-VG-Device": dev(3)}).json()
+        p = claim_signing.verify(body["vgToken"], key)
+        assert claim_signing.token_matches(p, body["directUrl"], dev(3))
+        assert claim_signing.token_matches(p, body["audioUrl"], dev(3))
+        monkeypatch.delenv("CLIENT_QUOTA_SIGNING_KEY")
+        assert "vgToken" not in client.post("/api/v1/client/douyin/video", json={"url": DY},
+                                            headers={"X-VG-Device": dev(3)}).json()

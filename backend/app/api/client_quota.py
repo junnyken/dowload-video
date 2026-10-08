@@ -33,6 +33,8 @@ Flags (read at call time):
                                owner 2026-10-07, PLAN-32E G5: a guest could
                                otherwise "fail" its way to 5 + 10 a day)
   CLIENT_QUOTA_IP_MULT (default 3)
+  CLIENT_QUOTA_SIGNING_KEY / _KID  P3 (task #6172): when set, every allowed
+                               claim carries a signed "token" (app.core.claim_signing)
 
 Stats (PLAN-32E P0, admin "App Windows"): the daily hash
 vidgrab:stats:route:<day> holds "<route>|<outcome>" and, per requester kind,
@@ -51,7 +53,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core import desktop_signals, quotas
+from app.core import claim_signing, desktop_signals, quotas
 from app.core.auth_middleware import get_optional_user
 from app.main import limiter
 
@@ -342,9 +344,16 @@ def _claim_one(req: "quotas.QuotaRequester", ip: str, url: str, route: str, retr
     desktop_signals.note_app_download(req, ip, device)
     if retro:
         desktop_signals.note_retro(req)
-    return {"allowed": True, "claimId": claim_id, "platform": platform,
-            "alreadyCounted": (not counted) and req.kind != quotas.REQ_ADMIN,
-            "overLimit": over, "mode": quota_mode(), **_usage(req)}
+    out = {"allowed": True, "claimId": claim_id, "platform": platform,
+           "alreadyCounted": (not counted) and req.kind != quotas.REQ_ADMIN,
+           "overLimit": over, "mode": quota_mode(), **_usage(req)}
+    # P3 (task #6172): signed token the app's Rust side checks before
+    # yt-dlp starts. Left out entirely without CLIENT_QUOTA_SIGNING_KEY or
+    # without the machine header, so older apps see the same answer as before.
+    token = claim_signing.claim_token(claim_id, [url], device)
+    if token:
+        out["token"] = token
+    return out
 
 
 def _status_for(req: "quotas.QuotaRequester") -> int:

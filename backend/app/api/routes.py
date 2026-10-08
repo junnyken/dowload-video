@@ -1039,7 +1039,7 @@ async def fetch_link(
             from app.api.client_quota import record_route_stat as _route_stat
             _route_stat("server", "ok", _quota_req)
         from app.core.local_download import file_fields as _file_fields
-        return {
+        _resp = {
             "success": True,
             "title": info.get("title"),
             "thumbnail_url": info.get("thumbnail_url"),
@@ -1079,6 +1079,17 @@ async def fetch_link(
             "available_subtitle_languages": info.get("available_subtitle_languages", []),
             "subtitle_source":             info.get("subtitle_source", "none"),
         }
+        # PLAN-32E P3 (task #6172): the app's Rust side lets a direct link
+        # through only with a signed token (this download is already counted
+        # here). Absent without CLIENT_QUOTA_SIGNING_KEY / machine header.
+        if _from_app:
+            from app.core.claim_signing import server_route_token as _srv_token
+            from app.core.quotas import valid_device_hash as _valid_dev
+            _vg = _srv_token([info.get("direct_mp4_url")],
+                             _valid_dev(request.headers.get("X-VG-Device")))
+            if _vg:
+                _resp["vgToken"] = _vg
+        return _resp
     except Exception as e:
         # Count the failure once, with its classified reason. A deliberate
         # HTTPException raised after the success was already counted (the 4K
