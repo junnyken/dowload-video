@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  NO_CLAIM, badgeText, capIds, decideBatch, decideClaim, selectionCap, emptyLedger, flushLedger, gatePaused, graceLeft, isIpLimit, mergeCounters, normalizeLedger, parseHint, parseSnapshot, tryGrace, utcDay,
+  NO_CLAIM, badgeText, capIds, decideBatch, decideClaim, selectionCap, emptyLedger, flushLedger, gatePaused, graceLeft, isIpLimit, mergeCounters, normalizeLedger, parseHint, parseSnapshot, tokenExpiryMs, tokenStale, tryGrace, utcDay,
 } from '../src/lib/quota-core.ts';
 import { presetFormat, qualityFormat } from '../src/lib/quality.ts';
 
@@ -220,4 +220,37 @@ test('guest: channel and queue paths are capped too', () => {
   assert.equal(capForGuest(undefined, true, true), undefined);      // audio untouched
   assert.equal(capForGuest('137+140', false, true), '137+140');     // an explicit (unlocked) pick stays
   assert.equal(capForGuest(undefined, false, false), undefined);    // signed in: yt-dlp best
+});
+
+// ---- PLAN-32E P3: signed claim tokens ---------------------------------------------------
+
+const b64url = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
+const TOKEN = `${b64url({ v: 1, kid: 'k1', cid: 'abcdef123456', uh: ['x'], dev: 'd', iat: 1, exp: T0 / 1000 + 7200 })}.c2ln`;
+
+test('claim 200 with token: token passed through, the rest as before (no token = 0.9 answer)', () => {
+  const plain = decideClaim(200, OK);
+  const signed = decideClaim(200, { ...OK, token: TOKEN });
+  assert.equal(signed.kind, 'proceed');
+  if (signed.kind !== 'proceed' || plain.kind !== 'proceed') return;
+  assert.equal(signed.token, TOKEN);
+  assert.equal('token' in plain, false);
+  assert.equal(signed.claimId, plain.claimId);
+  assert.equal(signed.counted, plain.counted);
+});
+
+test('claim-batch items keep their tokens', () => {
+  const d = decideBatch(200, { items: [{ ...OK, token: TOKEN }, { ...OK, claimId: 'other1234567' }] }, ['u1', 'u2']);
+  assert.equal(d.kind, 'ok');
+  if (d.kind !== 'ok') return;
+  assert.equal(d.items[0].token, TOKEN);
+  assert.equal(d.items[1].token, undefined);
+});
+
+test('token expiry is read from the payload; stale one minute before', () => {
+  assert.equal(tokenExpiryMs(TOKEN), T0 + 7200_000);
+  assert.equal(tokenStale(TOKEN, T0), false);
+  assert.equal(tokenStale(TOKEN, T0 + 7200_000 - 30_000), true);
+  assert.equal(tokenExpiryMs('garbage'), null);
+  assert.equal(tokenStale(null, T0), false);
+  assert.equal(tokenStale('not.a.token', T0), false);
 });

@@ -16,6 +16,8 @@ export type DouyinVideo = {
   platform: 'douyin'; id: string; url: string; title: string; uploader: string | null; thumbnail: string | null;
   durationSec: number | null; directUrl: string; audioUrl: string | null;
   headers: Record<string, string>; expiresAt: string | null; cacheHit: boolean;
+  /** PLAN-32E P3: signed by the server for directUrl/audioUrl; Rust checks it. */
+  vgToken?: string;
 };
 
 const KNOWN = new Set([

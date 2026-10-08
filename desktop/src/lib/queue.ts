@@ -11,7 +11,7 @@ import { syncSoon } from './sync';
 import { douyinVideo, isExpired, toHeaderList, type DouyinVideo } from './douyin';
 import { isDouyinUrl } from './urls';
 import { claimForStart, clearGate, quotaGate, refreshQuota, refuseFromServer, settle } from './quota';
-import { gatePaused } from './quota-core';
+import { gatePaused, tokenStale } from './quota-core';
 import { cookieState, refreshCookieStatus, routesFor } from './cookies';
 import { cookieErrorCode, cookiePlatformOf, pickNext, settleThenFallback, type Plan, type Route } from './cookies-core';
 import {
@@ -48,6 +48,8 @@ export type QueueItem = {
   errorCode: string | null;
   /** Server claim for the daily allowance (quota.ts); NO_CLAIM = nothing to settle. Persisted, so a resume after a restart does not claim twice. */
   claimId?: string | null;
+  /** PLAN-32E P3: the server's signed token for claimId; Rust's start_download checks it. */
+  claimToken?: string | null;
   /** Old route name of the current/last run (0.7.x; pickNext keeps one 'local_cookie' job per platform). */
   route?: Route;
   /** 0.7.x: the one Douyin L1 -> server fallback already happened. Unused since 0.8.0 (Douyin is server-only). */
@@ -100,16 +102,17 @@ export type NewJob = Pick<QueueItem, 'url' | 'title' | 'thumbnail' | 'platform' 
   quality?: string;
   /** A claim made before enqueueing (channel claim-batch): start() does not claim again. */
   claimId?: string | null;
+  claimToken?: string | null;
   /** 'S0': skip the local steps (the local analysis already failed and the user chose the server). */
   startAt?: 'S0';
 };
 
 export function enqueue(job: NewJob): string {
-  const { startAt, claimId, ...rest } = job;
+  const { startAt, claimId, claimToken, ...rest } = job;
   const item: QueueItem = {
     ...rest, id: newId(), state: 'queued', stage: null, percent: null, downloadedBytes: null, totalBytes: null,
     speedBps: null, etaSec: null, filePath: null, fileSize: null, errorCode: null, addedAt: new Date().toISOString(),
-    claimId: claimId || null, tried: startAt === 'S0' ? ['L0', 'L1'] : [],
+    claimId: claimId || null, claimToken: claimToken || null, tried: startAt === 'S0' ? ['L0', 'L1'] : [],
   };
   queue.set((l) => [...l, item]);
   pump();
@@ -118,7 +121,7 @@ export function enqueue(job: NewJob): string {
 
 /** A channel video the daily allowance refused (claim-batch): shown as failed with the server's reason, never started. */
 export function enqueueRefused(job: NewJob, detail: string | null): string {
-  const { startAt: _s, claimId: _c, ...rest } = job;
+  const { startAt: _s, claimId: _c, claimToken: _t, ...rest } = job;
   const item: QueueItem = {
     ...rest, id: newId(), state: 'failed', stage: null, percent: null, downloadedBytes: null, totalBytes: null,
     speedBps: null, etaSec: null, filePath: null, fileSize: null, errorCode: 'api:quota_exceeded_daily', errorText: detail,
@@ -168,7 +171,7 @@ const forget = (id: string) => { resolved.delete(id); refreshed.delete(id); serv
 
 async function douyinArgs(item: QueueItem) {
   let r = resolved.get(item.id);
-  if (!r || isExpired(r.v, r.at)) {
+  if (!r || isExpired(r.v, r.at) || tokenStale(r.v.vgToken, Date.now())) {
     r = { v: await douyinVideo(item.url), at: Date.now() }; // counts one download on the server
     void refreshQuota(); // the server counted it itself (no claim to settle): update the badge now
     resolved.set(item.id, r);
@@ -181,6 +184,7 @@ async function douyinArgs(item: QueueItem) {
     formatId: undefined, // a direct file has one format; height selectors would match nothing
     headers: toHeaderList(v.headers),
     fileTitle: v.title || item.title, fileId: safeId || item.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 12),
+    ...(v.vgToken ? { claimToken: v.vgToken } : {}), // PLAN-32E P3: signed by the server for these CDN links
   };
 }
 
@@ -216,6 +220,7 @@ async function serverArgs(item: QueueItem) {
     headers: r.v.headers,
     fileTitle: r.v.title || item.title, fileId: fileIdOf(item),
     useCookies: false,
+    ...(r.v.vgToken ? { claimToken: r.v.vgToken } : {}), // PLAN-32E P3 (a direct link needs it; the API host's file does not)
   };
 }
 
@@ -230,7 +235,7 @@ async function start(item: QueueItem) {
       if (item.claimId) {
         // A local claim is still open (e.g. the cookies were removed meanwhile): refund BEFORE the server counts.
         await settle(item.claimId, 'failed', 'server_fallback');
-        patch(item.id, { claimId: null });
+        patch(item.id, { claimId: null, claimToken: null });
       }
       if (step === 'DOUYIN_SERVER') {
         extra = await douyinArgs(item); // the server already counts this one
@@ -240,13 +245,17 @@ async function start(item: QueueItem) {
         extra = a;
       }
     } else {
-      if (!item.claimId) {
+      // A resumed item whose signed token ran out (2 h) claims again: Rust would refuse the old one,
+      // and the server counts the same URL only once a day (PLAN-32E P3).
+      if (!item.claimId || tokenStale(item.claimToken, Date.now())) {
         const v = await claimForStart(item.url, claimRoute(step)); // daily allowance (PLAN-32D §5); resumed items keep their claim
         if (!v.ok) { refusedByQuota(item.id); return; }
-        patch(item.id, { claimId: v.claimId });
+        patch(item.id, { claimId: v.claimId, claimToken: v.token ?? null });
         if (!queue.get().some((i) => i.id === item.id)) { void settle(v.claimId, 'cancelled'); return; } // cancelled while claiming
       }
-      if (step === 'L1') extra = { useCookies: true };
+      const tok = queue.get().find((i) => i.id === item.id)?.claimToken;
+      extra = tok ? { claimToken: tok } : {};
+      if (step === 'L1') extra = { ...extra, useCookies: true };
     }
     if (!queue.get().some((i) => i.id === item.id && i.state === 'running')) return; // cancelled / paused while resolving
     // a guest's local download stops at 1080p (server-route steps override formatId in `extra`)
@@ -277,7 +286,7 @@ async function moveOn(it: QueueItem, plan: RouteId[], next: RouteId, code: strin
   const moved = await settleThenFallback(
     () => settle(claimId, 'failed', code),
     () => queue.get().some((i) => i.id === it.id && i.state === 'running'),
-    () => patch(it.id, { claimId: null, tried, step: next, route: legacyRoute(next), state: 'queued', errorCode: null }),
+    () => patch(it.id, { claimId: null, claimToken: null, tried, step: next, route: legacyRoute(next), state: 'queued', errorCode: null }),
   );
   // wording: BA review
   if (moved) toast('info', `Không tải được trực tiếp trên máy này. Đang thử qua máy chủ VidGrab: ${it.title}`);
@@ -303,7 +312,7 @@ function finishFailed(id: string, code: string) {
   if (!it) return;
   forget(id);
   void settle(it.claimId, 'failed', code); // refund when the server allows it
-  patch(id, { claimId: null });
+  patch(id, { claimId: null, claimToken: null });
   patch(id, { state: 'failed', errorCode: code, speedBps: null, etaSec: null, pausing: false });
   void api.historyAdd(toHistory(it, 'failed', { errorCode: code })).then(() => syncSoon()).catch(() => {});
   toast('error', `Tải thất bại: ${it.title}. ${errorMessage(code)}`);
@@ -394,7 +403,7 @@ export function resume(id: string) {
 export function retry(id: string) {
   forget(id);
   clearGate();
-  patch(id, { state: 'queued', claimId: null, route: undefined, step: undefined, tried: [], cookieFallback: false, errorCode: null, errorText: null, percent: null, downloadedBytes: null, speedBps: null, etaSec: null });
+  patch(id, { state: 'queued', claimId: null, claimToken: null, route: undefined, step: undefined, tried: [], cookieFallback: false, errorCode: null, errorText: null, percent: null, downloadedBytes: null, speedBps: null, etaSec: null });
   pump();
 }
 

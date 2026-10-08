@@ -175,3 +175,27 @@ Rust: `src-tauri/src/browser_login.rs` (no Tauri types; unit-tested: state
 mismatch, wrong path/method/Host, duplicated params, one-shot close, cancel,
 timeout, request cap, CSP script hash).
 
+
+## 6. Signed claims (0.10.0, PLAN-32E P3, task #6172)
+
+Server (only when `CLIENT_QUOTA_SIGNING_KEY` is set; otherwise every answer
+is exactly as before and app 0.10 behaves like 0.9):
+
+| Where | New field | Payload (`b64url(JSON).b64url(Ed25519 sig over the first part)`) |
+|---|---|---|
+| `GET /client/version` | `policy` | `{v:1, kid, requireToken, grace, min, iat, exp:+24h}` |
+| `POST /client/quota/claim`, each allowed `claim-batch` item | `token` | `{v:1, kid, cid:<claimId>, uh:[sha256(url)[:32]], dev:<X-VG-Device[:32]>, iat, exp:+2h}` — only with `X-VG-Device` |
+| `POST /fetch-link` (X-VG-Source: desktop), `POST /client/douyin/video` | `vgToken` | same, `cid:"s…"`, `uh` = the absolute direct/CDN link(s) the app will download |
+
+Rust: `start_download` takes `claimToken?: string`. Before anything is
+spawned (`src-tauri/src/quota_gate.rs`) it needs one of: no key embedded
+(build.rs, `VIDGRAB_CLAIM_PUBKEYS`) · a `https://dvid-api…/api/v1/download-local`
+file · a token valid for this URL (raw or normalised), this machine, not used
+by another job this session · a signed policy saying `requireToken:false` ·
+the server answering Rust's own `GET /client/version` without a verifiable
+policy · the server NOT reachable from Rust (3 s) and a free offline slot in
+`vidgrab.db` table `quota_grace` (cap `policy.grace`, 3 without a policy, per
+UTC day, same URL again = no new slot). Otherwise errors:
+`claim_required` (server reachable and requires a token) or
+`offline_grace_used`. The policy is cached in `<app data>/policy.bin`
+(re-verified on load, fresh for 1 h). Key rotation: `P3-KEY-ROTATION.md`.

@@ -61,8 +61,11 @@ function jobOf(v: ChannelVideo, ch: ChannelTarget) {
 }
 
 /** Puts videos into the download queue exactly like the Download screen does (without a per-video probe). */
-export function enqueueVideos(videos: ChannelVideo[], ch: ChannelTarget, claims?: Map<string, string>) {
-  for (const v of videos) enqueue({ ...jobOf(v, ch), claimId: claims?.get(v.id) || null });
+export function enqueueVideos(videos: ChannelVideo[], ch: ChannelTarget, claims?: Map<string, { claimId: string; token?: string }>) {
+  for (const v of videos) {
+    const c = claims?.get(v.id);
+    enqueue({ ...jobOf(v, ch), claimId: c?.claimId || null, claimToken: c?.token ?? null });
+  }
 }
 
 export type Refused = { video: ChannelVideo; detail: string | null };
@@ -86,14 +89,14 @@ export async function enqueueWithClaims(videos: ChannelVideo[], ch: ChannelTarge
       groups.set(r, [...(groups.get(r) ?? []), v]);
     } else direct.push(v);
   }
-  const claims = new Map<string, string>();
+  const claims = new Map<string, { claimId: string; token?: string }>();
   const allowed: ChannelVideo[] = [...direct];
   const refused: Refused[] = [];
   for (const [route, list] of groups) {
     const d = await claimBatch(list.map((v) => v.url), route);
     if (d.kind !== 'ok') { allowed.push(...list); continue; } // disabled / offline: claimed per item at start
     d.items.forEach((it, i) => {
-      if (it.allowed) { allowed.push(list[i]); if (it.claimId) claims.set(list[i].id, it.claimId); }
+      if (it.allowed) { allowed.push(list[i]); if (it.claimId) claims.set(list[i].id, { claimId: it.claimId, token: it.token }); }
       else refused.push({ video: list[i], detail: it.detail });
     });
   }

@@ -16,6 +16,7 @@ mod auth;
 mod browser_login;
 mod channels;
 mod checksum;
+mod claim_token;
 mod cookies;
 mod device;
 mod douyin_local;
@@ -28,6 +29,7 @@ mod login_window;
 mod paths;
 mod proc;
 mod progress;
+mod quota_gate;
 mod sys;
 mod validate;
 
@@ -726,6 +728,41 @@ struct HeaderArg {
     value: String,
 }
 
+/// quota_gate::Gate::check off the async runtime (it may wait up to 3 s for
+/// GET /client/version and touches SQLite).
+async fn check_quota(app: &AppHandle, job_id: &str, url_raw: &str, url_norm: &str, token: Option<String>) -> CmdResult<()> {
+    let app = app.clone();
+    let (job_id, url_raw, url_norm) = (job_id.to_string(), url_raw.to_string(), url_norm.to_string());
+    let verdict = tauri::async_runtime::spawn_blocking(move || {
+        let gate = app.state::<quota_gate::Gate>();
+        let store = app.state::<Store>();
+        let dir = app.path().app_data_dir().ok();
+        let device = device::device_info(dir.as_deref()).hash;
+        let version = app.package_info().version.to_string();
+        let req = quota_gate::Request {
+            job_id: &job_id, url_raw: &url_raw, url_norm: &url_norm, device_hash: &device, token: token.as_deref(),
+        };
+        gate.check(&req, store.0.as_ref(), quota_gate::now_secs(), &|| quota_gate::fetch_policy(&version))
+    })
+    .await
+    .map_err(|e| CommandError::unknown(format!("quota check failed: {e}")))?;
+    match verdict {
+        Ok(_) => Ok(()),
+        Err(quota_gate::Refused::ClaimRequired) => Err(CommandError::new(
+            Code::ClaimRequired,
+            "the server requires a signed claim for this download and none valid was given",
+        )),
+        Err(quota_gate::Refused::OfflineGraceUsed) => Err(CommandError::new(
+            Code::OfflineGraceUsed,
+            "the VidGrab server is unreachable and today's offline downloads are used",
+        )),
+        Err(quota_gate::Refused::NoLedger) => Err(CommandError::new(
+            Code::OfflineGraceUsed,
+            "the VidGrab server is unreachable and the local database is unavailable",
+        )),
+    }
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 async fn start_download(
@@ -740,10 +777,12 @@ async fn start_download(
     file_title: Option<String>,
     file_id: Option<String>,
     use_cookies: Option<bool>,
+    claim_token: Option<String>,
 ) -> CmdResult<()> {
     if !paths::valid_job_id(&job_id) {
         return Err(CommandError::unknown("invalid job id"));
     }
+    let url_raw = url.trim().to_string();
     let url = valid_url(&url)?;
     let headers = headers
         .unwrap_or_default()
@@ -766,6 +805,8 @@ async fn start_download(
     if lock(&jobs.downloads).contains_key(&job_id) {
         return Err(CommandError::unknown("this job is already running"));
     }
+    // PLAN-32E P3: the daily allowance, checked here and not only in the UI.
+    check_quota(&app, &job_id, &url_raw, &url, claim_token).await?;
 
     let free = sys::disk_free(&out_dir).map_err(|e| CommandError::unknown(format!("cannot read free space: {e}")))?;
     if free < MIN_FREE_BYTES {
@@ -1317,6 +1358,17 @@ pub fn run() {
                 .and_then(|d| std::fs::create_dir_all(&d).ok().map(|_| d.join("vidgrab.db")))
                 .and_then(|p| Db::open(&p).ok());
             app.manage(Store(db));
+
+            // PLAN-32E P3: claim-token gate; reads the signed policy once now.
+            let policy_file = app.path().app_data_dir().ok().map(|d| d.join("policy.bin"));
+            app.manage(quota_gate::Gate::new(quota_gate::CLAIM_KEYS, policy_file));
+            {
+                let handle = app.handle().clone();
+                let version = app.package_info().version.to_string();
+                std::thread::spawn(move || {
+                    handle.state::<quota_gate::Gate>().refresh(&|| quota_gate::fetch_policy(&version));
+                });
+            }
 
             // A crash between spawning yt-dlp and deleting its cookie file
             // leaves `ck-*.txt` behind; nothing is running yet, so sweep them.

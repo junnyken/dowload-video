@@ -24,6 +24,11 @@ pub enum Code {
     Cancelled,
     /// cookies_login_finish found no cookie of the platform in the login window.
     CookieRequired,
+    /// PLAN-32E P3: the server requires a signed claim token and none valid
+    /// came with start_download (quota_gate.rs).
+    ClaimRequired,
+    /// PLAN-32E P3: the API is unreachable and today's offline slots are used.
+    OfflineGraceUsed,
     Unknown,
 }
 
@@ -43,6 +48,8 @@ impl Code {
             Code::Timeout => "timeout",
             Code::Cancelled => "cancelled",
             Code::CookieRequired => "cookie_required",
+            Code::ClaimRequired => "claim_required",
+            Code::OfflineGraceUsed => "offline_grace_used",
             Code::Unknown => "unknown",
         }
     }

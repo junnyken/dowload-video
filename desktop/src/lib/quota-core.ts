@@ -29,7 +29,7 @@ export type Refusal = {
 };
 
 export type ClaimDecision =
-  | { kind: 'proceed'; claimId: string; counted: boolean; data: Record<string, unknown> | null }
+  | { kind: 'proceed'; claimId: string; counted: boolean; data: Record<string, unknown> | null; token?: string }
   | { kind: 'refused'; refusal: Refusal }
   | { kind: 'update_required' }
   | { kind: 'offline' };
@@ -66,7 +66,8 @@ export const isIpLimit = (r: Pick<Refusal, 'reason'>): boolean => r.reason === '
 export function decideClaim(status: number, data: unknown): ClaimDecision {
   const o = obj(data);
   if (status === 200 && o.allowed === true && str(o.claimId)) {
-    return { kind: 'proceed', claimId: o.claimId as string, counted: true, data: o };
+    const token = str(o.token); // PLAN-32E P3: signed, checked by Rust in start_download
+    return { kind: 'proceed', claimId: o.claimId as string, counted: true, data: o, ...(token ? { token } : {}) };
   }
   if (status === 503 && o.error_code === 'client_quota_disabled') {
     return { kind: 'proceed', claimId: NO_CLAIM, counted: false, data: null };
@@ -189,7 +190,7 @@ export function mergeCounters(prev: QuotaSnapshot | null, d: unknown): QuotaSnap
 
 // ---- channels: claim-batch (PLAN-32D §6) -------------------------------------------
 
-export type BatchItem = { url: string; allowed: boolean; claimId: string; detail: string | null };
+export type BatchItem = { url: string; allowed: boolean; claimId: string; detail: string | null; token?: string };
 export type BatchDecision =
   | { kind: 'ok'; items: BatchItem[]; data: Record<string, unknown> }
   | { kind: 'disabled' }
@@ -208,7 +209,10 @@ export function decideBatch(status: number, data: unknown, urls: readonly string
   if (status !== 200 || !Array.isArray(o.items) || o.items.length !== urls.length) return { kind: 'offline' };
   const items = (o.items as unknown[]).map((raw, i): BatchItem => {
     const it = obj(raw);
-    if (it.allowed === true && str(it.claimId)) return { url: urls[i], allowed: true, claimId: it.claimId as string, detail: null };
+    if (it.allowed === true && str(it.claimId)) {
+      const token = str(it.token);
+      return { url: urls[i], allowed: true, claimId: it.claimId as string, detail: null, ...(token ? { token } : {}) };
+    }
     if (it.error_code === 'invalid_url') return { url: urls[i], allowed: true, claimId: NO_CLAIM, detail: null };
     return { url: urls[i], allowed: false, claimId: NO_CLAIM, detail: str(it.detail) };
   });
@@ -229,3 +233,27 @@ export function selectionCap(q: { status: string; snap: QuotaSnapshot | null }):
 export function capIds<T>(ids: readonly T[], cap: number | null): T[] {
   return cap == null ? [...ids] : ids.slice(0, Math.max(0, cap));
 }
+
+// ---- claim tokens (PLAN-32E P3) ------------------------------------------------------
+
+/**
+ * Expiry (ms) of a signed claim token, read from its payload WITHOUT checking
+ * the signature (Rust does that). null = not a token we can read.
+ */
+export function tokenExpiryMs(token: string | null | undefined): number | null {
+  if (!token) return null;
+  const body = token.split('.')[0] ?? '';
+  try {
+    const b64 = body.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (body.length % 4)) % 4);
+    const exp = num(obj(JSON.parse(atob(b64))).exp);
+    return exp == null ? null : exp * 1000;
+  } catch {
+    return null;
+  }
+}
+
+/** A resumed item whose token will have expired before yt-dlp starts: claim again (same URL the same day counts once). */
+export const tokenStale = (token: string | null | undefined, now: number, marginMs = 60_000): boolean => {
+  const exp = tokenExpiryMs(token);
+  return exp != null && exp - marginMs <= now;
+};

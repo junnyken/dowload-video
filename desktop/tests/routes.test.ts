@@ -200,3 +200,14 @@ test('fetch-link: the server quality note reaches the app', () => {
   const plain = parseFetchLink(200, { success: true, local_file_id: 'a.mp4', quality_note: null }, o);
   assert.ok(plain.kind === 'ok' && !('note' in plain));
 });
+
+test('fetch-link direct link keeps the server string and its vgToken (PLAN-32E P3)', () => {
+  const raw = 'https://cdn.example/a%2Fb.mp4?sig=AbC&x=1';
+  const d = parseFetchLink(200, { success: true, direct_mp4_url: raw, vgToken: 'p.s' }, { apiBase: API, audioOnly: false, fallbackTitle: 'T' });
+  assert.equal(d.kind, 'ok');
+  if (d.kind !== 'ok') return;
+  assert.equal(d.url, raw);
+  assert.equal(d.vgToken, 'p.s');
+  const none = parseFetchLink(200, { success: true, direct_mp4_url: raw }, { apiBase: API, audioOnly: false, fallbackTitle: 'T' });
+  assert.equal(none.kind === 'ok' && 'vgToken' in none, false);
+});

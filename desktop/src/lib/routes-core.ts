@@ -192,7 +192,7 @@ export type ServerRefusal = {
 };
 
 export type FetchLinkOutcome =
-  | { kind: 'ok'; url: string; title: string | null; thumbnail: string | null; headers: { name: string; value: string }[]; source: 'file' | 'direct'; note?: string | null }
+  | { kind: 'ok'; url: string; title: string | null; thumbnail: string | null; headers: { name: string; value: string }[]; source: 'file' | 'direct'; note?: string | null; vgToken?: string }
   | { kind: 'quota'; refusal: ServerRefusal }
   | { kind: 'error'; code: string; message: string };
 
@@ -213,7 +213,8 @@ function absolute(apiBase: string, raw: string | null): string | null {
   if (raw.startsWith('/') && !raw.startsWith('//')) return apiBase + raw;
   try {
     const u = new URL(raw);
-    return u.protocol === 'https:' || u.protocol === 'http:' ? u.toString() : null;
+    // The server's own string (not u.toString()): Rust matches its signed hash (PLAN-32E P3).
+    return u.protocol === 'https:' || u.protocol === 'http:' ? raw : null;
   } catch {
     return null;
   }
@@ -243,7 +244,8 @@ export function parseFetchLink(status: number, data: unknown, o: { apiBase: stri
     const note = str(obj(d.quality_note).message);
     if (fileId) return { kind: 'ok', url: downloadLocalUrl(o.apiBase, fileId, name), title, thumbnail: str(d.thumbnail_url), headers: [], source: 'file', ...(note ? { note } : {}) };
     const direct = absolute(o.apiBase, str(d.direct_mp4_url));
-    if (direct) return { kind: 'ok', url: direct, title, thumbnail: str(d.thumbnail_url), headers: headerList(d.http_headers ?? d.headers), source: 'direct', ...(note ? { note } : {}) };
+    const vgToken = str(d.vgToken); // PLAN-32E P3: Rust needs it for a direct (non-API-host) link
+    if (direct) return { kind: 'ok', url: direct, title, thumbnail: str(d.thumbnail_url), headers: headerList(d.http_headers ?? d.headers), source: 'direct', ...(note ? { note } : {}), ...(vgToken ? { vgToken } : {}) };
     return { kind: 'error', code: 'server_fetch_failed', message: '' };
   }
   const det = obj(d.detail);

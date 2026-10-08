@@ -121,7 +121,8 @@ export async function flushOffline(): Promise<void> {
   }
 }
 
-export type StartVerdict = { ok: true; claimId: string } | { ok: false };
+/** token: the server's signed claim (PLAN-32E P3), handed to Rust's start_download as-is. */
+export type StartVerdict = { ok: true; claimId: string; token?: string } | { ok: false };
 
 /** Called by the queue before a local download starts. */
 export async function claimForStart(url: string, route: 'local' | 'local_cookie' = 'local'): Promise<StartVerdict> {
@@ -131,7 +132,7 @@ export async function claimForStart(url: string, route: 'local' | 'local_cookie'
   if (d.kind === 'proceed') {
     if (d.counted) setSnap(mergeCounters(quota.get().snap, d.data));
     else if (r.status === 503) setDisabled();
-    return { ok: true, claimId: d.claimId };
+    return { ok: true, claimId: d.claimId, ...(d.token ? { token: d.token } : {}) };
   }
   if (d.kind === 'refused') {
     refuse(d.refusal);

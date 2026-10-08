@@ -51,6 +51,7 @@ const COMMANDS: &[&str] = &[
 
 fn main() {
     generate_pins();
+    generate_claim_keys();
     tauri_build::try_build(
         tauri_build::Attributes::new()
             .app_manifest(tauri_build::AppManifest::new().commands(COMMANDS)),
@@ -89,5 +90,71 @@ fn generate_pins() {
     }
     out.push_str("];\n");
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("pins.rs");
+    fs::write(out_path, out).unwrap();
+}
+
+const CLAIM_KEYS_ENV: &str = "VIDGRAB_CLAIM_PUBKEYS";
+const MAX_CLAIM_KEYS: usize = 3;
+
+/// PLAN-32E P3 (task #6172): the Ed25519 public key(s) the app trusts for
+/// claim tokens and the quota policy, embedded as $OUT_DIR/claim_keys.rs.
+///
+/// VIDGRAB_CLAIM_PUBKEYS = "<kid>:<base64 32-byte public key>[,<kid>:<key>]"
+/// (at most 3: current + next during a rotation, docs/desktop/P3-KEY-ROTATION.md).
+///
+/// Failure policy:
+/// - a malformed value always stops the build (a typo must never ship as
+///   "no keys");
+/// - unset or empty: a RELEASE build stops with an explanation; debug /
+///   `cargo test` builds get an empty list and a warning;
+/// - "none": an explicit empty list in any profile (that app never asks for
+///   a token and grants no offline slots itself, i.e. behaves like 0.9).
+fn generate_claim_keys() {
+    use base64::Engine as _;
+    println!("cargo:rerun-if-env-changed={CLAIM_KEYS_ENV}");
+    let raw = env::var(CLAIM_KEYS_ENV).unwrap_or_default();
+    let raw = raw.trim();
+    let release = env::var("PROFILE").map(|p| p == "release").unwrap_or(false);
+    let mut keys: Vec<(String, [u8; 32])> = Vec::new();
+    if raw.is_empty() {
+        if release {
+            panic!(
+                "\n\n{CLAIM_KEYS_ENV} is not set. A release build must embed the claim-token public key(s):\n  \
+                 {CLAIM_KEYS_ENV}=k1:<base64 public key>   (printed by backend/scripts/gen_claim_signing_key.py)\n\
+                 Set {CLAIM_KEYS_ENV}=none to build an app that never checks claim tokens (behaves like 0.9).\n\
+                 See docs/desktop/P3-KEY-ROTATION.md.\n"
+            );
+        }
+        println!("cargo:warning={CLAIM_KEYS_ENV} not set: this debug build checks no claim tokens");
+    } else if !raw.eq_ignore_ascii_case("none") {
+        for part in raw.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+            let (kid, b64) = part
+                .split_once(':')
+                .unwrap_or_else(|| panic!("{CLAIM_KEYS_ENV}: entry {part:?} is not <kid>:<base64 key>"));
+            let kid = kid.trim();
+            if kid.is_empty() || kid.len() > 16 || !kid.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+                panic!("{CLAIM_KEYS_ENV}: kid {kid:?} must be 1-16 chars of A-Z a-z 0-9 _ -");
+            }
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(b64.trim())
+                .unwrap_or_else(|e| panic!("{CLAIM_KEYS_ENV}: key {kid:?} is not standard base64: {e}"));
+            let key: [u8; 32] = bytes
+                .try_into()
+                .unwrap_or_else(|b: Vec<u8>| panic!("{CLAIM_KEYS_ENV}: key {kid:?} is {} bytes, expected 32", b.len()));
+            if keys.iter().any(|(k, _)| k == kid) {
+                panic!("{CLAIM_KEYS_ENV}: kid {kid:?} listed twice");
+            }
+            keys.push((kid.to_string(), key));
+        }
+        if keys.is_empty() || keys.len() > MAX_CLAIM_KEYS {
+            panic!("{CLAIM_KEYS_ENV}: expected 1 to {MAX_CLAIM_KEYS} keys, got {}", keys.len());
+        }
+    }
+    let mut out = String::from("pub const CLAIM_KEYS: &[(&str, [u8; 32])] = &[\n");
+    for (kid, key) in &keys {
+        out.push_str(&format!("    ({kid:?}, {key:?}),\n"));
+    }
+    out.push_str("];\n");
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("claim_keys.rs");
     fs::write(out_path, out).unwrap();
 }

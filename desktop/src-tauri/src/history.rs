@@ -1,6 +1,6 @@
 //! Local SQLite store (rusqlite, bundled SQLite) in the app data dir.
 //!
-//! Tables (schema v2, tracked with PRAGMA user_version):
+//! Tables (schema v3, tracked with PRAGMA user_version):
 //! - history: the contract's HistoryItem, written by the UI via history_add.
 //! - produced_paths: canonical paths of files finished downloads produced.
 //!   Written ONLY by Rust at completion; reveal_path/open_path check it. The
@@ -9,6 +9,7 @@
 //!   still knows what to delete after a pause or an app restart.
 //! - v2: channels (§4 Channel; pendingNew as JSON text) and channel_seen
 //!   (channel_id, video_id). Queries live in channels.rs.
+//! - v3: quota_grace (PLAN-32E P3; offline slots, written only by quota_gate.rs).
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -16,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 #[cfg(test)]
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -65,7 +66,29 @@ pub struct Db {
 
 fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     migrate_v1(conn)?;
-    migrate_v2(conn)
+    migrate_v2(conn)?;
+    migrate_v3(conn)
+}
+
+/// v3 (PLAN-32E P3): quota_grace — offline downloads Rust granted itself
+/// (quota_gate.rs). Written ONLY by Rust; no command exposes it. `url` is the
+/// url hash (sha256[:32]), not the link; `used` is the slot number that day.
+fn migrate_v3(conn: &Connection) -> rusqlite::Result<()> {
+    if user_version(conn)? < 3 {
+        conn.execute_batch(
+            "BEGIN;
+             CREATE TABLE IF NOT EXISTS quota_grace (
+               day TEXT NOT NULL,
+               used INTEGER NOT NULL,
+               url TEXT NOT NULL,
+               at INTEGER NOT NULL,
+               PRIMARY KEY (day, url)
+             );
+             PRAGMA user_version = 3;
+             COMMIT;",
+        )?;
+    }
+    Ok(())
 }
 
 fn user_version(conn: &Connection) -> rusqlite::Result<i64> {
@@ -375,7 +398,7 @@ mod tests {
             assert_eq!(has_channels, 0);
         }
         let db = Db::open(&p).unwrap();
-        assert_eq!(db.schema_version().unwrap(), 2);
+        assert_eq!(db.schema_version().unwrap(), SCHEMA_VERSION);
         let items = db.list(None, None, None).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].id, "old");
@@ -384,7 +407,7 @@ mod tests {
         assert!(db.channel_list().unwrap().is_empty());
         drop(db);
         let db = Db::open(&p).unwrap(); // idempotent
-        assert_eq!(db.schema_version().unwrap(), 2);
+        assert_eq!(db.schema_version().unwrap(), SCHEMA_VERSION);
         assert_eq!(db.list(None, None, None).unwrap().len(), 1);
         drop(db);
         let _ = std::fs::remove_dir_all(&dir);

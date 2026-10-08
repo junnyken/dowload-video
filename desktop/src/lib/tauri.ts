@@ -43,6 +43,8 @@ export const api = {
     headers?: { name: string; value: string }[]; fileTitle?: string; fileId?: string;
     // The user's own cookies for this URL's platform (PLAN-32D L1); Rust decides which blob from the host.
     useCookies?: boolean;
+    // PLAN-32E P3: the server's signed claim token; Rust checks it before yt-dlp starts.
+    claimToken?: string;
   }) =>
     call<null>('start_download', a),
   pauseDownload: (jobId: string) => call<null>('pause_download', { jobId }),

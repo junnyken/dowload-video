@@ -41,6 +41,9 @@ const MESSAGES: Record<string, string> = {
   drm: 'Video được bảo vệ bản quyền (DRM) nên không tải được.',
   server_fetch_failed: 'Máy chủ VidGrab cũng không tải được video này. Hãy thử lại sau.',
   server_busy: 'Máy chủ VidGrab đang bận. Hãy thử lại sau ít phút.',
+  // Daily allowance checked by the app itself (PLAN-32E P3, Rust start_download). wording: BA review
+  claim_required: 'Không xác nhận được lượt tải với máy chủ VidGrab. Hãy kiểm tra kết nối rồi bấm Thử lại.',
+  offline_grace_used: 'Không kết nối được máy chủ VidGrab và đã dùng hết lượt tải ngoại tuyến của hôm nay. Hãy kết nối Internet rồi thử lại.',
   login_link_invalid: 'Phiên đăng nhập từ trình duyệt không dùng được hoặc đã hết hạn. Hãy bấm “Đăng nhập qua trình duyệt” lần nữa.',
 };
 
