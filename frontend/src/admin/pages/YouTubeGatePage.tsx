@@ -10,10 +10,8 @@ interface Snapshot {
   success?: boolean
   enabled?: boolean
   circuit_state?: string
-  cost_today?: number
   daily_limit_gb?: number
   bytes_today?: number
-  [k: string]: unknown
 }
 
 function fmtBytes(n: unknown) {
@@ -55,11 +53,6 @@ export default function YouTubeGatePage() {
   const enabled = !!snap?.enabled
   const circuit = String(snap?.circuit_state ?? '—')
 
-  // Everything not already surfaced above, shown rather than dropped: this
-  // endpoint returns a dashboard snapshot whose keys vary by build.
-  const known = new Set(['success', 'enabled', 'circuit_state', 'cost_today', 'bytes_today', 'daily_limit_gb'])
-  const extra = Object.entries(snap ?? {}).filter(([k]) => !known.has(k))
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -97,28 +90,13 @@ export default function YouTubeGatePage() {
           <div className="mt-1 text-xl font-semibold text-fg">{fmtBytes(snap?.bytes_today)}</div>
         </div>
         <div className="rounded-card border border-line bg-surface shadow-card p-3">
-          <div className="text-[10px] uppercase tracking-wide text-fg-muted">Chi phí ước tính</div>
+          <div className="text-[10px] uppercase tracking-wide text-fg-muted">Trần băng thông / ngày</div>
           <div className="mt-1 text-xl font-semibold text-fg">
-            {snap?.cost_today != null ? `$${Number(snap.cost_today).toFixed(2)}` : '—'}
+            {/* wording: BA review */}
+            {snap?.daily_limit_gb != null && Number(snap.daily_limit_gb) > 0 ? `${snap.daily_limit_gb} GB` : 'Không giới hạn'}
           </div>
         </div>
       </div>
-
-      {extra.length > 0 && (
-        <div className="rounded-card border border-line bg-surface shadow-card p-4">
-          <h2 className="mb-2 text-sm font-semibold text-fg">Chi tiết khác</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            {extra.map(([k, v]) => (
-              <div key={k} className="rounded border border-line px-2 py-1">
-                <div className="text-[10px] text-fg-muted">{k}</div>
-                <div className="font-mono text-[11px] text-fg-2 break-all">
-                  {typeof v === 'object' ? JSON.stringify(v) : String(v)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

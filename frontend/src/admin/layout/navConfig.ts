@@ -43,9 +43,9 @@ const NAV_MONITOR: NavItem[] = [
   { href: '/vid-admin/proxy', label: 'Proxy', icon: Network, minRole: 'viewer' },
   { href: '/vid-admin/cobalt', label: 'Cobalt', icon: Layers, minRole: 'viewer' },
   { href: '/vid-admin/queue', label: 'Queue', icon: ListOrdered, minRole: 'viewer' },
-  { href: '/vid-admin/jobs', label: 'Jobs', icon: Briefcase, minRole: 'viewer' },
+  { href: '/vid-admin/jobs', label: 'Jobs', icon: Briefcase, minRole: 'viewer', hidden: true },
   { href: '/vid-admin/analytics', label: 'Analytics', icon: ChartColumn, minRole: 'viewer' },
-  { href: '/vid-admin/probes', label: 'Sức khoẻ nền tảng', icon: HeartPulse, minRole: 'viewer' },
+  { href: '/vid-admin/probes', label: 'Sức khoẻ nền tảng', icon: HeartPulse, minRole: 'viewer', hidden: true },
   { href: '/vid-admin/funnel', label: 'Funnel', icon: Funnel, minRole: 'viewer' },
   { href: '/vid-admin/youtube-gate', label: 'YouTube Gate', icon: Play, minRole: 'operator' },
   // Ops Signals is the aggregated "is anything wrong right now" view. Queue
@@ -60,12 +60,12 @@ const NAV_MONITOR: NavItem[] = [
 
 const NAV_MANAGE: NavItem[] = [
   { href: '/vid-admin/users', label: 'Users', icon: Users, minRole: 'operator' },
-  { href: '/vid-admin/config', label: 'Config', icon: Settings, minRole: 'admin' },
+  { href: '/vid-admin/config', label: 'Config', icon: Settings, minRole: 'admin', hidden: true },
   { href: '/vid-admin/asr', label: 'Phiên âm (ASR)', icon: Mic, minRole: 'operator' },
   { href: '/vid-admin/apify-costs', label: 'Chi phí Apify', icon: CircleDollarSign, minRole: 'admin' },
   // wording: BA review
   { href: '/vid-admin/desktop-app', label: 'App Windows', icon: MonitorDown, minRole: 'admin' },
-  { href: '/vid-admin/playbooks', label: 'Playbooks', icon: BookOpen, minRole: 'operator' },
+  { href: '/vid-admin/playbooks', label: 'Playbooks', icon: BookOpen, minRole: 'operator', hidden: true },
   { href: '/vid-admin/automation-history', label: 'Automation', icon: History, minRole: 'viewer' },
 ]
 
@@ -106,10 +106,20 @@ export function titleForPath(pathname: string): string {
   return hit ? hit.label : 'vid-admin'
 }
 
+const ALL_NAV = [...NAV_OVERVIEW, ...NAV_MONITOR]
+const byHref = (href: string): NavItem => {
+  const item = ALL_NAV.find(i => i.href === href)
+  if (!item) throw new Error(`MOBILE_TABS: no nav item for ${href}`)
+  return item
+}
+
+// Picked by href (not index) so hiding/reordering sidebar entries cannot
+// silently swap a tab. Same five pages as before: Overview, Platforms,
+// Cookies, Queue, Cobalt (previously NAV_MONITOR[0,1,4,3] by index).
 export const MOBILE_TABS: NavItem[] = [
-  NAV_OVERVIEW[0],
-  NAV_MONITOR[0],
-  NAV_MONITOR[1],
-  NAV_MONITOR[4],
-  NAV_MONITOR[3],
-]
+  '/vid-admin',
+  '/vid-admin/platforms',
+  '/vid-admin/cookies',
+  '/vid-admin/queue',
+  '/vid-admin/cobalt',
+].map(byHref)

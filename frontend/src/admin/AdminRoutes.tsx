@@ -2,15 +2,11 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { AdminShell } from './layout/AdminShell'
 import { AdminLoginPage } from './pages/AdminLoginPage'
 import { AdminHomePage } from './pages/AdminHomePage'
-import { PlatformsPage } from './pages/PlatformsPage'
 import { CookiesPage } from './pages/CookiesPage'
-import { JobsPage } from './pages/JobsPage'
 import { ProxyPage } from './pages/ProxyPage'
-import { QueuePage } from './pages/QueuePage'
 import { AuditLogPage } from './pages/AuditLogPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import FunnelPage from './pages/FunnelPage'
-import ProbesPage from './pages/ProbesPage'
 import UsersPage from './pages/UsersPage'
 import ConfigPage from './pages/ConfigPage'
 import AccessPage from './pages/AccessPage'
@@ -23,8 +19,6 @@ import BillingAdminPage from './pages/BillingAdminPage'
 import PresetsPage from './pages/PresetsPage'
 // Ported back from src/pages/Admin/, where no route could reach them.
 import QueueHealthPage from './pages/QueueHealthPage'
-import PlaybooksPage from './pages/PlaybooksPage'
-import AutomationHistoryPage from './pages/AutomationHistoryPage'
 import YouTubeGatePage from './pages/YouTubeGatePage'
 import AnomaliesPage from './pages/AnomaliesPage'
 import OpsSignalsPage from './pages/OpsSignalsPage'
@@ -32,6 +26,7 @@ import AsrPage from './pages/AsrPage'
 import ApifyCostsPage from './pages/ApifyCostsPage'
 import DesktopAppPage from './pages/DesktopAppPage'
 import CobaltPage from './pages/CobaltPage'
+import { PlatformsHubPage, QueueHubPage, AutomationHubPage } from './pages/MergedPages'
 
 function Shell({ children }: { children: React.ReactNode }) {
   return <AdminShell>{children}</AdminShell>
@@ -45,17 +40,17 @@ export function AdminRoutes() {
 
       {/* Protected — Phase 1 */}
       <Route path="/vid-admin"           element={<Shell><AdminHomePage /></Shell>} />
-      <Route path="/vid-admin/platforms" element={<Shell><PlatformsPage /></Shell>} />
+      <Route path="/vid-admin/platforms" element={<Shell><PlatformsHubPage /></Shell>} />
       <Route path="/vid-admin/cookies"   element={<Shell><CookiesPage /></Shell>} />
-      <Route path="/vid-admin/jobs"      element={<Shell><JobsPage /></Shell>} />
+      <Route path="/vid-admin/jobs" element={<Navigate to="/vid-admin/queue?tab=jobs" replace />} />
 
       {/* Protected — Phase 2 (now wired) */}
       <Route path="/vid-admin/proxy"     element={<Shell><ProxyPage /></Shell>} />
       <Route path="/vid-admin/cobalt"    element={<Shell><CobaltPage /></Shell>} />
-      <Route path="/vid-admin/queue"     element={<Shell><QueuePage /></Shell>} />
+      <Route path="/vid-admin/queue" element={<Shell><QueueHubPage /></Shell>} />
       <Route path="/vid-admin/queue-health"       element={<Shell><QueueHealthPage /></Shell>} />
-      <Route path="/vid-admin/playbooks"          element={<Shell><PlaybooksPage /></Shell>} />
-      <Route path="/vid-admin/automation-history" element={<Shell><AutomationHistoryPage /></Shell>} />
+      <Route path="/vid-admin/playbooks" element={<Navigate to="/vid-admin/automation-history?tab=playbooks" replace />} />
+      <Route path="/vid-admin/automation-history" element={<Shell><AutomationHubPage /></Shell>} />
       <Route path="/vid-admin/youtube-gate"       element={<Shell><YouTubeGatePage /></Shell>} />
       <Route path="/vid-admin/anomalies"          element={<Shell><AnomaliesPage /></Shell>} />
       <Route path="/vid-admin/ops-signals"        element={<Shell><OpsSignalsPage /></Shell>} />
@@ -67,7 +62,7 @@ export function AdminRoutes() {
       {/* Phase 3+ — Analytics now live */}
       <Route path="/vid-admin/analytics" element={<Shell><AnalyticsPage /></Shell>} />
       <Route path="/vid-admin/funnel"    element={<Shell><FunnelPage /></Shell>} />
-      <Route path="/vid-admin/probes"    element={<Shell><ProbesPage /></Shell>} />
+      <Route path="/vid-admin/probes" element={<Navigate to="/vid-admin/platforms?tab=probes" replace />} />
       <Route path="/vid-admin/users"     element={<Shell><UsersPage /></Shell>} />
       <Route path="/vid-admin/config"    element={<Shell><ConfigPage /></Shell>} />
       <Route path="/vid-admin/access"    element={<Shell><AccessPage /></Shell>} />
