@@ -65,15 +65,28 @@ def _today() -> str:
     return _t.strftime("%Y-%m-%d", _t.gmtime())
 
 
+def is_probe_run() -> bool:
+    """True inside a platform probe (platform_probe.probe_once → run_as_probe).
+    Probes run every 30 min; counting them would bury the few real downloads
+    the owner reads these numbers for (task #6170)."""
+    try:
+        from app.services.china_platforms.normalized_models import current_context
+        return current_context().origin == "probe"
+    except Exception:
+        return False
+
+
 def record_cobalt_outcome(platform: str, ok: bool) -> None:
     """Never raises. ok resets the failure streak; a streak of _TRIP_AFTER
-    trips the platform."""
+    trips the platform. A probe's outcome still feeds the breaker (it is a
+    real answer from Cobalt) but not the daily usage stats."""
     try:
         from app.core.redis_client import get_redis
         rc = get_redis()
-        sk = f"cobalt:stats:{_today()}"
-        rc.hincrby(sk, f"{platform}|{'ok' if ok else 'fail'}", 1)
-        rc.expire(sk, _STATS_TTL)
+        if not is_probe_run():
+            sk = f"cobalt:stats:{_today()}"
+            rc.hincrby(sk, f"{platform}|{'ok' if ok else 'fail'}", 1)
+            rc.expire(sk, _STATS_TTL)
         if ok:
             rc.delete(f"cobalt:pfail:{platform}")
             return

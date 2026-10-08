@@ -359,8 +359,12 @@ def cobalt_with_meta(url: str, platform: str, quality: str = "video") -> dict | 
 def cookie_last_stat(platform: str, outcome: str) -> None:
     """Per UTC day: which step served a COOKIE_LAST_PLATFORMS download —
     anon_ok | cobalt_ok | cookie_ok | all_fail | gone (no cookie tried).
-    The numbers that decide whether a platform stays cookie-last."""
+    The numbers that decide whether a platform stays cookie-last.
+    Probe runs are not counted (task #6170)."""
     try:
+        from app.services.cobalt_service import is_probe_run
+        if is_probe_run():
+            return
         from app.core.redis_client import get_redis
         rc = get_redis()
         import time as _tm

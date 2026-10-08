@@ -71,6 +71,20 @@ _DEFAULT_TARGETS: Dict[str, str] = {
     #   a VOD: the official TwitchCon VOD made /fetch-link run past 150s
     #   (it downloads the whole broadcast), unusable as a probe.
     "twitch": "https://www.twitch.tv/twitch/clip/CrispyJollyGullHassaanChop-nPlLKGxGRcBj37e4",
+    # Added 2026-10-08 (task #6170). Official accounts only, short clips (the
+    # probe takes the real download path, Cobalt included, every 30 min). Each
+    # resolved with yt-dlp on 2026-10-08; the first three come from yt-dlp's
+    # own extractor tests, which is where their age/stability shows.
+    #   @instagram (user id 25025320) — 5 s reel
+    "instagram": "https://www.instagram.com/reel/Chunk8-jurw/",
+    #   CNN's page — "Holocaust survivor becomes US citizen" (44 s). No short
+    #   video by Meta's own page could be listed without signing in.
+    "facebook": "https://www.facebook.com/cnn/videos/10155529876156509/",
+    #   @CaptainAmerica (Marvel) — 3 s, posted 2016. @X's own test post no
+    #   longer carries a video.
+    "twitter": "https://x.com/CaptainAmerica/status/719944021058060289",
+    #   @nba — 6 s, posted 2024-07. @tiktok's own videos could not be listed.
+    "tiktok": "https://www.tiktok.com/@nba/video/7390205678729579807",
 }
 
 _TARGETS_KEY = "probe:targets"

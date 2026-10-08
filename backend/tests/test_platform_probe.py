@@ -64,8 +64,9 @@ class TestUnknownIsNotHealthy:
     def test_platform_without_a_target_is_not_configured(self):
         with _with(_FakeRedis(targets={})):
             states = pp.get_probe_states()
-        assert states["tiktok"]["status"] == pp.NOT_CONFIGURED
-        assert states["tiktok"]["status"] != pp.OK, (
+        # pinterest: no shipped default (tiktok got one on 2026-10-08)
+        assert states["pinterest"]["status"] == pp.NOT_CONFIGURED
+        assert states["pinterest"]["status"] != pp.OK, (
             "'nobody has checked' must never be reported as 'checked and fine' — "
             "that is exactly how a dead platform stays invisible"
         )
@@ -173,10 +174,13 @@ class TestTargets:
         ship with one; the rest report not_configured until an operator sets
         them. Measured 2026-09-24: youtube and vk resolved, 19 others did not.
         2026-10-02: six more verified through the live /fetch-link (official
-        accounts' posts) — see the comments on _DEFAULT_TARGETS."""
+        accounts' posts) — see the comments on _DEFAULT_TARGETS.
+        2026-10-08 (#6170): instagram, facebook, twitter, tiktok — official
+        accounts, resolved with yt-dlp."""
         assert set(pp._DEFAULT_TARGETS) == {
             "youtube", "vk",
             "odysee", "soundcloud", "bilibili", "threads", "dailymotion", "twitch",
+            "instagram", "facebook", "twitter", "tiktok",
         }
 
     def test_configured_target_overrides_the_default(self):

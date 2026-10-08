@@ -126,3 +126,23 @@ def test_youtube_health_probes_the_configured_instances(rc, monkeypatch):
     src = inspect.getsource(video_tasks)
     assert '"http://cobalt-api:9000"' not in src and "/api/serverInfo" not in src
     assert "instances_status()" in src
+
+
+def test_probe_runs_feed_the_breaker_but_not_the_usage_stats(rc, monkeypatch):
+    """Task #6170: IG/FB/X/TikTok probes run every 30 min through the real
+    path. Counting them would bury the few real downloads in cobalt:stats /
+    cookie_last:stats; the breaker still hears them (a real Cobalt answer)."""
+    from app.services.china_platforms.probes import run_as_probe
+
+    def _probe_burst():
+        for _ in range(3):
+            cs.record_cobalt_outcome("instagram", False)
+        downloader.cookie_last_stat("instagram", "all_fail")
+    run_as_probe(_probe_burst)
+    assert rc.hgetall(f"cobalt:stats:{cs._today()}") == {}
+    assert not any(k.startswith("cookie_last:stats:") for k in rc.keys("*"))
+    assert cs.cobalt_platform_tripped("instagram")           # breaker still counts probes
+    cs.record_cobalt_outcome("facebook", True)                # a real download is counted
+    downloader.cookie_last_stat("facebook", "cobalt_ok")
+    assert rc.hgetall(f"cobalt:stats:{cs._today()}") == {"facebook|ok": "1"}
+    assert any(k.startswith("cookie_last:stats:") for k in rc.keys("*"))
