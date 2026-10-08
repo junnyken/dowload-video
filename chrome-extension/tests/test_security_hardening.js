@@ -187,7 +187,7 @@ assert(background.includes('_isLocalDevSender') && background.includes('isLocalD
 assert(!JSON.stringify(manifest).includes('cmc-1'), 'manifest has no dead cmc-1 host');
 assert(manifest.host_permissions.includes('*://dvid-api.vibe1.tinhgon.xyz/*') && manifest.host_permissions.includes('*://dvid.vibe1.tinhgon.xyz/*'), 'host_permissions has the two exact new hosts');
 assert(!manifest.host_permissions.concat(...manifest.content_scripts.map(c => c.matches)).some(m => /\*[^/]*tinhgon/.test(m)), 'no wildcard on tinhgon.xyz anywhere in manifest');
-assert(manifest.version === '5.3.0', 'manifest version 5.3.0');
+assert(manifest.version === '5.3.1', 'manifest version 5.3.1');
 assert(bridge.includes('event.source !== window'), 'bridge rejects cross-window messages');
 assert(bridge.includes('event.origin !== window.location.origin'), 'bridge rejects cross-origin messages');
 assert(bridge.includes("VG_SET_AUTH_TOKEN"), 'bridge forwards the token to the service worker directly (popup is closed during login)');

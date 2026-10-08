@@ -586,8 +586,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         clearTimeout(abortTimer);
         clearInterval(pingInterval);
 
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = await resp.json();
+        // The server explains every failure in the body (detail / user_message);
+        // "HTTP 500" alone told the user nothing (08/10, task #6134).
+        const data = await resp.json().catch(() => null);
+        if (!resp.ok) {
+          const d = data?.detail;
+          const why = data?.user_message || (typeof d === 'string' ? d : d?.message || d?.user_message);
+          throw new Error(why ? `${why} (HTTP ${resp.status})` : `HTTP ${resp.status}`);
+        }
         if (!data?.success) throw new Error(data?.detail || 'Server lỗi');
 
         // Resolve download URL (same logic as popup resolveDownloadUrl)
