@@ -345,7 +345,7 @@ def test_cobalt_serves_before_any_cookie_is_spent(stub, rc, monkeypatch):
     monkeypatch.setattr(downloader, "is_cobalt_available", lambda: True)
     got = []
     monkeypatch.setattr(downloader, "download_social_via_cobalt",
-                        lambda url, d, p: got.append(p) or {"url": None, "title": "via cobalt", "ext": "mp4",
+                        lambda url, d, p, *a: got.append(p) or {"url": None, "title": "via cobalt", "ext": "mp4",
                                                             "id": "c1", "extractor": "cobalt_facebook",
                                                             "filepath": __file__})
     run()
@@ -431,11 +431,11 @@ def test_cobalt_image_answer_is_not_served(media, monkeypatch):
     from app.services import cobalt_service as cs
     jpg, vid = media
     monkeypatch.setattr(cs, "_download_social_via_cobalt",
-                        lambda u, d, p: {"filepath": str(jpg), "extractor": "cobalt_instagram"})
+                        lambda u, d, p, *a: {"filepath": str(jpg), "extractor": "cobalt_instagram"})
     assert cs.download_social_via_cobalt("https://www.instagram.com/reel/x/", "/tmp", "instagram") is None
     assert not jpg.exists()
     monkeypatch.setattr(cs, "_download_social_via_cobalt",
-                        lambda u, d, p: {"filepath": str(vid), "extractor": "cobalt_instagram"})
+                        lambda u, d, p, *a: {"filepath": str(vid), "extractor": "cobalt_instagram"})
     assert cs.download_social_via_cobalt("https://www.instagram.com/reel/x/", "/tmp", "instagram")
 
 
@@ -503,7 +503,7 @@ def test_cobalt_first_serves_without_touching_yt_dlp(stub, rc, monkeypatch):
     v = add()
     monkeypatch.setattr(downloader, "is_cobalt_available", lambda: True)
     monkeypatch.setattr(downloader, "download_social_via_cobalt",
-                        lambda url, d, p: {"url": None, "title": "via cobalt", "ext": "mp4", "id": "c1",
+                        lambda url, d, p, *a: {"url": None, "title": "via cobalt", "ext": "mp4", "id": "c1",
                                            "extractor": "cobalt_facebook", "filepath": __file__})
     out = run()
     # yt-dlp only for title/thumbnail: metadata, no download, no cookie
@@ -518,7 +518,7 @@ def test_cobalt_first_miss_falls_back_and_is_not_retried(stub, rc, monkeypatch):
     add()
     monkeypatch.setattr(downloader, "is_cobalt_available", lambda: True)
     calls = []
-    monkeypatch.setattr(downloader, "download_social_via_cobalt", lambda url, d, p: calls.append(p) or None)
+    monkeypatch.setattr(downloader, "download_social_via_cobalt", lambda url, d, p, *a: calls.append(p) or None)
     out = run()                                     # anon login wall → cookie
     assert out and calls == ["facebook"]            # Cobalt asked once, not again before the cookie
     assert stats(rc) == {"facebook|cobalt_first_miss": "1", "facebook|cookie_ok": "1"}
@@ -542,7 +542,7 @@ def test_cobalt_with_meta_runs_both_and_never_spends_a_cookie(rc, monkeypatch, m
     jpg, vid = media
     add()
     monkeypatch.setattr(downloader, "download_social_via_cobalt",
-                        lambda url, d, p: {"title": "facebook_x", "thumbnail": "", "filepath": str(vid)})
+                        lambda url, d, p, *a: {"title": "facebook_x", "thumbnail": "", "filepath": str(vid)})
     seen = []
 
     class Meta:

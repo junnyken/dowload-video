@@ -1610,10 +1610,10 @@ def youtube_extraction_health_probe(self):
     # ── Probe Cobalt API ──────────────────────────────────────────────
     cobalt_healthy = False
     try:
-        import httpx as _httpx
-        _cobalt_base = "http://cobalt-api:9000"
-        _resp = _httpx.get(f"{_cobalt_base}/api/serverInfo", timeout=5.0)
-        cobalt_healthy = _resp.status_code == 200
+        # the configured instances (COBALT_API_URLS), not the old compose
+        # hostname "cobalt-api:9000" that reported False forever (task #6133)
+        from app.services.cobalt_service import instances_status
+        cobalt_healthy = any(r["ok"] for r in instances_status())
         rc.set("cobalt_healthy", "1" if cobalt_healthy else "0", ex=_YT_HEALTH_SNAPSHOT_TTL)
     except Exception:
         rc.set("cobalt_healthy", "0", ex=_YT_HEALTH_SNAPSHOT_TTL)

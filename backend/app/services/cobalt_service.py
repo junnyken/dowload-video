@@ -46,6 +46,95 @@ def _auth_headers() -> dict:
     return {"Authorization": f"Api-Key {key}"} if key else {}
 
 
+# Errors that mean "this instance's IP was refused", not "this link is bad":
+# another instance (other IP) may succeed. Measured 08/10: TikTok answered
+# error.api.fetch.fail on every try for a while from our first instance.
+_ROTATE_ON = ("error.api.fetch.fail", "error.api.fetch.rate", "error.api.fetch.critical",
+              "error.api.youtube.")
+
+# Per-platform circuit (task #6133): after this many failed Cobalt answers in
+# a row for one platform, Cobalt is skipped for it for _TRIP_S, so users stop
+# paying Cobalt's latency while that platform blocks us.
+_TRIP_AFTER = int(os.getenv("COBALT_TRIP_AFTER", "3"))
+_TRIP_S = int(os.getenv("COBALT_TRIP_SECONDS", "900"))
+_STATS_TTL = 40 * 86400
+
+
+def _today() -> str:
+    import time as _t
+    return _t.strftime("%Y-%m-%d", _t.gmtime())
+
+
+def record_cobalt_outcome(platform: str, ok: bool) -> None:
+    """Never raises. ok resets the failure streak; a streak of _TRIP_AFTER
+    trips the platform."""
+    try:
+        from app.core.redis_client import get_redis
+        rc = get_redis()
+        sk = f"cobalt:stats:{_today()}"
+        rc.hincrby(sk, f"{platform}|{'ok' if ok else 'fail'}", 1)
+        rc.expire(sk, _STATS_TTL)
+        if ok:
+            rc.delete(f"cobalt:pfail:{platform}")
+            return
+        n = rc.incr(f"cobalt:pfail:{platform}")
+        rc.expire(f"cobalt:pfail:{platform}", 600)
+        if n >= _TRIP_AFTER:
+            rc.setex(f"cobalt:trip:{platform}", _TRIP_S, str(n))
+            rc.delete(f"cobalt:pfail:{platform}")
+            print(f"[Cobalt] {platform}: {n} failures in a row — skipped for {_TRIP_S // 60} min")
+    except Exception:
+        pass
+
+
+def cobalt_platform_tripped(platform: str) -> bool:
+    try:
+        from app.core.redis_client import get_redis
+        return bool(get_redis().exists(f"cobalt:trip:{platform}"))
+    except Exception:
+        return False
+
+
+def cobalt_video_quality(quality: str) -> str:
+    """Our quality string → Cobalt's videoQuality. "video" (HD) = 1080,
+    video_<N> = N, video_4k = max."""
+    q = str(quality or "video")
+    if q == "video_4k":
+        return "max"
+    if q.startswith("video_") and q[6:].isdigit():
+        return q[6:]
+    return "1080"
+
+
+def instances_status(timeout: float = 5.0) -> list:
+    """Admin view: each configured instance answering GET / (no API key
+    needed), with its version. Host only — never the key."""
+    import time as _t
+    from urllib.parse import urlparse
+    out = []
+    for u in COBALT_API_URLS:
+        t0 = _t.monotonic()
+        row = {"host": urlparse(u).netloc or u, "ok": False, "ms": None, "version": None,
+               "cooling_down": False}
+        try:
+            r = httpx.get(u, timeout=timeout)
+            row["ms"] = int((_t.monotonic() - t0) * 1000)
+            row["ok"] = r.status_code == 200
+            try:
+                row["version"] = (r.json().get("cobalt") or {}).get("version")
+            except Exception:
+                pass
+        except Exception:
+            pass
+        try:
+            from app.core.redis_client import get_redis
+            row["cooling_down"] = bool(get_redis().exists(_cobalt_down_key(u)))
+        except Exception:
+            pass
+        out.append(row)
+    return out
+
+
 def _cobalt_down_key(instance_url: str) -> str:
     import hashlib
     return f"cobalt:down:{hashlib.md5(instance_url.encode()).hexdigest()[:12]}"
@@ -129,7 +218,8 @@ def fetch_cobalt_stream(url: str, video_quality: str = "1080",
                         download_mode: str = "auto",
                         youtube_codec: str = "h264",
                         audio_format: str = "best",
-                        audio_bitrate: str = "128") -> Dict[str, Any]:
+                        audio_bitrate: str = "128",
+                        extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Request a specific quality stream from Cobalt.
     Returns dict with status, url, filename, etc.
@@ -143,6 +233,7 @@ def fetch_cobalt_stream(url: str, video_quality: str = "1080",
         "audioBitrate": audio_bitrate,
         "filenameStyle": "pretty",
         "alwaysProxy": False,
+        **(extra or {}),
     }
 
     instances = _healthy_cobalt_instances()
@@ -173,6 +264,10 @@ def fetch_cobalt_stream(url: str, video_quality: str = "1080",
         # health problem — no point rotating for it, and doing so would mask
         # the real reason with a misleading "no_cobalt_instance" on retries.
         err_code = (result.get("error") or {}).get("code", "")
+        if err_code.startswith(_ROTATE_ON):
+            print(f"[Cobalt] {instance}: {err_code} — trying the next instance")
+            last_error = result
+            continue
         if err_code.startswith("error.api."):
             return result
         last_error = result
@@ -329,12 +424,12 @@ def download_from_cobalt(url: str, quality: str, output_dir: str) -> Optional[st
     return None
 
 
-def download_instagram_via_cobalt(url: str, output_dir: str) -> "dict | None":
+def download_instagram_via_cobalt(url: str, output_dir: str, video_quality: str = "1080") -> "dict | None":
     """
     Download an Instagram Reel/Post via Cobalt.
     Returns minimal info dict compatible with downloader.py, or None on failure.
     """
-    result = fetch_cobalt_stream(url, video_quality="1080", download_mode="auto")
+    result = fetch_cobalt_stream(url, video_quality=video_quality, download_mode="auto")
     status = result.get("status", "error")
 
     if status == "error":
@@ -388,12 +483,12 @@ def download_instagram_via_cobalt(url: str, output_dir: str) -> "dict | None":
         return None
 
 
-def download_facebook_via_cobalt(url: str, output_dir: str) -> "dict | None":
+def download_facebook_via_cobalt(url: str, output_dir: str, video_quality: str = "1080") -> "dict | None":
     """
     Download a Facebook video via Cobalt.
     Returns minimal info dict compatible with downloader.py, or None on failure.
     """
-    result = fetch_cobalt_stream(url, video_quality="1080", download_mode="auto")
+    result = fetch_cobalt_stream(url, video_quality=video_quality, download_mode="auto")
     status = result.get("status", "error")
 
     if status == "error":
@@ -468,28 +563,31 @@ def is_real_video(path: str) -> bool:
                for s in streams)
 
 
-def download_social_via_cobalt(url: str, output_dir: str, platform: str) -> "dict | None":
-    r = _download_social_via_cobalt(url, output_dir, platform)
+def download_social_via_cobalt(url: str, output_dir: str, platform: str,
+                               quality: str = "video") -> "dict | None":
+    r = _download_social_via_cobalt(url, output_dir, platform, cobalt_video_quality(quality))
     if r and not is_real_video(r.get("filepath") or ""):
         print(f"[Cobalt/{platform}] answer is not a video (image or broken file) — not used")
         try:
             os.remove(r["filepath"])
         except Exception:
             pass
-        return None
+        r = None
+    record_cobalt_outcome(platform, bool(r))
     return r
 
 
-def _download_social_via_cobalt(url: str, output_dir: str, platform: str) -> "dict | None":
+def _download_social_via_cobalt(url: str, output_dir: str, platform: str,
+                                video_quality: str = "1080") -> "dict | None":
     """Instagram / Facebook / X post via Cobalt (task #6127: tried after the
     anonymous yt-dlp attempt and BEFORE a pool cookie is spent). Same result
     shape as download_instagram_via_cobalt; None on any failure, including a
     multi-item "picker" post (no single stream)."""
     if platform == "instagram":
-        return download_instagram_via_cobalt(url, output_dir)
+        return download_instagram_via_cobalt(url, output_dir, video_quality)
     if platform == "facebook":
-        return download_facebook_via_cobalt(url, output_dir)
-    result = fetch_cobalt_stream(url, video_quality="1080", download_mode="auto")
+        return download_facebook_via_cobalt(url, output_dir, video_quality)
+    result = fetch_cobalt_stream(url, video_quality=video_quality, download_mode="auto")
     stream_url = result.get("url") if result.get("status") != "error" else None
     if not stream_url:
         print(f"[Cobalt/{platform}] no single stream (status={result.get('status')})")

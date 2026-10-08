@@ -254,7 +254,10 @@ def cobalt_first(platform: str | None, quality: str) -> bool:
     wanted = {p.strip().lower() for p in raw.split(",") if p.strip()}
     if "x" in wanted:
         wanted.add("twitter")
-    return platform in wanted
+    if platform not in wanted:
+        return False
+    from app.services.cobalt_service import cobalt_platform_tripped
+    return not cobalt_platform_tripped(platform)   # task #6133: skipped while it keeps failing
 
 
 _PLATFORM_LABEL = {"facebook": "Video Facebook", "instagram": "Video Instagram", "twitter": "Video X"}
@@ -309,14 +312,14 @@ def enrich_cobalt_info(info: dict, meta: dict | None, platform: str) -> dict:
     return info
 
 
-def cobalt_with_meta(url: str, platform: str) -> dict | None:
+def cobalt_with_meta(url: str, platform: str, quality: str = "video") -> dict | None:
     """Cobalt download and the metadata lookup run side by side; the result
     waits for the metadata at most _COBALT_META_WAIT_S."""
     import concurrent.futures as _cf
     ex = _cf.ThreadPoolExecutor(max_workers=1)
     fut = ex.submit(_quick_meta, url)
     try:
-        info = download_social_via_cobalt(url, DOWNLOAD_DIR, platform)
+        info = download_social_via_cobalt(url, DOWNLOAD_DIR, platform, quality)
         if not info:
             return None
         try:
@@ -2493,7 +2496,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     if not user_cookies_file and cobalt_first(_cf_platform, quality):
         try:
             if is_cobalt_available():
-                info = cobalt_with_meta(url, _cf_platform)
+                info = cobalt_with_meta(url, _cf_platform, quality)
         except Exception as _cf_err:
             print(f"[Downloader] {_cf_platform}: Cobalt-first failed ({type(_cf_err).__name__})")
             info = None
@@ -3228,7 +3231,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         try:
             # not twice: Cobalt-first already missed for this request
             if not cobalt_first(_cl_platform, quality) and is_cobalt_available():
-                info = download_social_via_cobalt(url, DOWNLOAD_DIR, _cl_platform)
+                info = download_social_via_cobalt(url, DOWNLOAD_DIR, _cl_platform, quality)
                 if info:
                     info = enrich_cobalt_info(info, None, _cl_platform)
         except Exception as _cb_err:

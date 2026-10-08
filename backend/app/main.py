@@ -519,6 +519,8 @@ app.include_router(admin_china_router, prefix="/api/v1/admin", tags=["Admin Chin
 # Task #6087 — Windows app: machines + local/server download stats (read-only)
 from app.api.admin_desktop import router as admin_desktop_router
 app.include_router(admin_desktop_router, prefix="/api/v1/admin", tags=["Admin Desktop App"])
+from app.api.admin_cobalt import router as admin_cobalt_router
+app.include_router(admin_cobalt_router, prefix="/api/v1/admin", tags=["Admin Cobalt"])
 
 # Phase 19 — Mobile / PWA endpoints
 from app.api import mobile as mobile_api
