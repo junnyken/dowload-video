@@ -325,3 +325,30 @@ class TestCoverageIsNotConfidence:
         r = self._status([], probes)
         assert r["monitored_count"] + r["unmonitored_count"] == r["total_count"]
         assert r["monitored_count"] == 1
+
+
+class TestProbeQuality:
+    """Task #6170: probe_once downloads the file. Cobalt/TikWM platforms keep
+    the default quality (the path users take); the rest probe at 480p —
+    a best-quality probe was ~35 MB of 4K Dailymotion every 30 min."""
+
+    def test_full_path_platforms_keep_default_quality(self):
+        for p in ("instagram", "facebook", "twitter", "tiktok"):
+            assert pp.probe_quality(p) == "video"
+
+    def test_others_probe_at_480p_and_env_can_change_it(self, monkeypatch):
+        monkeypatch.delenv("PROBE_QUALITY", raising=False)
+        for p in ("youtube", "dailymotion", "vk", "odysee"):
+            assert pp.probe_quality(p) == "video_480"
+        monkeypatch.setenv("PROBE_QUALITY", "video_360")
+        assert pp.probe_quality("youtube") == "video_360"
+
+    def test_probe_once_passes_the_quality_through(self):
+        seen = {}
+
+        def _fake(url, quality="video"):
+            seen["q"] = quality
+            return {"title": "t", "direct_mp4_url": "https://cdn/v.mp4"}
+        with patch("app.services.downloader.extract_video_info_sync", _fake):
+            r = pp.probe_once("https://example.com/v", quality="video_480")
+        assert r["ok"] and seen["q"] == "video_480"

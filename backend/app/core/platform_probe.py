@@ -63,10 +63,11 @@ _DEFAULT_TARGETS: Dict[str, str] = {
     "bilibili": "https://www.bilibili.com/video/BV1ECeJ65EZS",
     #   @threads — "You can now DM videos, GIFS and stickers on Threads" (5.6s)
     "threads": "https://www.threads.com/@threads/post/DOJPyNPEVvT",
-    #   api.dailymotion.com/user/dailymotion — "Dailymotion Hackathon Feb 2017" (17.6s).
-    #   The account's oldest video (x4u2q9g) was refused ("Kênh ngoại tuyến"),
-    #   which is why this is the second-oldest rather than the first.
-    "dailymotion": "https://www.dailymotion.com/video/x5e9eog",
+    #   api.dailymotion.com/user/dailymotion — "T'as le projet…" DayOne (59 s).
+    #   Replaced 2026-10-08: x5e9eog ("Dailymotion Hackathon Feb 2017") now
+    #   answers 403 "This user is not allowed to access this video" (the live
+    #   probe failed on it). Listed from the account's own video list.
+    "dailymotion": "https://www.dailymotion.com/video/xb6qrbe",
     #   A clip on twitch.tv/twitch — "F1 2017 E3 Gameplay!" (2.4s). A clip, not
     #   a VOD: the official TwitchCon VOD made /fetch-link run past 150s
     #   (it downloads the whole broadcast), unusable as a probe.
@@ -156,7 +157,22 @@ def set_target(platform: str, url: Optional[str]) -> Dict[str, str]:
     return get_targets()
 
 
-def probe_once(url: str, timeout: int = _PROBE_TIMEOUT_SEC) -> Dict[str, Any]:
+# Platforms whose users are served through Cobalt-first / TikWM: probe them
+# with the default quality so the probe takes THAT path. Everyone else is
+# probed at 480p: probe_once downloads the file (quality "video" is not
+# metadata-only, despite the history above), and a best-quality probe meant
+# ~35 MB of 4K Dailymotion every 30 min. "video_fast" would be metadata-only
+# but has a 30 s cap (VK/Odysee need ~47 s) and is cached (task #6170).
+_FULL_PATH_PLATFORMS = frozenset({"instagram", "facebook", "twitter", "tiktok"})
+
+
+def probe_quality(platform: str) -> str:
+    if platform in _FULL_PATH_PLATFORMS:
+        return "video"
+    return (os.getenv("PROBE_QUALITY") or "video_480").strip() or "video_480"
+
+
+def probe_once(url: str, timeout: int = _PROBE_TIMEOUT_SEC, quality: str = "video") -> Dict[str, Any]:
     """
     Ask the platform whether extraction still works, THROUGH THE PATH THE APP
     ACTUALLY USES.
@@ -209,7 +225,7 @@ def probe_once(url: str, timeout: int = _PROBE_TIMEOUT_SEC) -> Dict[str, Any]:
         # run_as_probe marks the context origin="probe" so the China access
         # layer never spends on a managed provider for a probe (plan §14.1).
         from app.services.china_platforms.probes import run_as_probe
-        future = pool.submit(run_as_probe, extract_video_info_sync, url, quality="video")
+        future = pool.submit(run_as_probe, extract_video_info_sync, url, quality=quality)
         info = future.result(timeout=timeout)
     except concurrent.futures.TimeoutError:
         return _done(False, f"timeout_after_{timeout}s")

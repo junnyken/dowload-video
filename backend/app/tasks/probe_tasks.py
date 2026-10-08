@@ -21,6 +21,7 @@ from app.core.platform_probe import (
     get_probe_states,
     get_targets,
     probe_once,
+    probe_quality,
     record_probe,
 )
 from app.core.redis_client import get_redis
@@ -49,7 +50,7 @@ def probe_all_platforms() -> Dict[str, str]:
 
     results: Dict[str, str] = {}
     for platform, url in sorted(targets.items()):
-        outcome = probe_once(url)
+        outcome = probe_once(url, quality=probe_quality(platform))
         # The recorded status, not the raw outcome: a first failure is
         # UNCONFIRMED and must neither alert nor count as a break.
         results[platform] = record_probe(platform, outcome)
