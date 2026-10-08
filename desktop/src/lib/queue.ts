@@ -18,6 +18,8 @@ import {
   claimRoute, currentStep, isLocalStep, legacyRoute, nextRoute, triedBefore, type FetchLinkOutcome, type RouteId,
 } from './routes-core';
 import { fetchLink } from './fetchlink';
+import { capForGuest } from './quality';
+import { auth } from './auth';
 
 export type QueueState = 'queued' | 'running' | 'paused' | 'completed' | 'failed';
 
@@ -247,7 +249,9 @@ async function start(item: QueueItem) {
       if (step === 'L1') extra = { useCookies: true };
     }
     if (!queue.get().some((i) => i.id === item.id && i.state === 'running')) return; // cancelled / paused while resolving
-    await api.startDownload({ jobId: item.id, url: item.url, outDir: item.outDir, formatId: item.formatId, audioOnly: item.audioOnly, ...extra });
+    // a guest's local download stops at 1080p (server-route steps override formatId in `extra`)
+    const formatId = capForGuest(item.formatId, item.audioOnly, auth.get().status !== 'in');
+    await api.startDownload({ jobId: item.id, url: item.url, outDir: item.outDir, formatId, audioOnly: item.audioOnly, ...extra });
   } catch (e) {
     finishFailed(item.id, toAppError(e).code);
   }

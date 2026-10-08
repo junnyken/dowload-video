@@ -5,6 +5,7 @@ import { createStore } from './store';
 import { api, onCheckNow, onQuitting } from './tauri';
 import { enqueue, enqueueRefused, pauseAllForQuit } from './queue';
 import { qualityFormat } from './quality';
+import { auth } from './auth';
 import { settings } from './settings';
 import { errorMessage, toAppError } from './errors';
 import { newId } from './format';
@@ -51,7 +52,7 @@ export function fetchChannelListing(url: string, limit: number): Promise<Channel
 type ChannelTarget = { platform: string; title: string; quality: string; outDir: string };
 
 function jobOf(v: ChannelVideo, ch: ChannelTarget) {
-  const f = qualityFormat(ch.quality);
+  const f = qualityFormat(ch.quality, auth.get().status !== 'in');
   if (ch.platform === 'douyin') f.formatId = undefined; // a direct MP4 has no height to select on
   return {
     url: v.url, title: v.title, thumbnail: v.thumbnail, platform: ch.platform, uploader: ch.title, outDir: ch.outDir,

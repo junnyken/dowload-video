@@ -3,13 +3,14 @@ import { Badge, Button, IconButton, PlatformBadge, Select, Thumb } from './ui';
 import { type Card, removeCard, retryCard, serverCanTry, setCard, switchToServer } from '../lib/probes';
 import { qualityOptions, resolveQuality } from '../lib/quality';
 import { settings, type Quality } from '../lib/settings';
+import { auth } from '../lib/auth';
 import { formatBytes, formatDuration } from '../lib/format';
 import { errorMessage } from '../lib/errors';
 import { api } from '../lib/tauri';
 
 export function cardSelection(card: Card, defaultQuality: Quality, defaultDir: string | null) {
   const r = card.result!;
-  const opts = qualityOptions(r.formats);
+  const opts = qualityOptions(r.formats, { guest: auth.get().status !== 'in' });
   const value = card.quality && opts.some((o) => o.value === card.quality) ? card.quality : resolveQuality(opts, defaultQuality);
   const option = opts.find((o) => o.value === value) ?? opts[0];
   return { opts, option, outDir: card.outDir ?? defaultDir };
@@ -17,6 +18,7 @@ export function cardSelection(card: Card, defaultQuality: Quality, defaultDir: s
 
 export function ProbeCard({ card, onAdd }: { card: Card; onAdd: (c: Card) => void }) {
   const st = settings.use();
+  auth.use(); // signing in unlocks 2K/4K on this card
   if (card.status === 'loading') {
     return (
       <article className="flex gap-4 rounded-xl border border-line bg-surface p-3 shadow-card" aria-busy="true" aria-label="Đang phân tích liên kết">
@@ -66,7 +68,7 @@ export function ProbeCard({ card, onAdd }: { card: Card; onAdd: (c: Card) => voi
         </div>
         <div className="mt-auto flex flex-wrap items-center gap-2">
           <Select label="Chất lượng" value={option.value} onChange={(v) => setCard(card.url, { quality: v as Quality })} className="w-[170px]">
-            {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            {opts.map((o) => <option key={o.value} value={o.value} disabled={o.locked}>{o.label}</option>)}
           </Select>
           <span className="w-[72px] text-[13px] text-fg-2" title="Dung lượng ước tính">{est ? `~${formatBytes(est)}` : 'Chưa rõ'}</span>
           <button

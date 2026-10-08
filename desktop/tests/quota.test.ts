@@ -188,3 +188,36 @@ test('ip_limit refusals are told apart from the personal daily limit', () => {
   const p = decideClaim(429, { error_code: 'quota_exceeded_daily', reason: 'daily_limit', detail: 'Hết', limit: 5, usedToday: 5 });
   assert.ok(p.kind === 'refused' && !isIpLimit(p.refusal));
 });
+
+// ── task #6134: guests stop at 1080p in the app too ─────────────────────────
+import { GUEST_FORMAT, capForGuest, qualityFormat as qf, qualityOptions as qo, resolveQuality as rq } from '../src/lib/quality.ts';
+
+test('guest: 2K/4K options are locked, best is capped, defaults resolve below the cap', () => {
+  const fmts = [
+    { id: 'p2160', ext: 'mp4', height: 2160, audioOnly: false },
+    { id: 'p1080', ext: 'mp4', height: 1080, audioOnly: false },
+    { id: 'p720', ext: 'mp4', height: 720, audioOnly: false },
+    { id: 'a', ext: 'm4a', height: null, audioOnly: true },
+  ] as any;
+  const g = qo(fmts, { guest: true });
+  const by = Object.fromEntries(g.map((o) => [o.value, o]));
+  assert.equal(by['2160'].locked, true);
+  assert.ok(by['2160'].label.includes('Đăng nhập'));
+  assert.equal(by['1080'].locked, undefined);
+  assert.equal(by.best.format.id, 'p1080');
+  assert.ok(by.best.label.includes('1080p'));
+  assert.equal(rq(g, '2160' as any), '1080');
+  const u = qo(fmts, { guest: false });
+  assert.ok(u.every((o) => !o.locked) && u[0].format.id === 'p2160');
+});
+
+test('guest: channel and queue paths are capped too', () => {
+  assert.equal(qf('best', true).formatId, GUEST_FORMAT);
+  assert.equal(qf('2160', true).formatId, GUEST_FORMAT);
+  assert.notEqual(qf('720', true).formatId, GUEST_FORMAT);
+  assert.equal(qf('best', false).formatId, undefined);
+  assert.equal(capForGuest(undefined, false, true), GUEST_FORMAT);
+  assert.equal(capForGuest(undefined, true, true), undefined);      // audio untouched
+  assert.equal(capForGuest('137+140', false, true), '137+140');     // an explicit (unlocked) pick stays
+  assert.equal(capForGuest(undefined, false, false), undefined);    // signed in: yt-dlp best
+});
