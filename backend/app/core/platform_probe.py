@@ -75,8 +75,13 @@ _DEFAULT_TARGETS: Dict[str, str] = {
     # probe takes the real download path, Cobalt included, every 30 min). Each
     # resolved with yt-dlp on 2026-10-08; the first three come from yt-dlp's
     # own extractor tests, which is where their age/stability shows.
-    #   @instagram (user id 25025320) — 5 s reel
-    "instagram": "https://www.instagram.com/reel/Chunk8-jurw/",
+    #   Instagram: NOT an official account. @instagram's posts found
+    #   (yt-dlp tests: reel Chunk8-jurw, tv/BkfuX9UB-eK, p/BQ0eAlwhDrw) all fail
+    #   the real path — Cobalt answers the reel with a .jpg (first live probe
+    #   08/10 10:40Z: failed), the IGTV with error.api.fetch.empty, the post
+    #   with a picker. This public reel is one users downloaded on 08/10;
+    #   Cobalt answers it with an .mp4 redirect.
+    "instagram": "https://www.instagram.com/reel/DeJjs2ipNPr/",
     #   CNN's page — "Holocaust survivor becomes US citizen" (44 s). No short
     #   video by Meta's own page could be listed without signing in.
     "facebook": "https://www.facebook.com/cnn/videos/10155529876156509/",
