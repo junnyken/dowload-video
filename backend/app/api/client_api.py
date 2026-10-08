@@ -226,13 +226,17 @@ async def get_client_history(
 @limiter.limit("60/minute")
 async def get_client_version(request: Request):
     env = os.environ.get
-    latest = (env("DESKTOP_LATEST_VERSION") or "0.1.0").strip()
+    # Latest = the GitHub Release when newer than the env floor (task #6172:
+    # publishing a release is the whole release, no panel edit).
+    import asyncio  # noqa: PLC0415
+    from app.core import desktop_release  # noqa: PLC0415
+    rel = await asyncio.to_thread(desktop_release.current)
     min_supported = (env("DESKTOP_MIN_VERSION") or "0.1.0").strip()
     out: Dict[str, Any] = {
-        "latest": latest,
+        "latest": rel["latest"],
         "minSupported": min_supported,
-        "notes": env("DESKTOP_RELEASE_NOTES") or "",
-        "downloadUrl": env("DESKTOP_DOWNLOAD_URL") or "",
+        "notes": rel["notes"],
+        "downloadUrl": rel["downloadUrl"],
         # Task #6087: the app reads its quota mode here without an extra call.
         "features": _features(),
     }

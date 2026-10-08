@@ -57,6 +57,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from app.api.admin import verify_admin
 from app.core.audit import log_admin_action
 from app.core import update_gate
+from app.core import desktop_release
 from app.core import quotas
 
 logger = logging.getLogger(__name__)
@@ -385,7 +386,7 @@ def _flags() -> dict:
         "client_update_gate_enabled": update_gate.gate_enabled(),
         "cookie_platforms": client_api.cookie_platforms(),
         "server_fallback_platforms": client_api.server_fallback_platforms(),
-        "desktop_latest_version": (env("DESKTOP_LATEST_VERSION") or "0.1.0").strip(),
+        "desktop_latest_version": desktop_release.current()["latest"],
         "desktop_min_version": (env("DESKTOP_MIN_VERSION") or "0.1.0").strip(),
         "offline_grace": client_quota.offline_grace(),
         "refund_daily_max": client_quota.refund_daily_max(),

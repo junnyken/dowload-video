@@ -65,13 +65,15 @@ def should_gate(request: Request) -> bool:
 
 def update_required_response() -> JSONResponse:
     env = os.environ.get
+    from app.core import desktop_release  # noqa: PLC0415
+    rel = desktop_release.current()        # cached; GitHub release when newer
     return JSONResponse(status_code=426, content={
         "error_code": "update_required",
         # wording: BA review
         "detail": "Ứng dụng VidGrab trên máy bạn đã cũ. Vui lòng cập nhật bản mới để tiếp tục tải.",
         "minSupported": (env("DESKTOP_MIN_VERSION") or "0.1.0").strip(),
-        "latest": (env("DESKTOP_LATEST_VERSION") or "").strip(),
-        "downloadUrl": (env("DESKTOP_DOWNLOAD_URL") or "").strip(),
+        "latest": rel["latest"],
+        "downloadUrl": rel["downloadUrl"],
     })
 
 

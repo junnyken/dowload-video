@@ -65,3 +65,16 @@ def app():
 def auth_headers():
     """Stub Bearer token for authenticated endpoints (unit tests)."""
     return {"Authorization": "Bearer test-token"}
+
+
+@pytest.fixture(autouse=True)
+def _desktop_release_offline(monkeypatch):
+    """Task #6172: /client/version reads the latest GitHub Release. Tests never
+    call GitHub: env source by default; tests of desktop_release opt back in
+    with a fake fetch."""
+    monkeypatch.setenv("DESKTOP_RELEASE_SOURCE", "env")
+    try:
+        from app.core import desktop_release
+        desktop_release._mem.update(at=0.0, ttl=0, val=None)
+    except Exception:
+        pass
