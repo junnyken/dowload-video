@@ -7,7 +7,7 @@ import {
   ClipboardPaste, Play, Pause, Scissors, ImageDown,
   Upload, ExternalLink, SkipBack, SkipForward,
   Clapperboard, List, Sparkles, Eraser, Move, ZoomIn,
-  Layers, Stamp, CalendarClock
+  Layers, Stamp, CalendarClock, Lock
 } from 'lucide-react';
 import UpgradeModal from './UpgradeModal';
 import QuickGuideSection from './QuickGuideSection';
@@ -27,7 +27,7 @@ import { usePresets } from '../hooks/usePresets';
 import { useResolveInput } from '../hooks/useResolveInput';
 import { useEntitlement } from '../hooks/useEntitlement';
 import CapabilityBadge from './CapabilityBadge';
-import PlatformStatusBanner from './PlatformStatusBanner';
+import { readGuestHistory, addGuestHistory, removeGuestHistory, clearGuestHistory } from '../lib/guestHistory';
 import { localFileId, localAnyId, localVideoFirstId, localDownloadUrl, toFileId } from '../lib/localFile';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -331,6 +331,18 @@ export default function DashboardContent() {
     };
   }, []);
 
+  // #6134: a row the server marked locked never downloads. 'signin' → ask the
+  // shell to open the sign-in dialog; 'plan' → existing upgrade modal.
+  const handleLockedRow = (kind) => {
+    if (kind === 'signin') {
+      window.dispatchEvent(new CustomEvent('vidgrab:open-auth'));
+      showToast('Vui lòng đăng nhập để tải chất lượng này.'); // wording: BA review
+    } else {
+      setUpgradeErrorCode('tier_limit_quality');
+      setShowUpgradeModal(true);
+    }
+  };
+
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 3000);
@@ -342,8 +354,10 @@ export default function DashboardContent() {
     fetch(`${API_BASE}/api/v1/history?limit=5`, { headers: _historyAuthHeaders })
       .then(res => res.json())
       .then(data => {
+        // Guest: server returns local_only (no shared pool) → browser history.
+        if (!session?.access_token) { setRecentDownloads(readGuestHistory().slice(0, 5)); return; }
         if (data.success && data.jobs) setRecentDownloads(data.jobs);
-      }).catch(() => {});
+      }).catch(() => { if (!session?.access_token) setRecentDownloads(readGuestHistory().slice(0, 5)); });
   }, [session?.access_token]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset track selection when the Spotify album/playlist changes
@@ -369,6 +383,11 @@ export default function DashboardContent() {
   };
 
   const handleDeleteJob = async (jobId) => {
+    if (!session?.access_token) {
+      setRecentDownloads(removeGuestHistory(jobId).slice(0, 5));
+      showToast('Đã xóa thành công!');
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE}/api/v1/history/${jobId}`, {
         method: 'DELETE',
@@ -382,11 +401,12 @@ export default function DashboardContent() {
   };
 
   const handleClearAllHistory = async () => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa tất cả lịch sử tải gần đây không?')) return;
     if (!session?.access_token) {
-      showToast('Cần đăng nhập để xóa lịch sử tải.');
+      setRecentDownloads(clearGuestHistory());
+      showToast('Đã xóa tất cả lịch sử!');
       return;
     }
-    if (!window.confirm('Bạn có chắc chắn muốn xóa tất cả lịch sử tải gần đây không?')) return;
     try {
       const res = await fetch(`${API_BASE}/api/v1/history/all`, {
         method: 'DELETE',
@@ -633,6 +653,9 @@ export default function DashboardContent() {
         // knows the URL, so it can always derive this.
         trackEvent(EVENT.FETCH_SUCCESS, { platform: data.platform || detectedPlatform || 'unknown', has_subtitles: !!data.has_subtitles });
         showToast('Trích xuất thành công!');
+        if (!session?.access_token) {
+          setRecentDownloads(addGuestHistory({ title: data.title, original_url: effUrl.trim(), status: 'success', data }).slice(0, 5));
+        }
         if (subtitleMode !== 'off') {
           if (data.subtitle_file_url) {
             const a = document.createElement('a');
@@ -667,6 +690,9 @@ export default function DashboardContent() {
         reason: String(err?.message || '').slice(0, 120),
       });
       setError(err.message || 'Đã xảy ra lỗi khi xử lý link.');
+      if (!session?.access_token && fetchStatus != null && fetchStatus >= 400 && fetchStatus !== 402 && fetchStatus !== 429) {
+        setRecentDownloads(addGuestHistory({ title: effUrl.trim(), original_url: effUrl.trim(), status: 'failed' }).slice(0, 5));
+      }
     } finally {
       setIsLoading(false);
       if (progressPollRef.current) { clearTimeout(progressPollRef.current); progressPollRef.current = null; }
@@ -1736,9 +1762,6 @@ export default function DashboardContent() {
         errorCode={upgradeErrorCode}
         authToken={session?.access_token}
       />
-
-      {/* ── Platform health banner (shown only when degraded) ── */}
-      <PlatformStatusBanner />
 
       {/* ── Tool card (prompt box): URL row, mode tabs, options ── */}
       <div className="w-full max-w-3xl mb-6">
@@ -3058,7 +3081,7 @@ export default function DashboardContent() {
                         return (
                         <button
                           key={`v-${i}`}
-                          onClick={() => fmt.requires_merge ? handleMergeDownload(fmt.height) : handleFormatDownload(fmt)}
+                          onClick={() => fmt.locked ? handleLockedRow(fmt.locked) : fmt.requires_merge ? handleMergeDownload(fmt.height) : handleFormatDownload(fmt)}
                           disabled={downloadingId === `merge_${fmt.height}`}
                           className={`w-full flex items-center justify-between px-5 py-3.5 rounded-2xl ${
                             isAlreadyDownloaded
@@ -3072,6 +3095,13 @@ export default function DashboardContent() {
                               <div className="flex items-center gap-2">
                                 <ResBadge label={fmt.label} height={fmt.height} />
                                 <span className="text-sm font-bold">{fmt.resolution}</span>
+                                {fmt.locked && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-surface-2 text-fg-2 border border-line">
+                                    <Lock className="w-3 h-3" aria-hidden="true" />
+                                    {/* wording: BA review */}
+                                    {fmt.locked === 'signin' ? 'Đăng nhập để tải' : 'Nâng cấp để tải'}
+                                  </span>
+                                )}
                                 {!(fmt.height > 0) && (() => {
                                   const m = probeMap[fmt.url];
                                   if (m) {
@@ -3710,8 +3740,10 @@ export default function DashboardContent() {
                   </div>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
-                  {job.status === 'success' && job.direct_mp4_url ? (
-                    <a href={`${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(job.direct_mp4_url)}&filename=${encodeURIComponent(job.title || 'video')}`}
+                  {job.status === 'success' && (job.direct_mp4_url || (!session?.access_token && localVideoFirstId(job))) ? (
+                    <a href={(!session?.access_token && localVideoFirstId(job))
+                      ? `${API_BASE}/api/v1/download-local?file=${encodeURIComponent(localVideoFirstId(job))}&filename=${encodeURIComponent((job.title || 'video') + '.' + (localVideoFirstId(job).split('.').pop() || 'mp4'))}`
+                      : `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(job.direct_mp4_url)}&filename=${encodeURIComponent(job.title || 'video')}`}
                       className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-accent-soft text-accent-text font-bold hover:bg-accent/20 transition-colors border border-accent/30 text-xs">
                       <Download className="w-3.5 h-3.5" /> Tải lại
                     </a>

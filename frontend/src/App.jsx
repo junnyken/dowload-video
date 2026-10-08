@@ -93,6 +93,13 @@ function AppInner() {
   const { isAuthenticated, loading } = useAuth();
   const [view, setView]           = useState('landing');
   const [showAuthModal, setShowAuthModal] = useState(false);
+  // Any component can ask for the sign-in dialog (e.g. a quality row locked
+  // to signed-in users, task #6134) without prop drilling.
+  useEffect(() => {
+    const open = () => setShowAuthModal(true);
+    window.addEventListener('vidgrab:open-auth', open);
+    return () => window.removeEventListener('vidgrab:open-auth', open);
+  }, []);
   const [showFeedback, setShowFeedback]   = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [swUpdateReady, setSwUpdateReady] = useState(false);
