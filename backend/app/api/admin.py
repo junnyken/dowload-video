@@ -971,6 +971,9 @@ async def get_error_monitor(_=Depends(verify_admin)):
             "success": True,
             "recent_errors": failed_jobs,
             "recent_errors_source": "download_jobs",
+            # Task #6148: every failed /fetch-link attempt + unhandled 5xx,
+            # with the raw (redacted) reason. None = Redis unreadable.
+            "recent_attempts": _recent_attempts(),
             "error_patterns": error_patterns,
             "platform_fail_rates": platform_rates,
             "summary_24h": {
@@ -988,6 +991,11 @@ async def get_error_monitor(_=Depends(verify_admin)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _recent_attempts(limit: int = 50):
+    from app.core import recent_errors
+    return recent_errors.read(limit)
 
 
 def _other_domains_block(start: datetime, end: datetime) -> Optional[Dict[str, Any]]:

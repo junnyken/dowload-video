@@ -352,6 +352,21 @@ class UnhandledErrorMiddleware(BaseHTTPMiddleware):
             # Full detail to the log; nothing internal to the caller.
             print(f"[Unhandled] {request.method} {request.url.path}: {exc!r}\n"
                   f"{_tb.format_exc()}", flush=True)
+            # Task #6148: that log is not readable from the hosting panel and
+            # is wiped on redeploy — keep the reason (and where it was raised)
+            # in the admin's recent-failures list too.
+            try:
+                from app.core import recent_errors as _re
+                _tb_last = _tb.extract_tb(exc.__traceback__)[-1:] if exc.__traceback__ else []
+                _where = (f" @ {_tb_last[0].filename.rsplit('/app/', 1)[-1]}:{_tb_last[0].lineno}"
+                          if _tb_last else "")
+                _re.record(platform="api", status=500, error_code="unhandled",
+                           reason=f"{type(exc).__name__}: {exc}{_where}",
+                           path=f"{request.method} {request.url.path}",
+                           source=_re.client_source(request.headers.get("origin"),
+                                                    request.headers.get("x-vg-source")))
+            except Exception:
+                pass
             return JSONResponse(
                 status_code=500,
                 content={"detail": "Internal server error", "path": request.url.path},

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { ActiveAlertsBanner, type AlertItem } from '../panels/ActiveAlertsBanner'
 import { useAdminSystemStatus } from '../hooks/useAdminSystemStatus'
 import { useAdminActiveJobs } from '../hooks/useAdminActiveJobs'
-import type { SystemSnapshot, PlatformStatsTotal, DailyStatEntry, SnapshotSource } from '../api/system'
+import type { SystemSnapshot, PlatformStatsTotal, DailyStatEntry, SnapshotSource, RecentAttempt } from '../api/system'
 import { buildAlerts } from '../utils/alerts'
 import { absoluteTime, relativeTimeVi } from '../utils/anomalies'
 import { NO_TRAFFIC_HINT, fmtRate, safeRate } from '../utils/rate'
@@ -191,6 +191,34 @@ function ProxyPoolCard({ platform, redis, env, total }: { platform: string; redi
   )
 }
 
+// ─── Failed attempt row (task #6148) ──────────────────────────────────────────
+
+const SOURCE_LABEL: Record<string, string> = { web: 'Web', extension: 'Tiện ích', app: 'App', api: 'API' }
+
+function AttemptRow({ a }: { a: RecentAttempt }) {
+  const iso = new Date(a.ts * 1000).toISOString()
+  const meta = [
+    a.status ? `HTTP ${a.status}` : null,
+    a.error_code || null,
+    SOURCE_LABEL[a.source] ?? null,
+    a.kind === 'user' ? 'Tài khoản' : a.kind === 'guest' ? 'Khách' : null,
+    a.quality || null,
+    a.user_cookies ? 'cookie người dùng' : null,
+  ].filter(Boolean).join(' · ')
+  return (
+    <div className="flex items-start gap-3 py-2 border-b border-line last:border-0 text-xs">
+      <span className="shrink-0 rounded-md border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] uppercase text-fg-2">
+        {a.platform || '?'}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-fg-2 break-words line-clamp-2" title={a.reason}>{a.reason || 'Không ghi lý do'}</p>
+        <p className="text-fg-muted text-[10px] break-words">{meta}{a.url ? ` · ${a.url}` : ''}{a.path && a.path !== '/api/v1/fetch-link' ? ` · ${a.path}` : ''}</p>
+      </div>
+      <span className="shrink-0 text-fg-muted text-[10px] font-mono" title={absoluteTime(iso)}>{relativeTimeVi(iso)}</span>
+    </div>
+  )
+}
+
 // ─── Failure row ──────────────────────────────────────────────────────────────
 
 // download_jobs has error_message / error_type / created_at. The row read
@@ -291,6 +319,8 @@ export function AdminHomePage() {
   const platformTotals = (s?.platformStats.totals ?? []).filter(p => p.total > 0)
   const maxPlatTotal   = Math.max(...platformTotals.map(p => p.total), 1)
   const failedJobs     = (s?.stats.failed_jobs ?? []).slice(0, 5)
+  // undefined (older server) reads as empty; null means Redis was unreadable
+  const recentAttempts = s?.errors.recent_attempts === null ? null : (s?.errors.recent_attempts ?? [])
   const daily7d        = s?.analytics7d.daily_stats ?? []
 
   // Proxy pools — only platforms with >0 total or that are "required"
@@ -511,6 +541,25 @@ export function AdminHomePage() {
           </section>
         )}
       </div>
+
+      {/* ── Every failed download, with its raw reason (task #6148) ── */}
+      {s && !down.has('errors') && (
+        <section>
+          <SectionTitle title="Lượt tải lỗi gần đây" />
+          <p className="mb-2 text-[11px] text-fg-muted">
+            Mọi lượt tải lỗi (web, tiện ích, app) và lỗi máy chủ chưa xử lý — lý do gốc, đã che khoá/mật khẩu. Giữ 7 ngày.
+          </p>
+          <div className="rounded-card border border-line bg-surface shadow-card px-4 py-2">
+            {recentAttempts === null ? (
+              <p className="py-3 text-xs text-fg-muted">Không đọc được sổ lỗi (Redis) — không có nghĩa là không có lỗi.</p>
+            ) : recentAttempts.length === 0 ? (
+              <p className="py-3 text-xs text-fg-muted">Chưa có lượt tải lỗi nào được ghi.</p>
+            ) : (
+              recentAttempts.slice(0, 10).map((a, i) => <AttemptRow key={`${a.ts}-${i}`} a={a} />)
+            )}
+          </div>
+        </section>
+      )}
 
       {/* ── P3: Proxy pool status ── */}
       {proxyEntries.length > 0 && (

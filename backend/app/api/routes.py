@@ -224,6 +224,23 @@ def quality_note(requested: str | None, delivered: int, formats: list,
     }
 
 
+def _keep_recent_error(request, payload, user_id, vg_source, status, code, reason, quality) -> None:
+    """One row in the admin's recent-failures list (app.core.recent_errors).
+    Never raises."""
+    try:
+        from app.core import recent_errors
+        recent_errors.record(
+            platform=_get_platform_key(payload.url), status=status, error_code=code,
+            reason=reason, url=payload.url,
+            quality=f"{payload.quality or ''}→{quality or ''}" if quality != payload.quality else quality,
+            signed_in=bool(user_id),
+            source=recent_errors.client_source(request.headers.get("origin"), vg_source),
+            user_cookies=bool(payload.user_cookies_b64),
+        )
+    except Exception:
+        pass
+
+
 class FetchLinkRequest(BaseModel):
     url: str
     quality: Optional[str] = "video"
@@ -1090,12 +1107,19 @@ async def fetch_link(
         # guard's 403) has already decided its status — it used to be swallowed
         # here and re-raised as a 500 carrying the repr of the exception.
         if isinstance(e, HTTPException):
+            if e.status_code >= 500:
+                _keep_recent_error(request, payload, user_id, x_vg_source, e.status_code,
+                                   f"http_{e.status_code}", e.detail, _quality)
             raise
         msg = str(e)
         # Status is decided from the RAW message (it carries yt-dlp's own
         # reason), before the friendly rewrite below discards it.
         from app.core.extraction_errors import classify_extraction_error, ExtractionHTTPException
         _status, _err_code = classify_extraction_error(msg, e)
+        # Task #6148: the raw reason, readable on the admin Overview — the
+        # API's logs are not, and the message below is rewritten for users.
+        _keep_recent_error(request, payload, user_id, x_vg_source, _status, _err_code,
+                           f"{type(e).__name__}: {msg}", _quality)
         if "video unavailable" in msg.lower() or "unavailable" in msg.lower():
             msg = "🚫 Video không khả dụng — có thể đã bị xóa, giới hạn vùng (geo-block), hoặc bị ẩn."
         elif "sign in" in msg.lower() or "bot" in msg.lower():

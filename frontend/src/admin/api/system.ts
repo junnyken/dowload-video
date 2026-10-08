@@ -112,6 +112,23 @@ export interface ErrorsResponse {
   partial?: boolean
   coverage_hours?: number
   covered_since?: string | null
+  /** Every failed /fetch-link attempt + unhandled 5xx, newest first, 7 days
+   *  (Redis vidgrab:recent_errors). null = Redis unreadable, not "no errors". */
+  recent_attempts?: RecentAttempt[] | null
+}
+
+export interface RecentAttempt {
+  ts: number                 // unix seconds
+  path: string               // "/api/v1/fetch-link" or "POST /api/v1/…" (unhandled)
+  platform: string
+  status: number
+  error_code: string
+  reason: string             // raw reason, secrets redacted
+  url: string                // host + path, no query
+  quality: string            // asked, or "asked→served"
+  kind: 'user' | 'guest' | null
+  source: 'web' | 'extension' | 'app' | 'api' | ''
+  user_cookies: boolean
 }
 
 export interface PlatformStatsTotal {
