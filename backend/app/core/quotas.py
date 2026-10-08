@@ -43,7 +43,10 @@ TIER_PERMISSIONS: Dict[str, Dict[str, Any]] = {
     "free": {
         "daily_limit":          FREE_DAILY_LIMIT,
         "batch_limit":          FREE_BATCH_LIMIT,
-        "max_height":           1080,
+        # FREE_MAX_HEIGHT (task #6134): owner 08/10 — every account may take
+        # 2K/4K when the video has it; set 4320 on the deployment. Default
+        # keeps the old 1080p cap.
+        "max_height":           int(os.getenv("FREE_MAX_HEIGHT", "1080")),
         "youtube_download":     "video",   # video allowed, capped 1080p + 5/day
         "bulk_zip":             False,
         "spotify_artist_full":  False,     # only top_tracks

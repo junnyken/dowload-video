@@ -182,10 +182,23 @@ async def ping():
 
 # ── Request / Response Models ────────────────────────────────────────
 
-def quality_note(requested: str | None, delivered: int, formats: list) -> dict | None:
+def lock_rows_above_cap(formats: list, cap: dict | None) -> list:
+    """Task #6134: video rows above the account's height cap stay visible but
+    carry locked = "signin" | "plan" (the page shows them as an upsell, not
+    as a download that would silently come back smaller)."""
+    limit = int((cap or {}).get("height") or 0)
+    if not limit:
+        return formats
+    return [{**f, "locked": (cap or {}).get("reason")}
+            if f.get("type") == "video" and int(f.get("height") or 0) > limit else f
+            for f in formats]
+
+
+def quality_note(requested: str | None, delivered: int, formats: list,
+                 cap: dict | None = None) -> dict | None:
     """Task #6134: the server never swaps a resolution silently. When a
-    video_<N> request was served below N (the video does not have it), say
-    what was delivered and the best this video offers."""
+    video_<N> request was served below N, say why: the account's limit on
+    this platform (cap) or the video simply not having it."""
     q = str(requested or "")
     if not (q.startswith("video_") and q[6:].isdigit()) or not delivered:
         return None
@@ -193,6 +206,15 @@ def quality_note(requested: str | None, delivered: int, formats: list) -> dict |
     if delivered >= want * 0.8:
         return None
     best = max([int(f.get("height") or 0) for f in formats if f.get("type") == "video"] + [delivered])
+    limit = int((cap or {}).get("height") or 0)
+    if limit and want > limit:
+        reason = (cap or {}).get("reason")
+        # wording: BA review
+        msg = (f"Tài khoản khách tải tối đa {limit}p. Đăng nhập để tải chất lượng cao hơn. Đã tải bản {delivered}p."
+               if reason == "signin" else
+               f"Gói hiện tại tải tối đa {limit}p. Đã tải bản {delivered}p.")
+        return {"requested": want, "delivered": delivered, "best_available": best,
+                "limit": limit, "limit_reason": reason, "message": msg}
     return {
         "requested": want, "delivered": delivered, "best_available": best,
         # wording: BA review
@@ -668,6 +690,10 @@ async def fetch_link(
     _yt_quota_id = None
     _yt_global = False
     _quality = payload.quality
+    # task #6134: the height this account may download here (YouTube cap
+    # below); 0 = no cap. Lets the page lock the rows above it and lets the
+    # quality note say "your account" rather than "this video".
+    _height_cap = {"height": 0, "reason": None}
     if _get_platform_key(payload.url) == "youtube":
         from app.core import yt_quota as _ytq
         from app.core import youtube_gate as _ytg
@@ -732,6 +758,8 @@ async def fetch_link(
         # bytes through the paid proxy.
         _cap = int(os.getenv("YT_MAX_HEIGHT_USER", "1080") if user_id else os.getenv("YT_MAX_HEIGHT_ANON", "720"))
         _gate_h = _gate.get("effective_height")
+        if _cap > 0:   # the ACCOUNT's limit, before the per-request gate height
+            _height_cap = {"height": _cap, "reason": "plan" if user_id else "signin"}
         if _gate_h:
             _cap = min(_cap, _gate_h) if _cap > 0 else _gate_h
         if _cap > 0 and not (_quality.startswith("mp3") or _quality.startswith("audio") or _quality == "video_fast"):
@@ -843,7 +871,8 @@ async def fetch_link(
                 for f in (info.get("available_formats") or [])
             ]
         info["quality_note"] = quality_note(payload.quality, info.get("downloaded_height") or 0,
-                                            info.get("available_formats") or [])
+                                            info.get("available_formats") or [], _height_cap)
+        info["available_formats"] = lock_rows_above_cap(info.get("available_formats") or [], _height_cap)
 
         # 3. Post-extraction 4K height guard (catches merge-4K scenario for free users)
         # Only applies to YouTube — other platforms (Twitter, Instagram, Reddit, TikTok…)
@@ -979,6 +1008,8 @@ async def fetch_link(
             "downloaded_vcodec": info.get("downloaded_vcodec") or "",
             "downloaded_universal": info.get("downloaded_universal"),
             "quality_note": info.get("quality_note"),
+            "max_allowed_height": _height_cap["height"],
+            "height_cap_reason": _height_cap["reason"],
             "subtitle_url": info.get("subtitle_url"),
             "subtitle_file_url": subtitle_file_url,
             "subtitle_error": info.get("subtitle_error"),

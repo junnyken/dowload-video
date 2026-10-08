@@ -86,3 +86,56 @@ def test_fetch_link_returns_the_new_fields(app, route, monkeypatch):
     body = r.json()
     assert body["downloaded_vcodec"] == "vp09" and body["downloaded_universal"] is False
     assert body["quality_note"]["requested"] == 1080 and body["quality_note"]["delivered"] == 720
+
+
+def test_quality_note_tells_an_account_limit_from_a_missing_resolution():
+    fm = [{"type": "video", "height": 2160}, {"type": "video", "height": 720}]
+    g = quality_note("video_2160", 720, fm, {"height": 720, "reason": "signin"})
+    assert g["limit"] == 720 and g["limit_reason"] == "signin" and "Đăng nhập" in g["message"]
+    assert "không có bản" not in g["message"]                     # the video HAS 2160p
+    u = quality_note("video_2160", 1080, fm, {"height": 1080, "reason": "plan"})
+    assert u["message"].startswith("Gói hiện tại tải tối đa 1080p")
+    # asked below the cap, still missing → the video lacks it
+    n = quality_note("video_720", 480, [{"type": "video", "height": 480}], {"height": 1080, "reason": "plan"})
+    assert n["message"].startswith("Video này không có bản 720p")
+
+
+def test_rows_above_the_cap_are_locked_not_hidden():
+    from app.api.routes import lock_rows_above_cap
+    fm = [{"type": "video", "height": 2160}, {"type": "video", "height": 1080},
+          {"type": "video", "height": 720}, {"type": "audio", "bitrate": 128}]
+    out = lock_rows_above_cap(fm, {"height": 720, "reason": "signin"})
+    assert [f.get("locked") for f in out] == ["signin", "signin", None, None]
+    assert lock_rows_above_cap(fm, {"height": 0, "reason": None}) == fm
+
+
+def test_the_route_wires_the_cap_through():
+    import inspect
+    from app.api import routes
+    src = inspect.getsource(routes)
+    assert 'lock_rows_above_cap(info.get("available_formats") or [], _height_cap)' in src
+    assert '"max_allowed_height": _height_cap["height"]' in src
+    assert 'quality_note(payload.quality, info.get("downloaded_height") or 0,' in src
+
+
+def test_free_max_height_is_configurable(monkeypatch):
+    import importlib
+    from app.core import quotas
+    monkeypatch.setenv("FREE_MAX_HEIGHT", "4320")
+    q = importlib.reload(quotas)
+    try:
+        monkeypatch.setattr(q, "_get_tier", lambda uid: "free")
+        assert q.check_quality_permission("u", "video_2160", height=2160)["allowed"] is True
+    finally:
+        monkeypatch.delenv("FREE_MAX_HEIGHT")
+        q = importlib.reload(quotas)
+    monkeypatch.setattr(q, "_get_tier", lambda uid: "free")
+    assert q.check_quality_permission("u", "video_2160", height=2160)["allowed"] is False   # default unchanged
+
+
+def test_lock_reflects_the_account_cap_not_the_request():
+    import inspect
+    from app.api import routes
+    src = inspect.getsource(routes)
+    i, j = src.index('_height_cap = {"height": _cap'), src.index("_cap = min(_cap, _gate_h)")
+    assert i < j, "the account cap must be recorded before the per-request gate narrows _cap"
