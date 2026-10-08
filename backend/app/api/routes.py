@@ -2573,22 +2573,46 @@ async def proxy_download(request: Request, url: str, filename: str = "video", ex
 
 # ── GET /extension/download  (serve Chrome extension zip) ────────────
 
-@router.get("/extension/download")
-async def download_extension():
-    """Serve the latest VidGrab Chrome extension zip for direct download."""
+_EXTENSION_ZIP_MOUNT = "/app/extension/VidGrab-extension.zip"
+
+
+def _extension_zip_path() -> str | None:
+    """The zip /extension/download serves: the mounted package first
+    (scripts/package-extension.py), else a versioned zip next to the app."""
     import glob as _glob
-    # Check mounted path first (set via docker-compose volume)
-    _mounted = "/app/extension/VidGrab-extension.zip"
-    if os.path.exists(_mounted):
-        return FileResponse(_mounted, filename="VidGrab-extension.zip", media_type="application/zip")
-    # Fallback: glob versioned zips next to the app root
+    if os.path.exists(_EXTENSION_ZIP_MOUNT):
+        return _EXTENSION_ZIP_MOUNT
     base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     zips = sorted(_glob.glob(os.path.join(base, "chrome_extension_v*_store.zip")), reverse=True)
     if not zips:
         zips = sorted(_glob.glob(os.path.join(base, "chrome_extension_v*.zip")), reverse=True)
-    if not zips:
+    return zips[0] if zips else None
+
+
+@router.get("/extension/download")
+async def download_extension():
+    """Serve the latest VidGrab Chrome extension zip for direct download."""
+    path = _extension_zip_path()
+    if not path:
         raise HTTPException(status_code=404, detail="Extension file not found.")
-    return FileResponse(zips[0], filename="VidGrab-extension.zip", media_type="application/zip")
+    return FileResponse(path, filename="VidGrab-extension.zip", media_type="application/zip")
+
+
+@router.get("/extension/version")
+async def extension_version():
+    """The version INSIDE the zip /extension/download serves (its
+    manifest.json). The download page showed a hardcoded "5.2.5" while the
+    file was already 5.3.0 (08/10) — the page now asks here instead."""
+    import json as _json
+    import zipfile
+    path = _extension_zip_path()
+    if not path:
+        return {"version": None}
+    try:
+        with zipfile.ZipFile(path) as z:
+            return {"version": str(_json.loads(z.read("manifest.json")).get("version") or "") or None}
+    except Exception:
+        return {"version": None}
 
 
 # ── GET /platforms  (Platform Discovery — public) ─────────────────────────

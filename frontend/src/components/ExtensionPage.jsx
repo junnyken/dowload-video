@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Puzzle,
   Download,
@@ -57,7 +57,25 @@ const platforms = [
 ];
 
 // ── Install guide ────────────────────────────────────────────
-const EXT_VERSION = '5.2.5';
+// Fallback only: the page shows the version of the zip the server actually
+// serves (GET /api/v1/extension/version) — a hardcoded number said 5.2.5 while
+// the file was already 5.3.0 (08/10).
+const EXT_VERSION = '5.3.0';
+
+let _extVersion = null;
+function ExtVersion() {
+  const [v, setV] = useState(_extVersion || EXT_VERSION);
+  useEffect(() => {
+    if (_extVersion) return;
+    let alive = true;
+    fetch(`${API_BASE}/api/v1/extension/version`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d && d.version) { _extVersion = d.version; setV(d.version); } })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  return v;
+}
 
 // Copyable mono chip — chrome:// links can't be opened from a web page.
 function CopyChip({ text }) {
@@ -101,7 +119,7 @@ const steps = [
     title: 'Tải file ZIP',
     body: (
       <>
-        <p>Nhấn nút bên dưới để tải file ZIP (phiên bản {EXT_VERSION}) về máy.</p>
+        <p>Nhấn nút bên dưới để tải file ZIP (phiên bản <ExtVersion />) về máy.</p>
         <a
           href={`${API_BASE}/api/v1/extension/download`}
           onClick={() => trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'extension_guide' })}
