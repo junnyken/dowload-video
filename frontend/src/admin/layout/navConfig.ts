@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Globe, Cookie, Network, ListOrdered, Briefcase, ChartColumn,
   HeartPulse, Funnel, Radio, Users, Settings, BookOpen, History, ScrollText,
   Gauge, Siren, Play, Building2, KeyRound, Webhook, Wallet, Sparkles,
-  SlidersHorizontal, Shield, Activity, Mic, CircleDollarSign, MonitorDown,
+  SlidersHorizontal, Shield, Activity, Mic, CircleDollarSign, MonitorDown, Layers,
   type LucideIcon,
 } from 'lucide-react'
 import type { AdminRole } from '../types/admin.types'
@@ -41,6 +41,7 @@ const NAV_MONITOR: NavItem[] = [
   { href: '/vid-admin/platforms', label: 'Platforms', icon: Globe, minRole: 'viewer' },
   { href: '/vid-admin/cookies', label: 'Cookies', icon: Cookie, minRole: 'viewer' },
   { href: '/vid-admin/proxy', label: 'Proxy', icon: Network, minRole: 'viewer' },
+  { href: '/vid-admin/cobalt', label: 'Cobalt', icon: Layers, minRole: 'viewer' },
   { href: '/vid-admin/queue', label: 'Queue', icon: ListOrdered, minRole: 'viewer' },
   { href: '/vid-admin/jobs', label: 'Jobs', icon: Briefcase, minRole: 'viewer' },
   { href: '/vid-admin/analytics', label: 'Analytics', icon: ChartColumn, minRole: 'viewer' },

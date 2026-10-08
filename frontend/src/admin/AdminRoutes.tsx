@@ -31,6 +31,7 @@ import OpsSignalsPage from './pages/OpsSignalsPage'
 import AsrPage from './pages/AsrPage'
 import ApifyCostsPage from './pages/ApifyCostsPage'
 import DesktopAppPage from './pages/DesktopAppPage'
+import CobaltPage from './pages/CobaltPage'
 
 function Shell({ children }: { children: React.ReactNode }) {
   return <AdminShell>{children}</AdminShell>
@@ -50,6 +51,7 @@ export function AdminRoutes() {
 
       {/* Protected — Phase 2 (now wired) */}
       <Route path="/vid-admin/proxy"     element={<Shell><ProxyPage /></Shell>} />
+      <Route path="/vid-admin/cobalt"    element={<Shell><CobaltPage /></Shell>} />
       <Route path="/vid-admin/queue"     element={<Shell><QueuePage /></Shell>} />
       <Route path="/vid-admin/queue-health"       element={<Shell><QueueHealthPage /></Shell>} />
       <Route path="/vid-admin/playbooks"          element={<Shell><PlaybooksPage /></Shell>} />
