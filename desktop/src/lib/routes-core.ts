@@ -192,7 +192,7 @@ export type ServerRefusal = {
 };
 
 export type FetchLinkOutcome =
-  | { kind: 'ok'; url: string; title: string | null; thumbnail: string | null; headers: { name: string; value: string }[]; source: 'file' | 'direct' }
+  | { kind: 'ok'; url: string; title: string | null; thumbnail: string | null; headers: { name: string; value: string }[]; source: 'file' | 'direct'; note?: string | null }
   | { kind: 'quota'; refusal: ServerRefusal }
   | { kind: 'error'; code: string; message: string };
 
@@ -239,9 +239,11 @@ export function parseFetchLink(status: number, data: unknown, o: { apiBase: stri
     const title = str(d.title);
     const name = title ?? o.fallbackTitle;
     const fileId = (o.audioOnly ? str(d.local_mp3_file_id) ?? str(d.local_file_id) : str(d.local_file_id)) ?? null;
-    if (fileId) return { kind: 'ok', url: downloadLocalUrl(o.apiBase, fileId, name), title, thumbnail: str(d.thumbnail_url), headers: [], source: 'file' };
+    // The server says when it delivered a lower resolution than asked (task #6134).
+    const note = str(obj(d.quality_note).message);
+    if (fileId) return { kind: 'ok', url: downloadLocalUrl(o.apiBase, fileId, name), title, thumbnail: str(d.thumbnail_url), headers: [], source: 'file', ...(note ? { note } : {}) };
     const direct = absolute(o.apiBase, str(d.direct_mp4_url));
-    if (direct) return { kind: 'ok', url: direct, title, thumbnail: str(d.thumbnail_url), headers: headerList(d.http_headers ?? d.headers), source: 'direct' };
+    if (direct) return { kind: 'ok', url: direct, title, thumbnail: str(d.thumbnail_url), headers: headerList(d.http_headers ?? d.headers), source: 'direct', ...(note ? { note } : {}) };
     return { kind: 'error', code: 'server_fetch_failed', message: '' };
   }
   const det = obj(d.detail);

@@ -1,6 +1,6 @@
 [package]
 name = "vidgrab-desktop"
-version = "0.9.0"
+version = "0.9.1"
 description = "VidGrab desktop client (Phase 32C, stage C1)"
 edition = "2021"
 rust-version = "1.88"

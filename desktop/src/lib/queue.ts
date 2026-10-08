@@ -206,6 +206,7 @@ async function serverArgs(item: QueueItem) {
     r = { v: out, at: Date.now() };
     serverLinks.set(item.id, r);
     patch(item.id, { title: out.title || item.title, thumbnail: item.thumbnail ?? out.thumbnail });
+    if (out.note) toast('info', `${out.title || item.title}: ${out.note}`); // server's own sentence (task #6134)
   }
   return {
     url: r.v.url,

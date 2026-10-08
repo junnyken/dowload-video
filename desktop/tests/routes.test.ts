@@ -192,3 +192,11 @@ test('fetch-link refusals and errors', () => {
   assert.deepEqual(parseFetchLink(200, { success: true }, o), { kind: 'error', code: 'server_fetch_failed', message: '' });
   assert.equal(parseFetchLink(200, null, o).kind, 'error');
 });
+
+test('fetch-link: the server quality note reaches the app', () => {
+  const o = { apiBase: API, audioOnly: false, fallbackTitle: 'T' };
+  const ok = parseFetchLink(200, { success: true, local_file_id: 'a.mp4', quality_note: { message: 'Video này không có bản 1080p. Đã tải bản 716p.' } }, o);
+  assert.ok(ok.kind === 'ok' && ok.note === 'Video này không có bản 1080p. Đã tải bản 716p.');
+  const plain = parseFetchLink(200, { success: true, local_file_id: 'a.mp4', quality_note: null }, o);
+  assert.ok(plain.kind === 'ok' && !('note' in plain));
+});
