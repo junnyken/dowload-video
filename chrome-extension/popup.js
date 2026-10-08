@@ -2,6 +2,16 @@ const DEFAULT_API_BASE = 'https://dvid-api.vibe1.tinhgon.xyz';
 const WEB_BASE = 'https://dvid.vibe1.tinhgon.xyz';
 let API_BASE = DEFAULT_API_BASE;
 
+// Every call to our API carries the sign-in token when there is one: the
+// server caps guests at 1080p and 5 downloads/day, so a signed-in user's
+// request sent without it was served as a guest's (08/10, task #6148).
+async function vgAuthHeaders(extra = {}) {
+  try {
+    const r = await chrome.storage.local.get('vg_auth_token');
+    return r.vg_auth_token ? { ...extra, Authorization: `Bearer ${r.vg_auth_token}` } : extra;
+  } catch { return extra; }
+}
+
 // Mirrors normalizeApiBase() in background.js. The Settings field used to
 // accept anything starting with "http", including plain-http hosts — and the
 // value syncs across every browser on the account. Require https (http only
@@ -136,7 +146,7 @@ function startJobPolling(batchId, maxVideos) {
 
   const poll = async () => {
     try {
-      const resp = await fetch(`${API_BASE}/api/v1/jobs/${batchId}`);
+      const resp = await fetch(`${API_BASE}/api/v1/jobs/${batchId}`, { headers: await vgAuthHeaders() });
       if (!resp.ok) { _chJobPollTimer = setTimeout(poll, nextDelay()); return; }
       const data = await resp.json();
       const jobs = (data.jobs || []).filter(j => j.original_url !== 'batch_zip');
@@ -860,7 +870,7 @@ function renderAiAnalyzeResults(result) {
 async function pollAiAnalysis(jobId, attempt = 0) {
   const box = document.getElementById('ai-analyze-results');
   try {
-    const res = await fetch(`${API_BASE}/api/v1/analyze/${jobId}`);
+    const res = await fetch(`${API_BASE}/api/v1/analyze/${jobId}`, { headers: await vgAuthHeaders() });
     const data = await res.json();
     if (data.status === 'done' || data.status === 'cached') {
       renderAiAnalyzeResults(data);
@@ -892,7 +902,7 @@ document.getElementById('action-ai-analyze')?.addEventListener('click', async ()
   try {
     const res = await fetch(`${API_BASE}/api/v1/analyze-media`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await vgAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         url: _lastDownloadData.original_url || _aiFileId,
         media_path: _aiFileId,
@@ -1399,7 +1409,7 @@ document.getElementById('ch-scrape-btn').addEventListener('click', async () => {
     document.getElementById('ch-btn-text').textContent = 'Đang lấy dữ liệu Spotify...';
     status.textContent = 'Đang gọi API Spotify...';
     try {
-      const res = await fetch(`${API_BASE}/api/v1/fetch-spotify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: chUrl }) });
+      const res = await fetch(`${API_BASE}/api/v1/fetch-spotify`, { method: 'POST', headers: await vgAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ url: chUrl }) });
       const data = await res.json();
       if (data.success && data.tracks) { _spotifyTracksCache = data.tracks.map(t => t.search_query); renderSpotifyPlaylist(data); }
       else throw new Error(data.detail || 'Lỗi server');
@@ -1416,7 +1426,7 @@ document.getElementById('ch-scrape-btn').addEventListener('click', async () => {
     const batchDiv = document.getElementById('ch-batch-info');
     try {
       const payload = { urls, quality: 'video', remove_watermark: true, channel_mode: true, max_videos: _chMaxVideos };
-      const resp = await fetch(`${API_BASE}/api/v1/bulk-download`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const resp = await fetch(`${API_BASE}/api/v1/bulk-download`, { method: 'POST', headers: await vgAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(payload) });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
       if (data.success) {
@@ -1468,7 +1478,7 @@ document.getElementById('ch-send-btn').addEventListener('click', async () => {
       max_videos: isGeneric ? _chMaxVideos : (urls.length || 20),
     };
     const resp = await fetch(`${API_BASE}/api/v1/bulk-download`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      method: 'POST', headers: await vgAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(payload),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();

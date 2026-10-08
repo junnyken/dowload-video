@@ -421,7 +421,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       continue;
     }
     try {
-      const resp = await fetch(`${base}/api/v1/jobs/${batchId}`);
+      const resp = await fetch(`${base}/api/v1/jobs/${batchId}`, { headers: await authHeaders() });
       if (!resp.ok) continue;
       const data = await resp.json();
       const jobs = (data.jobs || []).filter((j) => j.original_url !== 'batch_zip');
@@ -675,7 +675,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         const resp = await fetch(`${base}/api/v1/fetch-link`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(body),
           signal: controller.signal,
         });
@@ -730,7 +730,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         const resp = await fetch(target.toString(), {
           method: msg.method || 'POST',
-          headers: msg.headers || { 'Content-Type': 'application/json' },
+          // our own API only (checked above) — a signed-in user is not a guest
+          headers: await authHeaders(msg.headers || { 'Content-Type': 'application/json' }),
           body: msg.body ? JSON.stringify(msg.body) : undefined,
         });
         const data = await resp.json();
@@ -823,7 +824,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const user_cookies_b64 = await getEphemeralCookiesB64(msg.url);
         const resp = await fetch(`${base}/api/v1/fetch-link`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ url: msg.url, quality: 'video', remove_watermark: true, user_cookies_b64 }),
         });
         const data = await resp.json();
@@ -892,7 +893,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     const user_cookies_b64 = await getEphemeralCookiesB64(targetUrl);
     const resp = await fetch(`${base}/api/v1/fetch-link`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ url: targetUrl, quality: isMP3 ? 'mp3_320' : 'video', remove_watermark: true, user_cookies_b64 }),
       signal: controller.signal,
     });
