@@ -777,7 +777,7 @@ async def fetch_link(
             _yt_quota_id = None  # nothing to refund
             _msg = (f"Bạn đã đạt giới hạn {_lim} video YouTube hôm nay."
                     if user_id else
-                    "Khách chỉ tải được 1 video YouTube/ngày. Vui lòng đăng nhập để tải nhiều hơn.")
+                    f"Khách tải được {_lim} video YouTube/ngày. Vui lòng đăng nhập để tải nhiều hơn.")
             raise HTTPException(status_code=429, detail={"error": "youtube_quota_exceeded", "message": _msg})
 
         # Valve: site-wide daily budget ceiling (protects proxy spend).
