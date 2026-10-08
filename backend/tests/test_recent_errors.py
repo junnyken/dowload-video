@@ -16,7 +16,9 @@ import json
 import fakeredis
 import pytest
 
+from app.api.admin import verify_admin   # bound at import, like the router (a test reloads app.api.admin)
 from app.core import recent_errors as re_
+from app.main import app as fastapi_app
 from tests.test_fetch_link_uuid_scope import route  # noqa: F401 — fixture
 
 
@@ -149,13 +151,11 @@ def test_unhandled_exception_is_kept_with_its_location(app, route, monkeypatch):
 
 def test_admin_errors_returns_recent_attempts(app, route, monkeypatch):
     re_.record(platform="douyin", status=503, error_code="temporary_blocked", reason="r1")
-    from app.api import admin
-    from app.main import app as fastapi_app
-    fastapi_app.dependency_overrides[admin.verify_admin] = lambda: {"id": "admin"}
+    fastapi_app.dependency_overrides[verify_admin] = lambda: None
     try:
         r = app.get("/api/v1/admin/errors")
     finally:
-        fastapi_app.dependency_overrides.pop(admin.verify_admin, None)
+        fastapi_app.dependency_overrides.pop(verify_admin, None)
     assert r.status_code == 200, r.text[:300]
     rows = r.json()["recent_attempts"]
     assert rows and rows[0]["platform"] == "douyin" and rows[0]["reason"] == "r1"
