@@ -5,6 +5,9 @@ Desktop client API (VidGrab Desktop C1)
   GET  /client/history   — the signed-in user's own rows (limit<=200, `before` cursor on createdAt)
   GET  /client/version   — update info from env, no auth; + signed "policy"
                            when CLIENT_QUOTA_SIGNING_KEY is set (PLAN-32E P3)
+  GET  /client/update/{target}/{arch}/{current_version}
+                         — in-app updater (task #6205): 204, or the signed
+                           latest GitHub Release in Tauri v2 format
 
 Both /client/history routes sit behind CLIENT_API_ENABLED (default OFF, read
 at call time) and answer 503 {detail, error_code:"client_api_disabled"} when
@@ -21,7 +24,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.auth_middleware import get_required_user
@@ -244,6 +247,23 @@ async def get_client_version(request: Request):
     if signed:
         out["policy"] = signed
     return out
+
+
+@router.get("/client/update/{target}/{arch}/{current_version}")
+@limiter.limit("60/minute")
+async def get_client_update(request: Request, target: str, arch: str, current_version: str):
+    """Task #6205: the app's in-app updater (Tauri v2 dynamic update server).
+    204 = nothing to install; 200 {version, notes, pub_date?, url, signature}
+    where url is the latest GitHub Release's installer and signature the
+    content of its .sig asset (desktop_release.update_offer). No auth, never
+    gated (update_gate.ALWAYS_OPEN_PREFIXES): an old app must be able to
+    update. The app verifies the signature against its built-in public key."""
+    import asyncio  # noqa: PLC0415
+    from app.core import desktop_release  # noqa: PLC0415
+    offer = await asyncio.to_thread(desktop_release.update_offer, target, arch, current_version)
+    if not offer:
+        return Response(status_code=204)
+    return offer
 
 
 def _signed_policy(min_supported: str) -> Optional[str]:

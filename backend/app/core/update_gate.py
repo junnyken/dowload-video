@@ -6,8 +6,9 @@ an enforced daily allowance can be dodged by staying on an old build. When
 CLIENT_UPDATE_GATE_ENABLED is on, requests from the app to the app routes
 (/api/v1/client/*, /api/v1/fetch-link) that carry a missing or too-low
 X-VG-Client answer 426 {error_code: "update_required", minSupported, latest,
-downloadUrl}. GET /api/v1/client/version is always allowed: the app must
-still learn what to install.
+downloadUrl}. GET /api/v1/client/version and the in-app updater's
+/api/v1/client/update/... (task #6205) are always allowed: the app must still
+learn what to install, and install it.
 
 "From the app" = Origin of the app's webview (tauri.localhost) or
 X-VG-Source: desktop. The website sends neither, so it is never gated.
@@ -24,6 +25,8 @@ from starlette.responses import JSONResponse
 APP_ORIGINS = ("http://tauri.localhost", "https://tauri.localhost", "tauri://localhost")
 GATED_PREFIXES = ("/api/v1/client/", "/api/v1/fetch-link")
 ALWAYS_OPEN = ("/api/v1/client/version",)
+# Task #6205: the in-app updater's endpoint — a too-old app must still update.
+ALWAYS_OPEN_PREFIXES = ("/api/v1/client/update/",)
 _VER = re.compile(r"^\s*v?(\d{1,4})\.(\d{1,4})\.(\d{1,4})")
 
 
@@ -58,7 +61,7 @@ def should_gate(request: Request) -> bool:
     if not gate_enabled() or request.method == "OPTIONS":
         return False
     path = request.url.path
-    if path in ALWAYS_OPEN or not path.startswith(GATED_PREFIXES):
+    if path in ALWAYS_OPEN or path.startswith(ALWAYS_OPEN_PREFIXES) or not path.startswith(GATED_PREFIXES):
         return False
     return from_app(request) and too_old(request)
 
