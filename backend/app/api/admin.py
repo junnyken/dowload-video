@@ -2386,6 +2386,29 @@ async def cookie_pool_remove(req: CookieRemoveRequest, request: Request, _=Depen
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class CookieRemoveBatchRequest(BaseModel):
+    platform: str
+    hashes: List[str]
+
+
+@router.post("/cookies/remove-batch")
+async def cookie_pool_remove_batch(req: CookieRemoveBatchRequest, request: Request, _=Depends(verify_admin)):
+    """Remove several cookies of one platform by hash (task #6223: select
+    rows → delete; 'delete every rejected cookie')."""
+    if req.platform not in _VALID_PLATFORMS:
+        raise HTTPException(status_code=400, detail=f"Platform must be one of: {_VALID_PLATFORMS}")
+    if not req.hashes or len(req.hashes) > 200:
+        raise HTTPException(status_code=400, detail="hashes: 1–200 items")
+    from app.core.cookie_pool import remove_cookies_by_hash
+    out = remove_cookies_by_hash(req.platform, req.hashes)
+    log_admin_action(
+        request, "admin.cookie.removed_batch",
+        resource_type="cookie_pool", resource_id=req.platform,
+        metadata={"removed": len(out["removed"]), "missing": len(out["missing"]), "pool_size": out["pool_size"]},
+    )
+    return {"success": True, "platform": req.platform, **out}
+
+
 @router.post("/cookies/retest/{platform}/{cookie_hash}")
 async def cookie_pool_retest(
     platform: str, cookie_hash: str, request: Request, _=Depends(verify_admin),

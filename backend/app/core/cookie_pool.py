@@ -652,6 +652,25 @@ def remove_cookie(platform: str, index: int) -> int:
     return rc.llen(pool_key)
 
 
+def remove_cookies_by_hash(platform: str, hashes) -> dict:
+    """Remove every pool cookie whose hash is in `hashes` (task #6223).
+    By hash, not index: removing several by index shifts the ones after the
+    first and deletes the wrong cookies. Unknown hashes are reported, never
+    an error. Returns {"removed": [...], "missing": [...], "pool_size": n}."""
+    rc = get_redis()
+    pool_key = f"cookie_pool:{platform}"
+    wanted = {str(h).strip() for h in (hashes or []) if str(h).strip()}
+    removed = []
+    for c in rc.lrange(pool_key, 0, -1):
+        h = _hash(c)
+        if h in wanted and h not in removed:
+            rc.lrem(pool_key, 0, c)
+            for k in ("cookie_meta", "cookie_health", "cookie_cooldown", "cookie_lastused"):
+                rc.delete(f"{k}:{platform}:{h}")
+            removed.append(h)
+    return {"removed": removed, "missing": sorted(wanted - set(removed)), "pool_size": rc.llen(pool_key)}
+
+
 def get_expiry_report(platform: str) -> list[dict]:
     rc = get_redis()
     cookies = rc.lrange(f"cookie_pool:{platform}", 0, -1)
