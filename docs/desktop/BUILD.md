@@ -158,6 +158,10 @@ npm ci
 node scripts/fetch-binaries.mjs --target x86_64-pc-windows-msvc
 npm run tauri -- build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis
 ```
+Since 0.11.0 (task #6205) a release build also needs `VIDGRAB_CLAIM_PUBKEYS`
+(P3-KEY-ROTATION.md) and the updater key in `TAURI_SIGNING_PRIVATE_KEY` +
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; it then writes `…_x64-setup.exe.sig`
+next to the installer. See UPDATER.md §3.
 Output: `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/VidGrab_0.1.0_x64-setup.exe`
 (101 MiB; installer is unsigned — SmartScreen shows "Windows protected your PC",
 choose More info → Run anyway). Linker warnings `LNK4099` (missing Microsoft

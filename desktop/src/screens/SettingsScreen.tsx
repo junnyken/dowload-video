@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Check, Copy, FolderOpen, LogIn, LogOut, RefreshCw, ShieldCheck } from 'lucide-react';
-import { Badge, Button, ScreenHeader, Select, Spinner, Toggle } from '../components/ui';
+import { Check, Copy, Download, FolderOpen, LogIn, LogOut, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Badge, Button, ProgressBar, ScreenHeader, Select, Spinner, Toggle } from '../components/ui';
 import { SyncStatus } from '../components/SyncStatus';
 import { deviceInfo, type DeviceInfo } from '../lib/device';
 import { CopyLink } from '../components/CopyLink';
@@ -8,12 +8,13 @@ import { PlatformAccounts } from '../components/PlatformAccounts';
 import { settings, updateSettings, ensureOutDir, type Quality, type Theme } from '../lib/settings';
 import { QUALITY_LABEL } from '../lib/quality';
 import { auth, signOut } from '../lib/auth';
-import { api } from '../lib/tauri';
+import { api, onUpdateProgress } from '../lib/tauri';
 import { apiFetch } from '../lib/http';
 import { openSignIn, toast } from '../lib/ui';
 import { versionLess } from '../lib/format';
 import { errorMessage, toAppError } from '../lib/errors';
 import { WEBSITE_URL } from '../lib/config';
+import { inAppVersion, progressPercent, updaterMissing, type InAppProgress } from '../lib/update-core';
 import type { ClientVersionInfo, ToolVersions } from '../lib/types';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -46,6 +47,12 @@ export function SettingsScreen() {
   const [checking, setChecking] = useState(false);
   const [checkMsg, setCheckMsg] = useState<string | null>(null);
   const [device, setDevice] = useState<DeviceInfo | null>(null);
+  // In-app update (task #6205). `inApp` = the version Rust offers to install,
+  // null when there is none or this build cannot update itself.
+  const [inApp, setInApp] = useState<string | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [installProgress, setInstallProgress] = useState<InAppProgress | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
   const [codeCopied, setCodeCopied] = useState(false);
   async function copyCode() {
     if (!device) return;
@@ -63,9 +70,39 @@ export function SettingsScreen() {
     api.toolVersions().then(setTools).catch(() => setTools(null));
   }, []);
 
+  const checkInApp = useCallback(async () => {
+    try {
+      const [offer, current] = await Promise.all([api.updateCheck(), api.getVersion()]);
+      setInApp(inAppVersion(current, offer));
+    } catch (e) {
+      // updater_unavailable / not_in_app: behave as before 0.11 (manual link).
+      // Any other failure (offline, endpoint down) also leaves only the link.
+      const code = toAppError(e).code;
+      if (!updaterMissing(code)) console.warn('update_check failed:', code);
+      setInApp(null);
+    }
+  }, []);
+
+  async function installNow() {
+    setInstalling(true);
+    setInstallError(null);
+    setInstallProgress(null);
+    const off = await onUpdateProgress(setInstallProgress);
+    try {
+      // On success the app exits and the installer starts the new version.
+      await api.updateInstall();
+    } catch (e) {
+      setInstallError(errorMessage(toAppError(e).code));
+      setInstalling(false);
+    } finally {
+      off();
+    }
+  }
+
   const check = useCallback(async () => {
     setChecking(true);
     setCheckMsg(null);
+    void checkInApp();
     try {
       const res = await apiFetch<ClientVersionInfo>('/api/v1/client/version');
       if (res.status !== 200 || !res.data?.latest) throw { code: 'server' };
@@ -97,6 +134,8 @@ export function SettingsScreen() {
   }
 
   const newer = !!(latest && version && versionLess(version, latest.latest));
+  const offered = inApp ?? (newer ? latest!.latest : null);
+  const percent = progressPercent(installProgress);
 
   async function pick() {
     try {
@@ -188,15 +227,41 @@ export function SettingsScreen() {
           </Section>
 
           <Section title="Thông tin phiên bản">
-            <Row label="VidGrab" hint={newer ? undefined : latest ? 'Bạn đang dùng bản mới nhất.' : undefined}>
+            <Row label="VidGrab" hint={offered ? undefined : latest ? 'Bạn đang dùng bản mới nhất.' : undefined}>
               <span className="text-sm text-fg-2">{version ?? '—'}</span>
-              {newer && <Badge tone="accent">Có bản mới {latest!.latest}</Badge>}
-              <Button size="sm" icon={checking ? <Spinner /> : <RefreshCw size={14} />} disabled={checking} onClick={() => void check()}>Kiểm tra bản mới</Button>
+              {offered && <Badge tone="accent">Có bản mới {offered}</Badge>}
+              {inApp && (
+                // wording: BA review
+                <Button size="sm" variant="primary" icon={installing ? <Spinner /> : <Download size={14} />} disabled={installing} onClick={() => void installNow()}>
+                  Cập nhật ngay
+                </Button>
+              )}
+              <Button size="sm" icon={checking ? <Spinner /> : <RefreshCw size={14} />} disabled={checking || installing} onClick={() => void check()}>Kiểm tra bản mới</Button>
             </Row>
-            {newer && (
+            {installing && (
+              // wording: BA review
+              <div className="space-y-2 px-4 py-3 text-[13px] text-fg-2">
+                <p>
+                  {percent === 100
+                    ? 'Đã tải xong. Đang cài đặt, VidGrab sẽ tự đóng và mở lại sau ít giây…'
+                    : `Đang tải bản cập nhật ${inApp ?? ''}${percent !== null ? ` — ${percent}%` : '…'}`}
+                </p>
+                <ProgressBar percent={percent} indeterminate={percent === null} />
+              </div>
+            )}
+            {installError && (
+              // wording: BA review
+              <div className="flex flex-wrap items-center gap-2 bg-danger-soft px-4 py-3 text-[13px] text-fg-2">
+                <span>Không cập nhật được: {installError}</span>
+                {latest?.downloadUrl && <><span>Tải bản mới thủ công tại:</span><CopyLink url={latest.downloadUrl} /></>}
+              </div>
+            )}
+            {offered && (
               <div className="flex flex-wrap items-center gap-2 bg-accent-soft px-4 py-3 text-[13px] text-fg-2">
-                {latest!.notes && <span>{latest!.notes}</span>}
-                {latest!.downloadUrl && <><span>Tải bản mới tại:</span><CopyLink url={latest!.downloadUrl} /></>}
+                {latest?.notes && <span>{latest.notes}</span>}
+                {/* wording: BA review */}
+                {inApp && !installing && <span>Bấm “Cập nhật ngay”: VidGrab tự tải, kiểm tra chữ ký rồi cài và mở lại; lượt tải đang chạy sẽ được tạm dừng.</span>}
+                {latest?.downloadUrl && <><span>Tải bản mới tại:</span><CopyLink url={latest.downloadUrl} /></>}
               </div>
             )}
             {checkMsg && <p className="px-4 py-3 text-[13px] text-fg-muted">Không kiểm tra được bản mới: {checkMsg}</p>}

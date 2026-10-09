@@ -62,3 +62,33 @@ export function installLink(downloadUrl: string, website: string, allowedHosts: 
   } catch { /* empty or malformed */ }
   return `${website.replace(/\/$/, '')}/download`;
 }
+
+// ---- In-app update (task #6205) --------------------------------------------
+// Rust's update_check / update_install (src-tauri/src/app_update.rs). The
+// webview never sees the download URL or signature, only this.
+
+export type InAppOffer = { available: boolean; version?: string; notes?: string };
+export type InAppProgress = { downloaded: number; total?: number | null; percent?: number | null };
+
+/** The version to offer with "Cập nhật ngay", or null: only a well-formed
+ * answer naming a version newer than the running one. */
+export function inAppVersion(appVersion: string | null, offer: unknown): string | null {
+  const o = (offer && typeof offer === 'object' ? offer : {}) as Record<string, unknown>;
+  const v = str(o.version);
+  if (o.available !== true || !appVersion || !/^v?\d+\.\d+\.\d+$/.test(v)) return null;
+  return versionLess(appVersion, v) ? v.replace(/^v/, '') : null;
+}
+
+/** 0..100, or null when the size is unknown. */
+export function progressPercent(p: InAppProgress | null): number | null {
+  if (!p) return null;
+  if (typeof p.percent === 'number' && Number.isFinite(p.percent)) return Math.max(0, Math.min(100, Math.round(p.percent)));
+  if (typeof p.total === 'number' && p.total > 0) return Math.max(0, Math.min(100, Math.floor((p.downloaded / p.total) * 100)));
+  return null;
+}
+
+/** The updater cannot run here (dev browser, build without the feature):
+ * the UI then behaves as before 0.11 (manual link only). */
+export function updaterMissing(code: string | null | undefined): boolean {
+  return code === 'updater_unavailable' || code === 'not_in_app';
+}

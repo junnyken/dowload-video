@@ -1,7 +1,7 @@
 // PLAN-32E P1 step 3 (task #6125): when the app must block for an update.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fromApiAnswer, fromVersionInfo, installLink, versionLess } from '../src/lib/update-core.ts';
+import { fromApiAnswer, fromVersionInfo, inAppVersion, installLink, progressPercent, updaterMissing, versionLess } from '../src/lib/update-core.ts';
 
 const HOSTS = ['dvid.vibe1.tinhgon.xyz', 'dvid-api.vibe1.tinhgon.xyz'];
 const SITE = 'https://dvid.vibe1.tinhgon.xyz';
@@ -41,4 +41,33 @@ test('install link: allowed https host only, else the website download page', ()
   assert.equal(installLink('https://evil.example/x.exe', SITE, HOSTS), `${SITE}/download`);
   assert.equal(installLink('http://dvid.vibe1.tinhgon.xyz/x.exe', SITE, HOSTS), `${SITE}/download`);
   assert.equal(installLink('', SITE + '/', HOSTS), `${SITE}/download`);
+});
+
+// Task #6205: in-app update ("Cập nhật ngay").
+test('in-app offer: only a newer well-formed version is offered', () => {
+  assert.equal(inAppVersion('0.11.0', { available: true, version: '0.11.1' }), '0.11.1');
+  assert.equal(inAppVersion('0.11.0', { available: true, version: 'v0.12.0' }), '0.12.0');
+  assert.equal(inAppVersion('0.11.0', { available: true, version: '0.11.0' }), null);
+  assert.equal(inAppVersion('0.11.0', { available: true, version: '0.10.9' }), null);
+  assert.equal(inAppVersion('0.11.0', { available: false, version: '0.12.0' }), null);
+  assert.equal(inAppVersion('0.11.0', { available: true, version: '0.12.0-beta' }), null);
+  assert.equal(inAppVersion('0.11.0', { available: true }), null);
+  assert.equal(inAppVersion(null, { available: true, version: '0.12.0' }), null);
+  assert.equal(inAppVersion('0.11.0', null), null);
+});
+
+test('in-app progress percent', () => {
+  assert.equal(progressPercent(null), null);
+  assert.equal(progressPercent({ downloaded: 5, percent: 42 }), 42);
+  assert.equal(progressPercent({ downloaded: 50, total: 200 }), 25);
+  assert.equal(progressPercent({ downloaded: 500, total: 200 }), 100);
+  assert.equal(progressPercent({ downloaded: 50, total: null, percent: null }), null);
+  assert.equal(progressPercent({ downloaded: 50, total: 0 }), null);
+});
+
+test('updater missing falls back to the manual link; other errors are real errors', () => {
+  assert.equal(updaterMissing('updater_unavailable'), true);
+  assert.equal(updaterMissing('not_in_app'), true);
+  assert.equal(updaterMissing('network'), false);
+  assert.equal(updaterMissing('update_bad_signature'), false);
 });

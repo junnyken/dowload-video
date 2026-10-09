@@ -47,6 +47,8 @@ const COMMANDS: &[&str] = &[
     "cookies_status",
     "cookies_clear",
     "douyin_resolve_local",
+    "update_check",
+    "update_install",
 ];
 
 fn main() {

@@ -233,6 +233,19 @@ async function mockDouyinLocal(url: string) {
   };
 }
 
+async function mockUpdateInstall() {
+  const total = 104_857_600;
+  for (let d = 0; d <= total; d += total / 20) {
+    emit('update://progress', { downloaded: d, total, percent: Math.round((d / total) * 100) });
+    await sleep(150);
+  }
+  const fail = localStorage.getItem('mock.updateFail');
+  if (fail) throw err(fail, 'mock install failure');
+  await sleep(800);
+  location.reload(); // stands in for the restart
+  return null;
+}
+
 // ---- invoke ----------------------------------------------------------------
 let authBlob: string | null = null;
 export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promise<unknown> {
@@ -309,6 +322,12 @@ export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promi
     case 'douyin_resolve_local': return mockDouyinLocal(a.url as string);
     case 'device_info': return { hash: 'a1b2c3d4'.repeat(8), code: 'A1B2C3D4', displayName: 'PC-MOCK (Windows 11 24H2, build 26100)', source: 'machine' };
     case 'tool_versions': return { ytdlp: '2026.09.30', ffmpeg: '7.1', deno: '2.5.0' };
+    // localStorage mock.update=0.11.1 offers an in-app update; mock.updateFail=<code> makes the install fail.
+    case 'update_check': {
+      const v = localStorage.getItem('mock.update');
+      return v ? { available: true, version: v, notes: 'Bản cập nhật mô phỏng.' } : { available: false };
+    }
+    case 'update_install': return mockUpdateInstall();
   }
   throw err('unknown', `mock: unknown command ${cmd}`);
 }

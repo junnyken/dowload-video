@@ -8,6 +8,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { DeviceInfo } from './device';
 import type { CookieStatus, DouyinLocal } from './cookies-core';
+import type { InAppOffer, InAppProgress } from './update-core';
 import type { Channel, ChannelListing, DoneEvent, HistoryItem, LogEvent, ProbeResult, ProgressEvent, ToolVersions } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -89,6 +90,10 @@ export const api = {
   cookiesClear: (platform: string) => call<null>('cookies_clear', { platform }),
   // Douyin on this machine (0.7.2): a hidden Douyin page with the saved cookies resolves the direct link (Rust checks it).
   douyinResolveLocal: (url: string, debug = false) => call<DouyinLocal>('douyin_resolve_local', { url, debug }),
+  // In-app update (task #6205): Rust asks the update endpoint, verifies the
+  // signature, installs and restarts; `updater_unavailable` when not built in.
+  updateCheck: () => call<InAppOffer>('update_check'),
+  updateInstall: () => call<null>('update_install'),
 };
 
 export const onProgress = (cb: (e: ProgressEvent) => void) => on<ProgressEvent>('download://progress', cb);
@@ -97,6 +102,8 @@ export const onDone = (cb: (e: DoneEvent) => void) => on<DoneEvent>('download://
 // Tray menu "Kiểm tra kênh ngay" and the real quit (downloads must be paused within the 3 s grace).
 export const onCheckNow = (cb: () => void) => on<unknown>('channels://check-now', () => cb());
 export const onQuitting = (cb: () => void) => on<unknown>('app://quitting', () => cb());
+// In-app update download progress (task #6205).
+export const onUpdateProgress = (cb: (p: InAppProgress) => void) => on<InAppProgress>('update://progress', cb);
 // A login-<platform> window was closed (by "Xong", "Xoá" or the user).
 export const onLoginClosed = (cb: (p: { platform: string; saved?: boolean | null }) => void) =>
   on<{ platform: string; saved?: boolean | null }>('cookies://login-closed', cb);

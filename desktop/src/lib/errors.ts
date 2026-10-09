@@ -44,6 +44,9 @@ const MESSAGES: Record<string, string> = {
   // Daily allowance checked by the app itself (PLAN-32E P3, Rust start_download). wording: BA review
   claim_required: 'Không xác nhận được lượt tải với máy chủ VidGrab. Hãy kiểm tra kết nối rồi bấm Thử lại.',
   offline_grace_used: 'Không kết nối được máy chủ VidGrab và đã dùng hết lượt tải ngoại tuyến của hôm nay. Hãy kết nối Internet rồi thử lại.',
+  // In-app update (task #6205). wording: BA review
+  update_bad_signature: 'Bản cập nhật tải về không đúng chữ ký của VidGrab nên đã bị huỷ, máy của bạn không bị thay đổi gì. Hãy tải bản mới thủ công.',
+  updater_unavailable: 'Bản ứng dụng này không tự cập nhật được. Hãy tải bản mới thủ công.',
   login_link_invalid: 'Phiên đăng nhập từ trình duyệt không dùng được hoặc đã hết hạn. Hãy bấm “Đăng nhập qua trình duyệt” lần nữa.',
 };
 

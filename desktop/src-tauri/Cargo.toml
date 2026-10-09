@@ -1,6 +1,6 @@
 [package]
 name = "vidgrab-desktop"
-version = "0.10.0"
+version = "0.11.0"
 description = "VidGrab desktop client (Phase 32C, stage C1)"
 edition = "2021"
 rust-version = "1.88"
@@ -39,8 +39,10 @@ base64 = "0.22"
 ureq = { version = "3", default-features = false, features = ["rustls"] }
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
-# Off in C0 (unsigned installer, no updater key yet). Build with
-# `--features updater` once the key pair exists (stage C2).
+# In-app update (task #6205, docs/desktop/UPDATER.md). On by default since
+# 0.11.0; driven from Rust only (update_check / update_install), the webview
+# gets no updater:* permission. `--no-default-features` builds without it and
+# the Settings screen falls back to the manual download link.
 tauri-plugin-updater = { version = "2", optional = true }
 # Per-user "start with Windows" (HKCU Run key, no admin); driven from Rust only.
 tauri-plugin-autostart = "2"
@@ -48,7 +50,7 @@ tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
 
 [features]
-default = []
+default = ["updater"]
 updater = ["dep:tauri-plugin-updater"]
 
 [target.'cfg(windows)'.dependencies]

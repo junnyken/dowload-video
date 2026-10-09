@@ -29,6 +29,11 @@ pub enum Code {
     ClaimRequired,
     /// PLAN-32E P3: the API is unreachable and today's offline slots are used.
     OfflineGraceUsed,
+    /// Task #6205: this build has no in-app updater (feature `updater` off).
+    UpdaterUnavailable,
+    /// Task #6205: the downloaded update's signature did not verify.
+    #[cfg_attr(not(feature = "updater"), allow(dead_code))]
+    UpdateBadSignature,
     Unknown,
 }
 
@@ -50,6 +55,8 @@ impl Code {
             Code::CookieRequired => "cookie_required",
             Code::ClaimRequired => "claim_required",
             Code::OfflineGraceUsed => "offline_grace_used",
+            Code::UpdaterUnavailable => "updater_unavailable",
+            Code::UpdateBadSignature => "update_bad_signature",
             Code::Unknown => "unknown",
         }
     }

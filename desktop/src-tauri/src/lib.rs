@@ -12,6 +12,7 @@
 //! autostart plugins are driven only from Rust; the webview gets no
 //! permission of theirs.
 
+mod app_update;
 mod auth;
 mod browser_login;
 mod channels;
@@ -580,17 +581,58 @@ fn quit(app: &AppHandle) {
     if flags.quitting.swap(true, Ordering::SeqCst) {
         return;
     }
-    let _ = app.emit(EVENT_QUITTING, ());
     let app = app.clone();
     std::thread::spawn(move || {
-        let deadline = Instant::now() + QUIT_GRACE;
-        let jobs = app.state::<Jobs>();
-        while Instant::now() < deadline && !lock(&jobs.downloads).is_empty() {
-            std::thread::sleep(Duration::from_millis(100));
-        }
-        jobs.kill_all();
+        stop_downloads_for_exit(&app);
         app.exit(0);
     });
+}
+
+/// Tells the UI to pause downloads, gives it QUIT_GRACE, then kills whatever
+/// is still running. Blocking. Used by "Thoát" and before an app update.
+fn stop_downloads_for_exit(app: &AppHandle) {
+    let _ = app.emit(EVENT_QUITTING, ());
+    let deadline = Instant::now() + QUIT_GRACE;
+    let jobs = app.state::<Jobs>();
+    while Instant::now() < deadline && !lock(&jobs.downloads).is_empty() {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    jobs.kill_all();
+}
+
+// ---------------------------------------------------------------- self-update (task #6205)
+
+/// Asks the update endpoint whether a newer signed release exists
+/// (app_update.rs). `updater_unavailable` when built without the feature.
+#[tauri::command]
+async fn update_check(app: AppHandle) -> CmdResult<app_update::UpdateOffer> {
+    #[cfg(all(desktop, feature = "updater"))]
+    {
+        let pending = app.state::<app_update::Pending>();
+        app_update::check(&app, &pending).await
+    }
+    #[cfg(not(all(desktop, feature = "updater")))]
+    {
+        let _ = app;
+        app_update::not_enabled()
+    }
+}
+
+/// Downloads, verifies and installs the update found by `update_check`, then
+/// the app restarts as the new version (Windows: the installer relaunches it).
+#[tauri::command]
+async fn update_install(app: AppHandle) -> CmdResult<()> {
+    #[cfg(all(desktop, feature = "updater"))]
+    {
+        let pending = app.state::<app_update::Pending>();
+        let a = app.clone();
+        app_update::install(&app, &pending, move || stop_downloads_for_exit(&a)).await
+    }
+    #[cfg(not(all(desktop, feature = "updater")))]
+    {
+        let _ = app;
+        app_update::not_enabled()
+    }
 }
 
 #[cfg(desktop)]
@@ -1346,10 +1388,13 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
-            // Only with `--features updater` (stage C2, needs the key pair).
-            // The webview is never granted updater:*; checks run from Rust.
+            // Feature `updater` (default since 0.11.0, task #6205). The webview
+            // is never granted updater:*; update_check/update_install run here.
             #[cfg(all(desktop, feature = "updater"))]
-            app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+            {
+                app.handle().plugin(app_update::plugin())?;
+                app.manage(app_update::Pending::default());
+            }
 
             let db = app
                 .path()
@@ -1472,7 +1517,9 @@ pub fn run() {
             cookies_login_finish,
             cookies_status,
             cookies_clear,
-            douyin_resolve_local
+            douyin_resolve_local,
+            update_check,
+            update_install
         ])
         .run(tauri::generate_context!())
         .expect("error while running VidGrab");

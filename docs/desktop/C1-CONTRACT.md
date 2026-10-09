@@ -199,3 +199,15 @@ UTC day, same URL again = no new slot). Otherwise errors:
 `claim_required` (server reachable and requires a token) or
 `offline_grace_used`. The policy is cached in `<app data>/policy.bin`
 (re-verified on load, fresh for 1 h). Key rotation: `P3-KEY-ROTATION.md`.
+
+## 7. In-app update (0.11.0, task #6205)
+
+| Command | Args | Returns / events |
+|---|---|---|
+| `update_check` | — | `{ available: boolean, version?, notes? }` — Rust asks `GET /api/v1/client/update/{target}/{arch}/{current_version}` (204 = nothing) and keeps the answer |
+| `update_install` | — | downloads the update found by the last check, emits `update://progress` `{ downloaded, total?, percent? }`, verifies the signature with `plugins.updater.pubkey`, pauses/kills downloads (emits `app://quitting`), runs the NSIS installer (passive, `/R`) and exits. Errors: `update_bad_signature`, `network`, `unknown` |
+
+Both answer `updater_unavailable` in a build without the `updater` feature; the
+UI then shows only the manual link. The webview gets no `updater:*` /
+`process:*` permission. Server contract, key handling and release steps:
+`UPDATER.md`.
