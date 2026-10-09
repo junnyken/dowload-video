@@ -4,6 +4,7 @@ import {
   fetchCookieList,
   fetchCookieStatus,
   deleteCookie,
+  removeCookiesBatch,
   addCookie,
   triggerCookieHealthCheck,
   fetchStorageStatus,
@@ -35,6 +36,17 @@ export function useDeleteCookie(platform: string) {
   return useMutation({
     mutationFn: (index: number) => deleteCookie(platform, index),
     onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.cookieList(platform) }),
+  })
+}
+
+export function useRemoveCookiesBatch(platform: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (hashes: string[]) => removeCookiesBatch(platform, hashes),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: adminKeys.cookieList(platform) })
+      qc.invalidateQueries({ queryKey: ['admin', 'cookies', 'status'] })
+    },
   })
 }
 

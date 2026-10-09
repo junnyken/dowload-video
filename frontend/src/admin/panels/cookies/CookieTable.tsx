@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { cn } from '../../utils/cn'
 import { EmptyState } from '../../shared/EmptyState'
 import { ErrorState } from '../../shared/ErrorState'
@@ -102,6 +103,7 @@ function CooldownCell({ secs, status }: { secs: number; status: CookieItem['stat
 // ─── Column definitions ────────────────────────────────────────────────────────
 
 const COLS = [
+  { key: 'select',       label: '',                 w: 'w-10'          },
   { key: 'platform',      label: 'Platform',         w: 'min-w-[130px]' },
   { key: 'accountLabel',  label: 'Account Label',    w: 'min-w-[160px]' },
   { key: 'status',        label: 'Status',           w: 'min-w-[110px]' },
@@ -124,6 +126,9 @@ interface CookieTableProps {
   onRetry?: () => void
   onAction?: (id: string, action: CookieAction) => void
   onAddCookie?: () => void
+  selectedHashes?: Set<string>
+  onToggleSelect?: (hash: string) => void
+  onToggleSelectAll?: (hashes: string[], select: boolean) => void
 }
 
 export function CookieTable({
@@ -133,7 +138,19 @@ export function CookieTable({
   onRetry,
   onAction,
   onAddCookie,
+  selectedHashes,
+  onToggleSelect,
+  onToggleSelectAll,
 }: CookieTableProps) {
+  const selectable = !!selectedHashes && !!onToggleSelect
+  const visibleHashes = cookies.filter(c => !!c.hash).map(c => c.hash as string)
+  const selectedVisible = selectedHashes ? visibleHashes.filter(h => selectedHashes.has(h)).length : 0
+  const allSelected = visibleHashes.length > 0 && selectedVisible === visibleHashes.length
+  const headRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (headRef.current) headRef.current.indeterminate = selectedVisible > 0 && !allSelected
+  }, [selectedVisible, allSelected])
+
   function handleAction(id: string, action: CookieAction) {
     onAction?.(id, action)
   }
@@ -192,7 +209,19 @@ export function CookieTable({
                   col.key === 'actions' && 'text-center',
                 )}
               >
-                {col.label}
+                {col.key === 'select' ? (
+                  selectable && (
+                    <input
+                      ref={headRef}
+                      type="checkbox"
+                      checked={allSelected}
+                      disabled={visibleHashes.length === 0}
+                      onChange={() => onToggleSelectAll?.(visibleHashes, !allSelected)}
+                      aria-label="Chọn tất cả cookie đang hiển thị"
+                      className="h-4 w-4 cursor-pointer accent-accent"
+                    />
+                  )
+                ) : col.label}
               </th>
             ))}
           </tr>
@@ -209,45 +238,60 @@ export function CookieTable({
                 className={cn(
                   'transition-colors hover:bg-surface-2',
                   !isLast && 'border-b border-line',
-                  isDim && 'opacity-60',
+                  selectable && cookie.hash && selectedHashes?.has(cookie.hash) && 'bg-surface-2',
                 )}
               >
+                {/* Chọn (không làm mờ để luôn bấm được) */}
+                <td className="py-2.5 pl-4 pr-1">
+                  {selectable && (
+                    <input
+                      type="checkbox"
+                      checked={!!cookie.hash && selectedHashes!.has(cookie.hash)}
+                      disabled={!cookie.hash}
+                      onChange={() => cookie.hash && onToggleSelect!(cookie.hash)}
+                      aria-label={`Chọn cookie ${cookie.accountLabel}`}
+                      title={cookie.hash ? undefined : 'Cookie này không có mã hash nên không xoá hàng loạt được'}
+                      className="h-4 w-4 cursor-pointer accent-accent disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  )}
+                </td>
+
                 {/* Platform */}
-                <td className="py-2.5 pl-4 pr-3">
+                <td className={cn('py-2.5 pl-3 pr-3', isDim && 'opacity-60')}>
                   <PlatBadge platform={cookie.platform} />
                 </td>
 
                 {/* Account Label */}
-                <td className="py-2.5 pr-3">
+                <td className={cn('py-2.5 pr-3', isDim && 'opacity-60')}>
                   <span className="font-mono text-[11px] text-fg-2">{cookie.accountLabel}</span>
                 </td>
 
                 {/* Status */}
-                <td className="py-2.5 pr-3">
+                <td className={cn('py-2.5 pr-3', isDim && 'opacity-60')}>
                   <CookieStatusPill status={cookie.status} dot />
                 </td>
 
                 {/* Health Score */}
-                <td className="py-2.5 pr-3">
+                <td className={cn('py-2.5 pr-3', isDim && 'opacity-60')}>
                   <CookieHealthBadge score={cookie.healthScore} />
                 </td>
 
                 {/* Last Success */}
-                <td className="py-2.5 pr-3">
+                <td className={cn('py-2.5 pr-3', isDim && 'opacity-60')}>
                   <span className="font-mono text-[11px] text-fg-muted">
                     {cookie.lastSuccessAt}
                   </span>
                 </td>
 
                 {/* Last Fail */}
-                <td className="py-2.5 pr-3">
+                <td className={cn('py-2.5 pr-3', isDim && 'opacity-60')}>
                   <span className={cn('font-mono text-[11px]', cookie.lastFailAt ? 'text-danger' : 'text-fg-muted')}>
                     {cookie.lastFailAt ?? '—'}
                   </span>
                 </td>
 
                 {/* Fail Count */}
-                <td className="py-2.5 pr-3">
+                <td className={cn('py-2.5 pr-3', isDim && 'opacity-60')}>
                   <span
                     className={cn(
                       'font-mono text-xs font-semibold tabular-nums',
@@ -265,12 +309,12 @@ export function CookieTable({
                 </td>
 
                 {/* Cooldown */}
-                <td className="py-2.5 pr-3">
+                <td className={cn('py-2.5 pr-3', isDim && 'opacity-60')}>
                   <CooldownCell secs={cookie.cooldownRemainingSec} status={cookie.status} />
                 </td>
 
                 {/* Hạn · ngày thêm */}
-                <td className="py-2.5 pr-3">
+                <td className={cn('py-2.5 pr-3', isDim && 'opacity-60')}>
                   {(() => {
                     const life = describeLifetime(cookie.expiresAt, Math.floor(Date.now() / 1000))
                     const added = formatAddedDate(cookie.addedAt)
@@ -295,7 +339,7 @@ export function CookieTable({
                 </td>
 
                 {/* Kiểm tra thật */}
-                <td className="py-2.5 pr-3">
+                <td className={cn('py-2.5 pr-3', isDim && 'opacity-60')}>
                   <LiveTestCell test={cookie.liveTest} />
                 </td>
 

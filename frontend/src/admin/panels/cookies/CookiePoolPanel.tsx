@@ -109,6 +109,9 @@ interface CookiePoolPanelProps {
   onRetry?: () => void
   onAction?: (id: string, action: CookieAction) => void
   onAdd?: (data: AddCookieFormData) => void
+  selectedHashes?: Set<string>
+  onToggleSelect?: (hash: string) => void
+  onToggleSelectAll?: (hashes: string[], select: boolean) => void
 }
 
 export function CookiePoolPanel({
@@ -118,6 +121,9 @@ export function CookiePoolPanel({
   onRetry,
   onAction,
   onAdd,
+  selectedHashes,
+  onToggleSelect,
+  onToggleSelectAll,
 }: CookiePoolPanelProps) {
   const [search, setSearch]     = useState('')
   const [platform, setPlatform] = useState('all')
@@ -273,6 +279,9 @@ export function CookiePoolPanel({
           onRetry={onRetry}
           onAction={handleAction}
           onAddCookie={() => setModalOpen(true)}
+          selectedHashes={selectedHashes}
+          onToggleSelect={onToggleSelect}
+          onToggleSelectAll={onToggleSelectAll}
         />
       </Card>
 

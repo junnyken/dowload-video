@@ -51,6 +51,19 @@ export function deleteCookie(platform: string, index: number): Promise<CookieRem
   })
 }
 
+export interface CookieRemoveBatchResponse {
+  success: boolean
+  platform: string
+  removed: string[]
+  missing: string[]
+  pool_size: number
+}
+
+/** Xoá nhiều cookie một lần theo hash (không bao giờ gửi giá trị cookie). */
+export function removeCookiesBatch(platform: string, hashes: string[]): Promise<CookieRemoveBatchResponse> {
+  return adminPost<CookieRemoveBatchResponse>('/cookies/remove-batch', { platform, hashes })
+}
+
 export function addCookie(
   platform: string,
   rawCookie: string,

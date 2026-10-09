@@ -37,7 +37,13 @@ export interface BatchProgress {
   summary?: string
 }
 
+export interface TestPlatformOption { platform: string; label: string; count: number }
+
 interface Props {
+  testOptions?: TestPlatformOption[]
+  testSelected?: string[]
+  testCount?: number
+  onTestSelectedChange?: (next: string[]) => void
   updatedAtMs: number
   refreshing: boolean
   onReload: () => void
@@ -47,7 +53,7 @@ interface Props {
   storage: { text: string; warn: boolean }
 }
 
-export function CookieToolbar({ updatedAtMs, refreshing, onReload, onTestAll, onStop, batch, storage }: Props) {
+export function CookieToolbar({ testOptions = [], testSelected = [], testCount, onTestSelectedChange, updatedAtMs, refreshing, onReload, onTestAll, onStop, batch, storage }: Props) {
   const running = !!batch?.running
   return (
     <div className="flex flex-col gap-2 rounded-card border border-line bg-surface px-4 py-3 shadow-card">
@@ -68,7 +74,8 @@ export function CookieToolbar({ updatedAtMs, refreshing, onReload, onTestAll, on
           disabled={running}
           className="inline-flex items-center gap-1.5 rounded-control bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-50"
         >
-          Kiểm tra tất cả
+          {/* wording: BA review */}
+          {testCount != null ? `Kiểm tra (${testCount} cookie)` : 'Kiểm tra tất cả'}
         </button>
         {running && (
           <button onClick={onStop} className="rounded-control border border-line px-3 py-1.5 text-xs font-medium text-fg-2 hover:bg-surface-2">
@@ -79,6 +86,55 @@ export function CookieToolbar({ updatedAtMs, refreshing, onReload, onTestAll, on
           {updatedAtMs > 0 ? `cập nhật lúc ${formatClock(updatedAtMs)}` : 'chưa có dữ liệu'}
         </span>
       </div>
+
+      {testOptions.length > 0 && onTestSelectedChange && (
+        <div className="flex flex-wrap items-center gap-1.5" data-testid="test-platform-picker">
+          {/* wording: BA review */}
+          <span className="text-[11px] text-fg-muted">Kiểm tra nền tảng:</span>
+          {(() => {
+            const allOn = testOptions.every(o => testSelected.includes(o.platform))
+            return (
+              <button
+                type="button"
+                disabled={running}
+                aria-pressed={allOn}
+                onClick={() => onTestSelectedChange(allOn ? [] : testOptions.map(o => o.platform))}
+                className={cn(
+                  'rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors disabled:opacity-50',
+                  allOn ? 'border-line bg-surface-2 text-fg-2' : 'border-line text-fg-muted hover:border-line-strong hover:text-fg-2',
+                )}
+              >
+                Tất cả
+              </button>
+            )
+          })()}
+          {testOptions.map(o => {
+            const on = testSelected.includes(o.platform)
+            return (
+              <label
+                key={o.platform}
+                className={cn(
+                  'inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors',
+                  on ? 'border-line bg-surface-2 text-fg-2' : 'border-line text-fg-muted hover:border-line-strong hover:text-fg-2',
+                  running && 'pointer-events-none opacity-50',
+                )}
+              >
+                <input
+                  type="checkbox"
+                  className="h-3 w-3 accent-accent"
+                  checked={on}
+                  disabled={running}
+                  onChange={() => onTestSelectedChange(
+                    on ? testSelected.filter(p => p !== o.platform) : [...testSelected, o.platform],
+                  )}
+                />
+                {o.label}
+                <span className="font-mono text-[10px] text-fg-muted">{o.count}</span>
+              </label>
+            )
+          })}
+        </div>
+      )}
 
       {batch && (
         <div className="flex flex-col gap-1" data-testid="batch-progress">
@@ -100,6 +156,56 @@ export function CookieToolbar({ updatedAtMs, refreshing, onReload, onTestAll, on
       <p className={cn('text-[11px]', storage.warn ? 'text-warning' : 'text-fg-muted')} data-testid="storage-line">
         {storage.text}
       </p>
+    </div>
+  )
+}
+
+// ─── Bulk selection bar ────────────────────────────────────────────────────────
+
+interface BulkBarProps {
+  selectedCount: number
+  rejectedCount: number
+  pendingKey: 'selected' | 'rejected' | null
+  busy: boolean
+  noHashCount: number
+  onDeleteSelected: () => void
+  onDeleteRejected: () => void
+  onClear: () => void
+}
+
+export function CookieBulkBar({
+  selectedCount, rejectedCount, pendingKey, busy, noHashCount,
+  onDeleteSelected, onDeleteRejected, onClear,
+}: BulkBarProps) {
+  if (selectedCount === 0 && rejectedCount === 0) return null
+  const dangerCls = 'rounded-control bg-danger px-3 py-1.5 text-xs font-semibold text-danger-fg transition-colors hover:opacity-90 disabled:opacity-50'
+  const dangerOutline = 'rounded-control border border-danger/30 bg-danger-soft px-3 py-1.5 text-xs font-semibold text-danger transition-colors hover:opacity-90 disabled:opacity-50'
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface px-4 py-3 shadow-card" data-testid="bulk-bar">
+      {/* wording: BA review */}
+      {selectedCount > 0 && (
+        <>
+          <span className="text-xs font-medium text-fg">Đã chọn {selectedCount}</span>
+          <button onClick={onDeleteSelected} disabled={busy} className={dangerCls}>
+            {pendingKey === 'selected' ? `Chắc chắn xoá ${selectedCount} cookie?` : 'Xoá đã chọn'}
+          </button>
+          <button onClick={onClear} disabled={busy} className="rounded-control border border-line px-3 py-1.5 text-xs font-medium text-fg-2 hover:bg-surface-2 disabled:opacity-50">
+            Bỏ chọn
+          </button>
+        </>
+      )}
+      {/* wording: BA review */}
+      {rejectedCount > 0 && (
+        <button onClick={onDeleteRejected} disabled={busy} className={cn(dangerOutline, selectedCount > 0 && 'sm:ml-auto')}>
+          {pendingKey === 'rejected' ? `Chắc chắn xoá ${rejectedCount} cookie?` : `Xoá cookie bị từ chối (${rejectedCount})`}
+        </button>
+      )}
+      {noHashCount > 0 && (
+        <p className="w-full text-[11px] text-warning">
+          {/* wording: BA review */}
+          {noHashCount} cookie không có mã hash nên không xoá hàng loạt được.
+        </p>
+      )}
     </div>
   )
 }

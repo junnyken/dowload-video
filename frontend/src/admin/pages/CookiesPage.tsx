@@ -5,12 +5,13 @@ import {
   useAdminCookieList,
   useAdminCookieStatus,
   useDeleteCookie,
+  useRemoveCookiesBatch,
   useAddCookie,
   useCookieStorageStatus,
   useCookieRetestInfo,
 } from '../hooks/useAdminCookiePool'
 import { adminKeys } from '../lib/queryKeys'
-import { CookieToolbar, TestAllConfirm, describeStorage, type BatchProgress } from '../panels/cookies/CookieToolbar'
+import { CookieToolbar, CookieBulkBar, TestAllConfirm, describeStorage, type BatchProgress } from '../panels/cookies/CookieToolbar'
 import type { CookieItem, CookieAction, AddCookieFormData, LiveTest } from '../panels/cookies/cookie.types'
 import {
   fetchCookieList, retestCookie, setCookieDisabled,
@@ -134,6 +135,17 @@ function toLiveTest(r: RetestResponse): LiveTest {
   return { state: r.status === 'not_found' ? 'error' : r.status, message: r.message, at }
 }
 
+const TEST_PLATFORMS_KEY = 'vg.cookies.testPlatforms'
+
+function loadTestPlatforms(): string[] | null {
+  try {
+    const raw = localStorage.getItem(TEST_PLATFORMS_KEY)
+    if (!raw) return null
+    const v = JSON.parse(raw)
+    return Array.isArray(v) && v.every(x => typeof x === 'string') ? v : null
+  } catch { return null }
+}
+
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms))
 const BATCH_DELAY_MS = 2000
 
@@ -163,6 +175,7 @@ export function CookiesPage() {
   const qc = useQueryClient()
   const { data, isLoading, error, refetch, dataUpdatedAt, isFetching } = useAdminCookieList(activePlatform)
   const deleteMut = useDeleteCookie(activePlatform)
+  const batchDelMut = useRemoveCookiesBatch(activePlatform)
   const addMut    = useAddCookie()
   const storageQ  = useCookieStorageStatus()
   const retestInfo = useCookieRetestInfo()
@@ -178,6 +191,14 @@ export function CookiesPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const stopRef = useRef(false)
 
+  // ── Bulk select / delete ──
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [pendingDel, setPendingDel] = useState<'selected' | 'rejected' | null>(null)
+  const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Platforms chosen for "Kiểm tra" (null = follow the active platform) ──
+  const [testSel, setTestSel] = useState<string[] | null>(loadTestPlatforms)
+
   const rawCookies: CookieItem[] = (data?.cookies ?? []).map(e =>
     mapExpiryCookieToItem(e, activePlatform, isSupported(activePlatform)),
   )
@@ -187,6 +208,67 @@ export function CookiesPage() {
     ...(localOverrides[c.id] ?? {}),
     liveTest: (c.hash && liveTests[`${c.platform}:${c.hash}`]) || c.liveTest,
   }))
+
+  const testOptions = Object.entries(statusData?.pools ?? {})
+    .filter(([p, v]) => (v?.total ?? 0) > 0 && isSupported(p))
+    .map(([p, v]) => ({ platform: p, label: platformLabel(p), count: v?.total ?? 0 }))
+  const testSelected = (testSel ?? [activePlatform]).filter(p => testOptions.some(o => o.platform === p))
+  const testCount = testOptions.filter(o => testSelected.includes(o.platform)).reduce((n, o) => n + o.count, 0)
+
+  function changeTestSel(next: string[]) {
+    setTestSel(next)
+    try { localStorage.setItem(TEST_PLATFORMS_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+  }
+
+  const selectedHashes = new Set(cookies.filter(c => c.hash && selected.has(c.hash)).map(c => c.hash as string))
+  const rejectedHashes = cookies
+    .filter(c => c.hash && (c.liveTest?.state === 'rejected' || c.status === 'expired'))
+    .map(c => c.hash as string)
+  const noHashCount = cookies.filter(c => !c.hash).length
+
+  function clearPending() {
+    if (pendingTimer.current) clearTimeout(pendingTimer.current)
+    pendingTimer.current = null
+    setPendingDel(null)
+  }
+  useEffect(() => () => { if (pendingTimer.current) clearTimeout(pendingTimer.current) }, [])
+  useEffect(() => { setSelected(new Set()); clearPending() }, [activePlatform])
+
+  function toggleSelect(hash: string) {
+    clearPending()
+    setSelected(prev => {
+      const n = new Set(prev)
+      if (n.has(hash)) n.delete(hash); else n.add(hash)
+      return n
+    })
+  }
+  function toggleSelectAll(hashes: string[], select: boolean) {
+    clearPending()
+    setSelected(prev => {
+      const n = new Set(prev)
+      hashes.forEach(h => (select ? n.add(h) : n.delete(h)))
+      return n
+    })
+  }
+
+  function requestBulkDelete(kind: 'selected' | 'rejected') {
+    if (pendingDel !== kind) {
+      clearPending()
+      setPendingDel(kind)
+      pendingTimer.current = setTimeout(() => { pendingTimer.current = null; setPendingDel(null) }, 4000)
+      return
+    }
+    const hashes = kind === 'selected' ? Array.from(selectedHashes) : rejectedHashes
+    clearPending()
+    if (hashes.length === 0) return
+    batchDelMut.mutate(hashes, {
+      onSuccess: r => {
+        setSelected(new Set())
+        setNotice(`Đã xoá ${r.removed.length} cookie` + (r.missing.length ? ` · ${r.missing.length} không còn trong kho` : ''))
+      },
+      onError: e => setNotice(`Không xoá được: ${e instanceof Error ? e.message : 'lỗi máy chủ'}`),
+    })
+  }
 
   function setLive(platform: string, hash: string, t: LiveTest) {
     setLiveTests(prev => ({ ...prev, [`${platform}:${hash}`]: t }))
@@ -219,7 +301,7 @@ export function CookiesPage() {
   async function prepareTestAll() {
     setNotice(null)
     const platforms = Object.entries(statusData?.pools ?? {})
-      .filter(([, v]) => (v?.total ?? 0) > 0).map(([p]) => p).filter(isSupported)
+      .filter(([p, v]) => (v?.total ?? 0) > 0 && testSelected.includes(p)).map(([p]) => p).filter(isSupported)
     const lists = await Promise.all(platforms.map(async p => {
       try {
         const r = await qc.fetchQuery({
@@ -235,7 +317,7 @@ export function CookiesPage() {
       for (const l of lists) if (i < l.length) queue.push(l[i])
     }
     if (queue.length === 0) {
-      setNotice('Không có cookie nào để kiểm tra (cookie đang tắt hoặc nền tảng chưa hỗ trợ được bỏ qua).')
+      setNotice(platforms.length === 0 ? 'Chưa chọn nền tảng nào để kiểm tra.' : 'Không có cookie nào để kiểm tra (cookie đang tắt hoặc nền tảng chưa hỗ trợ được bỏ qua).')
       return
     }
     setConfirm({ queue: queue.slice(0, batchCap), skipped: Math.max(0, queue.length - batchCap) })
@@ -388,6 +470,10 @@ export function CookiesPage() {
       </div>
 
       <CookieToolbar
+        testOptions={testOptions}
+        testSelected={testSelected}
+        testCount={testCount}
+        onTestSelectedChange={changeTestSel}
         updatedAtMs={dataUpdatedAt}
         refreshing={isFetching}
         onReload={reloadAll}
@@ -395,6 +481,16 @@ export function CookiesPage() {
         onStop={() => { stopRef.current = true }}
         batch={batch}
         storage={describeStorage(storageQ.data, storageQ.isError)}
+      />
+      <CookieBulkBar
+        selectedCount={selectedHashes.size}
+        rejectedCount={rejectedHashes.length}
+        pendingKey={pendingDel}
+        busy={batchDelMut.isPending}
+        noHashCount={selected.size > 0 || rejectedHashes.length > 0 ? noHashCount : 0}
+        onDeleteSelected={() => requestBulkDelete('selected')}
+        onDeleteRejected={() => requestBulkDelete('rejected')}
+        onClear={() => { clearPending(); setSelected(new Set()) }}
       />
       {notice && (
         <p className="rounded-control border border-line bg-surface-2 px-3 py-2 text-xs text-fg-2" role="status">
@@ -418,6 +514,9 @@ export function CookiesPage() {
         onRetry={() => refetch()}
         onAction={handleAction}
         onAdd={handleAdd}
+        selectedHashes={selectedHashes}
+        onToggleSelect={toggleSelect}
+        onToggleSelectAll={toggleSelectAll}
       />
     </div>
   )
