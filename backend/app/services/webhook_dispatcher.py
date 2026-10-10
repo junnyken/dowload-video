@@ -17,7 +17,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-import httpx
 
 from app.core.celery_app import celery_app
 from app.core.database import get_service_client
@@ -114,29 +113,33 @@ async def _deliver_to_endpoint(
         "User-Agent": "VidGrab-Webhooks/1.0",
     }
 
+    # SSRF guard (Phase 33-0): fresh DNS validated right before the send, the
+    # request pinned to that IP, no redirects, bounded read, body never logged.
+    import asyncio
+    from app.core.webhook_guard import WebhookUrlError, post_webhook
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            resp = await client.post(url, content=payload_bytes, headers=headers)
+        result = await asyncio.to_thread(post_webhook, url, payload_bytes, headers, timeout=TIMEOUT)
 
         logger.info(
             "Webhook attempt=%d delivery=%s endpoint=%s status=%d",
-            attempt, delivery_id, endpoint_row["id"], resp.status_code,
+            attempt, delivery_id, endpoint_row["id"], result.status_code,
         )
 
-        if resp.is_success:
+        if result.success:
             return True
 
         logger.warning(
-            "Webhook non-2xx delivery=%s status=%d body=%.200s",
-            delivery_id, resp.status_code, resp.text,
+            "Webhook not delivered delivery=%s status=%d (%s)",
+            delivery_id, result.status_code, result.error,
         )
         return False
 
-    except httpx.TimeoutException:
-        logger.warning("Webhook timeout delivery=%s url=%s", delivery_id, url)
+    except WebhookUrlError as exc:
+        logger.warning("Webhook refused delivery=%s endpoint=%s: %s",
+                       delivery_id, endpoint_row.get("id"), exc)
         return False
     except Exception as exc:
-        logger.error("Webhook error delivery=%s: %s", delivery_id, exc, exc_info=True)
+        logger.warning("Webhook error delivery=%s: %s", delivery_id, type(exc).__name__)
         return False
 
 

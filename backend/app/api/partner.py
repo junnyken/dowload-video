@@ -535,6 +535,17 @@ async def register_webhook(
         )
 
     _validate_http_url(body.url, require_https=True)
+    # SSRF guard (Phase 33-0): no credentials, every resolved address public.
+    # The dispatcher re-checks right before each delivery.
+    import asyncio
+    from app.core.webhook_guard import WebhookUrlError, validate_webhook_url
+    try:
+        await asyncio.to_thread(validate_webhook_url, body.url)
+    except WebhookUrlError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_url", "message": str(exc)},
+        ) from exc
 
     secret = secrets.token_hex(32)  # 64-char hex string
 

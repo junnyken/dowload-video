@@ -7,8 +7,6 @@ import hmac
 import json
 import time
 
-import requests
-
 from app.core.celery_app import celery_app
 
 
@@ -56,17 +54,22 @@ def deliver_webhook_task(self, user_id: str, payload: dict):
     status_code = 0
     success = False
     error_message = None
+    retryable = True
 
+    # SSRF guard (Phase 33-0): https only, fresh DNS checked right before the
+    # send and the request pinned to the validated IP, no redirects, 10 s,
+    # bounded response read. The response body is never stored.
+    from app.core.webhook_guard import WebhookUrlError, post_webhook
     try:
-        resp = requests.post(
-            webhook_url, data=payload_bytes, headers=headers, timeout=15
-        )
-        status_code = resp.status_code
-        success = 200 <= status_code < 300
-        if not success:
-            error_message = f"HTTP {status_code}"
+        result = post_webhook(webhook_url, payload_bytes, headers)
+        status_code = result.status_code
+        success = result.success
+        error_message = result.error
+    except WebhookUrlError as e:
+        error_message = f"blocked: {e}"[:200]
+        retryable = not e.permanent
     except Exception as e:
-        error_message = str(e)[:200]
+        error_message = f"{type(e).__name__}: {e}"[:200]
 
     # Log delivery to Redis (keep last 50 entries)
     log_entry = json.dumps(
@@ -90,6 +93,10 @@ def deliver_webhook_task(self, user_id: str, payload: dict):
         pass
 
     # Retry on failure with exponential backoff: 30s, 60s, 120s
+    if not success and not retryable:
+        print(f"[Webhook] Delivery refused for user {user_id}: {error_message}")
+        return
+
     if not success:
         backoff = (2 ** self.request.retries) * 30
         print(

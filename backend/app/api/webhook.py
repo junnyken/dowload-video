@@ -54,8 +54,14 @@ async def register_webhook(
     """
     _require_pro(user)
 
-    if not body.webhook_url.startswith("https://"):
-        raise HTTPException(status_code=400, detail="webhook_url must start with https://")
+    # SSRF guard (Phase 33-0): https only, no credentials, every resolved
+    # address public. Delivery re-checks right before each send.
+    import asyncio
+    from app.core.webhook_guard import WebhookUrlError, validate_webhook_url
+    try:
+        await asyncio.to_thread(validate_webhook_url, body.webhook_url)
+    except WebhookUrlError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     # Generate a URL-safe secret with whs_ prefix
     raw_secret = f"whs_{secrets.token_urlsafe(32)}"
