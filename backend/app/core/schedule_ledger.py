@@ -175,8 +175,9 @@ def _is_known(rc, key: str, keys: list[str]) -> bool:
 def _history_urls(supabase, user_id: Optional[str], channel_url: str,
                   exclude_batch: Optional[str]) -> list[str]:
     """URLs of items this user's earlier runs of `channel_url` downloaded
-    successfully. Child jobs carry no user_id, only the batch of the channel
-    placeholder row (which does carry user_id + the channel URL)."""
+    successfully. Child jobs created before task #6256 carry no user_id, only
+    the batch of the channel placeholder row (which does carry user_id + the
+    channel URL), so match through the batch."""
     if not user_id or not channel_url:
         return []
     res = (

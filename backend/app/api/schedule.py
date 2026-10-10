@@ -9,7 +9,7 @@ Endpoints:
   POST   /api/v1/schedule/{id}/toggle  pause / resume
 """
 
-from datetime import datetime, timezone
+import asyncio
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -197,15 +197,16 @@ async def run_schedule_now(schedule_id: str, user=Depends(get_required_user)):
         raise HTTPException(404, "Lịch tải không tồn tại.")
 
     job = res.data[0]
+    # Task #6256: this called _trigger_job(job) without its supabase/now_iso
+    # arguments, so every request ended in a TypeError → 500.
+    from app.tasks.schedule_tasks import run_schedule_now as _run_now
     try:
-        from app.tasks.schedule_tasks import _trigger_job
-        _trigger_job(job)
-        supabase.table("scheduled_jobs").update({
-            "last_run_at":     datetime.now(timezone.utc).isoformat(),
-            "last_run_status": "running",
-        }).eq("id", schedule_id).execute()
+        started = await asyncio.to_thread(_run_now, supabase, job)
     except Exception as e:
-        raise HTTPException(500, f"Không thể khởi động job: {e}")
+        print(f"[Schedule] run-now {schedule_id} failed: {type(e).__name__}: {e}")
+        raise HTTPException(500, "Không thể khởi động job.")
+    if not started:
+        raise HTTPException(503, "Không thể khởi động job. Thử lại sau.")
 
     return {"message": "Đã khởi chạy ngay.", "schedule_id": schedule_id}
 

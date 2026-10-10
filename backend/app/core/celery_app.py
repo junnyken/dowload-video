@@ -67,6 +67,10 @@ celery_app = Celery(
         "app.tasks.container_tasks",
         "app.tasks.partner_tasks",
         "app.tasks.backup_tasks",
+        # Task #6256: both webhook delivery paths were missing here, so the
+        # worker dropped their messages as "unregistered task".
+        "app.tasks.webhook_tasks",
+        "app.services.webhook_dispatcher",
     ]
 )
 
@@ -136,8 +140,14 @@ celery_app.conf.update(
         'transcribe_video_task': {'queue': 'analysis'},
         'expire_transcript_asr_jobs_task': {'queue': 'analysis'},
         'sweep_stuck_transcript_asr_jobs_task': {'queue': 'analysis'},
-        # Webhook/partner delivery retries → light celery queue.
-        'retry_webhook_delivery': {'queue': 'celery'},
+        # Webhook/partner delivery (+ retries) → default celery queue, which
+        # the production worker consumes (backend/docker-entrypoint.sh). The
+        # old key 'retry_webhook_delivery' never matched the task's real name.
+        'deliver_webhook_task': {'queue': 'celery'},
+        'app.services.webhook_dispatcher.retry_webhook_delivery': {'queue': 'celery'},
+        # Scheduled keyword search (yt-dlp, network-bound) — off the beat tick,
+        # on the same queue as scheduled channel scans.
+        'run_keyword_schedule_task': {'queue': 'bulk'},
         '*': {'queue': 'celery'},
     },
     beat_schedule={

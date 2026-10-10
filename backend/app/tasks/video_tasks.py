@@ -924,11 +924,19 @@ def _scrape_channel_body(supabase, channel_url, batch_id, channel_job_id, max_vi
             if not video_url:
                 continue
 
-            response = supabase.table("download_jobs").insert({
+            child_row = {
                 "batch_id": batch_id,
                 "original_url": video_url,
                 "status": "pending",
-            }).execute()
+            }
+            # Scheduled run (task #6256): the child rows carry the schedule
+            # owner, otherwise /history (filtered on user_id) never lists the
+            # videos their schedule downloaded. Manual bulk/channel runs are
+            # left exactly as they were.
+            if schedule_id and user_id:
+                child_row["user_id"] = str(user_id)
+                child_row["selected_quality"] = quality
+            response = supabase.table("download_jobs").insert(child_row).execute()
 
             job_id = response.data[0]["id"]
             job_entries.append((job_id, video_url))

@@ -76,23 +76,52 @@ def scan_scheduled_jobs():
         _trigger_job(supabase, job, now_iso)
 
 
-def _trigger_job(supabase, job: dict, now_iso: str):
-    """Trigger one scheduled job and update its state."""
+def _claim_job(supabase, job: dict, now_iso: str, *, manual: bool) -> bool:
+    """Atomically take this run of `job` (task #6256).
+
+    Tick runs are a compare-and-set on the next_run_at value this tick read
+    (plus is_active): the same UPDATE moves next_run_at to the following
+    occurrence ('once' rows are deactivated instead), so a second tick that
+    read the same row — the previous tick still running, or two beat
+    processes — matches zero rows and skips it. Before this the row was only
+    advanced after the trigger finished, and a keyword schedule ran yt-dlp
+    inside the tick, so the next tick could fire it again.
+
+    Manual "run now" bypasses next_run_at (that is its point) and leaves the
+    recurring timetable alone; a manual run of a 'once' schedule consumes it.
+    """
+    job_id = job["id"]
+    update = {"last_run_at": now_iso, "last_run_status": "running"}
+    if job.get("schedule_type") == "once":
+        update["is_active"] = False
+    elif not manual:
+        # None (unknown schedule_type) drops the row out of the due query
+        # instead of re-firing it every minute.
+        update["next_run_at"] = _compute_next_run(job)
+
+    try:
+        q = supabase.table("scheduled_jobs").update(update).eq("id", job_id)
+        if not manual:
+            q = q.eq("is_active", True).eq("next_run_at", job.get("next_run_at"))
+        res = q.execute()
+    except Exception as e:
+        print(f"[Scheduler] Job {job_id} claim failed: {type(e).__name__}")
+        return False
+    return bool(res.data)
+
+
+def _trigger_job(supabase, job: dict, now_iso: str, *, manual: bool = False) -> bool:
+    """Claim, trigger one scheduled job and record the outcome.
+    Returns False when the run was not claimed (another tick has it)."""
     job_id = job["id"]
     user_id = job.get("user_id")
     job_type = job.get("job_type")
     payload = job.get("input_payload", {})
-    schedule_type = job.get("schedule_type")
     auto_col_id = job.get("auto_collection_id")
 
-    # Mark running
-    try:
-        supabase.table("scheduled_jobs").update({
-            "last_run_at":     now_iso,
-            "last_run_status": "running",
-        }).eq("id", job_id).execute()
-    except Exception:
-        pass
+    if not _claim_job(supabase, job, now_iso, manual=manual):
+        print(f"[Scheduler] Job {job_id} already claimed — skipped")
+        return False
 
     success = True
     try:
@@ -101,30 +130,23 @@ def _trigger_job(supabase, job: dict, now_iso: str):
         elif job_type == "channel":
             _trigger_channel(supabase, user_id, payload, auto_col_id, schedule=job)
         elif job_type == "keyword":
-            _trigger_keyword(supabase, user_id, payload, auto_col_id)
+            _trigger_keyword(supabase, user_id, payload, auto_col_id, schedule_id=job_id)
     except Exception as e:
         success = False
         print(f"[Scheduler] Job {job_id} trigger failed: {e}")
 
-    # Compute next run or deactivate
-    if schedule_type == "once":
-        try:
-            supabase.table("scheduled_jobs").update({
-                "is_active":       False,
-                "last_run_status": "success" if success else "failed",
-            }).eq("id", job_id).execute()
-        except Exception:
-            pass
-        return
-
-    next_run = _compute_next_run(job)
-    update = {"last_run_status": "success" if success else "failed"}
-    if next_run:
-        update["next_run_at"] = next_run
     try:
-        supabase.table("scheduled_jobs").update(update).eq("id", job_id).execute()
+        supabase.table("scheduled_jobs").update({
+            "last_run_status": "success" if success else "failed",
+        }).eq("id", job_id).execute()
     except Exception:
         pass
+    return True
+
+
+def run_schedule_now(supabase, job: dict) -> bool:
+    """Entry point for POST /schedule/{id}/run (the API checked ownership)."""
+    return _trigger_job(supabase, job, datetime.now(timezone.utc).isoformat(), manual=True)
 
 
 def _trigger_single(supabase, user_id: str, payload: dict, auto_col_id: str | None):
@@ -191,7 +213,38 @@ def _trigger_channel(supabase, user_id: str, payload: dict, auto_col_id: str | N
     )
 
 
-def _trigger_keyword(supabase, user_id: str, payload: dict, auto_col_id: str | None):
+def _trigger_keyword(supabase, user_id: str, payload: dict, auto_col_id: str | None,
+                     schedule_id: str | None = None):
+    """Hand the search + job creation to a worker task (task #6256). The
+    yt-dlp search used to run right here, inside the 60 s beat tick."""
+    run_keyword_schedule_task.delay(
+        user_id=user_id,
+        payload=dict(payload or {}),
+        auto_col_id=str(auto_col_id) if auto_col_id else None,
+        schedule_id=str(schedule_id) if schedule_id else None,
+    )
+
+
+@celery_app.task(name="run_keyword_schedule_task", ignore_result=True)
+def run_keyword_schedule_task(user_id: str | None = None, payload: dict | None = None,
+                              auto_col_id: str | None = None, schedule_id: str | None = None):
+    """Scheduled keyword search → one download job per result (queue: bulk)."""
+    from app.core.database import get_service_client
+    supabase = get_service_client()
+    try:
+        _run_keyword_search(supabase, user_id, payload or {}, auto_col_id)
+    except Exception as e:
+        print(f"[Scheduler] keyword schedule {schedule_id} failed: {type(e).__name__}: {e}")
+        if schedule_id:
+            try:
+                supabase.table("scheduled_jobs").update(
+                    {"last_run_status": "failed"}
+                ).eq("id", schedule_id).execute()
+            except Exception:
+                pass
+
+
+def _run_keyword_search(supabase, user_id: str, payload: dict, auto_col_id: str | None):
     keyword = payload.get("keyword", "")
     platform = payload.get("platform", "youtube")
     count = min(payload.get("count", 5), 20)
