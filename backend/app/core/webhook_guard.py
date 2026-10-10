@@ -154,7 +154,14 @@ def post_webhook(url: str, body: bytes, headers: dict, *,
                  timeout: float = DELIVERY_TIMEOUT_S) -> DeliveryResult:
     """Validate (fresh DNS), then POST `body` to the validated IP.
     Raises WebhookUrlError when the target is not allowed."""
-    target = validate_webhook_url(url)
+    return post_to_target(validate_webhook_url(url), body, headers, timeout=timeout)
+
+
+def post_to_target(target: WebhookTarget, body: bytes, headers: dict, *,
+                   timeout: float = DELIVERY_TIMEOUT_S) -> DeliveryResult:
+    """POST `body` to a target returned by validate_webhook_url (pinned to the
+    validated IP, no redirects, bounded read). Callers must not build a
+    WebhookTarget by hand — the address check lives in the validator."""
     ip = target.ips[0]
     host_header = f"[{target.host}]" if ":" in target.host else target.host   # IPv6 literal
     if target.port != 443:

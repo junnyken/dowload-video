@@ -1,6 +1,6 @@
 """
-Web Push Notifications — Phase 23
-===================================
+Web Push Notifications — Phase 23, made real in task #6256.
+============================================================
 Supabase-backed push subscription management.
 
 Endpoints (all prefixed /api/v1/push by main.py):
@@ -11,20 +11,21 @@ Endpoints (all prefixed /api/v1/push by main.py):
   GET    /vapid-key    — return VAPID public key for browser subscription setup
 
 Push subscriptions are persisted in the `push_subscriptions` Supabase table
-(see database/migrations/018_phase23_mobile.sql).
+(see database/migrations/018_phase23_mobile.sql), always tied to the signed-in
+user (Supabase JWT); guests get 401.
 
-For real encrypted Web Push, set PUSH_VAPID_PRIVATE_KEY / PUSH_VAPID_PUBLIC_KEY
-env vars and install pywebpush.  The /test endpoint currently uses a plain HTTP
-POST stub so it works without VAPID keys.
+Delivery (encryption, VAPID, endpoint allow-list + public-IP check, dead
+subscription cleanup) lives in app.core.push_sender; env vars are documented
+there.
 """
 
-import os
+import asyncio
 from typing import Optional
 
-import httpx
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from app.core import push_sender
 from app.core.database import get_service_client
 from app.main import limiter
 
@@ -33,15 +34,24 @@ router = APIRouter()
 
 # ── Pydantic models ──────────────────────────────────────────────────
 
+class _PushKeys(BaseModel):
+    p256dh: str = Field("", max_length=256)
+    auth: str = Field("", max_length=128)
+
+
 class PushSubscribeRequest(BaseModel):
-    endpoint: str
-    p256dh: str
-    auth: str
-    user_agent: str = ""
+    """Accepts both the browser's PushSubscription.toJSON() shape
+    ({endpoint, expirationTime, keys: {p256dh, auth}}) — which is what the
+    frontend sends — and the older flat {endpoint, p256dh, auth}."""
+    endpoint: str = Field(..., max_length=push_sender.MAX_ENDPOINT_LEN)
+    keys: Optional[_PushKeys] = None
+    p256dh: str = Field("", max_length=256)
+    auth: str = Field("", max_length=128)
+    user_agent: str = Field("", max_length=512)
 
 
 class PushTestRequest(BaseModel):
-    message: str = "Thử nghiệm thông báo từ VidGrab 🎉"
+    message: str = Field("Thử nghiệm thông báo từ VidGrab 🎉", max_length=200)
 
 
 # ── Auth helper ──────────────────────────────────────────────────────
@@ -60,90 +70,45 @@ def _get_user_id(request: Request) -> Optional[str]:
         return None
 
 
-# ── Push send helper ─────────────────────────────────────────────────
-
-async def _send_push_notification(endpoint: str, payload: dict) -> bool:
-    """
-    Simple push without VAPID encryption.
-    Real push requires pywebpush + VAPID keys (see PUSH_VAPID_PRIVATE_KEY env).
-    This stub sends a plain POST and returns success/fail.
-    """
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.post(endpoint, json=payload)
-            return r.status_code in (200, 201, 202)
-    except Exception:
-        return False
-
-
-# ── Public helper (importable from other modules) ────────────────────
-
-async def notify_user_job_done(
-    user_id: str,
-    job_id: str,
-    title: str,
-    download_url: str,
-) -> None:
-    """
-    Send a 'job done' push notification to all subscriptions for `user_id`.
-
-    Looks up push_subscriptions in Supabase, then fires a plain HTTP POST to
-    each endpoint.  Failures are silently swallowed so the caller is never
-    blocked by push errors.
-    """
-    payload = {
-        "title": "VidGrab ✅",
-        "body": f"Đã tải xong: {title[:60]}",
-        "url": f"/?job={job_id}",
-        "icon": "/icons/icon-192.svg",
-        "download_url": download_url,
-    }
-    try:
-        sb = get_service_client()
-        res = (
-            sb.table("push_subscriptions")
-            .select("endpoint")
-            .eq("user_id", user_id)
-            .execute()
-        )
-        rows = res.data or []
-    except Exception as err:
-        print(f"[Push] DB lookup failed for user {user_id}: {err}")
-        return
-
-    for row in rows:
-        endpoint = row.get("endpoint", "")
-        if endpoint:
-            try:
-                await _send_push_notification(endpoint, payload)
-            except Exception:
-                pass
-
-
 # ── Endpoints ─────────────────────────────────────────────────────────
 
 @router.post("/subscribe")
 @limiter.limit("10/minute")
 async def subscribe(payload: PushSubscribeRequest, request: Request):
-    """Upsert a Web Push subscription for the current authenticated user."""
+    """Upsert a Web Push subscription for the current authenticated user.
+
+    The endpoint must be https on a known browser push service and resolve
+    to public addresses only — the server POSTs to it later, so anything
+    else would let a client aim the worker at internal hosts."""
     user_id = _get_user_id(request)
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
+
+    p256dh = (payload.keys.p256dh if payload.keys else "") or payload.p256dh
+    auth_key = (payload.keys.auth if payload.keys else "") or payload.auth
+    if not p256dh or not auth_key:
+        raise HTTPException(status_code=422, detail="keys.p256dh and keys.auth are required")
+
+    endpoint = payload.endpoint.strip()
+    try:
+        await asyncio.to_thread(push_sender.validate_push_endpoint, endpoint)
+    except push_sender.PushEndpointError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid push endpoint: {e}")
 
     try:
         sb = get_service_client()
         sb.table("push_subscriptions").upsert(
             {
                 "user_id":    user_id,
-                "endpoint":   payload.endpoint,
-                "p256dh":     payload.p256dh,
-                "auth_key":   payload.auth,
-                "user_agent": payload.user_agent,
+                "endpoint":   endpoint,
+                "p256dh":     p256dh,
+                "auth_key":   auth_key,
+                "user_agent": payload.user_agent or request.headers.get("User-Agent", "")[:512],
             },
             on_conflict="user_id,endpoint",
         ).execute()
     except Exception as err:
-        print(f"[Push] Subscribe error for user {user_id}: {err}")
+        print(f"[Push] Subscribe error for user {user_id}: {type(err).__name__}")
         raise HTTPException(status_code=500, detail="Failed to save subscription")
 
     return {"success": True}
@@ -181,34 +146,29 @@ async def test_push(payload: PushTestRequest, request: Request):
         sb = get_service_client()
         res = (
             sb.table("push_subscriptions")
-            .select("endpoint")
+            .select("id")
             .eq("user_id", user_id)
             .execute()
         )
         rows = res.data or []
     except Exception as err:
-        print(f"[Push] Test: DB lookup failed for user {user_id}: {err}")
+        print(f"[Push] Test: DB lookup failed for user {user_id}: {type(err).__name__}")
         raise HTTPException(status_code=500, detail="Database error")
 
     if not rows:
         return {"success": False, "detail": "No active subscriptions found"}
+    if not push_sender.is_enabled():
+        return {"success": False, "detail": "Push notifications are not configured on the server",
+                "subscriptions_found": len(rows), "notifications_sent": 0}
 
-    test_payload = {
+    sent = await asyncio.to_thread(push_sender.send_push, user_id, {
         "title": "VidGrab 🔔",
         "body": payload.message,
-        "icon": "/icons/icon-192.svg",
-    }
-
-    sent = 0
-    for row in rows:
-        endpoint = row.get("endpoint", "")
-        if endpoint:
-            ok = await _send_push_notification(endpoint, test_payload)
-            if ok:
-                sent += 1
-
+        "url": "/",
+        "tag": "vidgrab-test",
+    })
     return {
-        "success": True,
+        "success": sent > 0,
         "subscriptions_found": len(rows),
         "notifications_sent": sent,
     }
@@ -242,5 +202,8 @@ async def push_status(request: Request):
 
 @router.get("/vapid-key")
 async def get_vapid_key():
-    """Return the VAPID public key that the browser needs to create a push subscription."""
-    return {"public_key": os.getenv("PUSH_VAPID_PUBLIC_KEY", os.getenv("VAPID_PUBLIC_KEY", ""))}
+    """Return the VAPID public key that the browser needs to create a push
+    subscription — derived from the server's private key, so rotating keys
+    needs no frontend rebuild. '' when push is not configured (the frontend
+    then skips subscribing)."""
+    return {"public_key": push_sender.public_key()}

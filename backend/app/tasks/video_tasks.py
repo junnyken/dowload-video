@@ -1055,6 +1055,9 @@ def create_zip_task(self, batch_id: str, zip_job_id: str, organize_by_channel: b
                 supabase.table("download_jobs").update(zip_update).eq("id", zip_job_id).execute()
 
             # ── Telegram: Notify batch complete ──────────
+            # Defaults so the push block below never hits a NameError when
+            # the lookup inside this try fails.
+            batch_jobs, success_count = [], 0
             try:
                 from app.core.notifications import notify_batch_complete_sync
 
@@ -1081,21 +1084,24 @@ def create_zip_task(self, batch_id: str, zip_job_id: str, organize_by_channel: b
                 print(f"[Telegram] Failed to send batch complete notification: {tg_err}")
 
             # ── Push: Notify user browser ─────────────────────────────────
+            # (Task #6256: this imported a send_push_notification that never
+            # existed, so the ImportError was swallowed and no push was sent.)
             try:
-                from app.api.push import send_push_notification
-                user_ids = list(set(
+                from app.core.push_sender import send_push
+                user_ids = sorted(set(
                     j.get("user_id") for j in batch_jobs
                     if j.get("user_id")
                 ))
                 for uid in user_ids:
-                    send_push_notification(
-                        user_id=uid,
-                        title="VidGrab — Batch hoan tat",
-                        body=f"{success_count} video san sang tai xuong.",
-                        url="/",
-                    )
+                    send_push(uid, {
+                        # wording: BA review
+                        "title": "VidGrab — Đã tải xong",
+                        "body": f"{success_count} video sẵn sàng tải xuống.",
+                        "url": "/",
+                        "tag": f"vidgrab-batch-{batch_id[:8]}",
+                    })
             except Exception as push_err:
-                print(f"[Push] Failed to send batch push: {push_err}")
+                print(f"[Push] Failed to send batch push: {type(push_err).__name__}")
 
         else:
             error_msg = result.get("error", "Unknown zip error")

@@ -382,23 +382,31 @@ export default function BulkContent() {
   // ── Push: ask permission after first successful batch ──────────────
   const requestPushSubscription = async () => {
     try {
-      if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
-      if (Notification.permission === 'granted' || Notification.permission === 'denied') return;
-      // Only ask after a batch completes (not on every poll tick)
+      if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      // Subscriptions belong to an account; the backend answers 401 to guests,
+      // so do not ask a guest for permission it cannot use.
+      const token = session?.access_token;
+      if (!token) return;
+      if (Notification.permission === 'denied') return;
+      // Only once per session, after a batch completes (not on every poll tick)
       if (sessionStorage.getItem('push-asked')) return;
       sessionStorage.setItem('push-asked', '1');
 
-      // Short delay so user sees the batch completion first
-      await new Promise(r => setTimeout(r, 3000));
-
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') return;
-
-      const reg = await navigator.serviceWorker.ready;
+      // The server publishes its VAPID public key ('' = push not configured)
+      // so a key change needs no frontend rebuild.
       const vapidRes = await fetch(`${API}/push/vapid-key`);
       if (!vapidRes.ok) return;
       const { public_key: rawKey } = await vapidRes.json();
       if (!rawKey) return;
+
+      if (Notification.permission !== 'granted') {
+        // Short delay so user sees the batch completion first
+        await new Promise(r => setTimeout(r, 3000));
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return;
+      }
+
+      const reg = await navigator.serviceWorker.ready;
 
       // Convert VAPID public key from base64url to Uint8Array
       const padding = '='.repeat((4 - (rawKey.length % 4)) % 4);
@@ -407,13 +415,28 @@ export default function BulkContent() {
       const appServerKey = new Uint8Array(rawData.length);
       for (let i = 0; i < rawData.length; i++) appServerKey[i] = rawData.charCodeAt(i);
 
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: appServerKey,
-      });
+      // Permission granted earlier but the subscription was never stored
+      // (the old backend rejected it), or it was made with a previous key:
+      // reuse a matching subscription, replace a stale one.
+      let sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        const oldKey = sub.options?.applicationServerKey
+          ? new Uint8Array(sub.options.applicationServerKey) : null;
+        const sameKey = oldKey && oldKey.length === appServerKey.length
+          && oldKey.every((b, i) => b === appServerKey[i]);
+        if (!sameKey) {
+          await sub.unsubscribe();
+          sub = null;
+        }
+      }
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: appServerKey,
+        });
+      }
 
       // Send subscription to backend
-      const token = session?.access_token;
       await fetch(`${API}/push/subscribe`, {
         method: 'POST',
         headers: {
