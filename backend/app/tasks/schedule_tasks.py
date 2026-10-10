@@ -99,7 +99,7 @@ def _trigger_job(supabase, job: dict, now_iso: str):
         if job_type == "single":
             _trigger_single(supabase, user_id, payload, auto_col_id)
         elif job_type == "channel":
-            _trigger_channel(supabase, user_id, payload, auto_col_id)
+            _trigger_channel(supabase, user_id, payload, auto_col_id, schedule=job)
         elif job_type == "keyword":
             _trigger_keyword(supabase, user_id, payload, auto_col_id)
     except Exception as e:
@@ -152,13 +152,22 @@ def _trigger_single(supabase, user_id: str, payload: dict, auto_col_id: str | No
         )
 
 
-def _trigger_channel(supabase, user_id: str, payload: dict, auto_col_id: str | None):
+def _trigger_channel(supabase, user_id: str, payload: dict, auto_col_id: str | None,
+                     schedule: dict | None = None):
+    """Phase 33-0: a scheduled channel run lists at most items_per_run_cap()
+    items (hard max 20) and passes the schedule id so scrape_channel_task
+    downloads only items no earlier run of this schedule handled
+    (app.core.schedule_ledger; SCHEDULE_DEDUPE_ENABLED=false turns the ledger
+    off, the cap stays)."""
     from app.tasks.video_tasks import scrape_channel_task
+    from app.core.schedule_ledger import items_per_run_cap
     import uuid
 
     url = payload.get("url", "")
-    max_videos = payload.get("max_videos", 10)
+    max_videos = items_per_run_cap(payload.get("max_videos"))
     quality = payload.get("quality", "video")
+    schedule = schedule or {}
+    schedule_id = schedule.get("id")
     batch_id = str(uuid.uuid4())
 
     channel_job = supabase.table("download_jobs").insert({
@@ -176,6 +185,9 @@ def _trigger_channel(supabase, user_id: str, payload: dict, auto_col_id: str | N
         max_videos=max_videos,
         user_id=user_id,
         quality=quality,
+        _schedule_id=str(schedule_id) if schedule_id else None,
+        # `schedule` is the row as read before this run marked last_run_at.
+        _schedule_first_run=not schedule.get("last_run_at"),
     )
 
 

@@ -736,7 +736,8 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
     time_limit=int(os.getenv("SCRAPE_TASK_HARD_LIMIT", "330")),       # 5.5 min
 )
 def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: str, max_videos: int = 100, min_views: int = 0, user_id: Optional[str] = None, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False,
-                        _requester: Optional[str] = None):
+                        _requester: Optional[str] = None, _schedule_id: Optional[str] = None,
+                        _schedule_first_run: bool = False):
     """
     Scrape a channel/playlist URL with wave-based processing:
 
@@ -749,6 +750,11 @@ def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: s
        - Wave 3: videos 21-30 (countdown=10s)
        This prevents flooding the Celery queue while keeping throughput high.
     5. Update the placeholder channel_job_id with summary.
+
+    ``_schedule_id`` is set only by a scheduled channel run (Phase 33-0): the
+    discovered entries then go through app.core.schedule_ledger, which drops
+    items an earlier run of that schedule already handled and caps the run.
+    Manual bulk/channel downloads never pass it and are unchanged.
     """
     # Per-platform wave delay — faster platforms get shorter delays
     platform = _get_platform(channel_url)
@@ -802,14 +808,16 @@ def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: s
     try:
         _scrape_channel_body(supabase, channel_url, batch_id, channel_job_id, max_videos, min_views,
                              user_id, quality, remove_watermark, download_subs, _requester, platform,
-                             WAVE_SIZE, WAVE_DELAY_SECONDS, _wave_mode)
+                             WAVE_SIZE, WAVE_DELAY_SECONDS, _wave_mode,
+                             schedule_id=_schedule_id, schedule_first_run=_schedule_first_run)
     finally:
         _reset_china_worker_context(_china_token)
 
 
 def _scrape_channel_body(supabase, channel_url, batch_id, channel_job_id, max_videos, min_views,
                          user_id, quality, remove_watermark, download_subs, _requester, platform,
-                         WAVE_SIZE, WAVE_DELAY_SECONDS, _wave_mode):
+                         WAVE_SIZE, WAVE_DELAY_SECONDS, _wave_mode,
+                         schedule_id=None, schedule_first_run=False):
     # Douyin with no server-side cookie (and no Apify): every video job would
     # fail with the cookie message, so do not create them. 2026-10-05: a
     # channel/bulk run created ~175 such jobs in one second, 0 succeeded.
@@ -866,6 +874,43 @@ def _scrape_channel_body(supabase, channel_url, batch_id, channel_job_id, max_vi
                 "error_message": f"Da quet {total_found} videos nhung khong co video nao dat dieu kien loc.",
             }).eq("id", channel_job_id).execute()
             return
+
+        # ── Scheduled run: skip items already handled (Phase 33-0) ─
+        if schedule_id:
+            from app.core import schedule_ledger
+            try:
+                from app.core.redis_client import get_redis
+                entries, _sl = schedule_ledger.select_new_items(
+                    get_redis(), schedule_id=str(schedule_id), platform=platform,
+                    entries=entries, max_items=schedule_ledger.items_per_run_cap(max_videos),
+                    is_first_run=bool(schedule_first_run), supabase=supabase,
+                    user_id=user_id, channel_url=channel_url, batch_id=batch_id,
+                )
+            except Exception as _sl_err:
+                # Fail closed: without the ledger this run cannot tell new
+                # items from old ones, and re-downloading is the bug.
+                print(f"[ScheduleLedger] schedule={schedule_id} ledger unavailable: {type(_sl_err).__name__}")
+                supabase.table("download_jobs").update({
+                    "status": "failed",
+                    # wording: BA review
+                    "error_message": "Lịch tải: tạm thời không kiểm tra được video đã tải. Lần chạy sau sẽ thử lại.",
+                }).eq("id", channel_job_id).execute()
+                return
+            print(f"[ScheduleLedger] schedule={schedule_id} mode={_sl['mode']} discovered={_sl['discovered']} "
+                  f"known={_sl['known']} selected={_sl['selected']} deferred={_sl['deferred']}")
+            total_queued = len(entries)
+            if not entries:
+                supabase.table("download_jobs").update({
+                    "status": "success",
+                    # wording: BA review
+                    "error_message": (
+                        f"Lịch tải: đã ghi nhận {_sl['discovered']} video hiện có của kênh; "
+                        "từ lần chạy sau chỉ tải video mới."
+                        if _sl["mode"] == schedule_ledger.MODE_BASELINE else
+                        f"Lịch tải: không có video mới ({_sl['known']} video đã tải trước đó)."
+                    ),
+                }).eq("id", channel_job_id).execute()
+                return
 
         # ── Phase 2: Insert ALL jobs as "pending" immediately ─
         # This lets the frontend show the full list with progress
