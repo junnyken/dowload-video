@@ -19,6 +19,8 @@ import PlaylistsPage from './pages/PlaylistsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import ArchivePage from './pages/ArchivePage';
 import SchedulePage from './pages/SchedulePage';
+import WatchPage from './pages/WatchPage';
+import { API_BASE } from './lib/apiBase';
 import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import WorkspaceSettingsPage from './pages/WorkspaceSettingsPage';
 import AuditLogPage from './pages/AuditLogPage';
@@ -60,6 +62,7 @@ const PATH_MAP = {
   '/analytics':           'analytics',
   '/archive':             'archive',
   '/schedule':            'schedule',
+  '/watch':               'watch',
   '/phu-de':              'subtitle-hub',
   '/transcript-translate': 'transcript-translate',
   '/transcript-asr':      'transcript-asr',
@@ -90,7 +93,20 @@ const PATH_MAP = {
 for (const p of platformPages) PATH_MAP[`/${p.slug}`] = `p:${p.slug}`;
 
 function AppInner() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, withAuth } = useAuth();
+  // Channel Watch (task #6257): the menu entry exists only when the backend
+  // says watching is enabled for this account (404 while the flag is off).
+  const [watchStatusOk, setWatchEnabled] = useState(false);
+  const watchEnabled = isAuthenticated && watchStatusOk;
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    let alive = true;
+    fetch(`${API_BASE}/api/v1/watch/status`, withAuth())
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (alive) setWatchEnabled(!!d?.enabled); })
+      .catch(() => { if (alive) setWatchEnabled(false); });
+    return () => { alive = false; };
+  }, [isAuthenticated, withAuth]);
   const [view, setView]           = useState('landing');
   const [showAuthModal, setShowAuthModal] = useState(false);
   // Any component can ask for the sign-in dialog (e.g. a quality row locked
@@ -234,6 +250,8 @@ function AppInner() {
     ...(isAuthenticated ? [
       { key: 'archive', label: 'Archive', active: view === 'archive', onClick: () => goTo('archive', '/archive') },
       { key: 'schedule', label: 'Lịch Tải', active: view === 'schedule', onClick: () => goTo('schedule', '/schedule') },
+      // wording: BA review
+      ...(watchEnabled ? [{ key: 'watch', label: 'Theo dõi kênh', title: 'Nhận thông báo khi kênh có video mới', active: view === 'watch', onClick: () => goTo('watch', '/watch') }] : []),
       { key: 'subtitle-hub', label: 'Phụ đề & Phiên âm', title: 'Trích phụ đề, phiên âm AI và dịch phụ đề', icon: Languages, active: ['subtitle-hub', 'transcript-asr', 'transcript-translate'].includes(view), onClick: () => goTo('subtitle-hub', '/phu-de') },
     ] : []),
     ...(pwaInstallReady ? [
@@ -443,6 +461,9 @@ function AppInner() {
         {view === 'schedule' && isAuthenticated && (
           <SchedulePage onNavigate={navigateTo} />
         )}
+
+        {/* Guests get the "Đăng nhập để theo dõi kênh" prompt from the page itself. */}
+        {view === 'watch' && <WatchPage />}
 
         {view === 'subtitle-hub' && isAuthenticated && (
           <SubtitleHubPage onNavigate={navigateTo} />
