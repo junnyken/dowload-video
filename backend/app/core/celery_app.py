@@ -71,6 +71,8 @@ celery_app = Celery(
         # worker dropped their messages as "unregistered task".
         "app.tasks.webhook_tasks",
         "app.services.webhook_dispatcher",
+        # Phase 33A Channel Watch (task #6257)
+        "app.tasks.watch_tasks",
     ]
 )
 
@@ -148,6 +150,14 @@ celery_app.conf.update(
         # Scheduled keyword search (yt-dlp, network-bound) — off the beat tick,
         # on the same queue as scheduled channel scans.
         'run_keyword_schedule_task': {'queue': 'bulk'},
+        # Phase 33A Channel Watch (task #6257): short, network-bound work on
+        # the default queue — consumed by the production worker AND by every
+        # compose worker definition (a new 'watch_scan' queue would need a
+        # deploy-config change before anything consumed it). Explicit so a
+        # change to '*' cannot strand them.
+        'watch_scan_tick': {'queue': 'celery'},
+        'scan_watch_source': {'queue': 'celery'},
+        'deliver_watch_deliveries': {'queue': 'celery'},
         '*': {'queue': 'celery'},
     },
     beat_schedule={
@@ -200,6 +210,12 @@ celery_app.conf.update(
         # Scheduled download scanner — trigger due scheduled_jobs every 60s
         'scan-scheduled-jobs-every-1min': {
             'task': 'scan_scheduled_jobs',
+            'schedule': 60.0,
+        },
+        # Phase 33A — Channel Watch: enqueue due sources (no-op while
+        # WATCH_ENABLED is false or WATCH_KILL_SWITCH is on)
+        'watch-scan-tick-every-1min': {
+            'task': 'watch_scan_tick',
             'schedule': 60.0,
         },
         # Phase 12 — Anomaly detection + auto-tune every 5 minutes

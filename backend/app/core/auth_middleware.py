@@ -170,10 +170,14 @@ async def get_optional_user(
         response = supabase.auth.get_user(token)
         if response and response.user:
             u = response.user
+            # email_confirmed_at: None = the account never confirmed its
+            # email (Channel Watch requires it for Free accounts, task #6257).
+            confirmed = getattr(u, "email_confirmed_at", None)
             return {
                 "id":    str(u.id),
                 "email": u.email,
                 "token": token,
+                "email_confirmed_at": str(confirmed) if confirmed else None,
             }
     except Exception:
         pass

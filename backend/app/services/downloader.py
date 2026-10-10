@@ -4104,11 +4104,27 @@ def _scrape_douyin_channel(channel_url: str, max_videos: int = 20) -> Dict[str, 
     }
 
 
-def scrape_tiktok_user_posts(channel_url: str, max_videos: int = 100, min_views: int = 0) -> Dict[str, Any]:
+class TikWMListingError(Exception):
+    """TikWM could not list a profile (see scrape_tiktok_user_posts)."""
+
+    def __init__(self, message: str, *, permanent: bool):
+        super().__init__(message)
+        self.permanent = permanent
+
+
+def scrape_tiktok_user_posts(channel_url: str, max_videos: int = 100, min_views: int = 0,
+                             *, raise_on_error: bool = False) -> Dict[str, Any]:
     """
     List a TikTok user's videos via the TikWM public API (no bot-block, no
     login). Paginates with TikWM's cursor. Returns the standard channel-scrape
-    shape; view filtering uses play_count.
+    shape; view filtering uses play_count. Entries also carry the video "id"
+    and, when TikWM reports it, "published_at" (ISO, UTC).
+
+    raise_on_error (Channel Watch, task #6257): a failure on the FIRST page
+    raises TikWMListingError instead of returning an empty list, so a caller
+    can tell "profile has no public videos / does not exist" (TikWM answered
+    with an error code → permanent=True) from "TikWM unreachable" (network
+    error → permanent=False). Default False keeps the old behaviour.
     """
     import httpx as _httpx
     m = re.search(r"tiktok\.com/@([\w.-]+)", channel_url)
@@ -4132,10 +4148,14 @@ def scrape_tiktok_user_posts(channel_url: str, max_videos: int = 100, min_views:
                 payload = resp.json()
             except Exception as e:
                 print(f"[TikWM] user/posts request failed (page {page}): {e}")
+                if raise_on_error and page == 1:
+                    raise TikWMListingError(f"request failed: {type(e).__name__}", permanent=False)
                 break
 
             if payload.get("code") != 0:
                 print(f"[TikWM] user/posts error: {payload.get('msg')}")
+                if raise_on_error and page == 1:
+                    raise TikWMListingError(str(payload.get("msg") or "error")[:120], permanent=True)
                 break
 
             data = payload.get("data") or {}
@@ -4150,10 +4170,16 @@ def scrape_tiktok_user_posts(channel_url: str, max_videos: int = 100, min_views:
                     continue
                 if (v.get("play_count") or 0) < min_views:
                     continue
-                entries.append({
+                entry = {
                     "url": f"https://www.tiktok.com/@{uid}/video/{vid}",
                     "title": (v.get("title") or "TikTok Video")[:200],
-                })
+                    "id": str(vid),
+                }
+                _ct = v.get("create_time")
+                if isinstance(_ct, (int, float)) and _ct > 0:
+                    from datetime import datetime as _dt, timezone as _tz
+                    entry["published_at"] = _dt.fromtimestamp(_ct, tz=_tz.utc).isoformat()
+                entries.append(entry)
                 if len(entries) >= max_videos:
                     break
 

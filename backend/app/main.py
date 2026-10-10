@@ -536,6 +536,12 @@ from app.api.admin_desktop import router as admin_desktop_router
 app.include_router(admin_desktop_router, prefix="/api/v1/admin", tags=["Admin Desktop App"])
 from app.api.admin_cobalt import router as admin_cobalt_router
 app.include_router(admin_cobalt_router, prefix="/api/v1/admin", tags=["Admin Cobalt"])
+# Phase 33A — Channel Watch "Theo dõi kênh" (task #6257); off unless WATCH_ENABLED
+from app.api import watch as watch_api
+from app.services.channel_watch import WatchError as _WatchError
+app.add_exception_handler(_WatchError, watch_api.watch_error_handler)
+app.include_router(watch_api.router, prefix="/api/v1", tags=["Channel Watch"])
+app.include_router(watch_api.admin_router, prefix="/api/v1/admin", tags=["Admin Channel Watch"])
 
 # Phase 19 — Mobile / PWA endpoints
 from app.api import mobile as mobile_api
