@@ -203,6 +203,28 @@ def get_watch_items(since: Optional[str] = None, user=Depends(get_optional_user)
     return {"items": cw.list_items(cw._sb(), user["id"], since=since_dt)}
 
 
+@router.get("/watch/inbox")
+def get_watch_inbox(subscription_id: Optional[str] = None, unread: bool = False,
+                    user=Depends(get_optional_user)):
+    """Hộp thư: new videos of every followed channel (30 days), read state."""
+    _require_enabled()
+    user = _require_user(user)
+    return cw.inbox(cw._sb(), user["id"], subscription_id=subscription_id, unread_only=unread)
+
+
+class InboxReadRequest(BaseModel):
+    item_ids: Optional[list[str]] = None
+    all: bool = False
+
+
+@router.post("/watch/inbox/read")
+def post_watch_inbox_read(payload: InboxReadRequest, user=Depends(get_optional_user)):
+    _require_enabled()
+    user = _require_user(user)
+    ids = (payload.item_ids or [])[:200]
+    return cw.mark_read(cw._sb(), user["id"], item_ids=ids, all_items=payload.all)
+
+
 # ── Admin ────────────────────────────────────────────────────────────
 
 @admin_router.get("/watch/overview")

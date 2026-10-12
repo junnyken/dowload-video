@@ -116,7 +116,14 @@ class _Query:
         if self.op == "upsert":
             rows = self.payload if isinstance(self.payload, list) else [self.payload]
             out = []
+            conflict = [c.strip() for c in (self.opts.get("on_conflict") or "").split(",") if c.strip()]
             for r in rows:
+                if conflict and not self.opts.get("ignore", False):
+                    hit = [x for x in self.db.rows(self.table) if all(x.get(c) == r.get(c) for c in conflict)]
+                    if hit:                      # real upsert: merge into the existing row
+                        hit[0].update(r)
+                        out.append(dict(hit[0]))
+                        continue
                 new = self.db.add(self.table, r, ignore=self.opts.get("ignore", False))
                 if new is not None:
                     out.append(dict(new))

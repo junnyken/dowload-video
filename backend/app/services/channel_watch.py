@@ -80,6 +80,8 @@ _MESSAGES = {
     "invalid_mode": "Chế độ nhận tin không hợp lệ.",  # wording: BA review
     "invalid_status": "Trạng thái không hợp lệ.",  # wording: BA review
     "invalid_since": "Mốc thời gian không hợp lệ.",  # wording: BA review
+    "inbox_not_ready": "Hộp thư đang được cập nhật, tạm chưa đánh dấu được. Vui lòng thử lại sau.",  # wording: BA review
+    "invalid_request": "Yêu cầu không hợp lệ.",  # wording: BA review
 }
 
 PLATFORM_LABELS = {"tiktok": "TikTok", "youtube": "YouTube"}
@@ -1297,3 +1299,79 @@ def list_items(sb, user_id: str, *, since: Optional[datetime] = None, now: Optio
             "published_at": r.get("published_at"), "discovered_at": r.get("discovered_at"),
         })
     return out
+
+
+# ── Inbox ("Hộp thư", Phase 33E) ─────────────────────────────────────
+# New videos of every followed channel in one list, newest first, with a
+# per-user read state (migration 039, one row per user). Without that table
+# everything shows as unread and marking answers 503 inbox_not_ready.
+
+INBOX_DAYS = 30
+INBOX_LIMIT = 500
+READ_IDS_MAX = 1000
+
+
+def _inbox_state(sb, user_id: str) -> tuple[Optional[dict], bool]:
+    try:
+        rows = (sb.table("watch_inbox_state").select("*").eq("user_id", user_id)
+                .limit(1).execute()).data or []
+    except Exception as e:  # noqa: BLE001 — table missing (039 not run)
+        logger.info("[Watch] inbox state unavailable: %s", type(e).__name__)
+        return None, False
+    return (rows[0] if rows else None), True
+
+
+def _is_read(item: dict, state: Optional[dict], read_ids: set) -> bool:
+    if not state:
+        return False
+    before = _parse(state.get("read_before"))
+    disc = _parse(item.get("discovered_at"))
+    return bool((before and disc and disc <= before) or item["id"] in read_ids)
+
+
+def inbox(sb, user_id: str, *, now: Optional[datetime] = None, subscription_id: Optional[str] = None,
+          unread_only: bool = False) -> dict:
+    now = now or utcnow()
+    items = list_items(sb, user_id, since=now - timedelta(days=INBOX_DAYS), now=now, limit=INBOX_LIMIT)
+    state, ready = _inbox_state(sb, user_id)
+    read_ids = set((state or {}).get("read_item_ids") or [])
+    unread = 0
+    out = []
+    for it in items:
+        read = _is_read(it, state, read_ids)
+        unread += 0 if read else 1
+        if subscription_id and it.get("subscription_id") != subscription_id:
+            continue
+        if unread_only and read:
+            continue
+        out.append({**it, "read": read})
+    return {"items": out, "unread": unread, "ready": ready}
+
+
+def mark_read(sb, user_id: str, *, item_ids: Optional[list] = None, all_items: bool = False,
+              now: Optional[datetime] = None) -> dict:
+    """Mark the given items (only ones in this user's inbox) or everything
+    as read. Returns {"unread": n}."""
+    now = now or utcnow()
+    if not all_items and not item_ids:
+        raise WatchError("invalid_request", 400)
+    state, ready = _inbox_state(sb, user_id)
+    if not ready:
+        raise WatchError("inbox_not_ready", 503)
+    items = list_items(sb, user_id, since=now - timedelta(days=INBOX_DAYS), now=now, limit=INBOX_LIMIT)
+    mine = {i["id"] for i in items}
+    row = {"user_id": user_id, "updated_at": _iso(now)}
+    if all_items:
+        row.update(read_before=_iso(now), read_item_ids=[])
+    else:
+        keep = [i for i in ((state or {}).get("read_item_ids") or []) if i in mine]
+        add = [str(i) for i in item_ids if str(i) in mine and str(i) not in keep]
+        row.update(read_before=(state or {}).get("read_before"),
+                   read_item_ids=(keep + add)[-READ_IDS_MAX:])
+    try:
+        sb.table("watch_inbox_state").upsert(row, on_conflict="user_id").execute()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[Watch] inbox write failed: %s", type(e).__name__)
+        raise WatchError("inbox_not_ready", 503)
+    read_ids = set(row["read_item_ids"])
+    return {"unread": sum(1 for i in items if not _is_read(i, row, read_ids))}

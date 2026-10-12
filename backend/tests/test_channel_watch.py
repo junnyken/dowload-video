@@ -1283,3 +1283,77 @@ def test_youtube_subscription_end_to_end(w, env, monkeypatch):
     cw.deliver_pending()
     assert w.pushes and "/share-target?url=" in w.pushes[0][1]["url"]
     assert "watch%3Fv%3DAAAAAAAAAA2" in w.pushes[0][1]["url"]
+
+
+# ── 33E: inbox (Hộp thư) ─────────────────────────────────────────────
+
+def _two_channels_with_news(w):
+    w.listings[CH] = vids(1)
+    w.listings[CH2] = vids(11, user="otherchannel")
+    w.add(tier="pro")
+    w.add(url=CH2, tier="pro")
+    w.listings[CH] = vids(3, 2, 1)
+    w.listings[CH2] = vids(12, 11, user="otherchannel")
+    w.advance(days=2)
+    w.scan()
+    w.scan(CH2)
+
+
+def test_inbox_lists_all_channels_unread_then_marks(w):
+    _two_channels_with_news(w)
+    box = cw.inbox(w.db, "u1")
+    assert box["ready"] is True and box["unread"] == 3
+    assert sorted(i["title"] for i in box["items"]) == ["video 12", "video 2", "video 3"]
+    assert all(i["read"] is False for i in box["items"])
+    one = next(i for i in box["items"] if i["title"] == "video 2")
+    assert cw.mark_read(w.db, "u1", item_ids=[one["id"]]) == {"unread": 2}
+    box = cw.inbox(w.db, "u1", unread_only=True)
+    assert len(box["items"]) == 2 and box["unread"] == 2
+    sub2 = next(s for s in w.rows("watch_subscriptions") if s["source_id"] == w.source(CH2)["id"])
+    assert [i["title"] for i in cw.inbox(w.db, "u1", subscription_id=sub2["id"])["items"]] == ["video 12"]
+    assert cw.mark_read(w.db, "u1", all_items=True) == {"unread": 0}
+    assert len(w.rows("watch_inbox_state")) == 1                  # one row per user, merged
+    # a video found after "mark all" is unread again
+    w.listings[CH] = vids(4, 3, 2, 1)
+    w.advance(days=2)
+    w.scan()
+    assert cw.inbox(w.db, "u1")["unread"] == 1
+
+
+def test_mark_read_ignores_other_users_items_and_bad_requests(w):
+    _two_channels_with_news(w)
+    w.listings[CH3] = vids(21, user="third.one")
+    w.add(user="u2", url=CH3, tier="pro", ip="2.2.2.2")
+    w.listings[CH3] = vids(22, 21, user="third.one")
+    w.advance(days=2)
+    w.scan(CH3)
+    foreign = cw.inbox(w.db, "u2")["items"][0]["id"]
+    assert cw.mark_read(w.db, "u1", item_ids=[foreign, "nope"]) == {"unread": 3}
+    assert w.rows("watch_inbox_state")[0]["read_item_ids"] == []
+    with pytest.raises(cw.WatchError) as e:
+        cw.mark_read(w.db, "u1")
+    assert e.value.code == "invalid_request"
+
+
+def test_inbox_without_migration_039(w):
+    _two_channels_with_news(w)
+    w.db.fail_tables.add("watch_inbox_state")
+    box = cw.inbox(w.db, "u1")
+    assert box["ready"] is False and box["unread"] == 3
+    with pytest.raises(cw.WatchError) as e:
+        cw.mark_read(w.db, "u1", all_items=True)
+    assert (e.value.code, e.value.status) == ("inbox_not_ready", 503)
+
+
+def test_inbox_api(app, w, api):
+    _two_channels_with_news(w)
+    assert app.get("/api/v1/watch/inbox").status_code == 401
+    login(api, tier="pro")
+    r = app.get("/api/v1/watch/inbox?unread=true")
+    assert r.status_code == 200 and r.json()["unread"] == 3
+    ids = [i["id"] for i in r.json()["items"]][:1]
+    r = app.post("/api/v1/watch/inbox/read", json={"item_ids": ids})
+    assert r.status_code == 200 and r.json() == {"unread": 2}
+    r = app.post("/api/v1/watch/inbox/read", json={"all": True})
+    assert r.json() == {"unread": 0}
+    assert app.post("/api/v1/watch/inbox/read", json={}).json()["error_code"] == "invalid_request"
