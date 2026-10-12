@@ -218,6 +218,15 @@ def cookie_last(platform: str) -> bool:
     return platform in _COOKIE_LAST_SUPPORTED and platform in wanted
 
 
+def no_cookie_route(platform: str) -> bool:
+    """A public post of `platform` can be served without a pool cookie:
+    cookie-last (anonymous yt-dlp first) or Cobalt-first (not tripped)."""
+    try:
+        return cookie_last(platform) or cobalt_first(platform, "video")
+    except Exception:
+        return False
+
+
 def cookie_retry_worthwhile(err: str) -> bool:
     e = (err or "").lower()
     return not any(s in e for s in _COOKIE_RETRY_USELESS)
@@ -2171,7 +2180,11 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             _has_ig_cookie = bool(_INSTAGRAM_COOKIES_B64 or _igpool("instagram"))
         except Exception:
             _has_ig_cookie = bool(_INSTAGRAM_COOKIES_B64)
-        if not _has_ig_cookie:
+        # No pool cookie is only fatal when nothing else can serve Instagram.
+        # With Cobalt-first / cookie-last the public reel never needed one —
+        # 12/10 an empty pool made every Instagram download answer 422 before
+        # Cobalt was tried (task #6258).
+        if not _has_ig_cookie and not user_cookies_file and not no_cookie_route("instagram"):
             raise ValueError(
                 "Instagram yêu cầu đăng nhập để tải video. "
                 "Vui lòng liên hệ admin để cấu hình cookie Instagram."
