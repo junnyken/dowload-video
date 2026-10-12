@@ -321,6 +321,7 @@ async function initPopup() {
         document.getElementById('ch-count').textContent = '—';
         document.getElementById('ch-count-selector').classList.remove('hidden');
         document.getElementById('ch-send-btn').classList.add('hidden');
+        void initWatchFollow(pageInfo.url); // "Theo dõi kênh này" (Phase 33B)
       } else if (pageInfo.pageType === 'channel') {
         const countResp = await new Promise((r) => chrome.tabs.sendMessage(tab.id, { type: 'VG_GET_COUNT' }, r));
         const count = countResp?.count || 0;
@@ -346,6 +347,100 @@ async function initPopup() {
   }
 }
 initPopup();
+
+// ── Channel Watch ("Theo dõi kênh", Phase 33B, task #6259) ─────────
+// On a supported channel page (TikTok profile first) a signed-in user whose
+// account the server enables (GET /api/v1/watch/status) can follow the
+// channel: POST /api/v1/watch/sources. The server's own Vietnamese message is
+// shown verbatim (limit reached, cooldown, disabled…). Guests never see it:
+// the server has no guest mode. wording: BA review
+const VG_WATCH_TEXT = {
+  login: 'Đăng nhập để theo dõi kênh.',
+  checking: 'Đang kiểm tra kênh…',
+  done: 'Đã theo dõi kênh. Video mới sẽ được báo trong ứng dụng VidGrab và trên web.',
+  already: 'Bạn đã theo dõi kênh này rồi.',
+  following: 'Đang theo dõi',
+  offline: 'Không kết nối được máy chủ. Vui lòng thử lại.',
+  generic: 'Có lỗi xảy ra. Vui lòng thử lại.',
+};
+
+// Canonical profile URL when the page is a watchable channel, else null.
+function vgWatchTarget(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    const h = u.hostname.toLowerCase();
+    const m = u.pathname.match(/^\/@([\w.-]+)\/?$/);
+    if (u.protocol === 'https:' && (h === 'tiktok.com' || h.endsWith('.tiktok.com')) && m) {
+      return { platform: 'tiktok', url: `https://www.tiktok.com/@${m[1]}` };
+    }
+  } catch { /* not a URL */ }
+  return null;
+}
+
+function vgWatchMessage(status, data) {
+  if (status === 401) return VG_WATCH_TEXT.login;
+  if (data && typeof data.message === 'string' && data.message) return data.message;
+  if (data && typeof data.detail === 'string' && data.detail) return data.detail;
+  return VG_WATCH_TEXT.generic;
+}
+
+// API base straight from storage: the popup's API_BASE is filled asynchronously.
+async function vgApiBase() {
+  try {
+    const r = await chrome.storage.sync.get('vg_api_base');
+    return normalizeApiBase(r.vg_api_base) || DEFAULT_API_BASE;
+  } catch { return API_BASE || DEFAULT_API_BASE; }
+}
+
+async function initWatchFollow(pageUrl) {
+  const box = document.getElementById('ch-watch');
+  const target = vgWatchTarget(pageUrl);
+  if (!box || !target) return;
+  if (!(await vgAuthHeaders()).Authorization) return;   // guest: no button
+  const base = await vgApiBase();
+  let st = null;
+  try {
+    const r = await fetch(`${base}/api/v1/watch/status`, { headers: await vgAuthHeaders(), cache: 'no-store' });
+    if (!r.ok) return;   // 404 watch_disabled / 401 / 5xx: the feature is not there for this user
+    st = await r.json();
+  } catch { return; }
+  if (!st || st.enabled !== true) return;
+  if (Array.isArray(st.platforms) && !st.platforms.includes(target.platform)) return;
+  box.classList.remove('hidden');
+  const btn = document.getElementById('ch-watch-btn');
+  btn.addEventListener('click', () => { void vgFollowChannel(target.url); });
+}
+
+async function vgFollowChannel(channelUrl) {
+  const btn = document.getElementById('ch-watch-btn');
+  const msg = document.getElementById('ch-watch-msg');
+  const label = document.getElementById('ch-watch-text');
+  btn.disabled = true;
+  msg.style.color = '#94a3b8';
+  msg.textContent = VG_WATCH_TEXT.checking;
+  try {
+    const base = await vgApiBase();
+    const r = await fetch(`${base}/api/v1/watch/sources`, {
+      method: 'POST',
+      headers: await vgAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ url: channelUrl, mode: 'one_tap' }),
+    });
+    let data = null;
+    try { data = await r.json(); } catch { /* empty body */ }
+    if (r.status === 200 || r.status === 201) {
+      msg.style.color = '#34d399';
+      msg.textContent = data && data.already_subscribed ? VG_WATCH_TEXT.already : VG_WATCH_TEXT.done;
+      if (label) label.textContent = VG_WATCH_TEXT.following;
+      return;   // stays disabled: already following
+    }
+    msg.style.color = '#f87171';
+    msg.textContent = vgWatchMessage(r.status, data);   // textContent: server text is never parsed as HTML
+  } catch {
+    msg.style.color = '#f87171';
+    msg.textContent = VG_WATCH_TEXT.offline;
+  }
+  btn.disabled = false;
+}
 
 // ── Unsupported page state ────────────────────────────────────────
 function showUnsupportedPage() {
