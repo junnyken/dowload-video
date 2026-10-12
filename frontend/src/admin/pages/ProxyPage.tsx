@@ -33,12 +33,13 @@ interface ProxyAddPayload {
 
 const PLATFORM_ICONS: Record<string, string> = {
   youtube: '▶', tiktok: '◆', facebook: '◉', instagram: '◈',
-  douyin: '◉', twitter: '✦', reddit: '◎', default: '◌', tiktok_watch: '◇',
+  douyin: '◉', twitter: '✦', reddit: '◎', default: '◌', tiktok_watch: '◇', all: '✱',
 }
 
 // Pools that are not a download platform: shown with a plain label.
 const POOL_LABELS: Record<string, string> = {
   tiktok_watch: 'Theo dõi kênh TikTok', // wording: BA review
+  all: 'Tất cả nền tảng (dự phòng khi bị chặn)', // wording: BA review
 }
 
 const ENV_VAR_MAP: Record<string, string> = {
@@ -50,6 +51,7 @@ const ENV_VAR_MAP: Record<string, string> = {
   twitter:   'PROXY_POOL_TW',
   reddit:    'PROXY_POOL_REDDIT',
   tiktok_watch: 'PROXY_POOL_TT_WATCH',
+  all:       'PROXY_POOL_ALL',
   default:   'PROXY_POOL_DEFAULT',
 }
 
@@ -371,7 +373,7 @@ export function ProxyPage() {
               className="rounded-card border border-line bg-surface shadow-card px-3 py-2 text-sm text-fg-2 outline-none focus:border-line-strong"
             >
               <option value="">Select…</option>
-              {['youtube','tiktok','facebook','instagram','douyin','twitter','reddit','tiktok_watch','default'].map(p => (
+              {['all','youtube','tiktok','facebook','instagram','douyin','twitter','reddit','tiktok_watch','default'].map(p => (
                 <option key={p} value={p}>{POOL_LABELS[p] ?? p}</option>
               ))}
             </select>

@@ -658,6 +658,11 @@ def _facebook_retry_plan(opts: dict) -> list:
     stale pool cookie or a missing browser fingerprint was the only problem.
     """
     plan = []
+    if opts.get("proxy") and opts.get("proxy") == _FALLBACK_PROXY.get():
+        # These attempts DOWNLOAD (download=should_download). The admin "all"
+        # pool is a metadata-only fallback: video bytes never go through it.
+        opts = dict(opts)
+        opts.pop("proxy", None)
     has_cookie = bool(opts.get("cookiefile"))
     target = _impersonate_target()
 
@@ -1189,6 +1194,10 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
             proxy = get_proxy_from_pool(_platform)
         except Exception:
             pass
+        if not proxy:
+            # Admin pool "Tất cả nền tảng": set only for the one retry after
+            # this platform blocked the server IP (extract_video_info_sync).
+            proxy = _FALLBACK_PROXY.get()
         if not proxy:
             proxy = get_proxy_config_for_phase(url, phase=phase)
     elif _is_youtube_url and _youtube_proxy_download_enabled():
@@ -3851,7 +3860,68 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     return result
 
 
+# ── Admin proxy pool "all" ("Tất cả nền tảng") — fallback ONLY ───────────
+# Owner 12/10/2026: one proxy for every platform, but only as a fallback —
+# downloads that work today keep going direct. When an extraction fails with
+# what looks like an IP block, it is retried ONCE with the "all" proxy for the
+# metadata phase (same rule as a per-platform pool: bytes stay direct, except
+# YouTube which has its own proxy system and is never touched here). A
+# platform that has its own pool proxy already used it — no second try.
+_FALLBACK_PROXY: contextvars.ContextVar = contextvars.ContextVar("vg_fallback_proxy", default=None)
+FALLBACK_POOL = "all"
+_BLOCK_MARKERS = (
+    "sign in to confirm", "not a bot", "429", "too many requests", "rate limit", "rate-limit",
+    "403", "forbidden", "blocked", "captcha", "overload", "unable to extract", "login required",
+    "requested content is not available", "temporarily unavailable", "connection reset", "timed out",
+)
+_CONTENT_MARKERS = ("private", "removed", "deleted", "does not exist", "copyright", "no longer available",
+                    "not found", "404")
+
+
+def looks_ip_blocked(err: str) -> bool:
+    t = (err or "").lower()
+    if any(m in t for m in _CONTENT_MARKERS):
+        return False
+    return any(m in t for m in _BLOCK_MARKERS)
+
+
+def fallback_proxy_for(url: str) -> Optional[str]:
+    """The "all" pool proxy for a retry, or None (YouTube, a platform that
+    has its own proxy, or an empty pool)."""
+    u = (url or "").lower()
+    if "youtube.com" in u or "youtu.be" in u or u.startswith("ytsearch"):
+        return None
+    try:
+        from app.core.proxy_pool import get_proxy_from_pool, platform_of_url  # noqa: PLC0415
+        if get_proxy_from_pool(platform_of_url(url)):
+            return None
+        return get_proxy_from_pool(FALLBACK_POOL)
+    except Exception:  # noqa: BLE001 — no Redis → no retry
+        return None
+
+
 def extract_video_info_sync(url: str, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False, progress_token: str = "", subtitle_language: str = "auto", user_cookies_file: str = None) -> Dict[str, Any]:
+    try:
+        return _extract_video_info_once(url, quality, remove_watermark, download_subs, progress_token,
+                                        subtitle_language, user_cookies_file)
+    except ValueError as first:
+        if _FALLBACK_PROXY.get() or not looks_ip_blocked(str(first)) or "Quá thời gian chờ" in str(first):
+            raise
+        proxy = fallback_proxy_for(url)
+        if not proxy:
+            raise
+        print("[Downloader] blocked — one retry via the admin 'all' proxy pool")
+        token = _FALLBACK_PROXY.set(proxy)
+        try:
+            return _extract_video_info_once(url, quality, remove_watermark, download_subs, progress_token,
+                                            subtitle_language, user_cookies_file)
+        except Exception:
+            raise first
+        finally:
+            _FALLBACK_PROXY.reset(token)
+
+
+def _extract_video_info_once(url: str, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False, progress_token: str = "", subtitle_language: str = "auto", user_cookies_file: str = None) -> Dict[str, Any]:
     """
     Public entry point with HARD TIMEOUT.
     Wraps the actual extraction in a thread.

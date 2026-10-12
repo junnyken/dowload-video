@@ -489,7 +489,8 @@ def _watch_proxy() -> Optional[str]:
     import os  # noqa: PLC0415
     try:
         from app.core.proxy_pool import get_proxy_from_pool  # noqa: PLC0415
-        p = get_proxy_from_pool(WATCH_PROXY_POOL)
+        # Own pool first, then the admin "Tất cả nền tảng" fallback pool.
+        p = get_proxy_from_pool(WATCH_PROXY_POOL) or get_proxy_from_pool("all")
         if p:
             return p
     except Exception:  # noqa: BLE001 — no Redis → env / direct

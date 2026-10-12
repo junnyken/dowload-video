@@ -35,8 +35,24 @@ _ENV_VARS = {
     "reddit":    "PROXY_POOL_REDDIT",
     # Channel Watch scans only (channel_watch._watch_proxy) — never downloads.
     "tiktok_watch": "PROXY_POOL_TT_WATCH",
+    # "Tất cả nền tảng": fallback only, after a platform blocked the server IP
+    # (downloader.extract_video_info_sync, channel_watch._watch_proxy).
+    "all":       "PROXY_POOL_ALL",
     "default":   "PROXY_POOL_DEFAULT",
 }
+
+
+def platform_of_url(url: str) -> str:
+    """Pool name of a media URL (same mapping as downloader._get_base_opts)."""
+    u = (url or "").lower()
+    if "youtube.com" in u or "youtu.be" in u:
+        return "youtube"
+    for host, name in (("tiktok.com", "tiktok"), ("facebook.com", "facebook"), ("fb.watch", "facebook"),
+                       ("instagram.com", "instagram"), ("douyin.com", "douyin"), ("twitter.com", "twitter"),
+                       ("x.com", "twitter"), ("reddit.com", "reddit"), ("redd.it", "reddit")):
+        if host in u:
+            return name
+    return "default"
 
 
 def _env_proxies(platform: str) -> list[str]:
@@ -86,7 +102,7 @@ def get_pool_status() -> dict:
     """Return count of proxies per platform (Redis + env)."""
     rc = get_redis()
     result = {}
-    for platform in ("youtube", "tiktok", "facebook", "instagram", "douyin", "twitter", "reddit", "tiktok_watch"):
+    for platform in ("youtube", "tiktok", "facebook", "instagram", "douyin", "twitter", "reddit", "tiktok_watch", "all"):
         redis_count = rc.llen(f"proxy_pool:{platform}")
         env_count = len(_env_proxies(platform))
         result[platform] = {
