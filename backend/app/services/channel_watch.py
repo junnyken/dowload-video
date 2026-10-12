@@ -971,6 +971,41 @@ def pull_forward_stale_retries(sb, now: datetime, limit: int = 100) -> int:
     return len(moved)
 
 
+WATCH_PROXY_FP_KEY = "watch:proxy_fp"
+
+
+def rescan_blocked_on_new_proxy(sb, rc, now: datetime) -> int:
+    """When the channel-scan proxy changes (admin added / replaced one),
+    blocked TikTok sources are due NOW instead of after their back-off —
+    adding a proxy takes effect within a minute. Only a fingerprint of the
+    proxy is stored, never the proxy itself."""
+    proxy = _watch_proxy() or ""
+    try:   # the whole pools, not the random pick: several proxies ≠ a change every tick
+        pool = sorted(set((rc.lrange(f"proxy_pool:{WATCH_PROXY_POOL}", 0, -1) or [])
+                          + (rc.lrange("proxy_pool:all", 0, -1) or [])))
+    except Exception:  # noqa: BLE001
+        pool = []
+    basis = "\n".join(pool) or proxy
+    fp = hashlib.sha256(basis.encode()).hexdigest()[:16] if proxy else ""
+    try:
+        old = rc.get(WATCH_PROXY_FP_KEY)
+        if (old or "") == fp:
+            return 0
+        rc.set(WATCH_PROXY_FP_KEY, fp)
+    except Exception:  # noqa: BLE001
+        return 0
+    if not proxy:
+        return 0
+    rows = (sb.table("watch_sources").select("id, last_failure_category")
+            .eq("platform", "tiktok").in_("status", list(SCANNABLE)).gte("consecutive_failures", 1)
+            .limit(200).execute()).data or []
+    ids = [r["id"] for r in rows if r.get("last_failure_category") not in PERMANENT_FAILURES]
+    if ids:
+        sb.table("watch_sources").update({"next_scan_at": _iso(now)}).in_("id", ids).execute()
+        logger.info("[Watch] new scan proxy — %d blocked TikTok sources due now", len(ids))
+    return len(ids)
+
+
 def tick(*, now: Optional[datetime] = None, sb=None, rc=None,
          enqueue_scan: Callable[[str], Any], enqueue_delivery: Callable[[], Any]) -> dict:
     if not cfg.scanning_allowed():
@@ -981,6 +1016,7 @@ def tick(*, now: Optional[datetime] = None, sb=None, rc=None,
     enqueued = 0
     try:
         pull_forward_stale_retries(sb, now)
+        rescan_blocked_on_new_proxy(sb, rc, now)
     except Exception as e:  # never block the tick
         logger.warning("[Watch] pull-forward skipped: %s", type(e).__name__)
     batch = cfg.scan_batch_per_minute()

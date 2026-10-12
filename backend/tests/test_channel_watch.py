@@ -1493,3 +1493,37 @@ def test_admin_pool_status_lists_tiktok_watch(monkeypatch):
     st = pp.get_pool_status()
     assert st["tiktok_watch"]["redis_pool"] == 1 and st["tiktok"]["redis_pool"] == 0
     assert pp.get_proxy_from_pool("tiktok") is None or pp.get_proxy_from_pool("tiktok") != "http://u:p@h:1"
+
+
+def test_new_scan_proxy_makes_blocked_tiktok_sources_due_now(w, monkeypatch):
+    w.listings[CH] = vids(1)
+    w.add()
+    s = w.source()
+    later = (w.clock[0] + timedelta(hours=2)).isoformat()
+    s.update(consecutive_failures=5, last_failure_category="embed_overload", scan_interval_sec=86400,
+             next_scan_at=later)
+    proxy = {"v": None}
+    monkeypatch.setattr(cw, "_watch_proxy", lambda: proxy["v"])
+    assert cw.rescan_blocked_on_new_proxy(w.db, w.rc, w.clock[0]) == 0      # no proxy yet
+    proxy["v"] = "http://u:p@all.invalid:1"
+    assert cw.rescan_blocked_on_new_proxy(w.db, w.rc, w.clock[0]) == 1
+    assert cw._parse(w.source()["next_scan_at"]) == w.clock[0]
+    assert "all.invalid" not in (w.rc.get(cw.WATCH_PROXY_FP_KEY) or "")      # fingerprint only
+    s["next_scan_at"] = later
+    assert cw.rescan_blocked_on_new_proxy(w.db, w.rc, w.clock[0]) == 0      # same proxy: once
+    s["last_failure_category"] = "not_found_or_private"
+    proxy["v"] = "http://u:p@other.invalid:2"
+    assert cw.rescan_blocked_on_new_proxy(w.db, w.rc, w.clock[0]) == 0      # permanent: left alone
+
+
+def test_proxy_fingerprint_is_stable_with_several_proxies(w, monkeypatch):
+    w.listings[CH] = vids(1)
+    w.add()
+    w.rc.rpush("proxy_pool:all", "http://a.invalid:1", "http://b.invalid:2")
+    picks = iter(["http://a.invalid:1", "http://b.invalid:2", "http://a.invalid:1"])
+    monkeypatch.setattr(cw, "_watch_proxy", lambda: next(picks))
+    s = w.source()
+    s.update(consecutive_failures=2, last_failure_category="embed_overload")
+    assert cw.rescan_blocked_on_new_proxy(w.db, w.rc, w.clock[0]) == 1
+    assert cw.rescan_blocked_on_new_proxy(w.db, w.rc, w.clock[0]) == 0     # different pick, same pool
+    assert cw.rescan_blocked_on_new_proxy(w.db, w.rc, w.clock[0]) == 0
