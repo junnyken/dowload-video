@@ -33,7 +33,12 @@ interface ProxyAddPayload {
 
 const PLATFORM_ICONS: Record<string, string> = {
   youtube: '▶', tiktok: '◆', facebook: '◉', instagram: '◈',
-  douyin: '◉', twitter: '✦', reddit: '◎', default: '◌',
+  douyin: '◉', twitter: '✦', reddit: '◎', default: '◌', tiktok_watch: '◇',
+}
+
+// Pools that are not a download platform: shown with a plain label.
+const POOL_LABELS: Record<string, string> = {
+  tiktok_watch: 'Theo dõi kênh TikTok', // wording: BA review
 }
 
 const ENV_VAR_MAP: Record<string, string> = {
@@ -44,6 +49,7 @@ const ENV_VAR_MAP: Record<string, string> = {
   douyin:    'PROXY_POOL_CN',
   twitter:   'PROXY_POOL_TW',
   reddit:    'PROXY_POOL_REDDIT',
+  tiktok_watch: 'PROXY_POOL_TT_WATCH',
   default:   'PROXY_POOL_DEFAULT',
 }
 
@@ -321,7 +327,7 @@ export function ProxyPage() {
                     <div className="flex items-center gap-2.5">
                       <StatusDot platform={p} total={pools[p].total} />
                       <span className="font-mono text-[11px] text-fg-2">{PLATFORM_ICONS[p] ?? '◌'}</span>
-                      <span className="text-sm font-medium capitalize text-fg-2">{p}</span>
+                      <span className="text-sm font-medium capitalize text-fg-2">{POOL_LABELS[p] ?? p}</span>
                     </div>
                   </td>
                   <td className="py-3 text-right font-mono text-sm text-fg-muted">{pools[p].redis_pool}</td>
@@ -365,8 +371,8 @@ export function ProxyPage() {
               className="rounded-card border border-line bg-surface shadow-card px-3 py-2 text-sm text-fg-2 outline-none focus:border-line-strong"
             >
               <option value="">Select…</option>
-              {['youtube','tiktok','facebook','instagram','douyin','twitter','reddit','default'].map(p => (
-                <option key={p} value={p}>{p}</option>
+              {['youtube','tiktok','facebook','instagram','douyin','twitter','reddit','tiktok_watch','default'].map(p => (
+                <option key={p} value={p}>{POOL_LABELS[p] ?? p}</option>
               ))}
             </select>
           </div>

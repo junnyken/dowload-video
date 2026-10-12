@@ -475,13 +475,34 @@ def _tiktok_embed_entries(channel_url: str, fetch: Optional[Callable[[str], tupl
     return out
 
 
-def _embed_fetch(url: str) -> tuple:
-    """Direct first. WATCH_TIKTOK_EMBED_PROXY=true retries a throttled /
-    failed call ONCE through a proxy: WATCH_TIKTOK_PROXY_URL (watch only),
-    YTDL_PROXY / RESIDENTIAL_PROXY_URL, else one from the admin proxy pool
-    (tiktok, then default) —
-    ~330 KB per call; off by default because some proxies bill per GB."""
+WATCH_PROXY_POOL = "tiktok_watch"
+
+
+def _watch_proxy() -> Optional[str]:
+    """Proxy for channel scans ONLY. Primary source: the admin Proxy page,
+    pool "tiktok_watch" ("Theo dõi kênh TikTok") — adding one there is the
+    whole opt-in (owner 12/10: proxies and cookies are managed in admin).
+    It is never the "tiktok" pool: that one also carries normal TikTok
+    metadata extraction, whose CDN links are tied to the extracting IP.
+    Fallback (env, only with WATCH_TIKTOK_EMBED_PROXY=true):
+    WATCH_TIKTOK_PROXY_URL / YTDL_PROXY / RESIDENTIAL_PROXY_URL."""
     import os  # noqa: PLC0415
+    try:
+        from app.core.proxy_pool import get_proxy_from_pool  # noqa: PLC0415
+        p = get_proxy_from_pool(WATCH_PROXY_POOL)
+        if p:
+            return p
+    except Exception:  # noqa: BLE001 — no Redis → env / direct
+        pass
+    if cfg.tiktok_embed_proxy():
+        return (os.environ.get("WATCH_TIKTOK_PROXY_URL") or os.environ.get("YTDL_PROXY")
+                or os.environ.get("RESIDENTIAL_PROXY_URL") or None)
+    return None
+
+
+def _embed_fetch(url: str) -> tuple:
+    """Direct first; a throttled / failed read is retried ONCE through
+    _watch_proxy() (~330 KB per call)."""
     from curl_cffi import requests as _cr  # noqa: PLC0415
 
     try:
@@ -492,19 +513,7 @@ def _embed_fetch(url: str) -> tuple:
         exc = None
     except Exception as e:  # noqa: BLE001
         first, exc = (0, ""), e
-    proxy = None
-    if cfg.tiktok_embed_proxy():
-        # WATCH_TIKTOK_PROXY_URL first: used ONLY here. A rotating proxy in
-        # the admin "tiktok" pool would also carry normal TikTok metadata
-        # extraction, whose CDN links are tied to the extracting IP.
-        proxy = (os.environ.get("WATCH_TIKTOK_PROXY_URL") or os.environ.get("YTDL_PROXY")
-                 or os.environ.get("RESIDENTIAL_PROXY_URL"))
-        if not proxy:
-            try:
-                from app.core.proxy_pool import get_proxy_from_pool  # noqa: PLC0415
-                proxy = get_proxy_from_pool("tiktok")
-            except Exception:  # noqa: BLE001 — no Redis → direct only
-                proxy = None
+    proxy = _watch_proxy()
     if not proxy:
         if exc:
             raise exc

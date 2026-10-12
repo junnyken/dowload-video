@@ -1079,40 +1079,6 @@ class _R:
         self.status_code, self.text = code, text
 
 
-def test_embed_proxy_retry_is_opt_in(env, monkeypatch):
-    import curl_cffi.requests as cr
-    calls = []
-    monkeypatch.setattr(cr, "get", lambda url, **k: calls.append(k.get("proxy")) or _R(503, "overload"))
-    monkeypatch.delenv("YTDL_PROXY", raising=False)
-    env.setenv("RESIDENTIAL_PROXY_URL", "http://proxy.invalid:1")
-    assert cw._embed_fetch("https://www.tiktok.com/embed/@x") == (503, "overload")
-    assert calls == [None]                                  # off by default: no billed call
-    env.setenv("WATCH_TIKTOK_EMBED_PROXY", "true")
-    calls.clear()
-    cw._embed_fetch("https://www.tiktok.com/embed/@x")
-    assert calls == [None, "http://proxy.invalid:1"]
-    calls.clear()
-    monkeypatch.setattr(cr, "get", lambda url, **k: calls.append(k.get("proxy")) or _R(200, "ok"))
-    assert cw._embed_fetch("https://www.tiktok.com/embed/@x") == (200, "ok") and calls == [None]
-
-
-def test_embed_proxy_falls_back_to_admin_pool(env, monkeypatch):
-    import curl_cffi.requests as cr
-    calls = []
-    monkeypatch.setattr(cr, "get", lambda url, **k: calls.append(k.get("proxy")) or _R(503, "overload"))
-    monkeypatch.delenv("YTDL_PROXY", raising=False)
-    monkeypatch.delenv("RESIDENTIAL_PROXY_URL", raising=False)
-    monkeypatch.setattr("app.core.proxy_pool.get_proxy_from_pool", lambda p: "http://pool.invalid:2")
-    env.setenv("WATCH_TIKTOK_EMBED_PROXY", "true")
-    cw._embed_fetch("https://www.tiktok.com/embed/@x")
-    assert calls == [None, "http://pool.invalid:2"]
-    calls.clear()
-    monkeypatch.setattr("app.core.proxy_pool.get_proxy_from_pool", lambda p: None)
-    assert cw._embed_fetch("https://www.tiktok.com/embed/@x") == (503, "overload") and calls == [None]
-
-
-# ── 33C: webhook event watch.new_items ──────────────────────────────
-
 def _new_video_ready(w, user="u1", tier="pro"):
     w.listings[CH] = vids(1)
     w.add(user=user, tier=tier)
@@ -1473,12 +1439,57 @@ def test_instagram_no_run_started_refunds_the_estimate(w, ig_env):
     assert int(w.rc.get(bg.k_platform_spend(bg.day_key(), "instagram")) or 0) == 0
 
 
-def test_embed_proxy_prefers_watch_only_env(env, monkeypatch):
+def _pool(monkeypatch, value):
+    seen = []
+    monkeypatch.setattr("app.core.proxy_pool.get_proxy_from_pool", lambda p: seen.append(p) or value)
+    return seen
+
+
+def test_embed_no_proxy_anywhere_means_direct_only(env, monkeypatch):
     import curl_cffi.requests as cr
     calls = []
     monkeypatch.setattr(cr, "get", lambda url, **k: calls.append(k.get("proxy")) or _R(503, "overload"))
-    env.setenv("WATCH_TIKTOK_EMBED_PROXY", "true")
+    monkeypatch.delenv("YTDL_PROXY", raising=False)
     env.setenv("RESIDENTIAL_PROXY_URL", "http://res.invalid:1")
+    assert _pool(monkeypatch, None) == []
+    assert cw._embed_fetch("https://www.tiktok.com/embed/@x") == (503, "overload")
+    assert calls == [None]                         # env proxy needs the flag: no billed call
+
+
+def test_embed_uses_admin_pool_tiktok_watch_without_any_env(env, monkeypatch):
+    import curl_cffi.requests as cr
+    calls = []
+    monkeypatch.setattr(cr, "get", lambda url, **k: calls.append(k.get("proxy")) or _R(503, "overload"))
+    asked = _pool(monkeypatch, "http://pool.invalid:2")
+    cw._embed_fetch("https://www.tiktok.com/embed/@x")
+    assert asked == ["tiktok_watch"]               # never the download pool "tiktok"
+    assert calls == [None, "http://pool.invalid:2"]
+    calls.clear()
+    monkeypatch.setattr(cr, "get", lambda url, **k: calls.append(k.get("proxy")) or _R(200, "ok"))
+    assert cw._embed_fetch("https://www.tiktok.com/embed/@x") == (200, "ok") and calls == [None]
+
+
+def test_embed_env_proxy_only_with_flag_and_after_the_pool(env, monkeypatch):
+    import curl_cffi.requests as cr
+    calls = []
+    monkeypatch.setattr(cr, "get", lambda url, **k: calls.append(k.get("proxy")) or _R(503, "overload"))
+    _pool(monkeypatch, None)
+    env.setenv("WATCH_TIKTOK_EMBED_PROXY", "true")
     env.setenv("WATCH_TIKTOK_PROXY_URL", "http://watch.invalid:3")
     cw._embed_fetch("https://www.tiktok.com/embed/@x")
     assert calls == [None, "http://watch.invalid:3"]
+    calls.clear()
+    _pool(monkeypatch, "http://pool.invalid:2")
+    cw._embed_fetch("https://www.tiktok.com/embed/@x")
+    assert calls == [None, "http://pool.invalid:2"]
+
+
+def test_admin_pool_status_lists_tiktok_watch(monkeypatch):
+    import fakeredis as _f
+    from app.core import proxy_pool as pp
+    rc = _f.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(pp, "get_redis", lambda: rc)
+    pp.add_proxy("tiktok_watch", "http://u:p@h:1")
+    st = pp.get_pool_status()
+    assert st["tiktok_watch"]["redis_pool"] == 1 and st["tiktok"]["redis_pool"] == 0
+    assert pp.get_proxy_from_pool("tiktok") is None or pp.get_proxy_from_pool("tiktok") != "http://u:p@h:1"

@@ -33,6 +33,8 @@ _ENV_VARS = {
     "douyin":    "PROXY_POOL_CN",
     "twitter":   "PROXY_POOL_TW",
     "reddit":    "PROXY_POOL_REDDIT",
+    # Channel Watch scans only (channel_watch._watch_proxy) — never downloads.
+    "tiktok_watch": "PROXY_POOL_TT_WATCH",
     "default":   "PROXY_POOL_DEFAULT",
 }
 
@@ -84,7 +86,7 @@ def get_pool_status() -> dict:
     """Return count of proxies per platform (Redis + env)."""
     rc = get_redis()
     result = {}
-    for platform in ("youtube", "tiktok", "facebook", "instagram", "douyin", "twitter", "reddit"):
+    for platform in ("youtube", "tiktok", "facebook", "instagram", "douyin", "twitter", "reddit", "tiktok_watch"):
         redis_count = rc.llen(f"proxy_pool:{platform}")
         env_count = len(_env_proxies(platform))
         result[platform] = {
