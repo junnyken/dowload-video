@@ -10,7 +10,8 @@ import { createStore } from './store';
 import { api, loadMock, mockMode } from './tauri';
 import { authErrorCode, toAppError, type AppError } from './errors';
 
-export type AuthState = { status: 'loading' | 'out' | 'in'; email: string | null };
+/** userId: the Supabase user id (keys per-account local state such as Channel Watch's last-seen). */
+export type AuthState = { status: 'loading' | 'out' | 'in'; email: string | null; userId?: string | null };
 export const auth = createStore<AuthState>({ status: 'loading', email: null });
 
 let client: SupabaseClient | null = null;
@@ -63,7 +64,7 @@ function getClient(): SupabaseClient {
 }
 
 function apply(s: Session | null) {
-  auth.set(s?.user ? { status: 'in', email: s.user.email ?? null } : { status: 'out', email: null });
+  auth.set(s?.user ? { status: 'in', email: s.user.email ?? null, userId: s.user.id ?? null } : { status: 'out', email: null });
 }
 
 export async function initAuth() {
@@ -100,7 +101,7 @@ export async function signInWithBrowser(): Promise<void> {
       const m = await loadMock();
       const s = await m.mockExchange(refreshToken);
       mockToken = s.access_token;
-      auth.set({ status: 'in', email: s.user.email });
+      auth.set({ status: 'in', email: s.user.email, userId: 'mock-user' });
       return;
     }
     const { error } = await getClient().auth.refreshSession({ refresh_token: refreshToken });

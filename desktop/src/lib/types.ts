@@ -113,4 +113,4 @@ export type Channel = {
   createdAt: string;
 };
 
-export type Screen = 'download' | 'channels' | 'queue' | 'history' | 'settings';
+export type Screen = 'download' | 'channels' | 'watch' | 'queue' | 'history' | 'settings';

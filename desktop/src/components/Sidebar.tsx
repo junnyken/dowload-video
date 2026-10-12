@@ -1,13 +1,17 @@
-import { Download, History, ListChecks, Settings as Cog, Tv, User } from 'lucide-react';
+import { Download, Eye, History, ListChecks, Settings as Cog, Tv, User } from 'lucide-react';
 import { nav, go, openSignIn } from '../lib/ui';
 import { queue, activeCount } from '../lib/queue';
 import { auth } from '../lib/auth';
 import { channels, totalPending } from '../lib/channels';
+import { watchItems, watchLocal, watchStatus } from '../lib/watch';
+import { pendingItems, watchVisible } from '../lib/watch-core';
 import type { Screen } from '../lib/types';
 
 const ITEMS: { id: Screen; label: string; icon: typeof Download }[] = [
   { id: 'download', label: 'Tải xuống', icon: Download },
   { id: 'channels', label: 'Kênh', icon: Tv },
+  // Channel Watch (Phase 33B): only for a signed-in user the server enabled it for. wording: BA review
+  { id: 'watch', label: 'Theo dõi kênh', icon: Eye },
   { id: 'queue', label: 'Hàng đợi', icon: ListChecks },
   { id: 'history', label: 'Lịch sử', icon: History },
   { id: 'settings', label: 'Cài đặt', icon: Cog },
@@ -18,6 +22,8 @@ export function Sidebar() {
   const active = activeCount(queue.use());
   const a = auth.use();
   const pendingNew = totalPending(channels.use());
+  const showWatch = watchVisible(a.status, watchStatus.use());
+  const watchNew = pendingItems(watchItems.use(), watchLocal.use()).length;
   return (
     <aside className="flex w-[208px] shrink-0 flex-col border-r border-line bg-surface">
       <div className="flex items-center gap-2.5 px-4 pb-4 pt-5">
@@ -27,7 +33,7 @@ export function Sidebar() {
         <span className="text-base font-bold tracking-tight text-fg">VidGrab</span>
       </div>
       <nav className="flex flex-1 flex-col gap-0.5 px-2.5" aria-label="Điều hướng chính">
-        {ITEMS.map(({ id, label, icon: Icon }) => {
+        {ITEMS.filter(({ id }) => id !== 'watch' || showWatch).map(({ id, label, icon: Icon }) => {
           const on = screen === id;
           return (
             <button
@@ -44,6 +50,11 @@ export function Sidebar() {
               {id === 'channels' && pendingNew > 0 && (
                 <span aria-label={`${pendingNew} video mới từ các kênh`} className="min-w-5 rounded-full bg-accent px-1.5 text-center text-xs font-semibold leading-5 text-accent-fg">
                   {pendingNew}
+                </span>
+              )}
+              {id === 'watch' && watchNew > 0 && (
+                <span aria-label={`${watchNew} video mới từ kênh đang theo dõi`} className="min-w-5 rounded-full bg-accent px-1.5 text-center text-xs font-semibold leading-5 text-accent-fg">
+                  {watchNew}
                 </span>
               )}
               {id === 'queue' && active > 0 && (

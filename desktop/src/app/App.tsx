@@ -5,6 +5,7 @@ import { SignInModal } from '../components/SignInModal';
 import { UpdateRequired } from '../components/UpdateRequired';
 import { DownloadScreen } from '../screens/DownloadScreen';
 import { ChannelsScreen } from '../screens/ChannelsScreen';
+import { WatchScreen } from '../screens/WatchScreen';
 import { QueueScreen } from '../screens/QueueScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
@@ -18,6 +19,7 @@ import { initSync, refreshPending } from '../lib/sync';
 import { startChannels } from '../lib/channels';
 import { mockMode } from '../lib/tauri';
 import { initUpdateGate } from '../lib/update';
+import { startWatch } from '../lib/watch';
 
 let booted = false;
 
@@ -39,6 +41,7 @@ export function App() {
       void initAuth();
       void refreshPending();
       void startChannels();
+      startWatch();
     }
     return () => mq.removeEventListener('change', applyTheme);
   }, []);
@@ -53,6 +56,7 @@ export function App() {
         <div className={mockMode ? 'h-[calc(100%-26px)]' : 'h-full'}>
           {screen === 'download' && <DownloadScreen />}
           {screen === 'channels' && <ChannelsScreen />}
+          {screen === 'watch' && <WatchScreen />}
           {screen === 'queue' && <QueueScreen />}
           {screen === 'history' && <HistoryScreen />}
           {screen === 'settings' && <SettingsScreen />}
