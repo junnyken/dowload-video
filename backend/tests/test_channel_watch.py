@@ -1471,3 +1471,14 @@ def test_instagram_no_run_started_refunds_the_estimate(w, ig_env):
     with pytest.raises(cw.ListingError):
         cw._list_instagram({"external_channel_id": "natgeo"}, 10, run=lambda i, n: ([], False, None))
     assert int(w.rc.get(bg.k_platform_spend(bg.day_key(), "instagram")) or 0) == 0
+
+
+def test_embed_proxy_prefers_watch_only_env(env, monkeypatch):
+    import curl_cffi.requests as cr
+    calls = []
+    monkeypatch.setattr(cr, "get", lambda url, **k: calls.append(k.get("proxy")) or _R(503, "overload"))
+    env.setenv("WATCH_TIKTOK_EMBED_PROXY", "true")
+    env.setenv("RESIDENTIAL_PROXY_URL", "http://res.invalid:1")
+    env.setenv("WATCH_TIKTOK_PROXY_URL", "http://watch.invalid:3")
+    cw._embed_fetch("https://www.tiktok.com/embed/@x")
+    assert calls == [None, "http://watch.invalid:3"]

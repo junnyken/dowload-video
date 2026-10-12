@@ -477,8 +477,9 @@ def _tiktok_embed_entries(channel_url: str, fetch: Optional[Callable[[str], tupl
 
 def _embed_fetch(url: str) -> tuple:
     """Direct first. WATCH_TIKTOK_EMBED_PROXY=true retries a throttled /
-    failed call ONCE through a proxy: YTDL_PROXY / RESIDENTIAL_PROXY_URL
-    when set, else one from the admin proxy pool (tiktok, then default) —
+    failed call ONCE through a proxy: WATCH_TIKTOK_PROXY_URL (watch only),
+    YTDL_PROXY / RESIDENTIAL_PROXY_URL, else one from the admin proxy pool
+    (tiktok, then default) —
     ~330 KB per call; off by default because some proxies bill per GB."""
     import os  # noqa: PLC0415
     from curl_cffi import requests as _cr  # noqa: PLC0415
@@ -493,7 +494,11 @@ def _embed_fetch(url: str) -> tuple:
         first, exc = (0, ""), e
     proxy = None
     if cfg.tiktok_embed_proxy():
-        proxy = os.environ.get("YTDL_PROXY") or os.environ.get("RESIDENTIAL_PROXY_URL")
+        # WATCH_TIKTOK_PROXY_URL first: used ONLY here. A rotating proxy in
+        # the admin "tiktok" pool would also carry normal TikTok metadata
+        # extraction, whose CDN links are tied to the extracting IP.
+        proxy = (os.environ.get("WATCH_TIKTOK_PROXY_URL") or os.environ.get("YTDL_PROXY")
+                 or os.environ.get("RESIDENTIAL_PROXY_URL"))
         if not proxy:
             try:
                 from app.core.proxy_pool import get_proxy_from_pool  # noqa: PLC0415
