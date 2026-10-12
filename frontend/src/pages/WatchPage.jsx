@@ -39,8 +39,14 @@ const T = {
   degraded: 'Tạm thời không đọc được kênh, hệ thống sẽ thử lại.',
   modeTap: 'Thông báo + mở nhanh để tải',
   modeNotify: 'Chỉ thông báo',
-  recentTitle: 'Video mới gần đây',
   download: 'Tải',
+  inboxTitle: 'Hộp thư', // wording: BA review
+  unreadCount: (n) => `${n} chưa xem`, // wording: BA review
+  allChannels: 'Tất cả kênh', // wording: BA review
+  unreadOnly: 'Chỉ video chưa xem', // wording: BA review
+  markAll: 'Đánh dấu đã xem tất cả', // wording: BA review
+  inboxEmpty: 'Chưa có video mới.', // wording: BA review
+  unreadDot: 'Chưa xem', // wording: BA review
   pushBtn: 'Bật thông báo',
   push: {
     ok: 'Đã bật thông báo trên trình duyệt này.',
@@ -65,7 +71,9 @@ export default function WatchPage() {
   const { isAuthenticated, session, withAuth } = useAuth();
   const [status, setStatus] = useState(null);       // null = loading, false = unavailable
   const [subs, setSubs] = useState([]);
-  const [items, setItems] = useState([]);
+  const [inbox, setInbox] = useState({ items: [], unread: 0, ready: true });
+  const [inboxSub, setInboxSub] = useState('');
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const [url, setUrl] = useState('');
   const [mode, setMode] = useState('one_tap');
   const [busy, setBusy] = useState(false);
@@ -84,17 +92,36 @@ export default function WatchPage() {
         if (!alive) return null;
         setStatus(st || false);
         if (!st) return null;
-        return Promise.all([getJson('/subscriptions'), getJson('/items')]);
+        return getJson('/subscriptions');
       })
-      .then((res) => {
-        if (!alive || !res) return;
-        const [s, i] = res;
-        if (s) setSubs(s.subscriptions || []);
-        if (i) setItems(i.items || []);
+      .then((s) => {
+        if (!alive || !s) return;
+        setSubs(s.subscriptions || []);
       })
       .catch(() => { if (alive) setStatus(false); });
     return () => { alive = false; };
   }, [isAuthenticated, withAuth, reloadKey]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    let alive = true;
+    const qs = new URLSearchParams();
+    if (inboxSub) qs.set('subscription_id', inboxSub);
+    if (unreadOnly) qs.set('unread', 'true');
+    const q = qs.toString();
+    fetch(`${API}/inbox${q ? `?${q}` : ''}`, withAuth())
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d) return;
+        setInbox({
+          items: Array.isArray(d.items) ? d.items : [],
+          unread: Number(d.unread) || 0,
+          ready: d.ready !== false,
+        });
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [isAuthenticated, withAuth, reloadKey, inboxSub, unreadOnly]);
 
   if (!isAuthenticated) {
     return (
@@ -147,6 +174,33 @@ export default function WatchPage() {
     const r = await fetch(`${API}/subscriptions/${id}`, withAuth({ method: 'DELETE' }));
     if (!r.ok) setErr(errText(await r.json().catch(() => ({}))));
     load();
+  }
+
+  async function markRead(payload, optimistic) {
+    const prev = inbox;
+    setInbox(optimistic);
+    try {
+      const r = await fetch(`${API}/inbox/read`, withAuth({
+        // keepalive: "Tải" navigates to /share-target right after the click.
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), keepalive: true,
+      }));
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setInbox(prev); setErr(errText(d)); return; }
+      if (typeof d.unread === 'number') setInbox((cur) => ({ ...cur, unread: d.unread }));
+    } catch { setInbox(prev); }
+  }
+
+  function markOne(it) {
+    if (it.read) return;
+    markRead({ item_ids: [it.id] }, {
+      ...inbox,
+      items: inbox.items.map((x) => (x.id === it.id ? { ...x, read: true } : x)),
+      unread: Math.max(0, inbox.unread - 1),
+    });
+  }
+
+  function markAll() {
+    markRead({ all: true }, { ...inbox, items: inbox.items.map((x) => ({ ...x, read: true })), unread: 0 });
   }
 
   async function push() {
@@ -239,25 +293,52 @@ export default function WatchPage() {
         </div>
       )}
 
-      {items.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-sm font-bold text-fg-2 mb-3">{T.recentTitle}</h2>
+      <div className="mt-8">
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <h2 className="text-sm font-bold text-fg-2">{T.inboxTitle}</h2>
+          {inbox.unread > 0 && (
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-accent-soft text-accent-text font-bold">{T.unreadCount(inbox.unread)}</span>
+          )}
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
+          <select value={inboxSub} onChange={(e) => setInboxSub(e.target.value)} aria-label={T.allChannels}
+            className="min-w-0 px-3 py-2 rounded-xl bg-surface-2 border border-line text-sm text-fg">
+            <option value="">{T.allChannels}</option>
+            {subs.map((s) => (
+              <option key={s.id} value={s.id}>{s.source.display_name || s.source.canonical_url}</option>
+            ))}
+          </select>
+          <label className="flex items-center gap-2 text-xs text-fg-muted cursor-pointer">
+            <input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} />
+            {T.unreadOnly}
+          </label>
+          <button onClick={markAll} disabled={inbox.unread === 0 || !inbox.ready}
+            className="sm:ml-auto px-3 py-2 rounded-lg border border-line-strong text-xs font-bold text-fg-muted hover:text-fg cursor-pointer disabled:opacity-50">
+            {T.markAll}
+          </button>
+        </div>
+        {inbox.items.length === 0 ? (
+          <p className="text-sm text-fg-muted px-1 py-4">{T.inboxEmpty}</p>
+        ) : (
           <div className="flex flex-col gap-2">
-            {items.map((it) => (
+            {inbox.items.map((it) => (
               <div key={it.id} className="flex items-center gap-3 px-3 py-2 rounded-xl border border-line bg-surface min-w-0">
+                <span title={it.read ? undefined : T.unreadDot} aria-label={it.read ? undefined : T.unreadDot}
+                  className={`w-2 h-2 rounded-full shrink-0 ${it.read ? 'bg-transparent' : 'bg-accent'}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-fg truncate">{it.title || it.url}</p>
-                  <p className="text-[11px] text-fg-muted">{it.channel} · {fmt(it.discovered_at)}</p>
+                  <a href={it.url} target="_blank" rel="noreferrer noopener" onClick={() => markOne(it)}
+                    className={`block text-sm text-fg truncate hover:underline ${it.read ? '' : 'font-bold'}`}>{it.title || it.url}</a>
+                  <p className="text-[11px] text-fg-muted truncate">{it.platform} · {it.channel} · {fmt(it.discovered_at)}</p>
                 </div>
-                <a href={`/share-target?url=${encodeURIComponent(it.url)}`}
+                <a href={`/share-target?url=${encodeURIComponent(it.url)}`} onClick={() => markOne(it)}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-accent/30 text-accent-text text-xs font-bold hover:bg-accent-soft shrink-0">
                   <Download className="w-3.5 h-3.5" /> {T.download}
                 </a>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

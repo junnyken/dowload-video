@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   MAX_IDS, POLL_MS, applyPoll, batchByChannel, channelLabel, emptyLocal, markDone, mergeItems, nextPollDelay, notifyText, oneTap,
-  parseItems, parseStatus, parseSubscriptions, pendingItems, readLocal, serverMessage, toChannelVideo, watchVisible, writeLocal,
+  parseInbox, parseItems, parseStatus, parseSubscriptions, pendingItems, readLocal, serverMessage, toChannelVideo, watchVisible, writeLocal,
   type EnqueueWithClaims, type WatchItem,
 } from '../src/lib/watch-core.ts';
 
@@ -200,4 +200,34 @@ test('watch.ts wires one-tap to the real channels.ts enqueueWithClaims (no priva
   assert.match(src, /oneTap\([\s\S]*?\},\s*enqueueWithClaims\)/);
   assert.doesNotMatch(src, /\benqueue\(/, 'never calls the bare queue enqueue (which would skip the claim batch)');
   assert.doesNotMatch(src, /startDownload/, 'never starts yt-dlp directly');
+});
+
+// ---- inbox ("Hộp thư") -----------------------------------------------------------------
+
+test('parseInbox: valid payload, read flag, unread count, ready', () => {
+  const r = parseInbox({
+    items: [{ id: 'a', source_id: 's', subscription_id: 'u', channel: 'kenh', platform: 'tiktok', title: 'T', url: 'https://x/1', published_at: null, discovered_at: '2026-10-01T00:00:00Z', read: true, extra: 1 },
+      { id: 'b', url: 'https://x/2', read: false }],
+    unread: 1, ready: true, other: 'ignored',
+  });
+  assert.equal(r.items.length, 2);
+  assert.equal(r.items[0].read, true);
+  assert.equal(r.items[1].read, false);
+  assert.equal(r.items[1].source_id, '');
+  assert.equal(r.unread, 1);
+  assert.equal(r.ready, true);
+});
+
+test('parseInbox: wrong types dropped, garbage = empty, ready=false honoured', () => {
+  const r = parseInbox({ items: [null, 5, { title: 'no id' }, { id: 7 }, { id: 'ok', title: 42, read: 'yes' }], unread: '3', ready: false });
+  assert.deepEqual(r.items.map((i) => i.id), ['ok']);
+  assert.equal(r.items[0].title, null);
+  assert.equal(r.items[0].read, false, 'only boolean true counts as read');
+  assert.equal(r.unread, 0);
+  assert.equal(r.ready, false);
+  for (const bad of [null, undefined, 'x', [], { items: 'nope' }]) {
+    const e = parseInbox(bad);
+    assert.deepEqual(e, { items: [], unread: 0, ready: true });
+  }
+  assert.equal(parseInbox({ unread: -4 }).unread, 0);
 });

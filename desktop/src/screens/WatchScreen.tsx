@@ -1,15 +1,15 @@
 // "Theo dõi kênh" (Phase 33B, task #6259): channels the VidGrab server
 // watches for this account; new videos are downloaded on THIS machine when
 // the user taps "Tải". All Vietnamese strings: wording: BA review.
-import { useEffect, useState } from 'react';
-import { AlertCircle, Bell, Download, Eye, Pause, Play, RefreshCw, Trash2, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { AlertCircle, Bell, Download, Eye, Pause, Play, RefreshCw, Trash2 } from 'lucide-react';
 import { Badge, Button, EmptyState, IconButton, PlatformBadge, ScreenHeader, Spinner } from '../components/ui';
 import { formatDate } from '../lib/format';
 import { confirmDialog, toast } from '../lib/ui';
 import {
-  addSource, dismissItems, downloadItems, refreshAll, removeSource, setPaused, watchItems, watchLoading, watchLocal, watchStatus, watchSubs,
+  addSource, downloadInboxItems, fetchInbox, inboxQuery, markInboxRead, refreshAll, removeSource, setPaused, watchInbox, watchLoading, watchStatus, watchSubs,
 } from '../lib/watch';
-import { channelLabel, pendingItems, type WatchItem, type WatchSubscription } from '../lib/watch-core';
+import { channelLabel, type InboxItem, type WatchSubscription } from '../lib/watch-core';
 
 // wording: BA review
 const T = {
@@ -38,11 +38,15 @@ const T = {
   remove: 'Bỏ theo dõi',
   confirmTitle: 'Bỏ theo dõi kênh này?',
   confirmText: 'Bạn có thể phải chờ một thời gian trước khi thêm kênh khác.',
-  recent: 'Video mới',
+  inboxTitle: 'Hộp thư', // wording: BA review
+  unreadCount: (n: number) => `${n} chưa xem`, // wording: BA review
+  allChannels: 'Tất cả kênh', // wording: BA review
+  unreadOnly: 'Chỉ video chưa xem', // wording: BA review
+  markAll: 'Đánh dấu đã xem tất cả', // wording: BA review
+  unreadDot: 'Chưa xem', // wording: BA review
   downloadAll: (n: number) => `Tải tất cả (${n})`,
   download: 'Tải',
-  dismiss: 'Bỏ qua',
-  noRecent: 'Chưa có video mới. Ứng dụng tự kiểm tra khoảng 15 phút một lần khi đang chạy và báo cho bạn.',
+  noRecent: 'Chưa có video mới.', // wording: BA review
   reload: 'Làm mới',
 };
 
@@ -101,15 +105,16 @@ function SubCard({ s }: { s: WatchSubscription }) {
   );
 }
 
-function ItemRow({ i }: { i: WatchItem }) {
+function ItemRow({ i }: { i: InboxItem }) {
   return (
     <li className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2">
+      <span role={i.read ? undefined : 'img'} aria-label={i.read ? undefined : T.unreadDot} title={i.read ? undefined : T.unreadDot}
+        className={`h-2 w-2 shrink-0 rounded-full ${i.read ? 'bg-transparent' : 'bg-accent'}`} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm text-fg" title={i.title ?? i.url ?? ''}>{i.title || i.url}</p>
+        <p className={`truncate text-sm text-fg ${i.read ? '' : 'font-semibold'}`} title={i.title ?? i.url ?? ''}>{i.title || i.url}</p>
         <p className="truncate text-xs text-fg-muted">{channelLabel(i.channel)}{i.discovered_at ? ` · ${formatDate(i.discovered_at)}` : ''}</p>
       </div>
-      <Button size="sm" variant="primary" icon={<Download size={14} />} onClick={() => void downloadItems([i])}>{T.download}</Button>
-      <IconButton label={T.dismiss} onClick={() => dismissItems([i.id])}><X size={15} /></IconButton>
+      <Button size="sm" variant="primary" icon={<Download size={14} />} onClick={() => void downloadInboxItems([i])}>{T.download}</Button>
     </li>
   );
 }
@@ -117,8 +122,8 @@ function ItemRow({ i }: { i: WatchItem }) {
 export function WatchScreen() {
   const st = watchStatus.use();
   const subs = watchSubs.use();
-  const items = watchItems.use();
-  const local = watchLocal.use();
+  const inbox = watchInbox.use();
+  const q = inboxQuery.use();
   const loading = watchLoading.use();
   const [url, setUrl] = useState('');
   const [mode, setMode] = useState<'one_tap' | 'notify_only'>('one_tap');
@@ -126,6 +131,13 @@ export function WatchScreen() {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => { void refreshAll(); }, []);
+  const subId = q.subscriptionId ?? '';
+  const unreadOnly = q.unreadOnly === true;
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; } // refreshAll above already fetched
+    void fetchInbox({ subscriptionId: subId, unreadOnly });
+  }, [subId, unreadOnly]);
 
   if (!st || (st.kind !== 'ok' && loading)) {
     return <div className="flex h-full items-center justify-center"><Spinner className="text-accent" /></div>;
@@ -140,7 +152,7 @@ export function WatchScreen() {
   }
 
   const s = st.status;
-  const pending = pendingItems(items, local);
+  const pending = inbox.items.filter((i) => !i.read && !!i.url);
   const canAdd = s.enabled && s.used < s.limits.max_sources;
 
   async function add() {
@@ -181,19 +193,32 @@ export function WatchScreen() {
           {err && <p role="alert" className="mt-2 text-[13px] text-danger">{err}</p>}
         </div>
 
-        <section className="mt-4" aria-label={T.recent}>
-          <div className="flex items-center gap-2">
-            <h2 className="text-[13px] font-semibold text-fg-2">{T.recent}{pending.length ? ` (${pending.length})` : ''}</h2>
+        <section className="mt-4" aria-label={T.inboxTitle}>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-[13px] font-semibold text-fg-2">{T.inboxTitle}</h2>
+            {inbox.unread > 0 && <Badge tone="accent">{T.unreadCount(inbox.unread)}</Badge>}
             {pending.length > 1 && (
               <span className="ml-auto flex gap-1.5">
-                <Button size="sm" variant="primary" icon={<Download size={14} />} onClick={() => void downloadItems(pending)}>{T.downloadAll(pending.length)}</Button>
-                <Button size="sm" variant="ghost" onClick={() => dismissItems(pending.map((i) => i.id))}>{T.dismiss}</Button>
+                <Button size="sm" variant="primary" icon={<Download size={14} />} onClick={() => void downloadInboxItems(pending)}>{T.downloadAll(pending.length)}</Button>
               </span>
             )}
           </div>
-          {pending.length === 0
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <select aria-label={T.allChannels} value={subId} onChange={(e) => inboxQuery.set({ ...q, subscriptionId: e.target.value })}
+              className="h-9 min-w-0 max-w-full rounded-[10px] border border-line-strong bg-canvas px-2 text-sm text-fg">
+              <option value="">{T.allChannels}</option>
+              {subs.map((x) => <option key={x.id} value={x.id}>{x.source.display_name || x.source.canonical_url}</option>)}
+            </select>
+            <label className="flex items-center gap-1.5 text-xs text-fg-muted">
+              <input type="checkbox" checked={unreadOnly} onChange={(e) => inboxQuery.set({ ...q, unreadOnly: e.target.checked })} />
+              {T.unreadOnly}
+            </label>
+            <Button size="sm" variant="ghost" className="ml-auto" disabled={inbox.unread === 0 || !inbox.ready}
+              onClick={() => void markInboxRead('all', (m) => toast('error', m))}>{T.markAll}</Button>
+          </div>
+          {inbox.items.length === 0
             ? <p className="mt-2 text-xs text-fg-muted">{T.noRecent}</p>
-            : <ul className="mt-2 flex flex-col gap-1.5">{pending.map((i) => <ItemRow key={i.id} i={i} />)}</ul>}
+            : <ul className="mt-2 flex flex-col gap-1.5">{inbox.items.map((i) => <ItemRow key={i.id} i={i} />)}</ul>}
         </section>
 
         {subs.length === 0 && !loading

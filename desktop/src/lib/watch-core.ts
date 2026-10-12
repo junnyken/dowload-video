@@ -56,6 +56,10 @@ export type WatchItem = {
   discovered_at: string | null;
 };
 
+/** One row of GET /watch/inbox: a WatchItem plus its read-state. */
+export type InboxItem = WatchItem & { read: boolean };
+export type Inbox = { items: InboxItem[]; unread: number; ready: boolean };
+
 const num = (v: unknown, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
 
@@ -120,6 +124,20 @@ export function parseItems(data: unknown): WatchItem[] {
       channel: str(i.channel), platform: str(i.platform), title: str(i.title), url: str(i.url),
       published_at: str(i.published_at), discovered_at: str(i.discovered_at),
     }));
+}
+
+/** GET /watch/inbox. Unknown fields ignored, wrong types dropped; `ready` is false only when the server says so. */
+export function parseInbox(data: unknown): Inbox {
+  const d = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>;
+  const list = Array.isArray(d.items) ? d.items : [];
+  const items = list
+    .filter((i): i is Record<string, unknown> => !!i && typeof i === 'object' && typeof (i as { id?: unknown }).id === 'string')
+    .map((i) => ({
+      id: i.id as string, source_id: str(i.source_id) ?? '', subscription_id: str(i.subscription_id) ?? '',
+      channel: str(i.channel), platform: str(i.platform), title: str(i.title), url: str(i.url),
+      published_at: str(i.published_at), discovered_at: str(i.discovered_at), read: i.read === true,
+    }));
+  return { items, unread: Math.max(0, Math.floor(num(d.unread))), ready: d.ready !== false };
 }
 
 /** Server refusal text, shown verbatim ({error_code, message, detail}). */

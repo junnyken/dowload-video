@@ -8,9 +8,9 @@ import { settings, ensureOutDir } from './settings';
 import { enqueueWithClaims, joinPath, notifySafe, refusedText, sanitizeFolderName } from './channels';
 import { go, nav, toast } from './ui';
 import {
-  RESUME_MIN_GAP_MS, applyPoll, batchByChannel, emptyLocal, markDone, mergeItems, nextPollDelay, notifyText, oneTap, parseItems,
+  RESUME_MIN_GAP_MS, applyPoll, batchByChannel, emptyLocal, markDone, mergeItems, nextPollDelay, notifyText, oneTap, parseInbox, parseItems,
   parseStatus, parseSubscriptions, readLocal, serverMessage, watchVisible, writeLocal,
-  type StatusResult, type WatchItem, type WatchLocal, type WatchSubscription,
+  type Inbox, type InboxItem, type StatusResult, type WatchItem, type WatchLocal, type WatchSubscription,
 } from './watch-core';
 
 const BASE = '/api/v1/watch';
@@ -41,7 +41,9 @@ async function call(path: string, method: Method = 'GET', body?: unknown): Promi
 export const watchStatus = createStore<StatusResult | null>(null);
 export const watchSubs = createStore<WatchSubscription[]>([]);
 export const watchItems = createStore<WatchItem[]>([]);
+export const watchInbox = createStore<Inbox>({ items: [], unread: 0, ready: true });
 export const watchLocal = createStore<WatchLocal>(emptyLocal());
+export const inboxQuery = createStore<InboxQuery>({ subscriptionId: '', unreadOnly: false });
 export const watchLoading = createStore(false);
 
 export const isWatchVisible = () => watchVisible(auth.get().status, watchStatus.get());
@@ -66,6 +68,40 @@ export async function refreshStatus(): Promise<StatusResult> {
   return s;
 }
 
+export type InboxQuery = { subscriptionId?: string; unreadOnly?: boolean };
+
+/** GET /watch/inbox (newest first, last 30 days). Keeps the previous inbox on failure. */
+export async function fetchInbox(q: InboxQuery = {}): Promise<Inbox | null> {
+  const p = new URLSearchParams();
+  if (q.subscriptionId) p.set('subscription_id', q.subscriptionId);
+  if (q.unreadOnly) p.set('unread', 'true');
+  const qs = p.toString();
+  const r = await call(`/inbox${qs ? `?${qs}` : ''}`);
+  if (r.status !== 200) return null;
+  const inbox = parseInbox(r.data);
+  watchInbox.set(inbox);
+  return inbox;
+}
+
+/** POST /watch/inbox/read. Optimistic; reverts silently on error unless `onError` wants the server text. */
+export async function markInboxRead(target: string[] | 'all', onError?: (message: string) => void): Promise<boolean> {
+  if (target !== 'all' && target.length === 0) return true;
+  const prev = watchInbox.get();
+  const set = target === 'all' ? null : new Set(target);
+  const items = prev.items.map((i) => (!set || set.has(i.id) ? { ...i, read: true } : i));
+  const newlyRead = prev.items.filter((i, k) => !i.read && items[k].read).length;
+  watchInbox.set({ ...prev, items, unread: target === 'all' ? 0 : Math.max(0, prev.unread - newlyRead) });
+  const r = await call('/inbox/read', 'POST', target === 'all' ? { all: true } : { item_ids: target });
+  if (r.status === 200) {
+    const u = (r.data as { unread?: unknown })?.unread;
+    if (typeof u === 'number' && Number.isFinite(u)) watchInbox.set((cur) => ({ ...cur, unread: Math.max(0, u) }));
+    return true;
+  }
+  watchInbox.set(prev);
+  if (onError) onError(serverMessage(r.data, GENERIC));
+  return false;
+}
+
 /** Subscriptions + the last 7 days of new items (the screen). */
 export async function refreshAll(): Promise<void> {
   watchLoading.set(true);
@@ -75,6 +111,7 @@ export async function refreshAll(): Promise<void> {
     const [s, i] = await Promise.all([call('/subscriptions'), call('/items')]);
     if (s.status === 200) watchSubs.set(parseSubscriptions(s.data));
     if (i.status === 200) watchItems.set(mergeItems(parseItems(i.data), []));
+    await fetchInbox(inboxQuery.get());
   } finally {
     watchLoading.set(false);
   }
@@ -165,6 +202,7 @@ export function startWatch() {
     lastUser = key;
     watchSubs.set([]);
     watchItems.set([]);
+    watchInbox.set({ items: [], unread: 0, ready: true });
     if (!key) {
       watchStatus.set(null);
       watchLocal.set(emptyLocal());
@@ -185,17 +223,28 @@ export function startWatch() {
 // ---- one-tap ---------------------------------------------------------------------------------
 
 /** "Tải": the videos go through the normal channel path (allowance claimed, local queue). */
-export async function downloadItems(items: WatchItem[]): Promise<void> {
+export async function downloadItems(items: WatchItem[]): Promise<string[]> {
   const base = await ensureOutDir();
-  if (!base) { toast('error', 'Chưa chọn được thư mục lưu. Hãy chọn thư mục trong Cài đặt.'); return; } // wording: BA review
+  if (!base) { toast('error', 'Chưa chọn được thư mục lưu. Hãy chọn thư mục trong Cài đặt.'); return []; } // wording: BA review
+  const before = new Set(watchLocal.get().done);
   const res = await oneTap(items, watchLocal.get(), {
     quality: settings.get().defaultQuality,
     outDirFor: (channel) => joinPath(base, sanitizeFolderName(channel.replace(/^@/, ''))),
   }, enqueueWithClaims);
   saveLocal(res.local);
+  const queued = res.local.done.filter((id) => !before.has(id));
   if (res.enqueued) toast('success', `Đã thêm ${res.enqueued} video vào hàng đợi.`); // wording: BA review
   // Refused (no downloads left today) stay under "Video mới", like the Channels review list.
   if (res.refused.length) toast('error', refusedText(res.refused.length, res.refused[0].detail));
+  return queued; // ids that really went into the queue
+}
+
+/** Inbox "Tải": one-tap download, then the queued ones are marked read on the server. */
+export async function downloadInboxItems(items: InboxItem[]): Promise<void> {
+  const queued = await downloadItems(items);
+  const unread = new Set(items.filter((i) => !i.read).map((i) => i.id));
+  const ids = queued.filter((id) => unread.has(id));
+  if (ids.length) await markInboxRead(ids);
 }
 
 /** "Bỏ qua": hide from "Video mới" without downloading. */
