@@ -24,7 +24,7 @@ const T = {
   used: (u: number, m: number) => `Đang theo dõi ${u}/${m} kênh`,
   every: (h: number) => `Máy chủ kiểm tra khoảng mỗi ${h} giờ`,
   emptyTitle: 'Chưa theo dõi kênh nào',
-  emptyText: 'Dán liên kết trang kênh TikTok hoặc YouTube ở trên để bắt đầu.',
+  emptyText: 'Dán liên kết trang kênh TikTok, YouTube hoặc Instagram (gói Pro) ở trên để bắt đầu.',
   lastScan: 'Kiểm tra gần nhất',
   never: 'Chưa kiểm tra',
   newItems: (n: number) => `${n} video mới (7 ngày)`,

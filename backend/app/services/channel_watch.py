@@ -71,6 +71,7 @@ _MESSAGES = {
     "ip_daily_cap_reached": "Hôm nay mạng của bạn đã thêm đủ số kênh cho phép. Vui lòng thử lại vào ngày mai.",  # wording: BA review
     "email_not_verified": "Vui lòng xác thực email trước khi theo dõi kênh.",  # wording: BA review
     "unsupported_platform": "Nền tảng này chưa hỗ trợ theo dõi kênh.",  # wording: BA review
+    "platform_pro_only": "Theo dõi kênh {platform} dành cho gói Pro trở lên.",  # wording: BA review
     "platform_not_enabled": "Theo dõi kênh {platform} đang tạm tắt.",  # wording: BA review
     "unsupported_url": "Liên kết chưa đúng. Hãy dán liên kết trang kênh, ví dụ https://www.tiktok.com/@tenkenh hoặc https://www.youtube.com/@tenkenh",  # wording: BA review
     "channel_not_found": "Không tìm thấy kênh này. Hãy kiểm tra lại liên kết.",  # wording: BA review
@@ -84,7 +85,7 @@ _MESSAGES = {
     "invalid_request": "Yêu cầu không hợp lệ.",  # wording: BA review
 }
 
-PLATFORM_LABELS = {"tiktok": "TikTok", "youtube": "YouTube"}
+PLATFORM_LABELS = {"tiktok": "TikTok", "youtube": "YouTube", "instagram": "Instagram"}
 
 
 class WatchError(Exception):
@@ -155,7 +156,7 @@ class ChannelRef:
 # Hosts of platforms we recognise but cannot watch in this phase.
 _KNOWN_UNSUPPORTED = (
     "youtu.be", "douyin.com", "iesdouyin.com", "kuaishou.com",
-    "xiaohongshu.com", "xhslink.com", "instagram.com", "facebook.com", "fb.watch",
+    "xiaohongshu.com", "xhslink.com", "facebook.com", "fb.watch",
     "x.com", "twitter.com", "threads.net", "threads.com", "bilibili.com", "b23.tv",
     "reddit.com", "pinterest.com", "pin.it", "soundcloud.com", "vimeo.com",
     "dailymotion.com", "twitch.tv", "snapchat.com", "likee.video", "weibo.com",
@@ -164,6 +165,11 @@ _TIKTOK_HOSTS = ("tiktok.com", "www.tiktok.com", "m.tiktok.com")
 _TIKTOK_SHORT_HOSTS = ("vm.tiktok.com", "vt.tiktok.com")
 _TIKTOK_PROFILE_RE = re.compile(r"^/@([A-Za-z0-9_.]{1,40})(?:/.*)?$")
 _YOUTUBE_HOSTS = ("youtube.com", "www.youtube.com", "m.youtube.com")
+_INSTAGRAM_HOSTS = ("instagram.com", "www.instagram.com", "m.instagram.com")
+# instagram.com/<username>[/reels|/] — not /p/, /reel/, /stories/, /explore…
+_IG_PROFILE_RE = re.compile(r"^/([A-Za-z0-9_.]{1,30})(?:/(?:reels|tagged)?)?/?$")
+_IG_RESERVED = frozenset({"p", "reel", "reels", "tv", "stories", "explore", "accounts", "direct",
+                          "about", "developer", "legal", "web", "graphql", "api", "challenge"})
 _YT_CHANNEL_ID_RE = re.compile(r"^UC[A-Za-z0-9_-]{22}$")
 # /@handle, /channel/UC…, /c/name, /user/name — optionally followed by a tab.
 _YT_CHANNEL_PATH_RE = re.compile(
@@ -190,6 +196,8 @@ def platform_of_url(url: str) -> Optional[str]:
         return "tiktok"
     if host in _YOUTUBE_HOSTS:
         return "youtube"
+    if host in _INSTAGRAM_HOSTS:
+        return "instagram"
     for h in _KNOWN_UNSUPPORTED:
         if host == h or host.endswith("." + h):
             return f"other:{h}"
@@ -267,6 +275,13 @@ def resolve_channel_url(url: str, *, resolve_short: Callable[[str], str] = None,
 
     if platform == "youtube":
         return _resolve_youtube(url, fetch_page)
+    if platform == "instagram":
+        m = _IG_PROFILE_RE.match(urlsplit(url).path or "")
+        name = (m.group(1).lower() if m else "").strip(".")
+        if not name or name in _IG_RESERVED:
+            raise WatchError("unsupported_url")
+        return ChannelRef(platform="instagram", external_channel_id=name,
+                          canonical_url=f"https://www.instagram.com/{name}/", display_name=f"@{name}")
 
     # tiktok
     if _host_of(url) in _TIKTOK_SHORT_HOSTS:
@@ -294,6 +309,8 @@ def resolve_channel_url(url: str, *, resolve_short: Callable[[str], str] = None,
 
 _TIKTOK_VIDEO_RE = re.compile(r"/video/(\d{6,})")
 _YT_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+_IG_CODE_RE = re.compile(r"^[A-Za-z0-9_-]{5,40}$")
+_IG_URL_CODE_RE = re.compile(r"instagram\.com/(?:[^/]+/)?(?:p|reel|reels|tv)/([A-Za-z0-9_-]{5,40})")
 
 
 def item_identity(platform: str, entry: dict) -> tuple[str, str]:
@@ -311,6 +328,11 @@ def item_identity(platform: str, entry: dict) -> tuple[str, str]:
         else:
             m = _TIKTOK_VIDEO_RE.search(url)
             ext = m.group(1) if m else None
+    elif platform == "instagram":
+        raw = str(entry.get("id") or "")
+        if _IG_CODE_RE.match(raw):
+            ext = raw
+            url = f"https://www.instagram.com/reel/{raw}/"
     elif platform == "youtube":
         raw = str(entry.get("id") or "")
         if _YT_VIDEO_ID_RE.match(raw):
@@ -551,9 +573,111 @@ def _list_youtube(source: dict, limit: int, *, extract=None) -> list:
     return out
 
 
+IG_PROVIDER = "apify_instagram_watch"
+IG_BUDGET_CLASS = "apify_watch"     # own vendor ceilings: CHINA_ACCESS_APIFY_WATCH_*
+
+
+def ig_actor_entries(items: list, limit: int) -> list:
+    """Apify instagram-reel-scraper dataset rows → watch entries. Tolerant
+    of field names (shortCode / code / url); rows without a reel code are
+    dropped. Newest first."""
+    out = []
+    for it in items or []:
+        if not isinstance(it, dict) or it.get("error"):
+            continue
+        code = str(it.get("shortCode") or it.get("code") or "")
+        if not _IG_CODE_RE.match(code):
+            m = _IG_URL_CODE_RE.search(str(it.get("url") or ""))
+            code = m.group(1) if m else ""
+        if not code:
+            continue
+        entry = {"id": code, "url": f"https://www.instagram.com/reel/{code}/",
+                 "title": str(it.get("caption") or "Instagram Reel").strip()[:200]}
+        ts = it.get("timestamp")
+        if isinstance(ts, str) and _parse(ts):
+            entry["published_at"] = _iso(_parse(ts))
+        out.append(entry)
+    out.sort(key=lambda e: e.get("published_at") or "", reverse=True)
+    return out[:limit]
+
+
+def _list_instagram(source: dict, limit: int, *, run=None) -> list:
+    """PAID (Phase 33F, Pro only): newest reels of a public Instagram profile
+    through Apify (apify~instagram-reel-scraper, pay per reel, ~0.0026 USD +
+    0.001 start). Every run is capped twice: budget_guard (platform
+    "instagram" + vendor class "apify_watch" daily/monthly ceilings, fail
+    closed) and the run's own maxItems + maxTotalChargeUsd. Owner 12/10:
+    every 6 h, at most 3 USD/day."""
+    import asyncio  # noqa: PLC0415
+    import os  # noqa: PLC0415
+    from app.services.china_platforms import apify_pool, budget_guard, cost_metrics  # noqa: PLC0415
+    from app.services.china_platforms import settings as cs  # noqa: PLC0415
+
+    n = max(1, min(int(limit), cfg.items_per_scan()))
+    name = (source.get("external_channel_id") or "").strip()
+    if not name:
+        raise ListingError("bad_url", permanent=True)
+    per_item = float(os.environ.get("WATCH_IG_EST_COST_PER_ITEM_USD") or 0.0026)
+    est = round(0.001 + per_item * n, 4)
+    cand = budget_guard.PaidCandidate(IG_PROVIDER, IG_BUDGET_CLASS, cs.usd_to_micros(est))
+    if budget_guard.global_killswitch_on() or budget_guard.platform_killswitch_on("instagram"):
+        raise ListingError("paid_disabled", permanent=False)
+    try:
+        reservation = budget_guard.reserve("instagram", "admin", cand)   # system scan, not a person
+    except budget_guard.BudgetDenied as bd:
+        raise ListingError(f"budget_{bd.level}"[:40], permanent=False)
+
+    actor_input = {"username": [name], "resultsLimit": n, "skipPinnedPosts": True,
+                   "includeSharesCount": False, "includeTranscript": False, "includeDownloadedVideo": False}
+    if run is not None:     # tests: (input, n) -> (items, started, actual_usd)
+        items, started, actual = run(actor_input, n)
+        failure, lease = None, None
+    else:
+        from app.services.china_platforms.errors import ProviderFailureError  # noqa: PLC0415
+        from app.services.china_platforms.providers.apify_provider import ApifyProvider  # noqa: PLC0415
+        from app.services.china_platforms.providers.managed_actor_provider import (  # noqa: PLC0415
+            ActorSpec, ParsedActorItem)
+        spec = ActorSpec(
+            name=IG_PROVIDER, platform="instagram",
+            actor_id=os.environ.get("WATCH_IG_ACTOR_ID") or "apify~instagram-reel-scraper",
+            budget_class=IG_BUDGET_CLASS, build_input=lambda _u: actor_input,
+            parse_item=lambda _i: ParsedActorItem(), est_cost_usd=est,
+            max_charge_usd=round(est * 1.5, 4), timeout_sec=120, require_duration=False)
+        prov = ApifyProvider(spec, max_items=n)
+        items, failure = [], None
+        try:
+            items = asyncio.run(prov._run_actor(actor_input))
+        except ProviderFailureError as exc:
+            failure = exc.failure
+        except Exception as exc:  # noqa: BLE001
+            failure = type(exc).__name__
+        r = getattr(prov, "last_run", None)
+        started = bool(r and r.run_started)
+        actual = r.actual_cost_usd if r else None
+        lease = getattr(r, "pool_lease", None) if r else None
+    budget_guard.reconcile(reservation, actual, started)
+    budget_guard.check_spend_alerts(IG_BUDGET_CLASS)
+    if lease is not None:
+        apify_pool.settle(lease, reservation.recorded_micros or 0, dispatched=started)
+    entries = ig_actor_entries(items or [], n) if failure is None else []
+    cost_metrics.record_paid("instagram", success=bool(entries), usable=None,
+                             recorded_micros=reservation.recorded_micros or 0)
+    logger.info("[Watch] instagram listing: items=%d cost_micros=%d started=%s",
+                len(entries), reservation.recorded_micros or 0, started)
+    if failure is not None:
+        cat = getattr(failure, "category", str(failure))
+        if cat in ("private_or_login_required", "parse_failed"):
+            raise ListingError("not_found_or_private", permanent=True)
+        raise ListingError("provider_unavailable", permanent=False)
+    if not entries:
+        raise ListingError("empty", permanent=True)
+    return entries
+
+
 PROVIDERS: dict[str, tuple[str, Callable[[dict, int], list]]] = {
     "tiktok": ("tikwm", _list_tiktok),
     "youtube": ("ytdlp_flat", _list_youtube),
+    "instagram": (IG_PROVIDER, _list_instagram),
 }
 
 
@@ -645,6 +769,9 @@ def _scan_locked(sb, src: dict, now: datetime, trigger: str) -> dict:
     sid = src["id"]
     platform = src["platform"]
     subs = _active_subs(sb, sid)
+    if platform in cfg.PAID_PLATFORMS:
+        # Paid listing: only subscribers whose tier still pays keep it alive.
+        subs = [s for s in subs if cfg.is_paid(s.get("tier") or "free")]
     if not subs:
         sb.table("watch_sources").update({"status": "idle", "subscriber_count": 0}).eq("id", sid).execute()
         return {"outcome": "no_subscribers"}
@@ -1076,6 +1203,8 @@ def add_source(*, user_id: str, tier: str, is_admin: bool, email_verified: Optio
         raise WatchError("email_not_verified", 403)
 
     ref = resolve_channel_url(url, resolve_short=resolve_short)
+    if ref.platform in cfg.PAID_PLATFORMS and not paid:
+        raise WatchError("platform_pro_only", 403, platform=PLATFORM_LABELS.get(ref.platform, ref.platform))
 
     source = _one(sb.table("watch_sources").select("*").eq("platform", ref.platform)
                   .eq("external_channel_id", ref.external_channel_id).limit(1).execute())
@@ -1148,7 +1277,12 @@ def add_source(*, user_id: str, tier: str, is_admin: bool, email_verified: Optio
             {"user_id": user_id, "source_id": source["id"], "created_at": _iso(now), **fields}).execute())
     _ip_add(rc, iph, now, 1)
 
-    scan = scan_source(source["id"], now=now, sb=sb, rc=rc, trigger="baseline")
+    if ref.platform in cfg.PAID_PLATFORMS:
+        # A paid listing can take a minute: never inside the HTTP request.
+        # The source is due now, so the next beat tick (≤ 1 min) scans it.
+        scan = {"outcome": "queued"}
+    else:
+        scan = scan_source(source["id"], now=now, sb=sb, rc=rc, trigger="baseline")
     if scan.get("outcome") == "failed" and scan.get("permanent"):
         # Undo: nothing stays behind for a channel we cannot read.
         if previous:

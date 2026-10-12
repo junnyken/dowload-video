@@ -1357,3 +1357,117 @@ def test_inbox_api(app, w, api):
     r = app.post("/api/v1/watch/inbox/read", json={"all": True})
     assert r.json() == {"unread": 0}
     assert app.post("/api/v1/watch/inbox/read", json={}).json()["error_code"] == "invalid_request"
+
+
+# ── 33F: Instagram (paid, Pro only) ─────────────────────────────────
+
+IG = "https://www.instagram.com/natgeo/"
+
+
+@pytest.fixture
+def ig_env(env, monkeypatch, w):
+    env.setenv("WATCH_PLATFORMS_ENABLED", "tiktok,youtube,instagram")
+    monkeypatch.setattr("app.core.redis_client._client", w.rc)
+    monkeypatch.setattr("app.core.redis_client.get_redis", lambda: w.rc)
+    env.setenv("CHINA_ACCESS_INSTAGRAM_MANAGED_DAILY_SPEND_CEILING_USD", "3")
+    env.setenv("CHINA_ACCESS_APIFY_WATCH_DAILY_SPEND_CEILING_USD", "3")
+    env.setenv("CHINA_ACCESS_APIFY_WATCH_MONTHLY_SPEND_CEILING_USD", "93")
+    return env
+
+
+def _ig_source(w):
+    return next(s for s in w.rows("watch_sources") if s["platform"] == "instagram")
+
+
+@pytest.mark.parametrize("url,ok", [
+    ("https://www.instagram.com/natgeo/", True),
+    ("https://instagram.com/NatGeo/reels/", True),
+    ("https://www.instagram.com/natgeo", True),
+    ("https://www.instagram.com/p/DeJjs2ipNPr/", False),
+    ("https://www.instagram.com/reel/DeJjs2ipNPr/", False),
+    ("https://www.instagram.com/stories/natgeo/1/", False),
+    ("https://www.instagram.com/explore/", False),
+])
+def test_instagram_profile_links(ig_env, url, ok):
+    if ok:
+        ref = cw.resolve_channel_url(url)
+        assert (ref.platform, ref.external_channel_id, ref.canonical_url) == ("instagram", "natgeo", IG)
+    else:
+        with pytest.raises(cw.WatchError) as e:
+            cw.resolve_channel_url(url)
+        assert e.value.code == "unsupported_url"
+
+
+def test_instagram_is_pro_only(w, ig_env):
+    with pytest.raises(cw.WatchError) as e:
+        w.add(url=IG, tier="free")
+    assert (e.value.code, e.value.status) == ("platform_pro_only", 403)
+    assert "Instagram" in e.value.message and w.rows("watch_sources") == []
+
+
+def test_instagram_add_queues_baseline_without_paying_in_the_request(w, ig_env, monkeypatch):
+    calls = []
+    monkeypatch.setitem(cw.PROVIDERS, "instagram", (cw.IG_PROVIDER, lambda s, n: calls.append(n) or
+                                                    [{"id": "DeJjs2ipNPr", "title": "r"}]))
+    res = w.add(url=IG, tier="pro")
+    assert res["baseline"] == "pending" and calls == []
+    enq = []
+    cw.tick(enqueue_scan=enq.append, enqueue_delivery=lambda: None)
+    assert enq == [_ig_source(w)["id"]]
+    assert cw.scan_source(enq[0])["outcome"] == "baseline" and calls == [10]
+
+
+def test_instagram_scan_skipped_when_no_paying_subscriber(w, ig_env, monkeypatch):
+    calls = []
+    monkeypatch.setitem(cw.PROVIDERS, "instagram", (cw.IG_PROVIDER, lambda s, n: calls.append(n) or []))
+    w.add(url=IG, tier="pro")
+    w.rows("watch_subscriptions")[0]["tier"] = "free"        # downgraded
+    assert cw.scan_source(_ig_source(w)["id"])["outcome"] == "no_subscribers" and calls == []
+
+
+def test_ig_actor_entries_tolerates_field_names():
+    rows = [{"shortCode": "AAAAA1", "caption": "old", "timestamp": "2026-10-01T00:00:00.000Z"},
+            {"url": "https://www.instagram.com/reel/BBBBB2/", "timestamp": "2026-10-11T00:00:00Z"},
+            {"code": "bad code"}, {"error": "no_items"}, "junk"]
+    out = cw.ig_actor_entries(rows, 10)
+    assert [e["id"] for e in out] == ["BBBBB2", "AAAAA1"]
+    assert out[0]["url"] == "https://www.instagram.com/reel/BBBBB2/" and out[0]["title"] == "Instagram Reel"
+    assert cw.item_identity("instagram", out[0]) == ("BBBBB2", "https://instagram.com/reel/BBBBB2")
+
+
+def test_instagram_listing_is_budgeted_and_capped(w, ig_env):
+    seen = []
+
+    def run(actor_input, n):
+        seen.append((actor_input, n))
+        return [{"shortCode": f"CODE{i}x", "timestamp": f"2026-10-1{i}T00:00:00Z"} for i in range(n)], True, 0.0
+    src = {"external_channel_id": "natgeo"}
+    out = cw._list_instagram(src, 50, run=run)
+    inp, n = seen[0]
+    assert n == 10 and inp["username"] == ["natgeo"] and inp["resultsLimit"] == 10
+    assert inp["includeDownloadedVideo"] is False and inp["includeTranscript"] is False
+    assert len(out) == 10
+    from app.services.china_platforms import budget_guard as bg
+    spent = int(w.rc.get(bg.k_platform_spend(bg.day_key(), "instagram")))
+    assert spent == int(round((0.001 + 0.0026 * 10) * 1e6))           # floored at the estimate
+
+
+def test_instagram_daily_ceiling_stops_paid_runs(w, ig_env):
+    ig_env.setenv("CHINA_ACCESS_INSTAGRAM_MANAGED_DAILY_SPEND_CEILING_USD", "0.05")
+    runs = []
+
+    def run(actor_input, n):
+        runs.append(1)
+        return [{"shortCode": "CODE1x"}], True, None
+    src = {"external_channel_id": "natgeo"}
+    cw._list_instagram(src, 10, run=run)                 # 0.027
+    with pytest.raises(cw.ListingError) as e:
+        cw._list_instagram(src, 10, run=run)             # would pass 0.05
+    assert e.value.permanent is False and e.value.category.startswith("budget_") and len(runs) == 1
+
+
+def test_instagram_no_run_started_refunds_the_estimate(w, ig_env):
+    from app.services.china_platforms import budget_guard as bg
+    with pytest.raises(cw.ListingError):
+        cw._list_instagram({"external_channel_id": "natgeo"}, 10, run=lambda i, n: ([], False, None))
+    assert int(w.rc.get(bg.k_platform_spend(bg.day_key(), "instagram")) or 0) == 0

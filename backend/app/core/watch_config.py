@@ -48,7 +48,9 @@ JITTER = 0.12
 
 # Platforms with a FREE native listing implemented in this phase. China
 # platforms (paid access layer) are deliberately absent.
-IMPLEMENTED_PLATFORMS = frozenset({"tiktok", "youtube"})
+IMPLEMENTED_PLATFORMS = frozenset({"tiktok", "youtube", "instagram"})
+# Listed through a PAID provider: Pro / Team / Enterprise (and admins) only.
+PAID_PLATFORMS = frozenset({"instagram"})
 
 PAID_TIERS = ("pro", "team", "enterprise")
 
