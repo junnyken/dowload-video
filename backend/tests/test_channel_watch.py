@@ -1082,6 +1082,7 @@ def test_embed_proxy_retry_is_opt_in(env, monkeypatch):
     import curl_cffi.requests as cr
     calls = []
     monkeypatch.setattr(cr, "get", lambda url, **k: calls.append(k.get("proxy")) or _R(503, "overload"))
+    monkeypatch.delenv("YTDL_PROXY", raising=False)
     env.setenv("RESIDENTIAL_PROXY_URL", "http://proxy.invalid:1")
     assert cw._embed_fetch("https://www.tiktok.com/embed/@x") == (503, "overload")
     assert calls == [None]                                  # off by default: no billed call
@@ -1092,3 +1093,18 @@ def test_embed_proxy_retry_is_opt_in(env, monkeypatch):
     calls.clear()
     monkeypatch.setattr(cr, "get", lambda url, **k: calls.append(k.get("proxy")) or _R(200, "ok"))
     assert cw._embed_fetch("https://www.tiktok.com/embed/@x") == (200, "ok") and calls == [None]
+
+
+def test_embed_proxy_falls_back_to_admin_pool(env, monkeypatch):
+    import curl_cffi.requests as cr
+    calls = []
+    monkeypatch.setattr(cr, "get", lambda url, **k: calls.append(k.get("proxy")) or _R(503, "overload"))
+    monkeypatch.delenv("YTDL_PROXY", raising=False)
+    monkeypatch.delenv("RESIDENTIAL_PROXY_URL", raising=False)
+    monkeypatch.setattr("app.core.proxy_pool.get_proxy_from_pool", lambda p: "http://pool.invalid:2")
+    env.setenv("WATCH_TIKTOK_EMBED_PROXY", "true")
+    cw._embed_fetch("https://www.tiktok.com/embed/@x")
+    assert calls == [None, "http://pool.invalid:2"]
+    calls.clear()
+    monkeypatch.setattr("app.core.proxy_pool.get_proxy_from_pool", lambda p: None)
+    assert cw._embed_fetch("https://www.tiktok.com/embed/@x") == (503, "overload") and calls == [None]
