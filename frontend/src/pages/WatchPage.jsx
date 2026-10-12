@@ -18,7 +18,7 @@ const T = {
   loginBody: 'Theo dõi kênh chỉ dành cho tài khoản đã đăng nhập.',
   loginBtn: 'Đăng nhập',
   unavailable: 'Tính năng theo dõi kênh hiện chưa mở cho tài khoản của bạn.',
-  placeholder: 'Dán liên kết kênh, ví dụ https://www.tiktok.com/@tenkenh',
+  placeholder: 'Dán liên kết kênh TikTok hoặc YouTube, ví dụ https://www.youtube.com/@tenkenh',
   add: 'Theo dõi',
   adding: 'Đang kiểm tra kênh…',
   used: (u, m) => `Đang theo dõi ${u}/${m} kênh`,

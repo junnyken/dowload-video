@@ -92,7 +92,12 @@ const STATUS_ON = [200, { enabled: true, platforms: ['tiktok'], limits: { max_so
     const t = ctx.vgWatchTarget(PROFILE);
     assert(t && t.platform === 'tiktok' && t.url === 'https://www.tiktok.com/@meo.cute', 'TikTok profile → canonical URL (query dropped)');
     assert(ctx.vgWatchTarget('https://www.tiktok.com/@meo/video/123') === null, 'TikTok video page is not a channel');
-    assert(ctx.vgWatchTarget('https://www.youtube.com/@meo') === null, 'YouTube not enabled yet');
+    const yt = ctx.vgWatchTarget('https://www.youtube.com/@meo/videos?view=0');
+    assert(yt && yt.platform === 'youtube' && yt.url === 'https://www.youtube.com/@meo', 'YouTube channel tab → channel URL');
+    const yc = ctx.vgWatchTarget('https://m.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ');
+    assert(yc && yc.url === 'https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ', 'YouTube /channel/UC… kept');
+    assert(ctx.vgWatchTarget('https://www.youtube.com/watch?v=dQw4w9WgXcQ') === null, 'YouTube video is not a channel');
+    assert(ctx.vgWatchTarget('https://youtube.com.evil.example/@meo') === null, 'YouTube look-alike host refused');
     assert(ctx.vgWatchTarget('https://tiktok.com.evil.example/@meo') === null, 'look-alike host refused');
     assert(ctx.vgWatchTarget('http://www.tiktok.com/@meo') === null, 'plain http refused');
   }

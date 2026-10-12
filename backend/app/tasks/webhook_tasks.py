@@ -47,7 +47,7 @@ def deliver_webhook_task(self, user_id: str, payload: dict):
     headers = {
         "Content-Type": "application/json",
         "X-VidGrab-Signature": f"sha256={signature}",
-        "X-VidGrab-Event": "job.completed",
+        "X-VidGrab-Event": str(payload.get("event") or "job.completed")[:40],
         "User-Agent": "VidGrab-Webhook/1.0",
     }
 
@@ -75,6 +75,7 @@ def deliver_webhook_task(self, user_id: str, payload: dict):
     log_entry = json.dumps(
         {
             "job_id": payload.get("job_id"),
+            "event": payload.get("event") or "job.completed",
             "status_code": status_code,
             "success": success,
             "error": error_message,

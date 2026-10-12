@@ -60,7 +60,7 @@ const platforms = [
 // Fallback only: the page shows the version of the zip the server actually
 // serves (GET /api/v1/extension/version) — a hardcoded number said 5.2.5 while
 // the file was already 5.3.0 (08/10).
-const EXT_VERSION = '5.4.0';
+const EXT_VERSION = '5.5.0';
 
 let _extVersion = null;
 function ExtVersion() {

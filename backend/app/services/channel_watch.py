@@ -72,7 +72,9 @@ _MESSAGES = {
     "email_not_verified": "Vui lòng xác thực email trước khi theo dõi kênh.",  # wording: BA review
     "unsupported_platform": "Nền tảng này chưa hỗ trợ theo dõi kênh.",  # wording: BA review
     "platform_not_enabled": "Theo dõi kênh {platform} đang tạm tắt.",  # wording: BA review
-    "unsupported_url": "Liên kết chưa đúng. Hãy dán liên kết trang kênh, ví dụ https://www.tiktok.com/@tenkenh",  # wording: BA review
+    "unsupported_url": "Liên kết chưa đúng. Hãy dán liên kết trang kênh, ví dụ https://www.tiktok.com/@tenkenh hoặc https://www.youtube.com/@tenkenh",  # wording: BA review
+    "channel_not_found": "Không tìm thấy kênh này. Hãy kiểm tra lại liên kết.",  # wording: BA review
+    "channel_unreachable": "Tạm thời chưa mở được trang kênh. Vui lòng thử lại sau ít phút.",  # wording: BA review
     "private_or_login_required": "Không đọc được video công khai của kênh này (kênh riêng tư, không tồn tại hoặc chưa có video).",  # wording: BA review
     "not_found": "Không tìm thấy kênh đang theo dõi.",  # wording: BA review
     "invalid_mode": "Chế độ nhận tin không hợp lệ.",  # wording: BA review
@@ -80,7 +82,7 @@ _MESSAGES = {
     "invalid_since": "Mốc thời gian không hợp lệ.",  # wording: BA review
 }
 
-PLATFORM_LABELS = {"tiktok": "TikTok"}
+PLATFORM_LABELS = {"tiktok": "TikTok", "youtube": "YouTube"}
 
 
 class WatchError(Exception):
@@ -150,7 +152,7 @@ class ChannelRef:
 
 # Hosts of platforms we recognise but cannot watch in this phase.
 _KNOWN_UNSUPPORTED = (
-    "youtube.com", "youtu.be", "douyin.com", "iesdouyin.com", "kuaishou.com",
+    "youtu.be", "douyin.com", "iesdouyin.com", "kuaishou.com",
     "xiaohongshu.com", "xhslink.com", "instagram.com", "facebook.com", "fb.watch",
     "x.com", "twitter.com", "threads.net", "threads.com", "bilibili.com", "b23.tv",
     "reddit.com", "pinterest.com", "pin.it", "soundcloud.com", "vimeo.com",
@@ -159,6 +161,12 @@ _KNOWN_UNSUPPORTED = (
 _TIKTOK_HOSTS = ("tiktok.com", "www.tiktok.com", "m.tiktok.com")
 _TIKTOK_SHORT_HOSTS = ("vm.tiktok.com", "vt.tiktok.com")
 _TIKTOK_PROFILE_RE = re.compile(r"^/@([A-Za-z0-9_.]{1,40})(?:/.*)?$")
+_YOUTUBE_HOSTS = ("youtube.com", "www.youtube.com", "m.youtube.com")
+_YT_CHANNEL_ID_RE = re.compile(r"^UC[A-Za-z0-9_-]{22}$")
+# /@handle, /channel/UC…, /c/name, /user/name — optionally followed by a tab.
+_YT_CHANNEL_PATH_RE = re.compile(
+    r"^/(?:(@[A-Za-z0-9_.\-]{1,100})|channel/(UC[A-Za-z0-9_-]{22})|c/([A-Za-z0-9_.\-]{1,100})"
+    r"|user/([A-Za-z0-9_.\-]{1,100}))(?:/.*)?$")
 
 
 def _host_of(url: str) -> str:
@@ -178,6 +186,8 @@ def platform_of_url(url: str) -> Optional[str]:
     host = _host_of(url)
     if host in _TIKTOK_HOSTS or host in _TIKTOK_SHORT_HOSTS:
         return "tiktok"
+    if host in _YOUTUBE_HOSTS:
+        return "youtube"
     for h in _KNOWN_UNSUPPORTED:
         if host == h or host.endswith("." + h):
             return f"other:{h}"
@@ -189,7 +199,55 @@ def _resolve_short(url: str) -> str:
     return resolve_short_url(url)
 
 
-def resolve_channel_url(url: str, *, resolve_short: Callable[[str], str] = None) -> ChannelRef:
+_YT_CANONICAL_RE = re.compile(r'<link rel="canonical" href="https://www\.youtube\.com/channel/(UC[A-Za-z0-9_-]{22})"')
+_YT_EXTERNAL_ID_RE = re.compile(r'"externalId":"(UC[A-Za-z0-9_-]{22})"')
+_YT_TITLE_RE = re.compile(r'<meta property="og:title" content="([^"]{1,200})"')
+
+
+def _youtube_channel_page(url: str) -> str:
+    import httpx  # noqa: PLC0415
+    r = httpx.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                                              "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+                                "Accept-Language": "en"},
+                  timeout=15, follow_redirects=True)
+    if r.status_code == 404:
+        raise WatchError("channel_not_found", 404)
+    r.raise_for_status()
+    return r.text
+
+
+def _resolve_youtube(url: str, fetch_page: Callable[[str], str] = None) -> ChannelRef:
+    """Any channel link → its stable UC… id (a handle can be renamed; the
+    id cannot), so /@name and /channel/UC… share one source."""
+    m = _YT_CHANNEL_PATH_RE.match(urlsplit(url).path or "")
+    if not m:
+        raise WatchError("unsupported_url")
+    handle, cid, cname, uname = m.groups()
+    page_url = ("https://www.youtube.com/" + (handle or f"channel/{cid}" if (handle or cid)
+                else (f"c/{cname}" if cname else f"user/{uname}")))
+    try:
+        html = (fetch_page or _youtube_channel_page)(page_url)
+    except WatchError:
+        raise
+    except Exception:
+        raise WatchError("channel_unreachable", 503)
+    found = _YT_CANONICAL_RE.search(html) or _YT_EXTERNAL_ID_RE.search(html)
+    if not found or (cid and found.group(1) != cid):
+        raise WatchError("channel_not_found", 404)
+    channel_id = found.group(1)
+    title = _YT_TITLE_RE.search(html)
+    import html as _html  # noqa: PLC0415
+    name = _html.unescape(title.group(1)).strip() if title else (handle or channel_id)
+    return ChannelRef(
+        platform="youtube",
+        external_channel_id=channel_id,
+        canonical_url=f"https://www.youtube.com/channel/{channel_id}",
+        display_name=name[:100],
+    )
+
+
+def resolve_channel_url(url: str, *, resolve_short: Callable[[str], str] = None,
+                        fetch_page: Callable[[str], str] = None) -> ChannelRef:
     """Validate a pasted channel link. Raises WatchError(unsupported_url |
     unsupported_platform | platform_not_enabled)."""
     url = (url or "").strip()
@@ -204,6 +262,9 @@ def resolve_channel_url(url: str, *, resolve_short: Callable[[str], str] = None)
         raise WatchError("unsupported_platform")
     if not cfg.platform_enabled(platform):
         raise WatchError("platform_not_enabled", platform=PLATFORM_LABELS.get(platform, platform))
+
+    if platform == "youtube":
+        return _resolve_youtube(url, fetch_page)
 
     # tiktok
     if _host_of(url) in _TIKTOK_SHORT_HOSTS:
@@ -230,6 +291,7 @@ def resolve_channel_url(url: str, *, resolve_short: Callable[[str], str] = None)
 # ── Item identity ────────────────────────────────────────────────────
 
 _TIKTOK_VIDEO_RE = re.compile(r"/video/(\d{6,})")
+_YT_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 
 def item_identity(platform: str, entry: dict) -> tuple[str, str]:
@@ -247,6 +309,11 @@ def item_identity(platform: str, entry: dict) -> tuple[str, str]:
         else:
             m = _TIKTOK_VIDEO_RE.search(url)
             ext = m.group(1) if m else None
+    elif platform == "youtube":
+        raw = str(entry.get("id") or "")
+        if _YT_VIDEO_ID_RE.match(raw):
+            ext = raw
+            url = f"https://www.youtube.com/watch?v={raw}"
     if not ext:
         ext = url_key(url) if url else None
     return ext, (canonical_url(url) if url else "")
@@ -443,8 +510,48 @@ def _list_tiktok(source: dict, limit: int, *, embed_fetch=None) -> list:
     return entries
 
 
+def _list_youtube(source: dict, limit: int, *, extract=None) -> list:
+    """Newest uploads of a YouTube channel (its /videos tab, newest first)
+    via yt-dlp's flat listing — one page request, free, no login.
+
+    YouTube's RSS feed (feeds/videos.xml) answered 404 for every channel
+    on 12/10/2026, so it is not used. Shorts and live streams are other
+    tabs and are not watched."""
+    url = (source.get("canonical_url") or "").rstrip("/") + "/videos"
+    try:
+        if extract is None:
+            import yt_dlp  # noqa: PLC0415
+            opts = {"extract_flat": "in_playlist", "playlistend": max(1, int(limit)),
+                    "quiet": True, "no_warnings": True, "skip_download": True, "socket_timeout": 20}
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False) or {}
+        else:
+            info = extract(url, limit) or {}
+    except Exception as e:  # noqa: BLE001
+        msg = str(e).lower()
+        if "does not exist" in msg or "404" in msg or "not available" in msg and "channel" in msg:
+            raise ListingError("not_found_or_private", permanent=True)
+        if "does not have a videos tab" in msg:
+            raise ListingError("empty", permanent=True)
+        logger.info("[Watch] youtube listing error %s", type(e).__name__)
+        raise ListingError("network", permanent=False)
+    out = []
+    for e in (info.get("entries") or [])[:limit]:
+        vid = str((e or {}).get("id") or "")
+        if not _YT_VIDEO_ID_RE.match(vid):
+            continue
+        entry = {"id": vid, "url": f"https://www.youtube.com/watch?v={vid}",
+                 "title": (e.get("title") or "YouTube Video")[:200]}
+        ts = e.get("timestamp") or e.get("release_timestamp")
+        if isinstance(ts, (int, float)) and ts > 0:
+            entry["published_at"] = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+        out.append(entry)
+    return out
+
+
 PROVIDERS: dict[str, tuple[str, Callable[[dict, int], list]]] = {
     "tiktok": ("tikwm", _list_tiktok),
+    "youtube": ("ytdlp_flat", _list_youtube),
 }
 
 
@@ -781,14 +888,66 @@ def build_payload(sub: dict, source: dict, items: list[dict]) -> dict:
     }
 
 
+WEBHOOK_EVENT = "watch.new_items"
+
+
+def webhook_payload(sub: dict, source: dict, items: list[dict], now: datetime) -> dict:
+    """Body POSTed to the user's webhook (Phase 33C), signed like
+    job.completed (X-VidGrab-Signature, HMAC-SHA256). Public fields only."""
+    source = source or {}
+    return {
+        "event": WEBHOOK_EVENT,
+        "sent_at": _iso(now),
+        "subscription_id": sub.get("id"),
+        "channel": {"platform": source.get("platform"), "name": source.get("display_name"),
+                    "url": source.get("canonical_url")},
+        "items": [{"id": i.get("external_item_id"), "url": i.get("canonical_item_url"),
+                   "title": i.get("title") or "", "published_at": i.get("published_at"),
+                   "discovered_at": i.get("discovered_at")} for i in items],
+    }
+
+
+def _webhook_users(sb, user_ids: list[str]) -> set[str]:
+    """Users with an active webhook whose tier still allows webhooks
+    (registration is Pro-only; a later downgrade must stop deliveries)."""
+    if not user_ids:
+        return set()
+    try:
+        rows = (sb.table("user_webhooks").select("user_id, is_active")
+                .in_("user_id", user_ids).execute()).data or []
+    except Exception as e:  # noqa: BLE001 — webhooks never block pushes
+        logger.warning("[Watch] webhook lookup failed: %s", type(e).__name__)
+        return set()
+    out = set()
+    for r in rows:
+        if not r.get("is_active"):
+            continue
+        try:
+            from app.core.quotas import get_user_tier  # noqa: PLC0415
+            tier = get_user_tier(r["user_id"]) or "free"
+        except Exception:  # noqa: BLE001
+            tier = "free"
+        if cfg.is_paid(tier):
+            out.add(r["user_id"])
+    return out
+
+
+def _enqueue_webhook(user_id: str, payload: dict) -> None:
+    from app.tasks.webhook_tasks import deliver_webhook_task  # noqa: PLC0415
+    deliver_webhook_task.delay(user_id, payload)
+
+
 def deliver_pending(*, now: Optional[datetime] = None, sb=None, source_id: Optional[str] = None,
-                    send: Optional[Callable[[str, dict], int]] = None, limit: int = 500) -> dict:
+                    send: Optional[Callable[[str, dict], int]] = None,
+                    hook: Optional[Callable[[str, dict], Any]] = None, limit: int = 500) -> dict:
     if not cfg.scanning_allowed():
         return {"skipped": "disabled"}
     sb = sb or _sb()
     now = now or utcnow()
     if send is None:
         from app.core.push_sender import send_push as send
+    if hook is None:
+        hook = _enqueue_webhook
 
     q = sb.table("watch_deliveries").select("id, subscription_id, item_id, status, created_at").eq("status", "pending")
     if source_id:
@@ -813,7 +972,9 @@ def deliver_pending(*, now: Optional[datetime] = None, sb=None, source_id: Optio
     sources = {s["id"]: s for s in ((sb.table("watch_sources").select("*")
                                      .in_("id", source_ids).execute()).data or [] if source_ids else [])}
 
-    stats = {"notified": 0, "throttled": 0, "skipped": 0, "pushes": 0}
+    hooked = _webhook_users(sb, list({s["user_id"] for s in subs.values()
+                                      if s.get("status") == "active" and s.get("user_id")}))
+    stats = {"notified": 0, "throttled": 0, "skipped": 0, "pushes": 0, "webhooks": 0}
     for sub_id, dels in groups.items():
         ids = [d["id"] for d in dels]
         sub = subs.get(sub_id)
@@ -840,6 +1001,13 @@ def deliver_pending(*, now: Optional[datetime] = None, sb=None, source_id: Optio
         except Exception as e:
             logger.warning("[Watch] push failed for subscription %s: %s", sub_id, type(e).__name__)
             sent = 0
+        if sub["user_id"] in hooked:
+            try:
+                hook(sub["user_id"], webhook_payload(sub, sources.get(sub.get("source_id")), its, now))
+                sent += 1
+                stats["webhooks"] += 1
+            except Exception as e:  # noqa: BLE001 — broker down: the push still counts
+                logger.warning("[Watch] webhook enqueue failed for %s: %s", sub_id, type(e).__name__)
         final = "notified" if sent > 0 else "no_push_target"
         (sb.table("watch_deliveries").update({"status": final, "notified_at": _iso(now)})
          .in_("id", claimed_ids).execute())

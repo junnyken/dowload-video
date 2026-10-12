@@ -17,19 +17,21 @@ const T = {
   subtitle: 'Máy chủ VidGrab kiểm tra kênh giúp bạn; video mới được tải về ngay trên máy này khi bạn bấm “Tải”.',
   unavailable: 'Tính năng theo dõi kênh hiện chưa mở cho tài khoản của bạn.',
   addLabel: 'Theo dõi kênh mới',
-  placeholder: 'https://www.tiktok.com/@tenkenh',
+  placeholder: 'https://www.tiktok.com/@tenkenh hoặc https://www.youtube.com/@tenkenh',
   add: 'Theo dõi',
   modeTap: 'Thông báo + bấm để tải',
   modeNotify: 'Chỉ thông báo',
   used: (u: number, m: number) => `Đang theo dõi ${u}/${m} kênh`,
   every: (h: number) => `Máy chủ kiểm tra khoảng mỗi ${h} giờ`,
   emptyTitle: 'Chưa theo dõi kênh nào',
-  emptyText: 'Dán liên kết trang kênh TikTok ở trên để bắt đầu.',
+  emptyText: 'Dán liên kết trang kênh TikTok hoặc YouTube ở trên để bắt đầu.',
   lastScan: 'Kiểm tra gần nhất',
   never: 'Chưa kiểm tra',
   newItems: (n: number) => `${n} video mới (7 ngày)`,
   paused: 'Đang tạm dừng',
   baseline: 'Đang ghi nhận video hiện có của kênh…',
+  // wording: BA review — shown while the first read failed temporarily
+  retrying: (t: string) => (t ? `Chưa đọc được kênh, máy chủ sẽ thử lại lúc ${t}.` : 'Chưa đọc được kênh, máy chủ sẽ thử lại sớm.'),
   degraded: 'Tạm thời không đọc được kênh, máy chủ sẽ thử lại.',
   pause: 'Tạm dừng',
   resume: 'Tiếp tục',
@@ -78,7 +80,11 @@ function SubCard({ s }: { s: WatchSubscription }) {
       <dl className="mt-2.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-fg-muted">
         <dt>{T.lastScan}</dt><dd className="text-fg-2">{s.source.last_scan_at ? formatDate(s.source.last_scan_at) : T.never}</dd>
       </dl>
-      {!s.baseline_completed_at && <p className="mt-2 text-xs text-fg-muted">{T.baseline}</p>}
+      {!s.baseline_completed_at && s.source.status !== 'degraded' && (
+        <p className="mt-2 text-xs text-fg-muted">
+          {s.source.last_failure_category ? T.retrying(formatDate(s.source.next_scan_at)) : T.baseline}
+        </p>
+      )}
       {s.source.status === 'degraded' && (
         <p role="alert" className="mt-2 flex items-start gap-1.5 rounded-lg bg-danger-soft px-2.5 py-1.5 text-xs text-danger">
           <AlertCircle size={14} className="mt-px shrink-0" aria-hidden />{T.degraded}

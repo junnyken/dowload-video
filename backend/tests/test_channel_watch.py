@@ -329,7 +329,8 @@ def test_email_unknown_for_api_key_user_is_not_blocked(app, w, api, monkeypatch)
 # ── 4. URL validation ────────────────────────────────────────────────
 
 @pytest.mark.parametrize("url,code", [
-    ("https://www.youtube.com/@x", "unsupported_platform"),
+    ("https://www.youtube.com/@x", "platform_not_enabled"),      # implemented, flag off here
+    ("https://youtu.be/dQw4w9WgXcQ", "unsupported_platform"),      # a video, not a channel
     ("https://www.douyin.com/user/abc", "unsupported_platform"),
     ("https://example.com/@x", "unsupported_url"),
     ("ftp://www.tiktok.com/@x", "unsupported_url"),
@@ -1108,3 +1109,177 @@ def test_embed_proxy_falls_back_to_admin_pool(env, monkeypatch):
     calls.clear()
     monkeypatch.setattr("app.core.proxy_pool.get_proxy_from_pool", lambda p: None)
     assert cw._embed_fetch("https://www.tiktok.com/embed/@x") == (503, "overload") and calls == [None]
+
+
+# ── 33C: webhook event watch.new_items ──────────────────────────────
+
+def _new_video_ready(w, user="u1", tier="pro"):
+    w.listings[CH] = vids(1)
+    w.add(user=user, tier=tier)
+    w.listings[CH] = vids(2, 1)
+    w.advance(days=2)
+    w.scan()
+
+
+def test_webhook_event_for_paid_user_with_active_webhook(w, monkeypatch):
+    monkeypatch.setattr("app.core.quotas.get_user_tier", lambda uid: "pro")
+    w.db.add("user_webhooks", {"user_id": "u1", "webhook_url": "https://hook.example/x",
+                               "secret_hash": "h", "is_active": True}, ignore=False)
+    _new_video_ready(w)
+    sent = []
+    stats = cw.deliver_pending(hook=lambda uid, p: sent.append((uid, p)))
+    assert stats["webhooks"] == 1 and stats["pushes"] == 1
+    uid, p = sent[0]
+    assert uid == "u1" and p["event"] == "watch.new_items"
+    assert p["channel"]["platform"] == "tiktok" and p["channel"]["url"] == CH
+    assert [i["id"] for i in p["items"]] == ["2"]
+    assert p["items"][0]["url"].endswith("/video/2") and p["items"][0]["title"] == "video 2"
+    assert w.rows("watch_deliveries")[0]["status"] == "notified"
+
+
+@pytest.mark.parametrize("tier,active", [("free", True), ("pro", False)])
+def test_no_webhook_when_downgraded_or_inactive(w, monkeypatch, tier, active):
+    monkeypatch.setattr("app.core.quotas.get_user_tier", lambda uid: tier)
+    w.db.add("user_webhooks", {"user_id": "u1", "webhook_url": "https://hook.example/x",
+                               "secret_hash": "h", "is_active": active}, ignore=False)
+    _new_video_ready(w)
+    sent = []
+    assert cw.deliver_pending(hook=lambda uid, p: sent.append(uid))["webhooks"] == 0 and sent == []
+
+
+def test_webhook_only_user_counts_as_notified_and_broker_failure_never_blocks(w, monkeypatch):
+    monkeypatch.setattr("app.core.quotas.get_user_tier", lambda uid: "pro")
+    w.db.add("user_webhooks", {"user_id": "u1", "webhook_url": "https://hook.example/x",
+                               "secret_hash": "h", "is_active": True}, ignore=False)
+    _new_video_ready(w)
+    w.push_result = 0                                   # no browser/app push target
+    assert cw.deliver_pending(hook=lambda uid, p: None)["webhooks"] == 1
+    assert w.rows("watch_deliveries")[0]["status"] == "notified"
+
+
+def test_webhook_broker_down_falls_back_to_push_status(w, monkeypatch):
+    monkeypatch.setattr("app.core.quotas.get_user_tier", lambda uid: "pro")
+    w.db.add("user_webhooks", {"user_id": "u1", "webhook_url": "https://hook.example/x",
+                               "secret_hash": "h", "is_active": True}, ignore=False)
+    _new_video_ready(w)
+
+    def down(uid, p):
+        raise ConnectionError("broker")
+    stats = cw.deliver_pending(hook=down)
+    assert stats["webhooks"] == 0 and stats["pushes"] == 1 and len(w.pushes) == 1
+
+
+def test_webhook_task_sends_event_header(monkeypatch):
+    from app.tasks import webhook_tasks as wt
+    seen = {}
+
+    class _Res:
+        status_code, success, error = 200, True, None
+
+    def fake_post(url, body, headers):
+        seen.update(url=url, body=body, headers=headers)
+        return _Res()
+    db = FakeDB()
+    db.add("user_webhooks", {"user_id": "u1", "webhook_url": "https://hook.example/x",
+                             "secret_hash": "k", "is_active": True}, ignore=False)
+    monkeypatch.setattr("app.core.database.get_service_client", lambda: db)
+    monkeypatch.setattr("app.core.webhook_guard.post_webhook", fake_post)
+    monkeypatch.setattr("app.core.redis_client.get_redis", lambda: fakeredis.FakeRedis(decode_responses=True))
+    payload = {"event": "watch.new_items", "items": []}
+    wt.deliver_webhook_task.run("u1", payload)
+    import hashlib as _h, hmac as _hm, json as _j
+    assert seen["headers"]["X-VidGrab-Event"] == "watch.new_items"
+    want = _hm.new(b"k", _j.dumps(payload, ensure_ascii=False).encode(), _h.sha256).hexdigest()
+    assert seen["headers"]["X-VidGrab-Signature"] == f"sha256={want}"
+
+
+# ── 33D: YouTube channels (free, all accounts) ──────────────────────
+
+YT_ID = "UCBJycsmduvYEL83R_U4JriQ"
+
+
+def _yt_page(cid=YT_ID, title="Marques Brownlee"):
+    return (f'<html><link rel="canonical" href="https://www.youtube.com/channel/{cid}">'
+            f'<meta property="og:title" content="{title}"></html>')
+
+
+@pytest.mark.parametrize("url,page", [
+    ("https://www.youtube.com/@mkbhd", "https://www.youtube.com/@mkbhd"),
+    ("https://youtube.com/@mkbhd/videos", "https://www.youtube.com/@mkbhd"),
+    ("https://m.youtube.com/channel/" + YT_ID + "/featured", "https://www.youtube.com/channel/" + YT_ID),
+    ("https://www.youtube.com/c/mkbhd", "https://www.youtube.com/c/mkbhd"),
+    ("www.youtube.com/user/marquesbrownlee", "https://www.youtube.com/user/marquesbrownlee"),
+])
+def test_youtube_links_resolve_to_one_channel_id(env, url, page):
+    env.setenv("WATCH_PLATFORMS_ENABLED", "tiktok,youtube")
+    seen = []
+    ref = cw.resolve_channel_url(url, fetch_page=lambda u: seen.append(u) or _yt_page())
+    assert seen == [page]
+    assert (ref.platform, ref.external_channel_id) == ("youtube", YT_ID)
+    assert ref.canonical_url == f"https://www.youtube.com/channel/{YT_ID}"
+    assert ref.display_name == "Marques Brownlee"
+
+
+@pytest.mark.parametrize("url,page,code", [
+    ("https://www.youtube.com/watch?v=dQw4w9WgXcQ", _yt_page(), "unsupported_url"),
+    ("https://www.youtube.com/@mkbhd", "<html>consent wall</html>", "channel_not_found"),
+    ("https://www.youtube.com/channel/" + YT_ID, _yt_page(cid="UC" + "x" * 22), "channel_not_found"),
+])
+def test_youtube_bad_links(env, url, page, code):
+    env.setenv("WATCH_PLATFORMS_ENABLED", "youtube")
+    with pytest.raises(cw.WatchError) as e:
+        cw.resolve_channel_url(url, fetch_page=lambda u: page)
+    assert e.value.code == code
+
+
+def test_youtube_page_unreachable_is_retryable_message(env):
+    env.setenv("WATCH_PLATFORMS_ENABLED", "youtube")
+
+    def down(u):
+        raise TimeoutError("slow")
+    with pytest.raises(cw.WatchError) as e:
+        cw.resolve_channel_url("https://www.youtube.com/@mkbhd", fetch_page=down)
+    assert e.value.code == "channel_unreachable" and e.value.status == 503
+
+
+def test_youtube_listing_maps_entries_and_errors():
+    src = {"canonical_url": f"https://www.youtube.com/channel/{YT_ID}"}
+    calls = []
+    info = {"entries": [{"id": "_0G4OG39XjI", "title": "WTF is a Googlebook?"},
+                        {"id": "bad"}, {"id": "3iRUwVzRDZQ", "title": "Fold", "timestamp": 1760000000}]}
+    out = cw._list_youtube(src, 10, extract=lambda u, n: calls.append((u, n)) or info)
+    assert calls == [(f"https://www.youtube.com/channel/{YT_ID}/videos", 10)]
+    assert [e["id"] for e in out] == ["_0G4OG39XjI", "3iRUwVzRDZQ"]
+    assert out[0]["url"] == "https://www.youtube.com/watch?v=_0G4OG39XjI"
+    assert out[1]["published_at"].startswith("2025-10-09") and "published_at" not in out[0]
+    for msg, cat, perm in [("This channel does not exist.", "not_found_or_private", True),
+                           ("This channel does not have a videos tab", "empty", True),
+                           ("HTTP Error 429: Too Many Requests", "network", False)]:
+        def boom(u, n, msg=msg):
+            raise RuntimeError(msg)
+        with pytest.raises(cw.ListingError) as e:
+            cw._list_youtube(src, 10, extract=boom)
+        assert (e.value.category, e.value.permanent) == (cat, perm)
+
+
+def test_youtube_item_identity_is_the_video_id():
+    ext, url = cw.item_identity("youtube", {"id": "_0G4OG39XjI", "url": "https://www.youtube.com/watch?v=_0G4OG39XjI&t=3"})
+    assert ext == "_0G4OG39XjI" and url == "https://youtube.com/watch?v=_0G4OG39XjI"
+
+
+def test_youtube_subscription_end_to_end(w, env, monkeypatch):
+    env.setenv("WATCH_PLATFORMS_ENABLED", "tiktok,youtube")
+    monkeypatch.setattr(cw, "_youtube_channel_page", lambda u: _yt_page())
+    yt = f"https://www.youtube.com/channel/{YT_ID}"
+    monkeypatch.setitem(cw.PROVIDERS, "youtube", ("ytdlp_flat", w._provider))
+    w.listings[yt] = [{"id": "AAAAAAAAAA1", "title": "old"}]
+    res = cw.add_source(user_id="u1", tier="free", is_admin=False, email_verified=True,
+                        url="https://www.youtube.com/@mkbhd", mode="one_tap", ip="1.1.1.1")
+    assert res["baseline"] == "done" and res["source"]["platform"] == "youtube"
+    w.listings[yt] = [{"id": "AAAAAAAAAA2", "title": "new"}, {"id": "AAAAAAAAAA1", "title": "old"}]
+    w.advance(days=2)
+    src = next(s for s in w.rows("watch_sources") if s["platform"] == "youtube")
+    assert cw.scan_source(src["id"])["new_items"] == 1
+    cw.deliver_pending()
+    assert w.pushes and "/share-target?url=" in w.pushes[0][1]["url"]
+    assert "watch%3Fv%3DAAAAAAAAAA2" in w.pushes[0][1]["url"]

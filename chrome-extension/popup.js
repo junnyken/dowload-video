@@ -349,7 +349,7 @@ async function initPopup() {
 initPopup();
 
 // ── Channel Watch ("Theo dõi kênh", Phase 33B, task #6259) ─────────
-// On a supported channel page (TikTok profile first) a signed-in user whose
+// On a supported channel page (TikTok profile, YouTube channel) a signed-in user whose
 // account the server enables (GET /api/v1/watch/status) can follow the
 // channel: POST /api/v1/watch/sources. The server's own Vietnamese message is
 // shown verbatim (limit reached, cooldown, disabled…). Guests never see it:
@@ -372,6 +372,11 @@ function vgWatchTarget(rawUrl) {
     const m = u.pathname.match(/^\/@([\w.-]+)\/?$/);
     if (u.protocol === 'https:' && (h === 'tiktok.com' || h.endsWith('.tiktok.com')) && m) {
       return { platform: 'tiktok', url: `https://www.tiktok.com/@${m[1]}` };
+    }
+    // YouTube channel (any tab): the server resolves it to the channel id.
+    const yt = u.pathname.match(/^\/(@[\w.-]{1,100}|channel\/UC[\w-]{22}|c\/[\w.-]{1,100}|user\/[\w.-]{1,100})(?:\/[\w]*)?\/?$/);
+    if (u.protocol === 'https:' && ['youtube.com', 'www.youtube.com', 'm.youtube.com'].includes(h) && yt) {
+      return { platform: 'youtube', url: `https://www.youtube.com/${yt[1]}` };
     }
   } catch { /* not a URL */ }
   return null;
