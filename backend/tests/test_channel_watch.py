@@ -545,9 +545,16 @@ def test_interval_calc(env):
     assert cw.jittered_delay(86400, rnd=lambda: 0.0) == int(86400 * 0.88)
     assert cw.jittered_delay(86400, rnd=lambda: 1.0) == int(86400 * 1.12)
     mid = lambda: 0.5
-    assert [cw.failure_delay(21600, n, rnd=mid) for n in (1, 2, 3, 4, 5, 12)] == [
+    # permanent failure: one interval, then doubling
+    assert [cw.failure_delay(21600, n, rnd=mid, permanent=True) for n in (1, 2, 3, 4, 5, 12)] == [
         21600, 43200, 86400, 172800, 259200, 259200]
-    assert cw.failure_delay(86400, 3, rnd=lambda: 1.0) == 259200     # jitter never passes max
+    assert cw.failure_delay(86400, 3, rnd=lambda: 1.0, permanent=True) == 259200  # jitter never passes max
+    # temporary failure (12/10): 10 min, doubling, never past the old schedule
+    assert [cw.failure_delay(86400, n, rnd=mid) for n in (1, 2, 3, 4, 8, 9, 12)] == [
+        600, 1200, 2400, 4800, 76800, 153600, 259200]
+    assert cw.failure_delay(300, 1, rnd=mid) == 300
+    env.setenv("WATCH_RETRY_BASE_SEC", "120")
+    assert cw.failure_delay(86400, 1, rnd=mid) == 120
 
 
 def _next_delay(w):
@@ -575,7 +582,8 @@ def test_failures_back_off_and_degrade(w, env):
         w.advance(days=4)
         assert w.scan()["outcome"] == "failed"
         delays.append(_next_delay(w))
-    assert delays[0] <= 21600 * 1.12 and delays[1] >= 43200 * 0.88
+    # temporary failure: 10 min, then doubling (12/10 — was one interval)
+    assert delays[0] <= 600 * 1.12 and delays[1] >= 1200 * 0.88 and delays[1] > delays[0]
     assert max(delays) <= 259200
     s = w.source()
     assert s["status"] == "degraded" and s["consecutive_failures"] == 4
@@ -938,6 +946,10 @@ def test_tikwm_listing_ids_published_and_errors(monkeypatch):
     assert d.scrape_tiktok_user_posts(CH, 10)["entries"] == []
 
 
+def _EMBED_DOWN(url):
+    return 503, "overload-protect triggered"
+
+
 def test_provider_maps_tikwm_errors(monkeypatch):
     from app.services import downloader as d
 
@@ -945,9 +957,138 @@ def test_provider_maps_tikwm_errors(monkeypatch):
         raise d.TikWMListingError("private", permanent=True)
     monkeypatch.setattr(d, "scrape_tiktok_user_posts", boom)
     with pytest.raises(cw.ListingError) as e:
-        cw._list_tiktok({"canonical_url": CH}, 10)
+        cw._list_tiktok({"canonical_url": CH}, 10, embed_fetch=_EMBED_DOWN)
     assert e.value.category == "not_found_or_private" and e.value.permanent
     monkeypatch.setattr(d, "scrape_tiktok_user_posts", lambda *a, **k: {"entries": []})
     with pytest.raises(cw.ListingError) as e:
-        cw._list_tiktok({"canonical_url": CH}, 10)
+        cw._list_tiktok({"canonical_url": CH}, 10, embed_fetch=_EMBED_DOWN)
     assert e.value.category == "empty"
+
+
+# ── 12/10/2026: TikWM user/posts behind Cloudflare → embed page first ──
+
+def _embed_html(videos, *, uid="somechannel", is_error=False):
+    import json as _j
+    state = {"source": {"data": {f"/embed/@{uid}": {
+        "userInfo": {"uniqueId": uid}, "videoList": videos, "isError": is_error}}}}
+    return ('<html><script id="__FRONTITY_CONNECT_STATE__" type="application/json">'
+            + _j.dumps(state) + "</script></html>")
+
+
+def _ev(vid, height=1280, desc="v", author="somechannel"):
+    return {"id": str(vid), "desc": desc, "height": height, "playAddr": "", "authorUniqueId": author}
+
+
+PINNED_OLD = 7100000000000000000      # older id → older post
+NEW_A, NEW_B = 7695610326234041630, 7695608097624083742
+
+
+def test_embed_lists_newest_first_skips_photos_and_reads_post_time():
+    html = _embed_html([_ev(PINNED_OLD), _ev(NEW_B), _ev(NEW_A), _ev(7695600000000000000, height=0)])
+    seen = []
+    out = cw._tiktok_embed_entries(CH, fetch=lambda u: seen.append(u) or (200, html))
+    assert seen == ["https://www.tiktok.com/embed/@somechannel"]
+    assert [e["id"] for e in out] == [str(NEW_A), str(NEW_B), str(PINNED_OLD)]   # photo dropped
+    assert out[0]["url"] == f"https://www.tiktok.com/@somechannel/video/{NEW_A}"
+    assert out[0]["published_at"].startswith("2026-")
+
+
+@pytest.mark.parametrize("status,text,cat", [
+    (503, "overload-protect triggered", "embed_overload"),
+    (403, "", "embed_http_403"),
+    (200, "<html>no state</html>", "embed_unreadable"),
+    (200, None, "embed_unreadable"),
+])
+def test_embed_failures_are_temporary(status, text, cat):
+    html = _embed_html([], is_error=True) if text is None else text
+    with pytest.raises(cw.ListingError) as e:
+        cw._tiktok_embed_entries(CH, fetch=lambda u: (status, html))
+    assert e.value.category == cat and e.value.permanent is False
+
+
+def test_embed_exception_is_temporary():
+    def boom(u):
+        raise ConnectionResetError("tls")
+    with pytest.raises(cw.ListingError) as e:
+        cw._tiktok_embed_entries(CH, fetch=boom)
+    assert e.value.permanent is False
+
+
+def test_provider_uses_embed_then_falls_back_to_tikwm(monkeypatch):
+    from app.services import downloader as d
+    calls = []
+    monkeypatch.setattr(d, "scrape_tiktok_user_posts",
+                        lambda *a, **k: calls.append(1) or {"entries": vids(9)})
+    out = cw._list_tiktok({"canonical_url": CH}, 10, embed_fetch=lambda u: (200, _embed_html([_ev(NEW_A)])))
+    assert [e["id"] for e in out] == [str(NEW_A)] and calls == []
+    out = cw._list_tiktok({"canonical_url": CH}, 10, embed_fetch=lambda u: (503, "overload"))
+    assert [e["id"] for e in out] == ["9"] and calls == [1]
+
+    def tikwm_down(*a, **k):
+        raise d.TikWMListingError("request failed", permanent=False)
+    monkeypatch.setattr(d, "scrape_tiktok_user_posts", tikwm_down)
+    with pytest.raises(cw.ListingError) as e:
+        cw._list_tiktok({"canonical_url": CH}, 10, embed_fetch=lambda u: (503, "overload"))
+    assert e.value.category == "embed_overload" and e.value.permanent is False
+
+
+def test_first_scan_temporary_failure_retries_in_minutes_not_a_day(w):
+    w.provider_error[CH] = cw.ListingError("embed_overload", permanent=False)
+    res = w.add()
+    assert res["baseline"] == "pending"
+    assert 0 < _next_delay(w) <= 600 * 1.12 + 1
+    assert w.source()["last_failure_category"] == "embed_overload"
+    w.provider_error.clear()
+    w.listings[CH] = vids(3, 2, 1)
+    w.advance(seconds=700)
+    calls = []
+    cw.tick(enqueue_scan=lambda sid: calls.append(sid) or cw.scan_source(sid), enqueue_delivery=lambda: None)
+    assert calls == [w.source()["id"]]
+    sub = w.rows("watch_subscriptions")[0]
+    assert sub["baseline_completed_at"] and w.source()["consecutive_failures"] == 0
+
+
+def test_tick_pulls_forward_sources_stuck_on_the_old_24h_rule(w):
+    w.listings[CH] = vids(1)
+    w.add()
+    s = w.source()
+    s.update(consecutive_failures=1, last_failure_category="network", scan_interval_sec=86400,
+             next_scan_at=(w.clock[0] + timedelta(hours=23)).isoformat())
+    calls = []
+    cw.tick(enqueue_scan=calls.append, enqueue_delivery=lambda: None)
+    assert calls == [s["id"]]
+    assert cw._parse(w.source()["next_scan_at"]) == w.clock[0]
+
+
+def test_pull_forward_leaves_new_schedule_and_permanent_failures_alone(w):
+    w.listings[CH] = vids(1)
+    w.add()
+    s = w.source()
+    later = (w.clock[0] + timedelta(seconds=600)).isoformat()
+    s.update(consecutive_failures=1, last_failure_category="embed_overload", scan_interval_sec=86400,
+             next_scan_at=later)
+    assert cw.pull_forward_stale_retries(w.db, w.clock[0]) == 0
+    s.update(last_failure_category="not_found_or_private",
+             next_scan_at=(w.clock[0] + timedelta(hours=23)).isoformat())
+    assert cw.pull_forward_stale_retries(w.db, w.clock[0]) == 0
+
+
+class _R:
+    def __init__(self, code, text=""):
+        self.status_code, self.text = code, text
+
+
+def test_embed_proxy_retry_is_opt_in(env, monkeypatch):
+    import curl_cffi.requests as cr
+    calls = []
+    monkeypatch.setattr(cr, "get", lambda url, **k: calls.append(k.get("proxy")) or _R(503, "overload"))
+    env.setenv("RESIDENTIAL_PROXY_URL", "http://proxy.invalid:1")
+    assert cw._embed_fetch("https://www.tiktok.com/embed/@x") == (503, "overload")
+    assert calls == [None]                                  # off by default: no billed call
+    env.setenv("WATCH_TIKTOK_EMBED_PROXY", "true")
+    calls.clear()
+    cw._embed_fetch("https://www.tiktok.com/embed/@x")
+    assert calls == [None, "http://proxy.invalid:1"]
+    calls.clear()
+    monkeypatch.setattr(cr, "get", lambda url, **k: calls.append(k.get("proxy")) or _R(200, "ok"))
+    assert cw._embed_fetch("https://www.tiktok.com/embed/@x") == (200, "ok") and calls == [None]

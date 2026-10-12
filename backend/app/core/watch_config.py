@@ -155,6 +155,16 @@ def platform_floor_sec(platform: str) -> int:
     return _int(f"WATCH_PLATFORM_FLOOR_SEC_{(platform or '').upper()}", default, lo=60)
 
 
+def retry_base_sec() -> int:
+    """First retry after a temporary scan failure; doubles per failure."""
+    return _int("WATCH_RETRY_BASE_SEC", 600, lo=60)
+
+
+def tiktok_embed_proxy() -> bool:
+    """Retry a throttled TikTok embed read once via the residential proxy."""
+    return _flag("WATCH_TIKTOK_EMBED_PROXY", False)
+
+
 def degrade_after_failures() -> int:
     return _int("WATCH_DEGRADE_AFTER_FAILURES", 5, lo=1)
 

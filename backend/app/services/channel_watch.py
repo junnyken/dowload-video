@@ -292,11 +292,28 @@ def jittered_delay(interval: int, rnd: Callable[[], float] = random.random) -> i
     return min(int(interval * factor), cfg.max_interval_sec())
 
 
-def failure_delay(interval: int, failures: int, rnd: Callable[[], float] = random.random) -> int:
-    """1st failure → one normal interval, then doubling, capped at max."""
+def failure_delay(interval: int, failures: int, rnd: Callable[[], float] = random.random,
+                  *, permanent: bool = False) -> int:
+    """When to try a failing source again.
+
+    Temporary failure (network, rate limit): WATCH_RETRY_BASE_SEC (10 min),
+    doubling per consecutive failure, never longer than the old schedule.
+    Until 12/10/2026 the first failure waited one whole interval — 24 h on
+    Free — so a first scan that hit a TikWM hiccup left the channel at
+    "Chưa kiểm tra" for a day.
+    Permanent failure: one interval, then doubling. Both capped at max."""
     n = max(1, int(failures))
-    raw = interval * (2 ** min(n - 1, 16))
+    mult = 2 ** min(n - 1, 16)
+    raw = interval * mult
+    if not permanent:
+        raw = min(raw, cfg.retry_base_sec() * mult)
     return min(jittered_delay(min(raw, cfg.max_interval_sec()), rnd), cfg.max_interval_sec())
+
+
+def failure_delay_ceiling(interval: int, failures: int) -> int:
+    """Latest next_scan_at a temporarily failing source may have (top of
+    the jitter band) — anything later was scheduled by the old rule."""
+    return failure_delay(interval, failures, rnd=lambda: 1.0) + 60
 
 
 # ── Providers (FREE listings only) ───────────────────────────────────
@@ -308,16 +325,110 @@ class ListingError(Exception):
         self.permanent = permanent
 
 
-def _list_tiktok(source: dict, limit: int) -> list:
+_EMBED_STATE_RE = re.compile(r'<script id="__FRONTITY_CONNECT_STATE__"[^>]*>(.*?)</script>', re.S)
+_TIKTOK_UID_RE = re.compile(r"tiktok\.com/@([\w.-]+)", re.I)
+
+
+def _tiktok_embed_entries(channel_url: str, fetch: Optional[Callable[[str], tuple]] = None) -> list:
+    """Newest posts of a public TikTok profile from TikTok's own creator
+    embed page (www.tiktok.com/embed/@<user>), free, no login, no signature.
+
+    Since 12/10/2026 TikWM's /api/user/posts answers every caller with a
+    Cloudflare challenge (403), which left new subscriptions stuck at
+    "Chưa kiểm tra". The embed page lists ~10 newest + pinned posts; it
+    needs a browser TLS fingerprint (plain httpx gets 503) and answers
+    "overload-protect triggered" (503) when called too often.
+
+    Returns entries newest first (pinned old posts sink to the end), photo
+    posts left out (the one-tap download is for videos). Raises
+    ListingError(permanent=False) for anything it cannot read — the embed
+    page never proves a profile missing or private on its own."""
+    m = _TIKTOK_UID_RE.search(channel_url or "")
+    if not m:
+        raise ListingError("bad_url", permanent=True)
+    uid = m.group(1).rstrip(".")
+    url = f"https://www.tiktok.com/embed/@{quote(uid)}"
+    if fetch is None:
+        fetch = _embed_fetch
+    try:
+        status, text = fetch(url)
+    except Exception as e:  # TLS resets, timeouts
+        raise ListingError(f"embed_{type(e).__name__}"[:40], permanent=False)
+    if status != 200:
+        raise ListingError("embed_overload" if status == 503 else f"embed_http_{status}", permanent=False)
+    sm = _EMBED_STATE_RE.search(text or "")
+    try:
+        import json as _json  # noqa: PLC0415
+        data = (_json.loads(sm.group(1)) if sm else {}).get("source", {}).get("data", {})
+    except ValueError:
+        data = {}
+    node = next((v for v in (data.values() if isinstance(data, dict) else [])
+                 if isinstance(v, dict) and isinstance(v.get("videoList"), list)), None)
+    if node is None or node.get("isError"):
+        raise ListingError("embed_unreadable", permanent=False)
+    out = []
+    for v in node["videoList"]:
+        vid = str((v or {}).get("id") or "")
+        if not vid.isdigit():
+            continue
+        if not (v.get("height") or v.get("playAddr")):   # photo post
+            continue
+        author = (v.get("authorUniqueId") or uid)
+        entry = {"url": f"https://www.tiktok.com/@{author}/video/{vid}",
+                 "title": (v.get("desc") or "TikTok Video")[:200], "id": vid}
+        ts = int(vid) >> 32                                # TikTok ids carry the post time
+        if 1_400_000_000 < ts < 4_000_000_000:
+            entry["published_at"] = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+        out.append(entry)
+    out.sort(key=lambda e: int(e["id"]), reverse=True)
+    return out
+
+
+def _embed_fetch(url: str) -> tuple:
+    """Direct first. WATCH_TIKTOK_EMBED_PROXY=true retries a throttled /
+    failed call ONCE through the residential proxy already configured for
+    YouTube (YTDL_PROXY / RESIDENTIAL_PROXY_URL) — ~330 KB per call, off by
+    default because that proxy is billed per GB."""
+    import os  # noqa: PLC0415
+    from curl_cffi import requests as _cr  # noqa: PLC0415
+
+    try:
+        r = _cr.get(url, impersonate="chrome", timeout=15)
+        if r.status_code == 200:
+            return r.status_code, r.text
+        first: tuple = (r.status_code, r.text)
+        exc = None
+    except Exception as e:  # noqa: BLE001
+        first, exc = (0, ""), e
+    proxy = os.environ.get("YTDL_PROXY") or os.environ.get("RESIDENTIAL_PROXY_URL")
+    if not (cfg.tiktok_embed_proxy() and proxy):
+        if exc:
+            raise exc
+        return first
+    r = _cr.get(url, impersonate="chrome", timeout=20, proxy=proxy)
+    return r.status_code, r.text
+
+
+def _list_tiktok(source: dict, limit: int, *, embed_fetch=None) -> list:
+    """TikTok embed page first, TikWM second. Only TikWM can say "this
+    profile does not exist / is private" (permanent); every other failure is
+    temporary and retried soon (failure_delay)."""
     from app.services.downloader import TikWMListingError, scrape_tiktok_user_posts
 
     try:
+        return _tiktok_embed_entries(source["canonical_url"], embed_fetch)[:limit]
+    except ListingError as e:
+        if e.permanent:
+            raise
+        logger.info("[Watch] tiktok embed unavailable (%s) — trying TikWM", e.category)
+        embed_err = e.category
+    try:
         res = scrape_tiktok_user_posts(source["canonical_url"], max_videos=limit, raise_on_error=True)
     except TikWMListingError as e:
-        raise ListingError("not_found_or_private" if e.permanent else "network", permanent=e.permanent)
+        raise ListingError("not_found_or_private" if e.permanent else embed_err, permanent=e.permanent)
     except Exception as e:  # httpx/JSON errors, bad URL
         logger.info("[Watch] tiktok listing error %s", type(e).__name__)
-        raise ListingError("network", permanent=False)
+        raise ListingError(embed_err, permanent=False)
     entries = res.get("entries") or []
     if not entries:
         raise ListingError("empty", permanent=True)
@@ -535,7 +646,8 @@ def _record_failure(sb, src, now, interval, err: ListingError, provider_name, re
         "status": status,
         "consecutive_failures": failures,
         "last_failure_category": err.category,
-        "next_scan_at": _iso(now + timedelta(seconds=failure_delay(interval, failures))),
+        "next_scan_at": _iso(now + timedelta(seconds=failure_delay(interval, failures,
+                                                                   permanent=err.permanent))),
         "scan_interval_sec": interval,
         "subscriber_count": len(subs),
     }).eq("id", src["id"]).execute()
@@ -574,6 +686,32 @@ def due_sources(sb, now: datetime, limit: int) -> list[dict]:
     return [r for r in rows if r["id"] in with_subs]
 
 
+PERMANENT_FAILURES = frozenset({"not_found_or_private", "empty", "bad_url", "platform_not_supported"})
+
+
+def pull_forward_stale_retries(sb, now: datetime, limit: int = 100) -> int:
+    """Sources that failed TEMPORARILY under the old rule (one whole
+    interval, i.e. 24 h on Free) wait no longer than failure_delay says
+    now. Idempotent: a source already on the new schedule is left alone."""
+    rows = (sb.table("watch_sources")
+            .select("id, status, next_scan_at, scan_interval_sec, consecutive_failures, last_failure_category")
+            .in_("status", list(SCANNABLE)).gte("consecutive_failures", 1)
+            .limit(limit).execute()).data or []
+    moved = []
+    for r in rows:
+        if r.get("last_failure_category") in PERMANENT_FAILURES:
+            continue
+        nxt = _parse(r.get("next_scan_at"))
+        interval = int(r.get("scan_interval_sec") or cfg.min_interval_sec("free"))
+        ceiling = failure_delay_ceiling(interval, int(r.get("consecutive_failures") or 1))
+        if nxt and (nxt - now).total_seconds() > ceiling:
+            moved.append(r["id"])
+    if moved:
+        sb.table("watch_sources").update({"next_scan_at": _iso(now)}).in_("id", moved).execute()
+        logger.info("[Watch] pulled %d stale retries forward", len(moved))
+    return len(moved)
+
+
 def tick(*, now: Optional[datetime] = None, sb=None, rc=None,
          enqueue_scan: Callable[[str], Any], enqueue_delivery: Callable[[], Any]) -> dict:
     if not cfg.scanning_allowed():
@@ -582,6 +720,10 @@ def tick(*, now: Optional[datetime] = None, sb=None, rc=None,
     rc = rc or _rc()
     now = now or utcnow()
     enqueued = 0
+    try:
+        pull_forward_stale_retries(sb, now)
+    except Exception as e:  # never block the tick
+        logger.warning("[Watch] pull-forward skipped: %s", type(e).__name__)
     batch = cfg.scan_batch_per_minute()
     # Over-fetch: sources still queued from an earlier tick are skipped below
     # and must not use up this tick's batch.

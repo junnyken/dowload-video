@@ -34,6 +34,8 @@ const T = {
   remove: 'Bỏ theo dõi',
   confirmRemove: 'Bỏ theo dõi kênh này? Bạn có thể phải chờ một thời gian trước khi thêm kênh khác.',
   baselinePending: 'Đang ghi nhận video hiện có của kênh…',
+  // wording: BA review — shown while the first read failed temporarily
+  retrying: (t) => (t ? `Chưa đọc được kênh, sẽ thử lại lúc ${t}.` : 'Chưa đọc được kênh, hệ thống sẽ thử lại sớm.'),
   degraded: 'Tạm thời không đọc được kênh, hệ thống sẽ thử lại.',
   modeTap: 'Thông báo + mở nhanh để tải',
   modeNotify: 'Chỉ thông báo',
@@ -215,7 +217,11 @@ export default function WatchPage() {
                   {s.new_items_7d > 0 && <span className="text-accent-text">{T.newItems(s.new_items_7d)}</span>}
                   <span>{s.mode === 'notify_only' ? T.modeNotify : T.modeTap}</span>
                 </div>
-                {!s.baseline_completed_at && <p className="text-xs text-fg-muted">{T.baselinePending}</p>}
+                {!s.baseline_completed_at && s.source.status !== 'degraded' && (
+                  <p className="text-xs text-fg-muted">
+                    {s.source.last_failure_category ? T.retrying(fmt(s.source.next_scan_at)) : T.baselinePending}
+                  </p>
+                )}
                 {s.source.status === 'degraded' && <p className="text-xs text-danger">{T.degraded}</p>}
                 <div className="flex items-center gap-2 pt-0.5">
                   <button onClick={() => patch(s.id, { status: paused ? 'active' : 'paused' })}
