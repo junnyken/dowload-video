@@ -28,6 +28,7 @@ import DesktopAppPage from './pages/DesktopAppPage'
 import MetricsPage from './pages/MetricsPage'
 import CobaltPage from './pages/CobaltPage'
 import TakedownAdminPage from './pages/TakedownAdminPage'
+import SwitchesPage from './pages/SwitchesPage'
 import { PlatformsHubPage, QueueHubPage, AutomationHubPage } from './pages/MergedPages'
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -60,6 +61,7 @@ export function AdminRoutes() {
       <Route path="/vid-admin/apify-costs"        element={<Shell><ApifyCostsPage /></Shell>} />
       <Route path="/vid-admin/desktop-app"        element={<Shell><DesktopAppPage /></Shell>} />
       <Route path="/vid-admin/takedown"           element={<Shell><TakedownAdminPage /></Shell>} />
+      <Route path="/vid-admin/switches"           element={<Shell><SwitchesPage /></Shell>} />
       <Route path="/vid-admin/metrics"            element={<Shell><MetricsPage /></Shell>} />
       <Route path="/vid-admin/audit"     element={<Shell><AuditLogPage /></Shell>} />
 

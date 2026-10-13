@@ -10,7 +10,9 @@ Flags
                                         endpoint answers 404 watch_disabled
                                         and the beat tick does nothing
   WATCH_KILL_SWITCH              false  emergency stop: no scan, no delivery,
-                                        no new source; listing/removal still work
+                                        no new source; listing/removal still work.
+                                        An admin override (Redis, admin page
+                                        "Công tắc khẩn cấp") wins over the env
   WATCH_REQUIRE_ACCOUNT          true   guests are always refused in 33A (there
                                         is no guest mode); kept for the spec
   WATCH_PLATFORMS_ENABLED        ""     comma list of platforms allowed to be
@@ -76,8 +78,15 @@ def enabled() -> bool:
     return _flag("WATCH_ENABLED", False)
 
 
-def kill_switch() -> bool:
+def env_kill_switch() -> bool:
     return _flag("WATCH_KILL_SWITCH", False)
+
+
+def kill_switch() -> bool:
+    """Admin override (page "Công tắc khẩn cấp") first, else WATCH_KILL_SWITCH.
+    Never raises: an unreadable override falls back to the env value."""
+    from app.core import admin_switches  # noqa: PLC0415
+    return admin_switches.resolve(admin_switches.WATCH_KILL, env_kill_switch())
 
 
 def require_account() -> bool:
