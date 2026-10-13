@@ -2834,6 +2834,10 @@ async def get_platform_status():
                 # genuinely do not know.
                 "probe":    probe_status or _PROBE_NOT_CONFIGURED,
                 "monitored": bool(probe_status and probe_status != _PROBE_NOT_CONFIGURED),
+                # Last SUCCESSFUL probe (ISO UTC), or None if never seen working.
+                "last_verified_at": probe.get("last_verified_at"),
+                # Short admin-written note (Vietnamese), "" when none.
+                "known_limitation": probe.get("known_limitation") or "",
             })
 
         degraded_count = sum(1 for p in platforms if p["status"] == "degraded")

@@ -13,7 +13,7 @@ no proxy spend. It will not catch "metadata resolves but the media 404s", and
 says so rather than implying full coverage — real user failures cover that side,
 via the fetch_failed / download_failed events.
 
-WHY MOST TARGETS SHIP EMPTY
+WHY MOST TARGETS SHIP EMPTY (2026-10-13: all free platforms now have one)
 ---------------------------
 A probe needs a sample URL per platform that is public and stable. Inventing
 twenty of them would produce a monitor that reports false failures on day one,
@@ -21,6 +21,10 @@ and a monitor people learn to ignore is worse than no monitor. So only targets
 that are genuinely known-stable ship as defaults; everything else reports
 `not_configured`, which is neither healthy nor failed, and the operator fills
 them in through the admin without a deploy.
+
+Exception (task #6332): Douyin/Xiaohongshu can reach a paid provider. They
+have no default target, run only when the admin sets one, at most once per
+their minimum interval (24 h default) — see PAID_PROBE_PLATFORMS.
 
 Configured targets live in Redis under `probe:targets` as a JSON object
 {platform: url}, overriding the defaults below.
@@ -55,8 +59,13 @@ _DEFAULT_TARGETS: Dict[str, str] = {
     # found from that account's listing (not guessed), and each returned 200
     # with a title and a media URL from the live /api/v1/fetch-link — the same
     # extract_video_info_sync entry point probe_once uses.
-    #   @Odysee channel — "VIDEO: The Future of Odysee" (17.9s)
-    "odysee": "https://odysee.com/@Odysee:8/FutureofOdyseeVideo:0",
+    #   @Odysee channel — "Call an Ambulance!" (8 s video). Replaced 2026-10-13
+    #   (task #6332): the old target, "VIDEO: The Future of Odysee", still
+    #   resolves locally (yt-dlp 2026.08.19: 1080p, 344 s) but is a 344 s
+    #   video the probe downloads at 480p, and the live probe kept failing on
+    #   it. Listed from the channel's own claim_search; yt-dlp resolved it
+    #   (720p, 8 s) on 2026-10-13.
+    "odysee": "https://odysee.com/@Odysee:8/call-an-ambulance:6",
     #   soundcloud.com/soundcloud — "Upload Your First Track" (4.5s)
     "soundcloud": "https://soundcloud.com/soundcloud/upload-your-first-track",
     #   space.bilibili.com/8047632 (哔哩哔哩弹幕网) — "欢 迎 来 到 A G I 时 代" (6.3s)
@@ -91,7 +100,66 @@ _DEFAULT_TARGETS: Dict[str, str] = {
     "twitter": "https://x.com/CaptainAmerica/status/719944021058060289",
     #   @nba — 6 s, posted 2024-07. @tiktok's own videos could not be listed.
     "tiktok": "https://www.tiktok.com/@nba/video/7390205678729579807",
+    # Added 2026-10-13 (task #6332). Each checked from the workspace on that
+    # day through the code path the app uses for that platform.
+    #   Rumble: yt-dlp's own extractor test URL (online since 2021), 103 s.
+    #   Resolved with Chrome impersonation; WITHOUT it the workspace IP gets
+    #   403 — if the live probe fails with 403, that is the server path, not
+    #   the target. Rumble's own channel could not be listed.
+    "rumble": "https://rumble.com/vdmum1-moose-the-dog-helps-girls-dig-a-snow-fort.html",
+    #   Snapchat: public Spotlight from yt-dlp's extractor tests (4.7 s);
+    #   app.services.snapchat_extractor returned a title and a direct URL.
+    "snapchat": "https://www.snapchat.com/spotlight/W7_EDlXWTBiXAEEniNoMPwAAYYWtidGhudGZpAX1TKn0JAX1TKnXJAAAAAA",
+    #   Lemon8: the official @lemon8_us account, its one VIDEO post among the
+    #   20 on its profile (the rest are image posts);
+    #   app.services.lemon8_extractor returned source_type=video + direct URL.
+    "lemon8": "https://www.lemon8-app.com/@lemon8_us/7586892375096623671?region=us",
+    #   Podcast: NPR "Up First" RSS feed (daily since 2017). The probe takes
+    #   the newest episode; app.services.podcast_extractor returned a title
+    #   and an audio URL.
+    "podcast": "https://feeds.npr.org/510318/podcast.xml",
+    #   Spotify: Rick Astley — "Never Gonna Give You Up". The app does not
+    #   download from Spotify: it reads the track page (free embed scrape,
+    #   spotify_service.get_track_info_async returned the name) and then
+    #   finds the audio on SoundCloud/YouTube. The probe covers that chain.
+    "spotify": "https://open.spotify.com/track/4PTG3Z6ehGkBFwjybzWkR8",
+    #   Pinterest: pin from yt-dlp's extractor tests ("Origami", 58 s);
+    #   yt-dlp resolved it anonymously (1080p+) on 2026-10-13. Production
+    #   already probes Pinterest through an admin-set target, which keeps
+    #   overriding this default.
+    "pinterest": "https://www.pinterest.com/pin/664281013778109217/",
 }
+
+# Platforms whose real path can reach a PAID managed provider (Apify, through
+# the China access layer). They ship WITHOUT a default target, on purpose:
+#   * a probe only reaches the paid provider when CHINA_ACCESS_MANAGED_PROBES_ENABLED
+#     is on (registry.managed_allowed_for refuses origin="probe" otherwise).
+#     With it off — the default — a Douyin probe runs the native route only,
+#     which fails for every public video (0/1245 on prod), so a default
+#     target would raise a red "degraded" banner while users are served fine;
+#   * when it is on, every paid call still goes through the provider router's
+#     budget_guard.precheck + reserve (requester "probe": the guest per-day
+#     limit, the platform and provider daily ceilings, the monthly ceiling).
+# The admin can set a target per platform; it is then probed at most once per
+# its minimum interval (default 24 h, below), enforced through Redis.
+PAID_PROBE_PLATFORMS = frozenset({"douyin", "xiaohongshu", "kuaishou"})
+NOT_CONFIGURED_REASON: Dict[str, str] = {
+    "douyin": "paid_probe_admin_opt_in",
+    "xiaohongshu": "paid_probe_admin_opt_in",
+    # Not paid, but anonymous extraction needs a signed-in cookie (yt-dlp from
+    # the workspace, 2026-10-13: "Account authentication is required" on its
+    # own test URL). Production probes Reddit through an admin-set target.
+    "reddit": "needs_cookie_admin_target",
+}
+
+# Minimum seconds between two probes of one platform. 0 = every scheduled
+# sweep (30 min). Admin-settable per platform (Redis `probe:min_interval`).
+PAID_MIN_INTERVAL_SEC = 86400
+_PAID_MIN_INTERVAL_FLOOR = 3600     # an admin value below this is raised to it
+_MIN_INTERVAL_KEY = "probe:min_interval"          # JSON {platform: seconds}
+_LAST_RUN_KEY = "probe:last_run:{platform}"       # SET NX EX — the claim
+_LIMITATION_KEY = "probe:known_limitation"        # JSON {platform: text}
+_LIMITATION_MAX = 300
 
 _TARGETS_KEY = "probe:targets"
 _STATE_KEY = "probe:state"          # hash: platform -> json
@@ -155,6 +223,105 @@ def set_target(platform: str, url: Optional[str]) -> Dict[str, str]:
     stored[platform] = (url or "").strip()
     rc.set(_TARGETS_KEY, json.dumps(stored))
     return get_targets()
+
+
+def _read_json_map(key: str) -> Dict[str, Any]:
+    """A Redis string holding a JSON object; {} when absent. Raises on Redis
+    failure so callers that must fail closed can."""
+    raw = get_redis().get(key)
+    if isinstance(raw, bytes):
+        raw = raw.decode()
+    try:
+        val = json.loads(raw) if raw else {}
+    except Exception:
+        val = {}
+    return val if isinstance(val, dict) else {}
+
+
+def default_min_interval(platform: str) -> int:
+    return PAID_MIN_INTERVAL_SEC if platform in PAID_PROBE_PLATFORMS else 0
+
+
+def get_min_interval(platform: str, _stored: Optional[Dict[str, Any]] = None) -> int:
+    """Seconds that must pass between two probes of `platform`.
+
+    Paid platforms fail closed: if Redis cannot be read they keep the 24 h
+    default, and an admin value is never allowed below one hour.
+    """
+    value = default_min_interval(platform)
+    try:
+        stored = (_stored if _stored is not None else _read_json_map(_MIN_INTERVAL_KEY)).get(platform)
+        if stored is not None:
+            value = max(0, int(stored))
+    except Exception:
+        pass
+    if platform in PAID_PROBE_PLATFORMS:
+        value = max(value, _PAID_MIN_INTERVAL_FLOOR)
+    return value
+
+
+def set_min_interval(platform: str, seconds: Optional[int]) -> int:
+    """Set one platform's minimum interval; None restores the default."""
+    if platform not in PROBE_PLATFORMS:
+        raise ValueError(f"Unknown platform: {platform}")
+    stored = _read_json_map(_MIN_INTERVAL_KEY)
+    if seconds is None:
+        stored.pop(platform, None)
+    else:
+        stored[platform] = max(0, int(seconds))
+    get_redis().set(_MIN_INTERVAL_KEY, json.dumps(stored))
+    return get_min_interval(platform)
+
+
+def claim_probe_slot(platform: str) -> bool:
+    """May `platform` be probed now? Claims the slot when it may.
+
+    Platforms without a minimum interval always may. For the others the claim
+    is one `SET key NX EX interval` in Redis, so it holds across worker
+    restarts and two concurrent sweeps cannot both win it. The claim is taken
+    BEFORE the probe runs: a probe that crashes half-way still counts, which is
+    the safe side for a paid provider. Any Redis error → no probe (fail
+    closed); for a paid platform that is the only acceptable answer.
+    """
+    interval = get_min_interval(platform)
+    if interval <= 0:
+        return True
+    try:
+        won = get_redis().set(_LAST_RUN_KEY.format(platform=platform),
+                              str(int(time.time())), nx=True, ex=interval)
+        return bool(won)
+    except Exception:
+        return False
+
+
+def get_known_limitations() -> Dict[str, str]:
+    try:
+        stored = _read_json_map(_LIMITATION_KEY)
+    except Exception:
+        return {}
+    return {k: v for k, v in stored.items() if isinstance(v, str) and v.strip()}
+
+
+def set_known_limitation(platform: str, text: Optional[str]) -> str:
+    """Set (or clear, with empty/None) the short note shown next to a platform's
+    status, e.g. "Chỉ tải được video công khai". Returns the stored text."""
+    if platform not in PROBE_PLATFORMS:
+        raise ValueError(f"Unknown platform: {platform}")
+    clean = " ".join((text or "").split())[:_LIMITATION_MAX]
+    stored = _read_json_map(_LIMITATION_KEY)
+    if clean:
+        stored[platform] = clean
+    else:
+        stored.pop(platform, None)
+    get_redis().set(_LIMITATION_KEY, json.dumps(stored, ensure_ascii=False))
+    return clean
+
+
+def _iso(ts: Any) -> Optional[str]:
+    try:
+        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(int(ts)))
+    except Exception:
+        return None
 
 
 # Platforms whose users are served through Cobalt-first / TikWM: probe them
@@ -265,9 +432,14 @@ def record_probe(platform: str, result: Dict[str, Any]) -> str:
     except Exception:
         prev = {}
 
+    now = int(time.time())
+    # Last SUCCESSFUL probe, carried across failures: "when did we last see
+    # it work" is the useful fact once it is broken.
+    verified_at = prev.get("verified_at")
     if result.get("ok"):
         streak = 0
         status = OK
+        verified_at = now
     else:
         streak = int(prev.get("fail_streak") or 0) + 1
         status = FAILED if streak >= _FAIL_CONFIRM else UNCONFIRMED
@@ -277,8 +449,9 @@ def record_probe(platform: str, result: Dict[str, Any]) -> str:
         "reason": result.get("reason"),
         "ms": result.get("ms"),
         "title": result.get("title"),
-        "at": int(time.time()),
+        "at": now,
         "fail_streak": streak,
+        "verified_at": verified_at,
     }
     try:
         (rc or get_redis()).hset(_STATE_KEY, platform, json.dumps(payload))
@@ -309,22 +482,38 @@ def get_probe_states() -> Dict[str, Dict[str, Any]]:
     except Exception:
         pass
 
+    limitations = get_known_limitations()
+    try:
+        intervals = _read_json_map(_MIN_INTERVAL_KEY)
+    except Exception:
+        intervals = {}
     now = int(time.time())
     out: Dict[str, Dict[str, Any]] = {}
     for platform in PROBE_PLATFORMS:
         target = targets.get(platform)
+        rec = stored.get(platform) or {}
+        interval = get_min_interval(platform, intervals)
+        extra = {
+            # Kept even with no target: a success recorded before the target
+            # was cleared is still the last time it was seen working.
+            "last_verified_at": _iso(rec.get("verified_at")) if rec.get("verified_at") else None,
+            "known_limitation": limitations.get(platform, ""),
+            "min_interval_s": interval,
+            "paid": platform in PAID_PROBE_PLATFORMS,
+        }
         if not target:
             out[platform] = {"status": NOT_CONFIGURED, "target": None,
-                             "reason": None, "at": None, "ms": None, "age_s": None}
+                             "reason": NOT_CONFIGURED_REASON.get(platform),
+                             "at": None, "ms": None, "age_s": None, **extra}
             continue
-        rec = stored.get(platform)
-        if not rec or not rec.get("at"):
+        if not rec.get("at"):
             out[platform] = {"status": STALE, "target": target, "reason": "never_probed",
-                             "at": None, "ms": None, "age_s": None}
+                             "at": None, "ms": None, "age_s": None, **extra}
             continue
         age = now - int(rec["at"])
         status = rec.get("status")
-        if age > _STALE_AFTER_SEC:
+        # A platform probed once a day is not stale after 3 hours.
+        if age > max(_STALE_AFTER_SEC, interval + _STALE_AFTER_SEC):
             status = STALE
         out[platform] = {
             "status": status,
@@ -333,5 +522,6 @@ def get_probe_states() -> Dict[str, Dict[str, Any]]:
             "at": rec.get("at"),
             "ms": rec.get("ms"),
             "age_s": age,
+            **extra,
         }
     return out
