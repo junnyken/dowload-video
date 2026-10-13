@@ -28,7 +28,11 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::Duration;
 
-const OFFER_URL: &str = "https://dvid-api.vibe1.tinhgon.xyz/api/v1/client/ytdlp";
+/// Same host as every other app → server call (quota_gate::API_HOST): a
+/// domain move is a one-place change.
+fn offer_url() -> String {
+    format!("https://{}/api/v1/client/ytdlp", crate::quota_gate::API_HOST)
+}
 const ACTIVE_FILE: &str = "ytdlp-active.json";
 pub const CHECK_EVERY: Duration = Duration::from_secs(12 * 3600);
 const OFFER_TIMEOUT: Duration = Duration::from_secs(5);
@@ -101,7 +105,7 @@ fn agent(timeout: Duration) -> ureq::Agent {
 
 fn fetch_offer(app_version: &str) -> Fetched {
     let resp = agent(OFFER_TIMEOUT)
-        .get(OFFER_URL)
+        .get(&offer_url())
         .header("Accept", "application/json")
         .header("X-VG-Source", "desktop")
         .header("X-VG-Client", app_version)
