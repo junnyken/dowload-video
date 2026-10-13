@@ -455,6 +455,18 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 });
 
 // ── Message handler ───────────────────────────────────────────────
+// The server explains every failure in its body: a plain `detail` string, a
+// `detail` object ({message|user_message}), or a top-level message (503
+// server_busy: "Hệ thống đang bận, vui lòng thử lại sau khoảng N giây.",
+// task #6397). Never retried automatically: the user presses the button again.
+function vgServerErrorText(data, status) {
+  const d = data?.detail;
+  const why = data?.user_message || (typeof d === 'string' ? d : d?.message || d?.user_message)
+    || data?.message;
+  if (data?.error_code === 'server_busy' && why) return why;
+  return why ? `${why} (HTTP ${status})` : `HTTP ${status}`;
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const tabId = sender.tab?.id;
 
@@ -589,11 +601,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         // The server explains every failure in the body (detail / user_message);
         // "HTTP 500" alone told the user nothing (08/10, task #6134).
         const data = await resp.json().catch(() => null);
-        if (!resp.ok) {
-          const d = data?.detail;
-          const why = data?.user_message || (typeof d === 'string' ? d : d?.message || d?.user_message);
-          throw new Error(why ? `${why} (HTTP ${resp.status})` : `HTTP ${resp.status}`);
-        }
+        if (!resp.ok) throw new Error(vgServerErrorText(data, resp.status));
         if (!data?.success) throw new Error(data?.detail || 'Server lỗi');
 
         // Resolve download URL (same logic as popup resolveDownloadUrl)
@@ -917,7 +925,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       addToHistory({ title: data.title || 'Video', thumbnail: data.thumbnail_url || '', url: targetUrl, quality: isMP3 ? 'MP3' : 'HD', fileSize: data.file_size_mb ? `${data.file_size_mb} MB` : '' });
       chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '✅ Đang tải xuống!' }).catch(() => {});
     } else {
-      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '❌ ' + (data.detail || 'Lỗi') }).catch(() => {});
+      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '❌ ' + (resp.ok ? (data.detail || 'Lỗi') : vgServerErrorText(data, resp.status)) }).catch(() => {});
     }
   } catch (err) {
     const msg = err.name === 'AbortError' ? 'Xử lý quá lâu' : 'Lỗi kết nối';

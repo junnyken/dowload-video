@@ -1799,7 +1799,12 @@ function showMultiFormat(data) {
         try {
           const quality = isVideo ? `video_${fmt.height}` : 'mp3_320';
           const result = await apiFetchLink({ url: videoUrl, quality, remove_watermark: _lastNoWm });
-          if (!result?.ok || !result.data?.success) { dlBtn.textContent = '❌'; return; }
+          if (!result?.ok || !result.data?.success) {
+            dlBtn.textContent = '❌';
+            const d = result?.data?.detail;  // e.g. 503 server_busy: "Hệ thống đang bận…" (task #6397)
+            dlBtn.title = (typeof d === 'string' ? d : d?.message) || result?.data?.message || result?.error || '';
+            return;
+          }
 
           const r = result.data;
           showQualityNote(r.quality_note);
