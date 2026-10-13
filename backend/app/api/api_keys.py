@@ -21,7 +21,6 @@ from pydantic import BaseModel, Field
 
 from app.core.auth_middleware import get_required_user
 from app.core.database import get_supabase_client
-from app.core.quotas import _get_profile as get_user_profile
 
 router = APIRouter()
 
