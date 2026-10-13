@@ -68,14 +68,16 @@ def test_some_above_cap_picks_best_under_cap():
 
 
 @pytest.mark.parametrize("q", ["video_360", "video_480", "video_720", "video_1080", "video"])
-def test_all_above_cap_still_rejected_for_progressive(q):
-    cap = {"video_360": 360, "video_480": 480, "video_720": 720, "video_1080": 1080, "video": 1080}[q]
-    fm = [_fmt("big", cap * 2, acodec="mp4a.40.2")]
-    assert _pick(_sel(q), fm) is None
+def test_all_above_cap_takes_smallest_above_cap(q):
+    # Task #6332: Odysee lists a single 720p "original"; every video_480
+    # request (the probe's too) failed "Requested format is not available".
+    cap = 1080 if q == "video" else int(q.split("_")[1])
+    fm = [_fmt("x2", cap * 2), _fmt("x3", cap * 3)]
+    assert _pick(_sel(q), fm) == ["x2"]
 
 
-def test_360_cap_rejects_lone_1080p():
-    assert _pick(_sel("video_360"), [_fmt("only1080", 1080)]) is None
+def test_odysee_single_720p_original_at_480():
+    assert _pick(_sel("video_480"), [_fmt("original", 720)]) == ["original"]
 
 
 def test_mixed_known_and_unknown_prefers_known_under_cap():

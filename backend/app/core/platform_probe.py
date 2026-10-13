@@ -370,6 +370,12 @@ def probe_once(url: str, timeout: int = _PROBE_TIMEOUT_SEC, quality: str = "vide
     started = time.time()
 
     def _done(ok: bool, reason: Optional[str], title: Optional[str] = None) -> Dict[str, Any]:
+        # The user-facing message is ~200 chars of advice before the yt-dlp
+        # cause, so the truncation below kept only the advice: 4 probes stayed
+        # red on 13/10 with no stored cause (task #6332). Cause first.
+        if reason and "(Lý do kỹ thuật:" in reason:
+            head, _, tech = reason.partition("(Lý do kỹ thuật:")
+            reason = tech.strip().rstrip(")").strip() + " | " + head.strip()
         return {
             "ok": ok,
             # Truncated: extractor errors can embed a whole HTML page, and this

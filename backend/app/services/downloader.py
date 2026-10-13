@@ -210,6 +210,40 @@ _COOKIE_RETRY_USELESS = ("404", "not found", "does not exist", "has been removed
                          "is not a valid url", "deleted")
 
 
+def _host_of(url: str) -> str:
+    try:
+        from urllib.parse import urlparse
+        return (urlparse(url).hostname or "").lower()
+    except Exception:
+        return ""
+
+
+def is_rumble_url(url: str) -> bool:
+    h = _host_of(url)
+    return h == "rumble.com" or h.endswith(".rumble.com")
+
+
+# Big platforms that also have /feed or /rss paths that are NOT podcasts.
+_NOT_PODCAST_HOSTS = ("youtube.com", "youtu.be", "facebook.com", "instagram.com",
+                      "tiktok.com", "x.com", "twitter.com", "reddit.com")
+
+
+def is_podcast_feed_url(url: str) -> bool:
+    """A podcast RSS feed. yt-dlp's generic extractor turns one into a
+    playlist of every episode (NPR "Up First": hundreds) and the request
+    never finished — /fetch-link and the probe both timed out (13/10, task
+    #6332). app.services.podcast_extractor reads the newest episode."""
+    h = _host_of(url)
+    if not h or any(h == d or h.endswith("." + d) for d in _NOT_PODCAST_HOSTS):
+        return False
+    path = url.split("?", 1)[0].split("#", 1)[0].lower().rstrip("/")
+    if path.endswith((".rss", ".xml")):
+        return True
+    if path.rsplit("/", 1)[-1] in ("rss", "feed", "podcast"):
+        return True
+    return h.startswith("feeds.")
+
+
 def cookie_last(platform: str) -> bool:
     raw = os.getenv("COOKIE_LAST_PLATFORMS") or ""
     wanted = {p.strip().lower() for p in raw.split(",") if p.strip()}
@@ -1065,6 +1099,11 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
                 # keeps unknown-height formats but still rejects known ones
                 # above the cap.
                 f"/best[height<=?{height}]"
+                # Only taller formats exist (Odysee lists one 720p "original";
+                # every 480p request failed, probe included — 13/10, task
+                # #6332): the smallest one above the cap beats an error.
+                f"/worst[height>{height}]"
+                f"/best"
             )
         except:
             fmt = "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/bestvideo[ext=webm]+bestaudio[ext=webm]/bestvideo+bestaudio/best"
@@ -1108,6 +1147,10 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
             "/best[height<=1080]"
             # Last resort: formats with NO height (e.g. MangoTV).
             "/best[height<=?1080]"
+            # Only taller single-file formats exist: the smallest of them
+            # rather than an error (task #6332, see video_<N> above).
+            "/worst[height>1080]"
+            "/best"
         )
 
     opts = {
@@ -1323,6 +1366,14 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
             opts["extractor_args"] = {"twitter": {"api": ["graphql", "legacy"]}}
             if cookie_last("twitter") and not force_cookie:
                 _anon_fast_fail(opts, phase)
+
+    if is_rumble_url(url):
+        # Rumble answers yt-dlp's plain urllib request with 403 and serves the
+        # same page to a Chrome TLS fingerprint (measured 13/10: probe 403,
+        # --impersonate chrome returned the title). Task #6332.
+        target = _impersonate_target()
+        if target is not None:
+            opts["impersonate"] = target
 
     return opts
 
@@ -2357,6 +2408,19 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         url = url.split("?")[0]
 
 
+
+    # ── Podcast RSS → the newest episode's audio file ──
+    _podcast_meta = None
+    if is_podcast_feed_url(url):
+        from app.services.podcast_extractor import extract_podcast
+        _pod = extract_podcast(url)
+        if _pod.get("error_code") or not _pod.get("direct_url"):
+            raise ValueError(_pod.get("error_message") or "Không đọc được RSS podcast.")
+        _podcast_meta = _pod
+        url = _pod["direct_url"]
+        if not quality.startswith("mp3"):
+            quality = "mp3_128"   # an episode is audio; a "video" request has no video to give
+        print(f"[Downloader] Podcast RSS -> {(_pod.get('title') or '')[:60]} -> {url[:80]}")
 
     # ── Spotify: Resolve to YouTube search (no API key needed for tracks) ──
     _spotify_title = ""
@@ -3753,6 +3817,10 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     # Override with Spotify metadata for better title/thumbnail accuracy
     if _spotify_title:
         result["title"] = f"{_spotify_artist} - {_spotify_title}" if _spotify_artist else _spotify_title
+    if _podcast_meta:
+        result["title"] = _podcast_meta.get("title") or result.get("title")
+        if _podcast_meta.get("thumbnail") and not result.get("thumbnail_url"):
+            result["thumbnail_url"] = _podcast_meta["thumbnail"]
     if _spotify_thumbnail:
         result["thumbnail_url"] = _spotify_thumbnail
 
