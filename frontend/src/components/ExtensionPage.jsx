@@ -60,7 +60,7 @@ const platforms = [
 // Fallback only: the page shows the version of the zip the server actually
 // serves (GET /api/v1/extension/version) — a hardcoded number said 5.2.5 while
 // the file was already 5.3.0 (08/10).
-const EXT_VERSION = '5.5.0';
+const EXT_VERSION = '5.6.0';
 
 let _extVersion = null;
 function ExtVersion() {
@@ -159,7 +159,11 @@ const steps = [
   },
   {
     title: 'Cập nhật phiên bản mới',
-    body: <p>Tải file ZIP mới, giải nén đè lên thư mục cũ, rồi nhấn nút tải lại (mũi tên vòng) ở thẻ VidGrab trong trang <Code>chrome://extensions</Code>.</p>,
+    body: (
+      <>
+        <p>Tải file ZIP mới, giải nén <strong className="text-fg">đè lên thư mục cũ</strong> (hoặc xoá thư mục cũ rồi giải nén vào cùng chỗ), rồi nhấn nút tải lại (mũi tên vòng) ở thẻ VidGrab trong trang <Code>chrome://extensions</Code>.</p>
+      </>
+    ),
   },
 ];
 
@@ -266,6 +270,24 @@ export default function ExtensionPage() {
             ))}
           </ol>
         </section>
+
+        {/* ── Manual-install update note (Phase 34D-5) ── wording: BA review */}
+        <div
+          className="w-full flex items-start gap-3 p-4 rounded-2xl bg-accent-soft border border-accent/25"
+          role="note"
+          aria-label="Về việc cập nhật"
+        >
+          <Info className="w-5 h-5 text-accent-text flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-accent-text leading-relaxed">
+            <p className="font-bold mb-1">Extension cài thủ công không tự cập nhật</p>
+            <p>
+              Vì cài từ file ZIP (không qua Chrome Web Store), trình duyệt sẽ không tự nâng cấp VidGrab.
+              Khi có phiên bản mới, popup của extension sẽ hiện một thanh thông báo «Có bản tiện ích mới» kèm nút Tải về.
+              Để cập nhật: tải ZIP mới, giải nén đè lên thư mục cũ rồi nhấn nút tải lại ở thẻ VidGrab trong{' '}
+              <span className="font-mono font-semibold">chrome://extensions</span>.
+            </p>
+          </div>
+        </div>
 
         {/* ── Other browsers ────────────────────────────────── */}
         <div

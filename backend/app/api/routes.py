@@ -2688,14 +2688,31 @@ async def extension_version():
     file was already 5.3.0 (08/10) — the page now asks here instead."""
     import json as _json
     import zipfile
+    min_supported = _extension_min_version()
     path = _extension_zip_path()
     if not path:
-        return {"version": None}
+        return {"version": None, "minSupported": min_supported}
     try:
         with zipfile.ZipFile(path) as z:
-            return {"version": str(_json.loads(z.read("manifest.json")).get("version") or "") or None}
+            version = str(_json.loads(z.read("manifest.json")).get("version") or "") or None
     except Exception:
-        return {"version": None}
+        version = None
+    return {"version": version, "minSupported": min_supported}
+
+
+def _extension_min_version() -> str | None:
+    """Oldest extension version still supported (Phase 34D-5): admin sets the
+    `extension_min_version` key on the System Config page (empty = none).
+    Redis trouble must never break the version endpoint."""
+    try:
+        from app.core.redis_client import get_redis
+        v = get_redis().get("admin:config:extension_min_version")
+        if isinstance(v, bytes):
+            v = v.decode()
+        v = (v or "").strip()
+        return v or None
+    except Exception:
+        return None
 
 
 # ── GET /platforms  (Platform Discovery — public) ─────────────────────────
