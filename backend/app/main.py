@@ -440,6 +440,11 @@ app.add_middleware(
 )
 
 
+# Outermost: uptime monitors check with HEAD (UptimeRobot Free), routes are GET.
+from app.core.monitor_head import MonitorHeadMiddleware  # noqa: E402
+app.add_middleware(MonitorHeadMiddleware)
+
+
 # ── Include Router ───────────────────────────────────────────────────
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["Admin"])
