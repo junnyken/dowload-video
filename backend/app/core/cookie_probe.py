@@ -190,6 +190,7 @@ recently_verified = cp.recently_verified
 
 
 def _find(rc, platform: str, h: str) -> Optional[str]:
+    """Stored entry with this id (may be encrypted — decode before use)."""
     for c in rc.lrange(f"cookie_pool:{platform}", 0, -1):
         if cp._hash(c) == h:
             return c
@@ -208,13 +209,17 @@ def retest_cookie(platform: str, cookie_hash: str,
     Re-test one pooled cookie against its platform.
 
     status: ok | rejected | inconclusive | unsupported | skipped_disabled |
-            not_found | rate_limited
+            not_found | rate_limited | undecryptable
     Blocking (network) — call from a worker thread.
     """
     rc = get_redis()
-    cookie = _find(rc, platform, cookie_hash)
-    if cookie is None:
+    stored = _find(rc, platform, cookie_hash)
+    if stored is None:
         return _result("not_found", "Không tìm thấy cookie này trong kho")
+    cookie = cp._plain(stored)
+    if cookie is None:
+        return _result("undecryptable",
+                       "Không giải mã được cookie này (khoá máy chủ đã đổi) — hãy xoá và tải lên lại")
 
     health = rc.get(f"cookie_health:{platform}:{cookie_hash}")
     if health == "disabled":

@@ -29,6 +29,17 @@ ngắt mạch, hàng đợi — những thứ này tự dựng lại.
 - Muốn lưu cả bí mật: đặt System Config `backup_redis_include_secrets` = `true`
   (tắt: đặt giá trị khác hoặc xoá). Khi bật, bản **có** bí mật chỉ vào kho Supabase
   riêng tư; S3 và Postgres **luôn** nhận bản không có bí mật.
+- **Cookie được mã hoá khi lưu (task #6402).** Phần tử `cookie_pool:*` có dạng
+  `enc:v1:…` (AES-256-GCM); khoá suy ra bằng HKDF từ `SUPABASE_SERVICE_KEY` (hoặc
+  `COOKIE_POOL_ENCRYPTION_KEY` nếu có đặt — base64 của 32 byte, không bắt buộc).
+  Bản sao lưu kèm bí mật vì thế chứa **bản mã**, không phải cookie rõ.
+  **Khôi phục cookie mã hoá cần đúng khoá nguồn đó**: nếu `SUPABASE_SERVICE_KEY` đã
+  đổi, cookie khôi phục hiện "không giải mã được" ở trang Cookies, bị bỏ qua khi
+  tải (không lỗi, không lộ) → xoá và tải lên lại, hoặc đặt
+  `COOKIE_POOL_ENCRYPTION_KEY` = khoá suy ra từ giá trị cũ. Cookie cũ dạng chưa mã
+  hoá vẫn đọc được; nút "Mã hoá lại kho cookie" (hoặc
+  `POST /api/v1/admin/cookies/encrypt-all`) mã hoá chúng, worker cũng tự chạy một
+  lần khi khởi động.
 
 ```bash
 curl -X POST "$API/api/v1/admin/config/backup_redis_include_secrets" \

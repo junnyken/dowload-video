@@ -361,3 +361,18 @@ celery_app.conf.update(
         },
     }
 )
+
+
+# Task #6402: encrypt legacy plaintext pool cookies once per deploy. Every
+# worker fires this; a Redis lock lets one of them do it. Never raises, and
+# downloads read both forms, so it is safe before, during and after.
+from celery.signals import worker_ready
+
+
+@worker_ready.connect
+def _encrypt_cookie_pool_on_start(**_kwargs):
+    try:
+        from app.core.cookie_pool import migrate_cookie_pool_once
+        migrate_cookie_pool_once()
+    except Exception as exc:
+        print(f"[CookiePool] startup migration hook failed ({type(exc).__name__})")
