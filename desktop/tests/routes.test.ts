@@ -193,6 +193,17 @@ test('fetch-link refusals and errors', () => {
   assert.equal(parseFetchLink(200, null, o).kind, 'error');
 });
 
+test('fetch-link: 503 server_busy keeps the server sentence, gateway 503 stays generic (task #6397)', () => {
+  const o = { apiBase: API, audioOnly: false, fallbackTitle: 'T' };
+  const msg = 'Hệ thống đang bận, vui lòng thử lại sau khoảng 30 giây.';
+  assert.deepEqual(parseFetchLink(503, { error_code: 'server_busy', message: msg, detail: msg, retry_after: 30 }, o),
+    { kind: 'error', code: 'server_busy', message: msg });
+  // a 503 from the hosting gateway (no body) is not our busy answer
+  assert.deepEqual(parseFetchLink(503, null, o), { kind: 'error', code: 'server_fetch_failed', message: '' });
+  // the platform-unavailable 503 (admission control) keeps its own path
+  assert.equal(parseFetchLink(503, { detail: { error: 'platform_unavailable', message: 'Nền tảng tạm thời không khả dụng' } }, o).kind, 'error');
+});
+
 test('fetch-link: the server quality note reaches the app', () => {
   const o = { apiBase: API, audioOnly: false, fallbackTitle: 'T' };
   const ok = parseFetchLink(200, { success: true, local_file_id: 'a.mp4', quality_note: { message: 'Video này không có bản 1080p. Đã tải bản 716p.' } }, o);

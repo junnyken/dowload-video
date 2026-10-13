@@ -21,6 +21,20 @@ type State = 'on' | 'off'
 type Action = State | 'clear'
 
 interface LastChange { at: string; by: string; action: string; old: unknown; new: unknown }
+/** overload_guard only (task #6397): the per-process limit next to the switch. */
+interface Threshold {
+  label: string
+  help: string
+  value: number
+  default: number
+  source: 'admin' | 'default'
+  min: number
+  max: number
+  readable: boolean
+  now: { inflight: number; threads: number }
+  retry_after: number
+  rejected_today: number | null
+}
 interface Switch {
   key: string
   label: string
@@ -38,6 +52,7 @@ interface Switch {
   readable: boolean
   env_forced: boolean
   last_change: LastChange | null
+  threshold?: Threshold
 }
 
 const SOURCE_VI: Record<Switch['source'], string> = {
@@ -57,6 +72,62 @@ function actionText(s: Switch, a: Action): string {
     return `Bỏ giá trị admin, quay về theo biến môi trường (${s.env_name ?? '—'}): ${envLabel.toLowerCase()}.`
   }
   return `Chuyển sang: ${(a === 'on' ? s.on_label : s.off_label).toLowerCase()}.`
+}
+
+function ThresholdBox({ t, canEdit, onDone }: { t: Threshold; canEdit: boolean; onDone: () => void }) {
+  const [val, setVal] = useState(String(t.value))
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  useEffect(() => { setVal(String(t.value)) }, [t.value])
+
+  const n = Number(val)
+  const valid = Number.isInteger(n) && n >= t.min && n <= t.max
+
+  async function save(limit: number | null) {
+    setBusy(true); setMsg(null)
+    try {
+      await adminPost('/switches/overload_guard/limit', { limit })
+      setMsg({ ok: true, text: 'Đã lưu ngưỡng. Có hiệu lực trong vài giây.' })
+      onDone()
+    } catch (e) {
+      setMsg({ ok: false, text: `Không lưu được: ${(e as Error).message}` })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-card border border-line p-3 text-xs" data-testid="overload-threshold">
+      <p className="font-medium text-fg">{t.label}</p>
+      <p className="mt-1 text-fg-2">{t.help}</p>
+      <p className="mt-2 text-fg-muted">
+        Tiến trình vừa trả lời trang này: {t.now.inflight} yêu cầu nặng đang chạy, {t.now.threads} luồng trích xuất còn sống.
+        {' '}Báo bận hôm nay: {t.rejected_today ?? '—'} lượt. Người dùng được mời thử lại sau {t.retry_after} giây.
+      </p>
+      {canEdit && t.readable ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-fg-2">
+            Ngưỡng
+            <input type="number" min={t.min} max={t.max} value={val} disabled={busy}
+              onChange={e => setVal(e.target.value)}
+              aria-invalid={!valid}
+              className="min-h-11 w-24 rounded-card border border-line bg-surface px-2 text-fg outline-none focus:border-line-strong" />
+          </label>
+          <Button variant="primary" size="md" className="min-h-11" disabled={busy || !valid || n === t.value}
+            onClick={() => save(n)}>{busy ? 'Đang lưu…' : 'Lưu ngưỡng'}</Button>
+          {t.source === 'admin' && (
+            <Button size="md" className="min-h-11" disabled={busy} onClick={() => save(null)}>
+              Về mặc định ({t.default})
+            </Button>
+          )}
+          {!valid && <span className="text-danger">Nhập số nguyên từ {t.min} đến {t.max}.</span>}
+        </div>
+      ) : (
+        <p className="mt-2 text-fg-muted">Ngưỡng hiện tại: {t.value}{t.source === 'default' ? ' (mặc định)' : ''}.</p>
+      )}
+      {msg && <p role="status" className={`mt-2 ${msg.ok ? 'text-success' : 'text-danger'}`}>{msg.text}</p>}
+    </div>
+  )
 }
 
 function SwitchCard({ s, canEdit, onDone }: { s: Switch; canEdit: boolean; onDone: () => void }) {
@@ -114,6 +185,8 @@ function SwitchCard({ s, canEdit, onDone }: { s: Switch; canEdit: boolean; onDon
           {s.last_change ? `${fmtTime(s.last_change.at)} · ${s.last_change.by}` : 'Chưa đổi trên trang này'}
         </dd>
       </dl>
+
+      {s.threshold && <ThresholdBox t={s.threshold} canEdit={canEdit} onDone={onDone} />}
 
       {s.env_forced && (
         <p className="mt-3 text-xs text-warning-fg">

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import os
+import asyncio
 import subprocess
 from typing import Any
 
@@ -177,7 +178,7 @@ async def _create_asr_job(payload: CreateAsrJobRequest, identity, quota_subject)
     video_path = _guard_local_path(payload.video_local_path)
 
     try:
-        result = subprocess.run(
+        result = await asyncio.to_thread(subprocess.run,
             ["ffprobe", "-v", "error", "-show_entries", "format=duration",
              "-of", "default=noprint_wrappers=1:nokey=1", video_path],
             capture_output=True, timeout=30, text=True,

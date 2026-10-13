@@ -28,6 +28,7 @@ All outputs:
 import ipaddress
 import os
 import re
+import asyncio
 import subprocess
 import unicodedata
 import uuid
@@ -367,7 +368,7 @@ async def extract_audio(payload: ExtractAudioRequest, request: Request):
             codec_args = codec_args + ["-af", "loudnorm=I=-16:TP=-1.5:LRA=11"]
 
         ffmpeg_cmd = ["ffmpeg", "-y", "-i", input_path] + codec_args + [output_path]
-        result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=300)
+        result = await asyncio.to_thread(subprocess.run, ffmpeg_cmd, capture_output=True, timeout=300)
         if result.returncode != 0:
             raise ValueError(f"FFmpeg error: {result.stderr.decode()[-300:]}")
         if not os.path.exists(output_path):
@@ -433,7 +434,7 @@ async def mp4_loop(payload: Mp4LoopRequest, request: Request):
             "-an", "-movflags", "+faststart",
             output_path,
         ]
-        result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=180)
+        result = await asyncio.to_thread(subprocess.run, ffmpeg_cmd, capture_output=True, timeout=180)
         if result.returncode != 0:
             raise ValueError(f"FFmpeg error: {result.stderr.decode()[-300:]}")
         if not os.path.exists(output_path):
@@ -773,7 +774,7 @@ async def frame_thumb(payload: FrameThumbRequest, request: Request):
             "-q:v", "2",
             output_path,
         ]
-        result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=60)
+        result = await asyncio.to_thread(subprocess.run, ffmpeg_cmd, capture_output=True, timeout=60)
         if result.returncode != 0:
             raise ValueError(f"FFmpeg error: {result.stderr.decode()[-300:]}")
         if not os.path.exists(output_path):

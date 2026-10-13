@@ -1886,6 +1886,7 @@ async def download_thumbnail(request: Request, url: str, filename: str = "thumbn
 
 # ── POST /trim  (cut video/audio segment with FFmpeg) ────────────────
 
+import asyncio
 import subprocess
 
 def _resolve_local_input_or_raise(value: str, download_dir: str) -> str:
@@ -1966,7 +1967,7 @@ async def trim_media(payload: TrimRequest, request: Request):
             output_path,
         ]
 
-        result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=120)
+        result = await asyncio.to_thread(subprocess.run, ffmpeg_cmd, capture_output=True, timeout=120)
         if result.returncode != 0:
             # Fallback: re-encode if copy mode fails (some formats need it)
             if payload.is_audio:
@@ -1985,7 +1986,7 @@ async def trim_media(payload: TrimRequest, request: Request):
                     "-c:v", "libx264", "-c:a", "aac", "-preset", "fast",
                     output_path,
                 ]
-            result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=300)
+            result = await asyncio.to_thread(subprocess.run, ffmpeg_cmd, capture_output=True, timeout=300)
             if result.returncode != 0:
                 raise ValueError(f"FFmpeg error: {result.stderr.decode()[-200:]}")
 
@@ -2108,7 +2109,7 @@ async def convert_to_gif(payload: ToGifRequest, request: Request):
             "-vf", f"{vf_base},palettegen=stats_mode=diff",
             palette_path,
         ]
-        r1 = subprocess.run(palette_cmd, capture_output=True, timeout=60)
+        r1 = await asyncio.to_thread(subprocess.run, palette_cmd, capture_output=True, timeout=60)
         if r1.returncode != 0 or not os.path.exists(palette_path):
             raise ValueError(f"palettegen failed: {r1.stderr.decode()[-200:]}")
 
@@ -2121,7 +2122,7 @@ async def convert_to_gif(payload: ToGifRequest, request: Request):
             "-lavfi", f"{vf_base} [x]; [x][1:v] paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle",
             output_path,
         ]
-        r2 = subprocess.run(gif_cmd, capture_output=True, timeout=120)
+        r2 = await asyncio.to_thread(subprocess.run, gif_cmd, capture_output=True, timeout=120)
         if r2.returncode != 0 or not os.path.exists(output_path):
             raise ValueError(f"GIF conversion failed: {r2.stderr.decode()[-200:]}")
 

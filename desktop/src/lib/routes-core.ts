@@ -263,6 +263,10 @@ export function parseFetchLink(status: number, data: unknown, o: { apiBase: stri
   }
   const message = str(d.detail) ?? str(det.message) ?? str(det.user_message) ?? str(d.message) ?? '';
   if (status === 202) return { kind: 'error', code: 'server_busy', message }; // queued behind the fairness cap
+  // Task #6397: the server is overloaded and said so at once (503 server_busy, body
+  // has the Vietnamese sentence with the seconds to wait). No automatic retry: the
+  // item fails with that sentence and the user presses "Thử lại" when ready.
+  if (status === 503 && code === 'server_busy') return { kind: 'error', code: 'server_busy', message };
   if (status === 401) return { kind: 'error', code: 'unauthorized', message };
   // The server classified the extraction (extraction_errors.py): keep the codes the app knows.
   const known: Record<string, string> = { geo_blocked: 'geo_blocked', video_unavailable: 'not_found', unsupported_url: 'unsupported', drm_protected: 'drm' };

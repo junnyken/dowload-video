@@ -811,10 +811,19 @@ def _run_with_timeout(func, args=(), kwargs=None, timeout=EXTRACTION_TIMEOUT_SEC
     # Manage the executor manually and shut it down WITHOUT waiting so the
     # timeout is actually enforced; the orphaned thread dies on its own.
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    # Task #6397: the thread is counted while it runs — including after the
+    # timeout below has given up on it — so the overload guard sees orphaned
+    # extractions that still burn CPU.
+    from app.core.overload_guard import extraction_thread as _xt
+
+    def _tracked(*a, **kw):
+        with _xt():
+            return func(*a, **kw)
+
     # copy_context(): executor threads do not inherit contextvars, so without
     # it the request context bound in /fetch-link (China access layer, admin
     # canary) would be lost here. Same func, same args.
-    future = executor.submit(contextvars.copy_context().run, func, *args, **kwargs)
+    future = executor.submit(contextvars.copy_context().run, _tracked, *args, **kwargs)
     try:
         return future.result(timeout=timeout)
     except concurrent.futures.TimeoutError:
