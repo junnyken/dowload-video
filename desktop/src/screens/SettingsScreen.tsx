@@ -16,6 +16,7 @@ import { errorMessage, toAppError } from '../lib/errors';
 import { WEBSITE_URL } from '../lib/config';
 import { inAppVersion, progressPercent, updaterMissing, ytdlpLabel, type InAppProgress } from '../lib/update-core';
 import type { ClientVersionInfo, ToolVersions } from '../lib/types';
+import type { ClipMode } from '../lib/clipboard-core';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -165,6 +166,17 @@ export function SettingsScreen() {
             <Row label="Chất lượng mặc định" hint="Nếu video không có đúng mức này, ứng dụng chọn mức gần nhất thấp hơn.">
               <Select label="Chất lượng mặc định" value={st.defaultQuality} onChange={(v) => updateSettings({ defaultQuality: v as Quality })} className="w-[170px]">
                 {(Object.keys(QUALITY_LABEL) as Quality[]).map((q) => <option key={q} value={q}>{QUALITY_LABEL[q]}</option>)}
+              </Select>
+            </Row>
+          </Section>
+
+          {/* wording: BA review — clipboard link watch (14/10) */}
+          <Section title="Tự nhận link">
+            <Row label="Khi sao chép link video" hint="VidGrab nhận ra link video bạn vừa sao chép (Ctrl+C) ở bất kỳ đâu. Chỉ đọc link của các nền tảng VidGrab hỗ trợ; mọi nội dung khác trong bộ nhớ tạm được bỏ qua và không rời khỏi máy.">
+              <Select label="Khi sao chép link video" value={st.clipboardMode} onChange={(v) => updateSettings({ clipboardMode: v as ClipMode })} className="w-[170px]">
+                <option value="ask">Hỏi trước khi tải</option>
+                <option value="auto">Tự tải ngay</option>
+                <option value="off">Tắt</option>
               </Select>
             </Row>
           </Section>

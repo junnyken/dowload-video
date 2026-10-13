@@ -14,7 +14,7 @@ import { isChannelOnDownloadScreen as looksLikeChannelUrl } from '../lib/urls';
 const draft = createStore('');
 const PLATFORMS = ['YouTube', 'TikTok', 'Douyin', 'Instagram', 'Facebook', 'X (Twitter)', 'Threads', 'Reddit', 'Vimeo'];
 
-async function addToQueue(card: Card): Promise<boolean> {
+export async function addToQueue(card: Card): Promise<boolean> {
   const st = settings.get();
   const { option, outDir } = cardSelection(card, st.defaultQuality, st.outDir);
   const r = card.result!;

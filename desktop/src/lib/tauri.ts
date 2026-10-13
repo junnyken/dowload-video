@@ -80,6 +80,7 @@ export const api = {
   channelSeenAdd: (channelId: string, videoIds: string[]) => call<null>('channel_seen_add', { channelId, videoIds }),
   channelSeenList: (channelId: string) => call<string[]>('channel_seen_list', { channelId }),
   notify: (title: string, body: string) => call<null>('notify', { title, body }),
+  clipboardWatchSet: (enabled: boolean) => call<null>('clipboard_watch_set', { enabled }),
   autostartGet: () => call<boolean>('autostart_get'),
   autostartSet: (enabled: boolean) => call<null>('autostart_set', { enabled }),
   setCloseToTray: (enabled: boolean) => call<null>('set_close_to_tray', { enabled }),
@@ -102,6 +103,8 @@ export const onDone = (cb: (e: DoneEvent) => void) => on<DoneEvent>('download://
 // Tray menu "Kiểm tra kênh ngay" and the real quit (downloads must be paused within the 3 s grace).
 export const onCheckNow = (cb: () => void) => on<unknown>('channels://check-now', () => cb());
 export const onQuitting = (cb: () => void) => on<unknown>('app://quitting', () => cb());
+/** A single http(s) URL just copied (clip_watch.rs); other clipboard text never arrives. */
+export const onClipboardLink = (cb: (url: string) => void) => on<string>('clipboard-link', cb);
 // In-app update download progress (task #6205).
 export const onUpdateProgress = (cb: (p: InAppProgress) => void) => on<InAppProgress>('update://progress', cb);
 // A login-<platform> window was closed (by "Xong", "Xoá" or the user).

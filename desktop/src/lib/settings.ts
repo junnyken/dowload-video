@@ -1,4 +1,5 @@
 import { createStore } from './store';
+import type { ClipMode } from './clipboard-core';
 import { api } from './tauri';
 
 export type Quality = 'best' | '2160' | '1440' | '1080' | '720' | '480' | '360' | 'audio';
@@ -13,10 +14,12 @@ export type Settings = {
   closeToTray: boolean;
   /** Show the Douyin link window and keep it open on failure (debug, owner test 2026-10-07). */
   douyinDebugWindow: boolean;
+  /** Clipboard link watch: ask before downloading, download at once, or off (14/10). */
+  clipboardMode: ClipMode;
 };
 
 const KEY = 'vg.settings';
-const DEFAULTS: Settings = { outDir: null, concurrency: 2, defaultQuality: 'best', theme: 'system', autoSync: true, closeToTray: true, douyinDebugWindow: false };
+const DEFAULTS: Settings = { outDir: null, concurrency: 2, defaultQuality: 'best', theme: 'system', autoSync: true, closeToTray: true, douyinDebugWindow: false, clipboardMode: 'ask' };
 
 function load(): Settings {
   try {
@@ -24,6 +27,7 @@ function load(): Settings {
     if (raw && typeof raw === 'object') {
       const s = { ...DEFAULTS, ...raw } as Settings;
       s.concurrency = Math.min(4, Math.max(1, Math.round(Number(s.concurrency)) || 2));
+      if (!['ask', 'auto', 'off'].includes(s.clipboardMode)) s.clipboardMode = 'ask';
       return s;
     }
   } catch { /* corrupted -> defaults */ }

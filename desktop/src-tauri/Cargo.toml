@@ -22,6 +22,8 @@ tauri-plugin-dialog = "2"
 # Toasts for channel checks; called from Rust only (no notification:*
 # permission is granted to the webview).
 tauri-plugin-notification = "2"
+# Clipboard link watch (clip_watch.rs); read from Rust only, no webview permission.
+tauri-plugin-clipboard-manager = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"

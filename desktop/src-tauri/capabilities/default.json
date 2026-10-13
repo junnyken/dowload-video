@@ -38,6 +38,7 @@
     "allow-channel-seen-add",
     "allow-channel-seen-list",
     "allow-notify",
+    "allow-clipboard-watch-set",
     "allow-autostart-get",
     "allow-autostart-set",
     "allow-set-close-to-tray",

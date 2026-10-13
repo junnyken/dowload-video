@@ -20,6 +20,8 @@ import { startChannels } from '../lib/channels';
 import { mockMode } from '../lib/tauri';
 import { initUpdateGate } from '../lib/update';
 import { startWatch } from '../lib/watch';
+import { startClipboardWatch } from '../lib/clipboard';
+import { ClipboardBanner } from '../components/ClipboardBanner';
 
 let booted = false;
 
@@ -42,6 +44,7 @@ export function App() {
       void refreshPending();
       void startChannels();
       startWatch();
+      startClipboardWatch();
     }
     return () => mq.removeEventListener('change', applyTheme);
   }, []);
@@ -65,6 +68,7 @@ export function App() {
       {signIn && <SignInModal />}
       <ConfirmDialog />
       <Toasts />
+      <ClipboardBanner />
       <UpdateRequired />
     </div>
   );

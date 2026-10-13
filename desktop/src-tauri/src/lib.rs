@@ -18,6 +18,7 @@ mod browser_login;
 mod channels;
 mod checksum;
 mod claim_token;
+mod clip_watch;
 mod cookies;
 mod device;
 mod douyin_local;
@@ -573,6 +574,13 @@ fn channel_seen_list(store: State<'_, Store>, channel_id: String) -> CmdResult<V
         return Err(CommandError::unknown("invalid channel id"));
     }
     store.db()?.channel_seen_list(&channel_id).map_err(db_err)
+}
+
+/// Turns the clipboard link watch on/off (clip_watch.rs).
+#[tauri::command]
+fn clipboard_watch_set(enabled: bool) -> CmdResult<()> {
+    clip_watch::set_enabled(enabled);
+    Ok(())
 }
 
 /// Windows toast. The plugin is used from Rust only; texts are capped.
@@ -1442,7 +1450,11 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        // Clipboard link watch: read from Rust only (clip_watch.rs); the
+        // webview is granted no clipboard-manager permission.
+        .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
+            clip_watch::start(app.handle().clone());
             // Feature `updater` (default since 0.11.0, task #6205). The webview
             // is never granted updater:*; update_check/update_install run here.
             #[cfg(all(desktop, feature = "updater"))]
@@ -1549,6 +1561,7 @@ pub fn run() {
         .manage(AppFlags::default())
         .manage(BrowserLogin::default())
         .invoke_handler(tauri::generate_handler![
+            clipboard_watch_set,
             probe,
             cancel_probe,
             start_download,

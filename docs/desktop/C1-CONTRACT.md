@@ -103,6 +103,7 @@ checks only take videos not seen before.
 | `channel_seen_add` | `{ channelId, videoIds: string[] }` | `null` | Videos already downloaded/queued/dismissed. |
 | `channel_seen_list` | `{ channelId }` | `string[]` | |
 | `notify` | `{ title, body }` | `null` | Windows toast (notification plugin used from Rust only). |
+| `clipboard_watch_set` | `{ enabled }` | `null` | Clipboard link watch on/off (clip_watch.rs, 14/10). While on, Rust reads the clipboard every 1.5 s and emits **`clipboard-link`** (payload: string) only when the clipboard is ONE http(s) URL (no whitespace, ≤ 2048 chars); any other text never reaches the webview. Clipboard is read in Rust only (tauri-plugin-clipboard-manager); the webview gets no clipboard permission. |
 | `autostart_get` / `autostart_set` | `{}` / `{ enabled }` | `boolean` / `null` | tauri-plugin-autostart; launched with `--minimized` → start hidden in tray. |
 | `set_close_to_tray` | `{ enabled }` | `null` | Window close hides instead of quitting when enabled (default true). |
 

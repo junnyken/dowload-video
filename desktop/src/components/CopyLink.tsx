@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Check, Copy, ExternalLink } from 'lucide-react';
 import { api } from '../lib/tauri';
+import { ignoreCopied } from '../lib/clipboard';
 
 /** Shows a VidGrab link with "Mở" (opens the default browser through the
  * validated Rust open_url command) and "Sao chép" as the fallback. */
@@ -26,6 +27,7 @@ export function CopyLink({ url, label }: { url: string; label?: string }) {
         className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-accent-text hover:bg-accent-soft"
         onClick={async () => {
           try {
+            ignoreCopied(url); // the app's own copy is not offered back as a new link
             await navigator.clipboard.writeText(url);
             setDone(true);
             setTimeout(() => setDone(false), 1800);
