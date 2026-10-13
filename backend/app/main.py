@@ -381,6 +381,13 @@ app.add_middleware(UnhandledErrorMiddleware)
 from app.core.update_gate import UpdateGateMiddleware  # noqa: E402
 app.add_middleware(UpdateGateMiddleware)
 
+# Task #6397: heavy endpoints answer 503 server_busy at once when this process
+# is overloaded, instead of queueing into a 504 a minute later. Inside CORS so
+# the browser/app can read the body; outside SlowAPI so a refusal does not use
+# up the caller's rate limit. Admin switch "overload_guard".
+from app.core.overload_guard import OverloadGuardMiddleware  # noqa: E402
+app.add_middleware(OverloadGuardMiddleware)
+
 
 # ── CORS Configuration ──────────────────────────────────────────────
 # Only allow known frontend origins
@@ -437,6 +444,8 @@ app.add_middleware(
                    "X-Admin-Token",
                    # Windows app machine id / version / name (task #6087, /client/quota)
                    "X-VG-Device", "X-VG-Client", "X-VG-Device-Name"],
+    # 503 server_busy / 429 carry Retry-After (task #6397); the body has it too.
+    expose_headers=["Retry-After"],
 )
 
 

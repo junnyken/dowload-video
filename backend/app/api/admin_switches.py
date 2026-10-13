@@ -11,6 +11,9 @@ audited with log_admin_action (who/what/old/new).
 Keys
   watch_kill_switch      on = Channel Watch stopped (override of WATCH_KILL_SWITCH)
   desktop_updater        on = in-app updates offered (override of DESKTOP_UPDATER_ENABLED)
+  overload_guard         on = busy server answers 503 server_busy at once (override of
+                         OVERLOAD_GUARD_ENABLED, default on); its per-process limit:
+  POST /admin/switches/overload_guard/limit   {"limit": int | null}  (null = default)
   china_global           on = every China platform closed (china:killswitch:global;
                          env CHINA_ACCESS_GLOBAL_KILL_SWITCH forces on, cannot be overridden)
   china_<platform>       on = that platform closed (china:killswitch:platform:<p>)
@@ -28,7 +31,7 @@ from pydantic import BaseModel
 
 from app.api.admin import verify_admin
 from app.core import admin_switches as sw
-from app.core import desktop_release, watch_config
+from app.core import desktop_release, overload_guard, watch_config
 from app.core.audit import log_admin_action
 from app.services.china_platforms import budget_guard, settings as china_settings
 from app.services.china_platforms.policy import CHINA_PLATFORM_POLICIES
@@ -40,6 +43,10 @@ CHINA_PREFIX = "china_"
 
 class SwitchBody(BaseModel):
     state: Literal["on", "off", "clear"]
+
+
+class ThresholdBody(BaseModel):
+    limit: Optional[int] = None   # None = back to the default
 
 
 def _who(request: Request) -> str:
@@ -67,6 +74,21 @@ def _overridable_view(key: str) -> dict:
                             "không nhận thông báo video mới cho tới khi tắt công tắc."),
             "env_name": "WATCH_KILL_SWITCH",
         }
+    elif key == sw.OVERLOAD_GUARD:
+        env_val = overload_guard.env_enabled()
+        env_set = bool((os.getenv("OVERLOAD_GUARD_ENABLED") or "").strip())
+        meta = {
+            # wording: BA review
+            "label": "Báo bận khi máy chủ quá tải",
+            "on_label": "Đang bật", "off_label": "Đã TẮT",
+            "danger_state": "off",
+            "description": ("Bật = khi máy chủ đang xử lý quá nhiều lượt tải cùng lúc, lượt mới được trả lời ngay "
+                            "\"Hệ thống đang bận, vui lòng thử lại sau\" thay vì chờ 1–2 phút rồi báo lỗi quá thời gian. "
+                            "Ngưỡng tính cho từng tiến trình máy chủ (có 2 tiến trình)."),
+            "user_impact": ("Khi quá ngưỡng, người dùng web, tiện ích Chrome và app Windows thấy thông báo hệ thống "
+                            "đang bận kèm số giây nên chờ. Tắt = luôn nhận yêu cầu như trước (có thể chờ lâu rồi lỗi)."),
+            "env_name": "OVERLOAD_GUARD_ENABLED",
+        }
     else:
         env_val = desktop_release.env_updater_enabled()
         env_set = bool((os.getenv("DESKTOP_UPDATER_ENABLED") or "").strip())
@@ -87,10 +109,35 @@ def _overridable_view(key: str) -> dict:
         ov, readable = None, False
     effective = env_val if ov is None else ov
     source = "admin" if ov is not None else ("env" if env_set else "default")
-    return {"key": key, **meta, "kind": "override", "state": "on" if effective else "off",
+    view = {"key": key, **meta, "kind": "override", "state": "on" if effective else "off",
             "source": source, "env_state": "on" if env_val else "off",
             "override": None if ov is None else ("on" if ov else "off"),
             "readable": readable, "env_forced": False, "last_change": sw.read_meta(key)}
+    if key == sw.OVERLOAD_GUARD:
+        view["threshold"] = _overload_threshold()
+    return view
+
+
+def _overload_threshold() -> dict:
+    try:
+        admin_val = overload_guard.admin_limit_strict()
+        readable = True
+    except Exception:  # noqa: BLE001
+        admin_val, readable = None, False
+    st = overload_guard.status()
+    default = overload_guard.default_limit()
+    return {
+        # wording: BA review
+        "label": "Ngưỡng lượt nặng cùng lúc (mỗi tiến trình)",
+        "help": ("Đếm số yêu cầu nặng (tải, cắt, đổi GIF, phụ đề…) đang chạy và số luồng trích xuất còn sống "
+                 "trong một tiến trình. Đạt ngưỡng thì lượt mới bị báo bận. "
+                 f"Mặc định {default} = 2 × giới hạn tải đồng thời toàn hệ thống."),
+        "value": admin_val if admin_val is not None else default,
+        "default": default, "source": "admin" if admin_val is not None else "default",
+        "min": overload_guard.LIMIT_MIN, "max": overload_guard.LIMIT_MAX, "readable": readable,
+        "now": {"inflight": st["inflight"], "threads": st["threads"]},
+        "retry_after": st["retry_after"], "rejected_today": st["rejected_today"],
+    }
 
 
 def _china_scope(key: str) -> Optional[str]:
@@ -140,7 +187,7 @@ def _view(key: str) -> dict:
 
 
 def all_keys() -> list[str]:
-    return [sw.WATCH_KILL, sw.DESKTOP_UPDATER, "china_global",
+    return [sw.OVERLOAD_GUARD, sw.WATCH_KILL, sw.DESKTOP_UPDATER, "china_global",
             *(f"{CHINA_PREFIX}{p}" for p in CHINA_PLATFORM_POLICIES)]
 
 
@@ -174,3 +221,31 @@ async def set_switch(key: str, body: SwitchBody, request: Request, _=Depends(ver
                                "old": {"state": prior["state"], "source": prior["source"]},
                                "new": {"state": new["state"], "source": new["source"]}})
     return {"switch": new, "prior_state": prior["state"]}
+
+
+@router.post("/switches/overload_guard/limit")
+async def set_overload_limit(body: ThresholdBody, request: Request, _=Depends(verify_admin)) -> dict:
+    lim = body.limit
+    if lim is not None and not (overload_guard.LIMIT_MIN <= lim <= overload_guard.LIMIT_MAX):
+        raise HTTPException(status_code=400, detail=(
+            f"Ngưỡng phải từ {overload_guard.LIMIT_MIN} đến {overload_guard.LIMIT_MAX}."))  # wording: BA review
+    prior = _overload_threshold()
+    who = _who(request)
+    try:
+        overload_guard.set_admin_limit(lim)
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail="redis unavailable")
+    new = _view(sw.OVERLOAD_GUARD)
+    try:
+        sw.write_meta(sw.OVERLOAD_GUARD, f"limit={lim if lim is not None else 'default'}", who,
+                      prior["value"], new["threshold"]["value"])
+    except Exception:  # noqa: BLE001
+        pass
+    new["last_change"] = sw.read_meta(sw.OVERLOAD_GUARD)
+    log_admin_action(request, "admin.switch.overload_limit", resource_type="switch",
+                     resource_id=sw.OVERLOAD_GUARD,
+                     metadata={"by": who, "requested": lim,
+                               "old": {"value": prior["value"], "source": prior["source"]},
+                               "new": {"value": new["threshold"]["value"],
+                                       "source": new["threshold"]["source"]}})
+    return {"switch": new}

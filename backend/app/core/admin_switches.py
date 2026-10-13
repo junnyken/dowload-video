@@ -4,10 +4,11 @@ Admin overrides for emergency switches (task #6332 follow-up).
 Owner rule: an operational switch must be operable from the admin pages. An
 env change on Vibe Host needs a redeploy, which is useless during an incident.
 
-Two env-only switches get a Redis-backed override here:
+These env-only switches get a Redis-backed override here:
 
   watch_kill_switch   env WATCH_KILL_SWITCH         on = Channel Watch stopped
   desktop_updater     env DESKTOP_UPDATER_ENABLED   on = in-app updates offered
+  overload_guard      env OVERLOAD_GUARD_ENABLED    on = busy server answers 503 fast
 
 Effective value = admin override when one is set, else the env value (current
 behaviour is unchanged when nobody touched the admin page). "clear" removes
@@ -38,7 +39,8 @@ CACHE_TTL_SEC = 3.0
 
 WATCH_KILL = "watch_kill_switch"
 DESKTOP_UPDATER = "desktop_updater"
-OVERRIDABLE = frozenset({WATCH_KILL, DESKTOP_UPDATER})
+OVERLOAD_GUARD = "overload_guard"   # task #6397, env OVERLOAD_GUARD_ENABLED
+OVERRIDABLE = frozenset({WATCH_KILL, DESKTOP_UPDATER, OVERLOAD_GUARD})
 
 _MISS = object()
 _cache: dict[str, tuple[float, Optional[bool]]] = {}
