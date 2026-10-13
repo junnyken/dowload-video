@@ -16,7 +16,8 @@ def rc(monkeypatch):
     site_links._cache.clear()
 
 
-@pytest.mark.parametrize("bad", ["https://stats.uptimerobot.com/...", "https://stats.uptimerobot.com/…",
+@pytest.mark.parametrize("bad", ["https://dvid.vibe1.tinhgon.xyz/", "https://dvid-api.vibe1.tinhgon.xyz/health",
+                                 "https://stats.uptimerobot.com/...", "https://stats.uptimerobot.com/…",
                                  "http://stats.uptimerobot.com/x", "javascript:alert(1)",
                                  "stats.uptimerobot.com/x", "https://", "https://a b.com/x",
                                  "https://x.com/" + "a" * 400])

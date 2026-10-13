@@ -19,6 +19,7 @@ STATUS_PAGE = "status_page_url"
 NAMES = frozenset({STATUS_PAGE})
 MAX_LEN = 300
 _CACHE_TTL = 30.0
+_OWN_HOSTS = ("vibe1.tinhgon.xyz",)
 _cache: list = []   # [(expires_at, dict)]
 
 
@@ -41,6 +42,11 @@ def validate(url: Optional[str]) -> Optional[str]:
     # saved as is and the footer linked to a page that does not exist.
     if "..." in u or "…" in u:
         raise ValueError("Đây là địa chỉ mẫu — hãy dán địa chỉ thật của trang trạng thái")
+    # 13/10: the site's own home page was saved. A status page on the host it
+    # reports on dies with it — the one moment it is needed.
+    host = p.hostname.lower()
+    if any(host == h or host.endswith("." + h) for h in _OWN_HOSTS):
+        raise ValueError("Trang trạng thái phải nằm ngoài máy chủ VidGrab (vd stats.uptimerobot.com)")
     return u
 
 
