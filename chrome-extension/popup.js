@@ -8,7 +8,10 @@ let API_BASE = DEFAULT_API_BASE;
 async function vgAuthHeaders(extra = {}) {
   try {
     const r = await chrome.storage.local.get('vg_auth_token');
-    return r.vg_auth_token ? { ...extra, Authorization: `Bearer ${r.vg_auth_token}` } : extra;
+    let ver = '';
+    try { ver = chrome.runtime.getManifest().version || ''; } catch { /* no manifest in tests */ }
+    const h = ver ? { ...extra, 'X-VG-Ext-Version': ver } : extra;
+    return r.vg_auth_token ? { ...h, Authorization: `Bearer ${r.vg_auth_token}` } : h;
   } catch { return extra; }
 }
 
@@ -197,6 +200,93 @@ chrome.storage.sync.get('vg_api_base', (r) => {
   }
 });
 
+// ── Extension update check (Phase 34D-5, task #6399) ─────────────
+// Manual (zip) installs never auto-update, so the popup asks the backend which
+// version it serves and shows a banner when ours is older. Never blocks the
+// popup; every failure is silent.
+const VG_UPDATE_CACHE_KEY = 'vg_ext_update_check';
+const VG_UPDATE_DISMISS_KEY = 'vg_ext_update_dismissed';
+const VG_UPDATE_TTL_MS = 6 * 60 * 60 * 1000;
+
+function vgExtVersion() {
+  try { return chrome.runtime.getManifest().version || ''; } catch { return ''; }
+}
+
+// Pure. -1 / 0 / 1, or null when either side is not a dotted-number version.
+function vgCompareVersions(a, b) {
+  const parse = (v) => {
+    const m = /^\s*v?(\d+(?:\.\d+)*)/.exec(String(v == null ? '' : v));
+    return m ? m[1].split('.').map(Number) : null;
+  };
+  const pa = parse(a), pb = parse(b);
+  if (!pa || !pb) return null;
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] || 0, y = pb[i] || 0;
+    if (x !== y) return x < y ? -1 : 1;
+  }
+  return 0;
+}
+
+// Pure. info = { version, minSupported } from /extension/version.
+// -> { show, forced, version }. forced = below minSupported (cannot dismiss).
+function vgUpdateBanner(current, info, dismissed) {
+  const none = { show: false, forced: false, version: null };
+  if (!info || !current) return none;
+  const latest = info.version || null;
+  const min = info.minSupported || null;
+  if (min && vgCompareVersions(current, min) === -1) {
+    return { show: true, forced: true, version: latest || min };
+  }
+  if (latest && vgCompareVersions(current, latest) === -1) {
+    // a dismissal holds until a version NEWER than the dismissed one appears
+    if (dismissed && vgCompareVersions(latest, dismissed) !== 1) return none;
+    return { show: true, forced: false, version: latest };
+  }
+  return none;
+}
+
+async function vgFetchUpdateInfo(now = Date.now()) {
+  try {
+    const c = (await chrome.storage.local.get(VG_UPDATE_CACHE_KEY))[VG_UPDATE_CACHE_KEY];
+    if (c && typeof c.at === 'number' && now - c.at >= 0 && now - c.at < VG_UPDATE_TTL_MS) return c;
+  } catch { /* fall through to network */ }
+  try {
+    const base = await vgApiBase();
+    const r = await fetch(`${base}/api/v1/extension/version`, { headers: await vgAuthHeaders(), cache: 'no-store' });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const info = { at: now, version: d.version || null, minSupported: d.minSupported || null };
+    try { await chrome.storage.local.set({ [VG_UPDATE_CACHE_KEY]: info }); } catch { /* ignore */ }
+    return info;
+  } catch { return null; }
+}
+
+async function initUpdateBanner() {
+  try {
+    const el = document.getElementById('update-banner');
+    if (!el) return;
+    const info = await vgFetchUpdateInfo();
+    const dismissed = (await chrome.storage.local.get(VG_UPDATE_DISMISS_KEY))[VG_UPDATE_DISMISS_KEY] || null;
+    const d = vgUpdateBanner(vgExtVersion(), info, dismissed);
+    if (!d.show) { el.classList.add('hidden'); return; }
+    const text = document.getElementById('update-banner-text');
+    text.textContent = d.forced
+      ? 'Phiên bản tiện ích đã cũ, vui lòng cập nhật'   // wording: BA review
+      : `Có bản tiện ích mới ${d.version}`;              // wording: BA review
+    const link = document.getElementById('update-banner-link');
+    link.onclick = () => { chrome.tabs.create({ url: `${WEB_BASE}/extension` }); };
+    link.textContent = 'Tải về';                          // wording: BA review
+    const close = document.getElementById('update-banner-close');
+    close.classList.toggle('hidden', d.forced);
+    close.onclick = async () => {
+      try { await chrome.storage.local.set({ [VG_UPDATE_DISMISS_KEY]: d.version }); } catch { /* ignore */ }
+      el.classList.add('hidden');
+    };
+    el.classList.remove('hidden');
+  } catch { /* silent */ }
+}
+// ── /Extension update check ──────────────────────────────────────
+
 // ── Tab switcher ──────────────────────────────────────────────────
 let _lastActiveTab = 'single';
 function showTab(tab) {
@@ -286,6 +376,7 @@ function showReloadBanner(tabId) {
 }
 
 async function initPopup() {
+  initUpdateBanner();   // fire-and-forget: never blocks the popup
   // Chạy health check song song với page detection
   checkServerHealth();
 

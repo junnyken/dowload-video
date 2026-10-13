@@ -436,7 +436,9 @@ app.add_middleware(
                    # admin session on download endpoints (per-platform allowance + China canary)
                    "X-Admin-Token",
                    # Windows app machine id / version / name (task #6087, /client/quota)
-                   "X-VG-Device", "X-VG-Client", "X-VG-Device-Name"],
+                   "X-VG-Device", "X-VG-Client", "X-VG-Device-Name",
+                   # extension version on API calls (Phase 34D-5)
+                   "X-VG-Ext-Version"],
 )
 
 
