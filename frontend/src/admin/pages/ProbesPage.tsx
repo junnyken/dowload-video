@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAdminProbes, useSetProbeTarget, useRunProbes } from '../hooks/useAdminProbes'
+import { useAdminProbes, useSetProbeTarget, useSetProbeLimitation, useRunProbes } from '../hooks/useAdminProbes'
 import type { ProbeRow, ProbeStatus } from '../api/probes'
 
 const LABEL: Record<ProbeStatus, string> = {
@@ -28,9 +28,18 @@ function age(s: number | null): string {
   return `${Math.floor(s / 3600)} giờ trước`
 }
 
+function verifiedAt(iso: string | null | undefined): string {
+  if (!iso) return 'chưa lần nào'  // wording: BA review
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('vi-VN')
+}
+
 export default function ProbesPage() {
   const { data, isLoading, isError, error, refetch } = useAdminProbes()
   const setTarget = useSetProbeTarget()
+  const setLimitation = useSetProbeLimitation()
+  const [editingNote, setEditingNote] = useState<string | null>(null)
+  const [noteDraft, setNoteDraft] = useState('')
   const runNow = useRunProbes()
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -56,6 +65,11 @@ export default function ProbesPage() {
   const save = (platform: string) => {
     setTarget.mutate({ platform, url: draft.trim() || null })
     setEditing(null); setDraft('')
+  }
+
+  const saveNote = (platform: string) => {
+    setLimitation.mutate({ platform, text: noteDraft.trim() })
+    setEditingNote(null); setNoteDraft('')
   }
 
   return (
@@ -140,6 +154,13 @@ export default function ProbesPage() {
                   {r.reason && r.status !== 'ok' && (
                     <div className="text-[11px] text-fg-muted mt-1 max-w-[280px] break-words">{r.reason}</div>
                   )}
+                  {/* wording: BA review */}
+                  <div className="text-[11px] text-fg-muted mt-1">Tải được lần cuối: {verifiedAt(r.last_verified_at)}</div>
+                  {r.paid && (
+                    <div className="text-[11px] text-warning mt-0.5">
+                      Có thể tốn phí · dò tối đa 1 lần / {Math.round((r.min_interval_s ?? 86400) / 3600)} giờ
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-2.5 text-fg-muted text-xs whitespace-nowrap">
                   {age(r.age_s)}{r.ms !== null && <span className="text-fg-muted"> · {r.ms}ms</span>}
@@ -163,6 +184,29 @@ export default function ProbesPage() {
                       className="text-xs text-left text-fg-muted hover:text-accent-text transition-colors break-all max-w-[320px]"
                     >
                       {r.target || <span className="text-fg-muted italic">chưa đặt — bấm để thêm</span>}
+                    </button>
+                  )}
+                  {/* Known limitation: shown to users next to the platform status. wording: BA review */}
+                  {editingNote === r.platform ? (
+                    <div className="flex gap-1.5 mt-1.5">
+                      <input
+                        autoFocus value={noteDraft} maxLength={300} onChange={e => setNoteDraft(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveNote(r.platform); if (e.key === 'Escape') setEditingNote(null) }}
+                        placeholder="Giới hạn đã biết, vd: chỉ tải được video công khai"
+                        className="flex-1 min-w-0 px-2 py-1 rounded-md bg-surface border border-line-strong
+                                   text-xs text-fg-2 focus:outline-none focus:border-accent/60"
+                      />
+                      <button onClick={() => saveNote(r.platform)} className="px-2 py-1 rounded-md border border-accent bg-accent text-accent-fg text-xs font-semibold">Lưu</button>
+                      <button onClick={() => setEditingNote(null)} className="px-2 py-1 rounded-md text-fg-2 text-xs">Huỷ</button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setEditingNote(r.platform); setNoteDraft(r.known_limitation || '') }}
+                      className="block mt-1.5 text-[11px] text-left text-fg-muted hover:text-accent-text transition-colors break-words max-w-[320px]"
+                    >
+                      {r.known_limitation
+                        ? <>Giới hạn: {r.known_limitation}</>
+                        : <span className="italic">+ thêm giới hạn đã biết</span>}
                     </button>
                   )}
                 </td>

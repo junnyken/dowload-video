@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchProbes, setProbeTarget, runProbesNow, type ProbesResponse } from '../api/probes'
+import { fetchProbes, setProbeTarget, setProbeSettings, runProbesNow, type ProbesResponse } from '../api/probes'
 
 const KEY = ['admin', 'probes']
 
@@ -12,6 +12,15 @@ export function useSetProbeTarget() {
   return useMutation({
     mutationFn: ({ platform, url }: { platform: string; url: string | null }) =>
       setProbeTarget(platform, url),
+    onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
+  })
+}
+
+export function useSetProbeLimitation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ platform, text }: { platform: string; text: string }) =>
+      setProbeSettings(platform, { known_limitation: text }),
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
   })
 }
