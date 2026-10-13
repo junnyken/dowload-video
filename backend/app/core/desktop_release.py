@@ -44,6 +44,7 @@ SIG_MAX = 4096           # a Tauri .sig is ~ 400 bytes
 
 _VERSION = re.compile(r"^v?(\d{1,4})\.(\d{1,4})\.(\d{1,4})$")
 _RFC3339 = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
+_SHA_RE = re.compile(r"SHA-?256:\s*([0-9a-fA-F]{64})\b")
 _mem: Dict[str, Any] = {"at": 0.0, "ttl": 0, "val": None}
 
 
@@ -85,6 +86,11 @@ def parse_release(data: Any, repo: str) -> Optional[Dict[str, str]]:
     if not url:
         return None          # a release without the installer is not a release yet
     out = {"version": version, "downloadUrl": url, "notes": _notes_from_body(str(data.get("body") or ""))}
+    # Installer checksum published in the release text ("SHA-256: <64 hex>"),
+    # shown on the download page so users can verify (FAQ, task #6335).
+    m = _SHA_RE.search(str(data.get("body") or ""))
+    if m:
+        out["sha256"] = m.group(1).lower()
     # Task #6205: the updater signature is the asset "<installer>.sig" of THIS
     # release (same download folder, exact name); fetched in github_latest.
     urls = {(a or {}).get("browser_download_url") for a in data.get("assets") or []}
@@ -234,4 +240,6 @@ def current(fetch=None) -> Dict[str, str]:
     if gh and parse_version(gh["version"]) > (parse_version(out["latest"]) or (0, 0, 0)):
         out.update(latest=gh["version"], downloadUrl=gh["downloadUrl"],
                    notes=gh["notes"] or out["notes"], source="github")
+        if gh.get("sha256"):
+            out["sha256"] = gh["sha256"]
     return out

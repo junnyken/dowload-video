@@ -26,6 +26,7 @@ import AsrPage from './pages/AsrPage'
 import ApifyCostsPage from './pages/ApifyCostsPage'
 import DesktopAppPage from './pages/DesktopAppPage'
 import CobaltPage from './pages/CobaltPage'
+import TakedownAdminPage from './pages/TakedownAdminPage'
 import { PlatformsHubPage, QueueHubPage, AutomationHubPage } from './pages/MergedPages'
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -57,6 +58,7 @@ export function AdminRoutes() {
       <Route path="/vid-admin/asr"                element={<Shell><AsrPage /></Shell>} />
       <Route path="/vid-admin/apify-costs"        element={<Shell><ApifyCostsPage /></Shell>} />
       <Route path="/vid-admin/desktop-app"        element={<Shell><DesktopAppPage /></Shell>} />
+      <Route path="/vid-admin/takedown"           element={<Shell><TakedownAdminPage /></Shell>} />
       <Route path="/vid-admin/audit"     element={<Shell><AuditLogPage /></Shell>} />
 
       {/* Phase 3+ — Analytics now live */}

@@ -9,6 +9,10 @@ import SettingsContent from './components/SettingsContent';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import DesktopLoginPage from './pages/DesktopLoginPage';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsPage from './pages/TermsPage';
+import TakedownPage from './pages/TakedownPage';
+import FaqPage from './pages/FaqPage';
+import SiteFooter from './components/SiteFooter';
 import AccountMenu from './components/AccountMenu';
 import ThemeToggle from './components/ThemeToggle';
 import AuthModal from './components/auth/AuthModal';
@@ -73,6 +77,9 @@ const PATH_MAP = {
   // Opened by the Windows app's "Đăng nhập qua trình duyệt" (task #6039).
   '/desktop-login':       'desktop-login',
   '/privacy':             'privacy',
+  '/terms':               'terms',
+  '/takedown':            'takedown',
+  '/faq':                 'faq',
   '/api-docs':            'api-docs',
   '/api-keys':            'api-keys',
   '/link-bot':            'link-bot',
@@ -514,6 +521,24 @@ function AppInner() {
           </div>
         )}
 
+        {view === 'terms' && (
+          <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
+            <TermsPage onNavigate={navigateTo} />
+          </div>
+        )}
+
+        {view === 'takedown' && (
+          <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
+            <TakedownPage />
+          </div>
+        )}
+
+        {view === 'faq' && (
+          <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
+            <FaqPage onNavigate={navigateTo} />
+          </div>
+        )}
+
         {view === 'api-docs' && (
           <ApiDocsPage />
         )}
@@ -555,6 +580,7 @@ function AppInner() {
           <SearchPage onNavigate={navigateTo} />
         )}
       </ErrorBoundary>
+      <SiteFooter onNavigate={navigateTo} />
       </main>
 
       {/* ── Feedback Button ──────────────────────────────── */}

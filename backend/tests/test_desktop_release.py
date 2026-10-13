@@ -89,3 +89,15 @@ def test_client_version_and_update_gate_follow_github(app, gh, monkeypatch):
     from app.core import update_gate
     body = update_gate.update_required_response().body
     assert b'"latest":"0.10.0"' in body and URL_10.encode() in body
+
+
+def test_release_sha256_from_body_reaches_current(gh):
+    sha = "a" * 64
+    rel = release(body=f"VidGrab 0.10.0\n\n- x\n\nSHA-256: {sha.upper()}\n")
+    out = dr.current(lambda repo: rel)
+    assert out["sha256"] == sha
+
+
+def test_release_without_checksum_has_no_sha(gh):
+    out = dr.current(lambda repo: release(body="- only notes"))
+    assert out.get("sha256") is None

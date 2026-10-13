@@ -243,6 +243,8 @@ async def get_client_version(request: Request):
         # Task #6087: the app reads its quota mode here without an extra call.
         "features": _features(),
     }
+    if rel.get("sha256"):   # installer checksum from the release text (download page / FAQ)
+        out["sha256"] = rel["sha256"]
     signed = _signed_policy(min_supported)
     if signed:
         out["policy"] = signed
