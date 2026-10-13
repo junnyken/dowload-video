@@ -8,7 +8,7 @@
 | 1 | 34-0 kiểm thật xong | ⚠️ | `docs/PHASE-34-0-EVIDENCE.md`. Các luồng owner bấm thử (Theo dõi kênh, IG Watch Pro, kênh Xiaohongshu, Android, chữ ký lượt tải): owner báo xong, chưa có ảnh/ghi chép. |
 | 2 | Giám sát ngoài + cảnh báo chạy | ⚠️ | UptimeRobot đã dựng (5 monitor). Telegram: owner quyết định không dùng → cảnh báo chỉ qua email UptimeRobot, chưa kiểm email có tới. |
 | 2b | Link trang trạng thái | ❌ | `GET /api/v1/site-links` trả `https://stats.uptimerobot.com/...`: chữ mẫu, **link chết**. Dán địa chỉ thật (Admin → Công tắc khẩn cấp). |
-| 3 | 21/21 nền tảng có probe, ≤2 lỗi có lý do | ❌ | `/api/v1/platform-status`: 16 khoẻ · 2 lỗi (Instagram, Rumble) · Odysee "chưa xác nhận" (1 lượt hụt) · **Douyin, Xiaohongshu chưa đặt probe** (trả phí, admin bật, ≤1 lần/ngày). Rumble chưa ghi "giới hạn đã biết". Instagram chưa có lý do. |
+| 3 | 21/21 nền tảng có probe, ≤2 lỗi có lý do | ⚠️ | **Quyết định owner 13/10 (phương án b): Douyin, Xiaohongshu KHÔNG quảng bá ở G1**, không bật probe trả phí; web đã tự ẩn (trang chủ bỏ nền tảng trạng thái "unknown", trang SEO chỉ hiện "healthy": `LandingPage.jsx`, `PlatformLandingPage.jsx`). Còn 19 nền tảng có probe: 16 khoẻ · 2 lỗi (Instagram, Rumble) · Odysee "chưa xác nhận". Còn thiếu: lý do Instagram; Rumble ghi "giới hạn đã biết". |
 | 4 | Quét bí mật lịch sử git + đổi khoá k1 | ⚠️ | Quét xong: `docs/security/SECRET-SCAN-2026-10-13.md`. Đổi k1: app 0.14.x đã mang khoá k2; máy chủ chưa chuyển sang ký bằng k2 (chờ đa số người dùng ≥0.14, task #6330). |
 | 5 | Trang Điều khoản + Gỡ nội dung | ✅ | `/terms`, `/takedown`, `/faq`, `/privacy` đều 200. |
 | 6 | Diễn tập khôi phục 1 lần | ⚠️ | Owner báo xong; nhật ký diễn tập trong `docs/runbooks/backup-restore.md` §5 vẫn trống: cần ghi ngày, thời gian Redis/CSDL, sai lệch. |
@@ -16,7 +16,7 @@
 
 ## Để qua G1
 1. Dán địa chỉ trang trạng thái thật (hết link chết).
-2. Probe Douyin + Xiaohongshu: đặt link mẫu trong Admin → Sức khoẻ nền tảng (chạy ≤1 lần/ngày, có trần chi riêng) — hoặc ghi rõ là không quảng bá 2 nền tảng này.
+2. ~~Probe Douyin + Xiaohongshu~~ — đã chốt không quảng bá ở G1 (13/10).
 3. Instagram: đọc lý do ở Admin → Sức khoẻ nền tảng; Rumble: ghi "giới hạn đã biết".
 4. Gửi link Chrome Web Store, ghi nhật ký diễn tập khôi phục.
 5. Chuyển máy chủ ký lượt tải bằng k2 khi số máy ≥0.14 đủ lớn (đo ở Admin → Đo lường / App Windows).
