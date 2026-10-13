@@ -133,6 +133,8 @@ Kết luận:
 
 ### D3. 5 đề xuất tự động hoá đáng làm tiếp (xếp theo giá trị cho người Việt)
 
+> **Trạng thái 14/10:** (1) bắt link khi sao chép — XONG, app 0.15.0 (Cài đặt → Tự nhận link). (2) preset theo kênh — ĐÃ CÓ từ trước (mỗi kênh có chất lượng/thư mục/chế độ tải-hay-báo riêng; cộng chất lượng & thư mục mặc định chung). (4) chống tải trùng — XONG cho link lẻ, app 0.15.0 (kênh đã có sổ "đã thấy"); đồng bộ Drive chưa làm. (3) lịch giờ thấp điểm + tắt máy, (5) QR tự kích hoạt — chưa làm.
+
 | # | Đề xuất | Đối thủ đang có (đọc được) | Vì sao đáng làm [SL] |
 |---|---|---|---|
 | 1 | Bắt link từ clipboard trong app Windows (tự thêm vào hàng chờ, bật mặc định, có nút tắt) | JDownloader (3P) [3] | Người làm nội dung dán nhiều link TikTok/Douyin liên tục; bỏ được 1 bước |
