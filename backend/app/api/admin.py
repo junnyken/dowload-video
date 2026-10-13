@@ -311,6 +311,10 @@ async def admin_logout(
 class UpdateUserRequest(BaseModel):
     user_id: str
     plan: str  # 'free' or 'pro'
+    # Pro for N days after a bank transfer (billing_status='manual'): extends
+    # from the current expiry when one is still running. None = the old
+    # open-ended grant (billing_status='active', no expiry).
+    days: Optional[int] = None
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -890,6 +894,29 @@ async def send_test_notification(request: Request, _=Depends(verify_admin)):
 # POST /update-user — Toggle User Plan
 # ═════════════════════════════════════════════════════════════════════
 
+def _manual_pro_fields(supabase, user_id: str, days: int) -> Dict[str, Any]:
+    """Fields for a Pro grant of `days`, extended from a still-running manual
+    expiry so a renewal paid early is not lost."""
+    from datetime import timedelta  # noqa: PLC0415
+    now = datetime.now(timezone.utc)
+    start = now
+    try:
+        row = (supabase.table("profiles").select("tier, billing_status, subscription_expiry")
+               .eq("id", user_id).single().execute()).data or {}
+        cur = row.get("subscription_expiry")
+        if row.get("billing_status") == "manual" and cur:
+            cur_dt = datetime.fromisoformat(str(cur).replace("Z", "+00:00"))
+            if cur_dt > now:
+                start = cur_dt
+    except Exception:  # noqa: BLE001 — unreadable row: count from today
+        pass
+    return {
+        "billing_status": "manual",
+        "subscription_expiry": (start + timedelta(days=days)).isoformat(),
+        "stripe_subscription_id": None,
+    }
+
+
 @router.post("/update-user")
 async def update_user(req: UpdateUserRequest, request: Request, _=Depends(verify_admin)):
     """
@@ -911,6 +938,10 @@ async def update_user(req: UpdateUserRequest, request: Request, _=Depends(verify
                 "subscription_expiry":     None,
                 "stripe_subscription_id":  None,
             })
+        elif req.days is not None:
+            if not 1 <= req.days <= 800:
+                raise HTTPException(status_code=400, detail="Số ngày phải từ 1 đến 800")
+            profile_update.update(_manual_pro_fields(supabase, req.user_id, req.days))
         else:
             profile_update["billing_status"] = "active"
 
@@ -937,15 +968,17 @@ async def update_user(req: UpdateUserRequest, request: Request, _=Depends(verify
                 "updated": False,
                 "message": f"Không đổi được gói cho {req.user_id} — không tìm thấy hồ sơ.",
             }
+        expiry = profile_update.get("subscription_expiry")
         log_admin_action(
             request, "admin.user.tier_changed",
             resource_type="user", resource_id=req.user_id,
-            metadata={"new_tier": req.plan},
+            metadata={"new_tier": req.plan, "days": req.days, "expiry": expiry},
         )
         return {
             "success": True,
             "updated": updated,
-            "message": f"User {req.user_id} → {req.plan}",
+            "expiry": expiry,
+            "message": f"User {req.user_id} → {req.plan}" + (f" đến {expiry[:10]}" if expiry else ""),
         }
     except HTTPException:
         raise

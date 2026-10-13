@@ -239,6 +239,7 @@ def resolve_effective_tier(profile: Dict[str, Any]) -> str:
 
     Rules, in order:
       canceled                          → free
+      manual (admin grant), not expired → keep the tier until expiry
       canceling, period not yet over    → keep the tier until it ends
       past_due, still inside grace      → keep the tier
       past_due, grace expired           → free
@@ -270,6 +271,10 @@ def resolve_effective_tier(profile: Dict[str, Any]) -> str:
 
     if status == "canceled":
         return "free"
+    if status == "manual":
+        # Admin grant after a bank transfer (13/10): paid until the date the
+        # admin set, then free — no Stripe subscription renews it.
+        return declared if (expiry and expiry > now) else "free"
     if status == "canceling":
         return declared if (expiry and expiry > now) else "free"
     if status == "past_due":

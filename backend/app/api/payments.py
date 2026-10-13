@@ -411,10 +411,10 @@ async def create_checkout_session_v2(
     price_id = os.getenv(env_key or "", "") if env_key else ""
 
     if not price_id:
-        # Fallback to base Pro price if specific price not configured
-        price_id = _STRIPE_PRO_PRICE_ID
-        if not price_id:
-            raise HTTPException(status_code=503, detail=f"Gói {plan}/{period} chưa được cấu hình")
+        # Until 13/10 a missing price fell back to the Pro MONTHLY price: a
+        # "Team" or "API" buyer paid for and got Pro, a yearly buyer was
+        # billed monthly. A plan/period without its own price is not on sale.
+        raise HTTPException(status_code=400, detail=f"Gói {plan}/{period} chưa mở bán.")
 
     stripe      = _stripe()
     customer_id = _get_or_create_stripe_customer(user["id"], user["email"])

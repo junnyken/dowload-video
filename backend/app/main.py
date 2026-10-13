@@ -550,6 +550,9 @@ app.include_router(admin_china_router, prefix="/api/v1/admin", tags=["Admin Chin
 # Task #6332 follow-up — emergency switches operable from the admin page
 from app.api.admin_switches import router as admin_switches_router
 app.include_router(admin_switches_router, prefix="/api/v1/admin", tags=["Admin Switches"])
+from app.api.plans import public_router as plans_public, admin_router as plans_admin
+app.include_router(plans_public, prefix="/api/v1", tags=["Plans"])
+app.include_router(plans_admin, prefix="/api/v1/admin", tags=["Plans"])
 from app.api.site_links import public_router as site_links_public, admin_router as site_links_admin
 app.include_router(site_links_public, prefix="/api/v1", tags=["Site Links"])
 app.include_router(site_links_admin, prefix="/api/v1/admin", tags=["Site Links"])

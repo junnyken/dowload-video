@@ -1882,7 +1882,8 @@ def reset_daily_quota(self):
 @celery_app.task(name="expire_subscriptions", bind=True)
 def expire_subscriptions(self):
     """
-    Find profiles with billing_status='canceling' and subscription_expiry < now.
+    Find profiles with billing_status canceling / past_due / manual (admin
+    grant after a bank transfer) and subscription_expiry < now.
     Downgrade them to tier='free' / billing_status='canceled'.
     Runs at 00:30 UTC each day so users who cancelled keep Pro until midnight
     after their billing period ends.
@@ -1894,7 +1895,7 @@ def expire_subscriptions(self):
         res = (
             supabase.table("profiles")
             .select("id, tier, billing_status, subscription_expiry")
-            .in_("billing_status", ["canceling", "past_due"])
+            .in_("billing_status", ["canceling", "past_due", "manual"])
             .lt("subscription_expiry", now_iso)
             .execute()
         )
