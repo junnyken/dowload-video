@@ -54,13 +54,13 @@ Chi tiết: `cookie-blocked.md` (phần ssh bỏ qua), `china-platform-rollout.m
 ## (g) Chi phí tăng bất thường
 - **Dấu hiệu**: cảnh báo Telegram 50%/80% trần (nếu đã bật), hoặc số trong Admin -> **Chi phí Apify** / **Đo lường** vọt so với ngày thường.
 - **Kiểm tra**: (1) **Chi phí Apify**: nền tảng nào, hôm nay/tháng này. (2) **Đo lường**: nguồn chi (Apify lớp Trung Quốc, Apify theo dõi kênh, proxy). (3) **Phiên âm (ASR)**: chi hôm nay so với "Trần" hiển thị trên trang. (4) Admin -> **Audit Log**: ai bật gì gần đây.
-- **Xử lý (theo mức)**: ASR -> nút **Tạm dừng phiên âm** (Admin -> Phiên âm (ASR); trần đặt bằng env `ASR_SPEND_CEILING_USD`, `ASR_GLOBAL_DAILY_MINUTES_CAP`). Apify theo token -> sửa "Trần chi tiêu tháng (USD)" của từng token ở Admin -> **Config**. Công tắc dừng nền tảng Trung Quốc (`/china-platforms/<nền tảng|global>/kill-switch`) và công tắc Theo dõi kênh (`WATCH_KILL_SWITCH=1`, cần Redeploy): **chỉ có qua API/env, chưa có nút trong Admin** — nhờ Claude bật.
+- **Xử lý (theo mức)**: ASR -> nút **Tạm dừng phiên âm** (Admin -> Phiên âm (ASR); trần đặt bằng env `ASR_SPEND_CEILING_USD`, `ASR_GLOBAL_DAILY_MINUTES_CAP`). Apify theo token -> sửa "Trần chi tiêu tháng (USD)" của từng token ở Admin -> **Config**. Dừng nền tảng Trung Quốc (toàn bộ hoặc từng nền tảng) và dừng Theo dõi kênh: Admin -> **Công tắc khẩn cấp** (có hiệu lực trong vài giây, không cần Redeploy).
 - **Báo ai**: chạm 80% trần hoặc chi gấp đôi trung bình -> báo Claude trong ngày; chạm trần -> tạm dừng trước, hỏi sau.
 
 ## (h) App Windows lỗi hàng loạt sau phát hành
 - **Dấu hiệu**: nhiều người báo app không mở/tải lỗi ngay sau bản mới; số lỗi tăng trong Admin -> **App Windows**.
 - **Kiểm tra**: (1) lỗi bắt đầu sau bản nào (`/api/v1/client/version` cho biết bản mới nhất). (2) nếu liên quan yt-dlp: lỗi khớp với lúc bạn duyệt bản yt-dlp mới?
-- **Xử lý (đúng thứ tự)**: (1) Admin -> **App Windows** -> mục "Bản yt-dlp cho app": tắt -> app quay về yt-dlp có sẵn khi kiểm tra lần tới. (2) Rút bản app: đặt env `DESKTOP_UPDATER_ENABLED=0` trên backend rồi Redeploy (**chỉ có qua env**, chưa có nút trong Admin) — app ngừng được mời cập nhật, link tải tay giữ nguyên (`docs/desktop/UPDATER.md` §4). Hoặc xoá tệp `.sig` khỏi GitHub Release trên repo `junnyken/vidgrab-releases` (sau ~10 phút trả 204). (3) Máy đã cập nhật: phải cài lại bản cũ bằng tay.
+- **Xử lý (đúng thứ tự)**: (1) Admin -> **App Windows** -> mục "Bản yt-dlp cho app": tắt -> app quay về yt-dlp có sẵn khi kiểm tra lần tới. (2) Rút bản app: Admin -> **Công tắc khẩn cấp** -> tắt "Tự cập nhật app Windows" (vài giây, không cần Redeploy) — app ngừng được mời cập nhật, link tải tay giữ nguyên (`docs/desktop/UPDATER.md` §4). Hoặc xoá tệp `.sig` khỏi GitHub Release trên repo `junnyken/vidgrab-releases` (sau ~10 phút trả 204). (3) Máy đã cập nhật: phải cài lại bản cũ bằng tay.
 - **Báo ai**: báo Claude để dựng bản sửa; thông báo cho người dùng qua kênh hỗ trợ.
 
 ## (i) Lộ bí mật
