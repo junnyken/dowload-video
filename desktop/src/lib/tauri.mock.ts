@@ -321,7 +321,7 @@ export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promi
       return mockCookieCmd(cmd, (a.platform as string) ?? '');
     case 'douyin_resolve_local': return mockDouyinLocal(a.url as string);
     case 'device_info': return { hash: 'a1b2c3d4'.repeat(8), code: 'A1B2C3D4', displayName: 'PC-MOCK (Windows 11 24H2, build 26100)', source: 'machine' };
-    case 'tool_versions': return { ytdlp: '2026.09.30', ffmpeg: '7.1', deno: '2.5.0' };
+    case 'tool_versions': return { ytdlp: '2026.09.30', ytdlpSource: 'bundled', ffmpeg: '7.1', deno: '2.5.0' };
     // localStorage mock.update=0.11.1 offers an in-app update; mock.updateFail=<code> makes the install fail.
     case 'update_check': {
       const v = localStorage.getItem('mock.update');

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { desktopAppApi, postDesktopAllowance, resetDesktopIp } from '../api/desktopApp'
-import type { DesktopDevice, DesktopRoute, DevicesPayload, KindSummary, RouteGrid, SignalKind, SignalRow, SignalsPayload, StatsPayload } from '../api/desktopApp'
+import { desktopAppApi, getDesktopYtdlp, postDesktopAllowance, putDesktopYtdlp, resetDesktopIp, ytdlpAssetUrl } from '../api/desktopApp'
+import type { DesktopDevice, DesktopRoute, DesktopYtdlp, DevicesPayload, KindSummary, RouteGrid, SignalKind, SignalRow, SignalsPayload, StatsPayload } from '../api/desktopApp'
 import { PageHeader } from '../shared/PageHeader'
 import { StatCard } from '../shared/StatCard'
 import { Card } from '../shared/Card'
@@ -842,6 +842,123 @@ function DevicesPanel() {
   )
 }
 
+const YTDLP_VERSION_RE = /^\d{4}\.\d{2}\.\d{2}(\.\d{1,6})?$/
+const SHA256_RE = /^[0-9a-f]{64}$/
+
+/** Task #6333 (Phase 34A-3): approve a newer official yt-dlp.exe for the app. */
+function YtdlpPanel() {
+  const [data, setData] = useState<DesktopYtdlp | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [version, setVersion] = useState('')
+  const [sha, setSha] = useState('')
+  const [enabled, setEnabled] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [saveErr, setSaveErr] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const apply = (d: DesktopYtdlp) => {
+    setData(d)
+    setVersion(d.version)
+    setSha(d.sha256)
+    setEnabled(d.enabled)
+  }
+
+  const load = useCallback(async () => {
+    try {
+      apply(await getDesktopYtdlp())
+      setErr(null)
+    } catch (e) {
+      setErr((e as Error).message)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const v = version.trim()
+  const h = sha.trim().toLowerCase()
+  const versionOk = YTDLP_VERSION_RE.test(v)
+  const shaOk = SHA256_RE.test(h)
+  const dirty = !!data && (v !== data.version || h !== data.sha256 || enabled !== data.enabled)
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    if (busy || !versionOk || !shaOk) return
+    setBusy(true)
+    setSaveErr(null)
+    setNotice(null)
+    try {
+      const d = await putDesktopYtdlp({ version: v, sha256: h, enabled })
+      apply(d)
+      // wording: BA review
+      setNotice(d.enabled
+        ? `Đã lưu. App sẽ tự tải yt-dlp ${d.version} trong vòng 12 giờ (hoặc khi mở lại app).`
+        : 'Đã lưu. App sẽ quay về yt-dlp có sẵn trong bộ cài khi kiểm tra lần tới.')
+    } catch (e2) {
+      setSaveErr((e2 as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const field = 'w-full rounded-control border border-line bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
+
+  return (
+    <Card as="section">
+      {/* wording: BA review */}
+      <SectionHeader title="Bản yt-dlp cho app"
+        subtitle="Cho app dùng bản yt-dlp mới hơn bản có sẵn trong bộ cài, không cần phát hành app mới. Tắt thì app quay về bản có sẵn." />
+      {err && <div className="p-4"><ErrorState compact title="Không tải được cấu hình yt-dlp" message={err} onRetry={load} /></div>}
+      {!data && !err && <div className="p-4"><TableSkeleton rows={2} /></div>}
+      {data && (
+        <form onSubmit={submit} className="flex flex-col gap-4 px-4 py-4">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            {/* wording: BA review */}
+            <span className="text-fg-muted">Trạng thái:</span>
+            <StatusPill tone={data.enabled ? 'success' : 'neutral'}
+              label={data.enabled ? `Đang bật · ${data.version}` : data.configured ? 'Đang tắt' : 'Chưa cấu hình'} />
+            {data.updated_at && <span className="text-[11px] text-fg-muted">Cập nhật {fmtTime(data.updated_at)}</span>}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              {/* wording: BA review */}
+              <label htmlFor="ytdlp-version" className="mb-1.5 block text-xs font-medium text-fg-muted">Phiên bản yt-dlp</label>
+              <input id="ytdlp-version" className={`${field} font-mono`} value={version} placeholder="2026.10.10"
+                onChange={(e) => setVersion(e.target.value)} disabled={busy} />
+              {v && !versionOk && <p className="mt-1 text-[11px] text-danger">Dạng NĂM.THÁNG.NGÀY, ví dụ 2026.10.10.</p>}
+            </div>
+            <div>
+              {/* wording: BA review */}
+              <label htmlFor="ytdlp-sha" className="mb-1.5 block text-xs font-medium text-fg-muted">SHA-256 của yt-dlp.exe</label>
+              <input id="ytdlp-sha" className={`${field} font-mono`} value={sha} placeholder="64 ký tự 0-9 a-f"
+                onChange={(e) => setSha(e.target.value)} disabled={busy} spellCheck={false} />
+              {h && !shaOk && <p className="mt-1 text-[11px] text-danger">Cần đúng 64 ký tự 0-9, a-f.</p>}
+            </div>
+          </div>
+          {/* wording: BA review */}
+          <p className="text-[11px] text-fg-muted">
+            Tệp tải về: <span className="break-all font-mono text-fg-2">{versionOk ? ytdlpAssetUrl(v) : `${data.url_prefix}<phiên bản>/yt-dlp.exe`}</span>.
+            {' '}Chép mã SHA-256 từ tệp <b className="text-fg-2">SHA2-256SUMS</b> trong trang phát hành chính thức của yt-dlp trên GitHub
+            (dòng ghi <span className="font-mono">yt-dlp.exe</span>), không tự gõ. App chỉ dùng tệp khớp đúng mã này.
+          </p>
+          <label className="flex items-center gap-2 text-sm text-fg">
+            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} disabled={busy} />
+            {/* wording: BA review */}
+            Cho app dùng bản này
+          </label>
+          {saveErr && <div role="alert" className="rounded-control border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger">{saveErr}</div>}
+          {notice && <div className="rounded-control border border-success/30 bg-success-soft px-3 py-2 text-xs text-success">{notice}</div>}
+          <div className="flex justify-end">
+            <Button type="submit" variant="primary" disabled={busy || !dirty || !versionOk || !shaOk}>
+              {/* wording: BA review */}
+              {busy ? 'Đang lưu…' : 'Lưu'}
+            </Button>
+          </div>
+        </form>
+      )}
+    </Card>
+  )
+}
+
 export default function DesktopAppPage() {
   const [stats, setStats] = useState<StatsPayload | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -925,6 +1042,8 @@ export default function DesktopAppPage() {
           </Card>
         </>
       ) : null}
+
+      <YtdlpPanel />
 
       <SignalsPanel />
 

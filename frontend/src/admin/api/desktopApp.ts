@@ -273,3 +273,49 @@ export async function resetDesktopIp(ip: string, reason: string): Promise<IpRese
   }
   return res.json() as Promise<IpResetResult>
 }
+
+// Task #6333 (Phase 34A-3): the newer yt-dlp.exe the app may use without a new
+// app release. Backend: app/core/desktop_ytdlp.py. Off by default.
+export interface DesktopYtdlp {
+  configured: boolean
+  version: string
+  url: string
+  sha256: string
+  enabled: boolean
+  updated_at: string | null
+  url_prefix: string
+}
+
+export interface DesktopYtdlpBody {
+  version: string
+  sha256: string
+  enabled: boolean
+}
+
+export function ytdlpAssetUrl(version: string): string {
+  return `https://github.com/yt-dlp/yt-dlp/releases/download/${version}/yt-dlp.exe`
+}
+
+export function getDesktopYtdlp(): Promise<DesktopYtdlp> {
+  return call<DesktopYtdlp>('/ytdlp')
+}
+
+export async function putDesktopYtdlp(body: DesktopYtdlpBody): Promise<DesktopYtdlp> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = getAdminToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const res = await fetch(`${API_BASE}/api/v1/admin/desktop/ytdlp`, {
+    method: 'PUT', headers,
+    body: JSON.stringify({ ...body, url: ytdlpAssetUrl(body.version) }),
+  })
+  if (!res.ok) {
+    let msg = `Lỗi HTTP ${res.status}`
+    try {
+      const data = await res.json()
+      const d = data?.detail
+      msg = typeof d === 'string' ? d : d?.message ?? msg
+    } catch { /* keep the status text */ }
+    throw new Error(msg)
+  }
+  return res.json() as Promise<DesktopYtdlp>
+}

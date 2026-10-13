@@ -92,3 +92,11 @@ export function progressPercent(p: InAppProgress | null): number | null {
 export function updaterMissing(code: string | null | undefined): boolean {
   return code === 'updater_unavailable' || code === 'not_in_app';
 }
+
+/** Task #6333: the yt-dlp line in Settings — the version actually in use, and
+ * whether it is the newer one approved on the server. */
+export function ytdlpLabel(t: { ytdlp?: string | null; ytdlpSource?: string } | null): string {
+  if (!t?.ytdlp) return '—';
+  // wording: BA review
+  return t.ytdlpSource === 'server' ? `${t.ytdlp} (bản cập nhật từ máy chủ)` : t.ytdlp;
+}

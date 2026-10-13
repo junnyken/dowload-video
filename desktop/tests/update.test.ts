@@ -1,7 +1,7 @@
 // PLAN-32E P1 step 3 (task #6125): when the app must block for an update.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fromApiAnswer, fromVersionInfo, inAppVersion, installLink, progressPercent, updaterMissing, versionLess } from '../src/lib/update-core.ts';
+import { fromApiAnswer, fromVersionInfo, inAppVersion, installLink, progressPercent, updaterMissing, versionLess, ytdlpLabel } from '../src/lib/update-core.ts';
 
 const HOSTS = ['dvid.vibe1.tinhgon.xyz', 'dvid-api.vibe1.tinhgon.xyz'];
 const SITE = 'https://dvid.vibe1.tinhgon.xyz';
@@ -70,4 +70,12 @@ test('updater missing falls back to the manual link; other errors are real error
   assert.equal(updaterMissing('not_in_app'), true);
   assert.equal(updaterMissing('network'), false);
   assert.equal(updaterMissing('update_bad_signature'), false);
+});
+
+test('ytdlpLabel shows the yt-dlp in use (task #6333)', () => {
+  assert.equal(ytdlpLabel(null), '—');
+  assert.equal(ytdlpLabel({ ytdlp: '' }), '—');
+  assert.equal(ytdlpLabel({ ytdlp: '2026.08.19' }), '2026.08.19'); // app < 0.14: older app: no source field
+  assert.equal(ytdlpLabel({ ytdlp: '2026.08.19', ytdlpSource: 'bundled' }), '2026.08.19');
+  assert.match(ytdlpLabel({ ytdlp: '2026.10.10', ytdlpSource: 'server' }), /^2026\.10\.10 \(.+\)$/);
 });

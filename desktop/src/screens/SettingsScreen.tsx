@@ -14,7 +14,7 @@ import { openSignIn, toast } from '../lib/ui';
 import { versionLess } from '../lib/format';
 import { errorMessage, toAppError } from '../lib/errors';
 import { WEBSITE_URL } from '../lib/config';
-import { inAppVersion, progressPercent, updaterMissing, type InAppProgress } from '../lib/update-core';
+import { inAppVersion, progressPercent, updaterMissing, ytdlpLabel, type InAppProgress } from '../lib/update-core';
 import type { ClientVersionInfo, ToolVersions } from '../lib/types';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -265,7 +265,7 @@ export function SettingsScreen() {
               </div>
             )}
             {checkMsg && <p className="px-4 py-3 text-[13px] text-fg-muted">Không kiểm tra được bản mới: {checkMsg}</p>}
-            <Row label="yt-dlp"><span className="text-sm text-fg-2">{tools?.ytdlp ?? '—'}</span></Row>
+            <Row label="yt-dlp"><span className="text-sm text-fg-2">{ytdlpLabel(tools)}</span></Row>
             <Row label="ffmpeg"><span className="text-sm text-fg-2">{tools?.ffmpeg ?? '—'}</span></Row>
             <Row label="deno"><span className="text-sm text-fg-2">{tools?.deno ?? '—'}</span></Row>
           </Section>

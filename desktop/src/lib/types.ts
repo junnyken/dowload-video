@@ -63,7 +63,13 @@ export type DoneEvent = {
   cookiesUsed?: boolean;
 };
 
-export type ToolVersions = { ytdlp: string; ffmpeg: string; deno: string };
+export type ToolVersions = {
+  ytdlp: string;
+  /** Task #6333: 'server' = a newer yt-dlp approved on the server is in use; absent from older apps. */
+  ytdlpSource?: 'bundled' | 'server';
+  ffmpeg: string;
+  deno: string;
+};
 
 export type ClientVersionInfo = {
   latest: string;

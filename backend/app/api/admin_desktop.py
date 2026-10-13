@@ -816,3 +816,40 @@ def _thresholds(grace: int) -> dict:
 async def desktop_signals_view(days: int = Query(7), _=Depends(verify_admin)) -> dict:
     import asyncio  # noqa: PLC0415
     return await asyncio.to_thread(_signals, days)
+
+
+# ── approved yt-dlp for the app (task #6333, Phase 34A-3) ────────────────
+
+def _ytdlp_view(rec: Optional[dict]) -> dict:
+    from app.core import desktop_ytdlp  # noqa: PLC0415
+    return {"configured": rec is not None,
+            "version": rec["version"] if rec else "",
+            "url": rec["url"] if rec else "",
+            "sha256": rec["sha256"] if rec else "",
+            "enabled": bool(rec and rec["enabled"]),
+            "updated_at": rec.get("updated_at") if rec else None,
+            "url_prefix": desktop_ytdlp.URL_PREFIX}
+
+
+@router.get("/desktop/ytdlp")
+async def desktop_ytdlp_get(_=Depends(verify_admin)) -> dict:
+    import asyncio  # noqa: PLC0415
+    from app.core import desktop_ytdlp  # noqa: PLC0415
+    return _ytdlp_view(await asyncio.to_thread(desktop_ytdlp.get))
+
+
+@router.put("/desktop/ytdlp")
+async def desktop_ytdlp_put(request: Request, payload: dict = Body(...), _=Depends(verify_admin)) -> dict:
+    import asyncio  # noqa: PLC0415
+    from app.core import desktop_ytdlp  # noqa: PLC0415
+    try:
+        rec = await asyncio.to_thread(desktop_ytdlp.put, payload if isinstance(payload, dict) else {})
+    except desktop_ytdlp.Invalid as exc:
+        _bad(exc.code, exc.message)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("admin_desktop: ytdlp save failed: %s", type(exc).__name__)
+        _bad("storage_unavailable", "Redis unavailable", 503)
+    log_admin_action(request, "admin.desktop.ytdlp_set", resource_type="desktop_ytdlp",
+                     resource_id=rec["version"],
+                     metadata={"version": rec["version"], "sha256": rec["sha256"], "enabled": rec["enabled"]})
+    return _ytdlp_view(rec)
