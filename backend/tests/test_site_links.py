@@ -16,7 +16,8 @@ def rc(monkeypatch):
     site_links._cache.clear()
 
 
-@pytest.mark.parametrize("bad", ["http://stats.uptimerobot.com/x", "javascript:alert(1)",
+@pytest.mark.parametrize("bad", ["https://stats.uptimerobot.com/...", "https://stats.uptimerobot.com/…",
+                                 "http://stats.uptimerobot.com/x", "javascript:alert(1)",
                                  "stats.uptimerobot.com/x", "https://", "https://a b.com/x",
                                  "https://x.com/" + "a" * 400])
 def test_rejects_non_https_or_malformed(bad):
@@ -68,4 +69,9 @@ def test_admin_set_requires_admin(rc, monkeypatch):
     c = _app(monkeypatch, admin_ok=False)
     r = c.post("/api/v1/admin/site-links", json={"status_page_url": "https://x.com/s"})
     assert r.status_code in (401, 403)
+    assert site_links.get_links()["status_page_url"] is None
+
+
+def test_stored_placeholder_is_hidden(rc):
+    rc.hset(site_links.KEY, "status_page_url", "https://stats.uptimerobot.com/...")
     assert site_links.get_links()["status_page_url"] is None

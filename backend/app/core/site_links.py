@@ -37,6 +37,10 @@ def validate(url: Optional[str]) -> Optional[str]:
     p = urlparse(u)
     if p.scheme != "https" or not p.hostname or any(c.isspace() for c in u):
         raise ValueError("Cần địa chỉ https:// đầy đủ")
+    # 13/10: the help text's example "https://stats.uptimerobot.com/…" was
+    # saved as is and the footer linked to a page that does not exist.
+    if "..." in u or "…" in u:
+        raise ValueError("Đây là địa chỉ mẫu — hãy dán địa chỉ thật của trang trạng thái")
     return u
 
 
@@ -52,7 +56,10 @@ def get_links() -> Dict[str, Optional[str]]:
             k = k.decode() if isinstance(k, bytes) else k
             v = v.decode() if isinstance(v, bytes) else v
             if k in NAMES and v:
-                out[k] = v
+                try:
+                    out[k] = validate(v)   # a value saved before a rule existed is hidden, not linked
+                except ValueError:
+                    pass
     except Exception:  # noqa: BLE001
         pass
     _cache[:] = [(now + _CACHE_TTL, out)]
