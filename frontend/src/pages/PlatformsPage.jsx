@@ -4,6 +4,7 @@ import { CheckCircle, Clock, AlertCircle, Lock, Wifi, RefreshCw, Search, X } fro
 // VITE_API_BASE is not defined in any build — this fell back to ''
 // and became a relative (502) URL on the split-domain deploy.
 import { API_BASE } from '../lib/apiBase';
+import { usePlatformHealth } from '../lib/usePlatformHealth';
 
 const PLATFORMS = [
   // ── Fully supported ────────────────────────────────────────────────
@@ -189,6 +190,9 @@ function StatusBadge({ status }) {
     proxy_required:       { Icon: Wifi,        cls: 'bg-surface-2 text-fg-2 border-line',   label: 'Cần proxy' },
     temporarily_disabled: { Icon: Clock,       cls: 'bg-danger-soft text-danger border-danger/30',            label: 'Tạm dừng' },
     unsupported:          { Icon: AlertCircle, cls: 'bg-line-strong text-fg-muted border-line-strong',      label: 'Chưa hỗ trợ' },
+    // Phase 34D: health-probe driven, deliberately neutral (no "full support" claim).
+    degraded:             { Icon: AlertCircle, cls: 'bg-surface-2 text-fg-2 border-line',         label: 'Đang gặp sự cố' }, // wording: BA review
+    experimental:         { Icon: Clock,       cls: 'bg-surface-2 text-fg-2 border-line',         label: 'Đang thử nghiệm' }, // wording: BA review
   };
   const cfg = map[status] || map.basic;
   const { Icon, cls, label } = cfg;
@@ -207,8 +211,10 @@ const SOURCE_TYPE_LABELS = {
   profile: 'Profile', board: 'Board', subreddit: 'Cộng đồng', podcast_feed: 'Podcast',
 };
 
-function PlatformCard({ platform, liveData }) {
-  const effectiveStatus = liveData?.overall_status || platform.status;
+function PlatformCard({ platform, liveData, health }) {
+  const effectiveStatus = health === 'degraded' ? 'degraded'
+    : health === 'unknown' ? 'experimental'
+    : (liveData?.overall_status || platform.status);
 
   const borderCls = effectiveStatus === 'full'
     ? 'border-success/20 hover:border-accent/30'
@@ -231,13 +237,16 @@ function PlatformCard({ platform, liveData }) {
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-fg">{platform.name}</span>
             <StatusBadge status={effectiveStatus} />
-            {liveData && (
+            {liveData && health === 'healthy' && (
               <span className="text-[9px] px-1 py-0.5 rounded bg-success-soft text-success border border-success/15">
                 LIVE
               </span>
             )}
           </div>
           <p className="mt-1 text-sm text-fg-muted leading-snug">{platform.description}</p>
+          {platform.known_limitation && (
+            <p className="mt-1 text-xs text-fg-2">ℹ {platform.known_limitation}</p>
+          )}
           {platform.note && (
             <p className="mt-1 text-xs text-accent-text">⚠ {platform.note}</p>
           )}
@@ -296,7 +305,7 @@ function platformKey(name) {
   return name.toLowerCase().replace(/\s.*/, '').replace(/[^a-z0-9]/g, '');
 }
 
-function Section({ title, platforms, liveCapMap }) {
+function Section({ title, platforms, liveCapMap, classify, info }) {
   if (!platforms.length) return null;
   return (
     <div className="mb-8">
@@ -305,8 +314,9 @@ function Section({ title, platforms, liveCapMap }) {
         {platforms.map(p => (
           <PlatformCard
             key={p.name}
-            platform={p}
+            platform={{ ...p, known_limitation: info(p.name)?.known_limitation }}
             liveData={liveCapMap?.[platformKey(p.name)] || null}
+            health={classify(p.name)}
           />
         ))}
       </div>
@@ -345,7 +355,12 @@ export default function PlatformsPage() {
       .finally(() => setLiveLoading(false));
   }, []);
 
+  const { classify, info } = usePlatformHealth();
+
   const resolveStatus = (p) => {
+    const h = classify(p.name);
+    if (h === 'degraded') return 'degraded';
+    if (h === 'unknown') return 'experimental';
     const live = liveCapMap[platformKey(p.name)];
     return live?.overall_status || p.status;
   };
@@ -359,26 +374,32 @@ export default function PlatformsPage() {
       const matchesFilter =
         filter === 'all'             ? true
         : filter === 'full'          ? status === 'full'
-        : filter === 'basic'         ? p.status === 'basic'
+        : filter === 'basic'         ? (p.status === 'basic' && status !== 'degraded' && status !== 'experimental')
         : filter === 'cookie_required' ? status === 'cookie_required'
         : filter === 'proxy_required'  ? status === 'proxy_required'
         : p.isNew;
       return matchesSearch && matchesFilter;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, filter, liveCapMap]);
+  }, [query, filter, liveCapMap, classify]);
 
-  const fullCount  = PLATFORMS.filter(p => p.status === 'full').length;
-  const basicCount = PLATFORMS.filter(p => p.status === 'basic').length;
+  const healthyList = PLATFORMS.filter(p => classify(p.name) === 'healthy');
+  const fullCount  = healthyList.filter(p => p.status === 'full').length;
+  const basicCount = healthyList.filter(p => p.status === 'basic').length;
+  const degradedCount = PLATFORMS.filter(p => classify(p.name) === 'degraded').length;
+  const experimentalCount = PLATFORMS.filter(p => classify(p.name) === 'unknown').length;
   const newCount   = PLATFORMS.filter(p => p.isNew).length;
   const liveCount  = Object.keys(liveCapMap).length;
 
   const isSearching = query.trim().length > 0;
 
   // Sections for "all" view when not searching
-  const full     = displayList.filter(p => p.status === 'full' && !p.isNew);
-  const upgraded = displayList.filter(p => p.status === 'full' && p.isNew);
-  const basic    = displayList.filter(p => p.status === 'basic');
+  const okList   = displayList.filter(p => classify(p.name) === 'healthy');
+  const full     = okList.filter(p => p.status === 'full' && !p.isNew);
+  const upgraded = okList.filter(p => p.status === 'full' && p.isNew);
+  const basic    = okList.filter(p => p.status === 'basic');
+  const degraded = displayList.filter(p => classify(p.name) === 'degraded');
+  const experimental = displayList.filter(p => classify(p.name) === 'unknown');
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -397,9 +418,12 @@ export default function PlatformsPage() {
           ) : null}
         </div>
         <p className="mt-1 text-fg-muted">
-          VidGrab hỗ trợ <strong className="text-fg">{PLATFORMS.length}</strong> nền tảng —{' '}
+          VidGrab hỗ trợ <strong className="text-fg">{healthyList.length}</strong> nền tảng —{' '}
           <span className="text-success">{fullCount} đầy đủ</span>,{' '}
           <span className="text-accent-text">{basicCount} cơ bản</span>.
+          {(degradedCount + experimentalCount) > 0 && (
+            <> {degradedCount > 0 && `${degradedCount} đang gặp sự cố`}{degradedCount > 0 && experimentalCount > 0 && ', '}{experimentalCount > 0 && `${experimentalCount} đang thử nghiệm`}.</> /* wording: BA review */
+          )}
         </p>
 
         {/* Stats row */}
@@ -487,19 +511,22 @@ export default function PlatformsPage() {
         </div>
       ) : (filter === 'all' && !isSearching) ? (
         <>
-          <Section title="✅ Hỗ trợ đầy đủ" platforms={full} liveCapMap={liveCapMap} />
+          <Section title="✅ Hỗ trợ đầy đủ" platforms={full} liveCapMap={liveCapMap} classify={classify} info={info} />
           {upgraded.length > 0 && (
-            <Section title="⬆️ Nâng cấp trong Phase 15" platforms={upgraded} liveCapMap={liveCapMap} />
+            <Section title="⬆️ Nâng cấp trong Phase 15" platforms={upgraded} liveCapMap={liveCapMap} classify={classify} info={info} />
           )}
-          <Section title="🟡 Hỗ trợ cơ bản" platforms={basic} liveCapMap={liveCapMap} />
+          <Section title="🟡 Hỗ trợ cơ bản" platforms={basic} liveCapMap={liveCapMap} classify={classify} info={info} />
+          <Section title="⚠️ Đang gặp sự cố" platforms={degraded} liveCapMap={liveCapMap} classify={classify} info={info} /> {/* wording: BA review */}
+          <Section title="🧪 Đang thử nghiệm" platforms={experimental} liveCapMap={liveCapMap} classify={classify} info={info} /> {/* wording: BA review */}
         </>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {displayList.map(p => (
             <PlatformCard
               key={p.name}
-              platform={p}
+              platform={{ ...p, known_limitation: info(p.name)?.known_limitation }}
               liveData={liveCapMap[platformKey(p.name)] || null}
+              health={classify(p.name)}
             />
           ))}
         </div>
