@@ -33,6 +33,8 @@ mod progress;
 mod quota_gate;
 mod sys;
 mod validate;
+mod ytdlp_choice;
+mod ytdlp_update;
 
 use error::{CmdResult, Code, CommandError};
 use history::{Db, HistoryItem};
@@ -176,6 +178,9 @@ struct DoneEvent {
 #[derive(Clone, Serialize, Default)]
 struct ToolVersions {
     ytdlp: Option<String>,
+    /// Task #6333: "bundled" or "server" (a newer yt-dlp approved on the server).
+    #[serde(rename = "ytdlpSource")]
+    ytdlp_source: &'static str,
     ffmpeg: Option<String>,
     deno: Option<String>,
 }
@@ -188,6 +193,44 @@ async fn verified_sidecars() -> CmdResult<Vec<PathBuf>> {
     tauri::async_runtime::spawn_blocking(|| SIDECARS.iter().map(|n| checksum::verify(n)).collect::<Result<Vec<_>, _>>())
         .await
         .map_err(|e| CommandError::unknown(e.to_string()))?
+}
+
+/// The yt-dlp for one run (task #6333): the server-approved download when a
+/// verified one is present (ytdlp_update.rs), else the bundled one. `bundled`
+/// is set only in the first case: the fallback if the download cannot start.
+struct YtDlp {
+    path: PathBuf,
+    bundled: Option<PathBuf>,
+}
+
+/// `<local app data>/tools`: downloaded yt-dlp versions + ytdlp-active.json.
+fn ytdlp_tools_dir(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_local_data_dir().ok().map(|d| d.join("tools"))
+}
+
+/// `bundled` = the already verified bundled yt-dlp (verified_sidecars()[0]).
+async fn ytdlp_for(app: &AppHandle, bundled: &Path) -> YtDlp {
+    let dir = ytdlp_tools_dir(app);
+    let picked = tauri::async_runtime::spawn_blocking(move || ytdlp_update::pick(dir.as_deref())).await.ok().flatten();
+    match picked {
+        Some((path, _version)) => YtDlp { path, bundled: Some(bundled.to_path_buf()) },
+        None => YtDlp { path: bundled.to_path_buf(), bundled: None },
+    }
+}
+
+/// Spawns yt-dlp in a killable tree; a downloaded yt-dlp that cannot be
+/// started is replaced by the bundled one for this run.
+fn spawn_ytdlp(y: &YtDlp, args: Vec<std::ffi::OsString>) -> CmdResult<(std::process::Child, proc::ProcessTree)> {
+    let first = proc::spawn_tree(ytdlp_command(&y.path, args.clone()));
+    match (first, &y.bundled) {
+        (Ok(x), _) => Ok(x),
+        (Err(e), Some(b)) => {
+            eprintln!("updated yt-dlp could not start ({e}); using the bundled one");
+            proc::spawn_tree(ytdlp_command(b, args))
+        }
+        (Err(e), None) => Err(e),
+    }
+    .map_err(|e| CommandError::new(Code::ToolMissing, format!("cannot start yt-dlp: {e}")))
 }
 
 fn ytdlp_command(ytdlp: &Path, args: Vec<std::ffi::OsString>) -> Command {
@@ -329,12 +372,12 @@ impl Collected {
 async fn run_collect(
     registry: &Registry,
     key: &str,
-    cmd: Command,
+    ytdlp: &YtDlp,
+    args: Vec<std::ffi::OsString>,
     timeout: Duration,
     secret: Option<String>,
 ) -> CmdResult<Collected> {
-    let (mut child, tree) =
-        proc::spawn_tree(cmd).map_err(|e| CommandError::new(Code::ToolMissing, format!("cannot start yt-dlp: {e}")))?;
+    let (mut child, tree) = spawn_ytdlp(ytdlp, args)?;
     let running = Arc::new(Running { tree, stop: AtomicU8::new(STOP_NONE) });
     lock(registry).entry(key.to_string()).or_default().push(running.clone());
 
@@ -410,8 +453,9 @@ async fn probe(app: AppHandle, jobs: State<'_, Jobs>, url: String, use_cookies: 
     let paths = verified_sidecars().await?;
     let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3] };
     let ck = run_cookies(&app, &url, use_cookies).await?;
-    let cmd = ytdlp_command(&paths[0], engine::probe_args(&tools, &url, ck.as_ref().map(RunCookies::path)));
-    let c = run_collect(&jobs.probes, &url, cmd, PROBE_TIMEOUT, ck.as_ref().map(RunCookies::needle)).await?;
+    let ytdlp = ytdlp_for(&app, &paths[0]).await;
+    let args = engine::probe_args(&tools, &url, ck.as_ref().map(RunCookies::path));
+    let c = run_collect(&jobs.probes, &url, &ytdlp, args, PROBE_TIMEOUT, ck.as_ref().map(RunCookies::needle)).await?;
     if let Some(k) = ck {
         if !c.ok() && !c.cancelled && !c.timed_out {
             k.after_failure(error::classify(&c.err));
@@ -457,8 +501,9 @@ async fn channel_fetch(
     let paths = verified_sidecars().await?;
     let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3] };
     let ck = run_cookies(&app, &url, use_cookies).await?;
-    let cmd = ytdlp_command(&paths[0], engine::channel_fetch_args(&tools, &url, limit, ck.as_ref().map(RunCookies::path)));
-    let c = run_collect(&jobs.channel_fetches, &url, cmd, CHANNEL_FETCH_TIMEOUT, ck.as_ref().map(RunCookies::needle)).await?;
+    let ytdlp = ytdlp_for(&app, &paths[0]).await;
+    let args = engine::channel_fetch_args(&tools, &url, limit, ck.as_ref().map(RunCookies::path));
+    let c = run_collect(&jobs.channel_fetches, &url, &ytdlp, args, CHANNEL_FETCH_TIMEOUT, ck.as_ref().map(RunCookies::needle)).await?;
     if let Some(k) = ck {
         if !c.ok() && !c.cancelled && !c.timed_out {
             k.after_failure(error::classify(&c.err));
@@ -873,7 +918,7 @@ async fn start_download(
         out_name.as_ref(),
         ck.as_ref().map(RunCookies::path),
     );
-    let cmd = ytdlp_command(&paths[0], args);
+    let ytdlp = ytdlp_for(&app, &paths[0]).await;
 
     // Insert under the lock right after spawning so a concurrent start with
     // the same id cannot slip in between the check above and here.
@@ -882,8 +927,7 @@ async fn start_download(
         if map.contains_key(&job_id) {
             return Err(CommandError::unknown("this job is already running"));
         }
-        let (child, tree) = proc::spawn_tree(cmd)
-            .map_err(|e| CommandError::new(Code::ToolMissing, format!("cannot start yt-dlp: {e}")))?;
+        let (child, tree) = spawn_ytdlp(&ytdlp, args)?;
         let running = Arc::new(Running { tree, stop: AtomicU8::new(STOP_NONE) });
         map.insert(job_id.clone(), running.clone());
         (child, running)
@@ -1345,18 +1389,29 @@ fn first_line(path: &Path, args: &[&str]) -> Option<String> {
 }
 
 #[tauri::command]
-async fn tool_versions(jobs: State<'_, Jobs>) -> CmdResult<ToolVersions> {
+async fn tool_versions(app: AppHandle, jobs: State<'_, Jobs>) -> CmdResult<ToolVersions> {
     if let Some(v) = lock(&jobs.tool_versions).clone() {
         return Ok(v);
     }
     let paths = verified_sidecars().await?;
-    let v = tauri::async_runtime::spawn_blocking(move || ToolVersions {
-        ytdlp: first_line(&paths[0], &["--ignore-config", "--no-plugin-dirs", "--version"]),
-        ffmpeg: first_line(&paths[1], &["-hide_banner", "-version"]).map(|l| {
-            l.strip_prefix("ffmpeg version ").and_then(|r| r.split_whitespace().next()).unwrap_or(&l).to_string()
-        }),
-        deno: first_line(&paths[3], &["--version"])
-            .map(|l| l.strip_prefix("deno ").and_then(|r| r.split_whitespace().next()).unwrap_or(&l).to_string()),
+    let ytdlp = ytdlp_for(&app, &paths[0]).await;
+    let v = tauri::async_runtime::spawn_blocking(move || {
+        const YTDLP_VERSION: &[&str] = &["--ignore-config", "--no-plugin-dirs", "--version"];
+        // The version actually in use; the bundled one if the update does not start.
+        let updated = ytdlp.bundled.as_ref().and_then(|_| first_line(&ytdlp.path, YTDLP_VERSION));
+        let (ytdlp_version, ytdlp_source) = match updated {
+            Some(v) => (Some(v), "server"),
+            None => (first_line(&paths[0], YTDLP_VERSION), "bundled"),
+        };
+        ToolVersions {
+            ytdlp: ytdlp_version,
+            ytdlp_source,
+            ffmpeg: first_line(&paths[1], &["-hide_banner", "-version"]).map(|l| {
+                l.strip_prefix("ffmpeg version ").and_then(|r| r.split_whitespace().next()).unwrap_or(&l).to_string()
+            }),
+            deno: first_line(&paths[3], &["--version"])
+                .map(|l| l.strip_prefix("deno ").and_then(|r| r.split_whitespace().next()).unwrap_or(&l).to_string()),
+        }
     })
     .await
     .map_err(|e| CommandError::unknown(e.to_string()))?;
@@ -1413,6 +1468,22 @@ pub fn run() {
                 std::thread::spawn(move || {
                     handle.state::<quota_gate::Gate>().refresh(&|| quota_gate::fetch_policy(&version));
                 });
+            }
+
+            // Task #6333: a newer yt-dlp approved on the server (Windows only:
+            // the server offers yt-dlp.exe). At start, then every 12 h.
+            if cfg!(windows) {
+                if let Some(dir) = ytdlp_tools_dir(app.handle()) {
+                    let handle = app.handle().clone();
+                    let version = app.package_info().version.to_string();
+                    std::thread::spawn(move || loop {
+                        if ytdlp_update::check_once(&version, &dir) {
+                            // Settings shows the yt-dlp actually in use.
+                            *lock(&handle.state::<Jobs>().tool_versions) = None;
+                        }
+                        std::thread::sleep(ytdlp_update::CHECK_EVERY);
+                    });
+                }
             }
 
             // A crash between spawning yt-dlp and deleting its cookie file
