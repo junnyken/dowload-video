@@ -1218,7 +1218,7 @@ async def list_accounts(
 
         query = (
             supabase.table("profiles")
-            .select("id, email, display_name, tier, billing_status, plan_name, created_at",
+            .select("id, email, display_name, tier, billing_status, subscription_expiry, plan_name, created_at",
                     count="exact")
             .order("created_at", desc=True)
         )
@@ -1251,6 +1251,7 @@ async def list_accounts(
             "display_name":    r.get("display_name"),
             "tier":            (r.get("tier") or "free"),
             "billing_status":  r.get("billing_status"),
+            "subscription_expiry": r.get("subscription_expiry"),
             "plan_name":       r.get("plan_name"),
             "created_at":      r.get("created_at"),
             "downloads_today": usage_by_id.get(r.get("id"), 0),

@@ -5,7 +5,6 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import QuotaBar from '../components/QuotaBar';
-import UpgradeModal from '../components/UpgradeModal';
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 
@@ -115,12 +114,6 @@ export default function BillingPage() {
   const [portalLoading, setPortalLoading] = useState(false);
   const [portalError, setPortalError]   = useState('');
   const [toast, setToast]               = useState(null);
-  // These two buttons used to navigate('/pricing'), a page App.jsx hides and
-  // renders as nothing. Pointing them at /billing would be this page linking
-  // to itself, so they open the upgrade modal instead — the path that already
-  // reaches Stripe checkout and already fires upgrade_clicked.
-  const [showUpgrade, setShowUpgrade]   = useState(false);
-  const [authToken, setAuthToken]       = useState(null);
 
   // ── Query-param toasts ───────────────────────────────────────────────
   useEffect(() => {
@@ -145,13 +138,12 @@ export default function BillingPage() {
     return session?.access_token || null;
   }, []);
 
-  // Token is read on click rather than kept in state from the load effect:
-  // setting it there is a setState inside an effect, which the hooks lint
-  // rejects, and a token grabbed at click time is the fresher one anyway.
-  const openUpgrade = useCallback(async () => {
-    setAuthToken(await getToken());
-    setShowUpgrade(true);
-  }, [getToken]);
+  // Upgrade = see the plans and the bank-transfer details on /pricing.
+  const openUpgrade = useCallback(() => {
+    window.history.pushState({}, '', '/pricing');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    window.scrollTo(0, 0);
+  }, []);
 
   const fetchBillingInfo = useCallback(async () => {
     setLoadingInfo(true);
@@ -420,7 +412,7 @@ export default function BillingPage() {
                 Nâng cấp để mở khoá toàn bộ tính năng
               </p>
               <p className="text-fg-muted text-sm">
-                ZIP download, YouTube video 4K, phân tích AI, lưu cloud và nhiều hơn.
+                Xem bảng giá để biết hạn mức của từng gói.  {/* wording: BA review */}
               </p>
             </div>
             <button
@@ -437,12 +429,6 @@ export default function BillingPage() {
           </div>
         )}
       </div>
-
-      <UpgradeModal
-        isOpen={showUpgrade}
-        onClose={() => setShowUpgrade(false)}
-        authToken={authToken}
-      />
     </div>
   );
 }

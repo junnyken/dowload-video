@@ -73,9 +73,7 @@ function ProGate({ feature }) {
         Nâng cấp Pro để xem {feature}
       </p>
       <a
-        // /pricing renders nothing (App.jsx:457 hides it on purpose), so this
-        // link used to land on a blank page. /billing is the page that exists.
-        href="/billing"
+        href="/pricing"
         className="mt-3 text-xs text-fg-2 underline hover:text-fg-2"
       >
         Xem gói Pro →

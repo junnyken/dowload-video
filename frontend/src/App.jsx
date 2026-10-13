@@ -36,9 +36,7 @@ import LinkBotPage from './pages/LinkBotPage';
 import InstallPage from './pages/InstallPage';
 import DownloadPage from './pages/DownloadPage';
 import PlatformsPage from './pages/PlatformsPage';
-// PricingPage is not imported: the route that reached it renders nothing and
-// was removed from PATH_MAP below. The file is kept — restoring the page means
-// re-adding this import, the PATH_MAP entry, and a render branch.
+import PricingPage from './pages/PricingPage';
 import BillingPage from './pages/BillingPage';
 import SubtitleHubPage from './pages/SubtitleHubPage';
 import PlatformLandingPage from './pages/PlatformLandingPage';
@@ -87,10 +85,7 @@ const PATH_MAP = {
   '/download':            'download',
   '/platforms':           'platforms',
   '/share-target':        'landing',
-  // '/pricing' removed from the map on purpose. The view it pointed at
-  // renders nothing (see the comment further down), so a bookmarked or
-  // shared /pricing link showed a blank page. Unmapped paths fall back to
-  // 'landing', which is a page.
+  '/pricing':             'pricing',
   '/billing':             'billing',
   '/active':              'active',
   '/search':              'search',
@@ -565,11 +560,7 @@ function AppInner() {
         {view === 'platforms' && (
           <PlatformsPage />
         )}
-        {/* pricing temporarily hidden — renders nothing; nav button removed.
-            The four call sites that still navigated here were repointed on
-            2026-09-24: PaywallGate and SmartActionsPanel go to /billing, and
-            BillingPage's two buttons open UpgradeModal. Re-exposing this page
-            means restoring the /pricing entry in PATH_MAP above. */}
+        {view === 'pricing' && <PricingPage />}
         {view === 'billing' && (
           <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
             <BillingPage onNavigate={navigateTo} />

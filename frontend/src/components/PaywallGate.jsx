@@ -1,20 +1,17 @@
 import { Lock, Crown } from 'lucide-react';
 import { useEntitlement } from '../hooks/useEntitlement';
 
-// Vietnamese descriptions for gated features
+// Descriptions only for features the plan table (GET /api/v1/plans) really
+// lists. Cloud save, chapters, logo removal, priority queue and team
+// workspace were advertised here but no code enforces them, so they are gone.
+// wording: BA review
 const FEATURE_DESCRIPTIONS = {
   bulk_zip:      'Tải nhiều file cùng lúc dưới dạng ZIP',
-  youtube_video: 'Tải video YouTube ở chất lượng cao nhất',
-  ai_tools:      'Phân tích thông minh: cắt tự động, GIF, metadata',
-  logo_inpaint:  'Xoá logo watermark tự nhiên',
-  cloud_save:    'Lưu file vĩnh viễn trên cloud',
-  chapters:      'Tải từng chương riêng lẻ',
-  spotify_full:  'Tải toàn bộ album và danh sách phát Spotify',
+  youtube_video: 'Hạn mức YouTube cao hơn',
+  ai_tools:      'Phân tích thông minh với hạn mức cao hơn',
+  spotify_full:  'Tải được nhiều bài hơn khi tải theo nghệ sĩ Spotify',
   api_key:       'Tích hợp qua REST API với API key riêng',
   webhook:       'Nhận thông báo tự động qua webhook',
-  priority_queue:'Ưu tiên hàng đợi tải xuống',
-  team_workspace:'Không gian làm việc chung cho cả nhóm',
-  shared_history:'Lịch sử tải xuống chia sẻ trong nhóm',
 };
 
 function navigate(path) {
@@ -22,12 +19,9 @@ function navigate(path) {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
-function DefaultOverlay({ feature, requiredPlan }) {
+function DefaultOverlay({ feature }) {
   const description = FEATURE_DESCRIPTIONS[feature] || 'Tính năng này dành cho gói nâng cấp';
-  const planLabel   = requiredPlan === 'pro'        ? 'Pro'
-                    : requiredPlan === 'team'       ? 'Team'
-                    : requiredPlan === 'enterprise' ? 'Enterprise'
-                    : 'Pro';
+  const planLabel   = 'Pro';
 
   return (
     <div
@@ -50,10 +44,7 @@ function DefaultOverlay({ feature, requiredPlan }) {
       </div>
 
       <button
-        // The one button whose whole job is to convert a free user used to
-        // send them to /pricing, which App.jsx:457 hides and renders as an
-        // empty page. /billing renders, and carries the upgrade modal.
-        onClick={() => navigate('/billing')}
+        onClick={() => navigate('/pricing')}
         className="mt-1 px-4 py-2 rounded-lg bg-accent hover:opacity-90
                    text-accent-fg text-xs font-semibold transition-colors focus:outline-none
                    focus:ring-2 focus:ring-accent focus:ring-offset-2

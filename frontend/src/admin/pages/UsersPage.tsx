@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { adminFetch, adminPost } from '../utils/adminFetch'
+import { PlansSettingsCard, TransferCodeFinder, grantPro, fmtDate } from './PlansBilling'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -237,6 +238,7 @@ interface Account {
   display_name: string | null
   tier: string
   billing_status: string | null
+  subscription_expiry?: string | null
   plan_name: string | null
   created_at: string | null
   downloads_today: number
@@ -256,6 +258,9 @@ export default function UsersPage() {
   const [accQuery, setAccQuery]       = useState('')
   const [accBusy, setAccBusy]         = useState<Record<string, boolean>>({})
   const [accMsg, setAccMsg]           = useState<Record<string, string>>({})
+  // Expiry returned by the last Pro grant. /accounts lists billing_status but
+  // not the expiry date, so show what the grant reported until the next reload.
+  const [accExpiry, setAccExpiry]      = useState<Record<string, string>>({})
   const [data, setData]       = useState<UsersData | null>(null)
   const [signups, setSignups] = useState<SignupsData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -331,6 +336,22 @@ export default function UsersPage() {
     }
   }
 
+  // wording: BA review
+  async function handleGrantPro(userId: string, days: 30 | 365) {
+    setAccBusy(p => ({ ...p, [userId]: true }))
+    setAccMsg(p => ({ ...p, [userId]: '' }))
+    try {
+      const r = await grantPro(userId, days)
+      setAccExpiry(p => ({ ...p, [userId]: r.expiry ?? '' }))
+      setAccMsg(p => ({ ...p, [userId]: `→ Pro ${days} ngày, đến ${fmtDate(r.expiry)}` }))
+      await fetchAccounts(accQuery)
+    } catch (e) {
+      setAccMsg(p => ({ ...p, [userId]: (e as Error).message }))
+    } finally {
+      setAccBusy(p => ({ ...p, [userId]: false }))
+    }
+  }
+
   async function handleResetQuota(userId: string) {
     setResetting(prev => ({ ...prev, [userId]: true }))
     setResetMsg(prev => ({ ...prev, [userId]: '' }))
@@ -360,6 +381,12 @@ export default function UsersPage() {
           {loading && <span className="text-xs text-fg-muted animate-pulse">Refreshing…</span>}
           {!loading && <span className="text-xs text-fg-muted">Auto-refresh 60s</span>}
         </div>
+      </div>
+
+      {/* Gói & thanh toán: giá, thông tin chuyển khoản, tìm theo mã (wording: BA review) */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <PlansSettingsCard />
+        <TransferCodeFinder />
       </div>
 
       {/* ── Registered accounts ─────────────────────────────────────────
@@ -416,7 +443,14 @@ export default function UsersPage() {
                         <span className="text-fg-muted ml-2">({a.display_name})</span>
                       )}
                     </td>
-                    <td className="py-2 pr-4"><TierBadge tier={a.tier} /></td>
+                    <td className="py-2 pr-4">
+                      <TierBadge tier={a.tier} />
+                      {a.billing_status && a.billing_status !== 'none' && (
+                        <div className="mt-1 text-[10px] text-fg-muted">
+                          {a.billing_status}{(accExpiry[a.user_id] || a.subscription_expiry) ? ` · đến ${fmtDate(accExpiry[a.user_id] || a.subscription_expiry || '')}` : ''}
+                        </div>
+                      )}
+                    </td>
                     <td className="py-2 pr-4 font-mono text-fg-2">
                       {a.downloads_today}
                       <span className="text-fg-muted">
@@ -442,6 +476,14 @@ export default function UsersPage() {
                             {t}
                           </button>
                         ))}
+                        <button disabled={accBusy[a.user_id]} onClick={() => handleGrantPro(a.user_id, 30)}
+                          className="rounded px-2 py-0.5 border border-line-strong text-[10px] text-fg-2 hover:bg-surface">
+                          Cấp Pro 30 ngày
+                        </button>
+                        <button disabled={accBusy[a.user_id]} onClick={() => handleGrantPro(a.user_id, 365)}
+                          className="rounded px-2 py-0.5 border border-line-strong text-[10px] text-fg-2 hover:bg-surface">
+                          Cấp Pro 365 ngày
+                        </button>
                         {accMsg[a.user_id] && (
                           // Failures land in the same slot as "→ pro"; painting
                           // them green too would hide the one thing worth

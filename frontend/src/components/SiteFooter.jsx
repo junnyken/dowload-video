@@ -3,6 +3,7 @@ import { API_BASE } from '../lib/apiBase';
 
 // wording: BA review
 const LINKS = [
+  ['Bảng giá', 'pricing', '/pricing'],
   ['Điều khoản', 'terms', '/terms'],
   ['Chính sách riêng tư', 'privacy', '/privacy'],
   ['Gỡ nội dung', 'takedown', '/takedown'],

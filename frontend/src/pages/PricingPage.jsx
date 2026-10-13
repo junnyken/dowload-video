@@ -1,436 +1,224 @@
-import { useState } from 'react';
-import {
-  CheckCircle, X, Zap, Users, Code2, Crown,
-  ChevronDown, Loader2,
-} from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
+import { useEffect, useState } from 'react';
+import { Check, X, Crown, Copy, Loader2 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { API_BASE } from '../lib/apiBase';
+import { usePlans, formatVnd } from '../lib/usePlans';
+import { buildPlanRows } from '../lib/planRows';
 
-const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
+// Pricing page — Khách / Free / Pro. Every number comes from GET /api/v1/plans
+// (backend app/core/plans.py); nothing about limits is written in this file.
+// Payment is a manual bank transfer: an admin turns Pro on once the money
+// arrives. wording: BA review
 
-// ── Plan definitions ─────────────────────────────────────────────────────────
+const TIER_META = {
+  guest: { name: 'Khách', sub: 'Chưa đăng nhập' },
+  free:  { name: 'Free', sub: 'Có tài khoản, miễn phí' },
+  pro:   { name: 'Pro', sub: 'Dành cho người dùng thường xuyên' },
+};
 
-const PLANS = [
-  {
-    id: 'free',
-    name: 'Free',
-    icon: <Zap className="w-5 h-5" />,
-    description: 'Khởi đầu miễn phí, không cần thẻ tín dụng.',
-    monthlyPrice: 0,
-    yearlyPrice: 0,
-    cta: 'Bắt đầu miễn phí',
-    ctaVariant: 'secondary',
-    featured: false,
-    features: [
-      { label: '10 downloads/ngày', included: true },
-      { label: 'Batch tối đa 5 URL', included: true },
-      { label: 'Chất lượng tối đa 1080p', included: true },
-      { label: 'YouTube: video đến 1080p + MP3 (5 lượt/ngày)', included: true },
-      { label: 'Lịch sử 7 ngày (tối đa 20 mục)', included: true },
-      { label: 'AI Smart Tools', included: false },
-      { label: 'Bulk ZIP', included: false },
-      { label: 'API key', included: false },
-      { label: 'Hàng đợi ưu tiên', included: false },
-    ],
-  },
-  {
-    id: 'pro',
-    name: 'Pro',
-    icon: <Crown className="w-5 h-5" />,
-    description: 'Dành cho người dùng cá nhân cần sức mạnh thực sự.',
-    monthlyPrice: 9.99,
-    yearlyPrice: 79,
-    cta: 'Nâng cấp lên Pro',
-    ctaVariant: 'primary',
-    featured: true,
-    features: [
-      { label: '100 downloads/ngày', included: true },
-      { label: 'Batch tối đa 100 URL', included: true },
-      { label: 'Chất lượng 4K', included: true },
-      { label: 'YouTube video + MP3 (5 lượt/ngày)', included: true },
-      { label: 'Lịch sử 90 ngày', included: true },
-      { label: 'AI Smart Tools (50 phân tích/ngày)', included: true },
-      { label: 'Bulk ZIP', included: true },
-      { label: 'API key (3.000 calls/tháng)', included: true },
-      { label: 'Hàng đợi ưu tiên', included: true },
-    ],
-  },
-  {
-    id: 'team',
-    name: 'Team',
-    icon: <Users className="w-5 h-5" />,
-    description: 'Cộng tác nhóm, quản lý thành viên tập trung.',
-    monthlyPrice: 29.99,
-    yearlyPrice: 239,
-    priceSuffix: '/ 5 ghế',
-    cta: 'Nâng cấp lên Team',
-    ctaVariant: 'secondary',
-    featured: false,
-    features: [
-      { label: '500 downloads/ngày (dùng chung)', included: true },
-      { label: 'Tất cả tính năng Pro', included: true },
-      { label: 'Workspace team', included: true },
-      { label: 'Lịch sử chung nhóm', included: true },
-      { label: 'Quản lý thành viên', included: true },
-      { label: 'API key nhóm (10.000 calls/tháng)', included: true },
-      { label: 'Hàng đợi ưu tiên', included: true },
-      { label: 'Bulk ZIP', included: true },
-      { label: 'AI Smart Tools (200 phân tích/ngày)', included: true },
-      { label: 'Batch tối đa 200 URL', included: true },
-    ],
-  },
-  {
-    id: 'api_partner',
-    name: 'API Partner',
-    icon: <Code2 className="w-5 h-5" />,
-    description: 'Tích hợp API mạnh mẽ cho nhà phát triển và doanh nghiệp.',
-    monthlyPrice: 19.99,
-    yearlyPrice: 159,
-    cta: 'Nâng cấp lên API Partner',
-    ctaVariant: 'secondary',
-    featured: false,
-    features: [
-      { label: '1000 downloads/ngày', included: true },
-      { label: 'API Partner key (1000 calls/tháng)', included: true },
-      { label: 'Webhook HMAC', included: true },
-      { label: 'Batch tối đa 500 URL', included: true },
-      { label: 'AI phân tích (100/ngày)', included: true },
-      { label: 'Hỗ trợ email ưu tiên <24h', included: true },
-      { label: 'Hàng đợi ưu tiên', included: true },
-      { label: 'Bulk ZIP', included: true },
-      { label: 'Workspace team', included: false },
-    ],
-  },
-];
+function Cell({ value }) {
+  if (value === true) return <Check className="w-4 h-4 text-success shrink-0" aria-label="Có" />;
+  if (value === false) return <X className="w-4 h-4 text-fg-muted shrink-0" aria-label="Không có" />;
+  return <span className="text-fg text-sm text-right">{value}</span>;
+}
 
-const FAQS = [
-  {
-    q: 'Tôi có thể huỷ đăng ký bất cứ lúc nào không?',
-    a: 'Có. Bạn có thể huỷ gói bất kỳ lúc nào từ trang Billing. Quyền lợi vẫn giữ đến hết chu kỳ thanh toán hiện tại, sau đó tài khoản tự động về Free.',
-  },
-  {
-    q: 'Gói Yearly tiết kiệm như thế nào?',
-    a: 'Gói năm tương đương khoảng 34% so với thanh toán tháng. Ví dụ Pro năm chỉ $79 thay vì $119.88 (12 × $9.99). Thanh toán một lần, không phiền phức.',
-  },
-  {
-    q: 'VidGrab hỗ trợ những nền tảng nào?',
-    a: 'YouTube, TikTok, Instagram, Facebook, Twitter/X, SoundCloud và hơn 50 nền tảng khác. Xem danh sách đầy đủ tại trang Platforms.',
-  },
-  {
-    q: 'API Partner có thể tích hợp vào hệ thống của tôi như thế nào?',
-    a: 'Gói API Partner cấp Partner key riêng, hỗ trợ HMAC Webhook để nhận thông báo download hoàn thành. Xem tài liệu chi tiết tại trang API Docs.',
-  },
-  {
-    q: 'Nếu tôi vượt giới hạn download trong ngày thì sao?',
-    a: 'Yêu cầu vượt hạn ngạch sẽ bị từ chối với thông báo rõ ràng. Giới hạn tự reset vào 00:00 UTC mỗi ngày. Bạn có thể nâng cấp gói bất cứ lúc nào để tăng giới hạn ngay lập tức.',
-  },
-];
-
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function PeriodToggle({ period, onChange }) {
+function CopyButton({ text, label }) {
+  const [done, setDone] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setDone(true);
+      setTimeout(() => setDone(false), 1500);
+    } catch { /* clipboard blocked: user can still select the text */ }
+  };
   return (
-    <div className="flex items-center justify-center gap-3">
-      <span className={`text-sm font-medium transition-colors ${period === 'monthly' ? 'text-fg' : 'text-fg-muted'}`}>
-        Tháng
-      </span>
+    <button type="button" onClick={copy} aria-label={label}
+      className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 min-h-9 rounded-lg border border-line bg-surface text-fg-2 text-xs hover:bg-surface-2 transition-colors">
+      {done ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+      {done ? 'Đã chép' : 'Chép'} {/* wording: BA review */}
+    </button>
+  );
+}
 
-      <button
-        onClick={() => onChange(period === 'monthly' ? 'yearly' : 'monthly')}
-        aria-label="Chuyển đổi chu kỳ thanh toán"
-        className={`relative w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-success ${
-          period === 'yearly' ? 'bg-success' : 'bg-line-strong'
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-surface rounded-full shadow transition-transform duration-300 ${
-            period === 'yearly' ? 'translate-x-6' : 'translate-x-0'
-          }`}
-        />
-      </button>
-
-      <span className={`text-sm font-medium transition-colors ${period === 'yearly' ? 'text-fg' : 'text-fg-muted'}`}>
-        Năm
-      </span>
-
-      {period === 'yearly' && (
-        <span className="text-xs font-semibold bg-success-soft text-success border border-success/30 px-2 py-0.5 rounded-full">
-          Tiết kiệm 34%
-        </span>
-      )}
+function InfoRow({ label, value, copy }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2 border-b border-line last:border-0">
+      <div className="min-w-0">
+        <p className="text-xs text-fg-muted">{label}</p>
+        <p className="text-sm font-semibold text-fg break-words">{value || '—'}</p>
+      </div>
+      {copy && value ? <CopyButton text={value} label={`Chép ${label}`} /> : null}
     </div>
   );
 }
 
-function FeatureRow({ label, included }) {
-  return (
-    <li className="flex items-start gap-2.5 text-sm">
-      {included ? (
-        <CheckCircle className="w-4 h-4 text-success shrink-0 mt-0.5" />
-      ) : (
-        <X className="w-4 h-4 text-fg-muted shrink-0 mt-0.5" />
-      )}
-      <span className={included ? 'text-fg-2' : 'text-fg-muted line-through decoration-line-strong'}>
-        {label}
-      </span>
-    </li>
-  );
-}
+function PaymentSection({ pay, pro, period }) {
+  const { isAuthenticated, session } = useAuth();
+  const [me, setMe] = useState(null);
+  const [err, setErr] = useState('');
+  const token = session?.access_token;
 
-function PriceDisplay({ plan, period }) {
-  const price = period === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice;
-  const suffix = period === 'yearly' ? '/năm' : '/tháng';
+  useEffect(() => {
+    if (!token) return undefined;
+    let alive = true;
+    fetch(`${API_BASE}/api/v1/plans/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d) => { if (alive) { setMe(d); setErr(''); } })
+      .catch(() => { if (alive) setErr('Không tải được mã chuyển khoản. Vui lòng thử lại sau.'); }); // wording: BA review
+    return () => { alive = false; };
+  }, [token]);
 
-  if (price === 0) {
+  const amount = period === 'year' ? pro.price_year_vnd : pro.price_month_vnd;
+  const periodLabel = period === 'year' ? '365 ngày' : '30 ngày';
+
+  const box = 'mt-10 rounded-2xl border border-line bg-surface-2 p-5 sm:p-6';
+  const openLogin = () => window.dispatchEvent(new Event('vidgrab:open-auth'));
+
+  if (!pay?.ready) {
     return (
-      <div className="mt-4 mb-1">
-        <span className="text-4xl font-extrabold text-fg">$0</span>
-        <span className="text-fg-muted text-sm ml-1">mãi mãi</span>
-      </div>
+      <section className={box} aria-labelledby="pay-h">
+        <h2 id="pay-h" className="text-lg font-bold text-fg mb-2">Thanh toán</h2>
+        <p className="text-sm text-fg-2">
+          {/* wording: BA review */}
+          {pay?.contact ? `Để nâng cấp Pro, vui lòng liên hệ: ${pay.contact}` : 'Liên hệ qua nút Góp ý & Phản hồi để nâng cấp Pro.'}
+        </p>
+      </section>
     );
   }
 
+  if (!isAuthenticated) {
+    return (
+      <section className={box} aria-labelledby="pay-h">
+        <h2 id="pay-h" className="text-lg font-bold text-fg mb-2">Thanh toán</h2>
+        {/* wording: BA review */}
+        <p className="text-sm text-fg-2 mb-4">Đăng nhập để nhận mã chuyển khoản riêng của tài khoản bạn.</p>
+        <button type="button" onClick={openLogin}
+          className="px-5 py-2.5 min-h-11 rounded-xl bg-accent text-accent-fg text-sm font-semibold hover:opacity-90 transition">
+          Đăng nhập
+        </button>
+      </section>
+    );
+  }
+
+  const isPro = me?.tier === 'pro';
   return (
-    <div className="mt-4 mb-1">
-      <span className="text-4xl font-extrabold text-fg">${price}</span>
-      <span className="text-fg-muted text-sm ml-1">{suffix}</span>
-      {plan.priceSuffix && (
-        <span className="block text-xs text-fg-muted mt-0.5">{plan.priceSuffix}</span>
+    <section className={box} aria-labelledby="pay-h">
+      <h2 id="pay-h" className="text-lg font-bold text-fg mb-1">Thanh toán Pro bằng chuyển khoản</h2>
+      {/* wording: BA review */}
+      <p className="text-sm text-fg-muted mb-4">
+        Chuyển khoản đúng số tiền và đúng nội dung bên dưới. Sau khi tiền về, Pro được bật thủ công (thường trong ngày).
+      </p>
+      {isPro && (
+        <p className="mb-4 rounded-lg bg-accent-soft border border-accent/30 px-3 py-2 text-sm text-fg">
+          {/* wording: BA review */}
+          Bạn đang dùng Pro{me.expiry ? `, hết hạn ${new Date(me.expiry).toLocaleDateString('vi-VN')}` : ''}. Chuyển khoản thêm sẽ được cộng nối vào thời hạn hiện tại.
+        </p>
       )}
-    </div>
-  );
-}
-
-function PlanCard({ plan, period, onCheckout }) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleCta = async () => {
-    setError('');
-    if (plan.id === 'free') {
-      onCheckout(null);
-      return;
-    }
-    setLoading(true);
-    try {
-      await onCheckout(plan.id, period);
-    } catch (err) {
-      setError(err.message || 'Có lỗi xảy ra. Vui lòng thử lại.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const isFeatured = plan.featured;
-
-  return (
-    <div
-      className={`relative flex flex-col rounded-2xl p-6 transition-all duration-200 ${
-        isFeatured
-          ? 'bg-surface-2 border border-success/50 lg:scale-105 lg:-translate-y-1 z-10'
-          : 'bg-surface-2 border border-line hover:border-line'
-      }`}
-    >
-      {isFeatured && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-          <span className="bg-success text-success-fg text-xs font-bold px-3 py-1 rounded-full shadow-lg whitespace-nowrap">
-            Phổ biến nhất
-          </span>
+      {me && !isPro && (
+        <p className="mb-4 text-sm text-fg-2">Gói hiện tại của bạn: Free.{/* wording: BA review */}</p>
+      )}
+      {err && <p role="alert" className="mb-3 text-sm text-danger">{err}</p>}
+      {!me && !err && (
+        <p className="text-sm text-fg-muted flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Đang tải…</p>
+      )}
+      {me && (
+        <div>
+          <InfoRow label="Ngân hàng" value={pay.bank_name} />
+          <InfoRow label="Số tài khoản" value={pay.bank_account} copy />
+          <InfoRow label="Chủ tài khoản" value={pay.bank_holder} />
+          <InfoRow label={`Số tiền (${periodLabel})`} value={formatVnd(amount)} />
+          <InfoRow label="Nội dung chuyển khoản" value={me.transfer_code} copy />
         </div>
       )}
-
-      {/* Header */}
-      <div className="flex items-center gap-2.5">
-        <span className={`p-2 rounded-lg ${isFeatured ? 'bg-success-soft text-success' : 'bg-surface-2 text-fg-2'}`}>
-          {plan.icon}
-        </span>
-        <h3 className="text-lg font-bold text-fg">{plan.name}</h3>
-      </div>
-
-      {/* Price */}
-      <PriceDisplay plan={plan} period={period} />
-
-      {/* Description */}
-      <p className="text-fg-muted text-sm mb-5 leading-relaxed">{plan.description}</p>
-
-      {/* CTA */}
-      <button
-        onClick={handleCta}
-        disabled={loading}
-        className={`w-full py-2.5 px-4 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-success disabled:opacity-60 disabled:cursor-not-allowed ${
-          isFeatured
-            ? 'bg-accent hover:opacity-90 text-accent-fg shadow-lg'
-            : 'bg-surface-2 hover:bg-line text-fg border border-line'
-        }`}
-        aria-label={`${plan.cta} — gói ${plan.name}`}
-      >
-        {loading ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Đang xử lý...
-          </>
-        ) : (
-          plan.cta
-        )}
-      </button>
-
-      {error && (
-        <p className="mt-2 text-xs text-danger text-center leading-snug">{error}</p>
-      )}
-
-      {/* Divider */}
-      <hr className="border-line my-5" />
-
-      {/* Features */}
-      <ul className="space-y-2.5 flex-1">
-        {plan.features.map((f) => (
-          <FeatureRow key={f.label} label={f.label} included={f.included} />
-        ))}
-      </ul>
-    </div>
+      {pay.contact ? <p className="mt-4 text-xs text-fg-muted">Cần hỗ trợ: {pay.contact}{/* wording: BA review */}</p> : null}
+    </section>
   );
 }
 
-function FaqItem({ q, a }) {
-  const [open, setOpen] = useState(false);
+export default function PricingPage() {
+  const { ready, plans } = usePlans();
+  const [period, setPeriod] = useState('month');
+
+  useEffect(() => { document.title = 'Bảng giá — VidGrab'; }, []); // wording: BA review
+
+  const tiers = plans?.tiers || [];
+  const pro = tiers.find((t) => t.id === 'pro');
+  const rows = tiers.length ? buildPlanRows(tiers) : [];
 
   return (
-    <div className="border-b border-line last:border-b-0">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between gap-4 py-4 text-left text-fg-2 hover:text-fg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-success rounded"
-        aria-expanded={open}
-      >
-        <span className="font-medium text-sm sm:text-base">{q}</span>
-        <ChevronDown
-          className={`w-5 h-5 text-fg-muted shrink-0 transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
-        />
-      </button>
-
-      <div
-        className={`overflow-hidden transition-all duration-300 ease-in-out ${
-          open ? 'max-h-64 opacity-100 pb-4' : 'max-h-0 opacity-0'
-        }`}
-      >
-        <p className="text-sm text-fg-muted leading-relaxed">{a}</p>
-      </div>
-    </div>
-  );
-}
-
-// ── Main Page ─────────────────────────────────────────────────────────────────
-
-export default function PricingPage({ onNavigate }) {
-  const [period, setPeriod] = useState('monthly');
-
-  const _nav = (view, path) => {
-    if (onNavigate) onNavigate(view, path);
-    else window.history.pushState({}, '', path);
-  };
-
-  const handleCheckout = async (planId, billingPeriod) => {
-    // Free tier → go home
-    if (!planId) {
-      _nav('landing', '/');
-      return;
-    }
-
-    // Get Supabase token
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-
-    const res = await fetch(`${API}/payments/create-checkout-session-v2`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({
-        plan: planId,
-        period: billingPeriod,
-        success_url: `${window.location.origin}/billing?success=1`,
-        cancel_url: `${window.location.origin}/pricing`,
-      }),
-    });
-
-    if (res.status === 503) {
-      throw new Error('Hệ thống thanh toán chưa được cấu hình. Vui lòng liên hệ hỗ trợ.');
-    }
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.detail || body.message || 'Không thể tạo phiên thanh toán.');
-    }
-
-    const { checkout_url } = await res.json();
-    if (!checkout_url) throw new Error('Không nhận được URL thanh toán.');
-    window.location.href = checkout_url;
-  };
-
-  return (
-    <div className="min-h-screen bg-canvas text-fg">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
-
-        {/* Hero */}
-        <div className="text-center mb-12">
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight mb-4">
-            Chọn gói phù hợp với bạn
-          </h1>
-          <p className="text-fg-muted text-base sm:text-lg max-w-xl mx-auto">
-            Bắt đầu miễn phí. Nâng cấp khi cần. Huỷ bất cứ lúc nào.
+    <div className="bg-canvas text-fg">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-16">
+        <div className="text-center mb-8">
+          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight mb-3">Bảng giá</h1>
+          {/* wording: BA review */}
+          <p className="text-fg-muted text-sm sm:text-base max-w-xl mx-auto">
+            Dùng thử ngay không cần tài khoản. Đăng ký để có hạn mức cao hơn. Nâng cấp Pro khi cần dùng nhiều.
           </p>
         </div>
 
-        {/* Period toggle */}
-        <div className="flex justify-center mb-12">
-          <PeriodToggle period={period} onChange={setPeriod} />
-        </div>
+        {!ready && (
+          <div className="flex justify-center py-16" role="status" aria-label="Đang tải">
+            <Loader2 className="w-6 h-6 animate-spin text-fg-muted" />
+          </div>
+        )}
+        {ready && !plans && (
+          <p role="alert" className="text-center text-sm text-danger py-12">
+            {/* wording: BA review */}
+            Không tải được bảng giá. Vui lòng tải lại trang sau ít phút.
+          </p>
+        )}
 
-        {/* Plan cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-start">
-          {PLANS.map((plan) => (
-            <PlanCard
-              key={plan.id}
-              plan={plan}
-              period={period}
-              onCheckout={handleCheckout}
-            />
-          ))}
-        </div>
+        {plans && pro && (
+          <>
+            <div className="flex justify-center mb-8">
+              <div role="group" aria-label="Chu kỳ thanh toán Pro" className="inline-flex rounded-xl border border-line bg-surface p-1">
+                {[['month', 'Theo tháng'], ['year', 'Theo năm']].map(([k, l]) => (
+                  <button key={k} type="button" aria-pressed={period === k} onClick={() => setPeriod(k)}
+                    className={`px-4 py-2 min-h-10 rounded-lg text-sm font-medium transition-colors ${period === k ? 'bg-accent text-accent-fg' : 'text-fg-2 hover:text-fg'}`}>
+                    {l}{/* wording: BA review */}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        {/* Enterprise strip */}
-        <div className="mt-10 rounded-2xl border border-line bg-surface-2 px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div>
-            <h3 className="text-lg font-bold text-fg mb-1">Enterprise</h3>
-            <p className="text-fg-muted text-sm max-w-md">
-              Dung lượng không giới hạn, SLA tuỳ chỉnh, hỗ trợ kỹ thuật chuyên biệt, triển khai
-              riêng (on-premise hoặc cloud). Hãy nói cho chúng tôi biết nhu cầu của bạn.
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+              {tiers.map((t) => {
+                const meta = TIER_META[t.id] || { name: t.id, sub: '' };
+                const isPro = t.id === 'pro';
+                const price = isPro ? (period === 'year' ? t.price_year_vnd : t.price_month_vnd) : 0;
+                return (
+                  <article key={t.id}
+                    className={`min-w-0 rounded-2xl border p-5 bg-surface-2 ${isPro ? 'border-accent shadow-lg' : 'border-line'}`}>
+                    <h2 className="flex items-center gap-2 text-lg font-bold">
+                      {isPro && <Crown className="w-4 h-4 text-accent-text" aria-hidden="true" />}
+                      {meta.name}
+                    </h2>
+                    <p className="text-xs text-fg-muted mb-3">{meta.sub}</p>
+                    <p className="mb-4">
+                      <span className="text-3xl font-extrabold">{isPro ? formatVnd(price) : '0đ'}</span>
+                      {isPro && <span className="text-sm text-fg-muted"> / {period === 'year' ? 'năm' : 'tháng'}</span>}
+                    </p>
+                    <ul className="divide-y divide-line">
+                      {rows.map((r) => (
+                        <li key={r.key} className="flex items-center justify-between gap-3 py-2">
+                          <span className="text-xs text-fg-muted min-w-0">{r.label}</span>
+                          <Cell value={r.get(t)} />
+                        </li>
+                      ))}
+                    </ul>
+                  </article>
+                );
+              })}
+            </div>
+
+            <p className="mt-4 text-xs text-fg-muted text-center">
+              {/* wording: BA review */}
+              Số lượt tải được tính lại lúc {plans.daily_reset_utc || '00:00'} UTC mỗi ngày.
             </p>
-          </div>
-          <a
-            href="mailto:support@vidgrab.app?subject=Enterprise%20Inquiry"
-            className="shrink-0 px-6 py-3 rounded-xl bg-surface-2 hover:bg-line border border-line text-fg text-sm font-semibold transition-colors whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-success"
-          >
-            Liên hệ đội ngũ
-          </a>
-        </div>
 
-        {/* FAQ */}
-        <section className="mt-20" aria-labelledby="faq-heading">
-          <h2 id="faq-heading" className="text-2xl font-bold text-center mb-8">
-            Câu hỏi thường gặp
-          </h2>
-          <div className="max-w-2xl mx-auto bg-surface-2 border border-line rounded-2xl px-6 divide-y-0">
-            {FAQS.map((faq) => (
-              <FaqItem key={faq.q} q={faq.q} a={faq.a} />
-            ))}
-          </div>
-        </section>
-
-        {/* Footer note */}
-        <p className="text-center text-fg-muted text-xs mt-12">
-          Giá hiển thị bằng USD. Thuế (nếu có) sẽ được tính thêm lúc thanh toán.
-          Bảo mật thẻ bởi Stripe — VidGrab không lưu thông tin thẻ.
-        </p>
+            <PaymentSection pay={plans.payment} pro={pro} period={period} />
+          </>
+        )}
       </div>
     </div>
   );
