@@ -160,3 +160,18 @@ def test_expire_task_includes_manual():
     from app.tasks import video_tasks
     src = inspect.getsource(video_tasks.expire_subscriptions)
     assert '"manual"' in src
+
+
+def test_paid_never_below_free(monkeypatch):
+    from app.core import quotas as q
+    monkeypatch.setitem(q.TIER_PERMISSIONS["free"], "batch_limit", 500)
+    monkeypatch.setitem(q.TIER_PERMISSIONS["free"], "max_height", 4320)
+    monkeypatch.setitem(q.TIER_PERMISSIONS["pro"], "batch_limit", 100)
+    monkeypatch.setitem(q.TIER_PERMISSIONS["pro"], "max_height", 2160)
+    monkeypatch.setitem(q.TIER_PERMISSIONS["team"], "batch_limit", 200)
+    q._paid_never_below_free()
+    assert q.TIER_PERMISSIONS["pro"]["batch_limit"] == 500
+    assert q.TIER_PERMISSIONS["pro"]["max_height"] == 4320
+    assert q.TIER_PERMISSIONS["team"]["batch_limit"] == 500
+    assert q.TIER_PERMISSIONS["enterprise"]["batch_limit"] == -1
+    assert q.TIER_PERMISSIONS["enterprise"]["max_height"] == 4320

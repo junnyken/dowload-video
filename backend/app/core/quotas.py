@@ -740,6 +740,25 @@ def get_user_tier(user_id: str) -> str:
     return _get_tier(user_id)
 
 
+def _paid_never_below_free() -> None:
+    """A paid tier never gets less than Free. Production sets
+    FREE_BATCH_LIMIT=500 and FREE_MAX_HEIGHT=4320 while Pro kept its
+    hard-coded 100 links and 2160p: Pro paid for less than Free (13/10)."""
+    free = TIER_PERMISSIONS["free"]
+    for tier in ("pro", "team", "enterprise"):
+        perms = TIER_PERMISSIONS[tier]
+        for key in ("batch_limit", "max_height"):
+            if perms[key] == -1:
+                continue                      # already unlimited
+            if free[key] == -1:
+                perms[key] = -1
+            else:
+                perms[key] = max(int(perms[key]), int(free[key]))
+
+
+_paid_never_below_free()
+
+
 def get_tier_permissions(tier: str) -> Dict[str, Any]:
     return TIER_PERMISSIONS.get(tier, TIER_PERMISSIONS["free"])
 
