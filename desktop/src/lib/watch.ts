@@ -17,6 +17,7 @@ const BASE = '/api/v1/watch';
 const LOCAL_KEY = 'vg.watch';
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+const CALL_TIMEOUT_MS = 20_000; // watch calls are small; a silent host must not spin the screen
 type Answer = { status: number; data: unknown };
 
 /** Network failure -> status 0. A 401 is retried once with a refreshed token. No token -> 401 without calling. */
@@ -24,11 +25,11 @@ async function call(path: string, method: Method = 'GET', body?: unknown): Promi
   try {
     let token = await getAccessToken();
     if (!token) return { status: 401, data: null };
-    let r = await apiFetch(BASE + path, { method, body, token });
+    let r = await apiFetch(BASE + path, { method, body, token, timeoutMs: CALL_TIMEOUT_MS });
     if (r.status === 401) {
       token = await getAccessToken(true);
       if (!token) return { status: 401, data: r.data };
-      r = await apiFetch(BASE + path, { method, body, token });
+      r = await apiFetch(BASE + path, { method, body, token, timeoutMs: CALL_TIMEOUT_MS });
     }
     return { status: r.status, data: r.data };
   } catch {
@@ -46,7 +47,7 @@ export const watchLocal = createStore<WatchLocal>(emptyLocal());
 export const inboxQuery = createStore<InboxQuery>({ subscriptionId: '', unreadOnly: false });
 export const watchLoading = createStore(false);
 
-export const isWatchVisible = () => watchVisible(auth.get().status, watchStatus.get());
+export const isWatchVisible = () => watchVisible(auth.get().status, watchStatus.get(), watchLocal.get().known === true);
 
 const userKey = () => auth.get().userId || auth.get().email || 'unknown';
 
@@ -65,6 +66,10 @@ export async function refreshStatus(): Promise<StatusResult> {
   const s = parseStatus(r.status, r.data);
   if (s.kind === 'error' && watchStatus.get()?.kind === 'ok') return watchStatus.get() as StatusResult; // keep what we knew
   watchStatus.set(s);
+  // Remember per account whether the entry exists, so an outage keeps it.
+  const known = watchLocal.get().known === true;
+  if (s.kind === 'ok' && watchVisible('in', s) && !known) saveLocal({ ...watchLocal.get(), known: true });
+  if ((s.kind === 'off' || (s.kind === 'ok' && !watchVisible('in', s))) && known) saveLocal({ ...watchLocal.get(), known: false });
   return s;
 }
 

@@ -65,7 +65,11 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : nul
 
 export function parseStatus(httpStatus: number, data: unknown): StatusResult {
   if (httpStatus === 401) return { kind: 'login' };
-  if (httpStatus === 403 || httpStatus === 404 || httpStatus === 503) return { kind: 'off' };
+  // 503 means "off" only when the server says so (watch_disabled): a gateway
+  // 503 from an overloaded host is a network problem, not a disabled feature.
+  const code = data && typeof data === 'object' ? (data as Record<string, unknown>).error_code : undefined;
+  if (httpStatus === 403 || httpStatus === 404) return { kind: 'off' };
+  if (httpStatus === 503) return code === 'watch_disabled' ? { kind: 'off' } : { kind: 'error' };
   if (httpStatus !== 200 || !data || typeof data !== 'object') return { kind: 'error' };
   const d = data as Record<string, unknown>;
   const l = (d.limits && typeof d.limits === 'object' ? d.limits : {}) as Record<string, unknown>;
@@ -86,8 +90,13 @@ export function parseStatus(httpStatus: number, data: unknown): StatusResult {
  * user whose status says enabled — or who still has subscriptions to manage
  * (e.g. the trial was narrowed after they subscribed).
  */
-export function watchVisible(authStatus: 'loading' | 'out' | 'in', r: StatusResult | null): boolean {
-  if (authStatus !== 'in' || !r || r.kind !== 'ok') return false;
+/** `known`: this account had the entry before (saved per account). While the
+ * server cannot be reached the entry stays, so a network problem does not look
+ * like a removed feature. */
+export function watchVisible(authStatus: 'loading' | 'out' | 'in', r: StatusResult | null, known = false): boolean {
+  if (authStatus !== 'in') return false;
+  if (!r || r.kind === 'error') return known;
+  if (r.kind !== 'ok') return false;
   return r.status.enabled || r.status.used > 0;
 }
 
@@ -157,10 +166,10 @@ export function serverMessage(data: unknown, fallback: string): string {
  * second notification (also after a restart). done: items the user
  * downloaded or dismissed (hidden from the "Video mới" list).
  */
-export type WatchLocal = { since: string | null; notified: string[]; done: string[] };
+export type WatchLocal = { since: string | null; notified: string[]; done: string[]; known?: boolean };
 
 export const MAX_IDS = 500;
-export const emptyLocal = (): WatchLocal => ({ since: null, notified: [], done: [] });
+export const emptyLocal = (): WatchLocal => ({ since: null, notified: [], done: [], known: false });
 
 const ids = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').slice(-MAX_IDS) : []);
 
@@ -171,7 +180,7 @@ export function readLocal(raw: string | null, userId: string): WatchLocal {
     const v = all && typeof all === 'object' ? (all as Record<string, unknown>)[userId] : null;
     if (!v || typeof v !== 'object') return emptyLocal();
     const o = v as Record<string, unknown>;
-    return { since: str(o.since) && !Number.isNaN(Date.parse(o.since as string)) ? (o.since as string) : null, notified: ids(o.notified), done: ids(o.done) };
+    return { since: str(o.since) && !Number.isNaN(Date.parse(o.since as string)) ? (o.since as string) : null, notified: ids(o.notified), done: ids(o.done), known: o.known === true };
   } catch {
     return emptyLocal();
   }
@@ -183,7 +192,7 @@ export function writeLocal(raw: string | null, userId: string, local: WatchLocal
     const p = JSON.parse(raw ?? 'null');
     if (p && typeof p === 'object' && !Array.isArray(p)) all = p as Record<string, unknown>;
   } catch { /* start over */ }
-  all[userId] = { since: local.since, notified: local.notified.slice(-MAX_IDS), done: local.done.slice(-MAX_IDS) };
+  all[userId] = { since: local.since, notified: local.notified.slice(-MAX_IDS), done: local.done.slice(-MAX_IDS), known: local.known === true };
   return JSON.stringify(all);
 }
 

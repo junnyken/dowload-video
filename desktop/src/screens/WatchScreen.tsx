@@ -16,6 +16,10 @@ const T = {
   title: 'Theo dõi kênh',
   subtitle: 'Máy chủ VidGrab kiểm tra kênh giúp bạn; video mới được tải về ngay trên máy này khi bạn bấm “Tải”.',
   unavailable: 'Tính năng theo dõi kênh hiện chưa mở cho tài khoản của bạn.',
+  // wording: BA review — shown while the VidGrab server cannot be reached
+  offlineTitle: 'Chưa kết nối được máy chủ VidGrab',
+  offlineText: 'Danh sách kênh và video mới sẽ hiện lại khi có kết nối. Ứng dụng tự thử lại; bạn cũng có thể bấm Thử lại.',
+  retry: 'Thử lại',
   addLabel: 'Theo dõi kênh mới',
   placeholder: 'https://www.tiktok.com/@tenkenh hoặc https://www.youtube.com/@tenkenh',
   add: 'Theo dõi',
@@ -141,6 +145,18 @@ export function WatchScreen() {
 
   if (!st || (st.kind !== 'ok' && loading)) {
     return <div className="flex h-full items-center justify-center"><Spinner className="text-accent" /></div>;
+  }
+  if (st.kind === 'error') {
+    return (
+      <div className="flex h-full flex-col">
+        <ScreenHeader title={T.title} />
+        <div className="flex flex-col items-center gap-3 px-6">
+          <EmptyState icon={<AlertCircle size={24} />} title={T.offlineTitle} text={T.offlineText} />
+          <Button size="sm" variant="ghost" disabled={loading} icon={<RefreshCw size={14} />}
+            onClick={() => void refreshAll()}>{T.retry}</Button>
+        </div>
+      </div>
+    );
   }
   if (st.kind !== 'ok') {
     return (

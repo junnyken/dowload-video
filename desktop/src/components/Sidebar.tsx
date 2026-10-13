@@ -22,8 +22,9 @@ export function Sidebar() {
   const active = activeCount(queue.use());
   const a = auth.use();
   const pendingNew = totalPending(channels.use());
-  const showWatch = watchVisible(a.status, watchStatus.use());
-  const watchNew = pendingItems(watchItems.use(), watchLocal.use()).length;
+  const wl = watchLocal.use();
+  const showWatch = watchVisible(a.status, watchStatus.use(), wl.known === true);
+  const watchNew = pendingItems(watchItems.use(), wl).length;
   return (
     <aside className="flex w-[208px] shrink-0 flex-col border-r border-line bg-surface">
       <div className="flex items-center gap-2.5 px-4 pb-4 pt-5">

@@ -18,6 +18,9 @@ const T = {
   loginBody: 'Theo dõi kênh chỉ dành cho tài khoản đã đăng nhập.',
   loginBtn: 'Đăng nhập',
   unavailable: 'Tính năng theo dõi kênh hiện chưa mở cho tài khoản của bạn.',
+  offlineTitle: 'Chưa kết nối được máy chủ VidGrab', // wording: BA review
+  offlineBody: 'Danh sách kênh sẽ hiện lại khi có kết nối. Vui lòng thử lại sau ít phút.', // wording: BA review
+  retry: 'Thử lại', // wording: BA review
   placeholder: 'Dán liên kết kênh TikTok, YouTube hoặc Instagram (gói Pro), ví dụ https://www.youtube.com/@tenkenh',
   add: 'Theo dõi',
   adding: 'Đang kiểm tra kênh…',
@@ -87,18 +90,26 @@ export default function WatchPage() {
     if (!isAuthenticated) return undefined;
     let alive = true;
     const getJson = (path) => fetch(`${API}${path}`, withAuth()).then((r) => (r.ok ? r.json() : null));
-    getJson('/status')
+    // /status: 'offline' for network errors and gateway 5xx (13/10: overloaded
+    // host) — only the server's own refusal means the feature is not open.
+    fetch(`${API}/status`, withAuth())
+      .then(async (r) => {
+        if (r.ok) return r.json();
+        const d = await r.json().catch(() => null);
+        if (r.status >= 500 && d?.error_code !== 'watch_disabled') return 'offline';
+        return null;
+      })
       .then((st) => {
         if (!alive) return null;
         setStatus(st || false);
-        if (!st) return null;
+        if (!st || st === 'offline') return null;
         return getJson('/subscriptions');
       })
       .then((s) => {
         if (!alive || !s) return;
         setSubs(s.subscriptions || []);
       })
-      .catch(() => { if (alive) setStatus(false); });
+      .catch(() => { if (alive) setStatus('offline'); });
     return () => { alive = false; };
   }, [isAuthenticated, withAuth, reloadKey]);
 
@@ -139,6 +150,14 @@ export default function WatchPage() {
 
   if (status === null) {
     return <div className="max-w-3xl mx-auto px-4 py-16 flex justify-center"><RefreshCw className="w-5 h-5 animate-spin text-fg-muted" /></div>;
+  }
+  if (status === 'offline') {
+    return (
+      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 flex flex-col items-center gap-3">
+        <EmptyState icon={<Eye className="w-10 h-10" />} title={T.offlineTitle} body={T.offlineBody} />
+        <button onClick={load} className="px-4 py-2 rounded-lg border border-line-strong text-sm text-fg-muted hover:text-fg cursor-pointer">{T.retry}</button>
+      </div>
+    );
   }
   if (status === false) {
     return <div className="max-w-3xl mx-auto px-4 md:px-8 py-8"><EmptyState icon={<Eye className="w-10 h-10" />} title={T.title} body={T.unavailable} /></div>;

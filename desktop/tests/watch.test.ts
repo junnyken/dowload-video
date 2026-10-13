@@ -24,7 +24,7 @@ test('watch-core is really loaded (not a skipped import)', () => {
 
 // ---- status gating -------------------------------------------------------------------
 
-test('parseStatus: 200 -> ok with limits; 401 login; 403/404/503 off; other error', () => {
+test('parseStatus: 200 -> ok with limits; 401 login; 403/404/503 watch_disabled off; gateway 503 error', () => {
   const r = parseStatus(200, okStatus({ used: 2 }));
   assert.equal(r.kind, 'ok');
   if (r.kind === 'ok') {
@@ -36,7 +36,10 @@ test('parseStatus: 200 -> ok with limits; 401 login; 403/404/503 off; other erro
   assert.equal(parseStatus(401, { error_code: 'login_required' }).kind, 'login');
   assert.equal(parseStatus(404, { error_code: 'watch_disabled' }).kind, 'off');
   assert.equal(parseStatus(403, { error_code: 'watch_disabled' }).kind, 'off');
-  assert.equal(parseStatus(503, null).kind, 'off');
+  assert.equal(parseStatus(503, { error_code: 'watch_disabled' }).kind, 'off');
+  assert.equal(parseStatus(503, null).kind, 'error');                 // gateway 503 (overloaded host) ≠ disabled
+  assert.equal(parseStatus(502, null).kind, 'error');
+  assert.equal(parseStatus(504, null).kind, 'error');
   assert.equal(parseStatus(500, null).kind, 'error');
   assert.equal(parseStatus(0, null).kind, 'error');
   assert.equal(parseStatus(200, null).kind, 'error');
@@ -111,11 +114,11 @@ test('no re-notify after restart: state survives write/read, the server\'s >= si
 test('local state is per account and survives garbage', () => {
   const a = writeLocal(null, 'u1', { since: '2026-10-01T00:00:00Z', notified: ['x'], done: ['y'] });
   const b = writeLocal(a, 'u2', { since: null, notified: ['z'], done: [] });
-  assert.deepEqual(readLocal(b, 'u1'), { since: '2026-10-01T00:00:00Z', notified: ['x'], done: ['y'] });
+  assert.deepEqual(readLocal(b, 'u1'), { since: '2026-10-01T00:00:00Z', notified: ['x'], done: ['y'], known: false });
   assert.deepEqual(readLocal(b, 'u2').notified, ['z']);
   assert.deepEqual(readLocal(b, 'u3'), emptyLocal());
   assert.deepEqual(readLocal('{not json', 'u1'), emptyLocal());
-  assert.deepEqual(readLocal(JSON.stringify({ u1: { since: 'not a date', notified: [1, 'a'], done: 'x' } }), 'u1'), { since: null, notified: ['a'], done: [] });
+  assert.deepEqual(readLocal(JSON.stringify({ u1: { since: 'not a date', notified: [1, 'a'], done: 'x' } }), 'u1'), { since: null, notified: ['a'], done: [], known: false });
   assert.ok(JSON.parse(writeLocal('[1,2]', 'u1', emptyLocal())).u1, 'array in storage is replaced');
 });
 
@@ -230,4 +233,24 @@ test('parseInbox: wrong types dropped, garbage = empty, ready=false honoured', (
     assert.deepEqual(e, { items: [], unread: 0, ready: true });
   }
   assert.equal(parseInbox({ unread: -4 }).unread, 0);
+});
+
+
+test('watchVisible: an account that had the entry keeps it while the server cannot be reached (13/10)', () => {
+  const ok = parseStatus(200, okStatus());
+  assert.equal(watchVisible('in', ok), true);
+  assert.equal(watchVisible('in', { kind: 'error' }), false);           // never seen → hidden
+  assert.equal(watchVisible('in', { kind: 'error' }, true), true);      // known → stays
+  assert.equal(watchVisible('in', null, true), true);                   // app started offline
+  assert.equal(watchVisible('in', { kind: 'off' }, true), false);       // server says off → hidden
+  assert.equal(watchVisible('in', { kind: 'login' }, true), false);
+  assert.equal(watchVisible('out', { kind: 'error' }, true), false);    // signed out → never
+});
+
+test('readLocal/writeLocal keep "known" per account', () => {
+  const raw = writeLocal(null, 'u1', { ...emptyLocal(), known: true });
+  assert.equal(readLocal(raw, 'u1').known, true);
+  assert.equal(readLocal(raw, 'u2').known ?? false, false);
+  assert.equal(readLocal(writeLocal(raw, 'u1', emptyLocal()), 'u1').known, false);
+  assert.equal(readLocal('{"u1":{"since":null,"notified":[],"done":[]}}', 'u1').known, false);  // old data
 });
