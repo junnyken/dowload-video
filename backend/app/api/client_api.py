@@ -266,6 +266,20 @@ async def get_client_update(request: Request, target: str, arch: str, current_ve
     return offer
 
 
+@router.get("/client/ytdlp")
+@limiter.limit("60/minute")
+async def get_client_ytdlp(request: Request):
+    """Task #6333 (Phase 34A-3): the newer yt-dlp.exe an admin approved for the
+    app (app.core.desktop_ytdlp). 200 {version, url, sha256} when enabled,
+    204 otherwise (the app then keeps / goes back to its bundled yt-dlp).
+    No auth, never gated (update_gate.ALWAYS_OPEN): read from Rust."""
+    import asyncio  # noqa: PLC0415
+    from app.core import desktop_ytdlp  # noqa: PLC0415
+    offer = await asyncio.to_thread(desktop_ytdlp.offer)
+    if not offer:
+        return Response(status_code=204)
+    return offer
+
 def _signed_policy(min_supported: str) -> Optional[str]:
     """PLAN-32E P3 (task #6172): the policy app >= 0.10 reads FROM RUST (not
     via the webview) to know whether a download needs a signed claim token and

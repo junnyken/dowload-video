@@ -24,7 +24,8 @@ from starlette.responses import JSONResponse
 
 APP_ORIGINS = ("http://tauri.localhost", "https://tauri.localhost", "tauri://localhost")
 GATED_PREFIXES = ("/api/v1/client/", "/api/v1/fetch-link")
-ALWAYS_OPEN = ("/api/v1/client/version",)
+# Task #6333: the approved yt-dlp the app may switch to (read from Rust).
+ALWAYS_OPEN = ("/api/v1/client/version", "/api/v1/client/ytdlp")
 # Task #6205: the in-app updater's endpoint — a too-old app must still update.
 ALWAYS_OPEN_PREFIXES = ("/api/v1/client/update/",)
 _VER = re.compile(r"^\s*v?(\d{1,4})\.(\d{1,4})\.(\d{1,4})")
