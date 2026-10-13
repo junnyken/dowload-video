@@ -19,6 +19,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, field_validator
 
+from app.core.auth_middleware import get_optional_user as _auth_optional_user
+
+_PAID_TIERS = ("pro", "team", "enterprise")
+
 logger = logging.getLogger(__name__)
 
 _DOWNLOADS_DIR = os.path.join(
@@ -120,21 +124,27 @@ def _get_metadata_utils():
 # Auth helper (optional user)
 # ---------------------------------------------------------------------------
 
-def get_optional_user(request: Request) -> dict | None:
+async def get_optional_user(
+    user: dict | None = Depends(_auth_optional_user),
+) -> dict | None:
     """
-    Extract user from session/token if present; return None for anonymous.
-    Attempts to reuse existing auth dependency; degrades gracefully.
+    The signed-in user (Supabase JWT or API key, verified by auth_middleware)
+    with the effective tier, or None for a guest.
+
+    Until 13/10 this imported app.core.auth, which does not exist, and fell
+    back to trusting an X-User-Id header / user_id cookie: anyone could name
+    any id, so rotating fake ids lifted the guest limit, a real user's quota
+    could be drained by someone else, and signed-in users (who send no such
+    header) were all counted as guests. Pro never got Pro limits.
     """
+    if not user or not user.get("id"):
+        return None
     try:
-        from app.core.auth import get_current_user_optional  # noqa: PLC0415
-        return get_current_user_optional(request)
-    except ImportError:
-        pass
-    # Fallback: check for a simple session cookie or header
-    user_id = request.headers.get("X-User-Id") or request.cookies.get("user_id")
-    if user_id:
-        return {"id": user_id, "tier": "free"}
-    return None
+        from app.core.quotas import _get_tier  # noqa: PLC0415
+        tier = _get_tier(str(user["id"])) or "free"
+    except Exception:  # noqa: BLE001 — profile unreadable → least privilege
+        tier = "free"
+    return {**user, "tier": tier}
 
 
 # ---------------------------------------------------------------------------
@@ -228,7 +238,7 @@ def _check_analysis_quota(
     tier = user.get("tier", "free")
     user_id = user.get("id")
 
-    if tier == "pro":
+    if tier in _PAID_TIERS:
         daily_limit = PRO_ANALYSES_PER_DAY
     else:
         daily_limit = FREE_ANALYSES_PER_DAY
@@ -278,7 +288,7 @@ def _tier_filter_results(results: dict, tier: str) -> dict:
     - 'pro'       : full results
     - 'anonymous' : same as free but clip_suggestions=[]
     """
-    if tier == "pro":
+    if tier in _PAID_TIERS:
         return results
 
     filtered = dict(results)
@@ -359,7 +369,7 @@ async def submit_analyze_media(
     """
     # Tier limits
     tier = (user or {}).get("tier", "anonymous" if user is None else "free")
-    max_duration = MAX_DURATION_PRO_S if tier == "pro" else MAX_DURATION_FREE_S
+    max_duration = MAX_DURATION_PRO_S if tier in _PAID_TIERS else MAX_DURATION_FREE_S
 
     if body.duration_hint_s is not None and body.duration_hint_s > max_duration:
         raise HTTPException(
