@@ -1899,10 +1899,13 @@ async def get_probes(_=Depends(verify_admin)):
         "platforms": rows,
         "counts": counts,
         "total": len(rows),
+        # wording: BA review
         "note": (
-            "Dò bằng metadata (yt-dlp, không tải byte nào, không qua nhà cung cấp "
-            "trả phí). Không chứng minh tải được thật — phần đó do fetch_failed / "
-            "download_failed từ người dùng thật phủ."
+            "Dò theo đúng đường tải của người dùng, ở chất lượng thấp. Douyin và "
+            "Xiaohongshu có thể đi qua nhà cung cấp trả phí nên không dò mặc định: "
+            "admin tự đặt link mẫu, mỗi nền tảng dò tối đa 1 lần mỗi 24 giờ và vẫn "
+            "chịu hạn mức chi tiêu hằng ngày. Không chứng minh mọi link đều tải "
+            "được — phần đó do lỗi tải thật của người dùng phủ."
         ),
     }
 
@@ -1921,6 +1924,48 @@ async def set_probe_target(req: ProbeTargetRequest, request: Request, _=Depends(
         metadata={"cleared": not (req.url or "").strip()},
     )
     return {"success": True, "platform": req.platform, "configured": len(targets)}
+
+
+class ProbeSettingsRequest(BaseModel):
+    platform: str
+    # None = leave unchanged; "" clears the note.
+    known_limitation: Optional[str] = None
+    # None = leave unchanged; -1 = back to the default (24 h for paid
+    # platforms, every sweep for the rest).
+    min_interval_sec: Optional[int] = None
+
+
+@router.post("/probes/settings")
+async def set_probe_settings(req: ProbeSettingsRequest, request: Request, _=Depends(verify_admin)):
+    """Per-platform probe settings kept in Redis: the short "known limitation"
+    note shown with the platform's status, and the minimum probe interval."""
+    from app.core.platform_probe import (
+        PROBE_PLATFORMS, get_known_limitations, get_min_interval,
+        set_known_limitation, set_min_interval,
+    )
+    if req.platform not in PROBE_PLATFORMS:
+        raise HTTPException(status_code=400, detail=f"Unknown platform: {req.platform}")
+    if req.min_interval_sec is not None and req.min_interval_sec < -1:
+        raise HTTPException(status_code=400, detail="min_interval_sec must be >= 0, or -1 for the default")
+    try:
+        if req.known_limitation is not None:
+            set_known_limitation(req.platform, req.known_limitation)
+        if req.min_interval_sec is not None:
+            set_min_interval(req.platform, None if req.min_interval_sec == -1 else req.min_interval_sec)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Không lưu được: {e}")
+    log_admin_action(
+        request, "admin.probe.settings_set",
+        resource_type="platform_probe", resource_id=req.platform,
+        metadata={"known_limitation_set": req.known_limitation is not None,
+                  "min_interval_sec": req.min_interval_sec},
+    )
+    return {
+        "success": True,
+        "platform": req.platform,
+        "known_limitation": get_known_limitations().get(req.platform, ""),
+        "min_interval_s": get_min_interval(req.platform),
+    }
 
 
 @router.post("/probes/run")

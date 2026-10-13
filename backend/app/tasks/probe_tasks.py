@@ -18,6 +18,7 @@ from app.core.celery_app import celery_app
 from app.core.platform_probe import (
     FAILED,
     OK,
+    claim_probe_slot,
     get_probe_states,
     get_targets,
     probe_once,
@@ -50,6 +51,12 @@ def probe_all_platforms() -> Dict[str, str]:
 
     results: Dict[str, str] = {}
     for platform, url in sorted(targets.items()):
+        # Platforms with a minimum interval (the paid ones: 24 h by default)
+        # are skipped until it has passed. Nothing is recorded for a skip, so
+        # the last real result keeps standing.
+        if not claim_probe_slot(platform):
+            print(f"[Probe] {platform}: skipped (minimum interval not reached)")
+            continue
         outcome = probe_once(url, quality=probe_quality(platform))
         # The recorded status, not the raw outcome: a first failure is
         # UNCONFIRMED and must neither alert nor count as a break.
