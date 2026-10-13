@@ -18,6 +18,10 @@
 | Trang /terms, /takedown, /faq | ✅ 200 | 11:40 | curl |
 | Gửi gỡ nội dung sai dữ liệu | ✅ 422 (kiểm hợp lệ chạy) | 11:40 | curl |
 | Admin metrics / takedown khi chưa đăng nhập | ✅ 401 | 11:40 | curl |
+| Probe sau bản sửa 972fe94 (deploy 14:00 UTC) | ✅ Odysee (39 s), Podcast (2,5 s) xanh; ❌ Rumble 403 trên máy chủ (workspace giả lập Chrome qua được → nghi IP máy chủ bị chặn); ❌ Instagram (dòng lý do đã trôi khỏi log) | 21:31 | log `[Probe]` lượt 14:31 UTC |
+| Podcast RSS qua /fetch-link | ✅ 200, 8,4 s (trước: treo >90 s) | 21:00 | POST /api/v1/fetch-link video_480 |
+| Cảnh báo Telegram lúc khởi động | ❌ 403 "bot can't initiate conversation with a user": owner chưa bấm Start với bot nên mọi cảnh báo không tới | 21:00 | log khởi động |
+| Mã hoá kho cookie lúc khởi động | Chưa xác nhận: không có dòng `[CookiePool]` trong log; celery thấy thêm 1 node khác lúc khởi động | 21:00 | log khởi động |
 | Theo dõi kênh TikTok @cz3z qua proxy dự phòng | Chưa kiểm (log Vibe Host không đọc được cả ngày; chờ ảnh màn app của owner) | — | — |
 | Instagram Watch (Pro) | Chưa kiểm (chưa có kênh IG nào được thêm) | — | — |
 | Tải kênh Xiaohongshu, chia sẻ Android, 2 bước bấm thử chữ ký lượt tải | Chưa kiểm | — | — |
@@ -26,4 +30,6 @@
 1. Host vibe1 suy giảm từng đợt — owner báo người quản trị Vibe Host; bật giám sát ngoài (docs/runbooks/external-monitoring.md).
 2. X: một số bài báo cần đăng nhập — xem kho cookie X trong admin.
 3. Facebook: một số video báo lỗi xử lý — xem lại với link khác, kho cookie.
-4. Probe Instagram còn đỏ dù tải thật đã chạy — chờ lượt probe kế tiếp; nếu vẫn đỏ thì soi đường probe.
+4. Probe Instagram còn đỏ dù tải thật đã chạy — lý do kỹ thuật nay lưu ở đầu (Admin → Sức khoẻ nền tảng), đọc ở đó.
+5. Rumble: IP máy chủ bị 403 dù đã giả lập Chrome — cần proxy trong pool "all" hoặc chấp nhận là giới hạn.
+6. Telegram: owner bấm Start với bot cảnh báo, nếu không mọi cảnh báo đều rơi.
