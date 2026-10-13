@@ -26,6 +26,7 @@ import { useSmartDefaults, detectPlatform } from '../hooks/useSmartDefaults';
 import { usePresets } from '../hooks/usePresets';
 import { useResolveInput } from '../hooks/useResolveInput';
 import { useEntitlement } from '../hooks/useEntitlement';
+import { qualityLabel } from '../lib/usePlans';
 import CapabilityBadge from './CapabilityBadge';
 import { readGuestHistory, addGuestHistory, removeGuestHistory, clearGuestHistory } from '../lib/guestHistory';
 import { localFileId, localAnyId, localVideoFirstId, localDownloadUrl, toFileId } from '../lib/localFile';
@@ -615,7 +616,10 @@ export default function DashboardContent() {
         if (response.status === 403 && data.detail === 'QUOTA_EXCEEDED') {
           setUpgradeErrorCode('quota_exceeded_daily');
           setShowUpgradeModal(true);
-          throw new Error('Đã đạt giới hạn tải. Vui lòng nâng cấp Pro.');
+          // wording: BA review
+          throw new Error(['pro', 'team', 'enterprise', 'api'].includes(userTier)
+            ? 'Đã đạt giới hạn tải trong ngày. Lượt tải được tính lại lúc 07:00 giờ Việt Nam (00:00 UTC).'
+            : 'Đã đạt giới hạn tải trong ngày. Bạn có thể đợi đến 07:00 giờ Việt Nam (00:00 UTC) hoặc xem gói Pro tại trang Bảng giá.');
         }
         // Structured tier errors: 402 or known error_code → UpgradeModal
         {
@@ -3248,7 +3252,8 @@ export default function DashboardContent() {
                 >
                   <div className="flex items-center gap-3">
                     <Crown className="w-6 h-6" />
-                    <span className="text-base">Tải Video (HD / 4K)</span>
+                    {/* wording: BA review */}
+                    <span className="text-base">{maxMergeHeight > 0 ? `Tải Video (${qualityLabel(maxMergeHeight)})` : 'Tải Video'}</span>
                   </div>
                   {downloadingId === 'merge_4k' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
                 </button>
@@ -3876,7 +3881,7 @@ export default function DashboardContent() {
               <Sparkles className="w-3 h-3 flex-shrink-0 text-accent-text" /> TikTok / Douyin → bản không watermark
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg-2 bg-surface border border-line hover:border-line-strong transition-colors">
-              <Video className="w-3 h-3 flex-shrink-0 text-[#FF0000]" /> YouTube → 4K · 1080p · MP3
+              <Video className="w-3 h-3 flex-shrink-0 text-[#FF0000]" /> YouTube → 4K{!session && ' (đăng nhập)'} · 1080p · MP3{/* wording: BA review */}
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg-2 bg-surface border border-line hover:border-line-strong transition-colors">
               <Music className="w-3 h-3 flex-shrink-0 text-[#1DB954]" /> Spotify → MP3 320kbps

@@ -19,7 +19,7 @@ const TIER_META = {
 function Cell({ value }) {
   if (value === true) return <Check className="w-4 h-4 text-success shrink-0" aria-label="Có" />;
   if (value === false) return <X className="w-4 h-4 text-fg-muted shrink-0" aria-label="Không có" />;
-  return <span className="text-fg text-sm text-right">{value}</span>;
+  return <span className="text-fg text-sm break-words">{value}</span>;
 }
 
 function CopyButton({ text, label }) {
@@ -181,31 +181,37 @@ export default function PricingPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+            <div className="plan-grid grid grid-cols-1 md:grid-cols-3 gap-4"
+              style={{ '--plan-rows': rows.length + 1 }}>
               {tiers.map((t) => {
                 const meta = TIER_META[t.id] || { name: t.id, sub: '' };
                 const isPro = t.id === 'pro';
                 const price = isPro ? (period === 'year' ? t.price_year_vnd : t.price_month_vnd) : 0;
                 return (
                   <article key={t.id}
-                    className={`min-w-0 rounded-2xl border p-5 bg-surface-2 ${isPro ? 'border-accent shadow-lg' : 'border-line'}`}>
-                    <h2 className="flex items-center gap-2 text-lg font-bold">
-                      {isPro && <Crown className="w-4 h-4 text-accent-text" aria-hidden="true" />}
-                      {meta.name}
-                    </h2>
-                    <p className="text-xs text-fg-muted mb-3">{meta.sub}</p>
-                    <p className="mb-4">
-                      <span className="text-3xl font-extrabold">{isPro ? formatVnd(price) : '0đ'}</span>
-                      {isPro && <span className="text-sm text-fg-muted"> / {period === 'year' ? 'năm' : 'tháng'}</span>}
-                    </p>
-                    <ul className="divide-y divide-line">
-                      {rows.map((r) => (
-                        <li key={r.key} className="flex items-center justify-between gap-3 py-2">
-                          <span className="text-xs text-fg-muted min-w-0">{r.label}</span>
-                          <Cell value={r.get(t)} />
-                        </li>
-                      ))}
-                    </ul>
+                    className={`plan-card min-w-0 rounded-2xl border p-5 bg-surface-2 ${isPro ? 'border-accent shadow-lg' : 'border-line'}`}>
+                    <div className="pb-4">
+                      <h2 className="flex items-center gap-2 text-lg font-bold">
+                        {isPro && <Crown className="w-4 h-4 text-accent-text" aria-hidden="true" />}
+                        {meta.name}
+                      </h2>
+                      <p className="text-xs text-fg-muted mb-3">{meta.sub}</p>
+                      <p>
+                        <span className="text-3xl font-extrabold">{isPro ? formatVnd(price) : '0đ'}</span>
+                        {isPro && <span className="text-sm text-fg-muted"> / {period === 'year' ? 'năm' : 'tháng'}</span>}
+                      </p>
+                    </div>
+                    {rows.map((r) => {
+                      const v = r.get(t);
+                      const isIcon = typeof v === 'boolean';
+                      return (
+                        <div key={r.key} role="group" aria-label={r.label}
+                          className={`border-t border-line py-2.5 min-h-12 flex gap-x-3 gap-y-0.5 ${isIcon ? 'flex-row items-center justify-between' : 'flex-col justify-center'}`}>
+                          <span className="text-xs text-fg-muted">{r.label}</span>
+                          <Cell value={v} />
+                        </div>
+                      );
+                    })}
                   </article>
                 );
               })}

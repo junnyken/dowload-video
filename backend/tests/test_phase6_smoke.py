@@ -314,7 +314,8 @@ class TestSettingsContentPhase6:
         assert "notifPerm" in self._src() or "notification" in self._src().lower()
 
     def test_retention_rules_present(self):
-        assert "RETENTION_RULES" in self._src()
+        # 14/10: rules are built from /api/v1/plans (buildRetentionRules)
+        assert "RETENTION_RULES" in self._src() or "buildRetentionRules" in self._src()
 
     def test_app_version_displayed(self):
         assert "appVersion" in self._src() or "app_version" in self._src()

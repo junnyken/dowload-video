@@ -5,19 +5,33 @@ import {
   Clock, Database, FileDown, Key, Info, ExternalLink,
   CheckCircle2, XCircle, AlertCircle,
 } from 'lucide-react';
+import { usePlans } from '../lib/usePlans';
 import { getPermission, requestPermission, isSupported } from '../utils/notifications.js';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
-const RETENTION_RULES = [
-  { label: 'File tải về (chưa ghim)', value: '~60 phút', note: 'Tự xóa sau khi tải xong. Ghim vào Archive để giữ lại.' },
-  { label: 'File đã ghim (Archive)', value: 'Vô hạn', note: 'Giữ nguyên cho đến khi bạn xóa.' },
-  { label: 'Metadata lịch sử (miễn phí)', value: '30 ngày', note: 'Xuất CSV để giữ bản ghi lâu hơn.' },
-  { label: 'Metadata lịch sử (Pro)', value: '365 ngày', note: 'Tự động xóa sau 1 năm.' },
-  { label: 'Metadata Archive', value: 'Vô hạn', note: 'Dữ liệu mô tả giữ nguyên dù file đã hết hạn.' },
-];
+// wording: BA review
+// Pin numbers come from /api/v1/plans; export ranges mirror GET /user/history/export
+// (backend app/api/user.py: 30 days non-Pro, 365 days Pro).
+function buildRetentionRules(free, pro) {
+  const pinNote = (t) => (t ? `${t.pins} file, giữ ${t.pin_days} ngày` : null);
+  return [
+    { label: 'File tải về (chưa ghim)', value: '~60 phút', note: 'Tự xóa sau khi tải xong. Ghim vào Archive để giữ lại.' },
+    {
+      label: 'File đã ghim (Archive)',
+      value: free ? `${free.pin_days} ngày` : '—',
+      note: free && pro
+        ? `Free: ${pinNote(free)}. Pro: ${pinNote(pro)}. Ghim lại để gia hạn.`
+        : 'Hết hạn ghim thì file bị xóa, metadata vẫn còn.',
+    },
+    { label: 'Xuất lịch sử (Free)', value: '30 ngày', note: 'Xuất CSV/JSON trong 30 ngày gần nhất.' },
+    { label: 'Xuất lịch sử (Pro)', value: '365 ngày', note: 'Xuất CSV/JSON trong 365 ngày gần nhất.' },
+    { label: 'Metadata Archive', value: 'Vô hạn', note: 'Dữ liệu mô tả giữ nguyên dù file đã hết hạn.' },
+  ];
+}
 
 export default function SettingsContent() {
+  const { free: freePlan, pro: proPlan } = usePlans();
   const [appVersion, setAppVersion] = useState(null);
   const [apiOk, setApiOk] = useState(null);
   const [notifPerm, setNotifPerm] = useState(getPermission());
@@ -160,7 +174,7 @@ export default function SettingsContent() {
             </div>
           </div>
           <div className="space-y-2">
-            {RETENTION_RULES.map((rule, i) => (
+            {buildRetentionRules(freePlan, proPlan).map((rule, i) => (
               <div key={i} className="flex items-start gap-3 px-3 py-2.5 rounded-xl bg-surface border border-line/60">
                 <Database className="w-3.5 h-3.5 text-fg-muted flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">

@@ -208,3 +208,10 @@
 .vg-no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Pricing comparison: on md+ every card spans the same rows via subgrid so
+   each feature row has one height across all tiers. */
+@media (min-width: 768px) {
+  .plan-grid { grid-template-rows: repeat(var(--plan-rows), auto); }
+  .plan-card { display: grid; grid-row: span var(--plan-rows); grid-template-rows: subgrid; row-gap: 0; }
+}

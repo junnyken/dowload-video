@@ -53,9 +53,9 @@ const PLATFORMS = [
   {
     name: 'YouTube', status: 'full', logo: '▶️',
     features: ['video', 'audio', 'subtitle', 'batch', 'playlist', '4K'],
-    description: 'Qua residential proxy. Video, 4K, phụ đề, playlist.',
+    description: 'Video, 4K (đăng nhập), phụ đề, playlist.', // wording: BA review
     domains: ['youtube.com', 'youtu.be'],
-    note: 'Yêu cầu proxy — tốc độ thấp hơn nền tảng khác.',
+    note: 'Có thể chậm hơn các nền tảng khác.', // wording: BA review
   },
   // ── Upgraded in Phase 15 ───────────────────────────────────────────
   {
@@ -89,10 +89,10 @@ const PLATFORMS = [
   {
     name: 'Xiaohongshu', status: 'full', logo: '🌸',
     features: ['video', 'image', 'carousel', 'batch'],
-    description: 'Video và ảnh carousel. Cần cookie XHS + CN proxy cho một số nội dung.',
+    description: 'Video và ảnh carousel. Một số nội dung có thể không tải được.', // wording: BA review
     domains: ['xiaohongshu.com', 'xhslink.com'],
     isNew: true,
-    note: 'Một số nội dung yêu cầu CN proxy.',
+    note: 'Chỉ tải được nội dung công khai.', // wording: BA review
   },
   // ── Basic new platforms ────────────────────────────────────────────
   {
@@ -187,7 +187,7 @@ function StatusBadge({ status }) {
     basic:                { Icon: Clock,       cls: 'bg-accent-soft text-accent-text border-accent/30',       label: 'Cơ bản' },
     partial:              { Icon: AlertCircle, cls: 'bg-warning-soft text-warning border-warning/30',       label: 'Một phần' },
     cookie_required:      { Icon: Lock,        cls: 'bg-surface-2 text-fg-2 border-line',         label: 'Cần cookie' },
-    proxy_required:       { Icon: Wifi,        cls: 'bg-surface-2 text-fg-2 border-line',   label: 'Cần proxy' },
+    proxy_required:       { Icon: Wifi,        cls: 'bg-surface-2 text-fg-2 border-line',   label: 'Có thể chậm hơn' }, // wording: BA review
     temporarily_disabled: { Icon: Clock,       cls: 'bg-danger-soft text-danger border-danger/30',            label: 'Tạm dừng' },
     unsupported:          { Icon: AlertCircle, cls: 'bg-line-strong text-fg-muted border-line-strong',      label: 'Chưa hỗ trợ' },
     // Phase 34D: health-probe driven, deliberately neutral (no "full support" claim).
@@ -473,7 +473,7 @@ export default function PlatformsPage() {
             { key: 'full',            label: '✅ Đầy đủ' },
             { key: 'basic',           label: '🟡 Cơ bản' },
             { key: 'cookie_required', label: '🔒 Cần cookie' },
-            { key: 'proxy_required',  label: '🌐 Cần proxy' },
+            { key: 'proxy_required',  label: '🌐 Có thể chậm hơn' }, // wording: BA review
             { key: 'new',             label: '🆕 Mới' },
           ].map(f => (
             <button

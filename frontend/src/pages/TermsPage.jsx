@@ -8,7 +8,7 @@ export default function TermsPage({ onNavigate }) {
       <div className="mb-10 border-b border-line pb-6">
         <h1 className="text-3xl font-extrabold text-fg mb-2">Điều khoản sử dụng</h1>
         <p className="text-fg-muted text-sm">
-          Cập nhật lần cuối: <span className="text-fg-2">13/10/2026</span>
+          Cập nhật lần cuối: <span className="text-fg-2">14/10/2026</span>
         </p>
       </div>
 
@@ -64,7 +64,9 @@ export default function TermsPage({ onNavigate }) {
         <section>
           <h2 className="text-xl font-bold text-fg mb-3">6. Gói trả phí</h2>
           <p>
-            Các gói trả phí sẽ áp dụng chính sách giá và hoàn tiền riêng, sẽ công bố khi mở bán.
+            {/* wording: BA review */}
+            Giá và quyền lợi hiện hành của các gói trả phí được công bố tại trang <a href="/pricing" className="text-accent-text underline">Bảng giá</a>.
+            Về chính sách hoàn tiền, vui lòng xem trang Bảng giá hoặc liên hệ hỗ trợ.
           </p>
         </section>
 

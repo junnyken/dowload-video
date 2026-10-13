@@ -257,7 +257,8 @@ export default function LandingPage() {
             <span aria-hidden="true" className="hidden sm:inline">·</span>
             <span className="inline-flex items-center gap-1.5">
               <Download className="w-3 h-3" />
-              4K · 1080p · MP3 320kbps
+              {/* wording: BA review */}
+              {isAuthenticated ? '4K' : '4K (đăng nhập)'} · 1080p · MP3 320kbps
             </span>
             <span aria-hidden="true" className="hidden sm:inline">·</span>
             <button

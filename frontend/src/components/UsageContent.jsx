@@ -2,9 +2,17 @@ import { useEffect, useState } from 'react';
 import { BarChart2, Zap, Calendar, Archive, Crown, RefreshCw, Key, Copy, Trash2, Lock, Webhook, Shield, Clock, HardDrive, Pin } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../lib/apiBase';
+import { usePlans } from '../lib/usePlans';
+
+function goPricing() {
+  window.history.pushState({}, '', '/pricing');
+  window.dispatchEvent(new PopStateEvent('popstate'));
+  window.scrollTo(0, 0);
+}
 
 export default function UsageContent() {
   const { session } = useAuth();
+  const { free: freePlan, pro: proPlan } = usePlans();
   const [usage, setUsage]   = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -214,9 +222,10 @@ export default function UsageContent() {
             {isPro ? 'Pro Plan' : 'Free Plan'}
           </p>
           <p className="text-fg-muted text-xs">
+            {/* wording: BA review */}
             {pq
               ? (pq.unlimited ? 'Không giới hạn lượt tải' : (pq.scope === 'per_platform' ? `Tối đa ${pq.limit} lượt/ngày cho mỗi nền tảng` : `Tối đa ${pq.limit} lượt/ngày cho tất cả nền tảng`))
-              : (isPro ? 'Tải không giới hạn' : `Tối đa ${usage.limits.daily}/ngày, ${usage.limits.monthly}/tháng`)}
+              : (isPro ? (proPlan ? `Tối đa ${proPlan.daily_downloads} lượt/ngày` : 'Gói Pro') : `Tối đa ${usage.limits.daily}/ngày, ${usage.limits.monthly}/tháng`)}
           </p>
         </div>
         {!isPro && (
@@ -277,11 +286,15 @@ export default function UsageContent() {
       {/* Upgrade CTA for free users */}
       {!isPro && (
         <div className="bg-surface-2 border border-accent/20 rounded-xl p-4">
-          <p className="text-fg font-semibold text-sm mb-1">Nâng lên Pro — tải không giới hạn</p>
+          {/* wording: BA review */}
+          <p className="text-fg font-semibold text-sm mb-1">Nâng lên Pro để tải nhiều hơn</p>
           <p className="text-fg-muted text-xs mb-3">
-            Xoá giới hạn ngày/tháng, ưu tiên queue, không có quảng cáo.
+            {/* wording: BA review */}
+            {proPlan
+              ? `Pro có ${proPlan.daily_downloads} lượt tải mỗi ngày${freePlan ? ` (Free: ${freePlan.daily_downloads})` : ''}, tải ZIP, API key và theo dõi tới ${proPlan.watch_sources} nguồn.`
+              : 'Xem bảng giá để so sánh hạn mức các gói.'}
           </p>
-          <button className="px-4 py-2 rounded-lg bg-accent text-accent-fg text-sm font-bold hover:opacity-90 transition">
+          <button type="button" onClick={goPricing} className="px-4 py-2 rounded-lg bg-accent text-accent-fg text-sm font-bold hover:opacity-90 transition">
             Xem gói Pro →
           </button>
         </div>
@@ -600,7 +613,9 @@ function fmtBytes(bytes) {
 }
 
 function StorageSection({ info, isPro }) {
-  const pinnedLimit = isPro ? 50 : 3;
+  const { free: freePlan, pro: proPlan } = usePlans();
+  const tierPlan = isPro ? proPlan : freePlan;
+  const pinnedLimit = tierPlan ? tierPlan.pins : 0;
   const pinnedCount = info.pinned_count ?? 0;
   const pinnedBytes = info.pinned_bytes ?? 0;
   const tempCount   = info.temp_count ?? 0;
@@ -626,7 +641,7 @@ function StorageSection({ info, isPro }) {
               File được ghim
             </div>
             <span className="text-fg-muted">
-              {pinnedCount} / {pinnedLimit} file · {fmtBytes(pinnedBytes)}
+              {pinnedCount}{tierPlan ? ` / ${pinnedLimit}` : ''} file · {fmtBytes(pinnedBytes)}
             </span>
           </div>
           <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
@@ -636,9 +651,10 @@ function StorageSection({ info, isPro }) {
             />
           </div>
           <p className="text-[11px] text-fg-muted">
-            {isPro
-              ? 'Pro: ghim tối đa 50 file · giữ 30 ngày'
-              : 'Free: ghim tối đa 3 file · giữ 7 ngày · Nâng cấp Pro để ghim nhiều hơn'}
+            {/* wording: BA review */}
+            {tierPlan
+              ? `${isPro ? 'Pro' : 'Free'}: ghim tối đa ${tierPlan.pins} file · giữ ${tierPlan.pin_days} ngày${!isPro && proPlan ? ` · Pro ghim được ${proPlan.pins} file` : ''}`
+              : 'Xem bảng giá để biết hạn mức ghim file.'}
           </p>
         </div>
 

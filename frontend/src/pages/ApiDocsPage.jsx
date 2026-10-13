@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { usePlans } from '../lib/usePlans';
 import { Code, ExternalLink, CheckCircle2, AlertCircle, Key, Zap, Shield } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -14,21 +15,35 @@ const ENDPOINTS = [
     description: 'Public API metadata: endpoints, rate limits, auth guide, error format.',
     response: `{ "api_version": "v1", "app_version": "...", "rate_limits": {...}, "public_endpoints": [...] }`,
   },
+  // wording: BA review (all endpoint descriptions below)
   {
-    method: 'POST', path: '/api/v1/fetch-link', auth: false,
-    description: 'Start a download. Returns a token for polling progress.',
-    request: `{ "url": "https://youtube.com/watch?v=...", "quality": "720" }`,
-    response: `{ "success": true, "token": "abc123", "cache_key": "abc123" }`,
+    method: 'POST', path: '/api/v1/fetch-link', auth: false, keyOptional: true,
+    description: 'Tải một link và chờ kết quả: request giữ kết nối cho đến khi xong (đồng bộ), không trả token để poll. Gửi API key thì chạy dưới tài khoản của bạn (hạn mức, chất lượng theo gói); không gửi thì chạy như khách. quality mặc định "video" (tối đa 1080p); các giá trị: "video", "video_fast" (nhanh, chất lượng thấp hơn), "video_4k" (tốt nhất có thể), "video_<chiều cao>" (ví dụ "video_720"), "mp3_128", "mp3_320". Chất lượng thực tế bị giới hạn theo gói của tài khoản. progress_token là tuỳ chọn do bạn tự đặt: gửi kèm để theo dõi tiến độ qua GET /progress/{token} trong lúc request đang chạy.',
+    request: `{ "url": "https://youtube.com/watch?v=...", "quality": "video", "progress_token": "my-token-123" }`,
+    response: `{
+  "success": true,
+  "title": "...",
+  "thumbnail_url": "...",
+  "direct_mp4_url": "...",
+  "local_file_id": "...",
+  "quality": "...",
+  "duration": 212,
+  "file_size_mb": 18.4,
+  "available_formats": [...],
+  "downloaded_height": 1080,
+  "subtitle_url": null
+}`,
   },
   {
     method: 'GET', path: '/api/v1/progress/{token}', auth: false,
-    description: 'Poll job status. Keep polling until status = "done" or "error".',
-    response: `{ "status": "done", "title": "...", "direct_mp4_url": "...", "formats": [...] }`,
+    description: 'Tiến độ tải theo progress_token bạn đã gửi trong POST /fetch-link, chỉ có ý nghĩa khi request đó còn đang chạy. Token chưa biết (hoặc chưa có tiến độ) trả status "pending". Không dùng để lấy kết quả cuối: kết quả nằm trong response của /fetch-link.',
+    response: `{ "status": "pending", "percent": 0, "speed_kbps": 0, "eta_seconds": 0 }`,
   },
   {
-    method: 'GET', path: '/api/v1/history', auth: false,
-    description: 'Recent jobs for the caller — your own when a token is sent, otherwise the anonymous pool. Supports ?limit=20&offset=0&platform=youtube&status=success.',
-    response: `{ "success": true, "jobs": [ { "id": "...", "title": "...", "status": "success", ... } ] }`,
+    method: 'GET', path: '/api/v1/history', auth: false, keyOptional: true,
+    description: 'Lịch sử tải của tài khoản khi có API key (mặc định limit=5; hỗ trợ ?limit=&offset=&platform=&status=success|failed|processing). Khách (không gửi key) nhận danh sách rỗng kèm local_only: true vì lịch sử khách chỉ nằm trên trình duyệt.',
+    response: `{ "success": true, "jobs": [ { "id": "...", "title": "...", "status": "success", ... } ] }
+// khách: { "success": true, "jobs": [], "local_only": true }`,
   },
   {
     method: 'GET', path: '/api/v1/user/history/export', auth: true,
@@ -37,8 +52,13 @@ const ENDPOINTS = [
   },
   {
     method: 'GET', path: '/api/v1/archive', auth: true,
-    description: 'Personal archive. Supports ?q=...&platform=...&is_starred=true&page=1.',
+    description: 'Kho lưu cá nhân. Hỗ trợ ?platform=&is_starred=&collection_id=&language=&file_status=available|pinned|expired&sort=&page=1&limit=20. Không có tham số q: tìm kiếm dùng GET /api/v1/archive/search.',
     response: `{ "items": [...], "total": 120, "page": 1 }`,
+  },
+  {
+    method: 'GET', path: '/api/v1/archive/search', auth: true,
+    description: 'Tìm trong kho lưu theo tiêu đề, tác giả, hashtag, ghi chú. ?q= (tối thiểu 2 ký tự, bắt buộc) và ?limit=20.',
+    response: `{ ... danh sách kết quả khớp ... }`,
   },
   {
     method: 'GET', path: '/api/v1/error-codes', auth: false,
@@ -67,6 +87,11 @@ const methodColor = (m) => {
 export default function ApiDocsPage() {
   const [apiVersion, setApiVersion] = useState(null);
   const [expanded, setExpanded] = useState(null);
+  const { free, pro } = usePlans();
+  // Daily allowance comes from /api/v1/plans; no number when it did not load.
+  const dailyText = free && pro
+    ? `Free ${free.daily_downloads} · Pro ${pro.daily_downloads} lượt/ngày`
+    : 'Theo gói tài khoản';
 
   useEffect(() => {
     fetch(`${API_BASE}/api/v1/api-info`)
@@ -103,15 +128,20 @@ export default function ApiDocsPage() {
           <Key className="w-4 h-4 text-fg-2" />
           <h2 className="text-base font-semibold text-fg">Xác thực</h2>
         </div>
+        {/* wording: BA review */}
         <p className="text-sm text-fg-muted">
-          Các endpoint công khai không cần auth nhưng bị giới hạn theo IP. Authenticated endpoints yêu cầu Bearer token.
+          Một số endpoint công khai không cần key nhưng bị giới hạn theo IP. Endpoint ghi “auth” bắt buộc có key.
+          Với <code className="bg-surface-2 px-1 rounded">/fetch-link</code> và <code className="bg-surface-2 px-1 rounded">/history</code>, key là tuỳ chọn:
+          gửi key thì request chạy dưới tài khoản của bạn.
         </p>
-        <div className="font-mono text-xs bg-surface-2 border border-line rounded-xl px-4 py-3 text-fg-2">
-          Authorization: Bearer &lt;your-api-key&gt;
+        <div className="font-mono text-xs bg-surface-2 border border-line rounded-xl px-4 py-3 text-fg-2 space-y-1">
+          <div>X-API-Key: vidgrab_&lt;your-api-key&gt;</div>
+          <div className="text-fg-muted">Authorization: Bearer vidgrab_&lt;your-api-key&gt;  (cũng được chấp nhận)</div>
         </div>
         <p className="text-xs text-fg-muted">
-          Tạo API key tại: <strong className="text-fg-2">Settings → API Access → Tạo API Key</strong>.
-          Mỗi key có thể bị thu hồi bất kỳ lúc nào.
+          {/* wording: BA review */}
+          Tạo API key tại trang <a href="#/api-keys" className="text-accent-text underline"><strong>API Keys</strong></a> (dành cho gói Pro, Team, Enterprise).
+          Mỗi key có thể bị thu hồi bất kỳ lúc nào. Key sai hoặc đã thu hồi trả HTTP 401 với <code className="bg-surface-2 px-1 rounded">{'{"error_code":"invalid_api_key"}'}</code>.
         </p>
       </div>
 
@@ -123,9 +153,10 @@ export default function ApiDocsPage() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
           {[
-            { label: 'Default', value: '60 req/phút/IP' },
-            { label: 'Fetch-link / Bulk', value: '5 req/phút/IP' },
-            { label: 'Daily quota (anon)', value: 'Theo cấu hình server' },
+            // wording: BA review
+            { label: 'Các endpoint khác', value: '60 request/phút/IP' },
+            { label: 'Fetch-link / Bulk-download', value: '30 request/phút/IP' },
+            { label: 'Lượt tải mỗi ngày', value: dailyText },
           ].map(r => (
             <div key={r.label} className="px-3 py-2.5 rounded-xl bg-surface-2 border border-line">
               <p className="text-fg-muted mb-0.5">{r.label}</p>
@@ -134,8 +165,9 @@ export default function ApiDocsPage() {
           ))}
         </div>
         <p className="text-xs text-fg-muted">
-          Khi bị rate-limited: HTTP 429 với header <code className="bg-surface-2 px-1 rounded">Retry-After</code>.
-          Dùng exponential backoff khi retry.
+          {/* wording: BA review */}
+          Vượt giới hạn tốc độ: HTTP 429. Hãy đợi khoảng một phút rồi thử lại, dùng exponential backoff.
+          Mọi lệnh tải qua API được tính vào hạn mức lượt tải mỗi ngày của tài khoản (không có hạn mức riêng theo tháng cho API).
         </p>
       </div>
 
@@ -154,6 +186,12 @@ export default function ApiDocsPage() {
                 {ep.method}
               </span>
               <code className="text-sm text-fg-2 font-mono flex-1">{ep.path}</code>
+              {ep.keyOptional && (
+                <span className="text-[10px] bg-surface-2 text-fg-2 border border-line px-1.5 py-0.5 rounded font-semibold flex-shrink-0">
+                  {/* wording: BA review */}
+                  key tuỳ chọn
+                </span>
+              )}
               {ep.auth && (
                 <span className="text-[10px] bg-surface-2 text-fg-2 border border-line px-1.5 py-0.5 rounded font-semibold flex-shrink-0">
                   auth
@@ -220,9 +258,11 @@ export default function ApiDocsPage() {
         <ul className="text-sm text-fg-muted space-y-1.5 list-disc list-inside">
           <li>Chỉ retry khi <code className="text-fg-2">retryable: true</code>.</li>
           <li>Dùng exponential backoff: 1s → 2s → 4s → 8s (tối đa 3 lần).</li>
-          <li>HTTP 429: đợi theo <code className="text-fg-2">Retry-After</code> header.</li>
+          {/* wording: BA review */}
+          <li>HTTP 429: đợi khoảng một phút rồi thử lại (không có header Retry-After).</li>
           <li>HTTP 5xx: retry với backoff; HTTP 4xx (ngoại trừ 429): không retry.</li>
-          <li>Nếu <code className="text-fg-2">status = "processing"</code>: poll lại sau 2–3s.</li>
+          {/* wording: BA review */}
+          <li>/fetch-link là đồng bộ: chờ response của chính request đó, đừng gửi lại khi chưa có kết quả (mỗi lần gửi tính một lượt tải). Muốn hiện tiến độ, tự đặt <code className="text-fg-2">progress_token</code> và poll <code className="text-fg-2">/progress/{'{token}'}</code>.</li>
         </ul>
       </div>
 

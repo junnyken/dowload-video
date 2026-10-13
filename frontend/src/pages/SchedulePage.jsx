@@ -5,6 +5,7 @@ import {
   AlertCircle, Check, X, Zap, Copy,
 } from 'lucide-react';
 import EmptyState from '../components/shared/EmptyState';
+import { usePlans } from '../lib/usePlans';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -366,6 +367,7 @@ function ScheduleRow({ job, onDelete, onToggle, onRunNow }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function SchedulePage() {
   const { session } = useAuth();
+  const { free: freePlan, pro: proPlan } = usePlans();
   const [schedules,   setSchedules]   = useState([]);
   const [collections, setCollections] = useState([]);
   const [loading,     setLoading]     = useState(false);
@@ -436,7 +438,8 @@ export default function SchedulePage() {
       {/* Tier hint */}
       <div className="mb-4 px-4 py-2.5 bg-surface-2 border border-line rounded-xl text-xs text-fg-muted flex items-center gap-2">
         <Calendar className="w-4 h-4 text-accent-text" />
-        Free: tối đa 3 lịch · Pro: không giới hạn · Scanner chạy mỗi 60 giây
+        {/* wording: BA review */}
+        {freePlan && proPlan ? `Free: tối đa ${freePlan.schedules} lịch · Pro: tối đa ${proPlan.schedules} lịch · ` : ''}Scanner chạy mỗi 60 giây
       </div>
 
       {/* Run-now feedback */}

@@ -22,19 +22,19 @@ const BANNER_CONFIG = {
   quota_warning: {
     icon: ArrowUpCircle,
     color: 'bg-accent-soft border-accent/30',
-    text: 'Bạn đã dùng hơn 80% quota hôm nay. Nâng cấp Pro để tải không giới hạn.',
+    text: 'Bạn đã dùng hơn 80% lượt tải hôm nay. Pro có hạn mức lượt tải cao hơn.', // wording: BA review
     cta: { label: 'Nâng cấp Pro', action: 'upgrade' },
   },
   quota_reached: {
     icon: ArrowUpCircle,
     color: 'bg-danger-soft border-danger/30',
-    text: 'Bạn đã hết quota hôm nay. Nâng cấp Pro để tiếp tục tải không giới hạn.',
+    text: 'Bạn đã hết lượt tải hôm nay. Lượt tải được tính lại mỗi ngày, hoặc xem gói Pro để có hạn mức cao hơn.', // wording: BA review
     cta: { label: 'Nâng cấp Pro ngay', action: 'upgrade' },
   },
   paywall_hit: {
     icon: ArrowUpCircle,
     color: 'bg-surface-2 border-line',
-    text: 'Tính năng này dành cho Pro — dùng nhiều tài nguyên hơn và cho phép chất lượng cao nhất.',
+    text: 'Tính năng này dành cho Pro — như tải ZIP, API key và theo dõi nhiều kênh hơn.', // wording: BA review
     cta: { label: 'Xem gói Pro', action: 'upgrade' },
   },
   extension_nudge: {

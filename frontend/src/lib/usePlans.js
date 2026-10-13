@@ -58,7 +58,7 @@ export function formatVnd(n) {
 export function qualityLabel(h) {
   const n = Number(h) || 0;
   if (n <= 0) return '—';
-  return n >= 2160 ? '4K' : n >= 1440 ? '2K' : `${n}p`;
+  return n >= 4320 ? '8K' : n >= 2160 ? '4K' : n >= 1440 ? '2K' : `${n}p`;
 }
 
 export function limitLabel(n, unit = '') {

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { ListMusic, RefreshCw, Trash2, Play, Plus, ExternalLink, Loader2 } from 'lucide-react';
 import { API_BASE } from '../lib/apiBase';
+import { usePlans } from '../lib/usePlans';
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 
@@ -22,6 +23,19 @@ function formatDate(iso) {
 export default function PlaylistsPage({ onNavigate }) {
   const { session } = useAuth();
   const apiBase = API_BASE;
+  const { tier: planOf } = usePlans();
+  const [myTier, setMyTier] = useState(null); // real tier from /api/v1/plans/me
+
+  useEffect(() => {
+    const token = session?.access_token;
+    if (!token) return undefined;
+    let alive = true;
+    fetch(`${API_BASE}/api/v1/plans/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d?.tier) setMyTier(d.tier); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [session?.access_token]);
 
   const [playlists, setPlaylists]   = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -128,9 +142,9 @@ export default function PlaylistsPage({ onNavigate }) {
     }
   };
 
-  // derive tier info from count
-  const isPro = playlists.length > 3;
-  const limit = isPro ? 20 : 3;
+  const isPro = myTier === 'pro';
+  const tierPlan = myTier ? planOf(myTier) : null;
+  const limit = tierPlan ? tierPlan.playlists : null;
 
   return (
     <div className="space-y-6">
@@ -186,10 +200,12 @@ export default function PlaylistsPage({ onNavigate }) {
       <div className="flex items-center justify-between text-xs text-fg-muted">
         <span>
           <span className="text-fg font-bold">{playlists.length}</span>
-          <span>/{limit}</span>
-          <span className="ml-1.5 text-[10px] font-bold text-accent-text bg-accent-soft border border-accent/20 px-1.5 py-0.5 rounded-full">
-            {isPro ? 'Pro' : 'Free'}
-          </span>
+          {limit != null && <span>/{limit}</span>}
+          {myTier && (
+            <span className="ml-1.5 text-[10px] font-bold text-accent-text bg-accent-soft border border-accent/20 px-1.5 py-0.5 rounded-full">
+              {isPro ? 'Pro' : 'Free'}
+            </span>
+          )}
         </span>
         <span>playlist đã lưu</span>
       </div>
