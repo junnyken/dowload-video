@@ -47,7 +47,8 @@ export function downloadNow(url: string, platform: string) {
       stop();
       void addToQueue(card).then((ok) => {
         if (ok) toast('success', `Đã thêm video ${platform} vừa sao chép vào hàng đợi.`);
-        else go('download');
+        // not added but the card is still there (e.g. no folder / disk space): finish on the Download screen
+        else if (probes.get().cards.some((c) => c.url === url)) go('download');
       });
     } else if (card.status === 'error') {
       stop();

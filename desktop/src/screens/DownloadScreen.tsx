@@ -8,7 +8,8 @@ import { createStore } from '../lib/store';
 import { ensureOutDir, settings } from '../lib/settings';
 import { enqueue } from '../lib/queue';
 import { api } from '../lib/tauri';
-import { go, openInChannels, prefill, toast } from '../lib/ui';
+import { confirmDialog, go, openInChannels, prefill, toast } from '../lib/ui';
+import { findDuplicate } from '../lib/dedupe';
 import { isChannelOnDownloadScreen as looksLikeChannelUrl } from '../lib/urls';
 
 const draft = createStore('');
@@ -19,6 +20,21 @@ export async function addToQueue(card: Card): Promise<boolean> {
   const { option, outDir } = cardSelection(card, st.defaultQuality, st.outDir);
   const r = card.result!;
   if (!outDir) return false;
+  // Already downloaded / already queued (14/10, dedupe.ts). wording: BA review
+  const dup = await findDuplicate(r.url || card.url);
+  if (dup?.kind === 'queued') {
+    toast('info', 'Video này đang có trong hàng đợi.');
+    removeCard(card.url);
+    return false;
+  }
+  if (dup?.kind === 'downloaded') {
+    const again = await confirmDialog({
+      title: 'Video này đã tải trước đó',
+      text: `Bạn đã tải “${dup.item.title}”${dup.date ? ` ngày ${dup.date}` : ''}. Tải lại lần nữa?`,
+      okLabel: 'Tải lại',
+    });
+    if (!again) { removeCard(card.url); return false; }
+  }
   const est = option.format?.filesize ?? null;
   if (est) {
     try {
