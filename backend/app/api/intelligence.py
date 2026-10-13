@@ -153,6 +153,10 @@ async def resolve_anomaly_route(anomaly_id: str, request: Request):
 
     await _require_admin(request)
     success = resolve_anomaly(anomaly_id)
+    if success:
+        from app.core.audit import log_admin_action
+        log_admin_action(request, "admin.anomaly.resolve", resource_type="anomaly",
+                         resource_id=anomaly_id)
     return {"success": success}
 
 
@@ -275,7 +279,10 @@ async def auto_tune_reset(request: Request):
     from app.core.auto_tuner import reset_to_defaults
 
     await _require_admin(request)
-    return reset_to_defaults()
+    result = reset_to_defaults()
+    from app.core.audit import log_admin_action
+    log_admin_action(request, "admin.auto_tune.reset")
+    return result
 
 
 # ══════════════════════════════════════════════════════════════════════════════
