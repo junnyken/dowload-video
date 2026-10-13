@@ -27,6 +27,30 @@ def post(b, ip=IP):
     return client.post(URL, json=b, headers={"X-Forwarded-For": ip})
 
 
+@pytest.fixture(autouse=True)
+def tg(monkeypatch):
+    sent = []
+
+    async def fake(msg, parse_mode="HTML"):
+        sent.append(msg)
+        return True
+    monkeypatch.setattr("app.core.notifications.send_telegram_message", fake)
+    return sent
+
+
+def test_new_request_notifies_owner_without_personal_data(rc, tg):
+    assert post(body()).status_code == 201
+    assert len(tg) == 1 and "youtube.com" in tg[0]
+    assert "a@example.com" not in tg[0] and "Nguyễn A" not in tg[0]
+
+
+def test_notify_failure_never_fails_the_submission(rc, monkeypatch):
+    async def boom(msg, parse_mode="HTML"):
+        raise RuntimeError("telegram down")
+    monkeypatch.setattr("app.core.notifications.send_telegram_message", boom)
+    assert post(body(), ip="203.0.113.78").status_code == 201
+
+
 @pytest.fixture
 def admin():
     fastapi_app.dependency_overrides[verify_admin] = lambda: None

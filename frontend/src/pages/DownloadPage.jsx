@@ -102,6 +102,13 @@ export default function DownloadPage() {
               // wording: BA review
               <p className="mt-2 text-fg-muted">Bộ cài đang được cập nhật, vui lòng quay lại sau.</p>
             )}
+            {url && /^[0-9a-f]{64}$/.test(String(info?.sha256 || '')) && (
+              <div className="mt-4 text-xs text-fg-muted">
+                {/* wording: BA review */}
+                <p className="mb-1">Mã kiểm tra SHA-256 của bộ cài (so với kết quả lệnh <code>Get-FileHash</code>, xem Câu hỏi thường gặp):</p>
+                <code className="block break-all rounded-lg bg-surface-2 px-2 py-1.5 text-fg-2 select-all">{info.sha256}</code>
+              </div>
+            )}
           </div>
         )}
       </section>

@@ -159,7 +159,23 @@ async def submit_takedown(req: TakedownRequest, request: Request):
         logger.exception("takedown: store failed")
         # wording: BA review
         raise HTTPException(status_code=503, detail="Chưa gửi được yêu cầu. Vui lòng thử lại sau ít phút.")
+    await _notify_new_request(rec)
     return {"ok": True, "id": rec["id"]}
+
+
+async def _notify_new_request(rec: dict) -> None:
+    """Tell the owner on Telegram (same channel as other alerts): without it
+    a request waits until someone opens the admin page. Never blocks or
+    fails the submission; no requester e-mail/name in the message."""
+    try:
+        from app.core.notifications import send_telegram_message  # noqa: PLC0415
+        from urllib.parse import urlsplit  # noqa: PLC0415
+        host = urlsplit(rec.get("content_url") or "").hostname or "?"
+        # wording: BA review
+        await send_telegram_message(
+            f"📩 Yêu cầu gỡ nội dung mới #{rec['id']} ({host}). Xem tại admin → Gỡ nội dung.", parse_mode="")
+    except Exception:  # noqa: BLE001
+        logger.info("takedown: telegram notice skipped")
 
 
 def _load(r) -> list[Dict[str, Any]]:
