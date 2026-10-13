@@ -95,7 +95,44 @@ def reserve(cost_usd: float, minutes: float) -> str:
         release(day, cost_usd, minutes)
         alert_ceiling_once(day, spend=new_spend - cost_usd, minutes=new_minutes - minutes)
         raise BudgetError(code="spend_ceiling_reached")
+    check_spend_alerts(day, new_spend)
     return day
+
+
+SPEND_ALERT_THRESHOLDS = (50, 80)   # 100 % = alert_ceiling_once on refusal
+
+
+def check_spend_alerts(day: str, spent: float | None = None) -> list[int]:
+    """Phase 34C: Telegram alert when today's ASR spend (reserved + settled)
+    crosses 50 / 80 % of the daily ceiling — same rule as the China access
+    layer (budget_guard.check_spend_alerts): one alert per threshold per UTC
+    day (SET NX), several crossed at once → one message naming the highest.
+    Never raises; Redis unreadable → no alert. Returns the thresholds claimed."""
+    try:
+        ceiling = config.spend_ceiling_usd()
+        if ceiling <= 0:
+            return []
+        r = _r()
+        if spent is None:
+            spent = _f(r.get(f"asr:spend:{day}"))
+        pct = spent * 100.0 / ceiling
+        newly = [t for t in SPEND_ALERT_THRESHOLDS
+                 if pct >= t and r.set(f"asr:spend_alert:{day}:{t}", "1", nx=True, ex=2 * 86400)]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("asr spend alert check failed: %s", type(exc).__name__)
+        return []
+    if newly:
+        top = max(newly)
+        try:
+            from app.core.alerts import send_admin_alert  # noqa: PLC0415
+            send_admin_alert(
+                "warning" if top >= 80 else "info",
+                f"ASR: chi phí đạt {top}% trần ngày",
+                f"Ngày {day} (UTC): ~${spent:.4f} / trần ${ceiling:.2f}.",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("asr spend alert send failed: %s", type(exc).__name__)
+    return newly
 
 
 def release(day: str, cost_usd: float, minutes: float) -> None:
@@ -222,6 +259,10 @@ def settle(job_id: str, actual_cost_usd: float, *, paid_started: bool,
             r.incrbyfloat(f"asr:spend:{day}", delta)
         if not paid_started:
             r.incrbyfloat(f"asr:minutes:{day}", -_f(meta.get("minutes")))
+        if paid_started and actual_cost_usd > 0:
+            # Phase 34C: 40-day per-day/per-user rollup (asr:spend is a 3-day ledger).
+            from app.services import unit_metrics  # noqa: PLC0415
+            unit_metrics.record_asr_cost(meta.get("quota_key"), actual_cost_usd)
         fields = {"actual_cost": f"{actual_cost_usd:.6f}", "finished_ts": f"{time.time():.3f}"}
         if paid_calls is not None:
             fields["paid_calls"] = str(paid_calls)

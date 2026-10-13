@@ -25,6 +25,7 @@ import OpsSignalsPage from './pages/OpsSignalsPage'
 import AsrPage from './pages/AsrPage'
 import ApifyCostsPage from './pages/ApifyCostsPage'
 import DesktopAppPage from './pages/DesktopAppPage'
+import MetricsPage from './pages/MetricsPage'
 import CobaltPage from './pages/CobaltPage'
 import TakedownAdminPage from './pages/TakedownAdminPage'
 import { PlatformsHubPage, QueueHubPage, AutomationHubPage } from './pages/MergedPages'
@@ -59,6 +60,7 @@ export function AdminRoutes() {
       <Route path="/vid-admin/apify-costs"        element={<Shell><ApifyCostsPage /></Shell>} />
       <Route path="/vid-admin/desktop-app"        element={<Shell><DesktopAppPage /></Shell>} />
       <Route path="/vid-admin/takedown"           element={<Shell><TakedownAdminPage /></Shell>} />
+      <Route path="/vid-admin/metrics"            element={<Shell><MetricsPage /></Shell>} />
       <Route path="/vid-admin/audit"     element={<Shell><AuditLogPage /></Shell>} />
 
       {/* Phase 3+ — Analytics now live */}
