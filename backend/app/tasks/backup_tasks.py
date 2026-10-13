@@ -48,6 +48,17 @@ With no S3 target configured the task still succeeds and reports
 "off-site: chưa cấu hình". When a target IS configured and the copy fails, that
 is a warning on the run, because believing you have an off-site backup you do
 not have is worse than knowing you have none.
+
+Redis configuration (task #6332)
+--------------------------------
+The same run also writes ``redis-config-<date>.json.gz``: the admin-made
+configuration held in Redis (allow-list and secret rules in
+app/core/redis_config_backup.py). Secrets are metadata-only unless the admin
+System Config entry ``backup_redis_include_secrets`` is ``true``; even then the
+copy WITH secrets goes only to the private Supabase bucket — S3 and Postgres
+always get the metadata-only copy. A Redis failure is a warning on the run; it
+never fails the database backup. Restore: backend/scripts/restore_redis_config.py,
+drill: docs/runbooks/backup-restore.md.
 """
 
 from __future__ import annotations
@@ -56,6 +67,7 @@ import gzip
 import io
 import json
 import os
+import re
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
@@ -243,7 +255,23 @@ def _pg_configured() -> bool:
     return bool(os.getenv("BACKUP_PG_DSN"))
 
 
-def _upload_postgres(name: str, blob: bytes) -> str | None:
+def _check_db_dump(restored: dict[str, Any]) -> str | None:
+    if not restored.get("tables"):
+        return "restored dump has no tables"
+    return None
+
+
+def _check_redis_dump(restored: dict[str, Any]) -> str | None:
+    from app.core.redis_config_backup import FORMAT  # noqa: PLC0415
+    if restored.get("format") != FORMAT:
+        return "restored file is not a Redis config backup"
+    if restored.get("include_secrets"):
+        # Defence in depth: this destination must never hold credentials.
+        return "refusing: Redis copy WITH secrets must not go to Postgres"
+    return None
+
+
+def _upload_postgres(name: str, blob: bytes, check=_check_db_dump) -> str | None:
     """
     Second copy, into a Postgres database on the hosting platform.
 
@@ -329,12 +357,14 @@ def _upload_postgres(name: str, blob: bytes) -> str | None:
             restored = json.loads(gzip.decompress(stored).decode("utf-8"))
         except Exception as exc:  # noqa: BLE001
             return f"Postgres copy FAILED: stored bytes do not restore: {str(exc)[:120]}"
-        if not restored.get("tables"):
-            return "Postgres copy FAILED: restored dump has no tables"
+        problem = check(restored)
+        if problem:
+            return f"Postgres copy FAILED: {problem}"
 
-        print(f"[Backup] Postgres copy verified: {len(stored)} bytes, "
+        print(f"[Backup] Postgres copy verified: {name} {len(stored)} bytes, "
               f"{len(restored.get('tables', {}))} tables, "
-              f"{len(restored.get('auth_users', []))} auth users")
+              f"{len(restored.get('auth_users', []))} auth users, "
+              f"{len(restored.get('keys', []))} redis keys")
         return None
     except Exception as exc:  # noqa: BLE001
         return f"Postgres copy FAILED: {str(exc)[:160]}"
@@ -343,6 +373,26 @@ def _upload_postgres(name: str, blob: bytes) -> str | None:
             conn.close()
         except Exception:
             pass
+
+
+_DATED = re.compile(r"^(?:vidgrab|redis-config)-(\d{4}-\d{2}-\d{2})\.json\.gz$")
+
+
+def _stale_names(names: list[str], cutoff: str) -> list[str]:
+    """
+    Backup files older than the cutoff date.
+
+    This used to be ``name < "vidgrab-<cutoff>"``, a string comparison that
+    would have deleted every ``redis-config-*`` file the day it was written
+    ("r" sorts before "v"). Compare the DATE in the name, and leave anything
+    that does not look like one of our files alone.
+    """
+    out = []
+    for n in names:
+        m = _DATED.match(n or "")
+        if m and m.group(1) < cutoff:
+            out.append(n)
+    return out
 
 
 def _prune(client: httpx.Client, url: str, key: str) -> int:
@@ -356,8 +406,7 @@ def _prune(client: httpx.Client, url: str, key: str) -> int:
         return 0
 
     cutoff = (datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)).strftime("%Y-%m-%d")
-    stale = [o["name"] for o in r.json()
-             if o.get("name", "") < f"vidgrab-{cutoff}"]
+    stale = _stale_names([o.get("name", "") for o in r.json()], cutoff)
     if not stale:
         return 0
 
@@ -368,6 +417,66 @@ def _prune(client: httpx.Client, url: str, key: str) -> int:
         json={"prefixes": stale},
     )
     return len(stale) if d.status_code == 200 else 0
+
+
+def _redis_raw():
+    """A client that returns bytes, so values are backed up exactly."""
+    import redis  # noqa: PLC0415
+    return redis.from_url(os.getenv("REDIS_URL", "redis://redis:6379/0"),
+                          socket_timeout=15, socket_connect_timeout=10)
+
+
+def _backup_redis_config(client: httpx.Client, url: str, key: str,
+                         day: str, rc=None) -> dict[str, Any]:
+    """
+    Export the Redis configuration and send it to the same destinations as the
+    database dump. Never raises: Redis being down must not cost the night's
+    database backup. Returns the "redis" part of the run result.
+    """
+    from app.core import redis_config_backup as rcb  # noqa: PLC0415
+
+    name = f"redis-config-{day}.json.gz"
+    out: dict[str, Any] = {"ok": False, "file": name, "warnings": []}
+    try:
+        rc = rc if rc is not None else _redis_raw()
+        with_secrets = rcb.include_secrets_setting(rc)
+        safe = rcb.export_redis_config(rc, include_secrets=False)
+        full = rcb.export_redis_config(rc, include_secrets=True) if with_secrets else None
+    except Exception as exc:  # noqa: BLE001
+        out["error"] = f"Redis export FAILED: {type(exc).__name__}: {str(exc)[:160]}"
+        return out
+
+    safe_blob = rcb.to_blob(safe)
+    # Private Supabase bucket: the copy with secrets when the owner turned that
+    # on; every other destination only ever receives the metadata-only copy.
+    bucket_blob = rcb.to_blob(full) if full is not None else safe_blob
+    warnings: list[str] = list(safe.get("warnings", []))
+    try:
+        _upload(client, url, key, name, bucket_blob)
+        bucket_ok = True
+    except Exception as exc:  # noqa: BLE001
+        bucket_ok = False
+        warnings.append(f"Redis config upload to Supabase FAILED: {str(exc)[:160]}")
+
+    s3_err = _upload_offsite(name, safe_blob)
+    if s3_err:
+        warnings.append(f"redis: {s3_err}")
+    pg_err = _upload_postgres(name, safe_blob, check=_check_redis_dump)
+    if pg_err:
+        warnings.append(f"redis: {pg_err}")
+
+    summary = (full or safe)["summary"]
+    out.update({
+        "ok": bucket_ok,
+        "bytes": len(bucket_blob),
+        "keys": sum(g["keys"] for g in summary.values()),
+        "secrets_included": full is not None,
+        "groups": summary,
+        "offsite": _s3_configured() and not s3_err,
+        "postgres": _pg_configured() and not pg_err,
+        "warnings": warnings,
+    })
+    return out
 
 
 @celery_app.task(name="backup_database_daily", ignore_result=True)
@@ -427,6 +536,12 @@ def backup_database_daily() -> dict[str, Any]:
             warnings.append(pg_err)
         pg_state = "có" if (_pg_configured() and not pg_err) else "chưa cấu hình"
 
+        with httpx.Client(timeout=TIMEOUT) as client:
+            redis_part = _backup_redis_config(client, url, key, started.strftime("%Y-%m-%d"))
+        if redis_part.get("error"):
+            warnings.append(redis_part["error"])
+        warnings.extend(redis_part.get("warnings", []))
+
         total_rows = sum(counts.values())
         size_kb = len(blob) / 1024
         print(f"[Backup] {name}: {total_rows} rows across {len(counts)} tables, "
@@ -438,6 +553,15 @@ def backup_database_daily() -> dict[str, Any]:
             top = sorted(counts.items(), key=lambda kv: -kv[1])[:5]
             lines = "\n".join(f"  • {t}: {n}" for t, n in top if n)
             warn_block = ("\n⚠️ " + "\n⚠️ ".join(warnings[:5])) if warnings else ""
+            # wording: BA review
+            if redis_part.get("ok"):
+                secret_note = ("có kèm bí mật (chỉ trong kho Supabase)"
+                               if redis_part.get("secrets_included")
+                               else "bí mật chỉ ghi số lượng")
+                redis_line = (f"🧠 Cấu hình Redis: {redis_part.get('keys', 0)} khoá, "
+                              f"{redis_part.get('bytes', 0) / 1024:.1f} KB — {secret_note}\n")
+            else:
+                redis_line = "🧠 Cấu hình Redis: KHÔNG sao lưu được\n"
             send_telegram_message_sync(
                 "💾 <b>Sao lưu CSDL</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
@@ -446,6 +570,7 @@ def backup_database_daily() -> dict[str, Any]:
                 f"📦 {size_kb:.1f} KB\n"
                 f"🌍 Bản off-site (S3/R2): {offsite}\n"
                 f"🐘 Bản Postgres: {pg_state}\n"
+                f"{redis_line}"
                 f"{lines}{warn_block}"
             )
         except Exception as exc:  # noqa: BLE001
@@ -455,6 +580,7 @@ def backup_database_daily() -> dict[str, Any]:
                 "tables": len(counts), "bytes": len(blob),
                 "offsite": _s3_configured() and not offsite_err,
                 "postgres": _pg_configured() and not pg_err,
+                "redis": redis_part,
                 "warnings": warnings}
 
     except Exception as exc:  # noqa: BLE001
