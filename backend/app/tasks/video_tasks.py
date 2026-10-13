@@ -205,14 +205,17 @@ def _platform_sleep(url: str):
     delay = random.uniform(lo, hi)
     time.sleep(delay)
 
-def _track_platform(url: str, success: bool, error_code: Optional[str] = None) -> None:
+def _track_platform(url: str, success: bool, error_code: Optional[str] = None,
+                    duration_ms: Optional[int] = None) -> None:
     """Count one finished attempt (same counters as routes.py _track_download —
-    see app.core.download_outcomes). Synchronous: a worker is off the request path."""
+    see app.core.download_outcomes). Synchronous: a worker is off the request path.
+    ``duration_ms`` (Phase 34C): time to result of a success, this attempt."""
     try:
         from app.core.download_outcomes import record
         plat = _get_platform(url)
         # "other" is also counted per domain so the admin can break it down.
-        record(plat, success, error_code, domain=url if plat == "other" else None)
+        record(plat, success, error_code, domain=url if plat == "other" else None,
+               duration_ms=duration_ms if success else None)
     except Exception:
         pass
 
@@ -452,7 +455,7 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
         except Exception:
             update_data.pop("file_size_mb", None)
             _sb_update(supabase, update_data, job_id)
-        _track_platform(url, True)
+        _track_platform(url, True, duration_ms=int((time.time() - task_start) * 1000))
         try:
             from app.core.metrics import emit_job_event as _emit
             _emit("succeeded", job_id=job_id, platform=platform)

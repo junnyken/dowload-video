@@ -177,3 +177,17 @@ def send_phase14_daily_digest():
         send_telegram_message_sync(msg)
     except Exception as e:
         print(f"[Digest] send_phase14_daily_digest error: {e}")
+
+
+# ── Phase 34C weekly metrics report ──────────────────────────────────
+@celery_app.task(name="send_weekly_metrics_report", ignore_result=True)
+def send_weekly_metrics_report():
+    """Monday 08:00 Asia/Ho_Chi_Minh (beat entry at 01:00 UTC — the Celery app
+    runs on UTC). Does nothing unless the admin flag
+    admin:config:metrics_weekly_report_enabled is on; once per ISO week."""
+    try:
+        from app.services.unit_metrics import send_weekly_report
+        res = send_weekly_report(force=False)
+        print(f"[Metrics] weekly report: sent={res.get('sent')} skipped={res.get('skipped')}")
+    except Exception as e:
+        print(f"[Metrics] weekly report error: {e}")

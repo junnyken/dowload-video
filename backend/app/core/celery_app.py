@@ -351,5 +351,13 @@ celery_app.conf.update(
             'task': 'supabase_keepalive_ping',
             'schedule': 86400.0,
         },
+        # Phase 34C (task #6334): weekly metrics report, Monday 08:00
+        # Asia/Ho_Chi_Minh. This app's timezone is UTC (enable_utc), so the
+        # crontab is written in UTC: 08:00 UTC+7 = 01:00 UTC, still Monday.
+        # Off unless the admin flag metrics_weekly_report_enabled is on.
+        'weekly-metrics-report': {
+            'task': 'send_weekly_metrics_report',
+            'schedule': crontab(hour=1, minute=0, day_of_week='mon'),
+        },
     }
 )

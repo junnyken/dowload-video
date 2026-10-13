@@ -536,6 +536,9 @@ from app.api.admin_desktop import router as admin_desktop_router
 app.include_router(admin_desktop_router, prefix="/api/v1/admin", tags=["Admin Desktop App"])
 from app.api.admin_cobalt import router as admin_cobalt_router
 app.include_router(admin_cobalt_router, prefix="/api/v1/admin", tags=["Admin Cobalt"])
+# Phase 34C (task #6334) — "Đo lường": success / costs / adoption + weekly report
+from app.api.admin_metrics import router as admin_metrics_router
+app.include_router(admin_metrics_router, prefix="/api/v1/admin", tags=["Admin Metrics"])
 # Phase 33A — Channel Watch "Theo dõi kênh" (task #6257); off unless WATCH_ENABLED
 from app.api import watch as watch_api
 from app.services.channel_watch import WatchError as _WatchError

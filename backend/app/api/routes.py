@@ -11,6 +11,7 @@ from app.core.twitter_host import is_twitter_url
 import ipaddress
 import os
 import threading
+import time as _time_mod
 import uuid
 from typing import List, Optional
 from urllib.parse import quote, urlparse
@@ -26,18 +27,22 @@ from fastapi.responses import StreamingResponse
 # moved to app.core.platform_key so the worker can share it.
 from app.core.platform_key import platform_key as _get_platform_key  # noqa: E402
 
-def _track_download(url: str, success: bool, error_code: Optional[str] = None) -> None:
+def _track_download(url: str, success: bool, error_code: Optional[str] = None,
+                    duration_ms: Optional[int] = None) -> None:
     """Count one finished download attempt (vidgrab:stats:YYYY-MM-DD → platform:(ok|err),
     plus hourly buckets, error codes and last-success time — see
     app.core.download_outcomes). Queued on a background thread: never raises,
-    never makes /fetch-link wait on Redis."""
+    never makes /fetch-link wait on Redis. ``duration_ms`` (Phase 34C) feeds
+    the time-to-result histogram of successes."""
     try:
         from app.core.download_outcomes import record_async
         plat = _get_platform_key(url)
+        kw = {}
         if plat == "other":   # also counted per domain (admin "other" breakdown)
-            record_async(plat, success, error_code, domain=url)
-        else:
-            record_async(plat, success, error_code)
+            kw["domain"] = url
+        if success and duration_ms is not None:
+            kw["duration_ms"] = int(duration_ms)
+        record_async(plat, success, error_code, **kw)
     except Exception:
         pass
 
@@ -533,6 +538,7 @@ async def fetch_link(
     user=Depends(get_optional_user),
     x_vg_source: Optional[str] = Header(None, alias="X-VG-Source"),
 ):
+    _t0_result = _time_mod.monotonic()   # Phase 34C: time to result (successes)
     if not payload.url:
         raise HTTPException(status_code=400, detail="URL is required")
     # Share text ("… https://v.douyin.com/x/ 复制此链接…") -> the URL itself.
@@ -877,7 +883,8 @@ async def fetch_link(
         ):
             raise ValueError("Không tạo được file nhạc từ nguồn này. Vui lòng thử lại sau.")
 
-        _track_download(payload.url, True)
+        _track_download(payload.url, True,
+                        duration_ms=int((_time_mod.monotonic() - _t0_result) * 1000))
         _outcome_counted = True
         try:
             from app.core.obs_recorder import record_success as _obs_ok

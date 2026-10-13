@@ -348,6 +348,14 @@ def reconcile(res: Reservation, actual_usd: Optional[float], run_started: bool) 
             r.expire(k, _MONTH_TTL)
         except Exception as exc:  # noqa: BLE001
             logger.warning("china_access reconcile record failed: %s", type(exc).__name__)
+    if run_started and recorded:
+        # Phase 34C: who this paid run is charged to (top-users table). O(1),
+        # never raises; guests land in one "_unattributed" bucket, no IP kept.
+        try:
+            from app.services import unit_metrics  # noqa: PLC0415
+            unit_metrics.record_user_cost(res.requester, recorded)
+        except Exception:  # noqa: BLE001
+            pass
     if out["cost_flag"]:
         logger.warning("china_access cost %s: provider=%s est=%.6f actual=%s", out["cost_flag"],
                        res.budget_class, est / 1e6, out["actual_cost_usd"])

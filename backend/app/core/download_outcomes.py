@@ -96,6 +96,13 @@ ERRCODE_HOUR_KEY_TPL = "vidgrab:errcodes_hourly:{hour}"
 HOURLY_SINCE_KEY = "vidgrab:stats_hourly:since"
 OTHER_DOMAIN_HOUR_KEY_TPL = "vidgrab:other_domains_hourly:{hour}"
 OTHER_DOMAIN_SEEN_KEY_TPL = "vidgrab:other_domains_seen:{date}"
+# Phase 34C (task #6334): time to result of SUCCESSFUL downloads, as a fixed
+# histogram per UTC day — field "{platform}:{upper bound ms}" ("inf" = longer
+# than the last bound). O(1) HINCRBY in the same pipeline; percentiles are
+# read back as "at most N seconds" (bucket upper bound), never interpolated.
+LATENCY_KEY_TPL = "vidgrab:latency:{date}"
+LATENCY_BUCKETS_MS = (1000, 2000, 3000, 5000, 8000, 13000, 20000, 30000, 45000,
+                      60000, 90000, 120000, 180000, 300000)
 MAX_OTHER_DOMAINS_PER_DAY = 200
 OTHER_DOMAIN_OVERFLOW = "_overflow"       # domains past the daily cap
 OTHER_DOMAIN_UNKNOWN = "_unknown"         # no parsable host / IP address
@@ -183,12 +190,26 @@ def hour_str(dt: datetime) -> str:
 
 # ── Write path ───────────────────────────────────────────────────────────────
 
+def latency_bucket(duration_ms) -> str:
+    """Histogram field suffix for one duration: the first bound >= it, or "inf"."""
+    try:
+        ms = max(0, int(duration_ms))
+    except (TypeError, ValueError):
+        return "inf"
+    for b in LATENCY_BUCKETS_MS:
+        if ms <= b:
+            return str(b)
+    return "inf"
+
+
 def record(platform: str, success: bool, error_code: Optional[str] = None,
-           *, now: Optional[datetime] = None, domain: Optional[str] = None) -> None:
+           *, now: Optional[datetime] = None, domain: Optional[str] = None,
+           duration_ms: Optional[int] = None) -> None:
     """Count one finished download. Synchronous, never raises.
 
     ``domain`` (the URL, or a host) is only used when the platform is
-    "other": it is reduced to its registrable domain and counted per hour."""
+    "other": it is reduced to its registrable domain and counted per hour.
+    ``duration_ms`` (successes only) feeds the time-to-result histogram."""
     try:
         now = now or _now()
         plat = _slug(platform, "other")
@@ -218,6 +239,10 @@ def record(platform: str, success: bool, error_code: Optional[str] = None,
         if success:
             pipe.set(LAST_TS_KEY_TPL.format(platform=plat, kind="success"),
                      now.isoformat(), ex=LAST_TS_TTL)
+            if duration_ms is not None:
+                lkey = LATENCY_KEY_TPL.format(date=day_str(now))
+                pipe.hincrby(lkey, f"{plat}:{latency_bucket(duration_ms)}", 1)
+                pipe.expire(lkey, DAY_TTL)
         else:
             code = _slug(error_code, "unknown")
             err_key = ERRCODE_KEY_TPL.format(date=day_str(now))
@@ -247,20 +272,22 @@ def _get_executor() -> ThreadPoolExecutor:
         return _executor
 
 
-def _run(platform, success, error_code, now, domain=None):
+def _run(platform, success, error_code, now, domain=None, duration_ms=None):
     global _pending
     try:
-        if domain is None:
-            record(platform, success, error_code, now=now)
-        else:
-            record(platform, success, error_code, now=now, domain=domain)
+        kw = {}
+        if domain is not None:
+            kw["domain"] = domain
+        if duration_ms is not None:
+            kw["duration_ms"] = duration_ms
+        record(platform, success, error_code, now=now, **kw)
     finally:
         with _pending_lock:
             _pending -= 1
 
 
 def record_async(platform: str, success: bool, error_code: Optional[str] = None,
-                 *, domain: Optional[str] = None) -> None:
+                 *, domain: Optional[str] = None, duration_ms: Optional[int] = None) -> None:
     """Queue ``record`` on a background thread. Never raises, never blocks on Redis.
 
     The timestamp is taken now, so a slow queue still lands the count in the
@@ -274,7 +301,7 @@ def record_async(platform: str, success: bool, error_code: Optional[str] = None,
                 return
             _pending += 1
         try:
-            _get_executor().submit(_run, platform, success, error_code, _now(), domain)
+            _get_executor().submit(_run, platform, success, error_code, _now(), domain, duration_ms)
         except Exception:
             with _pending_lock:
                 _pending -= 1
@@ -328,6 +355,32 @@ def read_days(dates: Iterable[str]) -> Dict[str, Optional[Dict[str, Dict[str, in
     out: Dict[str, Optional[Dict[str, Dict[str, int]]]] = {}
     for d, raw in zip(dates, raws):
         out[d] = _parse_okerr(raw) if raw else None
+    return out
+
+
+def read_latency(dates: Iterable[str]) -> Dict[str, Optional[Dict[str, Dict[str, int]]]]:
+    """{date: {platform: {bucket: count}}} — None for a day with no histogram
+    (nothing recorded yet / expired)."""
+    dates = list(dates)
+    pipe = _redis().pipeline(transaction=False)
+    for d in dates:
+        pipe.hgetall(LATENCY_KEY_TPL.format(date=d))
+    out: Dict[str, Optional[Dict[str, Dict[str, int]]]] = {}
+    for d, raw in zip(dates, pipe.execute()):
+        if not raw:
+            out[d] = None
+            continue
+        per: Dict[str, Dict[str, int]] = {}
+        for k, v in raw.items():
+            key = _decode(k)
+            if ":" not in key:
+                continue
+            plat, bucket = key.rsplit(":", 1)
+            try:
+                per.setdefault(plat, {})[bucket] = per.get(plat, {}).get(bucket, 0) + int(_decode(v))
+            except Exception:
+                continue
+        out[d] = per
     return out
 
 
