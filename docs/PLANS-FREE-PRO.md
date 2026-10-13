@@ -3,6 +3,7 @@
 > **ĐÃ CHỐT + LÀM XONG 13/10** (owner đồng ý mục 2, giá 49.000đ/399.000đ, thanh toán A):
 > `/api/v1/plans` (b95df08), Pro không thấp hơn Free (fc8e292), `/pricing` + hộp nâng cấp + admin cấp Pro 30/365 ngày (09c96de, e78ffbe).
 > Việc owner: Admin → Người dùng → "Gói & thanh toán": điền ngân hàng, số tài khoản, chủ tài khoản (chưa điền thì trang giá chỉ hiện "Liên hệ").
+> **Hạn mức gọi API theo tháng (14/10, beb2834):** Pro 3.000, Team 10.000 lượt/tháng (sửa ở "Gói & thanh toán"), Enterprise không giới hạn. Mỗi request có API key = 1 lượt; hết lượt → 429 `api_monthly_quota_exceeded`, làm mới 00:00 UTC ngày 1. Header `X-API-Quota-*`; xem lượt: `GET /api/v1/api-keys/usage`.
 > Cấp Pro: khách chuyển khoản ghi mã `VGxxxxxxxx` → Admin → Người dùng → "Tìm theo mã chuyển khoản" → Cấp Pro 30/365 ngày. Hết hạn tự về Free (00:30 UTC).
 
 Nguồn: đọc mã nhánh `main` (92d7e84). "Đang chạy" = giá trị mặc định trong mã; biến môi trường production có thể khác (chưa đọc được giá trị env production). Giá tiền dưới đây là **đề xuất để owner chọn**, chưa dựa trên số đo chi phí (kế hoạch 34E yêu cầu giá theo chi phí đo được; trang Admin → Đo lường có số liệu đó).

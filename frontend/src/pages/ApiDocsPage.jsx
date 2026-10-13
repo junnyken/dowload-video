@@ -92,6 +92,10 @@ export default function ApiDocsPage() {
   const dailyText = free && pro
     ? `Free ${free.daily_downloads} · Pro ${pro.daily_downloads} lượt/ngày`
     : 'Theo gói tài khoản';
+  // wording: BA review
+  const monthlyText = pro && pro.api_calls_per_month > 0
+    ? `Pro ${pro.api_calls_per_month.toLocaleString('vi-VN')} lượt/tháng`
+    : pro && pro.api_calls_per_month === -1 ? 'Không giới hạn' : 'Theo gói tài khoản';
 
   useEffect(() => {
     fetch(`${API_BASE}/api/v1/api-info`)
@@ -151,11 +155,12 @@ export default function ApiDocsPage() {
           <Zap className="w-4 h-4 text-accent-text" />
           <h2 className="text-base font-semibold text-fg">Giới hạn tốc độ</h2>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
           {[
             // wording: BA review
             { label: 'Các endpoint khác', value: '60 request/phút/IP' },
             { label: 'Fetch-link / Bulk-download', value: '30 request/phút/IP' },
+            { label: 'Lượt gọi API mỗi tháng', value: monthlyText },
             { label: 'Lượt tải mỗi ngày', value: dailyText },
           ].map(r => (
             <div key={r.label} className="px-3 py-2.5 rounded-xl bg-surface-2 border border-line">
@@ -167,7 +172,18 @@ export default function ApiDocsPage() {
         <p className="text-xs text-fg-muted">
           {/* wording: BA review */}
           Vượt giới hạn tốc độ: HTTP 429. Hãy đợi khoảng một phút rồi thử lại, dùng exponential backoff.
-          Mọi lệnh tải qua API được tính vào hạn mức lượt tải mỗi ngày của tài khoản (không có hạn mức riêng theo tháng cho API).
+        </p>
+        <p className="text-xs text-fg-muted">
+          {/* wording: BA review — owner 14/10 monthly API quota */}
+          Mỗi request gửi kèm API key được tính 1 lượt gọi vào hạn mức <strong>tháng</strong> của tài khoản (tính theo tháng UTC,
+          làm mới 00:00 UTC ngày 1). Hết lượt: HTTP 429 với{' '}
+          <code className="bg-surface-2 px-1 rounded">{'{"error_code":"api_monthly_quota_exceeded","reset_at":"…"}'}</code>.
+          Mọi phản hồi của request có key kèm header{' '}
+          <code className="bg-surface-2 px-1 rounded">X-API-Quota-Limit</code>,{' '}
+          <code className="bg-surface-2 px-1 rounded">X-API-Quota-Remaining</code>,{' '}
+          <code className="bg-surface-2 px-1 rounded">X-API-Quota-Reset</code> (Unix time).
+          Xem số lượt đã dùng: <code className="bg-surface-2 px-1 rounded">GET /api/v1/api-keys/usage</code>.
+          Lệnh tải qua API vẫn trừ thêm vào hạn mức lượt tải mỗi ngày.
         </p>
       </div>
 

@@ -27,6 +27,8 @@ export async function grantPro(userId: string, days: 30 | 365): Promise<GrantRes
 interface PlanSettings {
   price_month_vnd: number
   price_year_vnd: number
+  api_calls_month_pro: number
+  api_calls_month_team: number
   bank_name: string
   bank_account: string
   bank_holder: string
@@ -50,7 +52,7 @@ export function PlansSettingsCard() {
   useEffect(() => { load() }, [load])
 
   const set = (k: keyof PlanSettings, v: string) =>
-    setForm(f => (f ? { ...f, [k]: k.startsWith('price_') ? (v === '' ? 0 : Number(v)) : v } : f))
+    setForm(f => (f ? { ...f, [k]: (k.startsWith('price_') || k.startsWith('api_calls_')) ? (v === '' ? 0 : Number(v)) : v } : f))
 
   async function save() {
     if (!form) return
@@ -84,6 +86,15 @@ export function PlansSettingsCard() {
           <label className="text-xs text-fg-2">Giá Pro / năm (đồng)
             <input type="number" inputMode="numeric" value={form.price_year_vnd} className={inputCls}
               onChange={e => set('price_year_vnd', e.target.value)} />
+          </label>
+          {/* wording: BA review — owner 14/10 monthly API quota */}
+          <label className="text-xs text-fg-2">Lượt gọi API / tháng — Pro
+            <input type="number" inputMode="numeric" value={form.api_calls_month_pro} className={inputCls}
+              onChange={e => set('api_calls_month_pro', e.target.value)} />
+          </label>
+          <label className="text-xs text-fg-2">Lượt gọi API / tháng — Team
+            <input type="number" inputMode="numeric" value={form.api_calls_month_team} className={inputCls}
+              onChange={e => set('api_calls_month_team', e.target.value)} />
           </label>
           <label className="text-xs text-fg-2">Ngân hàng
             <input value={form.bank_name} maxLength={120} className={inputCls} onChange={e => set('bank_name', e.target.value)} />

@@ -60,7 +60,16 @@ export function buildPlanRows(tiers) {
       key: 'schedules', label: 'Lịch tải',
       get: (t) => (t.schedules > 0 || t.schedules === -1 ? per(t.schedules, 'lịch') : false),
     },
-    { key: 'api', label: 'API key', get: (t) => !!t.api_key },
+    {
+      // owner 14/10: monthly API call quota (backend app/core/api_quota.py)
+      key: 'api', label: 'API key',
+      get: (t) => {
+        if (!t.api_key) return false;
+        const n = t.api_calls_per_month;
+        if (n === -1) return 'Không giới hạn lượt gọi';
+        return n > 0 ? `${n.toLocaleString('vi-VN')} lượt gọi/tháng` : true;
+      },
+    },
   ];
   return rows.filter((r) => !(r.hideIfNone && r.hideIfNone(tiers)));
 }

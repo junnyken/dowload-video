@@ -215,6 +215,18 @@ export default function ApiKeysPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // This month's API calls (owner 14/10, GET /api/v1/api-keys/usage).
+  const [usage, setUsage] = useState(null);
+  useEffect(() => {
+    if (!token) return undefined;
+    let alive = true;
+    fetch(`${apiBase}/api/v1/api-keys/usage`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive) setUsage(d); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [apiBase, token, keys]);
+
   const revoke = async (keyId) => {
     if (!window.confirm('Xác nhận thu hồi key này? Hành động không thể hoàn tác.')) return;
     setRevoking(keyId);
@@ -244,7 +256,8 @@ export default function ApiKeysPage() {
           </div>
           <div>
             <h1 className="text-fg font-bold text-lg">API Keys</h1>
-            <p className="text-fg-muted text-xs">Tối đa {MAX_KEYS} key. Quota chia sẻ với tài khoản web.</p>
+            {/* wording: BA review */}
+            <p className="text-fg-muted text-xs">Tối đa {MAX_KEYS} key. Lượt gọi API tính theo tháng cho cả tài khoản; lượt tải qua API vẫn trừ vào hạn mức tải mỗi ngày.</p>
           </div>
         </div>
         <button
@@ -257,11 +270,34 @@ export default function ApiKeysPage() {
         </button>
       </div>
 
+      {/* Monthly API quota — wording: BA review */}
+      {usage && usage.limit !== 0 && (
+        <div className="mb-4 p-3 rounded-xl bg-surface border border-line">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-fg font-semibold">Lượt gọi API tháng {usage.month}</span>
+            <span className="text-fg-2 tabular-nums">
+              {usage.limit === -1
+                ? `${usage.used ?? '—'} lượt · không giới hạn`
+                : `${usage.used ?? '—'} / ${Number(usage.limit).toLocaleString('vi-VN')}`}
+            </span>
+          </div>
+          {usage.limit > 0 && typeof usage.used === 'number' && (
+            <div className="mt-2 h-1.5 rounded-full bg-surface-2 overflow-hidden" aria-hidden="true">
+              <div className="h-full bg-accent" style={{ width: `${Math.min(100, (usage.used / usage.limit) * 100)}%` }} />
+            </div>
+          )}
+          <p className="mt-1.5 text-fg-muted text-[11px]">
+            Làm mới ngày {new Date(usage.reset_at).toLocaleDateString('vi-VN')} (00:00 UTC).
+          </p>
+        </div>
+      )}
+
       {/* Docs link */}
       <div className="mb-6 p-3 rounded-xl bg-surface border border-line flex items-center justify-between">
         <div>
           <p className="text-fg text-xs font-semibold">Xác thực bằng header</p>
           <code className="text-fg-muted text-xs">X-API-Key: vidgrab_xxxxxxxx...</code>
+          <p className="text-fg-muted text-[11px]">hoặc Authorization: Bearer vidgrab_…</p>
         </div>
         <a
           href="/api-docs"
