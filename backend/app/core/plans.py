@@ -22,6 +22,14 @@ from typing import Any, Dict, List, Optional
 SETTINGS_KEY = "plans:settings"
 DEFAULT_PRICE_MONTH_VND = 49_000      # owner 13/10
 DEFAULT_PRICE_YEAR_VND = 399_000      # owner 13/10
+DEFAULT_API_CALLS_MONTH_PRO = 3_000   # owner 14/10 (app.core.api_quota)
+DEFAULT_API_CALLS_MONTH_TEAM = 10_000
+_INT_FIELDS = {
+    "price_month_vnd": (1_000, 50_000_000, "Giá phải từ 1.000đ đến 50.000.000đ"),
+    "price_year_vnd": (1_000, 50_000_000, "Giá phải từ 1.000đ đến 50.000.000đ"),
+    "api_calls_month_pro": (0, 10_000_000, "Lượt gọi API/tháng phải từ 0 đến 10.000.000"),
+    "api_calls_month_team": (0, 10_000_000, "Lượt gọi API/tháng phải từ 0 đến 10.000.000"),
+}
 _TEXT_FIELDS = ("bank_name", "bank_account", "bank_holder", "contact")
 _TEXT_MAX = 120
 
@@ -38,6 +46,8 @@ def get_settings() -> Dict[str, Any]:
     out: Dict[str, Any] = {
         "price_month_vnd": DEFAULT_PRICE_MONTH_VND,
         "price_year_vnd": DEFAULT_PRICE_YEAR_VND,
+        "api_calls_month_pro": DEFAULT_API_CALLS_MONTH_PRO,
+        "api_calls_month_team": DEFAULT_API_CALLS_MONTH_TEAM,
         **{f: "" for f in _TEXT_FIELDS},
     }
     try:
@@ -47,7 +57,7 @@ def get_settings() -> Dict[str, Any]:
     for k, v in raw.items():
         k = k.decode() if isinstance(k, bytes) else k
         v = v.decode() if isinstance(v, bytes) else v
-        if k in ("price_month_vnd", "price_year_vnd"):
+        if k in _INT_FIELDS:
             try:
                 out[k] = int(v)
             except (TypeError, ValueError):
@@ -61,14 +71,14 @@ def set_settings(patch: Dict[str, Any]) -> Dict[str, Any]:
     """Validate and store the given fields. Raises ValueError (Vietnamese
     message) on a bad value."""
     clean: Dict[str, str] = {}
-    for k in ("price_month_vnd", "price_year_vnd"):
+    for k, (lo, hi, msg) in _INT_FIELDS.items():
         if k in patch and patch[k] is not None:
             try:
                 n = int(patch[k])
             except (TypeError, ValueError):
-                raise ValueError("Giá phải là số nguyên (đồng)")
-            if not 1_000 <= n <= 50_000_000:
-                raise ValueError("Giá phải từ 1.000đ đến 50.000.000đ")
+                raise ValueError(msg)
+            if not lo <= n <= hi:
+                raise ValueError(msg)
             clean[k] = str(n)
     for k in _TEXT_FIELDS:
         if k in patch and patch[k] is not None:
@@ -143,7 +153,7 @@ def build_plans() -> Dict[str, Any]:
             "max_height": guest_h,
             "youtube_per_day": yt_quota.YT_QUOTA_ANON, "youtube_max_height": yt_anon_h,
             "batch_links": free_p["batch_limit"],
-            "zip": False, "api_key": False,
+            "zip": False, "api_key": False, "api_calls_per_month": 0,
             "spotify_artist_tracks": sp.ARTIST_CAP_TOP_TRACKS,
             "smart_analysis_per_day": anon_ai,
             "watch_sources": 0,
@@ -157,6 +167,7 @@ def build_plans() -> Dict[str, Any]:
             "youtube_per_day": yt_quota.YT_QUOTA_USER, "youtube_max_height": yt_user_h,
             "batch_links": free_p["batch_limit"],
             "zip": bool(free_p["bulk_zip"]), "api_key": bool(free_p["api_key"]),
+            "api_calls_per_month": 0,
             "spotify_artist_tracks": sp.ARTIST_CAP_TOP_TRACKS,
             "smart_analysis_per_day": sa.free_limit(),
             "smart_analysis_max_min": int(sa.MAX_DURATION_FREE_S // 60),
@@ -173,6 +184,7 @@ def build_plans() -> Dict[str, Any]:
             "youtube_per_day": yt_quota.YT_QUOTA_USER, "youtube_max_height": yt_user_h,
             "batch_links": pro_p["batch_limit"],
             "zip": bool(pro_p["bulk_zip"]), "api_key": bool(pro_p["api_key"]),
+            "api_calls_per_month": s["api_calls_month_pro"] if pro_p["api_key"] else 0,
             "spotify_artist_tracks": sp.ARTIST_CAP_ALL_TRACKS,
             "smart_analysis_per_day": sa.pro_limit(),
             "smart_analysis_max_min": int(sa.MAX_DURATION_PRO_S // 60),

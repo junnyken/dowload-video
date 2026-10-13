@@ -28,6 +28,37 @@ _NEW_KEY_PREFIX = "vidgrab_"
 _LEGACY_KEY_PREFIX = "vg_"
 
 
+def _metered(request, user: Dict[str, Any]) -> Dict[str, Any]:
+    """Count one call against the key owner's monthly API quota (owner 14/10,
+    app.core.api_quota); 429 when it is used up. Only API-key callers get
+    here — the site's own session traffic is never metered."""
+    from fastapi import HTTPException  # noqa: PLC0415
+    from app.core import api_quota  # noqa: PLC0415
+    try:
+        from app.core.quotas import _get_tier  # noqa: PLC0415
+        tier = _get_tier(str(user["id"])) or "free"
+    except Exception:  # noqa: BLE001
+        tier = user.get("tier") or "free"
+    q = api_quota.consume(str(user["id"]), tier)
+    try:
+        if request is not None:
+            request.state.api_quota = q
+    except Exception:  # noqa: BLE001
+        pass
+    if not q["allowed"]:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error_code": "api_monthly_quota_exceeded",
+                "user_message": f"Đã dùng hết {q['limit']} lượt gọi API của tháng này.",
+                "limit": q["limit"],
+                "reset_at": q["reset_at"],
+            },
+            headers=api_quota.headers(q),
+        )
+    return {**user, "api_quota": q}
+
+
 def _invalid_key():
     from fastapi import HTTPException  # noqa: PLC0415
     raise HTTPException(status_code=401, detail={
@@ -176,7 +207,7 @@ async def get_optional_user(
     if x_api_key:
         result = _lookup_new_api_key(x_api_key)
         if result:
-            return result
+            return _metered(_request, result)
         _invalid_key()
 
     if not credentials or not credentials.credentials:
@@ -189,7 +220,7 @@ async def get_optional_user(
     if token.startswith(_NEW_KEY_PREFIX):
         result = _lookup_new_api_key(token)
         if result:
-            return result
+            return _metered(_request, result)
         _invalid_key()
 
     # ── Path 1: Supabase JWT ─────────────────────────────────────────
@@ -214,7 +245,7 @@ async def get_optional_user(
     legacy = _lookup_api_key(token)
     if legacy is None and token.startswith(_LEGACY_KEY_PREFIX):
         _invalid_key()
-    return legacy
+    return _metered(_request, legacy) if legacy else None
 
 
 async def get_required_user(

@@ -447,8 +447,12 @@ app.add_middleware(
                    # extension version on API calls (Phase 34D-5)
                    "X-VG-Ext-Version"],
     # 503 server_busy / 429 carry Retry-After (task #6397); the body has it too.
-    expose_headers=["Retry-After"],
+    expose_headers=["Retry-After", "X-API-Quota-Limit", "X-API-Quota-Remaining", "X-API-Quota-Reset"],
 )
+
+# Monthly API quota headers on API-key responses (owner 14/10, app.core.api_quota).
+from app.core.api_quota import ApiQuotaHeadersMiddleware  # noqa: E402
+app.add_middleware(ApiQuotaHeadersMiddleware)
 
 
 # Outermost: uptime monitors check with HEAD (UptimeRobot Free), routes are GET.

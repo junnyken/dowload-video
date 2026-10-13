@@ -205,3 +205,22 @@ async def update_key_label(
     if not res.data:
         raise HTTPException(status_code=404, detail="Key không tìm thấy.")
     return {"updated": True, "id": key_id, "label": body.label.strip()}
+
+
+# ── monthly API quota usage (owner 14/10) ───────────────────────────────────
+
+@router.get("/usage")
+async def api_usage(user: Dict[str, Any] = Depends(get_required_user)):
+    """This month's API calls for the signed-in account (session or key).
+    Reading it with a key does count as one call."""
+    from app.core import api_quota  # noqa: PLC0415
+    from app.core.quotas import _get_tier  # noqa: PLC0415
+    try:
+        tier = _get_tier(str(user["id"])) or "free"
+    except Exception:  # noqa: BLE001
+        tier = "free"
+    if user.get("api_quota"):
+        q = user["api_quota"]
+        return {"month": api_quota.month_of(), "used": q.get("used"), "limit": q.get("limit"),
+                "remaining": q.get("remaining"), "reset_at": q.get("reset_at"), "tier": tier}
+    return {**api_quota.usage(str(user["id"]), tier), "tier": tier}
