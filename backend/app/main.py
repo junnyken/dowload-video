@@ -534,6 +534,10 @@ app.include_router(admin_china_router, prefix="/api/v1/admin", tags=["Admin Chin
 # Task #6087 — Windows app: machines + local/server download stats (read-only)
 from app.api.admin_desktop import router as admin_desktop_router
 app.include_router(admin_desktop_router, prefix="/api/v1/admin", tags=["Admin Desktop App"])
+# Phase 34D-0 — content takedown requests (task #6335)
+from app.api import takedown as takedown_api
+app.include_router(takedown_api.public_router, prefix="/api/v1", tags=["Takedown"])
+app.include_router(takedown_api.admin_router, prefix="/api/v1/admin", tags=["Admin Takedown"])
 from app.api.admin_cobalt import router as admin_cobalt_router
 app.include_router(admin_cobalt_router, prefix="/api/v1/admin", tags=["Admin Cobalt"])
 # Phase 33A — Channel Watch "Theo dõi kênh" (task #6257); off unless WATCH_ENABLED
