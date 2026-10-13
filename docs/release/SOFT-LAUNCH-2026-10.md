@@ -27,7 +27,7 @@ Mọi tệp dưới đây đã kiểm trên production ngày 13/10/2026 (UTC). K
 - Tiện ích cài tay: Chrome → Tiện ích → bật Chế độ nhà phát triển → "Tải tiện ích đã giải nén". Có bản mới, tiện ích tự báo.
 
 ## Trước khi đăng bài
-1. Gói Free/Pro: chờ owner chốt `docs/PLANS-FREE-PRO.md`. Đến khi đó **không nhắc giá Pro** trong bài.
+1. Gói Free/Pro đã có ở `/pricing` (Pro 49.000đ/tháng, 399.000đ/năm, chuyển khoản). Chỉ nhắc giá trong bài sau khi owner điền thông tin ngân hàng trong admin.
 2. Câu chữ bài đăng: BA duyệt.
 3. Không deploy trong 24 giờ sau khi đăng, trừ sửa lỗi nghiêm trọng (luật phát hành §5).
 

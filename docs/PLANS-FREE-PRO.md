@@ -1,5 +1,10 @@
 # Gói dịch vụ VidGrab — hiện trạng và đề xuất (13/10/2026)
 
+> **ĐÃ CHỐT + LÀM XONG 13/10** (owner đồng ý mục 2, giá 49.000đ/399.000đ, thanh toán A):
+> `/api/v1/plans` (b95df08), Pro không thấp hơn Free (fc8e292), `/pricing` + hộp nâng cấp + admin cấp Pro 30/365 ngày (09c96de, e78ffbe).
+> Việc owner: Admin → Người dùng → "Gói & thanh toán": điền ngân hàng, số tài khoản, chủ tài khoản (chưa điền thì trang giá chỉ hiện "Liên hệ").
+> Cấp Pro: khách chuyển khoản ghi mã `VGxxxxxxxx` → Admin → Người dùng → "Tìm theo mã chuyển khoản" → Cấp Pro 30/365 ngày. Hết hạn tự về Free (00:30 UTC).
+
 Nguồn: đọc mã nhánh `main` (92d7e84). "Đang chạy" = giá trị mặc định trong mã; biến môi trường production có thể khác (chưa đọc được giá trị env production). Giá tiền dưới đây là **đề xuất để owner chọn**, chưa dựa trên số đo chi phí (kế hoạch 34E yêu cầu giá theo chi phí đo được; trang Admin → Đo lường có số liệu đó).
 
 ## 1. Hiện trạng: giao diện nói một đằng, máy chủ làm một nẻo
