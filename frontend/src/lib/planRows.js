@@ -19,7 +19,11 @@ export function buildPlanRows(tiers) {
     },
     {
       key: 'youtube', label: 'YouTube',
-      get: (t) => `${per(t.youtube_per_day, 'video/ngày')}, đến ${qualityLabel(t.youtube_max_height)}`,
+      // youtube_max_height 0 = no YouTube-specific cap (production 13/10):
+      // the general quality limit applies, so say nothing about height.
+      get: (t) => (t.youtube_max_height > 0
+        ? `${per(t.youtube_per_day, 'video/ngày')}, đến ${qualityLabel(t.youtube_max_height)}`
+        : per(t.youtube_per_day, 'video/ngày')),
     },
     {
       key: 'batch', label: 'Dán nhiều link một lần',

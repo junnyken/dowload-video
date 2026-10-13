@@ -40,7 +40,7 @@ function buildCopy(code, { guest, free, pro }, signedIn) {
       return {
         title: 'Đã đạt giới hạn YouTube',
         subtitle: have && pro
-          ? `Gói hiện tại: ${have.youtube_per_day === -1 ? 'không giới hạn' : have.youtube_per_day} video/ngày, đến ${qualityLabel(have.youtube_max_height)}.`
+          ? `Gói hiện tại: ${have.youtube_per_day === -1 ? 'không giới hạn' : have.youtube_per_day} video/ngày${have.youtube_max_height > 0 ? `, đến ${qualityLabel(have.youtube_max_height)}` : ''}.`
           : 'Nâng cấp Pro để có thêm hạn mức YouTube.',
       };
     case 'spotify_artist_full':
