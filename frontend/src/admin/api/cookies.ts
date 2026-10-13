@@ -82,6 +82,8 @@ export interface CookiePlatformSummary {
   hard_blocked: number
   expiry_warnings: number
   min_days_left: number | null
+  /** Encryption at rest (task #6402): how the pool entries are stored. */
+  storage?: { encrypted: number; legacy: number; undecryptable: number }
 }
 
 export interface CookieStatusResponse {
@@ -91,6 +93,19 @@ export interface CookieStatusResponse {
 
 export function fetchCookieStatus(): Promise<CookieStatusResponse> {
   return adminFetch<CookieStatusResponse>('/cookies/status')
+}
+
+export interface EncryptAllResponse {
+  success: boolean
+  enabled: boolean
+  platforms: Record<string, {
+    encrypted_now: number; already_encrypted: number; legacy_left: number; undecryptable: number
+  }>
+}
+
+/** Encrypt every plaintext pool cookie in place. Returns counts only. */
+export function encryptAllCookies(): Promise<EncryptAllResponse> {
+  return adminPost<EncryptAllResponse>('/cookies/encrypt-all')
 }
 
 export interface TestCookieResponse {
@@ -115,7 +130,7 @@ export function triggerCookieHealthCheck(): Promise<unknown> {
 
 export type RetestStatus =
   | 'ok' | 'rejected' | 'inconclusive' | 'unsupported'
-  | 'skipped_disabled' | 'not_found' | 'rate_limited'
+  | 'skipped_disabled' | 'not_found' | 'rate_limited' | 'undecryptable'
 
 export interface RetestResponse {
   success: boolean

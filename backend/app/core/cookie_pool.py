@@ -46,6 +46,7 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
+from app.core import cookie_crypto
 from app.core.redis_client import get_redis
 
 # Block TTLs
@@ -183,7 +184,39 @@ _AUTH_COOKIES: dict[str, set[str]] = {
 
 
 def _hash(cookie_b64: str) -> str:
+    """Identity of a cookie: md5 of its PLAINTEXT base64 (task #6402).
+
+    Accepts either the plaintext or the stored (possibly encrypted) form, so
+    health/meta/cooldown keys and the admin remove-by-hash API see the same
+    id for a legacy entry, its encrypted form and the plaintext a download
+    holds. An entry that cannot be decrypted hashes its stored form — a
+    stable id the admin can still remove by."""
+    if cookie_crypto.is_encrypted(cookie_b64):
+        plain = cookie_crypto.decode(cookie_b64)
+        if plain is not None:
+            cookie_b64 = plain
     return hashlib.md5(cookie_b64.encode()).hexdigest()[:16]
+
+
+def _plain(stored: str) -> Optional[str]:
+    """Plaintext base64 of a stored pool entry, None if undecryptable.
+    The one decode path for every reader of cookie_pool:* values."""
+    return cookie_crypto.decode(stored)
+
+
+def _note_undecryptable(rc, platform: str, stored: str) -> None:
+    """Skip-with-trace for an entry the current key cannot open: flag it in
+    its meta (cheap, once) and log the id only — never the value."""
+    h = _hash(stored)
+    try:
+        meta = _get_meta(rc, platform, h)
+        if not meta.get("undecryptable"):
+            meta["undecryptable"] = True
+            _set_meta(rc, platform, h, meta)
+            print(f"[CookiePool] {platform} cookie {h} cannot be decrypted with the "
+                  f"current key — skipped (re-upload it)")
+    except Exception:
+        pass
 
 
 # ── Netscape cookies.txt validation ──────────────────────────────────
@@ -330,6 +363,8 @@ def has_selectable_cookie(platform: str) -> bool:
     rc = get_redis()
     now = int(time.time())
     for c in rc.lrange(f"cookie_pool:{platform}", 0, -1) or []:
+        if _plain(c) is None:
+            continue
         h = _hash(c)
         if rc.get(f"cookie_health:{platform}:{h}") in ("expired", "disabled"):
             continue
@@ -353,7 +388,19 @@ def get_cookie_from_pool(platform: str) -> Optional[str]:
     """
     rc = get_redis()
     pool_key = f"cookie_pool:{platform}"
-    cookies = rc.lrange(pool_key, 0, -1)
+    stored = rc.lrange(pool_key, 0, -1)
+    if not stored:
+        return None
+    # Everything below works on PLAINTEXT base64 (same hash as the stored
+    # form), and that is what callers get back — the downloader writes it to
+    # the cookies file. Undecryptable entries are skipped, never returned.
+    cookies = []
+    for s in stored:
+        p = _plain(s)
+        if p is None:
+            _note_undecryptable(rc, platform, s)
+            continue
+        cookies.append(p)
     if not cookies:
         return None
 
@@ -557,6 +604,12 @@ def replace_cookie_content(platform: str, old_b64: str, new_b64: str) -> bool:
     writer won the race)."""
     if not new_b64 or new_b64 == old_b64:
         return False
+    # Callers hold plaintext; the pool may hold the encrypted form. Locate
+    # by identity (hash of plaintext), store the new content encrypted.
+    old_b64 = _plain(old_b64) or old_b64
+    new_b64 = _plain(new_b64) or new_b64
+    if new_b64 == old_b64:
+        return False
     rc = get_redis()
     pool_key = f"cookie_pool:{platform}"
     oh, nh = _hash(old_b64), _hash(new_b64)
@@ -581,13 +634,13 @@ def replace_cookie_content(platform: str, old_b64: str, new_b64: str) -> bool:
     try:
         with rc.pipeline() as p:
             p.watch(pool_key)
-            cookies = p.lrange(pool_key, 0, -1)
-            if old_b64 not in cookies or new_b64 in cookies:
+            hashes = [_hash(c) for c in p.lrange(pool_key, 0, -1)]
+            if oh not in hashes or nh in hashes:
                 p.unwatch()
                 return False
-            idx = cookies.index(old_b64)
+            idx = hashes.index(oh)
             p.multi()
-            p.lset(pool_key, idx, new_b64)
+            p.lset(pool_key, idx, cookie_crypto.encrypt(new_b64))
             p.setex(f"cookie_meta:{platform}:{nh}", _META_TTL, json.dumps(meta))
             for prefix, v, ttl in moved:
                 if ttl and ttl > 0:
@@ -614,11 +667,13 @@ def add_cookie(platform: str, cookie_b64: str, label: str = "") -> int:
     """
     rc = get_redis()
     pool_key = f"cookie_pool:{platform}"
+    cookie_b64 = _plain(cookie_b64) or cookie_b64
     h = _hash(cookie_b64)
-
-    existing = rc.lrange(pool_key, 0, -1)
-    if cookie_b64 not in existing:
-        rc.rpush(pool_key, cookie_b64)
+    # Dedupe by identity: the same cookie may already sit there encrypted
+    # (random nonce → different stored bytes) or as a legacy entry.
+    existing = {_hash(c) for c in rc.lrange(pool_key, 0, -1)}
+    if h not in existing:
+        rc.rpush(pool_key, cookie_crypto.encrypt(cookie_b64))
         rc.delete(f"cookie_health:{platform}:{h}")
         rc.delete(f"cookie_cooldown:{platform}:{h}")
 
@@ -677,8 +732,24 @@ def get_expiry_report(platform: str) -> list[dict]:
     now = int(time.time())
     result = []
 
-    for i, c in enumerate(cookies):
-        h = _hash(c)
+    for i, stored in enumerate(cookies):
+        h = _hash(stored)
+        storage = cookie_crypto.storage_state(stored)
+        c = _plain(stored)
+        if c is None:
+            # Undecryptable (key changed): listed so the admin can remove it,
+            # never parsed, never usable.
+            result.append({
+                "index": i, "hash": h, "label": _get_meta(rc, platform, h).get("label", ""),
+                "account_hint": "", "expires_at": 0, "expires_at_str": None,
+                "days_left": None, "expiry_status": "unknown",
+                "health_status": "undecryptable", "blocked": False,
+                "blocked_ttl_s": None, "cooldown_ttl_s": None, "last_used": 0,
+                "disabled_reason": "", "added_at": 0, "last_test_at": 0,
+                "last_test_status": "", "last_test_message": "", "verified_ok_at": 0,
+                "expired_reason": "", "storage": storage, "usable": False,
+            })
+            continue
         meta = _get_meta(rc, platform, h)
         expires_at = meta.get("expires_at", 0)
 
@@ -762,6 +833,7 @@ def get_expiry_report(platform: str) -> list[dict]:
             "verified_ok_at":  meta.get("verified_ok_at", 0) or 0,
             "expired_reason":  (meta.get("expired_reason", "")
                                 if health_val == "expired" else ""),
+            "storage":         storage,
             "usable":          effective_health not in ("expired", "disabled", "hard", "soft", "blocked"),
         })
 
@@ -786,8 +858,13 @@ def get_pool_status() -> dict:
         hard_blocked = soft_blocked = in_cooldown = expired_count = disabled_count = 0
         expiry_warnings = 0
         min_days_left: Optional[int] = None
+        enc_counts = {"encrypted": 0, "legacy": 0, "undecryptable": 0}
 
         for c in cookies:
+            state = cookie_crypto.storage_state(c)
+            enc_counts[state] += 1
+            if state == "undecryptable":
+                continue
             h = _hash(c)
             health = rc.get(f"cookie_health:{platform}:{h}")
             if health == "hard":
@@ -811,7 +888,8 @@ def get_pool_status() -> dict:
                     expiry_warnings += 1
 
         total = len(cookies)
-        unusable = hard_blocked + soft_blocked + expired_count + disabled_count
+        unusable = (hard_blocked + soft_blocked + expired_count + disabled_count
+                    + enc_counts["undecryptable"])
         result[platform] = {
             "total":           total,
             "healthy":         max(0, total - unusable),
@@ -823,6 +901,84 @@ def get_pool_status() -> dict:
             "expiry_warnings": expiry_warnings,
             "min_days_left":   min_days_left,
             "cooldown_s":      _COOLDOWN.get(platform, _DEFAULT_COOLDOWN),
+            "storage":         enc_counts,
         }
 
     return result
+
+
+# ── Encryption at rest: migration (task #6402) ───────────────────────
+
+MIGRATE_LOCK_KEY = "cookie_crypto:migrate_lock"   # outside cookie_pool:* on purpose
+_MIGRATE_LOCK_TTL = 300
+
+
+def migrate_cookie_pool() -> dict:
+    """Encrypt every legacy (plaintext) pool entry in place. Idempotent.
+
+    Per platform list, under WATCH: re-read, LSET each legacy element to its
+    encrypted form, commit — a concurrent add/remove/refresh aborts the round
+    and it retries instead of clobbering. Identity (hash of plaintext) does
+    not change, so health/meta/cooldown keys and downloads in flight are
+    unaffected. Returns counts only, never values:
+    {"enabled": bool, "platforms": {p: {encrypted_now, already_encrypted,
+    legacy_left, undecryptable}}}.
+    """
+    rc = get_redis()
+    enabled = cookie_crypto.enabled()
+    platforms: dict[str, dict] = {}
+    for pool_key in sorted(rc.scan_iter(match="cookie_pool:*", count=200)):
+        platform = pool_key.split(":", 1)[1]
+        counts = {"encrypted_now": 0, "already_encrypted": 0,
+                  "legacy_left": 0, "undecryptable": 0}
+        if enabled:
+            for _attempt in range(5):
+                try:
+                    with rc.pipeline() as p:
+                        p.watch(pool_key)
+                        items = p.lrange(pool_key, 0, -1)
+                        todo = [(i, c) for i, c in enumerate(items)
+                                if not cookie_crypto.is_encrypted(c)]
+                        if not todo:
+                            p.unwatch()
+                            break
+                        p.multi()
+                        for i, c in todo:
+                            p.lset(pool_key, i, cookie_crypto.encrypt(c))
+                        p.execute()
+                        counts["encrypted_now"] += len(todo)
+                        break
+                except Exception as exc:  # WatchError → retry; anything else → stop
+                    if type(exc).__name__ != "WatchError":
+                        print(f"[CookiePool] {platform}: encryption migration stopped "
+                              f"({type(exc).__name__})")
+                        break
+        for c in rc.lrange(pool_key, 0, -1) or []:
+            state = cookie_crypto.storage_state(c)
+            if state == "legacy":
+                counts["legacy_left"] += 1
+            elif state == "undecryptable":
+                counts["undecryptable"] += 1
+            else:
+                counts["already_encrypted"] += 1
+        counts["already_encrypted"] = max(0, counts["already_encrypted"] - counts["encrypted_now"])
+        platforms[platform] = counts
+    return {"enabled": enabled, "platforms": platforms}
+
+
+def migrate_cookie_pool_once() -> Optional[dict]:
+    """Startup hook: run the migration once across all workers (Redis lock,
+    expires on its own). Never raises; None when another process holds it."""
+    try:
+        rc = get_redis()
+        if not rc.set(MIGRATE_LOCK_KEY, str(os.getpid()), nx=True, ex=_MIGRATE_LOCK_TTL):
+            return None
+        out = migrate_cookie_pool()
+        done = sum(v["encrypted_now"] for v in out["platforms"].values())
+        bad = sum(v["undecryptable"] for v in out["platforms"].values())
+        print(f"[CookiePool] encryption at rest: enabled={out['enabled']} "
+              f"encrypted_now={done} undecryptable={bad}")
+        return out
+    except Exception as exc:
+        print(f"[CookiePool] startup encryption migration skipped ({type(exc).__name__})")
+        return None

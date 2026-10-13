@@ -2523,6 +2523,22 @@ async def cookie_pool_remove_batch(req: CookieRemoveBatchRequest, request: Reque
     return {"success": True, "platform": req.platform, **out}
 
 
+@router.post("/cookies/encrypt-all")
+async def cookie_pool_encrypt_all(request: Request, _=Depends(verify_admin)):
+    """Encrypt every legacy (plaintext) pool cookie in place (task #6402).
+    Idempotent; counts per platform only — never a cookie value."""
+    import asyncio
+    from app.core.cookie_pool import migrate_cookie_pool
+    out = await asyncio.to_thread(migrate_cookie_pool)
+    done = sum(v["encrypted_now"] for v in out["platforms"].values())
+    log_admin_action(
+        request, "admin.cookie.encrypt_all",
+        resource_type="cookie_pool", resource_id="*",
+        metadata={"enabled": out["enabled"], "encrypted_now": done},
+    )
+    return {"success": True, **out}
+
+
 @router.post("/cookies/retest/{platform}/{cookie_hash}")
 async def cookie_pool_retest(
     platform: str, cookie_hash: str, request: Request, _=Depends(verify_admin),

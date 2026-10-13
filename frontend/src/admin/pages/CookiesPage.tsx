@@ -14,7 +14,7 @@ import { adminKeys } from '../lib/queryKeys'
 import { CookieToolbar, CookieBulkBar, TestAllConfirm, describeStorage, type BatchProgress } from '../panels/cookies/CookieToolbar'
 import type { CookieItem, CookieAction, AddCookieFormData, LiveTest } from '../panels/cookies/cookie.types'
 import {
-  fetchCookieList, retestCookie, setCookieDisabled,
+  fetchCookieList, retestCookie, setCookieDisabled, encryptAllCookies,
   type ExpiryCookieEntry, type RetestResponse,
 } from '../api/cookies'
 
@@ -72,7 +72,7 @@ function mapExpiryCookieToItem(
     status = 'hard_blocked'
   } else if (entry.health_status === 'soft' || entry.health_status === 'blocked') {
     status = 'soft_blocked'
-  } else if (entry.health_status === 'disabled') {
+  } else if (entry.health_status === 'disabled' || entry.health_status === 'undecryptable') {
     status = 'disabled'
   } else if (entry.health_status === 'expired') {
     status = 'expired'
@@ -81,7 +81,9 @@ function mapExpiryCookieToItem(
   }
 
   let expiryEstimate = 'Unknown'
-  if (status === 'expired') {
+  if (entry.health_status === 'undecryptable') {
+    expiryEstimate = 'Không giải mã được — tải lên lại'
+  } else if (status === 'expired') {
     expiryEstimate = 'Expired'
   } else if (entry.expiry_status === 'session_only') {
     expiryEstimate = 'Session only'
@@ -132,7 +134,10 @@ function toLiveTest(r: RetestResponse): LiveTest {
   if (r.status === 'ok' && r.cleared_expired) {
     return { state: 'ok', at, message: 'Nền tảng vẫn chấp nhận — đã gỡ dấu "hết hạn"' }
   }
-  return { state: r.status === 'not_found' ? 'error' : r.status, message: r.message, at }
+  return {
+    state: r.status === 'not_found' || r.status === 'undecryptable' ? 'error' : r.status,
+    message: r.message, at,
+  }
 }
 
 const TEST_PLATFORMS_KEY = 'vg.cookies.testPlatforms'
@@ -189,6 +194,8 @@ export function CookiesPage() {
   const [batch, setBatch] = useState<BatchProgress | null>(null)
   const [confirm, setConfirm] = useState<{ queue: { platform: string; hash: string; label: string }[]; skipped: number } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [encConfirm, setEncConfirm] = useState(false)
+  const [encBusy, setEncBusy] = useState(false)
   const stopRef = useRef(false)
 
   // ── Bulk select / delete ──
@@ -421,6 +428,35 @@ export function CookiesPage() {
   // Pool counts per tab from status data
   const poolCounts = statusData?.pools ?? {}
 
+  // Encryption at rest (task #6402) — totals across platforms.
+  const enc = Object.values(poolCounts).reduce(
+    (a, p) => ({
+      encrypted: a.encrypted + (p.storage?.encrypted ?? 0),
+      legacy: a.legacy + (p.storage?.legacy ?? 0),
+      undecryptable: a.undecryptable + (p.storage?.undecryptable ?? 0),
+    }),
+    { encrypted: 0, legacy: 0, undecryptable: 0 },
+  )
+  const hasEncInfo = Object.values(poolCounts).some(p => p.storage)
+
+  async function runEncryptAll() {
+    setEncConfirm(false)
+    setEncBusy(true)
+    try {
+      const r = await encryptAllCookies()
+      const done = Object.values(r.platforms).reduce((n, p) => n + p.encrypted_now, 0)
+      const left = Object.values(r.platforms).reduce((n, p) => n + p.legacy_left, 0)
+      setNotice(r.enabled
+        ? `Đã mã hoá ${done} cookie.` + (left ? ` Còn ${left} cookie chưa mã hoá.` : '')
+        : 'Máy chủ chưa có khoá mã hoá — cookie vẫn lưu như cũ, không có gì thay đổi.')
+      qc.invalidateQueries({ queryKey: ['admin', 'cookies'] })
+    } catch (e) {
+      setNotice(`Không mã hoá được: ${e instanceof Error ? e.message : 'lỗi không rõ'}`)
+    } finally {
+      setEncBusy(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div>
@@ -433,6 +469,44 @@ export function CookiesPage() {
             </span>
           )}
         </p>
+        {hasEncInfo && (
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-fg-muted">
+            <span>
+              Mã hoá khi lưu: {enc.encrypted} đã mã hoá · {enc.legacy} chưa mã hoá
+              {enc.undecryptable > 0 && (
+                <span className="ml-1 font-medium text-warning">
+                  · {enc.undecryptable} không giải mã được
+                </span>
+              )}
+            </span>
+            {enc.legacy > 0 && !encConfirm && (
+              <button
+                onClick={() => setEncConfirm(true)}
+                disabled={encBusy}
+                className="rounded-control border border-line px-2 py-0.5 text-[11px] font-medium text-fg-2 hover:bg-surface-2 disabled:opacity-50"
+              >
+                {encBusy ? 'Đang mã hoá…' : 'Mã hoá lại kho cookie'}
+              </button>
+            )}
+            {encConfirm && (
+              <span className="inline-flex items-center gap-1.5" role="group">
+                <span className="text-fg-2">Mã hoá {enc.legacy} cookie chưa mã hoá? Tải video không bị gián đoạn.</span>
+                <button
+                  onClick={runEncryptAll}
+                  className="rounded-control bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-fg hover:bg-accent-hover"
+                >
+                  Mã hoá
+                </button>
+                <button
+                  onClick={() => setEncConfirm(false)}
+                  className="rounded-control border border-line px-2 py-0.5 text-[11px] font-medium text-fg-2 hover:bg-surface-2"
+                >
+                  Huỷ
+                </button>
+              </span>
+            )}
+          </p>
+        )}
       </div>
 
       {/* Dynamic platform tabs */}
