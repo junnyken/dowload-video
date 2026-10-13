@@ -19,7 +19,10 @@ async def submit_feedback(req: FeedbackRequest, request: Request):
     """Accept user feedback and notify via Telegram (+ SMTP if configured)."""
     import httpx
 
-    ip = request.client.host if request.client else "unknown"
+    # get_client_ip: the ASGI client host is the spoofable FIRST XFF entry
+    # under uvicorn --forwarded-allow-ips '*' (task #6398).
+    from app.core.client_ip import get_client_ip  # noqa: PLC0415
+    ip = get_client_ip(request) or "unknown"
     name_str = req.name or "Ẩn danh"
     email_str = req.email or ""
 

@@ -178,7 +178,13 @@ async def get_partner_tenant(request: Request) -> TenantContext:
     # 5. IP allowlist check
     ip_allowlist = key_row.get("ip_allowlist")
     if ip_allowlist is not None:
-        client_host = request.client.host if request.client else ""
+        # get_client_ip, not the ASGI client host: uvicorn runs with
+        # --forwarded-allow-ips "*", so that host is the FIRST
+        # X-Forwarded-For entry — whatever the caller typed. A leaked key plus
+        # "X-Forwarded-For: <allowed ip>" walked through the allowlist
+        # (task #6398).
+        from app.core.client_ip import get_client_ip  # noqa: PLC0415
+        client_host = get_client_ip(request)
         if client_host not in ip_allowlist:
             raise HTTPException(
                 status_code=403,
@@ -222,6 +228,21 @@ async def get_partner_tenant(request: Request) -> TenantContext:
     except Exception:
         features = {}
 
+    # 7b. Per-key requests-per-minute limit (task #6398). The column was
+    # stored, shown on /usage and editable, but nothing enforced it.
+    per_min = key_row.get("rate_limit_per_min") or 60
+    retry_after = _per_minute_exceeded(key_id, per_min)
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code":    "rate_limited",
+                "message": f"Rate limit of {per_min} requests per minute exceeded for this API key",
+                "retry_after_seconds": retry_after,
+            },
+            headers={"Retry-After": str(retry_after)},
+        )
+
     # 8. Fire-and-forget usage counter
     asyncio.create_task(_update_key_usage(key_id))
 
@@ -239,6 +260,34 @@ async def get_partner_tenant(request: Request) -> TenantContext:
         rate_limit_per_min=key_row.get("rate_limit_per_min") or 60,
         rate_limit_per_day=key_row.get("rate_limit_per_day") or 10_000,
     )
+
+
+def _per_minute_exceeded(key_id: str, limit: int) -> Optional[int]:
+    """Count one request for `key_id` in the current minute window. Returns the
+    seconds left in the window when `limit` is exceeded, else None.
+
+    Fails OPEN on Redis errors (returns None): the partner API kept working
+    before this check existed, and a Redis outage must not take it down."""
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        return None
+    if limit <= 0:
+        return None
+    try:
+        import time  # noqa: PLC0415
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        r = get_redis()
+        window = int(time.time() // 60)
+        key = f"partner:rpm:{key_id}:{window}"
+        count = r.incr(key)
+        if count == 1:
+            r.expire(key, 120)
+        if count > limit:
+            return max(1, 60 - int(time.time() % 60))
+    except Exception:
+        return None
+    return None
 
 
 # ── Optional variant (no-key → None, bad-key → still raises) ─────────────────

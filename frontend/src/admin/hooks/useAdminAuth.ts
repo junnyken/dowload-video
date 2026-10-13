@@ -88,6 +88,17 @@ export function useAdminAuth() {
   }, [])
 
   const logout = useCallback(() => {
+    // End the session server-side too (task #6398); before this the token
+    // stayed valid after Logout until its idle TTL ran out. Best effort: the
+    // local sign-out below happens whether or not the call succeeds.
+    const token = _user?.sessionToken
+    if (token) {
+      fetch(`${API_BASE}/api/v1/admin/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        keepalive: true,
+      }).catch(() => {})
+    }
     localStorage.removeItem(STORAGE_KEY)
     _user = null
     _notify()

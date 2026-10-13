@@ -46,6 +46,11 @@ _ADMIN_ALLOWED_IPS: set[str] = {
 }
 
 _SESSION_TTL        = 8 * 60 * 60        # 8-hour session TTL (seconds)
+# Absolute cap on a session's life (task #6398). _SESSION_TTL is an idle
+# timeout refreshed on every request, so an open dashboard tab (SSE every 5s)
+# kept one token valid forever — a leaked token never aged out. 7 days keeps a
+# working admin from re-logging daily while still bounding a stolen token.
+_SESSION_MAX_AGE    = 7 * 24 * 60 * 60
 _LOCKOUT_TTL        = 15 * 60            # 15-minute lockout after 3 bad attempts
 _MAX_ATTEMPTS       = 3                  # attempts before lockout
 _ATTEMPT_WINDOW     = 5 * 60            # attempt counter TTL (seconds)
@@ -58,7 +63,21 @@ def _redis():
 
 
 def _session_key(token: str) -> str:
+    """Redis key of a session. Holds sha256(token), not the token (task #6398):
+    anyone who can read Redis (a backup, a KEYS dump, the /access/sessions
+    listing) would otherwise hold a working admin credential."""
+    import hashlib
+    return "admin:session:h:" + hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _legacy_session_key(token: str) -> str:
+    """Key format before task #6398 (raw token). Read once, then migrated."""
     return f"admin:session:{token}"
+
+
+def _new_session_value(now: float | None = None) -> str:
+    import time
+    return str(int(now if now is not None else time.time()))
 
 
 def _attempt_key(ip: str) -> str:
@@ -89,13 +108,35 @@ def _session_is_valid(r, token: str) -> bool:
     """
     if not token:
         return False
+    import time
+    key = _session_key(token)
     try:
-        if not r.get(_session_key(token)):
-            return False
+        val = r.get(key)
+        if not val:
+            # Session issued before hashing: accept once, move it to the hashed
+            # key (issue time unknown → counted from now) and drop the raw key.
+            legacy = _legacy_session_key(token)
+            if not r.get(legacy):
+                return False
+            val = _new_session_value()
+            r.setex(key, _SESSION_TTL, val)
+            r.delete(legacy)
     except Exception:
         return False
     try:
-        r.expire(_session_key(token), _SESSION_TTL)
+        issued = int(val.decode() if isinstance(val, bytes) else val)
+    except (TypeError, ValueError):
+        issued = None  # unknown format: idle TTL still applies
+    # Values that are not an epoch timestamp (e.g. the old "1" marker) carry no
+    # issue time; only the idle TTL applies to them.
+    if issued is not None and issued >= 1_000_000_000 and time.time() - issued > _SESSION_MAX_AGE:
+        try:
+            r.delete(key)
+        except Exception:
+            pass
+        return False
+    try:
+        r.expire(key, _SESSION_TTL)
     except Exception:
         pass
     return True
@@ -237,10 +278,34 @@ async def admin_login(payload: AdminLoginRequest, request: Request):
     # Password correct — clear attempts, issue session token
     _clear_attempts(r, ip)
     token = secrets.token_urlsafe(32)
-    r.setex(_session_key(token), _SESSION_TTL, "1")
+    r.setex(_session_key(token), _SESSION_TTL, _new_session_value())
 
     log_admin_action(request, "admin.login.success", metadata={"ip": ip})
     return {"session_token": token, "expires_in": _SESSION_TTL}
+
+
+@router.post("/logout")
+async def admin_logout(
+    request: Request,
+    legacy_token: Optional[str] = Depends(_ADMIN_TOKEN_HEADER),
+    bearer: Optional[HTTPAuthorizationCredentials] = Depends(_BEARER_HEADER),
+    _=Depends(verify_admin),
+):
+    """End the presented session server-side (task #6398). Before this the
+    dashboard's Logout only cleared localStorage and the token stayed valid for
+    up to the idle TTL. Guarded like every admin route: a dead token gets 401,
+    which the dashboard ignores (it signs out locally either way)."""
+    token = (bearer.credentials if bearer and bearer.credentials else legacy_token) or ""
+    token = token.strip()
+    if token:
+        try:
+            r = _redis()
+            removed = r.delete(_session_key(token), _legacy_session_key(token))
+        except Exception:
+            removed = 0
+        if removed:
+            log_admin_action(request, "admin.logout", metadata={"ip": get_client_ip(request)})
+    return {"success": True}
 
 
 class UpdateUserRequest(BaseModel):
@@ -1245,7 +1310,7 @@ async def get_user_signups(days: int = 30, _=Depends(verify_admin)):
 # ═════════════════════════════════════════════════════════════════════
 
 @router.post("/backup/run")
-async def run_backup_now(_=Depends(verify_admin)):
+async def run_backup_now(request: Request, _=Depends(verify_admin)):
     """
     Run the nightly database backup immediately and return what it did.
 
@@ -1262,6 +1327,7 @@ async def run_backup_now(_=Depends(verify_admin)):
     result instead of a task id and a shrug.
     """
     from app.tasks.backup_tasks import backup_database_daily
+    log_admin_action(request, "admin.backup.run")
     return backup_database_daily()
 
 
@@ -2223,8 +2289,9 @@ async def cookie_expiry_report(_=Depends(verify_admin)):
 
 
 @router.post("/cookies/check-expiry")
-async def cookie_trigger_expiry_check(_=Depends(verify_admin)):
+async def cookie_trigger_expiry_check(request: Request, _=Depends(verify_admin)):
     """Manually trigger cookie expiry Telegram alert (same as daily Celery task)."""
+    log_admin_action(request, "admin.cookies.check_expiry")
     try:
         from app.core.celery_app import celery_app as _celery
         task = _celery.send_task("check_cookie_expiry")
@@ -2665,10 +2732,11 @@ async def scraperapi_remove_all_keys(request: Request, _=Depends(verify_admin)):
 
 
 @router.post("/scraperapi/rotate")
-async def scraperapi_rotate(_=Depends(verify_admin)):
+async def scraperapi_rotate(request: Request, _=Depends(verify_admin)):
     """Manually rotate to the next ScraperAPI key."""
     from app.core.scraperapi_pool import rotate_key, get_active_key
     rotate_key(reason="manual-admin")
+    log_admin_action(request, "admin.scraperapi.rotate")
     active = get_active_key()
     return {"success": True, "message": "Rotated to next key", "active_key_prefix": (active[:8] + "***") if active else "none"}
 
@@ -3112,7 +3180,7 @@ async def get_ops_health(_=Depends(verify_admin)):
 # ══════════════════════════════════════════════════════════════════════
 
 @router.delete("/cache/spotify-resolve")
-async def invalidate_spotify_resolve(query: str, _=Depends(verify_admin)):
+async def invalidate_spotify_resolve(query: str, request: Request, _=Depends(verify_admin)):
     """Drop the cached Spotify→YouTube resolve for ONE track when a user reports
     a wrong/mismatched song.
 
@@ -3123,15 +3191,20 @@ async def invalidate_spotify_resolve(query: str, _=Depends(verify_admin)):
     """
     from app.core.spotify_artist_ops import invalidate_resolve, resolve_cache_key
     deleted = invalidate_resolve(query)
+    log_admin_action(request, "admin.cache.spotify_resolve.delete", resource_type="cache",
+                     metadata={"deleted": bool(deleted)})
     return {"success": True, "query": query, "key": resolve_cache_key(query), "deleted": deleted}
 
 
 @router.delete("/cache/spotify-artist/{artist_id}")
-async def invalidate_spotify_artist_cache(artist_id: str, _=Depends(verify_admin)):
+async def invalidate_spotify_artist_cache(artist_id: str, request: Request, _=Depends(verify_admin)):
     """Drop the 30-min cached artist overview so the next load re-fetches fresh
     metadata/albums (use when an artist's catalog changed)."""
     from app.core.spotify_artist_ops import invalidate_artist
-    return {"success": True, "artist_id": artist_id, "deleted": invalidate_artist(artist_id)}
+    deleted = invalidate_artist(artist_id)
+    log_admin_action(request, "admin.cache.spotify_artist.delete", resource_type="cache",
+                     resource_id=artist_id, metadata={"deleted": bool(deleted)})
+    return {"success": True, "artist_id": artist_id, "deleted": deleted}
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -4012,7 +4085,8 @@ async def list_admin_sessions(_=Depends(verify_admin)):
         sessions = []
         for k in session_keys:
             k_str = k.decode() if isinstance(k, bytes) else k
-            token_fragment = k_str.replace("admin:session:", "")[:8] + "..."
+            # Hashed keys show a hash prefix (not usable as a credential).
+            token_fragment = k_str.replace("admin:session:", "")[:10] + "..."
             ttl = r.ttl(k)
             sessions.append({"token_fragment": token_fragment, "ttl_seconds": max(ttl, 0), "expires_in_human": f"{ttl // 3600}h {(ttl % 3600) // 60}m" if ttl > 0 else "expired"})
         sessions.sort(key=lambda x: -x["ttl_seconds"])
