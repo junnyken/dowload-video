@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, AlertTriangle } from 'lucide-react';
+import { usePlatformHealth } from '../lib/usePlatformHealth';
 import DashboardContent from '../components/DashboardContent';
 import { spaLink } from '../lib/spaLink';
 import { platformPages, COMMON_NOTE, QUOTA_NOTE } from '../content/platformPages';
@@ -19,8 +20,25 @@ export default function PlatformLandingPage({ slug }) {
     return () => { document.title = prev; };
   }, [page]);
 
+  const { classify, info } = usePlatformHealth();
+  const health = page ? classify(page.platform) : 'healthy';
+
+  // No head manager (react-helmet) in this app, so set the robots meta by hand.
+  // Client-side only: the prerendered static HTML is unchanged.
+  const notHealthy = health !== 'healthy';
+  useEffect(() => {
+    if (!notHealthy) return undefined;
+    const m = document.createElement('meta');
+    m.name = 'robots';
+    m.content = 'noindex';
+    m.setAttribute('data-vg-health', '1');
+    document.head.appendChild(m);
+    return () => { m.remove(); };
+  }, [notHealthy]);
+
   if (!page) return null;
-  const others = platformPages.filter((p) => p.slug !== slug);
+  const limitation = info(page.platform)?.known_limitation;
+  const others = platformPages.filter((p) => p.slug !== slug && classify(p.platform) === 'healthy');
 
   return (
     <div className="min-h-screen relative overflow-hidden pb-44 md:pb-24">
@@ -38,6 +56,26 @@ export default function PlatformLandingPage({ slug }) {
           </h1>
           <p className="mt-5 max-w-2xl text-base text-fg-2">{page.intro}</p>
         </section>
+
+        {notHealthy && (
+          <div
+            role="status"
+            className="w-full max-w-3xl mb-6 flex items-start gap-3 rounded-2xl border border-danger bg-danger-soft text-danger px-4 py-3 text-sm text-left"
+          >
+            <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="font-medium">
+                {health === 'degraded'
+                  ? 'Nền tảng này đang gặp sự cố, việc tải có thể không thành công.' /* wording: BA review */
+                  : 'Nền tảng này đang trong giai đoạn thử nghiệm, việc tải có thể không ổn định.' /* wording: BA review */}
+              </p>
+              {limitation && <p className="mt-1 break-words">{limitation}</p>}
+              <a href="/platforms" onClick={spaLink('/platforms')} className="mt-1 inline-block underline underline-offset-4">
+                Xem trạng thái{/* wording: BA review */}
+              </a>
+            </div>
+          </div>
+        )}
 
         <div className="w-full">
           <DashboardContent />
@@ -77,7 +115,7 @@ export default function PlatformLandingPage({ slug }) {
         <nav aria-label="Tải video từ nền tảng khác" className="w-full max-w-3xl mt-14">
           <h2 className="text-sm font-semibold text-fg-muted">Nền tảng khác</h2>
           <div className="mt-3 flex flex-wrap gap-2">
-            {others.map((o) => (
+            {others.filter((o) => classify(o.platform) === 'healthy').map((o) => (
               <a key={o.slug} href={`/${o.slug}`} onClick={spaLink(`/${o.slug}`)} className={chip}>
                 Tải video {o.platform}
               </a>

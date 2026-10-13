@@ -12,6 +12,7 @@ import { platformPages } from '../content/platformPages';
 import BulkContent from './BulkContent';
 import HistoryContent from './HistoryContent';
 import FlowVeoCleanup from './FlowVeoCleanup';
+import { usePlatformHealth } from '../lib/usePlatformHealth';
 
 // ── Platform Icons ──────────────────────────────────────────
 const TikTokIcon = () => <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 0010.86 4.46V13.2a8.16 8.16 0 005.58 2.2v-3.45a4.85 4.85 0 01-3.77-1.49V6.69h3.77z"/></svg>;
@@ -96,6 +97,7 @@ export default function LandingPage() {
   }, []);
 
   const { isAuthenticated } = useAuth();
+  const { classify } = usePlatformHealth();
 
   // Read once, at mount: this must not flip mid-session and reflow the page
   // under someone who is reading it.
@@ -285,15 +287,24 @@ export default function LandingPage() {
 
           {/* Platform pills — icon + label, neutral; only the glyph keeps its brand color */}
           <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 mt-6">
-            {platforms.map((p, i) => (
-              <div
-                key={i}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${p.bg} hover:border-line-strong transition-colors cursor-default`}
-              >
-                <span className={`${p.ic} [&_svg]:w-4 [&_svg]:h-4`}><p.icon /></span>
-                <span className="hidden sm:inline">{p.label}</span>
-              </div>
-            ))}
+            {platforms.filter((p) => classify(p.label) !== 'unknown').map((p, i) => {
+              const degraded = classify(p.label) === 'degraded';
+              return (
+                <div
+                  key={i}
+                  title={degraded ? 'Đang gặp sự cố' : undefined} /* wording: BA review */
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${p.bg} hover:border-line-strong transition-colors cursor-default ${degraded ? 'opacity-70' : ''}`}
+                >
+                  <span className={`${p.ic} [&_svg]:w-4 [&_svg]:h-4`}><p.icon /></span>
+                  <span className="hidden sm:inline">{p.label}</span>
+                  {degraded && (
+                    <span className="text-[10px] font-normal text-fg-muted">
+                      <span className="sr-only">{p.label}: </span>Đang gặp sự cố{/* wording: BA review */}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* Extension link — secondary, compact (comment history: it used to be
@@ -330,7 +341,7 @@ export default function LandingPage() {
         {/* Internal links to the per-platform SEO pages */}
         <nav aria-label="Tải video theo nền tảng" className="w-full mt-10 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-fg-muted">
           <span>Tải video theo nền tảng:</span>
-          {platformPages.map((p) => (
+          {platformPages.filter((p) => classify(p.platform) === 'healthy').map((p) => (
             <a
               key={p.slug}
               href={`/${p.slug}`}
