@@ -188,6 +188,17 @@ def github_latest(fetch=None, fetch_sig=None) -> Optional[Dict[str, str]]:
     return val
 
 
+def env_updater_enabled() -> bool:
+    return (os.environ.get("DESKTOP_UPDATER_ENABLED") or "1").strip().lower() not in ("0", "false", "no", "off")
+
+
+def updater_enabled() -> bool:
+    """Admin override (page "Công tắc khẩn cấp") first, else DESKTOP_UPDATER_ENABLED.
+    Never raises."""
+    from app.core import admin_switches  # noqa: PLC0415
+    return admin_switches.resolve(admin_switches.DESKTOP_UPDATER, env_updater_enabled())
+
+
 def update_offer(target: str, arch: str, current_version: str,
                  fetch=None, fetch_sig=None) -> Optional[Dict[str, str]]:
     """Task #6205 — the Tauri v2 updater's answer for
@@ -197,13 +208,13 @@ def update_offer(target: str, arch: str, current_version: str,
     it is strictly newer than the caller AND its installer has a valid .sig
     from the same release. The env floor is NOT used here: an env-only
     version has no signed installer. DESKTOP_RELEASE_SOURCE=env or
-    DESKTOP_UPDATER_ENABLED=0 → never an update (rollback switch)."""
+    DESKTOP_UPDATER_ENABLED=0 (or the admin switch off) → never an update (rollback switch)."""
     env = os.environ.get
     if (target, arch) != ("windows", "x86_64"):
         return None
     if (env("DESKTOP_RELEASE_SOURCE") or "github").strip().lower() == "env":
         return None
-    if (env("DESKTOP_UPDATER_ENABLED") or "1").strip().lower() in ("0", "false", "no", "off"):
+    if not updater_enabled():
         return None
     cur = parse_version(current_version)
     if not cur:

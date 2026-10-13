@@ -99,9 +99,12 @@ Apps **older than 0.11.0 cannot update themselves**: they keep showing the
 manual link (they have no updater). Everyone on 0.10.x must install 0.11.0 by
 hand once.
 
-**Pull a bad release:** set `DESKTOP_UPDATER_ENABLED=0` on the backend and
-redeploy (apps stop being offered the update; the manual link stays), or delete
-the `.sig` asset from the GitHub Release (→ 204 after the cache period).
+**Pull a bad release:** admin → **Công tắc khẩn cấp** → "Tự cập nhật app
+Windows" → stop offering (takes effect within seconds, no redeploy; audited).
+The env `DESKTOP_UPDATER_ENABLED=0` still works when no admin override is set
+("Về mặc định" removes the override). Apps stop being offered the update; the
+manual link stays. Alternatively delete the `.sig` asset from the GitHub
+Release (→ 204 after the cache period).
 
 ## 5. Losing or leaking the key; rotation
 
