@@ -175,3 +175,11 @@ def test_paid_never_below_free(monkeypatch):
     assert q.TIER_PERMISSIONS["team"]["batch_limit"] == 500
     assert q.TIER_PERMISSIONS["enterprise"]["batch_limit"] == -1
     assert q.TIER_PERMISSIONS["enterprise"]["max_height"] == 4320
+
+
+def test_smart_analysis_signed_in_never_below_guest(rc, monkeypatch):
+    from app.api import smart_analysis as sa
+    monkeypatch.setenv("AI_ANALYSIS_ANON_DAILY_LIMIT", "1000")
+    assert sa.free_limit() == 1000 and sa.pro_limit() >= 1000
+    t = {x["id"]: x for x in plans.build_plans()["tiers"]}
+    assert t["guest"]["smart_analysis_per_day"] <= t["free"]["smart_analysis_per_day"] <= t["pro"]["smart_analysis_per_day"]

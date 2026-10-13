@@ -38,6 +38,20 @@ router = APIRouter(tags=["Smart Analysis"])
 FREE_ANALYSES_PER_DAY = int(os.getenv("AI_FREE_ANALYSES_PER_DAY", "5"))
 FREE_CLIP_SUGGESTIONS_MAX = 1   # free gets 1 highlight only
 PRO_ANALYSES_PER_DAY = int(os.getenv("AI_PRO_ANALYSES_PER_DAY", "50"))
+
+
+def anon_limit() -> int:
+    return int(os.environ.get("AI_ANALYSIS_ANON_DAILY_LIMIT", "2"))
+
+
+def free_limit() -> int:
+    """Never below a guest's: production sets the guest limit to 1000 while
+    Free stayed at 5, so signing in cut the allowance (13/10)."""
+    return max(FREE_ANALYSES_PER_DAY, anon_limit())
+
+
+def pro_limit() -> int:
+    return max(PRO_ANALYSES_PER_DAY, free_limit())
 MAX_DURATION_FREE_S = 600.0     # 10 min max for free
 MAX_DURATION_PRO_S = 3600.0     # 60 min max for Pro
 
@@ -222,12 +236,12 @@ def _check_analysis_quota(
             logger.warning("Redis unavailable — skipping anonymous quota check")
             return True, ""
         key = f"ai_quota:anon:{ip}:{today_str}"
-        anon_limit = int(os.environ.get("AI_ANALYSIS_ANON_DAILY_LIMIT", "2"))
+        guest_limit = anon_limit()
         try:
             count = redis.get(key)
             current = int(count) if count else 0
-            if current >= anon_limit:
-                return False, f"Anonymous limit: {anon_limit} analyses per day. Sign in for more."
+            if current >= guest_limit:
+                return False, f"Anonymous limit: {guest_limit} analyses per day. Sign in for more."
             redis.incr(key)
             redis.expire(key, 86400)
             return True, ""
@@ -239,9 +253,9 @@ def _check_analysis_quota(
     user_id = user.get("id")
 
     if tier in _PAID_TIERS:
-        daily_limit = PRO_ANALYSES_PER_DAY
+        daily_limit = pro_limit()
     else:
-        daily_limit = FREE_ANALYSES_PER_DAY
+        daily_limit = free_limit()
 
     # Check Redis first (fast path)
     redis = _get_redis()

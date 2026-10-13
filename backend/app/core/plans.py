@@ -132,7 +132,7 @@ def build_plans() -> Dict[str, Any]:
     guest_h = int(os.getenv("GUEST_MAX_HEIGHT", "1080") or 0)
     yt_anon_h = int(os.getenv("YT_MAX_HEIGHT_ANON", "720"))
     yt_user_h = int(os.getenv("YT_MAX_HEIGHT_USER", "1080"))
-    anon_ai = int(os.environ.get("AI_ANALYSIS_ANON_DAILY_LIMIT", "2"))
+    anon_ai = sa.anon_limit()
     watch = _watch()
     s = get_settings()
 
@@ -158,7 +158,7 @@ def build_plans() -> Dict[str, Any]:
             "batch_links": free_p["batch_limit"],
             "zip": bool(free_p["bulk_zip"]), "api_key": bool(free_p["api_key"]),
             "spotify_artist_tracks": sp.ARTIST_CAP_TOP_TRACKS,
-            "smart_analysis_per_day": sa.FREE_ANALYSES_PER_DAY,
+            "smart_analysis_per_day": sa.free_limit(),
             "smart_analysis_max_min": int(sa.MAX_DURATION_FREE_S // 60),
             "watch_sources": watch.get("free_sources", 0) if watch.get("available") else 0,
             "watch_interval_h": watch.get("free_interval_h"),
@@ -174,7 +174,7 @@ def build_plans() -> Dict[str, Any]:
             "batch_links": pro_p["batch_limit"],
             "zip": bool(pro_p["bulk_zip"]), "api_key": bool(pro_p["api_key"]),
             "spotify_artist_tracks": sp.ARTIST_CAP_ALL_TRACKS,
-            "smart_analysis_per_day": sa.PRO_ANALYSES_PER_DAY,
+            "smart_analysis_per_day": sa.pro_limit(),
             "smart_analysis_max_min": int(sa.MAX_DURATION_PRO_S // 60),
             "watch_sources": watch.get("pro_sources", 0) if watch.get("available") else 0,
             "watch_interval_h": watch.get("pro_interval_h"),
