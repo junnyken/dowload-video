@@ -278,6 +278,8 @@ export default function SwitchesPage() {
             </div>
           )}
 
+          <StatusPageLinkCard canEdit={canEdit} />
+
           <Card padding="md" as="section">
             <h2 className="mb-2 text-sm font-semibold text-fg">Công tắc ở trang khác</h2>
             <ul className="space-y-2 text-xs text-fg-2">
@@ -294,5 +296,65 @@ export default function SwitchesPage() {
         </>
       )}
     </div>
+  )
+}
+
+
+/**
+ * Task #6331: the external status page (UptimeRobot / Better Stack) is linked
+ * from the web footer as "Trạng thái hệ thống" once set here. Empty = no link.
+ * Backend: app/api/site_links.py.
+ */
+function StatusPageLinkCard({ canEdit }: { canEdit: boolean }) {
+  const [saved, setSaved] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => {
+    adminFetch<{ status_page_url: string | null }>('/site-links')
+      .then(r => { setSaved(r.status_page_url); setDraft(r.status_page_url || '') })
+      .catch(() => setMsg({ ok: false, text: 'Không đọc được địa chỉ đang lưu.' }))
+  }, [])
+
+  const save = async (value: string) => {
+    setBusy(true); setMsg(null)
+    try {
+      const r = await adminPost<{ status_page_url: string | null }>('/site-links', { status_page_url: value || null })
+      setSaved(r.status_page_url); setDraft(r.status_page_url || '')
+      setMsg({ ok: true, text: r.status_page_url ? 'Đã lưu. Chân trang web hiện link sau tối đa 1 phút.' : 'Đã xoá link khỏi chân trang.' })
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không lưu được.' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card padding="md" as="section">
+      <h2 className="mb-1 text-sm font-semibold text-fg">Trang trạng thái hệ thống</h2>
+      <p className="mb-3 text-xs text-fg-2">
+        Dán địa chỉ trang trạng thái bên ngoài (ví dụ https://stats.uptimerobot.com/…). Chân trang web sẽ hiện
+        link “Trạng thái hệ thống”; để trống thì không hiện. Trang này nằm ngoài máy chủ nên vẫn mở được khi máy chủ gặp sự cố.
+      </p>
+      <form className="flex flex-wrap gap-2" onSubmit={e => { e.preventDefault(); void save(draft.trim()) }}>
+        <input
+          type="url" inputMode="url" value={draft} disabled={!canEdit || busy}
+          onChange={e => setDraft(e.target.value)} placeholder="https://stats.uptimerobot.com/…"
+          aria-label="Địa chỉ trang trạng thái"
+          className="min-w-0 flex-1 rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg"
+        />
+        <Button type="submit" size="sm" disabled={!canEdit || busy || draft.trim() === (saved || '')}>Lưu</Button>
+        {saved && (
+          <Button type="button" variant="secondary" size="sm" disabled={!canEdit || busy} onClick={() => void save('')}>Xoá link</Button>
+        )}
+      </form>
+      {saved && (
+        <p className="mt-2 text-xs text-fg-muted">
+          Đang hiện: <a href={saved} target="_blank" rel="noopener noreferrer" className="text-accent-text underline break-all">{saved}</a>
+        </p>
+      )}
+      {msg && <p className={cn('mt-2 text-xs', msg.ok ? 'text-fg-2' : 'text-danger')}>{msg.text}</p>}
+    </Card>
   )
 }
