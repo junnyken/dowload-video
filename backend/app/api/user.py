@@ -477,7 +477,10 @@ async def signout(_user: Dict[str, Any] = Depends(get_optional_user)):
 # ══════════════════════════════════════════════════════════════════════
 
 def _require_pro(user: Dict[str, Any]) -> str:
-    """Raise 403 if user is not Pro. Returns tier string."""
+    """Raise 403 if user is not Pro, or is calling with an API key (a leaked
+    key must not generate/revoke keys, 14/10). Returns tier string."""
+    if user.get("via_api_key"):
+        raise HTTPException(status_code=403, detail="Quản lý API key cần đăng nhập trên web, không dùng API key.")
     perm = check_feature_permission(user["id"], "api_key")
     if not perm["allowed"]:
         raise HTTPException(status_code=403, detail=perm["message"])

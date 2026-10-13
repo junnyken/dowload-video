@@ -160,7 +160,7 @@ class TestApiKeysProGuard:
         def _mock_profile(_user_id):
             return {"tier": "free", "billing_status": "none", "subscription_expiry": None}
 
-        monkeypatch.setattr("app.api.api_keys.get_user_profile", _mock_profile)
+        monkeypatch.setattr("app.core.quotas._get_profile", _mock_profile)
 
         from fastapi import HTTPException
         with pytest.raises(HTTPException) as exc:
@@ -173,7 +173,7 @@ class TestApiKeysProGuard:
         def _mock_profile(_user_id):
             return {"tier": "pro", "billing_status": "active", "subscription_expiry": None}
 
-        monkeypatch.setattr("app.api.api_keys.get_user_profile", _mock_profile)
+        monkeypatch.setattr("app.core.quotas._get_profile", _mock_profile)
         _assert_pro("user-pro")   # should not raise
 
 

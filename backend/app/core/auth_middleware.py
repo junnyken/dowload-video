@@ -24,6 +24,18 @@ from fastapi import Depends
 
 from app.core.database import get_supabase_client
 
+_NEW_KEY_PREFIX = "vidgrab_"
+_LEGACY_KEY_PREFIX = "vg_"
+
+
+def _invalid_key():
+    from fastapi import HTTPException  # noqa: PLC0415
+    raise HTTPException(status_code=401, detail={
+        "error_code": "invalid_api_key",
+        "user_message": "API key không hợp lệ hoặc đã bị thu hồi.",
+    })
+
+
 _bearer     = HTTPBearer(auto_error=False)
 _api_key_hdr = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -151,18 +163,34 @@ async def get_optional_user(
       2. Legacy API key Bearer token (user_api_keys table)
       3. X-API-Key header (api_keys table, vidgrab_ prefix)
     Returns user dict on success, None for guest.
-    Never raises — guest flow must always work.
+    Raises 401 invalid_api_key only when the caller presented an API key
+    (X-API-Key, or Bearer vidgrab_/vg_) that does not resolve; no
+    credentials or an unusable web session is a guest.
     """
+    # An API key the caller presented and that does not resolve is an error,
+    # not a guest (14/10): a mistyped or revoked key used to fall through to
+    # the anonymous path, so the developer got guest quotas and odd 400/429s
+    # instead of being told the key is wrong. A stale web session (JWT) still
+    # degrades to guest — the guest flow must keep working for the site.
     # ── Path 3: X-API-Key header (new multi-key) ─────────────────────
     if x_api_key:
         result = _lookup_new_api_key(x_api_key)
         if result:
             return result
+        _invalid_key()
 
     if not credentials or not credentials.credentials:
         return None
 
     token = credentials.credentials
+
+    # The public docs said "Authorization: Bearer <key>" while vidgrab_ keys
+    # only worked as X-API-Key; accept both.
+    if token.startswith(_NEW_KEY_PREFIX):
+        result = _lookup_new_api_key(token)
+        if result:
+            return result
+        _invalid_key()
 
     # ── Path 1: Supabase JWT ─────────────────────────────────────────
     try:
@@ -183,7 +211,10 @@ async def get_optional_user(
         pass
 
     # ── Path 2: Legacy Bearer API key ────────────────────────────────
-    return _lookup_api_key(token)
+    legacy = _lookup_api_key(token)
+    if legacy is None and token.startswith(_LEGACY_KEY_PREFIX):
+        _invalid_key()
+    return legacy
 
 
 async def get_required_user(

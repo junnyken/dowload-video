@@ -44,19 +44,34 @@ def _prefix_of(raw: str) -> str:
 
 
 def _assert_pro(user_id: str):
-    """Raise 403 if the user is not on Pro tier."""
+    """403 unless the account's EFFECTIVE tier may hold API keys (Pro, Team,
+    Enterprise). Used to read the raw profiles.tier and require exactly
+    "pro": Team/Enterprise were refused and an expired manual Pro passed."""
+    from app.core.quotas import check_feature_permission  # noqa: PLC0415
     try:
-        profile = get_user_profile(user_id)
+        perm = check_feature_permission(user_id, "api_key")
     except Exception:
-        profile = None
-
-    if not profile or profile.get("tier", "free") != "pro":
+        perm = {"allowed": False}
+    if not perm.get("allowed"):
         raise HTTPException(
             status_code=403,
             detail={
                 "error_code": "tier_required_feature",
                 "user_message": "API key management chỉ dành cho Pro.",
-                "upgrade_url": "/upgrade",
+                "upgrade_url": "/pricing",
+            },
+        )
+
+
+def _assert_session(user: Dict[str, Any]):
+    """Creating, listing, renaming or revoking keys needs a signed-in session,
+    not an API key: a leaked key must not mint or revoke other keys (14/10)."""
+    if user.get("via_api_key"):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error_code": "session_required",
+                "user_message": "Quản lý API key cần đăng nhập trên web, không dùng API key.",
             },
         )
 
@@ -76,6 +91,7 @@ class UpdateKeyRequest(BaseModel):
 @router.get("")
 async def list_keys(user: Dict[str, Any] = Depends(get_required_user)):
     """List all active + inactive API keys for the authenticated user."""
+    _assert_session(user)
     _assert_pro(user["id"])
 
     supabase = get_supabase_client()
@@ -98,6 +114,7 @@ async def create_key(
     Create a new API key (max 3 per user, Pro only).
     Returns the raw key ONCE — it cannot be retrieved again.
     """
+    _assert_session(user)
     _assert_pro(user["id"])
 
     supabase = get_supabase_client()
@@ -152,6 +169,7 @@ async def revoke_key(
     user: Dict[str, Any] = Depends(get_required_user),
 ):
     """Revoke (deactivate) a specific API key by ID."""
+    _assert_session(user)
     _assert_pro(user["id"])
 
     supabase = get_supabase_client()
@@ -174,6 +192,7 @@ async def update_key_label(
     user: Dict[str, Any] = Depends(get_required_user),
 ):
     """Update the display label of an API key."""
+    _assert_session(user)
     _assert_pro(user["id"])
 
     supabase = get_supabase_client()
