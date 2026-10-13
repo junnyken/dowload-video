@@ -222,11 +222,11 @@ export default function ExtensionPage() {
           <p className="text-center text-xs font-semibold text-fg-muted uppercase tracking-widest mb-4">
             Hỗ trợ tải từ
           </p>
-          {/* Negative mx to let chips bleed on mobile for scroll feel */}
-          <div className="relative sm:overflow-visible overflow-hidden -mx-4 sm:mx-0">
+          {/* Wraps at every width: the old hidden-scrollbar row showed 2.5 of 6
+              chips on a 390 px phone with no hint that it scrolled (13/10). */}
+          <div className="relative">
             <div
-              className="flex gap-2.5 overflow-x-auto pb-2 px-4 sm:px-0 sm:flex-wrap sm:justify-center"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              className="flex flex-wrap justify-center gap-2.5 pb-2"
               aria-label="Danh sách nền tảng"
             >
               {platforms.map(({ icon: Icon, label, color, ic }) => (

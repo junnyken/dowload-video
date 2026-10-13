@@ -2,7 +2,7 @@ import { X, Smartphone, Download, Share2 } from 'lucide-react';
 
 export default function PWAInstallBanner({ isIOS, onInstall, onDismiss }) {
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-40 sm:left-auto sm:right-4 sm:w-80">
+    <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] md:bottom-4 left-4 right-4 z-40 sm:left-auto sm:right-4 sm:w-80">
       <div className="bg-surface-2 border border-line rounded-2xl p-4 shadow-2xl shadow-black/40 relative">
         <button
           onClick={onDismiss}

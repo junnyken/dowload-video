@@ -270,7 +270,10 @@ function AppInner() {
     if (view === 'active')      return 'active';
     if (view === 'history')     return 'history';
     if (view === 'preferences') return 'account';
-    return 'landing';
+    // Only the home view lights "Trang chủ"; /extension, /faq, SEO pages… are
+    // none of the five tabs (13/10 UI review: they all showed Trang chủ active).
+    if (view === 'landing')     return 'landing';
+    return null;
   })();
 
   const handleMobileTabChange = (tabId) => {

@@ -437,7 +437,7 @@ export default function PlatformsPage() {
             <span className="text-sm font-semibold text-accent-text">{basicCount} Cơ bản</span>
           </div>
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-2 border border-line">
-            <span className="text-sm font-semibold text-fg-2">🆕 {newCount} Mới trong Phase 15</span>
+            <span className="text-sm font-semibold text-fg-2">🆕 {newCount} Mới thêm</span>
           </div>
         </div>
       </div>
@@ -513,7 +513,7 @@ export default function PlatformsPage() {
         <>
           <Section title="✅ Hỗ trợ đầy đủ" platforms={full} liveCapMap={liveCapMap} classify={classify} info={info} />
           {upgraded.length > 0 && (
-            <Section title="⬆️ Nâng cấp trong Phase 15" platforms={upgraded} liveCapMap={liveCapMap} classify={classify} info={info} />
+            <Section title="⬆️ Mới nâng cấp" platforms={upgraded} liveCapMap={liveCapMap} classify={classify} info={info} />
           )}
           <Section title="🟡 Hỗ trợ cơ bản" platforms={basic} liveCapMap={liveCapMap} classify={classify} info={info} />
           <Section title="⚠️ Đang gặp sự cố" platforms={degraded} liveCapMap={liveCapMap} classify={classify} info={info} /> {/* wording: BA review */}
@@ -535,14 +535,14 @@ export default function PlatformsPage() {
       {/* Footer note */}
       <div className="mt-8 p-4 rounded-xl bg-surface/60 border border-line">
         <p className="text-sm text-fg-muted">
-          <strong className="text-fg-2">Ghi chú:</strong> Nền tảng yêu cầu cookie cần được cấu hình bởi admin trong{' '}
-          <span className="font-mono text-xs bg-surface-2 text-fg-2 px-1.5 py-0.5 rounded border border-line-strong">Admin → Cookie Pool</span>.
+          {/* wording: BA review — internal names (Admin → Cookie Pool, capability registry) removed 13/10 */}
+          <strong className="text-fg-2">Ghi chú:</strong> Một số nền tảng chỉ tải được nội dung công khai.
           {liveCount > 0 && (
-            <span className="ml-1 text-success"> Dữ liệu status đang sync từ capability registry.</span>
+            <span className="ml-1 text-success"> Trạng thái được cập nhật tự động.</span>
           )}
         </p>
         <p className="mt-2 text-sm text-fg-muted">
-          Không tìm thấy nền tảng bạn cần? Gửi yêu cầu qua nút <strong className="text-fg-2">Phản hồi</strong> ở sidebar.
+          Không tìm thấy nền tảng bạn cần? Gửi yêu cầu qua nút <strong className="text-fg-2">Góp ý &amp; Phản hồi</strong>.
         </p>
       </div>
     </div>
