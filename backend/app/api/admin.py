@@ -1254,7 +1254,9 @@ async def run_backup_now(_=Depends(verify_admin)):
     nobody has ever watched succeed is a backup nobody should trust. This gives
     an operator the answer in seconds: how many rows and tables were captured,
     how large the file is, whether each destination accepted it, and any
-    warnings the run produced.
+    warnings the run produced. The ``redis`` part reports the Redis
+    configuration copy (task #6332): keys and bytes per group, and whether
+    secret values were included (default: no, metadata only).
 
     Runs inline rather than dispatching to Celery, so the caller gets the real
     result instead of a task id and a shrug.
