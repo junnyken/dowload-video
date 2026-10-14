@@ -40,6 +40,7 @@ const COMMANDS: &[&str] = &[
     "channel_seen_list",
     "notify",
     "clipboard_watch_set",
+    "system_shutdown",
     "autostart_get",
     "autostart_set",
     "set_close_to_tray",

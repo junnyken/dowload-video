@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { AlertCircle, CheckCircle2, FolderOpen, ListChecks, Pause, Play, RotateCw, Trash2, X, ExternalLink } from 'lucide-react';
-import { Badge, Button, EmptyState, IconButton, PlatformBadge, ProgressBar, ScreenHeader, Tabs, Thumb } from '../components/ui';
+import { AlertCircle, CheckCircle2, Clock, FolderOpen, ListChecks, Pause, Play, RotateCw, Trash2, X, ExternalLink } from 'lucide-react';
+import { Badge, Button, EmptyState, IconButton, PlatformBadge, ProgressBar, ScreenHeader, Tabs, Thumb, Toggle } from '../components/ui';
 import { QuotaBadge, QuotaNotice } from '../components/QuotaBadge';
-import { cancel, clearFinished, pause, queue, removeItem, resume, retry, type QueueItem } from '../lib/queue';
+import { cancel, clearFinished, pause, pump, queue, removeItem, resume, retry, type QueueItem } from '../lib/queue';
+import { schedule, setShutdownArmed, setStartAt } from '../lib/schedule';
+import { nextAt } from '../lib/schedule-core';
 import { formatBytes, formatEta, formatSpeed } from '../lib/format';
 import { errorAction, errorMessage } from '../lib/errors';
 import { api } from '../lib/tauri';
@@ -111,6 +113,7 @@ export function QueueScreen() {
         actions={<><QuotaBadge /><Button size="sm" icon={<Trash2 size={14} />} disabled={finished === 0} onClick={clearFinished}>Xoá mục đã xong</Button></>}
       />
       <QuotaNotice />
+      <ScheduleBar />
       <div className="px-6 pb-3">
         <Tabs<Tab> value={tab} onChange={setTab} items={[
           { value: 'active', label: 'Đang chạy', count: groups.active.length },
@@ -127,6 +130,43 @@ export function QueueScreen() {
           <ul className="flex flex-col gap-2.5">{list.map((it) => <Row key={it.id} it={it} />)}</ul>
         )}
       </div>
+    </div>
+  );
+}
+
+
+/** "Hẹn giờ bắt đầu" + "Tắt máy khi tải xong" (14/10, schedule.ts / shutdown.ts). wording: BA review */
+function ScheduleBar() {
+  const sch = schedule.use();
+  const [time, setTime] = useState('23:00');
+  const at = sch.startAt ? new Date(sch.startAt) : null;
+  const fmt = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const sameDay = at && at.toDateString() === new Date().toDateString();
+  return (
+    <div className="mx-6 mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface px-4 py-2.5 text-[13px] text-fg-2">
+      <Clock size={16} className="text-fg-muted" aria-hidden />
+      {at ? (
+        <>
+          <span>Hàng đợi sẽ bắt đầu lúc <strong className="text-fg">{fmt(at)}</strong>{sameDay ? ' hôm nay' : ' ngày mai'}.</span>
+          <Button size="sm" variant="ghost" onClick={() => { setStartAt(null); pump(); }}>Huỷ hẹn, tải ngay</Button>
+        </>
+      ) : (
+        <>
+          <label htmlFor="vg-start-at">Hẹn giờ bắt đầu</label>
+          <input id="vg-start-at" type="time" value={time} onChange={(e) => setTime(e.target.value)}
+            className="rounded-md border border-line bg-canvas px-2 py-1 text-sm text-fg" />
+          <Button size="sm" onClick={() => {
+            const t = nextAt(time, new Date());
+            if (t == null) { toast('error', 'Giờ không hợp lệ.'); return; }
+            setStartAt(t);
+            toast('info', `Các video trong hàng đợi sẽ bắt đầu tải lúc ${time}.`);
+          }}>Đặt hẹn</Button>
+        </>
+      )}
+      <span className="ml-auto flex items-center gap-2">
+        <Toggle checked={sch.shutdownArmed} onChange={(v) => setShutdownArmed(v)} label="Tắt máy khi tải xong" />
+        <span>Tắt máy khi tải xong</span>
+      </span>
     </div>
   );
 }

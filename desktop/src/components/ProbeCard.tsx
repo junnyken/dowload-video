@@ -7,6 +7,7 @@ import { auth } from '../lib/auth';
 import { formatBytes, formatDuration } from '../lib/format';
 import { errorMessage } from '../lib/errors';
 import { api } from '../lib/tauri';
+import { defaultsFor } from '../lib/presets-core';
 
 export function cardSelection(card: Card, defaultQuality: Quality, defaultDir: string | null) {
   const r = card.result!;
@@ -50,7 +51,8 @@ export function ProbeCard({ card, onAdd }: { card: Card; onAdd: (c: Card) => voi
     );
   }
   const r = card.result!;
-  const { opts, option, outDir } = cardSelection(card, st.defaultQuality, st.outDir);
+  const d = defaultsFor(card.result?.platform, st.platformPresets, st.defaultQuality, st.outDir);
+  const { opts, option, outDir } = cardSelection(card, d.quality, d.outDir);
   const est = option.format?.filesize ?? null;
   return (
     <article className="flex gap-4 rounded-xl border border-line bg-surface p-3 shadow-card">

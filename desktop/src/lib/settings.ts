@@ -1,5 +1,6 @@
 import { createStore } from './store';
 import type { ClipMode } from './clipboard-core';
+import { cleanPresets, type Presets } from './presets-core';
 import { api } from './tauri';
 
 export type Quality = 'best' | '2160' | '1440' | '1080' | '720' | '480' | '360' | 'audio';
@@ -16,10 +17,12 @@ export type Settings = {
   douyinDebugWindow: boolean;
   /** Clipboard link watch: ask before downloading, download at once, or off (14/10). */
   clipboardMode: ClipMode;
+  /** Per-platform quality/folder for links (presets-core.ts, 14/10). */
+  platformPresets: Presets;
 };
 
 const KEY = 'vg.settings';
-const DEFAULTS: Settings = { outDir: null, concurrency: 2, defaultQuality: 'best', theme: 'system', autoSync: true, closeToTray: true, douyinDebugWindow: false, clipboardMode: 'ask' };
+const DEFAULTS: Settings = { outDir: null, concurrency: 2, defaultQuality: 'best', theme: 'system', autoSync: true, closeToTray: true, douyinDebugWindow: false, clipboardMode: 'ask', platformPresets: {} };
 
 function load(): Settings {
   try {
@@ -28,6 +31,7 @@ function load(): Settings {
       const s = { ...DEFAULTS, ...raw } as Settings;
       s.concurrency = Math.min(4, Math.max(1, Math.round(Number(s.concurrency)) || 2));
       if (!['ask', 'auto', 'off'].includes(s.clipboardMode)) s.clipboardMode = 'ask';
+      s.platformPresets = cleanPresets(s.platformPresets);
       return s;
     }
   } catch { /* corrupted -> defaults */ }

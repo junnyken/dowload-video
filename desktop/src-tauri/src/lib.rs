@@ -583,6 +583,16 @@ fn clipboard_watch_set(enabled: bool) -> CmdResult<()> {
     Ok(())
 }
 
+/// "Tắt máy khi tải xong": shuts Windows down now (sys::shutdown_now). The
+/// webview calls it only after a 60 s countdown with a cancel button.
+#[tauri::command]
+async fn system_shutdown() -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(sys::shutdown_now)
+        .await
+        .map_err(|e| CommandError::unknown(format!("shutdown task failed: {e}")))?
+        .map_err(|e| CommandError::unknown(format!("cannot shut down: {e}")))
+}
+
 /// Windows toast. The plugin is used from Rust only; texts are capped.
 #[tauri::command]
 fn notify(app: AppHandle, title: String, body: String) -> CmdResult<()> {
@@ -1562,6 +1572,7 @@ pub fn run() {
         .manage(BrowserLogin::default())
         .invoke_handler(tauri::generate_handler![
             clipboard_watch_set,
+            system_shutdown,
             probe,
             cancel_probe,
             start_download,

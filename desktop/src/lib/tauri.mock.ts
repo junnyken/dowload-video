@@ -316,6 +316,7 @@ export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promi
     case 'channel_seen_list': return [...(mockSeen.get(a.channelId as string) ?? new Set<string>(MOCK_VIDEOS.map((v) => v.id)))];
     case 'notify': console.info('[mock notify]', a.title, a.body); return null;
     case 'clipboard_watch_set': return null;
+    case 'system_shutdown': mockLog.push('system_shutdown'); return null;
     case 'autostart_get': return autostart;
     case 'autostart_set': autostart = a.enabled as boolean; return null;
     case 'set_close_to_tray': return null;

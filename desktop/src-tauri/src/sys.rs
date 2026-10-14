@@ -125,3 +125,28 @@ mod tests {
         assert!(super::disk_free(std::path::Path::new("/definitely/not/here")).is_err());
     }
 }
+
+/// "Tắt máy khi tải xong" (14/10): the webview asks only after its own
+/// 60-second countdown the user could cancel. Absolute path to the system
+/// shutdown.exe (no PATH lookup); not in the app's kill-on-close job.
+#[cfg(windows)]
+pub fn shutdown_now() -> io::Result<()> {
+    use std::os::windows::process::CommandExt;
+    use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+    let root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+    let exe = Path::new(&root).join("System32").join("shutdown.exe");
+    let st = std::process::Command::new(exe)
+        .args(["/s", "/t", "0"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .status()?;
+    if st.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other(format!("shutdown.exe exited with {st}")))
+    }
+}
+
+#[cfg(not(windows))]
+pub fn shutdown_now() -> io::Result<()> {
+    Err(io::Error::new(io::ErrorKind::Unsupported, "shutdown is only supported on Windows"))
+}

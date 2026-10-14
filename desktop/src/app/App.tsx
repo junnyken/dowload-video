@@ -22,6 +22,8 @@ import { initUpdateGate } from '../lib/update';
 import { startWatch } from '../lib/watch';
 import { startClipboardWatch } from '../lib/clipboard';
 import { ClipboardBanner } from '../components/ClipboardBanner';
+import { ShutdownDialog } from '../components/ShutdownDialog';
+import { startShutdownWatch } from '../lib/shutdown';
 
 let booted = false;
 
@@ -45,6 +47,7 @@ export function App() {
       void startChannels();
       startWatch();
       startClipboardWatch();
+      startShutdownWatch();
     }
     return () => mq.removeEventListener('change', applyTheme);
   }, []);
@@ -69,6 +72,7 @@ export function App() {
       <ConfirmDialog />
       <Toasts />
       <ClipboardBanner />
+      <ShutdownDialog />
       <UpdateRequired />
     </div>
   );

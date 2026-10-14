@@ -17,6 +17,8 @@ import { WEBSITE_URL } from '../lib/config';
 import { inAppVersion, progressPercent, updaterMissing, ytdlpLabel, type InAppProgress } from '../lib/update-core';
 import type { ClientVersionInfo, ToolVersions } from '../lib/types';
 import type { ClipMode } from '../lib/clipboard-core';
+import { PRESET_PLATFORMS, type PlatformPreset } from '../lib/presets-core';
+import { platformLabel } from '../lib/format';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -170,6 +172,8 @@ export function SettingsScreen() {
             </Row>
           </Section>
 
+          <PlatformPresetsSection />
+
           {/* wording: BA review — clipboard link watch (14/10) */}
           <Section title="Tự nhận link">
             <Row label="Khi sao chép link video" hint="VidGrab nhận ra link video bạn vừa sao chép (Ctrl+C) ở bất kỳ đâu. Chỉ đọc link của các nền tảng VidGrab hỗ trợ; mọi nội dung khác trong bộ nhớ tạm được bỏ qua và không rời khỏi máy.">
@@ -284,5 +288,47 @@ export function SettingsScreen() {
         </div>
       </div>
     </div>
+  );
+}
+
+
+/** Per-platform quality/folder for links (14/10, presets-core.ts). wording: BA review */
+function PlatformPresetsSection() {
+  const st = settings.use();
+  const presets = st.platformPresets;
+  const set = (k: string, patch: PlatformPreset | null) => {
+    const next = { ...presets };
+    const merged = patch ? { ...next[k], ...patch } : {};
+    if (!merged.quality) delete merged.quality;
+    if (!merged.outDir) delete merged.outDir;
+    if (merged.quality || merged.outDir) next[k] = merged; else delete next[k];
+    updateSettings({ platformPresets: next });
+  };
+  async function pickFor(k: string) {
+    try {
+      const d = await api.pickFolder();
+      if (d) set(k, { outDir: d });
+    } catch (e) { toast('error', errorMessage(toAppError(e).code)); }
+  }
+  return (
+    <Section title="Mặc định theo nền tảng">
+      <p className="px-4 pt-3 text-xs text-fg-muted">
+        Chọn chất lượng và thư mục riêng cho từng nền tảng khi tải link lẻ. Để “Mặc định chung” thì dùng cài đặt ở mục Tải xuống. Kênh theo dõi có cài đặt riêng trong mục Kênh.
+      </p>
+      {PRESET_PLATFORMS.map((k) => {
+        const p = presets[k] ?? {};
+        return (
+          <Row key={k} label={platformLabel(k)}>
+            <Select label={`Chất lượng ${platformLabel(k)}`} value={p.quality ?? ''} onChange={(v) => set(k, { quality: (v || undefined) as Quality | undefined })} className="w-[170px]">
+              <option value="">Mặc định chung</option>
+              {(Object.keys(QUALITY_LABEL) as Quality[]).map((q) => <option key={q} value={q}>{QUALITY_LABEL[q]}</option>)}
+            </Select>
+            <span className="max-w-[160px] truncate text-[13px] text-fg-2 select-text" title={p.outDir ?? ''}>{p.outDir ?? 'Thư mục chung'}</span>
+            <Button size="sm" icon={<FolderOpen size={14} />} onClick={() => void pickFor(k)}>Đổi</Button>
+            {(p.quality || p.outDir) && <Button size="sm" variant="ghost" onClick={() => set(k, null)}>Bỏ</Button>}
+          </Row>
+        );
+      })}
+    </Section>
   );
 }

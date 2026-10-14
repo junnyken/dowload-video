@@ -81,6 +81,8 @@ export const api = {
   channelSeenList: (channelId: string) => call<string[]>('channel_seen_list', { channelId }),
   notify: (title: string, body: string) => call<null>('notify', { title, body }),
   clipboardWatchSet: (enabled: boolean) => call<null>('clipboard_watch_set', { enabled }),
+  /** Shuts Windows down now — only after the 60 s countdown (ShutdownDialog). */
+  systemShutdown: () => call<null>('system_shutdown'),
   autostartGet: () => call<boolean>('autostart_get'),
   autostartSet: (enabled: boolean) => call<null>('autostart_set', { enabled }),
   setCloseToTray: (enabled: boolean) => call<null>('set_close_to_tray', { enabled }),

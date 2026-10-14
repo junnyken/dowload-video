@@ -20,6 +20,7 @@ import {
 import { fetchLink } from './fetchlink';
 import { capForGuest } from './quality';
 import { auth } from './auth';
+import { schedule, scheduleAllows } from './schedule';
 
 export type QueueState = 'queued' | 'running' | 'paused' | 'completed' | 'failed';
 
@@ -138,8 +139,18 @@ export function pauseAllForQuit() {
   for (const i of queue.get()) if (i.state === 'running') void pause(i.id);
 }
 
+let scheduleTimer: ReturnType<typeof setTimeout> | null = null;
+/** Re-pump when a scheduled start time comes (schedule.ts). */
+function armScheduleTimer() {
+  if (scheduleTimer) clearTimeout(scheduleTimer);
+  scheduleTimer = null;
+  const t = schedule.get().startAt;
+  if (t != null) scheduleTimer = setTimeout(pump, Math.max(0, Math.min(t - Date.now(), 2 ** 31 - 1)) + 500);
+}
+
 export function pump() {
   if (quitting) return;
+  if (!scheduleAllows()) return; // "Hẹn giờ bắt đầu": items wait until the time (14/10)
   if (gatePaused(quotaGate.get(), Date.now())) return; // the server refused (daily limit): wait for sign-in / retry / next day
   const limit = settings.get().concurrency;
   for (;;) {
@@ -323,6 +334,10 @@ let started = false;
 export async function initQueue() {
   if (started) return;
   started = true;
+  // Only re-arm here: pump() itself clears a due schedule, and pumping from
+  // inside that change would re-enter pump. Clearing by hand calls pump().
+  armScheduleTimer();
+  schedule.subscribe(armScheduleTimer);
   await onProgress((e) => {
     const it = queue.get().find((i) => i.id === e.jobId);
     if (!it || it.state !== 'running') return;

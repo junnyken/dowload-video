@@ -10,6 +10,7 @@ import { enqueue } from '../lib/queue';
 import { api } from '../lib/tauri';
 import { confirmDialog, go, openInChannels, prefill, toast } from '../lib/ui';
 import { findDuplicate } from '../lib/dedupe';
+import { defaultsFor } from '../lib/presets-core';
 import { isChannelOnDownloadScreen as looksLikeChannelUrl } from '../lib/urls';
 
 const draft = createStore('');
@@ -17,7 +18,8 @@ const PLATFORMS = ['YouTube', 'TikTok', 'Douyin', 'Instagram', 'Facebook', 'X (T
 
 export async function addToQueue(card: Card): Promise<boolean> {
   const st = settings.get();
-  const { option, outDir } = cardSelection(card, st.defaultQuality, st.outDir);
+  const d = defaultsFor(card.result?.platform, st.platformPresets, st.defaultQuality, st.outDir);
+  const { option, outDir } = cardSelection(card, d.quality, d.outDir);
   const r = card.result!;
   if (!outDir) return false;
   // Already downloaded / already queued (14/10, dedupe.ts). wording: BA review

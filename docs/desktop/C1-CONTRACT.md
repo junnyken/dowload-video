@@ -104,6 +104,7 @@ checks only take videos not seen before.
 | `channel_seen_list` | `{ channelId }` | `string[]` | |
 | `notify` | `{ title, body }` | `null` | Windows toast (notification plugin used from Rust only). |
 | `clipboard_watch_set` | `{ enabled }` | `null` | Clipboard link watch on/off (clip_watch.rs, 14/10). While on, Rust reads the clipboard every 1.5 s and emits **`clipboard-link`** (payload: string) only when the clipboard is ONE http(s) URL (no whitespace, ≤ 2048 chars); any other text never reaches the webview. Clipboard is read in Rust only (tauri-plugin-clipboard-manager); the webview gets no clipboard permission. |
+| `system_shutdown` | `{}` | `null` | "Tắt máy khi tải xong" (14/10): runs `%SystemRoot%\System32\shutdown.exe /s /t 0` (absolute path, no shell, outside the app's kill-on-close job). The webview calls it ONLY after its own 60 s countdown dialog with a cancel button (ShutdownDialog); the setting is one-shot and never re-armed after an app restart. Non-Windows: error. |
 | `autostart_get` / `autostart_set` | `{}` / `{ enabled }` | `boolean` / `null` | tauri-plugin-autostart; launched with `--minimized` → start hidden in tray. |
 | `set_close_to_tray` | `{ enabled }` | `null` | Window close hides instead of quitting when enabled (default true). |
 
