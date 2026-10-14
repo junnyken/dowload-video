@@ -11,6 +11,7 @@
 
   const DOUYIN_ENDPOINTS = [
     '/aweme/v1/web/aweme/post/',       // video đăng của user
+    '/aweme/v1/web/aweme/detail/',     // video đang xem (1 aweme_detail) — tải thẳng bằng IP người dùng (14/10)
     '/aweme/v1/web/aweme/favorite/',   // video đã thích
     '/aweme/v1/web/search/item/',      // kết quả tìm kiếm
     '/aweme/v1/web/aweme/listv2/',     // danh sách tổng hợp
@@ -26,7 +27,7 @@
   }
 
   function extractAndBroadcast(url, json) {
-    const list = json?.aweme_list;
+    const list = json?.aweme_list || (json?.aweme_detail ? [json.aweme_detail] : null);
     if (!Array.isArray(list) || list.length === 0) return;
 
     const videos = list.map((aweme) => {

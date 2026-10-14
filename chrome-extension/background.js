@@ -561,6 +561,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // ── VG_DIRECT_DOWNLOAD (14/10): a media link the page itself holds (Douyin)
+  // downloaded with the user's browser/IP — no server, not blocked. If Chrome
+  // interrupts it (403 / expired link), the tab is told to use the server path.
+  if (msg.type === 'VG_DIRECT_DOWNLOAD') {
+    const url = String(msg.url || '');
+    if (!/^https:\/\//i.test(url)) { sendResponse({ ok: false }); return false; }
+    const safeName = String(msg.title || 'video').replace(/[/\\?%*:|"<>\n\r\t]/g, '-').trim().slice(0, 120) || 'video';
+    const tabId = sender?.tab?.id;
+    chrome.downloads.download({ url, filename: `VidGrab/${safeName}.mp4`, saveAs: false }, (downloadId) => {
+      if (chrome.runtime.lastError || !downloadId) { sendResponse({ ok: false }); return; }
+      sendResponse({ ok: true, downloadId });
+      const onChanged = (delta) => {
+        if (delta.id !== downloadId || !delta.state) return;
+        if (delta.state.current === 'interrupted') {
+          chrome.downloads.onChanged.removeListener(onChanged);
+          if (tabId != null) chrome.tabs.sendMessage(tabId, { type: 'VG_DIRECT_FAILED', pageUrl: msg.pageUrl }).catch(() => {});
+        } else if (delta.state.current === 'complete') {
+          chrome.downloads.onChanged.removeListener(onChanged);
+          addToHistory({ title: msg.title || 'Video', thumbnail: '', url: msg.pageUrl || url, quality: 'HD', fileSize: '', noWatermark: true, hasSubtitle: false, subtitleLanguages: [], subtitleSource: 'none' });
+        }
+      };
+      chrome.downloads.onChanged.addListener(onChanged);
+    });
+    return true;
+  }
+
   // ── VG_DOWNLOAD_NOW: full download pipeline in background — survives popup close ──────────
   // popup sends this instead of VG_FETCH_LINK so the download completes even if popup closes.
   // Flow: fetch-link API → resolve URL → chrome.downloads.download (saveAs:false) → notify.

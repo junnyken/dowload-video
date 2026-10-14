@@ -272,7 +272,69 @@
   const _vgCapturedMedia = new Set();   // direct media URLs seen on this page
 
   // ── Relay từ interceptor.js (MAIN world) ──────────────────────────
-  window.addEventListener('message', (event) => {
+  // ── Douyin: download with the user's own browser/IP (14/10) ────────────────
+// The server's IP is blocked by Douyin (share page without video data, play
+// links answer 0 bytes). The page the user is watching already has the media
+// link: from the API responses (interceptor.js), the SSR RENDER_DATA, or the
+// playing <video>. Downloading that link from here costs the server nothing
+// and is not blocked. Pure helpers are exported for tests (vgDouyin*).
+const _vgDouyinDirect = new Map(); // aweme_id -> { url, title }
+
+function vgDouyinIdOf(href) {
+  try {
+    const u = new URL(href);
+    if (!/(^|\.)douyin\.com$/i.test(u.hostname)) return null;
+    const m = u.pathname.match(/\/(?:video|note)\/(\d{15,25})/);
+    if (m) return m[1];
+    const q = u.searchParams.get('modal_id');
+    return q && /^\d{15,25}$/.test(q) ? q : null;
+  } catch { return null; }
+}
+
+function vgHttps(u) {
+  if (typeof u !== 'string' || !u) return null;
+  if (u.startsWith('//')) u = 'https:' + u;
+  return /^https?:\/\//i.test(u) ? u.replace('/playwm/', '/play/') : null;
+}
+
+/** Media link of aweme `id` anywhere inside Douyin's RENDER_DATA object. */
+function vgDouyinFindInRenderData(obj, id, depth = 0) {
+  if (!obj || typeof obj !== 'object' || depth > 12) return null;
+  const aid = obj.awemeId || obj.aweme_id;
+  if (String(aid || '') === id && obj.video) {
+    const v = obj.video;
+    const url = vgHttps(v.play_addr?.url_list?.[0]) || vgHttps(v.playAddr?.[0]?.src)
+      || vgHttps(v.playAddr?.urlList?.[0]) || vgHttps(v.playApi);
+    if (url) return { url, title: obj.desc || '' };
+  }
+  for (const k of Object.keys(obj)) {
+    const r = vgDouyinFindInRenderData(obj[k], id, depth + 1);
+    if (r) return r;
+  }
+  return null;
+}
+
+const _VG_DOUYIN_MEDIA_HOST = /^https:\/\/[^/]*(douyinvod|douyincdn|amemv|snssdk|bytecdn|zjcdn)\./i;
+
+function vgDouyinDirectForPage() {
+  const id = vgDouyinIdOf(location.href);
+  if (!id) return null;
+  const hit = _vgDouyinDirect.get(id);
+  if (hit) return { id, ...hit };
+  try {
+    const el = document.getElementById('RENDER_DATA');
+    if (el && el.textContent) {
+      const r = vgDouyinFindInRenderData(JSON.parse(decodeURIComponent(el.textContent)), id);
+      if (r) return { id, ...r };
+    }
+  } catch { /* page format changed: fall through */ }
+  const vid = document.querySelector('video');
+  const src = vid && (vid.currentSrc || vid.src || vid.querySelector('source')?.src);
+  if (src && _VG_DOUYIN_MEDIA_HOST.test(src)) return { id, url: src, title: document.title || '' };
+  return null;
+}
+
+window.addEventListener('message', (event) => {
     if (event.source !== window) return;
     if (event.data?.__vg_source !== 'interceptor') return;
 
@@ -288,6 +350,7 @@
     const videos = event.data.videos || [];
     videos.forEach((v) => {
       if (v.aweme_id) videoSet.add(`https://www.douyin.com/video/${v.aweme_id}`);
+      if (v.aweme_id && v.direct_url) _vgDouyinDirect.set(String(v.aweme_id), { url: v.direct_url, title: v.desc || '' });
     });
 
     // Cũng lưu lên background để popup lấy được
@@ -370,6 +433,27 @@
       btn.style.opacity = '0.7';
       btn.disabled = true;
 
+      // Douyin: the page already holds the media link — download it with this
+      // browser (user's IP); the server path is only the fallback (14/10).
+      const skipDirect = btn.dataset.vgSkipDirect === '1';
+      delete btn.dataset.vgSkipDirect;
+      const dy = skipDirect ? null : vgDouyinDirectForPage();
+      if (dy) {
+        const ok = await new Promise((resolve) => chrome.runtime.sendMessage(
+          { type: 'VG_DIRECT_DOWNLOAD', url: dy.url, title: dy.title || `douyin_${dy.id}`, pageUrl: location.href },
+          (r) => resolve(!chrome.runtime.lastError && r && r.ok)));
+        if (ok) {
+          label.textContent = '✅ Đang tải (trực tiếp)';
+          btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
+          await sleep(4000);
+          label.textContent = 'VidGrab';
+          btn.style.opacity = '1';
+          btn.style.background = 'linear-gradient(135deg,#f97316,#eab308)';
+          btn.disabled = false;
+          return;
+        }
+      }
+
       try {
         // Gọi API qua background service worker để bypass CORS
         const resp = await new Promise((resolve) =>
@@ -413,6 +497,14 @@
       btn.style.opacity = '1';
       btn.style.background = 'linear-gradient(135deg,#f97316,#eab308)';
       btn.disabled = false;
+    });
+
+    // The direct Douyin download was interrupted: run the server path once.
+    chrome.runtime.onMessage.addListener((m) => {
+      if (m?.type !== 'VG_DIRECT_FAILED') return;
+      showVGToast('Tải trực tiếp bị gián đoạn — đang thử qua máy chủ VidGrab…');
+      btn.dataset.vgSkipDirect = '1';
+      btn.click();
     });
 
     wrapper.appendChild(btn);
