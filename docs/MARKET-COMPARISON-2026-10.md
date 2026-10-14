@@ -133,7 +133,7 @@ Kết luận:
 
 ### D3. 5 đề xuất tự động hoá đáng làm tiếp (xếp theo giá trị cho người Việt)
 
-> **Trạng thái 14/10:** (1) bắt link khi sao chép — XONG, app 0.15.0 (Cài đặt → Tự nhận link). (2) preset theo kênh — ĐÃ CÓ từ trước (mỗi kênh có chất lượng/thư mục/chế độ tải-hay-báo riêng; cộng chất lượng & thư mục mặc định chung). (4) chống tải trùng — XONG cho link lẻ, app 0.15.0 (kênh đã có sổ "đã thấy"); đồng bộ Drive chưa làm. (3) lịch giờ thấp điểm + tắt máy, (5) QR tự kích hoạt — chưa làm.
+> **Trạng thái 14/10:** (1) bắt link khi sao chép — XONG, app 0.15.0 (Cài đặt → Tự nhận link). (2) preset theo kênh — ĐÃ CÓ từ trước (mỗi kênh có chất lượng/thư mục/chế độ tải-hay-báo riêng; cộng chất lượng & thư mục mặc định chung). (4) chống tải trùng — XONG cho link lẻ, app 0.15.0 (kênh đã có sổ "đã thấy"); đồng bộ Drive chưa làm. (2b) mặc định theo nền tảng cho link lẻ — XONG app 0.16.0. (3) hẹn giờ bắt đầu + tắt máy khi tải xong (đếm ngược 60 s) — XONG app 0.16.0. (5) QR tự kích hoạt — chưa làm (cần owner đăng ký cổng thanh toán).
 
 | # | Đề xuất | Đối thủ đang có (đọc được) | Vì sao đáng làm [SL] |
 |---|---|---|---|
