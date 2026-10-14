@@ -224,6 +224,16 @@ async def lifespan(app: FastAPI):
     except Exception as _js_err:
         print(f"[Startup] PhantomJS check skipped: {_js_err}")
 
+    # Which admin proxies reach Douyin (owner 14/10): measured once per deploy
+    # in a background thread (Redis lock: one of the API workers), logged as
+    # [ProxyTest] lines with masked hosts. Admin: /admin/proxies/test-china.
+    try:
+        import threading as _threading
+        from app.core.china_proxy_test import run_once_per_deploy as _proxy_test
+        _threading.Thread(target=_proxy_test, name="proxy-test", daemon=True).start()
+    except Exception as _pt_err:
+        print(f"[Startup] proxy test skipped: {type(_pt_err).__name__}")
+
     # Send Telegram startup notification (non-blocking, failure is OK)
     try:
         from app.core.notifications import notify_system_startup

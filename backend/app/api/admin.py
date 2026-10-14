@@ -2696,6 +2696,26 @@ async def proxy_pool_remove(req: ProxyRemoveRequest, request: Request, _=Depends
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/proxies/test-china")
+async def proxy_test_china_last(_=Depends(verify_admin)):
+    """Last "which proxy reaches Douyin" report (masked hosts)."""
+    from app.core.china_proxy_test import RESULT_KEY  # noqa: PLC0415
+    from app.core.redis_client import get_redis as _gr  # noqa: PLC0415
+    raw = _gr().get(RESULT_KEY)
+    return {"report": json.loads(raw) if raw else None}
+
+
+@router.post("/proxies/test-china")
+async def proxy_test_china_run(request: Request, _=Depends(verify_admin)):
+    """Run the Douyin proxy test now (≈20 s per proxy, max 8)."""
+    import asyncio as _aio  # noqa: PLC0415
+    from app.core.china_proxy_test import run  # noqa: PLC0415
+    report = await _aio.to_thread(run)
+    log_admin_action(request, "admin.proxies.test_china", resource_type="proxy_pool", resource_id="china",
+                     metadata={"proxies": len(report.get("proxies") or [])})
+    return {"report": report}
+
+
 @router.get("/proxies/list/{platform}")
 async def proxy_pool_list(platform: str, _=Depends(verify_admin)):
     """List all proxies in Redis pool for a platform (masked credentials)."""

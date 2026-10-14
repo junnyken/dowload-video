@@ -31,6 +31,9 @@ _ENV_VARS = {
     "facebook":  "PROXY_POOL_FB",
     "instagram": "PROXY_POOL_IG",
     "douyin":    "PROXY_POOL_CN",
+    # China platforms other than Douyin (owner 14/10): admin pools, metadata only.
+    "xiaohongshu": "PROXY_POOL_XHS",
+    "kuaishou":  "PROXY_POOL_KS",
     "twitter":   "PROXY_POOL_TW",
     "reddit":    "PROXY_POOL_REDDIT",
     # Channel Watch scans only (channel_watch._watch_proxy) — never downloads.
@@ -48,7 +51,9 @@ def platform_of_url(url: str) -> str:
     if "youtube.com" in u or "youtu.be" in u:
         return "youtube"
     for host, name in (("tiktok.com", "tiktok"), ("facebook.com", "facebook"), ("fb.watch", "facebook"),
-                       ("instagram.com", "instagram"), ("douyin.com", "douyin"), ("twitter.com", "twitter"),
+                       ("instagram.com", "instagram"), ("douyin.com", "douyin"), ("iesdouyin.com", "douyin"),
+                       ("xiaohongshu.com", "xiaohongshu"), ("xhslink.com", "xiaohongshu"),
+                       ("kuaishou.com", "kuaishou"), ("twitter.com", "twitter"),
                        ("x.com", "twitter"), ("reddit.com", "reddit"), ("redd.it", "reddit")):
         if host in u:
             return name
@@ -102,7 +107,8 @@ def get_pool_status() -> dict:
     """Return count of proxies per platform (Redis + env)."""
     rc = get_redis()
     result = {}
-    for platform in ("youtube", "tiktok", "facebook", "instagram", "douyin", "twitter", "reddit", "tiktok_watch", "all"):
+    for platform in ("youtube", "tiktok", "facebook", "instagram", "douyin", "xiaohongshu", "kuaishou",
+                     "twitter", "reddit", "tiktok_watch", "all"):
         redis_count = rc.llen(f"proxy_pool:{platform}")
         env_count = len(_env_proxies(platform))
         result[platform] = {
