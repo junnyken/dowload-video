@@ -19,6 +19,7 @@ pool entry, nothing else. Result kept in Redis `china:proxy_test:last`.
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from typing import Any, Dict, List, Optional
@@ -121,14 +122,17 @@ def _pool_entries() -> List[tuple]:
 def run() -> Dict[str, Any]:
     """Test every pooled proxy (max MAX_PROXIES) + the server IP. Never raises."""
     results: List[Dict[str, Any]] = []
+    entries = _pool_entries()
+    print(f"[ProxyTest] start: {len(entries)} proxies in pools {','.join(POOLS)}")
     direct = test_proxy(None)
     any_play = direct.pop("_play", None)
-    for pool, p in _pool_entries():
+    for pool, p in entries:
         res = test_proxy(p)
         res["pool"] = pool
         any_play = any_play or res.get("_play")
         res.pop("_play", None)
         results.append(res)
+        print(f"[ProxyTest] {json.dumps(res)}")
     if any_play:
         direct["douyin_bytes_direct"] = _bytes(any_play, None)
     report = {"at": int(time.time()), "video_id": TEST_VIDEO_ID, "direct": direct, "proxies": results}
@@ -138,8 +142,6 @@ def run() -> Dict[str, Any]:
     except Exception:  # noqa: BLE001
         pass
     print(f"[ProxyTest] direct {json.dumps(direct)}")
-    for r in results:
-        print(f"[ProxyTest] {json.dumps(r)}")
     if not results:
         print("[ProxyTest] no proxy in pools douyin/xiaohongshu/kuaishou/all")
     return report
@@ -149,7 +151,9 @@ def run_once_per_deploy() -> None:
     """Startup hook: one worker runs it (Redis lock, 30 min)."""
     try:
         from app.core.redis_client import get_redis  # noqa: PLC0415
-        if not get_redis().set(LOCK_KEY, "1", nx=True, ex=1800):
+        # One run per container (each deploy is a new container / hostname).
+        key = f"{LOCK_KEY}:{os.getenv('HOSTNAME', '')}"
+        if not get_redis().set(key, "1", nx=True, ex=1800):
             return
         run()
     except Exception as exc:  # noqa: BLE001
