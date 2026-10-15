@@ -220,3 +220,14 @@ def test_no_jar_falls_through_quietly(rc, monkeypatch):
     from curl_cffi import requests as cr
     monkeypatch.setattr(cr, "get", lambda *a, **k: pytest.fail("no jar → no call"))
     assert _run(d._try_signed_web_api("1")) is None
+
+
+def test_mint_now_reports_success_despite_zero_counter(rc, monkeypatch):
+    import httpx
+    V.save_settings(mint_url="https://m", mint_key="k", rc=rc)
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: _Resp(200, {"ua": UA, "cookies": COOKIES}))
+    out = V.mint_now(rc)
+    assert out["ok"] is True and out["has_jar"] is True
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: _Resp(502, {"code": "no_uifid"}))
+    out = V.mint_now(rc)
+    assert out["ok"] is False and "502" in out["last_mint_error"]

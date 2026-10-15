@@ -248,7 +248,8 @@ def mint_now(rc=None) -> Dict[str, Any]:
     rc = rc or _redis()
     rc.delete(COOL_KEY)
     ok = _mint(rc, get_settings(rc))
-    return {"ok": ok, **status(rc)}
+    # "ok" here is the mint result; status() also has an "ok" counter, so it goes last.
+    return {**status(rc), "ok": ok}
 
 
 def get_jar(rc=None) -> Optional[Tuple[str, Dict[str, str]]]:
