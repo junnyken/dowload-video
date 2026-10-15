@@ -189,7 +189,43 @@ def _resolve_cookie_file(user_cookies_file: Optional[str] = None) -> tuple[Optio
 # PROVIDER 1: iesdouyin Share Page (Primary — free, no auth)
 # ═════════════════════════════════════════════════════════════════════
 
+def _douyin_pool_proxy() -> Optional[str]:
+    """Proxy for Douyin METADATA: the admin pool "douyin" (owner rule: proxies
+    are configured in the admin, 15/10), else the legacy env IPROYAL_PROXY_CN.
+    Never used for video bytes."""
+    try:
+        from app.core.proxy_pool import get_proxy_from_pool
+        p = get_proxy_from_pool("douyin")
+        if p:
+            return p
+    except Exception:
+        pass
+    try:
+        from app.core.proxy_manager import IPROYAL_PROXY_CN
+        return IPROYAL_PROXY_CN or None
+    except Exception:
+        return None
+
+
 async def _try_iesdouyin_share(video_id: str, quality: str = "video") -> Optional[Dict[str, Any]]:
+    """Share page from the server IP first, then once through the admin
+    "douyin" proxy: measured 15/10, the server IP (VN) and a US proxy both get
+    the page WITHOUT video data, so only a proxy in a region Douyin serves can
+    help — the step is free to try and the managed (Apify) fallback follows."""
+    result = await _try_iesdouyin_share_once(video_id, quality, None)
+    if result:
+        return result
+    proxy = _douyin_pool_proxy()
+    if proxy:
+        _safe_print("[iesdouyin] retrying through the admin douyin proxy")
+        result = await _try_iesdouyin_share_once(video_id, quality, proxy)
+        if result:
+            result["provider"] = "iesdouyin_proxy"
+    return result
+
+
+async def _try_iesdouyin_share_once(video_id: str, quality: str = "video",
+                                    proxy: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     Fetch the iesdouyin.com share page and parse _ROUTER_DATA for video info.
     This is a server-side rendered page that embeds video metadata as JSON.
@@ -211,7 +247,7 @@ async def _try_iesdouyin_share(video_id: str, quality: str = "video") -> Optiona
     )
 
     try:
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, proxy=proxy) as client:
             resp = await client.get(share_url, headers={
                 "User-Agent": mobile_ua,
                 "Accept": "text/html,application/xhtml+xml",
@@ -716,11 +752,7 @@ async def _try_ytdlp(
 
     # ScraperAPI's proxy blocks Douyin's API paths (protected domain), so only a
     # genuine CN residential proxy is usable here — never the ScraperAPI fallback.
-    try:
-        from app.core.proxy_manager import IPROYAL_PROXY_CN
-        proxy = IPROYAL_PROXY_CN or None
-    except Exception:
-        proxy = None
+    proxy = _douyin_pool_proxy()
 
     _safe_print(
         f"[DouyinExtractor] Trying yt-dlp: {canonical_url} "
