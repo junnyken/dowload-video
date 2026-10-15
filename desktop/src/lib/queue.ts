@@ -2,7 +2,7 @@
 // setting, driven by Rust events (download://progress|done).
 import { createStore } from './store';
 import { api, onDone, onProgress } from './tauri';
-import { settings } from './settings';
+import { samePath, settings } from './settings';
 import { errorMessage, rememberServerMessage, toAppError } from './errors';
 import { toast } from './ui';
 import { newId } from './format';
@@ -271,7 +271,10 @@ async function start(item: QueueItem) {
     if (!queue.get().some((i) => i.id === item.id && i.state === 'running')) return; // cancelled / paused while resolving
     // a guest's local download stops at 1080p (server-route steps override formatId in `extra`)
     const formatId = capForGuest(item.formatId, item.audioOnly, auth.get().status !== 'in');
-    await api.startDownload({ jobId: item.id, url: item.url, outDir: item.outDir, formatId, audioOnly: item.audioOnly, ...extra });
+    // 0.17.0 names everywhere; sub-folders only in the main folder (a channel's folder is already its own).
+    const st = settings.get();
+    const style = { nameStyle: st.nameStyle, folderStyle: st.outDir && samePath(item.outDir, st.outDir) ? st.folderStyle : 'none' };
+    await api.startDownload({ jobId: item.id, url: item.url, outDir: item.outDir, formatId, audioOnly: item.audioOnly, ...style, ...extra });
   } catch (e) {
     finishFailed(item.id, toAppError(e).code);
   }

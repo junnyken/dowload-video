@@ -16,6 +16,7 @@ mod app_update;
 mod auth;
 mod browser_login;
 mod channels;
+mod cleanup;
 mod checksum;
 mod claim_token;
 mod clip_watch;
@@ -601,6 +602,48 @@ fn clipboard_watch_set(enabled: bool) -> CmdResult<()> {
     Ok(())
 }
 
+/// 0.17.0 auto cleanup (cleanup.rs): what would go to the Recycle Bin.
+/// `dir` = the download folder whose drive "min free GB" is measured on.
+fn cleanup_plan(db: &Db, older_than_days: Option<u32>, min_free_gb: Option<f64>, dir: Option<&str>) -> CmdResult<(Vec<cleanup::Row>, Option<u64>)> {
+    if older_than_days.is_some_and(|d| d == 0 || d > 3650) || min_free_gb.is_some_and(|g| !g.is_finite() || !(0.5..=10_000.0).contains(&g)) {
+        return Err(CommandError::unknown("cleanup: value out of range"));
+    }
+    let free = dir.map(PathBuf::from).filter(|p| p.is_absolute() && p.is_dir()).and_then(|p| sys::disk_free(&p).ok());
+    let min_free = min_free_gb.map(|g| (g * 1024.0 * 1024.0 * 1024.0) as u64);
+    let rows = cleanup::existing(db.cleanup_rows().map_err(db_err)?);
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+    let picked = cleanup::select(&rows, now, older_than_days, min_free, free).into_iter().cloned().collect();
+    Ok((picked, free))
+}
+
+#[tauri::command]
+async fn cleanup_preview(store: State<'_, Store>, older_than_days: Option<u32>, min_free_gb: Option<f64>, dir: Option<String>) -> CmdResult<cleanup::Plan> {
+    let (rows, free) = cleanup_plan(store.db()?, older_than_days, min_free_gb, dir.as_deref())?;
+    Ok(cleanup::Plan { count: rows.len(), bytes: rows.iter().map(|r| r.size).sum(), free_bytes: free })
+}
+
+/// Moves the planned files to the Recycle Bin (never a hard delete); the
+/// history rows stay, without their path.
+#[tauri::command]
+async fn cleanup_run(store: State<'_, Store>, older_than_days: Option<u32>, min_free_gb: Option<f64>, dir: Option<String>) -> CmdResult<cleanup::Outcome> {
+    let db = store.db()?;
+    let (rows, _) = cleanup_plan(db, older_than_days, min_free_gb, dir.as_deref())?;
+    let mut out = cleanup::Outcome::default();
+    for r in rows {
+        let path = r.path.clone();
+        let res = tauri::async_runtime::spawn_blocking(move || cleanup::to_trash(&path)).await.unwrap_or_else(|e| Err(e.to_string()));
+        match res {
+            Ok(()) => {
+                let _ = db.cleanup_forget(&r.id);
+                out.moved += 1;
+                out.bytes += r.size;
+            }
+            Err(_) => out.failed += 1,
+        }
+    }
+    Ok(out)
+}
+
 /// "Tắt máy khi tải xong": shuts Windows down now (sys::shutdown_now). The
 /// webview calls it only after a 60 s countdown with a cancel button.
 #[tauri::command]
@@ -901,6 +944,8 @@ async fn start_download(
     file_id: Option<String>,
     use_cookies: Option<bool>,
     claim_token: Option<String>,
+    folder_style: Option<String>,
+    name_style: Option<String>,
 ) -> CmdResult<()> {
     if !paths::valid_job_id(&job_id) {
         return Err(CommandError::unknown("invalid job id"));
@@ -921,6 +966,9 @@ async fn start_download(
         _ => None,
     };
     let out_dir = valid_out_dir(&out_dir)?;
+    // 0.17.0 presets; unknown keys are refused, absent = the old layout.
+    let template = engine::output_template(folder_style.as_deref().unwrap_or("none"), name_style.as_deref().unwrap_or("title"))
+        .ok_or_else(|| CommandError::unknown("unknown file name / folder style"))?;
     if let Some(f) = &format_id {
         validate::format_id(f).map_err(CommandError::unknown)?;
     }
@@ -954,6 +1002,10 @@ async fn start_download(
         out_name.as_ref(),
         ck.as_ref().map(RunCookies::path),
     );
+    let mut args = args;
+    if out_name.is_none() && template != engine::OUTPUT_TEMPLATE {
+        engine::set_output_template(&mut args, &template);
+    }
     let ytdlp = ytdlp_for(&app, &paths[0]).await;
 
     // Insert under the lock right after spawning so a concurrent start with
@@ -1654,6 +1706,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             clipboard_watch_set,
             system_shutdown,
+            cleanup_preview,
+            cleanup_run,
             probe,
             cancel_probe,
             start_download,

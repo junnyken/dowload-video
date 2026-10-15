@@ -211,7 +211,7 @@ pub fn to_listing(url: &str, t: &Target, answer: &str, limit: u32) -> Result<Cha
             if !ok_host {
                 return None;
             }
-            Some(ChannelVideo { title: cap(&s(e, "title").unwrap_or_else(|| id.clone()), 500), id, url: vurl, duration: None, upload_date: None, thumbnail: https(s(e, "thumbnail")) })
+            Some(ChannelVideo { title: cap(&s(e, "title").unwrap_or_else(|| id.clone()), 500), id, url: vurl, duration: None, upload_date: None, thumbnail: https(s(e, "thumbnail")), view_count: None })
         })
         .filter(|v| seen.insert(v.id.clone()))
         .take(limit as usize)

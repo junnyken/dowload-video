@@ -1,3 +1,4 @@
+import { startCleanupWatch } from '../lib/cleanup';
 import { useEffect } from 'react';
 import { Sidebar } from '../components/Sidebar';
 import { ConfirmDialog, Toasts } from '../components/Toasts';
@@ -48,6 +49,7 @@ export function App() {
       startWatch();
       startClipboardWatch();
       startShutdownWatch();
+      startCleanupWatch();
     }
     return () => mq.removeEventListener('change', applyTheme);
   }, []);

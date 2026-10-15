@@ -46,11 +46,18 @@ export const api = {
     useCookies?: boolean;
     // PLAN-32E P3: the server's signed claim token; Rust checks it before yt-dlp starts.
     claimToken?: string;
+    // 0.17.0 presets (engine.rs output_template); omitted = the old layout.
+    folderStyle?: string; nameStyle?: string;
   }) =>
     call<null>('start_download', a),
   pauseDownload: (jobId: string) => call<null>('pause_download', { jobId }),
   cancelDownload: (jobId: string) => call<null>('cancel_download', { jobId }),
   pickFolder: () => call<string | null>('pick_folder'),
+  // 0.17.0 auto cleanup (cleanup.rs): files VidGrab downloaded → Recycle Bin.
+  cleanupPreview: (a: { olderThanDays?: number; minFreeGb?: number; dir?: string }) =>
+    call<{ count: number; bytes: number; freeBytes: number | null }>('cleanup_preview', a),
+  cleanupRun: (a: { olderThanDays?: number; minFreeGb?: number; dir?: string }) =>
+    call<{ moved: number; bytes: number; failed: number }>('cleanup_run', a),
   defaultDownloadDir: () => call<string>('default_download_dir'),
   diskFree: (path: string) => call<number>('disk_free', { path }),
   revealPath: (path: string) => call<null>('reveal_path', { path }),

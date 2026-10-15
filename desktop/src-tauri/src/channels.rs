@@ -28,6 +28,53 @@ pub struct ChannelVideo {
     /// YYYYMMDD
     pub upload_date: Option<String>,
     pub thumbnail: Option<String>,
+    /// 0.17.0: when the listing has it (YouTube Shorts, TikTok by id). None = unknown.
+    #[serde(default)]
+    pub view_count: Option<u64>,
+}
+
+/// 0.17.0: optional conditions for auto-handling a channel's NEW videos.
+/// Every field empty = no filter (all new videos, as before). A video whose
+/// listing lacks the value a condition needs (YouTube's Videos tab has no
+/// view count) is NOT dropped by that condition: channel-core.ts decides.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ChannelFilter {
+    pub min_seconds: Option<u32>,
+    pub max_seconds: Option<u32>,
+    pub min_views: Option<u64>,
+    pub max_age_days: Option<u32>,
+    pub include_words: Vec<String>,
+    pub exclude_words: Vec<String>,
+}
+
+impl ChannelFilter {
+    pub fn validate(&self) -> Result<(), String> {
+        const DAY_SECS: u32 = 7 * 24 * 3600;
+        if self.min_seconds.is_some_and(|x| x > DAY_SECS) || self.max_seconds.is_some_and(|x| x == 0 || x > DAY_SECS) {
+            return Err("filter: duration out of range".into());
+        }
+        if let (Some(a), Some(b)) = (self.min_seconds, self.max_seconds) {
+            if a > b {
+                return Err("filter: minSeconds is above maxSeconds".into());
+            }
+        }
+        if self.min_views.is_some_and(|x| x > 100_000_000_000) {
+            return Err("filter: minViews out of range".into());
+        }
+        if self.max_age_days.is_some_and(|x| x == 0 || x > 3650) {
+            return Err("filter: maxAgeDays must be 1–3650".into());
+        }
+        for w in self.include_words.iter().chain(&self.exclude_words) {
+            if w.trim().is_empty() || w.chars().count() > 100 || w.chars().any(char::is_control) {
+                return Err("filter: invalid keyword".into());
+            }
+        }
+        if self.include_words.len() + self.exclude_words.len() > 50 {
+            return Err("filter: at most 50 keywords".into());
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -60,6 +107,8 @@ pub struct Channel {
     pub last_error: Option<String>,
     pub pending_new: Vec<ChannelVideo>,
     pub created_at: String,
+    #[serde(default)]
+    pub filter: ChannelFilter,
 }
 
 // ---------------------------------------------------------------- limits & ids
@@ -201,6 +250,7 @@ pub fn map_entry(e: &Value) -> Option<ChannelVideo> {
         duration: e.get("duration").and_then(Value::as_f64).filter(|d| d.is_finite() && *d >= 0.0),
         upload_date: upload_date(e),
         thumbnail: thumb(e),
+        view_count: e.get("view_count").and_then(Value::as_u64),
     })
 }
 
@@ -341,7 +391,8 @@ impl Channel {
         if self.pending_new.len() > MAX_PENDING {
             return Err(format!("pendingNew holds at most {MAX_PENDING} videos"));
         }
-        self.pending_new.iter().try_for_each(validate_video)
+        self.pending_new.iter().try_for_each(validate_video)?;
+        self.filter.validate()
     }
 }
 
@@ -378,21 +429,24 @@ fn row_to_channel(r: &rusqlite::Row<'_>) -> rusqlite::Result<Channel> {
         // A corrupt column must not hide the channel; it just loses pending.
         pending_new: serde_json::from_str(&pending).unwrap_or_default(),
         created_at: r.get(13)?,
+        // Same rule: a corrupt filter column means "no filter", not a lost channel.
+        filter: r.get::<_, Option<String>>(14)?.and_then(|f| serde_json::from_str(&f).ok()).unwrap_or_default(),
     })
 }
 
 impl Db {
     pub fn channel_upsert(&self, ch: &Channel) -> rusqlite::Result<()> {
         let pending = serde_json::to_string(&ch.pending_new).unwrap_or_else(|_| "[]".into());
+        let filter = serde_json::to_string(&ch.filter).unwrap_or_else(|_| "{}".into());
         self.c().execute(
             "INSERT INTO channels (id,url,title,platform,thumbnail,mode,quality,out_dir,check_every_hours,enabled,
-               last_checked_at,last_error,pending_new,created_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
+               last_checked_at,last_error,pending_new,created_at,filter)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)
              ON CONFLICT(id) DO UPDATE SET url=excluded.url, title=excluded.title, platform=excluded.platform,
                thumbnail=excluded.thumbnail, mode=excluded.mode, quality=excluded.quality, out_dir=excluded.out_dir,
                check_every_hours=excluded.check_every_hours, enabled=excluded.enabled,
                last_checked_at=excluded.last_checked_at, last_error=excluded.last_error,
-               pending_new=excluded.pending_new, created_at=excluded.created_at",
+               pending_new=excluded.pending_new, created_at=excluded.created_at, filter=excluded.filter",
             params![
                 ch.id,
                 ch.url,
@@ -407,7 +461,8 @@ impl Db {
                 ch.last_checked_at,
                 ch.last_error,
                 pending,
-                ch.created_at
+                ch.created_at,
+                filter
             ],
         )?;
         Ok(())
@@ -417,7 +472,7 @@ impl Db {
         let conn = self.c();
         let mut st = conn.prepare(
             "SELECT id,url,title,platform,thumbnail,mode,quality,out_dir,check_every_hours,enabled,
-                    last_checked_at,last_error,pending_new,created_at
+                    last_checked_at,last_error,pending_new,created_at,filter
              FROM channels ORDER BY created_at ASC, id ASC",
         )?;
         let v = st.query_map([], row_to_channel)?.collect::<rusqlite::Result<Vec<_>>>()?;
@@ -517,6 +572,7 @@ mod tests {
             last_error: None,
             pending_new: vec![video("pRrmQUm6Zvg")],
             created_at: "2026-10-06T09:00:00Z".into(),
+            filter: ChannelFilter::default(),
         }
     }
 
@@ -528,7 +584,36 @@ mod tests {
             duration: Some(606.0),
             upload_date: Some("20261001".into()),
             thumbnail: Some("https://i.ytimg.com/vi/x/hq720.jpg".into()),
+            view_count: None,
         }
+    }
+
+    #[test]
+    fn filter_validation() {
+        let mut c = channel();
+        c.filter = ChannelFilter { min_seconds: Some(60), max_seconds: Some(600), min_views: Some(10_000), max_age_days: Some(30), include_words: vec!["review".into()], exclude_words: vec!["live".into()] };
+        assert!(c.validate().is_ok());
+        for bad in [
+            ChannelFilter { min_seconds: Some(700), max_seconds: Some(600), ..Default::default() },
+            ChannelFilter { max_seconds: Some(0), ..Default::default() },
+            ChannelFilter { max_age_days: Some(0), ..Default::default() },
+            ChannelFilter { include_words: vec!["  ".into()], ..Default::default() },
+            ChannelFilter { exclude_words: vec!["a\nb".into()], ..Default::default() },
+        ] {
+            c.filter = bad;
+            assert!(c.validate().is_err());
+        }
+        // Old rows / old UI without the field still deserialize.
+        let j = serde_json::json!({"id":"UC1","url":"https://www.youtube.com/@a/videos","title":"a","platform":"youtube","thumbnail":null,
+            "mode":"notify","quality":"best","outDir":"/x","checkEveryHours":6,"enabled":true,"lastCheckedAt":null,"lastError":null,
+            "pendingNew":[],"createdAt":"2026"});
+        assert_eq!(serde_json::from_value::<Channel>(j).unwrap().filter, ChannelFilter::default());
+    }
+
+    #[test]
+    fn entry_view_count() {
+        let e = serde_json::json!({"id":"abc","url":"https://www.youtube.com/shorts/abc","title":"t","view_count":12000});
+        assert_eq!(map_entry(&e).unwrap().view_count, Some(12000));
     }
 
     #[test]

@@ -41,6 +41,8 @@ const COMMANDS: &[&str] = &[
     "notify",
     "clipboard_watch_set",
     "system_shutdown",
+    "cleanup_preview",
+    "cleanup_run",
     "autostart_get",
     "autostart_set",
     "set_close_to_tray",

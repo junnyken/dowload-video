@@ -17,6 +17,38 @@ pub struct Tools<'a> {
 /// ending in `[<id>].<ext>` to recognise per-format intermediates.
 pub const OUTPUT_TEMPLATE: &str = "%(title).150B [%(id)s].%(ext)s";
 
+/// 0.17.0 naming presets (Settings → file names / folders). The UI sends a
+/// KEY, never a template, so nothing user-typed reaches yt-dlp's `-o`. yt-dlp
+/// sanitizes every field value (no path separators), so a sub-folder can only
+/// come from the fixed prefixes below. Checked with yt-dlp 2026.08.19:
+/// "2026-10-08_YouTube_<title> [id]", "Youtube/2026-10/<title> [id]".
+pub fn output_template(folder: &str, name: &str) -> Option<String> {
+    let dir = match folder {
+        "none" => "",
+        "platform" => "%(extractor_key)s/",
+        "month" => "%(upload_date>%Y-%m|khong-ro-ngay)s/",
+        "platform_month" => "%(extractor_key)s/%(upload_date>%Y-%m|khong-ro-ngay)s/",
+        _ => return None,
+    };
+    let file = match name {
+        "title" => OUTPUT_TEMPLATE,
+        "date_title" => "%(upload_date>%Y-%m-%d&{} |)s%(title).140B [%(id)s].%(ext)s",
+        "date_channel_title" => "%(upload_date>%Y-%m-%d&{}_|)s%(uploader&{}_|)s%(title).120B [%(id)s].%(ext)s",
+        _ => return None,
+    };
+    Some(format!("{dir}{file}"))
+}
+
+/// Replaces the `-o` value download_args put in (used for the presets above
+/// when the job has no fixed OutName).
+pub fn set_output_template(args: &mut [OsString], template: &str) {
+    if let Some(i) = args.iter().position(|a| a == "-o") {
+        if let Some(v) = args.get_mut(i + 1) {
+            *v = template.into();
+        }
+    }
+}
+
 /// What `-x` converts to. m4a when the chosen selector asks for m4a (stream
 /// copy when the source is already AAC, which YouTube's 140 is), otherwise
 /// mp3 (re-encoded with libmp3lame, VBR quality 0).
@@ -345,5 +377,22 @@ mod tests {
                 assert!(!s.contains(&flag.to_string()), "{flag}");
             }
         }
+    }
+
+    #[test]
+    fn output_presets() {
+        assert_eq!(output_template("none", "title").as_deref(), Some(OUTPUT_TEMPLATE));
+        assert_eq!(
+            output_template("platform_month", "date_title").unwrap(),
+            "%(extractor_key)s/%(upload_date>%Y-%m|khong-ro-ngay)s/%(upload_date>%Y-%m-%d&{} |)s%(title).140B [%(id)s].%(ext)s"
+        );
+        assert!(output_template("../x", "title").is_none());
+        assert!(output_template("none", "%(title)s").is_none());
+        let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d") };
+        let mut a = download_args(&t, "u", Path::new("/out"), None, false, &[], None, None);
+        set_output_template(&mut a, "X/%(title)s.%(ext)s");
+        let s = strs(&a);
+        let i = s.iter().position(|x| x == "-o").unwrap();
+        assert_eq!(s[i + 1], "X/%(title)s.%(ext)s");
     }
 }

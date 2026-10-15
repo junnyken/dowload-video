@@ -317,6 +317,8 @@ export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promi
     case 'notify': console.info('[mock notify]', a.title, a.body); return null;
     case 'clipboard_watch_set': return null;
     case 'system_shutdown': mockLog.push('system_shutdown'); return null;
+    case 'cleanup_preview': return { count: 12, bytes: 3.4e9, freeBytes: 84e9 };
+    case 'cleanup_run': mockLog.push('cleanup_run'); return { moved: 12, bytes: 3.4e9, failed: 0 };
     case 'autostart_get': return autostart;
     case 'autostart_set': autostart = a.enabled as boolean; return null;
     case 'set_close_to_tray': return null;

@@ -40,6 +40,8 @@
     "allow-notify",
     "allow-clipboard-watch-set",
     "allow-system-shutdown",
+    "allow-cleanup-preview",
+    "allow-cleanup-run",
     "allow-autostart-get",
     "allow-autostart-set",
     "allow-set-close-to-tray",

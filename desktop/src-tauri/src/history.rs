@@ -1,6 +1,6 @@
 //! Local SQLite store (rusqlite, bundled SQLite) in the app data dir.
 //!
-//! Tables (schema v3, tracked with PRAGMA user_version):
+//! Tables (schema v4, tracked with PRAGMA user_version):
 //! - history: the contract's HistoryItem, written by the UI via history_add.
 //! - produced_paths: canonical paths of files finished downloads produced.
 //!   Written ONLY by Rust at completion; reveal_path/open_path check it. The
@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 #[cfg(test)]
-pub const SCHEMA_VERSION: i64 = 3;
+pub const SCHEMA_VERSION: i64 = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -67,7 +67,22 @@ pub struct Db {
 fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     migrate_v1(conn)?;
     migrate_v2(conn)?;
-    migrate_v3(conn)
+    migrate_v3(conn)?;
+    migrate_v4(conn)
+}
+
+/// v4 (app 0.17.0): channels.filter — the optional new-video conditions
+/// (channels.rs ChannelFilter), JSON; '{}' = no filter.
+fn migrate_v4(conn: &Connection) -> rusqlite::Result<()> {
+    if user_version(conn)? < 4 {
+        conn.execute_batch(
+            "BEGIN;
+             ALTER TABLE channels ADD COLUMN filter TEXT NOT NULL DEFAULT '{}';
+             PRAGMA user_version = 4;
+             COMMIT;",
+        )?;
+    }
+    Ok(())
 }
 
 /// v3 (PLAN-32E P3): quota_grace — offline downloads Rust granted itself

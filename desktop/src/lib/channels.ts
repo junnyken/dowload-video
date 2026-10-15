@@ -1,6 +1,7 @@
 // Channels: saved-channel store, add flow (fetch listing) and the background
 // scheduler (C1-CONTRACT.md section 4). The scheduler lives in the UI process,
 // so it keeps running while the window is hidden in the tray.
+import { split } from './channel-filter';
 import { createStore } from './store';
 import { api, onCheckNow, onQuitting } from './tauri';
 import { enqueue, enqueueRefused, pauseAllForQuit } from './queue';
@@ -261,7 +262,11 @@ async function doCheck(id: string): Promise<number | null> {
     const listing = await fetchChannelListing(ch.url, 50);
     const seen = new Set(await api.channelSeenList(id));
     const pending = new Set(ch.pendingNew.map((v) => v.id));
-    const fresh = listing.videos.filter((v) => !seen.has(v.id) && !pending.has(v.id));
+    const unseen = listing.videos.filter((v) => !seen.has(v.id) && !pending.has(v.id));
+    // 0.17.0: the channel's optional filter. Skipped videos are marked seen so
+    // they are judged once, not on every check.
+    const { keep: fresh, skip } = split(unseen, ch.filter, Date.now());
+    if (skip.length) await api.channelSeenAdd(id, skip.map((v) => v.id));
     failures.delete(id);
     if (fresh.length && ch.mode === 'download') {
       const { enqueued, refused } = await enqueueWithClaims(fresh, ch);

@@ -85,6 +85,18 @@ export type ChannelVideo = {
   duration: number | null;
   uploadDate: string | null; // YYYYMMDD
   thumbnail: string | null;
+  /** 0.17.0: when the listing has it (YouTube Shorts, TikTok by id). */
+  viewCount?: number | null;
+};
+
+/** 0.17.0: optional conditions for a watched channel's new videos (channel-filter.ts). */
+export type ChannelFilter = {
+  minSeconds: number | null;
+  maxSeconds: number | null;
+  minViews: number | null;
+  maxAgeDays: number | null;
+  includeWords: string[];
+  excludeWords: string[];
 };
 
 export type ChannelListing = {
@@ -117,6 +129,8 @@ export type Channel = {
   lastError: string | null;
   pendingNew: ChannelVideo[];
   createdAt: string;
+  /** 0.17.0; absent on channels saved by older versions = no filter. */
+  filter?: ChannelFilter;
 };
 
 export type Screen = 'download' | 'channels' | 'watch' | 'queue' | 'history' | 'settings';
