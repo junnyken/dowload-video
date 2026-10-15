@@ -51,10 +51,13 @@ pub enum PageError {
     Verify,
     /// A login wall and no videos (Facebook).
     Login,
-    /// The account does not exist.
+    /// The account does not exist / is banned (TikTok statusCode 10202, 10221).
     NotFound,
-    /// The page loaded but listed no video.
-    Empty,
+    /// A private account (TikTok statusCode 10222).
+    Private,
+    /// The page loaded but listed no video. `sec_uid`: the TikTok channel id
+    /// the page still gave, so yt-dlp can try `tiktokuser:<sec_uid>`.
+    Empty { sec_uid: Option<String>, status: i64 },
     /// The answer was not what the script sends.
     Bad,
 }
@@ -125,8 +128,13 @@ pub fn navigation_allowed(kind: Kind, u: &url::Url) -> bool {
     }
 }
 
-pub fn page_script(kind: Kind, limit: u32) -> String {
-    SCRIPT.replace("%KIND%", kind.as_str()).replace("%LIMIT%", &limit.clamp(1, 500).to_string())
+/// `show`: the user sees the window and may solve a check there, so the script waits longer.
+pub fn page_script(kind: Kind, limit: u32, show: bool) -> String {
+    SCRIPT
+        .replace("%KIND%", kind.as_str())
+        .replace("%LIMIT%", &limit.clamp(1, 500).to_string())
+        .replace("%MAXMS%", if show { "140000" } else { "35000" })
+        .replace("%SHOW%", if show { "true" } else { "false" })
 }
 
 /// Collects the chunked title answer ("VGL:<i>/<n>:<part>").
@@ -172,11 +180,20 @@ fn https(x: Option<String>) -> Option<String> {
 /// The script's answer → a listing of the channel at `url` (the URL the user gave).
 pub fn to_listing(url: &str, t: &Target, answer: &str, limit: u32) -> Result<ChannelListing, PageError> {
     let j: Value = serde_json::from_str(answer).map_err(|_| PageError::Bad)?;
+    let meta = j.get("meta").cloned().unwrap_or(Value::Null);
+    let status = j.get("status").and_then(Value::as_i64).unwrap_or(0);
+    let has_items = j.get("items").and_then(Value::as_array).is_some_and(|a| !a.is_empty());
+    if !has_items {
+        match status {
+            10202 | 10221 => return Err(PageError::NotFound),
+            10222 => return Err(PageError::Private),
+            _ => {}
+        }
+    }
     match s(&j, "error").as_deref() {
         Some("verify") => return Err(PageError::Verify),
         Some("login") => return Err(PageError::Login),
-        Some("not_found") => return Err(PageError::NotFound),
-        Some("empty") | None | Some(_) => {}
+        _ => {}
     }
     let mut seen = std::collections::HashSet::new();
     let videos: Vec<ChannelVideo> = j
@@ -198,9 +215,12 @@ pub fn to_listing(url: &str, t: &Target, answer: &str, limit: u32) -> Result<Cha
         .take(limit as usize)
         .collect();
     if videos.is_empty() {
-        return Err(if s(&j, "error").as_deref() == Some("empty") || j.get("items").is_some() { PageError::Empty } else { PageError::Bad });
+        if s(&j, "error").is_none() && j.get("items").is_none() {
+            return Err(PageError::Bad);
+        }
+        let sec_uid = if t.kind == Kind::TikTok { s(&meta, "id").filter(|i| valid_id(i) && i.starts_with("MS4w")) } else { None };
+        return Err(PageError::Empty { sec_uid, status });
     }
-    let meta = j.get("meta").cloned().unwrap_or(Value::Null);
     let path_name = t.page.path().trim_matches('/').split('/').next().unwrap_or("").to_string();
     let channel_id = s(&meta, "id")
         .filter(|i| valid_id(i))
@@ -257,9 +277,11 @@ mod tests {
 
     #[test]
     fn script_gets_kind_and_limit() {
-        let s = page_script(Kind::TikTok, 9999);
+        let s = page_script(Kind::TikTok, 9999, false);
         assert!(s.contains("const KIND = \"tiktok\"") && s.contains("const LIMIT = 500;"));
-        assert!(!s.contains("%KIND%") && !s.contains("%LIMIT%"));
+        assert!(s.contains("const MAXMS = 35000;") && s.contains("const SHOW = false;"));
+        assert!(page_script(Kind::Facebook, 5, true).contains("const SHOW = true;"));
+        assert!(!s.contains("%KIND%") && !s.contains("%LIMIT%") && !s.contains("%MAXMS%") && !s.contains("%SHOW%"));
     }
 
     #[test]
@@ -291,7 +313,15 @@ mod tests {
         let t = target("https://www.facebook.com/NASA").unwrap();
         assert_eq!(to_listing("u", &t, r#"{"error":"login"}"#, 5), Err(PageError::Login));
         assert_eq!(to_listing("u", &t, r#"{"error":"verify"}"#, 5), Err(PageError::Verify));
-        assert_eq!(to_listing("u", &t, r#"{"meta":{},"items":[],"error":"empty"}"#, 5), Err(PageError::Empty));
+        assert_eq!(to_listing("u", &t, r#"{"meta":{},"items":[],"error":"empty"}"#, 5), Err(PageError::Empty { sec_uid: None, status: 0 }));
+        let tt = target("https://www.tiktok.com/@ed").unwrap();
+        assert_eq!(
+            to_listing("u", &tt, r#"{"meta":{"id":"MS4wLjABAAAA_x"},"status":0,"items":[],"error":"empty"}"#, 5),
+            Err(PageError::Empty { sec_uid: Some("MS4wLjABAAAA_x".into()), status: 0 })
+        );
+        assert_eq!(to_listing("u", &tt, r#"{"meta":{},"status":10202,"items":[],"error":"empty"}"#, 5), Err(PageError::NotFound));
+        assert_eq!(to_listing("u", &tt, r#"{"meta":{},"status":10222,"items":[],"error":"empty"}"#, 5), Err(PageError::Private));
+        assert_eq!(to_listing("u", &tt, r#"{"meta":{},"status":0,"items":[],"error":"verify"}"#, 5), Err(PageError::Verify));
         assert_eq!(to_listing("u", &t, "not json", 5), Err(PageError::Bad));
         let ok = to_listing("https://www.facebook.com/NASA", &t, r#"{"meta":{"title":"NASA"},"items":[{"id":"2144422086394464","url":"https://www.facebook.com/watch/?v=2144422086394464","title":"Artemis","thumbnail":""}]}"#, 5).unwrap();
         assert_eq!((ok.channel_id.as_str(), ok.platform.as_str(), ok.videos[0].thumbnail.clone()), ("fb:NASA", "facebook", None));

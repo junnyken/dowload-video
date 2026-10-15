@@ -27,6 +27,9 @@ pub enum Code {
     /// App 0.16.2: the platform refused this machine for now (TikTok's
     /// JavaScript challenge / verification page), not a private channel.
     TemporarilyBlocked,
+    /// App 0.16.3: the channel page opened but showed no video (hidden-page
+    /// listing); the UI offers "Mở trang để kiểm tra".
+    ChannelPageEmpty,
     /// PLAN-32E P3: the server requires a signed claim token and none valid
     /// came with start_download (quota_gate.rs).
     ClaimRequired,
@@ -57,6 +60,7 @@ impl Code {
             Code::Cancelled => "cancelled",
             Code::CookieRequired => "cookie_required",
             Code::TemporarilyBlocked => "temporarily_blocked",
+            Code::ChannelPageEmpty => "channel_page_empty",
             Code::ClaimRequired => "claim_required",
             Code::OfflineGraceUsed => "offline_grace_used",
             Code::UpdaterUnavailable => "updater_unavailable",

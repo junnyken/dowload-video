@@ -44,10 +44,13 @@ export const isManualOnly = (c: { platform: string }) => c.platform === 'douyin'
  * Channel listing: Douyin goes through the server (P1 keeps it there), everything else through
  * the local yt-dlp, with the user's cookies when that platform is connected (PLAN-32D §6).
  */
-export function fetchChannelListing(url: string, limit: number): Promise<ChannelListing> {
+export function fetchChannelListing(url: string, limit: number, showPage = false): Promise<ChannelListing> {
   if (isDouyinUrl(url)) return fetchDouyinListing(url, limit);
-  return api.channelFetch(url, limit, planFor(url).useCookies || undefined);
+  return api.channelFetch(url, limit, planFor(url).useCookies || undefined, showPage || undefined);
 }
+
+/** 0.16.3: TikTok / Facebook channels can be listed in a window the user sees ("Mở trang để kiểm tra"). */
+export const canShowPage = (url: string) => /^https?:\/\/([a-z0-9-]+\.)*(tiktok\.com\/@|facebook\.com\/|fb\.com\/)/i.test(url.trim());
 
 type ChannelTarget = { platform: string; title: string; quality: string; outDir: string };
 
@@ -191,12 +194,12 @@ export type Flow = {
 export const flow = createStore<Flow>({ phase: 'idle', url: '', limit: 200 });
 let flowToken = 0;
 
-export async function fetchListing(url: string, limit: number, more = false) {
+export async function fetchListing(url: string, limit: number, more = false, showPage = false) {
   const token = ++flowToken;
   const prev = flow.get().listing;
   flow.set({ phase: more && prev ? 'ready' : 'loading', url, limit, listing: more ? prev : undefined, more });
   try {
-    const listing = await fetchChannelListing(url, limit);
+    const listing = await fetchChannelListing(url, limit, showPage);
     if (token !== flowToken) return;
     flow.set({ phase: 'ready', url, limit, listing });
   } catch (e) {

@@ -72,7 +72,8 @@ export const api = {
   deviceInfo: () => call<DeviceInfo>('device_info'),
   toolVersions: () => call<ToolVersions>('tool_versions'),
   // Channels (C1-CONTRACT.md section 4)
-  channelFetch: (url: string, limit?: number, useCookies?: boolean) => call<ChannelListing>('channel_fetch', { url, limit, useCookies }),
+  channelFetch: (url: string, limit?: number, useCookies?: boolean, showPage?: boolean) =>
+    call<ChannelListing>('channel_fetch', { url, limit, useCookies, showPage }),
   cancelChannelFetch: (url: string) => call<null>('cancel_channel_fetch', { url }),
   channelSave: (channel: Channel) => call<null>('channel_save', { channel }),
   channelList: () => call<Channel[]>('channel_list'),

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, BellRing, ListVideo, Pause, Pencil, Play, RefreshCw, Trash2, Tv } from 'lucide-react';
+import { AlertCircle, BellRing, Eye, ListVideo, Pause, Pencil, Play, RefreshCw, Trash2, Tv } from 'lucide-react';
 import { Badge, Button, EmptyState, IconButton, PlatformBadge, ScreenHeader, Spinner } from '../components/ui';
 import { ChannelAvatar, ChannelPicker, intervalLabel } from '../components/ChannelPicker';
 import { EditDialog, ReviewDialog } from '../components/ChannelDialogs';
 import {
-  cancelFlow, channels, channelsLoaded, checkChannel, checking, fetchListing, flow, isManualOnly, nextCheckAt, removeChannel, saveChannel,
+  canShowPage, cancelFlow, channels, channelsLoaded, checkChannel, checking, fetchListing, flow, isManualOnly, nextCheckAt, removeChannel, saveChannel,
 } from '../lib/channels';
 import { parseUrls } from '../lib/probes';
 import { isDouyinUrl } from '../lib/urls';
@@ -130,7 +130,12 @@ export function ChannelsScreen() {
             <div role="alert" className="mt-2 flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-[13px] text-danger">
               <AlertCircle size={16} className="mt-px shrink-0" aria-hidden />
               <span className="min-w-0 flex-1">{errorMessage(f.errorCode)}</span>
-              <Button size="sm" icon={<RefreshCw size={14} />} onClick={() => start(f.limit)}>Thử lại</Button>
+              <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                {canShowPage(f.url) && (
+                  <Button size="sm" icon={<Eye size={14} />} onClick={() => void fetchListing(f.url, f.limit, false, true)}>Mở trang để kiểm tra</Button>
+                )}
+                <Button size="sm" icon={<RefreshCw size={14} />} onClick={() => start(f.limit)}>Thử lại</Button>
+              </div>
             </div>
           )}
         </div>

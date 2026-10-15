@@ -39,7 +39,9 @@ const MESSAGES: Record<string, string> = {
   // 0.16.2: also a channel list that only shows logged in (Instagram, X, Facebook login wall).
   cookie_required: 'Nội dung này cần đăng nhập (Instagram, X và nhiều trang Facebook chỉ cho xem danh sách video khi đã đăng nhập). Hãy kết nối tài khoản của nền tảng này trong Cài đặt → Tài khoản nền tảng rồi thử lại.',
   // 0.16.2: TikTok's JavaScript challenge / verification page — not a private channel. wording: BA review
-  temporarily_blocked: 'Nền tảng đang tạm chặn yêu cầu từ máy này (bắt xác minh hoặc gọi quá nhanh) — kênh vẫn có thể là công khai. Hãy thử lại sau ít phút; nếu vẫn lỗi, kết nối tài khoản của nền tảng trong Cài đặt → Tài khoản nền tảng.',
+  temporarily_blocked: 'Nền tảng đang tạm chặn yêu cầu từ máy này (bắt xác minh hoặc gọi quá nhanh) — kênh vẫn có thể là công khai. Bấm “Mở trang để kiểm tra” để xác minh ngay trong cửa sổ, hoặc thử lại sau ít phút.',
+  // 0.16.3: hidden channel page opened but showed no video. wording: BA review
+  channel_page_empty: 'Đã mở trang kênh nhưng chưa thấy video nào. Bấm “Mở trang để kiểm tra” để xem nền tảng đang hiện gì — nếu được hỏi xác minh hoặc đăng nhập, làm ngay trong cửa sổ đó, ứng dụng sẽ tự lấy danh sách.',
   cookie_expired: 'Phiên đăng nhập đã lưu có thể đã hết hạn. Hãy kết nối lại tài khoản trong Cài đặt → Tài khoản nền tảng rồi tải lại.',
   // Through the VidGrab server (/fetch-link, PLAN-32D S0). The server's own text wins when it sent one. wording: BA review
   drm: 'Video được bảo vệ bản quyền (DRM) nên không tải được.',

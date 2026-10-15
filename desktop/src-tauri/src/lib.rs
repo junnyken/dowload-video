@@ -498,13 +498,16 @@ async fn channel_fetch(
     url: String,
     limit: Option<u32>,
     use_cookies: Option<bool>,
+    show_page: Option<bool>,
 ) -> CmdResult<channels::ChannelListing> {
     let url = channels::normalize_url(&url).map_err(|e| CommandError::new(Code::InvalidUrl, e))?;
     let limit = channels::clamp_limit(limit);
     // 0.16.2: TikTok profiles fall back to a real page; Facebook pages only list there.
+    // 0.16.3: "Mở trang để kiểm tra" (show_page) goes straight to a visible page.
     let page_target = page_listing::target(&url);
-    if let Some(t) = page_target.as_ref().filter(|t| t.kind == page_listing::Kind::Facebook) {
-        return page_list(&app, &url, t, limit).await;
+    let show = show_page.unwrap_or(false);
+    if let Some(t) = page_target.as_ref().filter(|t| show || t.kind == page_listing::Kind::Facebook) {
+        return page_list(&app, &jobs, &url, t, limit, show).await;
     }
     let paths = verified_sidecars().await?;
     let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3] };
@@ -536,10 +539,10 @@ async fn channel_fetch(
     };
     let code = channels::failure_code(map_err.as_ref(), c.ok(), &c.err);
     if let Some(t) = page_target.as_ref() {
-        match page_list(&app, &url, t, limit).await {
+        match page_list(&app, &jobs, &url, t, limit, false).await {
             Ok(listing) => return Ok(listing),
             // The page said something definite: that beats yt-dlp's guess.
-            Err(e) if matches!(e.code, Code::TemporarilyBlocked | Code::CookieRequired | Code::NotFound) => return Err(e),
+            Err(e) if matches!(e.code, Code::TemporarilyBlocked | Code::CookieRequired | Code::NotFound | Code::PrivateOrLogin | Code::ChannelPageEmpty) => return Err(e),
             Err(_) => {}
         }
     }
@@ -1342,7 +1345,7 @@ async fn cookies_clear(app: AppHandle, platform: String) -> CmdResult<()> {
 
 /// Channel listing through a hidden page (page_listing.rs / page_window.rs),
 /// with the user's saved cookies of that platform when there are any.
-async fn page_list(app: &AppHandle, url: &str, t: &page_listing::Target, limit: u32) -> CmdResult<channels::ChannelListing> {
+async fn page_list(app: &AppHandle, jobs: &State<'_, Jobs>, url: &str, t: &page_listing::Target, limit: u32, show: bool) -> CmdResult<channels::ChannelListing> {
     let slug = t.kind.cookie_slug();
     let jar = match (cookie_dir(app), cookies::def(slug)) {
         (Ok(dir), Some(p)) => tauri::async_runtime::spawn_blocking(move || cookies::load(&dir, slug))
@@ -1354,17 +1357,44 @@ async fn page_list(app: &AppHandle, url: &str, t: &page_listing::Target, limit: 
             .unwrap_or_default(),
         _ => Vec::new(),
     };
-    let answer = page_window::run(app, t, jar, limit).await.map_err(|f| match f {
+    let answer = page_window::run(app, t, jar, limit, show).await.map_err(|f| match f {
         page_window::Failure::Timeout => CommandError::new(Code::Timeout, "the channel page did not list videos in time"),
         page_window::Failure::Window(e) => CommandError::unknown(e),
     })?;
-    page_listing::to_listing(url, t, &answer, limit).map_err(|e| match e {
+    let err = match page_listing::to_listing(url, t, &answer, limit) {
+        Ok(listing) => return Ok(listing),
+        Err(e) => e,
+    };
+    // The page gave the TikTok channel id but no visible videos: yt-dlp lists
+    // by that id ("tiktokuser:<secUid>", the route yt-dlp itself suggests).
+    if let page_listing::PageError::Empty { sec_uid: Some(id), .. } = &err {
+        if let Ok(listing) = tiktok_by_id(app, jobs, url, id, limit).await {
+            return Ok(listing);
+        }
+    }
+    Err(match err {
         page_listing::PageError::Verify => CommandError::new(Code::TemporarilyBlocked, "the platform asked this machine for a verification"),
         page_listing::PageError::Login => CommandError::new(Code::CookieRequired, "the channel page needs a logged-in account"),
         page_listing::PageError::NotFound => CommandError::new(Code::NotFound, "this account does not exist"),
-        page_listing::PageError::Empty => CommandError::new(Code::NotFound, "the channel page lists no videos"),
+        page_listing::PageError::Private => CommandError::new(Code::PrivateOrLogin, "this account is private"),
+        page_listing::PageError::Empty { sec_uid, status } => CommandError::new(
+            Code::ChannelPageEmpty,
+            format!("the channel page showed no videos (status {status}, channel id {})", if sec_uid.is_some() { "found" } else { "missing" }),
+        ),
         page_listing::PageError::Bad => CommandError::unknown("the channel page gave an unexpected answer"),
     })
+}
+
+/// yt-dlp listing of a TikTok channel by its secUid; the listing keeps the user's URL.
+async fn tiktok_by_id(app: &AppHandle, jobs: &State<'_, Jobs>, url: &str, sec_uid: &str, limit: u32) -> CmdResult<channels::ChannelListing> {
+    let paths = verified_sidecars().await?;
+    let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3] };
+    let ytdlp = ytdlp_for(app, &paths[0]).await;
+    let by_id = format!("tiktokuser:{sec_uid}");
+    let args = engine::channel_fetch_args(&tools, &by_id, limit, None);
+    let c = run_collect(&jobs.channel_fetches, url, &ytdlp, args, CHANNEL_FETCH_TIMEOUT, None).await?;
+    let j = serde_json::from_slice::<serde_json::Value>(&c.out).map_err(|_| CommandError::unknown("no listing"))?;
+    channels::map_listing(url, &j, limit).map_err(|_| CommandError::unknown("no listing"))
 }
 
 /// Douyin on this machine (app 0.7.2 experiment, douyin_local.rs): a hidden
