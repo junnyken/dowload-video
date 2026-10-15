@@ -22,7 +22,7 @@ import sys
 import json
 import httpx
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from urllib.parse import unquote, quote
 
 from dotenv import load_dotenv
@@ -794,6 +794,100 @@ async def _try_ytdlp(
 # PUBLIC API — Main entry point
 # ═════════════════════════════════════════════════════════════════════
 
+def _signed_detail_blocking(video_id: str) -> Tuple[Optional[Dict[str, Any]], str]:
+    """One signed detail call. Returns (aweme_detail or None, reason). Never logs cookies/URLs."""
+    from app.services import douyin_visitor  # noqa: PLC0415
+    from app.services.douyin_sign import detail_request  # noqa: PLC0415
+    jar = douyin_visitor.get_jar()
+    if not jar:
+        return None, "no_jar"
+    if not douyin_visitor.take_slot():
+        return None, "rate_cap"
+    ua, cookies = jar
+    req = detail_request(video_id, cookies, ua)
+    if not req:
+        return None, "no_uifid"
+    url, headers = req
+    from curl_cffi import requests as cr  # noqa: PLC0415
+    try:
+        r = cr.get(url, headers=headers, cookies=cookies, impersonate="chrome131", timeout=20)
+    except Exception as exc:  # noqa: BLE001
+        return None, f"network {type(exc).__name__}"
+    body = r.text or ""
+    if r.status_code != 200:
+        # 403 "Blocked by ArgusSecurityPlugin ..." = the jar/signature was refused.
+        douyin_visitor.report(False, f"HTTP {r.status_code} {body[:60]}")
+        return None, f"HTTP {r.status_code}"
+    try:
+        data = json.loads(body)
+    except ValueError:
+        douyin_visitor.report(False, "non-json 200")
+        return None, "non-json"
+    detail = data.get("aweme_detail") if isinstance(data, dict) else None
+    if isinstance(detail, dict):
+        douyin_visitor.report(True)
+        return detail, ""
+    if isinstance(data, dict) and data.get("filter_detail"):
+        # A valid answer about the video (deleted / private / filtered), not a refusal.
+        return None, "filtered"
+    douyin_visitor.report(False, "empty 200")
+    return None, "empty"
+
+
+def _best_play_url(video: Dict[str, Any], quality: str) -> str:
+    """play_addr by default; the highest bit_rate entry for video_4k."""
+    if quality == "video_4k":
+        best, best_key = "", (-1, -1)
+        for br in video.get("bit_rate") or []:
+            pa = (br or {}).get("play_addr") or {}
+            urls = pa.get("url_list") or []
+            key = (int(pa.get("height") or 0), int(br.get("bit_rate") or 0))
+            if urls and key > best_key:
+                best, best_key = urls[0], key
+        if best:
+            return best
+    urls = ((video.get("play_addr") or {}).get("url_list")) or []
+    return urls[0] if urls else ""
+
+
+async def _try_signed_web_api(video_id: str, quality: str = "video") -> Optional[Dict[str, Any]]:
+    try:
+        detail, why = await asyncio.to_thread(_signed_detail_blocking, video_id)
+    except Exception as exc:  # noqa: BLE001
+        _safe_print(f"[douyin_signed] error {type(exc).__name__}")
+        return None
+    if not detail:
+        if why != "no_jar":
+            _safe_print(f"[douyin_signed] no data ({why})")
+        return None
+    video = detail.get("video") or {}
+    direct = _best_play_url(video, quality)
+    music = detail.get("music") or {}
+    audio_urls = ((music.get("play_url") or {}).get("url_list")) or [] if isinstance(music.get("play_url"), dict) else []
+    audio_url = audio_urls[0] if audio_urls else ""
+    if quality.startswith("mp3") and audio_url:
+        direct = audio_url
+    if not direct:
+        _safe_print("[douyin_signed] no play url (image post?)")
+        return None
+    cover = ((video.get("cover") or {}).get("url_list")) or []
+    duration_ms = video.get("duration") or 0
+    duration = int(duration_ms / 1000) if duration_ms > 1000 else int(duration_ms)
+    title = detail.get("desc") or "Douyin Video"
+    _safe_print(f"[douyin_signed] ok ({duration}s)")
+    return {
+        "title": title,
+        "thumbnail_url": cover[0] if cover else "",
+        "direct_mp4_url": direct,
+        "audio_url": audio_url,
+        "file_size_mb": 0,
+        "duration": duration,
+        "quality": quality,
+        "original_url": f"https://www.douyin.com/video/{video_id}",
+        "provider": "douyin_signed",
+    }
+
+
 async def extract_douyin_video(
     url: str,
     quality: str = "video",
@@ -837,7 +931,16 @@ async def extract_douyin_video(
     # as /jingxuan?modal_id=<id> are rejected outright by yt-dlp and TikWM.
     canonical_url = _canonical_douyin_url(video_id) if video_id else resolved_url
 
-    # Provider 0: yt-dlp + signature cookies (the only path Douyin still serves)
+    # Provider 0a: signed web API with the shared visitor jar (owner 15/10:
+    # 20/20 + 180/180 live calls, ~0.4 s, no proxy). Skipped when no jar can
+    # be had, so Apify stays the fallback behind the free steps.
+    if video_id:
+        result = await _try_signed_web_api(video_id, quality)
+        if result:
+            result["original_url"] = original_url
+            return result
+
+    # Provider 0b: yt-dlp + signature cookies
     if video_id:
         result = await _try_ytdlp(video_id, quality, user_cookies_file)
         if result:

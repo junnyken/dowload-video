@@ -717,3 +717,63 @@ async def china_watermark_review(platform: str, body: WatermarkReviewBody, reque
                                "reason": redact(body.note)[:500]})
     return {"platform": platform, "provider": body.provider, "url_hash": body.url_hash,
             "state": body.state, "prior": (prior or {}).get("state"), "route": agg}
+
+
+# ── Douyin visitor jar for the signed web API (owner 15/10/2026) ─────────────
+
+@router.get("/china-platforms/douyin/visitor")
+async def china_douyin_visitor_status(_=Depends(verify_admin)) -> dict:
+    from app.services import douyin_visitor  # noqa: PLC0415
+    try:
+        return douyin_visitor.status()
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail="redis unavailable")
+
+
+@router.post("/china-platforms/douyin/visitor/settings")
+async def china_douyin_visitor_settings(request: Request, _=Depends(verify_admin)) -> dict:
+    # Body parsed by hand: a 422 would echo the mint key back.
+    from app.services import douyin_visitor  # noqa: PLC0415
+    try:
+        payload = await request.json()
+    except Exception:  # noqa: BLE001
+        payload = None
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail={"error": "bad_body", "message": "Cần JSON."})
+    kwargs: dict[str, Any] = {}
+    if "enabled" in payload:
+        kwargs["enabled"] = bool(payload["enabled"])
+    if isinstance(payload.get("mint_url"), str):
+        kwargs["mint_url"] = payload["mint_url"]
+    if isinstance(payload.get("mint_key"), str):
+        kwargs["mint_key"] = payload["mint_key"]
+    if payload.get("max_age_h") is not None:
+        try:
+            kwargs["max_age_h"] = float(payload["max_age_h"])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail={"error": "bad_max_age", "message": "max_age_h phải là số giờ."})
+    for name in ("per_min", "per_hour", "pause_min"):
+        if payload.get(name) is not None:
+            try:
+                kwargs[name] = int(payload[name])
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail={"error": f"bad_{name}", "message": f"{name} phải là số."})
+    try:
+        out = douyin_visitor.save_settings(**kwargs)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"error": "bad_value", "message": str(exc)})
+    log_admin_action(request, "admin.china_access.douyin_visitor_settings", resource_type="china_secret",
+                     resource_id="douyin_visitor",
+                     metadata={"fields": sorted(kwargs), "mint_url": out["mint_url"], "enabled": out["enabled"],
+                               "max_age_h": out["max_age_h"], "per_min": out["per_min"],
+                               "per_hour": out["per_hour"], "pause_min": out["pause_min"]})
+    return out
+
+
+@router.post("/china-platforms/douyin/visitor/mint")
+async def china_douyin_visitor_mint(request: Request, _=Depends(verify_admin)) -> dict:
+    from app.services import douyin_visitor  # noqa: PLC0415
+    out = await asyncio.to_thread(douyin_visitor.mint_now)
+    log_admin_action(request, "admin.china_access.douyin_visitor_mint", resource_type="china_secret",
+                     resource_id="douyin_visitor", metadata={"ok": out["ok"]})
+    return out
