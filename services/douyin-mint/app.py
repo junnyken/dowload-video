@@ -64,6 +64,7 @@ async def _mint() -> dict:
             await browser.close()
 
 
+@app.get("/")
 @app.get("/health")
 async def health():
     return {"ok": True, "busy": _lock.locked()}
