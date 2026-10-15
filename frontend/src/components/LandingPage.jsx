@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  Download, Layers, History, Wand2,
+  Download, Layers, History, Wand2, Lock,
   Sparkles, Smartphone, X, ShieldCheck, Puzzle, Lightbulb
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -37,6 +37,10 @@ const platforms = [
   { icon: PinterestIcon, label: 'Pinterest', bg: 'bg-surface-2 text-fg-2 border-line', ic: 'text-[#E60023]' },
 ];
 
+// Owner 15/10: "Xóa Logo Video" is not good enough yet — tab locked, its
+// screen not rendered, until it is rebuilt. Flip to false to reopen.
+const FLOW_LOCKED = true;
+
 const tabs = [
   { id: 'single',  label: 'Tải Video & Nhạc', shortLabel: 'Video & Nhạc', icon: Download },
   { id: 'bulk',    label: 'Hàng Loạt · Kênh', shortLabel: 'Hàng Loạt',   icon: Layers  },
@@ -60,25 +64,31 @@ function ModeTabs({ activeTab, onChange }) {
         const Icon = tab.icon;
         const isActive = activeTab === tab.id;
         const isFlow = tab.id === 'flow';
+        const locked = isFlow && FLOW_LOCKED;
         return (
           <button
             key={tab.id}
             type="button"
-            onClick={() => onChange(tab.id)}
-            title={TAB_TITLES[tab.id]}
+            onClick={() => { if (!locked) onChange(tab.id); }}
+            disabled={locked}
+            aria-disabled={locked || undefined}
+            title={locked ? 'Đang nâng cấp — sẽ mở lại sau' : TAB_TITLES[tab.id]}
             aria-pressed={isActive}
-            className={`relative min-w-0 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 py-2 sm:py-1.5 rounded-lg text-[11px] sm:text-[13px] leading-tight font-medium whitespace-nowrap transition-colors cursor-pointer ${
-              isActive
-                ? 'bg-surface text-fg shadow-sm ring-1 ring-line'
-                : 'text-fg-2 hover:text-fg'
+            className={`relative min-w-0 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 py-2 sm:py-1.5 rounded-lg text-[11px] sm:text-[13px] leading-tight font-medium whitespace-nowrap transition-colors ${
+              locked
+                ? 'text-fg-muted opacity-60 cursor-not-allowed'
+                : isActive
+                  ? 'bg-surface text-fg shadow-sm ring-1 ring-line cursor-pointer'
+                  : 'text-fg-2 hover:text-fg cursor-pointer'
             }`}
           >
-            <Icon className="w-3.5 h-3.5" />
+            {locked ? <Lock className="w-3.5 h-3.5" /> : <Icon className="w-3.5 h-3.5" />}
             <span className="hidden sm:inline">{tab.label}</span>
             <span className="sm:hidden">{tab.shortLabel}</span>
             {isFlow && (
-              <span className={`${isActive ? 'invisible ' : ''}absolute top-0.5 right-0.5 sm:static text-[9px] font-mono font-semibold px-1 py-0.5 rounded bg-accent-soft text-accent-text leading-none`}>
-                New
+              // wording: BA review — owner 15/10: logo removal locked until it is reworked
+              <span className={`${isActive ? 'invisible ' : ''}absolute top-0.5 right-0.5 sm:static text-[9px] font-mono font-semibold px-1 py-0.5 rounded leading-none ${locked ? 'bg-surface text-fg-muted border border-line' : 'bg-accent-soft text-accent-text'}`}>
+                {locked ? 'Sắp có' : 'New'}
               </span>
             )}
           </button>
@@ -335,7 +345,7 @@ export default function LandingPage() {
         <div className="w-full">
           {activeTab === 'single'  && <DashboardContent />}
           {activeTab === 'bulk'    && <BulkContent />}
-          {activeTab === 'flow'    && <FlowVeoCleanup />}
+          {activeTab === 'flow'    && !FLOW_LOCKED && <FlowVeoCleanup />}
           {activeTab === 'history' && <HistoryContent />}
         </div>
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Video, Search, Languages, Menu, X } from 'lucide-react';
+import { Video, Languages, Menu, X } from 'lucide-react';
 import SearchPage from './pages/SearchPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WorkspaceProvider } from './context/WorkspaceContext';
@@ -246,7 +246,7 @@ function AppInner() {
   const goTo = (v, path = '/') => { setMenuOpen(false); navigateTo(v, path); };
 
   const navItems = [
-    { key: 'search', label: 'Tìm kiếm', title: 'Tìm kiếm video', icon: Search, active: view === 'search', onClick: () => goTo('search', '/search') },
+    // "Tìm kiếm" removed from the menu (owner 15/10: feature dropped).
     { key: 'platforms', label: 'Platforms', title: 'Nền tảng được hỗ trợ', active: view === 'platforms', onClick: () => goTo('platforms', '/platforms') },
     { key: 'extension', label: 'Extension', title: 'Tiện ích trình duyệt', active: view === 'extension', onClick: () => goTo('extension', '/extension') },
     ...(isAuthenticated ? [
@@ -323,7 +323,7 @@ function AppInner() {
       )}
       {/* ── Top Navbar ───────────────────────────────────── */}
       <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-xl bg-surface/80 border-b border-line">
-        <div className="max-w-6xl mx-auto h-14 md:h-16 px-4 md:px-8 flex items-center justify-between gap-3">
+        <div className="max-w-7xl mx-auto h-14 md:h-16 px-4 md:px-8 flex items-center justify-between gap-3">
           {/* Logo */}
           <button
             onClick={() => goTo('landing', '/')}
@@ -335,15 +335,17 @@ function AppInner() {
             <span className="text-lg font-semibold text-fg tracking-tight">VidGrab</span>
           </button>
 
-          {/* Inline links — desktop only (>= 1024px) */}
-          <div className="hidden lg:flex items-stretch h-full gap-1 flex-1 justify-center">
+          {/* Inline links — desktop only (>= 1280px) */}
+          {/* xl, not lg: at 1024–1279 px seven items + workspace + account wrapped
+              their labels onto two lines (owner screenshot 15/10). */}
+          <div className="hidden xl:flex items-stretch h-full gap-0.5 flex-1 justify-center min-w-0">
             {navItems.map((item) => (
               <button
                 key={item.key}
                 onClick={item.onClick}
                 title={item.title}
                 aria-current={item.active ? 'page' : undefined}
-                className={`relative inline-flex items-center gap-1.5 px-3 text-sm font-medium transition-colors cursor-pointer ${
+                className={`relative inline-flex items-center gap-1.5 px-2.5 text-sm font-medium whitespace-nowrap transition-colors cursor-pointer ${
                   item.active
                     ? 'text-fg after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-accent'
                     : 'text-fg-2 hover:text-fg'
@@ -385,7 +387,7 @@ function AppInner() {
               aria-label="Menu"
               aria-expanded={menuOpen}
               aria-controls="mobile-nav-sheet"
-              className="lg:hidden inline-flex items-center justify-center w-8 h-8 rounded-lg border border-line text-fg-2 hover:bg-surface-2 hover:text-fg transition-colors cursor-pointer"
+              className="xl:hidden inline-flex items-center justify-center w-8 h-8 rounded-lg border border-line text-fg-2 hover:bg-surface-2 hover:text-fg transition-colors cursor-pointer"
             >
               {menuOpen ? <X className="w-4 h-4" aria-hidden="true" /> : <Menu className="w-4 h-4" aria-hidden="true" />}
             </button>
@@ -396,7 +398,7 @@ function AppInner() {
         {menuOpen && (
           <div
             id="mobile-nav-sheet"
-            className="lg:hidden absolute top-full inset-x-0 bg-surface border-b border-line shadow-lg max-h-[calc(100vh-3.5rem)] overflow-y-auto"
+            className="xl:hidden absolute top-full inset-x-0 bg-surface border-b border-line shadow-lg max-h-[calc(100vh-3.5rem)] overflow-y-auto"
           >
             <div className="max-w-6xl mx-auto px-4 md:px-8 py-2 flex flex-col">
               {navItems.map((item) => (
