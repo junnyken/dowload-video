@@ -24,6 +24,7 @@ def test_direct_success_never_uses_proxy(monkeypatch):
 
 def test_proxy_retry_after_direct_fails(monkeypatch):
     calls = []
+    monkeypatch.setattr(d, "_proxy_may_help", lambda: True)
 
     async def once(vid, q, proxy):
         calls.append(proxy)
@@ -60,3 +61,30 @@ def test_env_fallback_when_pool_empty(monkeypatch):
     monkeypatch.setattr(pp, "get_proxy_from_pool", lambda p: None)
     monkeypatch.setattr(pm, "IPROYAL_PROXY_CN", "http://env:2")
     assert d._douyin_pool_proxy() == "http://env:2"
+
+
+def test_no_retry_when_measurement_says_proxies_do_not_help(monkeypatch):
+    calls = []
+
+    async def once(vid, q, proxy):
+        calls.append(proxy)
+        return None
+
+    monkeypatch.setattr(d, "_try_iesdouyin_share_once", once)
+    monkeypatch.setattr(d, "_douyin_pool_proxy", lambda: "http://u:p@h:1")
+    monkeypatch.setattr(d, "_proxy_may_help", lambda: False)
+    assert _run(d._try_iesdouyin_share("123")) is None
+    assert calls == [None]
+
+
+def test_proxy_may_help_reads_last_report(monkeypatch):
+    import json
+    import fakeredis
+    import app.core.redis_client as rcmod
+    r = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(rcmod, "get_redis", lambda: r)
+    assert d._proxy_may_help() is True                      # never measured
+    r.set("china:proxy_test:last", json.dumps({"proxies": [{"douyin_meta": False}]}))
+    assert d._proxy_may_help() is False
+    r.set("china:proxy_test:last", json.dumps({"proxies": [{"douyin_meta": False}, {"douyin_meta": True}]}))
+    assert d._proxy_may_help() is True

@@ -207,6 +207,25 @@ def _douyin_pool_proxy() -> Optional[str]:
         return None
 
 
+def _proxy_may_help() -> bool:
+    """Skip the proxy retry while the last measurement (app.core.china_proxy_test,
+    every deploy + admin "Kiểm proxy") found no proxy that gets video data:
+    15/10 a CN (Hubei) proxy still got the page without it — the block is
+    the page's JS signature, not the IP — and the retry only added ~6 s before
+    the managed fallback. No measurement yet → try."""
+    try:
+        import json as _json
+        from app.core.china_proxy_test import RESULT_KEY
+        from app.core.redis_client import get_redis
+        raw = get_redis().get(RESULT_KEY)
+        if not raw:
+            return True
+        report = _json.loads(raw)
+        return any(p.get("douyin_meta") for p in report.get("proxies") or [])
+    except Exception:
+        return True
+
+
 async def _try_iesdouyin_share(video_id: str, quality: str = "video") -> Optional[Dict[str, Any]]:
     """Share page from the server IP first, then once through the admin
     "douyin" proxy: measured 15/10, the server IP (VN) and a US proxy both get
@@ -215,7 +234,7 @@ async def _try_iesdouyin_share(video_id: str, quality: str = "video") -> Optiona
     result = await _try_iesdouyin_share_once(video_id, quality, None)
     if result:
         return result
-    proxy = _douyin_pool_proxy()
+    proxy = _douyin_pool_proxy() if _proxy_may_help() else None
     if proxy:
         _safe_print("[iesdouyin] retrying through the admin douyin proxy")
         result = await _try_iesdouyin_share_once(video_id, quality, proxy)
