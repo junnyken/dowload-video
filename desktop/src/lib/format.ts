@@ -62,3 +62,14 @@ export function versionLess(a: string, b: string): boolean {
   }
   return false;
 }
+
+/** Vietnamese compact count: 950 / 1,2 N / 3,4 Tr / 1,1 Tỷ (N = nghìn, Tr = triệu). Truncates, never rounds up. */
+export function compactViews(n: number | null | undefined): string {
+  if (n == null || !isFinite(n) || n < 0) return '';
+  const x = Math.floor(n);
+  const fmt = (v: number, unit: string) => `${(Math.floor(v * 10) / 10).toString().replace('.', ',')} ${unit}`;
+  if (x < 1000) return String(x);
+  if (x < 1e6) return fmt(x / 1e3, 'N');
+  if (x < 1e9) return fmt(x / 1e6, 'Tr');
+  return fmt(x / 1e9, 'Tỷ');
+}

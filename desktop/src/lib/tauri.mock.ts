@@ -149,6 +149,7 @@ function mockVideo(i: number): ChannelVideo {
     id: `mv${i}`, url: `https://www.youtube.com/watch?v=mv${i}`,
     title: `${TOPICS[i % TOPICS.length]} — công thức số ${i >= 1000 ? 300 + i - 999 : 300 - i}, làm tại nhà cực dễ${i % 7 === 0 ? ' và rất ngon, ai xem cũng mê' : ''}`,
     duration: 180 + ((i * 53) % 900), uploadDate: day(i >= 1000 ? 0 : i * 2), thumbnail: thumb('mv' + i),
+    ...(localStorage.getItem('mock.noViews') === '1' ? {} : { viewCount: ((i * 7919) % 1000) * (i % 5 === 0 ? 5000 : 37) }), // 0.17.0 dev knob: mock.noViews=1 drops view counts
   };
 }
 const MOCK_VIDEOS = Array.from({ length: 300 }, (_, i) => mockVideo(i));

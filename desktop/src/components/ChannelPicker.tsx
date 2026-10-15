@@ -4,7 +4,9 @@ import { Badge, Button, PlatformBadge, Select, Spinner, Thumb, Toggle } from './
 import { api } from '../lib/tauri';
 import { ensureOutDir, settings, type Quality } from '../lib/settings';
 import { QUALITY_LABEL } from '../lib/quality';
-import { formatBytes, formatDuration } from '../lib/format';
+import { compactViews, formatBytes, formatDuration } from '../lib/format';
+import { EMPTY_FILTER, isEmptyFilter, topByViews } from '../lib/channel-filter';
+import { ChannelFilterForm, validateFilter } from './ChannelFilterForm';
 import { errorMessage, toAppError } from '../lib/errors';
 import { toast } from '../lib/ui';
 import {
@@ -14,7 +16,7 @@ import { quota, refreshQuota } from '../lib/quota';
 import { capIds, selectionCap } from '../lib/quota-core';
 import { routesFor } from '../lib/cookies';
 import { isLocalStep } from '../lib/routes-core';
-import type { ChannelInterval, ChannelListing, ChannelMode } from '../lib/types';
+import type { ChannelFilter, ChannelInterval, ChannelListing, ChannelMode, ChannelVideo } from '../lib/types';
 
 const PAGE = 50;
 const QUALITIES = Object.keys(QUALITY_LABEL) as Quality[];
@@ -53,6 +55,8 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
   const [query, setQuery] = useState('');
   const [since, setSince] = useState('');
   const [page, setPage] = useState(0);
+  const [sort, setSort] = useState<'new' | 'views' | 'long' | 'short'>('new');
+  const [filter, setFilter] = useState<ChannelFilter>(() => saved?.filter ?? EMPTY_FILTER);
   const [quality, setQuality] = useState<Quality>(st.defaultQuality);
   const [baseDir, setBaseDir] = useState<string | null>(null);
   const [customDir, setCustomDir] = useState<string | null>(null);
@@ -95,8 +99,22 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
       }
       return true;
     });
+    // Unknown values go last; Array.sort is stable so ties keep the "Mới nhất" order.
+    const by = (get: (v: ChannelVideo) => number | null | undefined, dir: 1 | -1) => (a: ChannelVideo, b: ChannelVideo) => {
+      const x = get(a), y = get(b);
+      if (x == null && y == null) return 0;
+      if (x == null) return 1;
+      if (y == null) return -1;
+      return (x - y) * dir;
+    };
+    if (sort === 'views') out.sort(by((v) => v.viewCount, -1));
+    else if (sort === 'long') out.sort(by((v) => v.duration, -1));
+    else if (sort === 'short') out.sort(by((v) => v.duration, 1));
     return { shown: out, hiddenNoDate: hidden };
-  }, [listing.videos, query, since]);
+  }, [listing.videos, query, since, sort]);
+  const hasViews = useMemo(() => topByViews(listing.videos, 1) !== null, [listing.videos]);
+  const noViewsTip = 'Nền tảng không cung cấp lượt xem cho danh sách này'; // wording: BA review
+  const filterError = follow ? validateFilter(filter) : null;
 
   const pages = Math.max(1, Math.ceil(shown.length / PAGE));
   const cur = Math.min(page, pages - 1);
@@ -131,6 +149,7 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
   async function submit() {
     if (!dir || busy) return;
     if (n === 0 && !follow) return;
+    if (filterError) return;
     if (free != null && free < 300e6 && n > 0) {
       toast('error', 'Ổ đĩa không đủ dung lượng. Hãy chọn thư mục khác.');
       return;
@@ -138,6 +157,7 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
     setBusy(true);
     try {
       const ch = newChannelFromListing(listing, { mode, quality, outDir: dir, checkEveryHours: every });
+      if (follow && !isEmptyFilter(filter)) ch.filter = filter; else delete ch.filter;
       const res = n > 0 ? await enqueueWithClaims(selectedVideos, ch) : { enqueued: [], refused: [] };
       addRefused(res.refused, ch); // each with the server's reason in Hàng đợi → Lỗi
       const added = res.enqueued.length;
@@ -222,6 +242,11 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
               {!douyin && <IntervalSelect inline value={every} onChange={setEvery} />}
             </div>
           )}
+          {follow && (
+            <div className="w-full">
+              <ChannelFilterForm value={filter} onChange={setFilter} videos={listing.videos} />
+            </div>
+          )}
         </section>
 
         <div className="mt-3 flex flex-wrap items-center gap-2" role="toolbar" aria-label="Chọn video">
@@ -234,6 +259,16 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
           {[10, 50, 100].map((k) => (
             <Button key={k} size="sm" variant="secondary" aria-label={`Chọn ${k} video mới nhất`} disabled={listing.videos.length === 0} onClick={() => { setQuery(''); setSince(''); selectIds(listing.videos.slice(0, k).map((v) => v.id)); }}>
               {k} mới nhất
+            </Button>
+          ))}
+          {/* wording: BA review */}
+          {[10, 20].map((k) => (
+            <Button
+              key={`top${k}`} size="sm" variant="secondary" disabled={!hasViews} title={hasViews ? undefined : noViewsTip}
+              aria-label={`Chọn ${k} video xem nhiều nhất`}
+              onClick={() => { setQuery(''); setSince(''); selectIds((topByViews(listing.videos, k) ?? []).map((v) => v.id)); }}
+            >
+              Top {k} xem nhiều
             </Button>
           ))}
         </div>
@@ -255,6 +290,13 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
             />
           </label>
           {since && <Button size="sm" variant="ghost" onClick={() => setSince('')}>Xoá lọc ngày</Button>}
+          {/* wording: BA review */}
+          <Select label="Sắp xếp" value={sort} onChange={(v) => { setSort(v as typeof sort); setPage(0); }} className="w-[170px]">
+            <option value="new">Mới nhất</option>
+            <option value="views" disabled={!hasViews} title={hasViews ? undefined : noViewsTip}>Xem nhiều nhất</option>
+            <option value="long">Dài nhất</option>
+            <option value="short">Ngắn nhất</option>
+          </Select>
         </div>
         {since && hiddenNoDate > 0 && <p className="mt-1.5 text-xs text-fg-muted">{hiddenNoDate} video không rõ ngày đăng đang bị ẩn.</p>}
 
@@ -269,6 +311,7 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
                     <input type="checkbox" checked={sel.has(v.id)} onChange={() => toggle(v.id)} className="h-4 w-4 shrink-0 accent-[var(--vg-accent)]" aria-label={`Chọn ${v.title}`} />
                     <Thumb src={v.thumbnail} className="h-[45px] w-[80px]" />
                     <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg" title={v.title}>{v.title}</span>
+                    {v.viewCount != null && <span className="w-[104px] shrink-0 text-right text-xs tabular-nums text-fg-muted">{compactViews(v.viewCount)} lượt xem</span>}{/* wording: BA review */}
                     <span className="w-14 shrink-0 text-right text-xs tabular-nums text-fg-muted">{formatDuration(v.duration)}</span>
                     <span className="w-[84px] shrink-0 text-right text-xs tabular-nums text-fg-muted">{fmtUploadDate(v.uploadDate)}</span>
                   </label>
@@ -300,7 +343,7 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
             <FolderOpen size={15} className="shrink-0" aria-hidden />
             <span className="truncate">{dir ?? 'Chọn thư mục…'}</span>
           </button>
-          <Button variant="primary" icon={busy ? <Spinner /> : <Download size={16} />} disabled={!dir || busy || (n === 0 && !follow)} onClick={() => void submit()}>{label}</Button>
+          <Button variant="primary" icon={busy ? <Spinner /> : <Download size={16} />} disabled={!dir || busy || (n === 0 && !follow) || !!filterError} onClick={() => void submit()}>{label}</Button>
         </div>
         <p className="mt-2 flex items-start gap-1.5 text-xs text-fg-muted">
           <Info size={13} className="mt-px shrink-0" aria-hidden />

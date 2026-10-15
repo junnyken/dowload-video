@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { FolderOpen } from 'lucide-react';
 import { Button, Modal, Select, Spinner, Thumb } from './ui';
+import { ChannelFilterForm, validateFilter } from './ChannelFilterForm';
+import { EMPTY_FILTER, isEmptyFilter } from '../lib/channel-filter';
 import { IntervalSelect, ModeSelect, fmtUploadDate } from './ChannelPicker';
 import { channels, downloadPending, dismissPending, refusedText, saveChannel } from '../lib/channels';
 import { QUALITY_LABEL } from '../lib/quality';
@@ -9,7 +11,7 @@ import { api } from '../lib/tauri';
 import { formatDuration } from '../lib/format';
 import { errorMessage, toAppError } from '../lib/errors';
 import { toast } from '../lib/ui';
-import type { ChannelInterval, ChannelMode } from '../lib/types';
+import type { ChannelFilter, ChannelInterval, ChannelMode } from '../lib/types';
 
 export function ReviewDialog({ channelId, onClose }: { channelId: string; onClose: () => void }) {
   const ch = channels.use().find((c) => c.id === channelId);
@@ -84,8 +86,10 @@ export function EditDialog({ channelId, onClose }: { channelId: string; onClose:
   const [every, setEvery] = useState<ChannelInterval>(ch?.checkEveryHours ?? 6);
   const [quality, setQuality] = useState(ch?.quality ?? 'best');
   const [dir, setDir] = useState(ch?.outDir ?? '');
+  const [filter, setFilter] = useState<ChannelFilter>(ch?.filter ?? EMPTY_FILTER);
   const [busy, setBusy] = useState(false);
   if (!ch) return null;
+  const filterError = validateFilter(filter);
 
   async function pick() {
     try {
@@ -96,7 +100,8 @@ export function EditDialog({ channelId, onClose }: { channelId: string; onClose:
   async function save() {
     setBusy(true);
     try {
-      await saveChannel({ ...ch!, mode, checkEveryHours: every, quality, outDir: dir });
+      const { filter: _old, ...rest } = ch!;
+      await saveChannel({ ...rest, mode, checkEveryHours: every, quality, outDir: dir, ...(isEmptyFilter(filter) ? {} : { filter }) });
       toast('success', 'Đã lưu cài đặt kênh.');
       onClose();
     } catch (e) {
@@ -125,10 +130,11 @@ export function EditDialog({ channelId, onClose }: { channelId: string; onClose:
             <FolderOpen size={15} className="shrink-0" aria-hidden /><span className="truncate">{dir || 'Chọn thư mục…'}</span>
           </button>
         </div>
+        <ChannelFilterForm value={filter} onChange={setFilter} />
       </div>
       <div className="mt-5 flex justify-end gap-2">
         <Button onClick={onClose}>Huỷ</Button>
-        <Button variant="primary" disabled={busy || !dir} icon={busy ? <Spinner /> : undefined} onClick={() => void save()}>Lưu</Button>
+        <Button variant="primary" disabled={busy || !dir || !!filterError} icon={busy ? <Spinner /> : undefined} onClick={() => void save()}>Lưu</Button>
       </div>
     </Modal>
   );

@@ -5,13 +5,14 @@ import { SyncStatus } from '../components/SyncStatus';
 import { deviceInfo, type DeviceInfo } from '../lib/device';
 import { CopyLink } from '../components/CopyLink';
 import { PlatformAccounts } from '../components/PlatformAccounts';
-import { settings, updateSettings, ensureOutDir, type Quality, type Theme } from '../lib/settings';
+import { settings, updateSettings, ensureOutDir, cleanCleanup, FOLDER_STYLES, NAME_STYLES, type FolderStyle, type NameStyle, type Quality, type Theme } from '../lib/settings';
+import { cleanupArgs, runCleanup } from '../lib/cleanup';
 import { QUALITY_LABEL } from '../lib/quality';
 import { auth, signOut } from '../lib/auth';
 import { api, onUpdateProgress } from '../lib/tauri';
 import { apiFetch } from '../lib/http';
 import { openSignIn, toast } from '../lib/ui';
-import { versionLess } from '../lib/format';
+import { formatBytes, versionLess } from '../lib/format';
 import { errorMessage, toAppError } from '../lib/errors';
 import { WEBSITE_URL } from '../lib/config';
 import { inAppVersion, progressPercent, updaterMissing, ytdlpLabel, type InAppProgress } from '../lib/update-core';
@@ -174,6 +175,10 @@ export function SettingsScreen() {
 
           <PlatformPresetsSection />
 
+          <NamingSection />
+
+          <CleanupSection />
+
           {/* wording: BA review — clipboard link watch (14/10) */}
           <Section title="Tự nhận link">
             <Row label="Khi sao chép link video" hint="VidGrab nhận ra link video bạn vừa sao chép (Ctrl+C) ở bất kỳ đâu. Chỉ đọc link của các nền tảng VidGrab hỗ trợ; mọi nội dung khác trong bộ nhớ tạm được bỏ qua và không rời khỏi máy.">
@@ -329,6 +334,111 @@ function PlatformPresetsSection() {
           </Row>
         );
       })}
+    </Section>
+  );
+}
+
+const NAME_EXAMPLE: Record<NameStyle, string> = {
+  title: 'Tên video [id].mp4',
+  date_title: '2026-10-15 Tên video [id].mp4',
+  date_channel_title: '2026-10-15_Tên kênh_Tên video [id].mp4',
+};
+const FOLDER_EXAMPLE: Record<FolderStyle, string> = {
+  none: 'VidGrab\\Tên video.mp4',
+  platform: 'VidGrab\\TikTok\\…',
+  month: 'VidGrab\\2026-10\\…',
+  platform_month: 'VidGrab\\TikTok\\2026-10\\…',
+};
+const NAME_LABEL: Record<NameStyle, string> = { title: 'Chỉ tiêu đề', date_title: 'Ngày + tiêu đề', date_channel_title: 'Ngày + kênh + tiêu đề' }; // wording: BA review
+const FOLDER_LABEL: Record<FolderStyle, string> = { none: 'Không chia thư mục con', platform: 'Theo nền tảng', month: 'Theo tháng', platform_month: 'Theo nền tảng, rồi theo tháng' }; // wording: BA review
+
+/** File name / sub-folder layout of main-folder downloads (0.17.0). wording: BA review */
+function NamingSection() {
+  const st = settings.use();
+  return (
+    <Section title="Tên tệp & thư mục">
+      <Row label="Cách đặt tên tệp" hint={`Ví dụ: ${NAME_EXAMPLE[st.nameStyle]}`}>
+        <Select label="Cách đặt tên tệp" value={st.nameStyle} onChange={(v) => updateSettings({ nameStyle: v as NameStyle })} className="w-[220px]">
+          {NAME_STYLES.map((k) => <option key={k} value={k}>{NAME_LABEL[k]}</option>)}
+        </Select>
+      </Row>
+      <Row label="Chia thư mục con" hint={`Ví dụ: ${FOLDER_EXAMPLE[st.folderStyle]}`}>
+        <Select label="Chia thư mục con" value={st.folderStyle} onChange={(v) => updateSettings({ folderStyle: v as FolderStyle })} className="w-[220px]">
+          {FOLDER_STYLES.map((k) => <option key={k} value={k}>{FOLDER_LABEL[k]}</option>)}
+        </Select>
+      </Row>
+      <p className="px-4 py-3 text-xs text-fg-muted">Áp dụng cho video tải vào thư mục chính; video của kênh theo dõi vẫn vào thư mục riêng của kênh.</p>
+    </Section>
+  );
+}
+
+/** Auto cleanup of old downloads → Recycle Bin (0.17.0). wording: BA review */
+function CleanupSection() {
+  const st = settings.use();
+  const c = st.cleanup;
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const args = cleanupArgs();
+  const setC = (patch: Partial<typeof c>) => { updateSettings({ cleanup: cleanCleanup({ ...c, ...patch }) }); setMsg(null); setConfirming(false); };
+  const numOrNull = (v: string) => (v.trim() === '' ? null : Number(v));
+  // Draft text so a half-typed number is not rewritten by cleanCleanup while typing.
+  const [days, setDays] = useState(c.olderThanDays == null ? '' : String(c.olderThanDays));
+  const [gb, setGb] = useState(c.minFreeGb == null ? '' : String(c.minFreeGb));
+
+  async function preview() {
+    if (!args) return;
+    setBusy(true); setMsg(null); setConfirming(false);
+    try {
+      const r = await api.cleanupPreview(args);
+      setMsg(`Sẽ chuyển ${r.count} video (${formatBytes(r.bytes)}) vào Thùng rác`);
+    } catch (e) { toast('error', errorMessage(toAppError(e).code)); } finally { setBusy(false); }
+  }
+  async function run() {
+    setBusy(true); setMsg(null); setConfirming(false);
+    try {
+      const r = await runCleanup();
+      if (r) setMsg(`Đã chuyển ${r.moved} video (${formatBytes(r.bytes)}) vào Thùng rác${r.failed ? ` · ${r.failed} video không chuyển được` : ''}`);
+    } catch (e) { toast('error', errorMessage(toAppError(e).code)); } finally { setBusy(false); }
+  }
+
+  const numInput = 'h-9 w-24 rounded-[10px] border border-line-strong bg-surface px-2.5 text-right text-sm text-fg placeholder:text-fg-muted';
+  return (
+    <Section title="Tự dọn ổ đĩa">
+      <Row label="Tự chuyển video cũ vào Thùng rác" hint="Kiểm tra mỗi 6 giờ khi VidGrab đang chạy.">
+        <Toggle checked={c.enabled} onChange={(v) => setC({ enabled: v })} label="Tự chuyển video cũ vào Thùng rác" />
+      </Row>
+      <Row label="Video cũ hơn … ngày" hint="Để trống = không dọn theo tuổi video.">
+        <input
+          type="number" min={1} max={3650} step={1} inputMode="numeric" aria-label="Video cũ hơn (ngày)" placeholder="Tắt" className={numInput} value={days}
+          onChange={(e) => { setDays(e.target.value); setC({ olderThanDays: numOrNull(e.target.value) }); }}
+        />
+        <span className="text-[13px] text-fg-2">ngày</span>
+      </Row>
+      <Row label="Khi ổ còn dưới … GB" hint="Để trống = không dọn theo dung lượng trống. Dọn video cũ nhất trước.">
+        <input
+          type="number" min={0.5} step="any" inputMode="decimal" aria-label="Khi ổ còn dưới (GB)" placeholder="Tắt" className={numInput} value={gb}
+          onChange={(e) => { setGb(e.target.value); setC({ minFreeGb: numOrNull(e.target.value) }); }}
+        />
+        <span className="text-[13px] text-fg-2">GB</span>
+      </Row>
+      <div className="px-4 py-3">
+        <p className="text-xs text-fg-muted">Chỉ đụng tới video do VidGrab tải. Video vào Thùng rác của Windows, lấy lại được.</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button size="sm" icon={busy ? <Spinner /> : undefined} disabled={!args || busy} onClick={() => void preview()}>Xem trước</Button>
+          {!confirming ? (
+            <Button size="sm" variant="danger" disabled={!args || busy} onClick={() => setConfirming(true)}>Dọn ngay</Button>
+          ) : (
+            <span className="flex flex-wrap items-center gap-2 rounded-[10px] bg-danger-soft px-2.5 py-1" role="alertdialog" aria-label="Xác nhận dọn ngay">
+              <span className="text-[13px] text-fg">Chuyển các video đủ điều kiện vào Thùng rác ngay bây giờ?</span>
+              <Button size="sm" variant="danger" disabled={busy} onClick={() => void run()}>Đồng ý, dọn ngay</Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>Huỷ</Button>
+            </span>
+          )}
+        </div>
+        {!args && <p className="mt-2 text-xs text-fg-muted">Nhập số ngày hoặc số GB để dùng tính năng này.</p>}
+        {msg && <p role="status" className="mt-2 text-[13px] text-fg-2">{msg}</p>}
+      </div>
     </Section>
   );
 }
