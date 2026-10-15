@@ -5,7 +5,8 @@ export type AppError = { code: string; message: string };
 const MESSAGES: Record<string, string> = {
   invalid_url: 'Liên kết không hợp lệ. Hãy kiểm tra lại đường dẫn.',
   unsupported: 'Trang web này chưa được hỗ trợ hoặc liên kết không chứa video.',
-  private_or_login: 'Video riêng tư hoặc cần đăng nhập mới xem được.',
+  // wording: BA review — 15/10: TikTok answers "doesn't exist" for private / deleted posts too
+  private_or_login: 'Video hoặc kênh này không công khai (riêng tư, đã xoá, hoặc cần đăng nhập). Nếu là tài khoản của bạn, đăng nhập nền tảng ở Cài đặt rồi thử lại.',
   geo_blocked: 'Video bị chặn ở khu vực của bạn.',
   not_found: 'Không tìm thấy video. Có thể đã bị xoá hoặc liên kết sai.',
   forbidden: 'Máy chủ từ chối cho tải video này (liên kết tải có thể đã hết hạn). Hãy thử lại.',

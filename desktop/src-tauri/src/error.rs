@@ -147,6 +147,13 @@ const RULES: &[(Code, &[&str])] = &[
             "requires a subscription",
             "age-restricted",
             "inappropriate for some users",
+            // TikTok: yt-dlp's wording for status 10204/10222 ("item doesn't
+            // exist" to an anonymous visitor): the post is private, deleted or
+            // the account is private — seen 15/10 on a user's own PC (residential
+            // IP), so it is not an IP block there. Was "unknown".
+            "ip address is blocked from accessing this post",
+            // TikTok profile that is private / does not exist (no secUid).
+            "unable to extract secondary user id",
         ],
     ),
     (Code::Unsupported, &["unsupported url", "no video formats found", "requested format is not available"]),
@@ -259,6 +266,9 @@ mod tests {
         assert_eq!(c("ERROR: something nobody has seen before"), Code::Unknown);
         // yt-dlp/extractor/tiktok.py DouyinIE
         assert_eq!(c("ERROR: [Douyin] 7311: Fresh cookies (not necessarily logged in) are needed"), Code::PrivateOrLogin);
+        // yt-dlp 2026.08.19, 15/10, a TikTok post TikTok reports as statusCode 10204
+        assert_eq!(c("ERROR: [TikTok] 7695817594946817302: Your IP address is blocked from accessing this post"), Code::PrivateOrLogin);
+        assert_eq!(c("ERROR: [tiktok:user] cz3z: Unable to extract secondary user ID. If you are able to get the channel_id from a video posted by this user, try using \"tiktokuser:channel_id\" as the input URL"), Code::PrivateOrLogin);
     }
 
     #[test]
