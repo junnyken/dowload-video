@@ -57,7 +57,9 @@ pub enum PageError {
     Private,
     /// The page loaded but listed no video. `sec_uid`: the TikTok channel id
     /// the page still gave, so yt-dlp can try `tiktokuser:<sec_uid>`.
-    Empty { sec_uid: Option<String>, status: i64 },
+    /// `title` / `thumbnail`: the channel name and avatar the page showed, so
+    /// that listing is not titled with the bare secUid (0.16.4).
+    Empty { sec_uid: Option<String>, status: i64, title: Option<String>, thumbnail: Option<String> },
     /// The answer was not what the script sends.
     Bad,
 }
@@ -219,7 +221,12 @@ pub fn to_listing(url: &str, t: &Target, answer: &str, limit: u32) -> Result<Cha
             return Err(PageError::Bad);
         }
         let sec_uid = if t.kind == Kind::TikTok { s(&meta, "id").filter(|i| valid_id(i) && i.starts_with("MS4w")) } else { None };
-        return Err(PageError::Empty { sec_uid, status });
+        return Err(PageError::Empty {
+            sec_uid,
+            status,
+            title: s(&meta, "title").map(|x| cap(&x, 500)),
+            thumbnail: https(s(&meta, "thumbnail")),
+        });
     }
     let path_name = t.page.path().trim_matches('/').split('/').next().unwrap_or("").to_string();
     let channel_id = s(&meta, "id")
@@ -313,11 +320,16 @@ mod tests {
         let t = target("https://www.facebook.com/NASA").unwrap();
         assert_eq!(to_listing("u", &t, r#"{"error":"login"}"#, 5), Err(PageError::Login));
         assert_eq!(to_listing("u", &t, r#"{"error":"verify"}"#, 5), Err(PageError::Verify));
-        assert_eq!(to_listing("u", &t, r#"{"meta":{},"items":[],"error":"empty"}"#, 5), Err(PageError::Empty { sec_uid: None, status: 0 }));
+        assert_eq!(to_listing("u", &t, r#"{"meta":{},"items":[],"error":"empty"}"#, 5), Err(PageError::Empty { sec_uid: None, status: 0, title: None, thumbnail: None }));
         let tt = target("https://www.tiktok.com/@ed").unwrap();
         assert_eq!(
-            to_listing("u", &tt, r#"{"meta":{"id":"MS4wLjABAAAA_x"},"status":0,"items":[],"error":"empty"}"#, 5),
-            Err(PageError::Empty { sec_uid: Some("MS4wLjABAAAA_x".into()), status: 0 })
+            to_listing("u", &tt, r#"{"meta":{"id":"MS4wLjABAAAA_x","title":"Editer Lỏ","thumbnail":"https://p16.tiktokcdn.com/a.jpg"},"status":0,"items":[],"error":"empty"}"#, 5),
+            Err(PageError::Empty {
+                sec_uid: Some("MS4wLjABAAAA_x".into()),
+                status: 0,
+                title: Some("Editer Lỏ".into()),
+                thumbnail: Some("https://p16.tiktokcdn.com/a.jpg".into())
+            })
         );
         assert_eq!(to_listing("u", &tt, r#"{"meta":{},"status":10202,"items":[],"error":"empty"}"#, 5), Err(PageError::NotFound));
         assert_eq!(to_listing("u", &tt, r#"{"meta":{},"status":10222,"items":[],"error":"empty"}"#, 5), Err(PageError::Private));

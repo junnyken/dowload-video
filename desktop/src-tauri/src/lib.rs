@@ -1367,8 +1367,17 @@ async fn page_list(app: &AppHandle, jobs: &State<'_, Jobs>, url: &str, t: &page_
     };
     // The page gave the TikTok channel id but no visible videos: yt-dlp lists
     // by that id ("tiktokuser:<secUid>", the route yt-dlp itself suggests).
-    if let page_listing::PageError::Empty { sec_uid: Some(id), .. } = &err {
-        if let Ok(listing) = tiktok_by_id(app, jobs, url, id, limit).await {
+    if let page_listing::PageError::Empty { sec_uid: Some(id), title, thumbnail, .. } = &err {
+        if let Ok(mut listing) = tiktok_by_id(app, jobs, url, id, limit).await {
+            // yt-dlp's by-id playlist has no name: use the one the page showed,
+            // else "@user" from the URL — never the bare secUid (0.16.4).
+            let handle = t.page.path().trim_matches('/').to_string();
+            if listing.title == listing.channel_id || listing.title.starts_with("MS4w") {
+                listing.title = title.clone().unwrap_or_else(|| handle.clone());
+            }
+            listing.uploader = listing.uploader.or_else(|| Some(handle.trim_start_matches('@').to_string()));
+            listing.thumbnail = listing.thumbnail.or_else(|| thumbnail.clone());
+            listing.platform = "tiktok".into();
             return Ok(listing);
         }
     }
@@ -1377,7 +1386,7 @@ async fn page_list(app: &AppHandle, jobs: &State<'_, Jobs>, url: &str, t: &page_
         page_listing::PageError::Login => CommandError::new(Code::CookieRequired, "the channel page needs a logged-in account"),
         page_listing::PageError::NotFound => CommandError::new(Code::NotFound, "this account does not exist"),
         page_listing::PageError::Private => CommandError::new(Code::PrivateOrLogin, "this account is private"),
-        page_listing::PageError::Empty { sec_uid, status } => CommandError::new(
+        page_listing::PageError::Empty { sec_uid, status, .. } => CommandError::new(
             Code::ChannelPageEmpty,
             format!("the channel page showed no videos (status {status}, channel id {})", if sec_uid.is_some() { "found" } else { "missing" }),
         ),
