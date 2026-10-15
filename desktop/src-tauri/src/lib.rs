@@ -23,6 +23,8 @@ mod cookies;
 mod device;
 mod douyin_local;
 mod douyin_window;
+mod page_listing;
+mod page_window;
 mod engine;
 mod error;
 mod formats;
@@ -499,6 +501,11 @@ async fn channel_fetch(
 ) -> CmdResult<channels::ChannelListing> {
     let url = channels::normalize_url(&url).map_err(|e| CommandError::new(Code::InvalidUrl, e))?;
     let limit = channels::clamp_limit(limit);
+    // 0.16.2: TikTok profiles fall back to a real page; Facebook pages only list there.
+    let page_target = page_listing::target(&url);
+    if let Some(t) = page_target.as_ref().filter(|t| t.kind == page_listing::Kind::Facebook) {
+        return page_list(&app, &url, t, limit).await;
+    }
     let paths = verified_sidecars().await?;
     let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3] };
     let ck = run_cookies(&app, &url, use_cookies).await?;
@@ -528,6 +535,14 @@ async fn channel_fetch(
         _ => None,
     };
     let code = channels::failure_code(map_err.as_ref(), c.ok(), &c.err);
+    if let Some(t) = page_target.as_ref() {
+        match page_list(&app, &url, t, limit).await {
+            Ok(listing) => return Ok(listing),
+            // The page said something definite: that beats yt-dlp's guess.
+            Err(e) if matches!(e.code, Code::TemporarilyBlocked | Code::CookieRequired | Code::NotFound) => return Err(e),
+            Err(_) => {}
+        }
+    }
     let message = match (&map_err, c.ok()) {
         (Some(channels::MapError::NotAPlaylist), true) => "this URL is a single video, not a channel or playlist".into(),
         (Some(channels::MapError::Empty), true) => "the channel lists no videos".into(),
@@ -1323,6 +1338,33 @@ async fn cookies_clear(app: AppHandle, platform: String) -> CmdResult<()> {
     })
     .await
     .map_err(|e| CommandError::unknown(e.to_string()))?
+}
+
+/// Channel listing through a hidden page (page_listing.rs / page_window.rs),
+/// with the user's saved cookies of that platform when there are any.
+async fn page_list(app: &AppHandle, url: &str, t: &page_listing::Target, limit: u32) -> CmdResult<channels::ChannelListing> {
+    let slug = t.kind.cookie_slug();
+    let jar = match (cookie_dir(app), cookies::def(slug)) {
+        (Ok(dir), Some(p)) => tauri::async_runtime::spawn_blocking(move || cookies::load(&dir, slug))
+            .await
+            .ok()
+            .and_then(Result::ok)
+            .flatten()
+            .map(|text| cookies::filter_for(p, cookies::from_netscape(&text)))
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    };
+    let answer = page_window::run(app, t, jar, limit).await.map_err(|f| match f {
+        page_window::Failure::Timeout => CommandError::new(Code::Timeout, "the channel page did not list videos in time"),
+        page_window::Failure::Window(e) => CommandError::unknown(e),
+    })?;
+    page_listing::to_listing(url, t, &answer, limit).map_err(|e| match e {
+        page_listing::PageError::Verify => CommandError::new(Code::TemporarilyBlocked, "the platform asked this machine for a verification"),
+        page_listing::PageError::Login => CommandError::new(Code::CookieRequired, "the channel page needs a logged-in account"),
+        page_listing::PageError::NotFound => CommandError::new(Code::NotFound, "this account does not exist"),
+        page_listing::PageError::Empty => CommandError::new(Code::NotFound, "the channel page lists no videos"),
+        page_listing::PageError::Bad => CommandError::unknown("the channel page gave an unexpected answer"),
+    })
 }
 
 /// Douyin on this machine (app 0.7.2 experiment, douyin_local.rs): a hidden

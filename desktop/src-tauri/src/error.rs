@@ -24,6 +24,9 @@ pub enum Code {
     Cancelled,
     /// cookies_login_finish found no cookie of the platform in the login window.
     CookieRequired,
+    /// App 0.16.2: the platform refused this machine for now (TikTok's
+    /// JavaScript challenge / verification page), not a private channel.
+    TemporarilyBlocked,
     /// PLAN-32E P3: the server requires a signed claim token and none valid
     /// came with start_download (quota_gate.rs).
     ClaimRequired,
@@ -53,6 +56,7 @@ impl Code {
             Code::Timeout => "timeout",
             Code::Cancelled => "cancelled",
             Code::CookieRequired => "cookie_required",
+            Code::TemporarilyBlocked => "temporarily_blocked",
             Code::ClaimRequired => "claim_required",
             Code::OfflineGraceUsed => "offline_grace_used",
             Code::UpdaterUnavailable => "updater_unavailable",
@@ -125,6 +129,19 @@ const RULES: &[(Code, &[&str])] = &[
         ],
     ),
     (
+        // App 0.16.2: TikTok answers a plain client with a JavaScript challenge,
+        // so the profile has no secUid for yt-dlp — even for public channels
+        // (measured 15/10). channel_fetch then lists through a real page.
+        Code::TemporarilyBlocked,
+        &["unable to extract secondary user id"],
+    ),
+    (
+        // Listing that only works logged in: Instagram profiles, X timelines
+        // (yt-dlp is redirected to the login onboarding).
+        Code::CookieRequired,
+        &["[instagram:user]", "redirect_after_login", "i/jf/onboarding"],
+    ),
+    (
         Code::PrivateOrLogin,
         &[
             "private video",
@@ -152,8 +169,6 @@ const RULES: &[(Code, &[&str])] = &[
             // the account is private — seen 15/10 on a user's own PC (residential
             // IP), so it is not an IP block there. Was "unknown".
             "ip address is blocked from accessing this post",
-            // TikTok profile that is private / does not exist (no secUid).
-            "unable to extract secondary user id",
         ],
     ),
     (Code::Unsupported, &["unsupported url", "no video formats found", "requested format is not available"]),
@@ -268,7 +283,10 @@ mod tests {
         assert_eq!(c("ERROR: [Douyin] 7311: Fresh cookies (not necessarily logged in) are needed"), Code::PrivateOrLogin);
         // yt-dlp 2026.08.19, 15/10, a TikTok post TikTok reports as statusCode 10204
         assert_eq!(c("ERROR: [TikTok] 7695817594946817302: Your IP address is blocked from accessing this post"), Code::PrivateOrLogin);
-        assert_eq!(c("ERROR: [tiktok:user] cz3z: Unable to extract secondary user ID. If you are able to get the channel_id from a video posted by this user, try using \"tiktokuser:channel_id\" as the input URL"), Code::PrivateOrLogin);
+        assert_eq!(c("ERROR: [tiktok:user] cz3z: Unable to extract secondary user ID. If you are able to get the channel_id from a video posted by this user, try using \"tiktokuser:channel_id\" as the input URL"), Code::TemporarilyBlocked);
+        assert_eq!(c("ERROR: [instagram:user] nasa: Unable to extract data; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues"), Code::CookieRequired);
+        assert_eq!(c("ERROR: Unsupported URL: https://x.com/i/jf/onboarding/web?redirect_after_login=%2FNASA%2Fmedia&mode=login"), Code::CookieRequired);
+        assert_eq!(Code::TemporarilyBlocked.as_str(), "temporarily_blocked");
     }
 
     #[test]

@@ -157,6 +157,7 @@ export function ChannelsScreen() {
               <button type="button" className="rounded-lg px-2 py-1 hover:bg-surface-2" onClick={() => setText('https://www.youtube.com/@tenkenh')}>https://www.youtube.com/@tenkenh</button>
               <button type="button" className="rounded-lg px-2 py-1 hover:bg-surface-2" onClick={() => setText('https://www.youtube.com/playlist?list=…')}>https://www.youtube.com/playlist?list=…</button>
               <button type="button" className="rounded-lg px-2 py-1 hover:bg-surface-2" onClick={() => setText('https://www.tiktok.com/@tenkenh')}>https://www.tiktok.com/@tenkenh</button>
+              <button type="button" className="rounded-lg px-2 py-1 hover:bg-surface-2" onClick={() => setText('https://www.facebook.com/tentrang')}>https://www.facebook.com/tentrang</button>
               <button type="button" className="rounded-lg px-2 py-1 hover:bg-surface-2" onClick={() => setText('https://www.douyin.com/user/…')}>https://www.douyin.com/user/…</button>
             </div>
           </EmptyState>
