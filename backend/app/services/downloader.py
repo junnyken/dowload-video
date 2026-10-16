@@ -1859,6 +1859,43 @@ _CHINA_LAYER_REFERERS = {
 }
 
 
+_REDDIT_HLS_MASTER_RE = re.compile(r"^https://v\.redd\.it/[A-Za-z0-9]+/HLSPlaylist\.m3u8$")
+
+
+def _reddit_mux_hls(master_url: str, quality: str) -> Optional[str]:
+    """Mux a v.redd.it HLS master playlist into one local file; None on failure.
+
+    ffmpeg's default stream selection takes the highest-resolution video and
+    the best audio rendition; both are copied (no re-encode) into mp4, or the
+    audio alone is encoded to mp3. v.redd.it is a CDN without IP locks, so no
+    proxy or cookie is needed. Only the exact master-playlist shape is
+    accepted: ffmpeg follows URLs inside a playlist, so an arbitrary URL here
+    would be a server-side request primitive."""
+    import subprocess
+
+    if not _REDDIT_HLS_MASTER_RE.match(master_url or ""):
+        return None
+    audio = (quality or "").startswith("mp3")
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    out = new_download_path(DOWNLOAD_DIR, "reddit_", "mp3" if audio else "mp4")
+    codec = (["-vn", "-acodec", "libmp3lame", "-q:a", "2"] if audio
+             else ["-c", "copy", "-bsf:a", "aac_adtstoasc", "-movflags", "+faststart"])
+    try:
+        subprocess.run(
+            ["ffmpeg", "-nostdin", "-y", "-loglevel", "error",
+             "-protocol_whitelist", "https,tls,tcp,crypto",
+             "-i", master_url, *codec, out],
+            check=True, timeout=300, capture_output=True,
+        )
+    except Exception as mux_err:
+        print(f"[Downloader] Reddit: ffmpeg mux failed ({type(mux_err).__name__})")
+    if os.path.exists(out) and os.path.getsize(out) > 0:
+        return out
+    if os.path.exists(out):
+        os.remove(out)
+    return None
+
+
 def _china_layer_server_copy(result: Dict[str, Any], quality: str, platform: str) -> Dict[str, Any]:
     """Server copy for a Kuaishou / Xiaohongshu result from the China access
     layer. Same rules as the Douyin managed branch (measured 2026-10-06):
@@ -2183,6 +2220,24 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             rd_result = extract_reddit_single(url, quality)
             if rd_result.get("error_code"):
                 _reddit_err = rd_result.get("error_message", "Reddit extraction failed")
+            elif not rd_result.get("direct_url") and rd_result.get("hls_master_url"):
+                # v.redd.it: picture and sound are separate streams, so there
+                # is no single URL to hand the browser — mux them here.
+                _rd_path = _reddit_mux_hls(rd_result["hls_master_url"], quality)
+                if _rd_path:
+                    rd_result.pop("direct_url", None)
+                    rd_result["direct_mp4_url"] = ""
+                    rd_result["local_file_path"] = _rd_path
+                    rd_result["file_size_mb"] = round(os.path.getsize(_rd_path) / (1024 * 1024), 2)
+                    rd_result["quality"] = quality
+                    rd_result["original_url"] = url
+                    if _rd_path.endswith(".mp3"):
+                        rd_result["local_mp3_path"] = _rd_path
+                        rd_result["is_audio_only"] = True
+                    return rd_result
+                _reddit_err = "Không ghép được hình và tiếng của video Reddit."
+            elif not rd_result.get("direct_url"):
+                _reddit_err = "Không tìm thấy file video tải được trong bài đăng Reddit này."
             else:
                 # Normalize field: direct_url → direct_mp4_url (route contract)
                 rd_result["direct_mp4_url"] = rd_result.pop("direct_url", None) or ""

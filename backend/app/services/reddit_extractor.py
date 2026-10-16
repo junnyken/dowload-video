@@ -320,6 +320,49 @@ def _get_reddit_cookies_file() -> Optional[str]:
         return None
 
 
+_VREDDIT_ID_RE = re.compile(r"^https://v\.redd\.it/([A-Za-z0-9]+)/")
+
+
+def _is_manifest(url: str) -> bool:
+    path = (url or "").split("?", 1)[0].lower()
+    return path.endswith(".m3u8") or path.endswith(".mpd")
+
+
+def _pick_reddit_media(info: Dict[str, Any]) -> Tuple[str, str]:
+    """(direct_url, hls_master_url) for a yt-dlp Reddit result.
+
+    v.redd.it never serves one file with both picture and sound: video and
+    audio are separate HLS/DASH renditions. The old code fell back to the
+    LAST format's URL, which for v.redd.it is a video-only HLS variant
+    playlist — the user got a ~400-byte text file named .mp4 (measured
+    2026-10-16 on prod). So a direct URL is returned only when it is a real,
+    playable file: yt-dlp's single `url` (external embeds), or a progressive
+    format carrying both video and audio. Otherwise the master playlist is
+    returned and the downloader muxes it server-side with ffmpeg.
+    """
+    top = info.get("url") or ""
+    if top and not _is_manifest(top):
+        return top, ""
+
+    formats = info.get("formats") or []
+    muxed = [
+        f for f in formats
+        if f.get("url") and not _is_manifest(f["url"])
+        and (f.get("vcodec") or "none") != "none"
+        and (f.get("acodec") or "none") != "none"
+    ]
+    if muxed:
+        best = max(muxed, key=lambda f: (f.get("height") or 0, f.get("tbr") or 0))
+        return best["url"], ""
+
+    for f in formats:
+        for candidate in (f.get("manifest_url"), f.get("url")):
+            m = _VREDDIT_ID_RE.match(candidate or "")
+            if m:
+                return "", f"https://v.redd.it/{m.group(1)}/HLSPlaylist.m3u8"
+    return "", ""
+
+
 def extract_reddit_single(url: str, quality: str = "video") -> Dict[str, Any]:
     """
     Download a single Reddit post video (v.redd.it, external embed).
@@ -410,6 +453,8 @@ def extract_reddit_single(url: str, quality: str = "video") -> Dict[str, Any]:
         if f.get("url")
     ]
 
+    direct_url, hls_master_url = _pick_reddit_media(info)
+
     return {
         "platform": "Reddit",
         "title": info.get("title", ""),
@@ -418,7 +463,8 @@ def extract_reddit_single(url: str, quality: str = "video") -> Dict[str, Any]:
         "duration_ms": int((info.get("duration") or 0) * 1000),
         "duration": info.get("duration", 0),
         "formats": formats,
-        "direct_url": info.get("url", "") or (formats[-1]["url"] if formats else ""),
+        "direct_url": direct_url,
+        "hls_master_url": hls_master_url,
         "source_type": "video",
         "error_code": None,
         "error_message": None,
