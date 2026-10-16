@@ -2220,9 +2220,12 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             rd_result = extract_reddit_single(url, quality)
             if rd_result.get("error_code"):
                 _reddit_err = rd_result.get("error_message", "Reddit extraction failed")
-            elif not rd_result.get("direct_url") and rd_result.get("hls_master_url"):
+            elif rd_result.get("hls_master_url") and (
+                not rd_result.get("direct_url") or (quality or "").startswith("mp3")
+            ):
                 # v.redd.it: picture and sound are separate streams, so there
-                # is no single URL to hand the browser — mux them here.
+                # is no single URL to hand the browser — mux them here. mp3
+                # too: v.redd.it's own audio file is AAC in mp4, not mp3.
                 _rd_path = _reddit_mux_hls(rd_result["hls_master_url"], quality)
                 if _rd_path:
                     rd_result.pop("direct_url", None)

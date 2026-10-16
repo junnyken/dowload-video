@@ -339,12 +339,27 @@ def _pick_reddit_media(info: Dict[str, Any]) -> Tuple[str, str]:
     playable file: yt-dlp's single `url` (external embeds), or a progressive
     format carrying both video and audio. Otherwise the master playlist is
     returned and the downloader muxes it server-side with ffmpeg.
+
+    The master playlist is returned whenever the post is on v.redd.it, even
+    next to a direct URL: an mp3 request gets v.redd.it's bare AAC-in-mp4
+    audio as the "direct" file, which the downloader converts from the
+    master instead so the user really receives an mp3.
     """
+    formats = info.get("formats") or []
+    master = ""
+    for f in formats:
+        for candidate in (f.get("manifest_url"), f.get("url")):
+            m = _VREDDIT_ID_RE.match(candidate or "")
+            if m:
+                master = f"https://v.redd.it/{m.group(1)}/HLSPlaylist.m3u8"
+                break
+        if master:
+            break
+
     top = info.get("url") or ""
     if top and not _is_manifest(top):
-        return top, ""
+        return top, master
 
-    formats = info.get("formats") or []
     muxed = [
         f for f in formats
         if f.get("url") and not _is_manifest(f["url"])
@@ -353,14 +368,9 @@ def _pick_reddit_media(info: Dict[str, Any]) -> Tuple[str, str]:
     ]
     if muxed:
         best = max(muxed, key=lambda f: (f.get("height") or 0, f.get("tbr") or 0))
-        return best["url"], ""
+        return best["url"], master
 
-    for f in formats:
-        for candidate in (f.get("manifest_url"), f.get("url")):
-            m = _VREDDIT_ID_RE.match(candidate or "")
-            if m:
-                return "", f"https://v.redd.it/{m.group(1)}/HLSPlaylist.m3u8"
-    return "", ""
+    return "", master
 
 
 def extract_reddit_single(url: str, quality: str = "video") -> Dict[str, Any]:
