@@ -2165,6 +2165,48 @@ async def convert_to_gif(payload: ToGifRequest, request: Request):
         raise HTTPException(status_code=500, detail=f"GIF conversion failed: {str(e)}")
 
 
+# ── POST /jobs/{batch_id}/cancel  (the "Dừng" button) ─────────────────
+
+# Jobs not started yet; the batch id is the capability, as for GET
+# /jobs/{batch_id} and /retry-failed/{batch_id}.
+_CANCELLABLE_STATES = ("pending", "queued", "retrying")
+
+
+@router.post("/jobs/{batch_id}/cancel")
+@limiter.limit("20/minute")
+async def cancel_batch(batch_id: str, request: Request):
+    """Stop a batch: every job that has not started becomes "cancelled"
+    (process_video_task skips it). Jobs already downloading finish, so no
+    half-written file is left. A channel placeholder still scanning is
+    cancelled too, and the scan then creates no video jobs."""
+    supabase = get_supabase_client()
+    rows = (
+        supabase.table("download_jobs")
+        .select("id, status, original_url, error_message")
+        .eq("batch_id", batch_id)
+        .execute()
+    ).data or []
+    if not rows:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lượt tải này.")
+
+    def _scanning(j) -> bool:
+        # A channel placeholder while its listing runs: "Đang quét kênh...",
+        # then the task's "Dang quet kenh/danh sach ..." heartbeat.
+        msg = (j.get("error_message") or "").lower()
+        return j.get("status") == "processing" and msg.startswith(("đang quét", "dang quet"))
+
+    ids = [j["id"] for j in rows
+           if j.get("original_url") != "batch_zip"
+           and (j.get("status") in _CANCELLABLE_STATES or _scanning(j))]
+    if ids:
+        supabase.table("download_jobs").update({
+            "status":        "cancelled",
+            "error_message": "Đã dừng theo yêu cầu.",
+        }).in_("id", ids).in_("status", list(_CANCELLABLE_STATES) + ["processing"]).execute()
+    still_running = sum(1 for j in rows if j.get("status") == "processing" and j["id"] not in ids)
+    return {"success": True, "cancelled": len(ids), "still_running": still_running}
+
+
 # ── POST /retry-failed/{batch_id}  (re-queue all failed jobs) ─────────
 
 @router.post("/retry-failed/{batch_id}")
@@ -2404,6 +2446,7 @@ async def get_jobs_by_batch(batch_id: str):
         failed = sum(1 for j in jobs if j["status"] == "failed")
         processing = sum(1 for j in jobs if j["status"] == "processing")
         pending = sum(1 for j in jobs if j["status"] == "pending")
+        cancelled = sum(1 for j in jobs if j["status"] == "cancelled")
 
         # Annotate each job with a computed recovery_state for the frontend
         for job in jobs:
@@ -2436,6 +2479,7 @@ async def get_jobs_by_batch(batch_id: str):
                 "failed": failed,
                 "processing": processing,
                 "pending": pending,
+                "cancelled": cancelled,
                 "recoverable": recoverable,
                 "eta_seconds": eta_seconds,
             },

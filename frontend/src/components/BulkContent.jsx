@@ -31,6 +31,7 @@ import {
   Link2,
   Pencil,
   Eye,
+  OctagonX,
 } from 'lucide-react';
 
 import UpgradeModal from './UpgradeModal';
@@ -491,7 +492,7 @@ export default function BulkContent() {
 
     const _nextDelay = (jobs) => {
       if (!jobs || jobs.length === 0) return 3000;
-      const active = jobs.filter(j => j.status !== 'success' && j.status !== 'failed').length;
+      const active = jobs.filter(j => !['success', 'failed', 'cancelled'].includes(j.status)).length;
       const ratio = active / jobs.length;
       if (ratio > 0.5) return 2000;   // majority still running → fast
       if (ratio > 0.1) return 3000;   // some still running → normal
@@ -539,7 +540,7 @@ export default function BulkContent() {
             });
 
             const allDone = data.jobs.every(
-              (j) => j.status === 'success' || j.status === 'failed'
+              (j) => ['success', 'failed', 'cancelled'].includes(j.status)
             );
             if (allDone && data.jobs.length > 0) {
               requestPushSubscription();
@@ -610,6 +611,13 @@ export default function BulkContent() {
         </span>
       );
     }
+    if (status === 'cancelled') {
+      return (
+        <span className="inline-flex items-center gap-1 text-fg-muted bg-surface px-2.5 py-1 rounded-lg text-xs font-medium">
+          <OctagonX className="w-3 h-3" /> Đã dừng
+        </span>
+      );
+    }
     return status;
   };
 
@@ -652,10 +660,38 @@ export default function BulkContent() {
   
   const progressPct =
     totalData.total > 0
-      ? Math.round(((totalData.success + totalData.failed) / totalData.total) * 100)
+      ? Math.round(((totalData.success + totalData.failed + (totalData.cancelled || 0)) / totalData.total) * 100)
       : 0;
 
   // ── Handlers for bulk actions ──────────────────────────────────────────
+
+  // "Dừng": jobs not started yet are cancelled; ones already downloading finish.
+  const [isStopping, setIsStopping] = useState(false);
+  const handleStopBatch = async () => {
+    if (!batchId || isStopping) return;
+    setIsStopping(true);
+    try {
+      const res = await fetch(`${API}/jobs/${batchId}/cancel`, { method: 'POST' });
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.detail || 'Stop failed');
+      setRefreshTrigger(prev => prev + 1);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsStopping(false);
+    }
+  };
+  const canStop = !!batchId && jobs.some(j => j.original_url !== 'batch_zip' && ['pending', 'queued', 'retrying'].includes(j.status));
+  const stopButton = (label) => (
+    <button
+      onClick={handleStopBatch}
+      disabled={isStopping}
+      className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-surface text-fg-2 border border-line hover:bg-error/10 hover:text-error hover:border-error/30 transition-all disabled:opacity-50"
+    >
+      {isStopping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <OctagonX className="w-3.5 h-3.5" />}
+      {isStopping ? 'Đang dừng...' : label}
+    </button>
+  );
 
   const [isRetrying, setIsRetrying] = useState(false);
   const handleRetryFailed = async () => {
@@ -1375,7 +1411,7 @@ export default function BulkContent() {
               Tiến độ xử lý
             </h3>
             <span className="text-xs text-fg-muted">
-              {totalData.success + totalData.failed} / {totalData.total} hoàn tất
+              {totalData.success + totalData.failed + (totalData.cancelled || 0)} / {totalData.total} hoàn tất
             </span>
           </div>
 
@@ -1410,12 +1446,25 @@ export default function BulkContent() {
                 Thất bại: {totalData.failed}
               </span>
             )}
+            {totalData.cancelled > 0 && (
+              <span className="text-xs px-3 py-1.5 rounded-lg bg-surface font-medium text-fg-muted">
+                Đã dừng: {totalData.cancelled}
+              </span>
+            )}
             {(summary?.recoverable > 0) && (
               <span className="text-xs px-3 py-1.5 rounded-lg bg-accent/10 font-medium text-accent">
                 Có thể khôi phục: {summary.recoverable}
               </span>
             )}
           </div>
+
+          {/* Stop: cancels the videos not started yet */}
+          {canStop && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {stopButton('Dừng tải phần còn lại')}
+              <span className="text-[11px] text-fg-muted">Video đang tải dở sẽ được tải nốt.</span>
+            </div>
+          )}
 
           {/* Retry Failed / Recovery Buttons */}
           {totalData.failed > 0 && (
@@ -1685,6 +1734,7 @@ export default function BulkContent() {
               <p className="text-[11px] text-fg-muted text-center max-w-xs leading-relaxed">
                 YouTube có thể mất 30–90 giây để tải toàn bộ danh sách video của kênh. Vui lòng chờ trong giây lát.
               </p>
+              {discoveryJob && stopButton('Dừng quét kênh')}
             </div>
           ) : displayJobs.length === 0 ? (
             <div className="p-10 text-center text-fg-muted text-sm flex flex-col items-center gap-2">

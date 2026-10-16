@@ -283,6 +283,11 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
             print(f"[Idempotency] job={job_id} already succeeded, skipping duplicate execution.")
             _deregister_pending_task(_task_id)
             return
+        if (_ex.data or {}).get("status") == "cancelled":
+            # The user pressed "Dừng" (POST /jobs/{batch_id}/cancel).
+            print(f"[Cancel] job={job_id} was stopped by the user, skipping.")
+            _deregister_pending_task(_task_id)
+            return
     except Exception:
         pass
 
@@ -817,6 +822,16 @@ def scrape_channel_task(self, channel_url: str, batch_id: str, channel_job_id: s
         _reset_china_worker_context(_china_token)
 
 
+def _batch_cancelled(supabase, job_id: str) -> bool:
+    """True when the user stopped this job's batch (status "cancelled").
+    Any read error counts as not stopped."""
+    try:
+        res = supabase.table("download_jobs").select("status").eq("id", job_id).single().execute()
+        return (res.data or {}).get("status") == "cancelled"
+    except Exception:
+        return False
+
+
 def _scrape_channel_body(supabase, channel_url, batch_id, channel_job_id, max_videos, min_views,
                          user_id, quality, remove_watermark, download_subs, _requester, platform,
                          WAVE_SIZE, WAVE_DELAY_SECONDS, _wave_mode,
@@ -914,6 +929,12 @@ def _scrape_channel_body(supabase, channel_url, batch_id, channel_job_id, max_vi
                     ),
                 }).eq("id", channel_job_id).execute()
                 return
+
+        # Stopped by the user (POST /jobs/{batch_id}/cancel) while the channel
+        # was being scanned: create no video jobs.
+        if _batch_cancelled(supabase, channel_job_id):
+            print(f"[Channel] batch {batch_id} stopped by the user during the scan.")
+            return
 
         # ── Phase 2: Insert ALL jobs as "pending" immediately ─
         # This lets the frontend show the full list with progress
