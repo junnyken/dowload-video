@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  douyinVideoId, isChannelOnDownloadScreen, isDouyinChannelUrl, isDouyinShortUrl, isDouyinUrl, isDouyinVideoUrl, looksLikeChannelUrl,
+  douyinVideoId, isChannelOnDownloadScreen, isDouyinChannelUrl, isDouyinShortUrl, isDouyinUrl, isDouyinVideoUrl, isXhsProfileUrl, looksLikeChannelUrl,
 } from '../src/lib/urls.ts';
 
 test('Douyin profile links are channel links', () => {
@@ -65,4 +65,21 @@ test('share text: words around the link are not reported as invalid lines', asyn
   assert.deepEqual(parseUrls('hello world').invalid, ['hello', 'world']);
   assert.deepEqual(parseUrls('https://a.com/x htps://bad').invalid, []);
   assert.deepEqual(parseUrls('https://a.com/x https:/bad').invalid, ['https:/bad']);
+});
+
+test('Xiaohongshu / RedNote profile links go to the server listing', () => {
+  for (const u of [
+    'https://www.rednote.com/user/profile/67a6b733000000000d008962?xsec_token=ABFk&xsec_source=pc_feed',
+    'https://www.xiaohongshu.com/user/profile/5ff0e6410000000001008400',
+    'https://rednote.com/user/profile/67a6b733000000000d008962/',
+  ]) {
+    assert.equal(isXhsProfileUrl(u), true, u);
+    assert.equal(looksLikeChannelUrl(u), true, u);
+  }
+  for (const u of [
+    'https://www.rednote.com/explore/6411cf99000000001300b6d9',
+    'https://www.xiaohongshu.com/user/profile/5ff0e6410000000001008400/6411cf99000000001300b6d9',
+    'https://notrednote.com/user/profile/67a6b733000000000d008962',
+    'https://www.douyin.com/user/MS4wLjABAAAAabc',
+  ]) assert.equal(isXhsProfileUrl(u), false, u);
 });

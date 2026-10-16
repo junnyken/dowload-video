@@ -10,7 +10,7 @@ import type { ChannelListing, ProbeResult } from './types';
 
 export type DouyinItem = { id: string; url: string; title: string; thumbnail: string | null; durationSec: number | null };
 export type DouyinChannel = {
-  platform: 'douyin'; channelTitle: string; channelUrl: string; cap: number; fromCache: boolean; items: DouyinItem[];
+  platform: 'douyin' | 'xiaohongshu'; channelTitle: string; channelUrl: string; cap: number; fromCache: boolean; items: DouyinItem[];
 };
 export type DouyinVideo = {
   platform: 'douyin'; id: string; url: string; title: string; uploader: string | null; thumbnail: string | null;
@@ -22,7 +22,7 @@ export type DouyinVideo = {
 
 const KNOWN = new Set([
   'unsupported_url', 'quota_exceeded', 'quota_exceeded_daily', 'budget_exceeded', 'already_processing',
-  'no_media_found', 'platform_disabled', 'provider_unavailable',
+  'no_media_found', 'platform_disabled', 'provider_unavailable', 'login_required',
 ]);
 
 /** Server error -> { code, message }: the server's Vietnamese `detail` is remembered and shown as-is. */
@@ -53,13 +53,21 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 export const douyinChannel = (url: string, limit: number) =>
   post<DouyinChannel>('/api/v1/client/douyin/channel', { url, limit: Math.max(1, Math.min(500, Math.round(limit))) });
 
+/** Xiaohongshu / RedNote profile through the server (signed-in only, ≤ 20 per scan, paid per scan). */
+export const xhsChannel = (url: string, limit: number) =>
+  post<DouyinChannel>('/api/v1/client/xiaohongshu/channel', { url, limit: Math.max(1, Math.min(20, Math.round(limit))) });
+
+export async function fetchXhsListing(url: string, limit: number): Promise<ChannelListing> {
+  return toListing(await xhsChannel(url, limit));
+}
+
 export const douyinVideo = (url: string) => post<DouyinVideo>('/api/v1/client/douyin/video', { url });
 
 /** The server's channel answer in the shape the Channels screen already uses. */
 export function toListing(c: DouyinChannel): ChannelListing {
-  const m = /\/user\/([^/?#]+)/.exec(c.channelUrl);
+  const m = /\/user\/(?:profile\/)?([^/?#]+)/.exec(c.channelUrl);
   return {
-    channelId: m ? decodeURIComponent(m[1]) : c.channelUrl, url: c.channelUrl, title: c.channelTitle, platform: 'douyin',
+    channelId: m ? decodeURIComponent(m[1]) : c.channelUrl, url: c.channelUrl, title: c.channelTitle, platform: c.platform || 'douyin',
     uploader: c.channelTitle, thumbnail: c.items.find((i) => i.thumbnail)?.thumbnail ?? null,
     videos: c.items.map((i) => ({ id: i.id, url: i.url, title: i.title, duration: i.durationSec, uploadDate: null, thumbnail: i.thumbnail })),
     truncated: false, // the cap is the limit, not something "load more" can raise

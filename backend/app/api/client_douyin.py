@@ -132,6 +132,44 @@ async def douyin_channel(payload: ChannelIn, request: Request, user=Depends(get_
     }
 
 
+@router.post("/client/xiaohongshu/channel")
+@limiter.limit("6/minute")
+async def xiaohongshu_channel(payload: ChannelIn, request: Request, user=Depends(get_optional_user)):
+    """The app's Xiaohongshu / RedNote profile listing (its local yt-dlp
+    cannot read XHS profiles). Same answer shape as /client/douyin/channel.
+    Owner rules of the web listing apply: signed-in only, at most 20 videos
+    per scan, capped at today's downloads; each scan is one budgeted
+    managed run. Videos are then downloaded through the server route (S0)."""
+    from app.core.url_normalizer import extract_share_url  # noqa: PLC0415
+    from app.services.china_platforms import profile_listing  # noqa: PLC0415
+    from app.services.china_platforms.channel_listing import ChannelListingError  # noqa: PLC0415
+
+    # rednote.com -> www.xiaohongshu.com; xsec_token is kept (the listing needs it).
+    url = (extract_share_url(payload.url) or payload.url or "").strip()
+    if profile_listing.platform_of(url) != "xiaohongshu":
+        return _err(400, "Link không phải trang cá nhân Xiaohongshu / RedNote.", "unsupported_url")
+
+    token, ctx = _bind(request, user)
+    try:
+        listing = await profile_listing.list_profile("xiaohongshu", url, payload.limit, ctx)
+    except ChannelListingError as exc:
+        return _err(_STATUS.get(exc.code, 403 if exc.code == "login_required" else 503), str(exc), exc.code)
+    finally:
+        _unbind(token)
+
+    return {
+        "platform": "xiaohongshu",
+        "channelTitle": listing.channel_title,
+        "channelUrl": profile_listing.canonical_profile_url("xiaohongshu", listing.sec_uid),
+        "cap": listing.cap,
+        "fromCache": listing.from_cache,
+        "items": [{
+            "id": v.video_id, "url": v.url, "title": v.title or f"Xiaohongshu {v.video_id[-6:]}",
+            "thumbnail": v.thumbnail_url, "durationSec": v.duration_sec,
+        } for v in listing.videos],
+    }
+
+
 @router.post("/client/douyin/video")
 @limiter.limit("30/minute")
 async def douyin_video(payload: VideoIn, request: Request, user=Depends(get_optional_user)):

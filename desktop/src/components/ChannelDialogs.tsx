@@ -4,7 +4,7 @@ import { Button, Modal, Select, Spinner, Thumb } from './ui';
 import { ChannelFilterForm, validateFilter } from './ChannelFilterForm';
 import { EMPTY_FILTER, isEmptyFilter } from '../lib/channel-filter';
 import { IntervalSelect, ModeSelect, fmtUploadDate } from './ChannelPicker';
-import { channels, downloadPending, dismissPending, refusedText, saveChannel } from '../lib/channels';
+import { channels, downloadPending, dismissPending, isManualOnly, refusedText, saveChannel, serverListedName } from '../lib/channels';
 import { QUALITY_LABEL } from '../lib/quality';
 import type { Quality } from '../lib/settings';
 import { api } from '../lib/tauri';
@@ -115,8 +115,8 @@ export function EditDialog({ channelId, onClose }: { channelId: string; onClose:
     <Modal title={`Sửa kênh: ${ch.title}`} onClose={onClose}>
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3"><span className="text-sm text-fg">Khi có video mới</span><ModeSelect mode={mode} onChange={setMode} /></div>
-        {ch.platform === 'douyin'
-          ? <p className="text-xs text-fg-muted">Douyin: chỉ quét khi bạn bấm “Kiểm tra ngay”, không tự kiểm tra nền.</p>
+        {isManualOnly(ch)
+          ? <p className="text-xs text-fg-muted">{serverListedName(ch.platform)}: chỉ quét khi bạn bấm “Kiểm tra ngay”, không tự kiểm tra nền.</p>
           : <div className="flex items-center justify-between gap-3"><span className="text-sm text-fg">Kiểm tra mỗi</span><IntervalSelect value={every} onChange={setEvery} /></div>}
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm text-fg">Chất lượng</span>

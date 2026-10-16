@@ -10,7 +10,7 @@ import { ChannelFilterForm, validateFilter } from './ChannelFilterForm';
 import { errorMessage, toAppError } from '../lib/errors';
 import { toast } from '../lib/ui';
 import {
-  addRefused, enqueueWithClaims, fetchListing, flow, joinPath, newChannelFromListing, refusedText, resetFlow, sanitizeFolderName, saveChannel, channels, usesCookies,
+  addRefused, enqueueWithClaims, fetchListing, flow, joinPath, newChannelFromListing, refusedText, resetFlow, sanitizeFolderName, saveChannel, channels, serverListedName, usesCookies,
 } from '../lib/channels';
 import { quota, refreshQuota } from '../lib/quota';
 import { capIds, selectionCap } from '../lib/quota-core';
@@ -66,7 +66,8 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
   const [mode, setMode] = useState<ChannelMode>(() => (usesCookies(listing) ? 'notify' : 'download'));
   const [every, setEvery] = useState<ChannelInterval>(6);
   const [busy, setBusy] = useState(false);
-  const douyin = listing.platform === 'douyin';
+  const serverName = serverListedName(listing.platform); // Douyin / Xiaohongshu: listed by the server
+  const douyin = serverName !== null;
   // Downloads left today (when the server enforces the allowance): the picker never selects more (PLAN-32D §6).
   const q = quota.use();
   const localFirst = !douyin && isLocalStep(routesFor(listing.url)[0]);
@@ -212,7 +213,7 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
             {douyin && (
               <p className="mt-1.5 flex items-start gap-1.5 text-xs text-fg-muted">
                 <Info size={13} className="mt-px shrink-0" aria-hidden />
-                <span>Douyin: danh sách chỉ lấy tối đa {listing.cap ?? listing.videos.length} video — đúng số lượt tải bạn còn trong hôm nay. Mỗi video tải về tính một lượt.</span>
+                <span>{serverName}: danh sách chỉ lấy tối đa {listing.cap ?? listing.videos.length} video — đúng số lượt tải bạn còn trong hôm nay. Mỗi video tải về tính một lượt.</span>
               </p>
             )}
           </div>
@@ -233,7 +234,7 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
             <Toggle checked={follow} onChange={setFollow} label="Theo dõi kênh này" />
             <div className="min-w-0">
               <p className="text-sm font-medium text-fg">Theo dõi kênh này</p>
-              <p className="text-xs text-fg-muted">{douyin ? 'Douyin: chỉ quét khi bạn bấm “Kiểm tra ngay” ở mục Kênh, không tự kiểm tra nền.' : 'Tự kiểm tra video mới, kể cả khi thu nhỏ dưới khay.'}</p>
+              <p className="text-xs text-fg-muted">{douyin ? `${serverName}: chỉ quét khi bạn bấm “Kiểm tra ngay” ở mục Kênh, không tự kiểm tra nền.` : 'Tự kiểm tra video mới, kể cả khi thu nhỏ dưới khay.'}</p>
             </div>
           </div>
           {follow && (

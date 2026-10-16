@@ -27,6 +27,14 @@ export function isDouyinShortUrl(raw: string): boolean {
 }
 
 /** douyin.com/user/<sec_uid>, iesdouyin.com/share/user/<sec_uid>, or a v.douyin.com short link. */
+/** A Xiaohongshu / RedNote profile link (xiaohongshu.com or rednote.com /user/profile/<id>). */
+export function isXhsProfileUrl(raw: string): boolean {
+  const u = parse(raw);
+  if (!u) return false;
+  const h = bareHost(u);
+  return (h === 'xiaohongshu.com' || h === 'rednote.com') && /^\/user\/profile\/[0-9a-zA-Z]+\/?$/.test(u.pathname);
+}
+
 export function isDouyinChannelUrl(raw: string): boolean {
   const u = parse(raw);
   if (!u) return false;
@@ -52,7 +60,7 @@ export function looksLikeChannelUrl(raw: string): boolean {
     return path === '/playlist' && u.searchParams.has('list');
   }
   if (host === 'tiktok.com') return /^\/@[^/]+\/?$/.test(path);
-  return isDouyinChannelUrl(raw);
+  return isDouyinChannelUrl(raw) || isXhsProfileUrl(raw);
 }
 
 /** Download screen: a short Douyin link is downloaded as a video; only unambiguous channel links are redirected. */

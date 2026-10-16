@@ -10,8 +10,8 @@ import { auth } from './auth';
 import { settings } from './settings';
 import { errorMessage, toAppError } from './errors';
 import { newId } from './format';
-import { fetchDouyinListing } from './douyin';
-import { isDouyinUrl } from './urls';
+import { fetchDouyinListing, fetchXhsListing } from './douyin';
+import { isDouyinUrl, isXhsProfileUrl } from './urls';
 import { cookiesUsableFor, planFor, routesFor } from './cookies';
 import { claimBatch, quota } from './quota';
 import { claimRoute, isLocalStep } from './routes-core';
@@ -38,8 +38,12 @@ export function joinPath(base: string, name: string): string {
 
 export { looksLikeChannelUrl } from './urls';
 
-/** Douyin channels are never scanned in the background: every scan costs the server money. */
-export const isManualOnly = (c: { platform: string }) => c.platform === 'douyin';
+/** Platforms listed by the VidGrab server (the local yt-dlp cannot read them), with their display name. */
+export const SERVER_LISTED: Readonly<Record<string, string>> = { douyin: 'Douyin', xiaohongshu: 'Xiaohongshu / RedNote' };
+export const serverListedName = (platform: string): string | null => SERVER_LISTED[platform] ?? null;
+
+/** Douyin / Xiaohongshu channels are never scanned in the background: every scan costs the server money. */
+export const isManualOnly = (c: { platform: string }) => c.platform in SERVER_LISTED;
 
 /**
  * Channel listing: Douyin goes through the server (P1 keeps it there), everything else through
@@ -47,6 +51,7 @@ export const isManualOnly = (c: { platform: string }) => c.platform === 'douyin'
  */
 export function fetchChannelListing(url: string, limit: number, showPage = false): Promise<ChannelListing> {
   if (isDouyinUrl(url)) return fetchDouyinListing(url, limit);
+  if (isXhsProfileUrl(url)) return fetchXhsListing(url, limit);
   return api.channelFetch(url, limit, planFor(url).useCookies || undefined, showPage || undefined);
 }
 
@@ -57,7 +62,7 @@ type ChannelTarget = { platform: string; title: string; quality: string; outDir:
 
 function jobOf(v: ChannelVideo, ch: ChannelTarget) {
   const f = qualityFormat(ch.quality, auth.get().status !== 'in');
-  if (ch.platform === 'douyin') f.formatId = undefined; // a direct MP4 has no height to select on
+  if (ch.platform in SERVER_LISTED) f.formatId = undefined; // a direct MP4 has no height to select on
   return {
     url: v.url, title: v.title, thumbnail: v.thumbnail, platform: ch.platform, uploader: ch.title, outDir: ch.outDir,
     formatId: f.formatId, audioOnly: f.audioOnly, formatLabel: f.label, estSize: null, quality: ch.quality,

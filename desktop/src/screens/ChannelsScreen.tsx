@@ -4,10 +4,10 @@ import { Badge, Button, EmptyState, IconButton, PlatformBadge, ScreenHeader, Spi
 import { ChannelAvatar, ChannelPicker, intervalLabel } from '../components/ChannelPicker';
 import { EditDialog, ReviewDialog } from '../components/ChannelDialogs';
 import {
-  canShowPage, cancelFlow, channels, channelsLoaded, checkChannel, checking, fetchListing, flow, isManualOnly, nextCheckAt, removeChannel, saveChannel,
+  canShowPage, cancelFlow, channels, channelsLoaded, checkChannel, checking, fetchListing, flow, isManualOnly, nextCheckAt, removeChannel, saveChannel, serverListedName,
 } from '../lib/channels';
 import { parseUrls } from '../lib/probes';
-import { isDouyinUrl } from '../lib/urls';
+import { isDouyinUrl, isXhsProfileUrl } from '../lib/urls';
 import { QUALITY_LABEL } from '../lib/quality';
 import type { Quality } from '../lib/settings';
 import { errorMessage, toAppError } from '../lib/errors';
@@ -57,7 +57,7 @@ function ChannelCard({ c, onReview, onEdit }: { c: Channel; onReview: () => void
             {c.enabled
               ? <Badge tone={c.mode === 'download' ? 'success' : 'neutral'}>{c.mode === 'download' ? 'Tự tải về' : <><BellRing size={11} aria-hidden /> Chỉ báo</>}</Badge>
               : <Badge tone="warning">Đang tạm dừng</Badge>}
-            <span className="text-xs text-fg-muted">{manual ? 'Douyin: chỉ quét khi bạn bấm' : `Kiểm tra mỗi ${intervalLabel(c.checkEveryHours)}`} · {QUALITY_LABEL[c.quality as Quality] ?? c.quality}</span>
+            <span className="text-xs text-fg-muted">{manual ? `${serverListedName(c.platform)}: chỉ quét khi bạn bấm` : `Kiểm tra mỗi ${intervalLabel(c.checkEveryHours)}`} · {QUALITY_LABEL[c.quality as Quality] ?? c.quality}</span>
           </div>
         </div>
       </div>
@@ -125,6 +125,7 @@ export function ChannelsScreen() {
             <Button variant="primary" icon={loading ? <Spinner /> : <ListVideo size={16} />} disabled={loading || !text.trim()} onClick={() => start()}>Lấy danh sách video</Button>
           </div>
           {isDouyinUrl(text.trim()) && <p className="mt-2 text-xs text-fg-muted">Douyin: dán link trang cá nhân hoặc link một video của kênh — ứng dụng tìm kênh của tác giả. Danh sách lấy qua máy chủ VidGrab, giới hạn theo số lượt tải bạn còn trong hôm nay. Kênh Douyin chỉ được quét khi bạn bấm, không tự kiểm tra nền.</p>}
+          {isXhsProfileUrl(text.trim()) && <p className="mt-2 text-xs text-fg-muted">Xiaohongshu / RedNote: dán link trang cá nhân (giữ nguyên phần ?xsec_token=…). Cần đăng nhập; mỗi lần lấy tối đa 20 video, giới hạn theo số lượt tải bạn còn trong hôm nay. Kênh chỉ được quét khi bạn bấm, không tự kiểm tra nền.</p>}
           {msg && <p role="alert" className="mt-2 text-[13px] text-danger">{msg}</p>}
           {f.phase === 'error' && (
             <div role="alert" className="mt-2 flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-[13px] text-danger">
