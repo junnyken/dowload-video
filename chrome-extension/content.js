@@ -106,7 +106,7 @@
       /threads\.(net|com)\/@[\w.-]+\/?$/.test(url) ||
       // Xiaohongshu / Kuaishou profiles (task #6171): the server lists them
       // (signed-in users only, at most 20 videos per scan).
-      /xiaohongshu\.com\/user\/profile\/[0-9a-fA-F]{24}\/?(\?|#|$)/.test(url) ||
+      /(xiaohongshu|rednote)\.com\/user\/profile\/[0-9a-fA-F]{24}\/?(\?|#|$)/.test(url) ||
       /kuaishou\.(com|cn)\/profile\/[\w-]+\/?(\?|#|$)/.test(url)
     ) return 'generic_channel';
 

@@ -90,7 +90,7 @@ const PLATFORMS = [
     name: 'Xiaohongshu', status: 'full', logo: '🌸',
     features: ['video', 'image', 'carousel', 'batch'],
     description: 'Video và ảnh carousel. Một số nội dung có thể không tải được.', // wording: BA review
-    domains: ['xiaohongshu.com', 'xhslink.com'],
+    domains: ['xiaohongshu.com', 'xhslink.com', 'rednote.com'],
     isNew: true,
     note: 'Chỉ tải được nội dung công khai.', // wording: BA review
   },

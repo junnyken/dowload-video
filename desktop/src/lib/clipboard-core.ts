@@ -24,7 +24,7 @@ const HOSTS: Record<string, string> = {
   'dailymotion.com': 'Dailymotion', 'dai.ly': 'Dailymotion',
   'soundcloud.com': 'SoundCloud',
   'pinterest.com': 'Pinterest', 'pin.it': 'Pinterest',
-  'xiaohongshu.com': 'Xiaohongshu', 'xhslink.com': 'Xiaohongshu',
+  'xiaohongshu.com': 'Xiaohongshu', 'xhslink.com': 'Xiaohongshu', 'rednote.com': 'Xiaohongshu',
   'twitch.tv': 'Twitch',
   'vk.com': 'VK', 'vkvideo.ru': 'VK',
   'snapchat.com': 'Snapchat',

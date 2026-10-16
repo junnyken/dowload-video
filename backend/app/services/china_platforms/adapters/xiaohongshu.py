@@ -44,7 +44,7 @@ from app.services.china_platforms.providers.native_provider import NativeProvide
 
 PLATFORM = "xiaohongshu"
 
-_NOTE_HOSTS = ("xiaohongshu.com",)
+_NOTE_HOSTS = ("xiaohongshu.com", "rednote.com")
 _SHORT_HOSTS = ("xhslink.com", "xhslink.cn")
 _ID = r"([0-9a-fA-F]{24})"
 _NOTE_PATHS = (
@@ -219,7 +219,7 @@ async def _native_resolve(request: ChinaResolveRequest, ctx: RequestContext) -> 
 
 class XiaohongshuAdapter(PlatformAdapter):
     platform = PLATFORM
-    host_pattern = re.compile(r"(?:^|[/.])(?:xiaohongshu\.com|xhslink\.(?:com|cn))(?:[/:?#]|$)", re.IGNORECASE)
+    host_pattern = re.compile(r"(?:^|[/.])(?:xiaohongshu\.com|rednote\.com|xhslink\.(?:com|cn))(?:[/:?#]|$)", re.IGNORECASE)
 
     def matches(self, url: str) -> bool:
         """A single note or a share link. Profiles are not matched."""

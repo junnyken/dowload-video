@@ -51,6 +51,7 @@ _URL_PATTERNS = [
     r"xiaohongshu\.com/user/profile/",
     r"xhslink\.com/",
     r"redbook\.com/",
+    r"rednote\.com/(?:explore|discovery/item|user/profile)/",
 ]
 
 _NOTE_ID_RE = re.compile(r"/explore/([a-f0-9]{24})", re.IGNORECASE)

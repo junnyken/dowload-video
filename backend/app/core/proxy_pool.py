@@ -52,7 +52,7 @@ def platform_of_url(url: str) -> str:
         return "youtube"
     for host, name in (("tiktok.com", "tiktok"), ("facebook.com", "facebook"), ("fb.watch", "facebook"),
                        ("instagram.com", "instagram"), ("douyin.com", "douyin"), ("iesdouyin.com", "douyin"),
-                       ("xiaohongshu.com", "xiaohongshu"), ("xhslink.com", "xiaohongshu"),
+                       ("xiaohongshu.com", "xiaohongshu"), ("xhslink.com", "xiaohongshu"), ("rednote.com", "xiaohongshu"),
                        ("kuaishou.com", "kuaishou"), ("twitter.com", "twitter"),
                        ("x.com", "twitter"), ("reddit.com", "reddit"), ("redd.it", "reddit")):
         if host in u:

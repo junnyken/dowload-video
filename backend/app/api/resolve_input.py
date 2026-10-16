@@ -182,7 +182,7 @@ async def platforms_capabilities():
         "pinterest": ["pinterest.com"], "soundcloud": ["soundcloud.com"],
         "spotify": ["open.spotify.com"], "reddit": ["reddit.com", "redd.it"],
         "twitter": ["twitter.com", "x.com"], "bilibili": ["bilibili.com", "b23.tv"],
-        "xiaohongshu": ["xiaohongshu.com", "xhslink.com"],
+        "xiaohongshu": ["xiaohongshu.com", "xhslink.com", "rednote.com"],
         "lemon8": ["lemon8-app.com"], "snapchat": ["snapchat.com"],
         "vk": ["vk.com", "vkvideo.ru"], "twitch": ["twitch.tv"],
         "rumble": ["rumble.com"], "odysee": ["odysee.com"],

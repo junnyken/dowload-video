@@ -51,6 +51,9 @@ _HOST_ALIASES: dict[str, str] = {
     "old.reddit.com":     "www.reddit.com",
     "new.reddit.com":     "www.reddit.com",
     "sh.reddit.com":      "www.reddit.com",
+    # RedNote — international domain of Xiaohongshu (same note ids and paths)
+    "rednote.com":        "www.xiaohongshu.com",
+    "www.rednote.com":    "www.xiaohongshu.com",
 }
 
 # ── Short-link domains that need async expansion (flag only) ──────────────────
@@ -96,7 +99,8 @@ def extract_share_url(text):
 
     * Input without whitespace or full-width punctuation (already a single
       token — including scheme-less ones the normalizer handles) is returned
-      byte-identical.
+      byte-identical — except a rednote.com URL, which comes back on
+      www.xiaohongshu.com (see rewrite_rednote).
     * Otherwise the FIRST http(s) URL in the text is returned, with trailing
       punctuation stripped; None when the text contains no http(s) URL.
     * Non-str / empty input -> None.
@@ -107,12 +111,27 @@ def extract_share_url(text):
     if not stripped:
         return None
     if not _NEEDS_EXTRACT_RE.search(stripped):
-        return text
+        return rewrite_rednote(text)
     m = _SHARE_URL_RE.search(stripped)
     if not m:
         return None
     url = m.group(0).rstrip(_TRAILING_PUNCT)
-    return url if re.match(r"https?://.", url, re.I) else None
+    return rewrite_rednote(url) if re.match(r"https?://.", url, re.I) else None
+
+
+# ── RedNote → Xiaohongshu ────────────────────────────────────────────────────
+# rednote.com serves the same notes under the same paths (/explore/<id>,
+# /discovery/item/<id>, /user/profile/<id>) and the same xsec_token query.
+# Every extractor (yt-dlp, native, Apify actors) only knows xiaohongshu.com,
+# so the host is swapped at the door and the path + query are kept verbatim.
+_REDNOTE_RE = re.compile(r"^\s*https?://(?:www\.)?rednote\.com(?=[/?#]|$)", re.I)
+
+
+def rewrite_rednote(url):
+    """rednote.com / www.rednote.com URL -> www.xiaohongshu.com, else unchanged."""
+    if not isinstance(url, str) or not _REDNOTE_RE.match(url):
+        return url
+    return _REDNOTE_RE.sub("https://www.xiaohongshu.com", url.strip(), count=1)
 
 
 @dataclass

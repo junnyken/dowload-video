@@ -156,7 +156,7 @@ class ChannelRef:
 # Hosts of platforms we recognise but cannot watch in this phase.
 _KNOWN_UNSUPPORTED = (
     "youtu.be", "douyin.com", "iesdouyin.com", "kuaishou.com",
-    "xiaohongshu.com", "xhslink.com", "facebook.com", "fb.watch",
+    "xiaohongshu.com", "xhslink.com", "rednote.com", "facebook.com", "fb.watch",
     "x.com", "twitter.com", "threads.net", "threads.com", "bilibili.com", "b23.tv",
     "reddit.com", "pinterest.com", "pin.it", "soundcloud.com", "vimeo.com",
     "dailymotion.com", "twitch.tv", "snapchat.com", "likee.video", "weibo.com",

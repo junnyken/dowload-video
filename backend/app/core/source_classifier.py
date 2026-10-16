@@ -125,6 +125,8 @@ _r("bilibili", r"b23\.tv/([A-Za-z0-9]+)",                                       
 # ── Xiaohongshu / RedNote ─────────────────────────────────────────────────────
 _r("xiaohongshu", r"xiaohongshu\.com/explore/([A-Za-z0-9]+)",                  "single_post",  1)
 _r("xiaohongshu", r"xiaohongshu\.com/user/profile/([A-Za-z0-9]+)",             "profile",      1)
+_r("xiaohongshu", r"rednote\.com/explore/([A-Za-z0-9]+)",                     "single_post",  1)
+_r("xiaohongshu", r"rednote\.com/user/profile/([A-Za-z0-9]+)",                "profile",      1)
 _r("xiaohongshu", r"xhslink\.com/([A-Za-z0-9]+)",                               "single_post",  1)
 
 # ── Lemon8 ───────────────────────────────────────────────────────────────────

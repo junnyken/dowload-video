@@ -114,7 +114,7 @@ async function getApiBase() {
 // we don't need) and to avoid wasted chrome.cookies calls.
 const COOKIE_GATED_DOMAINS = [
   'instagram.com', 'twitter.com', 'x.com', 'facebook.com',
-  'reddit.com', 'bilibili.com', 'xiaohongshu.com', 'lemon8-app.com',
+  'reddit.com', 'bilibili.com', 'xiaohongshu.com', 'rednote.com', 'lemon8-app.com',
   // Douyin gates EVERY video behind signature cookies (ttwid/__ac_nonce/msToken),
   // public ones included — no account needed, just a live browser session.
   'douyin.com',
