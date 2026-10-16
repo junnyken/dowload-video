@@ -118,6 +118,25 @@ function stopChannelDiscovery() {
   _chDiscoveryTimer = null;
 }
 
+// "Dừng": the server cancels every video of the batch not started yet (and a
+// channel still being scanned); videos already downloading finish.
+async function stopChannelBatch(btn) {
+  if (!_chBatchId || btn.disabled) return;
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Đang dừng...';
+  try {
+    const resp = await fetch(`${API_BASE}/api/v1/jobs/${_chBatchId}/cancel`, {
+      method: 'POST', headers: await vgAuthHeaders(),
+    });
+    if (resp.ok) btn.classList.add('hidden');
+  } catch { /* the next poll shows the real state */ }
+  btn.disabled = false;
+  btn.textContent = label;
+}
+document.getElementById('ch-stop-scan')?.addEventListener('click', (e) => stopChannelBatch(e.currentTarget));
+document.getElementById('ch-stop-batch')?.addEventListener('click', (e) => stopChannelBatch(e.currentTarget));
+
 function startJobPolling(batchId, maxVideos) {
   _chBatchId = batchId;
   clearTimeout(_chJobPollTimer);
@@ -156,6 +175,7 @@ function startJobPolling(batchId, maxVideos) {
 
       // Discovery phase: only 1 processing job (the channel placeholder)
       const isDiscovering = jobs.length <= 1 && jobs.some(j => j.status === 'processing');
+      document.getElementById('ch-stop-scan').classList.toggle('hidden', !isDiscovering);
       if (isDiscovering) {
         const msg = jobs[0]?.error_message;
         if (msg) document.getElementById('ch-discovery-msg').textContent = msg;
@@ -170,19 +190,27 @@ function startJobPolling(batchId, maxVideos) {
 
       const videoJobs = jobs.filter(j => j.status !== 'processing' || jobs.length > 1);
       const success = videoJobs.filter(j => j.status === 'success').length;
+      const failed = videoJobs.filter(j => j.status === 'failed').length;
+      const stopped = videoJobs.filter(j => j.status === 'cancelled').length;
       const total = Math.max(videoJobs.length, 1);
       const pct = Math.round((success / total) * 100);
+      // Finished = success, failed or stopped ("Dừng"); polling used to wait
+      // for success on every job, so one failure kept it polling forever.
+      const left = videoJobs.filter(j => !['success', 'failed', 'cancelled'].includes(j.status)).length;
+      const waiting = videoJobs.some(j => ['pending', 'queued', 'retrying'].includes(j.status));
+      document.getElementById('ch-stop-batch').classList.toggle('hidden', !waiting);
 
       document.getElementById('ch-job-stats').textContent = `${success} / ${total}`;
       document.getElementById('ch-job-bar').style.width = pct + '%';
+      const extra = [failed ? `${failed} lỗi` : '', stopped ? `${stopped} đã dừng` : ''].filter(Boolean).join(', ');
       document.getElementById('ch-result-msg').textContent =
-        success === total && total > 0
-          ? `✅ Hoàn tất ${total} video!`
-          : `⏳ Đang xử lý... (${total - success} còn lại)`;
+        left === 0 && videoJobs.length > 0
+          ? `✅ Xong: ${success}/${total} video tải được${extra ? ` (${extra})` : ''}.`
+          : `⏳ Đang xử lý... (${left} còn lại${extra ? `, ${extra}` : ''})`;
 
       document.getElementById('ch-count').textContent = total;
 
-      if (success !== total || total === 0) {
+      if (left > 0 || videoJobs.length === 0) {
         _chJobPollTimer = setTimeout(poll, nextDelay());
       }
     } catch { _chJobPollTimer = setTimeout(poll, nextDelay()); }

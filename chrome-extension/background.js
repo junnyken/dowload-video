@@ -430,7 +430,8 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       const success = jobs.filter((j) => j.status === 'success').length;
       const failed = jobs.filter((j) => j.status === 'failed').length;
       const total = jobs.length;
-      const stillRunning = jobs.some((j) => j.status === 'processing' || j.status === 'pending');
+      const stopped = jobs.filter((j) => j.status === 'cancelled').length;
+      const stillRunning = jobs.some((j) => ['processing', 'pending', 'queued', 'retrying'].includes(j.status));
       if (stillRunning) continue;
 
       // Batch reached a terminal state (all done or failed) — notify + stop tracking.
@@ -442,7 +443,8 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       chrome.notifications.create(`vg-batch-${batchId}`, {
         type: 'basic',
         iconUrl: 'assets/icon.png',
-        title: failed > 0 ? `⚠️ Batch hoàn tất (${success}/${total} thành công)` : `✅ Batch hoàn tất (${total} video)`,
+        title: stopped > 0 ? `⏹ Đã dừng (${success}/${total} video tải được)`
+          : failed > 0 ? `⚠️ Batch hoàn tất (${success}/${total} thành công)` : `✅ Batch hoàn tất (${total} video)`,
         message: hostname,
         priority: 1,
       });
