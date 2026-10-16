@@ -417,10 +417,17 @@ origins = [
     "tauri://localhost",
 ]
 
-# Also allow any configured production domain
-prod_domain = os.getenv("FRONTEND_URL", "")
-if prod_domain and prod_domain not in origins:
-    origins.append(prod_domain)
+# Also allow the configured production domains. FRONTEND_URL is a
+# comma-separated list so a site can be served from several hosts at once
+# (custom domain, its www variant, the platform default domain):
+#   FRONTEND_URL=https://dowloadvideo.io.vn,https://www.dowloadvideo.io.vn
+# A browser's Origin never carries a trailing slash, so strip it here —
+# "https://x.vn/" would otherwise never match and silently block that host.
+# payments.py uses the FIRST entry for its redirect URLs.
+for prod_domain in os.getenv("FRONTEND_URL", "").split(","):
+    prod_domain = prod_domain.strip().rstrip("/")
+    if prod_domain and prod_domain not in origins:
+        origins.append(prod_domain)
 
 # Chrome extension origins.
 #

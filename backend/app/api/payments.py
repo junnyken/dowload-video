@@ -9,7 +9,8 @@ Required env vars:
   STRIPE_SECRET_KEY       — sk_live_... or sk_test_...
   STRIPE_WEBHOOK_SECRET   — whsec_... (from Stripe dashboard)
   STRIPE_PRO_PRICE_ID     — price_... (monthly Pro plan price)
-  FRONTEND_URL            — https://your-frontend.com (for redirect URLs)
+  FRONTEND_URL            — https://your-frontend.com (for redirect URLs; if
+                            comma-separated, the first entry is used)
 
 Webhook events handled:
   checkout.session.completed        → upgrade user to Pro
@@ -34,7 +35,12 @@ router = APIRouter()
 _STRIPE_SECRET_KEY     = os.getenv("STRIPE_SECRET_KEY", "")
 _STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 _STRIPE_PRO_PRICE_ID   = os.getenv("STRIPE_PRO_PRICE_ID", "")
-_FRONTEND_URL          = os.getenv("FRONTEND_URL", "https://vidgrab.io")
+# FRONTEND_URL may list several comma-separated hosts (main.py allows all of
+# them for CORS); redirects go to the first one, the primary domain.
+_FRONTEND_URL          = (
+    os.getenv("FRONTEND_URL", "").split(",")[0].strip().rstrip("/")
+    or "https://vidgrab.io"
+)
 
 GRACE_PERIOD_DAYS = 3   # keep Pro on payment failure for this many days
 

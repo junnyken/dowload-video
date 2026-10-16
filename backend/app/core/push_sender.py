@@ -27,7 +27,8 @@ Environment (names only; values are secrets):
                           (alias VAPID_PUBLIC_KEY)
   PUSH_VAPID_SUBJECT      "mailto:..." or "https://..." contact for the push
                           services (alias VAPID_SUBJECT); falls back to
-                          FRONTEND_URL when that is an https URL
+                          FRONTEND_URL (its first entry) when that is an
+                          https URL
 """
 
 from __future__ import annotations
@@ -152,7 +153,8 @@ def _load_vapid():
     priv = _env("PUSH_VAPID_PRIVATE_KEY", "VAPID_PRIVATE_KEY")
     subject = _env("PUSH_VAPID_SUBJECT", "VAPID_SUBJECT")
     if not subject:
-        fe = _env("FRONTEND_URL")
+        # FRONTEND_URL may be a comma-separated list; the first is the primary.
+        fe = _env("FRONTEND_URL").split(",")[0].strip()
         if fe.startswith("https://"):
             subject = fe.rstrip("/")
     reason = None
