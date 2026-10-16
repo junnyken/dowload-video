@@ -171,8 +171,18 @@ class TikTokExpander(BaseExpander):
         """Reuse existing scrape_channel_entries_sync from downloader.py."""
         from app.services.downloader import scrape_channel_entries_sync
         result = scrape_channel_entries_sync(url, max_videos=limit)
-        entries = [{"url": e.url, "title": e.title} for e in (result.entries or [])]
-        return entries, result.channel_title
+        # It returns a dict {"channel_title", "entries": [{"url", "title"}]};
+        # reading it as an object failed every TikTok/Douyin Browse (C001).
+        if not isinstance(result, dict):
+            result = {"entries": getattr(result, "entries", None),
+                      "channel_title": getattr(result, "channel_title", "")}
+        entries = []
+        for e in result.get("entries") or []:
+            u = e.get("url") if isinstance(e, dict) else getattr(e, "url", None)
+            t = e.get("title") if isinstance(e, dict) else getattr(e, "title", "")
+            if u:
+                entries.append({"url": u, "title": t or ""})
+        return entries, result.get("channel_title") or ""
 
     def _handle_from_url(self, url: str) -> str:
         m = re.search(r"/@([^/?#]+)", url)
