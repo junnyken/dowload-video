@@ -39,7 +39,7 @@ import logging
 import re
 import time
 from typing import Optional
-from urllib.parse import urlencode, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlsplit
 
 from app.services.china_platforms import apify_pool, budget_guard, cost_metrics, registry, request_cache, settings
 from app.services.china_platforms.channel_listing import (
@@ -170,6 +170,21 @@ def canonical_profile_url(platform: str, pid: str) -> str:
     if platform == "xiaohongshu":
         return f"https://www.xiaohongshu.com/user/profile/{pid}"
     return f"https://www.kuaishou.com/profile/{pid}"
+
+
+def _xhs_profile_token_query(url: str) -> str:
+    """"xsec_token=…&xsec_source=…" of a pasted XHS / RedNote profile link,
+    else "". Without the token xiaohongshu.com answers an anonymous profile
+    request with the login page, so the actor must get it."""
+    try:
+        q = parse_qs(urlsplit(url or "").query)
+    except ValueError:
+        return ""
+    tok = (q.get("xsec_token") or [""])[0].strip()
+    if not tok:
+        return ""
+    src = (q.get("xsec_source") or ["pc_feed"])[0].strip() or "pc_feed"
+    return urlencode({"xsec_token": tok, "xsec_source": src})
 
 
 async def resolve_profile(platform: str, url: str) -> str:
@@ -468,7 +483,12 @@ async def list_profile(platform: str, url: str, max_videos: int, ctx: Optional[R
                 return cached
         raise ChannelListingError(MSG_BUSY, "already_processing")
     try:
-        return await _run_listing(platform, pid, n, ctx, h, provider_factory)
+        actor_url = canonical_profile_url(platform, pid)
+        if platform == "xiaohongshu":
+            tq = _xhs_profile_token_query(url)
+            if tq:
+                actor_url += "?" + tq
+        return await _run_listing(platform, pid, n, ctx, h, provider_factory, actor_url=actor_url)
     finally:
         request_cache.release_dedupe(platform, OPERATION, h, token)
 
@@ -494,7 +514,7 @@ async def _free_xhs_listing(pid: str, n: int) -> Optional[ChannelListing]:
 
 
 async def _run_listing(platform: str, pid: str, n: int, ctx: RequestContext, h: str,
-                       provider_factory) -> ChannelListing:
+                       provider_factory, *, actor_url: Optional[str] = None) -> ChannelListing:
     spec = profile_spec(platform, n)
     est_micros = settings.usd_to_micros(spec.est_cost_usd)
     cand = budget_guard.PaidCandidate(spec.name, spec.budget_class, est_micros)
@@ -527,7 +547,7 @@ async def _run_listing(platform: str, pid: str, n: int, ctx: RequestContext, h: 
     t0 = time.monotonic()
     items, failure = None, None
     try:
-        items = await prov._run_actor(spec.build_input(canonical_profile_url(platform, pid)))
+        items = await prov._run_actor(spec.build_input(actor_url or canonical_profile_url(platform, pid)))
     except ProviderFailureError as exc:
         failure = exc.failure
     except Exception as exc:  # noqa: BLE001

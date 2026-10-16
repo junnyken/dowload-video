@@ -320,6 +320,23 @@ class TestOutput:
         assert [v.cached for v in listing.videos] == [True, False, True]   # no video_url → resolved later
         assert listing.channel_title == "Tiệm Nhỏ"
 
+    def test_xhs_profile_xsec_token_reaches_the_actor(self, on, rc):
+        """xiaohongshu.com answers an anonymous profile request without
+        xsec_token with the login page; a pasted RedNote profile link
+        carries it, so the actor input keeps it (and the host is XHS)."""
+        api = Api([xhs_row(0)])
+        url = (f"https://www.rednote.com/user/profile/{XHS_UID}"
+               "?xsec_token=ABFk%3D&xsec_source=pc_feed&other=1")
+        _list("xiaohongshu", USER, 1, api, url=url)
+        body = json.loads(api.starts()[0].content)
+        assert body["userUrls"] == [
+            f"https://www.xiaohongshu.com/user/profile/{XHS_UID}?xsec_token=ABFk%3D&xsec_source=pc_feed"]
+
+    def test_xhs_profile_without_token_is_unchanged(self, on, rc):
+        api = Api([xhs_row(0)])
+        _list("xiaohongshu", USER, 1, api)
+        assert json.loads(api.starts()[0].content)["userUrls"] == [XHS_PROFILE]
+
     def test_xhs_listed_video_is_a_cache_hit(self, on, rc):
         listing = _list("xiaohongshu", USER, 2, _xhs_api())
         calls: list = []
