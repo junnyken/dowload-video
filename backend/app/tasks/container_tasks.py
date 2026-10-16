@@ -106,7 +106,7 @@ def discover_container_task(
     container_id: str,
     max_items: int = 100,
     include_sections: Optional[list] = None,
-    _raw_input: str = "",
+    raw_input: str = "",  # what the user pasted; container.py passes it
 ) -> None:
     """
     Async container discovery with stage-by-stage progress tracking.
