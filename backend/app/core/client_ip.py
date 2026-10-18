@@ -25,3 +25,37 @@ def get_client_ip(request: Request) -> str:
         if last:
             return last
     return request.client.host if request.client else "127.0.0.1"
+
+
+_API_KEY_PREFIXES = ("vidgrab_", "vg_", "vgp_")
+
+
+def presented_api_key(request: Request) -> str | None:
+    """The API key the caller sent (X-API-Key, or Bearer with a key prefix),
+    or None. A Supabase session JWT is not an API key."""
+    raw = (request.headers.get("x-api-key") or "").strip()
+    if raw:
+        return raw
+    auth = request.headers.get("authorization") or ""
+    if auth.startswith("Bearer "):
+        token = auth[len("Bearer "):].strip()
+        if token.startswith(_API_KEY_PREFIXES):
+            return token
+    return None
+
+
+def rate_limit_key(request: Request) -> str:
+    """Limiter bucket: per API key when the caller sent one, else per IP.
+
+    A partner's backend usually sits behind ONE IP: counting per IP capped
+    every key behind it at the guest limits, whatever its plan. A key that
+    turns out to be invalid gets 401 from the auth layer; an IP that keeps
+    presenting invalid keys drops back to its IP bucket (bad_key_guard), so
+    spraying random keys cannot mint fresh buckets."""
+    key = presented_api_key(request)
+    if key:
+        from app.core.bad_key_guard import too_many_bad_keys  # noqa: PLC0415
+        if not too_many_bad_keys(request):
+            import hashlib  # noqa: PLC0415
+            return "apikey:" + hashlib.sha256(key.encode()).hexdigest()[:32]
+    return get_client_ip(request)

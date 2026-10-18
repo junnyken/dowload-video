@@ -59,8 +59,12 @@ def _metered(request, user: Dict[str, Any]) -> Dict[str, Any]:
     return {**user, "api_quota": q}
 
 
-def _invalid_key():
+def _invalid_key(request=None):
     from fastapi import HTTPException  # noqa: PLC0415
+    # Counted per IP: keyed requests get their own limiter bucket, so an IP
+    # spraying bad keys must drop back to its IP bucket (bad_key_guard).
+    from app.core.bad_key_guard import note_bad_key  # noqa: PLC0415
+    note_bad_key(request)
     raise HTTPException(status_code=401, detail={
         "error_code": "invalid_api_key",
         "user_message": "API key không hợp lệ hoặc đã bị thu hồi.",
@@ -208,7 +212,7 @@ async def get_optional_user(
         result = _lookup_new_api_key(x_api_key)
         if result:
             return _metered(_request, result)
-        _invalid_key()
+        _invalid_key(_request)
 
     if not credentials or not credentials.credentials:
         return None
@@ -221,7 +225,7 @@ async def get_optional_user(
         result = _lookup_new_api_key(token)
         if result:
             return _metered(_request, result)
-        _invalid_key()
+        _invalid_key(_request)
 
     # ── Path 1: Supabase JWT ─────────────────────────────────────────
     try:
@@ -244,7 +248,7 @@ async def get_optional_user(
     # ── Path 2: Legacy Bearer API key ────────────────────────────────
     legacy = _lookup_api_key(token)
     if legacy is None and token.startswith(_LEGACY_KEY_PREFIX):
-        _invalid_key()
+        _invalid_key(_request)
     return _metered(_request, legacy) if legacy else None
 
 

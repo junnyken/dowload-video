@@ -1,6 +1,19 @@
 import { getAdminToken } from '../hooks/useAdminAuth'
 import { API_BASE } from '../../lib/apiBase'
 
+/** FastAPI `detail` is a string, or a pydantic list of {msg}: flatten to one message. */
+export function formatDetail(detail: unknown, fallback: string): string {
+  if (typeof detail === 'string' && detail) return detail
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map(d => (d && typeof d === 'object' && 'msg' in d ? String((d as { msg: unknown }).msg) : typeof d === 'string' ? d : ''))
+      .filter(Boolean)
+    if (msgs.length) return msgs.join('; ')
+  }
+  if (detail && typeof detail === 'object' && 'message' in detail) return String((detail as { message: unknown }).message)
+  return fallback
+}
+
 /**
  * Authenticated fetch wrapper for admin API endpoints.
  * Automatically injects Authorization: Bearer <token> header.
@@ -24,7 +37,7 @@ export async function adminFetch<T = unknown>(
     let msg = `HTTP ${res.status}`
     try {
       const body = await res.json()
-      msg = body?.detail ?? msg
+      msg = formatDetail(body?.detail, msg)
     } catch { /* ignore */ }
     throw new Error(msg)
   }
@@ -34,6 +47,13 @@ export async function adminFetch<T = unknown>(
 export async function adminPost<T = unknown>(path: string, body?: unknown): Promise<T> {
   return adminFetch<T>(path, {
     method: 'POST',
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
+}
+
+export async function adminPatch<T = unknown>(path: string, body?: unknown): Promise<T> {
+  return adminFetch<T>(path, {
+    method: 'PATCH',
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
 }

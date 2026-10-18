@@ -1,6 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { adminFetch, adminPost } from '../utils/adminFetch'
+import { adminFetch, adminPatch, adminPost } from '../utils/adminFetch'
 import { cn } from '../utils/cn'
+import { Button } from '../shared/Button'
+import {
+  FormError, KeyFields, Modal, RawKeyModal, buildKeyPayload, keyFormFromRow,
+  type KeyFormValues, type PartnerKeyRow,
+} from '../shared/PartnerKeyUi'
 
 interface TenantRef {
   name: string
@@ -87,6 +92,84 @@ const SCOPE_COLORS: Record<string, string> = {
   admin: 'bg-danger-soft text-danger',
 }
 
+function RotateModal({ k, onClose, onRotated }: { k: ApiKey; onClose: () => void; onRotated: (raw: string) => void }) {
+  const [pending, setPending] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function confirm() {
+    setPending(true); setErr(null)
+    try {
+      const row = await adminPost<PartnerKeyRow>(`/enterprise/api-keys/${k.id}/rotate`)
+      if (!row.raw_key) throw new Error('Máy chủ không trả về key mới.')
+      onRotated(row.raw_key)
+    } catch (e) {
+      setErr((e as Error).message)
+      setPending(false)
+    }
+  }
+
+  return (
+    // wording: BA review
+    <Modal title="Đổi key" subtitle={`${k.key_prefix}… · ${k.label}`} onClose={onClose} locked={pending}>
+      <div className="space-y-3">
+        <p className="text-sm text-fg-2">
+          Key cũ sẽ ngừng hoạt động ngay lập tức: mọi hệ thống của khách đang dùng key này sẽ bị lỗi 401 cho đến khi họ cập nhật sang key mới.
+          Key mới chỉ hiển thị một lần.
+        </p>
+        <FormError message={err} />
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose} disabled={pending}>Huỷ</Button>
+          <Button variant="danger" onClick={confirm} disabled={pending}>{pending ? 'Đang đổi…' : 'Đổi key ngay'}</Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function EditLimitsModal({ k, onClose, onSaved }: { k: ApiKey; onClose: () => void; onSaved: () => void }) {
+  const initial = keyFormFromRow(k)
+  const [form, setForm] = useState<KeyFormValues>(initial)
+  const [pending, setPending] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    const built = buildKeyPayload(form)
+    if ('error' in built) { setErr(built.error); return }
+    // Only send what the admin changed.
+    const body: Record<string, unknown> = {}
+    const orig = buildKeyPayload(initial)
+    const origPayload = 'payload' in orig ? orig.payload : {}
+    for (const [key, val] of Object.entries(built.payload)) {
+      if (key === 'expires_at' && form.expires === initial.expires) continue
+      if (JSON.stringify(val) !== JSON.stringify(origPayload[key])) body[key] = val
+    }
+    if (Object.keys(body).length === 0) { onClose(); return }
+    setPending(true); setErr(null)
+    try {
+      await adminPatch(`/enterprise/api-keys/${k.id}`, body)
+      onSaved()
+    } catch (e2) {
+      setErr((e2 as Error).message)
+      setPending(false)
+    }
+  }
+
+  return (
+    // wording: BA review
+    <Modal title="Sửa giới hạn" subtitle={`${k.key_prefix}… · ${k.tenants?.name ?? ''}`} onClose={onClose} locked={pending}>
+      <form onSubmit={submit} className="space-y-3">
+        <KeyFields value={form} onChange={setForm} disabled={pending} />
+        <FormError message={err} />
+        <div className="flex justify-end gap-2 pt-1">
+          <Button onClick={onClose} disabled={pending}>Huỷ</Button>
+          <Button type="submit" variant="primary" disabled={pending}>{pending ? 'Đang lưu…' : 'Lưu'}</Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
 export default function ApiKeysPage() {
   const [data, setData] = useState<ApiKeysResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -95,6 +178,10 @@ export default function ApiKeysPage() {
   const [search, setSearch] = useState('')
   const [toggling, setToggling] = useState<Record<string, boolean>>({})
   const [msg, setMsg] = useState<Record<string, string>>({})
+  const [rotateKey, setRotateKey] = useState<ApiKey | null>(null)
+  const [editKey, setEditKey] = useState<ApiKey | null>(null)
+  // One-time secret: lives only while the reveal modal is open.
+  const [revealKey, setRevealKey] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -145,6 +232,21 @@ export default function ApiKeysPage() {
           ↺ Refresh
         </button>
       </div>
+
+      {rotateKey && (
+        <RotateModal
+          k={rotateKey}
+          onClose={() => setRotateKey(null)}
+          onRotated={raw => { setRotateKey(null); setRevealKey(raw); fetchData() }}
+        />
+      )}
+      {editKey && (
+        <EditLimitsModal k={editKey} onClose={() => setEditKey(null)} onSaved={() => { setEditKey(null); fetchData() }} />
+      )}
+      {revealKey && (
+        // wording: BA review
+        <RawKeyModal rawKey={revealKey} title="Key mới sau khi đổi" onClose={() => setRevealKey(null)} />
+      )}
 
       {/* Summary */}
       {data && (
@@ -249,8 +351,8 @@ export default function ApiKeysPage() {
                     <div className="text-fg-muted">Total: {k.requests_total.toLocaleString()}</div>
                   </td>
                   <td className="px-3 py-2.5 font-mono text-fg-muted">
-                    <div>{k.rate_limit_per_min}/min</div>
-                    <div>{k.rate_limit_per_day.toLocaleString()}/day</div>
+                    <div>{k.rate_limit_per_min}/phút</div>
+                    <div>{k.rate_limit_per_day.toLocaleString()}/ngày</div>
                   </td>
                   <td className="px-3 py-2.5 font-mono text-fg-muted">{formatRelative(k.last_used_at)}</td>
                   <td className="px-3 py-2.5 font-mono text-fg-muted">{formatDate(k.expires_at)}</td>
@@ -267,6 +369,21 @@ export default function ApiKeysPage() {
                     >
                       {toggling[k.id] ? '…' : k.is_active ? 'Deactivate' : 'Activate'}
                     </button>
+                    {/* wording: BA review */}
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      <button
+                        onClick={() => setEditKey(k)}
+                        className="rounded border border-line bg-surface px-2 py-1 text-[10px] font-medium text-fg hover:border-line-strong hover:bg-surface-2"
+                      >
+                        Sửa giới hạn
+                      </button>
+                      <button
+                        onClick={() => setRotateKey(k)}
+                        className="rounded border border-line bg-surface px-2 py-1 text-[10px] font-medium text-fg hover:border-line-strong hover:bg-surface-2"
+                      >
+                        Đổi key
+                      </button>
+                    </div>
                     {msg[k.id] && (
                       <p className="mt-1 font-mono text-[10px] text-success">{msg[k.id]}</p>
                     )}

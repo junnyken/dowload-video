@@ -111,6 +111,20 @@ async def get_partner_tenant(request: Request) -> TenantContext:
             },
         )
 
+    # 1b. The Partner API is exempt from the per-IP limiter, so an IP that
+    # keeps presenting invalid keys is stopped here, before the DB lookup.
+    from app.core.bad_key_guard import note_bad_key, too_many_bad_keys  # noqa: PLC0415
+    if too_many_bad_keys(request):
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code":    "too_many_invalid_keys",
+                "message": "Too many invalid API keys from this IP; retry in a minute",
+                "retry_after_seconds": 60,
+            },
+            headers={"Retry-After": "60"},
+        )
+
     # 2. Hash and look up
     key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
 
@@ -132,6 +146,7 @@ async def get_partner_tenant(request: Request) -> TenantContext:
         key_row = None
 
     if not key_row:
+        note_bad_key(request)
         raise HTTPException(
             status_code=401,
             detail={
@@ -198,11 +213,13 @@ async def get_partner_tenant(request: Request) -> TenantContext:
     tenant_id    = key_row["tenant_id"]
     workspace_id = key_row.get("workspace_id") or ""
 
-    # 6. Fetch tenant plan
+    # 6. Fetch tenant plan, status and monthly cap
+    monthly_cap = None
+    tenant_status = "active"
     try:
         tenant_res = (
             supabase.table("tenants")
-            .select("plan, workspace_id")
+            .select("plan, workspace_id, status, plan_api_calls_per_month")
             .eq("id", tenant_id)
             .single()
             .execute()
@@ -211,8 +228,25 @@ async def get_partner_tenant(request: Request) -> TenantContext:
         plan_str     = tenant_row.get("plan", "starter")
         # Use workspace_id from key first; fall back to tenant row
         workspace_id = workspace_id or tenant_row.get("workspace_id", "")
+        tenant_status = tenant_row.get("status") or "active"
+        monthly_cap   = tenant_row.get("plan_api_calls_per_month")
     except Exception:
         plan_str = "starter"
+    try:
+        plan = TenantPlan(plan_str)
+    except ValueError:
+        plan = TenantPlan.starter
+
+    # 6b. A suspended or canceled customer keeps its keys but cannot use them
+    # (admin → Tenants → status).
+    if tenant_status != "active":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code":    "tenant_inactive",
+                "message": f"This account is {tenant_status}",
+            },
+        )
 
     # 7. Fetch feature flags from tenant_settings
     try:
@@ -252,13 +286,14 @@ async def get_partner_tenant(request: Request) -> TenantContext:
     return TenantContext(
         tenant_id=tenant_id,
         workspace_id=workspace_id,
-        plan=TenantPlan(plan_str),
+        plan=plan,
         scopes=scopes,
         api_key_id=key_id,
         is_partner_request=True,
         features=features,
         rate_limit_per_min=key_row.get("rate_limit_per_min") or 60,
         rate_limit_per_day=key_row.get("rate_limit_per_day") or 10_000,
+        monthly_cap=monthly_cap,
     )
 
 

@@ -4361,7 +4361,14 @@ async def update_tenant_plan(tenant_id: str, request: Request, _=Depends(verify_
     new_plan = body.get("plan")
     if new_plan not in ("starter", "growth", "enterprise"):
         raise HTTPException(status_code=400, detail="Invalid plan")
-    supabase.table("tenants").update({"plan": new_plan}).eq("id", tenant_id).execute()
+    # The jobs/month cap follows the plan unless the admin sends its own.
+    from app.api.admin_partners import plan_default_cap
+    cap = body.get("api_calls_per_month")
+    if not isinstance(cap, int) or cap < -1:
+        cap = plan_default_cap(new_plan)
+    supabase.table("tenants").update(
+        {"plan": new_plan, "plan_api_calls_per_month": cap}
+    ).eq("id", tenant_id).execute()
     log_admin_action(request, "admin.tenant.plan_changed", resource_type="tenant", resource_id=tenant_id)
     return {"success": True, "tenant_id": tenant_id, "plan": new_plan}
 

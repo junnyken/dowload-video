@@ -1,6 +1,11 @@
 import { useEffect, useState, useCallback } from 'react'
 import { adminFetch, adminPost } from '../utils/adminFetch'
 import { cn } from '../utils/cn'
+import { Button } from '../shared/Button'
+import {
+  DEFAULT_KEY_FORM, Field, FormError, KeyFields, Modal, RawKeyModal, buildKeyPayload, inputCls,
+  type KeyFormValues, type PartnerKeyRow,
+} from '../shared/PartnerKeyUi'
 
 interface TenantSettings {
   custom_domain: string | null
@@ -82,6 +87,165 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+const PLAN_DEFAULT_CAP: Record<string, string> = { starter: '1.000', growth: '50.000', enterprise: 'không giới hạn' }
+
+// wording: BA review
+function formatCap(n: number | null | undefined): string {
+  if (n === -1) return 'Không giới hạn'
+  if (n === null || n === undefined) return '—'
+  return `${n.toLocaleString('vi-VN')} job/tháng`
+}
+
+/** '' = not set, 'unlimited' handled by the checkbox. Returns number or error. */
+function parseCap(text: string, unlimited: boolean): { value: number } | { error: string } {
+  if (unlimited) return { value: -1 }
+  const n = Number(text)
+  // wording: BA review
+  if (text.trim() === '' || !Number.isInteger(n) || n < 0) return { error: 'Hạn mức job/tháng phải là số nguyên từ 0 trở lên, hoặc chọn “Không giới hạn”.' }
+  return { value: n }
+}
+
+function CapFields({ cap, setCap, unlimited, setUnlimited, disabled, optional }: {
+  cap: string; setCap: (v: string) => void; unlimited: boolean; setUnlimited: (v: boolean) => void; disabled: boolean; optional?: boolean
+}) {
+  return (
+    <div className="space-y-2">
+      {/* wording: BA review */}
+      <Field label="Hạn mức job/tháng" hint={optional ? 'Để trống = dùng mặc định theo gói.' : undefined}>
+        <input className={inputCls} type="number" min={0} inputMode="numeric" value={cap} disabled={disabled || unlimited} placeholder={optional ? 'Mặc định theo gói' : 'Ví dụ 5000'} onChange={e => setCap(e.target.value)} />
+      </Field>
+      <label className="flex cursor-pointer items-center gap-2 text-xs text-fg-muted">
+        <input type="checkbox" checked={unlimited} disabled={disabled} onChange={e => setUnlimited(e.target.checked)} />
+        Không giới hạn
+      </label>
+    </div>
+  )
+}
+
+function CreateTenantModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [name, setName] = useState('')
+  const [plan, setPlan] = useState('starter')
+  const [cap, setCap] = useState('')
+  const [unlimited, setUnlimited] = useState(false)
+  const [pending, setPending] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    // wording: BA review
+    if (!name.trim() || name.trim().length > 120) { setErr('Tên khách phải có từ 1 đến 120 ký tự.'); return }
+    const body: Record<string, unknown> = { name: name.trim(), plan }
+    if (unlimited || cap.trim() !== '') {
+      const r = parseCap(cap, unlimited)
+      if ('error' in r) { setErr(r.error); return }
+      body.api_calls_per_month = r.value
+    }
+    setPending(true); setErr(null)
+    try {
+      await adminPost('/enterprise/tenants', body)
+      onCreated()
+    } catch (e2) {
+      setErr((e2 as Error).message)
+      setPending(false)
+    }
+  }
+
+  return (
+    // wording: BA review
+    <Modal title="Tạo khách partner" subtitle="Khách gọi Partner API từ backend của họ bằng key vgp_." onClose={onClose} locked={pending}>
+      <form onSubmit={submit} className="space-y-3">
+        <Field label="Tên khách">
+          <input className={inputCls} value={name} maxLength={120} disabled={pending} autoFocus onChange={e => setName(e.target.value)} />
+        </Field>
+        <Field label="Gói" hint={`Hạn mức job/tháng mặc định của gói này: ${PLAN_DEFAULT_CAP[plan]}.`}>
+          <select className={inputCls} value={plan} disabled={pending} onChange={e => setPlan(e.target.value)}>
+            <option value="starter">Starter</option>
+            <option value="growth">Growth</option>
+            <option value="enterprise">Enterprise</option>
+          </select>
+        </Field>
+        <CapFields cap={cap} setCap={setCap} unlimited={unlimited} setUnlimited={setUnlimited} disabled={pending} optional />
+        <FormError message={err} />
+        <div className="flex justify-end gap-2 pt-1">
+          <Button onClick={onClose} disabled={pending}>Huỷ</Button>
+          <Button type="submit" variant="primary" disabled={pending}>{pending ? 'Đang tạo…' : 'Tạo khách'}</Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function EditCapModal({ tenant, onClose, onSaved }: { tenant: Tenant; onClose: () => void; onSaved: () => void }) {
+  const initUnlimited = tenant.plan_api_calls_per_month === -1
+  const [cap, setCap] = useState(initUnlimited ? '' : String(tenant.plan_api_calls_per_month ?? ''))
+  const [unlimited, setUnlimited] = useState(initUnlimited)
+  const [pending, setPending] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    const r = parseCap(cap, unlimited)
+    if ('error' in r) { setErr(r.error); return }
+    setPending(true); setErr(null)
+    try {
+      await adminPost(`/enterprise/tenants/${tenant.id}/limits`, { api_calls_per_month: r.value })
+      onSaved()
+    } catch (e2) {
+      setErr((e2 as Error).message)
+      setPending(false)
+    }
+  }
+
+  return (
+    // wording: BA review
+    <Modal title="Sửa hạn mức job/tháng" subtitle={tenant.name} onClose={onClose} locked={pending}>
+      <form onSubmit={submit} className="space-y-3">
+        <CapFields cap={cap} setCap={setCap} unlimited={unlimited} setUnlimited={setUnlimited} disabled={pending} />
+        <FormError message={err} />
+        <div className="flex justify-end gap-2 pt-1">
+          <Button onClick={onClose} disabled={pending}>Huỷ</Button>
+          <Button type="submit" variant="primary" disabled={pending}>{pending ? 'Đang lưu…' : 'Lưu'}</Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function IssueKeyModal({ tenant, onClose, onIssued }: { tenant: Tenant; onClose: () => void; onIssued: (rawKey: string) => void }) {
+  const [form, setForm] = useState<KeyFormValues>(DEFAULT_KEY_FORM)
+  const [pending, setPending] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    const built = buildKeyPayload(form)
+    if ('error' in built) { setErr(built.error); return }
+    setPending(true); setErr(null)
+    try {
+      const row = await adminPost<PartnerKeyRow>(`/enterprise/tenants/${tenant.id}/api-keys`, built.payload)
+      if (!row.raw_key) throw new Error('Máy chủ không trả về key. Hãy dùng “Đổi key” trong trang Partner API Keys để lấy key mới.')
+      onIssued(row.raw_key)
+    } catch (e2) {
+      setErr((e2 as Error).message)
+      setPending(false)
+    }
+  }
+
+  return (
+    // wording: BA review
+    <Modal title="Cấp API key" subtitle={`${tenant.name} · tối đa 10 key đang hoạt động`} onClose={onClose} locked={pending}>
+      <form onSubmit={submit} className="space-y-3">
+        <KeyFields value={form} onChange={setForm} disabled={pending} />
+        <FormError message={err} />
+        <div className="flex justify-end gap-2 pt-1">
+          <Button onClick={onClose} disabled={pending}>Huỷ</Button>
+          <Button type="submit" variant="primary" disabled={pending}>{pending ? 'Đang cấp…' : 'Cấp key'}</Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
 export default function TenantsPage() {
   const [data, setData] = useState<TenantsResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -90,6 +254,11 @@ export default function TenantsPage() {
   const [planFilter, setPlanFilter] = useState('')
   const [actionInProgress, setActionInProgress] = useState<Record<string, boolean>>({})
   const [msg, setMsg] = useState<Record<string, string>>({})
+  const [showCreate, setShowCreate] = useState(false)
+  const [capTenant, setCapTenant] = useState<Tenant | null>(null)
+  const [keyTenant, setKeyTenant] = useState<Tenant | null>(null)
+  // One-time secret: lives only while the reveal modal is open.
+  const [revealKey, setRevealKey] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -145,10 +314,32 @@ export default function TenantsPage() {
           <h1 className="text-lg font-semibold tracking-tight text-fg">Tenants</h1>
           <p className="mt-0.5 text-xs text-fg-muted">Multi-tenant enterprise accounts</p>
         </div>
-        <button onClick={fetchData} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
-          ↺ Refresh
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {/* wording: BA review */}
+          <Button variant="primary" onClick={() => setShowCreate(true)}>Tạo khách partner</Button>
+          <button onClick={fetchData} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
+            ↺ Refresh
+          </button>
+        </div>
       </div>
+
+      {showCreate && (
+        <CreateTenantModal onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); fetchData() }} />
+      )}
+      {capTenant && (
+        <EditCapModal tenant={capTenant} onClose={() => setCapTenant(null)} onSaved={() => { setCapTenant(null); fetchData() }} />
+      )}
+      {keyTenant && (
+        <IssueKeyModal
+          tenant={keyTenant}
+          onClose={() => setKeyTenant(null)}
+          onIssued={raw => { setKeyTenant(null); setRevealKey(raw); fetchData() }}
+        />
+      )}
+      {revealKey && (
+        // wording: BA review
+        <RawKeyModal rawKey={revealKey} title="API key mới" onClose={() => setRevealKey(null)} />
+      )}
 
       {/* Summary cards */}
       {data && (
@@ -218,7 +409,7 @@ export default function TenantsPage() {
                   </td>
                   <td className="px-3 py-2.5">
                     <PlanBadge plan={t.plan} />
-                    <p className="mt-0.5 font-mono text-[10px] text-fg-muted">{t.plan_api_calls_per_month?.toLocaleString()}/mo</p>
+                    <p className="mt-0.5 text-[10px] text-fg-muted">{/* wording: BA review */}{formatCap(t.plan_api_calls_per_month)}</p>
                   </td>
                   <td className="px-3 py-2.5"><StatusBadge status={t.status} /></td>
                   <td className="px-3 py-2.5 font-mono text-fg-muted">
@@ -232,7 +423,20 @@ export default function TenantsPage() {
                   </td>
                   <td className="px-3 py-2.5 font-mono text-fg-muted">{formatDate(t.created_at)}</td>
                   <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {/* wording: BA review */}
+                      <button
+                        onClick={() => setKeyTenant(t)}
+                        className="rounded border border-line bg-surface px-2 py-1 text-[10px] font-medium text-fg hover:border-line-strong hover:bg-surface-2"
+                      >
+                        Cấp API key
+                      </button>
+                      <button
+                        onClick={() => setCapTenant(t)}
+                        className="rounded border border-line bg-surface px-2 py-1 text-[10px] font-medium text-fg hover:border-line-strong hover:bg-surface-2"
+                      >
+                        Sửa hạn mức
+                      </button>
                       {/* Plan change */}
                       <select
                         disabled={actionInProgress[t.id + '_plan']}
@@ -273,8 +477,16 @@ export default function TenantsPage() {
               ))}
               {(data?.tenants ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-10 text-center font-mono text-xs text-fg-muted">
-                    No tenants found
+                  <td colSpan={8} className="py-10 text-center">
+                    {/* wording: BA review */}
+                    {statusFilter || planFilter ? (
+                      <p className="font-mono text-xs text-fg-muted">Không có khách nào khớp bộ lọc.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        <p className="text-xs text-fg-muted">Chưa có khách nào. Tạo khách partner đầu tiên để cấp API key.</p>
+                        <Button variant="primary" onClick={() => setShowCreate(true)}>Tạo khách partner</Button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               )}

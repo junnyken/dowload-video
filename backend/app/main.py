@@ -37,7 +37,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.core.client_ip import get_client_ip
+from app.core.client_ip import get_client_ip, presented_api_key, rate_limit_key
 
 # Initialize Rate Limiter (stricter: 60 req/min per IP default).
 # key_func=get_client_ip (not slowapi's get_remote_address) — the latter
@@ -47,8 +47,13 @@ from app.core.client_ip import get_client_ip
 # which is NOT shared across the 4 uvicorn workers — each worker counts
 # independently, so the real limit is up to 4x the configured number and
 # unpredictable which worker a given request lands on.
+#
+# key_func=rate_limit_key: get_client_ip for everyone, except that a request
+# carrying an API key is counted per key — a partner's backend behind one IP
+# was otherwise held to the guest limits whatever its plan. The Partner API
+# (/api/v1/partner/*) is exempt and enforces its own per-key limit.
 limiter = Limiter(
-    key_func=get_client_ip,
+    key_func=rate_limit_key,
     default_limits=["60/minute"],
     storage_uri=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
     # Survive a Redis outage instead of taking the whole API down with it.
@@ -81,6 +86,10 @@ class DailyIPQuotaMiddleware(BaseHTTPMiddleware):
         if _DAILY_QUOTA <= 0 or request.method != "POST":
             return await call_next(request)
         if request.url.path not in _QUOTA_ENDPOINTS:
+            return await call_next(request)
+        # API-key calls are metered per account (monthly API quota + the
+        # account's daily downloads); an invalid key is refused with 401.
+        if presented_api_key(request):
             return await call_next(request)
 
         ip = get_client_ip(request)
@@ -606,8 +615,19 @@ from app.api import billing as billing_api
 from app.api import tenant_api_keys as tenant_api_keys_api
 
 app.include_router(partner_api.router, tags=["Partner API"])
+# Partner API: explicitly out of the default limit. Each vgp_ key has its own
+# requests/minute (partner_auth), jobs/day and the account's jobs/month
+# (partner_quota). On fastapi 0.141 SlowAPIMiddleware cannot see endpoints
+# inside included routers (_IncludedRouter has no .endpoint) and already
+# skips them — this keeps it so if that ever changes, instead of a partner
+# backend behind one IP silently falling under 60/min per IP.
+for _partner_route in partner_api.router.routes:
+    if getattr(_partner_route, "endpoint", None) is not None:
+        limiter.exempt(_partner_route.endpoint)
 app.include_router(billing_api.router,         prefix="/api/v1", tags=["Billing"])
 app.include_router(tenant_api_keys_api.router, prefix="/api/v1", tags=["Partner API Keys"])
+from app.api import admin_partners as admin_partners_api
+app.include_router(admin_partners_api.router, prefix="/api/v1/admin", tags=["Admin Partner API"])
 
 # Phase 20's /api/v1/admin/billing router is gone. Its auth guard read
 # profiles.is_admin, a column that does not exist on this database, so the
@@ -772,22 +792,30 @@ async def api_info():
         "app_version": APP_VERSION,
         "base_url": "/api/v1",
         "auth": {
-            "type": "bearer_token",
-            "header": "Authorization: Bearer <token>",
-            "api_key_endpoint": "POST /api/v1/user/api-key/generate",
-            "note": "Public endpoints (ping, fetch-link, progress) work without auth up to rate limits.",
+            "type": "api_key",
+            "header": "X-API-Key: vidgrab_<key>  (or Authorization: Bearer vidgrab_<key>)",
+            "api_key_endpoint": "POST /api/v1/api-keys (web session; Pro/Team/Enterprise)",
+            "note": "Public endpoints (fetch-link, progress, history) also work without a key, as a guest, up to the per-IP limits.",
         },
         "rate_limits": {
-            "default": "60 requests/minute per IP",
-            "heavy": "5 requests/minute per IP for /fetch-link and /bulk-download",
-            "daily_quota": "Configurable via DAILY_QUOTA_PER_IP env var (0 = unlimited)",
+            "default": "60 requests/minute — per API key when one is sent, else per IP",
+            "heavy": "30 requests/minute for /fetch-link and /bulk-download — per API key when one is sent, else per IP",
+            "monthly_api_calls": "Per account plan (see /api/v1/plans); every request with a key counts one call",
+            "daily_downloads": "Per account plan; downloads made through the API count too",
+            "headers": "X-API-Quota-Limit, X-API-Quota-Remaining, X-API-Quota-Reset on every keyed response",
+        },
+        "partner_api": {
+            "auth": "X-API-Key: vgp_<key>  (issued by VidGrab, not self-service)",
+            "base_path": "/api/v1/partner",
+            "rate_limits": "Per key: requests/minute (default 60), jobs/day (default 10000); per account: jobs/month",
+            "docs": "/api-docs#partner",
         },
         "public_endpoints": [
             {"method": "GET",  "path": "/",                            "description": "Basic liveness check"},
             {"method": "GET",  "path": "/health",                      "description": "Disk, Redis, yt-dlp version, app version"},
             {"method": "GET",  "path": "/api/v1/api-info",             "description": "This document"},
-            {"method": "POST", "path": "/api/v1/fetch-link",           "description": "Start a download — returns token for polling"},
-            {"method": "GET",  "path": "/api/v1/progress/{token}",     "description": "Poll job status and result"},
+            {"method": "POST", "path": "/api/v1/fetch-link",           "description": "Download one link and wait: the response carries the result (synchronous)"},
+            {"method": "GET",  "path": "/api/v1/progress/{token}",     "description": "Progress of a running /fetch-link that was sent with your own progress_token"},
             {"method": "GET",  "path": "/api/v1/history",              "description": "Recent jobs (unauthenticated: current session only)"},
             {"method": "GET",  "path": "/api/v1/extension/download",   "description": "Extension distribution metadata"},
         ],

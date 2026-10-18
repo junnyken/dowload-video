@@ -63,6 +63,9 @@ class TenantContext:
     features:           dict[str, Any]  = field(default_factory=dict)
     rate_limit_per_min: int             = 60
     rate_limit_per_day: int             = 10_000
+    # tenants.plan_api_calls_per_month — set per customer from the admin.
+    # None = the plan's default (PLAN_LIMITS); enterprise is always unlimited.
+    monthly_cap:        Optional[int]   = None
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
@@ -76,7 +79,10 @@ class TenantContext:
 
     def plan_limits(self) -> dict:
         """Return resource limits dict for the current plan."""
-        return PLAN_LIMITS.get(self.plan, PLAN_LIMITS[TenantPlan.starter]).copy()
+        limits = PLAN_LIMITS.get(self.plan, PLAN_LIMITS[TenantPlan.starter]).copy()
+        if self.plan != TenantPlan.enterprise and self.monthly_cap is not None:
+            limits["api_calls_per_month"] = int(self.monthly_cap)
+        return limits
 
 
 # ── DB helper ─────────────────────────────────────────────────────────────────

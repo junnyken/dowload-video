@@ -91,7 +91,10 @@ def sync_partner_job_task(self, partner_job_id: str, download_job_id: str, tenan
         payload = {"job_id": partner_job_id, "status": "done", "result": result}
     else:
         error_message = (row or {}).get("error_message") or "Download failed"
-        update = {"status": "failed", "error": error_message, "updated_at": _now_iso()}
+        # partner_jobs has error_message (migration 012), not "error": writing
+        # "error" made PostgREST reject the whole update, so a failed job
+        # stayed "queued" forever while its job.failed webhook went out.
+        update = {"status": "failed", "error_message": error_message, "updated_at": _now_iso()}
         event_type = "job.failed"
         payload = {"job_id": partner_job_id, "status": "failed", "error": error_message}
 

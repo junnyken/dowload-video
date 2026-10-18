@@ -121,41 +121,29 @@ def _validate_http_url(url: str, require_https: bool = False) -> None:
             )
 
 
-def _check_daily_rate_limit(tenant: TenantContext) -> None:
-    """Query tenant_usage_daily for today and enforce plan limit."""
-    limits = tenant.plan_limits()
-    monthly_cap = limits["api_calls_per_month"]
-    if monthly_cap == -1:
-        return  # enterprise: unlimited
-
-    supabase = get_service_client()
-    today    = date.today().isoformat()
-
-    try:
-        usage_res = (
-            supabase.table("tenant_usage_daily")
-            .select("api_calls")
-            .eq("tenant_id", tenant.tenant_id)
-            .eq("date", today)
-            .maybe_single()
-            .execute()
-        )
-        usage_row = usage_res.data or {}
-        calls_today = usage_row.get("api_calls") or 0
-    except Exception:
-        calls_today = 0
-
-    # daily cap = rate_limit_per_day from the key (set on key creation)
-    if calls_today >= tenant.rate_limit_per_day:
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "code":      "rate_limit_exceeded",
-                "message":   "Daily API call limit reached",
-                "limit":     tenant.rate_limit_per_day,
-                "used_today": calls_today,
-            },
-        )
+def _check_job_quota(tenant: TenantContext) -> None:
+    """Count one job against the key's jobs/day and the account's jobs/month
+    (app.core.partner_quota); 429 when either is used up."""
+    from app.core import partner_quota  # noqa: PLC0415
+    monthly_cap = tenant.plan_limits()["api_calls_per_month"]
+    q = partner_quota.consume(
+        tenant.tenant_id, tenant.api_key_id, tenant.rate_limit_per_day, monthly_cap,
+    )
+    if q["allowed"]:
+        return
+    if q["reason"] == "monthly":
+        code, message = "monthly_quota_exceeded", "Monthly job limit reached for this account"
+    else:
+        code, message = "rate_limit_exceeded", "Daily job limit reached for this API key"
+    raise HTTPException(
+        status_code=429,
+        detail={
+            "code":     code,
+            "message":  message,
+            "limit":    q["limit"],
+            "reset_at": q["reset_at"],
+        },
+    )
 
 
 def _increment_usage(tenant_id: str) -> None:
@@ -216,7 +204,7 @@ async def submit_job(
     """Submit a download job on behalf of a tenant."""
     _require_scope(tenant, "write")
     _validate_http_url(body.url)
-    _check_daily_rate_limit(tenant)
+    _check_job_quota(tenant)
 
     supabase  = get_service_client()
     job_id    = str(uuid.uuid4())
@@ -348,7 +336,7 @@ async def get_job(
         api_key_id=row.get("api_key_id"),
         created_at=row.get("created_at", ""),
         result=_public_result(row.get("result"), request),
-        error=row.get("error"),
+        error=row.get("error_message") or row.get("error"),
     )
 
 
@@ -393,7 +381,7 @@ async def list_jobs(
             api_key_id=r.get("api_key_id"),
             created_at=r.get("created_at", ""),
             result=_public_result(r.get("result"), request),
-            error=r.get("error"),
+            error=r.get("error_message") or r.get("error"),
         )
         for r in rows
     ]
@@ -495,19 +483,29 @@ async def get_usage(
     except Exception:
         month_calls = 0
 
+    # The counters that are actually enforced (partner_quota) win over the
+    # tenant_usage_daily sum, which is best-effort bookkeeping.
+    from app.core import partner_quota  # noqa: PLC0415
+    counted = partner_quota.usage(tenant.tenant_id, tenant.api_key_id)
+    if counted["month"] is not None:
+        month_calls = counted["month"]
+
     limits    = tenant.plan_limits()
     monthly   = limits["api_calls_per_month"]
-    remaining = (monthly - month_calls) if monthly != -1 else -1
+    remaining = max(0, monthly - month_calls) if monthly != -1 else -1
 
     return {
         "plan":           tenant.plan,
         "limits":         limits,
         "this_month":     {"api_calls": month_calls},
         "remaining":      remaining,
+        "month_resets_at": partner_quota.month_reset_at(),
         "daily_30d":      daily,
         "rate_limit": {
             "per_minute": tenant.rate_limit_per_min,
             "per_day":    tenant.rate_limit_per_day,
+            "used_today_this_key": counted["today_key"],
+            "day_resets_at": partner_quota.day_reset_at(),
         },
     }
 

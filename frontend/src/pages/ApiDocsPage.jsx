@@ -67,6 +67,19 @@ const ENDPOINTS = [
   },
 ];
 
+// wording: BA review
+const PARTNER_ENDPOINTS = [
+  { method: 'POST', path: '/jobs', note: 'Tạo job tải. Body: { url, quality }. Trả 202 cùng thông tin job.' },
+  { method: 'GET', path: '/jobs/{id}', note: 'Xem trạng thái và kết quả của một job.' },
+  { method: 'GET', path: '/jobs?status=&limit=', note: 'Liệt kê job của key, lọc theo trạng thái.' },
+  { method: 'DELETE', path: '/jobs/{id}', note: 'Huỷ job đang chờ.' },
+  { method: 'GET', path: '/usage', note: 'Xem mức dùng trong ngày và trong tháng so với hạn mức.' },
+  { method: 'POST', path: '/webhooks', note: 'Đăng ký webhook (URL HTTPS) nhận sự kiện job.completed, job.failed.' },
+  { method: 'GET', path: '/webhooks', note: 'Liệt kê webhook đã đăng ký.' },
+  { method: 'DELETE', path: '/webhooks/{id}', note: 'Xoá một webhook.' },
+  { method: 'POST', path: '/validate-urls', note: 'Kiểm tra trước danh sách URL, tối đa 100 URL mỗi lần.' },
+];
+
 const ERROR_EXAMPLES = [
   { code: 'unsupported_url',     retryable: false, message: 'URL không được hỗ trợ.' },
   { code: 'provider_unavailable', retryable: true,  message: 'Nền tảng tạm thời không phản hồi.' },
@@ -158,8 +171,8 @@ export default function ApiDocsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
           {[
             // wording: BA review
-            { label: 'Các endpoint khác', value: '60 request/phút/IP' },
-            { label: 'Fetch-link / Bulk-download', value: '30 request/phút/IP' },
+            { label: 'Các endpoint khác', value: '60 request/phút — theo API key (không có key: theo IP)' },
+            { label: 'Fetch-link / Bulk-download', value: '30 request/phút — theo API key (không có key: theo IP)' },
             { label: 'Lượt gọi API mỗi tháng', value: monthlyText },
             { label: 'Lượt tải mỗi ngày', value: dailyText },
           ].map(r => (
@@ -172,6 +185,7 @@ export default function ApiDocsPage() {
         <p className="text-xs text-fg-muted">
           {/* wording: BA review */}
           Vượt giới hạn tốc độ: HTTP 429. Hãy đợi khoảng một phút rồi thử lại, dùng exponential backoff.
+          Request có gửi key được đếm theo từng key, nên nhiều máy chủ dùng chung một IP không chia sẻ giới hạn với nhau.
         </p>
         <p className="text-xs text-fg-muted">
           {/* wording: BA review — owner 14/10 monthly API quota */}
@@ -185,6 +199,47 @@ export default function ApiDocsPage() {
           Xem số lượt đã dùng: <code className="bg-surface-2 px-1 rounded">GET /api/v1/api-keys/usage</code>.
           Lệnh tải qua API vẫn trừ thêm vào hạn mức lượt tải mỗi ngày.
         </p>
+      </div>
+
+      {/* ── Partner API ───────────────────────────────────── */}
+      {/* wording: BA review (whole Partner API section) */}
+      <div id="partner" className="p-5 rounded-2xl bg-surface border border-line space-y-3 scroll-mt-20">
+        <div className="flex items-center gap-2">
+          <Key className="w-4 h-4 text-accent-text" />
+          <h2 className="text-base font-semibold text-fg">Partner API (doanh nghiệp tích hợp từ backend)</h2>
+        </div>
+        <p className="text-sm text-fg-muted">
+          Dành cho doanh nghiệp gọi VidGrab từ máy chủ của mình. Key dạng <code className="bg-surface-2 px-1 rounded">vgp_</code> do VidGrab cấp,
+          bạn không tự tạo được. Muốn có key, hãy liên hệ VidGrab.
+        </p>
+        <div className="font-mono text-xs bg-surface-2 border border-line rounded-xl px-4 py-3 text-fg-2 space-y-1 overflow-x-auto">
+          <div>X-API-Key: vgp_&lt;key&gt;</div>
+          <div className="text-fg-muted">Base path: /api/v1/partner</div>
+        </div>
+        <div className="space-y-1.5">
+          {PARTNER_ENDPOINTS.map(e => (
+            <div key={e.method + e.path} className="px-3 py-2 rounded-xl bg-surface-2 border border-line">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`inline-flex px-2 py-0.5 rounded border text-[11px] font-bold font-mono ${methodColor(e.method)}`}>{e.method}</span>
+                <code className="text-xs font-mono text-fg-2 break-all">{e.path}</code>
+              </div>
+              <p className="text-xs text-fg-muted mt-1">{e.note}</p>
+            </div>
+          ))}
+        </div>
+        <div>
+          <p className="text-xs text-fg-muted mb-1 font-semibold uppercase tracking-wider">Ví dụ tạo job</p>
+          <pre className="text-xs font-mono bg-surface-2 border border-line rounded-xl px-4 py-3 text-success overflow-x-auto">{`POST /api/v1/partner/jobs
+X-API-Key: vgp_<key>
+
+{ "url": "https://youtube.com/watch?v=...", "quality": "video" }   // -> 202 + job`}</pre>
+        </div>
+        <ul className="text-xs text-fg-muted space-y-1.5 list-disc list-inside">
+          <li>Request/phút tính theo key (mặc định 60). Vượt giới hạn: HTTP 429 kèm header <code className="bg-surface-2 px-1 rounded">Retry-After</code>.</li>
+          <li>Job/ngày tính theo key (mặc định 10.000).</li>
+          <li>Job/tháng theo hợp đồng. Hết hạn mức: HTTP 429 với <code className="bg-surface-2 px-1 rounded">{'{"error_code":"monthly_quota_exceeded","reset_at":"…"}'}</code>.</li>
+          <li>Poll <code className="bg-surface-2 px-1 rounded">GET /jobs/{'{id}'}</code> không bị trừ hạn mức job.</li>
+        </ul>
       </div>
 
       {/* ── Endpoints ─────────────────────────────────────── */}
@@ -275,7 +330,7 @@ export default function ApiDocsPage() {
           <li>Chỉ retry khi <code className="text-fg-2">retryable: true</code>.</li>
           <li>Dùng exponential backoff: 1s → 2s → 4s → 8s (tối đa 3 lần).</li>
           {/* wording: BA review */}
-          <li>HTTP 429: đợi khoảng một phút rồi thử lại (không có header Retry-After).</li>
+          <li>HTTP 429 với key <code className="text-fg-2">vidgrab_</code>: đợi khoảng một phút rồi thử lại (không có header Retry-After). HTTP 429 của Partner API (key <code className="text-fg-2">vgp_</code>) có header <code className="text-fg-2">Retry-After</code>: đợi đúng số giây đó.</li>
           <li>HTTP 5xx: retry với backoff; HTTP 4xx (ngoại trừ 429): không retry.</li>
           {/* wording: BA review */}
           <li>/fetch-link là đồng bộ: chờ response của chính request đó, đừng gửi lại khi chưa có kết quả (mỗi lần gửi tính một lượt tải). Muốn hiện tiến độ, tự đặt <code className="text-fg-2">progress_token</code> và poll <code className="text-fg-2">/progress/{'{token}'}</code>.</li>
