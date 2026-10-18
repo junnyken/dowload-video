@@ -448,3 +448,38 @@ def test_failed_job_writes_error_message_column(monkeypatch):
     assert updates and updates[0]["status"] == "failed"
     assert updates[0]["error_message"] == "Video không còn tồn tại"
     assert "error" not in updates[0]
+
+
+# ── validate-urls ────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("url,platform", [
+    ("https://www.youtube.com/watch?v=jNQXAC9IVRw", "youtube"),
+    ("https://youtu.be/jNQXAC9IVRw", "youtube"),
+    ("https://www.tiktok.com/@a/video/7300000000000000000", "tiktok"),
+    ("https://v.douyin.com/abc/", "douyin"),
+    ("https://www.facebook.com/watch?v=1", "facebook"),
+    ("https://x.com/a/status/1", "twitter"),
+    ("https://www.bilibili.com/video/BV1xx411c7mD", "bilibili"),
+])
+def test_validate_urls_accepts_the_main_platforms(url, platform):
+    """These all came back "unsupported" (the registry only holds secondary
+    extractors) while a job for the same link downloaded fine — measured on
+    production 18/10 with "Me at the zoo"."""
+    from app.services.extractor_registry import REGISTRY
+    r = REGISTRY.validate_batch_url(url)
+    assert r["status"] == "valid" and r["platform"] == platform
+    assert r["support_level"] and r["source_type"]
+
+
+def test_validate_urls_unknown_site_is_not_refused():
+    from app.services.extractor_registry import REGISTRY
+    r = REGISTRY.validate_batch_url("https://example.com/x")
+    assert r["status"] == "unknown" and r["platform"] is None
+
+
+def test_validate_urls_batch_counts():
+    from app.services.extractor_registry import REGISTRY
+    out = REGISTRY.validate_batch(["https://youtu.be/jNQXAC9IVRw", "https://youtu.be/jNQXAC9IVRw",
+                                   "https://example.com/x", "not a url"])
+    assert out["counts"] == {"valid": 1, "duplicate": 1, "unknown": 1, "unsupported": 0, "invalid": 1}
+    assert "1 chưa nhận diện" in out["summary"]

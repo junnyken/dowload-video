@@ -134,8 +134,16 @@ Chỉ huỷ được job còn `queued`. Job đã chạy thì không bị ảnh h
 
 ### 3.6. Kiểm tra link trước khi tải — `POST /api/v1/partner/validate-urls`
 
-Body `{"urls": ["…", "…"]}`, tối đa 100 link một lần. Cho biết link nào hợp lệ và thuộc nền tảng nào.
-Không tạo job, không trừ hạn mức job.
+Body `{"urls": ["…", "…"]}`, tối đa 100 link một lần. Không tạo job, không trừ hạn mức job.
+Mỗi link trả về `platform` (vd `youtube`, `tiktok`, `douyin`), `support_level` và `status`:
+
+| `status` | Ý nghĩa |
+|---|---|
+| `valid` | Nền tảng được hỗ trợ |
+| `unknown` | Chưa nhận diện được nền tảng; job vẫn được thử tải |
+| `unsupported` | Nền tảng chưa hỗ trợ hoặc đang tạm dừng |
+| `invalid` | Không phải link http/https |
+| `duplicate` | Trùng với một link trước đó trong cùng danh sách |
 
 ---
 

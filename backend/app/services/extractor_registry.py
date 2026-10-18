@@ -110,22 +110,44 @@ class ExtractorRegistry:
     def validate_batch_url(self, url: str) -> dict:
         """
         Validate a single URL for batch submission.
-        Returns {status: "valid"|"unsupported"|"invalid", platform, message}.
+        Returns {status: "valid"|"unknown"|"unsupported"|"invalid", platform,
+        source_type, support_level, message}.
+
+        Decided by the same classifier as /resolve-input (source_classifier +
+        container_registry), the one the download path follows. This registry
+        alone only holds the secondary extractors (Bilibili, Instagram,
+        Xiaohongshu…): YouTube, TikTok, Douyin, Facebook and X — the bulk of
+        traffic, handled by the main downloader — all came back "unsupported"
+        while a job for the very same link downloaded fine.
         """
         if not url or not url.startswith(("http://", "https://")):
-            return {"status": "invalid", "platform": None, "message": "URL không hợp lệ"}
+            return {"status": "invalid", "platform": None, "source_type": None,
+                    "support_level": None, "message": "URL không hợp lệ"}
+        from app.core.source_classifier import classify  # noqa: PLC0415
+        from app.core.url_normalizer import extract_share_url, normalize  # noqa: PLC0415
+        from app.schemas.container import SUPPORT_LEVEL_LABELS  # noqa: PLC0415
+        from app.services.container_registry import get_capability  # noqa: PLC0415
+
+        canonical = normalize(extract_share_url(url) or url).canonical_url
+        clf = classify(canonical)
         ext = self.detect_safe(url)
-        if not ext:
-            return {
-                "status": "unsupported",
-                "platform": None,
-                "message": f"Nền tảng chưa được hỗ trợ: {url[:80]}",
-            }
-        return {
-            "status": "valid",
-            "platform": ext.platform_name,
-            "message": "OK",
-        }
+        known = clf.platform not in ("unknown", "generic")
+        platform = clf.platform if known else (ext.platform_name if ext else None)
+        level = get_capability(clf.platform, clf.source_type).support_level.value
+        base = {"platform": platform, "source_type": clf.source_type, "support_level": level}
+
+        if level in ("unsupported", "temporarily_disabled") and not ext:
+            # wording: BA review
+            return {**base, "status": "unsupported",
+                    "message": f"{SUPPORT_LEVEL_LABELS.get(level, level)}: {url[:80]}"}
+        if platform is None:
+            # A site we do not recognise may still download (generic
+            # extractor); say so instead of refusing it.
+            # wording: BA review
+            return {**base, "status": "unknown",
+                    "message": "Chưa nhận diện được nền tảng; VidGrab vẫn sẽ thử tải khi tạo job."}
+        return {**base, "status": "valid",
+                "message": SUPPORT_LEVEL_LABELS.get(level, "OK")}
 
     def validate_batch(self, urls: list[str]) -> dict:
         """
@@ -134,7 +156,7 @@ class ExtractorRegistry:
         """
         seen: set[str] = set()
         results = []
-        counts = {"valid": 0, "duplicate": 0, "unsupported": 0, "invalid": 0}
+        counts = {"valid": 0, "duplicate": 0, "unknown": 0, "unsupported": 0, "invalid": 0}
 
         for url in urls:
             url = url.strip()
@@ -155,6 +177,8 @@ class ExtractorRegistry:
         summary_parts = [f"{counts['valid']} hợp lệ"]
         if counts["duplicate"]:
             summary_parts.append(f"{counts['duplicate']} trùng lặp")
+        if counts["unknown"]:
+            summary_parts.append(f"{counts['unknown']} chưa nhận diện")
         if counts["unsupported"]:
             summary_parts.append(f"{counts['unsupported']} không hỗ trợ")
         if counts["invalid"]:
