@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import {
   Download, Layers, History, Wand2, Lock,
-  Sparkles, Smartphone, X, ShieldCheck, Puzzle, Lightbulb
+  Sparkles, Smartphone, X, ShieldCheck, Puzzle, Lightbulb, Code, Building2, ArrowRight
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { hasUsedBefore } from '../lib/returningUser';
 import { trackEvent, EVENT } from '../utils/trackEvent';
 import DashboardContent from './DashboardContent';
 import { spaLink } from '../lib/spaLink';
+import { SUPPORT_EMAIL } from '../lib/contact';
 import { platformPages } from '../content/platformPages';
 import BulkContent from './BulkContent';
 import HistoryContent from './HistoryContent';
@@ -363,6 +364,64 @@ export default function LandingPage() {
             </a>
           ))}
         </nav>
+
+        {/* wording: BA review (whole API section) */}
+        <section aria-labelledby="landing-api-title" className="w-full mt-12">
+          <h2 id="landing-api-title" className="text-lg font-semibold text-fg tracking-tight">
+            Kết nối VidGrab vào hệ thống của bạn (API)
+          </h2>
+          <p className="mt-1 text-sm text-fg-muted">
+            Tự động hoá việc tải video từ ứng dụng hoặc máy chủ của bạn, theo quy mô phù hợp.
+          </p>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="p-5 rounded-2xl bg-surface border border-line flex flex-col">
+              <div className="flex items-center gap-2">
+                <Code className="w-4 h-4 text-fg-2" aria-hidden="true" />
+                <h3 className="text-sm font-semibold text-fg">API key cá nhân</h3>
+              </div>
+              <p className="mt-2 text-xs text-fg-muted leading-relaxed">
+                Dành cho lập trình viên và nhu cầu nhỏ. Dùng gói Pro hoặc Team, tự tạo key ở trang API Keys,
+                rồi gọi <code className="bg-surface-2 px-1 rounded">POST /api/v1/fetch-link</code> với header{' '}
+                <code className="bg-surface-2 px-1 rounded">X-API-Key: vidgrab_…</code>. Kết quả trả về ngay trong một request.
+                Giới hạn 30 request/phút mỗi key, cùng số lượt/tháng theo gói.
+              </p>
+              <div className="pt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs mt-auto">
+                <a href="/api-docs" onClick={spaLink('/api-docs')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">
+                  Xem tài liệu API <ArrowRight className="w-3 h-3" aria-hidden="true" />
+                </a>
+                <a href="/api-keys" onClick={spaLink('/api-keys')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">
+                  Tạo API key <ArrowRight className="w-3 h-3" aria-hidden="true" />
+                </a>
+                <a href="/pricing" onClick={spaLink('/pricing')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">
+                  Xem bảng giá <ArrowRight className="w-3 h-3" aria-hidden="true" />
+                </a>
+              </div>
+            </div>
+            <div className="p-5 rounded-2xl bg-surface border border-line flex flex-col">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-fg-2" aria-hidden="true" />
+                <h3 className="text-sm font-semibold text-fg">Partner API cho doanh nghiệp</h3>
+              </div>
+              <p className="mt-2 text-xs text-fg-muted leading-relaxed">
+                Tích hợp từ backend của doanh nghiệp: job bất đồng bộ, webhook có chữ ký. Giới hạn theo từng key
+                (request/phút, job/ngày) và job/tháng theo hợp đồng; có thể khoá key theo IP máy chủ.
+                Key <code className="bg-surface-2 px-1 rounded">vgp_</code> do VidGrab cấp.
+              </p>
+              <div className="pt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs mt-auto">
+                <a href="/api-docs#partner" onClick={spaLink('/api-docs#partner')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">
+                  Tài liệu Partner API <ArrowRight className="w-3 h-3" aria-hidden="true" />
+                </a>
+                <span className="text-fg-muted">Liên hệ để nhận key:</span>
+                <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Đăng ký Partner API')}`} className="text-fg-2 hover:text-fg underline-offset-4 hover:underline">
+                  Email
+                </a>
+                <a href="https://t.me/vidgrab_support" target="_blank" rel="noopener noreferrer" className="text-fg-2 hover:text-fg underline-offset-4 hover:underline">
+                  Telegram
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* Share prompt */}
         {false && !shareShown && (

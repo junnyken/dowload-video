@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { usePlans } from '../lib/usePlans';
+import { SUPPORT_EMAIL } from '../lib/contact';
 import { Code, ExternalLink, CheckCircle2, AlertCircle, Key, Zap, Shield } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -110,6 +111,16 @@ export default function ApiDocsPage() {
     ? `Pro ${pro.api_calls_per_month.toLocaleString('vi-VN')} lượt/tháng`
     : pro && pro.api_calls_per_month === -1 ? 'Không giới hạn' : 'Theo gói tài khoản';
 
+  // Deep link /api-docs#partner: spaLink scrolls to top on navigation and the
+  // section only exists after render, so scroll once it has mounted.
+  useEffect(() => {
+    if (window.location.hash !== '#partner') return undefined;
+    const t = setTimeout(() => {
+      document.getElementById('partner')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+    return () => clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     fetch(`${API_BASE}/api/v1/api-info`)
       .then(r => r.json())
@@ -210,7 +221,10 @@ export default function ApiDocsPage() {
         </div>
         <p className="text-sm text-fg-muted">
           Dành cho doanh nghiệp gọi VidGrab từ máy chủ của mình. Key dạng <code className="bg-surface-2 px-1 rounded">vgp_</code> do VidGrab cấp,
-          bạn không tự tạo được. Muốn có key, hãy liên hệ VidGrab.
+          bạn không tự tạo được. Muốn có key, hãy liên hệ:{' '}
+          <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Đăng ký Partner API')}`} className="text-accent-text underline">{SUPPORT_EMAIL}</a>
+          {' '}hoặc Telegram{' '}
+          <a href="https://t.me/vidgrab_support" target="_blank" rel="noopener noreferrer" className="text-accent-text underline">@vidgrab_support</a>.
         </p>
         <div className="font-mono text-xs bg-surface-2 border border-line rounded-xl px-4 py-3 text-fg-2 space-y-1 overflow-x-auto">
           <div>X-API-Key: vgp_&lt;key&gt;</div>
