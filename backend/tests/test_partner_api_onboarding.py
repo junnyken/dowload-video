@@ -293,6 +293,10 @@ class _FakeTable:
         self.op, self.payload = "update", payload
         return self
 
+    def delete(self):
+        self.op = "delete"
+        return self
+
     def select(self, *_a, **_k):
         self.op = self.op or "select"
         return self
@@ -312,6 +316,10 @@ class _FakeTable:
             row = {"id": f"{self.name}-{len(rows) + 1}", **self.payload}
             rows.append(row)
             return SimpleNamespace(data=[dict(row)], count=None)
+        if self.op == "delete":
+            for r in match:
+                rows.remove(r)
+            return SimpleNamespace(data=[dict(r) for r in match], count=None)
         if self.op == "update":
             for r in match:
                 r.update(self.payload)
@@ -483,3 +491,30 @@ def test_validate_urls_batch_counts():
                                    "https://example.com/x", "not a url"])
     assert out["counts"] == {"valid": 1, "duplicate": 1, "unknown": 1, "unsupported": 0, "invalid": 1}
     assert "1 chưa nhận diện" in out["summary"]
+
+
+def test_delete_key(admin_db):
+    from app.api import admin_partners as ap
+    t = _run(ap.create_partner_tenant(ap.CreateTenantBody(name="ABC"), MagicMock()))
+    k = _run(ap.issue_partner_key(t["id"], ap.IssueKeyBody(), MagicMock()))
+    assert _run(ap.delete_partner_key(k["id"], MagicMock()))["success"]
+    assert admin_db.tables["tenant_api_keys"] == []
+    with pytest.raises(HTTPException) as e:
+        _run(ap.delete_partner_key(k["id"], MagicMock()))
+    assert e.value.status_code == 404
+
+
+def test_delete_partner_tenant(admin_db):
+    from app.api import admin_partners as ap
+    t = _run(ap.create_partner_tenant(ap.CreateTenantBody(name="ABC"), MagicMock()))
+    assert _run(ap.delete_partner_tenant(t["id"], MagicMock()))["success"]
+    assert admin_db.tables["tenants"] == []
+
+
+def test_web_linked_tenant_cannot_be_deleted(admin_db):
+    from app.api import admin_partners as ap
+    admin_db.tables["tenants"] = [{"id": "t-web", "name": "R27", "workspace_id": "ws-1"}]
+    with pytest.raises(HTTPException) as e:
+        _run(ap.delete_partner_tenant("t-web", MagicMock()))
+    assert e.value.status_code == 409
+    assert admin_db.tables["tenants"]          # still there

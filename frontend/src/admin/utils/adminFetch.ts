@@ -58,6 +58,10 @@ export async function adminPatch<T = unknown>(path: string, body?: unknown): Pro
   })
 }
 
+export async function adminDelete<T = unknown>(path: string): Promise<T> {
+  return adminFetch<T>(path, { method: 'DELETE' })
+}
+
 /**
  * Same admin session, different router prefix.
  *

@@ -4308,7 +4308,7 @@ async def list_enterprise_tenants(
 ):
     supabase = get_supabase_client()
     q = supabase.table("tenants").select(
-        "id, name, slug, plan, plan_seats, plan_api_calls_per_month, plan_storage_gb, "
+        "id, name, slug, workspace_id, plan, plan_seats, plan_api_calls_per_month, plan_storage_gb, "
         "status, trial_ends_at, subscription_id, license_expires_at, created_at, updated_at, "
         "tenant_settings(custom_domain, features)"
     )

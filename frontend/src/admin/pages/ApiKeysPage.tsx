@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { adminFetch, adminPatch, adminPost } from '../utils/adminFetch'
+import { adminDelete, adminFetch, adminPatch, adminPost } from '../utils/adminFetch'
 import { cn } from '../utils/cn'
 import { Button } from '../shared/Button'
 import {
@@ -126,6 +126,40 @@ function RotateModal({ k, onClose, onRotated }: { k: ApiKey; onClose: () => void
   )
 }
 
+function DeleteKeyModal({ k, onClose, onDeleted }: { k: ApiKey; onClose: () => void; onDeleted: () => void }) {
+  const [pending, setPending] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function confirm() {
+    setPending(true); setErr(null)
+    try {
+      await adminDelete(`/enterprise/api-keys/${k.id}`)
+      onDeleted()
+    } catch (e) {
+      setErr((e as Error).message)
+      setPending(false)
+    }
+  }
+
+  return (
+    // wording: BA review
+    <Modal title="Xoá key" subtitle={`${k.key_prefix}… · ${k.label}`} onClose={onClose} locked={pending}>
+      <div className="space-y-3">
+        <p className="text-sm text-fg-2">
+          Key sẽ bị xoá vĩnh viễn. Mọi hệ thống đang dùng key này sẽ nhận lỗi 401 ngay lập tức và không thể hoàn tác.
+          Các job đã chạy trước đó vẫn được giữ lại.
+        </p>
+        <p className="text-xs text-fg-muted">Nếu chỉ muốn tạm dừng key, hãy dùng nút “Deactivate” thay vì xoá.</p>
+        <FormError message={err} />
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose} disabled={pending}>Huỷ</Button>
+          <Button variant="danger" onClick={confirm} disabled={pending}>{pending ? 'Đang xoá…' : 'Xoá key vĩnh viễn'}</Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 function EditLimitsModal({ k, onClose, onSaved }: { k: ApiKey; onClose: () => void; onSaved: () => void }) {
   const initial = keyFormFromRow(k)
   const [form, setForm] = useState<KeyFormValues>(initial)
@@ -180,6 +214,7 @@ export default function ApiKeysPage() {
   const [msg, setMsg] = useState<Record<string, string>>({})
   const [rotateKey, setRotateKey] = useState<ApiKey | null>(null)
   const [editKey, setEditKey] = useState<ApiKey | null>(null)
+  const [deleteKey, setDeleteKey] = useState<ApiKey | null>(null)
   // One-time secret: lives only while the reveal modal is open.
   const [revealKey, setRevealKey] = useState<string | null>(null)
 
@@ -242,6 +277,9 @@ export default function ApiKeysPage() {
       )}
       {editKey && (
         <EditLimitsModal k={editKey} onClose={() => setEditKey(null)} onSaved={() => { setEditKey(null); fetchData() }} />
+      )}
+      {deleteKey && (
+        <DeleteKeyModal k={deleteKey} onClose={() => setDeleteKey(null)} onDeleted={() => { setDeleteKey(null); fetchData() }} />
       )}
       {revealKey && (
         // wording: BA review
@@ -382,6 +420,12 @@ export default function ApiKeysPage() {
                         className="rounded border border-line bg-surface px-2 py-1 text-[10px] font-medium text-fg hover:border-line-strong hover:bg-surface-2"
                       >
                         Đổi key
+                      </button>
+                      <button
+                        onClick={() => setDeleteKey(k)}
+                        className="rounded border border-danger/30 bg-danger-soft px-2 py-1 text-[10px] font-medium text-danger hover:border-danger/60"
+                      >
+                        Xoá key
                       </button>
                     </div>
                     {msg[k.id] && (

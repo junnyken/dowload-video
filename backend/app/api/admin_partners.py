@@ -16,6 +16,8 @@ Routes (all behind verify_admin, mounted under /api/v1/admin):
   POST  /enterprise/tenants/{id}/api-keys       — issue a key (raw key shown ONCE)
   POST  /enterprise/api-keys/{id}/rotate        — new secret, same key (shown ONCE)
   PATCH /enterprise/api-keys/{id}               — label / per-key limits / IP allowlist / expiry
+  DELETE /enterprise/api-keys/{id}              — delete a key for good
+  DELETE /enterprise/tenants/{id}               — delete a partner customer (not a web-linked one)
 """
 from __future__ import annotations
 
@@ -255,3 +257,38 @@ async def update_partner_key(key_id: str, body: UpdateKeyBody, request: Request,
         raise HTTPException(status_code=500, detail="Cập nhật thất bại")
     log_admin_action(request, "admin.api_key.updated", resource_type="api_key", resource_id=key_id)
     return _strip_hash(res.data[0])
+
+
+@router.delete("/enterprise/api-keys/{key_id}")
+async def delete_partner_key(key_id: str, request: Request, _=Depends(verify_admin)):
+    """Delete a key for good (the toggle only disables it). Its past jobs stay,
+    with api_key_id set to NULL (FK ON DELETE SET NULL)."""
+    _get_key(key_id)
+    get_supabase_client().table("tenant_api_keys").delete().eq("id", key_id).execute()
+    log_admin_action(request, "admin.api_key.deleted", resource_type="api_key", resource_id=key_id)
+    return {"success": True, "key_id": key_id}
+
+
+@router.delete("/enterprise/tenants/{tenant_id}")
+async def delete_partner_tenant(tenant_id: str, request: Request, _=Depends(verify_admin)):
+    """Delete a partner customer with its keys, jobs, settings, usage and
+    webhooks (all ON DELETE CASCADE). A tenant linked to a website workspace
+    is refused: it belongs to a web account, not to a partner created here."""
+    res = (
+        get_supabase_client().table("tenants")
+        .select("id, workspace_id")
+        .eq("id", tenant_id)
+        .maybe_single()
+        .execute()
+    )
+    if not res or not res.data:
+        raise HTTPException(status_code=404, detail="Không tìm thấy khách hàng")
+    if res.data.get("workspace_id"):
+        # wording: BA review
+        raise HTTPException(
+            status_code=409,
+            detail="Khách này gắn với một tài khoản trên web nên không xoá được ở đây. Hãy đổi trạng thái sang suspended.",
+        )
+    get_supabase_client().table("tenants").delete().eq("id", tenant_id).execute()
+    log_admin_action(request, "admin.tenant.deleted", resource_type="tenant", resource_id=tenant_id)
+    return {"success": True, "tenant_id": tenant_id}

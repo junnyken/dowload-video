@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { adminFetch, adminPost } from '../utils/adminFetch'
+import { adminDelete, adminFetch, adminPost } from '../utils/adminFetch'
 import { cn } from '../utils/cn'
 import { Button } from '../shared/Button'
 import {
@@ -23,6 +23,7 @@ interface Tenant {
   id: string
   name: string
   slug: string
+  workspace_id?: string | null
   plan: string
   plan_seats: number
   plan_api_calls_per_month: number
@@ -211,6 +212,46 @@ function EditCapModal({ tenant, onClose, onSaved }: { tenant: Tenant; onClose: (
   )
 }
 
+function DeleteTenantModal({ tenant, onClose, onDeleted }: { tenant: Tenant; onClose: () => void; onDeleted: () => void }) {
+  const [typed, setTyped] = useState('')
+  const [pending, setPending] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const matches = typed.trim() === tenant.name.trim()
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!matches) return
+    setPending(true); setErr(null)
+    try {
+      await adminDelete(`/enterprise/tenants/${tenant.id}`)
+      onDeleted()
+    } catch (e2) {
+      setErr((e2 as Error).message)
+      setPending(false)
+    }
+  }
+
+  return (
+    // wording: BA review
+    <Modal title="Xoá khách" subtitle={tenant.name} onClose={onClose} locked={pending}>
+      <form onSubmit={submit} className="space-y-3">
+        <p className="text-sm text-fg-2">
+          Xoá khách “{tenant.name}” sẽ xoá vĩnh viễn toàn bộ API key, lịch sử job, dữ liệu sử dụng, cài đặt và webhook của khách này.
+          Mọi hệ thống của khách sẽ nhận lỗi 401 ngay lập tức. Không thể hoàn tác.
+        </p>
+        <Field label={`Gõ đúng tên khách (“${tenant.name}”) để xác nhận`}>
+          <input className={inputCls} value={typed} disabled={pending} autoFocus onChange={e => setTyped(e.target.value)} />
+        </Field>
+        <FormError message={err} />
+        <div className="flex justify-end gap-2 pt-1">
+          <Button onClick={onClose} disabled={pending}>Huỷ</Button>
+          <Button type="submit" variant="danger" disabled={pending || !matches}>{pending ? 'Đang xoá…' : 'Xoá khách vĩnh viễn'}</Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
 function IssueKeyModal({ tenant, onClose, onIssued }: { tenant: Tenant; onClose: () => void; onIssued: (rawKey: string) => void }) {
   const [form, setForm] = useState<KeyFormValues>(DEFAULT_KEY_FORM)
   const [pending, setPending] = useState(false)
@@ -257,6 +298,7 @@ export default function TenantsPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [capTenant, setCapTenant] = useState<Tenant | null>(null)
   const [keyTenant, setKeyTenant] = useState<Tenant | null>(null)
+  const [deleteTenant, setDeleteTenant] = useState<Tenant | null>(null)
   // One-time secret: lives only while the reveal modal is open.
   const [revealKey, setRevealKey] = useState<string | null>(null)
 
@@ -335,6 +377,9 @@ export default function TenantsPage() {
           onClose={() => setKeyTenant(null)}
           onIssued={raw => { setKeyTenant(null); setRevealKey(raw); fetchData() }}
         />
+      )}
+      {deleteTenant && (
+        <DeleteTenantModal tenant={deleteTenant} onClose={() => setDeleteTenant(null)} onDeleted={() => { setDeleteTenant(null); fetchData() }} />
       )}
       {revealKey && (
         // wording: BA review
@@ -437,6 +482,18 @@ export default function TenantsPage() {
                       >
                         Sửa hạn mức
                       </button>
+                      {/* wording: BA review */}
+                      <button
+                        disabled={!!t.workspace_id}
+                        title={t.workspace_id ? 'Gắn với tài khoản web — chỉ tạm ngưng được' : undefined}
+                        onClick={() => setDeleteTenant(t)}
+                        className="rounded border border-danger/30 bg-danger-soft px-2 py-1 text-[10px] font-medium text-danger hover:border-danger/60 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Xoá khách
+                      </button>
+                      {t.workspace_id && (
+                        <span className="text-[10px] text-fg-muted">Gắn với tài khoản web — chỉ tạm ngưng được</span>
+                      )}
                       {/* Plan change */}
                       <select
                         disabled={actionInProgress[t.id + '_plan']}
