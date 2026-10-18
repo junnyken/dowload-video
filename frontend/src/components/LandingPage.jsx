@@ -382,8 +382,8 @@ export default function LandingPage() {
               <p className="mt-2 text-xs text-fg-muted leading-relaxed">
                 Dành cho lập trình viên và nhu cầu nhỏ. Dùng gói Pro hoặc Team, tự tạo key ở trang API Keys,
                 rồi gọi <code className="bg-surface-2 px-1 rounded">POST /api/v1/fetch-link</code> với header{' '}
-                <code className="bg-surface-2 px-1 rounded">X-API-Key: vidgrab_…</code>. Kết quả trả về ngay trong một request.
-                Giới hạn 30 request/phút mỗi key, cùng số lượt/tháng theo gói.
+                <code className="bg-surface-2 px-1 rounded">X-API-Key: vidgrab_…</code>. Request giữ kết nối đến khi tải xong rồi trả kết quả.
+                Giới hạn 30 lượt tải/phút mỗi key, cùng số lượt gọi/tháng theo gói.
               </p>
               <div className="pt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs mt-auto">
                 <a href="/api-docs" onClick={spaLink('/api-docs')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">

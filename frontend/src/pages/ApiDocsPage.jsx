@@ -72,7 +72,7 @@ const ENDPOINTS = [
 const PARTNER_ENDPOINTS = [
   { method: 'POST', path: '/jobs', note: 'Tạo job tải. Body: { url, quality }. Trả 202 cùng thông tin job.' },
   { method: 'GET', path: '/jobs/{id}', note: 'Xem trạng thái và kết quả của một job.' },
-  { method: 'GET', path: '/jobs?status=&limit=', note: 'Liệt kê job của key, lọc theo trạng thái.' },
+  { method: 'GET', path: '/jobs?status=&limit=', note: 'Liệt kê job của tài khoản (mọi key), lọc theo trạng thái.' },
   { method: 'DELETE', path: '/jobs/{id}', note: 'Huỷ job đang chờ.' },
   { method: 'GET', path: '/usage', note: 'Xem mức dùng trong ngày và trong tháng so với hạn mức.' },
   { method: 'POST', path: '/webhooks', note: 'Đăng ký webhook (URL HTTPS) nhận sự kiện job.completed, job.failed.' },
@@ -251,7 +251,7 @@ X-API-Key: vgp_<key>
         <ul className="text-xs text-fg-muted space-y-1.5 list-disc list-inside">
           <li>Request/phút tính theo key (mặc định 60). Vượt giới hạn: HTTP 429 kèm header <code className="bg-surface-2 px-1 rounded">Retry-After</code>.</li>
           <li>Job/ngày tính theo key (mặc định 10.000).</li>
-          <li>Job/tháng theo hợp đồng. Hết hạn mức: HTTP 429 với <code className="bg-surface-2 px-1 rounded">{'{"error_code":"monthly_quota_exceeded","reset_at":"…"}'}</code>.</li>
+          <li>Job/ngày hoặc job/tháng hết hạn mức: HTTP 429 với <code className="bg-surface-2 px-1 rounded">{'{"detail":{"code":"rate_limit_exceeded" | "monthly_quota_exceeded","reset_at":"…"}}'}</code>, chờ đến <code className="bg-surface-2 px-1 rounded">reset_at</code>.</li>
           <li>Poll <code className="bg-surface-2 px-1 rounded">GET /jobs/{'{id}'}</code> không bị trừ hạn mức job.</li>
         </ul>
       </div>
@@ -344,7 +344,7 @@ X-API-Key: vgp_<key>
           <li>Chỉ retry khi <code className="text-fg-2">retryable: true</code>.</li>
           <li>Dùng exponential backoff: 1s → 2s → 4s → 8s (tối đa 3 lần).</li>
           {/* wording: BA review */}
-          <li>HTTP 429 với key <code className="text-fg-2">vidgrab_</code>: đợi khoảng một phút rồi thử lại (không có header Retry-After). HTTP 429 của Partner API (key <code className="text-fg-2">vgp_</code>) có header <code className="text-fg-2">Retry-After</code>: đợi đúng số giây đó.</li>
+          <li>HTTP 429 với key <code className="text-fg-2">vidgrab_</code>: đợi khoảng một phút rồi thử lại (không có header Retry-After). Partner API (key <code className="text-fg-2">vgp_</code>): vượt request/phút thì có header <code className="text-fg-2">Retry-After</code>, đợi đúng số giây đó; hết job/ngày hoặc job/tháng thì chờ đến <code className="text-fg-2">reset_at</code>, thử lại sớm hơn vẫn bị 429.</li>
           <li>HTTP 5xx: retry với backoff; HTTP 4xx (ngoại trừ 429): không retry.</li>
           {/* wording: BA review */}
           <li>/fetch-link là đồng bộ: chờ response của chính request đó, đừng gửi lại khi chưa có kết quả (mỗi lần gửi tính một lượt tải). Muốn hiện tiến độ, tự đặt <code className="text-fg-2">progress_token</code> và poll <code className="text-fg-2">/progress/{'{token}'}</code>.</li>

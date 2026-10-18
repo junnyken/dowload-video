@@ -352,7 +352,7 @@ export default function ApiKeysPage() {
                   </td>
                   <td className="px-3 py-2.5 font-mono text-fg-muted">
                     <div>{k.rate_limit_per_min}/phút</div>
-                    <div>{k.rate_limit_per_day.toLocaleString()}/ngày</div>
+                    <div>{k.rate_limit_per_day.toLocaleString('vi-VN')}/ngày</div>
                   </td>
                   <td className="px-3 py-2.5 font-mono text-fg-muted">{formatRelative(k.last_used_at)}</td>
                   <td className="px-3 py-2.5 font-mono text-fg-muted">{formatDate(k.expires_at)}</td>
