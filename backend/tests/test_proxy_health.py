@@ -119,3 +119,31 @@ def test_list_endpoint_shows_health_priority_and_cooldown(fr, tg, monkeypatch):
     assert a["priority"] == "main" and a["health"]["alive"] is False and a["cooling_s"] > 0
     assert b["priority"] == "backup" and b["health"]["alive"] is True and b["cooling_s"] == 0
     assert "secretA" not in str(out)
+
+
+# ── input normalisation (19/10: a curl tail was pasted into the pool) ────────
+
+@pytest.mark.parametrize("raw,want", [
+    ("http://u1:pw@thehub.proxy-cheap.com:8080 https://ipv4.icanhazip.com", "http://u1:pw@thehub.proxy-cheap.com:8080"),
+    ("curl -v -x http://u1:pw@thehub.proxy-cheap.com:8080 https://ipv4.icanhazip.com", "http://u1:pw@thehub.proxy-cheap.com:8080"),
+    ("thehub.proxy-cheap.com:8080:u1:pw", "http://u1:pw@thehub.proxy-cheap.com:8080"),
+    ("u1:pw@gw.dataimpulse.com:823", "http://u1:pw@gw.dataimpulse.com:823"),
+    ("  'socks5://u1:pw@1.2.3.4:1080/'  ", "socks5://u1:pw@1.2.3.4:1080"),
+    ("1.2.3.4:3128", "http://1.2.3.4:3128"),
+])
+def test_normalize_proxy_url(raw, want):
+    from app.core.proxy_pool import normalize_proxy_url
+    assert normalize_proxy_url(raw) == want
+
+
+@pytest.mark.parametrize("raw", ["", "   ", "https://ipv4.icanhazip.com/path", "thehub.proxy-cheap.com", "u:p@host:99999", "not a proxy"])
+def test_normalize_rejects_garbage(raw):
+    from app.core.proxy_pool import normalize_proxy_url
+    with pytest.raises(ValueError):
+        normalize_proxy_url(raw)
+
+
+def test_unsupported_syntax_is_labelled():
+    from app.core.proxy_health import classify_error, KIND_LABEL
+    k = classify_error("ProxyError: Failed to perform, curl: (5) Unsupported proxy syntax in '?': Malformed")
+    assert k == "invalid_format" and "định dạng" in KIND_LABEL[k]

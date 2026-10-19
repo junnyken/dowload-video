@@ -2659,13 +2659,14 @@ async def proxy_pool_status(_=Depends(verify_admin)):
 @router.post("/proxies/add")
 async def proxy_pool_add(req: ProxyAddRequest, request: Request, _=Depends(verify_admin)):
     """Add a proxy URL to the pool for a platform."""
-    if not req.proxy_url.strip():
-        raise HTTPException(status_code=400, detail="proxy_url is required")
-    if not req.proxy_url.startswith(("http://", "https://", "socks5://")):
-        raise HTTPException(status_code=400, detail="proxy_url must start with http://, https://, or socks5://")
+    from app.core.proxy_pool import normalize_proxy_url
+    try:
+        url = normalize_proxy_url(req.proxy_url)
+    except ValueError as exc:
+        # wording: BA review
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
         from app.core.proxy_pool import add_proxy
-        url = req.proxy_url.strip()
         new_size = add_proxy(req.platform, url)
         # Mask credentials in audit log (keep scheme+host only)
         import re as _re
@@ -2675,7 +2676,17 @@ async def proxy_pool_add(req: ProxyAddRequest, request: Request, _=Depends(verif
             resource_type="proxy_pool", resource_id=req.platform,
             metadata={"proxy_masked": masked, "pool_size": new_size},
         )
-        return {"success": True, "platform": req.platform, "pool_size": new_size}
+        # Check the new proxy right away so the admin sees alive/dead now,
+        # not at the next 10-minute run.
+        health = None
+        try:
+            import asyncio as _aio
+            from app.core import proxy_health as _ph
+            health = await _aio.to_thread(_ph.run, req.platform)
+        except Exception:
+            pass
+        return {"success": True, "platform": req.platform, "pool_size": new_size,
+                "normalized": masked, "health": health}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

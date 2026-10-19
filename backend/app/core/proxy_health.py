@@ -55,6 +55,7 @@ KIND_LABEL = {
     "connect_failed": "Không kết nối được tới proxy",
     "tunnel_failed": "Proxy từ chối mở kết nối",
     "youtube_blocked": "Sống nhưng YouTube chặn IP này",
+    "invalid_format": "Sai định dạng proxy — xoá và thêm lại",
     "error": "Lỗi khác",
 }
 
@@ -70,6 +71,8 @@ def _d(v) -> str:
 
 def classify_error(text: str) -> str:
     t = (text or "").lower()
+    if "unsupported proxy syntax" in t or "malformed" in t or "bad url" in t:
+        return "invalid_format"
     if "traffic" in t and ("exhaust" in t or "limit" in t) or "402" in t or "payment required" in t:
         return "traffic_exhausted"
     if "407" in t or "proxy authentication" in t:

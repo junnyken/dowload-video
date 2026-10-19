@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { adminFetch, adminPost } from '../utils/adminFetch'
 import { cn } from '../utils/cn'
 import { ScraperApiPanel } from '../panels/ScraperApiPanel'
-import { CheckCircle2, XCircle, HelpCircle, RefreshCw, Loader2 } from 'lucide-react'
+import { CheckCircle2, XCircle, HelpCircle, RefreshCw, Loader2, ExternalLink } from 'lucide-react'
 
 interface ProxyPoolItem {
   redis_pool: number
@@ -385,15 +385,26 @@ export function ProxyPage() {
     }
   }, [fetchPools])
 
+  const [addOk, setAddOk] = useState('')
+
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
     setAddError('')
     if (!addPlatform || !addUrl) { setAddError('Platform and proxy URL are required.'); return }
-    if (!addUrl.match(/^(https?|socks5):\/\//)) { setAddError('URL must start with http://, https://, or socks5://'); return }
+    // The server cleans the input (a pasted curl command, host:port:user:pass …)
+    // and rejects what is not a proxy; no client-side scheme check any more.
+    setAddOk('')
     setAdding(true)
     try {
-      await adminPost<unknown>('/proxies/add', { platform: addPlatform, proxy_url: addUrl } as ProxyAddPayload)
+      const res = await adminPost<{ normalized?: string; health?: { results?: { alive: boolean; label: string; ms: number | null; country: string | null }[] } }>(
+        '/proxies/add', { platform: addPlatform, proxy_url: addUrl } as ProxyAddPayload)
+      const last = res.health?.results?.[res.health.results.length - 1]
+      // wording: BA review
+      setAddOk(`Đã thêm ${res.normalized ?? ''}` + (last
+        ? (last.alive ? ` — Sống${last.ms != null ? ` · ${last.ms} ms` : ''}${last.country ? ` · ${last.country}` : ''}` : ` — ${last.label}`)
+        : ''))
       setAddUrl('')
+      setHealthKey(k => k + 1)
       await fetchPools()
     } catch (e) {
       setAddError(e instanceof Error ? e.message : 'Failed to add proxy')
@@ -454,9 +465,20 @@ export function ProxyPage() {
             Auto-refresh every 30s — last updated {formattedTime}
           </p>
         </div>
-        <button onClick={fetchPools} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
-          ↺ Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Where the proxies are bought (owner 19/10). wording: BA review */}
+          <a href="https://dataimpulse.com/" target="_blank" rel="noopener noreferrer"
+             className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
+            Mua proxy DataImpulse <ExternalLink className="h-3 w-3" aria-hidden />
+          </a>
+          <a href="https://www.proxy-cheap.com/" target="_blank" rel="noopener noreferrer"
+             className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
+            Mua proxy proxy-cheap <ExternalLink className="h-3 w-3" aria-hidden />
+          </a>
+          <button onClick={fetchPools} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
+            ↺ Refresh
+          </button>
+        </div>
       </div>
 
       <HealthCard refreshKey={healthKey} onRan={() => setHealthKey(k => k + 1)} />
@@ -549,7 +571,7 @@ export function ProxyPage() {
             <label className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">Proxy URL</label>
             <input
               type="text"
-              placeholder="http://user:pass@host:port"
+              placeholder="http://user:pass@host:port  hoặc  host:port:user:pass"
               value={addUrl}
               onChange={e => setAddUrl(e.target.value)}
               className="w-full rounded-card border border-line bg-surface shadow-card px-3 py-2 text-sm text-fg-2 placeholder:text-fg-muted outline-none focus:border-line-strong"
@@ -564,6 +586,7 @@ export function ProxyPage() {
           </button>
         </form>
         {addError && <p className="mt-2 text-xs text-danger">{addError}</p>}
+        {addOk && <p className="mt-2 text-xs text-success">{addOk}</p>}
         {/* wording: BA review */}
         <p className="mt-3 text-[11px] text-fg-muted">
           Thứ tự là thứ tự ưu tiên: proxy thêm trước là proxy chính, proxy thêm sau là dự phòng — chỉ dùng khi proxy
