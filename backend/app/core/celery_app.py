@@ -133,6 +133,7 @@ celery_app.conf.update(
         # yt-dlp in a subprocess, minutes long, network-bound.
         'ytdlp_auto_update': {'queue': 'light'},
         'capacity_sample': {'queue': 'light'},
+        'proxy_health_check': {'queue': 'light'},
         'ytdlp_remediate': {'queue': 'light'},
         'retest_cookie_pool_daily': {'queue': 'light'},   # network probes, up to minutes (task #6127)
         'expire_analysis_jobs_task': {'queue': 'analysis'},
@@ -296,6 +297,13 @@ celery_app.conf.update(
             'task': 'capacity_sample',
             'schedule': 60.0,
             'options': {'expires': 55},
+        },
+        # Every admin proxy alive/dead + why; dead ones cooled so the pool
+        # fails over before a download hits them (app.core.proxy_health).
+        'proxy-health-every-10min': {
+            'task': 'proxy_health_check',
+            'schedule': 600.0,
+            'options': {'expires': 540},
         },
         # Phase 14 — Health checks (fail rate + disk + queue) every 5 min
         'run-health-checks-every-5min': {

@@ -160,3 +160,21 @@ async def capacity_settings(body: CapacitySettingsBody, request: Request, _=Depe
     log_admin_action(request, "admin.capacity.max_concurrent", resource_type="setting",
                      resource_id=str(value))
     return {"max_concurrent_downloads": value, "source": capacity.setting_source()}
+
+
+# ── Proxy health ─────────────────────────────────────────────────────────────
+
+@router.get("/proxies/health")
+async def proxies_health(_=Depends(verify_admin)):
+    from app.core import proxy_health
+    return proxy_health.last_summary() or {"at": None, "total": 0, "alive": 0, "results": []}
+
+
+@router.post("/proxies/health/run")
+async def proxies_health_run(request: Request, pool: str | None = None, _=Depends(verify_admin)):
+    """Check now (every pool, or one). Takes up to ~15 s per slow proxy."""
+    import asyncio
+    from app.core import proxy_health
+    out = await asyncio.to_thread(proxy_health.run, pool)
+    log_admin_action(request, "admin.proxy.health_run", resource_type="proxy", resource_id=pool or "all")
+    return out

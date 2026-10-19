@@ -2976,7 +2976,18 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                                     "proxy_exhausted" if _vr_exhausted else _e2s[:40],
                                     fallback=True, ms=int((_time.time() - _t) * 1000))
                             if _vr_exhausted:
-                                break  # re-rolling the IP won't restore quota
+                                # Re-rolling the IP won't restore quota — but a
+                                # backup proxy in the admin pool will (19/10).
+                                try:
+                                    from app.core.proxy_pool import next_proxy_after_failure as _npf
+                                    _nxt = _npf("youtube", _yt_proxy, _e2s[:60])
+                                except Exception:
+                                    _nxt = None
+                                if _nxt:
+                                    _yt_proxy = _nxt
+                                    _vr_exhausted = False
+                                    continue
+                                break
                         # else: bot-block / transient → loop re-rolls the exit IP
 
                     # Proxy out of traffic → cool it down so the pool rotates

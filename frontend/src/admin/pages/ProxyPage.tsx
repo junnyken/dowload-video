@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { adminFetch, adminPost } from '../utils/adminFetch'
 import { cn } from '../utils/cn'
 import { ScraperApiPanel } from '../panels/ScraperApiPanel'
+import { CheckCircle2, XCircle, HelpCircle, RefreshCw, Loader2 } from 'lucide-react'
 
 interface ProxyPoolItem {
   redis_pool: number
@@ -14,9 +15,141 @@ interface ProxyStatusResponse {
   pools: Record<string, ProxyPoolItem>
 }
 
+interface ProxyHealth {
+  alive: boolean
+  kind: string
+  label: string
+  ms: number | null
+  ip: string | null
+  country: string | null
+  youtube_ok: boolean | null
+  detail: string | null
+  at: number
+}
+
 interface MaskedProxy {
   index: number
   masked_url: string
+  priority?: 'main' | 'backup'
+  health?: ProxyHealth | null
+  cooling_s?: number
+}
+
+interface HealthSummary {
+  at: number | null
+  total: number
+  alive: number
+  results?: unknown[]
+  skipped?: string
+}
+
+function relativeTime(epochSec: number): string {
+  const diff = Math.max(0, Math.floor(Date.now() / 1000 - epochSec))
+  if (diff < 60) return 'vừa xong' // wording: BA review
+  if (diff < 3600) return `${Math.floor(diff / 60)} phút trước` // wording: BA review
+  if (diff < 86400) return `${Math.floor(diff / 3600)} giờ trước` // wording: BA review
+  return `${Math.floor(diff / 86400)} ngày trước` // wording: BA review
+}
+
+function HealthBadge({ h }: { h: ProxyHealth | null | undefined }) {
+  const base = 'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold'
+  if (!h) {
+    return (
+      <span className={cn(base, 'bg-surface-2 text-fg-muted border border-line')}>
+        <HelpCircle className="h-3 w-3" aria-hidden="true" />
+        {/* wording: BA review */}
+        Chưa kiểm
+      </span>
+    )
+  }
+  if (h.alive) {
+    const parts = ['Sống'] // wording: BA review
+    if (h.ms != null) parts.push(`${h.ms} ms`)
+    if (h.country) parts.push(h.country)
+    return (
+      <span className={cn(base, 'bg-success-soft text-success')}>
+        <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+        {parts.join(' · ')}
+      </span>
+    )
+  }
+  return (
+    <span className={cn(base, 'bg-danger-soft text-danger')}>
+      <XCircle className="h-3 w-3" aria-hidden="true" />
+      {h.label}
+    </span>
+  )
+}
+
+function HealthCard({ refreshKey, onRan }: { refreshKey: number; onRan: () => void }) {
+  const [summary, setSummary] = useState<HealthSummary | null>(null)
+  const [running, setRunning] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      const data = await adminFetch<HealthSummary>('/proxies/health')
+      setSummary(data)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Không tải được tình trạng proxy') // wording: BA review
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load, refreshKey])
+
+  async function run() {
+    setRunning(true)
+    setErr(null)
+    setNote(null)
+    try {
+      const data = await adminPost<HealthSummary>('/proxies/health/run', {})
+      if (data.skipped) setNote(data.skipped)
+      else setSummary(data)
+      onRan()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Kiểm tra thất bại') // wording: BA review
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return (
+    <div className="rounded-card border border-line bg-surface shadow-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          {/* wording: BA review */}
+          <h3 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">Tình trạng proxy</h3>
+          <p className="mt-1 text-sm text-fg" aria-live="polite">
+            {/* wording: BA review */}
+            {summary == null
+              ? 'Đang tải…'
+              : summary.at == null
+                ? 'Chưa kiểm lần nào'
+                : `${summary.alive}/${summary.total} proxy đang sống · kiểm lúc ${relativeTime(summary.at)}`}
+          </p>
+        </div>
+        <button
+          onClick={run}
+          disabled={running}
+          className="inline-flex items-center gap-1.5 rounded-control border border-line bg-surface px-3 py-1.5 text-xs font-medium text-fg hover:border-line-strong hover:bg-surface-2 disabled:opacity-50 transition-colors"
+        >
+          {running
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            : <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />}
+          {/* wording: BA review */}
+          {running ? 'Đang kiểm tra…' : 'Kiểm tra ngay'}
+        </button>
+      </div>
+      {err && <p className="mt-2 text-xs text-danger" role="alert">{err}</p>}
+      {note && <p className="mt-2 text-xs text-warning">{note}</p>}
+      {/* wording: BA review */}
+      <p className="mt-2 text-[11px] text-fg-muted">
+        Hệ thống tự kiểm mỗi 10 phút. Proxy chết bị tạm bỏ qua để proxy dự phòng phục vụ; sống lại thì tự dùng lại.
+        Có báo Telegram khi đổi trạng thái.
+      </p>
+    </div>
+  )
 }
 
 interface ProxyListResponse {
@@ -95,9 +228,11 @@ function SummaryCard({ label, value, sub }: { label: string; value: string | num
 function ExpandedProxies({
   platform,
   onRemoved,
+  refreshKey = 0,
 }: {
   platform: string
   onRemoved: () => void
+  refreshKey?: number
 }) {
   const [proxies, setProxies] = useState<MaskedProxy[]>([])
   const [loading, setLoading] = useState(true)
@@ -106,7 +241,6 @@ function ExpandedProxies({
   const [removeMsg, setRemoveMsg] = useState<Record<number, string>>({})
 
   const fetchProxies = useCallback(async () => {
-    setLoading(true)
     try {
       const data = await adminFetch<ProxyListResponse>(`/proxies/list/${platform}`)
       setProxies(data.proxies ?? [])
@@ -118,7 +252,7 @@ function ExpandedProxies({
     }
   }, [platform])
 
-  useEffect(() => { fetchProxies() }, [fetchProxies])
+  useEffect(() => { fetchProxies() }, [fetchProxies, refreshKey])
 
   async function handleRemove(index: number) {
     setRemoving(r => ({ ...r, [index]: true }))
@@ -164,10 +298,31 @@ function ExpandedProxies({
   return (
     <div className="px-6 py-3 space-y-1.5">
       {proxies.map(px => (
-        <div key={px.index} className="flex items-center justify-between gap-3 rounded-control border border-line bg-surface px-3 py-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="font-mono text-[10px] text-fg-muted flex-shrink-0">#{px.index}</span>
-            <span className="font-mono text-[11px] text-fg-muted truncate">{px.masked_url}</span>
+        <div key={px.index} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-control border border-line bg-surface px-3 py-2">
+          <div className="flex min-w-0 flex-1 basis-full flex-col gap-1.5 sm:basis-0">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="font-mono text-[10px] text-fg-muted flex-shrink-0">#{px.index}</span>
+              <span className="font-mono text-[11px] text-fg-muted truncate">{px.masked_url}</span>
+            </div>
+            <div
+              className="flex flex-wrap items-center gap-1.5"
+              title={[px.health?.detail, px.health?.ip ? `IP: ${px.health.ip}` : null].filter(Boolean).join(' — ') || undefined}
+            >
+              {/* wording: BA review */}
+              <span className={cn(
+                'rounded border px-1.5 py-0.5 text-[10px] font-semibold',
+                px.priority === 'main' ? 'border-accent text-accent' : 'border-line text-fg-muted'
+              )}>
+                {px.priority === 'main' ? 'Chính' : 'Dự phòng'}
+              </span>
+              <HealthBadge h={px.health} />
+              {(px.cooling_s ?? 0) > 0 && (
+                <span className="text-[10px] text-fg-muted">
+                  {/* wording: BA review */}
+                  đang tạm bỏ qua ~{Math.max(1, Math.ceil((px.cooling_s ?? 0) / 60))} phút
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {removeMsg[px.index] && (
@@ -202,6 +357,11 @@ export function ProxyPage() {
   const [adding, setAdding] = useState(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date())
+  const [healthKey, setHealthKey] = useState(0)
+  const [liveSummary, setLiveSummary] = useState<HealthSummary | null>(null)
+  useEffect(() => {
+    adminFetch<HealthSummary>('/proxies/health').then(setLiveSummary).catch(() => setLiveSummary(null))
+  }, [healthKey])
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchPools = useCallback(async () => {
@@ -272,10 +432,15 @@ export function ProxyPage() {
   // Optional platforms with 0 proxies are normal — they download direct.
   const essentialMissing = platforms.some(p => PROXY_ESSENTIAL.has(p) && pools[p].total === 0)
   const anyMissing       = platforms.some(p => pools[p].total === 0)
-  const healthStatus = essentialMissing ? 'Degraded' : anyMissing ? 'Partial' : 'Healthy'
+  // A dead proxy (last live check) outranks the count-based states: the card
+  // read "Healthy" while the main proxy was out of traffic.
+  const deadCount = liveSummary && liveSummary.at != null ? liveSummary.total - liveSummary.alive : 0
+  // wording: BA review
+  const healthStatus = deadCount > 0 ? `${deadCount} proxy chết`
+    : essentialMissing ? 'Degraded' : anyMissing ? 'Partial' : 'Healthy'
   const healthColor =
     healthStatus === 'Healthy'  ? 'text-success' :
-    healthStatus === 'Degraded' ? 'text-danger'     : 'text-warning'
+    healthStatus === 'Degraded' || deadCount > 0 ? 'text-danger'     : 'text-warning'
 
   const formattedTime = lastRefreshed.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
@@ -293,6 +458,8 @@ export function ProxyPage() {
           ↺ Refresh
         </button>
       </div>
+
+      <HealthCard refreshKey={healthKey} onRan={() => setHealthKey(k => k + 1)} />
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -351,7 +518,7 @@ export function ProxyPage() {
                 {expanded[p] && (
                   <tr key={`${p}-detail`} className="border-b border-line bg-surface-2">
                     <td colSpan={5} className="py-1">
-                      <ExpandedProxies platform={p} onRemoved={fetchPools} />
+                      <ExpandedProxies platform={p} onRemoved={fetchPools} refreshKey={healthKey} />
                     </td>
                   </tr>
                 )}
@@ -397,6 +564,11 @@ export function ProxyPage() {
           </button>
         </form>
         {addError && <p className="mt-2 text-xs text-danger">{addError}</p>}
+        {/* wording: BA review */}
+        <p className="mt-3 text-[11px] text-fg-muted">
+          Thứ tự là thứ tự ưu tiên: proxy thêm trước là proxy chính, proxy thêm sau là dự phòng — chỉ dùng khi proxy
+          trước lỗi hoặc hết dung lượng (nghỉ 1 giờ rồi thử lại proxy chính; có báo Telegram khi chuyển).
+        </p>
       </div>
 
       <ScraperApiPanel />

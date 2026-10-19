@@ -2725,11 +2725,15 @@ async def proxy_pool_list(platform: str, _=Depends(verify_admin)):
         rc = get_redis()
         pool_key = f"proxy_pool:{platform}"
         raw_list = rc.lrange(pool_key, 0, -1) or []
+        from app.core import proxy_health as _ph
         masked = []
         for i, p in enumerate(raw_list):
             url = p.strip() if isinstance(p, str) else p.decode() if isinstance(p, bytes) else str(p)
             m = _re.sub(r"(https?://|socks5://)[^@]+@", r"\1***:***@", url)
-            masked.append({"index": i, "masked_url": m})
+            # 2026-10-19: last health check + cooldown. Index order is the
+            # priority order (first = main proxy, next = backups).
+            masked.append({"index": i, "masked_url": m, "health": _ph.stored(url),
+                           "cooling_s": _ph.cooling_seconds(url), "priority": "main" if i == 0 else "backup"})
         return {"success": True, "platform": platform, "proxies": masked, "count": len(masked)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
