@@ -11,6 +11,13 @@ os.environ.setdefault("SUPABASE_URL", "http://localhost:54321")
 os.environ.setdefault("SUPABASE_KEY", "test-anon-key")
 os.environ.setdefault("REDIS_URL",    "redis://localhost:6379/15")  # db 15 = isolated
 os.environ.setdefault("ENV",          "test")
+# Never the developer's real keys (backend/.env is loaded by the app with
+# load_dotenv, which does not override what is already set): with
+# SUPABASE_SERVICE_KEY from .env the cookie store switched to encryption and
+# four plaintext cookie tests failed on one machine and passed on another
+# (2026-10-19). Encryption tests set their own key with monkeypatch.
+os.environ["SUPABASE_SERVICE_KEY"] = ""
+os.environ["COOKIE_POOL_ENCRYPTION_KEY"] = ""
 
 # ── Load the real app.main FIRST, for the whole test session ──────────────────
 # conftest.py is guaranteed by pytest to be imported before any test module is

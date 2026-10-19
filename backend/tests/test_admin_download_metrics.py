@@ -280,21 +280,8 @@ def test_4k_guard_after_success_is_not_counted_twice(app, route, rc, sync_outcom
 
 
 def _admin_dependencies(app_obj):
-    """Every verify_admin callable the mounted admin routes actually depend on.
-
-    test_admin_security reloads app.api.admin, after which the module's
-    `verify_admin` is a new object while the routes still hold the original —
-    so override what the routes hold, not the module attribute."""
-    found = set()
-    for route in app_obj.routes:
-        dep = getattr(route, "dependant", None)
-        stack = list(getattr(dep, "dependencies", []) or [])
-        while stack:
-            d = stack.pop()
-            if getattr(d.call, "__name__", "") == "verify_admin":
-                found.add(d.call)
-            stack.extend(d.dependencies or [])
-    return found
+    from tests._route_helpers import admin_dependencies
+    return admin_dependencies(app_obj)
 
 @pytest.fixture
 def admin(monkeypatch):

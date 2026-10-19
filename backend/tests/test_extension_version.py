@@ -53,14 +53,8 @@ def test_setter_needs_admin_and_feeds_endpoint(app, monkeypatch):
     monkeypatch.setattr(routes, "_extension_zip_path", lambda: None)
     assert app.post("/api/v1/admin/config/extension_min_version", json={"value": "5.5.0"}).status_code in (401, 403)
     # override what the mounted routes hold (test_admin_security reloads app.api.admin)
-    deps = set()
-    for route in fastapi_app.routes:
-        stack = list(getattr(getattr(route, "dependant", None), "dependencies", []) or [])
-        while stack:
-            d = stack.pop()
-            if getattr(d.call, "__name__", "") == "verify_admin":
-                deps.add(d.call)
-            stack.extend(d.dependencies or [])
+    from tests._route_helpers import admin_dependencies
+    deps = admin_dependencies(fastapi_app)
     for d in deps:
         fastapi_app.dependency_overrides[d] = lambda: None
     try:
