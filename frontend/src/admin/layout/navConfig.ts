@@ -75,16 +75,17 @@ const NAV_MANAGE: NavItem[] = [
   { href: '/vid-admin/automation-history', label: 'Automation', icon: History, minRole: 'viewer' },
 ]
 
-// The partner/multi-tenant surface. Every page here reads a table that is
-// empty or holds only the August "R27 Pilot Tenant" trial data — api_keys,
-// webhook_endpoints, analysis_jobs, payment_events, user_credits and
-// user_presets are all at zero rows. Re-list a line here the day that feature
-// has real customers.
+// The partner/multi-tenant surface. Tenants, API Keys, Webhooks and Usage are
+// listed again since 19/10: the Partner API now has admin onboarding (create a
+// customer, issue/rotate/delete vgp_ keys) and is offered on the homepage.
+// The rest still read tables at zero rows (analysis_jobs, payment_events,
+// user_credits, user_presets) — re-list a line the day it has real use.
 const NAV_ENTERPRISE: NavItem[] = [
-  { href: '/vid-admin/tenants',     label: 'Tenants',     icon: Building2,         minRole: 'admin', hidden: true },
-  { href: '/vid-admin/api-keys',    label: 'API Keys',    icon: KeyRound,          minRole: 'admin', hidden: true },
-  { href: '/vid-admin/webhooks',    label: 'Webhooks',    icon: Webhook,           minRole: 'admin', hidden: true },
-  { href: '/vid-admin/usage',       label: 'Usage',       icon: Activity,          minRole: 'admin', hidden: true },
+  // wording: BA review
+  { href: '/vid-admin/tenants',     label: 'Khách Partner',    icon: Building2,  minRole: 'admin' },
+  { href: '/vid-admin/api-keys',    label: 'Partner API Keys', icon: KeyRound,   minRole: 'admin' },
+  { href: '/vid-admin/webhooks',    label: 'Webhooks',         icon: Webhook,    minRole: 'admin' },
+  { href: '/vid-admin/usage',       label: 'Usage',            icon: Activity,   minRole: 'admin' },
   { href: '/vid-admin/ai-analysis', label: 'AI Analysis', icon: Sparkles,          minRole: 'admin', hidden: true },
   { href: '/vid-admin/billing',     label: 'Billing',     icon: Wallet,            minRole: 'admin', hidden: true },
   { href: '/vid-admin/presets',     label: 'Presets',     icon: SlidersHorizontal, minRole: 'admin', hidden: true },
@@ -100,7 +101,7 @@ export const NAV_SECTIONS: NavSection[] = [
   { label: null, items: NAV_OVERVIEW },
   { label: 'Monitor', items: NAV_MONITOR },
   { label: 'Manage', items: NAV_MANAGE },
-  { label: 'Enterprise', items: NAV_ENTERPRISE },
+  { label: 'Partner API', items: NAV_ENTERPRISE },
   { label: 'System', items: NAV_SYSTEM },
 ]
 
