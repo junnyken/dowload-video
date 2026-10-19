@@ -127,6 +127,10 @@ celery_app.conf.update(
         # Phase 18 — AI analysis jobs → dedicated analysis worker.
         'analyze_media_task': {'queue': 'analysis'},
         'probe_all_platforms': {'queue': 'light'},
+        # app.core.ytdlp_channel (2026-10-19): install + probe a candidate
+        # yt-dlp in a subprocess, minutes long, network-bound.
+        'ytdlp_auto_update': {'queue': 'light'},
+        'ytdlp_remediate': {'queue': 'light'},
         'retest_cookie_pool_daily': {'queue': 'light'},   # network probes, up to minutes (task #6127)
         'expire_analysis_jobs_task': {'queue': 'analysis'},
         # Transcript translation — reuses the 'analysis' worker (also

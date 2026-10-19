@@ -301,7 +301,14 @@ def cobalt_first(platform: str | None, quality: str) -> bool:
     if "x" in wanted:
         wanted.add("twitter")
     if platform not in wanted:
-        return False
+        # platform_health puts Cobalt first for a few hours when yt-dlp can
+        # no longer read the platform (2026-10-19); env still decides otherwise.
+        try:
+            from app.core.platform_health import prefer_cobalt
+            if not prefer_cobalt(platform):
+                return False
+        except Exception:
+            return False
     from app.services.cobalt_service import cobalt_platform_tripped
     return not cobalt_platform_tripped(platform)   # task #6133: skipped while it keeps failing
 

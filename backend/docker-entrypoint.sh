@@ -19,7 +19,8 @@ set -e
 APP_USER=appuser
 RUN_AS=""
 if [ "$(id -u)" = "0" ] && id "$APP_USER" >/dev/null 2>&1; then
-    chown -R "$APP_USER":"$APP_USER" /app/downloads /app/ytdlp_cache /opt/bgutil-cache 2>/dev/null || \
+    mkdir -p /app/ytdlp_override 2>/dev/null || true
+    chown -R "$APP_USER":"$APP_USER" /app/downloads /app/ytdlp_cache /opt/bgutil-cache /app/ytdlp_override 2>/dev/null || \
         echo "[entrypoint] WARNING: could not chown working dirs — continuing"
     if command -v setpriv >/dev/null 2>&1; then
         RUN_AS="setpriv --reuid=$APP_USER --regid=$APP_USER --init-groups --inh-caps=-all"
@@ -45,6 +46,13 @@ run_bg() {
         *)             $RUN_AS sh -c "$1" & ;;
     esac
 }
+run_once() {
+    case "$RUN_AS" in
+        "")            sh -c "$1" ;;
+        *"-c")         $RUN_AS "$1" ;;
+        *)             $RUN_AS sh -c "$1" ;;
+    esac
+}
 run_fg() {
     case "$RUN_AS" in
         "")            exec sh -c "$1" ;;
@@ -63,11 +71,26 @@ run_fg() {
 # this per worker type (20-100); it was lost when the four workers were folded
 # into this single one. 40 is the middle of that range, chosen because this one
 # worker serves every queue — media (compose used 20) through light (100).
-run_bg "celery -A app.core.celery_app worker \
+# ── yt-dlp channel (app.core.ytdlp_channel, 2026-10-19) ──────────────────────
+# A newer yt-dlp (stable or nightly) promoted at runtime lives in
+# /app/ytdlp_override, first on PYTHONPATH so it shadows the image's copy; the
+# image's site-packages is root-owned and appuser cannot upgrade it in place.
+# A redeploy starts from a fresh filesystem: `boot` reinstalls the pinned
+# version recorded in Redis (or drops the pin when the image is newer).
+# Bounded so a slow PyPI can only delay the start, never stop it.
+export YTDLP_OVERRIDE_DIR=/app/ytdlp_override
+export PYTHONPATH="/app/ytdlp_override${PYTHONPATH:+:$PYTHONPATH}"
+run_once "timeout 150 python -m app.core.ytdlp_channel boot" || \
+    echo "[entrypoint] yt-dlp channel boot step failed — continuing with the image copy"
+
+# The worker runs in a loop: ytdlp_channel restarts it (SIGTERM, warm
+# shutdown) after promoting a yt-dlp — its pool children are forked from a
+# parent that already imported the old one. A crash restarts it too.
+run_bg "while true; do celery -A app.core.celery_app worker \
     -Q downloads,bulk,light,media,analysis,celery \
     --concurrency=2 \
     --max-tasks-per-child=40 \
-    --loglevel=info"
+    --loglevel=info; echo '[entrypoint] celery worker exited — restarting in 3s'; sleep 3; done"
 
 run_bg "celery -A app.core.celery_app beat --loglevel=info"
 

@@ -141,7 +141,7 @@ EXPOSE 8000
 # first time a volume appears.
 RUN groupadd --system --gid 10001 appuser \
     && useradd --system --uid 10001 --gid appuser --home-dir /app --shell /usr/sbin/nologin appuser \
-    && mkdir -p /app/downloads /app/ytdlp_cache /opt/bgutil-cache \
+    && mkdir -p /app/downloads /app/ytdlp_cache /app/ytdlp_override /opt/bgutil-cache \
     && chown -R appuser:appuser /app /opt/bgutil-cache
 
 # Single-container deploy: run celery worker (background) + uvicorn (foreground)

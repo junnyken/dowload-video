@@ -72,9 +72,15 @@ _NOT_FOUND = (
 _UNSUPPORTED = ("unsupported url", "is not a valid url", "no video formats found",
                 "no video could be found", "no media found")
 _UPSTREAM = ("http error 5", "service unavailable", "bad gateway", "connection reset",
-             "connection refused", "remote end closed", "unable to extract",
-             "please report this issue", "extractorerror", "keyerror", "indexerror",
-             "typeerror", "attributeerror")
+             "connection refused", "remote end closed")
+# The extractor reached the page and could not read it: what a platform
+# redesign looks like (yt-dlp asks to "report this issue" exactly then). Split
+# from _UPSTREAM on 2026-10-19 — both were provider_unavailable, so "TikTok
+# changed its page" and "TikTok answered 503" counted as one number and the
+# health check could not tell when a yt-dlp update was the fix.
+_EXTRACTOR_BROKEN = ("unable to extract", "please report this issue", "extractorerror",
+                     "keyerror", "indexerror", "typeerror", "attributeerror",
+                     "jsondecodeerror", "unable to parse")
 
 
 # Codes our own (non-yt-dlp) extractors raise. Such an exception carries
@@ -162,6 +168,8 @@ def classify_extraction_error(
             return 404, "video_unavailable"
         if any(s in text for s in _TIMEOUT):
             return 504, "extraction_timeout"
+        if any(s in text for s in _EXTRACTOR_BROKEN):
+            return 502, "extractor_broken"
         if any(s in text for s in _UPSTREAM):
             return 502, "provider_unavailable"
         if exc is not None and not isinstance(exc, ValueError):

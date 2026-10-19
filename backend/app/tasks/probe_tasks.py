@@ -83,8 +83,18 @@ def _handle_alerts(results: Dict[str, str], was: Dict[str, str]) -> None:
         for p in broke:
             reason = (states.get(p, {}) or {}).get("reason") or "không rõ"
             lines.append(f"• <b>{p}</b> — {reason[:120]}")
-        lines.append("\nDò bằng metadata (không tải). Kiểm tra lại bằng tay trước khi kết luận.")
+        # wording: BA review
+        lines.append("\nĐang tự thử bản yt-dlp mới hơn (Facebook/Instagram/X: tạm tải qua Cobalt). "
+                     "Sẽ báo kết quả.")
         _send("\n".join(lines))
+        # app.core.platform_health (2026-10-19): act, not only report.
+        for p in broke:
+            try:
+                from app.core import platform_health
+                reason = (states.get(p, {}) or {}).get("reason") or "probe failed"
+                platform_health.on_platform_broken(p, f"probe: {reason}")
+            except Exception as exc:
+                print(f"[Probe] remediation trigger failed for {p}: {exc}")
         try:
             rc.sadd(_ALERTED_KEY, *broke)
         except Exception:
@@ -92,6 +102,12 @@ def _handle_alerts(results: Dict[str, str], was: Dict[str, str]) -> None:
 
     if recovered:
         _send("🟢 <b>Nền tảng hoạt động lại</b>\n" + "\n".join(f"• {p}" for p in recovered))
+        for p in recovered:
+            try:
+                from app.core import platform_health
+                platform_health.mark_recovered(p)
+            except Exception:
+                pass
         try:
             rc.srem(_ALERTED_KEY, *recovered)
         except Exception:

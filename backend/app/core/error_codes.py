@@ -147,6 +147,15 @@ ERROR_META: dict[str, dict] = {
         "suggested_action": "Đăng nhập và thử lại.",
     },
     # ── Phase 6 — standardized public API errors ──────────────────────
+    # 2026-10-19: the extractor could not read the platform's page — usually
+    # the platform changed it. Fixed by a newer yt-dlp; platform_health
+    # watches this code and tries one automatically.
+    "extractor_broken": {
+        # wording: BA review
+        "user_message": "Nền tảng vừa thay đổi nên tạm thời chưa tải được. Hệ thống đang tự cập nhật.",
+        "retryable": True,
+        "suggested_action": "Thử lại sau 30–60 phút.",
+    },
     "provider_unavailable": {
         "user_message": "Nền tảng nguồn tạm thời không phản hồi.",
         "retryable": True,

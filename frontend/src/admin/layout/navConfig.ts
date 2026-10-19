@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Globe, Cookie, Network, ListOrdered, Briefcase, ChartColumn,
   HeartPulse, Funnel, Radio, Users, Settings, BookOpen, History, ScrollText,
   Gauge, Siren, Play, Building2, KeyRound, Webhook, Wallet, Sparkles,
-  SlidersHorizontal, Shield, Activity, Mic, CircleDollarSign, MonitorDown, Layers, FileX, Ruler, Power,
+  SlidersHorizontal, Shield, Activity, Mic, CircleDollarSign, MonitorDown, Layers, FileX, Ruler, Power, Stethoscope,
   type LucideIcon,
 } from 'lucide-react'
 import type { AdminRole } from '../types/admin.types'
@@ -48,6 +48,8 @@ const NAV_MONITOR: NavItem[] = [
   { href: '/vid-admin/jobs', label: 'Jobs', icon: Briefcase, minRole: 'viewer', hidden: true },
   { href: '/vid-admin/analytics', label: 'Analytics', icon: ChartColumn, minRole: 'viewer' },
   { href: '/vid-admin/probes', label: 'Sức khoẻ nền tảng', icon: HeartPulse, minRole: 'viewer', hidden: true },
+  // wording: BA review
+  { href: '/vid-admin/platform-health', label: 'Sức khoẻ nền tảng', icon: Stethoscope, minRole: 'operator' },
   { href: '/vid-admin/funnel', label: 'Funnel', icon: Funnel, minRole: 'viewer' },
   // wording: BA review
   { href: '/vid-admin/metrics', label: 'Đo lường', icon: Ruler, minRole: 'admin' },

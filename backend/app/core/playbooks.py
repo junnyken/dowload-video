@@ -425,14 +425,22 @@ def _action_pause_low_priority_schedules(params: dict) -> dict:
 
 
 def _action_rotate_fallback_order(params: dict) -> dict:
-    """Demote current top fallback for a platform via adaptive_fallback."""
+    """Put the other route first for a platform. It called
+    adaptive_fallback.demote_top, which never existed, so this action always
+    failed (and get_best_layer, what a demotion would affect, has no caller).
+    Now: Cobalt before yt-dlp for 6 h where Cobalt can serve (FB/IG/X)."""
     platform = params.get("platform", "youtube")
     try:
-        from app.core import adaptive_fallback  # type: ignore  # lazy import
-        adaptive_fallback.demote_top(platform)
+        from app.core import platform_health  # type: ignore  # lazy import
+        if not platform_health.set_prefer_cobalt(platform, True, "playbook rotate_fallback_order"):
+            return {
+                "success": False,
+                "message": f"No alternative route for platform={platform}",
+                "action_taken": f"rotate_fallback_order({platform})",
+            }
         return {
             "success": True,
-            "message": f"Top fallback demoted for platform={platform}",
+            "message": f"Cobalt put first for platform={platform} (6 h)",
             "action_taken": f"rotate_fallback_order({platform})",
         }
     except ImportError:

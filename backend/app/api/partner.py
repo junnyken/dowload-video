@@ -677,3 +677,31 @@ async def validate_urls(
         "count":   len(urls),
         "results": results,
     }
+
+
+# ── Platform status (2026-10-19) ──────────────────────────────────────────────
+
+@router.get("/api/v1/partner/platform-status")
+async def partner_platform_status(tenant: TenantContext = Depends(get_partner_tenant)):
+    """Which platforms work right now, so a partner can hold jobs for a broken
+    one instead of burning its quota on failures. Same probe data as the
+    public /api/v1/platform-status, plus when a platform was marked degraded
+    and whether a fallback route is active. Pushed as webhook events
+    platform.degraded / platform.recovered to endpoints subscribed to them."""
+    from app.api.routes import get_platform_status
+    from app.core import platform_health
+    base = await get_platform_status()
+    degraded = platform_health.degraded()
+    rows = []
+    for row in base.get("platforms", []):
+        p = row.get("platform")
+        d = degraded.get(p) or {}
+        rows.append({
+            "platform": p,
+            "status": "degraded" if d else row.get("status"),
+            "message": row.get("message"),
+            "last_verified_at": row.get("last_verified_at"),
+            "degraded_since": d.get("since"),
+            "fallback_route": "cobalt" if platform_health.prefer_cobalt(p) else None,
+        })
+    return {"platforms": rows, "webhook_events": ["platform.degraded", "platform.recovered"]}

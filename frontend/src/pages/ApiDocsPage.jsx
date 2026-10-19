@@ -79,11 +79,15 @@ const PARTNER_ENDPOINTS = [
   { method: 'GET', path: '/webhooks', note: 'Liệt kê webhook đã đăng ký.' },
   { method: 'DELETE', path: '/webhooks/{id}', note: 'Xoá một webhook.' },
   { method: 'POST', path: '/validate-urls', note: 'Kiểm tra trước danh sách URL, tối đa 100 URL mỗi lần.' },
+  // wording: BA review
+  { method: 'GET', path: '/platform-status', note: 'Nền tảng nào đang tải được. Webhook platform.degraded / platform.recovered báo khi trạng thái đổi.' },
 ];
 
 const ERROR_EXAMPLES = [
   { code: 'unsupported_url',     retryable: false, message: 'URL không được hỗ trợ.' },
   { code: 'provider_unavailable', retryable: true,  message: 'Nền tảng tạm thời không phản hồi.' },
+  // wording: BA review
+  { code: 'extractor_broken',     retryable: true,  message: 'Nền tảng vừa thay đổi, hệ thống đang tự cập nhật. Thử lại sau 30–60 phút.' },
   { code: 'queue_busy',          retryable: true,  message: 'Hàng đợi đang quá tải.' },
   { code: 'rate_limited',        retryable: true,  message: 'Vui lòng đợi.' },
   { code: 'job_expired',         retryable: false, message: 'Job đã hết hạn.' },

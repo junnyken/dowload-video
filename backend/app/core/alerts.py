@@ -105,9 +105,22 @@ def send_admin_alert(level: str, title: str, body: str, alert_key: str = "") -> 
 
 def check_platform_fail_rates(window_minutes: int = 30) -> None:
     """
-    Pull recent download_jobs and alert if any platform has high fail rate.
-    Called from Celery beat every 5 min.
+    Alert on platforms failing for reasons of ours, and act on a platform
+    that changed (app.core.platform_health). Called from Celery beat every 5 min.
+
+    It read download_jobs before 2026-10-19 — written by /fetch-link only for
+    a signed-in user's success, so failures on the main path never reached
+    it — and counted a deleted video the same as an outage. The old body
+    below is kept as the fallback when the outcome store cannot be read.
     """
+    try:
+        from app.core import platform_health
+        counts = platform_health.recent_counts()
+        if counts:
+            platform_health.check_platforms(counts)
+            return
+    except Exception:
+        pass
     try:
         from app.core.database import get_supabase_client
         sb = get_supabase_client()

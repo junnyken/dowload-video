@@ -1492,88 +1492,88 @@ def check_api_credits(self):
 # yt-dlp Auto-Update (daily at 3 AM UTC)
 # =════════════════════════════════════════════════════════════════════
 
-@celery_app.task(name="ytdlp_auto_update", bind=True)
+@celery_app.task(name="ytdlp_auto_update", bind=True, time_limit=2400, soft_time_limit=2300)
 def ytdlp_auto_update(self):
     """
-    Upgrade yt-dlp to latest version daily.
-    After successful upgrade: restart bgutil-pot containers (staggered),
-    clear PO token cache, and trigger bgutil health probe.
+    Daily: move to a newer yt-dlp STABLE when it breaks nothing that works
+    (app.core.ytdlp_channel.daily_update — installed beside the image copy,
+    probed in a subprocess first, processes restarted after).
+
+    Until 2026-10-19 this ran `pip install --upgrade yt-dlp` as appuser into
+    the root-owned site-packages: it could not write, printed "pip upgrade
+    failed" and nobody heard. It also restarted two docker containers this
+    single-container deployment does not have.
     """
-    import subprocess
-    import importlib.metadata
-
+    import json
+    from app.core import ytdlp_channel
+    from app.core.alerts import send_admin_alert
     try:
-        before = importlib.metadata.version("yt-dlp")
-    except Exception:
-        before = "unknown"
-
-    print(f"[ytdlp-update] Current version: {before}")
-    try:
-        result = subprocess.run(
-            ["pip", "install", "-q", "--upgrade", "yt-dlp"],
-            capture_output=True, text=True, timeout=120
-        )
-        if result.returncode != 0:
-            print(f"[ytdlp-update] pip upgrade failed: {result.stderr[:200]}")
-            return
-
-        try:
-            import importlib
-            import yt_dlp as _ytdlp
-            importlib.reload(_ytdlp)
-        except Exception:
-            pass
-
-        try:
-            after = importlib.metadata.version("yt-dlp")
-        except Exception:
-            after = "unknown"
-
-        if before != after:
-            print(f"[ytdlp-update] Updated: {before} -> {after}")
-        else:
-            print(f"[ytdlp-update] Already latest: {before}")
-
-        # ── Fix 4: Post-update — restart bgutil containers, clear PO cache ──
-        import time as _time
-
-        # Staggered restart: bgutil-pot-1 first, wait 10s, then bgutil-pot-2
-        _bgutil_containers = ["vidgrab-bgutil-pot-1", "vidgrab-bgutil-pot-2-1"]
-        for _cname in _bgutil_containers:
-            try:
-                _restart = subprocess.run(
-                    ["docker", "restart", _cname],
-                    capture_output=True, text=True, timeout=30
-                )
-                if _restart.returncode == 0:
-                    print(f"[ytdlp-update] bgutil container {_cname} restarted")
-                else:
-                    print(f"[ytdlp-update] bgutil restart {_cname} failed: {_restart.stderr[:100]}")
-            except Exception as _re:
-                print(f"[ytdlp-update] bgutil restart {_cname} error: {_re}")
-            _time.sleep(10)  # staggered — never both down simultaneously
-
-        # Clear PO token cache (force fresh token on next request)
+        out = ytdlp_channel.daily_update()
+    except Exception as exc:
+        # wording: BA review
+        send_admin_alert("warning", "Cập nhật yt-dlp hằng ngày lỗi", f"{type(exc).__name__}: {exc}"[:300],
+                         alert_key="ytdlp_daily_error")
+        return {"error": str(exc)[:300]}
+    promoted = out.get("promoted")
+    if promoted:
+        # wording: BA review
+        send_admin_alert("info", f"yt-dlp đã lên {promoted['version']}",
+                         "Bản stable mới, đã kiểm các nền tảng đang chạy tốt trước khi dùng.",
+                         alert_key="")
         try:
             from app.core.po_token_cache import invalidate_po_token
             invalidate_po_token()
-            print("[ytdlp-update] PO token cache cleared")
-        except Exception as _pe:
-            print(f"[ytdlp-update] PO cache clear error: {_pe}")
-
-        # Trigger immediate bgutil health probe
+        except Exception:
+            pass
         try:
             probe_bgutil_health.delay()
-            print("[ytdlp-update] bgutil health probe triggered")
-        except Exception as _probe_e:
-            print(f"[ytdlp-update] health probe trigger error: {_probe_e}")
+        except Exception:
+            pass
+    else:
+        rejected = [t for t in out.get("tried", []) if t.get("result") != "promoted"]
+        if rejected:
+            t = rejected[0]
+            # wording: BA review
+            send_admin_alert(
+                "warning", f"Không lên được yt-dlp {t.get('version')}",
+                ("Cài đặt lỗi: " + str(t.get("detail"))) if t.get("result") == "install_failed"
+                else f"Bản mới làm hỏng: {', '.join(t.get('regressed') or [])}. Giữ bản đang chạy.",
+                alert_key="ytdlp_daily_rejected")
+    print(f"[ytdlp-update] {json.dumps(out, default=str)[:500]}")
+    return out
 
-        print("[ytdlp-update] yt-dlp updated → bgutil restarted → PO cache cleared → health probe triggered")
 
-    except subprocess.TimeoutExpired:
-        print("[ytdlp-update] pip upgrade timed out")
-    except Exception as e:
-        print(f"[ytdlp-update] Error: {e}")
+@celery_app.task(name="ytdlp_remediate", bind=True, time_limit=2400, soft_time_limit=2300)
+def ytdlp_remediate(self, platforms, reason=""):
+    """A platform broke (probe confirmed, or extractor_broken spiked —
+    app.core.platform_health): try the newest stable, then the newest nightly
+    yt-dlp; keep the first that fixes it without breaking another platform."""
+    from app.core import ytdlp_channel
+    from app.core.alerts import send_admin_alert
+    plats = [p for p in (platforms or []) if p]
+    try:
+        out = ytdlp_channel.remediate(plats, reason or "")
+    except Exception as exc:
+        send_admin_alert("warning", "Tự khắc phục yt-dlp lỗi", f"{type(exc).__name__}: {exc}"[:300],
+                         alert_key="ytdlp_remediate_error")
+        return {"error": str(exc)[:300]}
+    if out.get("skipped"):
+        return out
+    names = ", ".join(plats)
+    promoted = out.get("promoted")
+    if promoted:
+        # wording: BA review
+        send_admin_alert("info", f"Đã tự khắc phục {names}",
+                         f"Chuyển sang yt-dlp {promoted['version']} ({promoted['source']}). "
+                         f"Sửa được: {', '.join(promoted.get('fixed') or []) or '-'}.", alert_key="")
+    else:
+        tried = "; ".join(f"{t.get('version')}: {t.get('result')}" for t in out.get("tried", [])) \
+            or out.get("note") or "không có bản mới hơn"
+        # wording: BA review
+        send_admin_alert("critical", f"Chưa tự khắc phục được {names}",
+                         f"Đã thử: {tried}. Cần người xem (cookie, proxy, hoặc chờ yt-dlp sửa).",
+                         alert_key=f"ytdlp_remediate_failed_{names}")
+    return out
 
 
 # =════════════════════════════════════════════════════════════════════

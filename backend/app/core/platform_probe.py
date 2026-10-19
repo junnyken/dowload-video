@@ -128,6 +128,14 @@ _DEFAULT_TARGETS: Dict[str, str] = {
     #   already probes Pinterest through an admin-set target, which keeps
     #   overriding this default.
     "pinterest": "https://www.pinterest.com/pin/664281013778109217/",
+    # Added 2026-10-19. Douyin is the platform with the most traffic and had
+    # no canary. Since 15/10 its first route is the free self-signed web API
+    # (douyin_sign), so a probe no longer means "native route that fails
+    # everything" (the 0/1245 note below predates it). A brand ad (达霏欣),
+    # i.e. one its owner keeps up; /fetch-link returned its title on
+    # 2026-10-19. Paid routes stay closed to probes: managed providers via
+    # managed_allowed_for, ScraperAPI via the probe check in douyin_extractor.
+    "douyin": "https://www.douyin.com/video/7689009727547895282",
 }
 
 # Platforms whose real path can reach a PAID managed provider (Apify, through
@@ -142,9 +150,11 @@ _DEFAULT_TARGETS: Dict[str, str] = {
 #     limit, the platform and provider daily ceilings, the monthly ceiling).
 # The admin can set a target per platform; it is then probed at most once per
 # its minimum interval (default 24 h, below), enforced through Redis.
-PAID_PROBE_PLATFORMS = frozenset({"douyin", "xiaohongshu", "kuaishou"})
+# Douyin left this set on 2026-10-19 (free self-signed route, default target,
+# every sweep). Xiaohongshu links carry an expiring xsec_token, so there is no
+# stable default to ship — the admin sets one.
+PAID_PROBE_PLATFORMS = frozenset({"xiaohongshu", "kuaishou"})
 NOT_CONFIGURED_REASON: Dict[str, str] = {
-    "douyin": "paid_probe_admin_opt_in",
     "xiaohongshu": "paid_probe_admin_opt_in",
     # Not paid, but anonymous extraction needs a signed-in cookie (yt-dlp from
     # the workspace, 2026-10-13: "Account authentication is required" on its

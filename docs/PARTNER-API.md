@@ -145,6 +145,26 @@ Mỗi link trả về `platform` (vd `youtube`, `tiktok`, `douyin`), `support_le
 | `invalid` | Không phải link http/https |
 | `duplicate` | Trùng với một link trước đó trong cùng danh sách |
 
+### 3.7. Trạng thái nền tảng — `GET /api/v1/partner/platform-status`
+
+Cho biết nền tảng nào đang tải được. Nên kiểm trước khi đẩy nhiều job cho một nền tảng,
+để không tốn hạn mức vào các job sẽ lỗi. Không trừ hạn mức job.
+
+```json
+{"platforms": [
+  {"platform": "tiktok", "status": "healthy", "last_verified_at": "2026-10-19T03:00:00Z",
+   "degraded_since": null, "fallback_route": null},
+  {"platform": "facebook", "status": "degraded", "degraded_since": 1760842800,
+   "fallback_route": "cobalt"}
+], "webhook_events": ["platform.degraded", "platform.recovered"]}
+```
+
+`status`: `healthy` (đang tải được), `degraded` (đang lỗi, VidGrab đang tự khắc phục),
+`unknown` (chưa đủ dữ liệu). `fallback_route = "cobalt"` nghĩa là VidGrab đang tải nền tảng đó
+qua đường dự phòng; job vẫn chạy được nhưng độ phân giải hoặc định dạng có thể khác thường lệ.
+Khi một nền tảng `degraded`, job của nền tảng đó có thể lỗi nhiều hơn: nên tạm giữ lại và gửi
+khi nhận `platform.recovered`.
+
 ---
 
 ## 4. Giới hạn
@@ -190,7 +210,16 @@ Mỗi lần gọi webhook, VidGrab gửi `POST` với body JSON và các header:
 | `X-VidGrab-Signature-256` | `sha256=<HMAC-SHA256 của body, khoá là secret>` |
 | `X-VidGrab-Delivery` | Mã lần gửi (dùng để bỏ qua bản gửi trùng) |
 
-Body:
+Sự kiện có thể đăng ký trong `events`:
+
+| Sự kiện | Khi nào |
+|---|---|
+| `job.completed` | Job tải xong |
+| `job.failed` | Job lỗi |
+| `platform.degraded` | Một nền tảng bắt đầu lỗi (body: `{"platform", "status": "degraded", "at"}`) |
+| `platform.recovered` | Nền tảng đó hoạt động lại (body: `{"platform", "status": "ok", "at"}`) |
+
+Body của `job.completed`:
 
 ```json
 {"job_id": "6f1c…", "status": "done",

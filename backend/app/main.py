@@ -628,6 +628,8 @@ app.include_router(billing_api.router,         prefix="/api/v1", tags=["Billing"
 app.include_router(tenant_api_keys_api.router, prefix="/api/v1", tags=["Partner API Keys"])
 from app.api import admin_partners as admin_partners_api
 app.include_router(admin_partners_api.router, prefix="/api/v1/admin", tags=["Admin Partner API"])
+from app.api import admin_platform_health as admin_platform_health_api
+app.include_router(admin_platform_health_api.router, prefix="/api/v1/admin", tags=["Admin Platform Health"])
 
 # Phase 20's /api/v1/admin/billing router is gone. Its auth guard read
 # profiles.is_admin, a column that does not exist on this database, so the

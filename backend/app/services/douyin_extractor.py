@@ -530,6 +530,16 @@ async def _try_scraperapi_ssr(url: str, quality: str = "video") -> Optional[Dict
     Use ScraperAPI to fetch the Douyin page HTML with JS rendering,
     then parse RENDER_DATA or _ROUTER_DATA for video info.
     """
+    # Paid (JS-render credits). The platform probe runs Douyin every 30 min
+    # since 19/10; a probe must never spend on a provider — it only asks
+    # whether the free routes still work (same rule as managed_allowed_for).
+    try:
+        from app.services.china_platforms.normalized_models import current_context
+        if current_context().origin == "probe":
+            return None
+    except Exception:
+        pass
+
     from app.core.scraperapi_pool import get_active_key
     api_key = get_active_key()
     if not api_key:

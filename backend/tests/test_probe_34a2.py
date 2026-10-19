@@ -39,10 +39,17 @@ class TestEveryPlatformIsCoveredOrExplained:
             assert p in pp.NOT_CONFIGURED_REASON
 
     def test_unconfigured_paid_platform_reports_its_reason(self, rc):
-        st = pp.get_probe_states()["douyin"]
+        st = pp.get_probe_states()["xiaohongshu"]
         assert st["status"] == pp.NOT_CONFIGURED
         assert st["reason"] == "paid_probe_admin_opt_in"
         assert st["paid"] is True and st["min_interval_s"] == pp.PAID_MIN_INTERVAL_SEC
+
+    def test_douyin_is_probed_every_sweep_on_the_free_route(self, rc):
+        """19/10: Douyin (most traffic) got a default target; its first route
+        is the free self-signed API, paid routes stay closed to probes."""
+        assert "douyin" in pp._DEFAULT_TARGETS
+        assert "douyin" not in pp.PAID_PROBE_PLATFORMS
+        assert pp.get_min_interval("douyin") == 0
 
     def test_defaults_are_https_urls(self):
         for p, url in pp._DEFAULT_TARGETS.items():
@@ -57,31 +64,31 @@ class TestPaidMinInterval:
         assert all(pp.claim_probe_slot("youtube") for _ in range(3))
 
     def test_paid_platform_runs_once_per_interval(self, rc):
-        assert pp.claim_probe_slot("douyin") is True
-        assert pp.claim_probe_slot("douyin") is False
-        assert pp.claim_probe_slot("xiaohongshu") is True   # independent slot
-        ttl = rc.ttl("probe:last_run:douyin")
+        assert pp.claim_probe_slot("xiaohongshu") is True
+        assert pp.claim_probe_slot("xiaohongshu") is False
+        assert pp.claim_probe_slot("kuaishou") is True   # independent slot
+        ttl = rc.ttl("probe:last_run:xiaohongshu")
         assert 0 < ttl <= pp.PAID_MIN_INTERVAL_SEC
 
     def test_claim_survives_a_restart(self, rc):
         """The claim lives in Redis, not in process memory: a worker that
         restarts (a fresh client on the same Redis) still sees it."""
-        assert pp.claim_probe_slot("douyin") is True
+        assert pp.claim_probe_slot("xiaohongshu") is True
         fresh = fakeredis.FakeRedis(server=rc._test_server, decode_responses=True)
         with patch.object(pp, "get_redis", lambda: fresh):
-            assert pp.claim_probe_slot("douyin") is False
+            assert pp.claim_probe_slot("xiaohongshu") is False
 
     def test_redis_down_means_no_paid_probe(self, monkeypatch):
         def _down():
             raise ConnectionError("redis down")
         monkeypatch.setattr(pp, "get_redis", _down)
-        assert pp.get_min_interval("douyin") == pp.PAID_MIN_INTERVAL_SEC
-        assert pp.claim_probe_slot("douyin") is False
+        assert pp.get_min_interval("xiaohongshu") == pp.PAID_MIN_INTERVAL_SEC
+        assert pp.claim_probe_slot("xiaohongshu") is False
         assert pp.claim_probe_slot("youtube") is True
 
     def test_admin_cannot_set_a_paid_interval_below_one_hour(self, rc):
-        assert pp.set_min_interval("douyin", 60) == 3600
-        assert pp.set_min_interval("douyin", None) == pp.PAID_MIN_INTERVAL_SEC
+        assert pp.set_min_interval("xiaohongshu", 60) == 3600
+        assert pp.set_min_interval("xiaohongshu", None) == pp.PAID_MIN_INTERVAL_SEC
         assert pp.set_min_interval("vk", 7200) == 7200
 
     def test_sweep_skips_a_paid_platform_inside_its_interval(self, rc, monkeypatch):
@@ -93,24 +100,24 @@ class TestPaidMinInterval:
             calls.append(url)
             return {"ok": True, "reason": None, "ms": 1, "title": "t"}
 
-        targets = {"douyin": "https://www.douyin.com/video/1", "vk": "https://vk.com/video-1_2"}
+        targets = {"xiaohongshu": "https://www.xiaohongshu.com/explore/1", "vk": "https://vk.com/video-1_2"}
         with patch.object(probe_tasks, "get_targets", return_value=targets), \
              patch.object(probe_tasks, "probe_once", side_effect=_probe), \
              patch.object(probe_tasks, "_send"):
             fn = getattr(probe_tasks.probe_all_platforms, "run", probe_tasks.probe_all_platforms)
             first = fn()
             second = fn()
-        assert set(first) == {"douyin", "vk"}
-        assert set(second) == {"vk"}, "douyin probed twice inside 24 h"
-        assert calls.count("https://www.douyin.com/video/1") == 1
+        assert set(first) == {"xiaohongshu", "vk"}
+        assert set(second) == {"vk"}, "xiaohongshu probed twice inside 24 h"
+        assert calls.count("https://www.xiaohongshu.com/explore/1") == 1
 
     def test_a_daily_probe_is_not_stale_after_three_hours(self, rc):
-        pp.set_target("douyin", "https://www.douyin.com/video/1")
-        pp.record_probe("douyin", {"ok": True, "ms": 1, "title": "t"})
-        rec = json.loads(rc.hget(pp._STATE_KEY, "douyin"))
+        pp.set_target("xiaohongshu", "https://www.xiaohongshu.com/explore/1")
+        pp.record_probe("xiaohongshu", {"ok": True, "ms": 1, "title": "t"})
+        rec = json.loads(rc.hget(pp._STATE_KEY, "xiaohongshu"))
         rec["at"] -= 5 * 3600
-        rc.hset(pp._STATE_KEY, "douyin", json.dumps(rec))
-        assert pp.get_probe_states()["douyin"]["status"] == pp.OK
+        rc.hset(pp._STATE_KEY, "xiaohongshu", json.dumps(rec))
+        assert pp.get_probe_states()["xiaohongshu"]["status"] == pp.OK
 
 
 class TestLastVerifiedAt:
