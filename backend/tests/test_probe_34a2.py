@@ -34,11 +34,17 @@ class TestEveryPlatformIsCoveredOrExplained:
         assert len(pp.PROBE_PLATFORMS) == 21
 
     def test_paid_platforms_ship_without_a_default(self):
+        # Xiaohongshu ships the owner's own pick (19/10); it stays paid-gated
+        # (24 h, managed providers refused for probes). Any other paid
+        # platform still needs an explicit decision before getting one.
+        allowed = {"xiaohongshu"}
         for p in pp.PAID_PROBE_PLATFORMS & set(pp.PROBE_PLATFORMS):
-            assert p not in pp._DEFAULT_TARGETS, f"{p} would spend on a paid provider by default"
+            assert p not in pp._DEFAULT_TARGETS or p in allowed, f"{p} would spend on a paid provider by default"
             assert p in pp.NOT_CONFIGURED_REASON
+        assert pp.get_min_interval("xiaohongshu") == pp.PAID_MIN_INTERVAL_SEC
 
     def test_unconfigured_paid_platform_reports_its_reason(self, rc):
+        pp.set_target("xiaohongshu", "")          # the admin cleared the shipped default
         st = pp.get_probe_states()["xiaohongshu"]
         assert st["status"] == pp.NOT_CONFIGURED
         assert st["reason"] == "paid_probe_admin_opt_in"

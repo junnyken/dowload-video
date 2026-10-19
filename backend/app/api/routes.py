@@ -95,6 +95,9 @@ def _china_channel_guest_refusals(urls: List[str], channel_mode: bool, requester
 
 
 # ── Global concurrency limiter for /fetch-link ───────────────────────
+# The ceiling itself is app.core.capacity.get_max_concurrent() (admin setting,
+# env MAX_CONCURRENT_DOWNLOADS as fallback) since 2026-10-19; this env value
+# only sizes the per-worker backstop used when Redis is unreachable.
 _MAX_CONCURRENT_DL = int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "10"))
 _ACTIVE_DL_KEY = "vidgrab:active_downloads"
 _ACTIVE_DL_TTL = 600  # auto-expire 10min (crash-safety)
@@ -123,12 +126,15 @@ def _acquire_download_slot() -> tuple:
     try:
         from app.core.redis_client import get_redis as _get_redis
         rc = _get_redis()
+        from app.core import capacity as _cap
         count = rc.incr(_ACTIVE_DL_KEY)
         rc.expire(_ACTIVE_DL_KEY, _ACTIVE_DL_TTL)
-        if count > _MAX_CONCURRENT_DL:
+        if count > _cap.get_max_concurrent():
             rc.decr(_ACTIVE_DL_KEY)
+            _cap.note_refused()
             return False, int(count) - 1
         _local_slot_held.redis = True
+        _cap.note_acquired(int(count))
         return True, int(count)
     except Exception:
         # Redis is down. Fall back to the in-process ceiling instead of waving

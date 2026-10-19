@@ -188,6 +188,8 @@ class TestTargets:
             # 2026-10-19: Douyin, through the live /fetch-link (free
             # self-signed route); paid routes stay closed to probes.
             "douyin",
+            # 2026-10-19: owner-provided, paid-gated (24 h).
+            "xiaohongshu",
         }
 
     def test_configured_target_overrides_the_default(self):

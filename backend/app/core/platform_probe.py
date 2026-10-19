@@ -136,6 +136,12 @@ _DEFAULT_TARGETS: Dict[str, str] = {
     # 2026-10-19. Paid routes stay closed to probes: managed providers via
     # managed_allowed_for, ScraperAPI via the probe check in douyin_extractor.
     "douyin": "https://www.douyin.com/video/7689009727547895282",
+    # Added 2026-10-19 at the owner's request (his own pick). Stays a PAID
+    # platform: probed at most once per 24 h, managed providers refused for
+    # probes. Its xsec_token can expire — the admin then pastes a fresh link.
+    # /fetch-link returned 200 with a media URL for it on 2026-10-19.
+    "xiaohongshu": ("https://www.xiaohongshu.com/discovery/item/6a84b4cb000000002c0047f4"
+                    "?xsec_token=ABCzpvAxGR1kfy-nWWSj_0pi6270TB9gUmmagDInZL5vQ=&xsec_source=pc_share"),
 }
 
 # Platforms whose real path can reach a PAID managed provider (Apify, through

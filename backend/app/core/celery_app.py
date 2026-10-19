@@ -73,6 +73,8 @@ celery_app = Celery(
         "app.services.webhook_dispatcher",
         # Phase 33A Channel Watch (task #6257)
         "app.tasks.watch_tasks",
+        # Capacity telemetry (2026-10-19)
+        "app.tasks.capacity_tasks",
     ]
 )
 
@@ -130,6 +132,7 @@ celery_app.conf.update(
         # app.core.ytdlp_channel (2026-10-19): install + probe a candidate
         # yt-dlp in a subprocess, minutes long, network-bound.
         'ytdlp_auto_update': {'queue': 'light'},
+        'capacity_sample': {'queue': 'light'},
         'ytdlp_remediate': {'queue': 'light'},
         'retest_cookie_pool_daily': {'queue': 'light'},   # network probes, up to minutes (task #6127)
         'expire_analysis_jobs_task': {'queue': 'analysis'},
@@ -286,6 +289,13 @@ celery_app.conf.update(
         'flush-event-buffer-every-60s': {
             'task': 'flush_event_buffer',
             'schedule': 60.0,
+        },
+        # Capacity telemetry: concurrent downloads / refusals / CPU / memory,
+        # one record a minute (app.core.capacity). Sub-millisecond task.
+        'capacity-sample-every-1min': {
+            'task': 'capacity_sample',
+            'schedule': 60.0,
+            'options': {'expires': 55},
         },
         # Phase 14 — Health checks (fail rate + disk + queue) every 5 min
         'run-health-checks-every-5min': {

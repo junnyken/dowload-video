@@ -124,3 +124,39 @@ async def mark_platform_recovered(body: PlatformBody, request: Request, _=Depend
     changed = ph.mark_recovered(body.platform)
     log_admin_action(request, "admin.health.recovered", resource_type="platform", resource_id=body.platform)
     return {"platform": body.platform, "was_degraded": changed}
+
+
+# ── Capacity (concurrent downloads) ──────────────────────────────────────────
+
+class CapacitySettingsBody(BaseModel):
+    # None = back to the env value (MAX_CONCURRENT_DOWNLOADS)
+    max_concurrent_downloads: int | None = Field(None, ge=1, le=50)
+
+
+@router.get("/capacity")
+async def capacity_overview(range: str = "24h", _=Depends(verify_admin)):  # noqa: A002
+    from app.core import capacity
+    rng = "7d" if range == "7d" else "24h"
+    return {
+        **capacity.series(rng),
+        "latency": capacity.latency_by_platform(7 if rng == "7d" else 1),
+        "setting": {
+            "max_concurrent_downloads": capacity.get_max_concurrent(),
+            "source": capacity.setting_source(),
+            "env_default": capacity.env_default(),
+            "min": capacity.HARD_MIN, "max": capacity.HARD_MAX,
+        },
+        "resources": {"cpu_cores": capacity.cpu_cores(), "memory_pct_now": capacity.memory_pct()},
+    }
+
+
+@router.post("/capacity/settings")
+async def capacity_settings(body: CapacitySettingsBody, request: Request, _=Depends(verify_admin)):
+    from app.core import capacity
+    try:
+        value = capacity.set_max_concurrent(body.max_concurrent_downloads)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    log_admin_action(request, "admin.capacity.max_concurrent", resource_type="setting",
+                     resource_id=str(value))
+    return {"max_concurrent_downloads": value, "source": capacity.setting_source()}
