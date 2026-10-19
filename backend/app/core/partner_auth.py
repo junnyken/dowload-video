@@ -280,6 +280,9 @@ async def get_partner_tenant(request: Request) -> TenantContext:
     # 8. Fire-and-forget usage counter
     asyncio.create_task(_update_key_usage(key_id))
 
+    from app.core.bad_key_guard import note_valid_key  # noqa: PLC0415
+    note_valid_key(raw_key)
+
     # 9. Build and return TenantContext
     scopes = key_row.get("scopes") or ["read", "write", "batch", "webhook"]
 

@@ -37,7 +37,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.core.client_ip import get_client_ip, presented_api_key, rate_limit_key
+from app.core.client_ip import get_client_ip, has_valid_api_key, rate_limit_key
 
 # Initialize Rate Limiter (stricter: 60 req/min per IP default).
 # key_func=get_client_ip (not slowapi's get_remote_address) — the latter
@@ -89,7 +89,7 @@ class DailyIPQuotaMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         # API-key calls are metered per account (monthly API quota + the
         # account's daily downloads); an invalid key is refused with 401.
-        if presented_api_key(request):
+        if has_valid_api_key(request):
             return await call_next(request)
 
         ip = get_client_ip(request)
@@ -688,6 +688,7 @@ async def health_check():
     # Redis + Phase 11 metrics
     queue_depth       = -1
     downloads_queue   = -1
+    partner_queue     = -1
     redis_ok          = False
     celery_worker_cnt = -1
     pending_tasks_set = -1
@@ -699,6 +700,7 @@ async def health_check():
         redis_ok      = True
         queue_depth   = rc.llen("celery")
         downloads_queue = rc.llen("downloads")
+        partner_queue = rc.llen("partner")
         pending_tasks_set = rc.scard("vidgrab:pending_tasks")
         last_cleanup_raw = rc.get("vidgrab:last_cleanup_at")
         if last_cleanup_raw:
@@ -762,6 +764,7 @@ async def health_check():
             "ok":                    redis_ok,
             "queue_depth":           queue_depth,
             "downloads_queue_depth": downloads_queue,
+            "partner_queue_depth":   partner_queue,
         },
         "celery": {
             "worker_count":     celery_worker_cnt,

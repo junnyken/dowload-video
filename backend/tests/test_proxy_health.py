@@ -99,11 +99,11 @@ def test_a_proxy_in_two_pools_is_checked_once(fr, tg, monkeypatch):
     pp.add_proxy("youtube", MAIN)
     pp.add_proxy("all", MAIN)
     _fake_net(monkeypatch, {MAIN: "ok"})
-    real = ph._get
-    monkeypatch.setattr(ph, "_get", lambda u, p: calls.append(u) or real(u, p))
+    real = ph.check
+    monkeypatch.setattr(ph, "check", lambda p, youtube=False: calls.append(youtube) or real(p, youtube))
     out = ph.run()
     assert len(out["results"]) == 2
-    assert sum("ipinfo" in u for u in calls) == 1
+    assert calls == [True]                 # one check, with the YouTube test (one of its pools is youtube)
 
 
 def test_list_endpoint_shows_health_priority_and_cooldown(fr, tg, monkeypatch):
@@ -147,3 +147,30 @@ def test_unsupported_syntax_is_labelled():
     from app.core.proxy_health import classify_error, KIND_LABEL
     k = classify_error("ProxyError: Failed to perform, curl: (5) Unsupported proxy syntax in '?': Malformed")
     assert k == "invalid_format" and "định dạng" in KIND_LABEL[k]
+
+
+def test_youtube_pool_reports_whether_the_exit_ip_is_sticky(fr, tg, monkeypatch):
+    from app.core import proxy_health as ph
+    ips = iter(["198.51.100.1", "198.51.100.2", "203.0.113.5", "203.0.113.5", "192.0.2.9"])
+
+    def get(url, proxy):
+        if "ipinfo" in url:
+            return SimpleNamespace(status_code=200, json=lambda ip=next(ips): {"ip": ip, "country": "US"}, text="")
+        return SimpleNamespace(status_code=204, text="")
+    monkeypatch.setattr(ph, "_get", get)
+    assert ph.check(MAIN, youtube=True)["sticky"] is False      # rotating: new IP each call
+    assert ph.check(BACKUP, youtube=True)["sticky"] is True     # sticky session
+    assert ph.check(BACKUP, youtube=False)["sticky"] is None    # only measured for YouTube
+
+
+def test_one_blocked_youtube_exit_does_not_kill_a_rotating_proxy(fr, tg, monkeypatch):
+    from app.core import proxy_health as ph
+    yt = iter([403, 204])
+
+    def get(url, proxy):
+        if "ipinfo" in url:
+            return SimpleNamespace(status_code=200, json=lambda: {"ip": "198.51.100.1", "country": "US"}, text="")
+        return SimpleNamespace(status_code=next(yt), text="")
+    monkeypatch.setattr(ph, "_get", get)
+    r = ph.check(MAIN, youtube=True)
+    assert r["alive"] is True and r["youtube_ok"] is True

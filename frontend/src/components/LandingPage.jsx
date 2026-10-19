@@ -371,7 +371,7 @@ export default function LandingPage() {
             Kết nối VidGrab vào hệ thống của bạn (API)
           </h2>
           <p className="mt-1 text-sm text-fg-muted">
-            Tự động hoá việc tải video từ ứng dụng hoặc máy chủ của bạn, theo quy mô phù hợp.
+            Tự động tải video từ ứng dụng hoặc máy chủ của bạn, có hai mức dùng: cá nhân và doanh nghiệp.
           </p>
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="p-5 rounded-2xl bg-surface border border-line flex flex-col">
@@ -380,10 +380,10 @@ export default function LandingPage() {
                 <h3 className="text-sm font-semibold text-fg">API key cá nhân</h3>
               </div>
               <p className="mt-2 text-xs text-fg-muted leading-relaxed">
-                Dành cho lập trình viên và nhu cầu nhỏ. Dùng gói Pro hoặc Team, tự tạo key ở trang API Keys,
-                rồi gọi <code className="bg-surface-2 px-1 rounded">POST /api/v1/fetch-link</code> với header{' '}
-                <code className="bg-surface-2 px-1 rounded">X-API-Key: vidgrab_…</code>. Request giữ kết nối đến khi tải xong rồi trả kết quả.
-                Giới hạn 30 lượt tải/phút mỗi key, cùng số lượt gọi/tháng theo gói.
+                Dành cho lập trình viên và nhu cầu nhỏ. Dùng gói Pro hoặc Team, tự tạo API key ở trang API Keys,
+                rồi gọi <code className="bg-surface-2 px-1 rounded">POST /api/v1/fetch-link</code> kèm header{' '}
+                <code className="bg-surface-2 px-1 rounded">X-API-Key: vidgrab_…</code>. Lệnh gọi giữ kết nối đến khi tải xong rồi trả kết quả.
+                Giới hạn 30 lượt gọi mỗi phút cho mỗi key, và tổng lượt gọi mỗi tháng tuỳ gói.
               </p>
               <div className="pt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs mt-auto">
                 <a href="/api-docs" onClick={spaLink('/api-docs')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">
@@ -403,9 +403,10 @@ export default function LandingPage() {
                 <h3 className="text-sm font-semibold text-fg">Partner API cho doanh nghiệp</h3>
               </div>
               <p className="mt-2 text-xs text-fg-muted leading-relaxed">
-                Tích hợp từ backend của doanh nghiệp: job bất đồng bộ, webhook có chữ ký. Giới hạn theo từng key
-                (request/phút, job/ngày) và job/tháng theo hợp đồng; có thể khoá key theo IP máy chủ.
-                Key <code className="bg-surface-2 px-1 rounded">vgp_</code> do VidGrab cấp.
+                Dành cho doanh nghiệp gọi từ máy chủ của mình: tạo lệnh tải (job) chạy nền, nhận kết quả qua webhook có chữ ký xác thực.
+                Giới hạn đặt riêng cho từng key (số lệnh mỗi phút và mỗi ngày), số lệnh mỗi tháng theo hợp đồng.
+                Có thể chỉ cho phép key hoạt động từ IP máy chủ của bạn.
+                Key dạng <code className="bg-surface-2 px-1 rounded">vgp_…</code> do VidGrab cấp, bạn không tự tạo được.
               </p>
               <div className="pt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs mt-auto">
                 <a href="/api-docs#partner" onClick={spaLink('/api-docs#partner')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">

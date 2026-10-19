@@ -261,6 +261,24 @@ def on_platform_broken(platform: str, reason: str) -> None:
 
 # ── Scheduled check (replaces alerts.check_platform_fail_rates) ───────
 
+def probe_confirms_failure(platform: str) -> bool:
+    """Our own probe (not users' traffic) says the platform is down. Anyone
+    can send dead links, so traffic alone may only ALERT; the actions that
+    reach partners or change what runs need this. (Security review 19/10.)"""
+    try:
+        from app.core import platform_probe as pp  # noqa: PLC0415
+        return (pp.get_probe_states().get(platform) or {}).get("status") == pp.FAILED
+    except Exception:
+        return False
+
+
+_DISPLAY = {"twitter": "X"}
+
+
+def display(platform: str) -> str:
+    return _DISPLAY.get(platform, platform)
+
+
 def check_platforms(counts: Optional[Dict[str, Dict[str, int]]] = None, *,
                     now: Optional[datetime] = None) -> List[dict]:
     """Every 5 min via run_all_health_checks. Returns what it found."""
@@ -275,24 +293,29 @@ def check_platforms(counts: Optional[Dict[str, Dict[str, int]]] = None, *,
         found.append({"platform": platform, "verdict": v, **c})
         pct = round(100 * c["system_err"] / max(1, c["total"] - c["user_err"]))
         if v == "broken":
+            confirmed = probe_confirms_failure(platform)
             # wording: BA review
             send_admin_alert(
-                "critical", f"{platform}: có thể vừa đổi cấu trúc trang",
-                f"{c['broken']}/{c['total']} lượt tải 2 giờ qua lỗi 'bộ tải không đọc được trang'. "
-                "Đang tự thử bản yt-dlp mới hơn"
-                + (" và tạm chuyển sang Cobalt." if platform in COBALT_ROUTE_PLATFORMS else "."),
+                "critical", f"{display(platform)}: có thể vừa đổi cấu trúc trang",
+                f"{c['broken']}/{c['total']} lượt tải 2 giờ qua lỗi 'không đọc được trang'. "
+                + ("Kiểm tra tự động cũng hỏng → hệ thống tự thử yt-dlp mới hơn (nếu chưa thử trong 6 giờ qua)"
+                   + (" và tạm chuyển sang Cobalt." if platform in COBALT_ROUTE_PLATFORMS else ".")
+                   + " Chưa cần làm gì."
+                   if confirmed else
+                   "Kiểm tra tự động vẫn tải được → chưa tự xử lý (có thể do link lỗi của người dùng). Chưa cần làm gì."),
                 alert_key=f"health_broken_{platform}",
             )
-            on_platform_broken(platform, f"extractor_broken {c['broken']}/{c['total']}")
+            if confirmed:
+                on_platform_broken(platform, f"extractor_broken {c['broken']}/{c['total']}")
         else:
             # wording: BA review
             send_admin_alert(
-                v, f"{platform}: {pct}% lượt tải lỗi do hệ thống",
+                v, f"{display(platform)}: {pct}% lượt tải lỗi do hệ thống",
                 f"{c['system_err']}/{c['total']} lượt trong 2 giờ qua (không tính video bị xoá/riêng tư: "
-                f"{c['user_err']}).",
+                f"{c['user_err']}). Xem admin → Sức khoẻ nền tảng; nếu lỗi nhiều thì kiểm tra proxy và cookie.",
                 alert_key=f"health_{v}_{platform}",
             )
-            if v == "critical":
+            if v == "critical" and probe_confirms_failure(platform):
                 mark_degraded(platform, f"system errors {pct}%")
     # Recovery from traffic: a degraded platform back under the warning line.
     for platform in list(degraded()):

@@ -51,7 +51,7 @@ const PROBE_TONE: Record<ProbeStatus, string> = {
   not_configured: 'text-fg-muted border-line-strong bg-surface-2',
 }
 // wording: BA review
-const VERDICT_LABEL: Record<string, string> = { broken: 'Hỏng', critical: 'Nghiêm trọng', warning: 'Cảnh báo' }
+const VERDICT_LABEL: Record<string, string> = { broken: 'Có thể đã đổi trang', critical: 'Lỗi nhiều', warning: 'Lỗi một phần' }
 const VERDICT_TONE: Record<string, string> = {
   broken: 'text-danger border-danger/30 bg-danger-soft',
   critical: 'text-danger border-danger/30 bg-danger-soft',
@@ -64,9 +64,9 @@ const ACTION_LABEL: Record<string, string> = {
   remediate: 'Thử khắc phục nền tảng lỗi',
   daily_check: 'Kiểm tra bản stable mới',
   restarted: 'Khởi động lại tiến trình',
-  boot_reinstalled: 'Cài lại bản đã ghim khi khởi động',
-  boot_unpinned: 'Bỏ ghim khi khởi động',
-  boot_install_failed: 'Cài bản đã ghim thất bại khi khởi động',
+  boot_reinstalled: 'Khởi động: cài lại bản đã chốt',
+  boot_unpinned: 'Khởi động: bỏ chốt (bản trong máy mới hơn)',
+  boot_install_failed: 'Khởi động: cài bản đã chốt thất bại',
 }
 // wording: BA review
 const SOURCE_LABEL: Record<string, string> = { stable: 'stable', nightly: 'nightly', rollback: 'quay về' }
@@ -92,7 +92,7 @@ function isNewer(candidate: string | null, active: string | null): boolean {
 function ago(epoch: number | null | undefined): string {
   if (!epoch) return '—'
   const s = Math.max(0, Math.floor(Date.now() / 1000 - epoch))
-  if (s < 60) return `${s}s trước`
+  if (s < 60) return `${s} giây trước`
   if (s < 3600) return `${Math.floor(s / 60)} phút trước`
   if (s < 86400) return `${Math.floor(s / 3600)} giờ trước`
   return `${Math.floor(s / 86400)} ngày trước`
@@ -183,13 +183,13 @@ export default function PlatformHealthPage() {
   const remediate = useMutation({
     mutationFn: () => adminPost<{ queued: boolean; platforms: string[] }>('/ytdlp/remediate', { platforms: [] }),
     // wording: BA review
-    onSuccess: r => setNotice({ ok: true, text: `Đã xếp hàng khắc phục${r.platforms?.length ? ` (${r.platforms.join(', ')})` : ''}. Chạy nền vài phút; kết quả gửi qua Telegram và hiện ở mục lịch sử bên dưới sau khi làm mới.` }),
+    onSuccess: r => setNotice({ ok: true, text: `Đã đưa vào hàng chờ xử lý${r.platforms?.length ? ` (${r.platforms.join(', ')})` : ''}. Mất vài phút, chạy nền. Kết quả báo qua Telegram và ghi ở Lịch sử yt-dlp bên dưới (bấm Làm mới để thấy).` }),
     onError: e => setNotice({ ok: false, text: (e as Error).message }),
   })
   const daily = useMutation({
     mutationFn: () => adminPost<{ queued: boolean }>('/ytdlp/daily-check'),
     // wording: BA review
-    onSuccess: () => setNotice({ ok: true, text: 'Đã xếp hàng kiểm tra bản stable mới. Chạy nền; kết quả gửi qua Telegram và hiện ở lịch sử sau khi làm mới.' }),
+    onSuccess: () => setNotice({ ok: true, text: 'Đã đưa vào hàng chờ: kiểm tra bản yt-dlp stable mới. Kết quả báo qua Telegram và ghi ở Lịch sử yt-dlp sau khi làm mới.' }),
     onError: e => setNotice({ ok: false, text: (e as Error).message }),
   })
   const rollback = useMutation({
@@ -197,7 +197,7 @@ export default function PlatformHealthPage() {
     onSuccess: r => {
       setConfirmRollback(false)
       // wording: BA review
-      setNotice({ ok: true, text: `Đã quay về bản trước${r.to ? ` (${r.from ?? '?'} → ${r.to})` : ''}. API/worker đang khởi động lại.` })
+      setNotice({ ok: true, text: `Đã quay về bản trước${r.to ? ` (${r.from ?? '?'} → ${r.to})` : ''}. Máy chủ đang khởi động lại trong vài giây.` })
       qc.invalidateQueries({ queryKey: KEY })
     },
   })
@@ -221,7 +221,7 @@ export default function PlatformHealthPage() {
   if (isError || !data) {
     return <div className="mx-auto mt-16 max-w-2xl rounded-card border border-danger/30 bg-danger-soft p-6">
       {/* wording: BA review */}
-      <p className="mb-1 font-semibold text-danger">Không tải được</p>
+      <p className="mb-1 font-semibold text-danger">Không tải được dữ liệu sức khoẻ nền tảng</p>
       <p className="mb-4 break-words text-sm text-fg-muted">{(error as Error)?.message}</p>
       <Button onClick={() => refetch()}>Thử lại</Button>
     </div>
@@ -239,11 +239,12 @@ export default function PlatformHealthPage() {
         <div>
           {/* wording: BA review */}
           <h1 className="text-lg font-semibold tracking-tight text-fg">Sức khoẻ nền tảng</h1>
-          <p className="mt-0.5 text-sm text-fg-muted">
-            Tự động: dò mỗi 30 phút + kiểm tra lưu lượng mỗi 5 phút. Khi một nền tảng hỏng: báo Telegram;
-            Facebook/Instagram/X chuyển sang Cobalt trước trong 6 giờ; thử yt-dlp stable mới hơn rồi nightly,
-            chỉ giữ lại nếu sửa được nền tảng đó mà không làm hỏng nền tảng khác.
-          </p>
+          <ul className="mt-0.5 list-disc list-inside space-y-0.5 text-sm text-fg-muted">
+            <li>Mỗi 30 phút: thử lấy thông tin một video mẫu của từng nền tảng.</li>
+            <li>Mỗi 5 phút: xem tỷ lệ lỗi 2 giờ qua (không tính video bị xoá/riêng tư).</li>
+            <li>Khi kiểm tra tự động xác nhận một nền tảng hỏng: báo Telegram; Facebook, Instagram, X chuyển sang Cobalt trước 6 giờ; thử yt-dlp stable mới hơn rồi nightly (tối đa 1 lần mỗi 6 giờ cho mỗi nền tảng), chỉ giữ bản mới nếu sửa được mà không làm hỏng nền tảng khác.</li>
+            <li>Lỗi chỉ thấy trong lượt tải của người dùng (chưa được kiểm tra tự động xác nhận) thì chỉ báo Telegram.</li>
+          </ul>
         </div>
         <Button onClick={() => refetch()} disabled={isFetching}>{isFetching ? 'Đang làm mới…' : 'Làm mới'}</Button>
       </div>
@@ -257,17 +258,19 @@ export default function PlatformHealthPage() {
 
       <section className="rounded-card border border-line bg-surface p-4 shadow-card">
         <h2 className="text-sm font-semibold text-fg">yt-dlp</h2>
+        {/* wording: BA review */}
+        <p className="mt-0.5 text-xs text-fg-muted">stable = bản ổn định; nightly = bản thử nghiệm hằng đêm</p>
         <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <dt className="text-xs text-fg-muted">{/* wording: BA review */}Đang chạy</dt>
-            <dd className="break-all font-mono text-fg">{y.active ?? '—'}{y.override && <span className="ml-1 text-xs text-fg-muted">(override {y.override})</span>}</dd>
+            <dt className="text-xs text-fg-muted">{/* wording: BA review */}Bản đang dùng</dt>
+            <dd className="break-all font-mono text-fg">{y.active ?? '—'}{y.override && <span className="ml-1 text-xs text-fg-muted">(bản cài thêm {y.override})</span>}</dd>
           </div>
           <div>
-            <dt className="text-xs text-fg-muted">{/* wording: BA review */}Đang ghim</dt>
+            <dt className="text-xs text-fg-muted">{/* wording: BA review */}Bản đã chốt</dt>
             <dd className="break-all text-fg">
               {y.pinned
                 ? <><span className="font-mono">{y.pinned.version}</span> <span className="text-xs text-fg-muted">· {SOURCE_LABEL[y.pinned.source] ?? y.pinned.source} · {ago(y.pinned.at)}</span></>
-                : <span className="text-fg-muted">Không ghim</span>}
+                : <span className="text-fg-muted">Không chốt bản nào</span>}
             </dd>
           </div>
           {(['stable', 'nightly'] as const).map(k => (
@@ -287,7 +290,7 @@ export default function PlatformHealthPage() {
             {/* wording: BA review */}Kiểm tra bản stable mới
           </Button>
           <Button variant="primary" onClick={() => { setNotice(null); remediate.mutate() }} disabled={busy}>
-            {/* wording: BA review */}{remediate.isPending ? 'Đang xếp hàng…' : 'Thử khắc phục nền tảng đang lỗi'}
+            {/* wording: BA review */}{remediate.isPending ? 'Đang gửi lệnh…' : 'Thử khắc phục nền tảng đang lỗi'}
           </Button>
           <Button variant="danger" onClick={() => { rollback.reset(); setConfirmRollback(true) }} disabled={busy || !canRollback}
             title={canRollback ? undefined : 'Chưa có bản trước để quay về'}>
@@ -309,10 +312,10 @@ export default function PlatformHealthPage() {
                 <tr>
                   {/* wording: BA review */}
                   <th className="px-4 py-2 text-left font-semibold">Nền tảng</th>
-                  <th className="px-4 py-2 text-left font-semibold">Dò chủ động</th>
-                  <th className="px-4 py-2 text-left font-semibold">Lưu lượng 2 giờ</th>
-                  <th className="px-4 py-2 text-left font-semibold">Đánh giá</th>
-                  <th className="px-4 py-2 text-left font-semibold">Cobalt</th>
+                  <th className="px-4 py-2 text-left font-semibold">Kiểm tra tự động</th>
+                  <th className="px-4 py-2 text-left font-semibold">Lượt tải 2 giờ qua</th>
+                  <th className="px-4 py-2 text-left font-semibold">Mức báo động</th>
+                  <th className="px-4 py-2 text-left font-semibold">Đường Cobalt</th>
                   <th className="px-4 py-2 text-left font-semibold">Thao tác</th>
                 </tr>
               </thead>
@@ -327,15 +330,13 @@ export default function PlatformHealthPage() {
                         <span className={cn(BADGE, PROBE_TONE[r.probe.status])} title={r.probe.reason ?? undefined}>{PROBE_LABEL[r.probe.status]}</span>
                         {r.probe.reason && <div className="mt-1 max-w-[260px] break-words text-xs text-fg-muted">{r.probe.reason}</div>}
                         {/* wording: BA review */}
-                        <div className="mt-0.5 text-[11px] text-fg-muted" title={when(r.probe.at)}>kiểm lúc {ago(r.probe.at)}</div>
+                        <div className="mt-0.5 text-[11px] text-fg-muted" title={when(r.probe.at)}>kiểm {ago(r.probe.at)}</div>
                       </td>
                       <td className="px-4 py-2.5 text-xs text-fg-2">
                         {hasTraffic ? (
                           <>
                             {/* wording: BA review */}
-                            <div><span className="font-mono tabular-nums">{t.total}</span> lượt</div>
-                            <div className="text-fg-muted">lỗi do hệ thống: <span className="font-mono">{sysPct(t)}</span></div>
-                            <div className="text-fg-muted">hỏng: <span className="font-mono">{t.broken ?? 0}</span></div>
+                            <div><span className="font-mono tabular-nums">{t.total}</span> lượt · lỗi hệ thống <span className="font-mono">{sysPct(t)}</span> · không đọc được trang: <span className="font-mono">{t.broken ?? 0}</span></div>
                           </>
                         ) : <span className="text-fg-muted">Chưa có lượt nào</span>}
                       </td>
@@ -344,7 +345,7 @@ export default function PlatformHealthPage() {
                         {r.degraded && (
                           <div className="mt-1">
                             {/* wording: BA review */}
-                            <span className={cn(BADGE, 'border-warning/30 bg-warning-soft text-warning')} title={r.degraded.reason}>Đang suy giảm</span>
+                            <span className={cn(BADGE, 'border-warning/30 bg-warning-soft text-warning')} title={r.degraded.reason}>Đang trục trặc</span>
                             <div className="mt-0.5 max-w-[220px] break-words text-[11px] text-fg-muted">từ {ago(r.degraded.since)}{r.degraded.reason ? ` · ${r.degraded.reason}` : ''}</div>
                           </div>
                         )}
@@ -357,7 +358,7 @@ export default function PlatformHealthPage() {
                               disabled={cobalt.isPending && cobalt.variables?.platform === r.platform}
                               onChange={e => { setNotice(null); cobalt.mutate({ platform: r.platform, on: e.target.checked }) }} />
                             {/* wording: BA review */}
-                            {r.prefer_cobalt ? 'Ưu tiên Cobalt' : 'Tắt'}
+                            {r.prefer_cobalt ? 'Dùng Cobalt trước (6 giờ)' : 'Không dùng Cobalt trước'}
                           </label>
                         ) : <span className="text-xs text-fg-muted">—</span>}
                       </td>
@@ -393,12 +394,12 @@ export default function PlatformHealthPage() {
 
       {confirmRollback && (
         // wording: BA review
-        <Modal title="Quay về bản yt-dlp trước?" subtitle={`Các tiến trình API/worker sẽ khởi động lại trong vài giây.`}
+        <Modal title="Quay về bản yt-dlp trước?"
           onClose={() => setConfirmRollback(false)} locked={rollback.isPending}>
           <div className="space-y-3">
             <p className="text-sm text-fg-2">
               {/* wording: BA review */}
-              Hệ thống quay về bản yt-dlp trước{y.previous ? ` (${y.previous})` : ''}; các tiến trình API/worker khởi động lại vài giây.
+              Hệ thống sẽ quay về bản yt-dlp trước{y.previous ? ` (${y.previous})` : ''}. Máy chủ khởi động lại trong vài giây.
             </p>
             <FormError message={rollback.isError ? (rollback.error as Error).message : null} />
             <div className="flex justify-end gap-2">

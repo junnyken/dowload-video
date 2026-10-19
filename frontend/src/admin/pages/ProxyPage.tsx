@@ -23,6 +23,7 @@ interface ProxyHealth {
   ip: string | null
   country: string | null
   youtube_ok: boolean | null
+  sticky?: boolean | null
   detail: string | null
   at: number
 }
@@ -58,7 +59,7 @@ function HealthBadge({ h }: { h: ProxyHealth | null | undefined }) {
       <span className={cn(base, 'bg-surface-2 text-fg-muted border border-line')}>
         <HelpCircle className="h-3 w-3" aria-hidden="true" />
         {/* wording: BA review */}
-        Chưa kiểm
+        Chưa kiểm tra
       </span>
     )
   }
@@ -145,7 +146,7 @@ function HealthCard({ refreshKey, onRan }: { refreshKey: number; onRan: () => vo
       {note && <p className="mt-2 text-xs text-warning">{note}</p>}
       {/* wording: BA review */}
       <p className="mt-2 text-[11px] text-fg-muted">
-        Hệ thống tự kiểm mỗi 10 phút. Proxy chết bị tạm bỏ qua để proxy dự phòng phục vụ; sống lại thì tự dùng lại.
+        Hệ thống tự kiểm mỗi 10 phút. Proxy chết được tạm bỏ qua (tối đa 20 phút, dùng lại ngay khi kiểm tra thấy sống) để proxy dự phòng phục vụ.
         Có báo Telegram khi đổi trạng thái.
       </p>
     </div>
@@ -246,7 +247,7 @@ function ExpandedProxies({
       setProxies(data.proxies ?? [])
       setError(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load proxies')
+      setError(e instanceof Error ? e.message : 'Không tải được danh sách proxy')
     } finally {
       setLoading(false)
     }
@@ -261,13 +262,13 @@ function ExpandedProxies({
         method: 'DELETE',
         body: JSON.stringify({ platform, index }),
       })
-      setRemoveMsg(m => ({ ...m, [index]: 'Removed' }))
+      setRemoveMsg(m => ({ ...m, [index]: 'Đã xoá' }))
       setTimeout(() => {
         fetchProxies()
         onRemoved()
       }, 600)
     } catch (e) {
-      setRemoveMsg(m => ({ ...m, [index]: `Error: ${e instanceof Error ? e.message : 'Failed'}` }))
+      setRemoveMsg(m => ({ ...m, [index]: `Lỗi: ${e instanceof Error ? e.message : 'Thất bại'}` }))
     } finally {
       setRemoving(r => ({ ...r, [index]: false }))
     }
@@ -276,7 +277,7 @@ function ExpandedProxies({
   if (loading) {
     return (
       <div className="px-6 py-3 text-[11px] text-fg-muted animate-pulse">
-        Loading proxies…
+        Đang tải danh sách proxy…
       </div>
     )
   }
@@ -290,7 +291,7 @@ function ExpandedProxies({
   if (proxies.length === 0) {
     return (
       <div className="px-6 py-3 text-[11px] text-fg-muted italic">
-        No Redis proxies for this platform (env-fallback only, read-only).
+        Nền tảng này chưa có proxy thêm trong admin (chỉ có proxy cấu hình máy chủ, chỉ đọc).
       </div>
     )
   }
@@ -316,6 +317,19 @@ function ExpandedProxies({
                 {px.priority === 'main' ? 'Chính' : 'Dự phòng'}
               </span>
               <HealthBadge h={px.health} />
+              {px.health?.sticky != null && (
+                // YouTube pool only: does the exit IP stay the same between two calls?
+                // wording: BA review
+                <span
+                  className={cn('rounded px-1.5 py-0.5 text-[10px]',
+                    px.health.sticky ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning')}
+                  title={px.health.sticky
+                    ? 'Proxy giữ cùng một IP giữa các lượt — hợp với YouTube.'
+                    : 'Mỗi lượt ra một IP khác. YouTube có thể từ chối khi IP đổi giữa lúc lấy thông tin và lúc tải; nên tạo thông tin đăng nhập kiểu giữ phiên (sticky) ở trang nhà cung cấp.'}
+                >
+                  {px.health.sticky ? 'Giữ IP' : 'Đổi IP mỗi lượt'}
+                </span>
+              )}
               {(px.cooling_s ?? 0) > 0 && (
                 <span className="text-[10px] text-fg-muted">
                   {/* wording: BA review */}
@@ -328,7 +342,7 @@ function ExpandedProxies({
             {removeMsg[px.index] && (
               <span className={cn(
                 'font-mono text-[10px]',
-                removeMsg[px.index].startsWith('Error') ? 'text-danger' : 'text-success'
+                removeMsg[px.index].startsWith('Lỗi') ? 'text-danger' : 'text-success'
               )}>
                 {removeMsg[px.index]}
               </span>
@@ -338,7 +352,7 @@ function ExpandedProxies({
               disabled={removing[px.index]}
               className="rounded bg-danger-soft px-2 py-0.5 text-[10px] font-semibold text-danger hover:bg-danger/20 disabled:opacity-40 transition-colors"
             >
-              {removing[px.index] ? '…' : 'Remove'}
+              {removing[px.index] ? '…' : 'Xoá'}
             </button>
           </div>
         </div>
@@ -371,7 +385,7 @@ export function ProxyPage() {
       setLastRefreshed(new Date())
       setError(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load proxy pools')
+      setError(e instanceof Error ? e.message : 'Không tải được nhóm proxy')
     } finally {
       setLoading(false)
     }
@@ -390,7 +404,7 @@ export function ProxyPage() {
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
     setAddError('')
-    if (!addPlatform || !addUrl) { setAddError('Platform and proxy URL are required.'); return }
+    if (!addPlatform || !addUrl) { setAddError('Cần chọn nền tảng và nhập địa chỉ proxy.'); return }
     // The server cleans the input (a pasted curl command, host:port:user:pass …)
     // and rejects what is not a proxy; no client-side scheme check any more.
     setAddOk('')
@@ -407,7 +421,7 @@ export function ProxyPage() {
       setHealthKey(k => k + 1)
       await fetchPools()
     } catch (e) {
-      setAddError(e instanceof Error ? e.message : 'Failed to add proxy')
+      setAddError(e instanceof Error ? e.message : 'Không thêm được proxy')
     } finally {
       setAdding(false)
     }
@@ -420,7 +434,7 @@ export function ProxyPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-sm text-fg-muted animate-pulse">Loading proxy pools…</div>
+        <div className="text-sm text-fg-muted animate-pulse">Đang tải nhóm proxy…</div>
       </div>
     )
   }
@@ -429,7 +443,7 @@ export function ProxyPage() {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3">
         <p className="text-sm text-danger">{error}</p>
-        <button onClick={fetchPools} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">Retry</button>
+        <button onClick={fetchPools} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">Thử lại</button>
       </div>
     )
   }
@@ -448,10 +462,10 @@ export function ProxyPage() {
   const deadCount = liveSummary && liveSummary.at != null ? liveSummary.total - liveSummary.alive : 0
   // wording: BA review
   const healthStatus = deadCount > 0 ? `${deadCount} proxy chết`
-    : essentialMissing ? 'Degraded' : anyMissing ? 'Partial' : 'Healthy'
+    : essentialMissing ? 'Thiếu proxy' : anyMissing ? 'Một phần' : 'Tốt'
   const healthColor =
-    healthStatus === 'Healthy'  ? 'text-success' :
-    healthStatus === 'Degraded' || deadCount > 0 ? 'text-danger'     : 'text-warning'
+    healthStatus === 'Tốt'  ? 'text-success' :
+    healthStatus === 'Thiếu proxy' || deadCount > 0 ? 'text-danger'     : 'text-warning'
 
   const formattedTime = lastRefreshed.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
@@ -460,23 +474,24 @@ export function ProxyPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight text-fg">Proxy Health</h1>
+          {/* wording: BA review */}
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Proxy</h1>
           <p className="mt-0.5 text-xs text-fg-muted">
-            Auto-refresh every 30s — last updated {formattedTime}
+            Tự làm mới mỗi 30 giây — cập nhật lúc {formattedTime}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Where the proxies are bought (owner 19/10). wording: BA review */}
           <a href="https://dataimpulse.com/" target="_blank" rel="noopener noreferrer"
              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
-            Mua proxy DataImpulse <ExternalLink className="h-3 w-3" aria-hidden />
+            Mua tại DataImpulse <ExternalLink className="h-3 w-3" aria-hidden />
           </a>
           <a href="https://www.proxy-cheap.com/" target="_blank" rel="noopener noreferrer"
              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
-            Mua proxy proxy-cheap <ExternalLink className="h-3 w-3" aria-hidden />
+            Mua tại proxy-cheap <ExternalLink className="h-3 w-3" aria-hidden />
           </a>
           <button onClick={fetchPools} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
-            ↺ Refresh
+            ↺ Làm mới
           </button>
         </div>
       </div>
@@ -485,13 +500,13 @@ export function ProxyPage() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <SummaryCard label="Platforms" value={platforms.length} />
-        <SummaryCard label="Total (Redis)" value={totalRedis} sub="editable via API" />
-        <SummaryCard label="Total (ENV)" value={totalEnv} sub="read-only fallback" />
+        <SummaryCard label="Nền tảng" value={platforms.length} />
+        <SummaryCard label="Đã thêm trong admin" value={totalRedis} sub="sửa được ở đây" />
+        <SummaryCard label="Cấu hình máy chủ" value={totalEnv} sub="chỉ đọc, dự phòng" />
         <SummaryCard
-          label="Health"
+          label="Tình trạng"
           value={<span className={healthColor}>{healthStatus}</span> as unknown as string}
-          sub={`${totalAll} proxies total`}
+          sub={`tổng ${totalAll} proxy`}
         />
       </div>
 
@@ -500,11 +515,11 @@ export function ProxyPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line">
-              <th className="py-2.5 pl-4 text-left font-mono text-[10px] uppercase tracking-widest text-fg-muted">Platform</th>
-              <th className="py-2.5 text-right font-mono text-[10px] uppercase tracking-widest text-fg-muted">Redis</th>
-              <th className="py-2.5 text-right font-mono text-[10px] uppercase tracking-widest text-fg-muted">ENV</th>
-              <th className="py-2.5 text-right font-mono text-[10px] uppercase tracking-widest text-fg-muted">Total</th>
-              <th className="py-2.5 pr-4 text-right font-mono text-[10px] uppercase tracking-widest text-fg-muted">Details</th>
+              <th className="py-2.5 pl-4 text-left font-mono text-[10px] uppercase tracking-widest text-fg-muted">Nền tảng</th>
+              <th className="py-2.5 text-right font-mono text-[10px] uppercase tracking-widest text-fg-muted">Admin</th>
+              <th className="py-2.5 text-right font-mono text-[10px] uppercase tracking-widest text-fg-muted">Máy chủ</th>
+              <th className="py-2.5 text-right font-mono text-[10px] uppercase tracking-widest text-fg-muted">Tổng</th>
+              <th className="py-2.5 pr-4 text-right font-mono text-[10px] uppercase tracking-widest text-fg-muted">Chi tiết</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -533,7 +548,7 @@ export function ProxyPage() {
                       onClick={() => toggleExpand(p)}
                       className="rounded border border-line px-2 py-1 font-mono text-[10px] text-fg-muted hover:border-line-strong hover:text-fg-2 transition-colors"
                     >
-                      {expanded[p] ? '▾ Hide' : '▸ Details'}
+                      {expanded[p] ? '▾ Ẩn' : '▸ Chi tiết'}
                     </button>
                   </td>
                 </tr>
@@ -552,23 +567,23 @@ export function ProxyPage() {
 
       {/* Add proxy form */}
       <div className="rounded-card border border-line bg-surface shadow-card p-5">
-        <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">Add Proxy to Redis Pool</h3>
+        <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">Thêm proxy</h3>
         <form onSubmit={handleAdd} className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex flex-col gap-1.5">
-            <label className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">Platform</label>
+            <label className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">Nền tảng</label>
             <select
               value={addPlatform}
               onChange={e => setAddPlatform(e.target.value)}
               className="rounded-card border border-line bg-surface shadow-card px-3 py-2 text-sm text-fg-2 outline-none focus:border-line-strong"
             >
-              <option value="">Select…</option>
+              <option value="">Chọn…</option>
               {['all','youtube','tiktok','facebook','instagram','douyin','twitter','reddit','tiktok_watch','default'].map(p => (
                 <option key={p} value={p}>{POOL_LABELS[p] ?? p}</option>
               ))}
             </select>
           </div>
           <div className="flex flex-1 flex-col gap-1.5">
-            <label className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">Proxy URL</label>
+            <label className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">Địa chỉ proxy</label>
             <input
               type="text"
               placeholder="http://user:pass@host:port  hoặc  host:port:user:pass"
@@ -582,15 +597,15 @@ export function ProxyPage() {
             disabled={adding}
             className="rounded-card bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-50 transition-colors"
           >
-            {adding ? 'Adding…' : 'Add'}
+            {adding ? 'Đang thêm…' : 'Thêm'}
           </button>
         </form>
         {addError && <p className="mt-2 text-xs text-danger">{addError}</p>}
         {addOk && <p className="mt-2 text-xs text-success">{addOk}</p>}
         {/* wording: BA review */}
         <p className="mt-3 text-[11px] text-fg-muted">
-          Thứ tự là thứ tự ưu tiên: proxy thêm trước là proxy chính, proxy thêm sau là dự phòng — chỉ dùng khi proxy
-          trước lỗi hoặc hết dung lượng (nghỉ 1 giờ rồi thử lại proxy chính; có báo Telegram khi chuyển).
+          Thứ tự thêm chính là thứ tự ưu tiên: proxy thêm trước là chính, các proxy sau là dự phòng. Dự phòng chỉ dùng khi proxy
+          trước lỗi: hết dung lượng thì nghỉ 1 giờ, kiểm tra thấy chết thì nghỉ tối đa 20 phút, rồi thử lại proxy chính. Có báo Telegram khi chuyển.
         </p>
       </div>
 
@@ -598,17 +613,17 @@ export function ProxyPage() {
 
       {/* ENV var reference */}
       <div className="rounded-card border border-line bg-surface shadow-card p-5">
-        <h3 className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">ENV Var Reference</h3>
+        <h3 className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-widest text-fg-muted">Biến môi trường (tham khảo)</h3>
         <p className="mb-3 text-[11px] text-fg-muted">
-          ENV-fallback proxies are read-only. Set these on Coolify to provision env proxies.
+          Proxy cấu hình máy chủ chỉ đọc. Đặt các biến này trên máy chủ (Vibe Host) để cấp proxy.
         </p>
         <div className="overflow-x-auto rounded-card border border-line">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-line bg-surface-2">
-                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-widest text-fg-muted">Platform</th>
-                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-widest text-fg-muted">ENV Variable</th>
-                <th className="px-3 py-2 text-right font-mono text-[10px] uppercase tracking-widest text-fg-muted">Current ENV Count</th>
+                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-widest text-fg-muted">Nền tảng</th>
+                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-widest text-fg-muted">Tên biến</th>
+                <th className="px-3 py-2 text-right font-mono text-[10px] uppercase tracking-widest text-fg-muted">Số proxy hiện có</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -629,7 +644,8 @@ export function ProxyPage() {
       </div>
 
       <p className="text-center text-[10px] text-fg-muted">
-        Redis proxies survive restarts — ENV-fallback proxies are read-only from PROXY_POOL_* env vars.
+        {/* wording: BA review */}
+        Proxy thêm trong admin được giữ lại khi khởi động lại; proxy cấu hình máy chủ chỉ đọc từ biến PROXY_POOL_*.
       </p>
     </div>
   )

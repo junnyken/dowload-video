@@ -92,6 +92,16 @@ run_bg "while true; do celery -A app.core.celery_app worker \
     --max-tasks-per-child=40 \
     --loglevel=info; echo '[entrypoint] celery worker exited — restarting in 3s'; sleep 3; done"
 
+# Partner API worker (2026-10-19): its own queue so a partner's jobs never
+# wait behind bulk downloads / channel scans on the shared 2-slot worker.
+# Same restart loop (ytdlp_channel signals every celery worker main process).
+# PARTNER_WORKER_CONCURRENCY (default 2) sizes it; each slot is one download.
+run_bg "while true; do celery -A app.core.celery_app worker \
+    -Q partner -n partner@%h \
+    --concurrency=${PARTNER_WORKER_CONCURRENCY:-2} \
+    --max-tasks-per-child=40 \
+    --loglevel=info; echo '[entrypoint] partner worker exited — restarting in 3s'; sleep 3; done"
+
 run_bg "celery -A app.core.celery_app beat --loglevel=info"
 
 # Retuned from the emergency --workers 1 diagnostic (2026-08-12). The comment

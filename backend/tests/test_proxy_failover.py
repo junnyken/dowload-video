@@ -81,3 +81,21 @@ def test_youtube_layer_uses_the_failover(fr):
     from app.services import downloader
     src = inspect.getsource(downloader)
     assert 'next_proxy_after_failure as _npf' in src and '_npf("youtube", _yt_proxy' in src
+
+
+def test_socks5h_credentials_are_masked_in_list(fr):
+    import asyncio
+    from app.api import admin
+    from app.core import proxy_pool as pp
+    pp.add_proxy("youtube", "socks5h://user9:topsecret@1.2.3.4:1080")
+    out = asyncio.run(admin.proxy_pool_list("youtube"))
+    assert "topsecret" not in str(out) and "user9" not in str(out)
+
+
+def test_partner_quota_refund(fr):
+    from datetime import datetime, timezone
+    from app.core import partner_quota as pq
+    now = datetime(2026, 10, 19, tzinfo=timezone.utc)
+    pq.consume("t1", "k1", 10, 10, now=now)
+    pq.refund("t1", "k1", now=now)
+    assert pq.usage("t1", "k1", now=now) == {"month": 0, "today_key": 0}

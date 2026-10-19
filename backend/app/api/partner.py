@@ -34,6 +34,8 @@ from app.core.structured_log import get_logger
 logger = get_logger(__name__)
 router = APIRouter(tags=["Partner API"])
 
+PARTNER_QUEUE = "partner"
+
 _PLAN_PRIORITY: dict[str, int] = {
     TenantPlan.starter:    5,
     TenantPlan.growth:     3,
@@ -226,6 +228,9 @@ async def submit_job(
         ins = supabase.table("partner_jobs").insert(job_row).execute()
         saved = ins.data[0] if ins.data else job_row
     except Exception as exc:
+        # The job was counted by _check_job_quota but never created.
+        from app.core import partner_quota as _pq
+        _pq.refund(tenant.tenant_id, tenant.api_key_id)
         raise HTTPException(
             status_code=500,
             detail={"code": "db_error", "message": str(exc)},
@@ -250,10 +255,14 @@ async def submit_job(
             "source":           "partner",
         }).execute()
 
+        # Own queue + own worker (docker-entrypoint.sh, 2026-10-19): partner
+        # jobs no longer wait behind bulk / channel scans on the shared
+        # 2-slot worker.
         process_video_task.apply_async(
             args=[download_job_id, body.url],
             kwargs={"quality": body.quality},
             priority=priority,
+            queue=PARTNER_QUEUE,
         )
         from app.core.local_download import public_api_base
         sync_partner_job_task.apply_async(
@@ -262,6 +271,7 @@ async def submit_job(
             # on the host the partner already talks to.
             kwargs={"api_base": public_api_base(request)},
             countdown=5,
+            queue=PARTNER_QUEUE,
         )
     except Exception as exc:
         # Celery/DB unavailable — job stays queued; partner can retry via

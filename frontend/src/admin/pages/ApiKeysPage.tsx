@@ -42,12 +42,13 @@ interface ApiKeysResponse {
 }
 
 function formatRelative(iso: string | null): string {
-  if (!iso) return 'Never'
+  // wording: BA review
+  if (!iso) return 'Chưa dùng'
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (diff < 60) return `${diff}s ago`
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  return `${Math.floor(diff / 86400)}d ago`
+  if (diff < 60) return `${diff} giây trước`
+  if (diff < 3600) return `${Math.floor(diff / 60)} phút trước`
+  if (diff < 86400) return `${Math.floor(diff / 3600)} giờ trước`
+  return `${Math.floor(diff / 86400)} ngày trước`
 }
 
 function formatDate(iso: string | null): string {
@@ -71,7 +72,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={handleCopy}
-      title="Copy key prefix"
+      title="Sao chép phần đầu key"
       className={cn(
         'ml-1 rounded px-1 py-0.5 font-mono text-[10px] transition-colors',
         copied
@@ -79,7 +80,7 @@ function CopyButton({ text }: { text: string }) {
           : 'bg-surface text-fg-muted hover:bg-surface-2 hover:text-fg-2',
       )}
     >
-      {copied ? 'Copied!' : 'Copy'}
+      {/* wording: BA review */}{copied ? 'Đã chép' : 'Sao chép'}
     </button>
   )
 }
@@ -149,7 +150,7 @@ function DeleteKeyModal({ k, onClose, onDeleted }: { k: ApiKey; onClose: () => v
           Key sẽ bị xoá vĩnh viễn. Mọi hệ thống đang dùng key này sẽ nhận lỗi 401 ngay lập tức và không thể hoàn tác.
           Các job đã chạy trước đó vẫn được giữ lại.
         </p>
-        <p className="text-xs text-fg-muted">Nếu chỉ muốn tạm dừng key, hãy dùng nút “Deactivate” thay vì xoá.</p>
+        <p className="text-xs text-fg-muted">Nếu chỉ muốn tạm dừng key, hãy dùng nút “Tắt key” thay vì xoá.</p>
         <FormError message={err} />
         <div className="flex justify-end gap-2">
           <Button onClick={onClose} disabled={pending}>Huỷ</Button>
@@ -239,12 +240,12 @@ export default function ApiKeysPage() {
     setToggling(p => ({ ...p, [keyId]: true }))
     try {
       await adminPost(`/enterprise/api-keys/${keyId}/toggle`)
-      const label = currentState ? 'Deactivated' : 'Activated'
+      const label = currentState ? 'Đã tắt' : 'Đã bật'
       setMsg(m => ({ ...m, [keyId]: label }))
       setTimeout(() => setMsg(m => { const n = { ...m }; delete n[keyId]; return n }), 2000)
       fetchData()
     } catch (e) {
-      setMsg(m => ({ ...m, [keyId]: `Error: ${(e as Error).message}` }))
+      setMsg(m => ({ ...m, [keyId]: `Lỗi: ${(e as Error).message}` }))
     } finally {
       setToggling(p => ({ ...p, [keyId]: false }))
     }
@@ -261,10 +262,11 @@ export default function ApiKeysPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-fg">Partner API Keys</h1>
-          <p className="mt-0.5 text-xs text-fg-muted">vgp_ prefixed keys for tenant partner access</p>
+          {/* wording: BA review */}
+          <p className="mt-0.5 text-xs text-fg-muted">Key bắt đầu bằng vgp_ để khách Partner gọi API</p>
         </div>
         <button onClick={fetchData} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
-          ↺ Refresh
+          ↺ Làm mới
         </button>
       </div>
 
@@ -290,10 +292,11 @@ export default function ApiKeysPage() {
       {data && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
-            { label: 'Total Keys', value: data.total },
-            { label: 'Active', value: data.total_active },
-            { label: 'Req Today', value: data.total_requests_today.toLocaleString() },
-            { label: 'Req Month', value: data.total_requests_month.toLocaleString() },
+            // wording: BA review
+            { label: 'Tổng số key', value: data.total },
+            { label: 'Đang bật', value: data.total_active },
+            { label: 'Lượt gọi hôm nay', value: data.total_requests_today.toLocaleString() },
+            { label: 'Lượt gọi tháng này', value: data.total_requests_month.toLocaleString() },
           ].map(c => (
             <div key={c.label} className="rounded-card border border-line bg-surface shadow-card p-4">
               <p className="font-mono text-xs text-fg-muted">{c.label}</p>
@@ -307,14 +310,14 @@ export default function ApiKeysPage() {
       <div className="flex flex-wrap gap-2">
         <input
           type="text"
-          placeholder="Search key, label, tenant…"
+          placeholder="Tìm theo key, nhãn, khách…"
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="rounded border border-line bg-surface px-3 py-1.5 text-xs text-fg-2 placeholder:text-fg-muted w-52"
         />
         <label className="flex items-center gap-1.5 text-xs text-fg-muted cursor-pointer">
           <input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)} />
-          Active only
+          Chỉ key đang bật
         </label>
       </div>
 
@@ -323,13 +326,13 @@ export default function ApiKeysPage() {
       )}
 
       {loading ? (
-        <div className="py-12 text-center font-mono text-xs text-fg-muted">Loading API keys…</div>
+        <div className="py-12 text-center font-mono text-xs text-fg-muted">Đang tải danh sách key…</div>
       ) : (
         <div className="overflow-x-auto rounded-control border border-line">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-line bg-surface-2">
-                {['Key', 'Tenant', 'Scopes', 'IP Allowlist', 'Created By', 'Requests', 'Rate Limits', 'Last Used', 'Expires', 'Status'].map(h => (
+                {['Key', 'Khách', 'Quyền', 'IP được phép', 'Người tạo', 'Lượt gọi', 'Giới hạn', 'Dùng lần cuối', 'Hết hạn', 'Trạng thái'].map(h => (
                   <th key={h} className="px-3 py-2.5 font-mono font-semibold text-fg-muted">{h}</th>
                 ))}
               </tr>
@@ -365,7 +368,7 @@ export default function ApiKeysPage() {
                   {/* IP Allowlist */}
                   <td className="px-3 py-2.5">
                     {(!k.ip_allowlist || k.ip_allowlist.length === 0) ? (
-                      <span className="rounded bg-surface px-1.5 py-0.5 font-mono text-[10px] text-fg-muted">Any</span>
+                      <span className="rounded bg-surface px-1.5 py-0.5 font-mono text-[10px] text-fg-muted">Mọi IP</span>
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {k.ip_allowlist.map(ip => (
@@ -384,9 +387,9 @@ export default function ApiKeysPage() {
                     }
                   </td>
                   <td className="px-3 py-2.5 font-mono text-fg-muted">
-                    <div>Today: {k.requests_today.toLocaleString()}</div>
-                    <div className="text-fg-muted">Month: {k.requests_this_month.toLocaleString()}</div>
-                    <div className="text-fg-muted">Total: {k.requests_total.toLocaleString()}</div>
+                    <div>Hôm nay: {k.requests_today.toLocaleString()}</div>
+                    <div className="text-fg-muted">Tháng: {k.requests_this_month.toLocaleString()}</div>
+                    <div className="text-fg-muted">Tổng: {k.requests_total.toLocaleString()}</div>
                   </td>
                   <td className="px-3 py-2.5 font-mono text-fg-muted">
                     <div>{k.rate_limit_per_min}/phút</div>
@@ -405,7 +408,7 @@ export default function ApiKeysPage() {
                           : 'bg-success-soft text-success hover:bg-success/20',
                       )}
                     >
-                      {toggling[k.id] ? '…' : k.is_active ? 'Deactivate' : 'Activate'}
+                      {toggling[k.id] ? '…' : k.is_active ? 'Tắt key' : 'Bật key'}
                     </button>
                     {/* wording: BA review */}
                     <div className="mt-1.5 flex flex-wrap gap-1">
@@ -429,7 +432,7 @@ export default function ApiKeysPage() {
                       </button>
                     </div>
                     {msg[k.id] && (
-                      <p className="mt-1 font-mono text-[10px] text-success">{msg[k.id]}</p>
+                      <p className={cn('mt-1 font-mono text-[10px]', msg[k.id].startsWith('Lỗi') ? 'text-danger' : 'text-success')}>{msg[k.id]}</p>
                     )}
                   </td>
                 </tr>
@@ -437,7 +440,7 @@ export default function ApiKeysPage() {
               {keys.length === 0 && (
                 <tr>
                   <td colSpan={10} className="py-10 text-center font-mono text-xs text-fg-muted">
-                    No API keys found
+                    Không có key nào
                   </td>
                 </tr>
               )}

@@ -84,8 +84,8 @@ def _handle_alerts(results: Dict[str, str], was: Dict[str, str]) -> None:
             reason = (states.get(p, {}) or {}).get("reason") or "không rõ"
             lines.append(f"• <b>{p}</b> — {reason[:120]}")
         # wording: BA review
-        lines.append("\nĐang tự thử bản yt-dlp mới hơn (Facebook/Instagram/X: tạm tải qua Cobalt). "
-                     "Sẽ báo kết quả.")
+        lines.append("\nHệ thống sẽ tự thử bản yt-dlp mới hơn (tối đa 1 lần mỗi 6 giờ cho mỗi nền tảng) "
+                     "và báo kết quả. Facebook/Instagram/X tạm tải qua Cobalt.")
         _send("\n".join(lines))
         # app.core.platform_health (2026-10-19): act, not only report.
         for p in broke:

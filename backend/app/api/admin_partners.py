@@ -84,7 +84,7 @@ class CreateTenantBody(BaseModel):
     @classmethod
     def _plan(cls, v: str) -> str:
         if v not in _PLANS:
-            raise ValueError("plan phải là starter, growth hoặc enterprise")
+            raise ValueError("Gói phải là starter, growth hoặc enterprise")
         return v
 
 
@@ -129,7 +129,7 @@ def _get_tenant(tenant_id: str) -> Dict[str, Any]:
         .execute()
     )
     if not res or not res.data:
-        raise HTTPException(status_code=404, detail="Không tìm thấy khách hàng")
+        raise HTTPException(status_code=404, detail="Không tìm thấy khách")
     return res.data
 
 
@@ -160,7 +160,7 @@ async def create_partner_tenant(body: CreateTenantBody, request: Request, _=Depe
         "status": "active",
     }).execute()
     if not res.data:
-        raise HTTPException(status_code=500, detail="Không tạo được khách hàng")
+        raise HTTPException(status_code=500, detail="Không tạo được khách")
     tenant = res.data[0]
     try:
         db.table("tenant_settings").insert({"tenant_id": tenant["id"]}).execute()
@@ -251,10 +251,10 @@ async def update_partner_key(key_id: str, body: UpdateKeyBody, request: Request,
     if "expires_at" in sent:
         updates["expires_at"] = body.expires_at.isoformat() if body.expires_at else None
     if not updates:
-        raise HTTPException(status_code=422, detail="Không có trường nào để cập nhật")
+        raise HTTPException(status_code=422, detail="Không có thay đổi nào để lưu")
     res = get_supabase_client().table("tenant_api_keys").update(updates).eq("id", key_id).execute()
     if not res.data:
-        raise HTTPException(status_code=500, detail="Cập nhật thất bại")
+        raise HTTPException(status_code=500, detail="Cập nhật không thành công")
     log_admin_action(request, "admin.api_key.updated", resource_type="api_key", resource_id=key_id)
     return _strip_hash(res.data[0])
 
@@ -282,12 +282,12 @@ async def delete_partner_tenant(tenant_id: str, request: Request, _=Depends(veri
         .execute()
     )
     if not res or not res.data:
-        raise HTTPException(status_code=404, detail="Không tìm thấy khách hàng")
+        raise HTTPException(status_code=404, detail="Không tìm thấy khách")
     if res.data.get("workspace_id"):
         # wording: BA review
         raise HTTPException(
             status_code=409,
-            detail="Khách này gắn với một tài khoản trên web nên không xoá được ở đây. Hãy đổi trạng thái sang suspended.",
+            detail="Khách này gắn với một tài khoản trên web nên không xoá được ở đây. Hãy bấm “Tạm ngưng” thay thế.",
         )
     get_supabase_client().table("tenants").delete().eq("id", tenant_id).execute()
     log_admin_action(request, "admin.tenant.deleted", resource_type="tenant", resource_id=tenant_id)

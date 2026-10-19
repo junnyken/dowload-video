@@ -115,7 +115,7 @@ services:
       - 8.8.8.8
       - 8.8.4.4
     # Heavy worker: consumes the dedicated "downloads" queue only.
-    command: celery -A app.core.celery_app.celery_app worker --loglevel=info -Q downloads --concurrency=${CELERY_DOWNLOADS_CONCURRENCY:-6} --max-tasks-per-child=50
+    command: celery -A app.core.celery_app.celery_app worker --loglevel=info -Q downloads,partner --concurrency=${CELERY_DOWNLOADS_CONCURRENCY:-6} --max-tasks-per-child=50
     environment:
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0

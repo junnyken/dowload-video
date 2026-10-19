@@ -83,7 +83,7 @@ def set_max_concurrent(n: Optional[int]) -> int:
     else:
         n = int(n)
         if not HARD_MIN <= n <= HARD_MAX:
-            raise ValueError(f"Phải từ {HARD_MIN} đến {HARD_MAX}")
+            raise ValueError(f"Giá trị phải từ {HARD_MIN} đến {HARD_MAX}")
         _r().set(SETTING_KEY, str(n))
     _cache.update(value=0.0, at=0.0)
     return get_max_concurrent()
@@ -195,8 +195,9 @@ def sample(now: Optional[float] = None) -> Optional[dict]:
         peak, acq, ref, active, _ = pipe.execute()
         try:
             queue = int(rc.llen("downloads") or 0)
+            queue_partner = int(rc.llen("partner") or 0)
         except Exception:
-            queue = None
+            queue, queue_partner = None, None
         active_now = int(active or 0)
         rec = {
             "t": int(now or time.time()),
@@ -209,6 +210,7 @@ def sample(now: Optional[float] = None) -> Optional[dict]:
             "cpu": _cpu_pct(rc),
             "mem": memory_pct(),
             "queue": queue,
+            "queue_partner": queue_partner,
         }
         rc.lpush(MINUTES, json.dumps(rec, separators=(",", ":")))
         rc.ltrim(MINUTES, 0, MINUTES_KEEP - 1)

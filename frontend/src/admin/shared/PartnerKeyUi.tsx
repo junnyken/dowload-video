@@ -170,7 +170,7 @@ export function KeyFields({ value, onChange, disabled }: { value: KeyFormValues;
       <Field label="IP được phép gọi" hint="Mỗi dòng một địa chỉ IP (không nhận dải CIDR). Để trống = mọi IP đều gọi được.">
         <textarea className={cn(inputCls, 'font-mono')} rows={3} value={value.ips} disabled={disabled} placeholder={'Ví dụ: 203.0.113.10 (để trống = mọi IP)'} onChange={e => set('ips', e.target.value)} />
       </Field>
-      <Field label="Ngày hết hạn (tuỳ chọn)" hint="Để trống = không hết hạn.">
+      <Field label="Ngày hết hạn (tuỳ chọn)" hint="Key hết hạn cuối ngày đã chọn (giờ UTC, tức 06:59 sáng hôm sau giờ Việt Nam). Để trống = không hết hạn.">
         <input className={inputCls} type="date" value={value.expires} disabled={disabled} onChange={e => set('expires', e.target.value)} />
       </Field>
     </div>

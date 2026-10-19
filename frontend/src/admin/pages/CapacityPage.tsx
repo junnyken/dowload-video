@@ -186,13 +186,13 @@ function Tooltip({ pt, range, left }: { pt: Point; range: Range; left: number })
         style={{ left, bottom: 0, transform: 'translate(-50%, 6px)', minWidth: 150 }}>
         <div className="font-medium">{fmtClock(pt.t, range === '7d')}</div>
         {/* wording: BA review */}
-        <div className="text-fg-2">Cùng lúc cao nhất: <b className="text-fg">{pt.peak}</b> / trần {pt.limit}</div>
+        <div className="text-fg-2">Cao nhất cùng lúc: <b className="text-fg">{pt.peak}</b> / giới hạn {pt.limit}</div>
         {/* wording: BA review */}
-        <div className="text-fg-2">Bị từ chối: <b className="text-fg">{pt.refused}</b></div>
+        <div className="text-fg-2">Lượt bị từ chối (quá tải): <b className="text-fg">{pt.refused}</b></div>
         {/* wording: BA review */}
         <div className="text-fg-2">CPU: <b className="text-fg">{fmtNum(pt.cpu_avg, 0)}%</b> (cao nhất {fmtNum(pt.cpu_max, 0)}%)</div>
         {/* wording: BA review */}
-        <div className="text-fg-2">Hàng đợi tối đa: <b className="text-fg">{fmtNum(pt.queue_max)}</b></div>
+        <div className="text-fg-2">Việc tải hàng loạt đang chờ (tối đa): <b className="text-fg">{fmtNum(pt.queue_max)}</b></div>
       </div>
     </div>
   )
@@ -283,7 +283,7 @@ export default function CapacityPage() {
     }
     if (n > cur * 2 &&
       // wording: BA review
-      !window.confirm(`Bạn đang tăng trần từ ${cur} lên ${n} (hơn gấp đôi). Khi CPU đầy, mỗi lượt tải sẽ chậm đi. Vẫn lưu?`)) return
+      !window.confirm(`Bạn đang tăng giới hạn từ ${cur} lên ${n} (hơn gấp đôi). Khi CPU đầy, mỗi lượt tải sẽ chậm đi. Vẫn lưu?`)) return
     save(n)
   }
 
@@ -303,7 +303,7 @@ export default function CapacityPage() {
   if (!data || !axis) {
     return (
       <div className="space-y-2">
-        <h1 className="text-lg font-semibold text-fg">{/* wording: BA review */}Tải đồng thời &amp; quá tải</h1>
+        <h1 className="text-lg font-semibold text-fg">{/* wording: BA review */}Tải đồng thời</h1>
         <p className="text-sm text-danger" role="alert">{/* wording: BA review */}Không tải được số liệu: {err}</p>
         <button onClick={load} className="rounded-md border border-line px-3 py-1.5 text-xs text-fg-2 hover:bg-surface">
           {/* wording: BA review */}Thử lại
@@ -327,11 +327,11 @@ export default function CapacityPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-lg font-semibold tracking-tight text-fg">{/* wording: BA review */}Tải đồng thời &amp; quá tải</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-fg">{/* wording: BA review */}Tải đồng thời</h1>
         <p className="mt-1 text-xs text-fg-muted">
           {/* wording: BA review */}
-          Tối đa {lim} lượt tải cùng lúc qua /fetch-link; lượt thứ {lim + 1} bị từ chối ngay (lỗi 429).
-          Máy chủ có {resources.cpu_cores != null ? fmtNum(resources.cpu_cores, 2) : '—'} CPU
+          Tối đa {lim} lượt tải cùng lúc (qua /fetch-link); lượt thứ {lim + 1} bị từ chối ngay với lỗi 429.
+          Máy chủ có {resources.cpu_cores != null ? fmtNum(resources.cpu_cores, 2) : '—'} nhân CPU
           {resources.memory_pct_now != null ? `, RAM đang dùng ${fmtNum(resources.memory_pct_now, 0)}%` : ''}.
         </p>
       </div>
@@ -357,12 +357,12 @@ export default function CapacityPage() {
           </button>
           <button onClick={() => save(null)} disabled={saving || setting.source === 'env'}
             className="rounded-md border border-line px-3 py-1.5 text-xs text-fg-2 hover:bg-surface-2 disabled:opacity-50">
-            {/* wording: BA review */}Về mặc định
+            {/* wording: BA review */}Đặt lại mặc định
           </button>
         </div>
         <p className="mt-2 text-[11px] text-fg-muted">
           {/* wording: BA review */}
-          Tăng trần giúp nhiều người tải cùng lúc hơn, nhưng mỗi lượt sẽ chậm đi khi CPU đã đầy. Sau khi đổi, hãy theo dõi biểu đồ CPU bên dưới.
+          Tăng giới hạn giúp nhiều người tải cùng lúc hơn, nhưng mỗi lượt sẽ chậm đi khi CPU đã đầy. Sau khi đổi, hãy theo dõi biểu đồ CPU bên dưới.
         </p>
         {saveErr && <p className="mt-2 text-xs text-danger" role="alert">{saveErr}</p>}
         {saveOk && <p className="mt-2 text-xs text-success" role="status">{saveOk}</p>}
@@ -382,7 +382,7 @@ export default function CapacityPage() {
           <input type="checkbox" checked={asTable} onChange={e => setAsTable(e.target.checked)} />
           {/* wording: BA review */}Xem dạng bảng
         </label>
-        {err && <span className="text-xs text-danger" role="alert">{/* wording: BA review */}Làm mới lỗi: {err}</span>}
+        {err && <span className="text-xs text-danger" role="alert">{/* wording: BA review */}Làm mới thất bại: {err}</span>}
       </div>
 
       {partial && (
@@ -397,16 +397,16 @@ export default function CapacityPage() {
       {/* Tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {/* wording: BA review */}
-        <Tile label="Cao nhất cùng lúc" value={s.peak == null ? '—' : `${s.peak} / ${lim}`} sub="lượt / trần hiện tại" />
+        <Tile label="Cao nhất cùng lúc" value={s.peak == null ? '—' : `${s.peak} / ${lim}`} sub="lượt / giới hạn hiện tại" />
         {/* wording: BA review */}
-        <Tile label="Lượt bị từ chối vì quá tải" value={fmtNum(s.refused)} warn={s.refused > 0}
-          sub={s.acquired ? `trên ${fmtNum(s.acquired + s.refused)} lượt` : undefined} />
+        <Tile label="Lượt bị từ chối (quá tải)" value={fmtNum(s.refused)} warn={s.refused > 0}
+          sub={s.acquired ? `trên tổng ${fmtNum(s.acquired + s.refused)} lượt` : undefined} />
         {/* wording: BA review */}
-        <Tile label="Số phút chạm trần" value={fmtNum(s.minutes_at_limit)} warn={s.minutes_at_limit > 0}
+        <Tile label="Số phút chạm giới hạn" value={fmtNum(s.minutes_at_limit)} warn={s.minutes_at_limit > 0}
           sub={`trong ${fmtNum(s.minutes_sampled)} phút đã đo`} />
         {/* wording: BA review */}
-        <Tile label="CPU p95" value={s.cpu_p95 == null ? '—' : `${fmtNum(s.cpu_p95, 0)}%`} warn={cpuTone}
-          sub={s.cpu_max == null ? undefined : `cao nhất ${fmtNum(s.cpu_max, 0)}%`} />
+        <Tile label="CPU mức cao (p95)" value={s.cpu_p95 == null ? '—' : `${fmtNum(s.cpu_p95, 0)}%`} warn={cpuTone}
+          sub={s.cpu_max == null ? undefined : `95% thời gian thấp hơn mức này · cao nhất ${fmtNum(s.cpu_max, 0)}%`} />
       </div>
 
       {points.length === 0 ? (
@@ -420,7 +420,7 @@ export default function CapacityPage() {
             <thead className="sticky top-0 bg-surface text-left text-fg-muted">
               <tr>
                 {/* wording: BA review */}
-                {['Thời điểm', 'Cao nhất', 'Trần', 'Bị từ chối', 'CPU tb %', 'CPU max %', 'Hàng đợi'].map(h => (
+                {['Thời điểm', 'Cao nhất', 'Giới hạn', 'Bị từ chối', 'CPU trung bình %', 'CPU cao nhất %', 'Việc đang chờ'].map(h => (
                   <th key={h} scope="col" className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -444,9 +444,9 @@ export default function CapacityPage() {
         <div className="space-y-3">
           <Chart {...common}
             /* wording: BA review */
-            title="Lượt tải cùng lúc (cao nhất mỗi khoảng)"
+            title={range === '24h' ? 'Lượt tải cùng lúc (cao nhất mỗi 5 phút)' : 'Lượt tải cùng lúc (cao nhất mỗi giờ)'}
             yMax={peakMax} yTicks={[0, peakMax / 2, peakMax]}
-            refLines={[{ value: lastLimit, label: `Trần ${lastLimit}` }]}
+            refLines={[{ value: lastLimit, label: `Giới hạn ${lastLimit}` }]}
             render={({ x, plotH, px }) => {
               const y = (v: number) => 8 + plotH - (Math.min(v, peakMax) / peakMax) * plotH
               return runs(points, axis.bucket).map((run, i) => {
@@ -458,7 +458,7 @@ export default function CapacityPage() {
             }} />
           <Chart {...common}
             /* wording: BA review */
-            title="Lượt bị từ chối"
+            title="Lượt bị từ chối (quá tải)"
             height={100}
             yMax={refMax} yTicks={[0, refMax]}
             render={({ x, plotH, px }) => {
@@ -510,8 +510,8 @@ export default function CapacityPage() {
                   {/* wording: BA review */}
                   <th scope="col" className="py-1.5 pr-3 font-medium">Nền tảng</th>
                   <th scope="col" className="py-1.5 px-3 text-right font-medium">Số lượt</th>
-                  <th scope="col" className="py-1.5 px-3 text-right font-medium">p50</th>
-                  <th scope="col" className="py-1.5 pl-3 text-right font-medium">p95</th>
+                  <th scope="col" className="py-1.5 px-3 text-right font-medium">Trung vị (p50)</th>
+                  <th scope="col" className="py-1.5 pl-3 text-right font-medium">Chậm nhất 5% (p95)</th>
                 </tr>
               </thead>
               <tbody>
@@ -521,7 +521,7 @@ export default function CapacityPage() {
                     <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(l.total)}</td>
                     <td className="py-1.5 px-3 text-right tabular-nums">{fmtMs(l.p50_ms)}</td>
                     {/* wording: BA review */}
-                    <td className="py-1.5 pl-3 text-right tabular-nums">{l.p95_ms == null ? (l.total > 0 ? '> 60 s' : '—') : fmtMs(l.p95_ms)}</td>
+                    <td className="py-1.5 pl-3 text-right tabular-nums" title={l.p95_ms == null && l.total > 0 ? 'Lâu hơn 60 giây' : undefined}>{l.p95_ms == null ? (l.total > 0 ? '> 60 s' : '—') : fmtMs(l.p95_ms)}</td>
                   </tr>
                 ))}
               </tbody>

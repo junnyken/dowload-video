@@ -193,22 +193,70 @@ def status() -> dict:
 
 # ── install / probe / promote ─────────────────────────────────────────
 
+def wheel_sha256(version: str, timeout: int = 20) -> Optional[str]:
+    """sha256 PyPI publishes for this version's wheel (None = no wheel)."""
+    try:
+        req = urllib.request.Request(f"https://pypi.org/pypi/yt-dlp/{version}/json",
+                                     headers={"User-Agent": "vidgrab-ytdlp-channel"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read())
+        for f in data.get("urls") or []:
+            if f.get("packagetype") == "bdist_wheel" and (f.get("digests") or {}).get("sha256"):
+                return f["digests"]["sha256"]
+    except Exception:
+        return None
+    return None
+
+
+_ALLOWED_TOP = ("yt_dlp", "bin", "share")
+
+
+def unexpected_entries(target: str) -> List[str]:
+    """Anything in an install dir that is not yt-dlp itself. The dir is first
+    on PYTHONPATH of every process: a .pth, sitecustomize.py or a second
+    package there would run in all of them (security review 19/10)."""
+    bad = []
+    for name in os.listdir(target):
+        if name in _ALLOWED_TOP or (name.startswith("yt_dlp-") and name.endswith(".dist-info")):
+            continue
+        bad.append(name)
+    return bad
+
+
 def install(version: str, target: str) -> Optional[str]:
     """pip-install yt-dlp==version into `target` (replaced). Returns an
     error string, None on success. --no-deps: the image already has yt-dlp's
-    dependencies (curl_cffi is pinned there on purpose)."""
+    dependencies (curl_cffi is pinned there on purpose). Wheel only (no
+    setup.py runs at install) and pinned to the sha256 PyPI lists for it;
+    the result must contain nothing but yt-dlp."""
     shutil.rmtree(target, ignore_errors=True)
+    digest = wheel_sha256(version)
+    if not digest:
+        return f"no wheel with a sha256 on PyPI for {version}"
+    req_file = target + ".req.txt"
     try:
+        with open(req_file, "w", encoding="utf-8") as f:
+            f.write(f"yt-dlp=={version} --hash=sha256:{digest}\n")
         p = subprocess.run(
             [sys.executable, "-m", "pip", "install", "-q", "--no-deps", "--no-cache-dir",
-             "--disable-pip-version-check", "--target", target, f"yt-dlp=={version}"],
+             "--only-binary=:all:", "--require-hashes", "--disable-pip-version-check",
+             "--target", target, "-r", req_file],
             capture_output=True, text=True, timeout=PIP_TIMEOUT)
     except subprocess.TimeoutExpired:
         return "pip timeout"
     except Exception as exc:
         return f"pip error: {exc}"
+    finally:
+        try:
+            os.remove(req_file)
+        except OSError:
+            pass
     if p.returncode != 0:
         return (p.stderr or p.stdout or "pip failed").strip()[-300:]
+    bad = unexpected_entries(target)
+    if bad:
+        shutil.rmtree(target, ignore_errors=True)
+        return f"unexpected files in the package: {', '.join(bad[:5])}"
     got = dir_version(target)
     if not same(got, version):
         return f"installed {got!r}, wanted {version}"
@@ -397,6 +445,16 @@ def try_candidates(broken: List[str], candidates: List[tuple], reason: str) -> d
     platform that passes today. Returns a summary dict."""
     keep = [p for p in currently_ok_platforms() if p not in broken]
     tried = []
+    if broken:
+        # First ask the version that runs now: a platform it still reads is
+        # not broken (a burst of dead links, a transient block) — nothing to
+        # fix, and no reason to promote anything. (Security review 19/10.)
+        current = probe_with(OVERRIDE_DIR if dir_version(OVERRIDE_DIR) else None, broken)
+        still = [p for p in broken if not current.get(p, {}).get("ok")]
+        if not still:
+            return {"promoted": None, "tried": [], "kept_ok": keep,
+                    "note": "the running version already works for " + ",".join(broken)}
+        broken = still
     for version, source in candidates:
         cand = f"{OVERRIDE_DIR}.cand"
         err = install(version, cand)

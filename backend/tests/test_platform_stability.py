@@ -89,6 +89,7 @@ def test_broken_platform_triggers_degrade_cobalt_and_remediation(fr, monkeypatch
     monkeypatch.setattr(alerts, "send_admin_alert", lambda *a, **k: sent.append(a))
     monkeypatch.setattr(ph, "_notify_partners", lambda ev, p, r: notified.append((ev, p)))
     monkeypatch.setattr(ph, "request_remediation", lambda p, r: queued.append(p) or True)
+    monkeypatch.setattr(ph, "probe_confirms_failure", lambda p: True)
     _traffic(do, "facebook", 6, {"extractor_broken": 6})
     found = ph.check_platforms(now=NOW)
     assert found[0]["verdict"] == "broken"
@@ -221,8 +222,10 @@ def _cands(monkeypatch, yc, results):
         _fake_ytdlp(target, version)
         return None
     monkeypatch.setattr(yc, "install", install)
+    # path None = the image copy; the version running now is asked first
+    # (try_candidates' "does the current one already work?" check).
     monkeypatch.setattr(yc, "probe_with", lambda path, plats: {
-        p: {"ok": p in results[yc.dir_version(path)]} for p in plats})
+        p: {"ok": p in results.get(yc.dir_version(path) if path else "image", set())} for p in plats})
     monkeypatch.setattr(yc, "currently_ok_platforms", lambda: ["youtube", "facebook"])
 
 
@@ -254,6 +257,7 @@ def test_install_failure_is_reported_not_promoted(chan, monkeypatch):
     yc = chan
     monkeypatch.setattr(yc, "install", lambda v, t: "pip failed")
     monkeypatch.setattr(yc, "currently_ok_platforms", lambda: [])
+    monkeypatch.setattr(yc, "probe_with", lambda path, plats: {p: {"ok": False} for p in plats})
     out = yc.try_candidates(["tiktok"], [("2026.10.10.1.dev0", "nightly")], "t")
     assert out["promoted"] is None and out["tried"][0]["result"] == "install_failed"
 
@@ -370,3 +374,50 @@ def test_douyin_probe_never_reaches_scraperapi(monkeypatch):
     ctx.run(set_context, PROBE_CONTEXT)
     assert ctx.run(lambda: asyncio.run(de._try_scraperapi_ssr("https://www.douyin.com/video/1"))) is None
     assert called == []
+
+
+
+# ── security review 19/10 (MEDIUM-1 / MEDIUM-2) ──────────────────────────────
+
+def test_traffic_alone_only_alerts(fr, monkeypatch):
+    """Anyone can send dead links: without our own probe failing, a
+    'broken' verdict must not notify partners, reroute, or remediate."""
+    import app.core.download_outcomes as do
+    from app.core import alerts, platform_health as ph
+    sent, acted = [], []
+    monkeypatch.setattr(alerts, "send_admin_alert", lambda *a, **k: sent.append(a))
+    monkeypatch.setattr(ph, "on_platform_broken", lambda p, r: acted.append(p))
+    monkeypatch.setattr(ph, "mark_degraded", lambda p, r: acted.append(p))
+    monkeypatch.setattr(ph, "probe_confirms_failure", lambda p: False)
+    _traffic(do, "tiktok", 5, {"extractor_broken": 6})
+    _traffic(do, "youtube", 2, {"temporary_blocked": 10})
+    ph.check_platforms(now=NOW)
+    assert sent and acted == []
+    assert any("chưa tự xử lý" in a[2] for a in sent)
+
+
+def test_no_promotion_when_the_running_version_already_works(chan, monkeypatch):
+    yc = chan
+    installs = []
+    monkeypatch.setattr(yc, "install", lambda v, t: installs.append(v))
+    monkeypatch.setattr(yc, "currently_ok_platforms", lambda: ["youtube"])
+    monkeypatch.setattr(yc, "probe_with", lambda path, plats: {p: {"ok": True} for p in plats})
+    out = yc.try_candidates(["tiktok"], [("2026.10.10.1.dev0", "nightly")], "t")
+    assert out["promoted"] is None and "already works" in out["note"] and installs == []
+
+
+def test_install_rejects_extra_files_in_the_package(tmp_path):
+    from app.core import ytdlp_channel as yc
+    d = tmp_path / "cand"
+    (d / "yt_dlp").mkdir(parents=True)
+    (d / "yt_dlp-2026.10.10.dist-info").mkdir()
+    assert yc.unexpected_entries(str(d)) == []
+    (d / "sitecustomize.py").write_text("print('x')")
+    (d / "evil.pth").write_text("import os")
+    assert sorted(yc.unexpected_entries(str(d))) == ["evil.pth", "sitecustomize.py"]
+
+
+def test_install_requires_a_wheel_hash(chan, monkeypatch):
+    yc = chan
+    monkeypatch.setattr(yc, "wheel_sha256", lambda v: None)
+    assert "no wheel" in yc.install("2026.10.10.1.dev0", yc.OVERRIDE_DIR + ".cand")

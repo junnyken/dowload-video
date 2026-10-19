@@ -29,6 +29,16 @@ _LEGACY_KEY_PREFIX = "vg_"
 
 
 def _metered(request, user: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        from app.core.bad_key_guard import note_valid_key  # noqa: PLC0415
+        if user.get("token"):
+            note_valid_key(user["token"])
+    except Exception:  # noqa: BLE001
+        pass
+    return _metered_inner(request, user)
+
+
+def _metered_inner(request, user: Dict[str, Any]) -> Dict[str, Any]:
     """Count one call against the key owner's monthly API quota (owner 14/10,
     app.core.api_quota); 429 when it is used up. Only API-key callers get
     here — the site's own session traffic is never metered."""
@@ -225,6 +235,11 @@ async def get_optional_user(
         result = _lookup_new_api_key(token)
         if result:
             return _metered(_request, result)
+        _invalid_key(_request)
+
+    # A partner key (vgp_) is not a user credential: refuse it here as a bad
+    # key instead of quietly serving the caller as a guest (19/10 review).
+    if token.startswith("vgp_"):
         _invalid_key(_request)
 
     # ── Path 1: Supabase JWT ─────────────────────────────────────────

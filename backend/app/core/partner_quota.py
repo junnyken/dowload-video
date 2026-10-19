@@ -89,6 +89,19 @@ def consume(tenant_id: str, key_id: Optional[str], per_day: int, monthly_cap: in
                 "used": None, "reset_at": month_reset_at(n)}
 
 
+def refund(tenant_id: str, key_id: Optional[str], now: Optional[datetime] = None) -> None:
+    """Give back one job counted by consume() whose job was never created
+    (DB insert failed). Never raises."""
+    n = _now(now)
+    try:
+        rc = _r()
+        rc.decr(MONTH_KEY.format(tenant_id=tenant_id, month=_month(n)))
+        if key_id:
+            rc.decr(DAY_KEY.format(key_id=key_id, day=_day(n)))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def usage(tenant_id: str, key_id: Optional[str] = None,
           now: Optional[datetime] = None) -> Dict[str, Optional[int]]:
     """Jobs counted this UTC month (tenant) and today (key). None = unknown."""

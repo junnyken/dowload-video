@@ -2670,7 +2670,7 @@ async def proxy_pool_add(req: ProxyAddRequest, request: Request, _=Depends(verif
         new_size = add_proxy(req.platform, url)
         # Mask credentials in audit log (keep scheme+host only)
         import re as _re
-        masked = _re.sub(r"(https?://|socks5://)[^@]+@", r"\1***@", url)
+        masked = _re.sub(r"((?:https?|socks5h?)://)[^@]+@", r"\1***@", url)
         log_admin_action(
             request, "admin.proxy.added",
             resource_type="proxy_pool", resource_id=req.platform,
@@ -2740,7 +2740,7 @@ async def proxy_pool_list(platform: str, _=Depends(verify_admin)):
         masked = []
         for i, p in enumerate(raw_list):
             url = p.strip() if isinstance(p, str) else p.decode() if isinstance(p, bytes) else str(p)
-            m = _re.sub(r"(https?://|socks5://)[^@]+@", r"\1***:***@", url)
+            m = _re.sub(r"((?:https?|socks5h?)://)[^@]+@", r"\1***:***@", url)
             # 2026-10-19: last health check + cooldown. Index order is the
             # priority order (first = main proxy, next = backups).
             masked.append({"index": i, "masked_url": m, "health": _ph.stored(url),

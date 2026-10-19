@@ -97,7 +97,8 @@ def next_proxy_after_failure(platform: str, failed: Optional[str], reason: str =
     """`failed` ran out of traffic / refused the tunnel: cool it for an hour
     and return the next healthy proxy of the pool, or None when there is no
     other one. Tells the admin once an hour that the backup took over."""
-    from app.core.proxy_manager import _proxy_id, mark_proxy_bad  # noqa: PLC0415
+    from app.core.proxy_manager import mark_proxy_bad  # noqa: PLC0415
+    from app.core.china_proxy_test import mask  # noqa: PLC0415
     if failed:
         mark_proxy_bad(failed, ttl=EXHAUSTED_COOLDOWN_S)
     nxt = get_proxy_from_pool(platform)
@@ -109,8 +110,8 @@ def next_proxy_after_failure(platform: str, failed: Optional[str], reason: str =
             # wording: BA review
             send_telegram_message_sync(
                 f"🟠 <b>Proxy {platform} lỗi — đã chuyển sang proxy dự phòng</b>\n"
-                f"Proxy {_proxy_id(failed or '')} lỗi ({reason[:60] or 'không rõ'}), tạm nghỉ 1 giờ.\n"
-                f"Đang dùng proxy {_proxy_id(nxt)}. Kiểm tra / nạp thêm dung lượng cho proxy chính."
+                f"Proxy {mask(failed or '')} lỗi ({reason[:60] or 'không rõ'}), tạm nghỉ 1 giờ.\n"
+                f"Đang dùng {mask(nxt)}.\nViệc cần làm: nạp thêm dung lượng hoặc kiểm tra proxy chính."
             )
     except Exception:
         pass

@@ -45,8 +45,12 @@ def test_no_key_is_ip_bucket(fr):
     {"X-API-Key": "vgp_abc"},
 ])
 def test_keyed_request_is_key_bucket(fr, headers):
-    from app.core.client_ip import rate_limit_key
-    k = rate_limit_key(_req(headers))
+    from app.core.bad_key_guard import note_valid_key
+    from app.core.client_ip import presented_api_key, rate_limit_key
+    req = _req(headers)
+    assert rate_limit_key(req) == "203.0.113.50"         # not verified yet → IP bucket
+    note_valid_key(presented_api_key(req))               # the auth layer resolved it
+    k = rate_limit_key(req)
     assert k.startswith("apikey:") and "abc" not in k   # hashed, never the raw key
 
 
@@ -55,15 +59,34 @@ def test_web_session_jwt_stays_ip_bucket(fr):
     assert rate_limit_key(_req({"Authorization": "Bearer eyJhbGciOi.x.y"})) == "203.0.113.50"
 
 
-def test_ip_spraying_bad_keys_falls_back_to_ip_bucket(fr):
-    from app.core import bad_key_guard
+def test_made_up_keys_never_mint_a_bucket(fr):
+    """Security review 19/10 (HIGH): a fresh `Bearer vgp_<rand>` per request
+    used to get a fresh limiter bucket, escaping every per-IP limit."""
+    import uuid
+    from app.core.client_ip import has_valid_api_key, rate_limit_key
+    for _ in range(20):
+        req = _req({"Authorization": f"Bearer vgp_{uuid.uuid4().hex}"})
+        assert rate_limit_key(req) == "203.0.113.50"
+        assert has_valid_api_key(req) is False           # the daily per-IP quota applies too
+
+
+def test_valid_key_cache_fails_closed(monkeypatch):
+    import app.core.redis_client as rc
     from app.core.client_ip import rate_limit_key
-    req = _req({"X-API-Key": "vidgrab_random"})
-    for _ in range(bad_key_guard.BAD_KEY_LIMIT):
-        bad_key_guard.note_bad_key(req)
-    assert rate_limit_key(req) == "203.0.113.50"
-    # another IP is unaffected
-    assert rate_limit_key(_req({"X-API-Key": "vidgrab_random"}, ip="198.51.100.9")).startswith("apikey:")
+
+    def boom():
+        raise ConnectionError("redis down")
+    monkeypatch.setattr(rc, "get_redis", boom)
+    assert rate_limit_key(_req({"X-API-Key": "vidgrab_x"})) == "203.0.113.50"
+
+
+def test_partner_key_on_user_api_is_refused_not_a_guest(fr):
+    from app.core import auth_middleware as am
+    from fastapi.security import HTTPAuthorizationCredentials
+    cred = HTTPAuthorizationCredentials(scheme="Bearer", credentials="vgp_" + "a" * 64)
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(am.get_optional_user(_req(), credentials=cred, x_api_key=None))
+    assert e.value.status_code == 401
 
 
 def test_bad_key_guard_fails_open(monkeypatch):
@@ -146,7 +169,11 @@ def test_route_limit_is_per_key_not_per_ip(fr):
     def go(headers=None):
         return c.post("/heavy", headers={"x-forwarded-for": "198.51.100.73", **(headers or {})}).status_code
 
+    from app.core.bad_key_guard import note_valid_key
+    note_valid_key("vidgrab_k1")
+    note_valid_key("vidgrab_k2")
     assert [go() for _ in range(4)] == [200, 200, 200, 429]          # guests: per IP
+    assert go({"X-API-Key": "vidgrab_madeup"}) == 429                 # unverified key: still the IP
     assert [go({"X-API-Key": "vidgrab_k1"}) for _ in range(4)] == [200, 200, 200, 429]
     assert go({"X-API-Key": "vidgrab_k2"}) == 200                     # another key, same IP
 
@@ -490,7 +517,7 @@ def test_validate_urls_batch_counts():
     out = REGISTRY.validate_batch(["https://youtu.be/jNQXAC9IVRw", "https://youtu.be/jNQXAC9IVRw",
                                    "https://example.com/x", "not a url"])
     assert out["counts"] == {"valid": 1, "duplicate": 1, "unknown": 1, "unsupported": 0, "invalid": 1}
-    assert "1 chưa nhận diện" in out["summary"]
+    assert "1 link chưa nhận diện được nền tảng" in out["summary"]
 
 
 def test_delete_key(admin_db):

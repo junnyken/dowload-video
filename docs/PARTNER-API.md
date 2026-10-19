@@ -130,7 +130,8 @@ Chỉ huỷ được job còn `queued`. Job đã chạy thì không bị ảnh h
 }
 ```
 
-`api_calls_per_month = -1` nghĩa là không giới hạn.
+`api_calls_per_month = -1` nghĩa là không giới hạn. Trong Partner API, `api_calls` chính là số job
+(mỗi lần `POST /jobs` tính 1 job).
 
 ### 3.6. Kiểm tra link trước khi tải — `POST /api/v1/partner/validate-urls`
 
@@ -159,7 +160,7 @@ Cho biết nền tảng nào đang tải được. Nên kiểm trước khi đ�
 ], "webhook_events": ["platform.degraded", "platform.recovered"]}
 ```
 
-`status`: `healthy` (đang tải được), `degraded` (đang lỗi, VidGrab đang tự khắc phục),
+`status`: `healthy` (đang tải được), `degraded` (đang lỗi; VidGrab đang xử lý),
 `unknown` (chưa đủ dữ liệu). `fallback_route = "cobalt"` nghĩa là VidGrab đang tải nền tảng đó
 qua đường dự phòng; job vẫn chạy được nhưng độ phân giải hoặc định dạng có thể khác thường lệ.
 Khi một nền tảng `degraded`, job của nền tảng đó có thể lỗi nhiều hơn: nên tạm giữ lại và gửi
@@ -180,6 +181,8 @@ khi nhận `platform.recovered`.
 - Các giới hạn tính theo **key**, không theo IP. Nhiều máy chủ của bạn dùng chung một IP vẫn
   được tính riêng theo từng key.
 - Cần mức cao hơn mặc định? Báo VidGrab để điều chỉnh theo key hoặc theo tài khoản.
+
+Trường `message` trong phản hồi lỗi luôn bằng tiếng Anh; hãy xử lý theo `code`.
 
 Ví dụ phản hồi `429`:
 
@@ -259,7 +262,7 @@ theo `X-VidGrab-Delivery` hoặc `job_id`. Xem và xoá webhook:
 | 429 | `rate_limited` | Vượt request/phút, đợi theo `Retry-After` |
 | 429 | `rate_limit_exceeded` | Hết job trong ngày của key |
 | 429 | `monthly_quota_exceeded` | Hết job trong tháng của tài khoản |
-| 429 | `too_many_invalid_keys` | IP gửi quá nhiều key sai, đợi 1 phút |
+| 429 | `too_many_invalid_keys` | IP gửi quá nhiều key sai (từ 20 lần trong 1 phút), đợi 1 phút |
 | 5xx | — | Lỗi phía VidGrab, thử lại sau vài giây (tăng dần thời gian chờ) |
 
 Nguyên tắc thử lại: chỉ thử lại với `429` (theo `Retry-After` / `reset_at`) và `5xx`
@@ -322,5 +325,5 @@ async function download(url, quality = "video") {
 
 ## 9. Liên hệ
 
-Cấp key, đổi key, tăng hạn mức, giới hạn IP, hoặc báo lỗi: liên hệ đầu mối kỹ thuật của
-VidGrab. Gửi kèm `id` của job và thời điểm gọi để tra cứu nhanh.
+Cấp key, đổi key, tăng hạn mức, giới hạn IP, hoặc báo lỗi: email support@vidgrab.dev hoặc
+Telegram @vidgrab_support. Gửi kèm `id` của job và thời điểm gọi để tra cứu nhanh.

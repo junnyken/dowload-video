@@ -178,7 +178,7 @@ class ExtractorRegistry:
         if counts["duplicate"]:
             summary_parts.append(f"{counts['duplicate']} trùng lặp")
         if counts["unknown"]:
-            summary_parts.append(f"{counts['unknown']} chưa nhận diện")
+            summary_parts.append(f"{counts['unknown']} link chưa nhận diện được nền tảng")
         if counts["unsupported"]:
             summary_parts.append(f"{counts['unsupported']} không hỗ trợ")
         if counts["invalid"]:

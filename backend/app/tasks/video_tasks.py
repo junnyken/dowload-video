@@ -326,12 +326,16 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
         # The new task starts with request.retries=0, so carry the retries
         # already used — otherwise a retry that lands on a full lane gets a
         # fresh retry budget.
+        # Same queue it came from: without this a partner job deferred by a
+        # full lane fell back to the default `downloads` route, behind bulk.
+        _rk = ((getattr(self.request, "delivery_info", None) or {}).get("routing_key")) or None
         process_video_task.apply_async(
             args=[job_id, url, user_id, quality, remove_watermark, download_subs],
             kwargs={"_lane_try": _lane_try + 1,
                     "_prior_retries": _prior_retries + self.request.retries,
                     "_requester": _requester, "_quota_precounted": _quota_precounted},
             countdown=4 + (_lane_try % 7),
+            **({"queue": _rk} if _rk else {}),
         )
         _deregister_pending_task(_task_id)
         if _job_lease is not None:
@@ -1517,8 +1521,8 @@ def ytdlp_auto_update(self):
     promoted = out.get("promoted")
     if promoted:
         # wording: BA review
-        send_admin_alert("info", f"yt-dlp đã lên {promoted['version']}",
-                         "Bản stable mới, đã kiểm các nền tảng đang chạy tốt trước khi dùng.",
+        send_admin_alert("info", f"yt-dlp đã nâng lên {promoted['version']}",
+                         "Bản stable mới; đã kiểm tra các nền tảng đang chạy tốt trước khi chuyển. Chưa cần làm gì.",
                          alert_key="")
         try:
             from app.core.po_token_cache import invalidate_po_token
@@ -1535,9 +1539,9 @@ def ytdlp_auto_update(self):
             t = rejected[0]
             # wording: BA review
             send_admin_alert(
-                "warning", f"Không lên được yt-dlp {t.get('version')}",
-                ("Cài đặt lỗi: " + str(t.get("detail"))) if t.get("result") == "install_failed"
-                else f"Bản mới làm hỏng: {', '.join(t.get('regressed') or [])}. Giữ bản đang chạy.",
+                "warning", f"Không nâng được yt-dlp lên {t.get('version')}",
+                ("Cài đặt thất bại: " + str(t.get("detail"))) if t.get("result") == "install_failed"
+                else f"Bản mới làm hỏng: {', '.join(t.get('regressed') or [])}. Vẫn giữ bản đang chạy.",
                 alert_key="ytdlp_daily_rejected")
     print(f"[ytdlp-update] {json.dumps(out, default=str)[:500]}")
     return out
@@ -1564,14 +1568,15 @@ def ytdlp_remediate(self, platforms, reason=""):
     if promoted:
         # wording: BA review
         send_admin_alert("info", f"Đã tự khắc phục {names}",
-                         f"Chuyển sang yt-dlp {promoted['version']} ({promoted['source']}). "
-                         f"Sửa được: {', '.join(promoted.get('fixed') or []) or '-'}.", alert_key="")
+                         f"Đã chuyển sang yt-dlp {promoted['version']} "
+                         f"({'bản ổn định' if promoted['source'] == 'stable' else 'bản thử nghiệm hằng đêm'}). "
+                         f"Đã sửa được: {', '.join(promoted.get('fixed') or []) or '-'}.", alert_key="")
     else:
         tried = "; ".join(f"{t.get('version')}: {t.get('result')}" for t in out.get("tried", [])) \
             or out.get("note") or "không có bản mới hơn"
         # wording: BA review
-        send_admin_alert("critical", f"Chưa tự khắc phục được {names}",
-                         f"Đã thử: {tried}. Cần người xem (cookie, proxy, hoặc chờ yt-dlp sửa).",
+        send_admin_alert("critical", f"Chưa tự sửa được {names}",
+                         f"Đã thử: {tried}. Cần bạn kiểm tra cookie hoặc proxy, hoặc chờ bản yt-dlp mới.",
                          alert_key=f"ytdlp_remediate_failed_{names}")
     return out
 

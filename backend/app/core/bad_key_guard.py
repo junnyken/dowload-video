@@ -28,6 +28,37 @@ def _redis_key(request: Request) -> str:
     return f"badkey:{get_client_ip(request)}:{int(time.time() // 60)}"
 
 
+VALID_KEY = "apikey:valid:{h}"
+VALID_TTL = 600
+
+
+def key_hash(raw: str) -> str:
+    import hashlib  # noqa: PLC0415
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def note_valid_key(raw: str) -> None:
+    """The auth layer resolved this key: from now on (10 min) it may have its
+    own limiter bucket. Security review 19/10 (HIGH): the bucket used to be
+    given to ANY string shaped like a key, so a made-up `Bearer vgp_<rand>`
+    per request escaped every per-IP limit without an account."""
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        get_redis().set(VALID_KEY.format(h=key_hash(raw)), "1", ex=VALID_TTL)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def is_known_valid_key(raw: str) -> bool:
+    """Fails CLOSED (False → per-IP bucket): a Redis error must not hand out
+    unlimited buckets."""
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        return bool(get_redis().exists(VALID_KEY.format(h=key_hash(raw))))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def note_bad_key(request: Request | None) -> None:
     if request is None:
         return

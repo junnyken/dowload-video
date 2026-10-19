@@ -54,8 +54,18 @@ def rate_limit_key(request: Request) -> str:
     spraying random keys cannot mint fresh buckets."""
     key = presented_api_key(request)
     if key:
-        from app.core.bad_key_guard import too_many_bad_keys  # noqa: PLC0415
-        if not too_many_bad_keys(request):
-            import hashlib  # noqa: PLC0415
-            return "apikey:" + hashlib.sha256(key.encode()).hexdigest()[:32]
+        # Only a key the auth layer has already resolved (bad_key_guard,
+        # 10-min cache) gets its own bucket; anything else — a made-up key,
+        # a key on a route that never checks it — counts against the IP.
+        from app.core.bad_key_guard import is_known_valid_key, key_hash  # noqa: PLC0415
+        if is_known_valid_key(key):
+            return "apikey:" + key_hash(key)
     return get_client_ip(request)
+
+
+def has_valid_api_key(request: Request) -> bool:
+    key = presented_api_key(request)
+    if not key:
+        return False
+    from app.core.bad_key_guard import is_known_valid_key  # noqa: PLC0415
+    return is_known_valid_key(key)

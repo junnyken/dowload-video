@@ -152,7 +152,7 @@ ERROR_META: dict[str, dict] = {
     # watches this code and tries one automatically.
     "extractor_broken": {
         # wording: BA review
-        "user_message": "Nền tảng vừa thay đổi nên tạm thời chưa tải được. Hệ thống đang tự cập nhật.",
+        "user_message": "Nền tảng vừa thay đổi nên tạm thời chưa tải được. VidGrab đang xử lý.",
         "retryable": True,
         "suggested_action": "Thử lại sau 30–60 phút.",
     },

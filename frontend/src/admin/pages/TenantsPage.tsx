@@ -58,6 +58,11 @@ const STATUS_COLORS: Record<string, string> = {
   canceled: 'border-danger/30 bg-danger-soft text-danger',
 }
 
+// wording: BA review
+const STATUS_LABEL: Record<string, string> = {
+  active: 'Đang hoạt động', trial: 'Dùng thử', suspended: 'Tạm ngưng', canceled: 'Đã huỷ',
+}
+
 function PlanBadge({ plan }: { plan: string }) {
   return (
     <span className={cn('inline-block rounded-md border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider', PLAN_COLORS[plan] ?? 'border-line bg-surface-2 text-fg-2')}>
@@ -69,7 +74,7 @@ function PlanBadge({ plan }: { plan: string }) {
 function StatusBadge({ status }: { status: string }) {
   return (
     <span className={cn('inline-block rounded-md border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider', STATUS_COLORS[status] ?? 'border-line bg-surface-2 text-fg-2')}>
-      {status}
+      {STATUS_LABEL[status] ?? status}
     </span>
   )
 }
@@ -113,7 +118,7 @@ function CapFields({ cap, setCap, unlimited, setUnlimited, disabled, optional }:
     <div className="space-y-2">
       {/* wording: BA review */}
       <Field label="Hạn mức job/tháng" hint={optional ? 'Để trống = dùng mặc định theo gói.' : undefined}>
-        <input className={inputCls} type="number" min={0} inputMode="numeric" value={cap} disabled={disabled || unlimited} placeholder={optional ? 'Mặc định theo gói' : 'Ví dụ 5000'} onChange={e => setCap(e.target.value)} />
+        <input className={inputCls} type="number" min={0} inputMode="numeric" value={cap} disabled={disabled || unlimited} placeholder={optional ? 'Mặc định theo gói' : 'Ví dụ 5.000'} onChange={e => setCap(e.target.value)} />
       </Field>
       <label className="flex cursor-pointer items-center gap-2 text-xs text-fg-muted">
         <input type="checkbox" checked={unlimited} disabled={disabled} onChange={e => setUnlimited(e.target.checked)} />
@@ -153,7 +158,7 @@ function CreateTenantModal({ onClose, onCreated }: { onClose: () => void; onCrea
 
   return (
     // wording: BA review
-    <Modal title="Tạo khách partner" subtitle="Khách gọi Partner API từ backend của họ bằng key vgp_." onClose={onClose} locked={pending}>
+    <Modal title="Tạo khách partner" subtitle="Khách gọi Partner API từ máy chủ của họ bằng key vgp_." onClose={onClose} locked={pending}>
       <form onSubmit={submit} className="space-y-3">
         <Field label="Tên khách">
           <input className={inputCls} value={name} maxLength={120} disabled={pending} autoFocus onChange={e => setName(e.target.value)} />
@@ -324,11 +329,11 @@ export default function TenantsPage() {
     setActionInProgress(p => ({ ...p, [tenantId]: true }))
     try {
       await adminPost(`/enterprise/tenants/${tenantId}/status`, { status: newStatus })
-      setMsg(m => ({ ...m, [tenantId]: `Status → ${newStatus}` }))
+      setMsg(m => ({ ...m, [tenantId]: `Trạng thái → ${STATUS_LABEL[newStatus] ?? newStatus}` }))
       setTimeout(() => setMsg(m => { const n = { ...m }; delete n[tenantId]; return n }), 2000)
       fetchData()
     } catch (e) {
-      setMsg(m => ({ ...m, [tenantId]: `Error: ${(e as Error).message}` }))
+      setMsg(m => ({ ...m, [tenantId]: `Lỗi: ${(e as Error).message}` }))
     } finally {
       setActionInProgress(p => ({ ...p, [tenantId]: false }))
     }
@@ -338,11 +343,11 @@ export default function TenantsPage() {
     setActionInProgress(p => ({ ...p, [tenantId + '_plan']: true }))
     try {
       await adminPost(`/enterprise/tenants/${tenantId}/plan`, { plan: newPlan })
-      setMsg(m => ({ ...m, [tenantId + '_plan']: `Plan → ${newPlan}` }))
+      setMsg(m => ({ ...m, [tenantId + '_plan']: `Gói → ${newPlan}` }))
       setTimeout(() => setMsg(m => { const n = { ...m }; delete n[tenantId + '_plan']; return n }), 2000)
       fetchData()
     } catch (e) {
-      setMsg(m => ({ ...m, [tenantId + '_plan']: `Error: ${(e as Error).message}` }))
+      setMsg(m => ({ ...m, [tenantId + '_plan']: `Lỗi: ${(e as Error).message}` }))
     } finally {
       setActionInProgress(p => ({ ...p, [tenantId + '_plan']: false }))
     }
@@ -353,14 +358,15 @@ export default function TenantsPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight text-fg">Tenants</h1>
-          <p className="mt-0.5 text-xs text-fg-muted">Multi-tenant enterprise accounts</p>
+          {/* wording: BA review */}
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Khách Partner</h1>
+          <p className="mt-0.5 text-xs text-fg-muted">Tài khoản doanh nghiệp dùng Partner API</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {/* wording: BA review */}
           <Button variant="primary" onClick={() => setShowCreate(true)}>Tạo khách partner</Button>
           <button onClick={fetchData} className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
-            ↺ Refresh
+            ↺ Làm mới
           </button>
         </div>
       </div>
@@ -390,9 +396,10 @@ export default function TenantsPage() {
       {data && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
-            { label: 'Total', value: data.total },
-            { label: 'Active', value: data.status_counts['active'] ?? 0 },
-            { label: 'Suspended', value: data.status_counts['suspended'] ?? 0 },
+            // wording: BA review
+            { label: 'Tổng', value: data.total },
+            { label: 'Đang hoạt động', value: data.status_counts['active'] ?? 0 },
+            { label: 'Tạm ngưng', value: data.status_counts['suspended'] ?? 0 },
             { label: 'Enterprise', value: data.plan_counts['enterprise'] ?? 0 },
           ].map(card => (
             <div key={card.label} className="rounded-card border border-line bg-surface shadow-card p-4">
@@ -410,17 +417,18 @@ export default function TenantsPage() {
           onChange={e => setStatusFilter(e.target.value)}
           className="rounded border border-line bg-surface px-2 py-1.5 text-xs text-fg-2"
         >
-          <option value="">All status</option>
-          <option value="active">Active</option>
-          <option value="suspended">Suspended</option>
-          <option value="canceled">Canceled</option>
+          {/* wording: BA review */}
+          <option value="">Mọi trạng thái</option>
+          <option value="active">Đang hoạt động</option>
+          <option value="suspended">Tạm ngưng</option>
+          <option value="canceled">Đã huỷ</option>
         </select>
         <select
           value={planFilter}
           onChange={e => setPlanFilter(e.target.value)}
           className="rounded border border-line bg-surface px-2 py-1.5 text-xs text-fg-2"
         >
-          <option value="">All plans</option>
+          <option value="">Mọi gói</option>
           <option value="starter">Starter</option>
           <option value="growth">Growth</option>
           <option value="enterprise">Enterprise</option>
@@ -434,13 +442,14 @@ export default function TenantsPage() {
 
       {/* Table */}
       {loading ? (
-        <div className="py-12 text-center font-mono text-xs text-fg-muted">Loading tenants…</div>
+        <div className="py-12 text-center font-mono text-xs text-fg-muted">Đang tải danh sách khách…</div>
       ) : (
         <div className="overflow-x-auto rounded-control border border-line">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-line bg-surface-2">
-                {['Tenant', 'Plan', 'Status', "Today's Usage", 'Seats', 'Custom Domain', 'Created', 'Actions'].map(h => (
+                {/* wording: BA review */}
+                {['Khách', 'Gói', 'Trạng thái', 'Dùng hôm nay', 'Số ghế', 'Tên miền riêng', 'Ngày tạo', 'Thao tác'].map(h => (
                   <th key={h} className="px-3 py-2.5 font-mono font-semibold text-fg-muted">{h}</th>
                 ))}
               </tr>
@@ -458,9 +467,9 @@ export default function TenantsPage() {
                   </td>
                   <td className="px-3 py-2.5"><StatusBadge status={t.status} /></td>
                   <td className="px-3 py-2.5 font-mono text-fg-muted">
-                    <span title="API calls">⚡{t.today_usage?.api_calls ?? 0}</span>
+                    <span title="Lượt gọi API">⚡{t.today_usage?.api_calls ?? 0}</span>
                     {' · '}
-                    <span title="Downloads">↓{t.today_usage?.downloads ?? 0}</span>
+                    <span title="Lượt tải">↓{t.today_usage?.downloads ?? 0}</span>
                   </td>
                   <td className="px-3 py-2.5 font-mono text-fg-muted">{t.plan_seats}</td>
                   <td className="px-3 py-2.5 font-mono text-fg-muted text-[10px]">
@@ -485,7 +494,6 @@ export default function TenantsPage() {
                       {/* wording: BA review */}
                       <button
                         disabled={!!t.workspace_id}
-                        title={t.workspace_id ? 'Gắn với tài khoản web — chỉ tạm ngưng được' : undefined}
                         onClick={() => setDeleteTenant(t)}
                         className="rounded border border-danger/30 bg-danger-soft px-2 py-1 text-[10px] font-medium text-danger hover:border-danger/60 disabled:cursor-not-allowed disabled:opacity-40"
                       >
@@ -512,7 +520,7 @@ export default function TenantsPage() {
                           onClick={() => handleStatusChange(t.id, 'suspended')}
                           className="rounded bg-warning-soft px-2 py-1 text-[10px] text-warning hover:bg-warning-soft disabled:opacity-40"
                         >
-                          Suspend
+                          Tạm ngưng
                         </button>
                       ) : (
                         <button
@@ -520,7 +528,7 @@ export default function TenantsPage() {
                           onClick={() => handleStatusChange(t.id, 'active')}
                           className="rounded bg-success-soft px-2 py-1 text-[10px] text-success hover:bg-success/40 disabled:opacity-40"
                         >
-                          Activate
+                          Kích hoạt lại
                         </button>
                       )}
                     </div>

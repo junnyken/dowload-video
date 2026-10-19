@@ -45,6 +45,7 @@ TIMEOUT_S = 15
 PARALLEL = 6
 IP_URL = "https://ipinfo.io/json"
 YT_URL = "https://www.youtube.com/generate_204"
+YT_TRIES = 3
 
 # wording: BA review
 KIND_LABEL = {
@@ -56,7 +57,7 @@ KIND_LABEL = {
     "tunnel_failed": "Proxy từ chối mở kết nối",
     "youtube_blocked": "Sống nhưng YouTube chặn IP này",
     "invalid_format": "Sai định dạng proxy — xoá và thêm lại",
-    "error": "Lỗi khác",
+    "error": "Lỗi không rõ nguyên nhân",
 }
 
 
@@ -96,7 +97,7 @@ def _get(url: str, proxy: str):
 def check(proxy: str, youtube: bool = False) -> Dict[str, Any]:
     """One proxy. {alive, kind, label, ms, ip, country, youtube_ok, detail, at}."""
     out: Dict[str, Any] = {"alive": False, "kind": "error", "ms": None, "ip": None, "country": None,
-                           "youtube_ok": None, "detail": None, "at": int(time.time())}
+                           "youtube_ok": None, "sticky": None, "detail": None, "at": int(time.time())}
     t0 = time.time()
     try:
         r = _get(IP_URL, proxy)
@@ -121,11 +122,28 @@ def check(proxy: str, youtube: bool = False) -> Dict[str, Any]:
         return _labelled(out)
     out["alive"], out["kind"] = True, "ok"
     if youtube:
+        # YouTube's media URLs are tied to the exit IP that fetched the page:
+        # a rotating exit can switch between the two and get 403. Two calls in
+        # a row tell whether this proxy keeps its IP (a sticky session — set
+        # when generating the credentials at the provider).
         try:
-            yr = _get(YT_URL, proxy)
-            out["youtube_ok"] = yr.status_code == 204
+            r2 = _get(IP_URL, proxy)
+            ip2 = (r2.json() or {}).get("ip") if r2.status_code == 200 else None
+            out["sticky"] = bool(ip2) and ip2 == out["ip"]
         except Exception:  # noqa: BLE001
-            out["youtube_ok"] = False
+            out["sticky"] = None
+        # Up to YT_TRIES calls: a rotating proxy gets a new exit each time and
+        # YouTube blocks some exits but not others (measured 19/10 on the
+        # proxy-cheap pool: 204 on one run, blocked on the next). One bad
+        # exit must not flag — and cool — the whole proxy.
+        out["youtube_ok"] = False
+        for _ in range(YT_TRIES):
+            try:
+                if _get(YT_URL, proxy).status_code == 204:
+                    out["youtube_ok"] = True
+                    break
+            except Exception:  # noqa: BLE001
+                continue
         if not out["youtube_ok"]:
             out["alive"], out["kind"] = False, "youtube_blocked"
     return _labelled(out)
@@ -242,7 +260,7 @@ def run(only_pool: Optional[str] = None) -> Dict[str, Any]:
         if alerts:
             try:
                 from app.core.notifications import send_telegram_message_sync  # noqa: PLC0415
-                send_telegram_message_sync("<b>Kiểm tra proxy</b>\n" + "\n".join(alerts[:20]))
+                send_telegram_message_sync("<b>Kiểm tra proxy: có thay đổi</b>\n" + "\n".join(alerts[:20]))
             except Exception:
                 pass
         return summary
