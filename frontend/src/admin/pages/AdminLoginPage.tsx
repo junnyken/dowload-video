@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import ThemeToggle from '../../components/ThemeToggle'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { useAdminAuth } from '../hooks/useAdminAuth'
+import { useAdminAuth, consumeExpiredNotice } from '../hooks/useAdminAuth'
 
 export function AdminLoginPage() {
   const navigate = useNavigate()
@@ -12,7 +12,9 @@ export function AdminLoginPage() {
   }
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  // wording: BA review
+  const [error, setError] = useState(() =>
+    consumeExpiredNotice() ? 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' : '')
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: FormEvent) {

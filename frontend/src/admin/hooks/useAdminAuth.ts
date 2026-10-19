@@ -30,8 +30,35 @@ function _notify() {
   _subs.forEach(fn => fn())
 }
 
-// ── Exported helper — used by adminFetch ───────────────────────────────────────
+// ── Exported helpers — used by adminFetch ──────────────────────────────────────
+
+let _expiredNotice = false
+
+/**
+ * Drop the local session after the server refused it (401) or it outlived
+ * expiresAt. Before this the page only checked expiry when it first loaded and
+ * never reacted to a 401: a tab left open overnight kept showing the admin
+ * with every panel failing "Unauthorized" instead of going back to login.
+ */
+export function expireAdminSession(): void {
+  try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
+  if (_user) _expiredNotice = true
+  _user = null
+  _notify()
+}
+
+/** One-shot: true once after a session was expired, for the login page notice. */
+export function consumeExpiredNotice(): boolean {
+  const v = _expiredNotice
+  _expiredNotice = false
+  return v
+}
+
 export function getAdminToken(): string | null {
+  if (_user && new Date(_user.expiresAt) < new Date()) {
+    expireAdminSession()
+    return null
+  }
   return _user?.sessionToken ?? null
 }
 

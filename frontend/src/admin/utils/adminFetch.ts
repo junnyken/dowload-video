@@ -1,4 +1,25 @@
-import { getAdminToken } from '../hooks/useAdminAuth'
+import { getAdminToken, expireAdminSession } from '../hooks/useAdminAuth'
+
+// wording: BA review
+const MSG_OFFLINE = 'Không kết nối được máy chủ. Kiểm tra mạng rồi tải lại trang.'
+// wording: BA review
+const MSG_EXPIRED = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
+
+/** fetch + the two failures every admin call shares: no response at all
+ * (browser says "Failed to fetch") and a session the server no longer accepts. */
+async function sessionFetch(url: string, init: RequestInit, hadToken: boolean): Promise<Response> {
+  let res: Response
+  try {
+    res = await fetch(url, init)
+  } catch {
+    throw new Error(MSG_OFFLINE)
+  }
+  if (res.status === 401 && hadToken) {
+    expireAdminSession()
+    throw new Error(MSG_EXPIRED)
+  }
+  return res
+}
 import { API_BASE } from '../../lib/apiBase'
 
 /** FastAPI `detail` is a string, or a pydantic list of {msg}: flatten to one message. */
@@ -32,7 +53,7 @@ export async function adminFetch<T = unknown>(
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const res = await fetch(`${API_BASE}/api/v1/admin${path}`, { ...options, headers })
+  const res = await sessionFetch(`${API_BASE}/api/v1/admin${path}`, { ...options, headers }, !!token)
   if (!res.ok) {
     let msg = `HTTP ${res.status}`
     try {
@@ -80,7 +101,7 @@ export async function intelFetch<T = unknown>(
   }
   if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const res = await fetch(`${API_BASE}/api/v1/intelligence${path}`, { ...options, headers })
+  const res = await sessionFetch(`${API_BASE}/api/v1/intelligence${path}`, { ...options, headers }, !!token)
   if (!res.ok) {
     let msg = `HTTP ${res.status}`
     try {
