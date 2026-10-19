@@ -251,6 +251,11 @@ async def get_optional_user(
             # email_confirmed_at: None = the account never confirmed its
             # email (Channel Watch requires it for Free accounts, task #6257).
             confirmed = getattr(u, "email_confirmed_at", None)
+            try:
+                from app.core.bad_key_guard import note_valid_session  # noqa: PLC0415
+                note_valid_session(token, str(u.id))
+            except Exception:  # noqa: BLE001
+                pass
             return {
                 "id":    str(u.id),
                 "email": u.email,

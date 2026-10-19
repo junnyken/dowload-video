@@ -60,7 +60,36 @@ def rate_limit_key(request: Request) -> str:
         from app.core.bad_key_guard import is_known_valid_key, key_hash  # noqa: PLC0415
         if is_known_valid_key(key):
             return "apikey:" + key_hash(key)
+        return get_client_ip(request)
+    uid = verified_session_user(request)
+    if uid:
+        # A signed-in user (web, extension, app): per account, so a company's
+        # staff behind one office IP do not share a bucket (19/10).
+        return "user:" + uid
     return get_client_ip(request)
+
+
+def _bearer_token(request: Request) -> str | None:
+    auth = request.headers.get("authorization") or ""
+    if auth.startswith("Bearer "):
+        tok = auth[len("Bearer "):].strip()
+        return tok or None
+    return None
+
+
+def verified_session_user(request: Request) -> str | None:
+    """User id of a Bearer session token the auth layer verified recently."""
+    tok = _bearer_token(request)
+    if not tok or tok.startswith(_API_KEY_PREFIXES):
+        return None
+    from app.core.bad_key_guard import session_user  # noqa: PLC0415
+    return session_user(tok)
+
+
+def has_verified_identity(request: Request) -> bool:
+    """A verified API key or a verified signed-in session: such a caller is
+    metered per key / per account, not by the per-IP daily quota."""
+    return has_valid_api_key(request) or bool(verified_session_user(request))
 
 
 def has_valid_api_key(request: Request) -> bool:

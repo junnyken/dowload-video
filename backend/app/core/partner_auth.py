@@ -321,11 +321,60 @@ def _per_minute_exceeded(key_id: str, limit: int) -> Optional[int]:
         count = r.incr(key)
         if count == 1:
             r.expire(key, 120)
+        _note_rpm(r, key_id, window, int(count), int(count) > limit)
         if count > limit:
             return max(1, 60 - int(time.time() % 60))
     except Exception:
         return None
     return None
+
+
+_RPM_PEAK = "partner:rpm_peak:{key_id}:{hour}"      # zset "p" → busiest minute of the hour
+_RPM_REFUSED = "partner:rpm_refused:{key_id}:{hour}"
+_RPM_KEEP_S = 25 * 3600
+
+
+def _note_rpm(r, key_id: str, window: int, count: int, refused: bool) -> None:
+    """Per hour: the busiest minute and how many requests were refused — the
+    admin sees when a partner's key needs a higher requests/minute (19/10)."""
+    try:
+        hour = window // 60
+        pipe = r.pipeline(transaction=False)
+        pk = _RPM_PEAK.format(key_id=key_id, hour=hour)
+        pipe.zadd(pk, {"p": count}, gt=True)
+        pipe.expire(pk, _RPM_KEEP_S)
+        if refused:
+            rk = _RPM_REFUSED.format(key_id=key_id, hour=hour)
+            pipe.incr(rk)
+            pipe.expire(rk, _RPM_KEEP_S)
+        pipe.execute()
+    except Exception:
+        pass
+
+
+def rpm_stats(key_id: str, now: Optional[float] = None) -> dict:
+    """{now, peak_24h, refused_24h} for one partner key. Never raises."""
+    import time  # noqa: PLC0415
+    t = now or time.time()
+    window, hour = int(t // 60), int(t // 3600)
+    out = {"now": 0, "peak_24h": 0, "refused_24h": 0}
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        r = get_redis()
+        pipe = r.pipeline(transaction=False)
+        pipe.get(f"partner:rpm:{key_id}:{window}")
+        hours = [hour - i for i in range(24)]
+        for h in hours:
+            pipe.zscore(_RPM_PEAK.format(key_id=key_id, hour=h), "p")
+        for h in hours:
+            pipe.get(_RPM_REFUSED.format(key_id=key_id, hour=h))
+        res = pipe.execute()
+        out["now"] = int(res[0] or 0)
+        out["peak_24h"] = int(max((float(x) for x in res[1:25] if x is not None), default=0))
+        out["refused_24h"] = sum(int(x) for x in res[25:] if x)
+    except Exception:
+        pass
+    return out
 
 
 # ── Optional variant (no-key → None, bad-key → still raises) ─────────────────

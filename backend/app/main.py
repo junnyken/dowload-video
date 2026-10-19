@@ -37,7 +37,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.core.client_ip import get_client_ip, has_valid_api_key, rate_limit_key
+from app.core.client_ip import get_client_ip, has_verified_identity, rate_limit_key
 
 # Initialize Rate Limiter (stricter: 60 req/min per IP default).
 # key_func=get_client_ip (not slowapi's get_remote_address) — the latter
@@ -89,7 +89,10 @@ class DailyIPQuotaMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         # API-key calls are metered per account (monthly API quota + the
         # account's daily downloads); an invalid key is refused with 401.
-        if has_valid_api_key(request):
+        # A verified key or signed-in account is metered per key / per
+        # account (quotas.py); the per-IP day quota is for guests only —
+        # otherwise a company's staff behind one office IP share it.
+        if has_verified_identity(request):
             return await call_next(request)
 
         ip = get_client_ip(request)

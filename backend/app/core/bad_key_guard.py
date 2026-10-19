@@ -59,6 +59,34 @@ def is_known_valid_key(raw: str) -> bool:
         return False
 
 
+VALID_SESSION = "session:valid:{h}"
+
+
+def note_valid_session(token: str, user_id: str) -> None:
+    """A web/extension/app session (Supabase JWT) the auth layer verified:
+    for 10 min its requests are limited per ACCOUNT, not per IP — staff of a
+    company behind one office IP no longer share one bucket (19/10). Only
+    used to choose the limiter bucket; authentication is unchanged."""
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        get_redis().set(VALID_SESSION.format(h=key_hash(token)), str(user_id), ex=VALID_TTL)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def session_user(token: str) -> str | None:
+    """User id of a session verified in the last 10 min, else None (fails
+    closed: per IP)."""
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        raw = get_redis().get(VALID_SESSION.format(h=key_hash(token)))
+        if raw:
+            return raw.decode() if isinstance(raw, bytes) else str(raw)
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 def note_bad_key(request: Request | None) -> None:
     if request is None:
         return

@@ -4408,6 +4408,10 @@ async def list_enterprise_api_keys(
         q = q.eq("is_active", True)
     resp = q.order("created_at", desc=True).limit(limit).execute()
     keys = resp.data or []
+    from app.core.partner_auth import rpm_stats  # noqa: PLC0415
+    for k in keys:
+        # requests/minute: now, busiest minute in 24 h, refused (429) in 24 h
+        k["rpm"] = rpm_stats(str(k.get("id")))
 
     return {
         "api_keys": keys,

@@ -31,6 +31,28 @@ interface ApiKey {
   expires_at: string | null
   created_at: string
   tenants: TenantRef | null
+  /** requests/minute: this minute, busiest minute in 24 h, refused (429) in 24 h */
+  rpm?: { now: number; peak_24h: number; refused_24h: number }
+}
+
+/** Warn when the busiest minute reached 80% of the key's limit or anything was refused. */
+function RpmCell({ k }: { k: ApiKey }) {
+  const r = k.rpm ?? { now: 0, peak_24h: 0, refused_24h: 0 }
+  const limit = k.rate_limit_per_min || 1
+  const pct = Math.round((r.peak_24h / limit) * 100)
+  const hot = r.refused_24h > 0 || r.peak_24h >= limit * 0.8
+  // wording: BA review
+  return (
+    <div className={cn('font-mono', hot ? 'text-warning' : 'text-fg-muted')}
+      title="Số request trong phút hiện tại và phút đông nhất của 24 giờ qua, so với giới hạn request/phút của key">
+      <div>Phút này: {r.now.toLocaleString('vi-VN')}</div>
+      <div>Cao nhất 24h: {r.peak_24h.toLocaleString('vi-VN')}/{limit.toLocaleString('vi-VN')} ({pct}%)</div>
+      {r.refused_24h > 0
+        ? <div className="font-semibold">Bị từ chối 24h: {r.refused_24h.toLocaleString('vi-VN')}</div>
+        : <div>Bị từ chối 24h: 0</div>}
+      {hot && <div className="mt-0.5 text-[10px]">Cân nhắc tăng request/phút</div>}
+    </div>
+  )
 }
 
 interface ApiKeysResponse {
@@ -332,7 +354,7 @@ export default function ApiKeysPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-line bg-surface-2">
-                {['Key', 'Khách', 'Quyền', 'IP được phép', 'Người tạo', 'Lượt gọi', 'Giới hạn', 'Dùng lần cuối', 'Hết hạn', 'Trạng thái'].map(h => (
+                {['Key', 'Khách', 'Quyền', 'IP được phép', 'Người tạo', 'Lượt gọi', 'Giới hạn', 'Request/phút', 'Dùng lần cuối', 'Hết hạn', 'Trạng thái'].map(h => (
                   <th key={h} className="px-3 py-2.5 font-mono font-semibold text-fg-muted">{h}</th>
                 ))}
               </tr>
@@ -395,6 +417,7 @@ export default function ApiKeysPage() {
                     <div>{k.rate_limit_per_min}/phút</div>
                     <div>{k.rate_limit_per_day.toLocaleString('vi-VN')}/ngày</div>
                   </td>
+                  <td className="px-3 py-2.5"><RpmCell k={k} /></td>
                   <td className="px-3 py-2.5 font-mono text-fg-muted">{formatRelative(k.last_used_at)}</td>
                   <td className="px-3 py-2.5 font-mono text-fg-muted">{formatDate(k.expires_at)}</td>
                   <td className="px-3 py-2.5">
@@ -439,7 +462,7 @@ export default function ApiKeysPage() {
               ))}
               {keys.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center font-mono text-xs text-fg-muted">
+                  <td colSpan={11} className="py-10 text-center font-mono text-xs text-fg-muted">
                     Không có key nào
                   </td>
                 </tr>
