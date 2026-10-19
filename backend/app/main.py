@@ -345,6 +345,11 @@ from app.core.extraction_errors import (  # noqa: E402
 )
 app.add_exception_handler(ExtractionHTTPException, extraction_http_exception_handler)
 app.add_middleware(SlowAPIMiddleware)
+# fastapi 0.141 nests include_router in _IncludedRouter, which slowapi's route
+# lookup cannot see — the 60/min default reached no /api/v1/* route. Restore
+# it, with the polling/admin/partner exemptions (app.core.limiter_routes).
+from app.core.limiter_routes import install as _install_limiter_routes  # noqa: E402
+_install_limiter_routes()
 
 # ── Unhandled errors must still look like HTTP errors ────────────────
 # Starlette's ServerErrorMiddleware is the outermost layer, outside
