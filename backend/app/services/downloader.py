@@ -4199,6 +4199,45 @@ async def extract_video_info(url: str, quality: str = "video", remove_watermark:
 # ── Channel / Playlist Scraping ──────────────────────────────────────
 
 
+def _list_douyin_channel_signed(channel_url: str, max_videos: int) -> Optional[Dict[str, Any]]:
+    """Profile listing through douyin_extractor.signed_profile_listing, or None to fall through."""
+    try:
+        from app.services.china_platforms.channel_listing import listing_cap, sec_uid_of
+        from app.services.douyin_extractor import signed_profile_listing
+    except Exception as imp_err:  # noqa: BLE001
+        print(f"[Douyin Channel] signed listing unavailable: {type(imp_err).__name__}")
+        return None
+    sec_uid = sec_uid_of(channel_url)
+    if not sec_uid:
+        return None
+    try:
+        n = min(int(max_videos or 0), listing_cap())
+    except Exception as cap_err:  # noqa: BLE001
+        print(f"[Douyin Channel] signed listing cap unknown: {type(cap_err).__name__}")
+        return None
+    if n <= 0:
+        return None   # the Apify route words the no-allowance refusal
+    try:
+        listed, why = signed_profile_listing(sec_uid, n)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[Douyin Channel] signed listing error {type(exc).__name__}")
+        return None
+    if not listed or not listed["video_ids"]:
+        if why != "no_jar":
+            print(f"[Douyin Channel] signed listing gave nothing ({why or 'empty profile'})")
+        return None
+    ids = listed["video_ids"]
+    print(f"[Douyin Channel] signed listing: {len(ids)} videos (has_more={listed['has_more']})")
+    entries = [{"url": f"https://www.douyin.com/video/{vid}", "title": f"Douyin Video {vid[-6:]}"}
+               for vid in ids]
+    return {
+        "channel_title": listed["channel_title"] or f"Douyin User {sec_uid[:12]}...",
+        "entries": entries,
+        "total_found": len(entries),
+        "total_queued": len(entries),
+    }
+
+
 def _scrape_douyin_channel(channel_url: str, max_videos: int = 20) -> Dict[str, Any]:
     """
     Dedicated Douyin channel/user scraper.
@@ -4211,6 +4250,16 @@ def _scrape_douyin_channel(channel_url: str, max_videos: int = 20) -> Dict[str, 
       4. Return video URLs for the existing single-video pipeline
     """
     print(f"[Downloader] Using dedicated Douyin channel scraper for: {channel_url}")
+
+    # ── Method -1: signed web API with the shared visitor jar (free) ──
+    # Same jar and caps as the per-video signed step; one call lists the
+    # profile's newest ~41 videos. Capped like the Apify route at what the
+    # requester can still download today, since the per-video jobs below do
+    # not re-check that. Skipped (not refused) when it yields nothing, so the
+    # routes below keep running exactly as before.
+    _signed = _list_douyin_channel_signed(channel_url, max_videos)
+    if _signed is not None:
+        return _signed
 
     # ── Method 0: managed Apify route of the China access layer (task #6055) ──
     # Token pool from admin, budgeted, capped at the requester's remaining

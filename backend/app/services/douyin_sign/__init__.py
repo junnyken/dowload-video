@@ -21,11 +21,16 @@ with one visitor jar minted 33 minutes earlier.
 from __future__ import annotations
 
 import hashlib
+import re
 import time
 from typing import Dict, Mapping, Optional, Tuple
 from urllib.parse import quote, urlencode
 
 DETAIL_API = "https://www.douyin.com/aweme/v1/web/aweme/detail/"
+POST_API = "https://www.douyin.com/aweme/v1/web/aweme/post/"
+# A visitor's first (and only) profile page tops out near 41 items.
+POST_MAX_COUNT = 50
+_SEC_UID_OK = re.compile(r"[A-Za-z0-9_.-]{6,200}")
 
 # x-secsdk-web-signature salt for douyin_web (secsdk runtime_bundler_34.js).
 SALT = "A96D855A08C0A9707F8BEF0D9A527E4E"
@@ -70,13 +75,10 @@ def web_signature(pairs, uifid: str, *, timestamp: Optional[int] = None) -> Tupl
     return f"{query}&x-secsdk-web-signature={sig}", headers
 
 
-def detail_request(aweme_id: str, cookies: Mapping[str, str], user_agent: str) -> Optional[Tuple[str, Dict[str, str]]]:
-    """(url, headers) for a signed detail call, or None when the jar has no visitor id."""
+def _signed(api: str, extra, cookies: Mapping[str, str], user_agent: str, uifid: str,
+            referer: str) -> Tuple[str, Dict[str, str]]:
     from .abogus import ABogus  # noqa: PLC0415
-    uifid = pick_uifid(cookies)
-    if not uifid or not str(aweme_id).isdigit():
-        return None
-    params = list(_DETAIL_PARAMS) + [("aweme_id", str(aweme_id)), ("msToken", cookies.get("msToken", ""))]
+    params = list(_DETAIL_PARAMS) + list(extra) + [("msToken", cookies.get("msToken", ""))]
     pairs = params + [("a_bogus", ABogus(user_agent).get_value(urlencode(params)))]
     vfp = cookies.get(VERIFY_FP_COOKIE)
     if vfp:
@@ -84,8 +86,41 @@ def detail_request(aweme_id: str, cookies: Mapping[str, str], user_agent: str) -
     query, sig_headers = web_signature(pairs, uifid)
     headers = {
         "User-Agent": user_agent,
-        "Referer": f"https://www.douyin.com/video/{aweme_id}",
+        "Referer": referer,
         "Accept": "application/json, text/plain, */*",
         **sig_headers,
     }
-    return f"{DETAIL_API}?{query}", headers
+    return f"{api}?{query}", headers
+
+
+def detail_request(aweme_id: str, cookies: Mapping[str, str], user_agent: str) -> Optional[Tuple[str, Dict[str, str]]]:
+    """(url, headers) for a signed detail call, or None when the jar has no visitor id."""
+    uifid = pick_uifid(cookies)
+    if not uifid or not str(aweme_id).isdigit():
+        return None
+    return _signed(DETAIL_API, [("aweme_id", str(aweme_id))], cookies, user_agent, uifid,
+                   f"https://www.douyin.com/video/{aweme_id}")
+
+
+def post_request(sec_uid: str, cookies: Mapping[str, str], user_agent: str,
+                 count: int = POST_MAX_COUNT) -> Optional[Tuple[str, Dict[str, str]]]:
+    """(url, headers) for a signed profile listing (newest first), or None.
+
+    Measured 20/10 with a fresh visitor jar, no login: the first page answers
+    with up to ~41 videos whatever `count` asks for beyond that (41 of a
+    larger profile with has_more=1; 27 of 27 on a smaller one). Every
+    max_cursor page after it answers {"status_code":0} with no list, with or
+    without msToken / whale_cut params — Douyin keeps deeper pages for
+    signed-in sessions, so there is no paging here.
+    """
+    uifid = pick_uifid(cookies)
+    if not uifid or not _SEC_UID_OK.fullmatch(sec_uid or ""):
+        return None
+    extra = (
+        ("sec_user_id", sec_uid), ("max_cursor", "0"), ("locate_query", "false"),
+        ("show_live_replay_strategy", "1"), ("need_time_list", "1"), ("time_list_query", "0"),
+        ("whale_cut_token", ""), ("cut_version", "1"), ("count", str(int(count))),
+        ("publish_video_strategy_type", "2"),
+    )
+    return _signed(POST_API, extra, cookies, user_agent, uifid,
+                   f"https://www.douyin.com/user/{sec_uid}")

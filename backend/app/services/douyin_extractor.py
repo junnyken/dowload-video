@@ -22,7 +22,7 @@ import sys
 import json
 import httpx
 import asyncio
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 from urllib.parse import unquote, quote
 
 from dotenv import load_dotenv
@@ -804,8 +804,128 @@ async def _try_ytdlp(
 # PUBLIC API — Main entry point
 # ═════════════════════════════════════════════════════════════════════
 
+# A profile listing already carries every video's play URLs. Keeping them a
+# short while lets the per-video jobs of that channel skip their own signed
+# detail call, so a 40-video channel spends one slot of the visitor caps
+# (20/min by default) instead of 41 and does not spill onto Apify.
+_LISTED_KEY = "douyin:signed:listed:{}"
+_LISTED_TTL_S = 30 * 60
+
+
+def _slim_aweme(aweme: Dict[str, Any]) -> Dict[str, Any]:
+    """The fields _try_signed_web_api reads; a full list item is ~40 KB."""
+    video = aweme.get("video") or {}
+    music = aweme.get("music") or {}
+    bit_rate = [{"bit_rate": br.get("bit_rate"),
+                 "play_addr": {"url_list": ((br.get("play_addr") or {}).get("url_list") or [])[:2],
+                               "height": (br.get("play_addr") or {}).get("height")}}
+                for br in (video.get("bit_rate") or []) if isinstance(br, dict)]
+    return {
+        "desc": aweme.get("desc") or "",
+        "video": {
+            "play_addr": {"url_list": ((video.get("play_addr") or {}).get("url_list") or [])[:2]},
+            "bit_rate": bit_rate,
+            "cover": {"url_list": ((video.get("cover") or {}).get("url_list") or [])[:1]},
+            "duration": video.get("duration") or 0,
+        },
+        "music": {"play_url": {"url_list": (((music.get("play_url") or {}).get("url_list")) or [])[:1]}}
+        if isinstance(music.get("play_url"), dict) else {},
+    }
+
+
+def _remember_listed(awemes: List[Dict[str, Any]], rc=None) -> None:
+    try:
+        from app.services import douyin_visitor  # noqa: PLC0415
+        rc = rc or douyin_visitor._redis()
+        pipe = rc.pipeline()
+        for a in awemes:
+            vid = str(a.get("aweme_id") or "")
+            if vid.isdigit():
+                pipe.set(_LISTED_KEY.format(vid), json.dumps(_slim_aweme(a)), ex=_LISTED_TTL_S)
+        pipe.execute()
+    except Exception as exc:  # noqa: BLE001 — the cache only saves calls
+        _safe_print(f"[douyin_signed] listed cache write failed {type(exc).__name__}")
+
+
+def _listed_detail(video_id: str, rc=None) -> Optional[Dict[str, Any]]:
+    try:
+        from app.services import douyin_visitor  # noqa: PLC0415
+        raw = (rc or douyin_visitor._redis()).get(_LISTED_KEY.format(video_id))
+        return json.loads(raw) if raw else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _is_playable_video(aweme: Dict[str, Any]) -> bool:
+    """Image/slide posts have no play_addr; the single-video pipeline cannot use them."""
+    if aweme.get("images"):
+        return False
+    return bool(((aweme.get("video") or {}).get("play_addr") or {}).get("url_list"))
+
+
+def signed_profile_listing(sec_uid: str, count: int) -> Tuple[Optional[Dict[str, Any]], str]:
+    """Newest videos of a Douyin profile via the signed web API and the shared visitor jar.
+
+    Returns ({"channel_title", "video_ids", "has_more"} or None, reason). One
+    call, one slot of the visitor caps; a visitor only ever gets the first
+    page (~41 videos, see douyin_sign.post_request). Never logs cookies/URLs.
+    """
+    from app.services import douyin_visitor  # noqa: PLC0415
+    from app.services.douyin_sign import POST_MAX_COUNT, post_request  # noqa: PLC0415
+    if count <= 0:
+        return None, "zero"
+    jar = douyin_visitor.get_jar()
+    if not jar:
+        return None, "no_jar"
+    ua, cookies = jar
+    req = post_request(sec_uid, cookies, ua, min(count, POST_MAX_COUNT))
+    if not req:
+        return None, "no_uifid"
+    if not douyin_visitor.take_slot():
+        return None, "rate_cap"
+    url, headers = req
+    from curl_cffi import requests as cr  # noqa: PLC0415
+    try:
+        r = cr.get(url, headers=headers, cookies=cookies, impersonate="chrome131", timeout=30)
+    except Exception as exc:  # noqa: BLE001
+        return None, f"network {type(exc).__name__}"
+    body = r.text or ""
+    if r.status_code != 200:
+        douyin_visitor.report(False, f"HTTP {r.status_code} {body[:60]}")
+        return None, f"HTTP {r.status_code}"
+    try:
+        data = json.loads(body) if body.strip() else {}
+    except ValueError:
+        douyin_visitor.report(False, "non-json 200")
+        return None, "non-json"
+    if not isinstance(data, dict) or "aweme_list" not in data:
+        # Same signature as a refused detail call: 200 with an empty body.
+        douyin_visitor.report(False, "empty 200")
+        return None, "empty"
+    douyin_visitor.report(True)
+    awemes = [a for a in (data.get("aweme_list") or []) if isinstance(a, dict)]
+    playable = [a for a in awemes if _is_playable_video(a)]
+    _remember_listed(playable)
+    title = ""
+    for a in awemes:
+        title = str(((a.get("author") or {}).get("nickname")) or "")
+        if title:
+            break
+    ids, seen = [], set()
+    for a in playable:
+        vid = str(a.get("aweme_id") or "")
+        if vid.isdigit() and vid not in seen:
+            seen.add(vid)
+            ids.append(vid)
+    return {"channel_title": title, "video_ids": ids[:count],
+            "has_more": bool(data.get("has_more"))}, ""
+
+
 def _signed_detail_blocking(video_id: str) -> Tuple[Optional[Dict[str, Any]], str]:
     """One signed detail call. Returns (aweme_detail or None, reason). Never logs cookies/URLs."""
+    listed = _listed_detail(video_id)
+    if listed:
+        return listed, ""
     from app.services import douyin_visitor  # noqa: PLC0415
     from app.services.douyin_sign import detail_request  # noqa: PLC0415
     jar = douyin_visitor.get_jar()
