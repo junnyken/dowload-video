@@ -679,7 +679,7 @@ window.addEventListener('message', (event) => {
 
       while (stable < MAX_STABLE) {
         round++;
-        window.scrollBy({ top: window.innerHeight * 1.8, behavior: 'smooth' });
+        vgScrollPage();
         await sleep(2200);
 
         const curr = videoSet.size;
@@ -689,6 +689,8 @@ window.addEventListener('message', (event) => {
 
         if (curr === prevCount) stable++;
         else { stable = 0; prevCount = curr; }
+        // Douyin's own end-of-list line: nothing more will load.
+        if (vgReachedListEnd() && curr === prevCount && stable >= 1) break;
       }
 
       scrollBar.style.width = '100%';
@@ -745,6 +747,38 @@ window.addEventListener('message', (event) => {
         sendText.textContent = `📤 Thử lại (${urls.length} video)`;
       }
     });
+  }
+
+  // The element that actually scrolls. A Douyin profile locks <body>
+  // (overflow: hidden) and scrolls `.route-scroll-container` instead, so
+  // window.scrollBy moved 0 px there (measured 20/10) and the auto-scroll
+  // stopped after the first ~18 videos. Other sites scroll the window.
+  function vgScrollTarget() {
+    const isScrollable = (el) => {
+      const s = getComputedStyle(el).overflowY;
+      return (s === 'auto' || s === 'scroll') && el.scrollHeight > el.clientHeight + 50;
+    };
+    const named = document.querySelector('.route-scroll-container');
+    if (named && isScrollable(named)) return named;
+    const doc = document.scrollingElement || document.documentElement;
+    if (doc.scrollHeight > window.innerHeight + 50 && getComputedStyle(document.body).overflowY !== 'hidden') return null;
+    let best = null;
+    for (const el of document.querySelectorAll('div, main, section')) {
+      if (el.clientHeight < window.innerHeight * 0.5 || !isScrollable(el)) continue;
+      if (!best || el.scrollHeight > best.scrollHeight) best = el;
+    }
+    return best;
+  }
+
+  function vgScrollPage() {
+    const el = vgScrollTarget();
+    const step = window.innerHeight * 1.8;
+    if (el) el.scrollBy({ top: step, behavior: 'smooth' });
+    else window.scrollBy({ top: step, behavior: 'smooth' });
+  }
+
+  function vgReachedListEnd() {
+    return /暂时没有更多了|没有更多了/.test(document.body?.innerText?.slice(-4000) || '');
   }
 
   function stopDomObserver() {
