@@ -11,6 +11,8 @@ import type { ChannelListing, ProbeResult } from './types';
 export type DouyinItem = { id: string; url: string; title: string; thumbnail: string | null; durationSec: number | null };
 export type DouyinChannel = {
   platform: 'douyin' | 'xiaohongshu'; channelTitle: string; channelUrl: string; cap: number; fromCache: boolean; items: DouyinItem[];
+  /** 20/10: Douyin has more than the server could list; 'douyin_extension' = point to the browser extension. */
+  hasMore?: boolean; moreHint?: string | null;
 };
 export type DouyinVideo = {
   platform: 'douyin'; id: string; url: string; title: string; uploader: string | null; thumbnail: string | null;
@@ -72,6 +74,7 @@ export function toListing(c: DouyinChannel): ChannelListing {
     videos: c.items.map((i) => ({ id: i.id, url: i.url, title: i.title, duration: i.durationSec, uploadDate: null, thumbnail: i.thumbnail })),
     truncated: false, // the cap is the limit, not something "load more" can raise
     cap: c.cap,
+    moreHint: c.moreHint ?? null,
   };
 }
 

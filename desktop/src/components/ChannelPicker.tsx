@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, FolderOpen, Info, Search, Tv } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Download, FolderOpen, Info, Puzzle, Search, Tv } from 'lucide-react';
+import { WEBSITE_URL } from '../lib/config';
 import { Badge, Button, PlatformBadge, Select, Spinner, Thumb, Toggle } from './ui';
 import { api } from '../lib/tauri';
 import { ensureOutDir, settings, type Quality } from '../lib/settings';
@@ -210,11 +211,27 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
               {listing.truncated && <Badge tone="warning">Danh sách có thể chưa đủ</Badge>}
               {saved && <Badge tone="accent">Kênh này đã được theo dõi</Badge>}
             </div>
-            {douyin && (
+            {douyin && listing.moreHint !== 'douyin_extension' && (
               <p className="mt-1.5 flex items-start gap-1.5 text-xs text-fg-muted">
                 <Info size={13} className="mt-px shrink-0" aria-hidden />
                 <span>{serverName}: danh sách chỉ lấy tối đa {listing.cap ?? listing.videos.length} video — đúng số lượt tải bạn còn trong hôm nay. Mỗi video tải về tính một lượt.</span>
               </p>
+            )}
+            {/* wording: BA review */}
+            {listing.moreHint === 'douyin_extension' && (
+              <div className="mt-2 rounded-lg border border-line bg-surface-2 p-2.5 text-xs text-fg-2">
+                <p className="flex items-start gap-1.5">
+                  <Puzzle size={13} className="mt-px shrink-0 text-accent" aria-hidden />
+                  <span>
+                    Kênh này còn nhiều video hơn nhưng máy chủ chỉ lấy được {listing.videos.length} video mới nhất.
+                    Muốn lấy đầy đủ, hãy mở trang kênh trên Douyin bằng Chrome và dùng tiện ích VidGrab.
+                  </span>
+                </p>
+                <Button size="sm" className="mt-2"
+                  onClick={() => { api.openUrl(`${WEBSITE_URL}/extension`).catch(() => toast('error', 'Không mở được trình duyệt.')); }}>
+                  Cài tiện ích VidGrab
+                </Button>
+              </div>
             )}
           </div>
           {listing.truncated && (

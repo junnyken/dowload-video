@@ -109,6 +109,7 @@ export type ChannelListing = {
   videos: ChannelVideo[];
   truncated: boolean;
   cap?: number; // Douyin: how many downloads the person still has today (the listing is cut to this)
+  moreHint?: string | null; // Douyin: 'douyin_extension' when the channel has more than the server listed
 };
 
 export type ChannelMode = 'download' | 'notify';
