@@ -38,6 +38,25 @@ import {
 import UpgradeModal from './UpgradeModal';
 import QuickGuideSection from './QuickGuideSection';
 
+// The server's own sentence for a refused bulk request, whatever its shape:
+// a string detail (cookie_required…), a make_error object (daily allowance,
+// tier batch size…), slowapi's {"error": …} on 429, FastAPI's 422 list.
+// Every refusal used to fall through to "Failed to submit bulk jobs" unless
+// it was exactly quota_exceeded_daily, hiding why (20/10).
+// wording: BA review
+export function bulkRefusalText(status, data) {
+  const d = data && data.detail;
+  if (typeof d === 'string' && d.trim()) return d;
+  if (d && typeof d === 'object' && !Array.isArray(d)) {
+    const m = d.message || d.user_message;
+    if (m) return d.suggested_action && !d.message ? `${m} ${d.suggested_action}` : m;
+  }
+  if (status === 429) return 'Bạn gửi yêu cầu quá nhanh. Vui lòng chờ khoảng một phút rồi thử lại.';
+  if (status === 422) return 'Dữ liệu gửi lên không hợp lệ. Hãy kiểm tra lại danh sách link rồi thử lại.';
+  if (data && typeof data.message === 'string' && data.message) return data.message;
+  return `Không gửi được danh sách tải (mã lỗi ${status}). Vui lòng thử lại sau ít phút.`;
+}
+
 // Shown under a Douyin channel row when the server listed only the newest
 // videos and Douyin has more (channel_hint from GET /jobs/{batch_id}).
 // wording: BA review
@@ -388,14 +407,7 @@ export default function BulkContent() {
           setShowUpgradeModal(true);
           return;
         }
-        // Per-platform daily allowance used up for every link: the server's
-        // message names the platform and when it resets.
-        if (data.detail && typeof data.detail === 'object' && data.detail.error_code === 'quota_exceeded_daily') {
-          throw new Error(data.detail.message || 'Failed to submit bulk jobs');
-        }
-        // detail is a plain string for cookie_required (e.g. Douyin without a
-        // server cookie) — show it instead of the generic alert below.
-        throw new Error(typeof data.detail === 'string' ? data.detail : 'Failed to submit bulk jobs');
+        throw new Error(bulkRefusalText(res.status, data));
       }
       
       if (data.batch_id) {
@@ -403,7 +415,11 @@ export default function BulkContent() {
       }
     } catch (err) {
       console.error(err);
-      alert(err?.message || 'Failed to submit bulk jobs');
+      // wording: BA review
+      const network = err instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(err?.message || '');
+      alert(network
+        ? 'Lỗi kết nối mạng, chưa gửi được danh sách. Hãy kiểm tra Internet rồi thử lại.'
+        : (err?.message || 'Không gửi được danh sách tải. Vui lòng thử lại.'));
     } finally {
       setIsSubmitting(false);
     }
