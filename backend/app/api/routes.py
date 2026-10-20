@@ -2458,6 +2458,15 @@ async def get_jobs_by_batch(batch_id: str):
         for job in jobs:
             job["recovery_state"] = _compute_recovery_state(job, now_utc)
 
+        # Channel rows (no media of their own) may carry a follow-up hint.
+        from app.core.channel_hints import channel_hints as _channel_hints
+        _hints = _channel_hints(j.get("id") for j in jobs
+                                if j.get("status") == "success" and not j.get("direct_mp4_url")
+                                and not j.get("local_file_path"))
+        for job in jobs:
+            if job.get("id") in _hints:
+                job["channel_hint"] = _hints[job["id"]]
+
         recoverable = sum(1 for j in jobs if j["recovery_state"] in ("expired_refreshable", "recoverable"))
 
         # ETA estimate: (elapsed / completed) * remaining

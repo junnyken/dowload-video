@@ -4199,6 +4199,9 @@ async def extract_video_info(url: str, quality: str = "video", remove_watermark:
 # ── Channel / Playlist Scraping ──────────────────────────────────────
 
 
+CHANNEL_HINT_DOUYIN_EXTENSION = "douyin_extension"
+
+
 def _list_douyin_channel_signed(channel_url: str, max_videos: int) -> Optional[Dict[str, Any]]:
     """Profile listing through douyin_extractor.signed_profile_listing, or None to fall through."""
     try:
@@ -4230,12 +4233,18 @@ def _list_douyin_channel_signed(channel_url: str, max_videos: int) -> Optional[D
     print(f"[Douyin Channel] signed listing: {len(ids)} videos (has_more={listed['has_more']})")
     entries = [{"url": f"https://www.douyin.com/video/{vid}", "title": f"Douyin Video {vid[-6:]}"}
                for vid in ids]
-    return {
+    out = {
         "channel_title": listed["channel_title"] or f"Douyin User {sec_uid[:12]}...",
         "entries": entries,
         "total_found": len(entries),
         "total_queued": len(entries),
     }
+    # Douyin stopped short of what we asked for and has more: the server cannot
+    # page further, the extension can (it scrolls the profile in the user's own
+    # browser). Not set when our own cap (allowance / max_videos) cut the list.
+    if listed["has_more"] and len(ids) < n:
+        out["more_hint"] = CHANNEL_HINT_DOUYIN_EXTENSION
+    return out
 
 
 def _scrape_douyin_channel(channel_url: str, max_videos: int = 20) -> Dict[str, Any]:

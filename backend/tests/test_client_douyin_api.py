@@ -144,3 +144,56 @@ class TestVideo:
     def test_non_douyin_refused(self, on, rc):
         r = client.post("/api/v1/client/douyin/video", json={"url": "https://www.youtube.com/watch?v=x"})
         assert r.status_code == 400
+
+
+class TestSignedListing:
+    """20/10: the free signed listing answers before the managed Apify run."""
+
+    @staticmethod
+    def _signed_page(monkeypatch, rc, body):
+        import json
+        from curl_cffi import requests as cr
+        from app.core import cookie_crypto
+        from app.services import douyin_visitor as V
+        monkeypatch.setenv("SUPABASE_SERVICE_KEY", "test-service-key-for-encryption")
+        for f in vars(cookie_crypto).values():
+            if hasattr(f, "cache_clear"):
+                f.cache_clear()
+        V.store_jar("Mozilla/5.0 Chrome/131.0.0.0", {"UIFID_TEMP": "u", "s_v_web_id": "v"}, rc)
+
+        class _R:
+            status_code, text = 200, json.dumps(body)
+        monkeypatch.setattr(cr, "get", lambda *a, **k: _R())
+
+    @staticmethod
+    def _aweme(vid):
+        return {"aweme_id": vid, "desc": f"clip {vid}", "author": {"nickname": "MaodVlog"},
+                "video": {"duration": 30000, "cover": {"url_list": [f"https://a/{vid}.jpg"]},
+                          "play_addr": {"url_list": [f"https://v/{vid}"]}}}
+
+    def test_free_listing_first_with_extension_hint(self, on, rc, monkeypatch):
+        self._signed_page(monkeypatch, rc, {"status_code": 0, "has_more": 1,
+                                            "aweme_list": [self._aweme("7001"), self._aweme("7002")]})
+        r = _channel()
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert [i["id"] for i in body["items"]] == ["7001", "7002"]
+        assert body["items"][0] == {"id": "7001", "url": "https://www.douyin.com/video/7001", "title": "clip 7001",
+                                    "thumbnail": "https://a/7001.jpg", "durationSec": 30.0}
+        assert body["channelTitle"] == "MaodVlog" and body["channelUrl"] == PROFILE
+        assert body["hasMore"] is True and body["moreHint"] == "douyin_extension"
+        assert on.starts() == []                                          # no Apify run
+
+    def test_guest_cap_still_applies(self, on, rc, monkeypatch):
+        self._signed_page(monkeypatch, rc, {"status_code": 0, "has_more": 1,
+                                            "aweme_list": [self._aweme(str(7000 + i)) for i in range(8)]})
+        body = _channel(limit=20).json()
+        assert body["cap"] == 5 and len(body["items"]) == 5
+        assert body["hasMore"] is False and body["moreHint"] is None     # our cap cut it, not Douyin
+        assert on.starts() == []
+
+    def test_refused_listing_falls_back_to_apify(self, on, rc, monkeypatch):
+        self._signed_page(monkeypatch, rc, {"status_code": 0})
+        body = _channel().json()
+        assert body["cap"] == 5 and len(body["items"]) == 5 and "hasMore" not in body
+        assert len(on.starts()) == 1

@@ -911,13 +911,19 @@ def signed_profile_listing(sec_uid: str, count: int) -> Tuple[Optional[Dict[str,
         title = str(((a.get("author") or {}).get("nickname")) or "")
         if title:
             break
-    ids, seen = [], set()
+    videos, seen = [], set()
     for a in playable:
         vid = str(a.get("aweme_id") or "")
         if vid.isdigit() and vid not in seen:
             seen.add(vid)
-            ids.append(vid)
-    return {"channel_title": title, "video_ids": ids[:count],
+            video = a.get("video") or {}
+            cover = ((video.get("cover") or {}).get("url_list")) or []
+            ms = video.get("duration") or 0
+            videos.append({"id": vid, "title": (a.get("desc") or "").strip()[:300],
+                           "thumbnail": cover[0] if cover else None,
+                           "duration_sec": round(ms / 1000, 1) if ms else None})
+    videos = videos[:count]
+    return {"channel_title": title, "video_ids": [v["id"] for v in videos], "videos": videos,
             "has_more": bool(data.get("has_more"))}, ""
 
 

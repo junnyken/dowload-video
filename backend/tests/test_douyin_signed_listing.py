@@ -83,7 +83,10 @@ def test_listing_keeps_playable_videos_once_in_order(rc, monkeypatch):
     seen = []
     _with_http(rc, monkeypatch, _Http(200, json.dumps(PAGE)), seen)
     out, why = d.signed_profile_listing(SEC, 10)
-    assert why == "" and out == {"channel_title": "MaodVlog", "video_ids": ["7001", "7004"], "has_more": True}
+    assert why == "" and out["channel_title"] == "MaodVlog" and out["has_more"] is True
+    assert out["video_ids"] == ["7001", "7004"]
+    assert out["videos"][1] == {"id": "7004", "title": "clip 7004", "thumbnail": "https://a/c.jpg",
+                                "duration_sec": 30.0}
     assert len(seen) == 1 and V.status(rc)["ok"] == 1
 
 
@@ -158,3 +161,61 @@ def test_no_allowance_or_refusal_falls_through_to_apify(rc, monkeypatch):
     _cap(monkeypatch, 100)
     _with_http(rc, monkeypatch, _Http(200, '{"status_code":0}'))
     assert downloader._scrape_douyin_channel(SHARE_URL, 20) is apify
+
+
+# ── "use the extension" hint (20/10) ─────────────────────────────────────────
+
+def test_hint_when_douyin_has_more_than_it_gave(rc, monkeypatch):
+    _cap(monkeypatch, 100)
+    _with_http(rc, monkeypatch, _Http(200, json.dumps(PAGE)))          # has_more=1, 2 playable
+    out = downloader._scrape_douyin_channel(SHARE_URL, 100)
+    assert out["more_hint"] == downloader.CHANNEL_HINT_DOUYIN_EXTENSION
+
+
+def test_no_hint_when_our_own_cap_cut_the_list(rc, monkeypatch):
+    _cap(monkeypatch, 1)                                                # allowance 1 < 2 listed
+    _with_http(rc, monkeypatch, _Http(200, json.dumps(PAGE)))
+    assert "more_hint" not in downloader._scrape_douyin_channel(SHARE_URL, 100)
+
+
+def test_no_hint_when_the_channel_is_complete(rc, monkeypatch):
+    _cap(monkeypatch, 100)
+    _with_http(rc, monkeypatch, _Http(200, json.dumps({**PAGE, "has_more": 0})))
+    assert "more_hint" not in downloader._scrape_douyin_channel(SHARE_URL, 100)
+
+
+def test_channel_hint_store(rc):
+    from app.core import channel_hints as H
+    H.save_channel_hint("job-1", "douyin_extension", rc)
+    H.save_channel_hint("job-2", "made_up", rc)                         # unknown hints are not stored
+    assert H.channel_hints(["job-1", "job-2", "job-3"], rc) == {"job-1": "douyin_extension"}
+    assert 0 < rc.ttl("channel:hint:job-1") <= 7 * 24 * 3600
+    assert "tiện ích VidGrab" in H.hint_sentence("douyin_extension")
+    assert H.hint_sentence("made_up") == ""
+
+
+def test_jobs_endpoint_returns_the_hint_on_the_channel_row_only(rc, monkeypatch):
+    from types import SimpleNamespace
+    from app.api import routes
+    from app.core.channel_hints import save_channel_hint
+    rows = [
+        {"id": "ch", "status": "success", "direct_mp4_url": None, "local_file_path": None,
+         "original_url": SHARE_URL, "created_at": "2026-10-20T01:00:00+00:00"},
+        {"id": "v1", "status": "success", "direct_mp4_url": "https://v/1", "local_file_path": None,
+         "original_url": "https://www.douyin.com/video/7001", "created_at": "2026-10-20T01:00:01+00:00"},
+    ]
+
+    class _Q:
+        def __getattr__(self, _name):
+            return lambda *a, **k: self
+
+        def execute(self):
+            return SimpleNamespace(data=[dict(r) for r in rows])
+
+    monkeypatch.setattr(routes, "get_supabase_client", lambda: SimpleNamespace(table=lambda _t: _Q()))
+    save_channel_hint("ch", "douyin_extension", rc)
+    save_channel_hint("v1", "douyin_extension", rc)       # a video row never shows it
+    out = asyncio.new_event_loop().run_until_complete(routes.get_jobs_by_batch("b1"))
+    by_id = {j["id"]: j for j in out["jobs"]}
+    assert by_id["ch"]["channel_hint"] == "douyin_extension"
+    assert "channel_hint" not in by_id["v1"]

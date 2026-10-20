@@ -95,6 +95,46 @@ _STATUS = {"unsupported_url": 400, "platform_disabled": 503, "quota_exceeded": 4
            "provider_unavailable": 503}
 
 
+async def _signed_channel(url: str, limit: int, cap_ctx) -> Optional[dict]:
+    """The free signed listing (20/10) before the managed Apify run, same
+    answer shape plus hasMore / moreHint. None = fall through: a video link
+    (its author is read by the managed route), no allowance left (that route
+    words the refusal), no visitor jar, or Douyin refused."""
+    import asyncio  # noqa: PLC0415
+    from app.services.china_platforms import channel_listing  # noqa: PLC0415
+    from app.services.douyin_extractor import _resolve_short_url, signed_profile_listing  # noqa: PLC0415
+    from app.services.downloader import CHANNEL_HINT_DOUYIN_EXTENSION  # noqa: PLC0415
+    try:
+        sec_uid = channel_listing.sec_uid_of(url) or channel_listing.sec_uid_of(await _resolve_short_url(url))
+        if not sec_uid:
+            return None
+        n = min(int(limit), channel_listing.listing_cap(cap_ctx))
+        if n <= 0:
+            return None
+        listed, why = await asyncio.to_thread(signed_profile_listing, sec_uid, n)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("client douyin signed listing error %s", type(exc).__name__)
+        return None
+    if not listed or not listed["videos"]:
+        return None
+    videos = listed["videos"]
+    more = listed["has_more"] and len(videos) < n
+    return {
+        "platform": PLATFORM,
+        "channelTitle": listed["channel_title"] or f"Douyin {sec_uid[:12]}…",
+        "channelUrl": f"https://www.douyin.com/user/{sec_uid}",
+        "cap": n,
+        "fromCache": False,
+        "hasMore": more,
+        "moreHint": CHANNEL_HINT_DOUYIN_EXTENSION if more else None,
+        "items": [{
+            "id": v["id"], "url": f"https://www.douyin.com/video/{v['id']}",
+            "title": v["title"] or f"Douyin {v['id'][-6:]}",
+            "thumbnail": v["thumbnail"], "durationSec": v["duration_sec"],
+        } for v in videos],
+    }
+
+
 @router.post("/client/douyin/channel")
 @limiter.limit("6/minute")
 async def douyin_channel(payload: ChannelIn, request: Request, user=Depends(get_optional_user)):
@@ -113,6 +153,9 @@ async def douyin_channel(payload: ChannelIn, request: Request, user=Depends(get_
     req = _requester(request, user)
     cap_key = req.key if req.kind == "device" else None
     try:
+        signed = await _signed_channel(url, payload.limit, ctx.with_(requester_key=cap_key) if cap_key else ctx)
+        if signed is not None:
+            return signed
         listing = await channel_listing.list_douyin_profile(url, payload.limit, ctx, cap_key=cap_key)
     except channel_listing.ChannelListingError as exc:
         return _err(_STATUS.get(exc.code, 503), str(exc), exc.code)

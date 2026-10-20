@@ -1023,6 +1023,13 @@ def _scrape_channel_body(supabase, channel_url, batch_id, channel_job_id, max_vi
             f"Da tim thay {total_found} video, "
             f"{total_queued} video dat dieu kien loc va dang xu ly{wave_info}."
         )
+        _hint = result.get("more_hint")
+        if _hint:
+            from app.core.channel_hints import save_channel_hint, hint_sentence
+            save_channel_hint(channel_job_id, _hint)
+            # The web shows a button from the hint; the extension popup and the
+            # desktop app only show this text.
+            summary_msg = f"{summary_msg} {hint_sentence(_hint)}"
         supabase.table("download_jobs").update({
             "status": "success",
             "error_message": summary_msg,

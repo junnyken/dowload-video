@@ -32,10 +32,39 @@ import {
   Pencil,
   Eye,
   OctagonX,
+  Puzzle,
 } from 'lucide-react';
 
 import UpgradeModal from './UpgradeModal';
 import QuickGuideSection from './QuickGuideSection';
+
+// Shown under a Douyin channel row when the server listed only the newest
+// videos and Douyin has more (channel_hint from GET /jobs/{batch_id}).
+// wording: BA review
+function DouyinExtensionHint() {
+  const openExtensionPage = (e) => {
+    e.preventDefault();
+    window.history.pushState({}, '', '/extension');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+  return (
+    <div className="mt-2 p-2.5 rounded-control border border-line bg-surface text-[11px] text-fg-2 whitespace-normal">
+      <p className="font-semibold text-fg mb-1">Muốn lấy đầy đủ video của kênh?</p>
+      <p className="mb-2">
+        Máy chủ chỉ lấy được những video mới nhất. Dùng tiện ích VidGrab để lấy hết:
+        mở trang kênh trên Douyin, bấm nút cuộn trên khung VidGrab, chờ báo hoàn tất rồi bấm gửi tải.
+      </p>
+      <a
+        href="/extension"
+        onClick={openExtensionPage}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 font-medium text-accent-text border border-line hover:border-line-strong rounded-control transition-colors"
+      >
+        <Puzzle className="w-3.5 h-3.5" />
+        Cài tiện ích VidGrab
+      </a>
+    </div>
+  );
+}
 import ContainerPreviewPanel from './ContainerPreviewPanel';
 import { useContainerDiscover } from '../hooks/useContainerDiscover';
 
@@ -1827,6 +1856,7 @@ export default function BulkContent() {
                             {job.error_message}
                           </p>
                         )}
+                        {job.channel_hint === 'douyin_extension' && <DouyinExtensionHint />}
                           </div>
                         </div>
                       </td>
