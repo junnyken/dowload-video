@@ -15,7 +15,7 @@ channels for signed-in users. Several cookies are kept and taken in turn;
 a refused first page moves on to the next live one. When none is usable,
 switched off or over the hourly cap, callers fall back to the visitor's
 first page and the extension relay. A beat task tests every cookie each
-6 hours (probe_all) so a dead one is found before a user meets it.
+12 hours (probe_all) so a dead one is found before a user meets it.
 
 Redis
   douyin:chcookie:jars       hash id -> cookie_crypto-encrypted JSON {cookies, ua}
@@ -512,7 +512,7 @@ def test(cid: str, rc=None) -> Dict[str, Any]:
 
 
 def probe_all(rc=None, *, sleep=time.sleep) -> Dict[str, Any]:
-    """The 6-hourly check: test every cookie, dead ones too (a cookie that
+    """The 12-hourly check: test every cookie, dead ones too (a cookie that
     works again comes back). A failure is repeated once after PROBE_RETRY_S;
     failing twice marks the cookie dead at once, unless every cookie failed:
     that is the server's IP being throttled, not the cookies."""

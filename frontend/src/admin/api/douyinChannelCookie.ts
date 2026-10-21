@@ -2,7 +2,7 @@ import { getAdminToken } from '../hooks/useAdminAuth'
 import { API_BASE } from '../../lib/apiBase'
 
 // Douyin cookie for whole-channel listings (backend: /china-platforms/douyin/channel-cookie*).
-// Separate from the download cookie pool; several cookies taken in turn, tested every 6 hours.
+// Separate from the download cookie pool; several cookies taken in turn, tested every 12 hours.
 // The backend returns cookie NAMES only, never values.
 
 export interface ChannelCookieTest {
@@ -35,7 +35,7 @@ export interface ChannelCookie {
   last_test: ChannelCookieTest | null
 }
 
-/** The last 6-hourly automatic test of every cookie. */
+/** The last 12-hourly automatic test of every cookie. */
 export interface ChannelCookieAuto {
   at: number
   tested: number

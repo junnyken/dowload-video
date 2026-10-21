@@ -247,7 +247,7 @@ def test_probe_all_does_not_kill_when_every_cookie_fails(rc, monkeypatch):  # no
 
 def test_probe_task_is_scheduled():
     from app.core.celery_app import celery_app
-    sched = celery_app.conf.beat_schedule["probe-douyin-channel-cookies-every-6h"]
+    sched = celery_app.conf.beat_schedule["probe-douyin-channel-cookies-every-12h"]
     assert sched["task"] == "probe_douyin_channel_cookies"
     import app.tasks.video_tasks  # noqa: F401
     assert "probe_douyin_channel_cookies" in celery_app.tasks
