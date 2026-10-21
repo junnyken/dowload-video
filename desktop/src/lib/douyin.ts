@@ -6,7 +6,7 @@ import { apiFetch } from './http';
 import { auth, getAccessToken } from './auth';
 import { api } from './tauri';
 import { createStore } from './store';
-import { DOUYIN_ALL, listsMore, mergeListings, needsMore } from './douyin-core';
+import { DOUYIN_ALL, listsMore, mergeListings, needsMore, type RelayDoc } from './douyin-core';
 import { rememberServerMessage, toAppError } from './errors';
 import { douyinVideoId } from './urls';
 import type { ChannelListing, ProbeResult } from './types';
@@ -103,7 +103,12 @@ export async function fetchDouyinListing(url: string, limit: number, showPage = 
     douyinStage.set('server');
     const first = toListing(await douyinChannel(url, limit));
     if (!needsMore(first, limit)) return first;
-    douyinStage.set(showPage ? 'pageShown' : 'page');
+    // 0.18.5: Douyin refuses its own list call inside the embedded window
+    // (owner's tests 0.18.2–0.18.4: header, spinner, no grid), so the page
+    // step runs only when asked ("Thử đọc trong ứng dụng"); the whole
+    // channel comes through the extension relay instead (startDouyinRelay).
+    if (!showPage) return first;
+    douyinStage.set('pageShown');
     let pageNote: string | null = null; // 0.18.4: why the page step gave nothing (shown in the picker)
     const page = await api.channelFetch(first.url, limit, undefined, showPage || undefined).catch((e: unknown) => {
       const err = toAppError(e);
@@ -146,3 +151,18 @@ export function isExpired(v: Pick<DouyinVideo, 'expiresAt'>, resolvedAt: number,
 }
 
 export { toHeaderList } from './cookies-core';
+
+/**
+ * 0.18.5: the whole channel through the VidGrab extension in the person's own
+ * Chrome. The server makes a relay token; the app opens the channel with
+ * "#vg-relay=<token>"; the extension scrolls it and sends the list back.
+ */
+export const startDouyinRelay = (channelUrl: string) =>
+  post<{ token: string; openUrl: string; expiresIn: number }>('/api/v1/channel-relay', { url: channelUrl });
+
+export async function pollDouyinRelay(token: string): Promise<RelayDoc | 'expired' | null> {
+  const r = await apiFetch<RelayDoc>(`/api/v1/channel-relay/${encodeURIComponent(token)}`, { timeoutMs: 15_000 }).catch(() => null);
+  if (!r) return null;
+  if (r.status === 404) return 'expired';
+  return r.status === 200 && r.data ? r.data : null;
+}

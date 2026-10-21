@@ -42,3 +42,24 @@ export function mergeListings(server: ChannelListing, page: ChannelListing, limi
 /** True when `other` lists more of the channel than `first` (worth showing instead). */
 export const listsMore = (first: ChannelListing, other: ChannelListing | null): other is ChannelListing =>
   !!other && other.videos.length > first.videos.length;
+
+/** GET /api/v1/channel-relay/{token}: what the extension has sent so far (0.18.5). */
+export type RelayDoc = {
+  status: 'waiting' | 'scrolling' | 'done';
+  channelUrl: string;
+  channelTitle: string | null;
+  items: { id: string; url: string; title: string | null }[];
+  skipped: number;
+};
+
+/** The extension's list as a listing, merged into the server's (its titles / durations win where both have a video). */
+export function relayListing(server: ChannelListing, doc: RelayDoc): ChannelListing {
+  const page: ChannelListing = {
+    ...server,
+    title: doc.channelTitle || server.title,
+    videos: doc.items.map((i) => ({
+      id: i.id, url: i.url, title: i.title || `Douyin ${i.id.slice(-6)}`, duration: null, uploadDate: null, thumbnail: null,
+    })),
+  };
+  return mergeListings(server, page, doc.items.length + server.videos.length);
+}

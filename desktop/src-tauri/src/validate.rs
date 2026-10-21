@@ -82,8 +82,10 @@ pub fn cookie_platform(raw: &str) -> Result<&'static str, String> {
 }
 
 /// Hosts `open_url` may open in the browser (sign-up, password reset,
-/// installer download). Exact match, https only, default port, no userinfo.
-pub const OPEN_URL_HOSTS: &[&str] = &["dvid.vibe1.tinhgon.xyz", "dvid-api.vibe1.tinhgon.xyz"];
+/// installer download; 0.18.5: a Douyin channel in the user's own browser,
+/// where the VidGrab extension reads the whole list). Exact match, https
+/// only, default port, no userinfo.
+pub const OPEN_URL_HOSTS: &[&str] = &["dvid.vibe1.tinhgon.xyz", "dvid-api.vibe1.tinhgon.xyz", "www.douyin.com"];
 
 pub fn open_url(raw: &str) -> Result<String, String> {
     if raw.len() > 4096 { // signed CDN links (Douyin) can run past 2 KB
@@ -146,7 +148,10 @@ mod tests {
     fn open_url_allowlist() {
         assert!(open_url("https://dvid.vibe1.tinhgon.xyz/register").is_ok());
         assert!(open_url("https://dvid-api.vibe1.tinhgon.xyz/download/VidGrab_0.2.0_x64-setup.exe").is_ok());
+        assert!(open_url("https://www.douyin.com/user/MS4wLjABAAAA_x#vg-relay=abc").is_ok());
         for bad in [
+            "https://www.douyin.com.evil.com/",
+            "http://www.douyin.com/user/x",
             "http://dvid.vibe1.tinhgon.xyz/",
             "https://evil.com/",
             "https://dvid.vibe1.tinhgon.xyz.evil.com/",

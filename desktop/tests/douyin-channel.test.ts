@@ -2,7 +2,7 @@
 // 0.18.2: Douyin channel = server's first page + the app's page window; downloads capped at press time.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { listsMore, mergeListings, needsMore } from '../src/lib/douyin-core.ts';
+import { listsMore, mergeListings, needsMore, relayListing } from '../src/lib/douyin-core.ts';
 import { splitByCap } from '../src/lib/quota-core.ts';
 import type { ChannelListing, ChannelVideo } from '../src/lib/types.ts';
 
@@ -46,4 +46,16 @@ test('splitByCap: first `cap` now, the rest later; no cap = all now', () => {
   assert.deepEqual(splitByCap(['a', 'b'], null), { now: ['a', 'b'], later: [] });
   assert.deepEqual(splitByCap(['a'], 0), { now: [], later: ['a'] });
   assert.deepEqual(splitByCap(['a'], 5), { now: ['a'], later: [] });
+});
+
+test('relayListing: the extension\'s whole channel, server details kept, title fallback', () => {
+  const server = listing([v('2', { title: 'server 2', duration: 324 })], { cap: 41, moreHint: 'douyin_extension' });
+  const doc = { status: 'done' as const, channelUrl: server.url, channelTitle: '凌晨睡不着', skipped: 3,
+    items: [{ id: '1', url: 'https://www.douyin.com/video/1', title: 'ext 1' }, { id: '2', url: 'https://www.douyin.com/video/2', title: 'ext 2' },
+      { id: '7696450520369712419', url: 'https://www.douyin.com/video/7696450520369712419', title: null }] };
+  const m = relayListing(server, doc);
+  assert.deepEqual(m.videos.map((x) => x.id), ['1', '2', '7696450520369712419']);
+  assert.deepEqual([m.videos[1].title, m.videos[1].duration], ['server 2', 324]);
+  assert.equal(m.videos[2].title, 'Douyin 712419');
+  assert.equal(m.moreHint, null);
 });
