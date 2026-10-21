@@ -85,6 +85,7 @@ function DouyinExtensionHint() {
   );
 }
 import ContainerPreviewPanel from './ContainerPreviewPanel';
+import ChannelPreview, { isPreviewableChannel } from './ChannelPreview';
 import { useContainerDiscover } from '../hooks/useContainerDiscover';
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
@@ -256,6 +257,7 @@ export default function BulkContent() {
   const [quality, setQuality] = useState('video');
   const [removeWatermark, setRemoveWatermark] = useState(true);
   const [quotaInfo, setQuotaInfo] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null); // 21/10: channel listed for choosing
   const [selectedJobIds, setSelectedJobIds] = useState(new Set());
   const autoDownloadedRefs = useRef(new Set());
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -352,6 +354,11 @@ export default function BulkContent() {
     const dupCount = urlList.length - uniqueUrlList.length;
     if (dupCount > 0) urlList = uniqueUrlList;
 
+    await runBulk(urlList, channelMode);
+  };
+
+  /** Sends a list to /bulk-download (a new batch); true when the server accepted it. */
+  const runBulk = async (urlList, asChannel) => {
     setIsSubmitting(true);
     setJobs([]);
     setSelectedJobIds(new Set());
@@ -387,13 +394,13 @@ export default function BulkContent() {
 
       trackEvent(EVENT.BULK_STARTED, {
         url_count: urlList.length,
-        channel_mode: channelMode,
+        channel_mode: asChannel,
         quality,
       });
       const res = await fetch(`${API}/bulk-download`,
         withAuth({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
           urls: urlList,
-          channel_mode: channelMode,
+          channel_mode: asChannel,
           max_videos: parseInt(customMaxVideos) || parseInt(maxVideos) || 20,
           min_views: 0,
           quality: quality,
@@ -405,7 +412,7 @@ export default function BulkContent() {
       if (!res.ok) {
         if (res.status === 403 && data.detail === 'QUOTA_EXCEEDED') {
           setShowUpgradeModal(true);
-          return;
+          return false;
         }
         throw new Error(bulkRefusalText(res.status, data));
       }
@@ -413,6 +420,7 @@ export default function BulkContent() {
       if (data.batch_id) {
         setBatchId(data.batch_id);
       }
+      return true;
     } catch (err) {
       console.error(err);
       // wording: BA review
@@ -420,6 +428,7 @@ export default function BulkContent() {
       alert(network
         ? 'Lỗi kết nối mạng, chưa gửi được danh sách. Hãy kiểm tra Internet rồi thử lại.'
         : (err?.message || 'Không gửi được danh sách tải. Vui lòng thử lại.'));
+      return false;
     } finally {
       setIsSubmitting(false);
     }
@@ -1131,8 +1140,25 @@ export default function BulkContent() {
               </label>
               <p className="text-xs text-fg-muted mb-2">Chọn số video muốn quét từ kênh. Nếu mới dùng, hãy thử 10–50 video trước.</p>
               {/douyin\.com/i.test(urls) && (
-                // Server caps a Douyin channel scan at the remaining downloads today (task #6055).
-                <p className="text-xs text-fg-muted mb-2">Kênh Douyin: chỉ quét tối đa bằng số lượt tải còn lại hôm nay của bạn.</p>
+                // 21/10 — wording: BA review. Listing is free (~41 newest); only downloads count.
+                <p className="text-xs text-fg-muted mb-2">Kênh Douyin: máy chủ lấy được khoảng 40 video mới nhất. Muốn lấy đủ cả kênh, dùng tiện ích VidGrab trên Chrome hoặc ứng dụng VidGrab cho Windows.</p>
+              )}
+              {(() => {
+                const lines = urls.split('\n').map((u) => u.trim()).filter(Boolean);
+                if (lines.length !== 1 || !isPreviewableChannel(lines[0]) || previewUrl === lines[0]) return null;
+                return (
+                  // wording: BA review
+                  <button type="button" onClick={() => setPreviewUrl(lines[0])}
+                    className="mb-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border border-accent/40 bg-accent/10 text-accent-text hover:bg-accent/20 cursor-pointer">
+                    <Eye className="w-3.5 h-3.5" /> Xem danh sách video để chọn
+                  </button>
+                );
+              })()}
+              {previewUrl && (
+                <ChannelPreview
+                  key={previewUrl} url={previewUrl} withAuth={withAuth} signedIn={!!session?.access_token}
+                  onDownload={(list) => runBulk(list, false)} onClose={() => setPreviewUrl(null)}
+                />
               )}
               {/(xiaohongshu\.com|rednote\.com|xhslink\.c|kuaishou\.c|chenzhongtech\.c)/i.test(urls) && (
                 // Task #6171 — wording: BA review. Server rule: signed-in only, ≤ 20 per scan, ≤ remaining today.
