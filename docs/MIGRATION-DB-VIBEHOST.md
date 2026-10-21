@@ -31,7 +31,12 @@ dữ liệu và đăng nhập trên Postgres của Vibe Host.
 - Kiểm tra phiên đăng nhập chạy ở luồng riêng, hạn chờ 8 s, nhớ 5 phút.
 - Bỏ lịch `flush_event_buffer` trùng; kiểm tra lệch lịch chỉ đọc lịch đã trễ.
 
-### 1. Dữ liệu sang Postgres Vibe Host (đăng nhập vẫn ở Supabase)
+### 1. Dữ liệu sang Postgres Vibe Host (đăng nhập vẫn ở Supabase) — ĐÃ CHUYỂN 21/10/2026 23:39
+
+Chép đè lần cuối rồi đặt `DB_BACKEND=postgres` (commit 58a95c8). Quay lui:
+đặt `DB_BACKEND=supabase` rồi deploy (dữ liệu ghi sau 23:39 không có ở Supabase).
+VAYS không xoá được biến, nên quay lui là đổi giá trị chứ không xoá.
+
 1. Lấy sơ đồ thật: `pg_dump --schema-only` từ Supabase (cần chuỗi kết nối DB).
    Bỏ RLS/`auth.*`; khoá ngoại tới `auth.users` thay bằng bảng `app_users`
    (id, email, email_confirmed_at, created_at) đồng bộ từ Supabase Auth.
