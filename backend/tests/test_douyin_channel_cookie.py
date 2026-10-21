@@ -233,6 +233,9 @@ def test_probe_all_kills_a_dead_cookie_at_once_and_revives_a_working_one(rc, mon
     assert not st[good]["dead"] and st[bad]["dead"]                    # one probe is enough
     assert st[bad]["last_test"]["auto"] is True
     assert C.status(rc)["auto"]["tested"] == 2
+    assert not C.probe_due(rc)                                         # next run in ~48 h
+    rc.set(C.AUTO_KEY, json.dumps({"at": 1}))
+    assert C.probe_due(rc)
 
 
 def test_probe_all_does_not_kill_when_every_cookie_fails(rc, monkeypatch):  # noqa: F811
@@ -247,7 +250,7 @@ def test_probe_all_does_not_kill_when_every_cookie_fails(rc, monkeypatch):  # no
 
 def test_probe_task_is_scheduled():
     from app.core.celery_app import celery_app
-    sched = celery_app.conf.beat_schedule["probe-douyin-channel-cookies-every-12h"]
+    sched = celery_app.conf.beat_schedule["probe-douyin-channel-cookies-every-48h"]
     assert sched["task"] == "probe_douyin_channel_cookies"
     import app.tasks.video_tasks  # noqa: F401
     assert "probe_douyin_channel_cookies" in celery_app.tasks

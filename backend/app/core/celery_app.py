@@ -206,10 +206,11 @@ celery_app.conf.update(
             'task': 'retest_cookie_pool_daily',
             'schedule': crontab(hour=9, minute=0),
         },
-        # Douyin whole-channel cookies (admin "Cookie Douyin để lấy cả kênh"): test every 12 hours
-        'probe-douyin-channel-cookies-every-12h': {
+        # Douyin whole-channel cookies (admin "Cookie Douyin để lấy cả kênh"): asked daily,
+        # tests only when the last run is ~48 h old (douyin_channel_cookie.probe_due)
+        'probe-douyin-channel-cookies-every-48h': {
             'task': 'probe_douyin_channel_cookies',
-            'schedule': crontab(hour='*/12', minute=40),
+            'schedule': crontab(hour=0, minute=40),
         },
         # Daily cookie expiry check at 9:30 AM UTC (4:30 PM UTC+7)
         'check-cookie-expiry-daily': {

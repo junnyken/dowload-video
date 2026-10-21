@@ -15,7 +15,7 @@ channels for signed-in users. Several cookies are kept and taken in turn;
 a refused first page moves on to the next live one. When none is usable,
 switched off or over the hourly cap, callers fall back to the visitor's
 first page and the extension relay. A beat task tests every cookie each
-12 hours (probe_all) so a dead one is found before a user meets it.
+48 hours (probe_all) so a dead one is found before a user meets it.
 
 Redis
   douyin:chcookie:jars       hash id -> cookie_crypto-encrypted JSON {cookies, ua}
@@ -61,6 +61,7 @@ FAIL_STREAK_DEAD = 3
 MAX_COOKIES = 20
 FAILOVER_TRIES = 3         # cookies tried for one listing's first page
 PROBE_RETRY_S = 60         # a scheduled test that fails is repeated once after this
+PROBE_EVERY_S = 47 * 3600  # beat asks daily; a run happens when the last one is ~48 h old
 # The measured channel (作品 195): proof that page 2 comes back.
 DEFAULT_TEST_URL = "https://www.douyin.com/user/MS4wLjABAAAAkQs2tRzfg_eQ94ErmIEe4ba2ADzMVA7N7PbV-92qtgw3tLxfFB15eEW4hYgnRYPh"
 # Matches douyin_sign's browser params (Chrome 130, Windows).
@@ -511,8 +512,15 @@ def test(cid: str, rc=None) -> Dict[str, Any]:
     return out
 
 
+def probe_due(rc=None) -> bool:
+    """Kept in Redis, not in celery beat's schedule file: a redeploy resets that."""
+    rc = rc or _redis()
+    at = _json(rc.get(AUTO_KEY)).get("at") or 0
+    return time.time() - float(at) >= PROBE_EVERY_S
+
+
 def probe_all(rc=None, *, sleep=time.sleep) -> Dict[str, Any]:
-    """The 12-hourly check: test every cookie, dead ones too (a cookie that
+    """The 48-hourly check: test every cookie, dead ones too (a cookie that
     works again comes back). A failure is repeated once after PROBE_RETRY_S;
     failing twice marks the cookie dead at once, unless every cookie failed:
     that is the server's IP being throttled, not the cookies."""

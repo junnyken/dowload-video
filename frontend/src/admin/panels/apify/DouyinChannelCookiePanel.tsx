@@ -141,7 +141,7 @@ export function DouyinChannelCookiePanel() {
             <StatCard label="Tự thử gần nhất"
               tone={!auto ? 'default' : auto.ip_blocked ? 'warning' : auto.dead ? 'danger' : 'success'}
               value={!auto ? '—' : auto.ip_blocked ? 'IP bị chặn' : `${auto.ok}/${auto.tested} sống`}
-              hint={auto ? `${when(auto.at)} · 12 giờ/lần` : '12 giờ/lần'} />
+              hint={auto ? `${when(auto.at)} · 48 giờ/lần` : '48 giờ/lần'} />
             <StatCard label="Lượt gọi giờ này" value={`${st.calls_this_hour}/${st.per_hour}`} />
             <StatCard label="Bật lấy cả kênh" value={st.enabled ? 'Bật' : 'Tắt'} tone={st.enabled ? 'success' : 'warning'} />
           </div>
@@ -255,7 +255,7 @@ export function DouyinChannelCookiePanel() {
         )}
 
         <p className="text-[11px] text-fg-muted">
-          Mỗi trang là một lượt gọi (18 video); một kênh 200 video tốn khoảng 12 lượt. Các cookie được dùng lần lượt; cookie nào bị từ chối thì chuyển ngay sang cookie kế tiếp, bị từ chối 3 lần liền thì coi là chết. Mỗi 12 giờ máy chủ tự thử từng cookie (2 trang); hỏng 2 lần liền trong một lượt tự thử là đánh dấu chết, thử lại được thì sống lại. Douyin chặn theo IP máy chủ, nên thêm cookie giúp không gián đoạn chứ không tăng trần lượt. Cookie lưu mã hoá; trang này chỉ hiện tên cookie, không hiện giá trị.
+          Mỗi trang là một lượt gọi (18 video); một kênh 200 video tốn khoảng 12 lượt. Các cookie được dùng lần lượt; cookie nào bị từ chối thì chuyển ngay sang cookie kế tiếp, bị từ chối 3 lần liền thì coi là chết. Mỗi 48 giờ máy chủ tự thử từng cookie (2 trang); hỏng 2 lần liền trong một lượt tự thử là đánh dấu chết, thử lại được thì sống lại. Douyin chặn theo IP máy chủ, nên thêm cookie giúp không gián đoạn chứ không tăng trần lượt. Cookie lưu mã hoá; trang này chỉ hiện tên cookie, không hiện giá trị.
         </p>
       </div>
     </Card>

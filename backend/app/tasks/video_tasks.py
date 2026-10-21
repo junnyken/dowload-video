@@ -2188,8 +2188,11 @@ def retest_cookie_pool_daily(self):
 
 @celery_app.task(name="probe_douyin_channel_cookies")
 def probe_douyin_channel_cookies():
-    """Every 12 hours: test each Douyin whole-channel cookie (2 pages of the
-    admin's test channel) so a dead one is found before a user meets it."""
+    """Every 48 hours: test each Douyin whole-channel cookie (2 pages of the
+    admin's test channel) so a dead one is found before a user meets it.
+    Beat asks daily; probe_due keeps the 48 h gap across redeploys."""
     from app.services import douyin_channel_cookie
+    if not douyin_channel_cookie.probe_due():
+        return {"skipped": "not_due"}
     return douyin_channel_cookie.probe_all()
 
