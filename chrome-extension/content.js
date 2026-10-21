@@ -248,6 +248,7 @@
 
   // ── Shared video store (DOM + interceptor) ────────────────────────
   const videoSet = new Set(); // canonical video URLs
+  const vgSentUrls = new Set(); // 5.10.0: already sent to the server from this page
 
   function scanDOM() {
     document.querySelectorAll('a[href]').forEach((a) => {
@@ -374,7 +375,8 @@ window.addEventListener('message', (event) => {
     countEl.textContent = n;
     if (n > 0) {
       sendBtn && sendBtn.classList.remove('hidden');
-      if (sendText) sendText.textContent = `📤 Gửi tải ${n} video`;
+      const left = n - vgSentUrls.size;
+      if (sendText && !(sendBtn && sendBtn.disabled)) sendText.textContent = left > 0 ? `📤 Gửi tải ${left} video` : '✅ Đã gửi hết';
       if (statusEl && !statusEl.dataset.locked) {
         statusEl.style.color = '#34d399';
         statusEl.textContent = `Live: ${n} video thu thập được. Cuộn thêm hoặc gửi ngay.`;
@@ -708,14 +710,40 @@ window.addEventListener('message', (event) => {
     });
 
     // ── Gửi tải ───────────────────────────────────────────────────
+    // 5.10.0 (owner 21/10): send only what today's allowance covers (first
+    // collected = newest first); the rest stays here for a later press.
+    // wording: BA review
     sendBtn.addEventListener('click', async () => {
-      const urls = Array.from(videoSet);
-      if (urls.length === 0) {
+      const pending = Array.from(videoSet).filter((u) => !vgSentUrls.has(u));
+      if (videoSet.size === 0) {
         statusEl.textContent = 'Chưa có video — cuộn trang để load thêm.';
+        return;
+      }
+      if (pending.length === 0) {
+        statusEl.textContent = 'Đã gửi hết các video đã thu thập. Cuộn thêm để lấy video khác.';
         return;
       }
 
       sendBtn.disabled = true;
+      sendText.textContent = '⏳ Đang kiểm tra lượt tải còn lại...';
+      let cap = null;
+      let resetVn = '';
+      try {
+        const q = await new Promise((resolve) =>
+          chrome.runtime.sendMessage({ type: 'VG_API_FETCH', url: `${API_BASE}/api/v1/quota`, method: 'GET' }, resolve));
+        if (q && q.ok && q.data && q.data.success) {
+          cap = vgRemainingFor(q.data.quota, vgPlatformOfHost(location.hostname));
+          resetVn = (q.data.quota.platform_quota && q.data.quota.platform_quota.reset_time_vn) || '';
+        }
+      } catch { /* unknown: send all, the server still counts each one */ }
+      if (cap === 0) {
+        statusEl.style.color = '#fbbf24';
+        statusEl.textContent = `Bạn đã hết lượt tải hôm nay${resetVn ? ` — lượt mới lúc ${resetVn}` : ''}. ${pending.length} video vẫn được giữ ở đây để gửi sau.`;
+        sendBtn.disabled = false;
+        sendText.textContent = `📤 Gửi tải ${pending.length} video`;
+        return;
+      }
+      const { now: urls, later } = vgSplitByCap(pending, cap);
       sendText.textContent = `⏳ Đang gửi ${urls.length} video...`;
 
       try {
@@ -728,14 +756,23 @@ window.addEventListener('message', (event) => {
             body: { urls, quality: 'video', remove_watermark: true },
           }, resolve)
         );
-        if (!resp || !resp.ok) throw new Error(resp?.data?.detail || resp?.error || `HTTP ${resp?.status || 'unknown'}`);
+        const det = resp?.data?.detail;
+        if (!resp || !resp.ok) throw new Error((det && (det.message || (typeof det === 'string' ? det : ''))) || resp?.error || `HTTP ${resp?.status || 'unknown'}`);
         const data = resp.data;
 
         if (data.success) {
+          urls.forEach((u) => vgSentUrls.add(u));
           statusEl.style.color = '#34d399';
-          statusEl.textContent = `✅ Đã xếp hàng ${urls.length} video!`;
-          sendBtn.style.background = '#16a34a';
-          sendText.textContent = '✅ Đã gửi thành công';
+          if (later.length) {
+            statusEl.style.color = '#fbbf24';
+            statusEl.textContent = `✅ Đã gửi ${urls.length} video. Còn ${later.length} video chưa gửi vì hết lượt hôm nay${resetVn ? ` — lượt mới lúc ${resetVn}` : ''}; bấm gửi lại khi có lượt mới.`;
+            sendBtn.disabled = false;
+            sendText.textContent = `📤 Gửi tải ${later.length} video còn lại`;
+          } else {
+            statusEl.textContent = `✅ Đã xếp hàng ${urls.length} video!`;
+            sendBtn.style.background = '#16a34a';
+            sendText.textContent = '✅ Đã gửi thành công';
+          }
           sendResult.style.display = 'block';
           sendResult.innerHTML = `Batch: <span style="color:#f97316;font-family:monospace">${data.batch_id.slice(0,10)}…</span>`;
           window.open(`${FRONTEND_BASE}?batch=${data.batch_id}`, '_blank');
@@ -744,9 +781,36 @@ window.addEventListener('message', (event) => {
         statusEl.style.color = '#f87171';
         statusEl.textContent = `❌ Lỗi: ${err.message}`;
         sendBtn.disabled = false;
-        sendText.textContent = `📤 Thử lại (${urls.length} video)`;
+        sendText.textContent = `📤 Thử lại (${pending.length} video)`;
       }
     });
+  }
+
+  // Downloads left today for `platform` from GET /api/v1/quota (null = no limit / unknown).
+  function vgRemainingFor(quota, platform) {
+    const snap = quota && quota.platform_quota;
+    if (!snap || snap.unlimited) return null;
+    if (snap.scope === 'platform') {
+      const p = (snap.platforms || []).find((x) => x.platform === platform);
+      if (p) return p.remaining < 0 ? null : p.remaining;
+    }
+    return typeof snap.remaining_total === 'number' && snap.remaining_total >= 0 ? snap.remaining_total : null;
+  }
+
+  // The first `cap` (collection order) now, the rest later; cap null = all now.
+  function vgSplitByCap(items, cap) {
+    const now = cap == null ? items.slice() : items.slice(0, Math.max(0, cap));
+    return { now, later: items.slice(now.length) };
+  }
+
+  function vgPlatformOfHost(host) {
+    const h = (host || '').toLowerCase();
+    if (/(^|\.)douyin\.com$/.test(h)) return 'douyin';
+    if (/(^|\.)kuaishou\.(com|cn)$/.test(h)) return 'kuaishou';
+    if (/(^|\.)(xiaohongshu|rednote)\.com$/.test(h)) return 'xiaohongshu';
+    if (/(^|\.)bilibili\.com$/.test(h)) return 'bilibili';
+    if (/(^|\.)tiktok\.com$/.test(h)) return 'tiktok';
+    return 'other';
   }
 
   // The element that actually scrolls. A Douyin profile locks <body>
