@@ -17,6 +17,32 @@ SUPABASE_URL: str         = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY: str         = os.getenv("SUPABASE_KEY", "")          # anon key (existing)
 SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")  # service_role key (for backend ops)
 
+# 21/10/2026 — data moves to the Postgres Vibe Host provides
+# (docs/MIGRATION-DB-VIBEHOST.md). DB_BACKEND=postgres makes every get_*_client()
+# below hand out a PgClient (same query interface, plain SQL) on
+# APP_DATABASE_URL, falling back to DATABASE_URL. Sign-in and Storage stay on
+# Supabase (PgClient.auth / .storage) until phase 2. Unset = Supabase, as before.
+DB_BACKEND: str = os.getenv("DB_BACKEND", "supabase").strip().lower()
+
+
+def _postgres_dsn() -> str:
+    return os.getenv("APP_DATABASE_URL") or os.getenv("DATABASE_URL") or ""
+
+
+def using_postgres() -> bool:
+    return DB_BACKEND == "postgres" and bool(_postgres_dsn())
+
+
+@lru_cache(maxsize=1)
+def _pg_client():
+    from app.core.pg_client import PgClient  # noqa: PLC0415
+
+    def supabase_for_auth():
+        _validate_credentials()
+        return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY or SUPABASE_KEY)
+    return PgClient(_postgres_dsn(), maxconn=int(os.getenv("APP_DB_POOL_MAX", "8")),
+                    supabase_factory=supabase_for_auth)
+
 
 def _validate_credentials() -> None:
     """Validate that Supabase credentials are configured."""
@@ -39,6 +65,8 @@ def get_service_client() -> Client:
     Bypasses RLS. Falls back to anon client if SUPABASE_SERVICE_KEY not set.
     Never expose this key to the frontend.
     """
+    if using_postgres():
+        return _pg_client()
     _validate_credentials()
     key = SUPABASE_SERVICE_KEY or SUPABASE_KEY  # fallback to anon if not configured
     return create_client(SUPABASE_URL, key)
@@ -52,6 +80,8 @@ def get_anon_client() -> Client:
     `USING (id = auth.uid())` denies every row. Only reach for this when anon
     really is the right role for the table.
     """
+    if using_postgres():
+        return _pg_client()
     _validate_credentials()
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -81,6 +111,8 @@ def get_supabase_client() -> Client:
     Falls back to the anon key when SUPABASE_SERVICE_KEY is unset, so a
     half-configured environment degrades rather than failing to boot.
     """
+    if using_postgres():
+        return _pg_client()
     _validate_credentials()
     key = SUPABASE_SERVICE_KEY or SUPABASE_KEY
     return create_client(SUPABASE_URL, key)
