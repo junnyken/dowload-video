@@ -127,7 +127,7 @@ def _remember_signed(sec_uid: str, listed: dict) -> None:
         pass
 
 
-async def _signed_channel(url: str, limit: int) -> Optional[dict]:
+async def _signed_channel(url: str, limit: int, user: Optional[dict] = None) -> Optional[dict]:
     """The free signed listing (20/10) before the managed Apify run, same
     answer shape plus hasMore / moreHint. None = fall through: a video link
     (its author is read by the managed route), no visitor jar, or Douyin
@@ -135,7 +135,11 @@ async def _signed_channel(url: str, limit: int) -> Optional[dict]:
 
     21/10 (owner): listing is not capped by the downloads left today — only
     downloading counts. It is free, at most one page (~41 videos), and a
-    re-scan within 10 minutes is served from Redis."""
+    re-scan within 10 minutes is served from Redis.
+
+    21/10 (owner): a signed-in user gets the WHOLE channel when the admin has
+    put a Douyin cookie in "Cookie Douyin để lấy cả kênh"
+    (douyin_channel_cookie); otherwise / when it fails, the first page."""
     import asyncio  # noqa: PLC0415
     from app.services.china_platforms import channel_listing  # noqa: PLC0415
     from app.services.douyin_extractor import _resolve_short_url, signed_profile_listing  # noqa: PLC0415
@@ -145,6 +149,10 @@ async def _signed_channel(url: str, limit: int) -> Optional[dict]:
         sec_uid = channel_listing.sec_uid_of(url) or channel_listing.sec_uid_of(await _resolve_short_url(url))
         if not sec_uid:
             return None
+        if user:
+            whole = await _whole_channel(sec_uid, limit)
+            if whole is not None:
+                return whole
         n = max(1, min(int(limit), POST_MAX_COUNT))
         listed = _cached_signed(sec_uid, n)
         if listed is None:
@@ -166,6 +174,35 @@ async def _signed_channel(url: str, limit: int) -> Optional[dict]:
         "fromCache": False,
         "hasMore": more,
         "moreHint": CHANNEL_HINT_DOUYIN_EXTENSION if more else None,
+        "items": [{
+            "id": v["id"], "url": f"https://www.douyin.com/video/{v['id']}",
+            "title": v["title"] or f"Douyin {v['id'][-6:]}",
+            "thumbnail": v["thumbnail"], "durationSec": v["duration_sec"],
+        } for v in videos],
+    }
+
+
+async def _whole_channel(sec_uid: str, limit: int) -> Optional[dict]:
+    """The whole channel through the admin's Douyin cookie, or None."""
+    import asyncio  # noqa: PLC0415
+    from app.services import douyin_channel_cookie  # noqa: PLC0415
+    from app.services.downloader import CHANNEL_HINT_DOUYIN_EXTENSION  # noqa: PLC0415
+    listed, why = await asyncio.to_thread(douyin_channel_cookie.list_channel, sec_uid, limit)
+    if not listed or not listed["videos"]:
+        if why not in ("unusable", "no_cookie"):
+            logger.info("client douyin whole-channel listing fell back: %s", why)
+        return None
+    videos = listed["videos"]
+    more = bool(listed["has_more"]) and len(videos) < int(limit)
+    return {
+        "platform": PLATFORM,
+        "channelTitle": listed["channel_title"] or f"Douyin {sec_uid[:12]}…",
+        "channelUrl": f"https://www.douyin.com/user/{sec_uid}",
+        "cap": len(videos),
+        "fromCache": False,
+        "hasMore": more,
+        "moreHint": CHANNEL_HINT_DOUYIN_EXTENSION if more else None,
+        "whole": not more,
         "items": [{
             "id": v["id"], "url": f"https://www.douyin.com/video/{v['id']}",
             "title": v["title"] or f"Douyin {v['id'][-6:]}",
@@ -205,7 +242,7 @@ async def douyin_listing_answer(raw_url: str, limit: int, deep: bool, request: R
     deep_cap = ca_settings.douyin_channel_deep_max() if (deep and user) else None
     try:
         if not deep:
-            signed = await _signed_channel(url, limit)
+            signed = await _signed_channel(url, limit, user)
             if signed is not None:
                 return signed
         listing = await channel_listing.list_douyin_profile(url, limit, ctx, cap_key=cap_key, cap=deep_cap)

@@ -75,6 +75,14 @@ async def _bilibili(url: str, mid: str, limit: int):
             "items": items[:limit]}
 
 
+@router.get("/channel/preview/caps")
+async def channel_preview_caps():
+    """What the bulk page needs before the click: whether the server can list
+    a whole Douyin channel itself (then no extension tab is opened)."""
+    from app.services import douyin_channel_cookie  # noqa: PLC0415
+    return {"douyinWhole": douyin_channel_cookie.usable()}
+
+
 @router.post("/channel/preview")
 @limiter.limit("6/minute")
 async def channel_preview(payload: PreviewIn, request: Request, user=Depends(get_optional_user)):

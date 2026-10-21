@@ -266,6 +266,15 @@ export default function BulkContent() {
   const autoDownloadedRefs = useRef(new Set());
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const fileInputRef = useRef(null);
+  // 21/10: the server can read a whole Douyin channel itself (admin cookie): no extension tab
+  const [douyinWhole, setDouyinWhole] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API}/channel/preview/caps`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((d) => setDouyinWhole(!!(d && d.douyinWhole)))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetch(`${API}/quota`)
@@ -356,12 +365,13 @@ export default function BulkContent() {
     // 21/10: one Chinese channel link → list it to choose from (the old path
     // queued the first 20 videos only, owner's test: "21 video"). Bulk URL
     // preselects the whole channel, Channel the N newest; both ask before
-    // sending. Signed in, a Douyin profile is read whole by the extension: the
-    // tab opens here, inside the click, or the popup blocker stops it.
+    // sending. Signed in, a Douyin profile is read whole by the server when
+    // it has the admin cookie; otherwise by the extension: the tab opens here,
+    // inside the click, or the popup blocker stops it.
     if (urlList.length === 1 && isPreviewableChannel(urlList[0])) {
       const want = channelMode ? (parseInt(customMaxVideos) || parseInt(maxVideos) || 20) : 'all';
       const whole = !!session?.access_token && isDouyinProfile(urlList[0]) && (want === 'all' || want > DOUYIN_SERVER_PAGE);
-      const tab = whole ? window.open('about:blank', '_blank') : null;
+      const tab = whole && !douyinWhole ? window.open('about:blank', '_blank') : null;
       setPreview((p) => ({ url: urlList[0], want, tab, n: ((p && p.n) || 0) + 1 }));
       return;
     }
@@ -1136,6 +1146,7 @@ export default function BulkContent() {
               {previewUrl && (
                 <ChannelPreview
                   key={preview.n} url={preview.url} want={preview.want} autoTab={preview.tab}
+                  serverWhole={douyinWhole && !!session?.access_token && isDouyinProfile(preview.url)}
                   withAuth={withAuth} signedIn={!!session?.access_token}
                   onDownload={(list) => runBulk(list, false)} onClose={() => setPreview(null)}
                 />

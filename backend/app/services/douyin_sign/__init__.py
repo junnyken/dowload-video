@@ -103,22 +103,27 @@ def detail_request(aweme_id: str, cookies: Mapping[str, str], user_agent: str) -
 
 
 def post_request(sec_uid: str, cookies: Mapping[str, str], user_agent: str,
-                 count: int = POST_MAX_COUNT) -> Optional[Tuple[str, Dict[str, str]]]:
+                 count: int = POST_MAX_COUNT, max_cursor: str = "0") -> Optional[Tuple[str, Dict[str, str]]]:
     """(url, headers) for a signed profile listing (newest first), or None.
 
     Measured 20/10 with a fresh visitor jar, no login: the first page answers
     with up to ~41 videos whatever `count` asks for beyond that (41 of a
     larger profile with has_more=1; 27 of 27 on a smaller one). Every
     max_cursor page after it answers {"status_code":0} with no list, with or
-    without msToken / whale_cut params — Douyin keeps deeper pages for
-    signed-in sessions, so there is no paging here.
+    without msToken / whale_cut params.
+
+    21/10: a browser jar with history (ttwid + odin_tt from the owner's
+    Chrome, no login) pages the whole channel with count=18 and the
+    max_cursor each answer returns (11 pages, 166 videos, has_more=0) —
+    see douyin_channel_cookie.
     """
     uifid = pick_uifid(cookies)
-    if not uifid or not _SEC_UID_OK.fullmatch(sec_uid or ""):
+    if not uifid or not _SEC_UID_OK.fullmatch(sec_uid or "") or not str(max_cursor).isdigit():
         return None
     extra = (
-        ("sec_user_id", sec_uid), ("max_cursor", "0"), ("locate_query", "false"),
-        ("show_live_replay_strategy", "1"), ("need_time_list", "1"), ("time_list_query", "0"),
+        ("sec_user_id", sec_uid), ("max_cursor", str(max_cursor)), ("locate_query", "false"),
+        ("show_live_replay_strategy", "1"), ("need_time_list", "1" if str(max_cursor) == "0" else "0"),
+        ("time_list_query", "0"),
         ("whale_cut_token", ""), ("cut_version", "1"), ("count", str(int(count))),
         ("publish_video_strategy_type", "2"),
     )

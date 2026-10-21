@@ -64,7 +64,8 @@ function fmtDuration(s) {
 // tab) is preselected and confirmed before anything is sent; undefined = the
 // plain "Xem danh sách" list. `autoTab`: a tab opened inside that click, used
 // to fetch the whole Douyin channel through the extension straight away.
-export default function ChannelPreview({ url, withAuth, signedIn, onDownload, onClose, want, autoTab }) {
+// `serverWhole`: the server reads the whole Douyin channel itself (slower first answer).
+export default function ChannelPreview({ url, withAuth, signedIn, onDownload, onClose, want, autoTab, serverWhole }) {
   const [phase, setPhase] = useState('loading');
   const [listing, setListing] = useState(null);
   const [error, setError] = useState('');
@@ -281,7 +282,7 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
       )}
       {relay.state === 'error' && relay.msg && <p className="text-xs text-danger">{relay.msg}</p>}
       {phase === 'loading' && (relay.state === 'idle' || relay.state === 'error') && (
-        <p className="flex items-center gap-2 text-xs text-fg-muted"><Loader2 className="w-4 h-4 animate-spin" /> Đang lấy danh sách video của kênh…</p>
+        <p className="flex items-center gap-2 text-xs text-fg-muted"><Loader2 className="w-4 h-4 animate-spin" /> {serverWhole ? 'Đang lấy cả kênh, có thể mất khoảng 1 phút…' : 'Đang lấy danh sách video của kênh…'}</p>
       )}
       {phase === 'error' && (
         <div className="flex items-start gap-2 text-xs text-danger">

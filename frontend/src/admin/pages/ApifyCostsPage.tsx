@@ -10,6 +10,7 @@ import { SectionHeader } from '../shared/SectionHeader'
 import { TABLE, TABLE_SCROLL, TD, TD_NUM, TH, TH_NUM, TR } from '../shared/tableStyles'
 import { ApifyPoolManager, usd } from '../panels/apify/ApifyPoolManager'
 import { DouyinVisitorPanel } from '../panels/apify/DouyinVisitorPanel'
+import { DouyinChannelCookiePanel } from '../panels/apify/DouyinChannelCookiePanel'
 
 /**
  * Chi phí Apify (task #6036). Đo chi phí lấy video Douyin / Kuaishou /
@@ -146,6 +147,8 @@ export default function ApifyCostsPage() {
       </Card>
 
       <DouyinVisitorPanel />
+
+      <DouyinChannelCookiePanel />
 
       <Card as="section">
         <SectionHeader title="Token Apify" subtitle="Hệ thống tự chọn token theo thứ tự ưu tiên, rồi token còn nhiều tiền nhất" />

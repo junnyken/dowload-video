@@ -777,3 +777,75 @@ async def china_douyin_visitor_mint(request: Request, _=Depends(verify_admin)) -
     log_admin_action(request, "admin.china_access.douyin_visitor_mint", resource_type="china_secret",
                      resource_id="douyin_visitor", metadata={"ok": out["ok"]})
     return out
+
+
+# ── Douyin cookie for whole-channel listings (owner 21/10/2026) ──────────────
+# Its own section: the download cookie pool is not touched. Bodies are parsed
+# by hand so a 422 never echoes the cookie back.
+
+@router.get("/china-platforms/douyin/channel-cookie")
+async def china_douyin_channel_cookie_status(_=Depends(verify_admin)) -> dict:
+    from app.services import douyin_channel_cookie  # noqa: PLC0415
+    try:
+        return douyin_channel_cookie.status()
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail="redis unavailable")
+
+
+@router.post("/china-platforms/douyin/channel-cookie")
+async def china_douyin_channel_cookie_save(request: Request, _=Depends(verify_admin)) -> dict:
+    from app.services import douyin_channel_cookie  # noqa: PLC0415
+    payload = await _json_body(request)
+    text = payload.get("cookies")
+    if not isinstance(text, str) or not text.strip() or len(text) > 2_000_000:
+        raise HTTPException(status_code=400, detail={"error": "bad_body", "message": "Hãy dán nội dung cookie."})
+    try:
+        names = douyin_channel_cookie.store(text)
+    except douyin_channel_cookie.CookieError as exc:
+        raise HTTPException(status_code=400, detail={"error": "bad_cookie", "message": str(exc)})
+    test = await asyncio.to_thread(douyin_channel_cookie.test)
+    log_admin_action(request, "admin.china_access.douyin_channel_cookie_save", resource_type="china_secret",
+                     resource_id="douyin_channel_cookie",
+                     metadata={"cookie_names": len(names), "test_ok": test["ok"], "test_pages": test["pages"]})
+    return {"names": names, "test": test, "status": douyin_channel_cookie.status()}
+
+
+@router.post("/china-platforms/douyin/channel-cookie/settings")
+async def china_douyin_channel_cookie_settings(request: Request, _=Depends(verify_admin)) -> dict:
+    from app.services import douyin_channel_cookie  # noqa: PLC0415
+    payload = await _json_body(request)
+    kwargs: dict[str, Any] = {}
+    if "enabled" in payload:
+        kwargs["enabled"] = bool(payload["enabled"])
+    if payload.get("per_hour") is not None:
+        try:
+            kwargs["per_hour"] = int(payload["per_hour"])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail={"error": "bad_per_hour", "message": "per_hour phải là số."})
+    if isinstance(payload.get("test_url"), str):
+        kwargs["test_url"] = payload["test_url"]
+    try:
+        out = douyin_channel_cookie.save_settings(**kwargs)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"error": "bad_value", "message": str(exc)})
+    log_admin_action(request, "admin.china_access.douyin_channel_cookie_settings", resource_type="china_secret",
+                     resource_id="douyin_channel_cookie", metadata={"fields": sorted(kwargs), **out})
+    return out
+
+
+@router.post("/china-platforms/douyin/channel-cookie/test")
+async def china_douyin_channel_cookie_test(request: Request, _=Depends(verify_admin)) -> dict:
+    from app.services import douyin_channel_cookie  # noqa: PLC0415
+    out = await asyncio.to_thread(douyin_channel_cookie.test)
+    log_admin_action(request, "admin.china_access.douyin_channel_cookie_test", resource_type="china_secret",
+                     resource_id="douyin_channel_cookie", metadata=out)
+    return out
+
+
+@router.delete("/china-platforms/douyin/channel-cookie")
+async def china_douyin_channel_cookie_delete(request: Request, _=Depends(verify_admin)) -> dict:
+    from app.services import douyin_channel_cookie  # noqa: PLC0415
+    douyin_channel_cookie.drop()
+    log_admin_action(request, "admin.china_access.douyin_channel_cookie_delete", resource_type="china_secret",
+                     resource_id="douyin_channel_cookie", metadata={})
+    return douyin_channel_cookie.status()
