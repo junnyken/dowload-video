@@ -45,7 +45,7 @@ export const listsMore = (first: ChannelListing, other: ChannelListing | null): 
 
 /** GET /api/v1/channel-relay/{token}: what the extension has sent so far (0.18.5). */
 export type RelayDoc = {
-  status: 'waiting' | 'scrolling' | 'done';
+  status: 'waiting' | 'scrolling' | 'login' | 'done'; // login: Douyin's sign-in wall (extension 5.11.1)
   channelUrl: string;
   channelTitle: string | null;
   items: { id: string; url: string; title: string | null }[];
