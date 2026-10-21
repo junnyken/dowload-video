@@ -2185,3 +2185,11 @@ def retest_cookie_pool_daily(self):
             print(f"[CookieRetest] alert not sent: {type(e).__name__}")
     return {"tested": done, "summary": summary, "dead": len(dead)}
 
+
+@celery_app.task(name="probe_douyin_channel_cookies")
+def probe_douyin_channel_cookies():
+    """Every 6 hours: test each Douyin whole-channel cookie (2 pages of the
+    admin's test channel) so a dead one is found before a user meets it."""
+    from app.services import douyin_channel_cookie
+    return douyin_channel_cookie.probe_all()
+

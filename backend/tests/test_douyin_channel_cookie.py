@@ -97,19 +97,39 @@ def test_store_needs_ttwid_odin_and_uifid(rc):  # noqa: F811
     assert "odin_tt" in str(e.value)
     with pytest.raises(C.CookieError):
         C.store(".github.com\tTRUE\t/\tTRUE\t1\tuser_session\tx", rc)
-    names = C.store(NETSCAPE, rc)
-    assert names == ["UIFID", "odin_tt", "s_v_web_id", "ttwid"]
-    raw = rc.get(C.JAR_KEY)
+    added = C.store(NETSCAPE, "Chrome nhà", rc)
+    assert added["names"] == ["UIFID", "odin_tt", "s_v_web_id", "ttwid"]
+    raw = rc.hget(C.JARS_KEY, added["id"])
     assert "SECRET" not in raw and "GITHUB" not in raw                 # encrypted, other sites dropped
     st = C.status(rc)
-    assert st["has_cookie"] and st["names"] == names
+    assert st["has_cookie"] and st["live"] == 1
+    assert st["cookies"][0]["names"] == added["names"] and st["cookies"][0]["label"] == "Chrome nhà"
     assert "SECRET" not in json.dumps(st)
+
+
+def _other(n):
+    return NETSCAPE.replace("tt-SECRET", f"tt{n}-SECRET")
+
+
+def test_pool_adds_replaces_same_ttwid_and_migrates_the_first_version(rc):  # noqa: F811
+    from app.services.douyin_visitor import _enc
+    rc.set(C.OLD_JAR_KEY, _enc(json.dumps({"cookies": {"ttwid": "old", "odin_tt": "o", "UIFID": "u"}})))
+    rc.set(C.OLD_META_KEY, json.dumps({"saved_at": 1, "names": ["UIFID", "odin_tt", "ttwid"], "ok": 5}))
+    st = C.status(rc)
+    assert len(st["cookies"]) == 1 and st["cookies"][0]["ok"] == 5 and not rc.get(C.OLD_JAR_KEY)
+    a = C.store(NETSCAPE, "", rc)
+    b = C.store(NETSCAPE, "lại", rc)
+    assert a["id"] == b["id"] and len(C.status(rc)["cookies"]) == 2
+    C.store(_other(2), "", rc)
+    assert len(C.status(rc)["cookies"]) == 3
+    assert C.drop(a["id"], rc) and not C.drop(a["id"], rc)
+    assert len(C.status(rc)["cookies"]) == 2
 
 
 # ── listing ──────────────────────────────────────────────────────────────────
 
 def test_lists_the_whole_channel_page_by_page(rc, monkeypatch):  # noqa: F811
-    C.store(NETSCAPE, rc)
+    C.store(NETSCAPE, rc=rc)
     seen = []
     _pages(monkeypatch, n_pages=3, seen=seen)
     listed, why = C.list_channel(SEC, 500, rc=rc)
@@ -125,7 +145,7 @@ def test_lists_the_whole_channel_page_by_page(rc, monkeypatch):  # noqa: F811
 
 
 def test_stops_at_the_limit(rc, monkeypatch):  # noqa: F811
-    C.store(NETSCAPE, rc)
+    C.store(NETSCAPE, rc=rc)
     seen = []
     _pages(monkeypatch, n_pages=10, seen=seen)
     listed, _ = C.list_channel(SEC, 30, rc=rc)
@@ -133,24 +153,51 @@ def test_stops_at_the_limit(rc, monkeypatch):  # noqa: F811
 
 
 def test_later_page_refused_keeps_what_was_read(rc, monkeypatch):  # noqa: F811
-    C.store(NETSCAPE, rc)
+    C.store(NETSCAPE, rc=rc)
     _pages(monkeypatch, n_pages=5, refuse_from=2)
     listed, _ = C.list_channel(SEC, 500, rc=rc)
     assert len(listed["videos"]) == 34 and listed["has_more"] is True
-    assert C.status(rc)["fail"] == 1
+    assert C.status(rc)["cookies"][0]["fail"] == 1
 
 
 def test_first_page_refused_three_times_marks_the_cookie_dead(rc, monkeypatch):  # noqa: F811
-    C.store(NETSCAPE, rc)
+    C.store(NETSCAPE, rc=rc)
     _pages(monkeypatch, refuse_from=0)
     for _ in range(3):
         assert C.list_channel(SEC, 500, use_cache=False, rc=rc) == (None, "empty 200")
-    assert C.status(rc)["dead"] and not C.usable(rc)
+    assert C.status(rc)["cookies"][0]["dead"] and not C.usable(rc)
     assert C.list_channel(SEC, 500, use_cache=False, rc=rc) == (None, "unusable")
 
 
+def test_refused_cookie_moves_on_to_the_next_and_cookies_take_turns(rc, monkeypatch):  # noqa: F811
+    a = C.store(NETSCAPE, "a", rc)["id"]
+    b = C.store(_other(2), "b", rc)["id"]
+    seen = []
+    from curl_cffi import requests as cr
+
+    def get(url, **kw):
+        t = kw["cookies"]["ttwid"]
+        seen.append(t)
+        if t == "tt-SECRET":
+            return _R("")                                              # cookie a is refused
+        return _R({"status_code": 0, "has_more": 0, "max_cursor": 1, "aweme_list": [_aweme("7001")]})
+    monkeypatch.setattr(cr, "get", get)
+    for _ in range(4):
+        listed, _why = C.list_channel(SEC, 500, use_cache=False, rc=rc)
+        assert [v["id"] for v in listed["videos"]] == ["7001"]
+    assert "tt2-SECRET" in seen and seen.count("tt-SECRET") >= 1        # both asked first in turn
+    st = {c["id"]: c for c in C.status(rc)["cookies"]}
+    assert st[b]["ok"] == 4 and st[a]["fail"] >= 1
+    # a dies after 3 refusals, then only b is asked
+    for _ in range(3):
+        C._report(rc, a, False, "x")
+    seen.clear()
+    C.list_channel(SEC, 500, use_cache=False, rc=rc)
+    assert seen == ["tt2-SECRET"]
+
+
 def test_hourly_cap_and_switch_off(rc, monkeypatch):  # noqa: F811
-    C.store(NETSCAPE, rc)
+    C.store(NETSCAPE, rc=rc)
     _pages(monkeypatch, n_pages=5)
     C.save_settings(per_hour=2, rc=rc)
     listed, _ = C.list_channel(SEC, 500, rc=rc)
@@ -162,12 +209,48 @@ def test_hourly_cap_and_switch_off(rc, monkeypatch):  # noqa: F811
 
 
 def test_test_reads_two_pages(rc, monkeypatch):  # noqa: F811
-    assert C.test(rc)["reason"] == "no_cookie"
-    C.store(NETSCAPE, rc)
+    assert C.test("nope", rc)["reason"] == "no_cookie"
+    cid = C.store(NETSCAPE, rc=rc)["id"]
     _pages(monkeypatch, n_pages=5)
-    out = C.test(rc)
+    out = C.test(cid, rc)
     assert out["ok"] and out["pages"] == 2 and out["items"] == 36
-    assert C.status(rc)["last_test"]["ok"] is True
+    assert C.status(rc)["cookies"][0]["last_test"]["ok"] is True
+
+
+def test_probe_all_kills_a_dead_cookie_at_once_and_revives_a_working_one(rc, monkeypatch):  # noqa: F811
+    good = C.store(NETSCAPE, "good", rc)["id"]
+    bad = C.store(_other(2), "bad", rc)["id"]
+    for _ in range(3):
+        C._report(rc, good, False, "old")                              # dead from before
+    from curl_cffi import requests as cr
+    monkeypatch.setattr(cr, "get", lambda url, **kw: _R("") if kw["cookies"]["ttwid"] == "tt2-SECRET" else
+                        _R({"status_code": 0, "has_more": 1, "max_cursor": 1, "aweme_list": [_aweme("7001")]}))
+    slept = []
+    out = C.probe_all(rc, sleep=slept.append)
+    assert slept == [C.PROBE_RETRY_S]                                  # the failure was asked twice
+    assert out["tested"] == 2 and out["ok"] == 1 and out["dead"] == 1 and not out["ip_blocked"]
+    st = {c["id"]: c for c in C.status(rc)["cookies"]}
+    assert not st[good]["dead"] and st[bad]["dead"]                    # one probe is enough
+    assert st[bad]["last_test"]["auto"] is True
+    assert C.status(rc)["auto"]["tested"] == 2
+
+
+def test_probe_all_does_not_kill_when_every_cookie_fails(rc, monkeypatch):  # noqa: F811
+    C.store(NETSCAPE, "", rc)
+    C.store(_other(2), "", rc)
+    from curl_cffi import requests as cr
+    monkeypatch.setattr(cr, "get", lambda url, **kw: _R(""))
+    out = C.probe_all(rc, sleep=lambda s: None)
+    assert out["ip_blocked"] and out["dead"] == 0
+    assert all(not c["dead"] for c in C.status(rc)["cookies"])
+
+
+def test_probe_task_is_scheduled():
+    from app.core.celery_app import celery_app
+    sched = celery_app.conf.beat_schedule["probe-douyin-channel-cookies-every-6h"]
+    assert sched["task"] == "probe_douyin_channel_cookies"
+    import app.tasks.video_tasks  # noqa: F401
+    assert "probe_douyin_channel_cookies" in celery_app.tasks
 
 
 # ── API ──────────────────────────────────────────────────────────────────────
@@ -185,7 +268,7 @@ def _no_user():
 
 
 def test_signed_in_user_gets_the_whole_channel(on, rc, monkeypatch, _no_user):  # noqa: F811
-    C.store(NETSCAPE, rc)
+    C.store(NETSCAPE, rc=rc)
     _pages(monkeypatch, n_pages=3)
     _signed_in()
     body = client.post("/api/v1/channel/preview", json={"url": PROFILE, "limit": 500}).json()
@@ -198,7 +281,7 @@ def test_signed_in_user_gets_the_whole_channel(on, rc, monkeypatch, _no_user):  
 
 def test_guest_keeps_the_first_page(on, rc, monkeypatch):  # noqa: F811
     from app.services import douyin_visitor as V
-    C.store(NETSCAPE, rc)
+    C.store(NETSCAPE, rc=rc)
     V.store_jar("Mozilla/5.0 Chrome/131.0.0.0", {"UIFID_TEMP": "visitor", "s_v_web_id": "v"}, rc)
     seen = []
     _pages(monkeypatch, n_pages=3, seen=seen)
@@ -210,7 +293,7 @@ def test_guest_keeps_the_first_page(on, rc, monkeypatch):  # noqa: F811
 def test_refused_cookie_falls_back_to_the_first_page(on, rc, monkeypatch, _no_user):  # noqa: F811
     from curl_cffi import requests as cr
     from app.services import douyin_visitor as V
-    C.store(NETSCAPE, rc)
+    C.store(NETSCAPE, rc=rc)
     V.store_jar("Mozilla/5.0 Chrome/131.0.0.0", {"UIFID_TEMP": "visitor", "s_v_web_id": "v"}, rc)
 
     def get(url, **kw):
@@ -225,8 +308,10 @@ def test_refused_cookie_falls_back_to_the_first_page(on, rc, monkeypatch, _no_us
 
 def test_caps_endpoint(rc):  # noqa: F811
     assert client.get("/api/v1/channel/preview/caps").json() == {"douyinWhole": False}
-    C.store(NETSCAPE, rc)
+    C.store(NETSCAPE, rc=rc)
     assert client.get("/api/v1/channel/preview/caps").json() == {"douyinWhole": True}
+    C.save_settings(enabled=False, rc=rc)
+    assert client.get("/api/v1/channel/preview/caps").json() == {"douyinWhole": False}
 
 
 def test_admin_endpoints_never_return_values(rc, monkeypatch):  # noqa: F811
@@ -237,15 +322,18 @@ def test_admin_endpoints_never_return_values(rc, monkeypatch):  # noqa: F811
         r = client.post(base, json={"cookies": "ttwid=SECRET-only"})
         assert r.status_code == 400 and "SECRET" not in r.text
         _pages(monkeypatch, n_pages=5)
-        r = client.post(base, json={"cookies": NETSCAPE})
+        r = client.post(base, json={"cookies": NETSCAPE, "label": "Chrome nhà"})
         assert r.status_code == 200, r.text
+        cid = r.json()["id"]
         assert r.json()["test"]["ok"] is True and "SECRET" not in r.text
         st = client.get(base).json()
-        assert st["has_cookie"] and st["names"] and "SECRET" not in json.dumps(st)
+        assert st["has_cookie"] and st["cookies"][0]["names"] and "SECRET" not in json.dumps(st)
         r = client.post(base + "/settings", json={"per_hour": 40, "test_url": "https://evil.example/x"})
         assert r.status_code == 400
         assert client.post(base + "/settings", json={"per_hour": 40}).json()["per_hour"] == 40
-        assert client.post(base + "/test").json()["pages"] == 2
-        assert client.delete(base).json()["has_cookie"] is False
+        assert client.post(f"{base}/{cid}/test").json()["pages"] == 2
+        assert client.post(f"{base}/nope/test").status_code == 404
+        assert client.delete(f"{base}/{cid}").json()["has_cookie"] is False
+        assert client.delete(f"{base}/{cid}").status_code == 404
     finally:
         fastapi_app.dependency_overrides.pop(verify_admin, None)

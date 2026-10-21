@@ -799,15 +799,16 @@ async def china_douyin_channel_cookie_save(request: Request, _=Depends(verify_ad
     text = payload.get("cookies")
     if not isinstance(text, str) or not text.strip() or len(text) > 2_000_000:
         raise HTTPException(status_code=400, detail={"error": "bad_body", "message": "Hãy dán nội dung cookie."})
+    label = payload.get("label") if isinstance(payload.get("label"), str) else ""
     try:
-        names = douyin_channel_cookie.store(text)
+        added = douyin_channel_cookie.store(text, label)
     except douyin_channel_cookie.CookieError as exc:
         raise HTTPException(status_code=400, detail={"error": "bad_cookie", "message": str(exc)})
-    test = await asyncio.to_thread(douyin_channel_cookie.test)
+    test = await asyncio.to_thread(douyin_channel_cookie.test, added["id"])
     log_admin_action(request, "admin.china_access.douyin_channel_cookie_save", resource_type="china_secret",
-                     resource_id="douyin_channel_cookie",
-                     metadata={"cookie_names": len(names), "test_ok": test["ok"], "test_pages": test["pages"]})
-    return {"names": names, "test": test, "status": douyin_channel_cookie.status()}
+                     resource_id=f"douyin_channel_cookie:{added['id']}",
+                     metadata={"cookie_names": len(added["names"]), "test_ok": test["ok"], "test_pages": test["pages"]})
+    return {"id": added["id"], "names": added["names"], "test": test, "status": douyin_channel_cookie.status()}
 
 
 @router.post("/china-platforms/douyin/channel-cookie/settings")
@@ -833,19 +834,27 @@ async def china_douyin_channel_cookie_settings(request: Request, _=Depends(verif
     return out
 
 
-@router.post("/china-platforms/douyin/channel-cookie/test")
-async def china_douyin_channel_cookie_test(request: Request, _=Depends(verify_admin)) -> dict:
+@router.post("/china-platforms/douyin/channel-cookie/{cookie_id}/test")
+async def china_douyin_channel_cookie_test(cookie_id: str, request: Request, _=Depends(verify_admin)) -> dict:
     from app.services import douyin_channel_cookie  # noqa: PLC0415
-    out = await asyncio.to_thread(douyin_channel_cookie.test)
+    if not _channel_cookie_exists(cookie_id):
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Không còn cookie này."})
+    out = await asyncio.to_thread(douyin_channel_cookie.test, cookie_id)
     log_admin_action(request, "admin.china_access.douyin_channel_cookie_test", resource_type="china_secret",
-                     resource_id="douyin_channel_cookie", metadata=out)
+                     resource_id=f"douyin_channel_cookie:{cookie_id}", metadata=out)
     return out
 
 
-@router.delete("/china-platforms/douyin/channel-cookie")
-async def china_douyin_channel_cookie_delete(request: Request, _=Depends(verify_admin)) -> dict:
+@router.delete("/china-platforms/douyin/channel-cookie/{cookie_id}")
+async def china_douyin_channel_cookie_delete(cookie_id: str, request: Request, _=Depends(verify_admin)) -> dict:
     from app.services import douyin_channel_cookie  # noqa: PLC0415
-    douyin_channel_cookie.drop()
+    if not douyin_channel_cookie.drop(cookie_id):
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Không còn cookie này."})
     log_admin_action(request, "admin.china_access.douyin_channel_cookie_delete", resource_type="china_secret",
-                     resource_id="douyin_channel_cookie", metadata={})
+                     resource_id=f"douyin_channel_cookie:{cookie_id}", metadata={})
     return douyin_channel_cookie.status()
+
+
+def _channel_cookie_exists(cookie_id: str) -> bool:
+    from app.services import douyin_channel_cookie  # noqa: PLC0415
+    return any(c["id"] == cookie_id for c in douyin_channel_cookie.status()["cookies"])

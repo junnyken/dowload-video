@@ -136,6 +136,7 @@ celery_app.conf.update(
         'proxy_health_check': {'queue': 'light'},
         'ytdlp_remediate': {'queue': 'light'},
         'retest_cookie_pool_daily': {'queue': 'light'},   # network probes, up to minutes (task #6127)
+        'probe_douyin_channel_cookies': {'queue': 'light'},  # 2 pages per cookie, a 60 s retry
         'expire_analysis_jobs_task': {'queue': 'analysis'},
         # Transcript translation — reuses the 'analysis' worker (also
         # LLM-bound, bounded, moderate-concurrency work) rather than a new
@@ -204,6 +205,11 @@ celery_app.conf.update(
         'retest-cookie-pool-daily': {
             'task': 'retest_cookie_pool_daily',
             'schedule': crontab(hour=9, minute=0),
+        },
+        # Douyin whole-channel cookies (admin "Cookie Douyin để lấy cả kênh"): test every 6 hours
+        'probe-douyin-channel-cookies-every-6h': {
+            'task': 'probe_douyin_channel_cookies',
+            'schedule': crontab(hour='*/6', minute=40),
         },
         # Daily cookie expiry check at 9:30 AM UTC (4:30 PM UTC+7)
         'check-cookie-expiry-daily': {
