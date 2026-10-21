@@ -207,6 +207,12 @@ class TestBatchLimit:
         r = self.q.check_batch_limit("uid_pro", 101)
         assert r["allowed"] is False
 
+    def test_enterprise_unlimited_batch(self, monkeypatch):
+        """21/10: batch_limit -1 refused every batch ("Batch tối đa -1 video…")."""
+        self._mock_tier("enterprise", monkeypatch)
+        assert self.q.check_batch_limit("uid_ent", 1)["allowed"] is True
+        assert self.q.check_batch_limit("uid_ent", 500)["allowed"] is True
+
 
 # ══════════════════════════════════════════════════════════════════════
 # 4. Spotify artist mode gating (Case 3)

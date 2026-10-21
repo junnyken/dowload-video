@@ -935,7 +935,9 @@ def check_batch_limit(user_id: Optional[str], count: int) -> Dict[str, Any]:
     perms = get_tier_permissions(tier)
     limit = perms["batch_limit"]
 
-    if count > limit:
+    # -1 = no limit (Enterprise). `count > -1` refused every batch of an
+    # Enterprise account ("Batch tối đa -1 video…", owner 21/10).
+    if limit is not None and limit >= 0 and count > limit:
         return {
             "allowed":    False,
             "error_code": ERR_BATCH,
