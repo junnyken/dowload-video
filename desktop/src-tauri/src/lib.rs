@@ -1208,6 +1208,18 @@ async fn open_url(url: String) -> CmdResult<()> {
         .map_err(|e| CommandError::unknown(format!("cannot open link: {e}")))
 }
 
+/// 0.18.7: the channel relay page (www.douyin.com/user/…#vg-relay=…) or the
+/// extension page in Chrome when installed, else the default browser.
+/// true = Chrome.
+#[tauri::command]
+async fn open_in_chrome(url: String) -> CmdResult<bool> {
+    let url = validate::chrome_url(&url).map_err(|e| CommandError::new(Code::InvalidUrl, e))?;
+    tauri::async_runtime::spawn_blocking(move || sys::open_in_chrome(&url))
+        .await
+        .map_err(|e| CommandError::unknown(e.to_string()))?
+        .map_err(|e| CommandError::unknown(format!("cannot open link: {e}")))
+}
+
 // ---------------------------------------------------------------- history
 
 #[tauri::command]
@@ -1731,6 +1743,7 @@ pub fn run() {
             reveal_path,
             open_path,
             open_url,
+            open_in_chrome,
             history_list,
             history_add,
             history_delete,

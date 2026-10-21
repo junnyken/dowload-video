@@ -71,6 +71,33 @@ pub fn open_url(url: &str) -> io::Result<()> {
     shell_open(std::ffi::OsStr::new(url))
 }
 
+/// 0.18.7: Chrome's usual install places (machine-wide, then per-user).
+/// Douyin lets a guest in Chrome scroll a whole channel while a fresh Edge
+/// profile hits its sign-in wall (owner's test 21/10), so the channel relay
+/// prefers Chrome.
+#[cfg(windows)]
+fn chrome_exe() -> Option<std::path::PathBuf> {
+    let rel = r"Google\Chrome\Application\chrome.exe";
+    ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"]
+        .iter()
+        .filter_map(|v| std::env::var_os(v))
+        .map(|base| std::path::PathBuf::from(base).join(rel))
+        .find(|p| p.is_file())
+}
+
+/// Opens a link (already checked by validate::chrome_url) in Chrome when it
+/// is installed, else in the default browser.
+/// Ok(true) = Chrome.
+pub fn open_in_chrome(url: &str) -> io::Result<bool> {
+    #[cfg(windows)]
+    if let Some(exe) = chrome_exe() {
+        if std::process::Command::new(exe).arg(url).spawn().is_ok() {
+            return Ok(true);
+        }
+    }
+    open_url(url).map(|_| false)
+}
+
 fn shell_open(target: &std::ffi::OsStr) -> io::Result<()> {
     #[cfg(windows)]
     {

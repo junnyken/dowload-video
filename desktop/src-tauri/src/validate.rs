@@ -87,6 +87,23 @@ pub fn cookie_platform(raw: &str) -> Result<&'static str, String> {
 /// only, default port, no userinfo.
 pub const OPEN_URL_HOSTS: &[&str] = &["dvid.vibe1.tinhgon.xyz", "dvid-api.vibe1.tinhgon.xyz", "www.douyin.com"];
 
+/// 0.18.7: what `open_in_chrome` may hand to chrome.exe as an argument — a
+/// Douyin profile (www.douyin.com/user/…) or the extension install page,
+/// never anything else.
+pub fn chrome_url(raw: &str) -> Result<String, String> {
+    let s = open_url(raw)?;
+    let u = url::Url::parse(&s).map_err(|_| "not a valid URL".to_string())?;
+    let ok = match u.host_str() {
+        Some("www.douyin.com") => u.path().starts_with("/user/"),
+        Some("dvid.vibe1.tinhgon.xyz") => u.path() == "/extension",
+        _ => false,
+    };
+    if !ok {
+        return Err("this link is not allowed".into());
+    }
+    Ok(s)
+}
+
 pub fn open_url(raw: &str) -> Result<String, String> {
     if raw.len() > 4096 { // signed CDN links (Douyin) can run past 2 KB
         return Err("URL is too long".into());
@@ -149,6 +166,12 @@ mod tests {
         assert!(open_url("https://dvid.vibe1.tinhgon.xyz/register").is_ok());
         assert!(open_url("https://dvid-api.vibe1.tinhgon.xyz/download/VidGrab_0.2.0_x64-setup.exe").is_ok());
         assert!(open_url("https://www.douyin.com/user/MS4wLjABAAAA_x#vg-relay=abc").is_ok());
+        assert!(chrome_url("https://www.douyin.com/user/MS4wLjABAAAA_x#vg-relay=abc").is_ok());
+        assert!(chrome_url("https://dvid.vibe1.tinhgon.xyz/extension").is_ok());
+        for bad in ["https://dvid.vibe1.tinhgon.xyz/register", "https://www.douyin.com/video/1", "http://www.douyin.com/user/x",
+                    "https://www.douyin.com.evil.example/user/x", "--disable-web-security"] {
+            assert!(chrome_url(bad).is_err(), "{bad}");
+        }
         for bad in [
             "https://www.douyin.com.evil.com/",
             "http://www.douyin.com/user/x",

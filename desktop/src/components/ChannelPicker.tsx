@@ -70,6 +70,8 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
   // 0.18.5: the whole Douyin channel through the extension in the person's Chrome (channel relay)
   // 0.18.6: 'login' = Douyin wants the visitor signed in; 'noext' = no word from the extension after 20 s
   const [relay, setRelay] = useState<{ state: 'idle' | 'waiting' | 'scrolling' | 'login' | 'noext' | 'error'; count: number; msg?: string }>({ state: 'idle', count: 0 });
+  // 0.18.7: false = no Chrome on this machine, the default browser got the channel
+  const [viaChrome, setViaChrome] = useState(true);
   const relayTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => () => { if (relayTimer.current) clearInterval(relayTimer.current); }, []);
   const serverName = serverListedName(listing.platform); // Douyin / Xiaohongshu: listed by the server
@@ -193,7 +195,7 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
     let start: { token: string; openUrl: string };
     try {
       start = await startDouyinRelay(listing.url);
-      await api.openUrl(start.openUrl);
+      setViaChrome(await api.openInChrome(start.openUrl));
     } catch (e) {
       const m = toAppError(e);
       setRelay({ state: 'error', count: 0, msg: m.message || 'Không mở được trình duyệt. Hãy thử lại.' });
@@ -271,8 +273,8 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
                   <Puzzle size={13} className="mt-px shrink-0 text-accent" aria-hidden />
                   <span>
                     Kênh này còn nhiều video hơn nhưng mới lấy được {listing.videos.length} video mới nhất (Douyin chỉ cho trình duyệt thật xem hết).
-                    Bấm “Lấy đủ kênh bằng trình duyệt”: kênh mở trong trình duyệt mặc định của máy (Chrome, Edge, Cốc Cốc…), tiện ích VidGrab tự cuộn hết rồi gửi danh sách về đây.
-                    Cần cài tiện ích VidGrab (5.11.1 trở lên) trong đúng trình duyệt đó và đăng nhập Douyin trên trình duyệt đó.
+                    Bấm “Lấy đủ kênh bằng Chrome”: kênh mở trong Chrome, tiện ích VidGrab tự cuộn hết rồi gửi danh sách về đây. Cần cài tiện ích VidGrab (5.11.1 trở lên) trong Chrome.
+                    Máy chưa có Chrome thì kênh mở bằng trình duyệt mặc định; trình duyệt đó có thể bắt đăng nhập Douyin.
                   </span>
                 </p>
                 {listing.pageNote && <p className="mt-1.5 select-text break-all font-mono text-[10px] text-fg-muted">Chẩn đoán: {listing.pageNote}</p>}
@@ -280,27 +282,29 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
                   <p className="mt-2 flex items-center gap-2 text-fg">
                     <Spinner />
                     <span>{relay.state === 'waiting'
-                      ? 'Đã mở kênh trong trình duyệt — chờ tiện ích VidGrab bắt đầu cuộn (đừng đóng tab đó)…'
+                      ? (viaChrome
+                        ? 'Đã mở kênh trong Chrome — chờ tiện ích VidGrab bắt đầu cuộn (đừng đóng tab đó)…'
+                        : 'Máy chưa có Chrome nên kênh mở bằng trình duyệt mặc định — chờ tiện ích VidGrab bắt đầu cuộn (đừng đóng tab đó)…')
                       : `Tiện ích VidGrab đang cuộn kênh: đã nhận ${relay.count} video…`}</span>
                   </p>
                 ) : relay.state === 'login' ? (
                   <p className="mt-2 flex items-start gap-2 text-warning">
                     <Spinner />
-                    <span>Douyin yêu cầu đăng nhập mới cho xem hết kênh (mới thấy {relay.count} video). Hãy đăng nhập Douyin trong tab vừa mở; đăng nhập xong tiện ích tự cuộn tiếp và danh sách tự về đây.</span>
+                    <span>Douyin yêu cầu đăng nhập mới cho xem hết kênh (mới thấy {relay.count} video). Hãy đăng nhập Douyin trong tab vừa mở; đăng nhập xong tiện ích tự cuộn tiếp và danh sách tự về đây.{!viaChrome && ' Cài Google Chrome thường không bị chặn bước này.'}</span>
                   </p>
                 ) : relay.state === 'noext' ? (
                   <p className="mt-2 flex items-start gap-2 text-warning">
                     <Spinner />
-                    <span>Chưa thấy tiện ích VidGrab trả lời từ trình duyệt vừa mở. Ứng dụng mở kênh bằng trình duyệt mặc định của máy — hãy cài tiện ích VidGrab (5.11.1 trở lên) vào đúng trình duyệt đó (bấm “Cài tiện ích VidGrab”), rồi tải lại tab kênh Douyin (F5). Vẫn đang chờ.</span>
+                    <span>Chưa thấy tiện ích VidGrab trả lời từ {viaChrome ? 'Chrome' : 'trình duyệt vừa mở'}. Hãy cài tiện ích VidGrab (5.11.1 trở lên) vào {viaChrome ? 'Chrome' : 'đúng trình duyệt đó'} (bấm “Cài tiện ích VidGrab”), rồi tải lại tab kênh Douyin (F5). Vẫn đang chờ.</span>
                   </p>
                 ) : relay.state === 'error' && relay.msg ? <p className="mt-2 text-danger">{relay.msg}</p> : null}
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {/* 0.18.5: the extension in the person's browser reads the whole channel (channel relay) */}
+                  {/* 0.18.5: the extension in the person's browser reads the whole channel (channel relay); 0.18.7: Chrome first */}
                   <Button size="sm" variant="primary" disabled={more || relay.state === 'waiting' || relay.state === 'scrolling' || relay.state === 'login'} onClick={() => void startRelay()}>
-                    Lấy đủ kênh bằng trình duyệt
+                    Lấy đủ kênh bằng Chrome
                   </Button>
                   <Button size="sm"
-                    onClick={() => { api.openUrl(`${WEBSITE_URL}/extension`).catch(() => toast('error', 'Không mở được trình duyệt.')); }}>
+                    onClick={() => { api.openInChrome(`${WEBSITE_URL}/extension`).catch(() => toast('error', 'Không mở được trình duyệt.')); }}>
                     Cài tiện ích VidGrab
                   </Button>
                   <Button size="sm" variant="ghost" disabled={more} onClick={() => void fetchListing(listing.url, limit, false, true)}>

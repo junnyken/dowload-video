@@ -18,6 +18,7 @@ const COMMANDS: &[&str] = &[
     "reveal_path",
     "open_path",
     "open_url",
+    "open_in_chrome",
     "history_list",
     "history_add",
     "history_delete",

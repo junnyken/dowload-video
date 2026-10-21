@@ -64,6 +64,8 @@ export const api = {
   openPath: (path: string) => call<null>('open_path', { path }),
   // Rust allows only https on dvid.vibe1.tinhgon.xyz / dvid-api.vibe1.tinhgon.xyz.
   openUrl: (url: string) => call<null>('open_url', { url }),
+  // 0.18.7: a www.douyin.com/user/… page or the extension page in Chrome when installed, else the default browser; true = Chrome.
+  openInChrome: (url: string) => call<boolean>('open_in_chrome', { url }),
   historyList: (a: { limit?: number; offset?: number; query?: string } = {}) => call<HistoryItem[]>('history_list', a),
   historyAdd: (item: HistoryItem) => call<null>('history_add', { item }),
   historyDelete: (id: string) => call<null>('history_delete', { id }),

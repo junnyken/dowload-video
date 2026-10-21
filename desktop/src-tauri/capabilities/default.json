@@ -17,6 +17,7 @@
     "allow-reveal-path",
     "allow-open-path",
     "allow-open-url",
+    "allow-open-in-chrome",
     "allow-history-list",
     "allow-history-add",
     "allow-history-delete",
