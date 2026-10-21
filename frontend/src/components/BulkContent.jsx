@@ -349,6 +349,13 @@ export default function BulkContent() {
       .filter((u) => u !== '');
     if (urlList.length === 0) return;
 
+    // 21/10: one Chinese channel link → list it to choose from (the old path
+    // queued the first 20 videos only, owner's test: "21 video").
+    if (urlList.length === 1 && isPreviewableChannel(urlList[0])) {
+      setPreviewUrl(urlList[0]);
+      return;
+    }
+
     // Phase 21: silent deduplication before submit
     const uniqueUrlList = [...new Set(urlList)];
     const dupCount = urlList.length - uniqueUrlList.length;

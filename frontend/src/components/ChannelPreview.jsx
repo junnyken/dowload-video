@@ -5,7 +5,7 @@
 // the whole channel needs the browser extension (or, signed in, the paid
 // "Lấy thêm qua máy chủ").
 // wording: BA review (every sentence in this file)
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Loader2, Puzzle, RefreshCw, Server, X } from 'lucide-react';
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
@@ -57,6 +57,10 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
   const [deepBusy, setDeepBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState('');
+  // 21/10: the whole Douyin channel through the extension in this browser (POST /channel-relay)
+  const [relay, setRelay] = useState({ state: 'idle', count: 0 });
+  const relayTimer = useRef(null);
+  useEffect(() => () => { if (relayTimer.current) clearInterval(relayTimer.current); }, []);
 
   const refreshQuota = useCallback(() => {
     fetch(`${API}/quota`, withAuth({}))
@@ -104,6 +108,52 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
     } finally {
       setDeepBusy(false);
     }
+  };
+
+  const startRelay = async () => {
+    if (relayTimer.current) clearInterval(relayTimer.current);
+    setRelay({ state: 'waiting', count: 0 }); setNote('');
+    // Open the tab first (inside the click), then point it at the channel: popup blockers allow that.
+    const tab = window.open('about:blank', '_blank');
+    let start;
+    try {
+      const res = await fetch(`${API}/channel-relay`, withAuth({
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: listing.channelUrl || url }),
+      }));
+      start = await res.json();
+      if (!res.ok || !start.openUrl) throw new Error((start && typeof start.detail === 'string' && start.detail) || 'Không tạo được phiên lấy danh sách.');
+    } catch (e) {
+      if (tab) tab.close();
+      setRelay({ state: 'error', count: 0, msg: e.message });
+      return;
+    }
+    if (tab) tab.location.href = start.openUrl; else window.open(start.openUrl, '_blank');
+    const until = Date.now() + 15 * 60_000;
+    relayTimer.current = setInterval(async () => {
+      if (Date.now() > until) {
+        clearInterval(relayTimer.current);
+        setRelay({ state: 'error', count: 0, msg: 'Chưa nhận được danh sách sau 15 phút. Kiểm tra tiện ích VidGrab (bản 5.11.0 trở lên) đã cài trong trình duyệt này rồi bấm lại.' });
+        return;
+      }
+      let doc = null;
+      try {
+        const r = await fetch(`${API}/channel-relay/${encodeURIComponent(start.token)}`);
+        if (r.status === 404) { clearInterval(relayTimer.current); setRelay({ state: 'error', count: 0, msg: 'Phiên lấy danh sách đã hết hạn. Hãy bấm lại.' }); return; }
+        if (r.ok) doc = await r.json();
+      } catch { /* try again next tick */ }
+      if (!doc) return;
+      if (doc.status !== 'done') { setRelay({ state: doc.status === 'scrolling' ? 'scrolling' : 'waiting', count: (doc.items || []).length }); return; }
+      clearInterval(relayTimer.current);
+      setListing((prev) => {
+        const byId = new Map(((prev && prev.items) || []).map((v) => [v.id, v]));
+        const merged = (doc.items || []).map((i) => byId.get(i.id) || { id: i.id, url: i.url, title: i.title || `Douyin ${i.id.slice(-6)}`, thumbnail: null, durationSec: null });
+        const seen = new Set(merged.map((v) => v.id));
+        for (const v of (prev && prev.items) || []) if (!seen.has(v.id)) merged.push(v);
+        return { ...prev, channelTitle: doc.channelTitle || (prev && prev.channelTitle), items: merged, moreHint: null, hasMore: false };
+      });
+      setRelay({ state: 'idle', count: 0 });
+      setNote(`Đã lấy ${(doc.items || []).length} video của kênh qua tiện ích${doc.skipped ? ` (bỏ qua ${doc.skipped} bài ảnh)` : ''}.`);
+    }, 3000);
   };
 
   const items = useMemo(() => (listing && listing.items) || [], [listing]);
@@ -162,10 +212,19 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
           {listing.moreHint === 'douyin_extension' && (
             <div className="p-2.5 rounded-lg border border-line bg-surface-2 text-[11px] text-fg-2 space-y-2">
               <p>
-                Kênh này còn nhiều video hơn; máy chủ chỉ lấy được {items.length} video mới nhất.
-                Muốn lấy đủ cả kênh, hãy mở trang kênh trên Douyin bằng Chrome và dùng tiện ích VidGrab (tự cuộn hết kênh), hoặc dùng ứng dụng VidGrab cho Windows.
+                Kênh này còn nhiều video hơn; máy chủ chỉ lấy được {items.length} video mới nhất (Douyin chỉ cho trình duyệt thật xem hết).
+                Bấm “Lấy đủ kênh bằng tiện ích”: kênh mở ở tab mới, tiện ích VidGrab tự cuộn hết rồi gửi danh sách về đây.
               </p>
+              {(relay.state === 'waiting' || relay.state === 'scrolling') && (
+                <p className="flex items-center gap-2 text-fg"><Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  {relay.state === 'waiting' ? 'Đã mở kênh ở tab mới — chờ tiện ích VidGrab bắt đầu cuộn (đừng đóng tab đó)…' : `Tiện ích đang cuộn kênh: đã nhận ${relay.count} video…`}
+                </p>
+              )}
+              {relay.state === 'error' && relay.msg && <p className="text-danger">{relay.msg}</p>}
               <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={startRelay} disabled={relay.state === 'waiting' || relay.state === 'scrolling'} className="inline-flex items-center gap-1.5 px-2.5 py-1 font-semibold text-accent-fg bg-accent hover:bg-accent-hover rounded-lg cursor-pointer disabled:opacity-60">
+                  <Puzzle className="w-3.5 h-3.5" /> Lấy đủ kênh bằng tiện ích
+                </button>
                 <a href="/extension" onClick={openExtensionPage} className="inline-flex items-center gap-1.5 px-2.5 py-1 font-medium text-accent-text border border-line hover:border-line-strong rounded-lg">
                   <Puzzle className="w-3.5 h-3.5" /> Cài tiện ích VidGrab
                 </a>
