@@ -82,6 +82,43 @@ def _invalid_key(request=None):
 
 
 _bearer     = HTTPBearer(auto_error=False)
+
+SESSION_CACHE_S = 300
+SESSION_LOOKUP_TIMEOUT_S = 8
+
+
+def _session_key(token: str) -> str:
+    return "auth:session:" + hashlib.sha256(token.encode()).hexdigest()
+
+
+def _cached_session(token: str) -> Optional[Dict[str, Any]]:
+    try:
+        import json  # noqa: PLC0415
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        raw = get_redis().get(_session_key(token))
+        return json.loads(raw) if raw else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _remember_session(token: str, user: Dict[str, Any]) -> None:
+    """Never past the token's own expiry (exp claim, read without verifying:
+    the token was just verified by Supabase)."""
+    try:
+        import base64, json, time  # noqa: PLC0415, E401
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        ttl = SESSION_CACHE_S
+        try:
+            part = token.split(".")[1]
+            exp = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4))).get("exp")
+            if exp:
+                ttl = min(ttl, int(exp - time.time()))
+        except Exception:  # noqa: BLE001
+            pass
+        if ttl > 5:
+            get_redis().set(_session_key(token), json.dumps(user), ex=ttl)
+    except Exception:  # noqa: BLE001
+        pass
 _api_key_hdr = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
@@ -243,9 +280,19 @@ async def get_optional_user(
         _invalid_key(_request)
 
     # ── Path 1: Supabase JWT ─────────────────────────────────────────
+    # 21/10: supabase.auth.get_user is a blocking HTTP call; made inline in
+    # this async dependency it froze the whole worker while Supabase was slow.
+    # Now in a thread with a timeout, and a verified session is remembered for
+    # SESSION_CACHE_S (keyed by a hash of the token, never the token itself).
+    cached = _cached_session(token)
+    if cached:
+        return {**cached, "token": token}
     try:
-        supabase = get_supabase_client()
-        response = supabase.auth.get_user(token)
+        import asyncio  # noqa: PLC0415
+
+        def _lookup():
+            return get_supabase_client().auth.get_user(token)
+        response = await asyncio.wait_for(asyncio.to_thread(_lookup), timeout=SESSION_LOOKUP_TIMEOUT_S)
         if response and response.user:
             u = response.user
             # email_confirmed_at: None = the account never confirmed its
@@ -256,12 +303,13 @@ async def get_optional_user(
                 note_valid_session(token, str(u.id))
             except Exception:  # noqa: BLE001
                 pass
-            return {
+            user = {
                 "id":    str(u.id),
                 "email": u.email,
-                "token": token,
                 "email_confirmed_at": str(confirmed) if confirmed else None,
             }
+            _remember_session(token, user)
+            return {**user, "token": token}
     except Exception:
         pass
 

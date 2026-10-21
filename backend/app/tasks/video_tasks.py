@@ -1392,18 +1392,23 @@ def periodic_cleanup_downloads(self):
         try:
             from app.core.database import get_service_client as _get_svc2
             _sb2 = _get_svc2()
-            for dp in deleted_paths:
-                try:
-                    _sb2.table("download_jobs").update({
-                        "file_retention_status": "expired_metadata_only",
-                        "local_file_path": None,
-                        "local_mp3_path": None,
-                        "direct_mp4_url": None,
-                    }).or_(
-                        f"local_file_path.eq.{dp},local_mp3_path.eq.{dp}"
-                    ).execute()
-                except Exception:
-                    pass
+            # 21/10: one UPDATE per file filtered on unindexed path columns was
+            # a full scan of download_jobs per file, every 5 minutes, and ran
+            # the Supabase disk IO budget dry. Batch by column (migration 040
+            # adds the indexes).
+            _upd = {
+                "file_retention_status": "expired_metadata_only",
+                "local_file_path": None,
+                "local_mp3_path": None,
+                "direct_mp4_url": None,
+            }
+            for _i in range(0, len(deleted_paths), 100):
+                _chunk = deleted_paths[_i:_i + 100]
+                for _col in ("local_file_path", "local_mp3_path"):
+                    try:
+                        _sb2.table("download_jobs").update(_upd).in_(_col, _chunk).execute()
+                    except Exception:
+                        pass
         except Exception as e:
             print(f"[Cron] DB status update error: {e}")
 

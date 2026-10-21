@@ -355,11 +355,8 @@ celery_app.conf.update(
             'task': 'sweep_stuck_transcript_asr_jobs_task',
             'schedule': 600.0,
         },
-        # Phase 14 — Add bulk queue + bulk queue
-        'flush-bulk-queue-buffer-every-2min': {
-            'task': 'flush_event_buffer',
-            'schedule': 120.0,
-        },
+        # (21/10: a second flush_event_buffer entry every 2 min was removed —
+        # the 60 s one above already empties the same buffer.)
         # Phase 4 Admin — Aggregate platform health metrics every hour
         'aggregate-platform-health-hourly': {
             'task': 'aggregate_platform_health',

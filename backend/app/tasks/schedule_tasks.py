@@ -309,7 +309,11 @@ def detect_schedule_drift():
         # lives inside input_payload (JSONB), same as schedule_tasks._trigger_job.
         resp = supabase.table("scheduled_jobs").select(
             "id, input_payload, schedule_type, next_run_at, run_at, run_on_weekday"
-        ).eq("is_active", True).neq("schedule_type", "once").execute()
+        ).eq("is_active", True).neq("schedule_type", "once").lt(
+            # only the drifted ones (partial index on next_run_at): reading every
+            # active schedule every 5 minutes was wasted disk IO (21/10)
+            "next_run_at", (now_utc - timedelta(minutes=30)).isoformat()
+        ).execute()
 
         jobs = resp.data or []
         alerts = []

@@ -732,18 +732,31 @@ async def health_check():
         pass
 
     # Pending jobs in DB (status=pending or processing)
+    # 21/10: two count="exact" queries on every probe hit the database each
+    # time and, run inline in this async handler, froze the event loop while
+    # Supabase was slow (/health itself stopped answering). Cached 60 s in
+    # Redis, computed in a thread.
     pending_jobs_db = -1
     stale_jobs_count = -1
     try:
-        from app.core.database import get_service_client as _get_svc
-        _sb = _get_svc()
-        _pj = _sb.table("download_jobs").select("id", count="exact").in_("status", ["pending", "processing"]).execute()
-        pending_jobs_db = _pj.count if hasattr(_pj, "count") else len(_pj.data or [])
-        # Stale = processing for >8 min
-        from datetime import datetime, timezone, timedelta
-        _stale_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=8)).isoformat()
-        _sj = _sb.table("download_jobs").select("id", count="exact").eq("status", "processing").lt("updated_at", _stale_cutoff).execute()
-        stale_jobs_count = _sj.count if hasattr(_sj, "count") else len(_sj.data or [])
+        import json as _json
+        from app.core.redis_client import get_redis as _gr
+        _cached = _gr().get("health:db_job_counts")
+        if _cached:
+            pending_jobs_db, stale_jobs_count = _json.loads(_cached)
+        else:
+            def _db_counts():
+                from app.core.database import get_service_client as _get_svc
+                from datetime import datetime, timezone, timedelta
+                _sb = _get_svc()
+                _pj = _sb.table("download_jobs").select("id", count="exact").in_("status", ["pending", "processing"]).limit(1).execute()
+                # Stale = processing for >8 min
+                _stale_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=8)).isoformat()
+                _sj = _sb.table("download_jobs").select("id", count="exact").eq("status", "processing").lt("updated_at", _stale_cutoff).limit(1).execute()
+                return (_pj.count if _pj.count is not None else -1, _sj.count if _sj.count is not None else -1)
+            import asyncio as _aio
+            pending_jobs_db, stale_jobs_count = await _aio.wait_for(_aio.to_thread(_db_counts), timeout=5)
+            _gr().set("health:db_job_counts", _json.dumps([pending_jobs_db, stale_jobs_count]), ex=60)
     except Exception:
         pass
 
