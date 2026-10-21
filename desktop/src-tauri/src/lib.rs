@@ -505,9 +505,10 @@ async fn channel_fetch(
     let limit = channels::clamp_limit(limit);
     // 0.16.2: TikTok profiles fall back to a real page; Facebook pages only list there.
     // 0.16.3: "Mở trang để kiểm tra" (show_page) goes straight to a visible page.
+    // 0.18.2: a Douyin profile is only ever read in a page (yt-dlp cannot list it).
     let page_target = page_listing::target(&url);
     let show = show_page.unwrap_or(false);
-    if let Some(t) = page_target.as_ref().filter(|t| show || t.kind == page_listing::Kind::Facebook) {
+    if let Some(t) = page_target.as_ref().filter(|t| show || matches!(t.kind, page_listing::Kind::Facebook | page_listing::Kind::Douyin)) {
         return page_list(&app, &jobs, &url, t, limit, show).await;
     }
     let paths = verified_sidecars().await?;

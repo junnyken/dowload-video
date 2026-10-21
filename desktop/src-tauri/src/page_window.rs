@@ -27,9 +27,9 @@ use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 pub const LABEL_PREFIX: &str = "list-page-";
-/// Whole listing, window creation to answer (the script itself stops at 35 s).
-const TOTAL: Duration = Duration::from_secs(55);
-const TOTAL_SHOWN: Duration = Duration::from_secs(160);
+/// Whole listing, window creation to answer: the script's own limit
+/// (page_listing::max_ms) plus time to open the page and send the answer.
+const SLACK: Duration = Duration::from_secs(20);
 const TICK: Duration = Duration::from_secs(2);
 
 #[derive(Debug)]
@@ -97,7 +97,7 @@ pub async fn run<R: Runtime>(app: &AppHandle<R>, target: &Target, cookies: Vec<R
     let mut guard = Destroy { w: w.clone(), keep: false };
     let page = target.page.clone();
     let script = page_listing::page_script(kind, limit, show);
-    let total = if show { TOTAL_SHOWN } else { TOTAL };
+    let total = Duration::from_millis(u64::from(page_listing::max_ms(kind, show))) + SLACK;
     let outcome = tauri::async_runtime::spawn_blocking(move || {
         for c in &cookies {
             w.set_cookie(to_cookie(c)).map_err(|e| Failure::Window(format!("cannot set a cookie: {e}")))?;

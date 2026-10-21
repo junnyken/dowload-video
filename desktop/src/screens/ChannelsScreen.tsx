@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, BellRing, Eye, ListVideo, Pause, Pencil, Play, RefreshCw, Trash2, Tv } from 'lucide-react';
-import { Badge, Button, EmptyState, IconButton, PlatformBadge, ScreenHeader, Spinner } from '../components/ui';
+import { Badge, Button, EmptyState, IconButton, PlatformBadge, ScreenHeader, Select, Spinner } from '../components/ui';
 import { ChannelAvatar, ChannelPicker, intervalLabel } from '../components/ChannelPicker';
 import { EditDialog, ReviewDialog } from '../components/ChannelDialogs';
 import {
@@ -8,6 +8,7 @@ import {
 } from '../lib/channels';
 import { parseUrls } from '../lib/probes';
 import { isDouyinUrl, isXhsProfileUrl } from '../lib/urls';
+import { douyinStage, type DouyinStage } from '../lib/douyin';
 import { QUALITY_LABEL } from '../lib/quality';
 import type { Quality } from '../lib/settings';
 import { errorMessage, toAppError } from '../lib/errors';
@@ -84,6 +85,19 @@ function ChannelCard({ c, onReview, onEdit }: { c: Channel; onReview: () => void
   );
 }
 
+// 0.18.2 (owner 21/10): how many videos to list; "Tất cả" = the whole channel
+// (the app's / server's own maximum). Downloads are capped later, in the picker.
+const COUNTS = ['all', '50', '100', '200', '500'] as const;
+const ALL_LIMIT = 5000; // channels.rs MAX_LIMIT; Douyin asks for at most 500 (douyin-core DOUYIN_ALL)
+const countLimit = (c: string) => (c === 'all' ? ALL_LIMIT : Number(c));
+
+// wording: BA review
+const STAGE_TEXT: Record<DouyinStage, string> = {
+  server: 'Đang lấy các video mới nhất của kênh…',
+  page: 'Đang đọc toàn bộ kênh trên Douyin (kênh nhiều video có thể mất 1–3 phút)…',
+  deep: 'Đang lấy thêm video qua máy chủ VidGrab…',
+};
+
 export function ChannelsScreen() {
   const list = channels.use();
   const loaded = channelsLoaded.use();
@@ -93,12 +107,14 @@ export function ChannelsScreen() {
   const [msg, setMsg] = useState<string | null>(null);
   const [review, setReview] = useState<string | null>(null);
   const [edit, setEdit] = useState<string | null>(null);
+  const [count, setCount] = useState<string>('all');
+  const stage = douyinStage.use();
 
   useEffect(() => {
     if (pre) { setText(pre); setMsg(null); channelPrefill.set(null); }
   }, [pre]);
 
-  function start(limit = 200) {
+  function start(limit = countLimit(count)) {
     const first = parseUrls(text).valid[0];
     if (!first) { setMsg('Hãy dán một liên kết kênh hợp lệ (bắt đầu bằng http:// hoặc https://).'); return; }
     setMsg(null);
@@ -122,9 +138,13 @@ export function ChannelsScreen() {
               placeholder="https://www.youtube.com/@tenkenh"
               className="h-9 min-w-0 flex-1 rounded-[10px] border border-line-strong bg-canvas px-3 text-sm text-fg placeholder:text-fg-muted"
             />
+            {/* wording: BA review */}
+            <Select label="Số video" value={count} onChange={setCount} className="w-[175px]">
+              {COUNTS.map((c) => <option key={c} value={c}>{c === 'all' ? 'Tất cả video' : `${c} video mới nhất`}</option>)}
+            </Select>
             <Button variant="primary" icon={loading ? <Spinner /> : <ListVideo size={16} />} disabled={loading || !text.trim()} onClick={() => start()}>Lấy danh sách video</Button>
           </div>
-          {isDouyinUrl(text.trim()) && <p className="mt-2 text-xs text-fg-muted">Douyin: dán link trang cá nhân hoặc link một video của kênh — ứng dụng tìm kênh của tác giả. Danh sách lấy qua máy chủ VidGrab, giới hạn theo số lượt tải bạn còn trong hôm nay. Kênh Douyin chỉ được quét khi bạn bấm, không tự kiểm tra nền.</p>}
+          {isDouyinUrl(text.trim()) && <p className="mt-2 text-xs text-fg-muted">Douyin: dán link trang cá nhân hoặc link một video của kênh — ứng dụng tìm kênh của tác giả. Ứng dụng lấy toàn bộ kênh (hoặc số video bạn chọn); số lượt tải trong ngày chỉ tính khi bạn tải video về. Kênh Douyin chỉ được quét khi bạn bấm, không tự kiểm tra nền.</p>}{/* wording: BA review */}
           {isXhsProfileUrl(text.trim()) && <p className="mt-2 text-xs text-fg-muted">Xiaohongshu / RedNote: dán link trang cá nhân (giữ nguyên phần ?xsec_token=…). Cần đăng nhập; mỗi lần lấy tối đa 20 video, giới hạn theo số lượt tải bạn còn trong hôm nay. Kênh chỉ được quét khi bạn bấm, không tự kiểm tra nền.</p>}
           {msg && <p role="alert" className="mt-2 text-[13px] text-danger">{msg}</p>}
           {f.phase === 'error' && (
@@ -146,7 +166,7 @@ export function ChannelsScreen() {
             <div className="flex items-center gap-3">
               <Spinner className="text-accent" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-fg">Đang lấy danh sách video…</p>
+                <p className="text-sm font-medium text-fg">{stage ? STAGE_TEXT[stage] : 'Đang lấy danh sách video…'}</p>
                 <p className="truncate text-xs text-fg-muted">Kênh nhiều video có thể mất vài chục giây. {f.url}</p>
               </div>
               <Button size="sm" onClick={cancelFlow}>Huỷ</Button>

@@ -23,6 +23,10 @@ const SCRIPT: &str = include_str!("page_listing.js");
 pub enum Kind {
     TikTok,
     Facebook,
+    /// 21/10: a Douyin profile. The server lists only the first page (~41)
+    /// for a visitor; a real browser on the user's IP scrolls the whole
+    /// channel (the extension does it in Chrome).
+    Douyin,
 }
 
 impl Kind {
@@ -30,6 +34,7 @@ impl Kind {
         match self {
             Kind::TikTok => "tiktok",
             Kind::Facebook => "facebook",
+            Kind::Douyin => "douyin",
         }
     }
     /// Saved-cookie slug (cookies.rs table).
@@ -91,6 +96,17 @@ pub fn target(raw: &str) -> Option<Target> {
         }
         return url::Url::parse(&format!("https://www.tiktok.com/{user}")).ok().map(|page| Target { kind: Kind::TikTok, page });
     }
+    if is_host(&h, "douyin.com") {
+        // /user/<secUid> only (the server turns short / video links into it).
+        let sec = match segs.as_slice() {
+            ["user", s] => *s,
+            _ => return None,
+        };
+        if !sec.starts_with("MS4w") || !valid_id(sec) || sec.contains(['.', ':', '@']) {
+            return None;
+        }
+        return url::Url::parse(&format!("https://www.douyin.com/user/{sec}")).ok().map(|page| Target { kind: Kind::Douyin, page });
+    }
     if is_host(&h, "facebook.com") || h == "fb.com" {
         if segs.first() == Some(&"profile.php") {
             let id = u.query_pairs().find(|(k, _)| k == "id").map(|(_, v)| v.to_string())?;
@@ -127,6 +143,18 @@ pub fn navigation_allowed(kind: Kind, u: &url::Url) -> bool {
     match kind {
         Kind::TikTok => is_host(&h, "tiktok.com"),
         Kind::Facebook => is_host(&h, "facebook.com") || is_host(&h, "fb.com"),
+        Kind::Douyin => is_host(&h, "douyin.com"),
+    }
+}
+
+/// How long the page script keeps scrolling. A Douyin profile loads ~18
+/// videos per scroll, so ~200 videos take a dozen loads.
+pub fn max_ms(kind: Kind, show: bool) -> u32 {
+    match (kind, show) {
+        (Kind::Douyin, false) => 150_000,
+        (Kind::Douyin, true) => 240_000,
+        (_, false) => 35_000,
+        (_, true) => 140_000,
     }
 }
 
@@ -135,7 +163,7 @@ pub fn page_script(kind: Kind, limit: u32, show: bool) -> String {
     SCRIPT
         .replace("%KIND%", kind.as_str())
         .replace("%LIMIT%", &limit.clamp(1, 500).to_string())
-        .replace("%MAXMS%", if show { "140000" } else { "35000" })
+        .replace("%MAXMS%", &max_ms(kind, show).to_string())
         .replace("%SHOW%", if show { "true" } else { "false" })
 }
 
@@ -234,6 +262,8 @@ pub fn to_listing(url: &str, t: &Target, answer: &str, limit: u32) -> Result<Cha
         .unwrap_or_else(|| match t.kind {
             Kind::TikTok => path_name.clone(),
             Kind::Facebook => format!("fb:{}", if path_name == "profile.php" { t.page.query_pairs().find(|(k, _)| k == "id").map(|(_, v)| v.to_string()).unwrap_or_default() } else { path_name.clone() }),
+            // Same id as the server's listing (douyin.ts toListing), so a saved channel matches.
+            Kind::Douyin => t.page.path().trim_matches('/').split('/').nth(1).unwrap_or_default().to_string(),
         });
     let channel_id = if valid_id(&channel_id) { channel_id } else { format!("{}:page", t.kind.as_str()) };
     let uploader = s(&meta, "uploader").map(|u| cap(&u, 500));
@@ -256,6 +286,14 @@ mod tests {
 
     #[test]
     fn targets() {
+        let d = target("https://www.douyin.com/user/MS4wLjABAAAAkQs2tRzfg_eQ94ErmIEe4ba2ADzMVA7N7PbV-92qtgw3tLxfFB15eEW4hYgnRYPh?from_tab_name=main").unwrap();
+        assert_eq!((d.kind, d.page.as_str()), (Kind::Douyin, "https://www.douyin.com/user/MS4wLjABAAAAkQs2tRzfg_eQ94ErmIEe4ba2ADzMVA7N7PbV-92qtgw3tLxfFB15eEW4hYgnRYPh"));
+        assert!(target("https://www.douyin.com/video/7696450520369712419").is_none());
+        assert!(target("https://v.douyin.com/abc/").is_none());
+        assert!(target("https://www.douyin.com/user/self").is_none());
+        assert!(target("https://www.douyin.com/user/MS4w..%2Fx").is_none());
+        assert!(navigation_allowed(Kind::Douyin, &url::Url::parse("https://www.douyin.com/user/x").unwrap()));
+        assert!(!navigation_allowed(Kind::Douyin, &url::Url::parse("https://www.tiktok.com/@a").unwrap()));
         let t = target("https://www.tiktok.com/@editerloxinchao").unwrap();
         assert_eq!((t.kind, t.page.as_str()), (Kind::TikTok, "https://www.tiktok.com/@editerloxinchao"));
         assert!(target("https://m.tiktok.com/@a.b_c/").is_some());
@@ -313,6 +351,18 @@ mod tests {
         assert_eq!(l.videos.len(), 1);
         assert_eq!(l.videos[0].thumbnail.as_deref(), Some("https://p16.tiktokcdn.com/v.jpg"));
         assert!(!l.truncated);
+    }
+
+    #[test]
+    fn douyin_listing_keeps_the_sec_uid_as_channel_id() {
+        let t = target("https://www.douyin.com/user/MS4wLjABAAAA_dy").unwrap();
+        let ans = r#"{"meta":{"title":"凌晨睡不着"},"items":[
+            {"id":"7696450520369712419","url":"https://www.douyin.com/video/7696450520369712419","title":"《夜盲》3","thumbnail":"https://p3.douyinpic.com/c.jpg"},
+            {"id":"7696450520369712420","url":"https://www.tiktok.com/@x/video/7696450520369712420","title":"x","thumbnail":""}],"error":null}"#;
+        let l = to_listing("https://www.douyin.com/user/MS4wLjABAAAA_dy", &t, ans, 500).unwrap();
+        assert_eq!((l.channel_id.as_str(), l.title.as_str(), l.platform.as_str()), ("MS4wLjABAAAA_dy", "凌晨睡不着", "douyin"));
+        assert_eq!(l.videos.len(), 1);
+        assert!(page_script(Kind::Douyin, 500, false).contains("const MAXMS = 150000;"));
     }
 
     #[test]

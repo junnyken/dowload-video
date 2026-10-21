@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Download, FolderOpen, Info, Puzzle, Search, Tv } from 'lucide-react';
 import { WEBSITE_URL } from '../lib/config';
 import { Badge, Button, PlatformBadge, Select, Spinner, Thumb, Toggle } from './ui';
@@ -14,9 +14,7 @@ import {
   addRefused, enqueueWithClaims, fetchListing, flow, joinPath, newChannelFromListing, refusedText, resetFlow, sanitizeFolderName, saveChannel, channels, serverListedName, usesCookies,
 } from '../lib/channels';
 import { quota, refreshQuota } from '../lib/quota';
-import { capIds, selectionCap } from '../lib/quota-core';
-import { routesFor } from '../lib/cookies';
-import { isLocalStep } from '../lib/routes-core';
+import { selectionCap, splitByCap } from '../lib/quota-core';
 import type { ChannelFilter, ChannelInterval, ChannelListing, ChannelMode, ChannelVideo } from '../lib/types';
 
 const PAGE = 50;
@@ -69,10 +67,10 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
   const [busy, setBusy] = useState(false);
   const serverName = serverListedName(listing.platform); // Douyin / Xiaohongshu: listed by the server
   const douyin = serverName !== null;
-  // Downloads left today (when the server enforces the allowance): the picker never selects more (PLAN-32D §6).
+  // Downloads left today (when the server enforces the allowance). 0.18.2 (owner 21/10): any number may be
+  // selected; one press downloads the first `cap` of them and keeps the rest selected.
   const q = quota.use();
-  const localFirst = !douyin && isLocalStep(routesFor(listing.url)[0]);
-  const cap = localFirst ? selectionCap(q) : null;
+  const cap = selectionCap(q);
   useEffect(() => { void refreshQuota(); }, []);
 
   useEffect(() => { void ensureOutDir().then(setBaseDir); }, []);
@@ -123,36 +121,26 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
   const rows = shown.slice(cur * PAGE, cur * PAGE + PAGE);
   const filtered = !!query.trim() || !!since;
 
-  // wording: BA review
-  const lastNote = useRef(0);
-  const capNote = () => { // one note per burst of clicks
-    if (Date.now() - lastNote.current < 5000) return;
-    lastNote.current = Date.now();
-    toast('info', cap === 0 ? 'Bạn đã hết lượt tải hôm nay.' : `Hôm nay bạn chỉ còn ${cap} lượt tải.`);
-  };
   const toggle = (id: string) => {
-    if (!sel.has(id) && cap != null && sel.size >= cap) { capNote(); return; }
     setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   };
-  const selectIds = (ids: string[]) => {
-    const uniq = [...new Set(ids)];
-    const kept = capIds(uniq, cap);
-    if (kept.length < uniq.length) capNote();
-    setSel(new Set(kept));
-  };
-  // The remaining allowance went down (another download): drop the extra selection.
-  useEffect(() => { if (cap != null && sel.size > cap) setSel((s) => new Set(capIds([...s], cap))); }, [cap, sel.size]);
+  const selectIds = (ids: string[]) => setSel(new Set(ids));
   const selectedVideos = listing.videos.filter((v) => sel.has(v.id));
   const n = selectedVideos.length;
+  const { now: toDownload, later } = splitByCap(selectedVideos, cap);
+  const k = toDownload.length;
   const allShownOn = shown.length > 0 && shown.every((v) => sel.has(v.id));
 
-  const lowDisk = free != null && n > 0 && free < n * 80e6;
+  const lowDisk = free != null && k > 0 && free < k * 80e6;
 
   async function submit() {
     if (!dir || busy) return;
-    if (n === 0 && !follow) return;
+    if (k === 0 && !follow) {
+      if (n > 0) toast('info', refusedText(n, null));
+      return;
+    }
     if (filterError) return;
-    if (free != null && free < 300e6 && n > 0) {
+    if (free != null && free < 300e6 && k > 0) {
       toast('error', 'Ổ đĩa không đủ dung lượng. Hãy chọn thư mục khác.');
       return;
     }
@@ -160,11 +148,11 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
     try {
       const ch = newChannelFromListing(listing, { mode, quality, outDir: dir, checkEveryHours: every });
       if (follow && !isEmptyFilter(filter)) ch.filter = filter; else delete ch.filter;
-      const res = n > 0 ? await enqueueWithClaims(selectedVideos, ch) : { enqueued: [], refused: [] };
+      const res = k > 0 ? await enqueueWithClaims(toDownload, ch) : { enqueued: [], refused: [] };
       addRefused(res.refused, ch); // each with the server's reason in Hàng đợi → Lỗi
       const added = res.enqueued.length;
       // Everything shown here counts as "seen", so later checks only bring NEW videos.
-      const seenIds = follow ? listing.videos.map((v) => v.id) : selectedVideos.map((v) => v.id);
+      const seenIds = follow ? listing.videos.map((v) => v.id) : toDownload.map((v) => v.id);
       if (follow) {
         if (seenIds.length) await api.channelSeenAdd(ch.id, seenIds);
         await saveChannel(ch);
@@ -175,7 +163,15 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
         ? (added > 0 ? `Đã thêm ${added} video vào hàng đợi và bắt đầu theo dõi kênh.` : 'Đã bắt đầu theo dõi kênh.')
         : `Đã thêm ${added} video vào hàng đợi.`);
       if (res.refused.length) toast('error', refusedText(res.refused.length, res.refused[0].detail)); // ONE toast for all refused
-      resetFlow();
+      if (later.length) {
+        // Over today's downloads: stay here with the rest still selected (wording: BA review).
+        const reset = q.snap?.resetTimeVn;
+        toast('info', `Còn ${later.length} video đã chọn chưa tải vì hết lượt hôm nay${reset ? ` — lượt mới lúc ${reset}` : ''}. Danh sách vẫn được giữ chọn ở đây.`);
+        setSel(new Set(later.map((v) => v.id)));
+        void refreshQuota();
+      } else {
+        resetFlow();
+      }
     } catch (e) {
       toast('error', errorMessage(toAppError(e).code));
     } finally {
@@ -190,9 +186,11 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
     } catch { /* dialog unavailable */ }
   }
 
+  // wording: BA review
+  const count = later.length ? `${k}/${n}` : `${n}`;
   const label = follow
-    ? (n > 0 ? `Tải ${n} video và theo dõi kênh` : 'Chỉ theo dõi kênh')
-    : `Tải ${n} video đã chọn`;
+    ? (k > 0 ? `Tải ${count} video và theo dõi kênh` : 'Chỉ theo dõi kênh')
+    : `Tải ${count} video đã chọn`;
 
   return (
     <div className="flex h-full flex-col">
@@ -214,7 +212,7 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
             {douyin && listing.moreHint !== 'douyin_extension' && (
               <p className="mt-1.5 flex items-start gap-1.5 text-xs text-fg-muted">
                 <Info size={13} className="mt-px shrink-0" aria-hidden />
-                <span>{serverName}: danh sách chỉ lấy tối đa {listing.cap ?? listing.videos.length} video — đúng số lượt tải bạn còn trong hôm nay. Mỗi video tải về tính một lượt.</span>
+                <span>{serverName}: chọn bao nhiêu video tuỳ ý; mỗi video tải về tính một lượt tải trong ngày.</span>{/* wording: BA review */}
               </p>
             )}
             {/* wording: BA review */}
@@ -366,7 +364,8 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
         <p className="mt-2 flex items-start gap-1.5 text-xs text-fg-muted">
           <Info size={13} className="mt-px shrink-0" aria-hidden />
           <span>
-            {free != null && <>Ổ đĩa còn trống {formatBytes(free)}. {lowDisk && <span className="text-warning">Có thể không đủ chỗ cho {n} video. </span>}</>}
+            {free != null && <>Ổ đĩa còn trống {formatBytes(free)}. {lowDisk && <span className="text-warning">Có thể không đủ chỗ cho {k} video. </span>}</>}
+            {later.length > 0 && <span className="text-warning">Bạn chọn {n} video nhưng hôm nay còn {cap} lượt: lần này tải {k} video đầu, {later.length} video còn lại vẫn được giữ chọn. </span>}{/* wording: BA review */}
             {follow
               ? 'Video không chọn sẽ được đánh dấu là đã biết; về sau chỉ video MỚI đăng mới được tải hoặc báo cho bạn.'
               : 'Kênh sẽ không được lưu; bạn chỉ tải các video đã chọn.'}

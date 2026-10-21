@@ -234,6 +234,12 @@ export function capIds<T>(ids: readonly T[], cap: number | null): T[] {
   return cap == null ? [...ids] : ids.slice(0, Math.max(0, cap));
 }
 
+/** 0.18.2: the selection split into what today's allowance downloads now (the first `cap`, list order) and the rest. */
+export function splitByCap<T>(items: readonly T[], cap: number | null): { now: T[]; later: T[] } {
+  const now = capIds(items, cap);
+  return { now, later: items.slice(now.length) };
+}
+
 // ---- claim tokens (PLAN-32E P3) ------------------------------------------------------
 
 /**

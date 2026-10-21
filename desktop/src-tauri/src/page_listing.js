@@ -1,6 +1,6 @@
 // Channel listing inside the hidden page window (page_listing.rs).
 // Evaluated every 2 s by Rust; keeps its state on window.__vgList and runs
-// until it has LIMIT videos, the list stops growing, or 35 s pass. Only reads
+// until it has LIMIT videos, the list stops growing, or MAXMS pass. Only reads
 // the page and scrolls it. The answer goes out through document.title in
 // chunks ("VGL:<i>/<n>:<part>") because Chromium caps titles at 4096 chars.
 // %KIND%, %LIMIT%, %MAXMS% and %SHOW% are replaced by Rust. SHOW = the user
@@ -64,12 +64,38 @@
     const login = document.querySelector('form#login_form, form[action*="/login"], input[name="pass"]');
     if (login) S.login = true;
     if (login && !SHOW && S.items.size === 0 && elapsed > 10000) return send({ meta, error: "login" });
+  } else if (KIND === "douyin") {
+    // Same signals as the extension (content.js, 5.9.1): video links in the
+    // grid, ".route-scroll-container" scrolls (the body is locked), and
+    // Douyin prints "暂时没有更多了" under the last video. Image posts
+    // (/note/) are left out, like the server's listing.
+    document.querySelectorAll('a[href*="/video/"]').forEach((a) => {
+      const href = abs(a.getAttribute("href"));
+      const m = href.match(/^https:\/\/www\.douyin\.com\/video\/(\d{15,25})/);
+      if (!m || S.items.has(m[1])) return;
+      const img = a.querySelector("img");
+      const text = clip((a.textContent || "").replace(/(^|\s)[\d.,]+[万w]?(?=\s|$)/g, " "));
+      S.items.set(m[1], { id: m[1], url: "https://www.douyin.com/video/" + m[1], title: clip(img && img.alt) || text, thumbnail: (img && img.src) || "" });
+    });
+    if (!meta.title) {
+      const h = document.querySelector("h1");
+      const t = h && clip(h.textContent);
+      if (t) meta = S.meta = { title: t };
+    }
+    if (/暂时没有更多了|没有更多了/.test(((document.body && document.body.innerText) || "").slice(-4000))) S.end = true;
+    const verify = document.querySelector('#captcha_container, .captcha_verify_container, [id*="captcha"], [class*="captcha"]');
+    if (verify) S.verify = true;
+    if (verify && !SHOW && S.items.size === 0 && elapsed > 15000) return send({ meta, error: "verify" });
   }
 
   if (S.items.size === S.last) S.still += 1; else { S.still = 0; S.last = S.items.size; }
-  if (S.items.size >= LIMIT || (S.items.size > 0 && S.still >= 4) || elapsed > MAXMS) {
+  // Douyin fetches each next page slowly: wait 8 still ticks (16 s) unless the end line showed.
+  const stillMax = KIND === "douyin" ? (S.end ? 2 : 8) : 4;
+  if (S.items.size >= LIMIT || (S.items.size > 0 && S.still >= stillMax) || elapsed > MAXMS) {
     const why = S.items.size ? null : S.verify ? "verify" : S.login ? "login" : "empty";
     return send({ meta, status: S.status || meta.status || 0, items: Array.from(S.items.values()).slice(0, LIMIT), error: why });
   }
-  window.scrollBy(0, Math.max(800, window.innerHeight * 2));
+  const box = KIND === "douyin" && document.querySelector(".route-scroll-container");
+  if (box && box.scrollHeight > box.clientHeight + 50) box.scrollBy(0, Math.max(800, box.clientHeight * 2));
+  else window.scrollBy(0, Math.max(800, window.innerHeight * 2));
 })();

@@ -50,13 +50,13 @@ export const isManualOnly = (c: { platform: string }) => c.platform in SERVER_LI
  * the local yt-dlp, with the user's cookies when that platform is connected (PLAN-32D §6).
  */
 export function fetchChannelListing(url: string, limit: number, showPage = false): Promise<ChannelListing> {
-  if (isDouyinUrl(url)) return fetchDouyinListing(url, limit);
+  if (isDouyinUrl(url)) return fetchDouyinListing(url, limit, showPage);
   if (isXhsProfileUrl(url)) return fetchXhsListing(url, limit);
   return api.channelFetch(url, limit, planFor(url).useCookies || undefined, showPage || undefined);
 }
 
-/** 0.16.3: TikTok / Facebook channels can be listed in a window the user sees ("Mở trang để kiểm tra"). */
-export const canShowPage = (url: string) => /^https?:\/\/([a-z0-9-]+\.)*(tiktok\.com\/@|facebook\.com\/|fb\.com\/)/i.test(url.trim());
+/** 0.16.3: TikTok / Facebook channels can be listed in a window the user sees ("Mở trang để kiểm tra"); 0.18.2: Douyin profiles too. */
+export const canShowPage = (url: string) => /^https?:\/\/([a-z0-9-]+\.)*(tiktok\.com\/@|facebook\.com\/|fb\.com\/|douyin\.com\/user\/)/i.test(url.trim());
 
 type ChannelTarget = { platform: string; title: string; quality: string; outDir: string };
 

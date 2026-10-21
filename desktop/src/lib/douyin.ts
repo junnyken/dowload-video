@@ -3,7 +3,10 @@
 // /api/v1/client/douyin/video resolves one video to a short-lived signed CDN
 // link and counts ONE download. Direct links and tokens are never logged.
 import { apiFetch } from './http';
-import { getAccessToken } from './auth';
+import { auth, getAccessToken } from './auth';
+import { api } from './tauri';
+import { createStore } from './store';
+import { DOUYIN_ALL, listsMore, mergeListings, needsMore } from './douyin-core';
 import { rememberServerMessage } from './errors';
 import { douyinVideoId } from './urls';
 import type { ChannelListing, ProbeResult } from './types';
@@ -52,8 +55,10 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   throw douyinError(r.status, r.data);
 }
 
+const clampLimit = (limit: number) => Math.max(1, Math.min(DOUYIN_ALL, Math.round(limit)));
+
 export const douyinChannel = (url: string, limit: number) =>
-  post<DouyinChannel>('/api/v1/client/douyin/channel', { url, limit: Math.max(1, Math.min(500, Math.round(limit))) });
+  post<DouyinChannel>('/api/v1/client/douyin/channel', { url, limit: clampLimit(limit) });
 
 /** Xiaohongshu / RedNote profile through the server (signed-in only, ≤ 20 per scan, paid per scan). */
 export const xhsChannel = (url: string, limit: number) =>
@@ -72,14 +77,43 @@ export function toListing(c: DouyinChannel): ChannelListing {
     channelId: m ? decodeURIComponent(m[1]) : c.channelUrl, url: c.channelUrl, title: c.channelTitle, platform: c.platform || 'douyin',
     uploader: c.channelTitle, thumbnail: c.items.find((i) => i.thumbnail)?.thumbnail ?? null,
     videos: c.items.map((i) => ({ id: i.id, url: i.url, title: i.title, duration: i.durationSec, uploadDate: null, thumbnail: i.thumbnail })),
-    truncated: false, // the cap is the limit, not something "load more" can raise
+    truncated: false, // the whole channel is asked for up front (0.18.2), "load more" adds nothing
     cap: c.cap,
     moreHint: c.moreHint ?? null,
   };
 }
 
-export async function fetchDouyinListing(url: string, limit: number): Promise<ChannelListing> {
-  return toListing(await douyinChannel(url, limit));
+/** Which step of a Douyin channel scan is running (the Channels screen's loading text). */
+export type DouyinStage = 'server' | 'page' | 'deep';
+export const douyinStage = createStore<DouyinStage | null>(null);
+
+/**
+ * 0.18.2 (owner 21/10): the whole channel, not only what the person can
+ * download today.
+ *  1. the server's free signed listing: one page (~41 newest), fast;
+ *  2. Douyin has more → the app's own page window scrolls the profile on the
+ *     user's IP (page_listing.js), free;
+ *  3. that fails / finds fewer, and the person is signed in → the server's
+ *     paid "deep" listing (Apify, capped on the server).
+ * Any later step that fails keeps the best listing so far (with the
+ * extension hint when Douyin had more).
+ */
+export async function fetchDouyinListing(url: string, limit: number, showPage = false): Promise<ChannelListing> {
+  try {
+    douyinStage.set('server');
+    const first = toListing(await douyinChannel(url, limit));
+    if (!needsMore(first, limit)) return first;
+    douyinStage.set('page');
+    const page = await api.channelFetch(first.url, limit, undefined, showPage || undefined).catch(() => null);
+    if (listsMore(first, page)) return mergeListings(first, page, limit);
+    if (auth.get().status !== 'in') return first;
+    douyinStage.set('deep');
+    const deep = await post<DouyinChannel>('/api/v1/client/douyin/channel', { url: first.url, limit: clampLimit(limit), deep: true })
+      .then(toListing, () => null);
+    return listsMore(first, deep) ? { ...deep, cap: undefined, moreHint: null } : first;
+  } finally {
+    douyinStage.set(null);
+  }
 }
 
 /** What the Download screen shows for a Douyin link: nothing can be probed locally (and the server call would use a download). */
