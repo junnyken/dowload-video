@@ -679,11 +679,14 @@ window.addEventListener('message', (event) => {
       let stable = 0;
       const MAX_STABLE = 5;
       let round = 0;
+      let loginWall = false;
 
       while (stable < MAX_STABLE) {
         round++;
         vgScrollPage();
         await sleep(2200);
+        // 5.11.1: Douyin stops a signed-out visitor after a few rows.
+        if (vgLoginWall()) { loginWall = true; break; }
 
         const curr = videoSet.size;
         const pct = Math.min(90, Math.round((stable / MAX_STABLE) * 100));
@@ -701,9 +704,12 @@ window.addEventListener('message', (event) => {
       const finalCount = videoSet.size;
       delete statusEl.dataset.locked;
       statusEl.style.color = finalCount > 0 ? '#34d399' : '#9ca3af';
-      statusEl.textContent = finalCount > 0
-        ? `Hoàn tất! ${finalCount} video. Nhấn nút xanh để gửi tải.`
-        : 'Không tìm thấy video. Thử đăng nhập Douyin rồi thử lại.';
+      statusEl.textContent = loginWall
+        ? 'Douyin yêu cầu đăng nhập mới cho xem hết kênh. Hãy đăng nhập Douyin ngay trong tab này; đăng nhập xong tiện ích tự cuộn tiếp (trang không tự tải lại thì bấm F5).'
+        : finalCount > 0
+          ? `Hoàn tất! ${finalCount} video. Nhấn nút xanh để gửi tải.`
+          : 'Không tìm thấy video. Thử đăng nhập Douyin rồi thử lại.';
+      if (loginWall) statusEl.style.color = '#fbbf24';
 
       scrapeBtn.style.opacity = '1';
       scrapeBtn.textContent = '🔄 Cuộn thêm';
@@ -711,7 +717,10 @@ window.addEventListener('message', (event) => {
       isScraping = false;
 
       // wording: BA review
-      if (relayTok) {
+      if (relayTok && loginWall) {
+        // Keep the token (sessionStorage): after signing in the page reloads and scrolling starts again.
+        await vgRelaySend(relayTok, false, true);
+      } else if (relayTok) {
         const r = await vgRelaySend(relayTok, true);
         if (r && r.ok) {
           try { sessionStorage.removeItem(VG_RELAY_KEY); } catch { /* none */ }
@@ -822,7 +831,7 @@ window.addEventListener('message', (event) => {
     } catch { return m ? m[1] : null; }
   }
 
-  function vgRelayPayload(done) {
+  function vgRelayPayload(done, loginWall = false) {
     const items = [];
     let skipped = 0;
     for (const u of videoSet) {
@@ -835,12 +844,12 @@ window.addEventListener('message', (event) => {
       items.push({ url: `https://www.douyin.com/video/${m[2]}`, title: (hit && hit.title) || (img && img.alt) || null });
     }
     const h1 = document.querySelector('h1');
-    return { items: items.slice(0, 2000), channelTitle: h1 ? h1.textContent.trim().slice(0, 300) : null, done, skipped };
+    return { items: items.slice(0, 2000), channelTitle: h1 ? h1.textContent.trim().slice(0, 300) : null, done, skipped, loginWall };
   }
 
-  function vgRelaySend(token, done) {
+  function vgRelaySend(token, done, loginWall = false) {
     return new Promise((resolve) => chrome.runtime.sendMessage({
-      type: 'VG_API_FETCH', url: `${API_BASE}/api/v1/channel-relay/${token}`, method: 'PUT', body: vgRelayPayload(done),
+      type: 'VG_API_FETCH', url: `${API_BASE}/api/v1/channel-relay/${token}`, method: 'PUT', body: vgRelayPayload(done, loginWall),
     }, resolve));
   }
 
@@ -901,6 +910,11 @@ window.addEventListener('message', (event) => {
 
   function vgReachedListEnd() {
     return /暂时没有更多了|没有更多了/.test(document.body?.innerText?.slice(-4000) || '');
+  }
+
+  // Douyin's "登录后查看更多作品" (sign in to see more videos) under a signed-out profile grid.
+  function vgLoginWall() {
+    return /登录后查看更多/.test(document.body?.innerText?.slice(-4000) || '');
   }
 
   function stopDomObserver() {

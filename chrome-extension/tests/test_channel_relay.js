@@ -80,5 +80,18 @@ assert(p.items.length === 2 && p.skipped === 1, '[4] videos only, image post ski
 assert(p.items[0].title === '《夜盲》3' && p.items[1].title === 'from alt', '[4] titles from the API capture, else the cover alt');
 assert(p.channelTitle === '凌晨睡不着' && p.done === true, '[4] channel title + done');
 
+assert(p.loginWall === false && ctxFor('').vgRelayPayload(false, true).loginWall === true, '[4] login wall flag sent');
+
+// [5] 5.11.1: Douyin's sign-in wall stops the scroll and is reported (token kept for after sign-in)
+const wall = (text) => {
+  const ctx = { document: { body: { innerText: text } } };
+  vm.createContext(ctx);
+  vm.runInContext(grab('vgLoginWall'), ctx);
+  return ctx.vgLoginWall();
+};
+assert(wall('作品 195 … 登录后查看更多作品 立即登录') === true, '[5] sign-in wall seen');
+assert(wall('作品 195 … 暂时没有更多了') === false, '[5] end of list is not a wall');
+assert(panel.includes('if (vgLoginWall()) { loginWall = true; break; }') && panel.includes('vgRelaySend(relayTok, false, true)'), '[5] scroll stops and reports, not done');
+
 console.log(`\n── Summary: ${passed} passed, ${failed} failed ──`);
 process.exit(failed ? 1 : 0);
