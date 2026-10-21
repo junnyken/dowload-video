@@ -44,7 +44,7 @@ def test_probe_reads_both_databases(monkeypatch):
 def test_admin_endpoints(monkeypatch):
     from fastapi.testclient import TestClient
     from app.main import app as fastapi_app
-    from app.api.admin import verify_admin
+    from app.api.admin_db_migration import verify_admin
     r = fakeredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr("app.core.redis_client._client", r)
     monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://u:TopSecret@127.0.0.1:1/x")
@@ -59,3 +59,47 @@ def test_admin_endpoints(monkeypatch):
         assert client.get("/api/v1/admin/db-migration").json()["probe"]["source"]["ok"] is False
     finally:
         fastapi_app.dependency_overrides.pop(verify_admin, None)
+
+
+def test_copy_endpoint_needs_confirmation_and_one_run_at_a_time(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app as fastapi_app
+    from app.api.admin_db_migration import verify_admin
+    r = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr("app.core.redis_client._client", r)
+    monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://u:p@127.0.0.1:1/x")
+    monkeypatch.setenv("APP_DATABASE_URL", "postgresql://u:p@127.0.0.1:1/y")
+    started = []
+    monkeypatch.setattr(M, "copy_all", lambda **kw: started.append(kw))
+    client = TestClient(fastapi_app, raise_server_exceptions=False)
+    fastapi_app.dependency_overrides[verify_admin] = lambda: None
+    try:
+        base = "/api/v1/admin/db-migration/copy"
+        assert client.post(base, json={}).status_code == 400
+        r.set(M.COPY_LOCK, "1")
+        assert client.post(base, json={"confirm": "CHEP"}).status_code == 409
+        r.delete(M.COPY_LOCK)
+        assert client.post(base, json={"confirm": "CHEP", "replace": True}).json() == {"started": True}
+        import time
+        for _ in range(50):
+            if started:
+                break
+            time.sleep(0.05)
+        assert started == [{"replace": True, "rc": r}]
+        assert client.get(base).json()["running"] is False
+    finally:
+        fastapi_app.dependency_overrides.pop(verify_admin, None)
+
+
+def test_scrub_hides_passwords():
+    assert "pw1" not in M._scrub("connect to postgresql://u:pw1@h/db failed", "postgresql://u:pw1@h/db")
+    assert M._scrub("x postgres://a:b@c/d") == "x postgres://a:***@c/d"
+
+
+def test_toc_kinds():
+    assert M._toc_kind("4521; 0 0 POLICY public download_jobs p1 postgres") == "POLICY"
+    assert M._toc_kind("4600; 0 16400 ROW SECURITY public download_jobs postgres") == "ROW SECURITY"
+    assert M._toc_kind("6; 2615 2200 SCHEMA - public pg_database_owner") == "SCHEMA"
+    assert M._toc_kind("4400; 0 0 COMMENT - SCHEMA public pg_database_owner") == "COMMENT_SCHEMA"
+    assert M._toc_kind("3; 0 16384 TABLE DATA public plans postgres") == "TABLE DATA"
+    assert M._toc_kind("; comment") == ""

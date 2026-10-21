@@ -42,10 +42,21 @@ dữ liệu và đăng nhập trên Postgres của Vibe Host.
    Bộ test so kết quả hai phía cho từng kiểu lệnh.
 3. Kiểm tra phiên: xác thực JWT của Supabase tại chỗ bằng khoá công khai
    (JWKS) thay vì gọi `auth.get_user` mỗi request.
-4. Chép dữ liệu: dừng ghi (bảo trì ngắn), `pg_dump --data-only` các bảng
-   public → nạp vào Vibe Host, đối chiếu số dòng từng bảng, bật
-   `DB_BACKEND=postgres`. Giữ Supabase nguyên để quay lui (đổi lại biến).
-5. Sao lưu: pg_dump hằng đêm của Postgres Vibe Host (thay bản xuất qua API).
+4. Chép dữ liệu (admin → Cơ sở dữ liệu → "Chép dữ liệu sang Vibe Host",
+   `app/core/db_migration.copy_all`): lớp tương thích `auth`
+   (`app/core/supabase_compat.sql`) → chép `auth.users` (kèm băm bcrypt) →
+   `pg_dump -Fc --schema=public` → `pg_restore -f -` bỏ dòng
+   `SET transaction_timeout` (Supabase 17 → đích 16) → `psql
+   --single-transaction` → đếm chính xác từng bảng hai bên. Không tạo được
+   vai anon/authenticated/service_role thì bỏ policy RLS (backend là chủ bảng,
+   RLS không áp). Đã thử 17→16, kể cả đích là người dùng thường: 68 bảng khớp.
+   Chép KHÔNG chuyển website; được chạy nhiều lần ("chép đè").
+5. Chuyển (cần bảo trì ngắn): chép đè lần cuối → đặt `DB_BACKEND=postgres` →
+   deploy. Trước đó phải làm: người đăng ký mới vẫn tạo tài khoản ở Supabase →
+   khi gặp JWT hợp lệ mà `auth.users` ở đích chưa có, backend thêm dòng đó và
+   gắn lại trigger `handle_new_user` để có `profiles`. Giữ Supabase nguyên để
+   quay lui (bỏ biến).
+6. Sao lưu: pg_dump hằng đêm của Postgres Vibe Host (thay bản xuất qua API).
 
 ### 2. Đăng nhập trên Vibe Host
 1. API đăng nhập riêng (`/api/v1/auth/*`): đăng ký, đăng nhập, làm mới phiên,

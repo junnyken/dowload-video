@@ -23,6 +23,17 @@ interface Side {
 }
 interface Probe { at: number; pg_dump: string | null; psql: string | null; source: Side; target: Side }
 interface Status { source_set: boolean; target_set: boolean; probe: Probe | null }
+interface CopyRun {
+  status: 'running' | 'ok' | 'mismatch' | 'failed' | 'refused'; started: number; finished?: number
+  steps: { t: number; msg: string }[]; error?: string
+  counts?: Record<string, number>; diff?: Record<string, [number | null, number | null]>
+}
+interface CopyStatus { running: boolean; last: CopyRun | null }
+
+const COPY_VI: Record<CopyRun['status'], string> = {
+  running: 'Đang chép…', ok: 'Xong — số dòng khớp', mismatch: 'Xong nhưng số dòng lệch',
+  failed: 'Lỗi', refused: 'Chưa chép',
+}
 
 const KIND_VI: Record<string, string> = {
   'supabase-pooler': 'Supabase (qua pooler)',
@@ -67,6 +78,44 @@ export default function DatabasePage() {
   const [st, setSt] = useState<Status | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [copy, setCopy] = useState<CopyStatus | null>(null)
+  const [replace, setReplace] = useState(false)
+  const [copyBusy, setCopyBusy] = useState(false)
+
+  const loadCopy = useCallback(async () => {
+    try {
+      setCopy(await adminFetch<CopyStatus>('/db-migration/copy'))
+    } catch (e) {
+      setErr((e as Error).message)
+    }
+  }, [])
+
+  useEffect(() => { loadCopy() }, [loadCopy])
+  // the lock, not the last status: a container restart mid-copy leaves status 'running'
+  const running = !!copy?.running
+  useEffect(() => {
+    if (!running) return
+    const t = setInterval(loadCopy, 3000)
+    return () => clearInterval(t)
+  }, [running, loadCopy])
+
+  async function startCopy() {
+    const typed = window.prompt(
+      replace
+        ? 'Chép đè: XOÁ các bảng đang có ở Postgres Vibe Host (trừ bản sao lưu) rồi chép lại từ Supabase. Gõ CHEP để tiếp tục.'
+        : 'Chép toàn bộ dữ liệu từ Supabase sang Postgres Vibe Host. Website vẫn dùng Supabase. Gõ CHEP để tiếp tục.')
+    if (typed !== 'CHEP') return
+    setCopyBusy(true)
+    setErr(null)
+    try {
+      await adminPost('/db-migration/copy', { confirm: 'CHEP', replace })
+      await loadCopy()
+    } catch (e) {
+      setErr((e as Error).message)
+    } finally {
+      setCopyBusy(false)
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -99,7 +148,7 @@ export default function DatabasePage() {
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Cơ sở dữ liệu"
-        description="Chuyển dữ liệu từ Supabase sang Postgres của Vibe Host. Hiện chỉ kiểm tra hai bên, chưa chép gì."
+        description="Chuyển dữ liệu từ Supabase sang Postgres của Vibe Host. Chép xong website vẫn dùng Supabase cho tới bước chuyển."
         actions={<Button variant="primary" onClick={probe} disabled={busy}>{busy ? 'Đang dò...' : 'Dò lại'}</Button>}
       />
 
@@ -115,6 +164,45 @@ export default function DatabasePage() {
         <SideCard title="Nguồn: Supabase" side={p?.source} set={!!st?.source_set} />
         <SideCard title="Đích: Postgres Vibe Host" side={p?.target} set={!!st?.target_set} />
       </div>
+
+      <Card as="section">
+        <SectionHeader title="Chép dữ liệu" subtitle="Chép sơ đồ, dữ liệu và tài khoản từ Supabase sang Postgres Vibe Host, rồi đếm lại từng bảng. Website vẫn dùng Supabase cho tới bước chuyển." />
+        <div className="flex flex-col gap-3 p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="primary" onClick={startCopy}
+              disabled={copyBusy || running || !st?.source_set || !st?.target_set}>
+              {running ? 'Đang chép...' : 'Chép dữ liệu sang Vibe Host'}
+            </Button>
+            <label className="flex items-center gap-2 text-sm text-fg">
+              <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} disabled={running} />
+              Chép đè (xoá dữ liệu cũ ở đích trước)
+            </label>
+          </div>
+          {copy?.last && (
+            <>
+              <p className={`text-sm ${copy.last.status === 'ok' ? 'text-success' : copy.last.status === 'running' ? 'text-fg' : 'text-danger'}`}>
+                {COPY_VI[copy.last.status] ?? copy.last.status} · bắt đầu {when(copy.last.started)}
+                {copy.last.finished ? ` · ${Math.round(copy.last.finished - copy.last.started)} s` : ''}
+              </p>
+              {copy.last.error && <p className="break-words text-xs text-danger">{copy.last.error}</p>}
+              <ol className="space-y-0.5 font-mono text-[11px] text-fg-2">
+                {copy.last.steps.map((s, i) => <li key={i}>+{s.t}s {s.msg}</li>)}
+              </ol>
+              {copy.last.diff && Object.keys(copy.last.diff).length > 0 && (
+                <div className="text-xs text-danger">
+                  Lệch: {Object.entries(copy.last.diff).map(([t, [a, b]]) => `${t} (${a ?? '—'} → ${b ?? '—'})`).join(', ')}
+                </div>
+              )}
+              {copy.last.counts && (
+                <p className="text-xs text-fg-muted">
+                  Đã đếm {Object.keys(copy.last.counts).length} bảng · tài khoản: {num(copy.last.counts['auth.users'])} ·
+                  download_jobs: {num(copy.last.counts['download_jobs'])}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </Card>
 
       {tables.length > 0 && (
         <Card as="section">

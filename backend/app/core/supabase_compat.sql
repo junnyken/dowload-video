@@ -1,5 +1,7 @@
--- Runs FIRST on the Vibe Host Postgres, before schema.sql and migrations/*.sql
--- (docs/MIGRATION-DB-VIBEHOST.md). The migrations were written for Supabase:
+-- Runs FIRST on the Vibe Host Postgres, before the copied schema or
+-- database/schema.sql + migrations/*.sql (docs/MIGRATION-DB-VIBEHOST.md;
+-- app.core.db_migration runs it). Lives in backend/ because the image is
+-- built from backend/ only. The migrations were written for Supabase:
 -- they reference auth.users, auth.uid(), auth.role(), auth.jwt() and the
 -- roles anon / authenticated / service_role. This file provides those names so
 -- every migration applies unchanged.
@@ -10,8 +12,16 @@
 -- The backend connects as the table owner, so RLS policies do not apply to it,
 -- the same as Supabase's service_role.
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- Supabase keeps extensions in schema "extensions"; dumped defaults and
+-- functions say extensions.uuid_generate_v4() etc.
+CREATE SCHEMA IF NOT EXISTS extensions;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
+DO $$ BEGIN
+  EXECUTE format('ALTER DATABASE %I SET search_path = "$user", public, extensions', current_database());
+EXCEPTION WHEN insufficient_privilege THEN
+  RAISE NOTICE 'search_path not set: not the database owner';
+END $$;
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF;

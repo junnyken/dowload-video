@@ -152,3 +152,269 @@ def probe_once_per_deploy() -> None:
         probe()
     except Exception as exc:  # noqa: BLE001
         print(f"[DBMigration] probe failed: {type(exc).__name__}", flush=True)
+
+
+# ── copy (phase 1.4) ─────────────────────────────────────────────────────────
+#
+# 1. target: Supabase-compatible names (app/core/supabase_compat.sql)
+# 2. auth.users rows (id, email, bcrypt hash, confirmation, metadata) — the
+#    public tables' foreign keys point at them
+# 3. pg_dump -Fc of schema public (no owner, no grants) -> pg_restore, one
+#    transaction; RLS policies are skipped when the Supabase roles cannot be
+#    created (the backend connects as the owner, RLS never applied to it)
+# 4. exact row counts of every table on both sides
+#
+# Never switches the app over: DB_BACKEND stays as it is.
+
+import re as _re
+import tempfile as _tempfile
+
+COPY_KEY = "dbmig:copy"
+COPY_LOCK = "dbmig:copy:lock"
+KEEP_TABLES = {"db_backups"}           # the nightly backup's own table on the target
+AUTH_COLUMNS = ("id", "email", "encrypted_password", "email_confirmed_at", "raw_user_meta_data",
+                "raw_app_meta_data", "last_sign_in_at", "banned_until", "created_at", "updated_at")
+_COMPAT_SQL = os.path.join(os.path.dirname(__file__), "supabase_compat.sql")
+
+
+def _bin(tool: str) -> str:
+    """PG_TOOLS_DIR lets tests point at wrappers; the image has them on PATH."""
+    d = os.getenv("PG_TOOLS_DIR", "")
+    return os.path.join(d, tool) if d else (shutil.which(tool) or tool)
+
+
+def _scrub(text: str, *dsns: str) -> str:
+    for dsn in dsns:
+        try:
+            pw = urlparse(dsn).password
+        except Exception:  # noqa: BLE001
+            pw = None
+        if pw:
+            text = text.replace(pw, "***")
+    return _re.sub(r"(postgres(?:ql)?://[^:/@\s]+:)[^@\s]+@", r"\1***@", text)
+
+
+class _Log:
+    def __init__(self, rc, dsns):
+        self.rc, self.dsns = rc, dsns
+        self.state: Dict[str, Any] = {"started": time.time(), "steps": [], "status": "running"}
+        self._save()
+
+    def step(self, msg: str, **extra) -> None:
+        self.state["steps"].append({"t": round(time.time() - self.state["started"], 1),
+                                    "msg": _scrub(msg, *self.dsns)[:500], **extra})
+        self._save()
+
+    def done(self, status: str, **extra) -> Dict[str, Any]:
+        self.state.update(status=status, finished=time.time(), **extra)
+        self._save()
+        return self.state
+
+    def _save(self) -> None:
+        try:
+            self.rc.set(COPY_KEY, json.dumps(self.state, default=str), ex=30 * 86400)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _connect(dsn: str):
+    import psycopg2  # noqa: PLC0415
+    conn = psycopg2.connect(dsn, connect_timeout=15)
+    conn.autocommit = True
+    return conn
+
+
+def _public_tables(conn) -> list:
+    with conn.cursor() as cur:
+        cur.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1")
+        return [r[0] for r in cur.fetchall()]
+
+
+def _exact_counts(conn, tables) -> Dict[str, int]:
+    out = {}
+    with conn.cursor() as cur:
+        for t in tables:
+            cur.execute(f'SELECT count(*) FROM public."{t}"')
+            out[t] = int(cur.fetchone()[0])
+        cur.execute("SELECT to_regclass('auth.users') IS NOT NULL")
+        if cur.fetchone()[0]:
+            cur.execute("SELECT count(*) FROM auth.users")
+            out["auth.users"] = int(cur.fetchone()[0])
+    return out
+
+
+def _prepare_target(conn, log) -> bool:
+    """Compat schema; returns whether the Supabase roles exist (else policies are skipped)."""
+    with open(_COMPAT_SQL, encoding="utf-8") as fh:
+        sql = fh.read()
+    roles_sql = _re.search(r"DO \$\$ BEGIN\s+IF NOT EXISTS \(SELECT 1 FROM pg_roles.*?END \$\$;", sql, _re.S).group(0)
+    rest = sql.replace(roles_sql, "")
+    with conn.cursor() as cur:
+        try:
+            cur.execute(roles_sql)
+        except Exception as exc:  # noqa: BLE001
+            log.step(f"roles anon/authenticated/service_role not created ({type(exc).__name__}): RLS policies skipped")
+        cur.execute(rest)
+        cur.execute("SELECT count(*) FROM pg_roles WHERE rolname IN ('anon', 'authenticated', 'service_role')")
+        return cur.fetchone()[0] == 3
+
+
+def _copy_auth_users(src, dst, log) -> int:
+    from psycopg2.extras import Json, execute_values  # noqa: PLC0415
+    with src.cursor() as cur:
+        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = 'auth' AND table_name = 'users'")
+        have = {r[0] for r in cur.fetchall()}
+        cols = [c for c in AUTH_COLUMNS if c in have]
+        cur.execute(f"SELECT {', '.join(cols)} FROM auth.users ORDER BY created_at NULLS FIRST")
+        rows = cur.fetchall()
+    rows = [tuple(Json(v) if isinstance(v, (dict, list)) else v for v in r) for r in rows]
+    with dst.cursor() as cur:
+        cur.execute("ALTER TABLE auth.users DISABLE TRIGGER USER")
+        try:
+            if rows:
+                execute_values(cur, f"INSERT INTO auth.users ({', '.join(cols)}) VALUES %s "
+                                    f"ON CONFLICT (id) DO UPDATE SET "
+                                    + ", ".join(f"{c} = EXCLUDED.{c}" for c in cols if c != "id"), rows)
+        finally:
+            cur.execute("ALTER TABLE auth.users ENABLE TRIGGER USER")
+    log.step(f"auth.users: {len(rows)} accounts copied")
+    return len(rows)
+
+
+def _run(args, log, dsns, *, stdin=None, timeout=900) -> str:
+    p = subprocess.run(args, stdin=stdin, capture_output=True, text=True, timeout=timeout)
+    if p.returncode != 0:
+        raise RuntimeError(_scrub(f"{os.path.basename(args[0])} exit {p.returncode}: {p.stderr.strip()[-1500:]}", *dsns))
+    return p.stdout
+
+
+def copy_all(*, replace: bool = False, rc=None) -> Dict[str, Any]:
+    """Copy Supabase -> target. replace=True drops the target's public tables
+    first (except KEEP_TABLES); without it a target that already holds app
+    tables is refused."""
+    from app.core.redis_client import get_redis  # noqa: PLC0415
+    rc = rc or get_redis()
+    src_dsn, dst_dsn = source_dsn(), target_dsn()
+    log = _Log(rc, (src_dsn, dst_dsn))
+    if not src_dsn or not dst_dsn:
+        return log.done("failed", error="SUPABASE_DB_URL hoặc DATABASE_URL chưa đặt")
+    try:
+        src, dst = _connect(src_dsn), _connect(dst_dsn)
+    except Exception as exc:  # noqa: BLE001
+        return log.done("failed", error=_scrub(f"connect: {exc}", src_dsn, dst_dsn)[:300])
+    try:
+        existing = [t for t in _public_tables(dst) if t not in KEEP_TABLES]
+        if existing and not replace:
+            return log.done("refused", error=f"đích đã có {len(existing)} bảng; chọn 'chép đè' để thay")
+        if existing:
+            with dst.cursor() as cur:
+                for t in existing:
+                    cur.execute(f'DROP TABLE IF EXISTS public."{t}" CASCADE')
+                cur.execute("""SELECT 'DROP ' || CASE p.prokind WHEN 'p' THEN 'PROCEDURE' ELSE 'FUNCTION' END
+                                      || ' IF EXISTS public.' || quote_ident(p.proname)
+                                      || '(' || pg_get_function_identity_arguments(p.oid) || ') CASCADE'
+                                 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                                 LEFT JOIN pg_depend d ON d.objid = p.oid AND d.deptype = 'e'
+                                WHERE n.nspname = 'public' AND d.objid IS NULL""")
+                for (stmt,) in cur.fetchall():
+                    cur.execute(stmt)
+                cur.execute("""SELECT 'DROP ' || CASE c.relkind WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW'
+                                      ELSE 'SEQUENCE' END || ' IF EXISTS public.' || quote_ident(c.relname) || ' CASCADE'
+                                 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                                WHERE n.nspname = 'public' AND c.relkind IN ('v', 'm', 'S')""")
+                for (stmt,) in cur.fetchall():
+                    cur.execute(stmt)
+                cur.execute("""SELECT 'DROP TYPE IF EXISTS public.' || quote_ident(t.typname) || ' CASCADE'
+                                 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+                                WHERE n.nspname = 'public' AND t.typtype IN ('e', 'c', 'd')
+                                  AND NOT EXISTS (SELECT 1 FROM pg_class c WHERE c.reltype = t.oid)""")
+                for (stmt,) in cur.fetchall():
+                    cur.execute(stmt)
+            log.step(f"target: {len(existing)} old tables dropped (kept {sorted(KEEP_TABLES)})")
+        roles_ok = _prepare_target(dst, log)
+        log.step("target: Supabase-compatible auth schema ready")
+        _copy_auth_users(src, dst, log)
+
+        with _tempfile.TemporaryDirectory(prefix="dbmig-") as tmp:
+            dump = os.path.join(tmp, "public.dump")
+            with open(dump, "wb") as fh:
+                p = subprocess.run([_bin("pg_dump"), "-Fc", "--schema=public", "--no-owner", "--no-privileges",
+                                    "-d", src_dsn], stdout=fh, stderr=subprocess.PIPE, timeout=900)
+            if p.returncode != 0:
+                raise RuntimeError(_scrub(f"pg_dump exit {p.returncode}: {p.stderr.decode(errors='replace')[-1500:]}",
+                                          src_dsn, dst_dsn))
+            log.step(f"pg_dump: {round(os.path.getsize(dump) / 1048576, 2)} MB")
+            with open(dump, "rb") as fh:
+                toc = _run([_bin("pg_restore"), "-l"], log, (src_dsn, dst_dsn), stdin=fh)
+            keep, dropped = [], {}
+            for line in toc.splitlines():
+                kind = _toc_kind(line)
+                skip = kind in ("SCHEMA", "COMMENT_SCHEMA", "EXTENSION", "COMMENT_EXTENSION") \
+                    or (kind in ("POLICY", "ROW SECURITY") and not roles_ok)
+                if skip:
+                    dropped[kind] = dropped.get(kind, 0) + 1
+                    line = ";" + line
+                keep.append(line)
+            listing = os.path.join(tmp, "list.txt")
+            with open(listing, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(keep) + "\n")
+            log.step(f"pg_restore: skipping {dropped}" if dropped else "pg_restore: full list")
+            # pg_restore 17 always sends SET transaction_timeout, which a 16
+            # server rejects: render SQL, drop that line, load it with psql in
+            # one transaction.
+            with open(dump, "rb") as fh:
+                script = _run([_bin("pg_restore"), "--no-owner", "--no-privileges", "-L", listing, "-f", "-"],
+                              log, (src_dsn, dst_dsn), stdin=fh)
+            script = "\n".join(l for l in script.splitlines() if not l.startswith("SET transaction_timeout"))
+            sql_path = os.path.join(tmp, "restore.sql")
+            with open(sql_path, "w", encoding="utf-8") as fh:
+                fh.write(script)
+            with open(sql_path, "rb") as fh:
+                _run([_bin("psql"), "-X", "-q", "--single-transaction", "-v", "ON_ERROR_STOP=1",
+                      "-d", dst_dsn], log, (src_dsn, dst_dsn), stdin=fh)
+            log.step(f"restore: done ({round(len(script) / 1048576, 2)} MB of SQL)")
+
+        tables = _public_tables(src)
+        src_counts = _exact_counts(src, tables)
+        dst_counts = _exact_counts(dst, tables)
+        diff = {t: [src_counts.get(t), dst_counts.get(t)] for t in sorted(set(src_counts) | set(dst_counts))
+                if src_counts.get(t) != dst_counts.get(t)}
+        log.step(f"counts: {len(src_counts)} tables compared, {len(diff)} differ")
+        return log.done("ok" if not diff else "mismatch", counts=src_counts, diff=diff)
+    except Exception as exc:  # noqa: BLE001
+        return log.done("failed", error=_scrub(f"{type(exc).__name__}: {exc}", src_dsn, dst_dsn)[:1500])
+    finally:
+        src.close()
+        dst.close()
+
+
+def _toc_kind(line: str) -> str:
+    """pg_restore -l line -> object type ('TABLE', 'POLICY', 'SCHEMA', ...)."""
+    if not line or line.startswith(";"):
+        return ""
+    m = _re.match(r"^\d+;\s*\d+\s+\d+\s+(.*)$", line)
+    if not m:
+        return ""
+    rest = m.group(1)
+    for kind in ("ROW SECURITY", "COMMENT - SCHEMA", "COMMENT - EXTENSION", "TABLE DATA", "SEQUENCE SET",
+                 "FK CONSTRAINT", "DEFAULT ACL", "MATERIALIZED VIEW"):
+        if rest.startswith(kind):
+            return kind.replace("COMMENT - ", "COMMENT_")
+    return rest.split(" ", 1)[0]
+
+
+def copy_in_background(*, replace: bool) -> bool:
+    """Start copy_all in a thread; False when one is already running."""
+    import threading  # noqa: PLC0415
+    from app.core.redis_client import get_redis  # noqa: PLC0415
+    rc = get_redis()
+    if not rc.set(COPY_LOCK, str(os.getpid()), nx=True, ex=1800):
+        return False
+
+    def run():
+        try:
+            copy_all(replace=replace, rc=rc)
+        finally:
+            rc.delete(COPY_LOCK)
+    threading.Thread(target=run, name="dbmig-copy", daemon=True).start()
+    return True
