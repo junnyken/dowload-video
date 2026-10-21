@@ -212,21 +212,26 @@ async def lifespan(app: FastAPI):
     print("Starting Video Downloader API...")
     init_db()
 
-    # Validate that required Supabase columns exist (non-blocking)
-    try:
-        import asyncio as _asyncio
-        from app.core.database import validate_schema
-        await _asyncio.to_thread(validate_schema)
-    except Exception as _schema_err:
-        print(f"[Startup] Schema validation skipped: {_schema_err}")
+    # Schema validation + recovery scan (reclassify jobs stuck in 'processing'
+    # from the last deploy/crash). 21/10: both read Supabase and were awaited
+    # here, so while Supabase timed out uvicorn never opened its port and the
+    # platform's health check rejected the deploy. They now run in the
+    # background; the API serves at once.
+    import asyncio as _asyncio
 
-    # Recovery scan: reclassify jobs stuck in 'processing' from the last deploy/crash
-    try:
-        import asyncio as _asyncio
-        from app.core.recovery import startup_recovery_scan
-        await _asyncio.to_thread(startup_recovery_scan)
-    except Exception as _rec_err:
-        print(f"[Startup] Recovery scan skipped: {_rec_err}")
+    async def _startup_db_checks():
+        try:
+            from app.core.database import validate_schema
+            await _asyncio.wait_for(_asyncio.to_thread(validate_schema), timeout=120)
+        except Exception as _schema_err:
+            print(f"[Startup] Schema validation skipped: {_schema_err}")
+        try:
+            from app.core.recovery import startup_recovery_scan
+            await _asyncio.wait_for(_asyncio.to_thread(startup_recovery_scan), timeout=300)
+        except Exception as _rec_err:
+            print(f"[Startup] Recovery scan skipped: {_rec_err}")
+
+    _startup_db_task = _asyncio.create_task(_startup_db_checks())
 
     # JS runtime yt-dlp's iq.com (iQIYI) extractor needs (PhantomJS).
     try:
