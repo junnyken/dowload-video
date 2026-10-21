@@ -24,7 +24,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::webview::cookie::{time::OffsetDateTime, Cookie};
 use tauri::webview::NewWindowResponse;
-use tauri::{AppHandle, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 pub const LABEL_PREFIX: &str = "list-page-";
 /// Whole listing, window creation to answer: the script's own limit
@@ -70,9 +70,15 @@ pub async fn run<R: Runtime>(app: &AppHandle<R>, target: &Target, cookies: Vec<R
     let asm = Arc::new(Mutex::new(Assembler::default()));
     let kind = target.kind;
     let start = url::Url::parse("about:blank").expect("static URL");
-    let mut builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::External(start))
-        .inner_size(1280.0, 860.0)
-        .incognito(true);
+    let mut builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::External(start)).inner_size(1280.0, 860.0);
+    // 0.18.3: Douyin shows a profile's header but no video grid to a fresh
+    // InPrivate session (owner's Windows test 21/10). Its window keeps its
+    // own profile instead (separate from the app's, cookies kept between
+    // scans), so a check / login done once in "Mở trang Douyin" sticks.
+    builder = match (kind, app.path().app_local_data_dir()) {
+        (page_listing::Kind::Douyin, Ok(dir)) => builder.incognito(false).data_directory(dir.join("webview-douyin")),
+        _ => builder.incognito(true),
+    };
     builder = if show {
         // wording: BA review
         builder

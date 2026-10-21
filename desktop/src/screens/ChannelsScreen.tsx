@@ -87,14 +87,19 @@ function ChannelCard({ c, onReview, onEdit }: { c: Channel; onReview: () => void
 
 // 0.18.2 (owner 21/10): how many videos to list; "Tất cả" = the whole channel
 // (the app's / server's own maximum). Downloads are capped later, in the picker.
-const COUNTS = ['all', '50', '100', '200', '500'] as const;
+const COUNTS = ['all', '50', '100', '200', '500', 'custom'] as const;
 const ALL_LIMIT = 5000; // channels.rs MAX_LIMIT; Douyin asks for at most 500 (douyin-core DOUYIN_ALL)
-const countLimit = (c: string) => (c === 'all' ? ALL_LIMIT : Number(c));
+const countLimit = (c: string, custom: string) => {
+  if (c === 'all') return ALL_LIMIT;
+  const n = Math.round(Number(c === 'custom' ? custom : c));
+  return Number.isFinite(n) && n >= 1 ? Math.min(ALL_LIMIT, n) : ALL_LIMIT;
+};
 
 // wording: BA review
 const STAGE_TEXT: Record<DouyinStage, string> = {
   server: 'Đang lấy các video mới nhất của kênh…',
   page: 'Đang đọc toàn bộ kênh trên Douyin (kênh nhiều video có thể mất 1–3 phút)…',
+  pageShown: 'Cửa sổ Douyin đã mở: nếu Douyin hỏi đăng nhập hoặc xác minh, hãy làm ngay trong cửa sổ đó — ứng dụng tự cuộn và đọc danh sách.',
   deep: 'Đang lấy thêm video qua máy chủ VidGrab…',
 };
 
@@ -108,13 +113,14 @@ export function ChannelsScreen() {
   const [review, setReview] = useState<string | null>(null);
   const [edit, setEdit] = useState<string | null>(null);
   const [count, setCount] = useState<string>('all');
+  const [custom, setCustom] = useState('');
   const stage = douyinStage.use();
 
   useEffect(() => {
     if (pre) { setText(pre); setMsg(null); channelPrefill.set(null); }
   }, [pre]);
 
-  function start(limit = countLimit(count)) {
+  function start(limit = countLimit(count, custom)) {
     const first = parseUrls(text).valid[0];
     if (!first) { setMsg('Hãy dán một liên kết kênh hợp lệ (bắt đầu bằng http:// hoặc https://).'); return; }
     setMsg(null);
@@ -140,8 +146,16 @@ export function ChannelsScreen() {
             />
             {/* wording: BA review */}
             <Select label="Số video" value={count} onChange={setCount} className="w-[175px]">
-              {COUNTS.map((c) => <option key={c} value={c}>{c === 'all' ? 'Tất cả video' : `${c} video mới nhất`}</option>)}
+              {COUNTS.map((c) => <option key={c} value={c}>{c === 'all' ? 'Tất cả video' : c === 'custom' ? 'Tự nhập số video…' : `${c} video mới nhất`}</option>)}
             </Select>
+            {count === 'custom' && (
+              <input
+                type="number" min={1} max={ALL_LIMIT} inputMode="numeric" aria-label="Số video cần lấy" placeholder="Số video"
+                value={custom} disabled={loading} onChange={(e) => setCustom(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !loading) start(); }}
+                className="h-9 w-[100px] rounded-[10px] border border-line-strong bg-canvas px-2 text-sm text-fg placeholder:text-fg-muted"
+              />
+            )}
             <Button variant="primary" icon={loading ? <Spinner /> : <ListVideo size={16} />} disabled={loading || !text.trim()} onClick={() => start()}>Lấy danh sách video</Button>
           </div>
           {isDouyinUrl(text.trim()) && <p className="mt-2 text-xs text-fg-muted">Douyin: dán link trang cá nhân hoặc link một video của kênh — ứng dụng tìm kênh của tác giả. Ứng dụng lấy toàn bộ kênh (hoặc số video bạn chọn); số lượt tải trong ngày chỉ tính khi bạn tải video về. Kênh Douyin chỉ được quét khi bạn bấm, không tự kiểm tra nền.</p>}{/* wording: BA review */}

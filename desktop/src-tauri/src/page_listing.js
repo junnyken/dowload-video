@@ -86,6 +86,21 @@
     const verify = document.querySelector('#captcha_container, .captcha_verify_container, [id*="captcha"], [class*="captcha"]');
     if (verify) S.verify = true;
     if (verify && !SHOW && S.items.size === 0 && elapsed > 15000) return send({ meta, error: "verify" });
+    // 0.18.3: a fresh session can get the header but no grid (owner's test
+    // 21/10). Reload once after 20 s (the first visit has set Douyin's
+    // cookies by then); still nothing 25 s after that → answer "empty" now
+    // instead of waiting the whole MAXMS. A shown window waits: the user
+    // may be logging in / solving a check.
+    if (!SHOW && S.items.size === 0) {
+      let reloaded = false;
+      try { reloaded = sessionStorage.getItem("__vgReloaded") === "1"; } catch (e) { /* storage off */ }
+      if (!reloaded && elapsed > 20000) {
+        try { sessionStorage.setItem("__vgReloaded", "1"); } catch (e) { /* storage off */ }
+        location.reload();
+        return;
+      }
+      if (reloaded && elapsed > 25000) return send({ meta, items: [], error: S.verify ? "verify" : "empty" });
+    }
   }
 
   if (S.items.size === S.last) S.still += 1; else { S.still = 0; S.last = S.items.size; }

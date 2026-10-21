@@ -221,14 +221,20 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
                 <p className="flex items-start gap-1.5">
                   <Puzzle size={13} className="mt-px shrink-0 text-accent" aria-hidden />
                   <span>
-                    Kênh này còn nhiều video hơn nhưng máy chủ chỉ lấy được {listing.videos.length} video mới nhất.
-                    Muốn lấy đầy đủ, hãy mở trang kênh trên Douyin bằng Chrome và dùng tiện ích VidGrab.
+                    Kênh này còn nhiều video hơn nhưng mới lấy được {listing.videos.length} video mới nhất.
+                    Bấm “Mở trang Douyin để lấy đủ kênh”: ứng dụng mở trang kênh, tự cuộn và đọc hết (nếu Douyin hỏi đăng nhập hoặc xác minh, làm ngay trong cửa sổ đó). Hoặc dùng tiện ích VidGrab trên Chrome.
                   </span>
                 </p>
-                <Button size="sm" className="mt-2"
-                  onClick={() => { api.openUrl(`${WEBSITE_URL}/extension`).catch(() => toast('error', 'Không mở được trình duyệt.')); }}>
-                  Cài tiện ích VidGrab
-                </Button>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {/* 0.18.3: read the whole channel in a window the user sees (login / check there if Douyin asks) */}
+                  <Button size="sm" variant="primary" disabled={more} onClick={() => void fetchListing(listing.url, limit, false, true)}>
+                    Mở trang Douyin để lấy đủ kênh
+                  </Button>
+                  <Button size="sm"
+                    onClick={() => { api.openUrl(`${WEBSITE_URL}/extension`).catch(() => toast('error', 'Không mở được trình duyệt.')); }}>
+                    Cài tiện ích VidGrab
+                  </Button>
+                </div>
               </div>
             )}
           </div>

@@ -39,14 +39,17 @@ function page(batches: Link[][], opts: { end?: boolean; container?: boolean } = 
     },
   };
   const titles: string[] = [];
+  const store = new Map<string, string>();
+  const session = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); } };
+  const loc = { href: 'https://www.douyin.com/user/MS4wX', reloads: 0, reload() { this.reloads++; delete (win as Record<string, unknown>).__vgList; } };
   const run = (limit: number, maxMs = 150000) => {
     const code = SRC.replaceAll('%KIND%', 'douyin').replaceAll('%LIMIT%', String(limit))
       .replaceAll('%MAXMS%', String(maxMs)).replaceAll('%SHOW%', 'false');
-    new Function('window', 'document', 'location', 'setTimeout', code)(
-      win, doc, { href: 'https://www.douyin.com/user/MS4wX' }, (f: () => void) => timers.push(f));
+    new Function('window', 'document', 'location', 'setTimeout', 'sessionStorage', code)(
+      win, doc, loc, (f: () => void) => timers.push(f), session);
     while (timers.length) { timers.shift()!(); titles.push(doc.title); }
   };
-  return { run, box, win, titles, answer: () => {
+  return { run, box, win, titles, loc, answer: () => {
     const parts = titles.filter((t) => t.startsWith('VGL:'));
     if (!parts.length) return null;
     const n = Number(/^VGL:\d+\/(\d+):/.exec(parts[0])![1]);
@@ -93,4 +96,27 @@ test('no container: the window scrolls instead', () => {
   const p = page([[link(ID(1))], [link(ID(2))]], { container: false });
   p.run(500);
   assert.equal(p.win.winScrolled, 1);
+});
+
+test('empty grid: one reload after 20 s, then "empty" 25 s later instead of waiting MAXMS', () => {
+  const p = page([[]]);
+  const realNow = Date.now;
+  let now = 1_000_000;
+  Date.now = () => now;
+  try {
+    p.run(500);                        // t0
+    now += 21_000; p.run(500);         // 21 s, nothing → reload
+    assert.equal(p.loc.reloads, 1);
+    assert.equal(p.answer(), null);
+    now += 1_000; p.run(500);          // fresh page state after the reload
+    now += 10_000; p.run(500);
+    assert.equal(p.loc.reloads, 1);    // no second reload
+    assert.equal(p.answer(), null);
+    now += 16_000; p.run(500);         // 26 s after the reload
+    const a = p.answer();
+    assert.ok(a);
+    assert.deepEqual([a.items.length, a.error], [0, 'empty']);
+  } finally {
+    Date.now = realNow;
+  }
 });

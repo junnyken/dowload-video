@@ -84,7 +84,7 @@ export function toListing(c: DouyinChannel): ChannelListing {
 }
 
 /** Which step of a Douyin channel scan is running (the Channels screen's loading text). */
-export type DouyinStage = 'server' | 'page' | 'deep';
+export type DouyinStage = 'server' | 'page' | 'pageShown' | 'deep';
 export const douyinStage = createStore<DouyinStage | null>(null);
 
 /**
@@ -103,7 +103,7 @@ export async function fetchDouyinListing(url: string, limit: number, showPage = 
     douyinStage.set('server');
     const first = toListing(await douyinChannel(url, limit));
     if (!needsMore(first, limit)) return first;
-    douyinStage.set('page');
+    douyinStage.set(showPage ? 'pageShown' : 'page');
     const page = await api.channelFetch(first.url, limit, undefined, showPage || undefined).catch(() => null);
     if (listsMore(first, page)) return mergeListings(first, page, limit);
     if (auth.get().status !== 'in') return first;
