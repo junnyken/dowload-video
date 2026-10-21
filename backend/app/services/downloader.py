@@ -2108,25 +2108,30 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 # downloads the (not IP-bound) CDN URL directly, and (b) no
                 # video bytes go through the per-GB CN residential proxy
                 # (Phase 32B-1 section 10: proxy is metadata-only).
+                # The budget covers the free signed path too (measured
+                # 2026-10-21: an 80 MB video from a signed listing held a
+                # worker 4 min 20 s at ~0.3 MB/s; its CDN URL also played from
+                # another IP and without a douyin.com Referer).
                 import time as _t
                 _managed = str(result.get("provider") or "").startswith("apify")
-                _deadline = None
-                if _managed:
-                    try:
-                        _budget = float(os.getenv("CHINA_ACCESS_MANAGED_SERVER_DOWNLOAD_BUDGET_SEC", "45"))
-                    except ValueError:
-                        _budget = 45.0
-                    _deadline = _t.monotonic() + max(5.0, _budget)
+                try:
+                    _budget = float(os.getenv("CHINA_ACCESS_MANAGED_SERVER_DOWNLOAD_BUDGET_SEC", "45"))
+                except ValueError:
+                    _budget = 45.0
+                _deadline = _t.monotonic() + max(5.0, _budget)
+                _over_budget = False
 
                 def _stream_to_file(client: httpx.Client) -> bool:
+                    nonlocal _over_budget
                     try:
                         with client.stream("GET", cdn_url) as resp:
                             resp.raise_for_status()
                             with open(local_path, "wb") as f:
                                 for chunk in resp.iter_bytes(chunk_size=65536):
                                     f.write(chunk)
-                                    if _deadline is not None and _t.monotonic() > _deadline:
-                                        raise TimeoutError("managed server download budget exceeded")
+                                    if _t.monotonic() > _deadline:
+                                        _over_budget = True
+                                        raise TimeoutError("server download budget exceeded")
                         return os.path.exists(local_path) and os.path.getsize(local_path) > 0
                     except Exception:
                         if os.path.exists(local_path):
@@ -2156,11 +2161,12 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 except Exception:
                     pass
 
-                # Attempt 2: CN proxy fallback (only if direct failed; never
-                # for managed results — see the budget note above)
-                if not _downloaded and _managed:
-                    print("[Downloader] Douyin (managed): server copy not finished in budget — handing the CDN URL to the client")
-                if not _downloaded and IPROYAL_PROXY_CN and not _managed:
+                # Attempt 2: CN proxy fallback (only if direct was refused;
+                # never for managed results, never for a slow but working CDN
+                # — see the budget note above)
+                if not _downloaded and (_managed or _over_budget):
+                    print("[Downloader] Douyin: server copy not finished in budget — handing the CDN URL to the client")
+                if not _downloaded and IPROYAL_PROXY_CN and not _managed and not _over_budget:
                     print("[Downloader] Douyin: direct failed — retrying via CN proxy")
                     try:
                         with httpx.Client(

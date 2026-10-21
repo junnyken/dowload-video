@@ -3,8 +3,10 @@
 /fetch-link because the server copy crawled at ~0.2 MB/s from the CDN, then
 retried through the per-GB CN residential proxy, then handed the CDN URL
 over anyway. For managed (Apify) results the server copy now stops after a
-time budget and never goes through the CN proxy; native results keep the
-old behaviour.
+time budget and never goes through the CN proxy.
+
+2026-10-21: the same budget covers native results (the free signed path).
+A native result whose direct copy is refused still retries via the CN proxy.
 """
 import itertools
 
@@ -104,3 +106,30 @@ def test_native_result_still_tries_cn_proxy(monkeypatch, slow_cdn):
     out = downloader._extract_video_info_impl(DY_URL, "video")
     assert out["direct_mp4_url"] == SIGNED
     assert slow_cdn.clients == [None, "http://cn-proxy.invalid:1"]
+
+
+def _native_signed(monkeypatch):
+    monkeypatch.setattr(integration, "resolve_douyin_via_access_layer", lambda *a, **k: None)
+    monkeypatch.setattr(downloader, "extract_douyin_video_sync",
+                        lambda *a, **k: {"title": "t", "direct_mp4_url": SIGNED,
+                                         "provider": "douyin_signed"})
+
+
+def test_native_slow_cdn_hands_off_after_budget_without_cn_proxy(monkeypatch, slow_cdn):
+    """2026-10-21: an 80 MB video from the signed listing held a worker
+    4 min 20 s. A slow but working CDN now stops at the budget too, and is
+    not retried through the per-GB proxy."""
+    _native_signed(monkeypatch)
+    out = downloader._extract_video_info_impl(DY_URL, "video")
+    assert out["direct_mp4_url"] == SIGNED
+    assert not out.get("local_file_path")
+    assert slow_cdn.clients == [None]
+
+
+def test_native_fast_cdn_still_copied_by_the_server(monkeypatch, slow_cdn):
+    monkeypatch.setenv("CHINA_ACCESS_MANAGED_SERVER_DOWNLOAD_BUDGET_SEC", "1000")
+    _native_signed(monkeypatch)
+    out = downloader._extract_video_info_impl(DY_URL, "video")
+    assert out.get("local_file_path")
+    assert out["direct_mp4_url"] is None
+    assert slow_cdn.clients == [None]
