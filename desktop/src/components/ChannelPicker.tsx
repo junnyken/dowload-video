@@ -225,6 +225,7 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
                     Bấm “Mở trang Douyin để lấy đủ kênh”: ứng dụng mở trang kênh, tự cuộn và đọc hết (nếu Douyin hỏi đăng nhập hoặc xác minh, làm ngay trong cửa sổ đó). Hoặc dùng tiện ích VidGrab trên Chrome.
                   </span>
                 </p>
+                {listing.pageNote && <p className="mt-1.5 select-text break-all font-mono text-[10px] text-fg-muted">Chẩn đoán: {listing.pageNote}</p>}
                 <div className="mt-2 flex flex-wrap gap-2">
                   {/* 0.18.3: read the whole channel in a window the user sees (login / check there if Douyin asks) */}
                   <Button size="sm" variant="primary" disabled={more} onClick={() => void fetchListing(listing.url, limit, false, true)}>

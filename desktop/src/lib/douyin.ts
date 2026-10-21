@@ -7,7 +7,7 @@ import { auth, getAccessToken } from './auth';
 import { api } from './tauri';
 import { createStore } from './store';
 import { DOUYIN_ALL, listsMore, mergeListings, needsMore } from './douyin-core';
-import { rememberServerMessage } from './errors';
+import { rememberServerMessage, toAppError } from './errors';
 import { douyinVideoId } from './urls';
 import type { ChannelListing, ProbeResult } from './types';
 
@@ -104,13 +104,23 @@ export async function fetchDouyinListing(url: string, limit: number, showPage = 
     const first = toListing(await douyinChannel(url, limit));
     if (!needsMore(first, limit)) return first;
     douyinStage.set(showPage ? 'pageShown' : 'page');
-    const page = await api.channelFetch(first.url, limit, undefined, showPage || undefined).catch(() => null);
+    let pageNote: string | null = null; // 0.18.4: why the page step gave nothing (shown in the picker)
+    const page = await api.channelFetch(first.url, limit, undefined, showPage || undefined).catch((e: unknown) => {
+      const err = toAppError(e);
+      pageNote = `${err.code}${err.message ? `: ${err.message}` : ''}`.slice(0, 240);
+      return null;
+    });
+    const pageCount = page ? page.videos.length : null;
     if (listsMore(first, page)) return mergeListings(first, page, limit);
-    if (auth.get().status !== 'in') return first;
+    if (!pageNote && pageCount != null) pageNote = `page listed ${pageCount}`;
+    const withNote = { ...first, pageNote };
+    if (auth.get().status !== 'in') return withNote;
     douyinStage.set('deep');
+    let deepNote: string | null = null;
     const deep = await post<DouyinChannel>('/api/v1/client/douyin/channel', { url: first.url, limit: clampLimit(limit), deep: true })
-      .then(toListing, () => null);
-    return listsMore(first, deep) ? { ...deep, cap: undefined, moreHint: null } : first;
+      .then(toListing, (e: unknown) => { deepNote = toAppError(e).code; return null; });
+    if (listsMore(first, deep)) return { ...deep, cap: undefined, moreHint: null };
+    return { ...withNote, pageNote: [pageNote, deepNote && `server: ${deepNote}`].filter(Boolean).join(' · ') || null };
   } finally {
     douyinStage.set(null);
   }

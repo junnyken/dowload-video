@@ -1418,6 +1418,13 @@ async fn page_list(app: &AppHandle, jobs: &State<'_, Jobs>, url: &str, t: &page_
         Ok(listing) => return Ok(listing),
         Err(e) => e,
     };
+    // 0.18.4: what the Douyin page saw (its own list requests, the WebView2
+    // signs), short and without cookies or URLs, so a failure on the owner's
+    // machine says where it stopped.
+    let diag: String = serde_json::from_str::<serde_json::Value>(&answer)
+        .ok()
+        .and_then(|j| j.get("diag").and_then(serde_json::Value::as_str).map(|d| d.chars().filter(|c| c.is_ascii_graphic() || *c == ' ').take(160).collect()))
+        .unwrap_or_default();
     // The page gave the TikTok channel id but no visible videos: yt-dlp lists
     // by that id ("tiktokuser:<secUid>", the route yt-dlp itself suggests).
     if let page_listing::PageError::Empty { sec_uid: Some(id), title, thumbnail, .. } = &err {
@@ -1441,7 +1448,11 @@ async fn page_list(app: &AppHandle, jobs: &State<'_, Jobs>, url: &str, t: &page_
         page_listing::PageError::Private => CommandError::new(Code::PrivateOrLogin, "this account is private"),
         page_listing::PageError::Empty { sec_uid, status, .. } => CommandError::new(
             Code::ChannelPageEmpty,
-            format!("the channel page showed no videos (status {status}, channel id {})", if sec_uid.is_some() { "found" } else { "missing" }),
+            format!(
+                "the channel page showed no videos (status {status}, channel id {}){}",
+                if sec_uid.is_some() { "found" } else { "missing" },
+                if diag.is_empty() { String::new() } else { format!(" [{diag}]") }
+            ),
         ),
         page_listing::PageError::Bad => CommandError::unknown("the channel page gave an unexpected answer"),
     })

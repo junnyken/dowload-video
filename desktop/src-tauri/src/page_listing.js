@@ -17,6 +17,20 @@
   if (S.parts) return emit();
   const abs = (h) => { try { return new URL(h, location.href).href; } catch (e) { return ""; } };
   const clip = (t) => (t || "").replace(/\s+/g, " ").trim().slice(0, 200);
+  // 0.18.4: why a Douyin grid stayed empty — the page's own list requests
+  // (count, HTTP status, bytes), the WebView2 signs, cookie count. No URLs,
+  // no cookie values.
+  const douyinDiag = () => {
+    let posts = [];
+    try { posts = performance.getEntriesByType("resource").filter((e) => /\/aweme\/v1\/web\/aweme\/post\//.test(e.name)); } catch (e) { /* none */ }
+    const st = posts.map((e) => e.responseStatus || 0).join("/") || "-";
+    const bytes = posts.reduce((n, e) => n + (e.transferSize || 0), 0);
+    let brands = "?";
+    try { brands = ((navigator.userAgentData && navigator.userAgentData.brands) || []).some((b) => /webview/i.test(b.brand)) ? "wv" : "edge"; } catch (e) { /* none */ }
+    const wv = !!(window.chrome && window.chrome.webview);
+    const ck = (document.cookie || "").split(";").filter((c) => c.trim()).length;
+    return "post=" + posts.length + " st=" + st + " b=" + bytes + " ua=" + brands + " cw=" + (wv ? 1 : 0) + " ck=" + ck + " login=" + (document.querySelector('[data-e2e="login-button"], #login-pannel') ? 1 : 0);
+  };
   const send = (obj) => {
     const text = JSON.stringify(obj);
     S.parts = [];
@@ -99,7 +113,7 @@
         location.reload();
         return;
       }
-      if (reloaded && elapsed > 25000) return send({ meta, items: [], error: S.verify ? "verify" : "empty" });
+      if (reloaded && elapsed > 25000) return send({ meta, items: [], error: S.verify ? "verify" : "empty", diag: douyinDiag() });
     }
   }
 
@@ -108,7 +122,8 @@
   const stillMax = KIND === "douyin" ? (S.end ? 2 : 8) : 4;
   if (S.items.size >= LIMIT || (S.items.size > 0 && S.still >= stillMax) || elapsed > MAXMS) {
     const why = S.items.size ? null : S.verify ? "verify" : S.login ? "login" : "empty";
-    return send({ meta, status: S.status || meta.status || 0, items: Array.from(S.items.values()).slice(0, LIMIT), error: why });
+    const diag = KIND === "douyin" && !S.items.size ? douyinDiag() : undefined;
+    return send({ meta, status: S.status || meta.status || 0, items: Array.from(S.items.values()).slice(0, LIMIT), error: why, diag });
   }
   const box = KIND === "douyin" && document.querySelector(".route-scroll-container");
   if (box && box.scrollHeight > box.clientHeight + 50) box.scrollBy(0, Math.max(800, box.clientHeight * 2));

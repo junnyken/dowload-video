@@ -110,6 +110,7 @@ export type ChannelListing = {
   truncated: boolean;
   cap?: number; // Douyin: how many downloads the person still has today (the listing is cut to this)
   moreHint?: string | null; // Douyin: 'douyin_extension' when the channel has more than the server listed
+  pageNote?: string | null; // Douyin (0.18.4): why the app's page window listed nothing more — diagnostic text
 };
 
 export type ChannelMode = 'download' | 'notify';

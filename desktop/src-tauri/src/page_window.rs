@@ -27,6 +27,8 @@ use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 pub const LABEL_PREFIX: &str = "list-page-";
+/// 0.18.4: hides the WebView2-only signs from Douyin's scripts (see the file).
+const DOUYIN_INIT: &str = include_str!("douyin_init.js");
 /// Whole listing, window creation to answer: the script's own limit
 /// (page_listing::max_ms) plus time to open the page and send the answer.
 const SLACK: Duration = Duration::from_secs(20);
@@ -76,7 +78,7 @@ pub async fn run<R: Runtime>(app: &AppHandle<R>, target: &Target, cookies: Vec<R
     // own profile instead (separate from the app's, cookies kept between
     // scans), so a check / login done once in "Mở trang Douyin" sticks.
     builder = match (kind, app.path().app_local_data_dir()) {
-        (page_listing::Kind::Douyin, Ok(dir)) => builder.incognito(false).data_directory(dir.join("webview-douyin")),
+        (page_listing::Kind::Douyin, Ok(dir)) => builder.incognito(false).data_directory(dir.join("webview-douyin")).initialization_script(DOUYIN_INIT),
         _ => builder.incognito(true),
     };
     builder = if show {
