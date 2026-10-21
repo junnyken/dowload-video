@@ -31,6 +31,7 @@ import TakedownAdminPage from './pages/TakedownAdminPage'
 import SwitchesPage from './pages/SwitchesPage'
 import PlatformHealthPage from './pages/PlatformHealthPage'
 import CapacityPage from './pages/CapacityPage'
+import DatabasePage from './pages/DatabasePage'
 import { PlatformsHubPage, QueueHubPage, AutomationHubPage } from './pages/MergedPages'
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -66,6 +67,7 @@ export function AdminRoutes() {
       <Route path="/vid-admin/platform-health"    element={<Shell><PlatformHealthPage /></Shell>} />
       <Route path="/vid-admin/switches"           element={<Shell><SwitchesPage /></Shell>} />
       <Route path="/vid-admin/capacity"           element={<Shell><CapacityPage /></Shell>} />
+      <Route path="/vid-admin/database"           element={<Shell><DatabasePage /></Shell>} />
       <Route path="/vid-admin/metrics"            element={<Shell><MetricsPage /></Shell>} />
       <Route path="/vid-admin/audit"     element={<Shell><AuditLogPage /></Shell>} />
 

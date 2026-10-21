@@ -39,3 +39,23 @@ def test_probe_reads_both_databases(monkeypatch):
     assert rep["source"]["ok"] and rep["target"]["ok"]
     assert rep["source"]["server_version"].startswith("16")
     assert isinstance(rep["source"]["tables"], list)
+
+
+def test_admin_endpoints(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app as fastapi_app
+    from app.api.admin import verify_admin
+    r = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr("app.core.redis_client._client", r)
+    monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://u:TopSecret@127.0.0.1:1/x")
+    client = TestClient(fastapi_app, raise_server_exceptions=False)
+    assert client.get("/api/v1/admin/db-migration").status_code in (401, 403)
+    fastapi_app.dependency_overrides[verify_admin] = lambda: None
+    try:
+        assert client.get("/api/v1/admin/db-migration").json()["probe"] is None
+        body = client.post("/api/v1/admin/db-migration/probe")
+        assert body.status_code == 200 and "TopSecret" not in body.text
+        assert body.json()["probe"]["source"]["ok"] is False
+        assert client.get("/api/v1/admin/db-migration").json()["probe"]["source"]["ok"] is False
+    finally:
+        fastapi_app.dependency_overrides.pop(verify_admin, None)

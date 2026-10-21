@@ -604,6 +604,9 @@ app.include_router(admin_asr_router, prefix="/api/v1/admin", tags=["Admin ASR"])
 # Phase 32B-1 — China Platform Access Layer admin (read + kill switch/mode)
 from app.api.admin_china_platforms import router as admin_china_router
 app.include_router(admin_china_router, prefix="/api/v1/admin", tags=["Admin China Access"])
+# 21/10/2026 — moving the database to the Vibe Host Postgres (probe only for now)
+from app.api.admin_db_migration import router as admin_db_migration_router
+app.include_router(admin_db_migration_router, prefix="/api/v1/admin", tags=["Admin DB Migration"])
 # Task #6332 follow-up — emergency switches operable from the admin page
 from app.api.admin_switches import router as admin_switches_router
 app.include_router(admin_switches_router, prefix="/api/v1/admin", tags=["Admin Switches"])
