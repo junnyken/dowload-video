@@ -6,12 +6,15 @@ cookies). These two routes let the server do the part it can — the managed
 Apify route of the China access layer — and hand the app a direct media URL
 it downloads itself.
 
-  POST /client/douyin/channel  {url, limit}
+  POST /client/douyin/channel  {url, limit, deep?}
       List the newest videos of a Douyin profile (or of the author of a
-      Douyin video link: one extra managed call to read the author id). Nothing is counted; the
-      scan is capped at what the requester can still download today (guest
-      ≤ 5, signed-in ≤ 20, admin ≤ 100), and every listed video is cached so
-      the call below costs nothing more for it.
+      Douyin video link: one extra managed call to read the author id).
+      Nothing is counted. The free signed listing answers first (one page,
+      ~41 videos, not capped by the allowance since 21/10); the paid Apify
+      run (signed listing refused, or `deep` from a signed-in user) is
+      capped at what the requester can still download today, or at
+      CHINA_ACCESS_DOUYIN_CHANNEL_DEEP_MAX for `deep`. Every listed video is
+      cached so the call below costs nothing more for it.
   POST /client/douyin/video    {url}
       Direct media URL for one Douyin video (a cache hit after a channel
       scan, otherwise one budgeted managed resolve). Counts one download
@@ -50,6 +53,7 @@ class ChannelIn(BaseModel):
     model_config = ConfigDict(extra="ignore")
     url: str = Field(min_length=8, max_length=2048)
     limit: int = Field(default=20, ge=1, le=500)
+    deep: bool = False
 
 
 class VideoIn(BaseModel):
@@ -95,30 +99,65 @@ _STATUS = {"unsupported_url": 400, "platform_disabled": 503, "quota_exceeded": 4
            "provider_unavailable": 503}
 
 
-async def _signed_channel(url: str, limit: int, cap_ctx) -> Optional[dict]:
+_SIGNED_LIST_KEY = "douyin:signed:profile:{}"
+_SIGNED_LIST_TTL_S = 600
+
+
+def _cached_signed(sec_uid: str, n: int) -> Optional[dict]:
+    """A listing of this profile from the last 10 minutes that covers n videos
+    (it had n, or Douyin had no more): re-scans cost no visitor slot."""
+    import json  # noqa: PLC0415
+    try:
+        from app.services import douyin_visitor  # noqa: PLC0415
+        raw = douyin_visitor._redis().get(_SIGNED_LIST_KEY.format(sec_uid))
+        listed = json.loads(raw) if raw else None
+    except Exception:  # noqa: BLE001 — the cache only saves calls
+        return None
+    if not listed or (len(listed["videos"]) < n and listed["has_more"]):
+        return None
+    return {**listed, "videos": listed["videos"][:n], "video_ids": listed["video_ids"][:n]}
+
+
+def _remember_signed(sec_uid: str, listed: dict) -> None:
+    import json  # noqa: PLC0415
+    try:
+        from app.services import douyin_visitor  # noqa: PLC0415
+        douyin_visitor._redis().set(_SIGNED_LIST_KEY.format(sec_uid), json.dumps(listed), ex=_SIGNED_LIST_TTL_S)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+async def _signed_channel(url: str, limit: int) -> Optional[dict]:
     """The free signed listing (20/10) before the managed Apify run, same
     answer shape plus hasMore / moreHint. None = fall through: a video link
-    (its author is read by the managed route), no allowance left (that route
-    words the refusal), no visitor jar, or Douyin refused."""
+    (its author is read by the managed route), no visitor jar, or Douyin
+    refused.
+
+    21/10 (owner): listing is not capped by the downloads left today — only
+    downloading counts. It is free, at most one page (~41 videos), and a
+    re-scan within 10 minutes is served from Redis."""
     import asyncio  # noqa: PLC0415
     from app.services.china_platforms import channel_listing  # noqa: PLC0415
     from app.services.douyin_extractor import _resolve_short_url, signed_profile_listing  # noqa: PLC0415
+    from app.services.douyin_sign import POST_MAX_COUNT  # noqa: PLC0415
     from app.services.downloader import CHANNEL_HINT_DOUYIN_EXTENSION  # noqa: PLC0415
     try:
         sec_uid = channel_listing.sec_uid_of(url) or channel_listing.sec_uid_of(await _resolve_short_url(url))
         if not sec_uid:
             return None
-        n = min(int(limit), channel_listing.listing_cap(cap_ctx))
-        if n <= 0:
-            return None
-        listed, why = await asyncio.to_thread(signed_profile_listing, sec_uid, n)
+        n = max(1, min(int(limit), POST_MAX_COUNT))
+        listed = _cached_signed(sec_uid, n)
+        if listed is None:
+            listed, why = await asyncio.to_thread(signed_profile_listing, sec_uid, n)
+            if listed and listed["videos"]:
+                _remember_signed(sec_uid, listed)
     except Exception as exc:  # noqa: BLE001
         logger.warning("client douyin signed listing error %s", type(exc).__name__)
         return None
     if not listed or not listed["videos"]:
         return None
     videos = listed["videos"]
-    more = listed["has_more"] and len(videos) < n
+    more = listed["has_more"] and len(videos) < int(limit)
     return {
         "platform": PLATFORM,
         "channelTitle": listed["channel_title"] or f"Douyin {sec_uid[:12]}…",
@@ -152,11 +191,18 @@ async def douyin_channel(payload: ChannelIn, request: Request, user=Depends(get_
     # bucket. Provider budgets stay on the IP.
     req = _requester(request, user)
     cap_key = req.key if req.kind == "device" else None
+    # deep (21/10): the app could not read the whole channel in its own page
+    # window, so a signed-in user may have the paid Apify run list past the
+    # free first page, up to CHINA_ACCESS_DOUYIN_CHANNEL_DEEP_MAX. Guests keep
+    # the allowance cap on any paid listing.
+    from app.services.china_platforms import settings as ca_settings  # noqa: PLC0415
+    deep_cap = ca_settings.douyin_channel_deep_max() if (payload.deep and user) else None
     try:
-        signed = await _signed_channel(url, payload.limit, ctx.with_(requester_key=cap_key) if cap_key else ctx)
-        if signed is not None:
-            return signed
-        listing = await channel_listing.list_douyin_profile(url, payload.limit, ctx, cap_key=cap_key)
+        if not payload.deep:
+            signed = await _signed_channel(url, payload.limit)
+            if signed is not None:
+                return signed
+        listing = await channel_listing.list_douyin_profile(url, payload.limit, ctx, cap_key=cap_key, cap=deep_cap)
     except channel_listing.ChannelListingError as exc:
         return _err(_STATUS.get(exc.code, 503), str(exc), exc.code)
     finally:

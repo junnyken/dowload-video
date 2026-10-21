@@ -184,13 +184,58 @@ class TestSignedListing:
         assert body["hasMore"] is True and body["moreHint"] == "douyin_extension"
         assert on.starts() == []                                          # no Apify run
 
-    def test_guest_cap_still_applies(self, on, rc, monkeypatch):
-        self._signed_page(monkeypatch, rc, {"status_code": 0, "has_more": 1,
+    def test_listing_is_not_capped_by_the_allowance(self, on, rc, monkeypatch):
+        """21/10 (owner): listing shows the channel; only downloads count."""
+        from app.core import quotas
+        req = quotas.QuotaRequester(quotas.REQ_ANON, "testclient")
+        for i in range(5):  # no download left today
+            quotas.record_platform_download(req, "tiktok", f"https://www.tiktok.com/@a/video/{i}")
+        self._signed_page(monkeypatch, rc, {"status_code": 0, "has_more": 0,
                                             "aweme_list": [self._aweme(str(7000 + i)) for i in range(8)]})
         body = _channel(limit=20).json()
-        assert body["cap"] == 5 and len(body["items"]) == 5
-        assert body["hasMore"] is False and body["moreHint"] is None     # our cap cut it, not Douyin
+        assert len(body["items"]) == 8
+        assert body["hasMore"] is False and body["moreHint"] is None
         assert on.starts() == []
+
+    def test_has_more_when_asking_past_the_first_page(self, on, rc, monkeypatch):
+        # Douyin gives one page (cap 41 in the request); asking for 500 must still say "there is more".
+        self._signed_page(monkeypatch, rc, {"status_code": 0, "has_more": 1,
+                                            "aweme_list": [self._aweme(str(7000 + i)) for i in range(41)]})
+        body = _channel(limit=500).json()
+        assert len(body["items"]) == 41
+        assert body["hasMore"] is True and body["moreHint"] == "douyin_extension"
+
+    def test_rescan_is_served_from_the_cache(self, on, rc, monkeypatch):
+        from curl_cffi import requests as cr
+        self._signed_page(monkeypatch, rc, {"status_code": 0, "has_more": 1,
+                                            "aweme_list": [self._aweme(str(7000 + i)) for i in range(6)]})
+        assert len(_channel(limit=20).json()["items"]) == 6
+        calls = []
+        monkeypatch.setattr(cr, "get", lambda *a, **k: calls.append(1) or (_ for _ in ()).throw(AssertionError("no call")))
+        body = _channel(limit=3).json()
+        assert [i["id"] for i in body["items"]] == ["7000", "7001", "7002"] and calls == []
+        assert body["hasMore"] is False                                    # 3 asked, 3 given
+
+    def test_deep_signed_in_skips_the_free_page_and_uses_the_deep_cap(self, on, rc, monkeypatch):
+        from app.core.auth_middleware import get_optional_user
+        self._signed_page(monkeypatch, rc, {"status_code": 0, "has_more": 1,
+                                            "aweme_list": [self._aweme("7001")]})
+        monkeypatch.setenv("CHINA_ACCESS_DOUYIN_CHANNEL_DEEP_MAX", "7")
+        fastapi_app.dependency_overrides[get_optional_user] = lambda: {"id": "u-deep", "email": "d@example.com"}
+        try:
+            r = client.post("/api/v1/client/douyin/channel", json={"url": PROFILE, "limit": 500, "deep": True})
+        finally:
+            fastapi_app.dependency_overrides.pop(get_optional_user, None)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["cap"] == 7 and "hasMore" not in body                 # the Apify answer, not the signed page
+        assert len(on.starts()) == 1
+
+    def test_deep_guest_keeps_the_allowance_cap(self, on, rc, monkeypatch):
+        self._signed_page(monkeypatch, rc, {"status_code": 0, "has_more": 1,
+                                            "aweme_list": [self._aweme("7001")]})
+        r = client.post("/api/v1/client/douyin/channel", json={"url": PROFILE, "limit": 500, "deep": True})
+        assert r.status_code == 200 and r.json()["cap"] == 5
 
     def test_refused_listing_falls_back_to_apify(self, on, rc, monkeypatch):
         self._signed_page(monkeypatch, rc, {"status_code": 0})

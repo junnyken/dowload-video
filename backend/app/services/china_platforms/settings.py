@@ -268,6 +268,12 @@ def douyin_channel_admin_max() -> int:
     return min(500, max(1, _int("CHINA_ACCESS_DOUYIN_CHANNEL_ADMIN_MAX", 100)))
 
 
+def douyin_channel_deep_max() -> int:
+    """Videos the paid "deep" listing may return for a signed-in app user whose
+    own page window could not read the whole channel (21/10). ~0.007 USD each."""
+    return min(500, max(1, _int("CHINA_ACCESS_DOUYIN_CHANNEL_DEEP_MAX", 200)))
+
+
 def douyin_channel_timeout_sec() -> int:
     """One profile run lists up to 100 videos — longer than a single video."""
     return min(280, max(30, _int("CHINA_ACCESS_DOUYIN_CHANNEL_TIMEOUT_SEC", 150)))
