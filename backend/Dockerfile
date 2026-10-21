@@ -99,6 +99,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends libfontconfig1 
     || ( echo "WARNING: PhantomJS not installed - iq.com (iQIYI) stays unavailable" \
          && rm -rf /tmp/phantomjs.tar.bz2 /opt/phantomjs /opt/phantomjs-${PHANTOMJS_VERSION}-linux-x86_64 /usr/local/bin/phantomjs )
 
+# pg_dump/psql 17 (PostgreSQL's own apt repo) for moving the data from Supabase
+# to the Vibe Host Postgres and for nightly dumps (docs/MIGRATION-DB-VIBEHOST.md).
+# 17 dumps servers up to 17. Optional: a failure only leaves app.core.db_migration
+# reporting "pg_dump not installed".
+RUN ( apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    && . /etc/os-release \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update && apt-get install -y --no-install-recommends postgresql-client-17 \
+    && pg_dump --version ) \
+    || echo "WARNING: postgresql-client-17 not installed"; \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy yêu cầu và cài đặt môi trường
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

@@ -233,6 +233,14 @@ async def lifespan(app: FastAPI):
 
     _startup_db_task = _asyncio.create_task(_startup_db_checks())
 
+    # Moving the data to the Vibe Host Postgres: a read-only probe of both
+    # databases once per deploy, result in the log (app.core.db_migration).
+    try:
+        from app.core.db_migration import probe_once_per_deploy as _dbmig_probe
+        _dbmig_task = _asyncio.create_task(_asyncio.to_thread(_dbmig_probe))
+    except Exception as _dbmig_err:
+        print(f"[Startup] DB migration probe skipped: {_dbmig_err}")
+
     # JS runtime yt-dlp's iq.com (iQIYI) extractor needs (PhantomJS).
     try:
         import asyncio as _asyncio
