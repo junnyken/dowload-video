@@ -177,9 +177,15 @@ async def _signed_channel(url: str, limit: int) -> Optional[dict]:
 @router.post("/client/douyin/channel")
 @limiter.limit("6/minute")
 async def douyin_channel(payload: ChannelIn, request: Request, user=Depends(get_optional_user)):
+    return await douyin_listing_answer(payload.url, payload.limit, payload.deep, request, user)
+
+
+async def douyin_listing_answer(raw_url: str, limit: int, deep: bool, request: Request, user: Optional[dict]):
+    """The Douyin channel answer (dict) or an error JSONResponse. Shared by the
+    app route above and the website's /channel/preview (21/10)."""
     from app.services.china_platforms import channel_listing  # noqa: PLC0415
 
-    url = _clean_url(payload.url)
+    url = _clean_url(raw_url)
     if not url:
         return _err(400, channel_listing.MSG_BAD_URL, "unsupported_url")
     # A profile link, a v.douyin.com short link or a VIDEO link (its author's
@@ -196,13 +202,13 @@ async def douyin_channel(payload: ChannelIn, request: Request, user=Depends(get_
     # free first page, up to CHINA_ACCESS_DOUYIN_CHANNEL_DEEP_MAX. Guests keep
     # the allowance cap on any paid listing.
     from app.services.china_platforms import settings as ca_settings  # noqa: PLC0415
-    deep_cap = ca_settings.douyin_channel_deep_max() if (payload.deep and user) else None
+    deep_cap = ca_settings.douyin_channel_deep_max() if (deep and user) else None
     try:
-        if not payload.deep:
-            signed = await _signed_channel(url, payload.limit)
+        if not deep:
+            signed = await _signed_channel(url, limit)
             if signed is not None:
                 return signed
-        listing = await channel_listing.list_douyin_profile(url, payload.limit, ctx, cap_key=cap_key, cap=deep_cap)
+        listing = await channel_listing.list_douyin_profile(url, limit, ctx, cap_key=cap_key, cap=deep_cap)
     except channel_listing.ChannelListingError as exc:
         return _err(_STATUS.get(exc.code, 503), str(exc), exc.code)
     finally:
@@ -229,31 +235,44 @@ async def xiaohongshu_channel(payload: ChannelIn, request: Request, user=Depends
     Owner rules of the web listing apply: signed-in only, at most 20 videos
     per scan, capped at today's downloads; each scan is one budgeted
     managed run. Videos are then downloaded through the server route (S0)."""
+    return await profile_listing_answer("xiaohongshu", payload.url, payload.limit, request, user)
+
+
+_PROFILE_BAD_URL = {
+    "xiaohongshu": "Link không phải trang cá nhân Xiaohongshu / RedNote.",
+    "kuaishou": "Link không phải trang cá nhân Kuaishou.",
+}
+
+
+async def profile_listing_answer(platform: str, raw_url: str, limit: int, request: Request, user: Optional[dict]):
+    """Xiaohongshu / Kuaishou channel answer (dict) or an error JSONResponse;
+    also used by the website's /channel/preview (21/10)."""
     from app.core.url_normalizer import extract_share_url  # noqa: PLC0415
     from app.services.china_platforms import profile_listing  # noqa: PLC0415
     from app.services.china_platforms.channel_listing import ChannelListingError  # noqa: PLC0415
 
     # rednote.com -> www.xiaohongshu.com; xsec_token is kept (the listing needs it).
-    url = (extract_share_url(payload.url) or payload.url or "").strip()
-    if profile_listing.platform_of(url) != "xiaohongshu":
-        return _err(400, "Link không phải trang cá nhân Xiaohongshu / RedNote.", "unsupported_url")
+    url = (extract_share_url(raw_url) or raw_url or "").strip()
+    if profile_listing.platform_of(url) != platform:
+        return _err(400, _PROFILE_BAD_URL[platform], "unsupported_url")
 
     token, ctx = _bind(request, user)
     try:
-        listing = await profile_listing.list_profile("xiaohongshu", url, payload.limit, ctx)
+        listing = await profile_listing.list_profile(platform, url, limit, ctx)
     except ChannelListingError as exc:
         return _err(_STATUS.get(exc.code, 403 if exc.code == "login_required" else 503), str(exc), exc.code)
     finally:
         _unbind(token)
 
+    name = "Xiaohongshu" if platform == "xiaohongshu" else "Kuaishou"
     return {
-        "platform": "xiaohongshu",
+        "platform": platform,
         "channelTitle": listing.channel_title,
-        "channelUrl": profile_listing.canonical_profile_url("xiaohongshu", listing.sec_uid),
+        "channelUrl": profile_listing.canonical_profile_url(platform, listing.sec_uid),
         "cap": listing.cap,
         "fromCache": listing.from_cache,
         "items": [{
-            "id": v.video_id, "url": v.url, "title": v.title or f"Xiaohongshu {v.video_id[-6:]}",
+            "id": v.video_id, "url": v.url, "title": v.title or f"{name} {v.video_id[-6:]}",
             "thumbnail": v.thumbnail_url, "durationSec": v.duration_sec,
         } for v in listing.videos],
     }

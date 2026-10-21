@@ -580,6 +580,9 @@ app.include_router(client_quota_mod.router, prefix="/api/v1", tags=["Desktop Cli
 # Task #6055 — Douyin channel listing + direct video URL for the Windows app
 from app.api import client_douyin as client_douyin_mod
 app.include_router(client_douyin_mod.router, prefix="/api/v1", tags=["Desktop Client"])
+# 21/10 — channel preview (list + choose) for the website's bulk page
+from app.api import channel_preview as channel_preview_mod
+app.include_router(channel_preview_mod.router, prefix="/api/v1", tags=["Bulk"])
 from app.api.admin_asr import router as admin_asr_router
 app.include_router(admin_asr_router, prefix="/api/v1/admin", tags=["Admin ASR"])
 # Phase 32B-1 — China Platform Access Layer admin (read + kill switch/mode)
