@@ -623,6 +623,7 @@ window.addEventListener('message', (event) => {
     const scrollBar  = document.getElementById('vg-scroll-bar');
     const scrollInfo = document.getElementById('vg-scroll-info');
     const statusEl   = document.getElementById('vg-ch-status');
+    const relayTok   = vgRelayToken(); // 5.11.0: the app / website waits for this channel
 
     document.getElementById('vg-panel-close').addEventListener('click', () => {
       stopDomObserver();
@@ -688,6 +689,7 @@ window.addEventListener('message', (event) => {
         const pct = Math.min(90, Math.round((stable / MAX_STABLE) * 100));
         scrollBar.style.width = pct + '%';
         scrollInfo.textContent = `Cuộn #${round} • ${curr} video • stable ${stable}/${MAX_STABLE}`;
+        if (relayTok && round % 3 === 0) vgRelaySend(relayTok, false); // progress for the app / website
 
         if (curr === prevCount) stable++;
         else { stable = 0; prevCount = curr; }
@@ -707,7 +709,27 @@ window.addEventListener('message', (event) => {
       scrapeBtn.textContent = '🔄 Cuộn thêm';
       scrapeBtn.disabled = false;
       isScraping = false;
+
+      // wording: BA review
+      if (relayTok) {
+        const r = await vgRelaySend(relayTok, true);
+        if (r && r.ok) {
+          try { sessionStorage.removeItem(VG_RELAY_KEY); } catch { /* none */ }
+          statusEl.style.color = '#34d399';
+          statusEl.textContent = `✅ Đã gửi ${r.data.count} video về VidGrab (ứng dụng / website). Bạn có thể đóng tab này.`;
+        } else {
+          statusEl.style.color = '#f87171';
+          statusEl.textContent = 'Không gửi được danh sách về VidGrab — phiên có thể đã hết hạn. Hãy bấm lấy lại trong ứng dụng / website.';
+        }
+      }
     });
+
+    // 5.11.0: opened by the app / website — scroll the whole channel without a click.
+    if (relayTok) {
+      statusEl.style.color = '#f97316';
+      statusEl.textContent = 'VidGrab đang chờ danh sách kênh này — đang tự cuộn hết kênh, đừng đóng tab…'; // wording: BA review
+      setTimeout(() => { if (!isScraping) scrapeBtn.click(); }, 2000);
+    }
 
     // ── Gửi tải ───────────────────────────────────────────────────
     // 5.10.0 (owner 21/10): send only what today's allowance covers (first
@@ -784,6 +806,42 @@ window.addEventListener('message', (event) => {
         sendText.textContent = `📤 Thử lại (${pending.length} video)`;
       }
     });
+  }
+
+  // ── 5.11.0: relay a whole channel to the VidGrab app / website (owner 21/10) ──
+  // The app's embedded browser and the server only get Douyin's first ~41
+  // videos; this page (the person's own Chrome) gets all of them. The token
+  // comes from POST /api/v1/channel-relay; only video links + titles go back.
+  const VG_RELAY_KEY = '__vgRelay';
+
+  function vgRelayToken() {
+    const m = (location.hash || '').match(/vg-relay=([A-Za-z0-9_-]{32})/);
+    try {
+      if (m) sessionStorage.setItem(VG_RELAY_KEY, m[1]);
+      return m ? m[1] : sessionStorage.getItem(VG_RELAY_KEY);
+    } catch { return m ? m[1] : null; }
+  }
+
+  function vgRelayPayload(done) {
+    const items = [];
+    let skipped = 0;
+    for (const u of videoSet) {
+      const m = u.match(/douyin\.com\/(video|note)\/(\d{15,25})/);
+      if (!m) continue;
+      if (m[1] !== 'video') { skipped++; continue; } // image posts: the server's video route cannot use them
+      const hit = _vgDouyinDirect.get(m[2]);
+      const a = document.querySelector(`a[href*="/video/${m[2]}"]`);
+      const img = a && a.querySelector('img');
+      items.push({ url: `https://www.douyin.com/video/${m[2]}`, title: (hit && hit.title) || (img && img.alt) || null });
+    }
+    const h1 = document.querySelector('h1');
+    return { items: items.slice(0, 2000), channelTitle: h1 ? h1.textContent.trim().slice(0, 300) : null, done, skipped };
+  }
+
+  function vgRelaySend(token, done) {
+    return new Promise((resolve) => chrome.runtime.sendMessage({
+      type: 'VG_API_FETCH', url: `${API_BASE}/api/v1/channel-relay/${token}`, method: 'PUT', body: vgRelayPayload(done),
+    }, resolve));
   }
 
   // Downloads left today for `platform` from GET /api/v1/quota (null = no limit / unknown).

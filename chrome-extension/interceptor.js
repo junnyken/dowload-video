@@ -9,6 +9,15 @@
   if (window.__vg_interceptor) return;
   window.__vg_interceptor = true;
 
+  // 5.11.0: the VidGrab app / website opened this channel with
+  // "#vg-relay=<token>" (POST /api/v1/channel-relay). Keep the token before
+  // Douyin's router rewrites the URL; content.js reads it from the same
+  // origin's sessionStorage and scrolls the channel by itself.
+  try {
+    const m = (location.hash || '').match(/vg-relay=([A-Za-z0-9_-]{32})/);
+    if (m) sessionStorage.setItem('__vgRelay', m[1]);
+  } catch (e) { /* storage blocked: content.js reads the hash itself */ }
+
   const DOUYIN_ENDPOINTS = [
     '/aweme/v1/web/aweme/post/',       // video đăng của user
     '/aweme/v1/web/aweme/detail/',     // video đang xem (1 aweme_detail) — tải thẳng bằng IP người dùng (14/10)
