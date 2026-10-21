@@ -85,10 +85,12 @@ function DouyinExtensionHint() {
   );
 }
 import ContainerPreviewPanel from './ContainerPreviewPanel';
-import ChannelPreview, { isPreviewableChannel } from './ChannelPreview';
+import ChannelPreview, { isDouyinProfile, isPreviewableChannel } from './ChannelPreview';
 import { useContainerDiscover } from '../hooks/useContainerDiscover';
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
+// The server lists the newest ~41 Douyin videos by itself; more needs the extension.
+const DOUYIN_SERVER_PAGE = 40;
 
 async function safeJson(response) {
   const text = await response.text();
@@ -257,7 +259,9 @@ export default function BulkContent() {
   const [quality, setQuality] = useState('video');
   const [removeWatermark, setRemoveWatermark] = useState(true);
   const [quotaInfo, setQuotaInfo] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(null); // 21/10: channel listed for choosing
+  // 21/10: channel listed for choosing — {url, want?, tab?, n}
+  const [preview, setPreview] = useState(null);
+  const previewUrl = preview && preview.url;
   const [selectedJobIds, setSelectedJobIds] = useState(new Set());
   const autoDownloadedRefs = useRef(new Set());
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -350,9 +354,15 @@ export default function BulkContent() {
     if (urlList.length === 0) return;
 
     // 21/10: one Chinese channel link → list it to choose from (the old path
-    // queued the first 20 videos only, owner's test: "21 video").
+    // queued the first 20 videos only, owner's test: "21 video"). Bulk URL
+    // preselects the whole channel, Channel the N newest; both ask before
+    // sending. Signed in, a Douyin profile is read whole by the extension: the
+    // tab opens here, inside the click, or the popup blocker stops it.
     if (urlList.length === 1 && isPreviewableChannel(urlList[0])) {
-      setPreviewUrl(urlList[0]);
+      const want = channelMode ? (parseInt(customMaxVideos) || parseInt(maxVideos) || 20) : 'all';
+      const whole = !!session?.access_token && isDouyinProfile(urlList[0]) && (want === 'all' || want > DOUYIN_SERVER_PAGE);
+      const tab = whole ? window.open('about:blank', '_blank') : null;
+      setPreview((p) => ({ url: urlList[0], want, tab, n: ((p && p.n) || 0) + 1 }));
       return;
     }
 
@@ -1117,7 +1127,7 @@ export default function BulkContent() {
                 if (lines.length !== 1 || !isPreviewableChannel(lines[0]) || previewUrl === lines[0]) return null;
                 return (
                   // wording: BA review
-                  <button type="button" onClick={() => setPreviewUrl(lines[0])}
+                  <button type="button" onClick={() => setPreview((p) => ({ url: lines[0], n: ((p && p.n) || 0) + 1 }))}
                     className="mb-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border border-accent/40 bg-accent/10 text-accent-text hover:bg-accent/20 cursor-pointer">
                     <Eye className="w-3.5 h-3.5" /> Xem danh sách video để chọn
                   </button>
@@ -1125,8 +1135,9 @@ export default function BulkContent() {
               })()}
               {previewUrl && (
                 <ChannelPreview
-                  key={previewUrl} url={previewUrl} withAuth={withAuth} signedIn={!!session?.access_token}
-                  onDownload={(list) => runBulk(list, false)} onClose={() => setPreviewUrl(null)}
+                  key={preview.n} url={preview.url} want={preview.want} autoTab={preview.tab}
+                  withAuth={withAuth} signedIn={!!session?.access_token}
+                  onDownload={(list) => runBulk(list, false)} onClose={() => setPreview(null)}
                 />
               )}
         </>
