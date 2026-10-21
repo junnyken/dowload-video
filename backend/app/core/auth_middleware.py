@@ -87,6 +87,19 @@ SESSION_CACHE_S = 300
 SESSION_LOOKUP_TIMEOUT_S = 8
 
 
+async def _ensure_app_user(user: Dict[str, Any]) -> None:
+    """DB_BACKEND=postgres: a Supabase account first seen here gets its
+    auth.users row (and, by trigger, its profile) in the Vibe Host Postgres.
+    Never blocks sign-in: a failure is logged and retried on the next request."""
+    try:
+        import asyncio  # noqa: PLC0415
+        from app.core.db_migration import ensure_app_user  # noqa: PLC0415
+        await asyncio.wait_for(asyncio.to_thread(
+            ensure_app_user, user["id"], user.get("email") or "", user.get("email_confirmed_at")), timeout=5)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[Auth] app user sync failed: {type(exc).__name__}")
+
+
 def _session_key(token: str) -> str:
     return "auth:session:" + hashlib.sha256(token.encode()).hexdigest()
 
@@ -286,6 +299,7 @@ async def get_optional_user(
     # SESSION_CACHE_S (keyed by a hash of the token, never the token itself).
     cached = _cached_session(token)
     if cached:
+        await _ensure_app_user(cached)
         return {**cached, "token": token}
     try:
         import asyncio  # noqa: PLC0415
@@ -309,6 +323,7 @@ async def get_optional_user(
                 "email_confirmed_at": str(confirmed) if confirmed else None,
             }
             _remember_session(token, user)
+            await _ensure_app_user(user)
             return {**user, "token": token}
     except Exception:
         pass

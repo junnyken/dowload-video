@@ -103,3 +103,34 @@ def test_toc_kinds():
     assert M._toc_kind("4400; 0 0 COMMENT - SCHEMA public pg_database_owner") == "COMMENT_SCHEMA"
     assert M._toc_kind("3; 0 16384 TABLE DATA public plans postgres") == "TABLE DATA"
     assert M._toc_kind("; comment") == ""
+
+
+@pytest.mark.skipif(not DSN, reason="PG_TEST_DSN not set")
+def test_ensure_app_user_adds_the_account_once(monkeypatch):
+    import uuid
+    from app.core import database
+    r = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr("app.core.redis_client._client", r)
+    monkeypatch.setattr(database, "DB_BACKEND", "postgres")
+    monkeypatch.setenv("APP_DATABASE_URL", DSN)
+    database._pg_client.cache_clear()
+    try:
+        db = database.get_service_client()
+        db.run_sql("CREATE SCHEMA IF NOT EXISTS auth; CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY, "
+                   "email text, email_confirmed_at timestamptz, created_at timestamptz, updated_at timestamptz); SELECT 1")
+        uid = str(uuid.uuid4())
+        M.ensure_app_user(uid, "n@x.vn", None)
+        M.ensure_app_user(uid, "n@x.vn", None)                      # cached: no second write
+        M.ensure_app_user(uid, "n@x.vn", "2026-10-21T00:00:00+00:00")
+        row = db.run_sql("SELECT email, email_confirmed_at FROM auth.users WHERE id = %s::uuid", (uid,))
+        assert row == [{"email": "n@x.vn", "email_confirmed_at": "2026-10-21T00:00:00+00:00"}]
+        assert len(r.keys("auth:appuser:*")) == 2
+    finally:
+        database._pg_client.cache_clear()
+
+
+def test_ensure_app_user_does_nothing_on_supabase(monkeypatch):
+    from app.core import database
+    monkeypatch.setattr(database, "DB_BACKEND", "supabase")
+    monkeypatch.setattr(database, "get_service_client", lambda: (_ for _ in ()).throw(AssertionError("no db")))
+    M.ensure_app_user("x", "y", None)

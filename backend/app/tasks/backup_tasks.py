@@ -479,6 +479,34 @@ def _backup_redis_config(client: httpx.Client, url: str, key: str,
     return out
 
 
+def _export_postgres(dsn: str) -> tuple[dict[str, list], list[dict], list[str]]:
+    """Same shape as the PostgREST export, read straight from Postgres —
+    used once the app runs on the Vibe Host Postgres (DB_BACKEND=postgres),
+    where Supabase's tables are no longer the live data."""
+    import psycopg2  # noqa: PLC0415
+    import psycopg2.extras  # noqa: PLC0415
+    from app.core.pg_client import _out  # noqa: PLC0415
+    warnings: list[str] = []
+    tables: dict[str, list] = {}
+    conn = psycopg2.connect(dsn, connect_timeout=15, options="-c timezone=UTC")
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public' "
+                        "AND tablename <> 'db_backups' ORDER BY 1")
+            for (name,) in [(r["tablename"],) for r in cur.fetchall()]:
+                cur.execute(f'SELECT * FROM public."{name}" LIMIT %s', (MAX_ROWS_PER_TABLE + 1,))
+                rows = [{k: _out(v) for k, v in r.items()} for r in cur.fetchall()]
+                if len(rows) > MAX_ROWS_PER_TABLE:
+                    rows = rows[:MAX_ROWS_PER_TABLE]
+                    warnings.append(f"{name}: hit MAX_ROWS_PER_TABLE={MAX_ROWS_PER_TABLE}")
+                tables[name] = rows
+            cur.execute("SELECT * FROM auth.users ORDER BY created_at NULLS FIRST")
+            users = [{k: _out(v) for k, v in r.items()} for r in cur.fetchall()]
+    finally:
+        conn.close()
+    return tables, users, warnings
+
+
 @celery_app.task(name="backup_database_daily", ignore_result=True)
 def backup_database_daily() -> dict[str, Any]:
     """Export every table + auth.users to Supabase Storage. Never raises."""
@@ -493,28 +521,34 @@ def backup_database_daily() -> dict[str, Any]:
     counts: dict[str, int] = {}
 
     try:
+        from app.core.database import using_postgres, _postgres_dsn  # noqa: PLC0415
         with httpx.Client(timeout=TIMEOUT) as client:
-            tables = _list_tables(client, url, key)
-
             payload: dict[str, Any] = {
                 "generated_at": started.isoformat(),
                 "supabase_url": url,
                 "note": "Data only. Schema lives in database/migrations/ in git.",
                 "tables": {},
             }
-
-            for table in tables:
-                rows, warn = _dump_table(client, url, key, table)
-                payload["tables"][table] = rows
-                counts[table] = len(rows)
+            if using_postgres():
+                # 21/10/2026: the live data is in the Vibe Host Postgres
+                payload["source"] = "vibehost-postgres"
+                pg_tables, users, pg_warn = _export_postgres(_postgres_dsn())
+                warnings.extend(pg_warn)
+                for table, rows in pg_tables.items():
+                    payload["tables"][table] = rows
+                    counts[table] = len(rows)
+            else:
+                for table in _list_tables(client, url, key):
+                    rows, warn = _dump_table(client, url, key, table)
+                    payload["tables"][table] = rows
+                    counts[table] = len(rows)
+                    if warn:
+                        warnings.append(warn)
+                users, warn = _dump_auth_users(client, url, key)
                 if warn:
                     warnings.append(warn)
-
-            users, warn = _dump_auth_users(client, url, key)
             payload["auth_users"] = users
             counts["auth.users"] = len(users)
-            if warn:
-                warnings.append(warn)
 
             buf = io.BytesIO()
             with gzip.GzipFile(fileobj=buf, mode="wb") as gz:

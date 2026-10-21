@@ -373,6 +373,7 @@ def copy_all(*, replace: bool = False, rc=None) -> Dict[str, Any]:
                 _run([_bin("psql"), "-X", "-q", "--single-transaction", "-v", "ON_ERROR_STOP=1",
                       "-d", dst_dsn], log, (src_dsn, dst_dsn), stdin=fh)
             log.step(f"restore: done ({round(len(script) / 1048576, 2)} MB of SQL)")
+        _attach_signup_trigger(dst, log)
 
         tables = _public_tables(src)
         src_counts = _exact_counts(src, tables)
@@ -386,6 +387,50 @@ def copy_all(*, replace: bool = False, rc=None) -> Dict[str, Any]:
     finally:
         src.close()
         dst.close()
+
+
+def _attach_signup_trigger(conn, log) -> None:
+    """The profile/preferences/usage rows Supabase's on_auth_user_created made.
+    auth.users is not in the public dump, so its trigger is re-attached here;
+    app.core.auth_middleware inserts new sign-ups into auth.users after the
+    switch. The disposable-email check is not attached: Supabase already ran it."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT to_regprocedure('public.handle_new_user()') IS NOT NULL")
+        if not cur.fetchone()[0]:
+            log.step("signup trigger: public.handle_new_user() missing — not attached")
+            return
+        cur.execute("DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users")
+        cur.execute("CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users "
+                    "FOR EACH ROW EXECUTE FUNCTION public.handle_new_user()")
+    log.step("signup trigger: on_auth_user_created attached")
+
+
+def ensure_app_user(user_id: str, email: str, email_confirmed_at: Optional[str]) -> None:
+    """After the switch (DB_BACKEND=postgres) sign-up still happens at Supabase
+    Auth: add the account to auth.users here the first time it is seen (the
+    trigger makes its profile). Remembered in Redis for a day per
+    confirmation state, so a later email confirmation is copied too."""
+    from app.core.database import using_postgres, get_service_client  # noqa: PLC0415
+    if not using_postgres():
+        return
+    from app.core.redis_client import get_redis  # noqa: PLC0415
+    key = f"auth:appuser:{user_id}:{1 if email_confirmed_at else 0}"
+    try:
+        rc = get_redis()
+        if rc.get(key):
+            return
+    except Exception:  # noqa: BLE001
+        rc = None
+    get_service_client().run_sql(
+        """INSERT INTO auth.users (id, email, email_confirmed_at, created_at)
+           VALUES (%s::uuid, %s, %s::timestamptz, now())
+           ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email,
+               email_confirmed_at = coalesce(EXCLUDED.email_confirmed_at, auth.users.email_confirmed_at),
+               updated_at = now()
+           RETURNING id""",
+        (user_id, email, email_confirmed_at))
+    if rc is not None:
+        rc.set(key, "1", ex=86400)
 
 
 def _toc_kind(line: str) -> str:
