@@ -1103,6 +1103,27 @@ export default function BulkContent() {
           </div>
         </div>
 
+        {/* 21/10: one Chinese channel link (Bulk URL or Channel tab) can be listed and chosen from */}
+        <>
+              {(() => {
+                const lines = urls.split('\n').map((u) => u.trim()).filter(Boolean);
+                if (lines.length !== 1 || !isPreviewableChannel(lines[0]) || previewUrl === lines[0]) return null;
+                return (
+                  // wording: BA review
+                  <button type="button" onClick={() => setPreviewUrl(lines[0])}
+                    className="mb-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border border-accent/40 bg-accent/10 text-accent-text hover:bg-accent/20 cursor-pointer">
+                    <Eye className="w-3.5 h-3.5" /> Xem danh sách video để chọn
+                  </button>
+                );
+              })()}
+              {previewUrl && (
+                <ChannelPreview
+                  key={previewUrl} url={previewUrl} withAuth={withAuth} signedIn={!!session?.access_token}
+                  onDownload={(list) => runBulk(list, false)} onClose={() => setPreviewUrl(null)}
+                />
+              )}
+        </>
+
         {channelMode && (
           <div className="mb-4 p-4 rounded-xl bg-accent/5 border border-accent/20">
             <p className="text-xs text-accent-text flex items-center gap-2 mb-3">
@@ -1142,23 +1163,6 @@ export default function BulkContent() {
               {/douyin\.com/i.test(urls) && (
                 // 21/10 — wording: BA review. Listing is free (~41 newest); only downloads count.
                 <p className="text-xs text-fg-muted mb-2">Kênh Douyin: máy chủ lấy được khoảng 40 video mới nhất. Muốn lấy đủ cả kênh, dùng tiện ích VidGrab trên Chrome hoặc ứng dụng VidGrab cho Windows.</p>
-              )}
-              {(() => {
-                const lines = urls.split('\n').map((u) => u.trim()).filter(Boolean);
-                if (lines.length !== 1 || !isPreviewableChannel(lines[0]) || previewUrl === lines[0]) return null;
-                return (
-                  // wording: BA review
-                  <button type="button" onClick={() => setPreviewUrl(lines[0])}
-                    className="mb-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border border-accent/40 bg-accent/10 text-accent-text hover:bg-accent/20 cursor-pointer">
-                    <Eye className="w-3.5 h-3.5" /> Xem danh sách video để chọn
-                  </button>
-                );
-              })()}
-              {previewUrl && (
-                <ChannelPreview
-                  key={previewUrl} url={previewUrl} withAuth={withAuth} signedIn={!!session?.access_token}
-                  onDownload={(list) => runBulk(list, false)} onClose={() => setPreviewUrl(null)}
-                />
               )}
               {/(xiaohongshu\.com|rednote\.com|xhslink\.c|kuaishou\.c|chenzhongtech\.c)/i.test(urls) && (
                 // Task #6171 — wording: BA review. Server rule: signed-in only, ≤ 20 per scan, ≤ remaining today.
