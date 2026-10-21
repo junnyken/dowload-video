@@ -8,10 +8,13 @@ page signature rejects that environment). The VidGrab extension in the
 person's own Chrome scrolls the whole channel (174 videos measured). So:
 
   1. app / website  POST /channel-relay {url}       → {token, openUrl}
+     (signed-in callers only)
   2. it opens openUrl (the channel + "#vg-relay=<token>") in Chrome; the
      extension sees the token, scrolls the whole channel by itself and
   3. extension      PUT  /channel-relay/{token}     {items, channelTitle, done}
-     (partial updates while scrolling, then done=true)
+     (partial updates while scrolling, then done=true; loginWall=true →
+     status "login": Douyin wants the visitor signed in, the extension
+     resumes by itself after that)
   4. app / website  GET  /channel-relay/{token}     → {status, items, …}
 
 The token (24 random bytes) is the only key; a relay lives 30 minutes.
@@ -25,10 +28,11 @@ import re
 import secrets
 from typing import List, Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.client_douyin import _err
+from app.core.auth_middleware import get_optional_user
 from app.main import limiter
 
 router = APIRouter()
@@ -42,6 +46,7 @@ _DOUYIN_VIDEO = re.compile(r"^https://www\.douyin\.com/video/(\d{15,25})$")
 # wording: BA review
 MSG_BAD_URL = "Chỉ hỗ trợ trang cá nhân Douyin (douyin.com/user/…)."
 MSG_GONE = "Phiên lấy danh sách đã hết hạn. Hãy bấm lấy lại."
+MSG_LOGIN = "Hãy đăng nhập để lấy đủ cả kênh."
 
 
 def _rc():
@@ -66,6 +71,7 @@ class PutIn(BaseModel):
     channelTitle: Optional[str] = Field(default=None, max_length=300)
     done: bool = False
     skipped: int = Field(default=0, ge=0, le=100000)  # image posts etc. the extension left out
+    loginWall: bool = False  # Douyin asks the visitor to sign in before showing more (5.11.1)
 
 
 def _clean_profile(raw: str) -> Optional[str]:
@@ -78,7 +84,11 @@ def _clean_profile(raw: str) -> Optional[str]:
 
 @router.post("/channel-relay")
 @limiter.limit("10/minute")
-async def start(payload: StartIn, request: Request):
+async def start(payload: StartIn, request: Request, user=Depends(get_optional_user)):
+    # Signed-in only (owner 21/10): a whole channel turns into a large batch;
+    # guests keep the server's first page.
+    if not user:
+        return _err(401, MSG_LOGIN, "login_required")
     channel = _clean_profile(payload.url)
     if not channel:
         return _err(400, MSG_BAD_URL, "unsupported_url")
@@ -116,7 +126,7 @@ async def put(token: str, payload: PutIn, request: Request):
         title = " ".join((it.title or "").split())[:300] or None
         items.append({"id": m.group(1), "url": f"https://www.douyin.com/video/{m.group(1)}", "title": title})
     doc.update({
-        "status": "done" if payload.done else "scrolling",
+        "status": "done" if payload.done else "login" if payload.loginWall else "scrolling",
         "items": items,
         "skipped": payload.skipped,
         "channelTitle": (" ".join((payload.channelTitle or "").split())[:300] or doc.get("channelTitle")),

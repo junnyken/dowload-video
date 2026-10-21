@@ -24,6 +24,14 @@ def _unlimited():
     channel_relay.limiter.enabled = was
 
 
+@pytest.fixture(autouse=True)
+def _signed_in():
+    from app.core.auth_middleware import get_optional_user
+    fastapi_app.dependency_overrides[get_optional_user] = lambda: {"id": "u-relay"}
+    yield
+    fastapi_app.dependency_overrides.pop(get_optional_user, None)
+
+
 def _start(url=PROFILE):
     return client.post("/api/v1/channel-relay", json={"url": url})
 
@@ -65,3 +73,24 @@ def test_start_refuses_other_links(url, rc):
 def test_unknown_or_malformed_token(tok, rc):
     assert client.get(f"/api/v1/channel-relay/{tok}").status_code == 404
     assert client.put(f"/api/v1/channel-relay/{tok}", json={"items": []}).status_code in (404, 405)
+
+
+def test_start_needs_sign_in(rc):
+    # 21/10: a whole channel is signed-in only; the server's first page stays open to guests
+    from app.core.auth_middleware import get_optional_user
+    fastapi_app.dependency_overrides[get_optional_user] = lambda: None
+    r = _start()
+    assert r.status_code == 401 and r.json()["error_code"] == "login_required"
+    assert not rc.keys("vidgrab:relay:*")
+
+
+def test_login_wall_then_resume(rc):
+    # 5.11.1: Douyin's sign-in wall → "login"; after signing in the extension goes on to "done"
+    tok = _start().json()["token"]
+    item = [{"url": "https://www.douyin.com/video/7696450520369712419"}]
+    client.put(f"/api/v1/channel-relay/{tok}", json={"items": item, "loginWall": True})
+    assert client.get(f"/api/v1/channel-relay/{tok}").json()["status"] == "login"
+    client.put(f"/api/v1/channel-relay/{tok}", json={"items": item})
+    assert client.get(f"/api/v1/channel-relay/{tok}").json()["status"] == "scrolling"
+    client.put(f"/api/v1/channel-relay/{tok}", json={"items": item, "done": True, "loginWall": False})
+    assert client.get(f"/api/v1/channel-relay/{tok}").json()["status"] == "done"
