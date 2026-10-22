@@ -17,7 +17,7 @@ Download videos from TikTok, Douyin, Instagram, Facebook, X & Reddit, and grab M
 ```
 *(116 chars — within limit)*
 
-> **5.12.0: no YouTube.** The Chrome Web Store does not allow extensions that download from YouTube. The extension has no YouTube host permission, never lists YouTube media, and refuses YouTube links with a pointer to the VidGrab website. Do not mention YouTube anywhere in the listing or screenshots.
+> **No YouTube in the Web Store build.** The Chrome Web Store does not allow extensions that download from YouTube. Since 5.14.1 the build served on the VidGrab website keeps YouTube (owner's decision, 22/10/2026); **upload only the store build**: `python3 scripts/package-extension.py --store` → `chrome-extension/store-assets/VidGrab-store-v<version>.zip` (no YouTube host permission; the popup then refuses YouTube links with a pointer to the VidGrab website). Never upload `backend/extension/VidGrab-extension.zip` to the store. Do not mention YouTube anywhere in the listing or screenshots.
 
 ### Long Description
 ```

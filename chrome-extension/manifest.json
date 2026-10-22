@@ -2,7 +2,7 @@
   "update_url": "https://clients2.google.com/service/update2/crx",
   "manifest_version": 3,
   "name": "VidGrab - Video Downloader",
-  "version": "5.14.0",
+  "version": "5.14.1",
   "description": "Tải video từ TikTok, Douyin, Facebook, Instagram, X, Bilibili, Xiaohongshu… và bắt video (MP4, HLS, DASH) ngay trên trang bạn đang xem.",
   "minimum_chrome_version": "102",
   "permissions": [
@@ -26,6 +26,8 @@
   ],
   "host_permissions": [
     "*://*.tiktok.com/*",
+    "*://*.youtube.com/*",
+    "*://*.youtu.be/*",
     "*://*.facebook.com/*",
     "*://*.douyin.com/*",
     "*://*.instagram.com/*",
@@ -94,6 +96,7 @@
     {
       "matches": [
         "*://*.tiktok.com/*",
+        "*://*.youtube.com/*",
         "*://*.facebook.com/*",
         "*://*.douyin.com/*",
         "*://*.instagram.com/*",

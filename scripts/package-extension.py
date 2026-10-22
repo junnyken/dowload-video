@@ -22,7 +22,15 @@ The package goes to TWO destinations, and both are served to real users:
         than the website, which is the kind of drift nobody notices until a
         user reports a bug that was fixed weeks ago.
 
-Usage:  python3 scripts/package-extension.py
+Usage:  python3 scripts/package-extension.py           # the website build (with YouTube)
+        python3 scripts/package-extension.py --store   # the Chrome Web Store build
+
+The Chrome Web Store does not allow extensions that download YouTube. The
+website build keeps it (owner, 22/10/2026); --store writes
+chrome-extension/store-assets/VidGrab-store-v<version>.zip with the YouTube
+host permissions and content-script matches removed — the popup reads its own
+manifest and then sends YouTube links to the website. The store zip is never
+served to users and is not one of the DESTINATIONS.
 """
 
 from __future__ import annotations
@@ -60,6 +68,18 @@ def collect() -> list[pathlib.Path]:
     return files
 
 
+YOUTUBE = ("youtube.com", "youtu.be")
+
+
+def store_manifest(raw: str) -> str:
+    """The manifest without YouTube (host permissions + content-script matches)."""
+    m = json.loads(raw)
+    m["host_permissions"] = [h for h in m.get("host_permissions", []) if not any(y in h for y in YOUTUBE)]
+    for cs in m.get("content_scripts", []):
+        cs["matches"] = [x for x in cs.get("matches", []) if not any(y in x for y in YOUTUBE)]
+    return json.dumps(m, indent=2, ensure_ascii=False) + "\n"
+
+
 def main() -> int:
     manifest_path = SOURCE / "manifest.json"
     if not manifest_path.exists():
@@ -76,13 +96,18 @@ def main() -> int:
         print("ERROR: manifest.json was excluded — refusing to build", file=sys.stderr)
         return 1
 
-    print(f"Packaging extension v{version} — {len(files)} files")
+    store = "--store" in sys.argv[1:]
+    dests = [SOURCE / "store-assets" / f"VidGrab-store-v{version}.zip"] if store else DESTINATIONS
+    print(f"Packaging extension v{version} — {len(files)} files{' (Chrome Web Store build, no YouTube)' if store else ''}")
 
-    for dest in DESTINATIONS:
+    for dest in dests:
         dest.parent.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as z:
             for path in files:
-                z.write(path, path.relative_to(SOURCE).as_posix())
+                if store and path == manifest_path:
+                    z.writestr("manifest.json", store_manifest(path.read_text(encoding="utf-8")))
+                else:
+                    z.write(path, path.relative_to(SOURCE).as_posix())
 
         # Read the artifact back rather than trusting the write. A package that
         # cannot be opened, or that reports a different version from the source
@@ -92,7 +117,11 @@ def main() -> int:
             if bad is not None:
                 print(f"ERROR: {dest} is corrupt at {bad}", file=sys.stderr)
                 return 1
-            built = json.loads(z.read("manifest.json")).get("version")
+            built_manifest = json.loads(z.read("manifest.json"))
+            built = built_manifest.get("version")
+            if store and any(any(y in h for y in YOUTUBE) for h in built_manifest.get("host_permissions", [])):
+                print(f"ERROR: {dest} still has a YouTube host permission", file=sys.stderr)
+                return 1
         if built != version:
             print(f"ERROR: {dest} reports v{built}, source says v{version}",
                   file=sys.stderr)

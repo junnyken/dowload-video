@@ -407,7 +407,7 @@ async function initPopup() {
   initUpdateBanner();   // fire-and-forget: never blocks the popup
   vgShowVersion();
   getActiveTab().then((t) => {
-    if (t?.url && vgIsYouTube(t.url)) vgShowYouTubeNote(t.url);
+    if (t?.url && vgYouTubeBlocked(t.url)) vgShowYouTubeNote(t.url);
     void initSniff(t);
   }).catch(() => {});
   // Chạy health check song song với page detection
@@ -751,7 +751,7 @@ async function getTargetUrl() {
   const typed = (urlInput?.value || '').trim();
   if (typed) {
     if (!isHttpUrl(typed)) throw new Error('Link không hợp lệ. Cần bắt đầu bằng http:// hoặc https://');
-    if (vgIsYouTube(typed)) { vgShowYouTubeNote(typed); throw new Error(VG_YT_TEXT); }
+    if (vgYouTubeBlocked(typed)) { vgShowYouTubeNote(typed); throw new Error(VG_YT_TEXT); }
     return typed;
   }
   const tab = await getActiveTab();
@@ -761,7 +761,7 @@ async function getTargetUrl() {
   if (!tab?.url || /^(chrome|chrome-extension|edge|about):/i.test(tab.url)) {
     throw new Error('Không lấy được link ở trang này. Hãy dán link video vào ô phía trên.');
   }
-  if (vgIsYouTube(tab.url)) { vgShowYouTubeNote(tab.url); throw new Error(VG_YT_TEXT); }
+  if (vgYouTubeBlocked(tab.url)) { vgShowYouTubeNote(tab.url); throw new Error(VG_YT_TEXT); }
   return tab.url;
 }
 
@@ -2003,10 +2003,12 @@ if (_activeQPill) {
 }
 
 
-// ── YouTube (5.12.0) ──────────────────────────────────────────────
-// The Chrome Web Store does not allow extensions that download YouTube, so
-// the extension never does: YouTube links are sent to the VidGrab web (or
-// the Windows app), where the same account and quota apply. wording: BA review
+// ── YouTube (5.12.0 → 5.14.1) ─────────────────────────────────────
+// The Chrome Web Store does not allow extensions that download YouTube. The
+// build VidGrab hands out on its own website keeps YouTube (owner, 22/10);
+// the Web Store build (`package-extension.py --store`) drops the YouTube host
+// permission, and then the popup sends YouTube links to the web instead.
+// Which build this is = whether the manifest has the YouTube host. wording: BA review
 const VG_YT_TEXT = 'Tiện ích không tải video YouTube. Hãy mở trên web VidGrab.';
 
 function vgIsYouTube(url) {
@@ -2014,6 +2016,13 @@ function vgIsYouTube(url) {
     const h = new URL(url).hostname.toLowerCase();
     return /(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com)$/.test(h);
   } catch { return false; }
+}
+
+function vgYouTubeInBuild() {
+  return (chrome.runtime.getManifest().host_permissions || []).some((h) => /youtube\.com/.test(h));
+}
+function vgYouTubeBlocked(url) {
+  return vgIsYouTube(url) && !vgYouTubeInBuild();
 }
 
 function vgShowYouTubeNote(url) {

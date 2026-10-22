@@ -231,17 +231,17 @@ def main():
             check("all-sites access is optional, never at install", "*://*/*" in man0.get("optional_host_permissions", [])
                   and "*://*/*" not in man0.get("host_permissions", []) and "<all_urls>" not in man0.get("host_permissions", []))
 
-            # YouTube: refused, sent to the web
+            # YouTube: the website build downloads it (the store build refuses: test_youtube_builds.py)
             pop.fill("#vg-url-input", "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-            err = pop.evaluate("() => getTargetUrl().then(v => 'accepted:' + v).catch(e => e.message)")
-            check("YouTube link refused by the extension", "không tải video YouTube" in err, err)
-            check("YouTube note offers the web", pop.locator("#vg-yt-note").is_visible())
+            yt = pop.evaluate("() => getTargetUrl().then(v => 'accepted:' + v).catch(e => e.message)")
+            check("website build accepts YouTube", yt == "accepted:https://www.youtube.com/watch?v=dQw4w9WgXcQ", yt)
+            check("no YouTube note in the website build", not pop.locator("#vg-yt-note").is_visible())
             pop.fill("#vg-url-input", "https://www.tiktok.com/@a/video/123")
             ok = pop.evaluate("() => getTargetUrl().then(v => 'accepted:' + v).catch(e => e.message)")
             check("other links still accepted", ok == "accepted:https://www.tiktok.com/@a/video/123", ok)
 
             man = pop.evaluate("() => chrome.runtime.getManifest()")
-            check("no YouTube host permission", not any("youtube" in h for h in man.get("host_permissions", [])))
+            check("website build has the YouTube host permission", "*://*.youtube.com/*" in man.get("host_permissions", []))
             check("footer shows the real version", pop.locator("#footer-version").inner_text() == f"v{man['version']}",
                   pop.locator("#footer-version").inner_text())
             ctx.close()
