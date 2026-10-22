@@ -11,7 +11,7 @@
  */
 
 // Media seen in each tab (5.12.0): HLS / DASH / direct files, listed in the popup.
-importScripts('media-sniffer.js');
+importScripts('media-sniffer.js', 'direct-download.js');
 
 const DEFAULT_API_BASE = 'https://dvid-api.vibe1.tinhgon.xyz';
 const STORAGE_KEY = (tabId) => `vg_videos_${tabId}`;
@@ -397,6 +397,152 @@ async function vgFetchAndSave({ url, quality, remove_watermark, download_subs },
   return { data, dlUrl, finalExt, safeName };
 }
 
+// ── 5.18.0: download in the browser first, the server only counts ──────────
+// (direct-download.js has the why.) vgSaveVideo is what VG_DOWNLOAD_NOW and
+// the bulk queue call: claim one download (same daily allowance as the web),
+// find the file in the page, save it from this computer; if the browser
+// cannot, hand the claim back and let the server do it (vgFetchAndSave).
+const VG_HELPER_KEY = 'vg_helper_window';
+
+async function vgClaim(url) {
+  const base = await getApiBase();
+  try {
+    const r = await fetch(`${base}/api/v1/client/quota/claim`, {
+      method: 'POST',
+      headers: await authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ url, route: 'local', clientVersion: `ext-${chrome.runtime.getManifest().version}` }),
+    });
+    const d = await r.json().catch(() => null);
+    if (r.status === 503 && d && d.error_code === 'client_quota_disabled') return { allowed: true, claimId: null };
+    if (!r.ok || !d || d.allowed === false) {
+      return { allowed: false, status: r.status, message: (d && (d.detail || d.message)) || `HTTP ${r.status}`, resetTimeVn: d && d.resetTimeVn };
+    }
+    return { allowed: true, claimId: d.claimId || null };
+  } catch {
+    return null; // server unreachable: the direct download may still go (counted later by nobody — rare)
+  }
+}
+
+async function vgSettle(claimId, outcome) {
+  if (!claimId) return;
+  try {
+    const base = await getApiBase();
+    await fetch(`${base}/api/v1/client/quota/settle`, {
+      method: 'POST', headers: await authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ claimId, outcome }),
+    });
+  } catch { /* the claim simply stays counted */ }
+}
+
+// A minimised VidGrab window holds the pages opened for lists / bulk.
+async function vgHelperTab(url) {
+  const got = await chrome.storage.session.get(VG_HELPER_KEY).catch(() => ({}));
+  let winId = got[VG_HELPER_KEY];
+  if (winId != null) {
+    try { await chrome.windows.get(winId); } catch { winId = null; }
+  }
+  if (winId == null) {
+    const w = await chrome.windows.create({ url, focused: false, state: 'minimized' });
+    await chrome.storage.session.set({ [VG_HELPER_KEY]: w.id }).catch(() => {});
+    return w.tabs[0].id;
+  }
+  const t = await chrome.tabs.create({ windowId: winId, url, active: false });
+  return t.id;
+}
+
+async function vgCloseHelperIfIdle() {
+  const got = await chrome.storage.session.get(VG_HELPER_KEY).catch(() => ({}));
+  const winId = got[VG_HELPER_KEY];
+  if (winId == null) return;
+  try {
+    const w = await chrome.windows.get(winId, { populate: true });
+    const busy = w.tabs.some((t) => t.url && t.url !== 'about:blank' && t.status === 'loading');
+    if (!busy && w.tabs.length <= 1) { await chrome.windows.remove(winId); await chrome.storage.session.remove(VG_HELPER_KEY); }
+  } catch { await chrome.storage.session.remove(VG_HELPER_KEY).catch(() => {}); }
+}
+
+/** The file of the video page in `tabId`: the page's own data first, then the sniffer. */
+async function vgFindMedia(tabId) {
+  const until = Date.now() + self.vgDirect.FIND_TIMEOUT_MS;
+  while (Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 1200));
+    try {
+      const [res] = await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: self.vgDirect.vgPageMedia });
+      if (res && res.result && res.result.url) return res.result;
+    } catch { /* page still loading / navigating */ }
+    const sniffed = self.vgDirect.pickSniffed(await self.vgSniffList(tabId).catch(() => []));
+    if (sniffed) return { url: sniffed.url, title: sniffed.title, via: 'sniffer' };
+  }
+  return null;
+}
+
+/** chrome.downloads of `url`; resolves true when the file is complete, false when it failed. */
+function vgSaveFile(url, name) {
+  return new Promise((resolve) => {
+    let id = null;
+    const done = (ok) => { chrome.downloads.onChanged.removeListener(onChanged); clearTimeout(timer); resolve(ok); };
+    const onChanged = (delta) => {
+      if (delta.id !== id || !delta.state) return;
+      if (delta.state.current === 'complete') done(true);
+      else if (delta.state.current === 'interrupted') done(false);
+    };
+    const timer = setTimeout(() => done(true), self.vgDirect.SAVE_TIMEOUT_MS); // still running: count it as started
+    chrome.downloads.onChanged.addListener(onChanged);
+    chrome.downloads.download({ url, filename: `VidGrab/${name}.mp4`, saveAs: false, conflictAction: 'uniquify' }, (downloadId) => {
+      if (chrome.runtime.lastError || !downloadId) { done(false); return; }
+      id = downloadId;
+    });
+  });
+}
+
+/** Same tab URL, ignoring the hash and trailing slash. */
+function vgSamePage(a, b) {
+  const n = (u) => { try { const x = new URL(u); x.hash = ''; return x.toString().replace(/\/$/, ''); } catch { return u; } };
+  return n(a) === n(b);
+}
+
+/**
+ * One video, browser first. `pageTabId`: the tab the person is on (single
+ * download from that page — no extra window). Returns the same shape as
+ * vgFetchAndSave plus `via`; throws with .status like it.
+ */
+async function vgSaveVideo(payload, signal, pageTabId) {
+  // storage.local vg_direct === false: everything through the server (kill switch, tests)
+  const off = (await chrome.storage.local.get('vg_direct').catch(() => ({}))).vg_direct === false;
+  if (off || !self.vgDirect.directEligible(payload)) {
+    return { ...(await vgFetchAndSave(payload, signal)), via: 'server' };
+  }
+  const claim = await vgClaim(payload.url);
+  if (claim && !claim.allowed) {
+    throw Object.assign(new Error(`${claim.message}${claim.resetTimeVn ? ` — lượt mới lúc ${claim.resetTimeVn}` : ''}`), { status: 429 });
+  }
+  let tabId = null, ownTab = false, media = null;
+  try {
+    if (pageTabId != null) {
+      const t = await chrome.tabs.get(pageTabId).catch(() => null);
+      if (t && vgSamePage(t.url || '', payload.url)) tabId = pageTabId;
+    }
+    if (tabId == null) { tabId = await vgHelperTab(payload.url); ownTab = true; }
+    media = await vgFindMedia(tabId);
+  } catch { media = null; }
+  if (ownTab && tabId != null) chrome.tabs.remove(tabId).catch(() => {});
+  if (ownTab) setTimeout(() => { vgCloseHelperIfIdle(); }, 3000);
+
+  if (media && !(signal && signal.aborted)) {
+    const name = self.vgDirect.safeName(media.title);
+    if (await vgSaveFile(media.url, name)) {
+      if (claim && claim.claimId) vgSettle(claim.claimId, 'completed');
+      addToHistory({ title: media.title || 'Video', thumbnail: '', url: payload.url, quality: 'HD', fileSize: '',
+                     noWatermark: true, hasSubtitle: false, subtitleLanguages: [], subtitleSource: 'none' });
+      return { data: { success: true, title: media.title || 'Video', thumbnail_url: '', direct_mp4_url: media.url },
+               dlUrl: media.url, finalExt: 'mp4', safeName: name, via: `direct:${media.via}` };
+    }
+  }
+  // the browser could not: give the claim back, the server counts its own download
+  if (claim && claim.claimId) await vgSettle(claim.claimId, 'failed');
+  return { ...(await vgFetchAndSave(payload, signal)), via: 'server' };
+}
+
 // ── 5.17.0: download many collected videos to this computer (owner 22/10) ──
 // The popup's channel list sends the chosen videos; two at a time go through
 // vgFetchAndSave (each counts one download on the server, like the single
@@ -451,8 +597,9 @@ async function vgBulkWorker() {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 150_000);
       try {
-        const { data } = await vgFetchAndSave({ url: it.url, quality: b.quality, remove_watermark: true, download_subs: false }, controller.signal);
+        const { data, via } = await vgSaveVideo({ url: it.url, quality: b.quality, remove_watermark: true, download_subs: false }, controller.signal, null);
         it.status = 'done';
+        it.via = via;
         if (data && data.title) it.title = String(data.title).slice(0, 200);
       } catch (err) {
         it.status = 'error';
@@ -1021,7 +1168,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           chrome.runtime.sendMessage({ type: 'VG_FETCH_PROGRESS', elapsed }).catch(() => {});
         }, 3000);
 
-        const { data, dlUrl, finalExt, safeName } = await vgFetchAndSave({ url, quality, remove_watermark, download_subs }, controller.signal)
+        const { data, dlUrl, finalExt, safeName } = await vgSaveVideo({ url, quality, remove_watermark, download_subs }, controller.signal, msg.payload.pageTabId)
           .finally(() => { clearTimeout(abortTimer); clearInterval(pingInterval); });
         notifTitle = `✅ ${data.title || 'Video'} — đang tải`;
 

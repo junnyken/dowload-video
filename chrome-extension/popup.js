@@ -1110,7 +1110,8 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
     // Send to background worker — download continues even if popup is closed
     chrome.runtime.sendMessage({
       type: 'VG_DOWNLOAD_NOW',
-      payload: { url: targetUrl, quality, remove_watermark: noWm, download_subs: dlSubs, subtitle_mode: subtitleMode, subtitle_language: 'auto' },
+      // 5.18.0: the page the person is on — the browser reads its video there (no extra window)
+      payload: { url: targetUrl, quality, remove_watermark: noWm, download_subs: dlSubs, subtitle_mode: subtitleMode, subtitle_language: 'auto', pageTabId: _activeTabId },
     }, (ack) => {
       if (ack?.queued) {
         stopElapsedTimer();

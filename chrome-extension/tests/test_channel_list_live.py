@@ -42,6 +42,9 @@ def main():
                 viewport={"width": 1280, "height": 900},
                 args=["--headless=new", f"--disable-extensions-except={T.EXT}", f"--load-extension={T.EXT}", "--no-sandbox"])
             ctx.route("**/api/v1/fetch-link", on_fetch)
+            # 5.18.0: these checks are about the server path — direct download off, quota API faked
+            ctx.route("**/api/v1/client/quota/claim", lambda r: r.fulfill(status=200, content_type="application/json", body='{"allowed":true,"claimId":"testclaim0001"}'))
+            ctx.route("**/api/v1/client/quota/settle", lambda r: r.fulfill(status=200, content_type="application/json", body='{}'))
             sw = ctx.service_workers[0] if ctx.service_workers else ctx.wait_for_event("serviceworker", timeout=20000)
             ext_id = sw.url.split("/")[2]
             for _ in range(50):
@@ -53,7 +56,7 @@ def main():
             page.wait_for_timeout(4000)
             pop = ctx.new_page()
             pop.goto(f"chrome-extension://{ext_id}/popup.html", wait_until="domcontentloaded")
-            pop.evaluate("() => chrome.storage.local.set({vg_onboarding_done: true})")
+            pop.evaluate("() => chrome.storage.local.set({vg_onboarding_done: true, vg_direct: false})")
             pop.reload(wait_until="domcontentloaded")
             pop.wait_for_timeout(500)
             fb_id = pop.evaluate("""() => new Promise(r => chrome.tabs.query({}, ts =>
