@@ -379,6 +379,8 @@ export default function SchedulePage() {
   const [loading,     setLoading]     = useState(false);
   const [showCreate,  setShowCreate]  = useState(false);
   const [runMsg,      setRunMsg]      = useState('');
+  // List could not be loaded (offline / server error): say so instead of "no schedules".
+  const [loadError,   setLoadError]   = useState(false);
 
   const headers = { Authorization: `Bearer ${session?.access_token}` };
 
@@ -387,40 +389,57 @@ export default function SchedulePage() {
     try {
       const r = await fetch(`${API}/api/v1/schedule`, { headers });
       if (r.ok) { const d = await r.json(); setSchedules(d.schedules || []); }
+      setLoadError(!r.ok);
+    } catch {
+      setLoadError(true);
     } finally { setLoading(false); }
   }
 
   async function fetchCollections() {
-    const r = await fetch(`${API}/api/v1/archive/collections`, { headers });
-    if (r.ok) { const d = await r.json(); setCollections(d.collections || []); }
+    try {
+      const r = await fetch(`${API}/api/v1/archive/collections`, { headers });
+      if (r.ok) { const d = await r.json(); setCollections(d.collections || []); }
+    } catch { /* only the collection picker; the list banner reports the outage */ }
+  }
+
+  // Network failure in an action: tell the user instead of an uncaught error.
+  function networkFailed() {
+    setRunMsg(t('networkError'));
+    setTimeout(() => setRunMsg(''), 5000);
   }
 
   useEffect(() => { fetchSchedules(); fetchCollections(); }, []);
 
   async function handleDelete(id) {
     if (!confirm(t('confirmDelete'))) return;
-    await fetch(`${API}/api/v1/schedule/${id}`, { method: 'DELETE', headers });
-    setSchedules(prev => prev.filter(s => s.id !== id));
+    try {
+      await fetch(`${API}/api/v1/schedule/${id}`, { method: 'DELETE', headers });
+      setSchedules(prev => prev.filter(s => s.id !== id));
+    } catch { networkFailed(); }
   }
 
   async function handleToggle(id) {
-    const r = await fetch(`${API}/api/v1/schedule/${id}/toggle`, { method: 'POST', headers });
-    if (r.ok) {
-      const d = await r.json();
-      setSchedules(prev => prev.map(s => s.id === id ? { ...s, is_active: d.is_active } : s));
-    }
+    try {
+      const r = await fetch(`${API}/api/v1/schedule/${id}/toggle`, { method: 'POST', headers });
+      if (r.ok) {
+        const d = await r.json();
+        setSchedules(prev => prev.map(s => s.id === id ? { ...s, is_active: d.is_active } : s));
+      }
+    } catch { networkFailed(); }
   }
 
   async function handleRunNow(id) {
-    const r = await fetch(`${API}/api/v1/schedule/${id}/run`, { method: 'POST', headers });
-    const d = await r.json();
-    if (r.ok) {
-      setRunMsg(d.message || t('runTriggered'));
-      setSchedules(prev => prev.map(s => s.id === id ? { ...s, last_run_status: 'running' } : s));
-    } else {
-      setRunMsg(d.detail?.user_message || d.detail?.message || d.detail || t('runFailed'));
-    }
-    setTimeout(() => setRunMsg(''), 4000);
+    try {
+      const r = await fetch(`${API}/api/v1/schedule/${id}/run`, { method: 'POST', headers });
+      const d = await r.json();
+      if (r.ok) {
+        setRunMsg(d.message || t('runTriggered'));
+        setSchedules(prev => prev.map(s => s.id === id ? { ...s, last_run_status: 'running' } : s));
+      } else {
+        setRunMsg(d.detail?.user_message || d.detail?.message || d.detail || t('runFailed'));
+      }
+      setTimeout(() => setRunMsg(''), 4000);
+    } catch { networkFailed(); }
   }
 
   const active = schedules.filter(s => s.is_active);
@@ -466,9 +485,16 @@ export default function SchedulePage() {
         </div>
       )}
 
+      {loadError && (
+        <div role="alert" className="mb-4 flex items-center justify-between gap-3 px-4 py-3 bg-danger-soft border border-danger/40 rounded-lg text-danger text-sm">
+          <span>{t('loadError')}</span>
+          <button onClick={fetchSchedules} className="shrink-0 px-3 py-1 rounded-lg border border-danger/40 hover:bg-danger/10 transition cursor-pointer">{t('retry')}</button>
+        </div>
+      )}
+
       {loading && schedules.length === 0 ? (
         <div className="flex justify-center py-12 text-fg-muted text-sm">{t('loading')}</div>
-      ) : schedules.length === 0 ? (
+      ) : schedules.length === 0 && !loadError ? (
         <EmptyState
           icon={<Calendar className="w-12 h-12" />}
           title={t('emptyTitle')}

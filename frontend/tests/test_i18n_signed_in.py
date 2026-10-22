@@ -68,6 +68,19 @@ def main():
                 txt = pg.evaluate("document.body.innerText")
                 keys = sorted(set(m.group(0) for m in KEY.finditer(txt)))[:5]
                 check(f"{path} (vi): renders, no raw keys, no error", len(txt) > 50 and not keys and not errors, f"{keys} {errors}")
+            # the API unreachable (network error, not 503): archive and schedule
+            # say so with a retry button instead of an empty list + uncaught error
+            ctx.unroute_all()
+            ctx.route(re.compile(r"https://.*supabase\.co/.*"), lambda r: r.fulfill(status=503, body="{}"))
+            ctx.route(lambda u: "/api/" in u and not u.startswith(base), lambda r: r.abort())
+            for path, banner in [("/en/archive", "Couldn't load your archive"), ("/en/schedule", "Couldn't load your schedules"),
+                                 ("/archive", "Không tải được kho lưu trữ"), ("/schedule", "Không tải được danh sách lịch tải")]:
+                errors.clear()
+                pg.goto(f"{base}{path}", wait_until="networkidle")
+                pg.wait_for_timeout(900)
+                alert = pg.get_by_role("alert").filter(has_text=banner)
+                check(f"{path} offline: error banner + retry, no JS error", alert.count() == 1 and alert.get_by_role("button").count() == 1 and not errors,
+                      "; ".join(errors))
             b.close()
     finally:
         srv.shutdown()

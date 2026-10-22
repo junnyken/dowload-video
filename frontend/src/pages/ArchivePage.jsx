@@ -370,13 +370,23 @@ export default function ArchivePage({ onNavigate }) {
   const [deleteTarget, setDeleteTarget] = useState(null); // item object for delete modal
   const [redownloadMsg, setRedownloadMsg] = useState('');
   const [pinMsg, setPinMsg]         = useState('');
+  // List could not be loaded (offline / server error): say so instead of an empty archive.
+  const [loadError, setLoadError]   = useState(false);
   const searchTimer = useRef(null);
 
   const headers = { Authorization: `Bearer ${session?.access_token}` };
 
   async function fetchCollections() {
-    const r = await fetch(`${API}/api/v1/archive/collections`, { headers });
-    if (r.ok) { const d = await r.json(); setCollections(d.collections || []); }
+    try {
+      const r = await fetch(`${API}/api/v1/archive/collections`, { headers });
+      if (r.ok) { const d = await r.json(); setCollections(d.collections || []); }
+    } catch { /* sidebar only; the list banner reports the outage */ }
+  }
+
+  // Network failure in an action: tell the user instead of an uncaught error.
+  function networkFailed() {
+    setPinMsg(t('page.networkError'));
+    setTimeout(() => setPinMsg(''), 5000);
   }
 
   const fetchItems = useCallback(async (p = 1) => {
@@ -385,6 +395,7 @@ export default function ArchivePage({ onNavigate }) {
       if (searchQ.length >= 2) {
         const r = await fetch(`${API}/api/v1/archive/search?q=${encodeURIComponent(searchQ)}&limit=40`, { headers });
         if (r.ok) { const d = await r.json(); setItems(d.items); setTotal(d.total); }
+        setLoadError(!r.ok);
         return;
       }
 
@@ -407,6 +418,9 @@ export default function ArchivePage({ onNavigate }) {
         setTotal(d.total);
         setPage(p);
       }
+      setLoadError(!r.ok);
+    } catch {
+      setLoadError(true);
     } finally { setLoading(false); }
   }, [searchQ, platform, sortBy, activeView]);
 
@@ -417,12 +431,14 @@ export default function ArchivePage({ onNavigate }) {
   }, [fetchItems, fileStatus]);
 
   async function handleStar(id, starred) {
-    await fetch(`${API}/api/v1/archive/${id}`, {
-      method: 'PATCH',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_starred: starred }),
-    });
-    setItems(prev => prev.map(i => i.id === id ? { ...i, is_starred: starred } : i));
+    try {
+      await fetch(`${API}/api/v1/archive/${id}`, {
+        method: 'PATCH',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_starred: starred }),
+      });
+      setItems(prev => prev.map(i => i.id === id ? { ...i, is_starred: starred } : i));
+    } catch { networkFailed(); }
   }
 
   function handleDelete(item) {
@@ -444,56 +460,68 @@ export default function ArchivePage({ onNavigate }) {
 
   async function handlePin(jobId) {
     if (!jobId) return;
-    const r = await fetch(`${API}/api/v1/storage/pin/${jobId}`, { method: 'POST', headers });
-    const d = await r.json();
-    if (r.ok) {
-      setPinMsg(d.message || t('page.pinned'));
-      setTimeout(() => setPinMsg(''), 4000);
-      fetchItems(1);
-    } else {
-      setPinMsg(d.detail?.message || d.detail || t('page.pinFailed'));
-      setTimeout(() => setPinMsg(''), 5000);
-    }
+    try {
+      const r = await fetch(`${API}/api/v1/storage/pin/${jobId}`, { method: 'POST', headers });
+      const d = await r.json();
+      if (r.ok) {
+        setPinMsg(d.message || t('page.pinned'));
+        setTimeout(() => setPinMsg(''), 4000);
+        fetchItems(1);
+      } else {
+        setPinMsg(d.detail?.message || d.detail || t('page.pinFailed'));
+        setTimeout(() => setPinMsg(''), 5000);
+      }
+    } catch { networkFailed(); }
   }
 
   async function handleUnpin(jobId) {
     if (!jobId) return;
-    const r = await fetch(`${API}/api/v1/storage/pin/${jobId}`, { method: 'DELETE', headers });
-    const d = await r.json();
-    setPinMsg(d.message || t('page.unpinned'));
-    setTimeout(() => setPinMsg(''), 4000);
-    fetchItems(1);
+    try {
+      const r = await fetch(`${API}/api/v1/storage/pin/${jobId}`, { method: 'DELETE', headers });
+      const d = await r.json();
+      setPinMsg(d.message || t('page.unpinned'));
+      setTimeout(() => setPinMsg(''), 4000);
+      fetchItems(1);
+    } catch { networkFailed(); }
   }
 
   async function handleRedownload(id) {
-    const r = await fetch(`${API}/api/v1/archive/${id}/re-download`, { method: 'POST', headers });
-    const d = await r.json();
-    setRedownloadMsg(d.message || t('page.redownloadCreated'));
-    setTimeout(() => setRedownloadMsg(''), 4000);
+    try {
+      const r = await fetch(`${API}/api/v1/archive/${id}/re-download`, { method: 'POST', headers });
+      const d = await r.json();
+      setRedownloadMsg(d.message || t('page.redownloadCreated'));
+      setTimeout(() => setRedownloadMsg(''), 4000);
+    } catch { networkFailed(); }
   }
 
   async function handleAddToCollection(itemId, collId) {
-    await fetch(`${API}/api/v1/archive/collections/${collId}/add?item_id=${itemId}`, {
-      method: 'POST', headers,
-    });
-    fetchItems(1);
-    setAddToColl(null);
+    try {
+      await fetch(`${API}/api/v1/archive/collections/${collId}/add?item_id=${itemId}`, {
+        method: 'POST', headers,
+      });
+      fetchItems(1);
+      setAddToColl(null);
+    } catch { networkFailed(); }
   }
 
   async function handleDeleteCollection(collId) {
     if (!confirm(t('page.confirmDeleteCollection'))) return;
-    await fetch(`${API}/api/v1/archive/collections/${collId}`, { method: 'DELETE', headers });
-    fetchCollections();
-    if (activeView === collId) setActiveView('all');
+    try {
+      await fetch(`${API}/api/v1/archive/collections/${collId}`, { method: 'DELETE', headers });
+      fetchCollections();
+      if (activeView === collId) setActiveView('all');
+    } catch { networkFailed(); }
   }
 
   async function handleExport(format) {
-    const r = await fetch(`${API}/api/v1/archive/export?format=${format}`, { headers });
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `vidgrab-archive.${format}`; a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const r = await fetch(`${API}/api/v1/archive/export?format=${format}`, { headers });
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `vidgrab-archive.${format}`; a.click();
+      URL.revokeObjectURL(url);
+    } catch { networkFailed(); }
   }
 
   const LIMIT = 24;
@@ -633,10 +661,17 @@ export default function ArchivePage({ onNavigate }) {
           </div>
         )}
 
+        {loadError && (
+          <div role="alert" className="mb-4 flex items-center justify-between gap-3 px-4 py-3 bg-danger-soft border border-danger/40 rounded-lg text-danger text-sm">
+            <span>{t('page.loadError')}</span>
+            <button onClick={() => fetchItems(1)} className="shrink-0 px-3 py-1 rounded-lg border border-danger/40 hover:bg-danger/10 transition cursor-pointer">{t('page.retry')}</button>
+          </div>
+        )}
+
         {/* Grid */}
         {loading && items.length === 0 ? (
           <div className="flex items-center justify-center h-48 text-fg-muted text-sm">{t('page.loading')}</div>
-        ) : items.length === 0 ? (
+        ) : items.length === 0 && !loadError ? (
           <div className="flex flex-col items-center justify-center h-48 gap-3 text-fg-muted">
             <Archive className="w-12 h-12 opacity-30" />
             <p className="text-sm">{t('page.empty')}</p>

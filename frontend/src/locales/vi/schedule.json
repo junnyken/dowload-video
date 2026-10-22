@@ -72,5 +72,8 @@
   "sugDrift": "{{count}} job đang bị trễ — hàng đợi có thể đang bận",
   "sugTitle": "📅 Gợi ý lịch biểu tối ưu",
   "sugApply": "Áp dụng",
-  "sugDismiss": "Bỏ qua"
+  "sugDismiss": "Bỏ qua",
+  "loadError": "Không tải được danh sách lịch tải. Kiểm tra kết nối mạng rồi thử lại.",
+  "retry": "Thử lại",
+  "networkError": "Lỗi kết nối mạng. Hãy kiểm tra Internet rồi thử lại."
 }

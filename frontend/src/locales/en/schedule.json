@@ -77,5 +77,8 @@
   "sugDrift_other": "{{count}} jobs are running late — the queue may be busy",
   "sugTitle": "📅 Suggested optimal schedules",
   "sugApply": "Apply",
-  "sugDismiss": "Dismiss"
+  "sugDismiss": "Dismiss",
+  "loadError": "Couldn't load your schedules. Check your connection and try again.",
+  "retry": "Try again",
+  "networkError": "Network error. Check your internet connection and try again."
 }

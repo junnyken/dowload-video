@@ -81,7 +81,10 @@
     "pickCollection": "Choose Collection",
     "noCollectionsCreateFirst": "No collections yet. Create one first.",
     "itemCount_one": "{{count}} item",
-    "itemCount_other": "{{count}} items"
+    "itemCount_other": "{{count}} items",
+    "loadError": "Couldn't load your archive. Check your connection and try again.",
+    "retry": "Try again",
+    "networkError": "Network error. Check your internet connection and try again."
   },
   "suggestions": {
     "tagsAdded_one": "✓ Added {{count}} tag",

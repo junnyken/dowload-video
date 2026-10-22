@@ -7,6 +7,12 @@ import {
   Send,
   ArrowRight,
   Info,
+  Radar,
+  ListVideo,
+  CircleStop,
+  Cpu,
+  MonitorDown,
+  ShieldCheck,
 } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
 import { trackEvent, EVENT } from '../utils/trackEvent';
@@ -55,6 +61,17 @@ const platforms = [
   { icon: InstagramIcon, label: 'Instagram', color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#E1306C]' },
   { icon: DouyinIcon, label: 'Douyin',    color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#ff0050]' },
   { icon: SpotifyIcon, label: 'Spotify',  color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#1DB954]' },
+];
+
+// ── What the extension does (5.12–5.16) ──────────────────────
+// wording: BA review — text in locales/<lang>/extensionPage.json "features"
+const FEATURES = [
+  { id: 'sniff',   icon: Radar },
+  { id: 'channel', icon: CircleStop },
+  { id: 'list',    icon: ListVideo },
+  { id: 'local',   icon: Cpu },
+  { id: 'app',     icon: MonitorDown },
+  { id: 'drm',     icon: ShieldCheck },
 ];
 
 // ── Install guide ────────────────────────────────────────────
@@ -253,6 +270,26 @@ export default function ExtensionPage() {
             {/* Fade hint on right edge — mobile only */}
             <div className="sm:hidden absolute right-0 top-0 bottom-2 w-10 bg-gradient-to-l from-canvas to-transparent pointer-events-none" />
           </div>
+        </section>
+
+        {/* ── Features ──────────────────────────────────────── */}
+        <section className="w-full" aria-labelledby="features-heading">
+          <h2 id="features-heading" className="text-center text-xl sm:text-2xl font-black text-fg mb-6">
+            {t('features.heading')}
+          </h2>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {FEATURES.map(({ id, icon: Icon }) => (
+              <li key={id} className="flex gap-3 rounded-2xl bg-surface border border-line p-4">
+                <span className="flex-shrink-0 w-9 h-9 rounded-xl bg-accent-soft text-accent-text flex items-center justify-center">
+                  <Icon className="w-4 h-4" />
+                </span>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-sm text-fg">{t(`features.${id}.title`)}</h3>
+                  <p className="mt-1 text-sm text-fg-2 leading-relaxed">{t(`features.${id}.body`)}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
         </section>
 
         {/* ── Install guide ─────────────────────────────────── */}

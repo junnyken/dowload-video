@@ -50,5 +50,32 @@
   "otherBrowsers": "Edge, Cốc Cốc và Brave cài tương tự. Trên Edge dùng <mono>edge://extensions</mono>, trên Brave dùng <mono2>brave://extensions</mono2>.",
   "tgHeading": "Nhận file qua Telegram Bot",
   "tgBody": "Nhắn bất kỳ nội dung → bot tự gửi file ZIP + hướng dẫn cài đặt chi tiết.",
-  "tgOpen": "Mở Telegram Bot"
+  "tgOpen": "Mở Telegram Bot",
+  "features": {
+    "heading": "Tiện ích làm được gì",
+    "sniff": {
+      "title": "Bắt video đang phát trên trang",
+      "body": "Liệt kê các video trang web đang phát (MP4, HLS). Tải MP4 và luồng HLS ngay trong trình duyệt, tự ghép thành một file MP4."
+    },
+    "channel": {
+      "title": "Quét cả kênh, dừng lúc nào cũng được",
+      "body": "Mở trang kênh Douyin, TikTok hoặc Reels Facebook, tiện ích tự cuộn để gom danh sách video. Bấm Dừng quét khi đã đủ."
+    },
+    "list": {
+      "title": "Danh sách video ngay trong tiện ích",
+      "body": "Xem ảnh và tiêu đề từng video đã gom, bấm Tải cho đúng video bạn cần — không phải tải cả loạt."
+    },
+    "local": {
+      "title": "Tải bằng chính máy của bạn",
+      "body": "Ưu tiên tải trực tiếp trên trình duyệt hoặc app của bạn; chỉ khi không tải được tại máy mới nhờ máy chủ VidGrab."
+    },
+    "app": {
+      "title": "Nối với app VidGrab cho Windows",
+      "body": "Luồng có hình và tiếng tách riêng (DASH) được chuyển sang app VidGrab trên máy để tải và ghép tại chỗ."
+    },
+    "drm": {
+      "title": "Báo rõ video không tải được",
+      "body": "Video có DRM, mã hoá hoặc đang phát trực tiếp được đánh dấu rõ, tiện ích không cố tải."
+    }
+  }
 }

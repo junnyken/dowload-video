@@ -51,5 +51,32 @@
   "otherBrowsers": "Edge, Cốc Cốc and Brave install the same way. On Edge use <mono>edge://extensions</mono>, on Brave use <mono2>brave://extensions</mono2>.",
   "tgHeading": "Get the file via the Telegram Bot",
   "tgBody": "Send any message and the bot replies with the ZIP file and detailed install instructions.",
-  "tgOpen": "Open Telegram Bot"
+  "tgOpen": "Open Telegram Bot",
+  "features": {
+    "heading": "What the extension does",
+    "sniff": {
+      "title": "Catches the videos a page plays",
+      "body": "Lists the videos a page is playing (MP4, HLS). Downloads MP4 and HLS streams right in your browser and joins them into one MP4 file."
+    },
+    "channel": {
+      "title": "Scans whole channels — stop any time",
+      "body": "Open a Douyin, TikTok or Facebook Reels channel and the extension scrolls it to collect the videos. Press Stop scan when you have enough."
+    },
+    "list": {
+      "title": "Video list inside the extension",
+      "body": "See the thumbnail and title of every collected video and download just the ones you need — no need to grab the whole batch."
+    },
+    "local": {
+      "title": "Downloads with your own computer",
+      "body": "Downloads happen in your browser or app first; VidGrab's server only steps in when that is not possible."
+    },
+    "app": {
+      "title": "Works with the VidGrab Windows app",
+      "body": "Streams with separate video and audio (DASH) are handed to the VidGrab app on your PC, which downloads and merges them locally."
+    },
+    "drm": {
+      "title": "Clear about what cannot be downloaded",
+      "body": "DRM-protected, encrypted or live videos are clearly marked; the extension does not try to download them."
+    }
+  }
 }

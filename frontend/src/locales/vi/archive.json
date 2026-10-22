@@ -79,7 +79,10 @@
     "loadMore": "Xem thêm ({{remaining}} còn lại)",
     "pickCollection": "Chọn Collection",
     "noCollectionsCreateFirst": "Chưa có collection nào. Tạo mới trước nhé.",
-    "itemCount": "{{count}} items"
+    "itemCount": "{{count}} items",
+    "loadError": "Không tải được kho lưu trữ. Kiểm tra kết nối mạng rồi thử lại.",
+    "retry": "Thử lại",
+    "networkError": "Lỗi kết nối mạng. Hãy kiểm tra Internet rồi thử lại."
   },
   "suggestions": {
     "tagsAdded": "✓ Đã thêm {{count}} tag",
