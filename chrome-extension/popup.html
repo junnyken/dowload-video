@@ -190,6 +190,9 @@
       transition: all 0.2s;
       box-shadow: 0 4px 16px rgba(16,185,129,0.25);
     }
+    .vg-chip { background:#1e2333; border:1px solid #2b3245; color:#cbd5e1; border-radius:8px; padding:4px 8px; font-size:10px; font-weight:600; cursor:pointer; }
+    .vg-chip:hover { border-color:#6366f1; color:#fff; }
+    .vg-chip.hidden { display:none; }
     .btn-green:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(16,185,129,0.35); }
 
     /* ── Spinner ── */
@@ -792,8 +795,26 @@
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
           <div class="card-label" style="margin:0;">Danh sách video <span id="ch-list-count" style="color:#a5b4fc;"></span></div>
         </div>
+        <!-- 5.17.0: choose videos and download them to this computer. wording: BA review -->
+        <div id="ch-pick-bar" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:6px;font-size:10px;">
+          <button id="ch-pick-all" type="button" class="vg-chip">Chọn tất cả</button>
+          <button id="ch-pick-none" type="button" class="vg-chip">Bỏ chọn</button>
+          <button id="ch-pick-10" type="button" class="vg-chip">10 video đầu</button>
+          <span id="ch-pick-count" style="margin-left:auto;color:#94a3b8;"></span>
+        </div>
         <div id="ch-list" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;"></div>
         <div id="ch-list-msg" style="font-size:10px;color:#64748b;margin-top:4px;min-height:0;"></div>
+        <button id="ch-bulk-btn" type="button" class="btn-primary" style="margin-top:8px;" disabled>
+          <span id="ch-bulk-text">Tải video đã chọn về máy</span>
+        </button>
+        <div id="ch-bulk" class="hidden" style="margin-top:8px;background:#0f1119;border:1px solid #1e2333;border-radius:10px;padding:8px;">
+          <div style="height:6px;background:#1e2333;border-radius:99px;overflow:hidden;"><div id="ch-bulk-bar" style="height:100%;width:0;background:linear-gradient(90deg,#6366f1,#22c55e);transition:width .3s;"></div></div>
+          <div id="ch-bulk-info" style="font-size:10px;color:#cbd5e1;margin-top:6px;"></div>
+          <div style="display:flex;gap:6px;margin-top:6px;">
+            <button id="ch-bulk-stop" type="button" class="vg-chip">⏹ Dừng tải</button>
+            <button id="ch-bulk-clear" type="button" class="vg-chip hidden">Xoá kết quả</button>
+          </div>
+        </div>
       </div>
 
       <!-- Channel Watch (Phase 33B, task #6259): shown only when signed in and the server enables it. wording: BA review -->

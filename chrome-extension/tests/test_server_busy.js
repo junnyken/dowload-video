@@ -44,7 +44,9 @@ assert(vgServerErrorText({ user_message: 'U', detail: 'D' }, 500) === 'U (HTTP 5
 assert(vgServerErrorText(null, 502) === 'HTTP 502', 'no body (gateway)');
 
 console.log('[3] every /fetch-link caller reads the body text');
-assert(/if \(!resp\.ok\) throw new Error\(vgServerErrorText\(data, resp\.status\)\)/.test(background), 'VG_DOWNLOAD_NOW uses the helper');
+// 5.17.0: the single "Tải" and the bulk queue share vgFetchAndSave (it keeps the HTTP status for 429)
+assert(/if \(!resp\.ok\) throw Object\.assign\(new Error\(vgServerErrorText\(data, resp\.status\)\), \{ status: resp\.status \}\)/.test(background), 'vgFetchAndSave uses the helper');
+assert(/msg\.type === 'VG_DOWNLOAD_NOW'[\s\S]{0,1200}vgFetchAndSave\(/.test(background), 'VG_DOWNLOAD_NOW goes through vgFetchAndSave');
 assert(/vgServerErrorText\(data, resp\.status\)\) \}\)/.test(background), 'context menu toast uses the helper');
 assert(/result\?\.data\?\.detail \|\| result\?\.error/.test(popup), 'popup Spotify track shows detail');
 assert(/dlBtn\.title = \(typeof d === 'string' \? d : d\?\.message\)/.test(popup), 'popup format row keeps the reason in its tooltip');

@@ -674,6 +674,12 @@ function vgChannelState(scrolling) {
 }
 
 const _vgListed = new Set();
+// 5.17.0: the rows in order, the chosen ones, and whether new rows join the choice.
+const _vgItems = [];
+const _vgPicked = new Set();
+let _vgPickAuto = true;
+let _vgBulkActive = false; // a bulk download is running (button disabled)
+let _vgBulkDoc = null;      // last storage.local vg_bulk seen
 function vgRenderChannelList(items) {
   const wrap = document.getElementById('ch-list-wrap');
   const list = document.getElementById('ch-list');
@@ -684,14 +690,30 @@ function vgRenderChannelList(items) {
   items.forEach((it, i) => {
     if (_vgListed.has(it.url)) return;
     _vgListed.add(it.url);
+    _vgItems.push(it);
+    if (_vgPickAuto) _vgPicked.add(it.url); // new rows follow "Chọn tất cả"
     list.appendChild(vgChannelRow(it, i));
   });
+  vgBulkRows(); // rows that arrive after the progress was drawn get their state too
+  vgPickRefresh();
 }
 
 function vgChannelRow(it, i) {
   const row = document.createElement('div');
   row.className = 'vg-ch-row';
+  row.dataset.url = it.url;
   row.style.cssText = 'display:flex;align-items:center;gap:8px;background:#0f1119;border:1px solid #1e2333;border-radius:10px;padding:6px;';
+  const pick = document.createElement('input');
+  pick.type = 'checkbox';
+  pick.className = 'vg-ch-pick';
+  pick.checked = _vgPicked.has(it.url);
+  pick.setAttribute('aria-label', 'Chọn video này'); // wording: BA review
+  pick.style.cssText = 'flex-shrink:0;width:14px;height:14px;accent-color:#6366f1;cursor:pointer;';
+  pick.onchange = () => {
+    _vgPickAuto = false;
+    if (pick.checked) _vgPicked.add(it.url); else _vgPicked.delete(it.url);
+    vgPickRefresh();
+  };
   const thumb = document.createElement(it.thumb ? 'img' : 'div');
   thumb.style.cssText = 'flex-shrink:0;width:44px;height:56px;border-radius:6px;object-fit:cover;background:#1e2333;';
   if (it.thumb) { thumb.src = it.thumb; thumb.referrerPolicy = 'no-referrer'; thumb.alt = ''; thumb.loading = 'lazy'; }
@@ -725,9 +747,135 @@ function vgChannelRow(it, i) {
       state.style.color = ack?.queued ? '#86efac' : '#fca5a5';
     });
   };
-  row.append(thumb, info, dl);
+  row.append(pick, thumb, info, dl);
   return row;
 }
+
+// ── 5.17.0: choose videos, download them all to this computer ──────
+// wording: BA review
+function vgPickRefresh() {
+  for (const box of document.querySelectorAll('#ch-list .vg-ch-pick')) box.checked = _vgPicked.has(box.closest('.vg-ch-row').dataset.url);
+  const n = _vgPicked.size;
+  document.getElementById('ch-pick-count').textContent = `Đã chọn ${n}/${_vgItems.length}`;
+  const btn = document.getElementById('ch-bulk-btn');
+  btn.disabled = n === 0 || _vgBulkActive;
+  document.getElementById('ch-bulk-text').textContent = n ? `⬇ Tải ${n} video về máy` : 'Chọn video để tải về máy';
+}
+document.getElementById('ch-pick-all')?.addEventListener('click', () => {
+  _vgPickAuto = true;
+  for (const it of _vgItems) _vgPicked.add(it.url);
+  vgPickRefresh();
+});
+document.getElementById('ch-pick-none')?.addEventListener('click', () => {
+  _vgPickAuto = false;
+  _vgPicked.clear();
+  vgPickRefresh();
+});
+document.getElementById('ch-pick-10')?.addEventListener('click', () => {
+  _vgPickAuto = false;
+  _vgPicked.clear();
+  for (const it of _vgItems.slice(0, 10)) _vgPicked.add(it.url);
+  vgPickRefresh();
+});
+
+function vgPlatformOfUrl(u) {
+  const h = (() => { try { return new URL(u).hostname.toLowerCase(); } catch { return ''; } })();
+  if (/(^|\.)douyin\.com$/.test(h)) return 'douyin';
+  if (/(^|\.)tiktok\.com$/.test(h)) return 'tiktok';
+  if (/(^|\.)facebook\.com$/.test(h)) return 'facebook';
+  return 'other';
+}
+// Downloads left today for `platform` (null = no limit / unknown) — same rule as content.js.
+function vgRemainingFor(quota, platform) {
+  const snap = quota && quota.platform_quota;
+  if (!snap || snap.unlimited) return null;
+  if (snap.scope === 'platform') {
+    const p = (snap.platforms || []).find((x) => x.platform === platform);
+    if (p) return p.remaining < 0 ? null : p.remaining;
+  }
+  return typeof snap.remaining_total === 'number' && snap.remaining_total >= 0 ? snap.remaining_total : null;
+}
+
+document.getElementById('ch-bulk-btn')?.addEventListener('click', async () => {
+  const chosen = _vgItems.filter((it) => _vgPicked.has(it.url)).map((it) => ({ url: it.url, title: it.title || '' }));
+  if (!chosen.length) return;
+  const btn = document.getElementById('ch-bulk-btn');
+  const msgEl = document.getElementById('ch-list-msg');
+  btn.disabled = true;
+  document.getElementById('ch-bulk-text').textContent = '⏳ Đang kiểm tra lượt tải còn lại...';
+  let cap = null, reset = '';
+  try {
+    const base = await getApiBaseLocal();
+    const q = await new Promise((r) => chrome.runtime.sendMessage({ type: 'VG_API_FETCH', url: `${base}/api/v1/quota`, method: 'GET' }, r));
+    if (q && q.ok && q.data && q.data.success) {
+      cap = vgRemainingFor(q.data.quota, vgPlatformOfUrl(chosen[0].url));
+      reset = (q.data.quota.platform_quota && q.data.quota.platform_quota.reset_time_vn) || '';
+    }
+  } catch { /* unknown: send all, the server still counts each one */ }
+  if (cap === 0) {
+    msgEl.style.color = '#fbbf24';
+    msgEl.textContent = `Bạn đã hết lượt tải hôm nay${reset ? ` — lượt mới lúc ${reset}` : ''}.`;
+    vgPickRefresh();
+    return;
+  }
+  const now = cap == null ? chosen : chosen.slice(0, cap);
+  const later = chosen.slice(now.length);
+  const res = await new Promise((r) => chrome.runtime.sendMessage({
+    type: 'VG_BULK_START', items: now, later, quality: 'video',
+    laterReason: later.length ? `hết lượt tải hôm nay${reset ? `, lượt mới lúc ${reset}` : ''}` : null,
+  }, r));
+  if (!res || !res.ok) {
+    msgEl.style.color = '#fca5a5';
+    msgEl.textContent = (res && res.error) || 'Không bắt đầu được. Hãy thử lại.';
+    vgPickRefresh();
+    return;
+  }
+  msgEl.style.color = later.length ? '#fbbf24' : '#86efac';
+  msgEl.textContent = later.length
+    ? `Đang tải ${now.length} video về máy. ${later.length} video chưa tải vì hết lượt hôm nay${reset ? ` — lượt mới lúc ${reset}` : ''}.`
+    : `Đang tải ${now.length} video về máy — có thể đóng cửa sổ này, việc tải vẫn tiếp tục.`;
+});
+document.getElementById('ch-bulk-stop')?.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'VG_BULK_STOP' }));
+document.getElementById('ch-bulk-clear')?.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'VG_BULK_CLEAR' }));
+
+// Progress of the background queue (storage.local vg_bulk), also after reopening the popup.
+const VG_BULK_LABEL = { queued: 'Đang chờ', running: 'Đang tải…', done: '✓ Đã tải về máy', error: 'Lỗi', skipped: 'Chưa tải' };
+function vgBulkRender(b) {
+  _vgBulkDoc = b;
+  const box = document.getElementById('ch-bulk');
+  if (!box) return;
+  if (!b) { box.classList.add('hidden'); _vgBulkActive = false; vgPickRefresh(); return; }
+  const c = { total: b.items.length, done: 0, error: 0, skipped: 0, queued: 0, running: 0 };
+  for (const it of b.items) c[it.status] = (c[it.status] || 0) + 1;
+  const finished = c.done + c.error + c.skipped;
+  _vgBulkActive = !b.finishedAt && (c.running > 0 || (c.queued > 0 && !b.stopped));
+  box.classList.remove('hidden');
+  document.getElementById('ch-bulk-bar').style.width = `${c.total ? Math.round((finished / c.total) * 100) : 0}%`;
+  document.getElementById('ch-bulk-info').textContent = _vgBulkActive
+    ? `Đang tải về máy: ${c.done}/${c.total} xong${c.error ? ` · ${c.error} lỗi` : ''} — đóng cửa sổ này vẫn tải tiếp.`
+    : `${b.stopped ? 'Đã dừng' : 'Hoàn tất'}: ${c.done}/${c.total} video đã tải về máy${c.error ? ` · ${c.error} lỗi` : ''}${c.skipped ? ` · ${c.skipped} chưa tải${b.stopReason ? ` (${b.stopReason})` : ''}` : ''}.`;
+  document.getElementById('ch-bulk-stop').classList.toggle('hidden', !_vgBulkActive);
+  document.getElementById('ch-bulk-clear').classList.toggle('hidden', _vgBulkActive);
+  vgBulkRows();
+  vgPickRefresh();
+}
+// each row: its own state in the last run
+function vgBulkRows() {
+  const b = _vgBulkDoc;
+  if (!b) return;
+  const byUrl = new Map(b.items.map((x) => [x.url, x]));
+  for (const row of document.querySelectorAll('#ch-list .vg-ch-row')) {
+    const x = byUrl.get(row.dataset.url);
+    if (!x) continue;
+    const st = row.querySelector('.vg-ch-state');
+    st.textContent = x.status === 'error' ? `Lỗi: ${x.error || ''}` : VG_BULK_LABEL[x.status];
+    st.style.color = x.status === 'done' ? '#86efac' : x.status === 'error' ? '#fca5a5' : x.status === 'skipped' ? '#fbbf24' : '#a5b4fc';
+  }
+}
+chrome.storage.local.get('vg_bulk', (r) => vgBulkRender(r.vg_bulk || null));
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.vg_bulk) vgBulkRender(changes.vg_bulk.newValue || null);
+});
 window.addEventListener('unload', () => clearInterval(pollTimer));
 
 // ── Elapsed timer (hiển thị số giây đang xử lý) ──────────────────

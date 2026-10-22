@@ -344,6 +344,155 @@ async function hlsStart(item, height) {
   return job;
 }
 
+// One video: server fetch-link -> the file straight to this computer (smartDownload),
+// subtitles, history. Shared by VG_DOWNLOAD_NOW and the 5.17.0 bulk queue.
+// Throws an Error (with .status when the server answered) on failure.
+async function vgFetchAndSave({ url, quality, remove_watermark, download_subs }, signal) {
+  const base = await getApiBase();
+  const user_cookies_b64 = await getEphemeralCookiesB64(url);
+  const resp = await fetch(`${base}/api/v1/fetch-link`, {
+    method: 'POST',
+    headers: await authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ url, quality, remove_watermark, download_subs, user_cookies_b64 }),
+    signal,
+  });
+
+  // The server explains every failure in the body (detail / user_message);
+  // "HTTP 500" alone told the user nothing (08/10, task #6134).
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) throw Object.assign(new Error(vgServerErrorText(data, resp.status)), { status: resp.status });
+  if (!data?.success) throw new Error(data?.detail || 'Server lỗi');
+
+  // Resolve download URL (same logic as popup resolveDownloadUrl)
+  const ext = (quality || '').includes('mp3') || data.is_audio_only ? 'mp3' : 'mp4';
+  let dlUrl = ext === 'mp3'
+    ? (vgFileId(data.local_mp3_file_id, data.local_mp3_path) || vgFileId(data.local_file_id, data.local_file_path) || data.direct_mp4_url)
+    : (data.direct_mp4_url || vgFileId(data.local_file_id, data.local_file_path) || vgFileId(data.local_mp3_file_id, data.local_mp3_path));
+
+  if (!dlUrl) throw new Error('Không lấy được link tải');
+
+  const safeName = (data.title || 'video').replace(/[/\\?%*:|"<>]/g, '-');
+  const finalExt = (data.is_audio_only || dlUrl.endsWith('.mp3') || dlUrl.endsWith('.m4a')) ? 'mp3' : ext;
+
+  // E1: prefer direct (user IP), fall back to server proxy on failure
+  smartDownload({ rawUrl: dlUrl, base, safeName, finalExt, saveAs: false });
+  // Subtitle: prefer local backend file, fall back to CDN URL
+  if (data.subtitle_file_url) {
+    const subUrl = data.subtitle_file_url.startsWith('http') ? data.subtitle_file_url : `${base}${data.subtitle_file_url}`;
+    chrome.downloads.download({ url: subUrl, filename: `VidGrab/${safeName}.srt`, saveAs: false });
+  } else if (data.subtitle_url) {
+    chrome.downloads.download({ url: data.subtitle_url, filename: `VidGrab/${safeName}.srt`, saveAs: false });
+  }
+
+  const _hadSubtitle = !!(data.subtitle_file_url || data.subtitle_url);
+  addToHistory({
+    title: data.title || 'Video', thumbnail: data.thumbnail_url || '', url,
+    quality: finalExt === 'mp3' ? 'MP3' : (quality || 'HD'),
+    fileSize: data.file_size_mb ? `${data.file_size_mb} MB` : '',
+    noWatermark: remove_watermark && finalExt !== 'mp3',
+    hasSubtitle: _hadSubtitle,
+    subtitleLanguages: data.available_subtitle_languages || [],
+    subtitleSource: data.subtitle_source || 'none',
+  });
+  return { data, dlUrl, finalExt, safeName };
+}
+
+// ── 5.17.0: download many collected videos to this computer (owner 22/10) ──
+// The popup's channel list sends the chosen videos; two at a time go through
+// vgFetchAndSave (each counts one download on the server, like the single
+// "Tải" button). The queue lives in storage.local, so it goes on with the
+// popup closed and picks up again if Chrome stops this service worker.
+// A 429 (no downloads left today / too fast) stops the queue; the rest stay
+// "skipped" with the server's message. wording: BA review
+const VG_BULK_KEY = 'vg_bulk';
+const VG_BULK_PARALLEL = 2;
+let _vgBulk = null;        // in-memory copy of storage[VG_BULK_KEY]
+let _vgBulkWorkers = 0;
+
+async function vgBulkLoad() {
+  if (_vgBulk) return _vgBulk;
+  const got = await chrome.storage.local.get(VG_BULK_KEY);
+  _vgBulk = got[VG_BULK_KEY] || null;
+  return _vgBulk;
+}
+function vgBulkSave() {
+  return chrome.storage.local.set({ [VG_BULK_KEY]: _vgBulk });
+}
+function vgBulkCounts(b) {
+  const c = { total: b.items.length, done: 0, error: 0, skipped: 0, queued: 0, running: 0 };
+  for (const it of b.items) c[it.status] = (c[it.status] || 0) + 1;
+  return c;
+}
+
+async function vgBulkFinish() {
+  const b = _vgBulk;
+  if (!b || b.finishedAt) return;
+  b.finishedAt = Date.now();
+  await vgBulkSave();
+  const c = vgBulkCounts(b);
+  chrome.notifications.create(`vg-bulk-${b.finishedAt}`, {
+    type: 'basic', iconUrl: 'assets/icon.png',
+    title: b.stopped ? `VidGrab — đã dừng: ${c.done}/${c.total} video` : `✅ VidGrab — đã tải ${c.done}/${c.total} video`,
+    message: [c.error && `${c.error} video lỗi`, c.skipped && `${c.skipped} video chưa tải${b.stopReason ? ` (${b.stopReason})` : ''}`].filter(Boolean).join(' · ') || 'Tệp nằm trong thư mục Tải xuống / VidGrab.',
+    priority: 1,
+  });
+}
+
+async function vgBulkWorker() {
+  _vgBulkWorkers++;
+  try {
+    for (;;) {
+      const b = await vgBulkLoad();
+      if (!b || b.stopped || b.finishedAt) return;
+      const it = b.items.find((x) => x.status === 'queued');
+      if (!it) return;
+      it.status = 'running';
+      await vgBulkSave();
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 150_000);
+      try {
+        const { data } = await vgFetchAndSave({ url: it.url, quality: b.quality, remove_watermark: true, download_subs: false }, controller.signal);
+        it.status = 'done';
+        if (data && data.title) it.title = String(data.title).slice(0, 200);
+      } catch (err) {
+        it.status = 'error';
+        it.error = err.name === 'AbortError' ? 'Máy chủ xử lý quá lâu' : String(err.message || err).slice(0, 200);
+        if (err.status === 429) {
+          // no downloads left today (or too fast): keep the rest for later
+          b.stopped = true;
+          b.stopReason = it.error;
+          it.status = 'skipped';
+          for (const x of b.items) if (x.status === 'queued') x.status = 'skipped';
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+      await vgBulkSave();
+    }
+  } finally {
+    _vgBulkWorkers--;
+    const b = _vgBulk;
+    if (_vgBulkWorkers === 0 && b && !b.items.some((x) => x.status === 'running' || (x.status === 'queued' && !b.stopped))) {
+      await vgBulkFinish();
+    }
+  }
+}
+
+function vgBulkPump() {
+  while (_vgBulkWorkers < VG_BULK_PARALLEL) void vgBulkWorker();
+}
+
+// After a service-worker restart: what was running is queued again, then go on.
+(async () => {
+  const b = await vgBulkLoad();
+  if (!b || b.finishedAt) return;
+  let changed = false;
+  for (const it of b.items) if (it.status === 'running') { it.status = 'queued'; changed = true; }
+  if (changed) await vgBulkSave();
+  if (!b.stopped && b.items.some((x) => x.status === 'queued')) vgBulkPump();
+  else if (b.stopped) await vgBulkFinish();
+})();
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (!msg || msg.target !== 'sw') return false;
   (async () => {
@@ -799,9 +948,58 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
 
+  // ── 5.17.0: bulk download to this computer (popup channel list) ──
+  if (msg.type === 'VG_BULK_START') {
+    (async () => {
+      const cur = await vgBulkLoad();
+      if (cur && !cur.finishedAt && cur.items.some((x) => x.status === 'running' || x.status === 'queued')) {
+        sendResponse({ ok: false, error: 'Đang có một lượt tải hàng loạt chạy — hãy chờ xong hoặc bấm Dừng.' }); // wording: BA review
+        return;
+      }
+      const seen = new Set();
+      const items = (Array.isArray(msg.items) ? msg.items : [])
+        .filter((x) => x && typeof x.url === 'string' && /^https:\/\//.test(x.url) && !seen.has(x.url) && seen.add(x.url))
+        .slice(0, 500)
+        .map((x) => ({ url: x.url, title: typeof x.title === 'string' ? x.title.slice(0, 200) : '', status: 'queued' }));
+      const skipped = (Array.isArray(msg.later) ? msg.later : []).slice(0, 500)
+        .map((x) => ({ url: x.url, title: typeof x.title === 'string' ? x.title.slice(0, 200) : '', status: 'skipped' }));
+      if (!items.length) { sendResponse({ ok: false, error: 'Chưa chọn video nào.' }); return; }
+      _vgBulk = { startedAt: Date.now(), quality: msg.quality === 'mp3' ? 'mp3' : 'video', items: [...items, ...skipped],
+                  stopped: false, stopReason: msg.laterReason || null, finishedAt: null };
+      await vgBulkSave();
+      vgBulkPump();
+      sendResponse({ ok: true, count: items.length });
+    })();
+    return true;
+  }
+  if (msg.type === 'VG_BULK_STOP') {
+    (async () => {
+      const b = await vgBulkLoad();
+      if (b && !b.finishedAt) {
+        b.stopped = true;
+        b.stopReason = b.stopReason || 'bạn đã bấm Dừng';
+        for (const x of b.items) if (x.status === 'queued') x.status = 'skipped';
+        await vgBulkSave();
+        if (!b.items.some((x) => x.status === 'running')) await vgBulkFinish();
+      }
+      sendResponse({ ok: true });
+    })();
+    return true;
+  }
+  if (msg.type === 'VG_BULK_CLEAR') {
+    (async () => {
+      const b = await vgBulkLoad();
+      if (b && !b.items.some((x) => x.status === 'running' || (x.status === 'queued' && !b.stopped))) {
+        _vgBulk = null;
+        await chrome.storage.local.remove(VG_BULK_KEY);
+      }
+      sendResponse({ ok: true });
+    })();
+    return true;
+  }
+
   if (msg.type === 'VG_DOWNLOAD_NOW') {
     (async () => {
-      const base = await getApiBase();
       const { url, quality, remove_watermark, download_subs } = msg.payload;
 
       // Ack immediately so popup can show "running in background" state
@@ -823,54 +1021,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           chrome.runtime.sendMessage({ type: 'VG_FETCH_PROGRESS', elapsed }).catch(() => {});
         }, 3000);
 
-        const user_cookies_b64 = await getEphemeralCookiesB64(url);
-        const resp = await fetch(`${base}/api/v1/fetch-link`, {
-          method: 'POST',
-          headers: await authHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ url, quality, remove_watermark, download_subs, user_cookies_b64 }),
-          signal: controller.signal,
-        });
-        clearTimeout(abortTimer);
-        clearInterval(pingInterval);
-
-        // The server explains every failure in the body (detail / user_message);
-        // "HTTP 500" alone told the user nothing (08/10, task #6134).
-        const data = await resp.json().catch(() => null);
-        if (!resp.ok) throw new Error(vgServerErrorText(data, resp.status));
-        if (!data?.success) throw new Error(data?.detail || 'Server lỗi');
-
-        // Resolve download URL (same logic as popup resolveDownloadUrl)
-        const ext = (quality || '').includes('mp3') || data.is_audio_only ? 'mp3' : 'mp4';
-        let dlUrl = ext === 'mp3'
-          ? (vgFileId(data.local_mp3_file_id, data.local_mp3_path) || vgFileId(data.local_file_id, data.local_file_path) || data.direct_mp4_url)
-          : (data.direct_mp4_url || vgFileId(data.local_file_id, data.local_file_path) || vgFileId(data.local_mp3_file_id, data.local_mp3_path));
-
-        if (!dlUrl) throw new Error('Không lấy được link tải');
-
-        const safeName = (data.title || 'video').replace(/[/\\?%*:|"<>]/g, '-');
-        const finalExt = (data.is_audio_only || dlUrl.endsWith('.mp3') || dlUrl.endsWith('.m4a')) ? 'mp3' : ext;
-
-        // E1: prefer direct (user IP), fall back to server proxy on failure
-        smartDownload({ rawUrl: dlUrl, base, safeName, finalExt, saveAs: false });
-        // Subtitle: prefer local backend file, fall back to CDN URL
-        if (data.subtitle_file_url) {
-          const subUrl = data.subtitle_file_url.startsWith('http') ? data.subtitle_file_url : `${base}${data.subtitle_file_url}`;
-          chrome.downloads.download({ url: subUrl, filename: `VidGrab/${safeName}.srt`, saveAs: false });
-        } else if (data.subtitle_url) {
-          chrome.downloads.download({ url: data.subtitle_url, filename: `VidGrab/${safeName}.srt`, saveAs: false });
-        }
-
+        const { data, dlUrl, finalExt, safeName } = await vgFetchAndSave({ url, quality, remove_watermark, download_subs }, controller.signal)
+          .finally(() => { clearTimeout(abortTimer); clearInterval(pingInterval); });
         notifTitle = `✅ ${data.title || 'Video'} — đang tải`;
-        const _hadSubtitle = !!(data.subtitle_file_url || data.subtitle_url);
-        addToHistory({
-          title: data.title || 'Video', thumbnail: data.thumbnail_url || '', url,
-          quality: finalExt === 'mp3' ? 'MP3' : (quality || 'HD'),
-          fileSize: data.file_size_mb ? `${data.file_size_mb} MB` : '',
-          noWatermark: remove_watermark && finalExt !== 'mp3',
-          hasSubtitle: _hadSubtitle,
-          subtitleLanguages: data.available_subtitle_languages || [],
-          subtitleSource: data.subtitle_source || 'none',
-        });
 
         // Notify popup (may be closed — fails silently)
         chrome.runtime.sendMessage({ type: 'VG_DOWNLOAD_DONE', data, dlUrl, ext: finalExt, safeName }).catch(() => {});
