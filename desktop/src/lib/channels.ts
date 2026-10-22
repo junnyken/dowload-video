@@ -10,8 +10,9 @@ import { auth } from './auth';
 import { settings } from './settings';
 import { errorMessage, toAppError } from './errors';
 import { newId } from './format';
-import { fetchDouyinListing, fetchXhsListing } from './douyin';
-import { isDouyinUrl, isXhsProfileUrl } from './urls';
+import { fetchDouyinListing, fetchXhsListing, pollDouyinRelay, startDouyinRelay } from './douyin';
+import { facebookRelayListing } from './douyin-core';
+import { isDouyinUrl, isFacebookChannelUrl, isXhsProfileUrl } from './urls';
 import { cookiesUsableFor, planFor, routesFor } from './cookies';
 import { claimBatch, quota } from './quota';
 import { claimRoute, isLocalStep } from './routes-core';
@@ -196,12 +197,58 @@ export type Flow = {
   listing?: ChannelListing;
   errorCode?: string;
   more?: boolean; // loading a longer list while the picker stays open
+  /** 0.19.3: Facebook through the extension in Chrome — what the relay is doing. */
+  relay?: { state: 'waiting' | 'scrolling' | 'login' | 'noext'; count: number; viaChrome: boolean };
 };
 export const flow = createStore<Flow>({ phase: 'idle', url: '', limit: 200 });
 let flowToken = 0;
 
+/**
+ * 0.19.3: a Facebook page through the VidGrab extension in the person's own
+ * Chrome (channel relay, like the website). The app's hidden window is a
+ * signed-out WebView2 and listed nothing (owner 22/10: "chưa thấy video nào");
+ * the person's Chrome is signed in to Facebook and gets the whole tab.
+ */
+const RELAY_WAIT_MS = 15 * 60_000;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function fetchFacebookViaRelay(url: string, limit: number, token: number) {
+  const start = await startDouyinRelay(url);
+  const viaChrome = await api.openInChrome(start.openUrl);
+  const opened = Date.now();
+  flow.set({ ...flow.get(), relay: { state: 'waiting', count: 0, viaChrome } });
+  while (Date.now() - opened < RELAY_WAIT_MS) {
+    await sleep(3000);
+    if (token !== flowToken) return; // cancelled / another link
+    const doc = await pollDouyinRelay(start.token);
+    if (doc === 'expired') throw new Error('relay_expired');
+    if (!doc) continue;
+    if (doc.status === 'done') {
+      if (!doc.items.length) throw new Error('channel_page_empty');
+      flow.set({ phase: 'ready', url, limit, listing: facebookRelayListing(doc, limit) });
+      toast('success', `Đã lấy ${doc.items.length} video của trang qua tiện ích VidGrab.`); // wording: BA review
+      return;
+    }
+    const state = doc.status === 'waiting' && Date.now() - opened > 20_000 ? 'noext' : doc.status;
+    flow.set({ ...flow.get(), relay: { state, count: doc.items.length, viaChrome } });
+  }
+  throw new Error('relay_timeout');
+}
+
 export async function fetchListing(url: string, limit: number, more = false, showPage = false) {
   const token = ++flowToken;
+  if (isFacebookChannelUrl(url) && !showPage && !more) {
+    flow.set({ phase: 'loading', url, limit });
+    try {
+      await fetchFacebookViaRelay(url, limit, token);
+    } catch (e) {
+      if (token !== flowToken) return;
+      const err = toAppError(e);
+      const code = e instanceof Error && ['relay_expired', 'relay_timeout', 'channel_page_empty'].includes(e.message) ? e.message : err.code;
+      flow.set({ phase: 'error', url, limit, errorCode: code });
+    }
+    return;
+  }
   const prev = flow.get().listing;
   flow.set({ phase: more && prev ? 'ready' : 'loading', url, limit, listing: more ? prev : undefined, more });
   try {

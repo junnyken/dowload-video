@@ -20,6 +20,19 @@ export function isDouyinUrl(raw: string): boolean {
   return h === 'douyin.com' || h.endsWith('.douyin.com') || h === 'iesdouyin.com' || h.endsWith('.iesdouyin.com');
 }
 
+/**
+ * 0.19.3: a Facebook page / profile (or its Reels / Videos tab) — listed by the
+ * VidGrab extension in the person's own Chrome (channel relay), like the
+ * website does. Same shapes as the server (channel_relay.py): /<name>[/reels|/videos],
+ * profile.php?id=…, /people/<name>/<id>/.
+ */
+export function isFacebookChannelUrl(raw: string): boolean {
+  const t = (raw || '').trim().replace(/#.*$/, '');
+  return /^https?:\/\/(www\.|web\.|m\.)?facebook\.com\/(?!(reel|reels|watch|groups|share|events|marketplace|pages|gaming|login|photo|photos|hashtag|story\.php|profile\.php|people)(\/|\?|#|$))[A-Za-z0-9.-]{1,80}(\/(reels|videos))?\/?(\?.*)?$/i.test(t)
+    || /^https?:\/\/(www\.|web\.|m\.)?facebook\.com\/profile\.php\?(.*&)?id=\d{5,25}/i.test(t)
+    || /^https?:\/\/(www\.|web\.|m\.)?facebook\.com\/people\/[^/?#]+\/\d{5,25}\/?(\?.*)?$/i.test(t);
+}
+
 /** v.douyin.com/<code>: resolves to either a video or a profile. */
 export function isDouyinShortUrl(raw: string): boolean {
   const u = parse(raw);

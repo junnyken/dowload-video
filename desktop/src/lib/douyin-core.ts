@@ -63,3 +63,17 @@ export function relayListing(server: ChannelListing, doc: RelayDoc): ChannelList
   };
   return mergeListings(server, page, doc.items.length + server.videos.length);
 }
+
+/** 0.19.3: a Facebook page listed by the extension in Chrome (channel relay) as a channel listing. */
+// channelId like the page window's (page_listing.rs): fb:<profile id or page name>
+export function facebookRelayListing(doc: { channelUrl: string; channelTitle: string | null; items: { id: string; url: string; title: string | null }[] }, limit: number): ChannelListing {
+  const m = doc.channelUrl.match(/[?&]id=(\d+)/) || doc.channelUrl.match(/facebook\.com\/([^/?#]+)/);
+  const title = doc.channelTitle || 'Facebook';
+  const videos = doc.items.map((i) => ({
+    id: i.id, url: i.url, title: i.title || `Facebook ${i.id.slice(-6)}`, duration: null, uploadDate: null, thumbnail: null,
+  }));
+  return {
+    channelId: `fb:${m ? m[1] : doc.channelUrl}`, url: doc.channelUrl, title, platform: 'facebook', uploader: title, thumbnail: null,
+    videos: videos.slice(0, limit), truncated: videos.length > limit,
+  };
+}

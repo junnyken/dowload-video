@@ -7,7 +7,9 @@ import {
   canShowPage, cancelFlow, channels, channelsLoaded, checkChannel, checking, fetchListing, flow, isManualOnly, nextCheckAt, removeChannel, saveChannel, serverListedName,
 } from '../lib/channels';
 import { parseUrls } from '../lib/probes';
-import { isDouyinUrl, isXhsProfileUrl } from '../lib/urls';
+import { isDouyinUrl, isFacebookChannelUrl, isXhsProfileUrl } from '../lib/urls';
+import { WEBSITE_URL } from '../lib/config';
+import { api } from '../lib/tauri';
 import { douyinStage, type DouyinStage } from '../lib/douyin';
 import { QUALITY_LABEL } from '../lib/quality';
 import type { Quality } from '../lib/settings';
@@ -159,6 +161,7 @@ export function ChannelsScreen() {
             <Button variant="primary" icon={loading ? <Spinner /> : <ListVideo size={16} />} disabled={loading || !text.trim()} onClick={() => start()}>Lấy danh sách video</Button>
           </div>
           {isDouyinUrl(text.trim()) && <p className="mt-2 text-xs text-fg-muted">Douyin: dán link trang cá nhân hoặc link một video của kênh — ứng dụng tìm kênh của tác giả. Ứng dụng lấy toàn bộ kênh (hoặc số video bạn chọn); số lượt tải trong ngày chỉ tính khi bạn tải video về. Kênh Douyin chỉ được quét khi bạn bấm, không tự kiểm tra nền.</p>}{/* wording: BA review */}
+          {isFacebookChannelUrl(text.trim()) && <p className="mt-2 text-xs text-fg-muted">Facebook: ứng dụng mở trang trong Chrome, tiện ích VidGrab (5.16.1 trở lên) cuộn hết tab Reels rồi gửi danh sách về đây. Hãy đăng nhập Facebook trong Chrome để lấy đủ video.</p>}{/* wording: BA review */}
           {isXhsProfileUrl(text.trim()) && <p className="mt-2 text-xs text-fg-muted">Xiaohongshu / RedNote: dán link trang cá nhân (giữ nguyên phần ?xsec_token=…). Cần đăng nhập; mỗi lần lấy tối đa 20 video, giới hạn theo số lượt tải bạn còn trong hôm nay. Kênh chỉ được quét khi bạn bấm, không tự kiểm tra nền.</p>}
           {msg && <p role="alert" className="mt-2 text-[13px] text-danger">{msg}</p>}
           {f.phase === 'error' && (
@@ -180,9 +183,18 @@ export function ChannelsScreen() {
             <div className="flex items-center gap-3">
               <Spinner className="text-accent" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-fg">{stage ? STAGE_TEXT[stage] : 'Đang lấy danh sách video…'}</p>
-                <p className="truncate text-xs text-fg-muted">Kênh nhiều video có thể mất vài chục giây. {f.url}</p>
+                {/* 0.19.3: Facebook through the extension in Chrome. wording: BA review */}
+                <p className="text-sm font-medium text-fg">{f.relay
+                  ? (f.relay.state === 'scrolling' ? `Tiện ích VidGrab đang cuộn trang: đã nhận ${f.relay.count} video…`
+                    : f.relay.state === 'login' ? `Facebook cần đăng nhập — hãy đăng nhập Facebook trong tab vừa mở (đã nhận ${f.relay.count} video).`
+                    : f.relay.state === 'noext' ? `Chưa thấy tiện ích VidGrab trả lời từ ${f.relay.viaChrome ? 'Chrome' : 'trình duyệt vừa mở'}. Hãy cài tiện ích VidGrab (5.16.1 trở lên) rồi tải lại tab trang Facebook (F5). Vẫn đang chờ.`
+                    : `Đã mở trang trong ${f.relay.viaChrome ? 'Chrome' : 'trình duyệt'} — chờ tiện ích VidGrab cuộn hết tab Reels (đừng đóng tab đó)…`)
+                  : stage ? STAGE_TEXT[stage] : 'Đang lấy danh sách video…'}</p>
+                <p className="truncate text-xs text-fg-muted">{f.relay ? 'Facebook chỉ cho xem đủ video khi đã đăng nhập, nên ứng dụng nhờ tiện ích VidGrab trong Chrome của bạn lấy danh sách.' : 'Kênh nhiều video có thể mất vài chục giây.'} {f.url}</p>
               </div>
+              {f.relay?.state === 'noext' && (
+                <Button size="sm" onClick={() => { api.openInChrome(`${WEBSITE_URL}/extension`).catch(() => toast('error', 'Không mở được trình duyệt.')); }}>Cài tiện ích VidGrab</Button>
+              )}
               <Button size="sm" onClick={cancelFlow}>Huỷ</Button>
             </div>
             <div className="mt-3 flex flex-col gap-2">

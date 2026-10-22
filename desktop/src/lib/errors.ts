@@ -42,6 +42,9 @@ const MESSAGES: Record<string, string> = {
   temporarily_blocked: 'Nền tảng đang tạm chặn yêu cầu từ máy này (bắt xác minh hoặc gọi quá nhanh) — kênh vẫn có thể là công khai. Bấm “Mở trang để kiểm tra” để xác minh ngay trong cửa sổ, hoặc thử lại sau ít phút.',
   // 0.16.3: hidden channel page opened but showed no video. wording: BA review
   channel_page_empty: 'Đã mở trang kênh nhưng chưa thấy video nào. Bấm “Mở trang để kiểm tra” để xem nền tảng đang hiện gì — nếu được hỏi xác minh hoặc đăng nhập, làm ngay trong cửa sổ đó, ứng dụng sẽ tự lấy danh sách.',
+  // 0.19.3: Facebook through the extension in Chrome (channel relay). wording: BA review
+  relay_expired: 'Phiên lấy danh sách đã hết hạn. Hãy bấm “Lấy danh sách video” lại.',
+  relay_timeout: 'Chưa nhận được danh sách sau 15 phút. Kiểm tra tiện ích VidGrab (bản 5.16.1 trở lên) đã cài trong Chrome và bạn đã đăng nhập Facebook trong Chrome, rồi bấm lại.',
   cookie_expired: 'Phiên đăng nhập đã lưu có thể đã hết hạn. Hãy kết nối lại tài khoản trong Cài đặt → Tài khoản nền tảng rồi tải lại.',
   // Through the VidGrab server (/fetch-link, PLAN-32D S0). The server's own text wins when it sent one. wording: BA review
   drm: 'Video được bảo vệ bản quyền (DRM) nên không tải được.',

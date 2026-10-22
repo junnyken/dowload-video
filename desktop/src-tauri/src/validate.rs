@@ -85,16 +85,18 @@ pub fn cookie_platform(raw: &str) -> Result<&'static str, String> {
 /// installer download; 0.18.5: a Douyin channel in the user's own browser,
 /// where the VidGrab extension reads the whole list). Exact match, https
 /// only, default port, no userinfo.
-pub const OPEN_URL_HOSTS: &[&str] = &["dvid.vibe1.tinhgon.xyz", "dvid-api.vibe1.tinhgon.xyz", "www.douyin.com"];
+pub const OPEN_URL_HOSTS: &[&str] = &["dvid.vibe1.tinhgon.xyz", "dvid-api.vibe1.tinhgon.xyz", "www.douyin.com", "www.facebook.com"];
 
 /// 0.18.7: what `open_in_chrome` may hand to chrome.exe as an argument — a
 /// Douyin profile (www.douyin.com/user/…) or the extension install page,
-/// never anything else.
+/// never anything else. 0.19.3: also a Facebook page opened for the channel
+/// relay (www.facebook.com/…#vg-relay=<token>) — only with that fragment.
 pub fn chrome_url(raw: &str) -> Result<String, String> {
     let s = open_url(raw)?;
     let u = url::Url::parse(&s).map_err(|_| "not a valid URL".to_string())?;
     let ok = match u.host_str() {
         Some("www.douyin.com") => u.path().starts_with("/user/"),
+        Some("www.facebook.com") => u.fragment().is_some_and(|f| f.starts_with("vg-relay=")),
         Some("dvid.vibe1.tinhgon.xyz") => u.path() == "/extension",
         _ => false,
     };
@@ -168,6 +170,10 @@ mod tests {
         assert!(open_url("https://www.douyin.com/user/MS4wLjABAAAA_x#vg-relay=abc").is_ok());
         assert!(chrome_url("https://www.douyin.com/user/MS4wLjABAAAA_x#vg-relay=abc").is_ok());
         assert!(chrome_url("https://dvid.vibe1.tinhgon.xyz/extension").is_ok());
+        assert!(chrome_url("https://www.facebook.com/profile.php?id=61594798577076&sk=reels_tab#vg-relay=abc").is_ok());
+        assert!(chrome_url("https://www.facebook.com/thehecotnhadilam.vn/reels/#vg-relay=abc").is_ok());
+        assert!(chrome_url("https://www.facebook.com/thehecotnhadilam.vn/reels/").is_err());
+        assert!(chrome_url("https://www.facebook.com.evil.example/x#vg-relay=abc").is_err());
         for bad in ["https://dvid.vibe1.tinhgon.xyz/register", "https://www.douyin.com/video/1", "http://www.douyin.com/user/x",
                     "https://www.douyin.com.evil.example/user/x", "--disable-web-security"] {
             assert!(chrome_url(bad).is_err(), "{bad}");
