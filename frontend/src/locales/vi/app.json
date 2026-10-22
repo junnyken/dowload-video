@@ -1,0 +1,22 @@
+{
+  "navPlatforms": "Nền tảng",
+  "navPlatformsTitle": "Nền tảng được hỗ trợ",
+  "navExtension": "Tiện ích",
+  "navExtensionTitle": "Tiện ích trình duyệt",
+  "navArchive": "Lưu trữ",
+  "navSchedule": "Lịch tải",
+  "navWatch": "Theo dõi kênh",
+  "navWatchTitle": "Nhận thông báo khi kênh có video mới",
+  "navSubtitles": "Phụ đề & Phiên âm",
+  "navSubtitlesTitle": "Trích phụ đề, phiên âm AI và dịch phụ đề",
+  "navInstall": "Cài ứng dụng",
+  "navInstallTitle": "Cài ứng dụng VidGrab về máy",
+  "offline": "Đang offline — Kết nối internet để tiếp tục tải video",
+  "swNew": "Phiên bản mới khả dụng",
+  "swUpdate": "Cập nhật ngay",
+  "swSkip": "Bỏ qua",
+  "signIn": "Đăng nhập",
+  "menu": "Menu",
+  "langLabel": "Ngôn ngữ",
+  "langSwitchTo": "English"
+}

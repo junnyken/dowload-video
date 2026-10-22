@@ -1,0 +1,11 @@
+{
+  "degraded": "This platform is having problems; downloads may fail.",
+  "beta": "This platform is in beta; downloads may be unstable.",
+  "seeStatus": "See status",
+  "howTo": "How to download {{platform}} videos with VidGrab",
+  "faq": "Frequently asked questions",
+  "otherNav": "Download videos from other platforms",
+  "other": "Other platforms",
+  "downloadFrom": "{{platform}} video downloader",
+  "home": "VidGrab home"
+}

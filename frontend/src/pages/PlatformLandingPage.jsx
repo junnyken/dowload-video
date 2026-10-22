@@ -3,7 +3,9 @@ import { Sparkles, AlertTriangle } from 'lucide-react';
 import { usePlatformHealth } from '../lib/usePlatformHealth';
 import DashboardContent from '../components/DashboardContent';
 import { spaLink } from '../lib/spaLink';
-import { platformPages, COMMON_NOTE, QUOTA_NOTE } from '../content/platformPages';
+import { platformPages, pageText, COMMON_NOTE, QUOTA_NOTE, COMMON_NOTE_EN, QUOTA_NOTE_EN } from '../content/platformPages';
+import { useTranslation } from 'react-i18next';
+import { useLang, useLocalePath } from '../i18n';
 
 const chip =
   'px-3 py-1.5 rounded-full bg-surface border border-line text-sm text-fg-2 hover:text-fg hover:border-line-strong transition-colors';
@@ -11,14 +13,12 @@ const chip =
 // Landing page per platform. Copy lives in content/platformPages.js; the
 // download tool is the same DashboardContent used on the home page.
 export default function PlatformLandingPage({ slug }) {
-  const page = platformPages.find((p) => p.slug === slug);
-
-  useEffect(() => {
-    if (!page) return undefined;
-    const prev = document.title;
-    document.title = page.title;
-    return () => { document.title = prev; };
-  }, [page]);
+  const lang = useLang();
+  const { t } = useTranslation('platformLanding');
+  const lp = useLocalePath();
+  const found = platformPages.find((p) => p.slug === slug);
+  const page = found ? pageText(found, lang) : null;
+  // <title> / description / hreflang: lib/seo.js (App, on every navigation)
 
   const { classify, info } = usePlatformHealth();
   const health = page ? classify(page.platform) : 'healthy';
@@ -65,13 +65,11 @@ export default function PlatformLandingPage({ slug }) {
             <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
             <div className="min-w-0">
               <p className="font-medium">
-                {health === 'degraded'
-                  ? 'Nền tảng này đang gặp sự cố, việc tải có thể không thành công.' /* wording: BA review */
-                  : 'Nền tảng này đang trong giai đoạn thử nghiệm, việc tải có thể không ổn định.' /* wording: BA review */}
+                {health === 'degraded' ? t('degraded') : t('beta')}
               </p>
               {limitation && <p className="mt-1 break-words">{limitation}</p>}
-              <a href="/platforms" onClick={spaLink('/platforms')} className="mt-1 inline-block underline underline-offset-4">
-                Xem trạng thái{/* wording: BA review */}
+              <a href={lp('/platforms')} onClick={spaLink('/platforms')} className="mt-1 inline-block underline underline-offset-4">
+                {t('seeStatus')}
               </a>
             </div>
           </div>
@@ -82,11 +80,11 @@ export default function PlatformLandingPage({ slug }) {
         </div>
 
         <p className="mt-6 max-w-2xl text-center text-xs text-fg-muted">
-          {COMMON_NOTE} {QUOTA_NOTE}
+          {lang === 'en' ? `${COMMON_NOTE_EN} ${QUOTA_NOTE_EN}` : `${COMMON_NOTE} ${QUOTA_NOTE}`}
         </p>
 
         <section className="w-full max-w-3xl mt-14">
-          <h2 className="text-2xl font-semibold text-fg">Cách tải video {page.platform} bằng VidGrab</h2>
+          <h2 className="text-2xl font-semibold text-fg">{t('howTo', { platform: page.platform })}</h2>
           <ol className="mt-5 grid gap-3 sm:grid-cols-3">
             {page.steps.map((s, i) => (
               <li key={s.title} className="rounded-2xl bg-surface border border-line p-4">
@@ -101,7 +99,7 @@ export default function PlatformLandingPage({ slug }) {
         </section>
 
         <section className="w-full max-w-3xl mt-14">
-          <h2 className="text-2xl font-semibold text-fg">Câu hỏi thường gặp</h2>
+          <h2 className="text-2xl font-semibold text-fg">{t('faq')}</h2>
           <div className="mt-5 space-y-3">
             {page.faq.map((f) => (
               <div key={f.q} className="rounded-2xl bg-surface border border-line p-4">
@@ -112,16 +110,16 @@ export default function PlatformLandingPage({ slug }) {
           </div>
         </section>
 
-        <nav aria-label="Tải video từ nền tảng khác" className="w-full max-w-3xl mt-14">
-          <h2 className="text-sm font-semibold text-fg-muted">Nền tảng khác</h2>
+        <nav aria-label={t('otherNav')} className="w-full max-w-3xl mt-14">
+          <h2 className="text-sm font-semibold text-fg-muted">{t('other')}</h2>
           <div className="mt-3 flex flex-wrap gap-2">
             {others.filter((o) => classify(o.platform) === 'healthy').map((o) => (
-              <a key={o.slug} href={`/${o.slug}`} onClick={spaLink(`/${o.slug}`)} className={chip}>
-                Tải video {o.platform}
+              <a key={o.slug} href={lp(`/${o.slug}`)} onClick={spaLink(`/${o.slug}`)} className={chip}>
+                {t('downloadFrom', { platform: o.platform })}
               </a>
             ))}
-            <a href="/" onClick={spaLink('/')} className={chip}>
-              Trang chủ VidGrab
+            <a href={lp('/')} onClick={spaLink('/')} className={chip}>
+              {t('home')}
             </a>
           </div>
         </nav>

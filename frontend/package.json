@@ -14,10 +14,12 @@
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-query-devtools": "^5.101.2",
     "file-saver": "^2.0.5",
+    "i18next": "^25.10.10",
     "jszip": "^3.10.1",
     "lucide-react": "^1.11.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "react-i18next": "^15.7.4",
     "react-router-dom": "^7.18.4"
   },
   "devDependencies": {

@@ -7,9 +7,14 @@ import './index.css'
 import App from './App.jsx'
 import { AdminApp } from './admin/AdminApp'
 import { initSecurityShield } from './utils/security.js'
+import { installLocaleHistory } from './i18n'
+import LangProvider from './i18n/LangProvider'
 
 // Route /vid-admin/* to the new admin control plane (has its own BrowserRouter)
 const IS_ADMIN_ROUTE = window.location.pathname.startsWith('/vid-admin')
+
+// ── Language in the address (/en/...): every in-app navigation keeps it ──
+if (!IS_ADMIN_ROUTE) installLocaleHistory();
 
 // ── Security Shield ─────────────────────────────────────────────────
 // Initialize before render so protection is active immediately
@@ -54,6 +59,6 @@ window.addEventListener('appinstalled', () => {
 // ── Render App ──────────────────────────────────────────────────────
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    {IS_ADMIN_ROUTE ? <AdminApp /> : <App />}
+    {IS_ADMIN_ROUTE ? <AdminApp /> : <LangProvider><App /></LangProvider>}
   </StrictMode>,
 )

@@ -15,6 +15,10 @@ import FaqPage from './pages/FaqPage';
 import SiteFooter from './components/SiteFooter';
 import AccountMenu from './components/AccountMenu';
 import ThemeToggle from './components/ThemeToggle';
+import LangSwitch from './components/LangSwitch';
+import { useTranslation } from 'react-i18next';
+import { useLang, viewPath } from './i18n';
+import { applySeo } from './lib/seo';
 import AuthModal from './components/auth/AuthModal';
 import PreferencesContent from './components/PreferencesContent';
 import UsageContent from './components/UsageContent';
@@ -195,12 +199,12 @@ function AppInner() {
   };
 
   useEffect(() => {
-    const path = window.location.pathname;
-    const v = PATH_MAP[path] || 'landing';
+    // "/en/..." routes like its Vietnamese path (i18n/paths.js)
+    const v = PATH_MAP[viewPath(window.location.pathname)] || 'landing';
     setView(v);
 
     const handlePopState = () => {
-      const v2 = PATH_MAP[window.location.pathname] || 'landing';
+      const v2 = PATH_MAP[viewPath(window.location.pathname)] || 'landing';
       setView(v2);
     };
     window.addEventListener('popstate', handlePopState);
@@ -213,7 +217,7 @@ function AppInner() {
     const handleSwMsg = (event) => {
       if (event.data?.type === 'SW_NAVIGATE') {
         const path = (event.data.url || '/').split('?')[0];
-        const v = PATH_MAP[path] || 'landing';
+        const v = PATH_MAP[viewPath(path)] || 'landing';
         setView(v);
         window.history.pushState({}, '', event.data.url || '/');
       }
@@ -221,6 +225,11 @@ function AppInner() {
     navigator.serviceWorker.addEventListener('message', handleSwMsg);
     return () => navigator.serviceWorker.removeEventListener('message', handleSwMsg);
   }, []);
+
+  const lang = useLang();
+  const { t } = useTranslation('app');
+  // title / description / canonical / hreflang of public pages (lib/seo.js)
+  useEffect(() => { applySeo(viewPath(window.location.pathname), lang); }, [view, lang]);
 
   const navigateTo = (newView, path = '/') => {
     // Guard: authenticated-only views
@@ -247,17 +256,17 @@ function AppInner() {
 
   const navItems = [
     // "Tìm kiếm" removed from the menu (owner 15/10: feature dropped).
-    { key: 'platforms', label: 'Platforms', title: 'Nền tảng được hỗ trợ', active: view === 'platforms', onClick: () => goTo('platforms', '/platforms') },
-    { key: 'extension', label: 'Extension', title: 'Tiện ích trình duyệt', active: view === 'extension', onClick: () => goTo('extension', '/extension') },
+    { key: 'platforms', label: t('navPlatforms'), title: t('navPlatformsTitle'), active: view === 'platforms', onClick: () => goTo('platforms', '/platforms') },
+    { key: 'extension', label: t('navExtension'), title: t('navExtensionTitle'), active: view === 'extension', onClick: () => goTo('extension', '/extension') },
     ...(isAuthenticated ? [
-      { key: 'archive', label: 'Archive', active: view === 'archive', onClick: () => goTo('archive', '/archive') },
-      { key: 'schedule', label: 'Lịch Tải', active: view === 'schedule', onClick: () => goTo('schedule', '/schedule') },
+      { key: 'archive', label: t('navArchive'), active: view === 'archive', onClick: () => goTo('archive', '/archive') },
+      { key: 'schedule', label: t('navSchedule'), active: view === 'schedule', onClick: () => goTo('schedule', '/schedule') },
       // wording: BA review
-      ...(watchEnabled ? [{ key: 'watch', label: 'Theo dõi kênh', title: 'Nhận thông báo khi kênh có video mới', active: view === 'watch', onClick: () => goTo('watch', '/watch') }] : []),
-      { key: 'subtitle-hub', label: 'Phụ đề & Phiên âm', title: 'Trích phụ đề, phiên âm AI và dịch phụ đề', icon: Languages, active: ['subtitle-hub', 'transcript-asr', 'transcript-translate'].includes(view), onClick: () => goTo('subtitle-hub', '/phu-de') },
+      ...(watchEnabled ? [{ key: 'watch', label: t('navWatch'), title: t('navWatchTitle'), active: view === 'watch', onClick: () => goTo('watch', '/watch') }] : []),
+      { key: 'subtitle-hub', label: t('navSubtitles'), title: t('navSubtitlesTitle'), icon: Languages, active: ['subtitle-hub', 'transcript-asr', 'transcript-translate'].includes(view), onClick: () => goTo('subtitle-hub', '/phu-de') },
     ] : []),
     ...(pwaInstallReady ? [
-      { key: 'pwa', label: 'Cài ứng dụng', title: 'Cài ứng dụng VidGrab về máy', active: false, onClick: () => { setMenuOpen(false); handlePwaInstall(); } },
+      { key: 'pwa', label: t('navInstall'), title: t('navInstallTitle'), active: false, onClick: () => { setMenuOpen(false); handlePwaInstall(); } },
     ] : []),
   ];
 
@@ -299,25 +308,25 @@ function AppInner() {
       {!isOnline && (
         <div className="fixed bottom-0 inset-x-0 z-[60] bg-danger-soft backdrop-blur-sm border-t border-danger/50 flex items-center justify-center gap-2 py-2 px-4 text-sm text-danger">
           <span className="inline-block w-2 h-2 rounded-full bg-danger animate-pulse" />
-          Đang offline — Kết nối internet để tiếp tục tải video
+          {t('offline')}
         </div>
       )}
       <ExtensionInstallBanner />
       {/* ── SW Update Banner ─────────────────────────────── */}
       {swUpdateReady && (
         <div className="fixed bottom-0 inset-x-0 z-[59] bg-surface-2/95 backdrop-blur-sm border-t border-accent/30 flex items-center justify-center gap-3 py-2 px-4 text-sm text-fg-2">
-          <span className="text-accent-text font-semibold">Phiên bản mới khả dụng</span>
+          <span className="text-accent-text font-semibold">{t('swNew')}</span>
           <button
             onClick={handleSwUpdate}
             className="px-3 py-1 rounded-lg bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition cursor-pointer"
           >
-            Cập nhật ngay
+            {t('swUpdate')}
           </button>
           <button
             onClick={() => setSwUpdateReady(false)}
             className="text-fg-muted hover:text-fg-2 text-xs cursor-pointer"
           >
-            Bỏ qua
+            {t('swSkip')}
           </button>
         </div>
       )}
@@ -365,6 +374,7 @@ function AppInner() {
               </div>
             )}
 
+            <LangSwitch />
             <ThemeToggle />
 
             {isAuthenticated ? (
@@ -377,14 +387,14 @@ function AppInner() {
                 onClick={() => setShowAuthModal(true)}
                 className="px-3 py-1.5 rounded-control bg-accent text-accent-fg text-xs font-semibold hover:bg-accent-hover transition-colors cursor-pointer"
               >
-                Đăng nhập
+                {t('signIn')}
               </button>
             )}
 
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
-              aria-label="Menu"
+              aria-label={t('menu')}
               aria-expanded={menuOpen}
               aria-controls="mobile-nav-sheet"
               className="xl:hidden inline-flex items-center justify-center w-8 h-8 rounded-lg border border-line text-fg-2 hover:bg-surface-2 hover:text-fg transition-colors cursor-pointer"

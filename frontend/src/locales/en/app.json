@@ -1,0 +1,22 @@
+{
+  "navPlatforms": "Platforms",
+  "navPlatformsTitle": "Supported platforms",
+  "navExtension": "Extension",
+  "navExtensionTitle": "Browser extension",
+  "navArchive": "Archive",
+  "navSchedule": "Schedule",
+  "navWatch": "Channel watch",
+  "navWatchTitle": "Get notified when a channel posts a new video",
+  "navSubtitles": "Subtitles & Transcripts",
+  "navSubtitlesTitle": "Extract subtitles, AI transcription and subtitle translation",
+  "navInstall": "Install app",
+  "navInstallTitle": "Install the VidGrab app on this device",
+  "offline": "You are offline — connect to the internet to keep downloading",
+  "swNew": "A new version is available",
+  "swUpdate": "Update now",
+  "swSkip": "Skip",
+  "signIn": "Sign in",
+  "menu": "Menu",
+  "langLabel": "Language",
+  "langSwitchTo": "Tiếng Việt"
+}

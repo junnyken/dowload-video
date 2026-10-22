@@ -1,0 +1,11 @@
+{
+  "degraded": "Nền tảng này đang gặp sự cố, việc tải có thể không thành công.",
+  "beta": "Nền tảng này đang trong giai đoạn thử nghiệm, việc tải có thể không ổn định.",
+  "seeStatus": "Xem trạng thái",
+  "howTo": "Cách tải video {{platform}} bằng VidGrab",
+  "faq": "Câu hỏi thường gặp",
+  "otherNav": "Tải video từ nền tảng khác",
+  "other": "Nền tảng khác",
+  "downloadFrom": "Tải video {{platform}}",
+  "home": "Trang chủ VidGrab"
+}

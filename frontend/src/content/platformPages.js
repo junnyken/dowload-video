@@ -17,9 +17,39 @@ export const COMMON_NOTE =
 export const QUOTA_NOTE =
   'Người dùng chưa đăng nhập có hạn mức tải theo ngày. Khi chạm hạn mức, VidGrab sẽ báo trên màn hình.';
 
+// English (22/10/2026, /en/<slugEn>). wording: BA review — drafted with AI.
+export const COMMON_NOTE_EN =
+  'Only download public videos and respect copyright: use videos for personal purposes or with the creator’s permission.';
+export const QUOTA_NOTE_EN =
+  'Visitors who are not signed in have a daily download limit. VidGrab tells you on screen when you reach it.';
+
+/** A page's text in `lang` (falls back to Vietnamese). */
+export function pageText(p, lang) {
+  return lang === 'en' && p.en ? { ...p, ...p.en } : p;
+}
+
 export const platformPages = [
   {
     slug: 'tai-video-tiktok',
+    slugEn: 'tiktok-video-downloader',
+    en: {
+      title: "TikTok Video Downloader without Watermark | VidGrab",
+      description: "Paste a TikTok link to save the video to your device, with an option to remove the watermark/logo. Works with tiktok.com and vm.tiktok.com links, right in your browser.",
+      h1: "Download TikTok videos without watermark",
+      intro: "Paste a TikTok video link in the box below, turn on watermark removal and save a clean copy to your device. No app to install.",
+      steps: [
+        { title: "Copy the link", text: "In TikTok, tap Share and choose Copy link." },
+        { title: "Paste it into VidGrab", text: "Paste the link in the box above, turn on “Remove watermark / logo” for a clean copy, then press download." },
+        { title: "Save to your device", text: "Pick the format shown on screen (video or MP3) and download." },
+      ],
+      faq: [
+        { q: "Can VidGrab download TikTok videos without the logo?", a: "Yes. For TikTok, VidGrab has a “Remove watermark / logo” option. Turn it on before downloading to get a copy without the logo." },
+        { q: "Do short vm.tiktok.com links work?", a: "Yes. You can paste a full tiktok.com link or a short vm.tiktok.com link." },
+        { q: "Can I save only the audio (MP3) of a TikTok video?", a: "VidGrab lets you download MP3 audio when the result screen offers that option." },
+        { q: "Do I need to sign in to download TikTok videos?", a: "You can try it without an account, but visitors who are not signed in have a daily download limit." },
+        { q: "Can private TikTok videos be downloaded?", a: "No. VidGrab only handles public videos. Please respect the creator’s copyright when you use a video." },
+      ],
+    },
     platform: 'TikTok',
     title: 'Tải video TikTok không logo, không watermark | VidGrab',
     description:
@@ -57,6 +87,24 @@ export const platformPages = [
   },
   {
     slug: 'tai-video-facebook',
+    slugEn: 'facebook-video-downloader',
+    en: {
+      title: "Facebook Video & Reels Downloader | VidGrab",
+      description: "Save public Facebook videos, Reels and recorded live videos to your device from a link. Works with facebook.com and fb.watch links, right in your browser.",
+      h1: "Download Facebook videos",
+      intro: "Paste the link of a Facebook video, Reel or finished live video in the box below to save it to your device. Public content only.",
+      steps: [
+        { title: "Get the video link", text: "On Facebook, press Share or the three dots of the video and choose Copy link." },
+        { title: "Paste it into VidGrab", text: "Paste the link in the box above and press download so VidGrab can analyse the video." },
+        { title: "Choose and download", text: "Pick one of the available qualities in the results and save it." },
+      ],
+      faq: [
+        { q: "What Facebook content can VidGrab download?", a: "Public videos, Reels and recordings of finished live videos. Both facebook.com and fb.watch links work." },
+        { q: "Why does my Facebook video show an error?", a: "Usually the video is private, friends-only or in a closed group. VidGrab cannot download those. Facebook also blocks requests for a while sometimes — try again in a few minutes." },
+        { q: "Can I choose the video quality?", a: "The available qualities depend on the original video and are listed in the results once VidGrab has analysed the link." },
+        { q: "Can I download several Facebook videos at once?", a: "Yes, the home page has a mode for many links at once. Public content only." },
+      ],
+    },
     platform: 'Facebook',
     title: 'Tải video Facebook, Reels về máy nhanh | VidGrab',
     description:
@@ -90,6 +138,24 @@ export const platformPages = [
   },
   {
     slug: 'tai-video-threads',
+    slugEn: 'threads-video-downloader',
+    en: {
+      title: "Threads Video & Photo Downloader | VidGrab",
+      description: "Save videos and photos from public Threads posts to your device from a link. Works with threads.com and threads.net, right in your browser.",
+      h1: "Download Threads videos",
+      intro: "Paste the link of a public Threads post in the box below to save its video or photos. VidGrab cannot open posts that require signing in.",
+      steps: [
+        { title: "Copy the post link", text: "In Threads, press the share icon of the post and choose Copy link." },
+        { title: "Paste it into VidGrab", text: "Paste the link in the box above — make sure it is the link of a single post — and press download." },
+        { title: "Save the video or photos", text: "Pick the file shown in the results (video, photo, or each photo of a multi-photo post) and download it." },
+      ],
+      faq: [
+        { q: "What can VidGrab download from Threads?", a: "Videos and photos in public Threads posts, including posts with several photos." },
+        { q: "Which Threads links are supported?", a: "Links of public posts or profiles on threads.com or threads.net." },
+        { q: "Why can’t VidGrab download a Threads post?", a: "Common causes: the post requires signing in or is not public, it has no video or photo, or Threads is temporarily blocking requests. Try again in a few minutes." },
+        { q: "What happens with a profile link?", a: "A public profile link lists its recent posts for you to choose from. For an exact result, paste the link of a single post." },
+      ],
+    },
     platform: 'Threads',
     title: 'Tải video và ảnh Threads công khai | VidGrab',
     description:
@@ -123,6 +189,24 @@ export const platformPages = [
   },
   {
     slug: 'tai-video-douyin',
+    slugEn: 'douyin-video-downloader',
+    en: {
+      title: "Douyin Video Downloader without Watermark | VidGrab",
+      description: "Paste a Douyin link to save the video to your device, with an option to remove the watermark/logo. Works with douyin.com and short v.douyin.com links, right in your browser.",
+      h1: "Download Douyin videos without watermark",
+      intro: "Douyin is the Chinese version of TikTok. Paste a Douyin video link in the box below, turn on watermark removal and save a clean copy.",
+      steps: [
+        { title: "Copy the Douyin link", text: "In the Douyin app, tap Share and choose Copy link (usually a v.douyin.com link)." },
+        { title: "Paste it into VidGrab", text: "Paste the link in the box above, turn on “Remove watermark / logo” and press download." },
+        { title: "Save to your device", text: "Pick the format shown on screen and download." },
+      ],
+      faq: [
+        { q: "Does VidGrab remove the watermark from Douyin videos?", a: "Yes. For Douyin, VidGrab has a “Remove watermark / logo” option. Turn it on before downloading." },
+        { q: "Do short v.douyin.com links work?", a: "Yes. VidGrab expands short links before processing them." },
+        { q: "Why does a Douyin video sometimes fail?", a: "Douyin tightly limits outside access, so extraction occasionally fails. Try again in a few minutes or try another link." },
+        { q: "Can private Douyin videos be downloaded?", a: "No. VidGrab only handles public videos. Please respect the creator’s copyright when you use a video." },
+      ],
+    },
     platform: 'Douyin',
     title: 'Tải video Douyin không watermark | VidGrab',
     description:
