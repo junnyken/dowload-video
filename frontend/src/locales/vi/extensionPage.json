@@ -49,6 +49,6 @@
   "otherBrowsersAria": "Trình duyệt khác",
   "otherBrowsers": "Edge, Cốc Cốc và Brave cài tương tự. Trên Edge dùng <mono>edge://extensions</mono>, trên Brave dùng <mono2>brave://extensions</mono2>.",
   "tgHeading": "Nhận file qua Telegram Bot",
-  "tgBody": "Nhận bất kỳ nội dung → bot tự gửi file ZIP + hướng dẫn cài đặt chi tiết.",
+  "tgBody": "Nhắn bất kỳ nội dung → bot tự gửi file ZIP + hướng dẫn cài đặt chi tiết.",
   "tgOpen": "Mở Telegram Bot"
 }
