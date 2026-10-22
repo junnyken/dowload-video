@@ -1,0 +1,61 @@
+{
+  "title": "Lich su tai",
+  "subtitle": "Tat ca luot tai gan voi tai khoan",
+  "tabs": {
+    "all": "Tất cả",
+    "today": "Hôm nay",
+    "recent": "7 ngày",
+    "failed": "Thất bại"
+  },
+  "searchPlaceholder": "Tim kiem tieu de, creator, hashtag...",
+  "filters": {
+    "button": "Lo",
+    "buttonCount": "Lo ({{count}})",
+    "platform": "Nen tang",
+    "all": "Tat ca",
+    "sort": "Sap xep",
+    "sortNewest": "Moi nhat",
+    "sortOldest": "Cu nhat",
+    "sortMostViewed": "Nhieu view nhat",
+    "sortLongest": "Dai nhat",
+    "creator": "Creator",
+    "creatorPlaceholder": "Ten creator...",
+    "hasNotes": "Co ghi chu",
+    "filtering": "Dang loc",
+    "hashtag": "Loc hashtag: <b>#{{tag}}</b>",
+    "clear": "Xoa tat ca bo loc"
+  },
+  "offline": "Đang hiển thị dữ liệu đã lưu — kết nối lại để cập nhật",
+  "empty": {
+    "noResults": "Khong tim thay ket qua",
+    "noHistory": "Chua co lich su tai",
+    "first": "Tai video dau tien →"
+  },
+  "loadMore": "Xem them",
+  "item": {
+    "success": "✓ Thanh cong",
+    "failed": "✗ That bai",
+    "rerun": "Tải lại"
+  },
+  "notes": {
+    "title": "Ghi chu",
+    "saveError": "Loi luu ghi chu.",
+    "connectionError": "Loi ket noi.",
+    "none": "Chua co ghi chu nao.",
+    "save": "Luu",
+    "cancel": "Huy",
+    "placeholder": "Them ghi chu (toi da 500 ky tu)...",
+    "hint": "{{n}}/10 ghi chu · Enter de luu · mm:ss de gan timestamp",
+    "limit": "Da dat gioi han 10 ghi chu."
+  },
+  "desktop": {
+    "title": "Tải bằng app Windows",
+    "loadError": "Không tải được lịch sử từ app Windows.",
+    "retry": "Thử lại",
+    "empty": "Chưa có lượt tải nào từ app Windows",
+    "completed": "Hoàn tất",
+    "failed": "Thất bại",
+    "loadMoreError": "Không tải thêm được. Thử lại sau.",
+    "loadMore": "Xem thêm"
+  }
+}

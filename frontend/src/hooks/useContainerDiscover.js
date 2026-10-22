@@ -21,6 +21,7 @@
  *   refresh()     — re-discover the same URL
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
+import i18n from '../i18n';
 
 const API_BASE = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 
@@ -113,7 +114,7 @@ export function useContainerDiscover(url, { maxItems = 100, autoStart = true } =
           signal: abortRef.current?.signal,
         });
         if (!res.ok) {
-          setError(`Poll lỗi: HTTP ${res.status}`);
+          setError(i18n.t('discover.pollError', { ns: 'common', status: res.status }));
           setIsLoading(false);
           return;
         }
@@ -132,7 +133,7 @@ export function useContainerDiscover(url, { maxItems = 100, autoStart = true } =
             if (gate) {
               setCapabilityGate(gate);
             } else {
-              setError(snap.error?.message || snap.message || 'Discovery thất bại.');
+              setError(snap.error?.message || snap.message || i18n.t('discover.failed', { ns: 'common' }));
             }
           }
           // expired — UI reads jobSnapshot.status to show "Re-discover" CTA
@@ -246,7 +247,7 @@ export function useContainerDiscover(url, { maxItems = 100, autoStart = true } =
         status:       'queued',
         progress_pct: 5,
         stage:        'normalize_input',
-        message:      'Đang xếp hàng...',
+        message:      i18n.t('discover.queued', { ns: 'common' }),
       });
 
       schedulePoll(data.job_id, data.container_id, data.platform);

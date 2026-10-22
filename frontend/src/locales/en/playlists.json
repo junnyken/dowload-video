@@ -1,0 +1,29 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "never": "Never",
+  "errors": {
+    "load": "Could not load your playlists. {{message}}",
+    "save": "Could not save the playlist. Try again later.",
+    "refresh": "Could not refresh.",
+    "delete": "Could not delete."
+  },
+  "confirmDelete": "Remove this playlist from your saved list?",
+  "copied": "Link copied to clipboard",
+  "title": "Saved playlists",
+  "subtitle": "Save YouTube / Spotify links to download again later",
+  "reloadList": "Reload list",
+  "saveNew": "Save a new playlist",
+  "save": "Save",
+  "savedLabel": "saved playlists",
+  "empty": {
+    "title": "No playlists yet.",
+    "hint": "Save a YouTube or Spotify link to download again later."
+  },
+  "trackCount_one": "{{count}} track",
+  "trackCount_other": "{{count}} tracks",
+  "updated": "Updated: {{date}}",
+  "open": "Open playlist",
+  "refresh": "Refresh",
+  "download": "Download",
+  "delete": "Delete"
+}

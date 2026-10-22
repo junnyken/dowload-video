@@ -2,28 +2,27 @@ import { useState, useEffect, useCallback } from 'react';
 import { ClipboardCheck, Check, X, Clock, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { useTranslation } from 'react-i18next';
+import { getLang } from '../i18n';
 
 const API = import.meta.env.VITE_API_URL || '';
 
-const ACTION_LABELS = {
-  bulk_download:    'Tải hàng loạt',
-  schedule_create:  'Tạo lịch tải',
-  webhook_create:   'Đăng ký Webhook',
-  archive_delete:   'Xóa Archive item',
-};
+// Action labels: locales/*/team.json approval.action.<type>; known types only.
+const ACTION_TYPES = ['bulk_download', 'schedule_create', 'webhook_create', 'archive_delete'];
 
 const STATUS_CONFIG = {
-  awaiting_approval: { label: 'Chờ duyệt',  cls: 'text-accent-text bg-accent-soft border-accent/40',  icon: <Clock    className="w-3 h-3" /> },
-  approved:          { label: 'Đã duyệt',   cls: 'text-fg-2  bg-surface-2  border-line',   icon: <Check    className="w-3 h-3" /> },
-  rejected:          { label: 'Từ chối',    cls: 'text-danger   bg-danger-soft   border-danger/40',    icon: <X        className="w-3 h-3" /> },
+  awaiting_approval: { labelKey: 'awaiting_approval',  cls: 'text-accent-text bg-accent-soft border-accent/40',  icon: <Clock    className="w-3 h-3" /> },
+  approved:          { labelKey: 'approved',   cls: 'text-fg-2  bg-surface-2  border-line',   icon: <Check    className="w-3 h-3" /> },
+  rejected:          { labelKey: 'rejected',    cls: 'text-danger   bg-danger-soft   border-danger/40',    icon: <X        className="w-3 h-3" /> },
 };
 
 function fmtDate(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
+  return new Date(iso).toLocaleString(getLang() === 'en' ? 'en-US' : 'vi-VN', { dateStyle: 'short', timeStyle: 'short' });
 }
 
 export default function ApprovalQueuePage() {
+  const { t } = useTranslation('team');
   const { session } = useAuth();
   const { activeWorkspace, can } = useWorkspace();
   const [requests, setRequests]     = useState([]);
@@ -48,11 +47,11 @@ export default function ApprovalQueuePage() {
       const r = await fetch(endpoint, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      if (!r.ok) { setError('Không thể tải danh sách phê duyệt.'); return; }
+      if (!r.ok) { setError(t('approval.loadError')); return; }
       const d = await r.json();
       setRequests(d.pending || d.approval_requests || []);
     } finally { setLoading(false); }
-  }, [wsId, session, tab, isAdmin]);
+  }, [wsId, session, tab, isAdmin, t]);
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
@@ -83,7 +82,7 @@ export default function ApprovalQueuePage() {
   if (!activeWorkspace) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-12 text-center text-fg-muted">
-        Chưa có workspace nào.
+        {t('noWorkspace')}
       </div>
     );
   }
@@ -92,12 +91,12 @@ export default function ApprovalQueuePage() {
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
       <div className="flex items-center gap-3 mb-6">
         <ClipboardCheck className="w-5 h-5 text-accent-text" />
-        <h1 className="text-xl font-bold text-fg">Phê duyệt</h1>
+        <h1 className="text-xl font-bold text-fg">{t('approval.title')}</h1>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-1 mb-5 border-b border-line">
-        {[['pending', 'Chờ duyệt'], ['all', 'Tất cả']].map(([key, label]) => (
+        {[['pending', t('approval.tabPending')], ['all', t('approval.tabAll')]].map(([key, label]) => (
           <button
             key={key}
             onClick={() => { setTab(key); setRequests([]); }}
@@ -122,13 +121,13 @@ export default function ApprovalQueuePage() {
       ) : requests.length === 0 ? (
         <div className="text-center py-16 text-fg-muted">
           <ClipboardCheck className="w-8 h-8 mx-auto mb-3 opacity-40" />
-          <p>{tab === 'pending' ? 'Không có yêu cầu nào chờ duyệt.' : 'Chưa có yêu cầu phê duyệt nào.'}</p>
+          <p>{tab === 'pending' ? t('approval.emptyPending') : t('approval.emptyAll')}</p>
         </div>
       ) : (
         <div className="space-y-3">
           {requests.map(req => {
             const sc = STATUS_CONFIG[req.status] || STATUS_CONFIG.awaiting_approval;
-            const actionLabel = ACTION_LABELS[req.action_type] || req.action_type;
+            const actionLabel = ACTION_TYPES.includes(req.action_type) ? t(`approval.action.${req.action_type}`) : req.action_type;
             const note = req.action_payload?.requester_note;
             return (
               <div key={req.id} className="bg-surface-2 rounded-xl border border-line p-4">
@@ -137,7 +136,7 @@ export default function ApprovalQueuePage() {
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <span className="text-sm font-semibold text-fg">{actionLabel}</span>
                       <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border leading-none ${sc.cls}`}>
-                        {sc.icon} {sc.label}
+                        {sc.icon} {t(`approval.status.${sc.labelKey}`)}
                       </span>
                     </div>
                     <p className="text-xs text-fg-muted mb-1">
@@ -148,7 +147,7 @@ export default function ApprovalQueuePage() {
                       <p className="text-xs text-fg-2 italic mt-1 bg-surface-2 rounded px-2 py-1.5">{note}</p>
                     )}
                     {req.rejection_reason && (
-                      <p className="text-xs text-danger mt-1">Lý do từ chối: {req.rejection_reason}</p>
+                      <p className="text-xs text-danger mt-1">{t('approval.rejectionReason', { reason: req.rejection_reason })}</p>
                     )}
                   </div>
 
@@ -159,14 +158,14 @@ export default function ApprovalQueuePage() {
                         disabled={busy === req.id}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-2 text-fg-2 text-xs font-semibold hover:bg-line border border-line disabled:opacity-40 transition-colors cursor-pointer"
                       >
-                        <Check className="w-3 h-3" /> Duyệt
+                        <Check className="w-3 h-3" /> {t('approval.approve')}
                       </button>
                       <button
                         onClick={() => { setRejectModal(req.id); setRejectReason(''); }}
                         disabled={busy === req.id}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft text-danger text-xs font-semibold hover:bg-danger/20 border border-danger/40 disabled:opacity-40 transition-colors cursor-pointer"
                       >
-                        <X className="w-3 h-3" /> Từ chối
+                        <X className="w-3 h-3" /> {t('approval.reject')}
                       </button>
                     </div>
                   )}
@@ -181,12 +180,12 @@ export default function ApprovalQueuePage() {
       {rejectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-md bg-canvas rounded-2xl border border-line shadow-2xl p-6">
-            <h3 className="text-base font-semibold text-fg mb-3">Lý do từ chối</h3>
+            <h3 className="text-base font-semibold text-fg mb-3">{t('approval.rejectModalTitle')}</h3>
             <textarea
               value={rejectReason}
               onChange={e => setRejectReason(e.target.value)}
               rows={3}
-              placeholder="Nhập lý do (không bắt buộc)..."
+              placeholder={t('approval.reasonPlaceholder')}
               className="w-full bg-surface-2 border border-line-strong rounded-xl px-3 py-2.5 text-fg text-sm resize-none focus:outline-none focus:border-danger/50 placeholder:text-fg-muted mb-4"
             />
             <div className="flex gap-3 justify-end">
@@ -194,14 +193,14 @@ export default function ApprovalQueuePage() {
                 onClick={() => { setRejectModal(null); setRejectReason(''); }}
                 className="px-4 py-2 rounded-lg border border-line-strong text-fg-2 text-sm hover:bg-surface-2 transition-colors cursor-pointer"
               >
-                Huỷ
+                {t('approval.cancel')}
               </button>
               <button
                 onClick={handleReject}
                 disabled={!!busy}
                 className="px-4 py-2 rounded-lg bg-danger-soft text-danger border border-danger/40 text-sm font-semibold hover:bg-danger/20 disabled:opacity-40 transition-colors cursor-pointer"
               >
-                {busy ? '...' : 'Xác nhận từ chối'}
+                {busy ? '...' : t('approval.confirmReject')}
               </button>
             </div>
           </div>

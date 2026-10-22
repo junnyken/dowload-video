@@ -5,6 +5,8 @@ import {
   Clock, Database, FileDown, Key, Info, ExternalLink,
   CheckCircle2, XCircle, AlertCircle,
 } from 'lucide-react';
+import { Trans, useTranslation } from 'react-i18next';
+import i18n, { useLocalePath } from '../i18n';
 import { usePlans } from '../lib/usePlans';
 import { getPermission, requestPermission, isSupported } from '../utils/notifications.js';
 
@@ -14,23 +16,26 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 // Pin numbers come from /api/v1/plans; export ranges mirror GET /user/history/export
 // (backend app/api/user.py: 30 days non-Pro, 365 days Pro).
 function buildRetentionRules(free, pro) {
-  const pinNote = (t) => (t ? `${t.pins} file, giữ ${t.pin_days} ngày` : null);
+  const tr = (key, opts) => i18n.t(key, { ns: 'settings', ...opts });
+  const pinNote = (p) => (p ? tr('data.rules.pinned.pinNote', { pins: p.pins, days: p.pin_days }) : null);
   return [
-    { label: 'File tải về (chưa ghim)', value: '~60 phút', note: 'Tự xóa sau khi tải xong. Ghim vào Archive để giữ lại.' },
+    { label: tr('data.rules.temp.label'), value: tr('data.rules.temp.value'), note: tr('data.rules.temp.note') },
     {
-      label: 'File đã ghim (Archive)',
-      value: free ? `${free.pin_days} ngày` : '—',
+      label: tr('data.rules.pinned.label'),
+      value: free ? tr('data.rules.pinned.days', { days: free.pin_days }) : '—',
       note: free && pro
-        ? `Free: ${pinNote(free)}. Pro: ${pinNote(pro)}. Ghim lại để gia hạn.`
-        : 'Hết hạn ghim thì file bị xóa, metadata vẫn còn.',
+        ? tr('data.rules.pinned.noteBoth', { free: pinNote(free), pro: pinNote(pro) })
+        : tr('data.rules.pinned.noteDefault'),
     },
-    { label: 'Xuất lịch sử (Free)', value: '30 ngày', note: 'Xuất CSV/JSON trong 30 ngày gần nhất.' },
-    { label: 'Xuất lịch sử (Pro)', value: '365 ngày', note: 'Xuất CSV/JSON trong 365 ngày gần nhất.' },
-    { label: 'Metadata Archive', value: 'Vô hạn', note: 'Dữ liệu mô tả giữ nguyên dù file đã hết hạn.' },
+    { label: tr('data.rules.exportFree.label'), value: tr('data.rules.exportFree.value'), note: tr('data.rules.exportFree.note') },
+    { label: tr('data.rules.exportPro.label'), value: tr('data.rules.exportPro.value'), note: tr('data.rules.exportPro.note') },
+    { label: tr('data.rules.meta.label'), value: tr('data.rules.meta.value'), note: tr('data.rules.meta.note') },
   ];
 }
 
 export default function SettingsContent() {
+  const { t } = useTranslation('settings');
+  const lp = useLocalePath();
   const { free: freePlan, pro: proPlan } = usePlans();
   const [appVersion, setAppVersion] = useState(null);
   const [apiOk, setApiOk] = useState(null);
@@ -78,16 +83,16 @@ export default function SettingsContent() {
   };
 
   const handleRevokeKey = async () => {
-    if (!window.confirm('Hủy API key? Các integration đang dùng key này sẽ bị ngắt.')) return;
+    if (!window.confirm(t('access.confirmRevoke'))) return;
     await fetch(`${API_BASE}/api/v1/user/api-key/revoke`, { method: 'DELETE', credentials: 'include' });
     setApiKey(null);
   };
 
   const notifLabel = () => {
-    if (!isSupported()) return 'Trình duyệt không hỗ trợ';
-    if (notifPerm === 'granted') return 'Đã bật';
-    if (notifPerm === 'denied') return 'Đã từ chối (cài đặt trình duyệt)';
-    return 'Chưa bật';
+    if (!isSupported()) return t('notif.unsupported');
+    if (notifPerm === 'granted') return t('notif.on');
+    if (notifPerm === 'denied') return t('notif.denied');
+    return t('notif.off');
   };
 
   const notifEnabled = notifPerm === 'granted';
@@ -98,9 +103,9 @@ export default function SettingsContent() {
       <div>
         <div className="flex items-center gap-3 mb-1">
           <Settings className="w-5 h-5 text-accent-text" />
-          <h2 className="text-2xl font-bold text-fg tracking-tight">Settings</h2>
+          <h2 className="text-2xl font-bold text-fg tracking-tight">{t('title')}</h2>
         </div>
-        <p className="text-sm text-fg-muted ml-8">Cài đặt kết nối, thông báo, dữ liệu, và API</p>
+        <p className="text-sm text-fg-muted ml-8">{t('subtitle')}</p>
       </div>
 
       <div className="space-y-4">
@@ -113,21 +118,21 @@ export default function SettingsContent() {
             </div>
             <div className="flex-1">
               <h3 className="text-base font-semibold text-fg">API Connection</h3>
-              <p className="text-xs text-fg-muted">Trạng thái kết nối backend</p>
+              <p className="text-xs text-fg-muted">{t('api.desc')}</p>
             </div>
             <div className="flex items-center gap-2">
               {apiOk === null && <div className="w-2 h-2 rounded-full bg-fg-muted animate-pulse" />}
               {apiOk === true && <CheckCircle2 className="w-4 h-4 text-success" />}
               {apiOk === false && <XCircle className="w-4 h-4 text-error" />}
               <span className={`text-xs font-medium ${apiOk === true ? 'text-success' : apiOk === false ? 'text-error' : 'text-fg-muted'}`}>
-                {apiOk === null ? 'Đang kiểm tra…' : apiOk ? 'Kết nối tốt' : 'Không kết nối được'}
+                {apiOk === null ? t('api.checking') : apiOk ? t('api.ok') : t('api.fail')}
               </span>
             </div>
           </div>
           {appVersion && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-line">
               <Info className="w-3.5 h-3.5 text-fg-muted flex-shrink-0" />
-              <span className="text-xs text-fg-muted">Phiên bản backend: <span className="text-fg font-mono font-semibold">{appVersion}</span></span>
+              <span className="text-xs text-fg-muted">{t('api.backendVersion')} <span className="text-fg font-mono font-semibold">{appVersion}</span></span>
             </div>
           )}
         </div>
@@ -139,8 +144,8 @@ export default function SettingsContent() {
               {notifEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
             </div>
             <div className="flex-1">
-              <h3 className="text-base font-semibold text-fg">Thông báo trình duyệt</h3>
-              <p className="text-xs text-fg-muted">Nhận thông báo khi tải xong hoặc thất bại</p>
+              <h3 className="text-base font-semibold text-fg">{t('notif.title')}</h3>
+              <p className="text-xs text-fg-muted">{t('notif.desc')}</p>
             </div>
             <button
               onClick={handleNotifToggle}
@@ -151,13 +156,13 @@ export default function SettingsContent() {
             </button>
           </div>
           <div className="space-y-2 text-xs text-fg-muted">
-            <p>Trạng thái: <span className={`font-semibold ${notifEnabled ? 'text-success' : 'text-fg-2'}`}>{notifLabel()}</span></p>
+            <p>{t('notif.status')} <span className={`font-semibold ${notifEnabled ? 'text-success' : 'text-fg-2'}`}>{notifLabel()}</span></p>
             <p className="flex items-start gap-1.5">
               <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-              Thông báo Telegram cho operator được cấu hình qua biến môi trường server.
+              {t('notif.telegram')}
             </p>
             {notifPerm === 'denied' && (
-              <p className="text-accent-text">Để bật lại, mở cài đặt trình duyệt → Site Permissions → Notifications → cho phép trang này.</p>
+              <p className="text-accent-text">{t('notif.reenable')}</p>
             )}
           </div>
         </div>
@@ -169,8 +174,8 @@ export default function SettingsContent() {
               <Clock className="w-4 h-4 text-accent-fg" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-fg">Dữ liệu & Lưu trữ</h3>
-              <p className="text-xs text-fg-muted">Thời hạn lưu giữ từng loại dữ liệu</p>
+              <h3 className="text-base font-semibold text-fg">{t('data.title')}</h3>
+              <p className="text-xs text-fg-muted">{t('data.desc')}</p>
             </div>
           </div>
           <div className="space-y-2">
@@ -190,7 +195,7 @@ export default function SettingsContent() {
           <div className="mt-3 flex items-center gap-2">
             <FileDown className="w-3.5 h-3.5 text-accent-text flex-shrink-0" />
             <span className="text-xs text-fg-muted">
-              Xuất lịch sử: đăng nhập → History → nút <strong>Xuất CSV/JSON</strong>.
+              <Trans t={t} i18nKey="data.exportHint" components={{ b: <strong /> }} />
             </span>
           </div>
         </div>
@@ -203,10 +208,10 @@ export default function SettingsContent() {
             </div>
             <div>
               <h3 className="text-base font-semibold text-fg">API Access</h3>
-              <p className="text-xs text-fg-muted">Tích hợp VidGrab vào công cụ của bạn</p>
+              <p className="text-xs text-fg-muted">{t('access.desc')}</p>
             </div>
             <a
-              href="/api-docs"
+              href={lp('/api-docs')}
               className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-line text-fg-2 text-xs hover:bg-surface-2 transition-colors cursor-pointer"
             >
               <ExternalLink className="w-3 h-3" /> API Docs
@@ -224,28 +229,28 @@ export default function SettingsContent() {
                   disabled={apiKeyLoading}
                   className="px-3 py-1.5 rounded-lg bg-accent/10 text-accent-text border border-accent/30 text-xs font-semibold hover:bg-accent/20 transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  Tạo key mới
+                  {t('access.regenerate')}
                 </button>
                 <button
                   onClick={handleRevokeKey}
                   className="px-3 py-1.5 rounded-lg bg-error/10 text-error border border-error/20 text-xs font-semibold hover:bg-error/20 transition-colors cursor-pointer"
                 >
-                  Hủy key
+                  {t('access.revoke')}
                 </button>
               </div>
-              <p className="text-[11px] text-fg-muted">Dùng header <code className="bg-surface px-1 rounded">Authorization: Bearer &lt;key&gt;</code> trong mọi API request.</p>
+              <p className="text-[11px] text-fg-muted"><Trans t={t} i18nKey="access.header" values={{ header: 'Authorization: Bearer <key>' }} components={{ c: <code className="bg-surface px-1 rounded" /> }} /></p>
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-xs text-fg-muted">Chưa có API key. Tạo để dùng Public API.</p>
+              <p className="text-xs text-fg-muted">{t('access.none')}</p>
               <button
                 onClick={handleGenerateKey}
                 disabled={apiKeyLoading}
                 className="px-4 py-2 rounded-xl bg-surface-2 border border-line text-fg-2 text-xs font-semibold hover:bg-line transition-colors cursor-pointer disabled:opacity-50"
               >
-                {apiKeyLoading ? 'Đang tạo…' : 'Tạo API Key'}
+                {apiKeyLoading ? t('access.creating') : t('access.create')}
               </button>
-              <p className="text-[11px] text-fg-muted">Cần đăng nhập để tạo API key.</p>
+              <p className="text-[11px] text-fg-muted">{t('access.needLogin')}</p>
             </div>
           )}
         </div>
@@ -257,8 +262,8 @@ export default function SettingsContent() {
               <Palette className="w-4 h-4 text-accent-fg" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-fg">Thông tin ứng dụng</h3>
-              <p className="text-xs text-fg-muted">Phiên bản, tương thích, liên hệ</p>
+              <h3 className="text-base font-semibold text-fg">{t('info.title')}</h3>
+              <p className="text-xs text-fg-muted">{t('info.desc')}</p>
             </div>
           </div>
           <div className="space-y-2 text-xs">
@@ -271,13 +276,13 @@ export default function SettingsContent() {
               <span className="font-mono font-semibold text-fg">{appVersion || '—'}</span>
             </div>
             <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-surface border border-line/60">
-              <span className="text-fg-muted">Tương thích</span>
+              <span className="text-fg-muted">{t('info.compat')}</span>
               <span className={`font-semibold ${appVersion ? 'text-success' : 'text-fg-muted'}`}>
-                {appVersion ? '✓ Frontend ↔ Backend' : 'Chưa xác định'}
+                {appVersion ? t('info.compatOk') : t('info.compatUnknown')}
               </span>
             </div>
             <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-surface border border-line/60">
-              <span className="text-fg-muted">Hỗ trợ</span>
+              <span className="text-fg-muted">{t('info.support')}</span>
               <a
                 href="https://t.me/vidgrab_support"
                 target="_blank"

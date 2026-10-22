@@ -1,0 +1,43 @@
+{
+  "download": "Tải về",
+  "title": "Tìm kiếm video",
+  "subtitle": "Tìm video YouTube và TikTok để tải về — không cần link sẵn.",
+  "placeholder": "Nhập từ khóa tìm kiếm...",
+  "searchBtn": "Tìm",
+  "sort": {
+    "relevance": "Liên quan",
+    "date": "Mới nhất",
+    "viewCount": "Nhiều xem"
+  },
+  "duration": {
+    "all": "Tất cả",
+    "short": "< 4 phút",
+    "medium": "4 – 20 phút",
+    "long": "> 20 phút"
+  },
+  "errors": {
+    "tooShort": "Từ khóa phải có ít nhất 3 ký tự.",
+    "rateLimited": "Đã tìm 5 lần trong giờ này. Thử lại sau.",
+    "failed": "Tìm kiếm thất bại.",
+    "network": "Không thể kết nối. Kiểm tra mạng và thử lại.",
+    "noLink": "Video này không có link để tải về."
+  },
+  "rateLimit": {
+    "title": "Giới hạn tìm kiếm",
+    "body": "Bạn đã tìm 5 lần trong giờ này. Chờ ~60 phút hoặc dán link trực tiếp vào ô tải về."
+  },
+  "cached": "Kết quả từ cache (10 phút)",
+  "resultsFor": "{{count}} kết quả cho \"<kw>{{keyword}}</kw>\"",
+  "noResults": "Không tìm thấy video nào cho từ khóa này.",
+  "noResultsHint": "Thử từ khóa khác hoặc đổi sang nền tảng khác.",
+  "empty": {
+    "title": "Nhập từ khóa để bắt đầu tìm kiếm",
+    "hint": "Hỗ trợ YouTube và TikTok · Giới hạn 5 lần/giờ · Cache 10 phút"
+  },
+  "suggestions": {
+    "chill": "nhạc chill",
+    "cooking": "hướng dẫn nấu ăn",
+    "trending": "top trending tiktok",
+    "lofi": "lo-fi music"
+  }
+}

@@ -2,10 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { Key, Plus, Trash2, Pencil, Copy, Check, X, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../lib/apiBase';
+import { useTranslation } from 'react-i18next';
+import { useLang, useLocalePath } from '../i18n';
 
 const MAX_KEYS = 3;
 
 function CopyButton({ text }) {
+  const { t } = useTranslation('apiKeys');
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     await navigator.clipboard.writeText(text);
@@ -16,7 +19,7 @@ function CopyButton({ text }) {
     <button
       onClick={copy}
       className="p-1.5 rounded text-fg-muted hover:text-fg hover:bg-surface-2 transition-colors"
-      title="Copy"
+      title={t('copy')}
     >
       {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
     </button>
@@ -24,6 +27,7 @@ function CopyButton({ text }) {
 }
 
 function CreateModal({ onClose, onCreated, apiBase, token }) {
+  const { t } = useTranslation('apiKeys');
   const [label, setLabel]       = useState('My API Key');
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
@@ -60,7 +64,7 @@ function CreateModal({ onClose, onCreated, apiBase, token }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
       <div className="w-full max-w-md bg-canvas border border-line rounded-2xl shadow-2xl p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-fg font-semibold text-sm">Tạo API Key mới</h3>
+          <h3 className="text-fg font-semibold text-sm">{t('create.title')}</h3>
           <button onClick={onClose} className="p-1 rounded text-fg-muted hover:text-fg hover:bg-surface">
             <X className="w-4 h-4" />
           </button>
@@ -68,7 +72,7 @@ function CreateModal({ onClose, onCreated, apiBase, token }) {
 
         {!newKey ? (
           <>
-            <label className="block text-xs text-fg-muted mb-1">Nhãn</label>
+            <label className="block text-xs text-fg-muted mb-1">{t('create.label')}</label>
             <input
               type="text"
               value={label}
@@ -87,17 +91,17 @@ function CreateModal({ onClose, onCreated, apiBase, token }) {
                 disabled={loading}
                 className="flex-1 py-2 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-sm font-semibold disabled:opacity-60 transition-colors"
               >
-                {loading ? 'Đang tạo...' : 'Tạo Key'}
+                {loading ? t('create.creating') : t('create.submit')}
               </button>
               <button onClick={onClose} className="px-4 py-2 rounded-lg text-fg-muted hover:text-fg hover:bg-surface text-sm transition-colors">
-                Huỷ
+                {t('cancel')}
               </button>
             </div>
           </>
         ) : (
           <>
             <div className="mb-3 p-3 rounded-lg bg-accent-soft border border-accent/50">
-              <p className="text-xs text-accent-text font-semibold mb-1">⚠️ Lưu key ngay — sẽ không hiển thị lại!</p>
+              <p className="text-xs text-accent-text font-semibold mb-1">{t('create.saveWarning')}</p>
             </div>
 
             <label className="block text-xs text-fg-muted mb-1">API Key</label>
@@ -115,7 +119,7 @@ function CreateModal({ onClose, onCreated, apiBase, token }) {
               onClick={onClose}
               className="w-full py-2 rounded-lg bg-surface hover:bg-surface-2 text-fg text-sm font-semibold transition-colors"
             >
-              Đã lưu, đóng
+              {t('create.savedClose')}
             </button>
           </>
         )}
@@ -125,6 +129,7 @@ function CreateModal({ onClose, onCreated, apiBase, token }) {
 }
 
 function EditLabelModal({ keyId, currentLabel, onClose, onSaved, apiBase, token }) {
+  const { t } = useTranslation('apiKeys');
   const [label, setLabel]     = useState(currentLabel);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
@@ -156,7 +161,7 @@ function EditLabelModal({ keyId, currentLabel, onClose, onSaved, apiBase, token 
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
       <div className="w-full max-w-sm bg-canvas border border-line rounded-2xl shadow-2xl p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-fg font-semibold text-sm">Đổi tên Key</h3>
+          <h3 className="text-fg font-semibold text-sm">{t('edit.title')}</h3>
           <button onClick={onClose} className="p-1 rounded text-fg-muted hover:text-fg hover:bg-surface">
             <X className="w-4 h-4" />
           </button>
@@ -170,9 +175,9 @@ function EditLabelModal({ keyId, currentLabel, onClose, onSaved, apiBase, token 
         <div className="flex gap-2">
           <button onClick={submit} disabled={loading}
             className="flex-1 py-2 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-sm font-semibold disabled:opacity-60 transition-colors">
-            {loading ? 'Đang lưu...' : 'Lưu'}
+            {loading ? t('edit.saving') : t('edit.save')}
           </button>
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-fg-muted hover:text-fg hover:bg-surface text-sm transition-colors">Huỷ</button>
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-fg-muted hover:text-fg hover:bg-surface text-sm transition-colors">{t('cancel')}</button>
         </div>
       </div>
     </div>
@@ -180,6 +185,10 @@ function EditLabelModal({ keyId, currentLabel, onClose, onSaved, apiBase, token 
 }
 
 export default function ApiKeysPage() {
+  const { t } = useTranslation('apiKeys');
+  const lang = useLang();
+  const lp = useLocalePath();
+  const dateLocale = lang === 'en' ? 'en-US' : 'vi-VN';
   const { session } = useAuth();
   const token       = session?.access_token || localStorage.getItem('vg_token') || '';
   const apiBase     = API_BASE;
@@ -199,7 +208,7 @@ export default function ApiKeysPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.status === 403) {
-        setError('API key management chỉ dành cho Pro.');
+        setError(t('proOnly'));
         setKeys([]);
         return;
       }
@@ -211,7 +220,7 @@ export default function ApiKeysPage() {
     } finally {
       setLoading(false);
     }
-  }, [apiBase, token]);
+  }, [apiBase, token, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -228,7 +237,7 @@ export default function ApiKeysPage() {
   }, [apiBase, token, keys]);
 
   const revoke = async (keyId) => {
-    if (!window.confirm('Xác nhận thu hồi key này? Hành động không thể hoàn tác.')) return;
+    if (!window.confirm(t('revoke.confirm'))) return;
     setRevoking(keyId);
     try {
       const res = await fetch(`${apiBase}/api/v1/api-keys/${keyId}`, {
@@ -238,7 +247,7 @@ export default function ApiKeysPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await load();
     } catch (e) {
-      alert(`Lỗi: ${e.message}`);
+      alert(t('revoke.error', { message: e.message }));
     } finally {
       setRevoking(null);
     }
@@ -257,7 +266,7 @@ export default function ApiKeysPage() {
           <div>
             <h1 className="text-fg font-bold text-lg">API Keys</h1>
             {/* wording: BA review */}
-            <p className="text-fg-muted text-xs">Tối đa {MAX_KEYS} key. Lượt gọi API tính theo tháng cho cả tài khoản; lượt tải qua API vẫn trừ vào hạn mức tải mỗi ngày.</p>
+            <p className="text-fg-muted text-xs">{t('subtitle', { max: MAX_KEYS })}</p>
           </div>
         </div>
         <button
@@ -266,7 +275,7 @@ export default function ApiKeysPage() {
           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           <Plus className="w-3.5 h-3.5" />
-          Tạo Key
+          {t('create.submit')}
         </button>
       </div>
 
@@ -274,11 +283,11 @@ export default function ApiKeysPage() {
       {usage && usage.limit !== 0 && (
         <div className="mb-4 p-3 rounded-xl bg-surface border border-line">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-fg font-semibold">Lượt gọi API tháng {usage.month}</span>
+            <span className="text-fg font-semibold">{t('usage.title', { month: usage.month })}</span>
             <span className="text-fg-2 tabular-nums">
               {usage.limit === -1
-                ? `${usage.used ?? '—'} lượt · không giới hạn`
-                : `${usage.used ?? '—'} / ${Number(usage.limit).toLocaleString('vi-VN')}`}
+                ? t('usage.unlimited', { used: usage.used ?? '—' })
+                : `${usage.used ?? '—'} / ${Number(usage.limit).toLocaleString(dateLocale)}`}
             </span>
           </div>
           {usage.limit > 0 && typeof usage.used === 'number' && (
@@ -287,7 +296,7 @@ export default function ApiKeysPage() {
             </div>
           )}
           <p className="mt-1.5 text-fg-muted text-[11px]">
-            Làm mới ngày {new Date(usage.reset_at).toLocaleDateString('vi-VN')} (00:00 UTC).
+            {t('usage.reset', { date: new Date(usage.reset_at).toLocaleDateString(dateLocale) })}
           </p>
         </div>
       )}
@@ -295,15 +304,15 @@ export default function ApiKeysPage() {
       {/* Docs link */}
       <div className="mb-6 p-3 rounded-xl bg-surface border border-line flex items-center justify-between">
         <div>
-          <p className="text-fg text-xs font-semibold">Xác thực bằng header</p>
+          <p className="text-fg text-xs font-semibold">{t('auth.title')}</p>
           <code className="text-fg-muted text-xs">X-API-Key: vidgrab_xxxxxxxx...</code>
-          <p className="text-fg-muted text-[11px]">hoặc Authorization: Bearer vidgrab_…</p>
+          <p className="text-fg-muted text-[11px]">{t('auth.or')}</p>
         </div>
         <a
-          href="/api-docs"
+          href={lp('/api-docs')}
           className="text-fg-2 hover:text-fg-2 text-xs underline underline-offset-2"
         >
-          Xem docs →
+          {t('docs')}
         </a>
       </div>
 
@@ -318,8 +327,8 @@ export default function ApiKeysPage() {
         <div className="p-4 rounded-xl bg-danger-soft border border-danger/40 text-center">
           <p className="text-danger text-sm">{error}</p>
           {error.includes('Pro') && (
-            <a href="/upgrade" className="inline-block mt-2 text-xs text-fg-2 hover:text-fg-2 underline">
-              Nâng cấp Pro →
+            <a href={lp('/upgrade')} className="inline-block mt-2 text-xs text-fg-2 hover:text-fg-2 underline">
+              {t('upgrade')}
             </a>
           )}
         </div>
@@ -328,8 +337,8 @@ export default function ApiKeysPage() {
       {!loading && !error && keys.length === 0 && (
         <div className="text-center py-12">
           <Key className="w-10 h-10 text-fg-muted mx-auto mb-3" />
-          <p className="text-fg-muted text-sm">Chưa có API key nào.</p>
-          <p className="text-fg-muted text-xs mt-1">Nhấn "Tạo Key" để bắt đầu.</p>
+          <p className="text-fg-muted text-sm">{t('empty.title')}</p>
+          <p className="text-fg-muted text-xs mt-1">{t('empty.hint')}</p>
         </div>
       )}
 
@@ -349,18 +358,18 @@ export default function ApiKeysPage() {
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="text-fg text-sm font-medium truncate">{k.label}</span>
                     {!k.is_active && (
-                      <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-surface-2 text-fg-muted">Thu hồi</span>
+                      <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-surface-2 text-fg-muted">{t('revoke.badge')}</span>
                     )}
                   </div>
                   <code className="text-xs text-fg-muted font-mono">{k.key_prefix}…</code>
                   <div className="flex items-center gap-3 mt-1.5 text-xs text-fg-muted">
-                    <span>Tổng: {k.requests_total?.toLocaleString() || 0} req</span>
+                    <span>{t('item.total', { n: k.requests_total?.toLocaleString() || 0 })}</span>
                     <span>·</span>
-                    <span>Tạo: {k.created_at?.slice(0, 10)}</span>
+                    <span>{t('item.created', { date: k.created_at?.slice(0, 10) })}</span>
                     {k.last_used_at && (
                       <>
                         <span>·</span>
-                        <span>Dùng lần cuối: {k.last_used_at.slice(0, 10)}</span>
+                        <span>{t('item.lastUsed', { date: k.last_used_at.slice(0, 10) })}</span>
                       </>
                     )}
                   </div>
@@ -371,7 +380,7 @@ export default function ApiKeysPage() {
                     <button
                       onClick={() => setEditKey(k)}
                       className="p-1.5 rounded text-fg-muted hover:text-fg hover:bg-surface-2 transition-colors"
-                      title="Đổi tên"
+                      title={t('item.rename')}
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
@@ -379,7 +388,7 @@ export default function ApiKeysPage() {
                       onClick={() => revoke(k.id)}
                       disabled={revoking === k.id}
                       className="p-1.5 rounded text-fg-muted hover:text-danger hover:bg-surface-2 transition-colors disabled:opacity-50"
-                      title="Thu hồi"
+                      title={t('revoke.title')}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>

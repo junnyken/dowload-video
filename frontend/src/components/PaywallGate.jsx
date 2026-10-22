@@ -1,18 +1,13 @@
 import { Lock, Crown } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useEntitlement } from '../hooks/useEntitlement';
 
 // Descriptions only for features the plan table (GET /api/v1/plans) really
 // lists. Cloud save, chapters, logo removal, priority queue and team
 // workspace were advertised here but no code enforces them, so they are gone.
 // wording: BA review
-const FEATURE_DESCRIPTIONS = {
-  bulk_zip:      'Tải nhiều file cùng lúc dưới dạng ZIP',
-  youtube_video: 'Hạn mức YouTube cao hơn',
-  ai_tools:      'Phân tích thông minh với hạn mức cao hơn',
-  spotify_full:  'Tải được nhiều bài hơn khi tải theo nghệ sĩ Spotify',
-  api_key:       'Tích hợp qua REST API với API key riêng',
-  webhook:       'Nhận thông báo tự động qua webhook',
-};
+// Texts live in locales/*/usage.json (paywall.desc.<feature>).
+const FEATURE_DESCRIPTIONS = new Set(['bulk_zip', 'youtube_video', 'ai_tools', 'spotify_full', 'api_key', 'webhook']);
 
 function navigate(path) {
   window.history.pushState({}, '', path);
@@ -20,7 +15,8 @@ function navigate(path) {
 }
 
 function DefaultOverlay({ feature }) {
-  const description = FEATURE_DESCRIPTIONS[feature] || 'Tính năng này dành cho gói nâng cấp';
+  const { t } = useTranslation('usage');
+  const description = FEATURE_DESCRIPTIONS.has(feature) ? t(`paywall.desc.${feature}`) : t('paywall.descDefault');
   const planLabel   = 'Pro';
 
   return (
@@ -36,7 +32,7 @@ function DefaultOverlay({ feature }) {
       <div className="space-y-1">
         <p className="text-fg font-semibold text-sm flex items-center justify-center gap-1.5">
           <Crown className="w-4 h-4 text-accent-text" aria-hidden="true" />
-          Tính năng {planLabel}
+          {t('paywall.featureTitle', { plan: planLabel })}
         </p>
         <p className="text-fg-muted text-xs max-w-[240px] leading-relaxed">
           {description}
@@ -50,7 +46,7 @@ function DefaultOverlay({ feature }) {
                    focus:ring-2 focus:ring-accent focus:ring-offset-2
                    focus:ring-offset-canvas"
       >
-        Nâng cấp lên {planLabel}
+        {t('paywall.upgradeTo', { plan: planLabel })}
       </button>
     </div>
   );

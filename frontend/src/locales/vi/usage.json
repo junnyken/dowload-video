@@ -1,0 +1,91 @@
+{
+  "loadFailed": "Không tải được dữ liệu. Thử lại sau.",
+  "title": "Quota & Usage",
+  "subtitle": "Theo dõi lượt tải theo tài khoản",
+  "planPro": "Pro Plan",
+  "planFree": "Free Plan",
+  "planUnlimited": "Không giới hạn lượt tải",
+  "planPerPlatform": "Tối đa {{limit}} lượt/ngày cho mỗi nền tảng",
+  "planAllPlatforms": "Tối đa {{limit}} lượt/ngày cho tất cả nền tảng",
+  "planProDaily": "Tối đa {{daily}} lượt/ngày",
+  "planProFallback": "Gói Pro",
+  "planFreeLimits": "Tối đa {{daily}}/ngày, {{monthly}}/tháng",
+  "upgradeBadge": "Nâng cấp",
+  "today": "Hôm nay",
+  "todayPlatform": "Hôm nay · {{platform}}",
+  "thisMonth": "Tháng này",
+  "unitDownloads": "lượt",
+  "byPlatformTitle": "Lượt đã dùng hôm nay theo nền tảng",
+  "noneToday": "Chưa tải video nào hôm nay.",
+  "resetAt": "Lượt mới được cộng lại lúc {{time}} mỗi ngày.",
+  "bulkJobs": "Bulk jobs tổng cộng",
+  "cta": {
+    "title": "Nâng lên Pro để tải nhiều hơn",
+    "body": "Pro có {{daily}} lượt tải mỗi ngày, tải ZIP, API key và theo dõi tới {{sources}} nguồn.",
+    "bodyWithFree": "Pro có {{daily}} lượt tải mỗi ngày (Free: {{free}}), tải ZIP, API key và theo dõi tới {{sources}} nguồn.",
+    "noPlan": "Xem bảng giá để so sánh hạn mức các gói.",
+    "button": "Xem gói Pro →"
+  },
+  "proFeature": "Tính năng Pro",
+  "upgradeProBtn": "Nâng cấp Pro →",
+  "apiKey": {
+    "lockedDesc": "Nâng cấp để dùng API Key và tích hợp VidGrab vào ứng dụng của bạn.",
+    "saveNow": "Lưu key ngay — không thể xem lại sau khi đóng.",
+    "copy": "Sao chép",
+    "close": "Đóng",
+    "none": "Bạn chưa có API Key. Tạo key để tích hợp VidGrab vào ứng dụng.",
+    "create": "Tạo API Key",
+    "active": "Key đang hoạt động",
+    "createdAt": "Tạo lúc:",
+    "lastUsed": "Dùng lần cuối:",
+    "neverUsed": "Chưa dùng lần nào.",
+    "regenerate": "Tạo Key mới",
+    "revoke": "Thu hồi Key",
+    "confirmRevoke": "Thu hồi API Key? Mọi ứng dụng đang dùng key này sẽ bị ngắt kết nối.",
+    "createFailed": "Không thể tạo API Key. Thử lại sau.",
+    "revokeFailed": "Không thể thu hồi API Key. Thử lại sau."
+  },
+  "webhook": {
+    "lockedDesc": "Nâng cấp để nhận webhook khi có sự kiện tải xuống.",
+    "saveNow": "Lưu secret ngay — không thể xem lại sau khi đóng.",
+    "intro": "Nhận sự kiện tải xuống (job_done, job_failed) tới URL của bạn.",
+    "register": "Đăng ký",
+    "active": "Webhook đang hoạt động",
+    "revoke": "Thu hồi",
+    "logsTitle": "Delivery logs ({{count}})",
+    "time": "Thời gian",
+    "noLogs": "Chưa có delivery nào. Webhook sẽ được gọi khi job hoàn tất.",
+    "confirmRevoke": "Thu hồi webhook? Hệ thống sẽ ngừng gửi sự kiện tới URL này.",
+    "registerFailed": "Không thể đăng ký webhook. Thử lại sau.",
+    "revokeFailed": "Không thể thu hồi webhook. Thử lại sau."
+  },
+  "storage": {
+    "pinned": "File được ghim",
+    "pinnedCount": "{{count}} file · {{size}}",
+    "pinnedCountLimit": "{{count}} / {{limit}} file · {{size}}",
+    "pinInfo": "{{plan}}: ghim tối đa {{pins}} file · giữ {{days}} ngày",
+    "pinInfoPro": "{{plan}}: ghim tối đa {{pins}} file · giữ {{days}} ngày · Pro ghim được {{proPins}} file",
+    "pinNoPlan": "Xem bảng giá để biết hạn mức ghim file.",
+    "temp": "File tạm",
+    "unitFile": "file",
+    "tempExpire": "{{size}} · hết hạn sau 24h",
+    "unitItem": "mục",
+    "metadataOnly": "Metadata only · không giới hạn"
+  },
+  "quota": {
+    "unlimited": "Không giới hạn"
+  },
+  "paywall": {
+    "desc": {
+      "bulk_zip": "Tải nhiều file cùng lúc dưới dạng ZIP",
+      "youtube_video": "Hạn mức YouTube cao hơn",
+      "ai_tools": "Phân tích thông minh với hạn mức cao hơn",
+      "spotify_full": "Tải được nhiều bài hơn khi tải theo nghệ sĩ Spotify",
+      "api_key": "Tích hợp qua REST API với API key riêng",
+      "webhook": "Nhận thông báo tự động qua webhook"
+    },
+    "descDefault": "Tính năng này dành cho gói nâng cấp",
+    "featureTitle": "Tính năng {{plan}}",
+    "upgradeTo": "Nâng cấp lên {{plan}}"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "switcher": {
+    "personal": "Cá nhân",
+    "namePlaceholder": "Tên workspace...",
+    "create": "Tạo",
+    "createNew": "Tạo workspace mới",
+    "settings": "Cài đặt Workspace"
+  },
+  "title": "Cài đặt Workspace",
+  "none": "Chưa có workspace nào.",
+  "tabs": {
+    "overview": "Tổng quan",
+    "members": "Thành viên",
+    "invites": "Lời mời"
+  },
+  "name": "Tên Workspace",
+  "save": "Lưu",
+  "saveFailed": "Lỗi khi lưu.",
+  "inviteFailed": "Lỗi khi gửi lời mời.",
+  "info": "Thông tin",
+  "type": "Loại",
+  "typePersonal": "Cá nhân",
+  "typeTeam": "Team",
+  "typeEnterprise": "Enterprise",
+  "yourRole": "Vai trò của bạn",
+  "sendInvite": "Gửi lời mời",
+  "invite": "Mời",
+  "noInvites": "Không có lời mời nào đang chờ.",
+  "expires": "Hết hạn {{date}}"
+}

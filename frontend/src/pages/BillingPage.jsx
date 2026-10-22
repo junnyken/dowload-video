@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import QuotaBar from '../components/QuotaBar';
+import { useTranslation } from 'react-i18next';
+import { getLang } from '../i18n';
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 
@@ -13,7 +15,7 @@ const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 function formatDate(iso) {
   if (!iso) return null;
   try {
-    return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(iso));
+    return new Intl.DateTimeFormat(getLang() === 'en' ? 'en-US' : 'vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(iso));
   } catch {
     return iso;
   }
@@ -43,12 +45,13 @@ function PlanBadge({ tier }) {
 // ── Billing status pill ───────────────────────────────────────────────────────
 
 function BillingStatusPill({ status, expiryDate }) {
+  const { t } = useTranslation('billing');
   const configs = {
-    active:    { label: 'Đang hoạt động',                                  color: 'bg-success-soft text-success border-success/30' },
-    past_due:  { label: 'Quá hạn thanh toán — 3 ngày ân hạn',             color: 'bg-accent-soft text-accent-text border-accent/30'  },
-    canceling: { label: `Đã huỷ — còn hiệu lực đến ${formatDate(expiryDate) || '...'}`, color: 'bg-warning-soft text-warning border-warning/30' },
-    canceled:  { label: 'Đã huỷ',                                          color: 'bg-danger-soft text-danger border-danger/30'           },
-    none:      { label: 'Miễn phí',                                        color: 'bg-surface-2 text-fg-muted border-line-strong'        },
+    active:    { label: t('status.active'),                                  color: 'bg-success-soft text-success border-success/30' },
+    past_due:  { label: t('status.pastDue'),             color: 'bg-accent-soft text-accent-text border-accent/30'  },
+    canceling: { label: t('status.canceling', { date: formatDate(expiryDate) || '...' }), color: 'bg-warning-soft text-warning border-warning/30' },
+    canceled:  { label: t('status.canceled'),                                          color: 'bg-danger-soft text-danger border-danger/30'           },
+    none:      { label: t('status.none'),                                        color: 'bg-surface-2 text-fg-muted border-line-strong'        },
   };
 
   const cfg = configs[status] || configs.none;
@@ -64,6 +67,7 @@ function BillingStatusPill({ status, expiryDate }) {
 // ── Toast ─────────────────────────────────────────────────────────────────────
 
 function Toast({ message, type = 'info', onDismiss }) {
+  const { t } = useTranslation('billing');
   const styles = {
     success: 'bg-success-soft border-success/40 text-success',
     info:    'bg-surface-2 border-line text-fg-2',
@@ -83,7 +87,7 @@ function Toast({ message, type = 'info', onDismiss }) {
       <span className="flex-1">{message}</span>
       <button
         onClick={onDismiss}
-        aria-label="Đóng thông báo"
+        aria-label={t('toast.dismiss')}
         className="p-0.5 rounded hover:bg-surface-2 transition-colors"
       >
         <X className="w-3.5 h-3.5" />
@@ -107,6 +111,7 @@ function Card({ children, className = '' }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function BillingPage() {
+  const { t } = useTranslation('billing');
   const [billingInfo, setBillingInfo]   = useState(null);
   const [summary, setSummary]           = useState(null);
   const [loadingInfo, setLoadingInfo]   = useState(true);
@@ -119,18 +124,18 @@ export default function BillingPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('success') === '1') {
-      setToast({ message: 'Nâng cấp thành công! Chào mừng bạn đến với gói mới.', type: 'success' });
+      setToast({ message: t('toast.upgraded'), type: 'success' });
       // Remove param from URL without reload
       params.delete('success');
       const newSearch = params.toString();
       window.history.replaceState({}, '', newSearch ? `?${newSearch}` : window.location.pathname);
     } else if (params.get('canceled') === '1') {
-      setToast({ message: 'Đã huỷ thanh toán.', type: 'info' });
+      setToast({ message: t('toast.canceled'), type: 'info' });
       params.delete('canceled');
       const newSearch = params.toString();
       window.history.replaceState({}, '', newSearch ? `?${newSearch}` : window.location.pathname);
     }
-  }, []);
+  }, [t]);
 
   // ── Fetch helpers ────────────────────────────────────────────────────
   const getToken = useCallback(async () => {
@@ -190,7 +195,7 @@ export default function BillingPage() {
     setPortalError('');
     try {
       const token = await getToken();
-      if (!token) { setPortalError('Bạn cần đăng nhập để quản lý thanh toán.'); return; }
+      if (!token) { setPortalError(t('portal.needLogin')); return; }
       const res = await fetch(`${API}/payments/create-portal-session`, {
         method: 'POST',
         headers: {
@@ -206,11 +211,11 @@ export default function BillingPage() {
       const { url } = await res.json();
       if (url) window.location.href = url;
     } catch (e) {
-      setPortalError(e.message || 'Không thể mở trang quản lý thanh toán.');
+      setPortalError(e.message || t('portal.openFailed'));
     } finally {
       setPortalLoading(false);
     }
-  }, [getToken]);
+  }, [getToken, t]);
 
   // ── Derived values ───────────────────────────────────────────────────
   const tier          = billingInfo?.tier          || 'free';
@@ -241,14 +246,14 @@ export default function BillingPage() {
         {/* ── Header ─────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-fg">Thanh toán & Gói dịch vụ</h1>
+            <h1 className="text-2xl font-bold text-fg">{t('title')}</h1>
             <p className="text-fg-muted text-sm mt-1">
-              Quản lý gói cước và lịch sử thanh toán của bạn
+              {t('subtitle')}
             </p>
           </div>
           <button
             onClick={() => { fetchBillingInfo(); fetchSummary(); }}
-            aria-label="Tải lại"
+            aria-label={t('reload')}
             className="p-2 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-2 transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -271,7 +276,7 @@ export default function BillingPage() {
 
               {expiryDate && billingStatus === 'active' && (
                 <p className="text-fg-muted text-sm">
-                  Gia hạn tiếp theo:{' '}
+                  {t('nextRenewal')}{' '}
                   <span className="text-fg font-medium">{formatDate(expiryDate)}</span>
                 </p>
               )}
@@ -289,7 +294,7 @@ export default function BillingPage() {
                                focus:outline-none focus:ring-2 focus:ring-line-strong"
                   >
                     <CreditCard className="w-4 h-4" aria-hidden="true" />
-                    {portalLoading ? 'Đang chuyển hướng...' : 'Quản lý thanh toán'}
+                    {portalLoading ? t('portal.redirecting') : t('portal.manage')}
                     {!portalLoading && <ExternalLink className="w-3.5 h-3.5 opacity-60" aria-hidden="true" />}
                   </button>
                 )}
@@ -304,7 +309,7 @@ export default function BillingPage() {
                                focus:ring-offset-surface-2"
                   >
                     <Crown className="w-4 h-4" aria-hidden="true" />
-                    Nâng cấp
+                    {t('upgrade')}
                     <Zap className="w-3.5 h-3.5" aria-hidden="true" />
                   </button>
                 )}
@@ -324,7 +329,7 @@ export default function BillingPage() {
         <Card className="space-y-5">
           <h2 className="text-base font-semibold text-fg flex items-center gap-2">
             <Download className="w-4 h-4 text-success" aria-hidden="true" />
-            Sử dụng hôm nay
+            {t('usage.title')}
           </h2>
 
           {loadingSummary ? (
@@ -341,20 +346,20 @@ export default function BillingPage() {
               <QuotaBar
                 used={usage.downloads_today ?? 0}
                 limit={limits.downloads_per_day ?? -1}
-                label="Downloads hôm nay"
-                unit="lượt"
+                label={t('usage.downloads')}
+                unit={t('usage.unit')}
               />
               <QuotaBar
                 used={usage.ai_analyses_today ?? 0}
                 limit={limits.ai_analyses_per_day ?? -1}
-                label="Phân tích AI hôm nay"
-                unit="lượt"
+                label={t('usage.ai')}
+                unit={t('usage.unit')}
               />
               {limits.storage_mb !== undefined && (
                 <QuotaBar
                   used={Math.round((usage.storage_used_mb ?? 0))}
                   limit={limits.storage_mb ?? -1}
-                  label="Dung lượng cloud"
+                  label={t('usage.storage')}
                   unit="MB"
                 />
               )}
@@ -368,12 +373,12 @@ export default function BillingPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Brain className="w-4 h-4 text-fg-2" aria-hidden="true" />
-                <span className="text-sm font-medium text-fg">Credits còn lại</span>
+                <span className="text-sm font-medium text-fg">{t('credits.title')}</span>
               </div>
               <span className="text-success font-bold text-lg">{credits}</span>
             </div>
             <p className="text-fg-muted text-xs mt-1">
-              Dùng để phân tích AI, xoá logo và các tính năng nâng cao.
+              {t('credits.desc')}
             </p>
           </Card>
         )}
@@ -383,10 +388,10 @@ export default function BillingPage() {
           <Card>
             <h2 className="text-base font-semibold text-fg mb-3 flex items-center gap-2">
               <CreditCard className="w-4 h-4 text-fg-muted" aria-hidden="true" />
-              Lịch sử thanh toán
+              {t('history.title')}
             </h2>
             <p className="text-fg-muted text-sm mb-4">
-              Xem hoá đơn và lịch sử giao dịch trên trang quản lý của Stripe.
+              {t('history.desc')}
             </p>
             <button
               onClick={openPortal}
@@ -395,7 +400,7 @@ export default function BillingPage() {
                          hover:text-success transition-colors font-medium
                          focus:outline-none focus:underline disabled:opacity-50"
             >
-              Xem lịch sử thanh toán
+              {t('history.view')}
               <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
           </Card>
@@ -409,10 +414,10 @@ export default function BillingPage() {
           >
             <div className="flex-1 space-y-1">
               <p className="text-fg font-semibold">
-                Nâng cấp để mở khoá toàn bộ tính năng
+                {t('upsell.title')}
               </p>
               <p className="text-fg-muted text-sm">
-                Xem bảng giá để biết hạn mức của từng gói.  {/* wording: BA review */}
+                {t('upsell.desc')}  {/* wording: BA review */}
               </p>
             </div>
             <button
@@ -424,7 +429,7 @@ export default function BillingPage() {
                          focus:ring-offset-canvas"
             >
               <Crown className="w-4 h-4" aria-hidden="true" />
-              Xem các gói
+              {t('upsell.viewPlans')}
             </button>
           </div>
         )}

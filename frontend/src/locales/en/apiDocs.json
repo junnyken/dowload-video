@@ -1,0 +1,90 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "intro": "Reference for external integrations. Covers public and user-facing endpoints only. Admin endpoints are not documented here.",
+  "auth": {
+    "title": "Authentication",
+    "intro": "Some public endpoints need no key but are limited per IP. Endpoints marked “auth” require a key. For <code>/fetch-link</code> and <code>/history</code> the key is optional: if you send one, the request runs under your account.",
+    "accepted": "(also accepted)",
+    "note": "Create an API key on the <a><b>API Keys</b></a> page (available on Pro, Team and Enterprise plans). Any key can be revoked at any time. A wrong or revoked key returns HTTP 401 with <code>{\"error_code\":\"invalid_api_key\"}</code>."
+  },
+  "rate": {
+    "title": "Rate limits",
+    "otherLabel": "Other endpoints",
+    "otherValue": "60 requests/minute — per API key (without a key: per IP)",
+    "fetchLabel": "Fetch-link / Bulk-download",
+    "fetchValue": "30 requests/minute — per API key (without a key: per IP)",
+    "monthlyLabel": "API calls per month",
+    "dailyLabel": "Downloads per day",
+    "daily": "Free {{free}} · Pro {{pro}} downloads/day",
+    "byPlan": "Depends on your plan",
+    "monthlyPro": "Pro {{count}} calls/month",
+    "unlimited": "Unlimited",
+    "exceeded": "Over the rate limit: HTTP 429. Wait about a minute and try again, increasing the wait between attempts (exponential backoff). Requests that send a key are counted per key, so several servers behind one IP do not share a limit.",
+    "monthlyQuota": "Each request that sends an API key counts as 1 call against the account's <b>monthly</b> quota (UTC calendar month, resets at 00:00 UTC on the 1st). When it runs out: HTTP 429 with <code>{\"error_code\":\"api_monthly_quota_exceeded\",\"reset_at\":\"…\"}</code>. Every response to a request with a key includes the headers <code>X-API-Quota-Limit</code>, <code>X-API-Quota-Remaining</code>, <code>X-API-Quota-Reset</code> (Unix time). To see how many calls you have used: <code>GET /api/v1/api-keys/usage</code>. Downloads made through the API also count against the daily download allowance."
+  },
+  "partner": {
+    "title": "Partner API (for businesses integrating from their backend)",
+    "intro": "For businesses that call VidGrab from their own servers. Keys that look like <code>vgp_</code> are issued by VidGrab; you cannot create them yourself. To get a key, contact: <mail>{{email}}</mail> or Telegram <tg>@vidgrab_support</tg>.",
+    "mailSubject": "Partner API registration",
+    "basePath": "Base path: /api/v1/partner",
+    "exampleTitle": "Example: create a job",
+    "notes": {
+      "createJob": "Create a download job. Body: { url, quality }. Returns 202 with the job details.",
+      "getJob": "Get the status and result of a job.",
+      "listJobs": "List the account's jobs (across all keys), filtered by status.",
+      "cancelJob": "Cancel a pending job.",
+      "usage": "See today's and this month's usage against your quota.",
+      "addWebhook": "Register a webhook (HTTPS URL) to receive job.completed and job.failed events.",
+      "listWebhooks": "List registered webhooks.",
+      "deleteWebhook": "Delete a webhook.",
+      "validateUrls": "Check a list of URLs in advance, up to 100 URLs per call.",
+      "platformStatus": "Shows which platforms can currently be downloaded. The webhooks platform.degraded / platform.recovered are sent when the status changes."
+    },
+    "li1": "Requests per minute are counted per key (default 60). Over the limit: HTTP 429 with a <code>Retry-After</code> header.",
+    "li2": "Jobs per day are counted per key (default 10,000).",
+    "li3": "When the daily or monthly job quota runs out: HTTP 429 with <code>{\"detail\":{\"code\":\"rate_limit_exceeded\" | \"monthly_quota_exceeded\",\"reset_at\":\"…\"}}</code>; wait until <code>reset_at</code>.",
+    "li4": "<code>rate_limit_exceeded</code> = out of jobs for the day; <code>rate_limited</code> = too many requests per minute.",
+    "li5": "Polling <code>GET /jobs/{id}</code> does not use up the job quota."
+  },
+  "endpointsTitle": "Endpoints",
+  "keyOptional": "key optional",
+  "requestBody": "Request body",
+  "response": "Response",
+  "guestComment": "guest",
+  "searchResultsPlaceholder": "list of matching results",
+  "endpoints": {
+    "health": "Liveness + version check. Returns disk, Redis, yt-dlp version, app_version.",
+    "apiInfo": "Public API metadata: endpoints, rate limits, auth guide, error format.",
+    "fetchLink": "Download a link and wait for the result: the request stays open until it finishes (synchronous) and returns no token to poll. With an API key it runs under your account (quota and quality follow your plan); without one it runs as a guest. quality defaults to \"video\" (up to 1080p); allowed values: \"video\", \"video_fast\" (faster, lower quality), \"video_4k\" (best available), \"video_<height>\" (for example \"video_720\"), \"mp3_128\", \"mp3_320\". The actual quality is capped by the account's plan. progress_token is optional and chosen by you: send it to follow progress through GET /progress/{token} while the request is running.",
+    "progress": "Download progress for the progress_token you sent in POST /fetch-link; only meaningful while that request is still running. An unknown token (or one with no progress yet) returns status \"pending\". Do not use it to get the final result: the result is in the /fetch-link response.",
+    "history": "The account's download history when an API key is sent (default limit=5; supports ?limit=&offset=&platform=&status=success|failed|processing). Guests (no key) get an empty list with local_only: true, because guest history is kept only in the browser.",
+    "historyExport": "Export download history. ?format=csv|json&range_days=30 (max 365 for Pro).",
+    "archive": "Personal archive. Supports ?platform=&is_starred=&collection_id=&language=&file_status=available|pinned|expired&sort=&page=1&limit=20. There is no q parameter: use GET /api/v1/archive/search to search.",
+    "archiveSearch": "Search the archive by title, author, hashtag and notes. ?q= (at least 2 characters, required) and ?limit=20.",
+    "errorCodes": "Full catalogue of structured error codes with user-safe messages."
+  },
+  "errorFormat": {
+    "title": "Error format",
+    "intro": "Every error returns the same JSON structure:",
+    "fullList": "See the full list of error codes"
+  },
+  "errors": {
+    "unsupported_url": "This URL is not supported.",
+    "provider_unavailable": "The platform is temporarily not responding.",
+    "extractor_broken": "The platform just changed and downloads are temporarily unavailable; VidGrab is working on it. Try again in 30–60 minutes.",
+    "queue_busy": "The queue is overloaded.",
+    "rate_limited": "Please wait.",
+    "job_expired": "The job has expired.",
+    "validation_failed": "The input data is invalid.",
+    "unauthorized": "Sign-in required."
+  },
+  "retry": {
+    "title": "Retry guidance",
+    "li1": "Only retry when <code>retryable: true</code>.",
+    "li2": "Increase the wait between attempts (exponential backoff): 1s → 2s → 4s → 8s (at most 3 attempts).",
+    "li3": "HTTP 429 with a <code>vidgrab_</code> key: wait about a minute, then try again (there is no Retry-After header).",
+    "li4": "HTTP 429 with the Partner API (<code>vgp_</code> key): if you went over the requests-per-minute limit, a <code>Retry-After</code> header is present, so wait exactly that many seconds; if the daily or monthly job quota ran out, wait until <code>reset_at</code>, since retrying earlier still returns 429.",
+    "li5": "HTTP 5xx: retry with backoff; HTTP 4xx (except 429): do not retry.",
+    "li6": "/fetch-link is synchronous: wait for the response to that same request and do not resend it before you have a result (each send counts as one download). To show progress, set your own <code>progress_token</code> and poll <code>/progress/{token}</code>."
+  }
+}

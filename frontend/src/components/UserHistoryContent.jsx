@@ -7,6 +7,8 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../lib/apiBase';
 import DesktopHistorySection from './DesktopHistorySection';
+import { useTranslation, Trans } from 'react-i18next';
+import { useLang } from '../i18n';
 
 const apiBase = API_BASE;
 const API = `${apiBase}/api/v1`;
@@ -68,6 +70,7 @@ function fmtTs(s) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function UserHistoryContent({ onNavigate }) {
+  const { t } = useTranslation('userHistory');
   const { session } = useAuth();
 
   // List state
@@ -189,8 +192,8 @@ export default function UserHistoryContent({ onNavigate }) {
             <History className="w-5 h-5 text-accent-text" />
           </div>
           <div>
-            <h1 className="text-fg font-bold text-lg">Lich su tai</h1>
-            <p className="text-fg-muted text-xs">Tat ca luot tai gan voi tai khoan</p>
+            <h1 className="text-fg font-bold text-lg">{t('title')}</h1>
+            <p className="text-fg-muted text-xs">{t('subtitle')}</p>
           </div>
         </div>
         {/* Export */}
@@ -208,10 +211,10 @@ export default function UserHistoryContent({ onNavigate }) {
 
       {/* Tab filter */}
       <div className="flex gap-2 mb-4 flex-wrap">
-        {[['all', 'Tất cả'], ['today', 'Hôm nay'], ['recent', '7 ngày'], ['failed', 'Thất bại']].map(([key, label]) => (
+        {['all', 'today', 'recent', 'failed'].map((key) => (
           <button key={key} onClick={() => setFilterTab(key)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterTab === key ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-accent-fg hover:bg-line'}`}>
-            {label}
+            {t(`tabs.${key}`)}
           </button>
         ))}
       </div>
@@ -222,7 +225,7 @@ export default function UserHistoryContent({ onNavigate }) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-muted" />
           <input
             type="text"
-            placeholder="Tim kiem tieu de, creator, hashtag..."
+            placeholder={t('searchPlaceholder')}
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="w-full bg-surface border border-line-strong rounded-xl pl-9 pr-4 py-2.5 text-sm text-fg placeholder:text-fg-muted focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition"
@@ -243,7 +246,7 @@ export default function UserHistoryContent({ onNavigate }) {
           }`}
         >
           <SlidersHorizontal className="w-3.5 h-3.5" />
-          Lo{activeFilters > 0 ? ` (${activeFilters})` : ''}
+          {activeFilters > 0 ? t('filters.buttonCount', { count: activeFilters }) : t('filters.button')}
         </button>
       </div>
 
@@ -253,10 +256,10 @@ export default function UserHistoryContent({ onNavigate }) {
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {/* Platform */}
             <div>
-              <label className="text-[10px] text-fg-muted uppercase mb-1 block">Nen tang</label>
+              <label className="text-[10px] text-fg-muted uppercase mb-1 block">{t('filters.platform')}</label>
               <select value={filterPlatform} onChange={e => setFilterPlatform(e.target.value)}
                 className="w-full bg-surface-2 border border-line rounded-lg px-2 py-1.5 text-xs text-fg-2 focus:outline-none cursor-pointer">
-                <option value="">Tat ca</option>
+                <option value="">{t('filters.all')}</option>
                 {Object.keys(PLATFORM_BADGE).map(p => (
                   <option key={p} value={p}>{PLATFORM_BADGE[p].label}</option>
                 ))}
@@ -265,28 +268,28 @@ export default function UserHistoryContent({ onNavigate }) {
 
             {/* Sort */}
             <div>
-              <label className="text-[10px] text-fg-muted uppercase mb-1 block">Sap xep</label>
+              <label className="text-[10px] text-fg-muted uppercase mb-1 block">{t('filters.sort')}</label>
               <select value={sortBy} onChange={e => setSortBy(e.target.value)}
                 className="w-full bg-surface-2 border border-line rounded-lg px-2 py-1.5 text-xs text-fg-2 focus:outline-none cursor-pointer">
-                <option value="newest">Moi nhat</option>
-                <option value="oldest">Cu nhat</option>
-                <option value="most_viewed">Nhieu view nhat</option>
-                <option value="longest">Dai nhat</option>
+                <option value="newest">{t('filters.sortNewest')}</option>
+                <option value="oldest">{t('filters.sortOldest')}</option>
+                <option value="most_viewed">{t('filters.sortMostViewed')}</option>
+                <option value="longest">{t('filters.sortLongest')}</option>
               </select>
             </div>
 
             {/* Creator */}
             <div>
-              <label className="text-[10px] text-fg-muted uppercase mb-1 block">Creator</label>
+              <label className="text-[10px] text-fg-muted uppercase mb-1 block">{t('filters.creator')}</label>
               <input value={filterCreator} onChange={e => setFilterCreator(e.target.value)}
-                placeholder="Ten creator..."
+                placeholder={t('filters.creatorPlaceholder')}
                 className="w-full bg-surface-2 border border-line rounded-lg px-2 py-1.5 text-xs text-fg-2 placeholder:text-fg-muted focus:outline-none"
               />
             </div>
 
             {/* Has notes */}
             <div className="flex flex-col justify-end">
-              <label className="text-[10px] text-fg-muted uppercase mb-1 block">Co ghi chu</label>
+              <label className="text-[10px] text-fg-muted uppercase mb-1 block">{t('filters.hasNotes')}</label>
               <button
                 onClick={() => setFilterHasNotes(p => !p)}
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
@@ -296,7 +299,7 @@ export default function UserHistoryContent({ onNavigate }) {
                 }`}
               >
                 <MessageSquare className="w-3 h-3" />
-                {filterHasNotes ? 'Dang loc' : 'Tat ca'}
+                {filterHasNotes ? t('filters.filtering') : t('filters.all')}
               </button>
             </div>
           </div>
@@ -305,7 +308,7 @@ export default function UserHistoryContent({ onNavigate }) {
           {filterTag && (
             <div className="flex items-center gap-2 text-xs text-fg-muted">
               <Filter className="w-3 h-3" />
-              Loc hashtag: <span className="text-accent-text font-semibold">#{filterTag}</span>
+              <Trans t={t} i18nKey="filters.hashtag" values={{ tag: filterTag }} components={{ b: <span className="text-accent-text font-semibold" /> }} />
               <button onClick={() => setFilterTag('')} className="text-fg-muted hover:text-fg cursor-pointer"><X className="w-3 h-3" /></button>
             </div>
           )}
@@ -316,7 +319,7 @@ export default function UserHistoryContent({ onNavigate }) {
               onClick={() => { setFilterPlatform(''); setFilterCreator(''); setFilterHasNotes(false); setFilterTag(''); setSortBy('newest'); }}
               className="text-xs text-fg-muted hover:text-danger transition-colors cursor-pointer"
             >
-              Xoa tat ca bo loc
+              {t('filters.clear')}
             </button>
           )}
         </div>
@@ -325,7 +328,7 @@ export default function UserHistoryContent({ onNavigate }) {
       {/* Offline badge */}
       {isOfflineCached && (
         <div className="flex items-center gap-2 bg-accent-soft border border-accent/30 rounded-lg px-3 py-2 mb-3 text-xs text-accent-text">
-          <span>📵</span> Đang hiển thị dữ liệu đã lưu — kết nối lại để cập nhật
+          <span>📵</span> {t('offline')}
         </div>
       )}
 
@@ -337,11 +340,11 @@ export default function UserHistoryContent({ onNavigate }) {
       ) : items.length === 0 ? (
         <div className="text-center py-16 space-y-2">
           <History className="w-10 h-10 text-fg-muted mx-auto" />
-          <p className="text-fg-muted">{(search || activeFilters > 0) ? 'Khong tim thay ket qua' : 'Chua co lich su tai'}</p>
+          <p className="text-fg-muted">{(search || activeFilters > 0) ? t('empty.noResults') : t('empty.noHistory')}</p>
           {!(search || activeFilters > 0) && (
             <button onClick={() => onNavigate?.('landing', '/')}
               className="text-accent-text text-sm hover:underline cursor-pointer">
-              Tai video dau tien &rarr;
+              {t('empty.first')}
             </button>
           )}
         </div>
@@ -371,7 +374,7 @@ export default function UserHistoryContent({ onNavigate }) {
               className="w-full py-3 rounded-xl border border-line text-fg-muted hover:text-fg hover:border-line-strong transition-colors text-sm flex items-center justify-center gap-2 cursor-pointer"
             >
               <ChevronDown className="w-4 h-4" />
-              Xem them
+              {t('loadMore')}
             </button>
           )}
         </div>
@@ -385,10 +388,12 @@ export default function UserHistoryContent({ onNavigate }) {
 // ─── HistoryItem ──────────────────────────────────────────────────────────────
 
 function HistoryItem({ item, onDelete, deleting, onTagClick, activeTag, isNotesOpen, onToggleNotes, session, onRerun }) {
+  const { t } = useTranslation('userHistory');
+  const lang = useLang();
   const platformKey = getPlatformKey(item);
   const badge = platformKey ? PLATFORM_BADGE[platformKey] : null;
   const statusColor = item.status === 'success' ? 'text-success' : 'text-danger';
-  const date = new Date(item.created_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const date = new Date(item.created_at).toLocaleDateString(lang === 'en' ? 'en-US' : 'vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   const meta = item.job_metadata || {};
   const hashtags = (meta.hashtags || []).slice(0, 3);
@@ -421,7 +426,7 @@ function HistoryItem({ item, onDelete, deleting, onTagClick, activeTag, isNotesO
               </span>
             )}
             <span className={`text-[10px] ${statusColor}`}>
-              {item.status === 'success' ? '✓ Thanh cong' : '✗ That bai'}
+              {item.status === 'success' ? t('item.success') : t('item.failed')}
             </span>
             {item.file_size_mb > 0 && (
               <span className="text-[10px] text-fg-muted">{item.file_size_mb.toFixed(1)} MB</span>
@@ -464,7 +469,7 @@ function HistoryItem({ item, onDelete, deleting, onTagClick, activeTag, isNotesO
           {item.original_url && onRerun && (
             <button
               onClick={() => onRerun(item.original_url)}
-              title="Tải lại"
+              title={t('item.rerun')}
               className="flex items-center gap-1 p-1.5 rounded-lg text-fg-muted hover:text-success hover:bg-surface-2 transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -472,7 +477,7 @@ function HistoryItem({ item, onDelete, deleting, onTagClick, activeTag, isNotesO
           )}
           <button
             onClick={onToggleNotes}
-            title="Ghi chu"
+            title={t('notes.title')}
             className={`flex items-center gap-1 p-1.5 rounded-lg transition-colors cursor-pointer ${
               isNotesOpen || notesCount > 0
                 ? 'text-accent-text bg-accent-soft'
@@ -509,6 +514,7 @@ function HistoryItem({ item, onDelete, deleting, onTagClick, activeTag, isNotesO
 // ─── ClipNotesPanel ───────────────────────────────────────────────────────────
 
 function ClipNotesPanel({ jobId, session }) {
+  const { t } = useTranslation('userHistory');
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [noteText, setNoteText] = useState('');
@@ -552,12 +558,12 @@ function ClipNotesPanel({ jobId, session }) {
         body: JSON.stringify({ note_text: noteText.trim(), timestamp_seconds: ts }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.detail || 'Loi luu ghi chu.'); return; }
+      if (!res.ok) { setError(data.detail || t('notes.saveError')); return; }
       setNotes(prev => [...prev, data]);
       setNoteText('');
       setTsInput('');
     } catch (e) {
-      setError('Loi ket noi.');
+      setError(t('notes.connectionError'));
     } finally {
       setSubmitting(false);
     }
@@ -589,7 +595,7 @@ function ClipNotesPanel({ jobId, session }) {
   return (
     <div className="px-3 pb-3 border-t border-line mt-0">
       <p className="text-[10px] text-fg-muted uppercase mt-2 mb-2 font-semibold tracking-wider flex items-center gap-1">
-        <MessageSquare className="w-3 h-3" /> Ghi chu
+        <MessageSquare className="w-3 h-3" /> {t('notes.title')}
       </p>
 
       {/* Existing notes */}
@@ -597,7 +603,7 @@ function ClipNotesPanel({ jobId, session }) {
         <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 text-fg-muted animate-spin" /></div>
       ) : (
         <div className="space-y-1.5 mb-3">
-          {notes.length === 0 && <p className="text-xs text-fg-muted">Chua co ghi chu nao.</p>}
+          {notes.length === 0 && <p className="text-xs text-fg-muted">{t('notes.none')}</p>}
           {notes.map(note => (
             <div key={note.id} className="flex items-start gap-2 bg-surface-2 rounded-lg px-2.5 py-2">
               {editingId === note.id ? (
@@ -614,11 +620,11 @@ function ClipNotesPanel({ jobId, session }) {
                   <div className="flex gap-1.5">
                     <button onClick={() => handleEdit(note.id)}
                       className="flex items-center gap-1 px-2 py-1 rounded bg-success-soft text-success text-xs cursor-pointer hover:bg-success/20">
-                      <Check className="w-3 h-3" /> Luu
+                      <Check className="w-3 h-3" /> {t('notes.save')}
                     </button>
                     <button onClick={() => setEditingId(null)}
                       className="flex items-center gap-1 px-2 py-1 rounded bg-surface-2 text-fg-muted text-xs cursor-pointer">
-                      <X className="w-3 h-3" /> Huy
+                      <X className="w-3 h-3" /> {t('notes.cancel')}
                     </button>
                   </div>
                 </div>
@@ -658,7 +664,7 @@ function ClipNotesPanel({ jobId, session }) {
               className="w-16 bg-surface-2 border border-line rounded-lg px-2 py-1.5 text-xs text-fg-2 placeholder:text-fg-muted focus:outline-none"
             />
             <input value={noteText} onChange={e => setNoteText(e.target.value)}
-              placeholder="Them ghi chu (toi da 500 ky tu)..."
+              placeholder={t('notes.placeholder')}
               maxLength={500}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
               className="flex-1 bg-surface-2 border border-line rounded-lg px-2 py-1.5 text-xs text-fg-2 placeholder:text-fg-muted focus:outline-none"
@@ -666,17 +672,17 @@ function ClipNotesPanel({ jobId, session }) {
             <button onClick={handleSubmit} disabled={submitting || !noteText.trim()}
               className="px-2.5 py-1.5 rounded-lg bg-accent-soft text-accent-text text-xs font-bold border border-accent/30 hover:bg-accent/20 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1">
               {submitting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-              Luu
+              {t('notes.save')}
             </button>
           </div>
           {error && <p className="text-xs text-danger">{error}</p>}
           <p className="text-[10px] text-fg-muted">
-            {notes.length}/10 ghi chu &middot; Enter de luu &middot; mm:ss de gan timestamp
+            {t('notes.hint', { n: notes.length })}
           </p>
         </div>
       )}
       {notes.length >= 10 && (
-        <p className="text-xs text-fg-muted">Da dat gioi han 10 ghi chu.</p>
+        <p className="text-xs text-fg-muted">{t('notes.limit')}</p>
       )}
     </div>
   );

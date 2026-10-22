@@ -1,0 +1,11 @@
+{
+  "title": "Thông báo",
+  "clearAll": "Xóa tất cả",
+  "empty": "Chưa có thông báo nào",
+  "time": {
+    "now": "vừa xong",
+    "minutes": "{{count}} phút trước",
+    "hours": "{{count}} giờ trước",
+    "days": "{{count}} ngày trước"
+  }
+}

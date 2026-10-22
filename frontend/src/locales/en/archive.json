@@ -1,0 +1,107 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "retention": {
+    "temporary": "Available",
+    "pinned": "Pinned",
+    "expired": "File expired",
+    "until": " until {{date}}"
+  },
+  "delete": {
+    "fileOnly": {
+      "title": "Delete file from server",
+      "desc": "Keeps the archive entry, notes, and collections. You can download it again later."
+    },
+    "archiveOnly": {
+      "title": "Remove from archive",
+      "desc": "Removes the entry from your library. The file on the server (if still there) will expire on the normal schedule."
+    },
+    "everything": {
+      "title": "Delete everything",
+      "desc": "Deletes the archive entry, notes, and collection mapping, and removes the file from disk immediately."
+    },
+    "title": "Delete \"{{title}}\"",
+    "scope": "Choose what to delete:",
+    "cancel": "Cancel",
+    "deleting": "Deleting...",
+    "confirm": "Confirm delete"
+  },
+  "collection": {
+    "emptyName": "Collection name cannot be empty.",
+    "errorFallback": "Error",
+    "title": "Create New Collection",
+    "nameLabel": "Collection Name",
+    "namePlaceholder": "E.g. Great Tutorials, Chill Music...",
+    "iconLabel": "Icon",
+    "colorLabel": "Color",
+    "creating": "Creating...",
+    "create": "Create Collection"
+  },
+  "card": {
+    "redownloadRehydrate": "Download again (rehydrate)",
+    "redownload": "Download again",
+    "addToCollection": "Add to collection",
+    "pin": "Pin file",
+    "unpin": "Unpin",
+    "openOriginal": "Open original link",
+    "delete": "Delete...",
+    "redownloadCta": "Download again to view"
+  },
+  "page": {
+    "pinned": "File pinned.",
+    "pinFailed": "Could not pin.",
+    "unpinned": "Unpinned.",
+    "redownloadCreated": "Download request recreated.",
+    "confirmDeleteCollection": "Delete this collection? Items will stay in the archive.",
+    "viewAllCount": "All ({{total}})",
+    "viewStarred": "Starred",
+    "viewToday": "Today",
+    "viewArchive": "Archive",
+    "views": "Views",
+    "sideAll": "All",
+    "sideStarred": "Starred",
+    "sideToday": "Today",
+    "collections": "Collections",
+    "noCollections": "No collections yet",
+    "export": "Export",
+    "searchPlaceholder": "Search archive...",
+    "filter": "Filter",
+    "fileAll": "All",
+    "fileAvailable": "✅ Available",
+    "filePinned": "📌 Pinned",
+    "fileExpired": "⏰ Expired",
+    "allPlatforms": "All platforms",
+    "sortRecent": "Recently saved",
+    "sortUpload": "Upload date",
+    "sortDuration": "Duration",
+    "sortViews": "Views",
+    "sortTitle": "Title A-Z",
+    "loading": "Loading...",
+    "empty": "Your archive is empty. Download a video and it is saved here automatically.",
+    "loadMore": "Load more ({{remaining}} left)",
+    "pickCollection": "Choose Collection",
+    "noCollectionsCreateFirst": "No collections yet. Create one first.",
+    "itemCount_one": "{{count}} item",
+    "itemCount_other": "{{count}} items"
+  },
+  "suggestions": {
+    "tagsAdded_one": "✓ Added {{count}} tag",
+    "tagsAdded_other": "✓ Added {{count}} tags",
+    "dupModalTitle": "Possible duplicates",
+    "close": "Close",
+    "tagsHeading": "💡 Suggested tags",
+    "itemCount_one": "{{count}} item",
+    "itemCount_other": "{{count}} items",
+    "apply": "Apply",
+    "collapse": "Show less",
+    "showMoreItems_one": "Show {{count}} more item",
+    "showMoreItems_other": "Show {{count}} more items",
+    "dupHeading": "🔍 Possible duplicates",
+    "groupCount_one": "{{count}} group",
+    "groupCount_other": "{{count}} groups",
+    "copyCount_one": "{{count}} copy",
+    "copyCount_other": "{{count}} copies",
+    "view": "View",
+    "showMoreGroups_one": "Show {{count}} more group",
+    "showMoreGroups_other": "Show {{count}} more groups"
+  }
+}

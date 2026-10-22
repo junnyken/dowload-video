@@ -1,0 +1,54 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "noWorkspace": "No workspace yet.",
+  "audit": {
+    "loadError": "Couldn't load the audit log.",
+    "needAdmin": "Admin permission is required to view the audit log.",
+    "title": "Audit Log",
+    "eventCount_one": "{{n}} event",
+    "eventCount_other": "{{n}} events",
+    "action": "Action",
+    "resourceType": "Resource type",
+    "all": "All",
+    "res": {
+      "scheduled_job": "Schedule",
+      "member": "Member",
+      "invite": "Invite",
+      "approval_request": "Approval"
+    },
+    "dateFrom": "From date",
+    "dateTo": "To date",
+    "filter": "Filter",
+    "empty": "No events.",
+    "colTime": "Time",
+    "colActor": "Performed by",
+    "pageLine_one": "Page {{page}}/{{totalPages}} · {{count}} event",
+    "pageLine_other": "Page {{page}}/{{totalPages}} · {{count}} events"
+  },
+  "approval": {
+    "loadError": "Couldn't load the approvals list.",
+    "title": "Approvals",
+    "tabPending": "Pending",
+    "tabAll": "All",
+    "emptyPending": "No requests awaiting approval.",
+    "emptyAll": "No approval requests yet.",
+    "action": {
+      "bulk_download": "Bulk download",
+      "schedule_create": "Create download schedule",
+      "webhook_create": "Register webhook",
+      "archive_delete": "Delete archive item"
+    },
+    "status": {
+      "awaiting_approval": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected"
+    },
+    "rejectionReason": "Rejection reason: {{reason}}",
+    "approve": "Approve",
+    "reject": "Reject",
+    "rejectModalTitle": "Rejection reason",
+    "reasonPlaceholder": "Enter a reason (optional)...",
+    "cancel": "Cancel",
+    "confirmReject": "Confirm rejection"
+  }
+}

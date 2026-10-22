@@ -1,0 +1,39 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "title": "Connect Telegram Bot",
+  "loginPrompt": "Sign in to VidGrab to connect your account with the Telegram Bot.",
+  "login": "Sign in",
+  "unlinkConfirm": "Disconnect Telegram?",
+  "unlink": "Disconnect",
+  "processing": "Processing...",
+  "linked": {
+    "title": "Connected",
+    "desc": "Your VidGrab account is linked to the Telegram Bot.",
+    "relinkHint": "It looks like you want to reconnect. Click \"Update connection\" to link the new Telegram session.",
+    "updating": "Updating...",
+    "update": "Update connection"
+  },
+  "ready": {
+    "title": "Connect your VidGrab account",
+    "desc": "Connect to sync your quota and Pro features with the Telegram Bot.",
+    "confirm": "Confirm connection"
+  },
+  "none": {
+    "title": "Telegram not connected",
+    "desc": "Open the Telegram Bot and use the <code>/link</code> command to get a connection link."
+  },
+  "success": {
+    "title": "Connected!",
+    "desc": "Your VidGrab account is linked to the Telegram Bot. Quota and Pro features will sync automatically.",
+    "home": "Back to home"
+  },
+  "unlinked": {
+    "title": "Disconnected",
+    "desc": "The Telegram Bot has been disconnected from your VidGrab account."
+  },
+  "error": {
+    "title": "Something went wrong",
+    "retryHint": "Please try again.",
+    "retry": "Try again"
+  }
+}

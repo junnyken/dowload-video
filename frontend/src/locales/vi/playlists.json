@@ -1,0 +1,27 @@
+{
+  "never": "Chưa có",
+  "errors": {
+    "load": "Không tải được danh sách playlist. {{message}}",
+    "save": "Không thể lưu playlist. Thử lại sau.",
+    "refresh": "Không thể tải lại.",
+    "delete": "Không thể xoá."
+  },
+  "confirmDelete": "Xoá playlist này khỏi danh sách đã lưu?",
+  "copied": "Đã sao chép link vào clipboard",
+  "title": "Playlists đã lưu",
+  "subtitle": "Lưu link YouTube / Spotify để tải lại sau",
+  "reloadList": "Tải lại danh sách",
+  "saveNew": "Lưu playlist mới",
+  "save": "Lưu",
+  "savedLabel": "playlist đã lưu",
+  "empty": {
+    "title": "Chưa có playlist nào.",
+    "hint": "Lưu link YouTube hoặc Spotify để tải lại sau."
+  },
+  "trackCount": "{{count}} bài",
+  "updated": "Cập nhật: {{date}}",
+  "open": "Mở playlist",
+  "refresh": "Tải lại",
+  "download": "Tải xuống",
+  "delete": "Xoá"
+}

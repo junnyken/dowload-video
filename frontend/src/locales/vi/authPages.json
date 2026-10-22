@@ -1,0 +1,37 @@
+{
+  "reset": {
+    "errFallback": "Không đổi được mật khẩu.",
+    "doneTitle": "Đã đổi mật khẩu",
+    "doneBody": "Bạn có thể dùng mật khẩu mới ngay từ bây giờ.",
+    "home": "Về trang chủ",
+    "title": "Đặt mật khẩu mới",
+    "subtitle": "Nhập mật khẩu mới cho tài khoản của bạn.",
+    "linkUnusable": "Liên kết không dùng được: {{error}}",
+    "linkHint": "Liên kết đặt lại mật khẩu chỉ dùng một lần và sẽ hết hạn. Hãy yêu cầu gửi lại.",
+    "noSession": "Không tìm thấy phiên đặt lại mật khẩu. Hãy mở trang này từ liên kết trong email.",
+    "newPassword": "Mật khẩu mới",
+    "minPlaceholder": "Ít nhất {{count}} ký tự",
+    "tooShort": "Cần ít nhất {{count}} ký tự.",
+    "confirmPassword": "Nhập lại mật khẩu",
+    "confirmPlaceholder": "Nhập lại để xác nhận",
+    "mismatch": "Hai mật khẩu chưa khớp.",
+    "show": "Hiện mật khẩu",
+    "saving": "Đang lưu…",
+    "submit": "Đổi mật khẩu"
+  },
+  "desktop": {
+    "title": "Đăng nhập ứng dụng VidGrab",
+    "invalidLink": "Liên kết đăng nhập không hợp lệ hoặc đã bị sửa. Hãy mở ứng dụng VidGrab trên máy tính và bấm “Đăng nhập qua trình duyệt” lần nữa.",
+    "redirecting": "Đang chuyển về ứng dụng VidGrab…",
+    "redirectHint": "Nếu trình duyệt báo không kết nối được, hãy mở lại ứng dụng VidGrab và bấm “Đăng nhập qua trình duyệt” lần nữa.",
+    "subtitle": "Đăng nhập để kết nối ứng dụng VidGrab trên máy tính với tài khoản của bạn.",
+    "notice": "Chỉ dùng trang này khi bạn vừa bấm “Đăng nhập qua trình duyệt” trong ứng dụng VidGrab. Sau khi đăng nhập, trình duyệt sẽ chuyển thông tin đăng nhập thẳng về ứng dụng trên chính máy này.",
+    "emailPlaceholder": "ban@example.com",
+    "password": "Mật khẩu",
+    "signingIn": "Đang đăng nhập…",
+    "submit": "Đăng nhập và quay lại ứng dụng",
+    "noAccount": "Chưa có tài khoản?",
+    "signUp": "Đăng ký",
+    "forgot": "Quên mật khẩu?"
+  }
+}

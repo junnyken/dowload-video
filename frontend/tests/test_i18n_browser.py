@@ -35,13 +35,15 @@ class H(http.server.SimpleHTTPRequestHandler):
         if path.startswith("/api/"):
             self.send_error(503); return None
         if not f.is_file() and not (f / "index.html").is_file():
-            self.path = "/index.html"          # SPA fallback
+            # SPA fallback; English paths get the English shell (nginx.conf location /en/)
+            self.path = "/en/index.html" if path.startswith("/en/") else "/index.html"
         elif f.is_dir():
             self.path = path.rstrip("/") + "/index.html"
         return super().send_head()
 
 
-def main():
+def serve():
+    """dist/ like nginx on a free port (+ a private fontconfig for Chromium). Returns (server, base URL)."""
     tmp = Path(tempfile.mkdtemp())
     (tmp / "fonts.conf").write_text(f'<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig><dir>/usr/share/fonts</dir><cachedir>{tmp}/fc</cachedir></fontconfig>')
     os.environ["FONTCONFIG_FILE"] = str(tmp / "fonts.conf")
@@ -49,7 +51,11 @@ def main():
         daemon_threads = True
     srv = S(("127.0.0.1", 0), H)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    return srv, f"http://127.0.0.1:{srv.server_address[1]}"
+
+
+def main():
+    srv, base = serve()
     try:
         with sync_playwright() as p:
             b = p.chromium.launch(executable_path=CHROME, args=["--headless=new", "--no-sandbox"])

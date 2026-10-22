@@ -6,6 +6,7 @@ import TurnstileWidget from '../components/auth/TurnstileWidget';
 import { TURNSTILE_SITE_KEY } from '../lib/turnstile';
 import { authErrorMessage, MSG } from '../lib/authErrors';
 import { desktopCallbackUrl, parseDesktopLoginParams, signInForDesktop } from '../lib/desktopHandoff';
+import { useTranslation } from 'react-i18next';
 
 /**
  * /desktop-login?port=<1024-65535>&state=<64 hex> — opened by the VidGrab
@@ -13,6 +14,7 @@ import { desktopCallbackUrl, parseDesktopLoginParams, signInForDesktop } from '.
  * protocol and docs/desktop/C1-CONTRACT.md §5.
  */
 export default function DesktopLoginPage() {
+  const { t } = useTranslation('authPages');
   const params = useMemo(() => parseDesktopLoginParams(window.location.search), []);
   const { user } = useAuth();
   const [email, setEmail] = useState(user?.email || '');
@@ -30,10 +32,9 @@ export default function DesktopLoginPage() {
   if (!params) {
     return (
       <div className="max-w-md mx-auto space-y-4">
-        <h1 className="text-xl font-bold text-fg">Đăng nhập ứng dụng VidGrab</h1>
+        <h1 className="text-xl font-bold text-fg">{t('desktop.title')}</h1>
         <div className="rounded-lg border border-danger/60 bg-danger-soft p-3 text-sm text-danger">
-          Liên kết đăng nhập không hợp lệ hoặc đã bị sửa. Hãy mở ứng dụng VidGrab trên máy tính và bấm
-          “Đăng nhập qua trình duyệt” lần nữa.
+          {t('desktop.invalidLink')}
         </div>
       </div>
     );
@@ -70,10 +71,9 @@ export default function DesktopLoginPage() {
     return (
       <div className="max-w-md mx-auto text-center space-y-3">
         <CheckCircle className="w-10 h-10 mx-auto text-success" />
-        <h1 className="text-xl font-bold text-fg">Đang chuyển về ứng dụng VidGrab…</h1>
+        <h1 className="text-xl font-bold text-fg">{t('desktop.redirecting')}</h1>
         <p className="text-sm text-fg-muted">
-          Nếu trình duyệt báo không kết nối được, hãy mở lại ứng dụng VidGrab và bấm
-          “Đăng nhập qua trình duyệt” lần nữa.
+          {t('desktop.redirectHint')}
         </p>
       </div>
     );
@@ -86,26 +86,25 @@ export default function DesktopLoginPage() {
           <Monitor className="w-5 h-5 text-accent-fg" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-fg">Đăng nhập ứng dụng VidGrab</h1>
+          <h1 className="text-xl font-bold text-fg">{t('desktop.title')}</h1>
           <p className="mt-1 text-sm text-fg-muted">
-            Đăng nhập để kết nối ứng dụng VidGrab trên máy tính với tài khoản của bạn.
+            {t('desktop.subtitle')}
           </p>
         </div>
       </div>
 
       <div className="rounded-lg border border-line bg-surface p-3 text-xs text-fg-muted">
-        Chỉ dùng trang này khi bạn vừa bấm “Đăng nhập qua trình duyệt” trong ứng dụng VidGrab.
-        Sau khi đăng nhập, trình duyệt sẽ chuyển thông tin đăng nhập thẳng về ứng dụng trên chính máy này.
+        {t('desktop.notice')}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label className="mb-1 block text-xs font-semibold text-fg-muted" htmlFor="dl-email">Email</label>
           <input id="dl-email" type="email" required autoComplete="email" value={email}
-                 onChange={(e) => setEmail(e.target.value)} className={field} placeholder="ban@example.com" />
+                 onChange={(e) => setEmail(e.target.value)} className={field} placeholder={t('desktop.emailPlaceholder')} />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-semibold text-fg-muted" htmlFor="dl-pw">Mật khẩu</label>
+          <label className="mb-1 block text-xs font-semibold text-fg-muted" htmlFor="dl-pw">{t('desktop.password')}</label>
           <input id="dl-pw" type="password" required autoComplete="current-password" value={password}
                  onChange={(e) => setPassword(e.target.value)} className={field} />
         </div>
@@ -120,19 +119,19 @@ export default function DesktopLoginPage() {
           className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-bold text-accent-fg flex items-center justify-center gap-2
                      disabled:opacity-40 disabled:cursor-not-allowed">
           {busy && <Loader2 className="w-4 h-4 animate-spin" />}
-          {busy ? 'Đang đăng nhập…' : 'Đăng nhập và quay lại ứng dụng'}
+          {busy ? t('desktop.signingIn') : t('desktop.submit')}
         </button>
       </form>
 
       <div className="flex flex-wrap justify-between gap-2 text-xs text-fg-muted">
         <span>
-          Chưa có tài khoản?{' '}
+          {t('desktop.noAccount')}{' '}
           <button type="button" onClick={() => setModal('signup')} className="font-semibold text-accent-text hover:underline">
-            Đăng ký
+            {t('desktop.signUp')}
           </button>
         </span>
         <button type="button" onClick={() => setModal('reset')} className="hover:text-accent-text">
-          Quên mật khẩu?
+          {t('desktop.forgot')}
         </button>
       </div>
 

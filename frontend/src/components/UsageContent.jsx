@@ -3,6 +3,8 @@ import { BarChart2, Zap, Calendar, Archive, Crown, RefreshCw, Key, Copy, Trash2,
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../lib/apiBase';
 import { usePlans } from '../lib/usePlans';
+import { useTranslation } from 'react-i18next';
+import { useLang } from '../i18n';
 
 function goPricing() {
   window.history.pushState({}, '', '/pricing');
@@ -11,6 +13,9 @@ function goPricing() {
 }
 
 export default function UsageContent() {
+  const { t } = useTranslation('usage');
+  const lang = useLang();
+  const loc = lang === 'en' ? 'en-US' : 'vi-VN';
   const { session } = useAuth();
   const { free: freePlan, pro: proPlan } = usePlans();
   const [usage, setUsage]   = useState(null);
@@ -58,7 +63,7 @@ export default function UsageContent() {
   );
 
   if (!usage) return (
-    <div className="text-center py-16 text-fg-muted">Không tải được dữ liệu. Thử lại sau.</div>
+    <div className="text-center py-16 text-fg-muted">{t('loadFailed')}</div>
   );
 
   // Daily allowance is per platform (platform_quota); the "Hôm nay" card shows
@@ -97,14 +102,14 @@ export default function UsageContent() {
       setNewApiKey(data.api_key);
       setApiKeyStatus(prev => ({ ...(prev || {}), has_key: true, created_at: data.created_at || new Date().toISOString(), last_used_at: null }));
     } catch (err) {
-      setApiKeyError(err.message || 'Không thể tạo API Key. Thử lại sau.');
+      setApiKeyError(err.message || t('apiKey.createFailed'));
     } finally {
       setApiKeyLoading(false);
     }
   };
 
   const handleRevokeApiKey = async () => {
-    if (!window.confirm('Thu hồi API Key? Mọi ứng dụng đang dùng key này sẽ bị ngắt kết nối.')) return;
+    if (!window.confirm(t('apiKey.confirmRevoke'))) return;
     setApiKeyLoading(true);
     setApiKeyError('');
     try {
@@ -117,7 +122,7 @@ export default function UsageContent() {
       setApiKeyStatus({ has_key: false, created_at: null, last_used_at: null });
       setNewApiKey(null);
     } catch (err) {
-      setApiKeyError(err.message || 'Không thể thu hồi API Key. Thử lại sau.');
+      setApiKeyError(err.message || t('apiKey.revokeFailed'));
     } finally {
       setApiKeyLoading(false);
     }
@@ -165,14 +170,14 @@ export default function UsageContent() {
       setWebhookSecret(data.secret || null);
       setWebhookUrl('');
     } catch (err) {
-      setWebhookError(err.message || 'Không thể đăng ký webhook. Thử lại sau.');
+      setWebhookError(err.message || t('webhook.registerFailed'));
     } finally {
       setWebhookLoading(false);
     }
   };
 
   const handleRevokeWebhook = async () => {
-    if (!window.confirm('Thu hồi webhook? Hệ thống sẽ ngừng gửi sự kiện tới URL này.')) return;
+    if (!window.confirm(t('webhook.confirmRevoke'))) return;
     setWebhookLoading(true);
     setWebhookError('');
     try {
@@ -186,7 +191,7 @@ export default function UsageContent() {
       setWebhookSecret(null);
       setWebhookLogs([]);
     } catch (err) {
-      setWebhookError(err.message || 'Không thể thu hồi webhook. Thử lại sau.');
+      setWebhookError(err.message || t('webhook.revokeFailed'));
     } finally {
       setWebhookLoading(false);
     }
@@ -202,7 +207,7 @@ export default function UsageContent() {
           </div>
           <div>
             <h1 className="text-fg font-bold text-lg">Quota & Usage</h1>
-            <p className="text-fg-muted text-xs">Theo dõi lượt tải theo tài khoản</p>
+            <p className="text-fg-muted text-xs">{t('subtitle')}</p>
           </div>
         </div>
         <button onClick={load}
@@ -219,18 +224,18 @@ export default function UsageContent() {
         <Crown className={`w-5 h-5 ${isPro ? 'text-accent-text' : 'text-fg-muted'}`} />
         <div>
           <p className={`text-sm font-bold ${isPro ? 'text-accent-text' : 'text-fg'}`}>
-            {isPro ? 'Pro Plan' : 'Free Plan'}
+            {isPro ? t('planPro') : t('planFree')}
           </p>
           <p className="text-fg-muted text-xs">
             {/* wording: BA review */}
             {pq
-              ? (pq.unlimited ? 'Không giới hạn lượt tải' : (pq.scope === 'per_platform' ? `Tối đa ${pq.limit} lượt/ngày cho mỗi nền tảng` : `Tối đa ${pq.limit} lượt/ngày cho tất cả nền tảng`))
-              : (isPro ? (proPlan ? `Tối đa ${proPlan.daily_downloads} lượt/ngày` : 'Gói Pro') : `Tối đa ${usage.limits.daily}/ngày, ${usage.limits.monthly}/tháng`)}
+              ? (pq.unlimited ? t('planUnlimited') : (pq.scope === 'per_platform' ? t('planPerPlatform', { limit: pq.limit }) : t('planAllPlatforms', { limit: pq.limit })))
+              : (isPro ? (proPlan ? t('planProDaily', { daily: proPlan.daily_downloads }) : t('planProFallback')) : t('planFreeLimits', { daily: usage.limits.daily, monthly: usage.limits.monthly }))}
           </p>
         </div>
         {!isPro && (
           <span className="ml-auto text-[10px] font-bold text-accent-text bg-accent-soft border border-accent/20 px-2 py-0.5 rounded-full">
-            Nâng cấp
+            {t('upgradeBadge')}
           </span>
         )}
       </div>
@@ -239,7 +244,7 @@ export default function UsageContent() {
       <div className="grid grid-cols-2 gap-3">
         <StatCard
           icon={<Zap className="w-4 h-4" />}
-          label={pq && usage.used_platform_label ? `Hôm nay · ${usage.used_platform_label}` : 'Hôm nay'}
+          label={pq && usage.used_platform_label ? t('todayPlatform', { platform: usage.used_platform_label }) : t('today')}
           value={dayUsed}
           limit={dayLimit}
           pct={dailyPct}
@@ -247,7 +252,7 @@ export default function UsageContent() {
         />
         <StatCard
           icon={<Calendar className="w-4 h-4" />}
-          label="Tháng này"
+          label={t('thisMonth')}
           value={usage.downloads_this_month}
           limit={usage.limits.monthly}
           pct={monthPct}
@@ -255,9 +260,9 @@ export default function UsageContent() {
         />
         {pq && (
           <div className="col-span-2 bg-surface-2 border border-line rounded-xl p-4 space-y-1.5">
-            <p className="text-fg-muted text-xs">Lượt đã dùng hôm nay theo nền tảng</p>
+            <p className="text-fg-muted text-xs">{t('byPlatformTitle')}</p>
             {usedPlatforms.length === 0
-              ? <p className="text-fg text-sm">Chưa tải video nào hôm nay.</p>
+              ? <p className="text-fg text-sm">{t('noneToday')}</p>
               : usedPlatforms.map(p => (
                 <div key={p.platform} className="flex justify-between text-sm">
                   <span className="text-fg">{p.label}</span>
@@ -265,7 +270,7 @@ export default function UsageContent() {
                 </div>
               ))}
             {!pq.unlimited && (
-              <p className="text-fg-muted text-[11px] pt-1">Lượt mới được cộng lại lúc {pq.reset_time_vn} mỗi ngày.</p>
+              <p className="text-fg-muted text-[11px] pt-1">{t('resetAt', { time: pq.reset_time_vn })}</p>
             )}
           </div>
         )}
@@ -273,7 +278,7 @@ export default function UsageContent() {
           <Archive className="w-4 h-4 text-fg-muted" />
           <div>
             <p className="text-fg font-bold text-lg">{usage.bulk_jobs_count}</p>
-            <p className="text-fg-muted text-xs">Bulk jobs tổng cộng</p>
+            <p className="text-fg-muted text-xs">{t('bulkJobs')}</p>
           </div>
         </div>
       </div>
@@ -287,15 +292,17 @@ export default function UsageContent() {
       {!isPro && (
         <div className="bg-surface-2 border border-accent/20 rounded-xl p-4">
           {/* wording: BA review */}
-          <p className="text-fg font-semibold text-sm mb-1">Nâng lên Pro để tải nhiều hơn</p>
+          <p className="text-fg font-semibold text-sm mb-1">{t('cta.title')}</p>
           <p className="text-fg-muted text-xs mb-3">
             {/* wording: BA review */}
             {proPlan
-              ? `Pro có ${proPlan.daily_downloads} lượt tải mỗi ngày${freePlan ? ` (Free: ${freePlan.daily_downloads})` : ''}, tải ZIP, API key và theo dõi tới ${proPlan.watch_sources} nguồn.`
-              : 'Xem bảng giá để so sánh hạn mức các gói.'}
+              ? (freePlan
+                ? t('cta.bodyWithFree', { daily: proPlan.daily_downloads, free: freePlan.daily_downloads, sources: proPlan.watch_sources })
+                : t('cta.body', { daily: proPlan.daily_downloads, sources: proPlan.watch_sources }))
+              : t('cta.noPlan')}
           </p>
           <button type="button" onClick={goPricing} className="px-4 py-2 rounded-lg bg-accent text-accent-fg text-sm font-bold hover:opacity-90 transition">
-            Xem gói Pro →
+            {t('cta.button')}
           </button>
         </div>
       )}
@@ -319,11 +326,11 @@ export default function UsageContent() {
             <div className="flex flex-col items-center gap-3 py-4 text-center">
               <Lock className="w-8 h-8 text-fg-muted" />
               <div>
-                <p className="text-fg font-semibold text-sm">Tính năng Pro</p>
-                <p className="text-fg-muted text-xs mt-1">Nâng cấp để dùng API Key và tích hợp VidGrab vào ứng dụng của bạn.</p>
+                <p className="text-fg font-semibold text-sm">{t('proFeature')}</p>
+                <p className="text-fg-muted text-xs mt-1">{t('apiKey.lockedDesc')}</p>
               </div>
               <button className="mt-1 px-4 py-2 rounded-lg bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition">
-                Nâng cấp Pro →
+                {t('upgradeProBtn')}
               </button>
             </div>
           )}
@@ -342,22 +349,22 @@ export default function UsageContent() {
               {newApiKey && (
                 <div className="mb-4 rounded-lg border border-accent/40 bg-accent-soft overflow-hidden">
                   <div className="flex items-start gap-2 px-3 py-2.5 border-b border-accent/20">
-                    <span className="text-accent-text text-xs font-bold">Lưu key ngay — không thể xem lại sau khi đóng.</span>
+                    <span className="text-accent-text text-xs font-bold">{t('apiKey.saveNow')}</span>
                   </div>
                   <div className="flex items-center gap-2 px-3 py-2.5">
                     <code className="flex-1 text-xs font-mono text-success break-all select-all">{newApiKey}</code>
                     <button
                       onClick={handleCopyKey}
-                      title="Sao chép"
+                      title={t('apiKey.copy')}
                       className="flex-shrink-0 p-1.5 rounded-lg bg-surface-2 text-fg-2 hover:text-fg hover:bg-line transition-colors"
                     >
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => setNewApiKey(null)}
-                      title="Đóng"
+                      title={t('apiKey.close')}
                       className="flex-shrink-0 p-1.5 rounded-lg bg-surface-2 text-fg-muted hover:text-fg hover:bg-line transition-colors text-xs font-bold leading-none"
-                      aria-label="Đóng"
+                      aria-label={t('apiKey.close')}
                     >
                       ✕
                     </button>
@@ -368,7 +375,7 @@ export default function UsageContent() {
               {/* No key yet */}
               {apiKeyStatus && !apiKeyStatus.has_key && !newApiKey && (
                 <div className="flex flex-col items-center gap-3 py-3 text-center">
-                  <p className="text-fg-muted text-xs">Bạn chưa có API Key. Tạo key để tích hợp VidGrab vào ứng dụng.</p>
+                  <p className="text-fg-muted text-xs">{t('apiKey.none')}</p>
                   <button
                     onClick={handleGenerateApiKey}
                     disabled={apiKeyLoading}
@@ -377,7 +384,7 @@ export default function UsageContent() {
                     {apiKeyLoading
                       ? <span className="w-4 h-4 border-2 border-line border-t-fg rounded-full animate-spin" />
                       : <Key className="w-4 h-4" />}
-                    Tạo API Key
+                    {t('apiKey.create')}
                   </button>
                 </div>
               )}
@@ -387,16 +394,16 @@ export default function UsageContent() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-success flex-shrink-0" />
-                    <span className="text-success text-xs font-bold">Key đang hoạt động</span>
+                    <span className="text-success text-xs font-bold">{t('apiKey.active')}</span>
                   </div>
                   <div className="space-y-1 text-xs text-fg-muted">
                     {apiKeyStatus.created_at && (
-                      <p>Tạo lúc: <span className="text-fg-2">{new Date(apiKeyStatus.created_at).toLocaleString('vi-VN')}</span></p>
+                      <p>{t('apiKey.createdAt')} <span className="text-fg-2">{new Date(apiKeyStatus.created_at).toLocaleString(loc)}</span></p>
                     )}
                     {apiKeyStatus.last_used_at ? (
-                      <p>Dùng lần cuối: <span className="text-fg-2">{new Date(apiKeyStatus.last_used_at).toLocaleString('vi-VN')}</span></p>
+                      <p>{t('apiKey.lastUsed')} <span className="text-fg-2">{new Date(apiKeyStatus.last_used_at).toLocaleString(loc)}</span></p>
                     ) : (
-                      <p className="text-fg-muted">Chưa dùng lần nào.</p>
+                      <p className="text-fg-muted">{t('apiKey.neverUsed')}</p>
                     )}
                   </div>
                   <div className="flex gap-2 pt-1">
@@ -408,7 +415,7 @@ export default function UsageContent() {
                       {apiKeyLoading
                         ? <span className="w-3.5 h-3.5 border-2 border-line border-t-line rounded-full animate-spin" />
                         : <RefreshCw className="w-3.5 h-3.5" />}
-                      Tạo Key mới
+                      {t('apiKey.regenerate')}
                     </button>
                     <button
                       onClick={handleRevokeApiKey}
@@ -416,7 +423,7 @@ export default function UsageContent() {
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft text-danger border border-danger/30 hover:bg-danger/20 text-xs font-bold transition-colors disabled:opacity-60"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      Thu hồi Key
+                      {t('apiKey.revoke')}
                     </button>
                   </div>
                 </div>
@@ -451,11 +458,11 @@ export default function UsageContent() {
             <div className="flex flex-col items-center gap-3 py-4 text-center">
               <Lock className="w-8 h-8 text-fg-muted" />
               <div>
-                <p className="text-fg font-semibold text-sm">Tính năng Pro</p>
-                <p className="text-fg-muted text-xs mt-1">Nâng cấp để nhận webhook khi có sự kiện tải xuống.</p>
+                <p className="text-fg font-semibold text-sm">{t('proFeature')}</p>
+                <p className="text-fg-muted text-xs mt-1">{t('webhook.lockedDesc')}</p>
               </div>
               <button className="mt-1 px-4 py-2 rounded-lg bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition">
-                Nâng cấp Pro →
+                {t('upgradeProBtn')}
               </button>
             </div>
           )}
@@ -475,22 +482,22 @@ export default function UsageContent() {
                 <div className="rounded-lg border border-accent/40 bg-accent-soft overflow-hidden">
                   <div className="flex items-start gap-2 px-3 py-2.5 border-b border-accent/20">
                     <Shield className="w-3.5 h-3.5 text-accent-text flex-shrink-0 mt-0.5" />
-                    <span className="text-accent-text text-xs font-bold">Lưu secret ngay — không thể xem lại sau khi đóng.</span>
+                    <span className="text-accent-text text-xs font-bold">{t('webhook.saveNow')}</span>
                   </div>
                   <div className="flex items-center gap-2 px-3 py-2.5">
                     <code className="flex-1 text-xs font-mono text-success break-all select-all">{webhookSecret}</code>
                     <button
                       onClick={() => navigator.clipboard.writeText(webhookSecret).catch(() => {})}
-                      title="Sao chép"
+                      title={t('apiKey.copy')}
                       className="flex-shrink-0 p-1.5 rounded-lg bg-surface-2 text-fg-2 hover:text-fg hover:bg-line transition-colors"
                     >
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => setWebhookSecret(null)}
-                      title="Đóng"
+                      title={t('apiKey.close')}
                       className="flex-shrink-0 p-1.5 rounded-lg bg-surface-2 text-fg-muted hover:text-fg hover:bg-line transition-colors text-xs font-bold leading-none"
-                      aria-label="Đóng"
+                      aria-label={t('apiKey.close')}
                     >
                       ✕
                     </button>
@@ -501,7 +508,7 @@ export default function UsageContent() {
               {/* No webhook: registration form */}
               {!webhookHasReg && !webhookLoading && (
                 <form onSubmit={handleRegisterWebhook} className="space-y-3">
-                  <p className="text-fg-muted text-xs">Nhận sự kiện tải xuống (job_done, job_failed) tới URL của bạn.</p>
+                  <p className="text-fg-muted text-xs">{t('webhook.intro')}</p>
                   <div className="flex gap-2">
                     <input
                       type="url"
@@ -516,7 +523,7 @@ export default function UsageContent() {
                       className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Webhook className="w-4 h-4" />
-                      Đăng ký
+                      {t('webhook.register')}
                     </button>
                   </div>
                 </form>
@@ -535,14 +542,14 @@ export default function UsageContent() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-success flex-shrink-0" />
-                      <span className="text-success text-xs font-bold">Webhook đang hoạt động</span>
+                      <span className="text-success text-xs font-bold">{t('webhook.active')}</span>
                     </div>
                     <button
                       onClick={handleRevokeWebhook}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft text-danger border border-danger/30 hover:bg-danger/20 text-xs font-bold transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      Thu hồi
+                      {t('webhook.revoke')}
                     </button>
                   </div>
 
@@ -551,7 +558,7 @@ export default function UsageContent() {
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 text-fg-muted text-xs font-semibold">
                         <Clock className="w-3.5 h-3.5" />
-                        <span>Delivery logs ({webhookLogs.length})</span>
+                        <span>{t('webhook.logsTitle', { count: webhookLogs.length })}</span>
                       </div>
                       <div className="rounded-lg border border-line overflow-hidden">
                         <table className="w-full text-xs">
@@ -559,7 +566,7 @@ export default function UsageContent() {
                             <tr className="bg-surface border-b border-line">
                               <th className="px-3 py-2 text-left text-fg-muted font-semibold">Job ID</th>
                               <th className="px-3 py-2 text-left text-fg-muted font-semibold">Status</th>
-                              <th className="px-3 py-2 text-left text-fg-muted font-semibold hidden sm:table-cell">Thời gian</th>
+                              <th className="px-3 py-2 text-left text-fg-muted font-semibold hidden sm:table-cell">{t('webhook.time')}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-line">
@@ -580,7 +587,7 @@ export default function UsageContent() {
                                 </td>
                                 <td className="px-3 py-2 text-fg-muted hidden sm:table-cell">
                                   {log.delivered_at
-                                    ? new Date(log.delivered_at).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                    ? new Date(log.delivered_at).toLocaleString(loc, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
                                     : '—'}
                                 </td>
                               </tr>
@@ -592,7 +599,7 @@ export default function UsageContent() {
                   )}
 
                   {webhookLogs.length === 0 && (
-                    <p className="text-fg-muted text-xs text-center py-3">Chưa có delivery nào. Webhook sẽ được gọi khi job hoàn tất.</p>
+                    <p className="text-fg-muted text-xs text-center py-3">{t('webhook.noLogs')}</p>
                   )}
                 </div>
               )}
@@ -613,6 +620,7 @@ function fmtBytes(bytes) {
 }
 
 function StorageSection({ info, isPro }) {
+  const { t } = useTranslation('usage');
   const { free: freePlan, pro: proPlan } = usePlans();
   const tierPlan = isPro ? proPlan : freePlan;
   const pinnedLimit = tierPlan ? tierPlan.pins : 0;
@@ -638,10 +646,12 @@ function StorageSection({ info, isPro }) {
           <div className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-1.5 text-fg-2 font-semibold">
               <Pin className="w-3.5 h-3.5 text-fg-2" />
-              File được ghim
+              {t('storage.pinned')}
             </div>
             <span className="text-fg-muted">
-              {pinnedCount}{tierPlan ? ` / ${pinnedLimit}` : ''} file · {fmtBytes(pinnedBytes)}
+              {tierPlan
+                ? t('storage.pinnedCountLimit', { count: pinnedCount, limit: pinnedLimit, size: fmtBytes(pinnedBytes) })
+                : t('storage.pinnedCount', { count: pinnedCount, size: fmtBytes(pinnedBytes) })}
             </span>
           </div>
           <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
@@ -653,22 +663,24 @@ function StorageSection({ info, isPro }) {
           <p className="text-[11px] text-fg-muted">
             {/* wording: BA review */}
             {tierPlan
-              ? `${isPro ? 'Pro' : 'Free'}: ghim tối đa ${tierPlan.pins} file · giữ ${tierPlan.pin_days} ngày${!isPro && proPlan ? ` · Pro ghim được ${proPlan.pins} file` : ''}`
-              : 'Xem bảng giá để biết hạn mức ghim file.'}
+              ? (!isPro && proPlan
+                ? t('storage.pinInfoPro', { plan: 'Free', pins: tierPlan.pins, days: tierPlan.pin_days, proPins: proPlan.pins })
+                : t('storage.pinInfo', { plan: isPro ? 'Pro' : 'Free', pins: tierPlan.pins, days: tierPlan.pin_days }))
+              : t('storage.pinNoPlan')}
           </p>
         </div>
 
         {/* Row: temp + archive */}
         <div className="grid grid-cols-2 gap-3 pt-1">
           <div className="bg-surface-2 rounded-lg p-3 space-y-0.5">
-            <p className="text-xs text-fg-muted">File tạm</p>
-            <p className="text-fg font-bold">{tempCount} <span className="text-fg-muted text-xs font-normal">file</span></p>
-            <p className="text-[11px] text-fg-muted">{fmtBytes(tempBytes)} · hết hạn sau 24h</p>
+            <p className="text-xs text-fg-muted">{t('storage.temp')}</p>
+            <p className="text-fg font-bold">{tempCount} <span className="text-fg-muted text-xs font-normal">{t('storage.unitFile')}</span></p>
+            <p className="text-[11px] text-fg-muted">{t('storage.tempExpire', { size: fmtBytes(tempBytes) })}</p>
           </div>
           <div className="bg-surface-2 rounded-lg p-3 space-y-0.5">
             <p className="text-xs text-fg-muted">Archive</p>
-            <p className="text-fg font-bold">{archiveTotal} <span className="text-fg-muted text-xs font-normal">mục</span></p>
-            <p className="text-[11px] text-fg-muted">Metadata only · không giới hạn</p>
+            <p className="text-fg font-bold">{archiveTotal} <span className="text-fg-muted text-xs font-normal">{t('storage.unitItem')}</span></p>
+            <p className="text-[11px] text-fg-muted">{t('storage.metadataOnly')}</p>
           </div>
         </div>
       </div>
@@ -677,6 +689,7 @@ function StorageSection({ info, isPro }) {
 }
 
 function StatCard({ icon, label, value, limit, pct, isPro }) {
+  const { t } = useTranslation('usage');
   const barColor = pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-accent' : 'bg-accent';
 
   return (
@@ -690,7 +703,7 @@ function StatCard({ icon, label, value, limit, pct, isPro }) {
         {!isPro && limit > 0 && (
           <span className="text-fg-muted text-xs">/ {limit}</span>
         )}
-        {isPro && <span className="text-fg-muted text-xs">lượt</span>}
+        {isPro && <span className="text-fg-muted text-xs">{t('unitDownloads')}</span>}
       </div>
       {!isPro && limit > 0 && (
         <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">

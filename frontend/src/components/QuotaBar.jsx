@@ -1,7 +1,10 @@
 // QuotaBar — reusable quota progress bar
+import { useTranslation } from 'react-i18next';
+
 // Props: used, limit (-1 = unlimited), label, unit, size ('sm' | 'md')
 
 export default function QuotaBar({ used = 0, limit = -1, label = '', unit = '', size = 'md' }) {
+  const { t } = useTranslation('usage');
   const unlimited = limit === -1;
   const pct       = unlimited ? 100 : limit > 0 ? Math.min(Math.round((used / limit) * 100), 100) : 0;
 
@@ -17,7 +20,7 @@ export default function QuotaBar({ used = 0, limit = -1, label = '', unit = '', 
     ? `${used} / ∞${unit ? ' ' + unit : ''}`
     : `${used} / ${limit}${unit ? ' ' + unit : ''}`;
 
-  const subText = unlimited ? 'Không giới hạn' : null;
+  const subText = unlimited ? t('quota.unlimited') : null;
 
   return (
     <div className={isSm ? 'space-y-0.5' : 'space-y-1.5'}>
@@ -25,7 +28,7 @@ export default function QuotaBar({ used = 0, limit = -1, label = '', unit = '', 
         <span className={isSm ? 'text-fg-muted' : 'text-fg-2 font-medium'}>{label}</span>
         <span className="text-fg-muted">
           {unlimited ? (
-            <span className="text-success font-medium">Không giới hạn</span>
+            <span className="text-success font-medium">{t('quota.unlimited')}</span>
           ) : (
             countText
           )}

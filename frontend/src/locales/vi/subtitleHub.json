@@ -1,0 +1,15 @@
+{
+  "tabs": {
+    "extract": "Trích phụ đề",
+    "asr": "Phiên âm AI",
+    "translate": "Dịch"
+  },
+  "extractIntro": "Nhiều video đã có sẵn phụ đề do người đăng tải. VidGrab lấy phụ đề đó về cho bạn, không cần nhận diện giọng nói nên nhanh và miễn phí hạn mức phiên âm.",
+  "noSubsHint": "Video không có thẻ \"Phụ đề\"? Chuyển sang tab \"Phiên âm AI\" để tạo phụ đề từ giọng nói.",
+  "home": "Về trang chủ để dán link video",
+  "title": "Phụ đề và Phiên âm",
+  "subtitle": "Lấy phụ đề có sẵn, tạo phụ đề từ giọng nói, hoặc dịch sang ngôn ngữ khác.",
+  "step1": "Dán link video vào ô tải ở trang chủ rồi bấm lấy thông tin video.",
+  "step2": "Ở thẻ kết quả, mở thẻ \"Phụ đề\" (chỉ hiện khi video có phụ đề sẵn).",
+  "step3": "Chọn ngôn ngữ và định dạng (SRT/VTT), rồi bấm \"Tải phụ đề\"."
+}

@@ -1,0 +1,21 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "title": "Analytics",
+  "subtitle": "Download stats for your account",
+  "proTitle": "Analytics — a Pro feature",
+  "proDesc": "Upgrade to Pro to see detailed analytics: downloads per day, platform, size...",
+  "upgrade": "Upgrade to Pro →",
+  "loadFailed": "Couldn't load the analytics data.",
+  "totalDownloads": "Total downloads",
+  "inDays": "in {{days}} days",
+  "sizeMb": "Size (MB)",
+  "total": "total",
+  "topPlatform": "Top platform",
+  "mostUsed": "most used",
+  "avgPerDay": "Average per day",
+  "downloadsUnit": "downloads",
+  "dailyTitle": "Downloads per day",
+  "exportCsv": "Export CSV",
+  "byPlatform": "By platform",
+  "noData": "No data in the last {{days}} days."
+}

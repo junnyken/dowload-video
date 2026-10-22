@@ -1,0 +1,102 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "title": "Settings",
+  "subtitle": "Connection, notification, data and API settings",
+  "api": {
+    "title": "API Connection",
+    "desc": "Backend connection status",
+    "checking": "Checking…",
+    "ok": "Connected",
+    "fail": "Can't connect",
+    "backendVersion": "Backend version:"
+  },
+  "notif": {
+    "title": "Browser notifications",
+    "desc": "Get notified when a download finishes or fails",
+    "status": "Status:",
+    "unsupported": "Browser not supported",
+    "on": "On",
+    "denied": "Blocked (browser settings)",
+    "off": "Off",
+    "telegram": "Telegram notifications for operators are configured through server environment variables.",
+    "reenable": "To turn it back on, open your browser settings → Site Permissions → Notifications → allow this site."
+  },
+  "data": {
+    "title": "Data & Storage",
+    "desc": "How long each type of data is kept",
+    "exportHint": "Export history: sign in → History → the <b>Export CSV/JSON</b> button.",
+    "rules": {
+      "temp": {
+        "label": "Downloaded files (not pinned)",
+        "value": "~60 min",
+        "note": "Deleted automatically after download. Pin to Archive to keep them."
+      },
+      "pinned": {
+        "label": "Pinned files (Archive)",
+        "days": "{{days}} days",
+        "noteBoth": "Free: {{free}}. Pro: {{pro}}. Pin again to extend.",
+        "noteDefault": "When the pin expires the file is deleted; the metadata stays.",
+        "pinNote": "{{pins}} files, kept {{days}} days"
+      },
+      "exportFree": {
+        "label": "History export (Free)",
+        "value": "30 days",
+        "note": "Export CSV/JSON for the last 30 days."
+      },
+      "exportPro": {
+        "label": "History export (Pro)",
+        "value": "365 days",
+        "note": "Export CSV/JSON for the last 365 days."
+      },
+      "meta": {
+        "label": "Archive metadata",
+        "value": "Unlimited",
+        "note": "Descriptive data is kept even after the file expires."
+      }
+    }
+  },
+  "access": {
+    "title": "API Access",
+    "desc": "Integrate VidGrab into your tools",
+    "docs": "API Docs",
+    "regenerate": "Create new key",
+    "revoke": "Revoke key",
+    "header": "Use the <c>{{header}}</c> header in every API request.",
+    "none": "No API key yet. Create one to use the Public API.",
+    "creating": "Creating…",
+    "create": "Create API Key",
+    "needLogin": "You need to sign in to create an API key.",
+    "confirmRevoke": "Revoke the API key? Integrations using this key will be disconnected."
+  },
+  "info": {
+    "title": "App info",
+    "desc": "Version, compatibility, contact",
+    "compat": "Compatibility",
+    "compatOk": "✓ Frontend ↔ Backend",
+    "compatUnknown": "Unknown",
+    "support": "Support"
+  },
+  "prefs": {
+    "title": "Preferences",
+    "subtitle": "Default download settings — synced with your account",
+    "quality": "Default quality",
+    "q": {
+      "video": "MP4 HD (best ≤1080p)",
+      "mp4_4k": "MP4 4K (best ≤4K)",
+      "mp3_320": "MP3 320kbps",
+      "mp3_128": "MP3 128kbps"
+    },
+    "defaults": "Default options",
+    "watermark": "Remove watermark",
+    "watermarkDesc": "Turned on automatically when downloading TikTok / Douyin",
+    "subs": "Download subtitles",
+    "subsDesc": "Includes .srt if the video has subtitles",
+    "bulk": "Default count (Bulk)",
+    "theme": "Appearance",
+    "dark": "🌙 Dark",
+    "light": "☀️ Light",
+    "saving": "Saving...",
+    "saved": "Saved!",
+    "save": "Save preferences"
+  }
+}

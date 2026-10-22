@@ -1,5 +1,7 @@
 import { Component } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
+import { Trans } from 'react-i18next';
+import i18n from '../i18n';
 
 /**
  * React error boundary — catches unhandled render/lifecycle errors in the
@@ -32,7 +34,8 @@ export default class ErrorBoundary extends Component {
     if (!this.state.hasError) return this.props.children;
 
     const { error } = this.state;
-    const message = error?.message || 'Lỗi không xác định';
+    const t = (key) => i18n.t(key, { ns: 'common' });
+    const message = error?.message || t('errorBoundary.unknown');
     const isNetworkError = message.toLowerCase().includes('fetch') ||
                            message.toLowerCase().includes('network');
 
@@ -47,12 +50,12 @@ export default class ErrorBoundary extends Component {
 
           <div>
             <h2 className="text-xl font-bold text-fg mb-2">
-              Đã xảy ra lỗi không mong đợi
+              {t('errorBoundary.title')}
             </h2>
             <p className="text-sm text-fg-muted">
               {isNetworkError
-                ? 'Không thể kết nối đến server. Kiểm tra kết nối mạng và thử lại.'
-                : 'Thành phần gặp lỗi và không thể hiển thị. Thử làm mới trang.'}
+                ? t('errorBoundary.network')
+                : t('errorBoundary.render')}
             </p>
           </div>
 
@@ -67,26 +70,32 @@ export default class ErrorBoundary extends Component {
               onClick={this.handleReset}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-accent/10 border border-accent/30 text-accent-text text-sm font-semibold hover:bg-accent/20 transition-colors cursor-pointer"
             >
-              <RefreshCw className="w-4 h-4" /> Thử lại
+              <RefreshCw className="w-4 h-4" /> {t('errorBoundary.retry')}
             </button>
             <button
               onClick={this.handleReload}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface border border-line text-fg-2 text-sm font-semibold hover:text-fg hover:border-accent/30 transition-colors cursor-pointer"
             >
-              <Home className="w-4 h-4" /> Tải lại trang
+              <Home className="w-4 h-4" /> {t('errorBoundary.reload')}
             </button>
           </div>
 
           <p className="text-xs text-fg-muted">
-            Nếu lỗi tiếp tục, liên hệ hỗ trợ tại{' '}
-            <a
-              href="https://t.me/vidgrab_support"
-              className="text-accent-text hover:text-primary-light transition-colors"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Telegram
-            </a>.
+            <Trans
+              i18n={i18n}
+              t={i18n.getFixedT(null, 'common')}
+              i18nKey="errorBoundary.support"
+              components={{
+                tg: (
+                  <a
+                    href="https://t.me/vidgrab_support"
+                    className="text-accent-text hover:text-primary-light transition-colors"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  />
+                ),
+              }}
+            />
           </p>
         </div>
       </div>

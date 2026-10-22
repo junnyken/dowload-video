@@ -1,0 +1,31 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "switcher": {
+    "personal": "Personal",
+    "namePlaceholder": "Workspace name...",
+    "create": "Create",
+    "createNew": "Create new workspace",
+    "settings": "Workspace settings"
+  },
+  "title": "Workspace settings",
+  "none": "No workspace yet.",
+  "tabs": {
+    "overview": "Overview",
+    "members": "Members",
+    "invites": "Invites"
+  },
+  "name": "Workspace name",
+  "save": "Save",
+  "saveFailed": "Couldn't save.",
+  "inviteFailed": "Couldn't send the invite.",
+  "info": "Details",
+  "type": "Type",
+  "typePersonal": "Personal",
+  "typeTeam": "Team",
+  "typeEnterprise": "Enterprise",
+  "yourRole": "Your role",
+  "sendInvite": "Send invite",
+  "invite": "Invite",
+  "noInvites": "No pending invites.",
+  "expires": "Expires {{date}}"
+}

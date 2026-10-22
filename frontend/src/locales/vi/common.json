@@ -1,0 +1,88 @@
+{
+  "help": {
+    "quality_selector": "Chọn chất lượng video. 4K cần nhiều thời gian hơn và dung lượng lớn hơn. Dùng 'video_fast' nếu cần tải nhanh.",
+    "batch_download": "Tải nhiều video cùng lúc theo kênh hoặc playlist. Mỗi đợt tối đa 10 video để tránh bị chặn.",
+    "schedule": "Lên lịch tải video tự động theo cron expression. Ví dụ: '0 9 * * *' = mỗi ngày 9h sáng.",
+    "archive_pin": "Ghim video vào archive để không bị xóa sau 24 giờ. File sẽ được giữ lại vĩnh viễn (hoặc đến khi bạn xóa).",
+    "remove_watermark": "Xóa watermark bằng AI inpainting. Chỉ hỗ trợ TikTok/Douyin. Mất thêm 30–60 giây để xử lý.",
+    "webhook": "Nhận thông báo khi tải xong qua URL webhook của bạn. Gửi POST request với thông tin job.",
+    "approval_workflow": "Tải xuống quy mô lớn cần admin workspace duyệt trước khi thực hiện. Bạn sẽ nhận thông báo khi được duyệt.",
+    "auto_retry": "Hệ thống tự động thử lại khi gặp lỗi tạm thời (rate limit, timeout). Tối đa 3–4 lần với backoff."
+  },
+  "helpTitle": "Trợ giúp",
+  "newBadge": "Mới",
+  "errorBoundary": {
+    "unknown": "Lỗi không xác định",
+    "title": "Đã xảy ra lỗi không mong đợi",
+    "network": "Không thể kết nối đến server. Kiểm tra kết nối mạng và thử lại.",
+    "render": "Thành phần gặp lỗi và không thể hiển thị. Thử làm mới trang.",
+    "retry": "Thử lại",
+    "reload": "Tải lại trang",
+    "support": "Nếu lỗi tiếp tục, liên hệ hỗ trợ tại <tg>Telegram</tg>."
+  },
+  "platformStatus": {
+    "degraded": "{{count}} nền tảng đang gặp sự cố",
+    "constrained": "{{count}} nền tảng có thể chậm hơn bình thường",
+    "suffixDegraded": " — đang lỗi",
+    "suffixSlow": " — chậm"
+  },
+  "expiry": {
+    "expired": "Đã hết hạn",
+    "recreate": "Tạo lại",
+    "minutesLeft": "Còn {{count}} phút"
+  },
+  "smartDefaults": {
+    "suggest": "Bạn thường dùng <q>{{quality}}</q> cho {{platform}} — dùng lại không?",
+    "use": "Dùng"
+  },
+  "quickActions": {
+    "no_watermark": {
+      "label": "Sạch WM",
+      "description": "Tải không watermark"
+    },
+    "mp3_fast": {
+      "description": "Trích âm thanh MP3"
+    },
+    "mp3_hq": {
+      "description": "MP3 chất lượng cao 320kbps"
+    },
+    "thumbnail": {
+      "description": "Chỉ lấy ảnh thumbnail"
+    },
+    "gif_quick": {
+      "description": "Tạo GIF 15 giây đầu"
+    }
+  },
+  "presets": {
+    "sys_tiktok_clean": "TikTok sạch watermark",
+    "sys_mp3_fast": "Trích âm thanh MP3",
+    "sys_thumbnail": "Chỉ lấy thumbnail"
+  },
+  "processing": {
+    "failed": "Xử lý thất bại",
+    "errors": {
+      "no_subtitles": "Nguồn này không có phụ đề/captions",
+      "file_expired": "File đã hết hạn, hãy tải lại từ nguồn gốc",
+      "invalid_path": "Đường dẫn file không hợp lệ"
+    }
+  },
+  "discover": {
+    "pollError": "Poll lỗi: HTTP {{status}}",
+    "failed": "Discovery thất bại.",
+    "queued": "Đang xếp hàng..."
+  },
+  "notify": {
+    "downloadDone": "✅ Tải xuống hoàn tất",
+    "fileReady": "File đã sẵn sàng tải về.",
+    "downloadFailed": "❌ Tải xuống thất bại",
+    "unknownError": "Lỗi không xác định.",
+    "archiveDone": "📁 Archive hoàn tất",
+    "savedToArchive": "Đã lưu vào Archive."
+  },
+  "urlValidator": {
+    "required": "Vui lòng nhập URL.",
+    "scheme": "URL phải bắt đầu bằng https:// hoặc http://",
+    "invalid": "URL không hợp lệ.",
+    "blocked": "URL không được phép."
+  }
+}

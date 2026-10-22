@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AlertTriangle, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -11,6 +12,7 @@ const PLATFORM_LABEL = {
 };
 
 export default function PlatformStatusBanner() {
+  const { t } = useTranslation('common');
   const [data, setData]       = useState(null);
   const [expanded, setExpanded] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -48,8 +50,8 @@ export default function PlatformStatusBanner() {
         <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${hasSevere ? 'text-danger' : 'text-warning'}`} />
         <span className="flex-1 font-medium">
           {hasSevere
-            ? `${degraded.length} nền tảng đang gặp sự cố`
-            : `${constrained.length} nền tảng có thể chậm hơn bình thường`}
+            ? t('platformStatus.degraded', { count: degraded.length })
+            : t('platformStatus.constrained', { count: constrained.length })}
         </span>
         <button
           onClick={() => setExpanded(v => !v)}
@@ -79,8 +81,8 @@ export default function PlatformStatusBanner() {
               }`}
             >
               {PLATFORM_LABEL[p.platform] || p.platform}
-              {p.status === 'degraded' && ' — đang lỗi'}
-              {p.status === 'constrained' && ' — chậm'}
+              {p.status === 'degraded' && t('platformStatus.suffixDegraded')}
+              {p.status === 'constrained' && t('platformStatus.suffixSlow')}
             </span>
           ))}
         </div>

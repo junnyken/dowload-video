@@ -1,0 +1,46 @@
+{
+  "copy": "Copy",
+  "cancel": "Huỷ",
+  "proOnly": "API key management chỉ dành cho Pro.",
+  "subtitle": "Tối đa {{max}} key. Lượt gọi API tính theo tháng cho cả tài khoản; lượt tải qua API vẫn trừ vào hạn mức tải mỗi ngày.",
+  "create": {
+    "title": "Tạo API Key mới",
+    "label": "Nhãn",
+    "creating": "Đang tạo...",
+    "submit": "Tạo Key",
+    "saveWarning": "⚠️ Lưu key ngay — sẽ không hiển thị lại!",
+    "savedClose": "Đã lưu, đóng"
+  },
+  "edit": {
+    "title": "Đổi tên Key",
+    "saving": "Đang lưu...",
+    "save": "Lưu"
+  },
+  "revoke": {
+    "confirm": "Xác nhận thu hồi key này? Hành động không thể hoàn tác.",
+    "error": "Lỗi: {{message}}",
+    "badge": "Thu hồi",
+    "title": "Thu hồi"
+  },
+  "usage": {
+    "title": "Lượt gọi API tháng {{month}}",
+    "unlimited": "{{used}} lượt · không giới hạn",
+    "reset": "Làm mới ngày {{date}} (00:00 UTC)."
+  },
+  "auth": {
+    "title": "Xác thực bằng header",
+    "or": "hoặc Authorization: Bearer vidgrab_…"
+  },
+  "docs": "Xem docs →",
+  "upgrade": "Nâng cấp Pro →",
+  "empty": {
+    "title": "Chưa có API key nào.",
+    "hint": "Nhấn \"Tạo Key\" để bắt đầu."
+  },
+  "item": {
+    "total": "Tổng: {{n}} req",
+    "created": "Tạo: {{date}}",
+    "lastUsed": "Dùng lần cuối: {{date}}",
+    "rename": "Đổi tên"
+  }
+}

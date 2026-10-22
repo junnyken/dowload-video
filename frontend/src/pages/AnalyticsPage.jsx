@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { BarChart2, Download, Globe, TrendingUp, Calendar, Crown, ChevronDown } from 'lucide-react';
 import { API_BASE } from '../lib/apiBase';
+import { useTranslation } from 'react-i18next';
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 
@@ -70,6 +71,7 @@ const PLATFORM_COLORS = {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
+  const { t } = useTranslation('analytics');
   const { session } = useAuth();
   const apiBase = API_BASE;
 
@@ -91,7 +93,7 @@ export default function AnalyticsPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setAnalytics(await res.json());
     } catch (err) {
-      setError(err.message || 'Không tải được dữ liệu analytics.');
+      setError(err.message || t('loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -120,11 +122,11 @@ export default function AnalyticsPage() {
           <Crown className="w-8 h-8 text-accent-text" />
         </div>
         <div>
-          <p className="text-fg font-bold text-lg">Analytics — tính năng Pro</p>
-          <p className="text-fg-muted text-sm mt-1">Nâng cấp Pro để xem analytics chi tiết: lượt tải theo ngày, platform, dung lượng...</p>
+          <p className="text-fg font-bold text-lg">{t('proTitle')}</p>
+          <p className="text-fg-muted text-sm mt-1">{t('proDesc')}</p>
         </div>
         <button className="px-5 py-2.5 rounded-lg bg-accent text-accent-fg text-sm font-bold hover:opacity-90 transition">
-          Nâng cấp Pro →
+          {t('upgrade')}
         </button>
       </div>
     );
@@ -154,8 +156,8 @@ export default function AnalyticsPage() {
             <BarChart2 className="w-5 h-5 text-accent-text" />
           </div>
           <div>
-            <h1 className="text-fg font-bold text-lg">Analytics</h1>
-            <p className="text-fg-muted text-xs">Thống kê lượt tải theo tài khoản</p>
+            <h1 className="text-fg font-bold text-lg">{t('title')}</h1>
+            <p className="text-fg-muted text-xs">{t('subtitle')}</p>
           </div>
         </div>
 
@@ -198,27 +200,27 @@ export default function AnalyticsPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatCard
               icon={<Download className="w-4 h-4" />}
-              label="Tổng lượt tải"
+              label={t('totalDownloads')}
               value={totalDownloads}
-              sub={`trong ${range} ngày`}
+              sub={t('inDays', { days: range })}
             />
             <StatCard
               icon={<TrendingUp className="w-4 h-4" />}
-              label="Dung lượng (MB)"
+              label={t('sizeMb')}
               value={totalMb}
-              sub="tổng cộng"
+              sub={t('total')}
             />
             <StatCard
               icon={<Globe className="w-4 h-4" />}
-              label="Platform phổ biến"
+              label={t('topPlatform')}
               value={topPlatform}
-              sub="dùng nhiều nhất"
+              sub={t('mostUsed')}
             />
             <StatCard
               icon={<Calendar className="w-4 h-4" />}
-              label="Trung bình/ngày"
+              label={t('avgPerDay')}
               value={avgPerDay}
-              sub="lượt tải"
+              sub={t('downloadsUnit')}
             />
           </div>
 
@@ -226,13 +228,13 @@ export default function AnalyticsPage() {
           {daily.length > 0 && (
             <div className="bg-surface-2 border border-line rounded-xl p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-fg font-semibold text-sm">Lượt tải theo ngày</p>
+                <p className="text-fg font-semibold text-sm">{t('dailyTitle')}</p>
                 <button
                   onClick={exportCSV}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-2 text-fg-2 hover:bg-line text-xs font-bold transition-colors"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  Export CSV
+                  {t('exportCsv')}
                 </button>
               </div>
 
@@ -257,7 +259,7 @@ export default function AnalyticsPage() {
           {/* Platform breakdown */}
           {platforms.length > 0 && (
             <div className="bg-surface-2 border border-line rounded-xl p-4 space-y-3">
-              <p className="text-fg font-semibold text-sm">Theo platform</p>
+              <p className="text-fg font-semibold text-sm">{t('byPlatform')}</p>
               <div className="space-y-3">
                 {platforms.map((p, i) => (
                   <PlatformBar
@@ -275,7 +277,7 @@ export default function AnalyticsPage() {
           {/* Empty daily */}
           {daily.length === 0 && (
             <div className="text-center py-10 text-fg-muted text-sm">
-              Chưa có dữ liệu trong {range} ngày qua.
+              {t('noData', { days: range })}
             </div>
           )}
         </>

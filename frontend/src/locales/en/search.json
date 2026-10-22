@@ -1,0 +1,45 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "download": "Download",
+  "title": "Search videos",
+  "subtitle": "Find YouTube and TikTok videos to download — no link needed.",
+  "placeholder": "Enter a search keyword...",
+  "searchBtn": "Search",
+  "sort": {
+    "relevance": "Relevant",
+    "date": "Newest",
+    "viewCount": "Most viewed"
+  },
+  "duration": {
+    "all": "All",
+    "short": "< 4 min",
+    "medium": "4 – 20 min",
+    "long": "> 20 min"
+  },
+  "errors": {
+    "tooShort": "The keyword must be at least 3 characters.",
+    "rateLimited": "You have searched 5 times this hour. Try again later.",
+    "failed": "Search failed.",
+    "network": "Could not connect. Check your network and try again.",
+    "noLink": "This video has no link to download."
+  },
+  "rateLimit": {
+    "title": "Search limit reached",
+    "body": "You have searched 5 times this hour. Wait about 60 minutes, or paste a link directly into the download box."
+  },
+  "cached": "Results from cache (10 minutes)",
+  "resultsFor_one": "{{count}} result for \"<kw>{{keyword}}</kw>\"",
+  "resultsFor_other": "{{count}} results for \"<kw>{{keyword}}</kw>\"",
+  "noResults": "No videos found for this keyword.",
+  "noResultsHint": "Try another keyword or switch platforms.",
+  "empty": {
+    "title": "Enter a keyword to start searching",
+    "hint": "Supports YouTube and TikTok · 5 searches per hour · 10-minute cache"
+  },
+  "suggestions": {
+    "chill": "chill music",
+    "cooking": "cooking tutorials",
+    "trending": "top trending tiktok",
+    "lofi": "lo-fi music"
+  }
+}

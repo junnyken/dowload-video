@@ -3,6 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { ListMusic, RefreshCw, Trash2, Play, Plus, ExternalLink, Loader2 } from 'lucide-react';
 import { API_BASE } from '../lib/apiBase';
 import { usePlans } from '../lib/usePlans';
+import { useTranslation } from 'react-i18next';
+import { useLang } from '../i18n';
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 
@@ -15,12 +17,14 @@ function platformBadge(platform) {
   return { label: platform || 'Other', cls: 'bg-surface-2 text-fg-muted border border-line-strong' };
 }
 
-function formatDate(iso) {
-  if (!iso) return 'Chưa có';
-  return new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+function formatDate(iso, t, lang) {
+  if (!iso) return t('never');
+  return new Date(iso).toLocaleString(lang === 'en' ? 'en-US' : 'vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export default function PlaylistsPage({ onNavigate }) {
+  const { t } = useTranslation('playlists');
+  const lang = useLang();
   const { session } = useAuth();
   const apiBase = API_BASE;
   const { tier: planOf } = usePlans();
@@ -65,7 +69,7 @@ export default function PlaylistsPage({ onNavigate }) {
       const data = await res.json();
       setPlaylists(Array.isArray(data) ? data : (data.playlists || []));
     } catch (err) {
-      setFetchError('Không tải được danh sách playlist. ' + (err.message || ''));
+      setFetchError(t('errors.load', { message: err.message || '' }));
     } finally {
       setLoading(false);
     }
@@ -89,7 +93,7 @@ export default function PlaylistsPage({ onNavigate }) {
       setSaveUrl('');
       await fetchPlaylists();
     } catch (err) {
-      setSaveError(err.message || 'Không thể lưu playlist. Thử lại sau.');
+      setSaveError(err.message || t('errors.save'));
     } finally {
       setSaving(false);
     }
@@ -106,14 +110,14 @@ export default function PlaylistsPage({ onNavigate }) {
       if (!res.ok) { const d = await res.json(); throw new Error(d.detail || `HTTP ${res.status}`); }
       await fetchPlaylists();
     } catch (err) {
-      setCardError(prev => ({ ...prev, [id]: err.message || 'Không thể tải lại.' }));
+      setCardError(prev => ({ ...prev, [id]: err.message || t('errors.refresh') }));
     } finally {
       setRefreshing(prev => ({ ...prev, [id]: false }));
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Xoá playlist này khỏi danh sách đã lưu?')) return;
+    if (!window.confirm(t('confirmDelete'))) return;
     setDeleting(prev => ({ ...prev, [id]: true }));
     setCardError(prev => ({ ...prev, [id]: '' }));
     try {
@@ -124,7 +128,7 @@ export default function PlaylistsPage({ onNavigate }) {
       if (!res.ok) { const d = await res.json(); throw new Error(d.detail || `HTTP ${res.status}`); }
       setPlaylists(prev => prev.filter(p => p.id !== id));
     } catch (err) {
-      setCardError(prev => ({ ...prev, [id]: err.message || 'Không thể xoá.' }));
+      setCardError(prev => ({ ...prev, [id]: err.message || t('errors.delete') }));
     } finally {
       setDeleting(prev => ({ ...prev, [id]: false }));
     }
@@ -136,7 +140,7 @@ export default function PlaylistsPage({ onNavigate }) {
       onNavigate('landing', '/');
     } else if (playlist.url) {
       navigator.clipboard.writeText(playlist.url).then(() => {
-        setToast('Đã sao chép link vào clipboard');
+        setToast(t('copied'));
         setTimeout(() => setToast(''), 2500);
       });
     }
@@ -155,15 +159,15 @@ export default function PlaylistsPage({ onNavigate }) {
             <ListMusic className="w-5 h-5 text-accent-text" />
           </div>
           <div>
-            <h1 className="text-fg font-bold text-lg">Playlists đã lưu</h1>
-            <p className="text-fg-muted text-xs">Lưu link YouTube / Spotify để tải lại sau</p>
+            <h1 className="text-fg font-bold text-lg">{t('title')}</h1>
+            <p className="text-fg-muted text-xs">{t('subtitle')}</p>
           </div>
         </div>
         <button
           onClick={fetchPlaylists}
           disabled={loading}
           className="p-2 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-2 transition-colors disabled:opacity-50"
-          aria-label="Tải lại danh sách"
+          aria-label={t('reloadList')}
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
@@ -171,7 +175,7 @@ export default function PlaylistsPage({ onNavigate }) {
 
       {/* Save new playlist form */}
       <form onSubmit={handleSave} className="rounded-xl border border-line bg-surface-2 p-4 space-y-3">
-        <p className="text-fg font-semibold text-sm">Lưu playlist mới</p>
+        <p className="text-fg font-semibold text-sm">{t('saveNew')}</p>
         <div className="flex gap-2">
           <input
             type="url"
@@ -188,7 +192,7 @@ export default function PlaylistsPage({ onNavigate }) {
             {saving
               ? <Loader2 className="w-4 h-4 animate-spin" />
               : <Plus className="w-4 h-4" />}
-            Lưu
+            {t('save')}
           </button>
         </div>
         {saveError && (
@@ -207,7 +211,7 @@ export default function PlaylistsPage({ onNavigate }) {
             </span>
           )}
         </span>
-        <span>playlist đã lưu</span>
+        <span>{t('savedLabel')}</span>
       </div>
 
       {/* Fetch error */}
@@ -228,8 +232,8 @@ export default function PlaylistsPage({ onNavigate }) {
       {!loading && !fetchError && playlists.length === 0 && (
         <div className="text-center py-14 space-y-2">
           <ListMusic className="w-10 h-10 text-fg-muted mx-auto" />
-          <p className="text-fg-muted text-sm">Chưa có playlist nào.</p>
-          <p className="text-fg-muted text-xs">Lưu link YouTube hoặc Spotify để tải lại sau.</p>
+          <p className="text-fg-muted text-sm">{t('empty.title')}</p>
+          <p className="text-fg-muted text-xs">{t('empty.hint')}</p>
         </div>
       )}
 
@@ -255,14 +259,14 @@ export default function PlaylistsPage({ onNavigate }) {
                         {badge.label}
                       </span>
                       {pl.item_count != null && (
-                        <span className="text-xs text-fg-muted">{pl.item_count} bài</span>
+                        <span className="text-xs text-fg-muted">{t('trackCount', { count: pl.item_count })}</span>
                       )}
                     </div>
                     <p className="text-fg font-semibold text-sm leading-snug truncate">
                       {pl.title || pl.url}
                     </p>
                     <p className="text-fg-muted text-xs">
-                      Cập nhật: {formatDate(pl.last_refreshed_at || pl.updated_at)}
+                      {t('updated', { date: formatDate(pl.last_refreshed_at || pl.updated_at, t, lang) })}
                     </p>
                   </div>
                   {pl.url && (
@@ -271,7 +275,7 @@ export default function PlaylistsPage({ onNavigate }) {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex-shrink-0 p-1.5 rounded-lg text-fg-muted hover:text-fg-2 hover:bg-surface-2 transition-colors"
-                      aria-label="Mở playlist"
+                      aria-label={t('open')}
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
@@ -293,7 +297,7 @@ export default function PlaylistsPage({ onNavigate }) {
                     {isRefreshing
                       ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       : <RefreshCw className="w-3.5 h-3.5" />}
-                    Tải lại
+                    {t('refresh')}
                   </button>
 
                   <button
@@ -302,7 +306,7 @@ export default function PlaylistsPage({ onNavigate }) {
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-soft text-accent-text border border-accent/25 hover:bg-accent/20 text-xs font-bold transition-colors disabled:opacity-50"
                   >
                     <Play className="w-3.5 h-3.5" />
-                    Tải xuống
+                    {t('download')}
                   </button>
 
                   <button
@@ -313,7 +317,7 @@ export default function PlaylistsPage({ onNavigate }) {
                     {isDeleting
                       ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       : <Trash2 className="w-3.5 h-3.5" />}
-                    Xoá
+                    {t('delete')}
                   </button>
                 </div>
               </div>

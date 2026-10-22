@@ -1,20 +1,14 @@
 import { useState, useEffect, useRef } from "react";
+import { useTranslation } from 'react-i18next';
 
-const HELP_TOPICS = {
-  quality_selector:    "Chọn chất lượng video. 4K cần nhiều thời gian hơn và dung lượng lớn hơn. Dùng 'video_fast' nếu cần tải nhanh.",
-  batch_download:      "Tải nhiều video cùng lúc theo kênh hoặc playlist. Mỗi đợt tối đa 10 video để tránh bị chặn.",
-  schedule:            "Lên lịch tải video tự động theo cron expression. Ví dụ: '0 9 * * *' = mỗi ngày 9h sáng.",
-  archive_pin:         "Ghim video vào archive để không bị xóa sau 24 giờ. File sẽ được giữ lại vĩnh viễn (hoặc đến khi bạn xóa).",
-  remove_watermark:    "Xóa watermark bằng AI inpainting. Chỉ hỗ trợ TikTok/Douyin. Mất thêm 30–60 giây để xử lý.",
-  webhook:             "Nhận thông báo khi tải xong qua URL webhook của bạn. Gửi POST request với thông tin job.",
-  approval_workflow:   "Tải xuống quy mô lớn cần admin workspace duyệt trước khi thực hiện. Bạn sẽ nhận thông báo khi được duyệt.",
-  auto_retry:          "Hệ thống tự động thử lại khi gặp lỗi tạm thời (rate limit, timeout). Tối đa 3–4 lần với backoff.",
-};
+// Help text lives in locales/*/common.json (help.<topic>).
+const HELP_TOPICS = ['quality_selector', 'batch_download', 'schedule', 'archive_pin', 'remove_watermark', 'webhook', 'approval_workflow', 'auto_retry'];
 
 export function ContextualHelp({ topic, position = "right" }) {
+  const { t } = useTranslation('common');
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-  const text = HELP_TOPICS[topic];
+  const text = HELP_TOPICS.includes(topic) ? t(`help.${topic}`) : undefined;
 
   useEffect(() => {
     if (!open) return;
@@ -36,7 +30,7 @@ export function ContextualHelp({ topic, position = "right" }) {
       <button
         onClick={() => setOpen(!open)}
         className="w-4 h-4 rounded-full bg-surface-2 text-fg-muted hover:bg-line hover:text-fg text-xs flex items-center justify-center transition ml-1"
-        title="Trợ giúp"
+        title={t('helpTitle')}
       >
         ?
       </button>
@@ -51,6 +45,7 @@ export function ContextualHelp({ topic, position = "right" }) {
 }
 
 export function FirstTimeHint({ feature, children }) {
+  const { t } = useTranslation('common');
   const [seen, setSeen] = useState(true);
 
   useEffect(() => {
@@ -78,7 +73,7 @@ export function FirstTimeHint({ feature, children }) {
       {children}
       {!seen && (
         <span className="absolute -top-1.5 -right-2 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-accent text-accent-fg animate-pulse leading-none">
-          Mới
+          {t('newBadge')}
         </span>
       )}
     </span>

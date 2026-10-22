@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { authLinkError } from '../lib/authRecovery';
+import { useTranslation } from 'react-i18next';
+import { useLocalePath } from '../i18n';
 
 /**
  * Landing page for the Supabase password-recovery link.
@@ -15,6 +17,8 @@ import { authLinkError } from '../lib/authRecovery';
 const MIN_LENGTH = 8;
 
 export default function ResetPasswordPage() {
+  const { t } = useTranslation('authPages');
+  const lp = useLocalePath();
   const { updatePassword, session, loading } = useAuth();
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
@@ -43,7 +47,7 @@ export default function ResetPasswordPage() {
     setBusy(true); setError('');
     const { error } = await updatePassword(pw);
     setBusy(false);
-    if (error) { setError(error.message || 'Không đổi được mật khẩu.'); return; }
+    if (error) { setError(error.message || t('reset.errFallback')); return; }
     setDone(true);
     // Clear the recovery token out of the address bar once it is spent.
     window.history.replaceState({}, '', '/reset-password');
@@ -56,12 +60,12 @@ export default function ResetPasswordPage() {
     return (
       <div className="max-w-md mx-auto text-center space-y-4">
         <div className="text-4xl">✓</div>
-        <h1 className="text-xl font-bold text-fg">Đã đổi mật khẩu</h1>
+        <h1 className="text-xl font-bold text-fg">{t('reset.doneTitle')}</h1>
         <p className="text-sm text-fg-muted">
-          Bạn có thể dùng mật khẩu mới ngay từ bây giờ.
+          {t('reset.doneBody')}
         </p>
-        <a href="/" className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-bold text-accent-fg">
-          Về trang chủ
+        <a href={lp('/')} className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-bold text-accent-fg">
+          {t('reset.home')}
         </a>
       </div>
     );
@@ -70,17 +74,17 @@ export default function ResetPasswordPage() {
   return (
     <div className="max-w-md mx-auto space-y-5">
       <div>
-        <h1 className="text-xl font-bold text-fg">Đặt mật khẩu mới</h1>
+        <h1 className="text-xl font-bold text-fg">{t('reset.title')}</h1>
         <p className="mt-1 text-sm text-fg-muted">
-          Nhập mật khẩu mới cho tài khoản của bạn.
+          {t('reset.subtitle')}
         </p>
       </div>
 
       {linkError && (
         <div className="rounded-lg border border-danger/60 bg-danger-soft p-3 text-sm text-danger">
-          Liên kết không dùng được: {linkError}
+          {t('reset.linkUnusable', { error: linkError })}
           <div className="mt-2 text-xs text-danger">
-            Liên kết đặt lại mật khẩu chỉ dùng một lần và sẽ hết hạn. Hãy yêu cầu gửi lại.
+            {t('reset.linkHint')}
           </div>
         </div>
       )}
@@ -89,28 +93,28 @@ export default function ResetPasswordPage() {
           of letting the user type a password that cannot be saved. */}
       {!loading && !session && !linkError && (
         <div className="rounded-lg border border-accent/60 bg-accent-soft p-3 text-sm text-accent-text">
-          Không tìm thấy phiên đặt lại mật khẩu. Hãy mở trang này từ liên kết trong email.
+          {t('reset.noSession')}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
-          <label className="mb-1 block text-xs font-semibold text-fg-muted">Mật khẩu mới</label>
+          <label className="mb-1 block text-xs font-semibold text-fg-muted">{t('reset.newPassword')}</label>
           <input type={show ? 'text' : 'password'} value={pw} onChange={e => setPw(e.target.value)}
-                 autoComplete="new-password" className={field} placeholder={`Ít nhất ${MIN_LENGTH} ký tự`} />
-          {tooShort && <p className="mt-1 text-xs text-accent-text">Cần ít nhất {MIN_LENGTH} ký tự.</p>}
+                 autoComplete="new-password" className={field} placeholder={t('reset.minPlaceholder', { count: MIN_LENGTH })} />
+          {tooShort && <p className="mt-1 text-xs text-accent-text">{t('reset.tooShort', { count: MIN_LENGTH })}</p>}
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-semibold text-fg-muted">Nhập lại mật khẩu</label>
+          <label className="mb-1 block text-xs font-semibold text-fg-muted">{t('reset.confirmPassword')}</label>
           <input type={show ? 'text' : 'password'} value={pw2} onChange={e => setPw2(e.target.value)}
-                 autoComplete="new-password" className={field} placeholder="Nhập lại để xác nhận" />
-          {mismatch && <p className="mt-1 text-xs text-accent-text">Hai mật khẩu chưa khớp.</p>}
+                 autoComplete="new-password" className={field} placeholder={t('reset.confirmPlaceholder')} />
+          {mismatch && <p className="mt-1 text-xs text-accent-text">{t('reset.mismatch')}</p>}
         </div>
 
         <label className="flex items-center gap-2 text-xs text-fg-muted">
           <input type="checkbox" checked={show} onChange={e => setShow(e.target.checked)} />
-          Hiện mật khẩu
+          {t('reset.show')}
         </label>
 
         {error && <p className="text-sm text-danger">{error}</p>}
@@ -118,7 +122,7 @@ export default function ResetPasswordPage() {
         <button type="submit" disabled={!canSubmit}
           className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-bold text-accent-fg
                      disabled:opacity-40 disabled:cursor-not-allowed">
-          {busy ? 'Đang lưu…' : 'Đổi mật khẩu'}
+          {busy ? t('reset.saving') : t('reset.submit')}
         </button>
       </form>
     </div>

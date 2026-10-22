@@ -6,17 +6,20 @@ import {
 } from 'lucide-react';
 import EmptyState from '../components/shared/EmptyState';
 import { usePlans } from '../lib/usePlans';
+import { useTranslation } from 'react-i18next';
+import i18n, { getLang } from '../i18n';
 
 const API = import.meta.env.VITE_API_URL || '';
 
-const JOB_TYPE_LABELS   = { single: 'URL Đơn', channel: 'Kênh / Playlist', keyword: 'Từ Khóa' };
-const SCHEDULE_LABELS   = { once: 'Một lần', daily: 'Hằng ngày', weekly: 'Hằng tuần' };
-const WEEKDAY_LABELS    = ['Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy','Chủ Nhật'];
-const DUP_LABELS        = { off: 'Không lọc trùng', url_24h: 'Bỏ qua URL 24h', canonical_id: 'Bỏ qua ID video' };
+// Labels live in locales/*/schedule.json (jobType.* / schedType.* / weekday.* / dup.*); only keys here.
+const JOB_TYPE_KEYS = ['single', 'channel', 'keyword'];
+const SCHEDULE_KEYS = ['once', 'daily', 'weekly'];
+const WEEKDAY_KEYS  = [0, 1, 2, 3, 4, 5, 6];
+const DUP_KEYS      = ['off', 'url_24h', 'canonical_id'];
 
 function fmtDatetime(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString('vi-VN', {
+  return new Date(iso).toLocaleString(getLang() === 'en' ? 'en-US' : 'vi-VN', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
@@ -25,16 +28,17 @@ function fmtDatetime(iso) {
 function timeUntil(iso) {
   if (!iso) return null;
   const diff = new Date(iso) - Date.now();
-  if (diff <= 0) return 'Sắp chạy';
+  if (diff <= 0) return i18n.t('soon', { ns: 'schedule' });
   const h = Math.floor(diff / 3_600_000);
   const m = Math.floor((diff % 3_600_000) / 60_000);
-  if (h > 24) return `${Math.floor(h / 24)} ngày nữa`;
-  if (h > 0)  return `${h}h ${m}m nữa`;
-  return `${m} phút nữa`;
+  if (h > 24) return i18n.t('inDays', { ns: 'schedule', count: Math.floor(h / 24) });
+  if (h > 0)  return i18n.t('inHoursMinutes', { ns: 'schedule', h, m });
+  return i18n.t('inMinutes', { ns: 'schedule', count: m });
 }
 
 // ── Create panel ─────────────────────────────────────────────────────────────
 function CreatePanel({ collections, onCreated, onClose }) {
+  const { t } = useTranslation('schedule');
   const { session } = useAuth();
   const [jobType,    setJobType]    = useState('single');
   const [schedType,  setSchedType]  = useState('once');
@@ -77,10 +81,10 @@ function CreatePanel({ collections, onCreated, onClose }) {
   function validateInput() {
     if (jobType !== 'keyword') {
       const v = url.trim();
-      if (!v) { setUrlErr('Vui lòng nhập URL.'); return false; }
-      if (!/^https?:\/\//i.test(v)) { setUrlErr('URL phải bắt đầu bằng https://'); return false; }
+      if (!v) { setUrlErr(t('errUrlRequired')); return false; }
+      if (!/^https?:\/\//i.test(v)) { setUrlErr(t('errUrlHttps')); return false; }
     } else {
-      if (!keyword.trim()) { setError('Vui lòng nhập từ khóa.'); return false; }
+      if (!keyword.trim()) { setError(t('errKeywordRequired')); return false; }
     }
     return true;
   }
@@ -113,7 +117,7 @@ function CreatePanel({ collections, onCreated, onClose }) {
         body: JSON.stringify(body),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.detail?.user_message || d.detail?.message || d.detail || 'Lỗi tạo lịch');
+      if (!r.ok) throw new Error(d.detail?.user_message || d.detail?.message || d.detail || t('errCreate'));
       onCreated(d);
       onClose();
     } catch (e) { setError(e.message); }
@@ -123,18 +127,18 @@ function CreatePanel({ collections, onCreated, onClose }) {
   return (
     <div className="bg-surface border border-line rounded-2xl p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-bold text-fg">Tạo Lịch Tải Mới</h3>
+        <h3 className="font-bold text-fg">{t('createTitle')}</h3>
         <button onClick={onClose} className="text-fg-muted hover:text-fg cursor-pointer"><X className="w-5 h-5" /></button>
       </div>
 
       {/* Job type */}
       <div>
-        <label className="text-xs text-fg-muted mb-1.5 block">Loại Job</label>
+        <label className="text-xs text-fg-muted mb-1.5 block">{t('jobTypeLabel')}</label>
         <div className="grid grid-cols-3 gap-2">
-          {Object.entries(JOB_TYPE_LABELS).map(([k, v]) => (
+          {JOB_TYPE_KEYS.map(k => (
             <button key={k} onClick={() => { setJobType(k); setUrlErr(''); }}
               className={`py-2 rounded-lg text-sm cursor-pointer border transition-colors ${jobType === k ? 'border-accent/50 bg-accent-soft text-accent-text' : 'border-line text-fg-muted hover:border-line-strong'}`}>
-              {v}
+              {t(`jobType.${k}`)}
             </button>
           ))}
         </div>
@@ -144,7 +148,7 @@ function CreatePanel({ collections, onCreated, onClose }) {
       {jobType !== 'keyword' ? (
         <div>
           <label className="text-xs text-fg-muted mb-1 block">
-            {jobType === 'single' ? 'URL Video' : 'URL Kênh / Playlist'}
+            {jobType === 'single' ? t('urlVideo') : t('urlChannel')}
           </label>
           <input
             value={url}
@@ -157,9 +161,9 @@ function CreatePanel({ collections, onCreated, onClose }) {
       ) : (
         <div className="space-y-2">
           <div>
-            <label className="text-xs text-fg-muted mb-1 block">Từ Khóa</label>
+            <label className="text-xs text-fg-muted mb-1 block">{t('keywordLabel')}</label>
             <input value={keyword} onChange={e => setKeyword(e.target.value)}
-              placeholder="VD: react tutorial 2024"
+              placeholder={t('keywordPlaceholder')}
               className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:border-accent/50"
             />
           </div>
@@ -171,7 +175,7 @@ function CreatePanel({ collections, onCreated, onClose }) {
             </select>
             <input type="number" min={1} max={20} value={kwCount} onChange={e => setKwCount(+e.target.value)}
               className="w-20 bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none"
-              title="Số video tối đa"
+              title={t('maxVideos')}
             />
           </div>
         </div>
@@ -179,12 +183,12 @@ function CreatePanel({ collections, onCreated, onClose }) {
 
       {/* Schedule type */}
       <div>
-        <label className="text-xs text-fg-muted mb-1.5 block">Lịch Chạy</label>
+        <label className="text-xs text-fg-muted mb-1.5 block">{t('scheduleLabel')}</label>
         <div className="grid grid-cols-3 gap-2">
-          {Object.entries(SCHEDULE_LABELS).map(([k, v]) => (
+          {SCHEDULE_KEYS.map(k => (
             <button key={k} onClick={() => setSchedType(k)}
               className={`py-2 rounded-lg text-sm cursor-pointer border transition-colors ${schedType === k ? 'border-accent/50 bg-accent-soft text-accent-text' : 'border-line text-fg-muted hover:border-line-strong'}`}>
-              {v}
+              {t(`schedType.${k}`)}
             </button>
           ))}
         </div>
@@ -194,7 +198,7 @@ function CreatePanel({ collections, onCreated, onClose }) {
       <div className="flex gap-3">
         {schedType !== 'once' && (
           <div className="flex-1">
-            <label className="text-xs text-fg-muted mb-1 block">Giờ chạy (UTC)</label>
+            <label className="text-xs text-fg-muted mb-1 block">{t('runAtUtc')}</label>
             <input type="time" value={runAt} onChange={e => setRunAt(e.target.value)}
               className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none cursor-pointer"
             />
@@ -202,16 +206,16 @@ function CreatePanel({ collections, onCreated, onClose }) {
         )}
         {schedType === 'weekly' && (
           <div className="flex-1">
-            <label className="text-xs text-fg-muted mb-1 block">Thứ</label>
+            <label className="text-xs text-fg-muted mb-1 block">{t('weekdayLabel')}</label>
             <select value={weekday} onChange={e => setWeekday(+e.target.value)}
               className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg-2 focus:outline-none cursor-pointer">
-              {WEEKDAY_LABELS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+              {WEEKDAY_KEYS.map(i => <option key={i} value={i}>{t(`weekday.${i}`)}</option>)}
             </select>
           </div>
         )}
         {schedType === 'once' && (
           <div className="flex-1">
-            <label className="text-xs text-fg-muted mb-1 block">Thời điểm chạy</label>
+            <label className="text-xs text-fg-muted mb-1 block">{t('runTime')}</label>
             <input type="datetime-local" value={nextRun} onChange={e => setNextRun(e.target.value)}
               className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none cursor-pointer"
             />
@@ -220,25 +224,25 @@ function CreatePanel({ collections, onCreated, onClose }) {
       </div>
 
       {schedType !== 'once' && nextRun && (
-        <p className="text-xs text-fg-muted">Lần chạy tiếp theo: {fmtDatetime(nextRun)}</p>
+        <p className="text-xs text-fg-muted">{t('nextRunLine', { when: fmtDatetime(nextRun) })}</p>
       )}
 
       {/* Duplicate suppression */}
       <div>
-        <label className="text-xs text-fg-muted mb-1 block">Lọc video trùng</label>
+        <label className="text-xs text-fg-muted mb-1 block">{t('dupLabel')}</label>
         <select value={dupMode} onChange={e => setDupMode(e.target.value)}
           className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg-2 focus:outline-none cursor-pointer">
-          {Object.entries(DUP_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          {DUP_KEYS.map(k => <option key={k} value={k}>{t(`dup.${k}`)}</option>)}
         </select>
       </div>
 
       {/* Auto collection */}
       {collections.length > 0 && (
         <div>
-          <label className="text-xs text-fg-muted mb-1 block">Tự động thêm vào collection (tuỳ chọn)</label>
+          <label className="text-xs text-fg-muted mb-1 block">{t('autoCollection')}</label>
           <select value={autoCollId} onChange={e => setAutoCollId(e.target.value)}
             className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg-2 focus:outline-none cursor-pointer">
-            <option value="">— Không —</option>
+            <option value="">{t('none')}</option>
             {collections.map(c => <option key={c.id} value={c.id}>{c.icon || '📁'} {c.name}</option>)}
           </select>
         </div>
@@ -248,7 +252,7 @@ function CreatePanel({ collections, onCreated, onClose }) {
 
       <button onClick={handleCreate} disabled={loading}
         className="w-full py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm hover:opacity-90 transition disabled:opacity-50 cursor-pointer">
-        {loading ? 'Đang tạo...' : 'Tạo Lịch Tải'}
+        {loading ? t('creating') : t('createBtn')}
       </button>
     </div>
   );
@@ -256,6 +260,7 @@ function CreatePanel({ collections, onCreated, onClose }) {
 
 // ── Schedule row ──────────────────────────────────────────────────────────────
 function ScheduleRow({ job, onDelete, onToggle, onRunNow }) {
+  const { t } = useTranslation('schedule');
   const [runLoading, setRunLoading] = useState(false);
   const [copyDone,   setCopyDone]   = useState(false);
   const isActive  = job.is_active;
@@ -281,18 +286,18 @@ function ScheduleRow({ job, onDelete, onToggle, onRunNow }) {
       {/* Top row: badges + source */}
       <div className="flex items-start gap-2 flex-wrap">
         <span className="text-xs font-bold px-2 py-0.5 rounded bg-surface-2 text-fg-2 shrink-0">
-          {JOB_TYPE_LABELS[job.job_type] || job.job_type}
+          {JOB_TYPE_KEYS.includes(job.job_type) ? t(`jobType.${job.job_type}`) : job.job_type}
         </span>
         <span className="text-xs px-2 py-0.5 rounded bg-surface-2 text-fg-muted shrink-0">
-          {SCHEDULE_LABELS[job.schedule_type] || job.schedule_type}
+          {SCHEDULE_KEYS.includes(job.schedule_type) ? t(`schedType.${job.schedule_type}`) : job.schedule_type}
         </span>
         {job.duplicate_suppression && job.duplicate_suppression !== 'off' && (
           <span className="text-xs px-2 py-0.5 rounded bg-surface-2 text-fg-2 border border-line shrink-0">
-            {DUP_LABELS[job.duplicate_suppression]}
+            {DUP_KEYS.includes(job.duplicate_suppression) ? t(`dup.${job.duplicate_suppression}`) : undefined}
           </span>
         )}
         {!isActive && (
-          <span className="text-xs px-2 py-0.5 rounded bg-surface-2 text-fg-muted shrink-0">Tạm dừng</span>
+          <span className="text-xs px-2 py-0.5 rounded bg-surface-2 text-fg-muted shrink-0">{t('paused')}</span>
         )}
       </div>
 
@@ -300,7 +305,7 @@ function ScheduleRow({ job, onDelete, onToggle, onRunNow }) {
       <div className="flex items-center gap-1.5 min-w-0">
         <p className="text-sm text-fg truncate flex-1">{source || JSON.stringify(job.input_payload)}</p>
         {source && (
-          <button onClick={handleCopySource} title="Sao chép nguồn"
+          <button onClick={handleCopySource} title={t('copySource')}
             className="flex-shrink-0 p-1 rounded text-fg-muted hover:text-fg-2 cursor-pointer transition-colors">
             {copyDone ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
@@ -312,7 +317,7 @@ function ScheduleRow({ job, onDelete, onToggle, onRunNow }) {
         {/* Next run */}
         <span className="flex items-center gap-1 text-fg-muted">
           <Clock className="w-3 h-3" />
-          Lần tới: <span className="text-fg-2">{fmtDatetime(job.next_run_at)}</span>
+          {t('nextLabel')} <span className="text-fg-2">{fmtDatetime(job.next_run_at)}</span>
           {job.is_active && job.next_run_at && (
             <span className="text-fg-muted ml-1">({timeUntil(job.next_run_at)})</span>
           )}
@@ -336,7 +341,7 @@ function ScheduleRow({ job, onDelete, onToggle, onRunNow }) {
 
       {/* Run count */}
       {job.run_count > 0 && (
-        <p className="text-[11px] text-fg-muted">Đã chạy {job.run_count} lần</p>
+        <p className="text-[11px] text-fg-muted">{t('runCount', { count: job.run_count })}</p>
       )}
 
       {/* Actions */}
@@ -345,13 +350,13 @@ function ScheduleRow({ job, onDelete, onToggle, onRunNow }) {
         <button onClick={handleRunNow} disabled={runLoading}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-accent/30 text-accent-text text-xs font-bold hover:bg-accent-soft transition-colors cursor-pointer disabled:opacity-50">
           {runLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-          Chạy ngay
+          {t('runNow')}
         </button>
 
         {/* Pause / resume */}
         <button onClick={() => onToggle(job.id)}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors ${isActive ? 'border-line-strong text-fg-muted hover:text-fg' : 'border-success/30 text-success hover:bg-success-soft'}`}>
-          {isActive ? <><Pause className="w-3.5 h-3.5" /> Tạm dừng</> : <><Play className="w-3.5 h-3.5" /> Tiếp tục</>}
+          {isActive ? <><Pause className="w-3.5 h-3.5" /> {t('paused')}</> : <><Play className="w-3.5 h-3.5" /> {t('resume')}</>}
         </button>
 
         {/* Delete */}
@@ -366,6 +371,7 @@ function ScheduleRow({ job, onDelete, onToggle, onRunNow }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function SchedulePage() {
+  const { t } = useTranslation('schedule');
   const { session } = useAuth();
   const { free: freePlan, pro: proPlan } = usePlans();
   const [schedules,   setSchedules]   = useState([]);
@@ -392,7 +398,7 @@ export default function SchedulePage() {
   useEffect(() => { fetchSchedules(); fetchCollections(); }, []);
 
   async function handleDelete(id) {
-    if (!confirm('Xóa lịch tải này?')) return;
+    if (!confirm(t('confirmDelete'))) return;
     await fetch(`${API}/api/v1/schedule/${id}`, { method: 'DELETE', headers });
     setSchedules(prev => prev.filter(s => s.id !== id));
   }
@@ -409,10 +415,10 @@ export default function SchedulePage() {
     const r = await fetch(`${API}/api/v1/schedule/${id}/run`, { method: 'POST', headers });
     const d = await r.json();
     if (r.ok) {
-      setRunMsg(d.message || 'Đã kích hoạt chạy ngay.');
+      setRunMsg(d.message || t('runTriggered'));
       setSchedules(prev => prev.map(s => s.id === id ? { ...s, last_run_status: 'running' } : s));
     } else {
-      setRunMsg(d.detail?.user_message || d.detail?.message || d.detail || 'Không thể chạy ngay.');
+      setRunMsg(d.detail?.user_message || d.detail?.message || d.detail || t('runFailed'));
     }
     setTimeout(() => setRunMsg(''), 4000);
   }
@@ -425,13 +431,13 @@ export default function SchedulePage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-fg">Lịch Tải</h1>
-          <p className="text-sm text-fg-muted mt-1">Tự động tải video theo lịch đặt trước</p>
+          <h1 className="text-2xl font-bold text-fg">{t('title')}</h1>
+          <p className="text-sm text-fg-muted mt-1">{t('subtitle')}</p>
         </div>
         <button onClick={() => setShowCreate(s => !s)}
           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent text-accent-fg font-bold text-sm hover:opacity-90 transition cursor-pointer">
           <Plus className="w-4 h-4" />
-          Tạo lịch mới
+          {t('newSchedule')}
         </button>
       </div>
 
@@ -439,7 +445,7 @@ export default function SchedulePage() {
       <div className="mb-4 px-4 py-2.5 bg-surface-2 border border-line rounded-xl text-xs text-fg-muted flex items-center gap-2">
         <Calendar className="w-4 h-4 text-accent-text" />
         {/* wording: BA review */}
-        {freePlan && proPlan ? `Free: tối đa ${freePlan.schedules} lịch · Pro: tối đa ${proPlan.schedules} lịch · ` : ''}Scanner chạy mỗi 60 giây
+        {freePlan && proPlan ? t('tierHint', { free: freePlan.schedules, pro: proPlan.schedules }) : t('tierHintScannerOnly')}
       </div>
 
       {/* Run-now feedback */}
@@ -461,16 +467,16 @@ export default function SchedulePage() {
       )}
 
       {loading && schedules.length === 0 ? (
-        <div className="flex justify-center py-12 text-fg-muted text-sm">Đang tải...</div>
+        <div className="flex justify-center py-12 text-fg-muted text-sm">{t('loading')}</div>
       ) : schedules.length === 0 ? (
         <EmptyState
           icon={<Calendar className="w-12 h-12" />}
-          title="Chưa có lịch tải nào"
-          body='Nhấn "Tạo lịch mới" để tự động tải video theo giờ đặt trước.'
+          title={t('emptyTitle')}
+          body={t('emptyBody')}
           action={
             <button onClick={() => setShowCreate(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent-soft border border-accent/30 text-accent-text text-sm font-bold hover:bg-accent/20 transition cursor-pointer">
-              <Plus className="w-4 h-4" /> Tạo lịch đầu tiên
+              <Plus className="w-4 h-4" /> {t('createFirst')}
             </button>
           }
         />
@@ -479,7 +485,7 @@ export default function SchedulePage() {
           {active.length > 0 && (
             <div>
               <p className="text-xs font-bold text-fg-muted uppercase tracking-wider mb-2">
-                Đang hoạt động ({active.length})
+                {t('activeHeading', { count: active.length })}
               </p>
               <div className="space-y-3">
                 {active.map(s => (
@@ -491,7 +497,7 @@ export default function SchedulePage() {
           {paused.length > 0 && (
             <div>
               <p className="text-xs font-bold text-fg-muted uppercase tracking-wider mb-2">
-                Đã tạm dừng ({paused.length})
+                {t('pausedHeading', { count: paused.length })}
               </p>
               <div className="space-y-3">
                 {paused.map(s => (

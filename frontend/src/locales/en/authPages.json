@@ -1,0 +1,40 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "reset": {
+    "errFallback": "Couldn't change the password.",
+    "doneTitle": "Password changed",
+    "doneBody": "You can use your new password right away.",
+    "home": "Back to home",
+    "title": "Set a new password",
+    "subtitle": "Enter a new password for your account.",
+    "linkUnusable": "This link can't be used: {{error}}",
+    "linkHint": "A password reset link works only once and expires. Please request a new one.",
+    "noSession": "No password reset session found. Please open this page from the link in your email.",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm password",
+    "confirmPlaceholder": "Re-enter to confirm",
+    "mismatch": "The two passwords don't match.",
+    "show": "Show password",
+    "saving": "Saving…",
+    "submit": "Change password",
+    "minPlaceholder_one": "At least {{count}} character",
+    "minPlaceholder_other": "At least {{count}} characters",
+    "tooShort_one": "At least {{count}} character required.",
+    "tooShort_other": "At least {{count}} characters required."
+  },
+  "desktop": {
+    "title": "Sign in to the VidGrab app",
+    "invalidLink": "The sign-in link is invalid or has been altered. Open the VidGrab app on your computer and click “Sign in with browser” again.",
+    "redirecting": "Returning to the VidGrab app…",
+    "redirectHint": "If your browser says it can't connect, reopen the VidGrab app and click “Sign in with browser” again.",
+    "subtitle": "Sign in to connect the VidGrab desktop app to your account.",
+    "notice": "Use this page only right after you clicked “Sign in with browser” in the VidGrab app. After you sign in, the browser sends your sign-in details straight back to the app on this same computer.",
+    "emailPlaceholder": "you@example.com",
+    "password": "Password",
+    "signingIn": "Signing in…",
+    "submit": "Sign in and return to the app",
+    "noAccount": "Don't have an account?",
+    "signUp": "Sign up",
+    "forgot": "Forgot password?"
+  }
+}

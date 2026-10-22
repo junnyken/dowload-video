@@ -1,0 +1,38 @@
+{
+  "title": "Kết nối Telegram Bot",
+  "loginPrompt": "Đăng nhập VidGrab để kết nối tài khoản với Telegram Bot.",
+  "login": "Đăng nhập",
+  "unlinkConfirm": "Xác nhận huỷ kết nối Telegram?",
+  "unlink": "Huỷ kết nối",
+  "processing": "Đang xử lý...",
+  "linked": {
+    "title": "Đã kết nối",
+    "desc": "Tài khoản VidGrab của bạn đã được liên kết với Telegram Bot.",
+    "relinkHint": "Có vẻ bạn đang muốn kết nối lại. Nhấn \"Cập nhật kết nối\" để liên kết với phiên Telegram mới.",
+    "updating": "Đang cập nhật...",
+    "update": "Cập nhật kết nối"
+  },
+  "ready": {
+    "title": "Kết nối tài khoản VidGrab",
+    "desc": "Kết nối để đồng bộ quota và tính năng Pro với Telegram Bot.",
+    "confirm": "Xác nhận kết nối"
+  },
+  "none": {
+    "title": "Chưa kết nối Telegram",
+    "desc": "Mở Telegram Bot và dùng lệnh <code>/link</code> để nhận link kết nối."
+  },
+  "success": {
+    "title": "Kết nối thành công!",
+    "desc": "Tài khoản VidGrab đã được liên kết với Telegram Bot. Quota và tính năng Pro sẽ đồng bộ tự động.",
+    "home": "Về trang chủ"
+  },
+  "unlinked": {
+    "title": "Đã huỷ kết nối",
+    "desc": "Telegram Bot đã bị ngắt kết nối khỏi tài khoản VidGrab của bạn."
+  },
+  "error": {
+    "title": "Đã xảy ra lỗi",
+    "retryHint": "Vui lòng thử lại.",
+    "retry": "Thử lại"
+  }
+}

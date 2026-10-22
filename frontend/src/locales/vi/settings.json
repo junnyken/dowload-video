@@ -1,0 +1,101 @@
+{
+  "title": "Settings",
+  "subtitle": "Cài đặt kết nối, thông báo, dữ liệu, và API",
+  "api": {
+    "title": "API Connection",
+    "desc": "Trạng thái kết nối backend",
+    "checking": "Đang kiểm tra…",
+    "ok": "Kết nối tốt",
+    "fail": "Không kết nối được",
+    "backendVersion": "Phiên bản backend:"
+  },
+  "notif": {
+    "title": "Thông báo trình duyệt",
+    "desc": "Nhận thông báo khi tải xong hoặc thất bại",
+    "status": "Trạng thái:",
+    "unsupported": "Trình duyệt không hỗ trợ",
+    "on": "Đã bật",
+    "denied": "Đã từ chối (cài đặt trình duyệt)",
+    "off": "Chưa bật",
+    "telegram": "Thông báo Telegram cho operator được cấu hình qua biến môi trường server.",
+    "reenable": "Để bật lại, mở cài đặt trình duyệt → Site Permissions → Notifications → cho phép trang này."
+  },
+  "data": {
+    "title": "Dữ liệu & Lưu trữ",
+    "desc": "Thời hạn lưu giữ từng loại dữ liệu",
+    "exportHint": "Xuất lịch sử: đăng nhập → History → nút <b>Xuất CSV/JSON</b>.",
+    "rules": {
+      "temp": {
+        "label": "File tải về (chưa ghim)",
+        "value": "~60 phút",
+        "note": "Tự xóa sau khi tải xong. Ghim vào Archive để giữ lại."
+      },
+      "pinned": {
+        "label": "File đã ghim (Archive)",
+        "days": "{{days}} ngày",
+        "noteBoth": "Free: {{free}}. Pro: {{pro}}. Ghim lại để gia hạn.",
+        "noteDefault": "Hết hạn ghim thì file bị xóa, metadata vẫn còn.",
+        "pinNote": "{{pins}} file, giữ {{days}} ngày"
+      },
+      "exportFree": {
+        "label": "Xuất lịch sử (Free)",
+        "value": "30 ngày",
+        "note": "Xuất CSV/JSON trong 30 ngày gần nhất."
+      },
+      "exportPro": {
+        "label": "Xuất lịch sử (Pro)",
+        "value": "365 ngày",
+        "note": "Xuất CSV/JSON trong 365 ngày gần nhất."
+      },
+      "meta": {
+        "label": "Metadata Archive",
+        "value": "Vô hạn",
+        "note": "Dữ liệu mô tả giữ nguyên dù file đã hết hạn."
+      }
+    }
+  },
+  "access": {
+    "title": "API Access",
+    "desc": "Tích hợp VidGrab vào công cụ của bạn",
+    "docs": "API Docs",
+    "regenerate": "Tạo key mới",
+    "revoke": "Hủy key",
+    "header": "Dùng header <c>{{header}}</c> trong mọi API request.",
+    "none": "Chưa có API key. Tạo để dùng Public API.",
+    "creating": "Đang tạo…",
+    "create": "Tạo API Key",
+    "needLogin": "Cần đăng nhập để tạo API key.",
+    "confirmRevoke": "Hủy API key? Các integration đang dùng key này sẽ bị ngắt."
+  },
+  "info": {
+    "title": "Thông tin ứng dụng",
+    "desc": "Phiên bản, tương thích, liên hệ",
+    "compat": "Tương thích",
+    "compatOk": "✓ Frontend ↔ Backend",
+    "compatUnknown": "Chưa xác định",
+    "support": "Hỗ trợ"
+  },
+  "prefs": {
+    "title": "Preferences",
+    "subtitle": "Cài đặt mặc định khi tải — sync theo tài khoản",
+    "quality": "Chất lượng mặc định",
+    "q": {
+      "video": "MP4 HD (tốt nhất ≤1080p)",
+      "mp4_4k": "MP4 4K (tốt nhất ≤4K)",
+      "mp3_320": "MP3 320kbps",
+      "mp3_128": "MP3 128kbps"
+    },
+    "defaults": "Tùy chọn mặc định",
+    "watermark": "Xoá watermark",
+    "watermarkDesc": "Tự động bật khi tải TikTok / Douyin",
+    "subs": "Tải phụ đề",
+    "subsDesc": "Kèm .srt nếu video có phụ đề",
+    "bulk": "Số lượng mặc định (Bulk)",
+    "theme": "Giao diện",
+    "dark": "🌙 Tối",
+    "light": "☀️ Sáng",
+    "saving": "Đang lưu...",
+    "saved": "Đã lưu!",
+    "save": "Lưu preferences"
+  }
+}

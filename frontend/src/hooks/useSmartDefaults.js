@@ -19,6 +19,7 @@
  */
 
 import { useMemo, useCallback } from 'react';
+import i18n from '../i18n';
 
 // ── Platform detection ────────────────────────────────────────────────────────
 
@@ -89,7 +90,7 @@ export const QUICK_ACTIONS = {
     label: 'MP3',
     icon: '🎵',
     settings: { quality: 'mp3_128' },
-    description: 'Trích âm thanh MP3',
+    get description() { return i18n.t('quickActions.mp3_fast.description', { ns: 'common' }); },
     tier: 'free',
   },
   mp3_hq: {
@@ -97,7 +98,7 @@ export const QUICK_ACTIONS = {
     label: 'MP3 HQ',
     icon: '🎵',
     settings: { quality: 'mp3_320' },
-    description: 'MP3 chất lượng cao 320kbps',
+    get description() { return i18n.t('quickActions.mp3_hq.description', { ns: 'common' }); },
     tier: 'pro',
   },
   video_hd: {
@@ -110,10 +111,10 @@ export const QUICK_ACTIONS = {
   },
   no_watermark: {
     id: 'no_watermark',
-    label: 'Sạch WM',
+    get label() { return i18n.t('quickActions.no_watermark.label', { ns: 'common' }); },
     icon: '✨',
     settings: { remove_watermark: true, quality: 'video' },
-    description: 'Tải không watermark',
+    get description() { return i18n.t('quickActions.no_watermark.description', { ns: 'common' }); },
     tier: 'free',
   },
   thumbnail: {
@@ -121,7 +122,7 @@ export const QUICK_ACTIONS = {
     label: 'Thumbnail',
     icon: '🖼',
     settings: { quality: 'thumbnail_only' },
-    description: 'Chỉ lấy ảnh thumbnail',
+    get description() { return i18n.t('quickActions.thumbnail.description', { ns: 'common' }); },
     tier: 'free',
   },
   gif_quick: {
@@ -129,7 +130,7 @@ export const QUICK_ACTIONS = {
     label: 'GIF 15s',
     icon: '🎞',
     settings: { quality: 'video', output: 'gif', duration: 15 },
-    description: 'Tạo GIF 15 giây đầu',
+    get description() { return i18n.t('quickActions.gif_quick.description', { ns: 'common' }); },
     tier: 'pro',
   },
 };

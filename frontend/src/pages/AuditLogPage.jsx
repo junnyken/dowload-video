@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Shield, ChevronLeft, ChevronRight, Filter, Download } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { useTranslation } from 'react-i18next';
+import { getLang } from '../i18n';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -9,10 +11,11 @@ const PAGE_SIZE = 50;
 
 function fmtDate(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
+  return new Date(iso).toLocaleString(getLang() === 'en' ? 'en-US' : 'vi-VN', { dateStyle: 'short', timeStyle: 'short' });
 }
 
 export default function AuditLogPage() {
+  const { t } = useTranslation('team');
   const { session } = useAuth();
   const { activeWorkspace, can } = useWorkspace();
   const [logs, setLogs]           = useState([]);
@@ -44,13 +47,13 @@ export default function AuditLogPage() {
       const r = await fetch(`${API}/api/v1/workspaces/${wsId}/audit?${params}`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      if (!r.ok) { setError('Không thể tải audit log.'); return; }
+      if (!r.ok) { setError(t('audit.loadError')); return; }
       const d = await r.json();
       setLogs(d.logs || []);
       setTotal(d.total || 0);
       if (d.action_labels) setActionLabels(d.action_labels);
     } finally { setLoading(false); }
-  }, [wsId, session, can, page, filterAction, filterResource, filterDateFrom, filterDateTo]);
+  }, [wsId, session, can, page, filterAction, filterResource, filterDateFrom, filterDateTo, t]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
@@ -61,7 +64,7 @@ export default function AuditLogPage() {
   if (!activeWorkspace) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-12 text-center text-fg-muted">
-        Chưa có workspace nào.
+        {t('noWorkspace')}
       </div>
     );
   }
@@ -69,7 +72,7 @@ export default function AuditLogPage() {
     return (
       <div className="max-w-4xl mx-auto px-4 py-12 text-center">
         <Shield className="w-8 h-8 text-fg-muted mx-auto mb-3" />
-        <p className="text-fg-muted">Cần quyền Admin để xem audit log.</p>
+        <p className="text-fg-muted">{t('audit.needAdmin')}</p>
       </div>
     );
   }
@@ -78,51 +81,51 @@ export default function AuditLogPage() {
     <div className="max-w-5xl mx-auto px-4 md:px-8 py-8 md:py-12">
       <div className="flex items-center gap-3 mb-6">
         <Shield className="w-5 h-5 text-accent-text" />
-        <h1 className="text-xl font-bold text-fg">Audit Log</h1>
-        <span className="ml-auto text-xs text-fg-muted">{total.toLocaleString()} sự kiện</span>
+        <h1 className="text-xl font-bold text-fg">{t('audit.title')}</h1>
+        <span className="ml-auto text-xs text-fg-muted">{t('audit.eventCount', { count: total, n: total.toLocaleString() })}</span>
       </div>
 
       {/* Filters */}
       <div className="bg-surface-2 rounded-xl border border-line p-4 mb-5">
         <div className="flex flex-wrap gap-3 items-end">
           <div>
-            <label className="block text-xs text-fg-muted mb-1">Hành động</label>
+            <label className="block text-xs text-fg-muted mb-1">{t('audit.action')}</label>
             <select
               value={filterAction}
               onChange={e => setFilterAction(e.target.value)}
               className="bg-surface-2 border border-line-strong rounded-lg px-2.5 py-1.5 text-fg-2 text-xs focus:outline-none cursor-pointer"
             >
-              <option value="">Tất cả</option>
+              <option value="">{t('audit.all')}</option>
               {Object.entries(actionLabels).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs text-fg-muted mb-1">Loại resource</label>
+            <label className="block text-xs text-fg-muted mb-1">{t('audit.resourceType')}</label>
             <select
               value={filterResource}
               onChange={e => setFilterResource(e.target.value)}
               className="bg-surface-2 border border-line-strong rounded-lg px-2.5 py-1.5 text-fg-2 text-xs focus:outline-none cursor-pointer"
             >
-              <option value="">Tất cả</option>
+              <option value="">{t('audit.all')}</option>
               <option value="archive_item">Archive Item</option>
               <option value="collection">Collection</option>
-              <option value="scheduled_job">Lịch tải</option>
-              <option value="member">Thành viên</option>
-              <option value="invite">Lời mời</option>
+              <option value="scheduled_job">{t('audit.res.scheduled_job')}</option>
+              <option value="member">{t('audit.res.member')}</option>
+              <option value="invite">{t('audit.res.invite')}</option>
               <option value="workspace">Workspace</option>
               <option value="export_job">Export</option>
-              <option value="approval_request">Phê duyệt</option>
+              <option value="approval_request">{t('audit.res.approval_request')}</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-fg-muted mb-1">Từ ngày</label>
+            <label className="block text-xs text-fg-muted mb-1">{t('audit.dateFrom')}</label>
             <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
               className="bg-surface-2 border border-line-strong rounded-lg px-2.5 py-1.5 text-fg-2 text-xs focus:outline-none" />
           </div>
           <div>
-            <label className="block text-xs text-fg-muted mb-1">Đến ngày</label>
+            <label className="block text-xs text-fg-muted mb-1">{t('audit.dateTo')}</label>
             <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
               className="bg-surface-2 border border-line-strong rounded-lg px-2.5 py-1.5 text-fg-2 text-xs focus:outline-none" />
           </div>
@@ -130,7 +133,7 @@ export default function AuditLogPage() {
             onClick={handleFilter}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-soft text-accent-text text-xs font-semibold hover:bg-accent/20 transition-colors cursor-pointer"
           >
-            <Filter className="w-3.5 h-3.5" /> Lọc
+            <Filter className="w-3.5 h-3.5" /> {t('audit.filter')}
           </button>
         </div>
       </div>
@@ -145,7 +148,7 @@ export default function AuditLogPage() {
       ) : logs.length === 0 ? (
         <div className="text-center py-16 text-fg-muted">
           <Shield className="w-8 h-8 mx-auto mb-3 opacity-40" />
-          <p>Không có sự kiện nào.</p>
+          <p>{t('audit.empty')}</p>
         </div>
       ) : (
         <>
@@ -153,9 +156,9 @@ export default function AuditLogPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line bg-surface-2">
-                  <th className="text-left px-4 py-3 text-xs text-fg-muted font-medium whitespace-nowrap">Thời gian</th>
-                  <th className="text-left px-4 py-3 text-xs text-fg-muted font-medium whitespace-nowrap">Hành động</th>
-                  <th className="text-left px-4 py-3 text-xs text-fg-muted font-medium whitespace-nowrap">Người thực hiện</th>
+                  <th className="text-left px-4 py-3 text-xs text-fg-muted font-medium whitespace-nowrap">{t('audit.colTime')}</th>
+                  <th className="text-left px-4 py-3 text-xs text-fg-muted font-medium whitespace-nowrap">{t('audit.action')}</th>
+                  <th className="text-left px-4 py-3 text-xs text-fg-muted font-medium whitespace-nowrap">{t('audit.colActor')}</th>
                   <th className="text-left px-4 py-3 text-xs text-fg-muted font-medium whitespace-nowrap">Resource</th>
                   <th className="text-left px-4 py-3 text-xs text-fg-muted font-medium whitespace-nowrap">IP</th>
                 </tr>
@@ -182,7 +185,7 @@ export default function AuditLogPage() {
           {/* Pagination */}
           <div className="flex items-center justify-between mt-4 px-1">
             <p className="text-xs text-fg-muted">
-              Trang {page}/{totalPages} · {total} sự kiện
+              {t('audit.pageLine', { page, totalPages, count: total })}
             </p>
             <div className="flex gap-2">
               <button

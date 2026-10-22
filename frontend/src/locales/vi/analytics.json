@@ -1,0 +1,20 @@
+{
+  "title": "Analytics",
+  "subtitle": "Thống kê lượt tải theo tài khoản",
+  "proTitle": "Analytics — tính năng Pro",
+  "proDesc": "Nâng cấp Pro để xem analytics chi tiết: lượt tải theo ngày, platform, dung lượng...",
+  "upgrade": "Nâng cấp Pro →",
+  "loadFailed": "Không tải được dữ liệu analytics.",
+  "totalDownloads": "Tổng lượt tải",
+  "inDays": "trong {{days}} ngày",
+  "sizeMb": "Dung lượng (MB)",
+  "total": "tổng cộng",
+  "topPlatform": "Platform phổ biến",
+  "mostUsed": "dùng nhiều nhất",
+  "avgPerDay": "Trung bình/ngày",
+  "downloadsUnit": "lượt tải",
+  "dailyTitle": "Lượt tải theo ngày",
+  "exportCsv": "Export CSV",
+  "byPlatform": "Theo platform",
+  "noData": "Chưa có dữ liệu trong {{days}} ngày qua."
+}

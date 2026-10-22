@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import i18n from '../i18n';
 
 const LOCAL_KEY = 'vg_user_presets';
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
@@ -19,7 +20,7 @@ const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 const SYSTEM_PRESETS = [
   {
     id: 'sys_tiktok_clean',
-    name: 'TikTok sạch watermark',
+    get name() { return i18n.t('presets.sys_tiktok_clean', { ns: 'common' }); },
     platform: 'tiktok',
     settings: { remove_watermark: true, quality: 'video' },
     is_system: true,
@@ -43,7 +44,7 @@ const SYSTEM_PRESETS = [
   },
   {
     id: 'sys_mp3_fast',
-    name: 'Trích âm thanh MP3',
+    get name() { return i18n.t('presets.sys_mp3_fast', { ns: 'common' }); },
     platform: null,
     settings: { quality: 'mp3_128' },
     is_system: true,
@@ -51,7 +52,7 @@ const SYSTEM_PRESETS = [
   },
   {
     id: 'sys_thumbnail',
-    name: 'Chỉ lấy thumbnail',
+    get name() { return i18n.t('presets.sys_thumbnail', { ns: 'common' }); },
     platform: null,
     settings: { quality: 'thumbnail_only' },
     is_system: true,

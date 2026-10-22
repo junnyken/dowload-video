@@ -3,6 +3,8 @@
  * Runs client-side before any fetch — catches obvious mistakes early.
  */
 
+import i18n from '../i18n';
+
 const PLATFORM_PATTERNS = [
   { id: 'youtube',   label: 'YouTube',   re: /youtube\.com\/|youtu\.be\// },
   { id: 'tiktok',    label: 'TikTok',    re: /tiktok\.com\// },
@@ -24,7 +26,7 @@ export function validateUrl(raw) {
   const url = (raw || '').trim();
 
   if (!url) {
-    return { valid: false, platform: null, error: 'Vui lòng nhập URL.' };
+    return { valid: false, platform: null, error: i18n.t('urlValidator.required', { ns: 'common' }) };
   }
 
   // Must start with http(s)://
@@ -32,7 +34,7 @@ export function validateUrl(raw) {
     return {
       valid: false,
       platform: null,
-      error: 'URL phải bắt đầu bằng https:// hoặc http://',
+      error: i18n.t('urlValidator.scheme', { ns: 'common' }),
     };
   }
 
@@ -41,14 +43,14 @@ export function validateUrl(raw) {
   try {
     parsed = new URL(url);
   } catch {
-    return { valid: false, platform: null, error: 'URL không hợp lệ.' };
+    return { valid: false, platform: null, error: i18n.t('urlValidator.invalid', { ns: 'common' }) };
   }
 
   // Reject obviously internal/localhost hosts
   const host = parsed.hostname.toLowerCase();
   const BLOCKED = ['localhost', '127.0.0.1', '0.0.0.0', '::1'];
   if (BLOCKED.some(b => host === b || host.endsWith(`.${b}`))) {
-    return { valid: false, platform: null, error: 'URL không được phép.' };
+    return { valid: false, platform: null, error: i18n.t('urlValidator.blocked', { ns: 'common' }) };
   }
 
   // Detect platform

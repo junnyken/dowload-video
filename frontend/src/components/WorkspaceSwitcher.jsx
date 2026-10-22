@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Building2, ChevronDown, Check, Plus, User, Users, Briefcase } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useAuth } from '../context/AuthContext';
+import { useTranslation } from 'react-i18next';
 
 const TYPE_ICON = {
   personal:   <User    className="w-3.5 h-3.5" />,
@@ -17,6 +18,7 @@ const ROLE_BADGE = {
 };
 
 export default function WorkspaceSwitcher({ onNavigate }) {
+  const { t } = useTranslation('workspace');
   const { workspaces, activeWorkspace, myRole, switchWorkspace, loading } = useWorkspace();
   const { session } = useAuth();
   const [open, setOpen] = useState(false);
@@ -68,7 +70,7 @@ export default function WorkspaceSwitcher({ onNavigate }) {
       >
         <Building2 className="w-3.5 h-3.5 text-fg-muted flex-shrink-0" />
         <span className="truncate font-medium text-xs">
-          {isPersonal ? 'Cá nhân' : activeWorkspace.name}
+          {isPersonal ? t('switcher.personal') : activeWorkspace.name}
         </span>
         <ChevronDown className={`w-3 h-3 text-fg-muted flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -99,7 +101,7 @@ export default function WorkspaceSwitcher({ onNavigate }) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-medium truncate ${isActive ? 'text-fg' : 'text-fg-2'}`}>
-                      {ws.type === 'personal' ? 'Cá nhân' : ws.name}
+                      {ws.type === 'personal' ? t('switcher.personal') : ws.name}
                     </p>
                     <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded border leading-none ${rb.cls}`}>
                       {rb.label}
@@ -120,7 +122,7 @@ export default function WorkspaceSwitcher({ onNavigate }) {
                   value={newName}
                   onChange={e => setNewName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') setCreating(false); }}
-                  placeholder="Tên workspace..."
+                  placeholder={t('switcher.namePlaceholder')}
                   className="flex-1 bg-surface border border-line-strong rounded-lg px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-muted focus:outline-none focus:border-accent/50"
                 />
                 <button
@@ -128,7 +130,7 @@ export default function WorkspaceSwitcher({ onNavigate }) {
                   disabled={creating_busy || !newName.trim()}
                   className="px-2.5 py-1.5 rounded-lg bg-accent-soft text-accent-text text-xs font-bold disabled:opacity-40 hover:bg-accent/20 transition-colors cursor-pointer"
                 >
-                  {creating_busy ? '...' : 'Tạo'}
+                  {creating_busy ? '...' : t('switcher.create')}
                 </button>
               </div>
             ) : (
@@ -137,7 +139,7 @@ export default function WorkspaceSwitcher({ onNavigate }) {
                 className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-2 text-xs transition-colors cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Tạo workspace mới
+                {t('switcher.createNew')}
               </button>
             )}
           </div>
@@ -150,7 +152,7 @@ export default function WorkspaceSwitcher({ onNavigate }) {
                 className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-2 text-xs transition-colors cursor-pointer"
               >
                 <Building2 className="w-3.5 h-3.5" />
-                Cài đặt Workspace
+                {t('switcher.settings')}
               </button>
             </div>
           )}

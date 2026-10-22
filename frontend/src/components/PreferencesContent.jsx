@@ -1,17 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Settings2, Save, Loader2, CheckCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 
-const QUALITY_OPTIONS = [
-  { value: 'video',   label: 'MP4 HD (tốt nhất ≤1080p)' },
-  { value: 'mp4_4k',  label: 'MP4 4K (tốt nhất ≤4K)' },
-  { value: 'mp3_320', label: 'MP3 320kbps' },
-  { value: 'mp3_128', label: 'MP3 128kbps' },
-];
+// Labels: locales/*/settings.json (prefs.q.<value>).
+const QUALITY_OPTIONS = ['video', 'mp4_4k', 'mp3_320', 'mp3_128'];
 
 const BULK_PRESETS = [10, 20, 50, 100, 200];
 
 export default function PreferencesContent() {
+  const { t } = useTranslation('settings');
   const { preferences, savePreferences } = useAuth();
   const [form, setForm]       = useState(null);
   const [saving, setSaving]   = useState(false);
@@ -44,8 +42,8 @@ export default function PreferencesContent() {
           <Settings2 className="w-5 h-5 text-accent-text" />
         </div>
         <div>
-          <h1 className="text-fg font-bold text-lg">Preferences</h1>
-          <p className="text-fg-muted text-xs">Cài đặt mặc định khi tải — sync theo tài khoản</p>
+          <h1 className="text-fg font-bold text-lg">{t('prefs.title')}</h1>
+          <p className="text-fg-muted text-xs">{t('prefs.subtitle')}</p>
         </div>
       </div>
 
@@ -53,35 +51,35 @@ export default function PreferencesContent() {
       <div className="bg-surface-2 border border-line rounded-2xl p-5 space-y-5">
 
         {/* Default quality */}
-        <Section title="Chất lượng mặc định">
+        <Section title={t('prefs.quality')}>
           <div className="grid grid-cols-2 gap-2">
             {QUALITY_OPTIONS.map(opt => (
-              <label key={opt.value}
+              <label key={opt}
                 className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors
-                  ${form.default_quality === opt.value
+                  ${form.default_quality === opt
                     ? 'border-accent/60 bg-accent-soft text-accent-text'
                     : 'border-line-strong text-fg-muted hover:border-line-strong'}`}>
                 <input type="radio" className="accent-accent"
-                  checked={form.default_quality === opt.value}
-                  onChange={() => update('default_quality', opt.value)} />
-                <span className="text-sm">{opt.label}</span>
+                  checked={form.default_quality === opt}
+                  onChange={() => update('default_quality', opt)} />
+                <span className="text-sm">{t(`prefs.q.${opt}`)}</span>
               </label>
             ))}
           </div>
         </Section>
 
         {/* Toggles */}
-        <Section title="Tùy chọn mặc định">
+        <Section title={t('prefs.defaults')}>
           <div className="space-y-3">
             <Toggle
-              label="Xoá watermark"
-              desc="Tự động bật khi tải TikTok / Douyin"
+              label={t('prefs.watermark')}
+              desc={t('prefs.watermarkDesc')}
               checked={form.remove_watermark}
               onChange={v => update('remove_watermark', v)}
             />
             <Toggle
-              label="Tải phụ đề"
-              desc="Kèm .srt nếu video có phụ đề"
+              label={t('prefs.subs')}
+              desc={t('prefs.subsDesc')}
               checked={form.download_subs}
               onChange={v => update('download_subs', v)}
             />
@@ -89,7 +87,7 @@ export default function PreferencesContent() {
         </Section>
 
         {/* Bulk preset */}
-        <Section title="Số lượng mặc định (Bulk)">
+        <Section title={t('prefs.bulk')}>
           <div className="flex gap-2 flex-wrap">
             {BULK_PRESETS.map(n => (
               <button key={n}
@@ -105,16 +103,16 @@ export default function PreferencesContent() {
         </Section>
 
         {/* Theme */}
-        <Section title="Giao diện">
+        <Section title={t('prefs.theme')}>
           <div className="flex gap-2">
-            {['dark', 'light'].map(t => (
-              <button key={t}
-                onClick={() => update('theme_mode', t)}
+            {['dark', 'light'].map(mode => (
+              <button key={mode}
+                onClick={() => update('theme_mode', mode)}
                 className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-colors capitalize
-                  ${form.theme_mode === t
+                  ${form.theme_mode === mode
                     ? 'border-accent/60 bg-accent-soft text-accent-text'
                     : 'border-line-strong text-fg-muted hover:border-line-strong'}`}>
-                {t === 'dark' ? '🌙 Tối' : '☀️ Sáng'}
+                {mode === 'dark' ? t('prefs.dark') : t('prefs.light')}
               </button>
             ))}
           </div>
@@ -128,10 +126,10 @@ export default function PreferencesContent() {
         className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent text-accent-fg font-bold hover:opacity-90 active:scale-[0.98] transition disabled:opacity-50"
       >
         {saving
-          ? <><Loader2 className="w-4 h-4 animate-spin" /> Đang lưu...</>
+          ? <><Loader2 className="w-4 h-4 animate-spin" /> {t('prefs.saving')}</>
           : saved
-          ? <><CheckCircle className="w-4 h-4" /> Đã lưu!</>
-          : <><Save className="w-4 h-4" /> Lưu preferences</>}
+          ? <><CheckCircle className="w-4 h-4" /> {t('prefs.saved')}</>
+          : <><Save className="w-4 h-4" /> {t('prefs.save')}</>}
       </button>
     </div>
   );

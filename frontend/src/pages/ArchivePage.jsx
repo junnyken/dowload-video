@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTranslation } from 'react-i18next';
+import { useLang } from '../i18n';
 import {
   Archive, Star, Trash2, Download, Search, Filter, X, Plus,
   Folder, Clock, RefreshCw, Pin, PinOff,
@@ -9,27 +11,30 @@ import {
 
 // ── Retention badge config ─────────────────────────────────────────
 const RETENTION_BADGE = {
-  temporary:            { label: 'Khả dụng', cls: 'bg-success-soft text-success border-success/30' },
-  pinned:               { label: 'Đã ghim', cls: 'bg-accent-soft text-accent-text border-accent/30' },
-  expired_metadata_only:{ label: 'File hết hạn', cls: 'bg-line text-fg-muted border-line-strong' },
+  temporary:            { labelKey: 'retention.temporary', cls: 'bg-success-soft text-success border-success/30' },
+  pinned:               { labelKey: 'retention.pinned', cls: 'bg-accent-soft text-accent-text border-accent/30' },
+  expired_metadata_only:{ labelKey: 'retention.expired', cls: 'bg-line text-fg-muted border-line-strong' },
 };
 
 function RetentionBadge({ status, pinExpiry }) {
+  const { t } = useTranslation('archive');
+  const lang = useLang();
   const cfg = RETENTION_BADGE[status] || RETENTION_BADGE.temporary;
   const expText = status === 'pinned' && pinExpiry
-    ? ` đến ${new Date(pinExpiry).toLocaleDateString('vi-VN')}`
+    ? t('retention.until', { date: new Date(pinExpiry).toLocaleDateString(lang === 'en' ? 'en-US' : 'vi-VN') })
     : '';
   return (
     <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border ${cfg.cls}`}>
       {status === 'pinned' && <Pin className="w-2.5 h-2.5" />}
       {status === 'expired_metadata_only' && <AlertCircle className="w-2.5 h-2.5" />}
       {status === 'temporary' && <CheckCircle className="w-2.5 h-2.5" />}
-      {cfg.label}{expText}
+      {t(cfg.labelKey)}{expText}
     </span>
   );
 }
 
 function DeleteModal({ item, onClose, onDeleted }) {
+  const { t } = useTranslation('archive');
   const { session } = useAuth();
   const [mode, setMode]     = useState('archive_only');
   const [loading, setLoading] = useState(false);
@@ -37,20 +42,20 @@ function DeleteModal({ item, onClose, onDeleted }) {
   const MODES = [
     {
       id: 'file_only',
-      title: 'Xoá file khỏi máy chủ',
-      desc: 'Giữ lại mục archive, ghi chú, và collection. Bạn vẫn có thể tải lại sau.',
+      title: t('delete.fileOnly.title'),
+      desc: t('delete.fileOnly.desc'),
       danger: false,
     },
     {
       id: 'archive_only',
-      title: 'Xoá khỏi archive',
-      desc: 'Xoá mục khỏi thư viện. File trên server (nếu còn) sẽ tự hết hạn theo lịch thông thường.',
+      title: t('delete.archiveOnly.title'),
+      desc: t('delete.archiveOnly.desc'),
       danger: false,
     },
     {
       id: 'everything',
-      title: 'Xoá toàn bộ',
-      desc: 'Xoá mục archive, ghi chú, collection mapping, và xoá file khỏi disk ngay lập tức.',
+      title: t('delete.everything.title'),
+      desc: t('delete.everything.desc'),
       danger: true,
     },
   ];
@@ -72,8 +77,8 @@ function DeleteModal({ item, onClose, onDeleted }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-surface border border-line rounded-2xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
-        <h3 className="font-bold text-fg mb-1">Xoá "{item.title?.slice(0,40)}"</h3>
-        <p className="text-xs text-fg-muted mb-4">Chọn phạm vi xoá:</p>
+        <h3 className="font-bold text-fg mb-1">{t('delete.title', { title: item.title?.slice(0,40) })}</h3>
+        <p className="text-xs text-fg-muted mb-4">{t('delete.scope')}</p>
         <div className="space-y-2 mb-5">
           {MODES.map(m => (
             <label key={m.id} className={`flex gap-3 p-3 rounded-xl border cursor-pointer transition-all ${mode === m.id ? (m.danger ? 'border-danger/50 bg-danger-soft' : 'border-accent/40 bg-accent-soft') : 'border-line hover:border-line-strong'}`}>
@@ -86,10 +91,10 @@ function DeleteModal({ item, onClose, onDeleted }) {
           ))}
         </div>
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-line text-sm text-fg-muted hover:text-fg cursor-pointer">Huỷ</button>
+          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-line text-sm text-fg-muted hover:text-fg cursor-pointer">{t('delete.cancel')}</button>
           <button onClick={handleDelete} disabled={loading}
             className={`flex-1 py-2 rounded-xl text-sm font-bold cursor-pointer disabled:opacity-50 transition-colors ${mode === 'everything' ? 'bg-danger hover:opacity-90 text-danger-fg' : 'bg-accent text-danger-fg'}`}>
-            {loading ? 'Đang xoá...' : 'Xác nhận xoá'}
+            {loading ? t('delete.deleting') : t('delete.confirm')}
           </button>
         </div>
       </div>
@@ -116,12 +121,13 @@ function fmtDuration(s) {
   return `${m}:${String(sec).padStart(2,'0')}`;
 }
 
-function fmtDate(iso) {
+function fmtDate(iso, lang) {
   if (!iso) return '';
-  return new Date(iso).toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric' });
+  return new Date(iso).toLocaleDateString(lang === 'en' ? 'en-US' : 'vi-VN', { day:'2-digit', month:'2-digit', year:'numeric' });
 }
 
 function CollectionModal({ onClose, onCreated }) {
+  const { t } = useTranslation('archive');
   const { session } = useAuth();
   const [name, setName] = useState('');
   const [color, setColor] = useState('var(--vg-accent)');
@@ -133,7 +139,7 @@ function CollectionModal({ onClose, onCreated }) {
   const COLORS = ['var(--vg-accent)','var(--vg-success)','var(--vg-accent)','var(--vg-danger)','var(--vg-accent)','var(--vg-accent)','var(--vg-accent)','var(--vg-success)'];
 
   async function handleCreate() {
-    if (!name.trim()) return setError('Tên collection không được để trống.');
+    if (!name.trim()) return setError(t('collection.emptyName'));
     setLoading(true); setError('');
     try {
       const r = await fetch(`${API}/api/v1/archive/collections`, {
@@ -142,7 +148,7 @@ function CollectionModal({ onClose, onCreated }) {
         body: JSON.stringify({ name: name.trim(), color, icon }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.detail?.message || d.detail || 'Lỗi');
+      if (!r.ok) throw new Error(d.detail?.message || d.detail || t('collection.errorFallback'));
       onCreated(d);
       onClose();
     } catch (e) { setError(e.message); }
@@ -153,22 +159,22 @@ function CollectionModal({ onClose, onCreated }) {
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-surface border border-line rounded-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
-          <h3 className="text-lg font-bold text-fg">Tạo Collection Mới</h3>
+          <h3 className="text-lg font-bold text-fg">{t('collection.title')}</h3>
           <button onClick={onClose} className="text-fg-muted hover:text-fg cursor-pointer"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className="text-xs text-fg-muted mb-1 block">Tên Collection</label>
+            <label className="text-xs text-fg-muted mb-1 block">{t('collection.nameLabel')}</label>
             <input
               value={name} onChange={e => setName(e.target.value)}
-              placeholder="VD: Tutorial Hay, Nhạc Chill..."
+              placeholder={t('collection.namePlaceholder')}
               className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:border-accent/50"
             />
           </div>
 
           <div>
-            <label className="text-xs text-fg-muted mb-2 block">Icon</label>
+            <label className="text-xs text-fg-muted mb-2 block">{t('collection.iconLabel')}</label>
             <div className="flex gap-2 flex-wrap">
               {EMOJIS.map(e => (
                 <button key={e} onClick={() => setIcon(e)}
@@ -179,7 +185,7 @@ function CollectionModal({ onClose, onCreated }) {
           </div>
 
           <div>
-            <label className="text-xs text-fg-muted mb-2 block">Màu</label>
+            <label className="text-xs text-fg-muted mb-2 block">{t('collection.colorLabel')}</label>
             <div className="flex gap-2">
               {COLORS.map(c => (
                 <button key={c} onClick={() => setColor(c)}
@@ -194,7 +200,7 @@ function CollectionModal({ onClose, onCreated }) {
 
           <button onClick={handleCreate} disabled={loading}
             className="w-full py-2 rounded-xl bg-accent text-accent-fg font-bold text-sm hover:opacity-90 transition disabled:opacity-50 cursor-pointer">
-            {loading ? 'Đang tạo...' : 'Tạo Collection'}
+            {loading ? t('collection.creating') : t('collection.create')}
           </button>
         </div>
       </div>
@@ -203,6 +209,8 @@ function CollectionModal({ onClose, onCreated }) {
 }
 
 function ArchiveCard({ item, collections, onStar, onDelete, onRedownload, onTagFilter, onAddToCollection, onPin, onUnpin }) {
+  const { t } = useTranslation('archive');
+  const lang = useLang();
   const [menu, setMenu] = useState(false);
   const platform = item.platform || 'other';
   const badgeCls = PLATFORM_COLORS[platform] || PLATFORM_COLORS.other;
@@ -233,7 +241,7 @@ function ArchiveCard({ item, collections, onStar, onDelete, onRedownload, onTagF
         {/* Expired overlay */}
         {isExpired && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-            <span className="text-[10px] font-bold text-fg-muted bg-black/70 px-2 py-1 rounded">File hết hạn</span>
+            <span className="text-[10px] font-bold text-fg-muted bg-black/70 px-2 py-1 rounded">{t('retention.expired')}</span>
           </div>
         )}
       </div>
@@ -254,32 +262,32 @@ function ArchiveCard({ item, collections, onStar, onDelete, onRedownload, onTagF
                 <div className="absolute right-0 top-6 z-20 bg-canvas border border-line rounded-lg py-1 w-48 shadow-xl">
                   <button onClick={() => { onRedownload(item.id); setMenu(false); }}
                     className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-fg-2 hover:bg-surface-2 cursor-pointer">
-                    <Download className="w-3.5 h-3.5" /> {isExpired ? 'Tải lại (rehydrate)' : 'Tải lại'}
+                    <Download className="w-3.5 h-3.5" /> {isExpired ? t('card.redownloadRehydrate') : t('card.redownload')}
                   </button>
                   <button onClick={() => { onAddToCollection(item.id); setMenu(false); }}
                     className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-fg-2 hover:bg-surface-2 cursor-pointer">
-                    <Folder className="w-3.5 h-3.5" /> Thêm vào collection
+                    <Folder className="w-3.5 h-3.5" /> {t('card.addToCollection')}
                   </button>
                   {!isExpired && retStatus !== 'pinned' && (
                     <button onClick={() => { onPin(item.file_job_id); setMenu(false); }}
                       className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-accent-text hover:bg-accent-soft cursor-pointer">
-                      <Pin className="w-3.5 h-3.5" /> Ghim file
+                      <Pin className="w-3.5 h-3.5" /> {t('card.pin')}
                     </button>
                   )}
                   {retStatus === 'pinned' && (
                     <button onClick={() => { onUnpin(item.file_job_id); setMenu(false); }}
                       className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-fg-2 hover:bg-surface-2 cursor-pointer">
-                      <PinOff className="w-3.5 h-3.5" /> Bỏ ghim
+                      <PinOff className="w-3.5 h-3.5" /> {t('card.unpin')}
                     </button>
                   )}
                   <a href={item.original_url} target="_blank" rel="noreferrer"
                     className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-fg-2 hover:bg-surface-2 cursor-pointer">
-                    <ExternalLink className="w-3.5 h-3.5" /> Mở link gốc
+                    <ExternalLink className="w-3.5 h-3.5" /> {t('card.openOriginal')}
                   </a>
                   <hr className="border-line my-1" />
                   <button onClick={() => { onDelete(item); setMenu(false); }}
                     className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-danger hover:bg-danger-soft cursor-pointer">
-                    <Trash2 className="w-3.5 h-3.5" /> Xóa...
+                    <Trash2 className="w-3.5 h-3.5" /> {t('card.delete')}
                   </button>
                 </div>
               )}
@@ -327,7 +335,7 @@ function ArchiveCard({ item, collections, onStar, onDelete, onRedownload, onTagF
         )}
 
         <div className="flex items-center justify-between">
-          <p className="text-[10px] text-fg-muted">{fmtDate(item.archived_at)}</p>
+          <p className="text-[10px] text-fg-muted">{fmtDate(item.archived_at, lang)}</p>
           <RetentionBadge status={retStatus} pinExpiry={item.pin_expires_at} />
         </div>
 
@@ -335,7 +343,7 @@ function ArchiveCard({ item, collections, onStar, onDelete, onRedownload, onTagF
         {isExpired && (
           <button onClick={() => onRedownload(item.id)}
             className="w-full py-1.5 rounded-lg border border-accent/30 text-accent-text text-xs font-bold hover:bg-accent-soft cursor-pointer transition-colors flex items-center justify-center gap-1.5">
-            <RefreshCw className="w-3 h-3" /> Tải lại để xem lại
+            <RefreshCw className="w-3 h-3" /> {t('card.redownloadCta')}
           </button>
         )}
       </div>
@@ -344,6 +352,7 @@ function ArchiveCard({ item, collections, onStar, onDelete, onRedownload, onTagF
 }
 
 export default function ArchivePage({ onNavigate }) {
+  const { t } = useTranslation('archive');
   const { session } = useAuth();
   const [items, setItems]           = useState([]);
   const [total, setTotal]           = useState(0);
@@ -429,7 +438,7 @@ export default function ArchivePage({ onNavigate }) {
       ));
     } else {
       setItems(prev => prev.filter(i => i.id !== id));
-      setTotal(t => t - 1);
+      setTotal(n => n - 1);
     }
   }
 
@@ -438,11 +447,11 @@ export default function ArchivePage({ onNavigate }) {
     const r = await fetch(`${API}/api/v1/storage/pin/${jobId}`, { method: 'POST', headers });
     const d = await r.json();
     if (r.ok) {
-      setPinMsg(d.message || 'Đã ghim file.');
+      setPinMsg(d.message || t('page.pinned'));
       setTimeout(() => setPinMsg(''), 4000);
       fetchItems(1);
     } else {
-      setPinMsg(d.detail?.message || d.detail || 'Không thể ghim.');
+      setPinMsg(d.detail?.message || d.detail || t('page.pinFailed'));
       setTimeout(() => setPinMsg(''), 5000);
     }
   }
@@ -451,7 +460,7 @@ export default function ArchivePage({ onNavigate }) {
     if (!jobId) return;
     const r = await fetch(`${API}/api/v1/storage/pin/${jobId}`, { method: 'DELETE', headers });
     const d = await r.json();
-    setPinMsg(d.message || 'Đã bỏ ghim.');
+    setPinMsg(d.message || t('page.unpinned'));
     setTimeout(() => setPinMsg(''), 4000);
     fetchItems(1);
   }
@@ -459,7 +468,7 @@ export default function ArchivePage({ onNavigate }) {
   async function handleRedownload(id) {
     const r = await fetch(`${API}/api/v1/archive/${id}/re-download`, { method: 'POST', headers });
     const d = await r.json();
-    setRedownloadMsg(d.message || 'Đã tạo lại lệnh tải.');
+    setRedownloadMsg(d.message || t('page.redownloadCreated'));
     setTimeout(() => setRedownloadMsg(''), 4000);
   }
 
@@ -472,7 +481,7 @@ export default function ArchivePage({ onNavigate }) {
   }
 
   async function handleDeleteCollection(collId) {
-    if (!confirm('Xóa collection? Items vẫn còn trong archive.')) return;
+    if (!confirm(t('page.confirmDeleteCollection'))) return;
     await fetch(`${API}/api/v1/archive/collections/${collId}`, { method: 'DELETE', headers });
     fetchCollections();
     if (activeView === collId) setActiveView('all');
@@ -491,21 +500,21 @@ export default function ArchivePage({ onNavigate }) {
   const hasMore = items.length < total;
 
   const activeColl = collections.find(c => c.id === activeView);
-  const viewLabel = activeView === 'all' ? `Tất Cả (${total})`
-    : activeView === 'starred' ? 'Đã Gắn Sao'
-    : activeView === 'today' ? 'Hôm Nay'
-    : activeColl ? `${activeColl.icon || '📁'} ${activeColl.name}` : 'Archive';
+  const viewLabel = activeView === 'all' ? t('page.viewAllCount', { total })
+    : activeView === 'starred' ? t('page.viewStarred')
+    : activeView === 'today' ? t('page.viewToday')
+    : activeColl ? `${activeColl.icon || '📁'} ${activeColl.name}` : t('page.viewArchive');
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)] bg-canvas">
       {/* ── Sidebar ──────────────────────────────────────── */}
       <aside className="w-56 shrink-0 border-r border-line p-4 flex flex-col gap-1">
-        <p className="text-[10px] font-bold text-fg-muted uppercase tracking-wider mb-2">Views</p>
+        <p className="text-[10px] font-bold text-fg-muted uppercase tracking-wider mb-2">{t('page.views')}</p>
 
         {[
-          { id: 'all',     label: 'Tất Cả', icon: <Archive className="w-4 h-4" /> },
-          { id: 'starred', label: 'Gắn Sao', icon: <Star className="w-4 h-4" /> },
-          { id: 'today',   label: 'Hôm Nay', icon: <Clock className="w-4 h-4" /> },
+          { id: 'all',     label: t('page.sideAll'), icon: <Archive className="w-4 h-4" /> },
+          { id: 'starred', label: t('page.sideStarred'), icon: <Star className="w-4 h-4" /> },
+          { id: 'today',   label: t('page.sideToday'), icon: <Clock className="w-4 h-4" /> },
         ].map(v => (
           <button key={v.id} onClick={() => { setActiveView(v.id); setPage(1); }}
             className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors text-left ${activeView === v.id ? 'bg-accent-soft text-accent-text' : 'text-fg-muted hover:bg-surface-2 hover:text-fg'}`}>
@@ -514,7 +523,7 @@ export default function ArchivePage({ onNavigate }) {
         ))}
 
         <div className="mt-4 flex items-center justify-between">
-          <p className="text-[10px] font-bold text-fg-muted uppercase tracking-wider">Collections</p>
+          <p className="text-[10px] font-bold text-fg-muted uppercase tracking-wider">{t('page.collections')}</p>
           <button onClick={() => setShowCollModal(true)}
             className="text-fg-muted hover:text-accent-text cursor-pointer transition-colors">
             <Plus className="w-3.5 h-3.5" />
@@ -522,7 +531,7 @@ export default function ArchivePage({ onNavigate }) {
         </div>
 
         {collections.length === 0 && (
-          <p className="text-xs text-fg-muted px-3 mt-1">Chưa có collection nào</p>
+          <p className="text-xs text-fg-muted px-3 mt-1">{t('page.noCollections')}</p>
         )}
 
         {collections.map(c => (
@@ -540,7 +549,7 @@ export default function ArchivePage({ onNavigate }) {
 
         {/* Export */}
         <div className="mt-auto pt-4 border-t border-line space-y-1">
-          <p className="text-[10px] font-bold text-fg-muted uppercase tracking-wider mb-2">Export</p>
+          <p className="text-[10px] font-bold text-fg-muted uppercase tracking-wider mb-2">{t('page.export')}</p>
           <button onClick={() => handleExport('json')}
             className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs text-fg-muted hover:bg-surface-2 hover:text-fg cursor-pointer">
             <FileJson className="w-4 h-4" /> JSON
@@ -565,7 +574,7 @@ export default function ArchivePage({ onNavigate }) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-muted" />
             <input
               value={searchQ} onChange={e => setSearchQ(e.target.value)}
-              placeholder="Tìm kiếm archive..."
+              placeholder={t('page.searchPlaceholder')}
               className="w-64 bg-surface border border-line rounded-lg pl-9 pr-3 py-2 text-sm text-fg focus:outline-none focus:border-accent/50"
             />
             {searchQ && <button onClick={() => setSearchQ('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-muted hover:text-fg cursor-pointer"><X className="w-3.5 h-3.5" /></button>}
@@ -573,17 +582,17 @@ export default function ArchivePage({ onNavigate }) {
 
           <button onClick={() => setShowFilters(f => !f)}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors ${showFilters ? 'border-accent/50 text-accent-text bg-accent-soft' : 'border-line text-fg-muted hover:text-fg'}`}>
-            <Filter className="w-4 h-4" /> Filter
+            <Filter className="w-4 h-4" /> {t('page.filter')}
           </button>
         </div>
 
         {/* File status pills — always visible */}
         <div className="flex gap-2 mb-3 flex-wrap">
           {[
-            { val: '',          label: 'Tất cả' },
-            { val: 'available', label: '✅ Khả dụng' },
-            { val: 'pinned',    label: '📌 Đã ghim' },
-            { val: 'expired',   label: '⏰ Hết hạn' },
+            { val: '',          label: t('page.fileAll') },
+            { val: 'available', label: t('page.fileAvailable') },
+            { val: 'pinned',    label: t('page.filePinned') },
+            { val: 'expired',   label: t('page.fileExpired') },
           ].map(opt => (
             <button key={opt.val} onClick={() => { setFileStatus(opt.val); setPage(1); }}
               className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors border ${fileStatus === opt.val ? 'bg-accent-soft border-accent/50 text-accent-text' : 'border-line text-fg-muted hover:text-fg hover:border-line-strong'}`}>
@@ -597,18 +606,18 @@ export default function ArchivePage({ onNavigate }) {
           <div className="flex gap-3 mb-4 flex-wrap">
             <select value={platform} onChange={e => { setPlatform(e.target.value); setPage(1); }}
               className="bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg-2 focus:outline-none cursor-pointer">
-              <option value="">Tất cả nền tảng</option>
+              <option value="">{t('page.allPlatforms')}</option>
               {['youtube','tiktok','facebook','instagram','twitter','reddit'].map(p => (
                 <option key={p} value={p}>{p.charAt(0).toUpperCase()+p.slice(1)}</option>
               ))}
             </select>
             <select value={sortBy} onChange={e => { setSortBy(e.target.value); setPage(1); }}
               className="bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg-2 focus:outline-none cursor-pointer">
-              <option value="archived_at">Mới lưu nhất</option>
-              <option value="upload_date">Ngày upload</option>
-              <option value="duration">Thời lượng</option>
-              <option value="most_viewed">Lượt xem</option>
-              <option value="title">Tiêu đề A-Z</option>
+              <option value="archived_at">{t('page.sortRecent')}</option>
+              <option value="upload_date">{t('page.sortUpload')}</option>
+              <option value="duration">{t('page.sortDuration')}</option>
+              <option value="most_viewed">{t('page.sortViews')}</option>
+              <option value="title">{t('page.sortTitle')}</option>
             </select>
           </div>
         )}
@@ -626,11 +635,11 @@ export default function ArchivePage({ onNavigate }) {
 
         {/* Grid */}
         {loading && items.length === 0 ? (
-          <div className="flex items-center justify-center h-48 text-fg-muted text-sm">Đang tải...</div>
+          <div className="flex items-center justify-center h-48 text-fg-muted text-sm">{t('page.loading')}</div>
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 gap-3 text-fg-muted">
             <Archive className="w-12 h-12 opacity-30" />
-            <p className="text-sm">Archive trống. Tải video để tự động lưu vào đây.</p>
+            <p className="text-sm">{t('page.empty')}</p>
           </div>
         ) : (
           <>
@@ -655,7 +664,7 @@ export default function ArchivePage({ onNavigate }) {
               <div className="mt-6 flex justify-center">
                 <button onClick={() => fetchItems(page + 1)} disabled={loading}
                   className="px-6 py-2 rounded-xl border border-line text-sm text-fg-muted hover:text-fg hover:border-line-strong transition cursor-pointer disabled:opacity-50">
-                  {loading ? 'Đang tải...' : `Xem thêm (${total - items.length} còn lại)`}
+                  {loading ? t('page.loading') : t('page.loadMore', { remaining: total - items.length })}
                 </button>
               </div>
             )}
@@ -667,9 +676,9 @@ export default function ArchivePage({ onNavigate }) {
       {addToColl && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setAddToColl(null)}>
           <div className="bg-surface border border-line rounded-2xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
-            <h3 className="font-bold text-fg mb-3">Chọn Collection</h3>
+            <h3 className="font-bold text-fg mb-3">{t('page.pickCollection')}</h3>
             {collections.length === 0 ? (
-              <p className="text-sm text-fg-muted">Chưa có collection nào. Tạo mới trước nhé.</p>
+              <p className="text-sm text-fg-muted">{t('page.noCollectionsCreateFirst')}</p>
             ) : (
               <div className="space-y-1">
                 {collections.map(c => (
@@ -677,12 +686,12 @@ export default function ArchivePage({ onNavigate }) {
                     className="flex items-center gap-3 w-full px-3 py-2 rounded-lg hover:bg-surface-2 cursor-pointer text-sm text-fg-2 text-left">
                     <span style={{ color: c.color || 'var(--vg-fg-muted)' }}>{c.icon || '📁'}</span>
                     {c.name}
-                    <span className="ml-auto text-xs text-fg-muted">{c.item_count || 0} items</span>
+                    <span className="ml-auto text-xs text-fg-muted">{t('page.itemCount', { count: c.item_count || 0 })}</span>
                   </button>
                 ))}
               </div>
             )}
-            <button onClick={() => setAddToColl(null)} className="mt-3 text-xs text-fg-muted hover:text-fg-2 cursor-pointer">Huỷ</button>
+            <button onClick={() => setAddToColl(null)} className="mt-3 text-xs text-fg-muted hover:text-fg-2 cursor-pointer">{t('delete.cancel')}</button>
           </div>
         </div>
       )}

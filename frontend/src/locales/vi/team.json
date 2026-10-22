@@ -1,0 +1,51 @@
+{
+  "noWorkspace": "Chưa có workspace nào.",
+  "audit": {
+    "loadError": "Không thể tải audit log.",
+    "needAdmin": "Cần quyền Admin để xem audit log.",
+    "title": "Audit Log",
+    "eventCount": "{{n}} sự kiện",
+    "action": "Hành động",
+    "resourceType": "Loại resource",
+    "all": "Tất cả",
+    "res": {
+      "scheduled_job": "Lịch tải",
+      "member": "Thành viên",
+      "invite": "Lời mời",
+      "approval_request": "Phê duyệt"
+    },
+    "dateFrom": "Từ ngày",
+    "dateTo": "Đến ngày",
+    "filter": "Lọc",
+    "empty": "Không có sự kiện nào.",
+    "colTime": "Thời gian",
+    "colActor": "Người thực hiện",
+    "pageLine": "Trang {{page}}/{{totalPages}} · {{count}} sự kiện"
+  },
+  "approval": {
+    "loadError": "Không thể tải danh sách phê duyệt.",
+    "title": "Phê duyệt",
+    "tabPending": "Chờ duyệt",
+    "tabAll": "Tất cả",
+    "emptyPending": "Không có yêu cầu nào chờ duyệt.",
+    "emptyAll": "Chưa có yêu cầu phê duyệt nào.",
+    "action": {
+      "bulk_download": "Tải hàng loạt",
+      "schedule_create": "Tạo lịch tải",
+      "webhook_create": "Đăng ký Webhook",
+      "archive_delete": "Xóa Archive item"
+    },
+    "status": {
+      "awaiting_approval": "Chờ duyệt",
+      "approved": "Đã duyệt",
+      "rejected": "Từ chối"
+    },
+    "rejectionReason": "Lý do từ chối: {{reason}}",
+    "approve": "Duyệt",
+    "reject": "Từ chối",
+    "rejectModalTitle": "Lý do từ chối",
+    "reasonPlaceholder": "Nhập lý do (không bắt buộc)...",
+    "cancel": "Huỷ",
+    "confirmReject": "Xác nhận từ chối"
+  }
+}

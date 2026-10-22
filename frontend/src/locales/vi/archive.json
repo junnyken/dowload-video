@@ -1,0 +1,99 @@
+{
+  "retention": {
+    "temporary": "Khả dụng",
+    "pinned": "Đã ghim",
+    "expired": "File hết hạn",
+    "until": " đến {{date}}"
+  },
+  "delete": {
+    "fileOnly": {
+      "title": "Xoá file khỏi máy chủ",
+      "desc": "Giữ lại mục archive, ghi chú, và collection. Bạn vẫn có thể tải lại sau."
+    },
+    "archiveOnly": {
+      "title": "Xoá khỏi archive",
+      "desc": "Xoá mục khỏi thư viện. File trên server (nếu còn) sẽ tự hết hạn theo lịch thông thường."
+    },
+    "everything": {
+      "title": "Xoá toàn bộ",
+      "desc": "Xoá mục archive, ghi chú, collection mapping, và xoá file khỏi disk ngay lập tức."
+    },
+    "title": "Xoá \"{{title}}\"",
+    "scope": "Chọn phạm vi xoá:",
+    "cancel": "Huỷ",
+    "deleting": "Đang xoá...",
+    "confirm": "Xác nhận xoá"
+  },
+  "collection": {
+    "emptyName": "Tên collection không được để trống.",
+    "errorFallback": "Lỗi",
+    "title": "Tạo Collection Mới",
+    "nameLabel": "Tên Collection",
+    "namePlaceholder": "VD: Tutorial Hay, Nhạc Chill...",
+    "iconLabel": "Icon",
+    "colorLabel": "Màu",
+    "creating": "Đang tạo...",
+    "create": "Tạo Collection"
+  },
+  "card": {
+    "redownloadRehydrate": "Tải lại (rehydrate)",
+    "redownload": "Tải lại",
+    "addToCollection": "Thêm vào collection",
+    "pin": "Ghim file",
+    "unpin": "Bỏ ghim",
+    "openOriginal": "Mở link gốc",
+    "delete": "Xóa...",
+    "redownloadCta": "Tải lại để xem lại"
+  },
+  "page": {
+    "pinned": "Đã ghim file.",
+    "pinFailed": "Không thể ghim.",
+    "unpinned": "Đã bỏ ghim.",
+    "redownloadCreated": "Đã tạo lại lệnh tải.",
+    "confirmDeleteCollection": "Xóa collection? Items vẫn còn trong archive.",
+    "viewAllCount": "Tất Cả ({{total}})",
+    "viewStarred": "Đã Gắn Sao",
+    "viewToday": "Hôm Nay",
+    "viewArchive": "Archive",
+    "views": "Views",
+    "sideAll": "Tất Cả",
+    "sideStarred": "Gắn Sao",
+    "sideToday": "Hôm Nay",
+    "collections": "Collections",
+    "noCollections": "Chưa có collection nào",
+    "export": "Export",
+    "searchPlaceholder": "Tìm kiếm archive...",
+    "filter": "Filter",
+    "fileAll": "Tất cả",
+    "fileAvailable": "✅ Khả dụng",
+    "filePinned": "📌 Đã ghim",
+    "fileExpired": "⏰ Hết hạn",
+    "allPlatforms": "Tất cả nền tảng",
+    "sortRecent": "Mới lưu nhất",
+    "sortUpload": "Ngày upload",
+    "sortDuration": "Thời lượng",
+    "sortViews": "Lượt xem",
+    "sortTitle": "Tiêu đề A-Z",
+    "loading": "Đang tải...",
+    "empty": "Archive trống. Tải video để tự động lưu vào đây.",
+    "loadMore": "Xem thêm ({{remaining}} còn lại)",
+    "pickCollection": "Chọn Collection",
+    "noCollectionsCreateFirst": "Chưa có collection nào. Tạo mới trước nhé.",
+    "itemCount": "{{count}} items"
+  },
+  "suggestions": {
+    "tagsAdded": "✓ Đã thêm {{count}} tag",
+    "dupModalTitle": "Có thể trùng lặp",
+    "close": "Đóng",
+    "tagsHeading": "💡 Gợi ý tag tự động",
+    "itemCount": "{{count}} mục",
+    "apply": "Áp dụng",
+    "collapse": "Thu gọn",
+    "showMoreItems": "Xem thêm {{count}} mục",
+    "dupHeading": "🔍 Có thể trùng lặp",
+    "groupCount": "{{count}} nhóm",
+    "copyCount": "{{count}} bản",
+    "view": "Xem",
+    "showMoreGroups": "Xem thêm {{count}} nhóm"
+  }
+}

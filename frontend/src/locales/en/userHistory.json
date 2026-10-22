@@ -1,0 +1,62 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "title": "Download history",
+  "subtitle": "All downloads linked to your account",
+  "tabs": {
+    "all": "All",
+    "today": "Today",
+    "recent": "7 days",
+    "failed": "Failed"
+  },
+  "searchPlaceholder": "Search title, creator, hashtag...",
+  "filters": {
+    "button": "Filters",
+    "buttonCount": "Filters ({{count}})",
+    "platform": "Platform",
+    "all": "All",
+    "sort": "Sort",
+    "sortNewest": "Newest",
+    "sortOldest": "Oldest",
+    "sortMostViewed": "Most viewed",
+    "sortLongest": "Longest",
+    "creator": "Creator",
+    "creatorPlaceholder": "Creator name...",
+    "hasNotes": "Has notes",
+    "filtering": "Filtering",
+    "hashtag": "Filter by hashtag: <b>#{{tag}}</b>",
+    "clear": "Clear all filters"
+  },
+  "offline": "Showing saved data — reconnect to refresh",
+  "empty": {
+    "noResults": "No results found",
+    "noHistory": "No download history yet",
+    "first": "Download your first video →"
+  },
+  "loadMore": "Load more",
+  "item": {
+    "success": "✓ Success",
+    "failed": "✗ Failed",
+    "rerun": "Download again"
+  },
+  "notes": {
+    "title": "Notes",
+    "saveError": "Could not save the note.",
+    "connectionError": "Connection error.",
+    "none": "No notes yet.",
+    "save": "Save",
+    "cancel": "Cancel",
+    "placeholder": "Add a note (max 500 characters)...",
+    "hint": "{{n}}/10 notes · Enter to save · mm:ss to add a timestamp",
+    "limit": "You have reached the 10-note limit."
+  },
+  "desktop": {
+    "title": "Downloaded with the Windows app",
+    "loadError": "Could not load history from the Windows app.",
+    "retry": "Retry",
+    "empty": "No downloads from the Windows app yet",
+    "completed": "Completed",
+    "failed": "Failed",
+    "loadMoreError": "Could not load more. Try again later.",
+    "loadMore": "Load more"
+  }
+}

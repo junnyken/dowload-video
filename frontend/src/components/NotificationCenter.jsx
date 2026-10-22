@@ -9,17 +9,19 @@ import {
   Clock,
   HardDrive,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import { useNotifications } from '../context/NotificationContext';
 
 function relativeTime(isoString) {
   const diffMs = Date.now() - new Date(isoString).getTime();
   const s = Math.floor(diffMs / 1000);
-  if (s < 60) return 'vừa xong';
+  if (s < 60) return i18n.t('time.now', { ns: 'notifications' });
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m} phút trước`;
+  if (m < 60) return i18n.t('time.minutes', { ns: 'notifications', count: m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h} giờ trước`;
-  return `${Math.floor(h / 24)} ngày trước`;
+  if (h < 24) return i18n.t('time.hours', { ns: 'notifications', count: h });
+  return i18n.t('time.days', { ns: 'notifications', count: Math.floor(h / 24) });
 }
 
 const TYPE_ICON = {
@@ -31,6 +33,7 @@ const TYPE_ICON = {
 };
 
 export default function NotificationCenter() {
+  const { t } = useTranslation('notifications');
   const { notifications, unreadCount, markAllRead, clearAll } = useNotifications();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -61,7 +64,7 @@ export default function NotificationCenter() {
       <button
         onClick={() => setOpen((v) => !v)}
         className="relative p-2 rounded-lg text-fg-2 hover:text-fg hover:bg-surface-2 transition-colors"
-        aria-label="Thông báo"
+        aria-label={t('title')}
       >
         {unreadCount > 0 ? (
           <BellRing className="w-5 h-5" />
@@ -79,14 +82,14 @@ export default function NotificationCenter() {
         <div className="absolute right-0 top-full mt-2 w-80 max-h-[420px] flex flex-col bg-surface-2 border border-line rounded-xl shadow-2xl z-50">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-line flex-shrink-0">
-            <span className="font-semibold text-fg text-sm">Thông báo</span>
+            <span className="font-semibold text-fg text-sm">{t('title')}</span>
             <div className="flex items-center gap-3">
               {notifications.length > 0 && (
                 <button
                   onClick={clearAll}
                   className="text-[11px] text-fg-muted hover:text-fg-2 transition-colors"
                 >
-                  Xóa tất cả
+                  {t('clearAll')}
                 </button>
               )}
               <button
@@ -103,7 +106,7 @@ export default function NotificationCenter() {
             {notifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-fg-muted">
                 <Bell className="w-8 h-8 mb-2 opacity-40" />
-                <p className="text-sm">Chưa có thông báo nào</p>
+                <p className="text-sm">{t('empty')}</p>
               </div>
             ) : (
               notifications.slice(0, 30).map((n) => (

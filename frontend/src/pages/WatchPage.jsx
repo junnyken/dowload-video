@@ -7,63 +7,67 @@ import { Eye, Plus, Trash2, Pause, Play, RefreshCw, Bell, Download, AlertCircle 
 import EmptyState from '../components/shared/EmptyState';
 import { API_BASE } from '../lib/apiBase';
 import { enableWebPush, pushSupported } from '../lib/webPush';
+import { useTranslation } from 'react-i18next';
+import i18n, { getLang, useLocalePath } from '../i18n';
 
 const API = `${API_BASE}/api/v1/watch`;
 
 // wording: BA review
+// Text lives in locales/*/watch.json; getters read it at render time (language can change).
+const w = (key, opts) => i18n.t(key, { ns: 'watch', ...opts });
 const T = {
-  title: 'Theo dõi kênh',
-  subtitle: 'Nhận thông báo khi kênh bạn theo dõi có video mới.',
-  loginTitle: 'Đăng nhập để theo dõi kênh',
-  loginBody: 'Theo dõi kênh chỉ dành cho tài khoản đã đăng nhập.',
-  loginBtn: 'Đăng nhập',
-  unavailable: 'Tính năng theo dõi kênh hiện chưa mở cho tài khoản của bạn.',
-  offlineTitle: 'Chưa kết nối được máy chủ VidGrab', // wording: BA review
-  offlineBody: 'Danh sách kênh sẽ hiện lại khi có kết nối. Vui lòng thử lại sau ít phút.', // wording: BA review
-  retry: 'Thử lại', // wording: BA review
-  placeholder: 'Dán liên kết kênh TikTok, YouTube hoặc Instagram (gói Pro), ví dụ https://www.youtube.com/@tenkenh',
-  add: 'Theo dõi',
-  adding: 'Đang kiểm tra kênh…',
-  used: (u, m) => `Đang theo dõi ${u}/${m} kênh`,
-  every: (h) => `Kiểm tra khoảng mỗi ${h} giờ`,
-  emptyTitle: 'Chưa theo dõi kênh nào',
-  emptyBody: 'Dán liên kết trang kênh ở trên để bắt đầu.',
-  lastScan: 'Kiểm tra gần nhất',
-  never: 'Chưa kiểm tra',
-  newItems: (n) => `${n} video mới (7 ngày)`,
-  paused: 'Tạm dừng',
-  pause: 'Tạm dừng',
-  resume: 'Tiếp tục',
-  remove: 'Bỏ theo dõi',
-  confirmRemove: 'Bỏ theo dõi kênh này? Bạn có thể phải chờ một thời gian trước khi thêm kênh khác.',
-  baselinePending: 'Đang ghi nhận video hiện có của kênh…',
+  get title() { return w('title'); },
+  get subtitle() { return w('subtitle'); },
+  get loginTitle() { return w('loginTitle'); },
+  get loginBody() { return w('loginBody'); },
+  get loginBtn() { return w('loginBtn'); },
+  get unavailable() { return w('unavailable'); },
+  get offlineTitle() { return w('offlineTitle'); },
+  get offlineBody() { return w('offlineBody'); },
+  get retry() { return w('retry'); },
+  get placeholder() { return w('placeholder'); },
+  get add() { return w('add'); },
+  get adding() { return w('adding'); },
+  get emptyTitle() { return w('emptyTitle'); },
+  get emptyBody() { return w('emptyBody'); },
+  get lastScan() { return w('lastScan'); },
+  get never() { return w('never'); },
+  get paused() { return w('paused'); },
+  get pause() { return w('pause'); },
+  get resume() { return w('resume'); },
+  get remove() { return w('remove'); },
+  get confirmRemove() { return w('confirmRemove'); },
+  get baselinePending() { return w('baselinePending'); },
+  get degraded() { return w('degraded'); },
+  get modeTap() { return w('modeTap'); },
+  get modeNotify() { return w('modeNotify'); },
+  get download() { return w('download'); },
+  get inboxTitle() { return w('inboxTitle'); },
+  get allChannels() { return w('allChannels'); },
+  get unreadOnly() { return w('unreadOnly'); },
+  get markAll() { return w('markAll'); },
+  get inboxEmpty() { return w('inboxEmpty'); },
+  get unreadDot() { return w('unreadDot'); },
+  get pushBtn() { return w('pushBtn'); },
+  get genericError() { return w('genericError'); },
+  used: (used, max) => w('used', { used, max }),
+  every: (hours) => w('every', { hours }),
+  newItems: (count) => w('newItems', { count }),
   // wording: BA review — shown while the first read failed temporarily
-  retrying: (t) => (t ? `Chưa đọc được kênh, sẽ thử lại lúc ${t}.` : 'Chưa đọc được kênh, hệ thống sẽ thử lại sớm.'),
-  degraded: 'Tạm thời không đọc được kênh, hệ thống sẽ thử lại.',
-  modeTap: 'Thông báo + mở nhanh để tải',
-  modeNotify: 'Chỉ thông báo',
-  download: 'Tải',
-  inboxTitle: 'Hộp thư', // wording: BA review
-  unreadCount: (n) => `${n} chưa xem`, // wording: BA review
-  allChannels: 'Tất cả kênh', // wording: BA review
-  unreadOnly: 'Chỉ video chưa xem', // wording: BA review
-  markAll: 'Đánh dấu đã xem tất cả', // wording: BA review
-  inboxEmpty: 'Chưa có video mới.', // wording: BA review
-  unreadDot: 'Chưa xem', // wording: BA review
-  pushBtn: 'Bật thông báo',
+  retrying: (when) => (when ? w('retryingAt', { when }) : w('retrying')),
+  unreadCount: (count) => w('unreadCount', { count }),
   push: {
-    ok: 'Đã bật thông báo trên trình duyệt này.',
-    unsupported: 'Trình duyệt này không hỗ trợ thông báo.',
-    denied: 'Bạn đã chặn thông báo. Hãy cho phép trong cài đặt trình duyệt.',
-    not_configured: 'Máy chủ chưa bật thông báo.',
-    failed: 'Không bật được thông báo. Vui lòng thử lại.',
+    get ok() { return w('push.ok'); },
+    get unsupported() { return w('push.unsupported'); },
+    get denied() { return w('push.denied'); },
+    get not_configured() { return w('push.not_configured'); },
+    get failed() { return w('push.failed'); },
   },
-  genericError: 'Có lỗi xảy ra. Vui lòng thử lại.',
 };
 
 function fmt(iso) {
   if (!iso) return null;
-  return new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleString(getLang() === 'en' ? 'en-US' : 'vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 function errText(d) {
@@ -71,6 +75,8 @@ function errText(d) {
 }
 
 export default function WatchPage() {
+  useTranslation('watch'); // re-render on language change (T reads i18n at render)
+  const lp = useLocalePath();
   const { isAuthenticated, session, withAuth } = useAuth();
   const [status, setStatus] = useState(null);       // null = loading, false = unavailable
   const [subs, setSubs] = useState([]);
@@ -349,7 +355,7 @@ export default function WatchPage() {
                     className={`block text-sm text-fg truncate hover:underline ${it.read ? '' : 'font-bold'}`}>{it.title || it.url}</a>
                   <p className="text-[11px] text-fg-muted truncate">{it.platform} · {it.channel} · {fmt(it.discovered_at)}</p>
                 </div>
-                <a href={`/share-target?url=${encodeURIComponent(it.url)}`} onClick={() => markOne(it)}
+                <a href={lp(`/share-target?url=${encodeURIComponent(it.url)}`)} onClick={() => markOne(it)}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-accent/30 text-accent-text text-xs font-bold hover:bg-accent-soft shrink-0">
                   <Download className="w-3.5 h-3.5" /> {T.download}
                 </a>

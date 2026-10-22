@@ -1,0 +1,46 @@
+{
+  "title": "Thanh toán & Gói dịch vụ",
+  "subtitle": "Quản lý gói cước và lịch sử thanh toán của bạn",
+  "reload": "Tải lại",
+  "nextRenewal": "Gia hạn tiếp theo:",
+  "upgrade": "Nâng cấp",
+  "status": {
+    "active": "Đang hoạt động",
+    "pastDue": "Quá hạn thanh toán — 3 ngày ân hạn",
+    "canceling": "Đã huỷ — còn hiệu lực đến {{date}}",
+    "canceled": "Đã huỷ",
+    "none": "Miễn phí"
+  },
+  "toast": {
+    "dismiss": "Đóng thông báo",
+    "upgraded": "Nâng cấp thành công! Chào mừng bạn đến với gói mới.",
+    "canceled": "Đã huỷ thanh toán."
+  },
+  "portal": {
+    "needLogin": "Bạn cần đăng nhập để quản lý thanh toán.",
+    "openFailed": "Không thể mở trang quản lý thanh toán.",
+    "redirecting": "Đang chuyển hướng...",
+    "manage": "Quản lý thanh toán"
+  },
+  "usage": {
+    "title": "Sử dụng hôm nay",
+    "downloads": "Downloads hôm nay",
+    "ai": "Phân tích AI hôm nay",
+    "storage": "Dung lượng cloud",
+    "unit": "lượt"
+  },
+  "credits": {
+    "title": "Credits còn lại",
+    "desc": "Dùng để phân tích AI, xoá logo và các tính năng nâng cao."
+  },
+  "history": {
+    "title": "Lịch sử thanh toán",
+    "desc": "Xem hoá đơn và lịch sử giao dịch trên trang quản lý của Stripe.",
+    "view": "Xem lịch sử thanh toán"
+  },
+  "upsell": {
+    "title": "Nâng cấp để mở khoá toàn bộ tính năng",
+    "desc": "Xem bảng giá để biết hạn mức của từng gói.",
+    "viewPlans": "Xem các gói"
+  }
+}

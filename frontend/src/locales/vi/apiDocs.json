@@ -1,0 +1,89 @@
+{
+  "intro": "Tài liệu tham khảo cho các tích hợp bên ngoài. Chỉ bao gồm public + user-facing endpoints. Admin endpoints không được cung cấp tại đây.",
+  "auth": {
+    "title": "Xác thực",
+    "intro": "Một số endpoint công khai không cần key nhưng bị giới hạn theo IP. Endpoint ghi “auth” bắt buộc có key. Với <code>/fetch-link</code> và <code>/history</code>, key là tuỳ chọn: gửi key thì request chạy dưới tài khoản của bạn.",
+    "accepted": "(cũng được chấp nhận)",
+    "note": "Tạo API key tại trang <a><b>API Keys</b></a> (dành cho gói Pro, Team, Enterprise). Mỗi key có thể bị thu hồi bất kỳ lúc nào. Key sai hoặc đã thu hồi trả HTTP 401 với <code>{\"error_code\":\"invalid_api_key\"}</code>."
+  },
+  "rate": {
+    "title": "Giới hạn tốc độ",
+    "otherLabel": "Các endpoint khác",
+    "otherValue": "60 request/phút — theo API key (không có key: theo IP)",
+    "fetchLabel": "Fetch-link / Bulk-download",
+    "fetchValue": "30 request/phút — theo API key (không có key: theo IP)",
+    "monthlyLabel": "Lượt gọi API mỗi tháng",
+    "dailyLabel": "Lượt tải mỗi ngày",
+    "daily": "Free {{free}} · Pro {{pro}} lượt/ngày",
+    "byPlan": "Theo gói tài khoản",
+    "monthlyPro": "Pro {{count}} lượt/tháng",
+    "unlimited": "Không giới hạn",
+    "exceeded": "Vượt giới hạn tốc độ: HTTP 429. Hãy đợi khoảng một phút rồi thử lại, tăng dần thời gian chờ giữa các lần (exponential backoff). Request có gửi key được đếm theo từng key, nên nhiều máy chủ dùng chung một IP không chia sẻ giới hạn với nhau.",
+    "monthlyQuota": "Mỗi request gửi kèm API key được tính 1 lượt gọi vào hạn mức <b>tháng</b> của tài khoản (tính theo tháng UTC, làm mới 00:00 UTC ngày 1). Hết lượt: HTTP 429 với <code>{\"error_code\":\"api_monthly_quota_exceeded\",\"reset_at\":\"…\"}</code>. Mọi phản hồi của request có key kèm header <code>X-API-Quota-Limit</code>, <code>X-API-Quota-Remaining</code>, <code>X-API-Quota-Reset</code> (Unix time). Xem số lượt đã dùng: <code>GET /api/v1/api-keys/usage</code>. Lệnh tải qua API vẫn trừ thêm vào hạn mức lượt tải mỗi ngày."
+  },
+  "partner": {
+    "title": "Partner API (doanh nghiệp tích hợp từ backend)",
+    "intro": "Dành cho doanh nghiệp gọi VidGrab từ máy chủ của mình. Key dạng <code>vgp_</code> do VidGrab cấp, bạn không tự tạo được. Muốn có key, hãy liên hệ: <mail>{{email}}</mail> hoặc Telegram <tg>@vidgrab_support</tg>.",
+    "mailSubject": "Đăng ký Partner API",
+    "basePath": "Đường dẫn gốc: /api/v1/partner",
+    "exampleTitle": "Ví dụ tạo job",
+    "notes": {
+      "createJob": "Tạo job tải. Body: { url, quality }. Trả 202 cùng thông tin job.",
+      "getJob": "Xem trạng thái và kết quả của một job.",
+      "listJobs": "Liệt kê job của tài khoản (gộp mọi key), lọc theo trạng thái.",
+      "cancelJob": "Huỷ job đang chờ.",
+      "usage": "Xem mức dùng trong ngày và trong tháng so với hạn mức.",
+      "addWebhook": "Đăng ký webhook (URL HTTPS) nhận sự kiện job.completed, job.failed.",
+      "listWebhooks": "Liệt kê webhook đã đăng ký.",
+      "deleteWebhook": "Xoá một webhook.",
+      "validateUrls": "Kiểm tra trước danh sách URL, tối đa 100 URL mỗi lần.",
+      "platformStatus": "Cho biết nền tảng nào đang tải được. Webhook platform.degraded / platform.recovered báo khi trạng thái đổi."
+    },
+    "li1": "Request/phút tính theo key (mặc định 60). Vượt giới hạn: HTTP 429 kèm header <code>Retry-After</code>.",
+    "li2": "Job/ngày tính theo key (mặc định 10.000).",
+    "li3": "Job/ngày hoặc job/tháng hết hạn mức: HTTP 429 với <code>{\"detail\":{\"code\":\"rate_limit_exceeded\" | \"monthly_quota_exceeded\",\"reset_at\":\"…\"}}</code>, chờ đến <code>reset_at</code>.",
+    "li4": "<code>rate_limit_exceeded</code> = hết job trong ngày; <code>rate_limited</code> = quá số request mỗi phút.",
+    "li5": "Poll <code>GET /jobs/{id}</code> không bị trừ hạn mức job."
+  },
+  "endpointsTitle": "Endpoints",
+  "keyOptional": "key tuỳ chọn",
+  "requestBody": "Request body",
+  "response": "Response",
+  "guestComment": "khách",
+  "searchResultsPlaceholder": "danh sách kết quả khớp",
+  "endpoints": {
+    "health": "Liveness + version check. Returns disk, Redis, yt-dlp version, app_version.",
+    "apiInfo": "Public API metadata: endpoints, rate limits, auth guide, error format.",
+    "fetchLink": "Tải một link và chờ kết quả: request giữ kết nối cho đến khi xong (đồng bộ), không trả token để poll. Gửi API key thì chạy dưới tài khoản của bạn (hạn mức, chất lượng theo gói); không gửi thì chạy như khách. quality mặc định \"video\" (tối đa 1080p); các giá trị: \"video\", \"video_fast\" (nhanh, chất lượng thấp hơn), \"video_4k\" (tốt nhất có thể), \"video_<chiều cao>\" (ví dụ \"video_720\"), \"mp3_128\", \"mp3_320\". Chất lượng thực tế bị giới hạn theo gói của tài khoản. progress_token là tuỳ chọn do bạn tự đặt: gửi kèm để theo dõi tiến độ qua GET /progress/{token} trong lúc request đang chạy.",
+    "progress": "Tiến độ tải theo progress_token bạn đã gửi trong POST /fetch-link, chỉ có ý nghĩa khi request đó còn đang chạy. Token chưa biết (hoặc chưa có tiến độ) trả status \"pending\". Không dùng để lấy kết quả cuối: kết quả nằm trong response của /fetch-link.",
+    "history": "Lịch sử tải của tài khoản khi có API key (mặc định limit=5; hỗ trợ ?limit=&offset=&platform=&status=success|failed|processing). Khách (không gửi key) nhận danh sách rỗng kèm local_only: true vì lịch sử khách chỉ nằm trên trình duyệt.",
+    "historyExport": "Export download history. ?format=csv|json&range_days=30 (max 365 for Pro).",
+    "archive": "Kho lưu cá nhân. Hỗ trợ ?platform=&is_starred=&collection_id=&language=&file_status=available|pinned|expired&sort=&page=1&limit=20. Không có tham số q: tìm kiếm dùng GET /api/v1/archive/search.",
+    "archiveSearch": "Tìm trong kho lưu theo tiêu đề, tác giả, hashtag, ghi chú. ?q= (tối thiểu 2 ký tự, bắt buộc) và ?limit=20.",
+    "errorCodes": "Full catalogue of structured error codes with user-safe messages."
+  },
+  "errorFormat": {
+    "title": "Format lỗi",
+    "intro": "Mọi lỗi đều trả về cùng một cấu trúc JSON:",
+    "fullList": "Xem đầy đủ danh sách error codes"
+  },
+  "errors": {
+    "unsupported_url": "URL không được hỗ trợ.",
+    "provider_unavailable": "Nền tảng tạm thời không phản hồi.",
+    "extractor_broken": "Nền tảng vừa thay đổi nên tạm thời chưa tải được; VidGrab đang xử lý. Thử lại sau 30–60 phút.",
+    "queue_busy": "Hàng đợi đang quá tải.",
+    "rate_limited": "Vui lòng đợi.",
+    "job_expired": "Job đã hết hạn.",
+    "validation_failed": "Dữ liệu đầu vào không hợp lệ.",
+    "unauthorized": "Cần đăng nhập."
+  },
+  "retry": {
+    "title": "Hướng dẫn retry",
+    "li1": "Chỉ retry khi <code>retryable: true</code>.",
+    "li2": "Tăng dần thời gian chờ giữa các lần (exponential backoff): 1s → 2s → 4s → 8s (tối đa 3 lần).",
+    "li3": "HTTP 429 với key <code>vidgrab_</code>: đợi khoảng một phút rồi thử lại (không có header Retry-After).",
+    "li4": "HTTP 429 với Partner API (key <code>vgp_</code>): vượt request/phút thì có header <code>Retry-After</code>, đợi đúng số giây đó; hết job/ngày hoặc job/tháng thì chờ đến <code>reset_at</code>, thử lại sớm hơn vẫn bị 429.",
+    "li5": "HTTP 5xx: retry với backoff; HTTP 4xx (ngoại trừ 429): không retry.",
+    "li6": "/fetch-link là đồng bộ: chờ response của chính request đó, đừng gửi lại khi chưa có kết quả (mỗi lần gửi tính một lượt tải). Muốn hiện tiến độ, tự đặt <code>progress_token</code> và poll <code>/progress/{token}</code>."
+  }
+}

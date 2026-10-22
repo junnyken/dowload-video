@@ -1,0 +1,47 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "copy": "Copy",
+  "cancel": "Cancel",
+  "proOnly": "API key management is available on Pro only.",
+  "subtitle": "Up to {{max}} keys. API calls are counted per month for the whole account; downloads made through the API still count against the daily download allowance.",
+  "create": {
+    "title": "Create a new API key",
+    "label": "Label",
+    "creating": "Creating...",
+    "submit": "Create key",
+    "saveWarning": "⚠️ Save the key now — it will not be shown again!",
+    "savedClose": "Saved, close"
+  },
+  "edit": {
+    "title": "Rename key",
+    "saving": "Saving...",
+    "save": "Save"
+  },
+  "revoke": {
+    "confirm": "Revoke this key? This cannot be undone.",
+    "error": "Error: {{message}}",
+    "badge": "Revoked",
+    "title": "Revoke"
+  },
+  "usage": {
+    "title": "API calls in {{month}}",
+    "unlimited": "{{used}} calls · unlimited",
+    "reset": "Resets on {{date}} (00:00 UTC)."
+  },
+  "auth": {
+    "title": "Authenticate with a header",
+    "or": "or Authorization: Bearer vidgrab_…"
+  },
+  "docs": "View docs →",
+  "upgrade": "Upgrade to Pro →",
+  "empty": {
+    "title": "No API keys yet.",
+    "hint": "Click \"Create key\" to get started."
+  },
+  "item": {
+    "total": "Total: {{n}} req",
+    "created": "Created: {{date}}",
+    "lastUsed": "Last used: {{date}}",
+    "rename": "Rename"
+  }
+}

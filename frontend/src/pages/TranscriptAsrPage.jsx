@@ -6,6 +6,10 @@ import {
 } from 'lucide-react';
 import EmptyState from '../components/shared/EmptyState';
 import { localFileId } from '../lib/localFile';
+import { useTranslation, Trans } from 'react-i18next';
+import i18n, { useLang } from '../i18n';
+
+const NS = 'transcriptAsr';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -27,66 +31,57 @@ function authHeaders(session) {
   return headers;
 }
 
-// Must match backend transcript_translate._TARGET_LANGS exactly.
-const TARGET_LANGS = {
-  vi: 'Tiếng Việt', en: 'Tiếng Anh', ja: 'Tiếng Nhật', ko: 'Tiếng Hàn',
-  zh: 'Tiếng Trung', fr: 'Tiếng Pháp', de: 'Tiếng Đức', es: 'Tiếng Tây Ban Nha',
-  th: 'Tiếng Thái', id: 'Tiếng Indonesia',
-};
+// Must match backend transcript_translate._TARGET_LANGS exactly (codes only;
+// display names live in locales/*/transcriptAsr.json under langs.<code>).
+const TARGET_LANG_CODES = ['vi', 'en', 'ja', 'ko', 'zh', 'fr', 'de', 'es', 'th', 'id'];
 
 const ACTIVE_STATUSES = ['queued', 'extracting_audio', 'transcribing'];
 
 // Every error_code the backend can answer (app.services.asr.types.ERROR_MESSAGES_VI
 // plus disk_full from the shared disk guard). Kept client-side so a job row
-// always reads in Vietnamese even if the stored message is missing.
-export const ERROR_VI = {
-  asr_disabled: 'Tính năng tạo phụ đề tự động đang tạm tắt.',
-  asr_paused: 'Tính năng tạo phụ đề tự động đang tạm dừng bởi quản trị viên.',
-  spend_ceiling_reached: 'Hệ thống đã dùng hết ngân sách tạo phụ đề hôm nay. Vui lòng thử lại vào ngày mai.',
-  budget_unavailable: 'Không kiểm tra được ngân sách hệ thống, vui lòng thử lại sau.',
-  provider_unavailable: 'Dịch vụ nhận dạng giọng nói chưa sẵn sàng, vui lòng thử lại sau.',
-  provider_bad_output: 'Dịch vụ nhận dạng giọng nói trả kết quả không hợp lệ, chưa thể tạo phụ đề.',
-  provider_transient: 'Dịch vụ nhận dạng giọng nói đang quá tải, vui lòng thử lại sau.',
-  provider_error: 'Dịch vụ nhận dạng giọng nói gặp lỗi.',
-  no_speech: 'Không nhận diện được lời thoại nào trong video (có thể video không có tiếng nói).',
-  queue_unavailable: 'Không xếp được job vào hàng đợi, vui lòng thử lại sau. Hạn mức đã được hoàn lại.',
-  timeout: 'Xử lý quá thời gian cho phép.',
-  interrupted: 'Job bị gián đoạn giữa chừng (máy chủ khởi động lại). Hạn mức đã được hoàn lại.',
-  stuck_timeout: 'Job bị treo quá thời gian cho phép. Hạn mức đã được hoàn lại.',
-  source_missing: 'Video đã hết hạn hoặc bị xoá khỏi server. Vui lòng tải lại video.',
-  too_long: 'Video vượt giới hạn thời lượng cho tạo phụ đề tự động.',
-  audio_extract_failed: 'Không tách được âm thanh từ video.',
-  internal_error: 'Lỗi hệ thống khi tạo phụ đề.',
-  cancelled: 'Đã huỷ bởi người dùng.',
-  disk_full: 'Hệ thống tạm hết dung lượng lưu trữ. Vui lòng thử lại sau vài phút.',
-};
-const GENERIC_ERROR = 'Đã xảy ra lỗi, vui lòng thử lại sau.';
+// always reads in the user's language even if the stored message is missing.
+// Texts live in locales/*/transcriptAsr.json under errors.<code>; ERROR_VI keeps
+// its name/shape but resolves each message at read time (getters).
+const ERROR_CODES = [
+  'asr_disabled', 'asr_paused', 'spend_ceiling_reached', 'budget_unavailable',
+  'provider_unavailable', 'provider_bad_output', 'provider_transient', 'provider_error',
+  'no_speech', 'queue_unavailable', 'timeout', 'interrupted', 'stuck_timeout',
+  'source_missing', 'too_long', 'audio_extract_failed', 'internal_error', 'cancelled', 'disk_full',
+];
+export const ERROR_VI = {};
+ERROR_CODES.forEach((code) => {
+  Object.defineProperty(ERROR_VI, code, {
+    enumerable: true,
+    get: () => i18n.t(`errors.${code}`, { ns: NS }),
+  });
+});
+const genericError = () => i18n.t('genericError', { ns: NS });
 
 /** Vietnamese message for a job's failure: known code first, then stored text. */
 export function jobErrorText(job) {
-  if (job?.error_code && ERROR_VI[job.error_code]) return ERROR_VI[job.error_code];
-  return job?.error || GENERIC_ERROR;
+  if (job?.error_code && ERROR_CODES.includes(job.error_code)) return ERROR_VI[job.error_code];
+  return job?.error || genericError();
 }
 
 /** Vietnamese message for a failed API response body (create / actions). */
-export function apiErrorText(body, fallback = GENERIC_ERROR) {
+export function apiErrorText(body, fallback = genericError()) {
   const d = body?.detail;
   const code = body?.error_code || (d && typeof d === 'object' ? d.error_code : null);
-  if (code && ERROR_VI[code]) return ERROR_VI[code];
+  if (code && ERROR_CODES.includes(code)) return ERROR_VI[code];
   if (d && typeof d === 'object') return d.user_message || d.message || fallback;
   if (typeof d === 'string' && d) return d;
   return fallback;
 }
 
 const STATUS_CONFIG = {
-  queued:           { label: 'Đang chờ', cls: 'bg-surface-2 text-fg-2 border-line-strong' },
-  extracting_audio: { label: 'Đang tách âm thanh', cls: 'bg-accent-soft text-accent-text border-line', spin: true },
-  transcribing:     { label: 'Đang nhận diện giọng nói', cls: 'bg-accent-soft text-accent-text border-line', spin: true },
-  done:             { label: 'Hoàn tất', cls: 'bg-success-soft text-success border-success/30' },
-  failed:           { label: 'Thất bại', cls: 'bg-danger-soft text-danger border-danger/30' },
-  cancelled:        { label: 'Đã huỷ', cls: 'bg-surface-2 text-fg-muted border-line-strong' },
+  queued:           { labelKey: 'status.queued', cls: 'bg-surface-2 text-fg-2 border-line-strong' },
+  extracting_audio: { labelKey: 'status.extracting_audio', cls: 'bg-accent-soft text-accent-text border-line', spin: true },
+  transcribing:     { labelKey: 'status.transcribing', cls: 'bg-accent-soft text-accent-text border-line', spin: true },
+  done:             { labelKey: 'status.done', cls: 'bg-success-soft text-success border-success/30' },
+  failed:           { labelKey: 'status.failed', cls: 'bg-danger-soft text-danger border-danger/30' },
+  cancelled:        { labelKey: 'status.cancelled', cls: 'bg-surface-2 text-fg-muted border-line-strong' },
 };
-const UNKNOWN_STATUS = { label: 'Không rõ trạng thái', cls: 'bg-surface-2 text-fg-muted border-line-strong' };
+const UNKNOWN_STATUS = { labelKey: 'status.unknown', cls: 'bg-surface-2 text-fg-muted border-line-strong' };
 
 function statusKey(job) {
   if (job.status === 'failed' && job.error_code === 'cancelled') return 'cancelled';
@@ -94,6 +89,7 @@ function statusKey(job) {
 }
 
 function StatusBadge({ job }) {
+  const { t } = useTranslation(NS);
   const key = statusKey(job);
   const cfg = STATUS_CONFIG[key] || UNKNOWN_STATUS;
   return (
@@ -102,7 +98,7 @@ function StatusBadge({ job }) {
       {key === 'done' && <CheckCircle2 className="w-3 h-3" />}
       {key === 'failed' && <XCircle className="w-3 h-3" />}
       {key === 'cancelled' && <Ban className="w-3 h-3" />}
-      {cfg.label}
+      {t(cfg.labelKey)}
     </span>
   );
 }
@@ -114,20 +110,20 @@ function formatDuration(sec) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function formatMinutes(n) {
-  return `${Number(n).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} phút`;
+function formatMinutes(n, t, locale) {
+  return t('minutes', { value: Number(n).toLocaleString(locale, { maximumFractionDigits: 1 }) });
 }
 
-function formatResetTime(iso) {
+function formatResetTime(iso, locale) {
   const d = iso ? new Date(iso) : null;
   if (!d || Number.isNaN(d.getTime())) return null;
-  return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 }
 
 const DOWNLOAD_FORMATS = [
-  { key: 'srt', label: 'SRT', hint: 'Phổ biến nhất, dùng được với hầu hết trình phát' },
-  { key: 'vtt', label: 'VTT', hint: 'Dùng cho phụ đề trên web' },
-  { key: 'txt', label: 'TXT', hint: 'Chỉ lời thoại, không có mốc thời gian' },
+  { key: 'srt', label: 'SRT', hintKey: 'formats.srt' },
+  { key: 'vtt', label: 'VTT', hintKey: 'formats.vtt' },
+  { key: 'txt', label: 'TXT', hintKey: 'formats.txt' },
 ];
 
 const ROW_BTN =
@@ -136,6 +132,7 @@ const ROW_BTN =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent';
 
 function Dialog({ title, icon, onClose, children }) {
+  const { t } = useTranslation(NS);
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -152,7 +149,7 @@ function Dialog({ title, icon, onClose, children }) {
       >
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-bold text-fg flex items-center gap-2">{icon}{title}</h3>
-          <button onClick={onClose} className="min-h-11 min-w-11 -mr-2 flex items-center justify-center text-fg-muted hover:text-fg cursor-pointer" aria-label="Đóng">
+          <button onClick={onClose} className="min-h-11 min-w-11 -mr-2 flex items-center justify-center text-fg-muted hover:text-fg cursor-pointer" aria-label={t('close')}>
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -168,6 +165,9 @@ function Dialog({ title, icon, onClose, children }) {
  */
 export default function TranscriptAsrPage({ onOpenTranslate }) {
   const { session } = useAuth();
+  const { t } = useTranslation(NS);
+  const lang = useLang();
+  const locale = lang === 'en' ? 'en-US' : 'vi-VN';
   const [jobs, setJobs]                 = useState([]);
   const [jobsState, setJobsState]       = useState('loading'); // loading | ok | error
   const [quota, setQuota]               = useState(null);
@@ -228,7 +228,7 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
     : null;
   const exhausted = quotaState === 'ok' && quota?.enabled && remaining !== null && remaining <= 0;
   const canCreate = quotaState === 'ok' && quota?.enabled === true && !exhausted;
-  const resetTime = formatResetTime(quota?.reset_at_utc);
+  const resetTime = formatResetTime(quota?.reset_at_utc, locale);
 
   async function openPicker() {
     setPicking(true);
@@ -240,10 +240,10 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
       const withLocalFile = (d.jobs || []).filter((j) => localFileId(j));
       setHistory(withLocalFile);
       if (withLocalFile.length === 0) {
-        setHistoryError('Không tìm thấy video nào còn trên server. Tải video trước khi tạo phụ đề.');
+        setHistoryError(t('noVideos'));
       }
     } catch {
-      setHistoryError('Không tải được danh sách video đã tải. Thử lại sau.');
+      setHistoryError(t('historyLoadError'));
     } finally {
       setHistoryLoading(false);
     }
@@ -271,7 +271,7 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
-        setErrorMsg(apiErrorText(d, 'Tạo job thất bại.'));
+        setErrorMsg(apiErrorText(d, t('createFailed')));
         closePicker();
         fetchQuota(); // the failure may mean the feature just got switched off / the quota changed
         return;
@@ -280,7 +280,7 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
       closePicker();
       fetchQuota();
     } catch {
-      setErrorMsg('Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.');
+      setErrorMsg(t('networkError'));
     } finally {
       submittingRef.current = false;
       setCreatingId(null);
@@ -294,7 +294,7 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
       const r = await fetch(`${API}/api/v1/transcript-asr/jobs/${job.id}/download?format=${fmt}`, {
         headers: authHeaders(session),
       });
-      if (!r.ok) throw new Error('Không thể tải file.');
+      if (!r.ok) throw new Error(t('downloadFailed'));
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -307,7 +307,7 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
       setDownloadJob(null);
     } catch (e) {
       setDownloadJob(null);
-      setErrorMsg(e.message || 'Không thể tải file.');
+      setErrorMsg(e.message || t('downloadFailed'));
     } finally {
       setDownloading('');
     }
@@ -323,13 +323,13 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        setErrorMsg(apiErrorText(d, 'Không thực hiện được thao tác. Thử lại sau.'));
+        setErrorMsg(apiErrorText(d, t('actionFailed')));
       } else {
         setJobs((prev) => prev.filter((j) => j.id !== confirmJob.id));
         fetchQuota(); // a cancel refunds the reserved minutes
       }
     } catch {
-      setErrorMsg('Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.');
+      setErrorMsg(t('networkError'));
     } finally {
       setConfirming(false);
       setConfirmJob(null);
@@ -353,12 +353,12 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
         body: JSON.stringify({ target_lang: chainLang }),
       });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(apiErrorText(d, 'Tạo job dịch thất bại.'));
+      if (!r.ok) throw new Error(apiErrorText(d, t('translateFailed')));
       setChainJob(null);
       if (onOpenTranslate) onOpenTranslate();
       else window.location.href = '/transcript-translate';
     } catch (e) {
-      setChainError(e.message || 'Tạo job dịch thất bại.');
+      setChainError(e.message || t('translateFailed'));
     } finally {
       setChainLoading(false);
     }
@@ -372,20 +372,20 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
       <div className="flex items-center gap-2 flex-wrap">
         {isDone && (
           <>
-            <button onClick={() => setDownloadJob(job)} className={ROW_BTN} aria-label={`Tải phụ đề ${job.video_title || ''}`}>
-              <Download className="w-4 h-4" /> Tải
+            <button onClick={() => setDownloadJob(job)} className={ROW_BTN} aria-label={t('aria.download', { title: job.video_title || '' })}>
+              <Download className="w-4 h-4" /> {t('download')}
             </button>
-            <button onClick={() => openChainPicker(job)} className={ROW_BTN} aria-label={`Dịch phụ đề ${job.video_title || ''}`}>
-              <Languages className="w-4 h-4" /> Dịch phụ đề
+            <button onClick={() => openChainPicker(job)} className={ROW_BTN} aria-label={t('aria.translate', { title: job.video_title || '' })}>
+              <Languages className="w-4 h-4" /> {t('translateSubs')}
             </button>
           </>
         )}
         <button
           onClick={() => setConfirmJob(job)}
           className={`${ROW_BTN} hover:!text-danger hover:!border-danger/40`}
-          aria-label={`${isActive(job) ? 'Huỷ' : 'Xoá'} job ${job.video_title || ''}`}
+          aria-label={t(isActive(job) ? 'aria.cancelJob' : 'aria.deleteJob', { title: job.video_title || '' })}
         >
-          {isActive(job) ? <><Ban className="w-4 h-4" /> Huỷ</> : <><Trash2 className="w-4 h-4" /> Xoá</>}
+          {isActive(job) ? <><Ban className="w-4 h-4" /> {t('cancel')}</> : <><Trash2 className="w-4 h-4" /> {t('delete')}</>}
         </button>
       </div>
     );
@@ -410,25 +410,24 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
   return (
     <div data-testid="asr-panel">
       <p className="text-sm text-fg-muted leading-relaxed mb-4">
-        Dành cho video chưa có sẵn phụ đề: chọn 1 video đã tải, hệ thống tự nhận diện giọng nói và tạo phụ đề
-        kèm mốc thời gian. Có thể dịch luôn phụ đề vừa tạo sang ngôn ngữ khác.
+        {t('intro')}
       </p>
 
       {errorMsg && (
         <div role="alert" className="mb-4 flex items-start gap-2 px-4 py-3 bg-danger-soft border border-danger/30 rounded-xl text-sm text-danger">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
           <p className="flex-1">{errorMsg}</p>
-          <button onClick={() => setErrorMsg('')} className="min-h-11 min-w-11 -my-2.5 -mr-2 flex items-center justify-center cursor-pointer shrink-0" aria-label="Đóng thông báo lỗi">
+          <button onClick={() => setErrorMsg('')} className="min-h-11 min-w-11 -my-2.5 -mr-2 flex items-center justify-center cursor-pointer shrink-0" aria-label={t('closeError')}>
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
       {/* Create / quota card */}
-      <section className="mb-8 bg-surface border border-line rounded-xl p-4" aria-label="Tạo phụ đề mới">
+      <section className="mb-8 bg-surface border border-line rounded-xl p-4" aria-label={t('createSection')}>
         {quotaState === 'loading' && (
           <div className="flex items-center gap-2 text-sm text-fg-muted" data-testid="quota-loading">
-            <Loader2 className="w-4 h-4 animate-spin" /> Đang kiểm tra hạn mức…
+            <Loader2 className="w-4 h-4 animate-spin" /> {t('quotaChecking')}
           </div>
         )}
 
@@ -436,10 +435,10 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
           <div className="flex flex-col sm:flex-row sm:items-center gap-3" data-testid="quota-error">
             <p className="text-sm text-danger flex items-start gap-2 flex-1">
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-              Không kiểm tra được hạn mức hôm nay nên chưa thể tạo phụ đề mới.
+              {t('quotaError')}
             </p>
             <button onClick={() => { setQuotaState('loading'); fetchQuota(); }} className={ROW_BTN}>
-              <RefreshCw className="w-4 h-4" /> Thử lại
+              <RefreshCw className="w-4 h-4" /> {t('retry')}
             </button>
           </div>
         )}
@@ -448,11 +447,11 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
           <div className="flex items-start gap-3" data-testid="asr-disabled">
             <PowerOff className="w-5 h-5 text-fg-muted shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-fg">Tính năng đang tạm tắt</p>
+              <p className="text-sm font-semibold text-fg">{t('disabledTitle')}</p>
               <p className="text-xs text-fg-muted mt-1 leading-relaxed">
                 {quota.unavailable_reason && ERROR_VI[quota.unavailable_reason]
                   ? ERROR_VI[quota.unavailable_reason]
-                  : 'Phiên âm AI hiện chưa mở. Bạn vẫn xem và tải được các phụ đề đã tạo trước đó.'}
+                  : t('disabledBody')}
               </p>
             </div>
           </div>
@@ -465,24 +464,33 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
               <div className="text-sm">
                 {remaining !== null ? (
                   <p className="text-fg">
-                    <span className="font-semibold">Còn {formatMinutes(remaining)}</span> hôm nay
-                    <span className="text-fg-muted"> (đã dùng {formatMinutes(quota.minutes_used)} / {formatMinutes(quota.minutes_limit)})</span>
+                    <Trans
+                      t={t}
+                      i18nKey="quotaRemaining"
+                      values={{
+                        remaining: formatMinutes(remaining, t, locale),
+                        used: formatMinutes(quota.minutes_used, t, locale),
+                        limit: formatMinutes(quota.minutes_limit, t, locale),
+                      }}
+                      components={{ strong: <span className="font-semibold" />, muted: <span className="text-fg-muted" /> }}
+                    />
                   </p>
                 ) : (
                   <p className="text-fg-2">
-                    Không đọc được số phút đã dùng · hạn mức {formatMinutes(quota.minutes_limit)}/ngày
+                    {t('quotaUnknown', { limit: formatMinutes(quota.minutes_limit, t, locale) })}
                   </p>
                 )}
                 <p className="text-xs text-fg-muted mt-1">
-                  Mỗi video tối đa {quota.per_job_max_minutes} phút
-                  {resetTime ? ` · hạn mức làm mới lúc ${resetTime}` : ''}
+                  {resetTime
+                    ? t('perJobMaxWithReset', { max: quota.per_job_max_minutes, time: resetTime })
+                    : t('perJobMax', { max: quota.per_job_max_minutes })}
                 </p>
               </div>
             </div>
 
             {exhausted ? (
               <p className="text-sm text-warning-fg bg-warning-soft border border-line rounded-lg px-3 py-2.5" data-testid="quota-exhausted">
-                Đã hết hạn mức phiên âm hôm nay.{resetTime ? ` Quay lại sau ${resetTime} để tạo tiếp.` : ' Quay lại vào ngày mai để tạo tiếp.'}
+                {resetTime ? t('exhaustedWithTime', { time: resetTime }) : t('exhaustedNoTime')}
               </p>
             ) : (
               <button
@@ -490,7 +498,7 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
                 className="w-full min-h-12 flex items-center justify-center gap-2 px-5 py-3 rounded-xl border-2 border-dashed border-line hover:border-accent/40 text-fg-2 hover:text-accent-text transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <Mic className="w-5 h-5" />
-                Chọn video đã tải để tạo phụ đề
+                {t('pickVideoBtn')}
               </button>
             )}
           </div>
@@ -499,7 +507,7 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
 
       <div>
         <h2 className="text-xs font-bold text-fg-muted uppercase tracking-wider mb-3">
-          Hàng đợi{jobs.length > 0 ? ` (${jobs.length})` : ''}
+          {jobs.length > 0 ? t('queueCount', { n: jobs.length }) : t('queue')}
         </h2>
 
         {jobsState === 'loading' && (
@@ -510,9 +518,9 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
 
         {jobsState === 'error' && (
           <div className="bg-danger-soft border border-danger/30 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3" data-testid="jobs-error">
-            <p className="text-sm text-danger flex-1">Không tải được danh sách job. Kiểm tra mạng rồi thử lại.</p>
+            <p className="text-sm text-danger flex-1">{t('jobsLoadError')}</p>
             <button onClick={() => { setJobsState('loading'); fetchJobs(); }} className={ROW_BTN}>
-              <RefreshCw className="w-4 h-4" /> Thử lại
+              <RefreshCw className="w-4 h-4" /> {t('retry')}
             </button>
           </div>
         )}
@@ -520,8 +528,8 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
         {jobsState === 'ok' && jobs.length === 0 && (
           <EmptyState
             icon={<Mic className="w-12 h-12" />}
-            title="Chưa có job tạo phụ đề nào"
-            body={canCreate ? 'Chọn video đã tải ở trên để bắt đầu.' : 'Các job bạn tạo sẽ hiện ở đây.'}
+            title={t('emptyTitle')}
+            body={canCreate ? t('emptyBodyCanCreate') : t('emptyBody')}
           />
         )}
 
@@ -532,10 +540,10 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-[11px] uppercase tracking-wider text-fg-muted border-b border-line">
-                    <th className="px-4 py-3 font-semibold">Video</th>
-                    <th className="px-3 py-3 font-semibold">Thời lượng</th>
-                    <th className="px-3 py-3 font-semibold">Trạng thái</th>
-                    <th className="px-4 py-3 font-semibold text-right">Thao tác</th>
+                    <th className="px-4 py-3 font-semibold">{t('col.video')}</th>
+                    <th className="px-3 py-3 font-semibold">{t('col.duration')}</th>
+                    <th className="px-3 py-3 font-semibold">{t('col.status')}</th>
+                    <th className="px-4 py-3 font-semibold text-right">{t('col.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -544,9 +552,9 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
                       <td className="px-4 py-3 max-w-[16rem]">
                         <p className="font-medium text-fg flex items-center gap-2 min-w-0">
                           <Film className="w-4 h-4 text-fg-muted shrink-0" />
-                          <span className="truncate">{job.video_title || 'Video'}</span>
+                          <span className="truncate">{job.video_title || t('video')}</span>
                         </p>
-                        {job.detected_language && <p className="text-xs text-fg-muted mt-1">Ngôn ngữ: {job.detected_language}</p>}
+                        {job.detected_language && <p className="text-xs text-fg-muted mt-1">{t('language', { lang: job.detected_language })}</p>}
                         <div className="mt-2 space-y-1">{renderProgressBar(job)}{renderFailureNote(job)}</div>
                       </td>
                       <td className="px-3 py-3 font-mono text-xs text-fg-2 whitespace-nowrap">{formatDuration(job.duration_sec)}</td>
@@ -566,11 +574,11 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-fg flex items-center gap-2 min-w-0">
                         <Film className="w-4 h-4 text-fg-muted shrink-0" />
-                        <span className="truncate">{job.video_title || 'Video'}</span>
+                        <span className="truncate">{job.video_title || t('video')}</span>
                       </p>
                       <p className="text-xs text-fg-muted mt-1">
                         <span className="font-mono">{formatDuration(job.duration_sec)}</span>
-                        {job.detected_language ? ` · Ngôn ngữ: ${job.detected_language}` : ''}
+                        {job.detected_language ? ` · ${t('language', { lang: job.detected_language })}` : ''}
                       </p>
                     </div>
                     <StatusBadge job={job} />
@@ -588,10 +596,10 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
       <div className="h-16 sm:h-0" aria-hidden="true" />
 
       {picking && (
-        <Dialog title="Chọn video" icon={<Mic className="w-4 h-4 text-accent-text" />} onClose={closePicker}>
+        <Dialog title={t('pickerTitle')} icon={<Mic className="w-4 h-4 text-accent-text" />} onClose={closePicker}>
           {historyLoading ? (
             <div className="flex items-center justify-center gap-2 py-8 text-fg-muted text-sm">
-              <Loader2 className="w-4 h-4 animate-spin" /> Đang tải...
+              <Loader2 className="w-4 h-4 animate-spin" /> {t('loading')}
             </div>
           ) : (
             <>
@@ -623,8 +631,8 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
       )}
 
       {downloadJob && (
-        <Dialog title="Tải phụ đề" icon={<Download className="w-4 h-4 text-accent-text" />} onClose={() => setDownloadJob(null)}>
-          <p className="text-xs text-fg-muted mb-3 truncate">{downloadJob.video_title || 'Video'}</p>
+        <Dialog title={t('downloadTitle')} icon={<Download className="w-4 h-4 text-accent-text" />} onClose={() => setDownloadJob(null)}>
+          <p className="text-xs text-fg-muted mb-3 truncate">{downloadJob.video_title || t('video')}</p>
           <div className="flex flex-col gap-2">
             {DOWNLOAD_FORMATS.map((f) => (
               <button
@@ -635,7 +643,7 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
               >
                 <span>
                   <span className="block text-sm font-semibold text-fg">{f.label}</span>
-                  <span className="block text-[11px] text-fg-muted">{f.hint}</span>
+                  <span className="block text-[11px] text-fg-muted">{t(f.hintKey)}</span>
                 </span>
                 {downloading === f.key ? <Loader2 className="w-4 h-4 animate-spin text-accent-text" /> : <Download className="w-4 h-4 text-fg-muted" />}
               </button>
@@ -646,41 +654,41 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
 
       {confirmJob && (
         <Dialog
-          title={isActive(confirmJob) ? 'Huỷ job này?' : 'Xoá job này?'}
+          title={isActive(confirmJob) ? t('confirmCancelTitle') : t('confirmDeleteTitle')}
           icon={<Trash2 className="w-4 h-4 text-danger" />}
           onClose={() => !confirming && setConfirmJob(null)}
         >
           <p className="text-sm text-fg-2 mb-4 leading-relaxed">
             {isActive(confirmJob)
-              ? 'Job sẽ dừng lại và số phút đã giữ cho video này được hoàn lại hạn mức của bạn.'
-              : 'Job và file phụ đề đã tạo sẽ bị xoá, không thể hoàn tác. Video gốc không bị ảnh hưởng.'}
+              ? t('confirmCancelBody')
+              : t('confirmDeleteBody')}
           </p>
           <div className="flex gap-2">
-            <button onClick={() => setConfirmJob(null)} disabled={confirming} className={`${ROW_BTN} flex-1`}>Giữ lại</button>
+            <button onClick={() => setConfirmJob(null)} disabled={confirming} className={`${ROW_BTN} flex-1`}>{t('keep')}</button>
             <button
               onClick={handleConfirm}
               disabled={confirming}
               className="flex-1 inline-flex items-center justify-center gap-2 min-h-11 px-4 rounded-lg bg-danger text-accent-fg font-bold text-sm hover:opacity-90 disabled:opacity-50 cursor-pointer"
             >
               {confirming && <Loader2 className="w-4 h-4 animate-spin" />}
-              {isActive(confirmJob) ? 'Huỷ job' : 'Xoá job'}
+              {isActive(confirmJob) ? t('cancelJobBtn') : t('deleteJobBtn')}
             </button>
           </div>
         </Dialog>
       )}
 
       {chainJob && (
-        <Dialog title="Dịch phụ đề" icon={<Languages className="w-4 h-4 text-accent-text" />} onClose={() => setChainJob(null)}>
-          <label htmlFor="chain-lang-select" className="text-xs text-fg-muted mb-1 block">Ngôn ngữ đích</label>
+        <Dialog title={t('translateSubs')} icon={<Languages className="w-4 h-4 text-accent-text" />} onClose={() => setChainJob(null)}>
+          <label htmlFor="chain-lang-select" className="text-xs text-fg-muted mb-1 block">{t('targetLang')}</label>
           <select
             id="chain-lang-select"
             value={chainLang}
             onChange={(e) => setChainLang(e.target.value)}
             className="w-full min-h-11 bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:border-accent/50 cursor-pointer mb-3"
           >
-            <option value="" disabled>-- Chọn ngôn ngữ đích --</option>
-            {Object.entries(TARGET_LANGS).map(([key, label]) => (
-              <option key={key} value={key}>{label}</option>
+            <option value="" disabled>{t('chooseTargetLang')}</option>
+            {TARGET_LANG_CODES.map((key) => (
+              <option key={key} value={key}>{t(`langs.${key}`)}</option>
             ))}
           </select>
 
@@ -692,7 +700,7 @@ export default function TranscriptAsrPage({ onOpenTranslate }) {
             className="w-full inline-flex items-center justify-center gap-2 min-h-11 px-4 rounded-xl bg-accent text-accent-fg font-bold text-sm hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
             {chainLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Languages className="w-4 h-4" />}
-            {chainLoading ? 'Đang tạo...' : 'Bắt đầu dịch'}
+            {chainLoading ? t('creating') : t('startTranslate')}
           </button>
         </Dialog>
       )}

@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { Search, Loader2, TrendingUp, Clock, Eye, Play, Download } from 'lucide-react';
+import { useTranslation, Trans } from 'react-i18next';
 
 // VITE_API_BASE/VITE_API_BASE_URL are not defined in any build —
 // this fell back to '' and became a relative (502) URL.
@@ -24,19 +25,22 @@ function formatViews(n) {
 }
 
 const SORT_OPTIONS = [
-  { key: 'relevance',  label: 'Liên quan', Icon: TrendingUp },
-  { key: 'date',       label: 'Mới nhất',  Icon: Clock },
-  { key: 'view_count', label: 'Nhiều xem', Icon: Eye },
+  { key: 'relevance',  labelKey: 'sort.relevance', Icon: TrendingUp },
+  { key: 'date',       labelKey: 'sort.date',  Icon: Clock },
+  { key: 'view_count', labelKey: 'sort.viewCount', Icon: Eye },
 ];
 
 const DURATION_OPTIONS = [
-  { key: null,     label: 'Tất cả',       min: null, max: null },
-  { key: 'short',  label: '< 4 phút',     min: null, max: 240 },
-  { key: 'medium', label: '4 – 20 phút',  min: 240,  max: 1200 },
-  { key: 'long',   label: '> 20 phút',    min: 1200, max: null },
+  { key: null,     labelKey: 'duration.all',    min: null, max: null },
+  { key: 'short',  labelKey: 'duration.short',  min: null, max: 240 },
+  { key: 'medium', labelKey: 'duration.medium', min: 240,  max: 1200 },
+  { key: 'long',   labelKey: 'duration.long',   min: 1200, max: null },
 ];
 
+const SUGGESTION_KEYS = ['chill', 'cooking', 'trending', 'lofi'];
+
 function VideoCard({ video, onDownload }) {
+  const { t } = useTranslation('search');
   const dur   = formatDuration(video.duration_seconds);
   const views = formatViews(video.view_count);
 
@@ -82,7 +86,7 @@ function VideoCard({ video, onDownload }) {
           className="mt-2.5 w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-accent-soft border border-accent/30 text-accent-text text-xs font-bold hover:bg-accent/20 hover:border-accent/50 active:scale-95 transition-all"
         >
           <Download className="w-3.5 h-3.5" />
-          Tải về
+          {t('download')}
         </button>
       </div>
     </div>
@@ -104,6 +108,7 @@ function SkeletonCard() {
 }
 
 export default function SearchPage({ onNavigate }) {
+  const { t } = useTranslation('search');
   const [keyword,     setKeyword]     = useState('');
   const [platform,    setPlatform]    = useState('youtube');
   const [sort,        setSort]        = useState('relevance');
@@ -121,7 +126,7 @@ export default function SearchPage({ onNavigate }) {
     // For normal button clicks the event object is passed, which is not a string,
     // so we fall back to the keyword state correctly.
     const kw = (typeof kwOverride === 'string' ? kwOverride : keyword).trim();
-    if (kw.length < 3) { setError('Từ khóa phải có ít nhất 3 ký tự.'); return; }
+    if (kw.length < 3) { setError(t('errors.tooShort')); return; }
 
     setLoading(true);
     setError('');
@@ -149,13 +154,13 @@ export default function SearchPage({ onNavigate }) {
 
       if (res.status === 429) {
         setRateLimited(true);
-        setError('Đã tìm 5 lần trong giờ này. Thử lại sau.');
+        setError(t('errors.rateLimited'));
         return;
       }
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data?.detail?.message || data?.detail || 'Tìm kiếm thất bại.');
+        setError(data?.detail?.message || data?.detail || t('errors.failed'));
         return;
       }
 
@@ -163,15 +168,15 @@ export default function SearchPage({ onNavigate }) {
       setCached(!!data.cached);
       setSearched(true);
     } catch {
-      setError('Không thể kết nối. Kiểm tra mạng và thử lại.');
+      setError(t('errors.network'));
     } finally {
       setLoading(false);
     }
-  }, [keyword, platform, sort, duration]);
+  }, [keyword, platform, sort, duration, t]);
 
   const handleDownload = (url) => {
     if (!url) {
-      setError('Video này không có link để tải về.');
+      setError(t('errors.noLink'));
       return;
     }
     // DashboardContent is not mounted while Search is active, so dispatching
@@ -188,9 +193,9 @@ export default function SearchPage({ onNavigate }) {
     <div className="max-w-5xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-fg">Tìm kiếm video</h1>
+        <h1 className="text-2xl font-bold text-fg">{t('title')}</h1>
         <p className="mt-1 text-fg-muted text-sm">
-          Tìm video YouTube và TikTok để tải về — không cần link sẵn.
+          {t('subtitle')}
         </p>
       </div>
 
@@ -204,7 +209,7 @@ export default function SearchPage({ onNavigate }) {
             value={keyword}
             onChange={e => setKeyword(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
-            placeholder="Nhập từ khóa tìm kiếm..."
+            placeholder={t('placeholder')}
             className="w-full pl-12 pr-4 py-3.5 rounded-xl bg-surface/80 border border-line text-fg placeholder:text-fg-muted text-base font-medium focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition-all"
           />
         </div>
@@ -218,7 +223,7 @@ export default function SearchPage({ onNavigate }) {
             ? <Loader2 className="w-4 h-4 animate-spin" />
             : <Search className="w-4 h-4" />
           }
-          <span className="hidden sm:inline">Tìm</span>
+          <span className="hidden sm:inline">{t('searchBtn')}</span>
         </button>
       </div>
 
@@ -247,7 +252,7 @@ export default function SearchPage({ onNavigate }) {
 
         {/* Sort */}
         <div className="flex gap-1 p-1 rounded-lg bg-surface/60 border border-line">
-          {SORT_OPTIONS.map(({ key, label, Icon }) => (
+          {SORT_OPTIONS.map(({ key, labelKey, Icon }) => (
             <button
               key={key}
               type="button"
@@ -259,7 +264,7 @@ export default function SearchPage({ onNavigate }) {
               }`}
             >
               <Icon className="w-3 h-3" />
-              {label}
+              {t(labelKey)}
             </button>
           ))}
         </div>
@@ -277,7 +282,7 @@ export default function SearchPage({ onNavigate }) {
                   : 'text-fg-muted hover:text-fg-2'
               }`}
             >
-              {d.label}
+              {t(d.labelKey)}
             </button>
           ))}
         </div>
@@ -288,9 +293,9 @@ export default function SearchPage({ onNavigate }) {
         <div className="mb-5 flex items-start gap-3 p-4 rounded-xl bg-accent-soft border border-accent/30">
           <span className="text-xl flex-shrink-0">⏱</span>
           <div>
-            <p className="text-accent-text font-semibold text-sm">Giới hạn tìm kiếm</p>
+            <p className="text-accent-text font-semibold text-sm">{t('rateLimit.title')}</p>
             <p className="text-accent-text text-xs mt-0.5">
-              Bạn đã tìm 5 lần trong giờ này. Chờ ~60 phút hoặc dán link trực tiếp vào ô tải về.
+              {t('rateLimit.body')}
             </p>
           </div>
         </div>
@@ -307,7 +312,7 @@ export default function SearchPage({ onNavigate }) {
       {cached && results.length > 0 && (
         <p className="mb-3 text-xs text-fg-muted flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-success/60 inline-block" />
-          Kết quả từ cache (10 phút)
+          {t('cached')}
         </p>
       )}
 
@@ -322,8 +327,7 @@ export default function SearchPage({ onNavigate }) {
       {!loading && results.length > 0 && (
         <>
           <p className="mb-3 text-xs text-fg-muted">
-            {results.length} kết quả cho "
-            <span className="text-fg-2">{keyword}</span>"
+            <Trans t={t} i18nKey="resultsFor" values={{ count: results.length, keyword }} components={{ kw: <span className="text-fg-2" /> }} />
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {results.map((v, i) => (
@@ -337,8 +341,8 @@ export default function SearchPage({ onNavigate }) {
       {!loading && searched && results.length === 0 && !error && (
         <div className="text-center py-16 text-fg-muted">
           <Search className="w-12 h-12 mx-auto mb-3 opacity-20" />
-          <p className="text-sm">Không tìm thấy video nào cho từ khóa này.</p>
-          <p className="text-xs mt-1">Thử từ khóa khác hoặc đổi sang nền tảng khác.</p>
+          <p className="text-sm">{t('noResults')}</p>
+          <p className="text-xs mt-1">{t('noResultsHint')}</p>
         </div>
       )}
 
@@ -348,12 +352,12 @@ export default function SearchPage({ onNavigate }) {
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-surface/80 border border-line flex items-center justify-center">
             <Search className="w-7 h-7 text-fg-muted" />
           </div>
-          <p className="text-fg-muted text-sm font-medium">Nhập từ khóa để bắt đầu tìm kiếm</p>
+          <p className="text-fg-muted text-sm font-medium">{t('empty.title')}</p>
           <p className="text-fg-muted text-xs mt-1.5">
-            Hỗ trợ YouTube và TikTok · Giới hạn 5 lần/giờ · Cache 10 phút
+            {t('empty.hint')}
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
-            {['nhạc chill', 'hướng dẫn nấu ăn', 'top trending tiktok', 'lo-fi music'].map(q => (
+            {SUGGESTION_KEYS.map(k => t(`suggestions.${k}`)).map(q => (
               <button
                 key={q}
                 type="button"

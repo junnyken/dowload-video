@@ -6,6 +6,10 @@ import {
 } from 'lucide-react';
 import EmptyState from '../components/shared/EmptyState';
 import { localFileId } from '../lib/localFile';
+import { useTranslation } from 'react-i18next';
+import { useLocalePath } from '../i18n';
+
+const NS = 'transcriptTranslate';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -32,65 +36,58 @@ function authHeaders(session) {
 }
 
 // Must match backend's `_TARGET_LANGS` allowlist exactly (key + order).
-const TARGET_LANGS = {
-  vi: 'Tiếng Việt',
-  en: 'Tiếng Anh',
-  ja: 'Tiếng Nhật',
-  ko: 'Tiếng Hàn',
-  zh: 'Tiếng Trung',
-  fr: 'Tiếng Pháp',
-  de: 'Tiếng Đức',
-  es: 'Tiếng Tây Ban Nha',
-  th: 'Tiếng Thái',
-  id: 'Tiếng Indonesia',
-};
+// Display names live in locales/*/transcriptTranslate.json under langs.<code>.
+const TARGET_LANG_CODES = ['vi', 'en', 'ja', 'ko', 'zh', 'fr', 'de', 'es', 'th', 'id'];
 
 // Backend's detect_source_language() returns the language name in English
-// (e.g. "Vietnamese", "Korean") — map back to the Vietnamese label so the UI
-// doesn't mix "Korean → Tiếng Đức". Falls back to the raw LLM answer for a
-// detected language outside our 10-language target list (still correct,
-// just not translated for display).
-const SOURCE_LANG_DISPLAY = {
-  Vietnamese: 'Tiếng Việt',
-  English: 'Tiếng Anh',
-  Japanese: 'Tiếng Nhật',
-  Korean: 'Tiếng Hàn',
-  Chinese: 'Tiếng Trung',
-  French: 'Tiếng Pháp',
-  German: 'Tiếng Đức',
-  Spanish: 'Tiếng Tây Ban Nha',
-  Thai: 'Tiếng Thái',
-  Indonesian: 'Tiếng Indonesia',
+// (e.g. "Vietnamese", "Korean") — map it back to a language code so the UI
+// shows it in the user's language and doesn't mix "Korean → German". Falls
+// back to the raw LLM answer for a detected language outside our 10-language
+// target list (still correct, just not translated for display).
+const SOURCE_LANG_CODES = {
+  Vietnamese: 'vi',
+  English: 'en',
+  Japanese: 'ja',
+  Korean: 'ko',
+  Chinese: 'zh',
+  French: 'fr',
+  German: 'de',
+  Spanish: 'es',
+  Thai: 'th',
+  Indonesian: 'id',
 };
 
-function sourceLangLabel(sourceLang) {
-  if (!sourceLang) return 'Đang phát hiện...';
-  return SOURCE_LANG_DISPLAY[sourceLang] || sourceLang;
+function sourceLangLabel(sourceLang, t) {
+  if (!sourceLang) return t('detecting');
+  const code = SOURCE_LANG_CODES[sourceLang];
+  return code ? t(`langs.${code}`) : sourceLang;
 }
 
 const ACTIVE_STATUSES = ['queued', 'detecting', 'translating'];
 
 const STATUS_CONFIG = {
-  queued:      { label: 'Đang chờ',              cls: 'bg-line text-fg-muted border-line-strong' },
-  detecting:   { label: 'Đang nhận diện ngôn ngữ', cls: 'bg-surface-2 text-fg-2 border-line', spin: true },
-  translating: { label: 'Đang dịch',              cls: 'bg-surface-2 text-fg-2 border-line', spin: true },
-  done:        { label: 'Hoàn tất',               cls: 'bg-success-soft text-success border-success/30' },
-  failed:      { label: 'Thất bại',               cls: 'bg-danger-soft text-danger border-danger/30' },
+  queued:      { labelKey: 'status.queued',              cls: 'bg-line text-fg-muted border-line-strong' },
+  detecting:   { labelKey: 'status.detecting', cls: 'bg-surface-2 text-fg-2 border-line', spin: true },
+  translating: { labelKey: 'status.translating',              cls: 'bg-surface-2 text-fg-2 border-line', spin: true },
+  done:        { labelKey: 'status.done',               cls: 'bg-success-soft text-success border-success/30' },
+  failed:      { labelKey: 'status.failed',               cls: 'bg-danger-soft text-danger border-danger/30' },
 };
 
 function StatusBadge({ status }) {
+  const { t } = useTranslation(NS);
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.queued;
   return (
     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] font-semibold whitespace-nowrap ${cfg.cls}`}>
       {cfg.spin && <Loader2 className="w-3 h-3 animate-spin" />}
       {status === 'done' && <CheckCircle2 className="w-3 h-3" />}
       {status === 'failed' && <XCircle className="w-3 h-3" />}
-      {cfg.label}
+      {t(cfg.labelKey)}
     </span>
   );
 }
 
 function Dropzone({ files, onFilesAdded, onRemoveFile }) {
+  const { t } = useTranslation(NS);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef(null);
 
@@ -109,15 +106,15 @@ function Dropzone({ files, onFilesAdded, onRemoveFile }) {
         onClick={() => inputRef.current?.click()}
         role="button"
         tabIndex={0}
-        aria-label="Chọn hoặc kéo thả file transcript .srt/.vtt để tải lên"
+        aria-label={t('dropzoneAria')}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inputRef.current?.click(); } }}
         className={`cursor-pointer rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors ${
           dragOver ? 'border-accent bg-accent-soft' : 'border-line hover:border-line-strong'
         }`}
       >
         <Upload className="w-8 h-8 mx-auto text-fg-muted mb-2" />
-        <p className="text-sm text-fg-2 font-medium">Kéo thả file .srt/.vtt vào đây, hoặc bấm để chọn file</p>
-        <p className="text-xs text-fg-muted mt-1">Có thể chọn nhiều file cùng lúc</p>
+        <p className="text-sm text-fg-2 font-medium">{t('dropzoneText')}</p>
+        <p className="text-xs text-fg-muted mt-1">{t('dropzoneHint')}</p>
         <input
           ref={inputRef}
           type="file"
@@ -141,8 +138,8 @@ function Dropzone({ files, onFilesAdded, onRemoveFile }) {
               </span>
               <button
                 onClick={() => onRemoveFile(i)}
-                title="Bỏ file này"
-                aria-label={`Bỏ file ${f.name}`}
+                title={t('removeFileTitle')}
+                aria-label={t('removeFileAria', { name: f.name })}
                 className="text-fg-muted hover:text-danger cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
@@ -156,7 +153,8 @@ function Dropzone({ files, onFilesAdded, onRemoveFile }) {
 }
 
 function JobCard({ job, onDownload, onDelete, onBurn, onEdit }) {
-  const langLabel = TARGET_LANGS[job.target_lang] || job.target_lang;
+  const { t } = useTranslation(NS);
+  const langLabel = TARGET_LANG_CODES.includes(job.target_lang) ? t(`langs.${job.target_lang}`) : job.target_lang;
   const isDone = job.status === 'done';
   const pct = Math.min(100, Math.max(0, job.progress_pct ?? 0));
 
@@ -169,7 +167,7 @@ function JobCard({ job, onDownload, onDelete, onBurn, onEdit }) {
             <span className="truncate">{job.filename}</span>
           </p>
           <p className="text-xs text-fg-muted mt-1">
-            {sourceLangLabel(job.source_lang)} → {langLabel}
+            {sourceLangLabel(job.source_lang, t)} → {langLabel}
           </p>
         </div>
         <StatusBadge status={job.status} />
@@ -187,7 +185,7 @@ function JobCard({ job, onDownload, onDelete, onBurn, onEdit }) {
         </div>
         {job.cue_count != null && (
           <p className="text-[11px] text-fg-muted mt-1">
-            Đã dịch {job.translated_cue_count ?? 0}/{job.cue_count} dòng
+            {t('translatedCount', { done: job.translated_cue_count ?? 0, total: job.cue_count })}
           </p>
         )}
       </div>
@@ -199,14 +197,14 @@ function JobCard({ job, onDownload, onDelete, onBurn, onEdit }) {
       {job.skipped_block_count > 0 && (
         <p className="text-[11px] text-accent-text flex items-center gap-1">
           <AlertCircle className="w-3 h-3 shrink-0" />
-          Bỏ qua {job.skipped_block_count} dòng phụ đề bị lỗi định dạng trong file gốc.
+          {t('skipped', { count: job.skipped_block_count })}
         </p>
       )}
 
       {isDone && job.reading_speed_warning_count > 0 && (
-        <p className="text-[11px] text-accent-text flex items-center gap-1" title="Một số dòng dịch dài hơn thời gian hiển thị cho phép, người xem có thể không đọc kịp">
+        <p className="text-[11px] text-accent-text flex items-center gap-1" title={t('readingWarnTitle')}>
           <AlertCircle className="w-3 h-3 shrink-0" />
-          {job.reading_speed_warning_count} dòng dịch có thể quá dài để đọc kịp.
+          {t('readingWarn', { count: job.reading_speed_warning_count })}
         </p>
       )}
 
@@ -214,8 +212,8 @@ function JobCard({ job, onDownload, onDelete, onBurn, onEdit }) {
         <button
           onClick={() => onEdit(job)}
           disabled={!isDone}
-          title="Xem/sửa bản dịch trước khi tải"
-          aria-label={`Xem/sửa bản dịch ${job.filename}`}
+          title={t('editTitle')}
+          aria-label={t('editAria', { filename: job.filename })}
           className="p-2 rounded-lg border border-line text-fg-2 hover:text-accent-text hover:border-accent/40 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-fg-2 disabled:hover:border-line cursor-pointer transition-colors"
         >
           <Pencil className="w-4 h-4" />
@@ -223,8 +221,8 @@ function JobCard({ job, onDownload, onDelete, onBurn, onEdit }) {
         <button
           onClick={() => onDownload(job)}
           disabled={!isDone}
-          title="Tải file đã dịch"
-          aria-label={`Tải file đã dịch ${job.filename}`}
+          title={t('downloadTitle')}
+          aria-label={t('downloadAria', { filename: job.filename })}
           className="p-2 rounded-lg border border-line text-fg-2 hover:text-accent-text hover:border-accent/40 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-fg-2 disabled:hover:border-line cursor-pointer transition-colors"
         >
           <Download className="w-4 h-4" />
@@ -232,16 +230,16 @@ function JobCard({ job, onDownload, onDelete, onBurn, onEdit }) {
         <button
           onClick={() => onBurn(job)}
           disabled={!isDone}
-          title="Ghép phụ đề đã dịch vào video đã tải"
-          aria-label={`Ghép phụ đề vào video cho ${job.filename}`}
+          title={t('burnTitle')}
+          aria-label={t('burnAria', { filename: job.filename })}
           className="p-2 rounded-lg border border-line text-fg-2 hover:text-accent-text hover:border-accent/40 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-fg-2 disabled:hover:border-line cursor-pointer transition-colors"
         >
           <Film className="w-4 h-4" />
         </button>
         <button
           onClick={() => onDelete(job.id)}
-          title="Xoá job dịch"
-          aria-label={`Xoá job dịch ${job.filename}`}
+          title={t('deleteTitle')}
+          aria-label={t('deleteAria', { filename: job.filename })}
           className="p-2 rounded-lg border border-line text-fg-2 hover:text-danger hover:border-danger/40 cursor-pointer transition-colors"
         >
           <Trash2 className="w-4 h-4" />
@@ -253,6 +251,8 @@ function JobCard({ job, onDownload, onDelete, onBurn, onEdit }) {
 
 export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } = {}) {
   const { session } = useAuth();
+  const { t } = useTranslation(NS);
+  const lp = useLocalePath();
   const [files, setFiles]           = useState([]);
   const [targetLang, setTargetLang] = useState('');
   const [jobs, setJobs]             = useState([]);
@@ -326,7 +326,7 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
         body: form,
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.detail?.message || d.detail || 'Tải lên thất bại. Vui lòng thử lại.');
+      if (!r.ok) throw new Error(d.detail?.message || d.detail || t('uploadFailed'));
 
       if (Array.isArray(d.jobs) && d.jobs.length > 0) {
         setJobs((prev) => [...d.jobs, ...prev]);
@@ -334,7 +334,7 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
       setRejected(Array.isArray(d.rejected) ? d.rejected : []);
       setFiles([]);
     } catch (e) {
-      setErrorMsg(e.message || 'Có lỗi xảy ra khi tải lên.');
+      setErrorMsg(e.message || t('uploadError'));
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -347,7 +347,7 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
       const r = await fetch(`${API}/api/v1/transcript-translate/jobs/${job.id}/download`, {
         headers: authHeaders(session),
       });
-      if (!r.ok) throw new Error('Không thể tải file. Vui lòng thử lại.');
+      if (!r.ok) throw new Error(t('downloadFailedRetry'));
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -358,12 +358,12 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
-      setErrorMsg(e.message || 'Không thể tải file.');
+      setErrorMsg(e.message || t('downloadFailed'));
     }
   }
 
   async function handleDelete(id) {
-    if (!window.confirm('Xoá job dịch này? Hành động này không thể hoàn tác.')) return;
+    if (!window.confirm(t('confirmDelete'))) return;
     try {
       const r = await fetch(`${API}/api/v1/transcript-translate/jobs/${id}`, {
         method: 'DELETE',
@@ -388,10 +388,10 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
       const withLocalFile = (d.jobs || []).filter((j) => localFileId(j));
       setBurnHistory(withLocalFile);
       if (withLocalFile.length === 0) {
-        setBurnError('Không tìm thấy video nào còn trên server. Tải lại video trước khi ghép phụ đề.');
+        setBurnError(t('noVideos'));
       }
     } catch {
-      setBurnError('Không tải được danh sách video đã tải. Thử lại sau.');
+      setBurnError(t('historyLoadError'));
     } finally {
       setBurnLoading(false);
     }
@@ -418,10 +418,10 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
         }
       );
       const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || 'Ghép phụ đề vào video thất bại.');
+      if (!r.ok) throw new Error(d.detail || t('burnFailed'));
       setBurnResult(d);
     } catch (e) {
-      setBurnError(e.message || 'Ghép phụ đề vào video thất bại.');
+      setBurnError(e.message || t('burnFailed'));
     } finally {
       setBurnLoading(false);
     }
@@ -438,10 +438,10 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
         headers: authHeaders(session),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || 'Không tải được nội dung để sửa.');
+      if (!r.ok) throw new Error(d.detail || t('editLoadFailed'));
       setEditCues(d.cues || []);
     } catch (e) {
-      setEditError(e.message || 'Không tải được nội dung để sửa.');
+      setEditError(e.message || t('editLoadFailed'));
     } finally {
       setEditLoading(false);
     }
@@ -473,7 +473,7 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
         body: JSON.stringify({ cues: changed }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || 'Lưu thay đổi thất bại.');
+      if (!r.ok) throw new Error(d.detail || t('saveFailed'));
 
       setEditDirty(new Set());
       // Reflect the recomputed warning count in the job list right away,
@@ -482,7 +482,7 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
         j.id === editJob.id ? { ...j, reading_speed_warning_count: d.reading_speed_warning_count } : j
       )));
     } catch (e) {
-      setEditError(e.message || 'Lưu thay đổi thất bại.');
+      setEditError(e.message || t('saveFailed'));
     } finally {
       setEditSaving(false);
     }
@@ -494,23 +494,21 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
       <div className="mb-6">
         {embedded ? (
           <p className="text-sm text-fg-muted leading-relaxed">
-            Tải lên transcript .srt/.vtt có sẵn, chọn ngôn ngữ đích — hệ thống dịch bám sát ngữ nghĩa nội dung
-            gốc (không dịch máy móc từng chữ) và giữ nguyên mốc thời gian gốc của file.
+            {t('intro')}
           </p>
         ) : (
           <>
             <h1 className="text-2xl font-bold text-fg flex items-center gap-2">
               <Languages className="w-6 h-6 text-accent-text" />
-              Dịch Phụ Đề
+              {t('title')}
             </h1>
             <p className="text-sm text-fg-muted mt-1.5 leading-relaxed">
-              Tải lên transcript .srt/.vtt có sẵn, chọn ngôn ngữ đích — hệ thống dịch bám sát ngữ nghĩa nội dung
-              gốc (không dịch máy móc từng chữ) và giữ nguyên mốc thời gian gốc của file.
+              {t('intro')}
             </p>
           </>
         )}
         <a
-          href="/transcript-asr"
+          href={lp('/transcript-asr')}
           onClick={(e) => {
             e.preventDefault();
             if (onOpenAsr) { onOpenAsr(); return; }
@@ -519,7 +517,7 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
           }}
           className="inline-flex items-center gap-1.5 text-xs text-accent-text hover:underline mt-2 cursor-pointer"
         >
-          Chưa có file phụ đề? Tự tạo bằng AI từ video đã tải →
+          {t('asrLink')}
         </a>
       </div>
 
@@ -528,7 +526,7 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
         <div className="mb-4 flex items-start gap-2 px-4 py-3 bg-danger-soft border border-danger/30 rounded-xl text-sm text-danger">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
           <p className="flex-1">{errorMsg}</p>
-          <button onClick={() => setErrorMsg('')} className="text-danger hover:text-danger cursor-pointer shrink-0" aria-label="Đóng thông báo lỗi">
+          <button onClick={() => setErrorMsg('')} className="text-danger hover:text-danger cursor-pointer shrink-0" aria-label={t('closeError')}>
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -539,9 +537,9 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
         <div className="mb-4 px-4 py-3 bg-danger-soft border border-danger/30 rounded-xl text-sm text-danger">
           <div className="flex items-center justify-between gap-2 mb-1.5">
             <p className="font-semibold flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" /> Một số file bị từ chối
+              <AlertCircle className="w-4 h-4 shrink-0" /> {t('rejectedTitle')}
             </p>
-            <button onClick={() => setRejected([])} className="text-danger hover:text-danger cursor-pointer shrink-0" aria-label="Đóng thông báo file bị từ chối">
+            <button onClick={() => setRejected([])} className="text-danger hover:text-danger cursor-pointer shrink-0" aria-label={t('closeRejected')}>
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -559,16 +557,16 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
 
         <div className="mt-4 flex flex-col sm:flex-row gap-3 sm:items-end">
           <div className="flex-1">
-            <label htmlFor="target-lang-select" className="text-xs text-fg-muted mb-1 block">Ngôn ngữ đích</label>
+            <label htmlFor="target-lang-select" className="text-xs text-fg-muted mb-1 block">{t('targetLang')}</label>
             <select
               id="target-lang-select"
               value={targetLang}
               onChange={(e) => setTargetLang(e.target.value)}
               className="w-full sm:w-auto bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:border-accent/50 cursor-pointer"
             >
-              <option value="" disabled>-- Chọn ngôn ngữ đích --</option>
-              {Object.entries(TARGET_LANGS).map(([key, label]) => (
-                <option key={key} value={key}>{label}</option>
+              <option value="" disabled>{t('chooseTargetLang')}</option>
+              {TARGET_LANG_CODES.map((key) => (
+                <option key={key} value={key}>{t(`langs.${key}`)}</option>
               ))}
             </select>
           </div>
@@ -579,7 +577,7 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-            {submitting ? 'Đang tải lên...' : 'Bắt đầu dịch'}
+            {submitting ? t('uploading') : t('startTranslate')}
           </button>
         </div>
       </div>
@@ -587,14 +585,14 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
       {/* Queue */}
       <div>
         <h2 className="text-xs font-bold text-fg-muted uppercase tracking-wider mb-3">
-          Hàng đợi dịch{jobs.length > 0 ? ` (${jobs.length})` : ''}
+          {jobs.length > 0 ? t('queueCount', { n: jobs.length }) : t('queue')}
         </h2>
 
         {jobs.length === 0 ? (
           <EmptyState
             icon={<Languages className="w-12 h-12" />}
-            title="Chưa có job dịch nào"
-            body="Tải lên file .srt/.vtt ở trên để bắt đầu dịch phụ đề sang ngôn ngữ khác."
+            title={t('emptyTitle')}
+            body={t('emptyBody')}
           />
         ) : (
           <div className="flex flex-col gap-3">
@@ -622,33 +620,33 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-fg flex items-center gap-2">
                 <Film className="w-4 h-4 text-accent-text" />
-                Ghép vào video đã tải
+                {t('burnHeading')}
               </h3>
-              <button onClick={closeBurnPicker} className="text-fg-muted hover:text-fg cursor-pointer" aria-label="Đóng">
+              <button onClick={closeBurnPicker} className="text-fg-muted hover:text-fg cursor-pointer" aria-label={t('close')}>
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <p className="text-xs text-fg-muted mb-3 truncate">
-              Phụ đề: <span className="text-fg-2">{burnJob.filename}</span>
+              {t('subtitleLabel')} <span className="text-fg-2">{burnJob.filename}</span>
             </p>
 
             {burnResult ? (
               <div className="text-center py-4">
                 <CheckCircle2 className="w-8 h-8 text-success mx-auto mb-2" />
-                <p className="text-sm text-fg mb-3">Đã ghép phụ đề vào video thành công.</p>
+                <p className="text-sm text-fg mb-3">{t('burnSuccess')}</p>
                 <a
                   href={`${API}${burnResult.download_url}`}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-accent-fg text-sm font-bold hover:opacity-90 transition"
                 >
                   <Download className="w-4 h-4" />
-                  Tải video đã ghép phụ đề
+                  {t('burnDownload')}
                 </a>
               </div>
             ) : burnLoading ? (
               <div className="flex items-center justify-center gap-2 py-8 text-fg-muted text-sm">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Đang xử lý...
+                {t('processing')}
               </div>
             ) : (
               <>
@@ -684,9 +682,9 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
             <div className="flex items-center justify-between px-5 py-4 border-b border-line shrink-0">
               <h3 className="text-sm font-bold text-fg flex items-center gap-2 min-w-0">
                 <Pencil className="w-4 h-4 text-accent-text shrink-0" />
-                <span className="truncate">Xem/sửa bản dịch — {editJob.filename}</span>
+                <span className="truncate">{t('editHeading', { filename: editJob.filename })}</span>
               </h3>
-              <button onClick={closeEditor} className="text-fg-muted hover:text-fg cursor-pointer shrink-0" aria-label="Đóng">
+              <button onClick={closeEditor} className="text-fg-muted hover:text-fg cursor-pointer shrink-0" aria-label={t('close')}>
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -695,7 +693,7 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
               {editLoading ? (
                 <div className="flex items-center justify-center gap-2 py-8 text-fg-muted text-sm">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Đang tải...
+                  {t('loading')}
                 </div>
               ) : editError && editCues.length === 0 ? (
                 <p className="text-sm text-danger flex items-start gap-1.5">
@@ -730,7 +728,7 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
                   <span className="text-danger flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5 shrink-0" />{editError}</span>
                 )}
                 {!editError && editDirty.size > 0 && (
-                  <span className="text-fg-muted">{editDirty.size} dòng đã sửa, chưa lưu.</span>
+                  <span className="text-fg-muted">{t('unsaved', { count: editDirty.size })}</span>
                 )}
               </div>
               <button
@@ -739,7 +737,7 @@ export default function TranscriptTranslatePage({ embedded = false, onOpenAsr } 
                 className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-accent-fg text-sm font-bold hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
                 {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {editSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
+                {editSaving ? t('saving') : t('save')}
               </button>
             </div>
           </div>

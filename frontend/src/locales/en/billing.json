@@ -1,0 +1,47 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "title": "Billing & Plans",
+  "subtitle": "Manage your plan and payment history",
+  "reload": "Reload",
+  "nextRenewal": "Next renewal:",
+  "upgrade": "Upgrade",
+  "status": {
+    "active": "Active",
+    "pastDue": "Payment overdue — 3-day grace period",
+    "canceling": "Canceled — valid until {{date}}",
+    "canceled": "Canceled",
+    "none": "Free"
+  },
+  "toast": {
+    "dismiss": "Dismiss notification",
+    "upgraded": "Upgrade successful! Welcome to your new plan.",
+    "canceled": "Payment canceled."
+  },
+  "portal": {
+    "needLogin": "You need to sign in to manage billing.",
+    "openFailed": "Could not open the billing management page.",
+    "redirecting": "Redirecting...",
+    "manage": "Manage billing"
+  },
+  "usage": {
+    "title": "Today's usage",
+    "downloads": "Downloads today",
+    "ai": "AI analyses today",
+    "storage": "Cloud storage",
+    "unit": "uses"
+  },
+  "credits": {
+    "title": "Credits remaining",
+    "desc": "Used for AI analysis, logo removal and advanced features."
+  },
+  "history": {
+    "title": "Payment history",
+    "desc": "View invoices and transaction history on Stripe's management page.",
+    "view": "View payment history"
+  },
+  "upsell": {
+    "title": "Upgrade to unlock every feature",
+    "desc": "See the pricing page for each plan's limits.",
+    "viewPlans": "View plans"
+  }
+}

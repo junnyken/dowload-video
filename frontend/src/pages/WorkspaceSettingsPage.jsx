@@ -2,10 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { Building2, Users, Mail, Shield, Trash2, X, Check, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { useTranslation } from 'react-i18next';
+import { useLang } from '../i18n';
 
 const API = import.meta.env.VITE_API_URL || '';
 
-const TABS = ['Tổng quan', 'Thành viên', 'Lời mời'];
+// Tab labels: locales/*/workspace.json (tabs.<key>).
+const TABS = ['overview', 'members', 'invites'];
 
 const ROLE_LABELS = { owner: 'Owner', admin: 'Admin', editor: 'Editor', viewer: 'Viewer' };
 const ROLE_COLORS = {
@@ -16,6 +19,8 @@ const ROLE_COLORS = {
 };
 
 export default function WorkspaceSettingsPage() {
+  const { t } = useTranslation('workspace');
+  const lang = useLang();
   const { session } = useAuth();
   const { activeWorkspace, myRole, refetchWorkspaces, can } = useWorkspace();
   const [tab, setTab]     = useState(0);
@@ -77,7 +82,7 @@ export default function WorkspaceSettingsPage() {
         body: JSON.stringify({ name: wsName.trim() }),
       });
       if (r.ok) { setSaveDone(true); refetchWorkspaces(); setTimeout(() => setSaveDone(false), 2500); }
-      else { const d = await r.json(); setError(d.detail?.user_message || 'Lỗi khi lưu.'); }
+      else { const d = await r.json(); setError(d.detail?.user_message || t('saveFailed')); }
     } finally { setSaving(false); }
   };
 
@@ -112,7 +117,7 @@ export default function WorkspaceSettingsPage() {
         body: JSON.stringify({ email, role: inviteRole }),
       });
       if (r.ok) { setInviteEmail(''); fetchInvites(); }
-      else { const d = await r.json(); setError(d.detail?.user_message || 'Lỗi khi gửi lời mời.'); }
+      else { const d = await r.json(); setError(d.detail?.user_message || t('inviteFailed')); }
     } finally { setInviting(false); }
   };
 
@@ -127,7 +132,7 @@ export default function WorkspaceSettingsPage() {
   if (!activeWorkspace) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-12 text-center text-fg-muted">
-        Chưa có workspace nào.
+        {t('none')}
       </div>
     );
   }
@@ -136,19 +141,19 @@ export default function WorkspaceSettingsPage() {
     <div className="max-w-2xl mx-auto px-4 md:px-8 py-8 md:py-12">
       <div className="flex items-center gap-3 mb-6">
         <Building2 className="w-5 h-5 text-accent-text" />
-        <h1 className="text-xl font-bold text-fg">Cài đặt Workspace</h1>
+        <h1 className="text-xl font-bold text-fg">{t('title')}</h1>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b border-line">
-        {TABS.map((t, i) => (
+        {TABS.map((tabKey, i) => (
           <button
-            key={t}
+            key={tabKey}
             onClick={() => setTab(i)}
             className={`px-4 py-2.5 text-sm font-medium transition-colors cursor-pointer -mb-px border-b-2
               ${tab === i ? 'border-accent text-accent-text' : 'border-transparent text-fg-muted hover:text-fg-2'}`}
           >
-            {t}
+            {t(`tabs.${tabKey}`)}
           </button>
         ))}
       </div>
@@ -164,7 +169,7 @@ export default function WorkspaceSettingsPage() {
       {tab === 0 && (
         <div className="space-y-6">
           <div className="bg-surface-2 rounded-xl border border-line p-5">
-            <label className="block text-sm font-medium text-fg-2 mb-2">Tên Workspace</label>
+            <label className="block text-sm font-medium text-fg-2 mb-2">{t('name')}</label>
             {can('workspace.settings') ? (
               <div className="flex gap-2">
                 <input
@@ -177,7 +182,7 @@ export default function WorkspaceSettingsPage() {
                   disabled={saving || wsName.trim() === activeWorkspace.name}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-soft text-accent-text text-sm font-semibold hover:bg-accent/20 disabled:opacity-40 transition-colors cursor-pointer"
                 >
-                  {saveDone ? <Check className="w-4 h-4" /> : saving ? '...' : 'Lưu'}
+                  {saveDone ? <Check className="w-4 h-4" /> : saving ? '...' : t('save')}
                 </button>
               </div>
             ) : (
@@ -186,9 +191,9 @@ export default function WorkspaceSettingsPage() {
           </div>
 
           <div className="bg-surface-2 rounded-xl border border-line p-5 space-y-3">
-            <h3 className="text-sm font-medium text-fg-2">Thông tin</h3>
-            <InfoRow label="Loại" value={activeWorkspace.type === 'personal' ? 'Cá nhân' : activeWorkspace.type === 'team' ? 'Team' : 'Enterprise'} />
-            <InfoRow label="Vai trò của bạn">
+            <h3 className="text-sm font-medium text-fg-2">{t('info')}</h3>
+            <InfoRow label={t('type')} value={activeWorkspace.type === 'personal' ? t('typePersonal') : activeWorkspace.type === 'team' ? t('typeTeam') : t('typeEnterprise')} />
+            <InfoRow label={t('yourRole')}>
               <span className={`text-xs font-semibold px-2 py-0.5 rounded border ${ROLE_COLORS[myRole] || ROLE_COLORS.viewer}`}>
                 {ROLE_LABELS[myRole] || myRole}
               </span>
@@ -253,7 +258,7 @@ export default function WorkspaceSettingsPage() {
           {can('members.invite') && (
             <div className="bg-surface-2 rounded-xl border border-line p-5">
               <h3 className="text-sm font-medium text-fg-2 mb-3 flex items-center gap-2">
-                <Mail className="w-4 h-4" /> Gửi lời mời
+                <Mail className="w-4 h-4" /> {t('sendInvite')}
               </h3>
               <div className="flex gap-2">
                 <input
@@ -277,7 +282,7 @@ export default function WorkspaceSettingsPage() {
                   disabled={inviting || !inviteEmail.trim()}
                   className="px-4 py-2 rounded-lg bg-accent-soft text-accent-text text-sm font-semibold hover:bg-accent/20 disabled:opacity-40 transition-colors cursor-pointer"
                 >
-                  {inviting ? '...' : 'Mời'}
+                  {inviting ? '...' : t('invite')}
                 </button>
               </div>
             </div>
@@ -286,14 +291,14 @@ export default function WorkspaceSettingsPage() {
           {/* Pending invites */}
           <div className="space-y-2">
             {invites.length === 0 ? (
-              <p className="text-center text-fg-muted text-sm py-8">Không có lời mời nào đang chờ.</p>
+              <p className="text-center text-fg-muted text-sm py-8">{t('noInvites')}</p>
             ) : invites.map(inv => (
               <div key={inv.id} className="flex items-center gap-3 px-4 py-3 rounded-xl bg-surface-2 border border-line">
                 <Mail className="w-4 h-4 text-fg-muted flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-fg truncate">{inv.email}</p>
                   <p className="text-xs text-fg-muted">
-                    {ROLE_LABELS[inv.role] || inv.role} · Hết hạn {new Date(inv.expires_at).toLocaleDateString('vi-VN')}
+                    {ROLE_LABELS[inv.role] || inv.role} · {t('expires', { date: new Date(inv.expires_at).toLocaleDateString(lang === 'en' ? 'en-US' : 'vi-VN') })}
                   </p>
                 </div>
                 {can('members.invite') && (

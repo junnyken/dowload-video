@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Clock, AlertTriangle, XCircle, RotateCcw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 /** Shows expiry countdown for a processed artifact. */
 export default function ArtifactExpiry({ expiresAt, onReprocess }) {
+  const { t } = useTranslation('common');
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 15000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(timer);
   }, []);
 
   if (!expiresAt) return null;
@@ -19,13 +21,13 @@ export default function ArtifactExpiry({ expiresAt, onReprocess }) {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs text-danger">
         <XCircle className="w-3 h-3" />
-        Đã hết hạn
+        {t('expiry.expired')}
         {onReprocess && (
           <button
             onClick={onReprocess}
             className="ml-1 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-danger-soft hover:bg-danger/20 text-danger transition-colors cursor-pointer"
           >
-            <RotateCcw className="w-2.5 h-2.5" /> Tạo lại
+            <RotateCcw className="w-2.5 h-2.5" /> {t('expiry.recreate')}
           </button>
         )}
       </span>
@@ -36,7 +38,7 @@ export default function ArtifactExpiry({ expiresAt, onReprocess }) {
     return (
       <span className="inline-flex items-center gap-1 text-xs text-accent-text animate-pulse">
         <AlertTriangle className="w-3 h-3" />
-        Còn {minLeft} phút
+        {t('expiry.minutesLeft', { count: minLeft })}
       </span>
     );
   }
@@ -44,7 +46,7 @@ export default function ArtifactExpiry({ expiresAt, onReprocess }) {
   return (
     <span className="inline-flex items-center gap-1 text-xs text-success">
       <Clock className="w-3 h-3" />
-      Còn {minLeft} phút
+      {t('expiry.minutesLeft', { count: minLeft })}
     </span>
   );
 }

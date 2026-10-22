@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { API_BASE } from '../lib/apiBase';
+import { useTranslation } from 'react-i18next';
+import { useLang } from '../i18n';
 
 export default function ArchiveSuggestions({ authToken }) {
+  const { t } = useTranslation('archive');
+  const lang = useLang();
   const [tagSuggestions, setTagSuggestions] = useState([]);
   const [duplicates, setDuplicates] = useState([]);
   const [dupModal, setDupModal] = useState(null);
@@ -34,7 +38,7 @@ export default function ArchiveSuggestions({ authToken }) {
         body: JSON.stringify({ tags: item.suggested_tags }),
       });
       setTagSuggestions((s) => s.filter((x) => x.item_id !== item.item_id));
-      showToast(`✓ Đã thêm ${item.suggested_tags.length} tag`);
+      showToast(t('suggestions.tagsAdded', { count: item.suggested_tags.length }));
     } catch (_) {}
     setAccepting(null);
   };
@@ -70,17 +74,17 @@ export default function ArchiveSuggestions({ authToken }) {
       {dupModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60">
           <div className="bg-surface border border-line rounded-xl p-5 max-w-md w-full mx-4">
-            <div className="text-fg font-semibold mb-3">Có thể trùng lặp</div>
+            <div className="text-fg font-semibold mb-3">{t('suggestions.dupModalTitle')}</div>
             <div className="text-fg-muted text-sm mb-3">"{dupModal.title}"</div>
             <div className="space-y-2">
               {(dupModal.items || []).map((it, i) => (
                 <div key={i} className="bg-surface-2 rounded p-2 text-sm">
                   <div className="text-fg">{it.title}</div>
-                  <div className="text-fg-muted text-xs">{it.created_at ? new Date(it.created_at).toLocaleString("vi-VN") : ""}</div>
+                  <div className="text-fg-muted text-xs">{it.created_at ? new Date(it.created_at).toLocaleString(lang === 'en' ? 'en-US' : "vi-VN") : ""}</div>
                 </div>
               ))}
             </div>
-            <button onClick={() => setDupModal(null)} className="mt-4 w-full py-2 rounded-lg bg-surface-2 text-fg text-sm hover:bg-line transition">Đóng</button>
+            <button onClick={() => setDupModal(null)} className="mt-4 w-full py-2 rounded-lg bg-surface-2 text-fg text-sm hover:bg-line transition">{t('suggestions.close')}</button>
           </div>
         </div>
       )}
@@ -88,21 +92,21 @@ export default function ArchiveSuggestions({ authToken }) {
       {tagSuggestions.length > 0 && (
         <div className="bg-surface-2 border border-line rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-fg">💡 Gợi ý tag tự động</span>
-            <span className="text-xs text-fg-muted">{tagSuggestions.length} mục</span>
+            <span className="text-sm font-medium text-fg">{t('suggestions.tagsHeading')}</span>
+            <span className="text-xs text-fg-muted">{t('suggestions.itemCount', { count: tagSuggestions.length })}</span>
           </div>
           <div className="space-y-2">
             {visibleTags.map((s) => (
               <div key={s.item_id} className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs text-fg-muted shrink-0 max-w-[120px] truncate" title={s.title}>{s.title}</span>
                 <div className="flex gap-1 flex-wrap flex-1">
-                  {(s.suggested_tags || []).map((t) => (
-                    <span key={t} className="px-2 py-0.5 rounded-full bg-surface-2 text-fg-2 text-xs border border-line">{t}</span>
+                  {(s.suggested_tags || []).map((tag) => (
+                    <span key={tag} className="px-2 py-0.5 rounded-full bg-surface-2 text-fg-2 text-xs border border-line">{tag}</span>
                   ))}
                 </div>
                 <button onClick={() => acceptTags(s)} disabled={accepting === s.item_id}
                   className="text-xs px-2 py-1 rounded bg-surface-2 text-fg-2 hover:bg-line transition disabled:opacity-50 shrink-0">
-                  {accepting === s.item_id ? "..." : "Áp dụng"}
+                  {accepting === s.item_id ? "..." : t('suggestions.apply')}
                 </button>
                 <button onClick={() => dismissTag(s.item_id)} className="text-xs text-fg-muted hover:text-fg-muted transition shrink-0">✕</button>
               </div>
@@ -110,7 +114,7 @@ export default function ArchiveSuggestions({ authToken }) {
           </div>
           {tagSuggestions.length > 3 && (
             <button onClick={() => setTagsExpanded(!tagsExpanded)} className="mt-2 text-xs text-fg-muted hover:text-fg-2 transition">
-              {tagsExpanded ? "Thu gọn" : `Xem thêm ${tagSuggestions.length - 3} mục`}
+              {tagsExpanded ? t('suggestions.collapse') : t('suggestions.showMoreItems', { count: tagSuggestions.length - 3 })}
             </button>
           )}
         </div>
@@ -119,22 +123,22 @@ export default function ArchiveSuggestions({ authToken }) {
       {duplicates.length > 0 && (
         <div className="bg-surface-2 border border-line rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-fg">🔍 Có thể trùng lặp</span>
-            <span className="text-xs text-fg-muted">{duplicates.length} nhóm</span>
+            <span className="text-sm font-medium text-fg">{t('suggestions.dupHeading')}</span>
+            <span className="text-xs text-fg-muted">{t('suggestions.groupCount', { count: duplicates.length })}</span>
           </div>
           <div className="space-y-2">
             {visibleDups.map((d, i) => (
               <div key={i} className="flex items-center gap-2">
                 <span className="text-xs text-fg-muted flex-1 truncate">{d.title}</span>
-                <span className="text-xs px-1.5 py-0.5 rounded bg-accent-soft text-accent-text">{(d.items || []).length} bản</span>
-                <button onClick={() => setDupModal(d)} className="text-xs px-2 py-1 rounded bg-surface text-fg-2 hover:bg-surface-2 transition">Xem</button>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-accent-soft text-accent-text">{t('suggestions.copyCount', { count: (d.items || []).length })}</span>
+                <button onClick={() => setDupModal(d)} className="text-xs px-2 py-1 rounded bg-surface text-fg-2 hover:bg-surface-2 transition">{t('suggestions.view')}</button>
                 <button onClick={() => setDuplicates((prev) => prev.filter((_, j) => j !== i))} className="text-xs text-fg-muted hover:text-fg-muted transition">✕</button>
               </div>
             ))}
           </div>
           {duplicates.length > 3 && (
             <button onClick={() => setDupExpanded(!dupExpanded)} className="mt-2 text-xs text-fg-muted hover:text-fg-2 transition">
-              {dupExpanded ? "Thu gọn" : `Xem thêm ${duplicates.length - 3} nhóm`}
+              {dupExpanded ? t('suggestions.collapse') : t('suggestions.showMoreGroups', { count: duplicates.length - 3 })}
             </button>
           )}
         </div>

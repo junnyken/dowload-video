@@ -3,7 +3,10 @@
  * All functions are no-ops when the Notification API is unavailable or denied.
  */
 
+import i18n from '../i18n';
+
 const ICON = '/icon-192.png';
+const tc = (key, opts) => i18n.t(key, { ns: 'common', ...opts });
 
 export function isSupported() {
   return typeof Notification !== 'undefined';
@@ -38,13 +41,13 @@ export function notify(title, body = '', options = {}) {
 }
 
 export function notifyDownloadDone(title) {
-  notify('✅ Tải xuống hoàn tất', title || 'File đã sẵn sàng tải về.', { tag: 'download-done' });
+  notify(tc('notify.downloadDone'), title || tc('notify.fileReady'), { tag: 'download-done' });
 }
 
 export function notifyDownloadFailed(title, reason) {
-  notify('❌ Tải xuống thất bại', `${title || 'Job'}: ${reason || 'Lỗi không xác định.'}`, { tag: 'download-failed' });
+  notify(tc('notify.downloadFailed'), `${title || 'Job'}: ${reason || tc('notify.unknownError')}`, { tag: 'download-failed' });
 }
 
 export function notifyArchiveDone(title) {
-  notify('📁 Archive hoàn tất', title || 'Đã lưu vào Archive.', { tag: 'archive-done' });
+  notify(tc('notify.archiveDone'), title || tc('notify.savedToArchive'), { tag: 'archive-done' });
 }

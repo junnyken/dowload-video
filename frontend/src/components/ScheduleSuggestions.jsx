@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { API_BASE } from '../lib/apiBase';
+import { useTranslation } from 'react-i18next';
 
 export default function ScheduleSuggestions({ authToken, onApplySuggestion }) {
+  const { t } = useTranslation('schedule');
   const [suggestions, setSuggestions] = useState([]);
   const [driftAlerts, setDriftAlerts] = useState([]);
   const [applying, setApplying] = useState(null);
@@ -41,7 +43,7 @@ export default function ScheduleSuggestions({ authToken, onApplySuggestion }) {
         headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
       });
       setSuggestions((prev) => prev.filter((x) => x.job_id !== s.job_id));
-      showToast("✓ Đã áp dụng lịch mới");
+      showToast(t('sugApplied'));
     } catch (_) {}
     setApplying(null);
   };
@@ -56,13 +58,13 @@ export default function ScheduleSuggestions({ authToken, onApplySuggestion }) {
 
       {driftAlerts.length > 0 && (
         <div className="bg-accent-soft border border-accent/30 rounded-lg px-4 py-2.5 text-sm text-accent-text">
-          ⚠️ {driftAlerts.length} job đang bị trễ — hàng đợi có thể đang bận
+          ⚠️ {t('sugDrift', { count: driftAlerts.length })}
         </div>
       )}
 
       {suggestions.length > 0 && (
         <div className="bg-surface-2 border border-line rounded-xl p-4">
-          <div className="text-sm font-medium text-fg mb-3">📅 Gợi ý lịch biểu tối ưu</div>
+          <div className="text-sm font-medium text-fg mb-3">{t('sugTitle')}</div>
           <div className="space-y-3">
             {suggestions.map((s) => (
               <div key={s.job_id} className="bg-surface rounded-lg p-3">
@@ -78,10 +80,10 @@ export default function ScheduleSuggestions({ authToken, onApplySuggestion }) {
                   <div className="flex gap-1.5 shrink-0">
                     <button onClick={() => apply(s)} disabled={applying === s.job_id}
                       className="text-xs px-2.5 py-1 rounded bg-success-soft text-success hover:bg-success/50 transition disabled:opacity-50">
-                      {applying === s.job_id ? "..." : "Áp dụng"}
+                      {applying === s.job_id ? "..." : t('sugApply')}
                     </button>
                     <button onClick={() => dismiss(s.job_id)} className="text-xs px-2.5 py-1 rounded bg-surface-2 text-fg-muted hover:text-fg transition">
-                      Bỏ qua
+                      {t('sugDismiss')}
                     </button>
                   </div>
                 </div>

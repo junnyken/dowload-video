@@ -1,0 +1,92 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "help": {
+    "quality_selector": "Choose the video quality. 4K takes longer and needs more storage. Use 'video_fast' for a quicker download.",
+    "batch_download": "Download many videos at once from a channel or playlist. Up to 10 videos per batch to avoid being blocked.",
+    "schedule": "Schedule automatic downloads with a cron expression. Example: '0 9 * * *' = every day at 9 AM.",
+    "archive_pin": "Pin a video to the archive so it isn't deleted after 24 hours. The file is kept permanently (until you delete it).",
+    "remove_watermark": "Remove the watermark with AI inpainting. TikTok/Douyin only. Takes an extra 30–60 seconds to process.",
+    "webhook": "Get notified through your webhook URL when a download finishes. We send a POST request with the job details.",
+    "approval_workflow": "Large-scale downloads need approval from a workspace admin before they run. You'll be notified once approved.",
+    "auto_retry": "The system retries automatically on temporary errors (rate limit, timeout), up to 3–4 times with backoff."
+  },
+  "helpTitle": "Help",
+  "newBadge": "New",
+  "errorBoundary": {
+    "unknown": "Unknown error",
+    "title": "An unexpected error occurred",
+    "network": "Can't connect to the server. Check your network connection and try again.",
+    "render": "A component failed and can't be displayed. Try refreshing the page.",
+    "retry": "Try again",
+    "reload": "Reload page",
+    "support": "If the error persists, contact support on <tg>Telegram</tg>."
+  },
+  "platformStatus": {
+    "degraded_one": "{{count}} platform is having problems",
+    "degraded_other": "{{count}} platforms are having problems",
+    "constrained_one": "{{count}} platform may be slower than usual",
+    "constrained_other": "{{count}} platforms may be slower than usual",
+    "suffixDegraded": " — down",
+    "suffixSlow": " — slow"
+  },
+  "expiry": {
+    "expired": "Expired",
+    "recreate": "Recreate",
+    "minutesLeft_one": "{{count}} minute left",
+    "minutesLeft_other": "{{count}} minutes left"
+  },
+  "smartDefaults": {
+    "suggest": "You usually use <q>{{quality}}</q> for {{platform}} — use it again?",
+    "use": "Use"
+  },
+  "quickActions": {
+    "no_watermark": {
+      "label": "No WM",
+      "description": "Download without watermark"
+    },
+    "mp3_fast": {
+      "description": "Extract MP3 audio"
+    },
+    "mp3_hq": {
+      "description": "High-quality MP3 at 320kbps"
+    },
+    "thumbnail": {
+      "description": "Thumbnail image only"
+    },
+    "gif_quick": {
+      "description": "Make a GIF of the first 15 seconds"
+    }
+  },
+  "presets": {
+    "sys_tiktok_clean": "TikTok without watermark",
+    "sys_mp3_fast": "Extract MP3 audio",
+    "sys_thumbnail": "Thumbnail only"
+  },
+  "processing": {
+    "failed": "Processing failed",
+    "errors": {
+      "no_subtitles": "This source has no subtitles/captions",
+      "file_expired": "The file has expired; download it again from the original source",
+      "invalid_path": "Invalid file path"
+    }
+  },
+  "discover": {
+    "pollError": "Poll error: HTTP {{status}}",
+    "failed": "Discovery failed.",
+    "queued": "Queued..."
+  },
+  "notify": {
+    "downloadDone": "✅ Download complete",
+    "fileReady": "Your file is ready to download.",
+    "downloadFailed": "❌ Download failed",
+    "unknownError": "Unknown error.",
+    "archiveDone": "📁 Archive complete",
+    "savedToArchive": "Saved to the archive."
+  },
+  "urlValidator": {
+    "required": "Please enter a URL.",
+    "scheme": "The URL must start with https:// or http://",
+    "invalid": "Invalid URL.",
+    "blocked": "This URL is not allowed."
+  }
+}

@@ -1,17 +1,17 @@
 import { useState, useCallback } from 'react';
+import i18n from '../i18n';
 
 const API = import.meta.env.VITE_API_URL || '';
 
-const FRIENDLY_ERRORS = {
-  no_subtitles: 'Nguồn này không có phụ đề/captions',
-  file_expired: 'File đã hết hạn, hãy tải lại từ nguồn gốc',
-  invalid_path: 'Đường dẫn file không hợp lệ',
-};
+// Server error codes -> text in locales/*/common.json (processing.errors.<code>).
+const FRIENDLY_CODES = ['no_subtitles', 'file_expired', 'invalid_path'];
+const friendly = (code) => (FRIENDLY_CODES.includes(code) ? i18n.t(`processing.errors.${code}`, { ns: 'common' }) : undefined);
 
 function friendlyMsg(err) {
-  if (!err) return 'Xử lý thất bại';
-  if (typeof err === 'string') return FRIENDLY_ERRORS[err] || err;
-  return FRIENDLY_ERRORS[err.error] || err.message || err.detail || 'Xử lý thất bại';
+  const failed = i18n.t('processing.failed', { ns: 'common' });
+  if (!err) return failed;
+  if (typeof err === 'string') return friendly(err) || err;
+  return friendly(err.error) || err.message || err.detail || failed;
 }
 
 async function callAPI(path, body) {

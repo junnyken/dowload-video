@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { MonitorDown, Loader2, ChevronDown } from 'lucide-react';
 import { API_BASE } from '../lib/apiBase';
+import { useTranslation } from 'react-i18next';
+import { useLang } from '../i18n';
 
 const PAGE = 20;
 // Server answers these when the feature is off / the table is missing; the
@@ -14,13 +16,15 @@ function fmtSize(n) {
   return `${Math.max(1, Math.round(n / 1024))} KB`;
 }
 
-function fmtDate(iso) {
+function fmtDate(iso, lang) {
   const d = iso ? new Date(iso) : null;
   if (!d || Number.isNaN(d.getTime())) return '';
-  return d.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString(lang === 'en' ? 'en-US' : 'vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export default function DesktopHistorySection({ session }) {
+  const { t } = useTranslation('userHistory');
+  const lang = useLang();
   const [items, setItems] = useState([]);
   const [next, setNext] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -60,10 +64,10 @@ export default function DesktopHistorySection({ session }) {
   if (hidden || !token) return null;
 
   return (
-    <section className="space-y-3 pt-4" aria-label="Tải bằng app Windows">
+    <section className="space-y-3 pt-4" aria-label={t('desktop.title')}>
       <div className="flex items-center gap-2">
         <MonitorDown className="w-4 h-4 text-accent-text" />
-        <h3 className="text-fg text-sm font-semibold">Tải bằng app Windows</h3>
+        <h3 className="text-fg text-sm font-semibold">{t('desktop.title')}</h3>
       </div>
 
       {loading && items.length === 0 ? (
@@ -72,12 +76,12 @@ export default function DesktopHistorySection({ session }) {
         </div>
       ) : error && items.length === 0 ? (
         <div className="bg-surface-2 border border-line rounded-xl p-4 text-sm text-fg-muted flex items-center justify-between gap-3">
-          <span>Không tải được lịch sử từ app Windows.</span>
-          <button onClick={() => load(null)} className="text-accent-text hover:underline cursor-pointer">Thử lại</button>
+          <span>{t('desktop.loadError')}</span>
+          <button onClick={() => load(null)} className="text-accent-text hover:underline cursor-pointer">{t('desktop.retry')}</button>
         </div>
       ) : items.length === 0 ? (
         <p className="bg-surface-2 border border-line rounded-xl p-4 text-sm text-fg-muted text-center">
-          Chưa có lượt tải nào từ app Windows
+          {t('desktop.empty')}
         </p>
       ) : (
         <div className="space-y-2">
@@ -88,16 +92,16 @@ export default function DesktopHistorySection({ session }) {
               <div key={it.id || it.clientId} className="bg-surface-2 border border-line rounded-xl p-3 hover:border-line-strong transition-colors">
                 <p className="text-fg text-sm font-medium truncate">{it.title || it.url}</p>
                 <div className="flex items-center gap-2 mt-1 flex-wrap text-[11px] text-fg-muted">
-                  <span className={ok ? 'text-success' : 'text-danger'}>{ok ? 'Hoàn tất' : 'Thất bại'}</span>
+                  <span className={ok ? 'text-success' : 'text-danger'}>{ok ? t('desktop.completed') : t('desktop.failed')}</span>
                   {it.platform && <span>{it.platform}</span>}
                   {it.formatLabel && <span>{it.formatLabel}</span>}
                   {size && <span>{size}</span>}
-                  <span>{fmtDate(it.finishedAt || it.createdAt)}</span>
+                  <span>{fmtDate(it.finishedAt || it.createdAt, lang)}</span>
                 </div>
               </div>
             );
           })}
-          {error && <p className="text-xs text-danger">Không tải thêm được. Thử lại sau.</p>}
+          {error && <p className="text-xs text-danger">{t('desktop.loadMoreError')}</p>}
           {next && (
             <button
               onClick={() => load(next)}
@@ -105,7 +109,7 @@ export default function DesktopHistorySection({ session }) {
               className="w-full py-3 rounded-xl border border-line text-fg-muted hover:text-fg hover:border-line-strong transition-colors text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
             >
               <ChevronDown className="w-4 h-4" />
-              Xem thêm
+              {t('desktop.loadMore')}
             </button>
           )}
         </div>
