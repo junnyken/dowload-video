@@ -458,6 +458,8 @@ async function initPopup() {
         } else {
           document.getElementById('ch-status').textContent = 'Panel live đang theo dõi DOM — cuộn trang để load video.';
         }
+        // 5.16.0: live list + stop button without having to press the tab
+        document.getElementById('tab-channel').click();
       }
     } else {
       showTab('single');
@@ -629,15 +631,103 @@ document.getElementById('tab-channel').addEventListener('click', async () => {
   const tab = await getActiveTab();
   const pageInfo = await tryGetPageInfo(tab.id).catch(() => null);
   if (pageInfo?.pageType === 'spotify_playlist' || pageInfo?.pageType === 'generic_channel') return;
-  pollTimer = setInterval(async () => {
+  const tick = async () => {
     if (!_activeTabId) return;
-    const res = await new Promise((r) => chrome.tabs.sendMessage(_activeTabId, { type: 'VG_GET_COUNT' }, r)).catch(() => null);
-    const count = res?.count || 0;
+    const res = await new Promise((r) => chrome.tabs.sendMessage(_activeTabId, { type: 'VG_GET_ITEMS' }, r)).catch(() => null);
+    if (!res) return;
+    const items = res.items || [];
+    const count = items.length;
     document.getElementById('ch-count').textContent = count;
     if (count > 0) { document.getElementById('ch-send-btn').classList.remove('hidden'); document.getElementById('ch-send-text').textContent = `Gửi tải ${count} video`; }
-  }, 1500);
+    vgChannelState(!!res.scrolling);
+    vgRenderChannelList(items);
+  };
+  void tick();
+  pollTimer = setInterval(tick, 1500);
 });
 document.getElementById('tab-single').addEventListener('click', () => clearInterval(pollTimer));
+
+// ── 5.16.0: stop the scan, and the list of collected videos ──────
+// wording: BA review
+document.getElementById('ch-stop-local')?.addEventListener('click', async (e) => {
+  e.currentTarget.textContent = '⏳ Đang dừng…';
+  await new Promise((r) => chrome.tabs.sendMessage(_activeTabId, { type: 'VG_STOP_SCROLL' }, r)).catch(() => null);
+});
+
+let _vgWasScrolling = false;
+function vgChannelState(scrolling) {
+  const stop = document.getElementById('ch-stop-local');
+  const btn = document.getElementById('ch-scrape-btn');
+  if (!stop || !btn) return;
+  stop.classList.toggle('hidden', !scrolling);
+  if (scrolling) {
+    btn.disabled = true;
+    document.getElementById('ch-spinner').style.display = 'block';
+    document.getElementById('ch-btn-text').textContent = 'Đang cuộn...';
+  } else if (_vgWasScrolling) {
+    stop.textContent = '⏹ Dừng quét';
+    btn.disabled = false;
+    document.getElementById('ch-spinner').style.display = 'none';
+    document.getElementById('ch-btn-text').textContent = 'Cuộn thêm';
+  }
+  _vgWasScrolling = scrolling;
+}
+
+const _vgListed = new Set();
+function vgRenderChannelList(items) {
+  const wrap = document.getElementById('ch-list-wrap');
+  const list = document.getElementById('ch-list');
+  if (!wrap || !list) return;
+  if (!items.length) return;
+  wrap.classList.remove('hidden');
+  document.getElementById('ch-list-count').textContent = `(${items.length})`;
+  items.forEach((it, i) => {
+    if (_vgListed.has(it.url)) return;
+    _vgListed.add(it.url);
+    list.appendChild(vgChannelRow(it, i));
+  });
+}
+
+function vgChannelRow(it, i) {
+  const row = document.createElement('div');
+  row.className = 'vg-ch-row';
+  row.style.cssText = 'display:flex;align-items:center;gap:8px;background:#0f1119;border:1px solid #1e2333;border-radius:10px;padding:6px;';
+  const thumb = document.createElement(it.thumb ? 'img' : 'div');
+  thumb.style.cssText = 'flex-shrink:0;width:44px;height:56px;border-radius:6px;object-fit:cover;background:#1e2333;';
+  if (it.thumb) { thumb.src = it.thumb; thumb.referrerPolicy = 'no-referrer'; thumb.alt = ''; thumb.loading = 'lazy'; }
+  const info = document.createElement('div');
+  info.style.cssText = 'flex:1;min-width:0;';
+  const title = document.createElement('div');
+  title.className = 'vg-ch-title';
+  title.style.cssText = 'font-size:10px;color:#e2e8f0;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;';
+  const idTail = (it.url.match(/(\d{6,25})\/?$/) || it.url.match(/[?&]v=(\d{6,25})/) || [])[1];
+  const fallback = /facebook\.com\/reel\//.test(it.url) ? 'Reel' : 'Video';
+  title.textContent = it.title || (idTail ? `${fallback} …${idTail.slice(-6)}` : `${fallback} ${i + 1}`);
+  title.title = it.url;
+  const state = document.createElement('div');
+  state.className = 'vg-ch-state';
+  state.style.cssText = 'font-size:9px;color:#64748b;margin-top:2px;';
+  info.append(title, state);
+  const dl = document.createElement('button');
+  dl.className = 'vg-ch-dl';
+  dl.textContent = 'Tải';
+  dl.style.cssText = 'flex-shrink:0;background:#6366f1;border:none;border-radius:8px;padding:6px 10px;color:#fff;font-size:10px;font-weight:700;cursor:pointer;';
+  dl.onclick = () => {
+    dl.disabled = true;
+    dl.textContent = '…';
+    chrome.runtime.sendMessage({
+      type: 'VG_DOWNLOAD_NOW',
+      payload: { url: it.url, quality: 'video', remove_watermark: true, download_subs: false },
+    }, (ack) => {
+      dl.textContent = ack?.queued ? '✓' : 'Tải';
+      dl.disabled = !!ack?.queued;
+      state.textContent = ack?.queued ? 'Đang tải nền — sẽ có thông báo khi xong' : 'Không gửi được, thử lại';
+      state.style.color = ack?.queued ? '#86efac' : '#fca5a5';
+    });
+  };
+  row.append(thumb, info, dl);
+  return row;
+}
 window.addEventListener('unload', () => clearInterval(pollTimer));
 
 // ── Elapsed timer (hiển thị số giây đang xử lý) ──────────────────

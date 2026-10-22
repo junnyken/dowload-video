@@ -776,6 +776,9 @@
         <span id="ch-btn-text">Bắt đầu Quét Kênh</span>
       </button>
 
+      <!-- 5.16.0: stop the page's auto-scroll -->
+      <button id="ch-stop-local" class="ch-stop-btn hidden" type="button" style="margin-bottom:8px;width:100%;padding:7px 10px;border-radius:10px;border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.08);color:#f87171;font-size:11px;font-weight:700;cursor:pointer;">⏹ Dừng quét</button>
+
       <!-- Send button (Douyin) -->
       <button id="ch-send-btn" class="btn-green hidden">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -783,6 +786,15 @@
       </button>
 
       <div id="ch-batch-info" class="hidden" style="font-size:10px;text-align:center;color:#475569;margin-top:6px;"></div>
+
+      <!-- 5.16.0: the collected videos, each with its own download button. wording: BA review -->
+      <div id="ch-list-wrap" class="hidden" style="margin-top:10px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div class="card-label" style="margin:0;">Danh sách video <span id="ch-list-count" style="color:#a5b4fc;"></span></div>
+        </div>
+        <div id="ch-list" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;"></div>
+        <div id="ch-list-msg" style="font-size:10px;color:#64748b;margin-top:4px;min-height:0;"></div>
+      </div>
 
       <!-- Channel Watch (Phase 33B, task #6259): shown only when signed in and the server enables it. wording: BA review -->
       <div id="ch-watch" class="hidden" style="margin-top:10px;">

@@ -252,6 +252,19 @@
   // ── Shared video store (DOM + interceptor) ────────────────────────
   const videoSet = new Set(); // canonical video URLs
   const vgSentUrls = new Set(); // 5.10.0: already sent to the server from this page
+  const vgItemMeta = new Map(); // 5.16.0: url -> {title, thumb}, for the popup's list
+  let vgStopScroll = false;     // 5.16.0: "Dừng quét" (popup or the page panel)
+
+  // Title + thumbnail of a collected link, from its anchor (kept: long grids drop old rows).
+  function vgRemember(url, a) {
+    if (vgItemMeta.has(url) && vgItemMeta.get(url).thumb) return;
+    const img = a && a.querySelector('img');
+    let title = ((a && a.getAttribute('aria-label')) || (img && img.alt) || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    // Facebook labels every reel tile the same ("Bản xem trước ô thước phim"): not a title
+    if (/^(bản xem trước|reel tile preview|preview)/i.test(title)) title = '';
+    const thumb = img && /^https:/.test(img.currentSrc || img.src || '') ? (img.currentSrc || img.src) : '';
+    vgItemMeta.set(url, { title, thumb });
+  }
 
   function scanDOM() {
     const onFacebook = /(^|\.)facebook\.com$/i.test(location.hostname);
@@ -261,21 +274,26 @@
         const id = vgFacebookVideoId(href);
         if (id) {
           videoSet.add(id.url);
+          vgRemember(id.url, a);
           const label = (a.getAttribute('aria-label') || '').trim();
-          if (label && !vgFbTitles.has(id.url)) vgFbTitles.set(id.url, label.slice(0, 300));
+          if (label && !/^(bản xem trước|reel tile preview|preview)/i.test(label) && !vgFbTitles.has(id.url)) vgFbTitles.set(id.url, label.slice(0, 300));
         }
         return;
       }
       // Douyin: /video/xxx or /note/xxx
       const dyMatch = href.match(/douyin\.com\/(video|note)\/(\d{15,25})/);
       if (dyMatch) {
-        videoSet.add(`https://www.douyin.com/${dyMatch[1]}/${dyMatch[2]}`);
+        const u = `https://www.douyin.com/${dyMatch[1]}/${dyMatch[2]}`;
+        videoSet.add(u);
+        vgRemember(u, a);
         return;
       }
       // TikTok: /@user/video/xxx
       const tkMatch = href.match(/tiktok\.com\/@[\w.-]+\/video\/(\d{15,25})/);
       if (tkMatch) {
-        videoSet.add(href.split('?')[0]); // clean tracking params
+        const u = href.split('?')[0]; // clean tracking params
+        videoSet.add(u);
+        vgRemember(u, a);
         return;
       }
     });
@@ -608,6 +626,10 @@ window.addEventListener('message', (event) => {
         🔄 Auto-Scroll &amp; Collect
       </button>
 
+      <button id="vg-stop-btn" style="width:100%;background:rgba(248,113,113,.12);color:#f87171;font-weight:700;
+        border:1px solid rgba(248,113,113,.4);border-radius:8px;padding:8px;cursor:pointer;font-size:12px;
+        margin-bottom:6px;display:none">⏹ Dừng quét</button>
+
       <button id="vg-send-btn" style="width:100%;background:#22c55e;color:#fff;font-weight:700;
         border:none;border-radius:8px;padding:9px;cursor:pointer;font-size:12px;
         transition:opacity .2s;display:none">
@@ -637,6 +659,8 @@ window.addEventListener('message', (event) => {
     const scrollInfo = document.getElementById('vg-scroll-info');
     const statusEl   = document.getElementById('vg-ch-status');
     const relayTok   = vgRelayToken(); // 5.11.0: the app / website waits for this channel
+    const stopBtn    = document.getElementById('vg-stop-btn');
+    stopBtn.addEventListener('click', () => { vgStopScroll = true; stopBtn.textContent = '⏳ Đang dừng…'; });
 
     document.getElementById('vg-panel-close').addEventListener('click', () => {
       stopDomObserver();
@@ -682,6 +706,10 @@ window.addEventListener('message', (event) => {
     scrapeBtn.addEventListener('click', async () => {
       if (isScraping) return;
       isScraping = true;
+      vgStopScroll = false;
+      delete statusEl.dataset.locked;
+      stopBtn.style.display = 'block';
+      stopBtn.textContent = '⏹ Dừng quét';
       scrapeBtn.style.opacity = '0.5';
       scrapeBtn.textContent = '⏳ Đang cuộn...';
       scrapeBtn.disabled = true;
@@ -693,8 +721,10 @@ window.addEventListener('message', (event) => {
       const MAX_STABLE = 5;
       let round = 0;
       let loginWall = false;
+      let stopped = false;
 
       while (stable < MAX_STABLE) {
+        if (vgStopScroll) { stopped = true; break; }
         round++;
         vgFacebookUnblock();
         vgScrollPage();
@@ -715,10 +745,14 @@ window.addEventListener('message', (event) => {
       }
 
       scrollBar.style.width = '100%';
+      stopBtn.style.display = 'none';
       const finalCount = videoSet.size;
       delete statusEl.dataset.locked;
       statusEl.style.color = finalCount > 0 ? '#34d399' : '#9ca3af';
-      statusEl.textContent = loginWall
+      if (stopped) statusEl.dataset.locked = '1';   // keep "Đã dừng quét", not the live count
+      statusEl.textContent = stopped
+        ? `Đã dừng quét — ${finalCount} video. Bấm "Cuộn thêm" để quét tiếp, hoặc gửi tải.`
+        : loginWall
         ? 'Douyin yêu cầu đăng nhập mới cho xem hết kênh. Hãy đăng nhập Douyin ngay trong tab này; đăng nhập xong tiện ích tự cuộn tiếp (trang không tự tải lại thì bấm F5).'
         : finalCount > 0
           ? `Hoàn tất! ${finalCount} video. Nhấn nút xanh để gửi tải.`
@@ -1035,7 +1069,20 @@ window.addEventListener('message', (event) => {
       sendResponse({ ok: true });
     }
     if (msg.type === 'VG_GET_COUNT') {
-      sendResponse({ count: videoSet.size });
+      sendResponse({ count: videoSet.size, scrolling: isScraping });
+    }
+    if (msg.type === 'VG_STOP_SCROLL') {
+      vgStopScroll = true;
+      sendResponse({ ok: true, scrolling: isScraping });
+    }
+    // 5.16.0: the collected videos for the popup's list (newest first = page order)
+    if (msg.type === 'VG_GET_ITEMS') {
+      const items = Array.from(videoSet).slice(0, 2000).map((url) => {
+        const meta = vgItemMeta.get(url) || {};
+        const fbTitle = typeof vgFbTitles !== 'undefined' ? vgFbTitles.get(url) : '';
+        return { url, title: meta.title || fbTitle || '', thumb: meta.thumb || '' };
+      });
+      sendResponse({ items, scrolling: isScraping });
     }
     if (msg.type === 'VG_GET_URLS') {
       sendResponse({ urls: Array.from(videoSet) });
