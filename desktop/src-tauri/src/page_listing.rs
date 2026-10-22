@@ -108,12 +108,21 @@ pub fn target(raw: &str) -> Option<Target> {
         return url::Url::parse(&format!("https://www.douyin.com/user/{sec}")).ok().map(|page| Target { kind: Kind::Douyin, page });
     }
     if is_host(&h, "facebook.com") || h == "fb.com" {
-        if segs.first() == Some(&"profile.php") {
-            let id = u.query_pairs().find(|(k, _)| k == "id").map(|(_, v)| v.to_string())?;
+        // profile.php?id=… and where Facebook sends it, /people/<name>/<id>/
+        // (measured 22/10). The tab the link asks for is kept: the app always
+        // opened sk=videos, and a profile with only reels listed nothing
+        // (owner 22/10; measured signed out: videos tab 1 link, reels tab 37).
+        let id = match segs.as_slice() {
+            ["profile.php"] => u.query_pairs().find(|(k, _)| k == "id").map(|(_, v)| v.to_string()),
+            ["people", _, id] => Some(id.to_string()),
+            _ => None,
+        };
+        if let Some(id) = id {
             if !id.chars().all(|c| c.is_ascii_digit()) || id.is_empty() {
                 return None;
             }
-            return url::Url::parse(&format!("https://www.facebook.com/profile.php?id={id}&sk=videos"))
+            let tab = if u.query_pairs().any(|(k, v)| k == "sk" && v == "reels_tab") { "reels_tab" } else { "videos" };
+            return url::Url::parse(&format!("https://www.facebook.com/profile.php?id={id}&sk={tab}"))
                 .ok()
                 .map(|page| Target { kind: Kind::Facebook, page });
         }
@@ -305,6 +314,20 @@ mod tests {
             target("https://www.facebook.com/profile.php?id=1000123").unwrap().page.as_str(),
             "https://www.facebook.com/profile.php?id=1000123&sk=videos"
         );
+        // 0.19.2: the Reels tab when the link asks for it, and /people/<name>/<id>/
+        assert_eq!(
+            target("https://www.facebook.com/profile.php?id=61594798577076&sk=reels_tab").unwrap().page.as_str(),
+            "https://www.facebook.com/profile.php?id=61594798577076&sk=reels_tab"
+        );
+        assert_eq!(
+            target("https://www.facebook.com/people/Cole-Cooper/61594798577076/?sk=reels_tab").unwrap().page.as_str(),
+            "https://www.facebook.com/profile.php?id=61594798577076&sk=reels_tab"
+        );
+        assert_eq!(
+            target("https://www.facebook.com/people/Cole-Cooper/61594798577076/").unwrap().page.as_str(),
+            "https://www.facebook.com/profile.php?id=61594798577076&sk=videos"
+        );
+        assert!(target("https://www.facebook.com/people/Cole-Cooper/abc/").is_none());
         assert!(target("https://www.facebook.com/watch/?v=1").is_none());
         assert!(target("https://www.facebook.com/NASA/videos/123456789").is_none());
         assert!(target("https://www.youtube.com/@x").is_none());

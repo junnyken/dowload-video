@@ -135,6 +135,14 @@
     const diag = KIND === "douyin" && !S.items.size ? douyinDiag() : undefined;
     return send({ meta, status: S.status || meta.status || 0, items: Array.from(S.items.values()).slice(0, LIMIT), error: why, diag });
   }
+  // 0.19.2: Facebook's reels grid sits above other sections; a blind 2-screen
+  // step jumps past its end and the next row never loads (measured signed
+  // out: blind 40 reels, last reel to the bottom 50). Same as the extension.
+  if (KIND === "facebook") {
+    const links = document.querySelectorAll('a[href*="/reel/"], a[href*="/videos/"], a[href*="/watch/?v="]');
+    const last = links[links.length - 1];
+    if (last) { last.scrollIntoView({ block: "end" }); window.scrollBy(0, window.innerHeight * 0.6); return; }
+  }
   const box = KIND === "douyin" && document.querySelector(".route-scroll-container");
   if (box && box.scrollHeight > box.clientHeight + 50) box.scrollBy(0, Math.max(800, box.clientHeight * 2));
   else window.scrollBy(0, Math.max(800, window.innerHeight * 2));
