@@ -35,8 +35,8 @@ VidGrab lets you download videos from the most popular platforms with one click 
 
 ★ VIDEO ON THE PAGE
 • Lists the videos the page plays — MP4, HLS (.m3u8) and DASH (.mpd) — with their qualities and length
-• Direct files download straight from your browser; streams go through VidGrab
-• Works on any site you allow ("Grab videos on this page"), one site at a time
+• Direct files and HLS streams download straight from your browser (HLS segments fetched in parallel and saved as one MP4); VidGrab's server is used only when that cannot work
+• Works on any site once you allow it ("Allow grabbing videos on every site" — optional, revocable)
 • DRM-protected and encrypted streams are shown as unsupported and never downloaded
 
 ★ KEY FEATURES
@@ -84,9 +84,11 @@ Primary: English | Secondary: Vietnamese
 | `notifications` | Show a Chrome notification when a background download completes (popup may be closed) | Required |
 | `contextMenus` | Add "Download with VidGrab" right-click menu item on supported video pages | Required |
 | `alarms` | Keep the service worker alive during long-running background downloads (MV3 SW can be suspended after ~30s idle) | Required |
-| `webRequest` | (5.12.0) Observe — never block or modify — the responses of the current tab to list the media it plays (content-type, size, URL of .mp4/.m3u8/.mpd). Only on hosts the extension already has, or a site the user allows one at a time. The list stays in `chrome.storage.session` and is deleted with the tab; nothing is sent anywhere | Required |
+| `webRequest` | (5.12.0) Observe — never block or modify — the responses of the current tab to list the media it plays (content-type, size, URL of .mp4/.m3u8/.mpd). Only on hosts the extension already has, or on every site once the user allows it from the popup. The list stays in `chrome.storage.session` and is deleted with the tab; nothing is sent anywhere | Required |
 
-**Optional host permission `*://*/*` (5.12.0):** never granted at install. The popup's "Bắt video trên trang này" (Grab videos on this page) button calls `chrome.permissions.request` for that one site's origin only, inside the user's click, so media can be listed on sites outside the list below.
+| `offscreen` | (5.13.0) A hidden extension page joins the segments of an HLS stream into one MP4 in the user's browser (reason `BLOBS`): segments are fetched, remuxed with the bundled mux.js (Apache-2.0, `lib/`, no remote code) and written to the extension's private storage, then saved with `chrome.downloads`. Created only while such a download runs | Required |
+
+**Optional host permission `*://*/*` (5.12.0, all sites since 5.13.0):** never granted at install. The popup's "Cho phép bắt video trên mọi trang" (Allow grabbing videos on every site) button calls `chrome.permissions.request` inside the user's click. One site's permission is not enough in practice: the media of a page is served from other hosts (CDNs), and Chrome only shows the extension requests to hosts it may access (measured 22/10/2026). The user can revoke it at any time on chrome://extensions.
 
 ### Host Permissions Justification
 
@@ -136,7 +138,7 @@ Primary: English | Secondary: Vietnamese
 VidGrab does not collect, transmit, or sell any personal data.
 
 - **Browsing history**: Not collected. The extension only reads the URL of the active tab when you click the download button or open the popup, and only on supported platforms.
-- **Media found on a page** (5.12.0): the addresses of the videos a tab plays (on supported platforms and on sites you allow one at a time) are kept in `chrome.storage.session` on your device to list them in the popup, and are deleted when you leave the page or close the tab. They are sent to the VidGrab server only when you press "Tải qua VidGrab" for a stream.
+- **Media found on a page** (5.12.0): the addresses of the videos a tab plays (on supported platforms, and on every site once you allow it) are kept in `chrome.storage.session` on your device to list them in the popup, and are deleted when you leave the page or close the tab. They are sent to the VidGrab server only when you press "Tải qua VidGrab" / "Qua VidGrab". HLS streams you download with "Tải về máy" never leave your browser.
 - **Video URLs**: Sent to the configured backend server solely to perform the download you requested. Not stored by the extension itself.
 - **Auth token** (optional): If you log in on the VidGrab website, an access token is stored in `chrome.storage.local` on your device only. It is never sent to any third party.
 - **Download history**: Stored locally in `chrome.storage.local` on your device. Not synced or transmitted.

@@ -292,6 +292,102 @@ async function addToHistory(record) {
   await chrome.storage.local.set({ [HISTORY_KEY]: history });
 }
 
+// ── HLS in the browser (5.13.0): offscreen.html + hls-downloader.js ──
+// The service worker keeps the job list (storage.session, so a reopened popup
+// sees it), owns the hidden page, and saves the finished MP4 with
+// chrome.downloads. wording: BA review
+const HLS_JOBS_KEY = 'vg_hls_jobs';
+const hlsJobs = new Map();
+
+async function hlsLoad() {
+  if (hlsJobs.size) return;
+  try {
+    const arr = (await chrome.storage.session.get(HLS_JOBS_KEY))[HLS_JOBS_KEY] || [];
+    arr.forEach((j) => hlsJobs.set(j.id, j));
+  } catch { /* empty */ }
+}
+function hlsSave() {
+  const arr = [...hlsJobs.values()].sort((a, b) => b.at - a.at).slice(0, 20);
+  chrome.storage.session.set({ [HLS_JOBS_KEY]: arr }).catch(() => {});
+}
+async function ensureOffscreen() {
+  const has = chrome.offscreen.hasDocument ? await chrome.offscreen.hasDocument() : false;
+  if (has) return;
+  try {
+    await chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: ['BLOBS'],
+      justification: 'Ghép các đoạn video HLS thành một tệp MP4 ngay trong trình duyệt của người dùng.',
+    });
+  } catch (e) {
+    if (!/single offscreen|already/i.test(String(e && e.message))) throw e;
+  }
+}
+async function closeOffscreenIfIdle() {
+  if ([...hlsJobs.values()].some((j) => j.state === 'running' || j.state === 'saving')) return;
+  try { if (await chrome.offscreen.hasDocument()) await chrome.offscreen.closeDocument(); } catch { /* gone */ }
+}
+function hlsSafeName(t) {
+  return String(t || 'video').replace(/[/\\?%*:|"<>\n\r\t]/g, '-').trim().slice(0, 120) || 'video';
+}
+
+async function hlsStart(item, height) {
+  await hlsLoad();
+  const id = `h${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const job = { id, title: item.title || 'video', url: item.url, height: height || null, state: 'running',
+                done: 0, total: 0, bytes: 0, at: Date.now(), message: '' };
+  hlsJobs.set(id, job);
+  hlsSave();
+  await ensureOffscreen();
+  await chrome.runtime.sendMessage({ target: 'offscreen', type: 'HLS_START',
+                                     job: { id, url: item.url, height: job.height, title: job.title } });
+  return job;
+}
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (!msg || msg.target !== 'sw') return false;
+  (async () => {
+    await hlsLoad();
+    const job = hlsJobs.get(msg.id);
+    if (!job) return;
+    if (msg.type === 'HLS_PROGRESS') {
+      Object.assign(job, { done: msg.done, total: msg.total, bytes: msg.bytes });
+      if (msg.height) job.height = msg.height;
+    } else if (msg.type === 'HLS_FAILED') {
+      Object.assign(job, { state: msg.reason === 'cancelled' ? 'cancelled' : 'failed', message: msg.message || '' });
+      closeOffscreenIfIdle();
+    } else if (msg.type === 'HLS_DONE') {
+      Object.assign(job, { state: 'saving', bytes: msg.bytes, done: job.total });
+      const filename = `VidGrab/${hlsSafeName(job.title)}${job.height ? ` (${job.height}p)` : ''}.${msg.ext || 'mp4'}`;
+      chrome.downloads.download({ url: msg.url, filename, saveAs: false }, (downloadId) => {
+        const finish = (state, message) => {
+          Object.assign(job, { state, message: message || '' });
+          hlsSave();
+          chrome.runtime.sendMessage({ target: 'offscreen', type: 'HLS_RELEASE', id: job.id })
+            .catch(() => {}).finally(() => closeOffscreenIfIdle());
+          if (state === 'done') {
+            chrome.notifications.create(`vg-hls-${job.id}`, {
+              type: 'basic', iconUrl: 'assets/icon.png', title: 'VidGrab — Đã tải xong',
+              message: `${job.title.slice(0, 80)} đã lưu vào thư mục Tải về.`,
+            });
+          }
+        };
+        if (chrome.runtime.lastError || !downloadId) { finish('failed', 'Trình duyệt không lưu được tệp.'); return; }
+        job.downloadId = downloadId;
+        const onChanged = (delta) => {
+          if (delta.id !== downloadId || !delta.state) return;
+          if (delta.state.current === 'complete') { chrome.downloads.onChanged.removeListener(onChanged); finish('done'); }
+          else if (delta.state.current === 'interrupted') { chrome.downloads.onChanged.removeListener(onChanged); finish('failed', 'Lưu tệp bị gián đoạn.'); }
+        };
+        chrome.downloads.onChanged.addListener(onChanged);
+      });
+    }
+    hlsSave();
+  })();
+  sendResponse({ ok: true });
+  return false;
+});
+
 // ── Badge Count ───────────────────────────────────────────────────
 // Media the sniffer found on the tab win: the badge shows how many.
 self.vgSniffBadge = (tabId, count) => {
@@ -631,6 +727,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ ok: true });
     })().catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
     return true;
+  }
+
+  if (msg.type === 'VG_HLS_START') {
+    (async () => {
+      const items = await self.vgSniffList(msg.tabId);
+      const item = items.find((x) => x.id === msg.id);
+      if (!item || item.kind !== 'hls') { sendResponse({ ok: false, error: 'not_hls' }); return; }
+      if (item.encryption !== 'none' || item.live) { sendResponse({ ok: false, error: 'unsupported' }); return; }
+      const job = await hlsStart(item, msg.height);
+      sendResponse({ ok: true, job });
+    })().catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
+    return true;
+  }
+  if (msg.type === 'VG_HLS_JOBS') {
+    hlsLoad().then(() => sendResponse({ jobs: [...hlsJobs.values()].sort((a, b) => b.at - a.at) }));
+    return true;
+  }
+  if (msg.type === 'VG_HLS_CANCEL') {
+    chrome.runtime.sendMessage({ target: 'offscreen', type: 'HLS_CANCEL', id: msg.id }).catch(() => {});
+    sendResponse({ ok: true });
+    return false;
   }
 
   if (msg.type === 'VG_DOWNLOAD_NOW') {

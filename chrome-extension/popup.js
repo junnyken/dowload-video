@@ -2034,8 +2034,8 @@ function vgShowVersion() {
 // browser; HLS / DASH go through the VidGrab server (in-browser merging comes
 // later). DRM / encrypted streams are shown but never downloaded. wording: BA review
 const VG_SNIFF_TEXT = {
-  ask: 'VidGrab chưa được phép xem trang này. Bấm nút bên dưới rồi phát video để VidGrab bắt link.',
-  allow: 'Bắt video trên trang này',
+  ask: 'Cho phép VidGrab nhận ra video trên mọi trang bạn xem (video thường nằm ở máy chủ khác với trang). Danh sách chỉ nằm trong trình duyệt của bạn; thu hồi lúc nào cũng được ở trang quản lý tiện ích.',
+  allow: 'Cho phép bắt video trên mọi trang',
   reload: 'Tải lại trang',
   granted: 'Đã cho phép. Tải lại trang rồi phát video, sau đó mở lại VidGrab.',
   denied: 'Bạn chưa cho phép nên VidGrab không bắt được video trên trang này.',
@@ -2046,6 +2046,14 @@ const VG_SNIFF_TEXT = {
   live: 'Đang phát trực tiếp — chưa hỗ trợ',
   download: 'Tải',
   viaServer: 'Tải qua VidGrab',
+  local: 'Tải về máy',
+  viaServerShort: 'Qua VidGrab',
+  jobRunning: 'Đang tải',
+  jobSaving: 'Đang lưu tệp…',
+  jobDone: 'Đã lưu vào thư mục Tải về',
+  jobCancelled: 'Đã huỷ',
+  cancel: 'Huỷ',
+  started2: 'Đang tải ngay trong trình duyệt — không cần máy chủ.',
   copy: 'Chép link',
   copied: 'Đã chép link.',
   started: 'Đã bắt đầu tải. Xem tiến độ ở thanh tải về của trình duyệt.',
@@ -2078,11 +2086,15 @@ let _vgSniffTimer = null;
 async function initSniff(tab) {
   const box = document.getElementById('vg-sniff');
   if (!box || !tab?.id || !tab.url || vgIsYouTube(tab.url)) return;
-  const pattern = vgOriginPattern(tab.url);
-  if (!pattern) return;
+  // Video usually comes from another host than the page (a CDN), and Chrome
+  // only shows the extension requests to hosts it may see — so one site's
+  // permission lists nothing in practice (measured 22/10). The ask is for
+  // every site, still optional and only on the user's click.
+  if (!vgOriginPattern(tab.url)) return;
+  const pattern = '*://*/*';
   const allow = document.getElementById('vg-sniff-allow');
   const empty = document.getElementById('vg-sniff-empty');
-  const granted = await vgHasOrigin(pattern);
+  const granted = await vgHasOrigin(vgOriginPattern(tab.url));
 
   if (!granted) {
     box.style.display = 'block';
@@ -2107,6 +2119,60 @@ async function initSniff(tab) {
 
   document.getElementById('vg-sniff-refresh').onclick = () => renderSniff(tab);
   await renderSniff(tab);
+  renderHlsJobs();
+}
+
+function vgSendToServer(url) {
+  showTab('single');
+  if (urlInput) { urlInput.value = url; urlInput.dispatchEvent(new Event('input')); }
+  document.getElementById('downloadBtn')?.click();
+}
+
+let _vgHlsTimer = null;
+async function renderHlsJobs() {
+  const box = document.getElementById('vg-hls-jobs');
+  if (!box) return;
+  const resp = await new Promise((r) => chrome.runtime.sendMessage({ type: 'VG_HLS_JOBS' }, r));
+  const jobs = ((resp && resp.jobs) || []).slice(0, 5);
+  box.textContent = '';
+  box.style.display = jobs.length ? 'flex' : 'none';
+  if (jobs.length) document.getElementById('vg-sniff').style.display = 'block';
+  jobs.forEach((j) => {
+    const row = document.createElement('div');
+    row.className = 'vg-hls-job';
+    row.dataset.state = j.state;
+    row.style.cssText = 'background:#0f1119;border:1px solid #1e2333;border-radius:10px;padding:7px 8px;font-size:10px;color:#cbd5e1;';
+    const pct = j.total ? Math.floor((j.done / j.total) * 100) : 0;
+    const label = j.state === 'running' ? `${VG_SNIFF_TEXT.jobRunning} ${pct}% · ${vgFmtBytes(j.bytes) || '0 KB'}`
+      : j.state === 'saving' ? VG_SNIFF_TEXT.jobSaving
+      : j.state === 'done' ? `${VG_SNIFF_TEXT.jobDone} · ${vgFmtBytes(j.bytes)}`
+      : j.state === 'cancelled' ? VG_SNIFF_TEXT.jobCancelled
+      : (j.message || VG_SNIFF_TEXT.failed);
+    const title = document.createElement('div');
+    title.style.cssText = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;';
+    title.textContent = `${j.title}${j.height ? ` · ${vgQ(j.height)}` : ''}`;
+    const line = document.createElement('div');
+    line.className = 'vg-hls-label';
+    line.style.cssText = `margin-top:3px;color:${j.state === 'failed' ? '#fca5a5' : j.state === 'done' ? '#86efac' : '#94a3b8'};`;
+    line.textContent = label;
+    row.append(title, line);
+    if (j.state === 'running') {
+      const bar = document.createElement('div');
+      bar.style.cssText = 'height:4px;background:#1e2333;border-radius:4px;margin-top:5px;overflow:hidden;';
+      const fill = document.createElement('div');
+      fill.style.cssText = `height:100%;width:${pct}%;background:#6366f1;`;
+      bar.appendChild(fill);
+      const cancel = document.createElement('button');
+      cancel.className = 'vg-hls-cancel';
+      cancel.textContent = VG_SNIFF_TEXT.cancel;
+      cancel.style.cssText = 'margin-top:5px;background:none;border:1px solid #2d3348;border-radius:6px;color:#94a3b8;font-size:9px;padding:2px 8px;cursor:pointer;';
+      cancel.onclick = () => chrome.runtime.sendMessage({ type: 'VG_HLS_CANCEL', id: j.id });
+      row.append(bar, cancel);
+    }
+    box.appendChild(row);
+  });
+  clearTimeout(_vgHlsTimer);
+  if (jobs.some((j) => j.state === 'running' || j.state === 'saving')) _vgHlsTimer = setTimeout(renderHlsJobs, 1000);
 }
 
 async function renderSniff(tab) {
@@ -2179,15 +2245,34 @@ function vgSniffRow(tab, it) {
       btn.onclick = () => chrome.runtime.sendMessage({ type: 'VG_SNIFF_DOWNLOAD', tabId: tab.id, id: it.id }, (r) => {
         msg.textContent = r && r.ok ? VG_SNIFF_TEXT.started : VG_SNIFF_TEXT.failed;
       });
+    } else if (it.kind === 'hls') {
+      // in this browser first; VidGrab's server only when that cannot work
+      let pick = null;
+      const heights = (it.variants || []).map((v) => v.height).filter(Boolean);
+      if (heights.length > 1) {
+        pick = document.createElement('select');
+        pick.className = 'vg-sniff-quality';
+        pick.style.cssText = 'background:#0f1923;border:1px solid #1e2333;border-radius:8px;color:#e2e8f0;font-size:10px;padding:4px;';
+        [...new Set(heights)].forEach((h) => { const o = document.createElement('option'); o.value = h; o.textContent = vgQ(h); pick.appendChild(o); });
+        actions.appendChild(pick);
+      }
+      btn.textContent = VG_SNIFF_TEXT.local;
+      btn.onclick = () => chrome.runtime.sendMessage(
+        { type: 'VG_HLS_START', tabId: tab.id, id: it.id, height: pick ? Number(pick.value) : null },
+        (r) => { msg.textContent = r && r.ok ? VG_SNIFF_TEXT.started2 : VG_SNIFF_TEXT.failed; renderHlsJobs(); });
+      actions.appendChild(btn);
+      const srv = document.createElement('button');
+      srv.className = 'vg-sniff-server';
+      srv.textContent = VG_SNIFF_TEXT.viaServerShort;
+      srv.title = VG_SNIFF_TEXT.viaServer;
+      srv.style.cssText = 'background:#1e2333;border:1px solid #2d3348;border-radius:8px;padding:5px 8px;color:#cbd5e1;font-size:10px;cursor:pointer;';
+      srv.onclick = () => vgSendToServer(it.url);
+      actions.appendChild(srv);
     } else {
       btn.textContent = VG_SNIFF_TEXT.viaServer;
-      btn.onclick = () => {
-        showTab('single');
-        if (urlInput) { urlInput.value = it.url; urlInput.dispatchEvent(new Event('input')); }
-        document.getElementById('downloadBtn')?.click();
-      };
+      btn.onclick = () => vgSendToServer(it.url);
     }
-    actions.appendChild(btn);
+    if (it.kind !== 'hls') actions.appendChild(btn);
   }
   const copy = document.createElement('button');
   copy.className = 'vg-sniff-copy';

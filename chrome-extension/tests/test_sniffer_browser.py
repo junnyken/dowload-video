@@ -182,7 +182,9 @@ def main():
             check("encrypted + DRM rows have no download button", len(blocked) == 2
                   and any("DRM" in b for b in blocked) and any("mã hoá" in b for b in blocked), str(blocked))
             dl = pop.locator(".vg-sniff-dl").all_inner_texts()
-            check("download buttons: MP4 direct + 2 streams via VidGrab", sorted(dl) == sorted(["Tải", "Tải qua VidGrab", "Tải qua VidGrab"]), str(dl))
+            check("download buttons: MP4 'Tải', HLS 'Tải về máy' (in the browser), DASH via VidGrab",
+                  sorted(dl) == sorted(["Tải", "Tải về máy", "Tải qua VidGrab"]), str(dl))
+            check("HLS row also offers 'Qua VidGrab'", pop.locator(".vg-sniff-server").count() == 1)
             hls_row = [k for k in range(rows.count()) if kinds[k] == "HLS" and "720p · 360p" in rows.nth(k).inner_text()]
             check("HLS row shows 720p · 360p and 0:12", bool(hls_row) and "0:12" in rows.nth(hls_row[0]).inner_text(),
                   rows.nth(hls_row[0]).inner_text().replace("\n", " | ") if hls_row else "")
@@ -220,10 +222,14 @@ def main():
             check("not-allowed site: nothing captured", seen == [], str(len(seen)))
             pop.evaluate("(a) => initSniff({id:a[0], url:a[1]})", [other_id, f"http://vgfixture.test:{port}/page.html"])
             pop.wait_for_timeout(300)
-            check("popup offers 'Bắt video trên trang này'", pop.locator("#vg-sniff-allow").is_visible()
-                  and pop.locator("#vg-sniff-allow").inner_text() == "Bắt video trên trang này")
-            granted = pop.evaluate("""() => new Promise(r => chrome.permissions.contains({origins:['http://vgfixture.test/*']}, r))""")
+            # video sits on CDN hosts: one site's permission lists nothing, so the ask is for every site
+            check("popup offers 'Cho phép bắt video trên mọi trang'", pop.locator("#vg-sniff-allow").is_visible()
+                  and pop.locator("#vg-sniff-allow").inner_text() == "Cho phép bắt video trên mọi trang")
+            granted = pop.evaluate("""() => new Promise(r => chrome.permissions.contains({origins:['*://*/*']}, r))""")
             check("nothing granted without the user's click", granted is False)
+            man0 = pop.evaluate("() => chrome.runtime.getManifest()")
+            check("all-sites access is optional, never at install", "*://*/*" in man0.get("optional_host_permissions", [])
+                  and "*://*/*" not in man0.get("host_permissions", []) and "<all_urls>" not in man0.get("host_permissions", []))
 
             # YouTube: refused, sent to the web
             pop.fill("#vg-url-input", "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
