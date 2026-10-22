@@ -22,7 +22,8 @@
  *   - otherwise the media sniffer's list for that tab (5.12.0): one complete
  *     video file, never a stream split into separate video and audio.
  * Not attempted (straight to the server): YouTube (Chrome Web Store policy,
- * IP-locked streams), Spotify / SoundCloud (audio through the server),
+ * IP-locked streams), TikTok (its CDN refuses the file outside the page),
+ * Spotify / SoundCloud (audio through the server),
  * MP3 / chosen quality / subtitles (the server converts).
  *
  * The pure helpers are exported for tests/test_direct_download.js.
@@ -30,7 +31,10 @@
 (function (root) {
   'use strict';
 
-  const SERVER_ONLY = /(^|\.)(youtube\.com|youtu\.be|googlevideo\.com|spotify\.com|soundcloud\.com)$/i;
+  // TikTok (5.18.4): its CDN answers a file saved outside the page with a web
+  // page (owner's "TikTok - Make Your Day.htm", 22/10) — trying it only cost
+  // 15–20 s before the server did it anyway.
+  const SERVER_ONLY = /(^|\.)(youtube\.com|youtu\.be|googlevideo\.com|spotify\.com|soundcloud\.com|tiktok\.com)$/i;
   const STREAM = /\.(m3u8|mpd)(\?|$)/i;
   const FIND_TIMEOUT_MS = 15000;
   const SAVE_TIMEOUT_MS = 10 * 60 * 1000;

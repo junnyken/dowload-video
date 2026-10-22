@@ -24,7 +24,9 @@ const D = ctx.vgDirect;
 
 console.log('[1] eligible');
 assert(D.directEligible({ url: 'https://www.facebook.com/reel/910445711561956', quality: 'video' }), 'Facebook reel, video');
-assert(D.directEligible({ url: 'https://www.tiktok.com/@a/video/7339598209432292640', quality: 'best' }), 'TikTok, best');
+assert(!D.directEligible({ url: 'https://www.tiktok.com/@a/video/7339598209432292640', quality: 'best' }), 'TikTok -> server (its CDN refuses the file outside the page)');
+assert(D.directEligible({ url: 'https://www.douyin.com/video/7339598209432292640', quality: 'video' }), 'Douyin, video (the server is blocked there)');
+assert(D.directEligible({ url: 'https://www.instagram.com/reel/DeuH0dDFGcg/', quality: 'best' }), 'Instagram, best');
 assert(!D.directEligible({ url: 'https://www.youtube.com/watch?v=abc', quality: 'video' }), 'YouTube -> server');
 assert(!D.directEligible({ url: 'https://open.spotify.com/track/x', quality: 'video' }), 'Spotify -> server');
 assert(!D.directEligible({ url: 'https://www.facebook.com/reel/1', quality: 'mp3' }), 'MP3 -> server converts');

@@ -436,7 +436,6 @@ vgRenewSession();
 // the bulk queue call: claim one download (same daily allowance as the web),
 // find the file in the page, save it from this computer; if the browser
 // cannot, hand the claim back and let the server do it (vgFetchAndSave).
-const VG_HELPER_KEY = 'vg_helper_window';
 
 async function vgClaim(url) {
   const base = await getApiBase();
@@ -468,31 +467,13 @@ async function vgSettle(claimId, outcome) {
   } catch { /* the claim simply stays counted */ }
 }
 
-// A minimised VidGrab window holds the pages opened for lists / bulk.
+// Each video opened for a list / bulk gets its OWN minimised window (closed
+// after): with two at a time in one window the second tab was a background
+// tab, throttled, and Facebook sometimes did not fill its page in 15 s (one
+// reel in three runs fell back to the server, measured 22/10).
 async function vgHelperTab(url) {
-  const got = await chrome.storage.session.get(VG_HELPER_KEY).catch(() => ({}));
-  let winId = got[VG_HELPER_KEY];
-  if (winId != null) {
-    try { await chrome.windows.get(winId); } catch { winId = null; }
-  }
-  if (winId == null) {
-    const w = await chrome.windows.create({ url, focused: false, state: 'minimized' });
-    await chrome.storage.session.set({ [VG_HELPER_KEY]: w.id }).catch(() => {});
-    return w.tabs[0].id;
-  }
-  const t = await chrome.tabs.create({ windowId: winId, url, active: false });
-  return t.id;
-}
-
-async function vgCloseHelperIfIdle() {
-  const got = await chrome.storage.session.get(VG_HELPER_KEY).catch(() => ({}));
-  const winId = got[VG_HELPER_KEY];
-  if (winId == null) return;
-  try {
-    const w = await chrome.windows.get(winId, { populate: true });
-    const busy = w.tabs.some((t) => t.url && t.url !== 'about:blank' && t.status === 'loading');
-    if (!busy && w.tabs.length <= 1) { await chrome.windows.remove(winId); await chrome.storage.session.remove(VG_HELPER_KEY); }
-  } catch { await chrome.storage.session.remove(VG_HELPER_KEY).catch(() => {}); }
+  const w = await chrome.windows.create({ url, focused: false, state: 'minimized' });
+  return { tabId: w.tabs[0].id, windowId: w.id };
 }
 
 /** The file of the video page in `tabId`: the page's own data first, then the sniffer. */
@@ -500,12 +481,20 @@ async function vgFindMedia(tabId) {
   const until = Date.now() + self.vgDirect.FIND_TIMEOUT_MS;
   while (Date.now() < until) {
     await new Promise((r) => setTimeout(r, 1200));
+    // Douyin: the media link the page itself received (content.js, 14/10) — the
+    // VidGrab server's IP is blocked by Douyin, so this is the way that works
+    const dy = await chrome.tabs.sendMessage(tabId, { type: 'VG_DOUYIN_DIRECT' }).catch(() => null);
+    if (dy && dy.media && dy.media.url) return { url: dy.media.url, title: dy.media.title, via: 'douyin' };
     try {
       const [res] = await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: self.vgDirect.vgPageMedia });
       if (res && res.result && res.result.url) return res.result;
     } catch { /* page still loading / navigating */ }
-    const sniffed = self.vgDirect.pickSniffed(await self.vgSniffList(tabId).catch(() => []));
+    const list = await self.vgSniffList(tabId).catch(() => []);
+    const sniffed = self.vgDirect.pickSniffed(list);
     if (sniffed) return { url: sniffed.url, title: sniffed.title, via: 'sniffer' };
+    // 5.18.4: a page that only streams (HLS / DASH — Vimeo, Reddit, Dailymotion…,
+    // measured 22/10) will not give a file: hand it to the server after 6 s, not 15
+    if (Date.now() > until - self.vgDirect.FIND_TIMEOUT_MS + 6000 && list.some((x) => x.kind === 'hls' || x.kind === 'dash')) return null;
   }
   return null;
 }
@@ -559,17 +548,16 @@ async function vgSaveVideo(payload, signal, pageTabId) {
   if (claim && !claim.allowed) {
     throw Object.assign(new Error(`${claim.message}${claim.resetTimeVn ? ` — lượt mới lúc ${claim.resetTimeVn}` : ''}`), { status: 429 });
   }
-  let tabId = null, ownTab = false, media = null;
+  let tabId = null, ownTab = false, media = null, helper = null;
   try {
     if (pageTabId != null) {
       const t = await chrome.tabs.get(pageTabId).catch(() => null);
       if (t && vgSamePage(t.url || '', payload.url)) tabId = pageTabId;
     }
-    if (tabId == null) { tabId = await vgHelperTab(payload.url); ownTab = true; }
+    if (tabId == null) { helper = await vgHelperTab(payload.url); tabId = helper.tabId; ownTab = true; }
     media = await vgFindMedia(tabId);
   } catch { media = null; }
-  if (ownTab && tabId != null) chrome.tabs.remove(tabId).catch(() => {});
-  if (ownTab) setTimeout(() => { vgCloseHelperIfIdle(); }, 3000);
+  if (ownTab && helper) chrome.windows.remove(helper.windowId).catch(() => {});
 
   if (media && !(signal && signal.aborted)) {
     const name = self.vgDirect.safeName(media.title);
@@ -1492,6 +1480,18 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const targetUrl = info.linkUrl || tab.url;
   const isMP3 = info.menuItemId === 'vg-download-mp3';
   chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '⚡ VidGrab: Đang xử lý...' }).catch(() => {});
+
+  // 5.18.4: a video goes the same way as the popup's button — the browser first
+  // (the page the person is on), the server when the browser cannot
+  if (!isMP3) {
+    try {
+      const { data, via } = await vgSaveVideo({ url: targetUrl, quality: 'video', remove_watermark: true, download_subs: false }, null, info.linkUrl ? null : tab.id);
+      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: `✅ Đang tải${via && via.startsWith('direct') ? ' (trực tiếp)' : ''}: ${(data && data.title) || 'video'}` }).catch(() => {});
+    } catch (err) {
+      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: `❌ ${err.name === 'AbortError' ? 'Xử lý quá lâu' : err.message || 'Lỗi kết nối'}` }).catch(() => {});
+    }
+    return;
+  }
 
   try {
     const controller = new AbortController();

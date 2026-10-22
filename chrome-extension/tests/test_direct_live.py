@@ -139,8 +139,8 @@ def main():
                   len(claims) == 3 and sum(s.get("outcome") == "completed" for s in settles) == 3 and not fetch_links,
                   f"claims={len(claims)} settles={len(settles)} fetch_links={len(fetch_links)}")
             time.sleep(5)
-            helper = sw.evaluate("() => new Promise(r => chrome.storage.session.get('vg_helper_window', x => r(x.vg_helper_window ?? null)))")
-            check("[bulk] the minimised VidGrab window closed afterwards", helper is None, str(helper))
+            wins = sw.evaluate("() => new Promise(r => chrome.windows.getAll({}, w => r(w.length)))")
+            check("[bulk] the minimised VidGrab windows closed afterwards (one per video)", wins == windows_before, f"{wins} vs {windows_before}")
 
             # [quota] a refused claim stops the queue before any download
             claims.clear(); settles.clear()

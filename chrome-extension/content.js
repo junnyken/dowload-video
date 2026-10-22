@@ -1146,6 +1146,9 @@ window.addEventListener('message', (event) => {
       if (btn && !btn.disabled) btn.click();
       sendResponse({ ok: true });
     }
+    if (msg.type === 'VG_DOUYIN_DIRECT') {
+      try { sendResponse({ media: vgDouyinDirectForPage() }); } catch { sendResponse({ media: null }); }
+    }
     if (msg.type === 'VG_CURRENT_VIDEO') {
       try { sendResponse({ video: vgCurrentVideo() }); } catch { sendResponse({ video: null }); }
     }
