@@ -2054,6 +2054,10 @@ const VG_SNIFF_TEXT = {
   jobCancelled: 'Đã huỷ',
   cancel: 'Huỷ',
   started2: 'Đang tải ngay trong trình duyệt — không cần máy chủ.',
+  viaApp: 'Tải bằng app',
+  appSent: 'Đã gửi sang app VidGrab trên máy này — app đang tải.',
+  appFailed: 'Không gửi được sang app VidGrab. Hãy mở app rồi thử lại.',
+  appHint: 'Cài app VidGrab cho Windows để tải loại video này ngay trên máy.',
   copy: 'Chép link',
   copied: 'Đã chép link.',
   started: 'Đã bắt đầu tải. Xem tiến độ ở thanh tải về của trình duyệt.',
@@ -2082,6 +2086,7 @@ function vgHasOrigin(pattern) {
 }
 
 let _vgSniffTimer = null;
+let _vgAppFound = false;   // the VidGrab app answers on this computer
 
 async function initSniff(tab) {
   const box = document.getElementById('vg-sniff');
@@ -2118,8 +2123,16 @@ async function initSniff(tab) {
   }
 
   document.getElementById('vg-sniff-refresh').onclick = () => renderSniff(tab);
+  const app = await new Promise((r) => chrome.runtime.sendMessage({ type: 'VG_APP_STATUS' }, r));
+  _vgAppFound = !!(app && app.found);
   await renderSniff(tab);
   renderHlsJobs();
+}
+
+function vgSendToApp(tab, it, msg) {
+  chrome.runtime.sendMessage({ type: 'VG_APP_SEND', tabId: tab.id, id: it.id }, (r) => {
+    msg.textContent = r && r.ok ? VG_SNIFF_TEXT.appSent : VG_SNIFF_TEXT.appFailed;
+  });
 }
 
 function vgSendToServer(url) {
@@ -2268,11 +2281,33 @@ function vgSniffRow(tab, it) {
       srv.style.cssText = 'background:#1e2333;border:1px solid #2d3348;border-radius:8px;padding:5px 8px;color:#cbd5e1;font-size:10px;cursor:pointer;';
       srv.onclick = () => vgSendToServer(it.url);
       actions.appendChild(srv);
+      if (_vgAppFound) {
+        const appBtn = document.createElement('button');
+        appBtn.className = 'vg-sniff-app';
+        appBtn.textContent = 'App';
+        appBtn.title = VG_SNIFF_TEXT.viaApp;
+        appBtn.style.cssText = srv.style.cssText;
+        appBtn.onclick = () => vgSendToApp(tab, it, msg);
+        actions.appendChild(appBtn);
+      }
+    } else if (_vgAppFound) {
+      // DASH: the app's yt-dlp + ffmpeg join video and audio on this machine
+      btn.textContent = VG_SNIFF_TEXT.viaApp;
+      btn.classList.add('vg-sniff-app');
+      btn.onclick = () => vgSendToApp(tab, it, msg);
+      const srv = document.createElement('button');
+      srv.className = 'vg-sniff-server';
+      srv.textContent = VG_SNIFF_TEXT.viaServerShort;
+      srv.title = VG_SNIFF_TEXT.viaServer;
+      srv.style.cssText = 'background:#1e2333;border:1px solid #2d3348;border-radius:8px;padding:5px 8px;color:#cbd5e1;font-size:10px;cursor:pointer;';
+      srv.onclick = () => vgSendToServer(it.url);
+      actions.append(btn, srv);
     } else {
       btn.textContent = VG_SNIFF_TEXT.viaServer;
+      btn.title = VG_SNIFF_TEXT.appHint;
       btn.onclick = () => vgSendToServer(it.url);
     }
-    if (it.kind !== 'hls') actions.appendChild(btn);
+    if (it.kind === 'file' || (it.kind === 'dash' && !_vgAppFound)) actions.appendChild(btn);
   }
   const copy = document.createElement('button');
   copy.className = 'vg-sniff-copy';

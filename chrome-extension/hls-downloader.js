@@ -132,7 +132,7 @@
     variants.sort((a, b) => b.height - a.height || b.bandwidth - a.bandwidth);
     const v = (job.height && variants.find((x) => x.height === job.height)) || variants[0];
     if (v.audio && audioWithUri.has(v.audio)) {
-      throw new JobError('separate_audio', 'Hình và tiếng nằm riêng — hãy dùng "Qua VidGrab".');
+      throw new JobError('separate_audio', 'Hình và tiếng nằm riêng — hãy dùng "App" (app VidGrab trên máy) hoặc "Qua VidGrab".');
     }
     return { url: v.url, text: await fetchText(v.url, job), height: v.height };
   }

@@ -117,6 +117,9 @@ export const onCheckNow = (cb: () => void) => on<unknown>('channels://check-now'
 export const onQuitting = (cb: () => void) => on<unknown>('app://quitting', () => cb());
 /** A single http(s) URL just copied (clip_watch.rs); other clipboard text never arrives. */
 export const onClipboardLink = (cb: (url: string) => void) => on<string>('clipboard-link', cb);
+/** A stream the VidGrab browser extension handed over (ext_bridge.rs, 0.19.0). */
+export type ExtJob = { url: string; title?: string | null; referer?: string | null };
+export const onExtDownload = (cb: (job: ExtJob) => void) => on<ExtJob>('ext-download', cb);
 // In-app update download progress (task #6205).
 export const onUpdateProgress = (cb: (p: InAppProgress) => void) => on<InAppProgress>('update://progress', cb);
 // A login-<platform> window was closed (by "Xong", "Xoá" or the user).

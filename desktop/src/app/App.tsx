@@ -21,7 +21,7 @@ import { startChannels } from '../lib/channels';
 import { mockMode } from '../lib/tauri';
 import { initUpdateGate } from '../lib/update';
 import { startWatch } from '../lib/watch';
-import { startClipboardWatch } from '../lib/clipboard';
+import { startClipboardWatch, startExtensionBridge } from '../lib/clipboard';
 import { ClipboardBanner } from '../components/ClipboardBanner';
 import { ShutdownDialog } from '../components/ShutdownDialog';
 import { startShutdownWatch } from '../lib/shutdown';
@@ -48,6 +48,7 @@ export function App() {
       void startChannels();
       startWatch();
       startClipboardWatch();
+      startExtensionBridge();
       startShutdownWatch();
       startCleanupWatch();
     }

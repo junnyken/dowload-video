@@ -27,6 +27,7 @@ mod douyin_window;
 mod page_listing;
 mod page_window;
 mod engine;
+mod ext_bridge;
 mod error;
 mod formats;
 mod history;
@@ -1622,6 +1623,21 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
             clip_watch::start(app.handle().clone());
+            // 0.19.0: the browser extension hands DASH / split-audio streams to
+            // this app (127.0.0.1 only, extension Origin only; ext_bridge.rs).
+            {
+                let handle = app.handle().clone();
+                let version = handle.package_info().version.to_string();
+                std::thread::spawn(move || match ext_bridge::bind() {
+                    Ok((listener, port)) => {
+                        eprintln!("extension bridge on 127.0.0.1:{port}");
+                        ext_bridge::serve(listener, port, &version, move |job| {
+                            let _ = handle.emit("ext-download", job);
+                        });
+                    }
+                    Err(e) => eprintln!("extension bridge not started: {e}"),
+                });
+            }
             // Feature `updater` (default since 0.11.0, task #6205). The webview
             // is never granted updater:*; update_check/update_install run here.
             #[cfg(all(desktop, feature = "updater"))]

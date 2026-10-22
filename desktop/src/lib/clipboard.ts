@@ -6,7 +6,7 @@
 // auto → the link is analysed and queued with the default quality at once.
 // off  → Rust stops reading the clipboard.
 import { decide, normalize } from './clipboard-core';
-import { api, onClipboardLink } from './tauri';
+import { api, onClipboardLink, onExtDownload } from './tauri';
 import { settings } from './settings';
 import { createStore } from './store';
 import { analyze, probes } from './probes';
@@ -71,6 +71,22 @@ export function dismissOffer() {
 
 function apply() {
   void api.clipboardWatchSet(settings.get().clipboardMode !== 'off').catch(() => {});
+}
+
+// 0.19.0: the VidGrab browser extension hands over what it cannot download
+// in the browser (DASH, audio in a separate playlist). Same path as a copied
+// link in "auto" mode: analysed and queued with the default quality, here on
+// this machine — not on the VidGrab server.
+let extStarted = false;
+export function startExtensionBridge() {
+  if (extStarted) return;
+  extStarted = true;
+  void onExtDownload((job) => {
+    const name = (job.title || '').trim() || 'video từ trình duyệt';
+    downloadNow(job.url, 'từ trình duyệt');
+    if (document.hidden) void api.notify('VidGrab', `Đang tải "${name.slice(0, 60)}" do tiện ích gửi sang.`).catch(() => {});
+    else toast('info', `Tiện ích VidGrab đã gửi "${name.slice(0, 60)}" sang app — đang phân tích để tải.`);
+  });
 }
 
 let started = false;

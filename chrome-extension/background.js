@@ -388,6 +388,42 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return false;
 });
 
+// ── VidGrab app on this computer (5.14.0, app 0.19.0 ext_bridge.rs) ──
+// The app listens on 127.0.0.1 (first free of these ports) and takes the
+// streams the browser cannot finish alone — DASH, split audio — to download
+// them with its own yt-dlp + ffmpeg. Our own machine first, the server last.
+const VG_APP_PORTS = [17325, 17326, 17327];
+let vgAppCache = { at: 0, port: null, version: null };
+
+async function vgFindApp(force = false) {
+  if (!force && Date.now() - vgAppCache.at < 30_000) return vgAppCache;
+  let found = { at: Date.now(), port: null, version: null };
+  for (const port of VG_APP_PORTS) {
+    try {
+      const ctl = new AbortController();
+      const t = setTimeout(() => ctl.abort(), 700);
+      const r = await fetch(`http://127.0.0.1:${port}/vidgrab/ping`, { signal: ctl.signal, cache: 'no-store' });
+      clearTimeout(t);
+      const j = r.ok ? await r.json() : null;
+      if (j && j.app === 'VidGrab') { found = { at: Date.now(), port, version: j.version || null }; break; }
+    } catch { /* not this port */ }
+  }
+  vgAppCache = found;
+  return found;
+}
+
+async function vgSendToApp(item) {
+  const app = await vgFindApp(true);
+  if (!app.port) return { ok: false, error: 'no_app' };
+  const r = await fetch(`http://127.0.0.1:${app.port}/vidgrab/download`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: item.url, title: item.title || '', referer: item.pageUrl || '' }),
+  });
+  const j = await r.json().catch(() => null);
+  return r.ok && j && j.ok ? { ok: true } : { ok: false, error: (j && j.error) || `HTTP ${r.status}` };
+}
+
 // ── Badge Count ───────────────────────────────────────────────────
 // Media the sniffer found on the tab win: the badge shows how many.
 self.vgSniffBadge = (tabId, count) => {
@@ -737,6 +773,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (item.encryption !== 'none' || item.live) { sendResponse({ ok: false, error: 'unsupported' }); return; }
       const job = await hlsStart(item, msg.height);
       sendResponse({ ok: true, job });
+    })().catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
+    return true;
+  }
+  if (msg.type === 'VG_APP_STATUS') {
+    vgFindApp(!!msg.force).then((a) => sendResponse({ found: !!a.port, version: a.version }));
+    return true;
+  }
+  if (msg.type === 'VG_APP_SEND') {
+    (async () => {
+      const items = await self.vgSniffList(msg.tabId);
+      const item = items.find((x) => x.id === msg.id);
+      if (!item || item.encryption !== 'none' || item.live) { sendResponse({ ok: false, error: 'unsupported' }); return; }
+      sendResponse(await vgSendToApp(item));
     })().catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
     return true;
   }
