@@ -599,6 +599,9 @@ app.include_router(channel_preview_mod.router, prefix="/api/v1", tags=["Bulk"])
 # 21/10 — the extension reads a whole channel for the app / website
 from app.api import channel_relay as channel_relay_mod
 app.include_router(channel_relay_mod.router, prefix="/api/v1", tags=["Bulk"])
+# 22/10 — the extension's own 30-day session (no more silent guest after an hour)
+from app.api import extension_session as extension_session_mod
+app.include_router(extension_session_mod.router, prefix="/api/v1", tags=["Extension"])
 from app.api.admin_asr import router as admin_asr_router
 app.include_router(admin_asr_router, prefix="/api/v1/admin", tags=["Admin ASR"])
 # Phase 32B-1 — China Platform Access Layer admin (read + kill switch/mode)

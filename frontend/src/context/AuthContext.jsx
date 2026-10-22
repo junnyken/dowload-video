@@ -36,26 +36,32 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   // ── Hand the session to the VidGrab browser extension ────────────
-  // The extension's "Kết nối tài khoản" button opens this app with
-  // ?connect_extension=1 and then waits for a token. Nothing ever sent one,
-  // so the extension stayed anonymous no matter how many times a user clicked
-  // connect — history, archive and Pro quota were unreachable from it.
+  // 22/10 (owner): signed in on the site, the extension still said "Khách"
+  // (5 a day) for a Pro user — it only got a token after its own "Kết nối tài
+  // khoản" button, and that token (Supabase, one hour) was never renewed. Now
+  // the session goes to the extension whenever the person is signed in here,
+  // and again when the extension says it is present (it may load after this
+  // page); the extension swaps it for its own 30-day session
+  // (backend app/core/extension_session.py) and skips the swap while it has one.
   //
   // We postMessage to our own origin only. The extension's web-bridge.js
   // content script is the sole listener, and it (plus the service worker)
   // re-verifies the origin, so this never exposes the token to another site.
   useEffect(() => {
-    const wantsExtensionConnect =
-      new URLSearchParams(window.location.search).get('connect_extension') === '1';
-    if (!wantsExtensionConnect) return;
-    if (!session?.access_token) return;   // wait until sign-in completes
-
-    window.postMessage({
+    if (!session?.access_token) return undefined;
+    const send = () => window.postMessage({
       __vg_source: 'webapp',
       type: 'VG_AUTH_TOKEN_FROM_WEB',
       token: session.access_token,
       email: session.user?.email || user?.email || '',
     }, window.location.origin);
+    send();
+    const onPresent = (event) => {
+      if (event.source !== window || event.origin !== window.location.origin) return;
+      if (event.data && event.data.__vg_source === 'extension' && event.data.type === 'VG_EXTENSION_PRESENT') send();
+    };
+    window.addEventListener('message', onPresent);
+    return () => window.removeEventListener('message', onPresent);
   }, [session, user]);
 
   const fetchPreferences = useCallback(async () => {

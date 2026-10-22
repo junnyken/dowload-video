@@ -287,6 +287,16 @@ async def get_optional_user(
             return _metered(_request, result)
         _invalid_key(_request)
 
+    # 22/10: the browser extension's own session (app.core.extension_session) —
+    # a signed 30-day token, a session like the web's, never metered.
+    if token.startswith("vgx_"):
+        from app.core import extension_session  # noqa: PLC0415
+        ext = extension_session.verify(token)
+        if ext:
+            await _ensure_app_user(ext)
+            return {**ext, "token": token}
+        return None  # expired / revoked: a guest, like a stale web session
+
     # A partner key (vgp_) is not a user credential: refuse it here as a bad
     # key instead of quietly serving the caller as a guest (19/10 review).
     if token.startswith("vgp_"):

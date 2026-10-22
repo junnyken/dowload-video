@@ -92,6 +92,8 @@ def main():
             check("popup: link box = the video on screen", val == f"https://www.tiktok.com/@creator2/video/{IDS[1]}", val)
             check("popup: 'Video đang xem: …' with the caption, not 'không phải video'",
                   hint.startswith("Video đang xem:") and "Caption of post 2" in hint and "không phải video" not in hint, hint[:120])
+            check("popup: the badge says '▶ Video đang xem' (was stuck on 'Đang nhận diện...')",
+                  pop2.locator("#page-badge").inner_text().strip() == "▶ Video đang xem", pop2.locator("#page-badge").inner_text())
             # 5.18.2: no raw file list on TikTok (preloaded files, blob: player, CDN refuses them)
             check("popup: no 'Video trên trang này' file list on TikTok", not pop2.locator("#vg-sniff").is_visible())
             ctx.close()

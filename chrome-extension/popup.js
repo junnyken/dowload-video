@@ -432,6 +432,12 @@ async function initPopup() {
 
     const bm = BADGE_MAP[pageInfo.pageType];
     if (bm) { pageBadge.textContent = bm.label; pageBadge.className = `text-xs px-2 py-0.5 rounded-full border ${bm.cls}`; }
+    else {
+      // 5.18.3: a feed (TikTok For You…) has no page type — the badge stayed "Đang nhận diện..." (owner 22/10)
+      const cur = await vgAskCurrentVideo(tab.id);
+      pageBadge.textContent = cur && cur.url ? '▶ Video đang xem' : 'Trang này'; // wording: BA review
+      pageBadge.className = `text-xs px-2 py-0.5 rounded-full border ${cur && cur.url ? BADGE_MAP.video.cls : 'bg-gray-800 text-gray-400 border-gray-700'}`;
+    }
 
     if (pageInfo.pageType === 'channel' || pageInfo.pageType === 'spotify_playlist' || pageInfo.pageType === 'generic_channel') {
       showTab('channel');

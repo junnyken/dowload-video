@@ -397,6 +397,40 @@ async function vgFetchAndSave({ url, quality, remove_watermark, download_subs },
   return { data, dlUrl, finalExt, safeName };
 }
 
+// ── 5.18.3: the extension's own 30-day session (backend app/core/extension_session.py) ──
+// `bearer`: the web's Supabase token (first sign-in) or the current vgx_ token
+// (renewal). Null when the server cannot issue one (old server, offline).
+async function vgExtSession(bearer) {
+  try {
+    const r = await fetch(`${await getApiBase()}/api/v1/extension/session`, {
+      method: 'POST', headers: { Authorization: `Bearer ${bearer}` },
+    });
+    const d = await r.json().catch(() => null);
+    return r.ok && d && typeof d.token === 'string' && d.token.startsWith('vgx_') ? d : null;
+  } catch { return null; }
+}
+
+// Renew a week before it ends; a Supabase token kept from before 5.18.3 is
+// swapped while it still works; an ended session is dropped (shown signed out).
+async function vgRenewSession() {
+  const got = await chrome.storage.local.get([AUTH_TOKEN_KEY, 'vg_auth_exp']).catch(() => ({}));
+  const tok = got[AUTH_TOKEN_KEY];
+  if (!tok) return;
+  const now = Math.floor(Date.now() / 1000);
+  const exp = Number(got.vg_auth_exp || 0);
+  if (tok.startsWith('vgx_') && exp && exp - now > 7 * 86400) return;
+  const sess = await vgExtSession(tok);
+  if (sess) {
+    await chrome.storage.local.set({ [AUTH_TOKEN_KEY]: sess.token, vg_auth_exp: sess.expiresAt, ...(sess.email ? { vg_auth_email: sess.email } : {}) });
+  } else if (tok.startsWith('vgx_') && exp && exp <= now) {
+    await chrome.storage.local.remove([AUTH_TOKEN_KEY, 'vg_auth_exp']);
+    chrome.runtime.sendMessage({ type: 'VG_AUTH_CHANGED', authenticated: false }).catch(() => {});
+  }
+}
+chrome.alarms.create('vg-session-renew', { periodInMinutes: 12 * 60 });
+chrome.alarms.onAlarm.addListener((a) => { if (a.name === 'vg-session-renew') vgRenewSession(); });
+vgRenewSession();
+
 // ── 5.18.0: download in the browser first, the server only counts ──────────
 // (direct-download.js has the why.) vgSaveVideo is what VG_DOWNLOAD_NOW and
 // the bulk queue call: claim one download (same daily allowance as the web),
@@ -983,8 +1017,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: false, error: 'Blocked: auth token may only be set by the extension UI or the VidGrab web app' });
         return;
       }
-      const _write = { [AUTH_TOKEN_KEY]: msg.token };
-      if (typeof msg.email === 'string' && msg.email) _write.vg_auth_email = msg.email;
+      // 5.18.3: the web's Supabase token lives one hour and was never renewed —
+      // the extension silently became a guest (5 a day) for a signed-in Pro
+      // user (owner 22/10). Swap it for the extension's own 30-day session.
+      // the site sends its session on every visit: keep a 30-day session of the same
+      // account that has more than a week left instead of asking for a new one
+      if (!msg.token.startsWith('vgx_')) {
+        const cur = await chrome.storage.local.get([AUTH_TOKEN_KEY, 'vg_auth_exp', 'vg_auth_email']).catch(() => ({}));
+        const left = Number(cur.vg_auth_exp || 0) - Math.floor(Date.now() / 1000);
+        if ((cur[AUTH_TOKEN_KEY] || '').startsWith('vgx_') && left > 7 * 86400 && msg.email && cur.vg_auth_email === msg.email) {
+          sendResponse({ ok: true, kept: true });
+          return;
+        }
+      }
+      const sess = await vgExtSession(msg.token);
+      const _write = sess ? { [AUTH_TOKEN_KEY]: sess.token, vg_auth_exp: sess.expiresAt } : { [AUTH_TOKEN_KEY]: msg.token };
+      const email = (sess && sess.email) || (typeof msg.email === 'string' && msg.email) || '';
+      if (email) _write.vg_auth_email = email;
       chrome.storage.local.set(_write, () => {
         // Refresh the popup's account row if it happens to be open.
         chrome.runtime.sendMessage({ type: 'VG_AUTH_CHANGED', authenticated: true, email: msg.email }).catch(() => {});
@@ -1005,7 +1054,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'VG_CLEAR_AUTH_TOKEN') {
     (async () => {
       if (!(await _mayWriteAuthAsync())) { sendResponse({ ok: false }); return; }
-      chrome.storage.local.remove([AUTH_TOKEN_KEY, 'vg_auth_email'], () => {
+      // sign-out: the extension session stops working on the server too
+      const tok = await getAuthToken();
+      if (tok && tok.startsWith('vgx_')) {
+        try { await fetch(`${await getApiBase()}/api/v1/extension/session`, { method: 'DELETE', headers: { Authorization: `Bearer ${tok}` } }); } catch { /* offline */ }
+      }
+      chrome.storage.local.remove([AUTH_TOKEN_KEY, 'vg_auth_email', 'vg_auth_exp'], () => {
         chrome.runtime.sendMessage({ type: 'VG_AUTH_CHANGED', authenticated: false }).catch(() => {});
         sendResponse({ ok: true });
       });
