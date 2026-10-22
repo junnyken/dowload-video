@@ -20,7 +20,7 @@
     "monthlyPro": "Pro {{count}} calls/month",
     "unlimited": "Unlimited",
     "exceeded": "Over the rate limit: HTTP 429. Wait about a minute and try again, increasing the wait between attempts (exponential backoff). Requests that send a key are counted per key, so several servers behind one IP do not share a limit.",
-    "monthlyQuota": "Each request that sends an API key counts as 1 call against the account's <b>monthly</b> quota (UTC calendar month, resets at 00:00 UTC on the 1st). When it runs out: HTTP 429 with <code>{\"error_code\":\"api_monthly_quota_exceeded\",\"reset_at\":\"…\"}</code>. Every response to a request with a key includes the headers <code>X-API-Quota-Limit</code>, <code>X-API-Quota-Remaining</code>, <code>X-API-Quota-Reset</code> (Unix time). To see how many calls you have used: <code>GET /api/v1/api-keys/usage</code>. Downloads made through the API also count against the daily download allowance."
+    "monthlyQuota": "Each request that sends an API key counts as 1 call against the account's <b>monthly</b> quota (UTC calendar month, resets at 00:00 UTC on the 1st). When it runs out: HTTP 429 with <code>{\"error_code\":\"api_monthly_quota_exceeded\",\"reset_at\":\"…\"}</code>. Every response to a request with a key includes the headers <code>X-API-Quota-Limit</code>, <code>X-API-Quota-Remaining</code>, <code>X-API-Quota-Reset</code> (Unix time). To see how many calls you have used: <code>GET /api/v1/api-keys/usage</code>. Downloads made through the API also count against the daily download limit."
   },
   "partner": {
     "title": "Partner API (for businesses integrating from their backend)",

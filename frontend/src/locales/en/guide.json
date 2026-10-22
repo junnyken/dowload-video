@@ -14,7 +14,7 @@
     "steps": [
       "Paste the video or song link into the input box.",
       "Choose a format: MP4 HD, 4K or MP3.",
-      "Turn on Remove watermark (TikTok / Douyin only) or Download subtitles if needed.",
+      "Turn on Remove watermark (TikTok / Douyin only) or pick a Subtitles option if needed.",
       "Click \"Extract now\", wait for processing, then download the file."
     ],
     "notes": [
@@ -28,7 +28,7 @@
     "steps": [
       "Paste multiple links (one URL per line), or load them from a .txt/.csv file.",
       "Choose the output format for the whole list.",
-      "Click start; the system processes them in batches.",
+      "Click \"Start bulk download\"; the system processes your links in batches.",
       "When done, download each file, copy links or download a ZIP."
     ],
     "notes": [
@@ -41,11 +41,11 @@
     "title": "How to scan and download videos from a channel",
     "description": "Use this to grab many videos from a channel, profile or playlist.",
     "steps": [
-      "Switch to the \"Bulk Download\" tab.",
+      "Switch to the \"Bulk · Channels\" tab.",
       "Paste the channel, profile or playlist link into the input box.",
-      "Turn on Channel Mode to scan the channel's videos instead of downloading a single link.",
+      "Turn on Channel mode to scan the channel's videos instead of downloading a single link.",
       "Choose how many videos to fetch: 10, 20, 50, 100, 200, 500 or enter your own.",
-      "Click start, follow the progress and download the results when done."
+      "Click \"Start bulk download\", follow the progress and download the results when done."
     ],
     "notes": [
       "Supports YouTube, TikTok, Instagram profiles and Facebook videos.",
@@ -73,11 +73,11 @@
       "cta": "Upgrade to Pro"
     },
     "quota_reached": {
-      "text": "You’re out of downloads for today. Your limit resets every day, or see Pro for a higher limit.",
+      "text": "You have no downloads left today. Your limit resets every day, or see Pro for a higher limit.",
       "cta": "Upgrade to Pro now"
     },
     "paywall_hit": {
-      "text": "This feature is for Pro — like ZIP downloads, API keys and tracking more channels.",
+      "text": "This feature is for Pro — like ZIP downloads, API keys and watching more channels.",
       "cta": "See Pro plans"
     },
     "extension_nudge": {

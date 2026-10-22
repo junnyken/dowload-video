@@ -28,13 +28,13 @@
   "collection": {
     "emptyName": "Collection name cannot be empty.",
     "errorFallback": "Error",
-    "title": "Create New Collection",
-    "nameLabel": "Collection Name",
-    "namePlaceholder": "E.g. Great Tutorials, Chill Music...",
+    "title": "Create new collection",
+    "nameLabel": "Collection name",
+    "namePlaceholder": "E.g. Great tutorials, Chill music...",
     "iconLabel": "Icon",
     "colorLabel": "Color",
     "creating": "Creating...",
-    "create": "Create Collection"
+    "create": "Create collection"
   },
   "card": {
     "redownloadRehydrate": "Download again (rehydrate)",
@@ -78,7 +78,7 @@
     "loading": "Loading...",
     "empty": "Your archive is empty. Download a video and it is saved here automatically.",
     "loadMore": "Load more ({{remaining}} left)",
-    "pickCollection": "Choose Collection",
+    "pickCollection": "Choose collection",
     "noCollectionsCreateFirst": "No collections yet. Create one first.",
     "itemCount_one": "{{count}} item",
     "itemCount_other": "{{count}} items",

@@ -8,8 +8,8 @@
     { "q": "Region restrictions", "a": "Content may be blocked in some countries. If the original platform doesn't allow viewing from your region or the server's region, the download may fail." },
     { "q": "Expired link or deleted content", "a": "Open the link on the original platform again to make sure the content can still be viewed. Download links created by VidGrab also expire after a while; just paste the original link again to create a new one." },
     { "q": "Platform is having issues", "a": "Platforms change often, so downloads sometimes fail temporarily. Check each platform's status on the home page (a notice appears if there is an issue), then try again in a few minutes." },
-    { "q": "Why can guests only download up to 1080p?", "a": "Guests (not signed in) can download up to 1080p. Sign up for an account to choose 2K/4K when the source offers it." },
-    { "q": "\"Daily download limit reached\" message", "a": "There is a daily download limit, which resets the next day. Sign in to get a limit tied to your account." },
+    { "q": "Why can guests only download up to 1080p?", "a": "Guests (not signed in) can download up to 1080p. Create an account to choose 2K/4K when the source offers it." },
+    { "q": "\"Daily download limit reached\" message", "a": "Each day has a download limit, which resets the next day. Sign in to get a limit for your own account." },
     { "q": "Slow downloads when the server is busy", "a": "When many people are using the service, your request may have to wait in a queue. You don't need to resend it — repeating it only makes the queue longer. Please wait or try again later." },
     { "q": "Chrome extension doesn't update automatically", "a": "Extensions installed manually (downloaded and loaded in developer mode) aren't updated by Chrome automatically. When a new version is out, download the extension again from VidGrab's Extension page and reload it." },
     { "q": "Windows app triggers a SmartScreen warning", "a": "This is a common warning for apps that aren't code-signed. See the safe installation guide below." }

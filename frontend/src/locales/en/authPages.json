@@ -23,12 +23,12 @@
     "tooShort_other": "At least {{count}} characters required."
   },
   "desktop": {
-    "title": "Sign in to the VidGrab app",
-    "invalidLink": "The sign-in link is invalid or has been altered. Open the VidGrab app on your computer and click “Sign in with browser” again.",
-    "redirecting": "Returning to the VidGrab app…",
-    "redirectHint": "If your browser says it can't connect, reopen the VidGrab app and click “Sign in with browser” again.",
-    "subtitle": "Sign in to connect the VidGrab desktop app to your account.",
-    "notice": "Use this page only right after you clicked “Sign in with browser” in the VidGrab app. After you sign in, the browser sends your sign-in details straight back to the app on this same computer.",
+    "title": "Sign in to the VidGrab Windows app",
+    "invalidLink": "The sign-in link is invalid or has been altered. Open the VidGrab Windows app and click “Sign in with browser” again.",
+    "redirecting": "Returning to the VidGrab Windows app…",
+    "redirectHint": "If your browser says it can't connect, reopen the VidGrab Windows app and click “Sign in with browser” again.",
+    "subtitle": "Sign in to connect the VidGrab Windows app to your account.",
+    "notice": "Use this page only right after you clicked “Sign in with browser” in the VidGrab Windows app. After you sign in, the browser sends your sign-in details straight back to the app on this same computer.",
     "emailPlaceholder": "you@example.com",
     "password": "Password",
     "signingIn": "Signing in…",

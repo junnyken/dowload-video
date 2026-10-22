@@ -15,7 +15,7 @@
   },
   "ready": {
     "title": "Connect your VidGrab account",
-    "desc": "Connect to sync your quota and Pro features with the Telegram Bot.",
+    "desc": "Connect to sync your download limit and Pro features with the Telegram Bot.",
     "confirm": "Confirm connection"
   },
   "none": {
@@ -24,7 +24,7 @@
   },
   "success": {
     "title": "Connected!",
-    "desc": "Your VidGrab account is linked to the Telegram Bot. Quota and Pro features will sync automatically.",
+    "desc": "Your VidGrab account is linked to the Telegram Bot. Your download limit and Pro features will sync automatically.",
     "home": "Back to home"
   },
   "unlinked": {

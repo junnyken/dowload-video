@@ -7,7 +7,7 @@
   "extractIntro": "Many videos already have subtitles added by the uploader. VidGrab fetches them for you. No speech recognition is needed, so it's fast and doesn't use your transcription quota.",
   "noSubsHint": "No \"Subtitles\" tab on your video? Switch to the \"AI transcription\" tab to create subtitles from speech.",
   "home": "Go to the home page to paste a video link",
-  "title": "Subtitles and Transcription",
+  "title": "Subtitles and transcripts",
   "subtitle": "Get existing subtitles, create subtitles from speech, or translate them into another language.",
   "_note": "wording: BA review — English drafted with AI",
   "step1": "Paste the video link into the download box on the home page and click to get the video info.",

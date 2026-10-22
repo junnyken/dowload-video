@@ -17,7 +17,7 @@
     "too_long": "The video exceeds the length limit for automatic subtitles.",
     "audio_extract_failed": "Couldn't extract the audio from the video.",
     "internal_error": "A system error occurred while creating subtitles.",
-    "cancelled": "Cancelled by the user.",
+    "cancelled": "Canceled by the user.",
     "disk_full": "The system is temporarily out of storage space. Please try again in a few minutes."
   },
   "genericError": "Something went wrong. Please try again later.",
@@ -27,7 +27,7 @@
     "transcribing": "Recognizing speech",
     "done": "Done",
     "failed": "Failed",
-    "cancelled": "Cancelled",
+    "cancelled": "Canceled",
     "unknown": "Unknown status"
   },
   "minutes": "{{value}} min",

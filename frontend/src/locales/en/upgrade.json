@@ -2,13 +2,13 @@
   "_note": "wording: BA review — English drafted with AI",
   "unlimitedPerDay": "unlimited downloads",
   "quota_exceeded_daily": {
-    "title": "Daily limit reached",
+    "title": "You've reached today's limit",
     "subtitle": "Current plan: {{have}}/day. Pro: {{pro}}/day.",
     "fallback": "Upgrade to Pro for more downloads every day."
   },
   "tier_limit_quality": {
     "title": "This quality is for Pro",
-    "subtitle": "Your current plan downloads up to {{have}}. Pro goes up to {{pro}}.",
+    "subtitle": "Your plan allows up to {{have}}. Pro allows up to {{pro}}.",
     "fallback": "Upgrade to Pro to choose higher quality."
   },
   "tier_limit_batch": {
@@ -34,7 +34,7 @@
   },
   "bulk_zip_pro": {
     "title": "ZIP download is for Pro",
-    "subtitle": "Packing a whole batch into one ZIP file is only for Pro members."
+    "subtitle": "Packing a whole batch into a single ZIP file is available to Pro members only."
   },
   "default": {
     "title": "Upgrade to Pro",

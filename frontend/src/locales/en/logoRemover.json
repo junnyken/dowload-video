@@ -35,7 +35,7 @@
   "duration": {
     "title": "⏱ Video too long",
     "pro": "Video is {{seconds}}s long (Pro limit: 2 minutes). Please trim the video first.",
-    "free": "Video is {{seconds}}s long (free limit: 30 seconds). Upgrade to Pro or trim the video shorter."
+    "free": "Video is {{seconds}}s long (free limit: 30 seconds). Upgrade to Pro or trim the video to a shorter length."
   },
   "errors": {
     "unsupportedFormat": "Only MP4, MOV, WebM and MKV are supported.",
@@ -110,7 +110,7 @@
     "loading": "Generating a preview from the first frame…",
     "motionMode": "Motion mode · Less blur",
     "staticMode": "Static background · More natural",
-    "weak": "Preview still smeared",
+    "weak": "Preview still looks smeared",
     "weakHint": "If the preview is still smeared, switch to Crop.",
     "switchCrop": "✂ Switch to Crop (cleaner)",
     "keepNatural": "Process naturally anyway",
@@ -147,7 +147,7 @@
     "variance": "Results may vary depending on the logo size and the background behind the processed area."
   },
   "error": {
-    "title": "Can't process this video",
+    "title": "We can't process this video yet",
     "fallback": "The logo area isn't suitable for automatic cleanup yet.",
     "tryThese": "Try the following:",
     "tip1": "· Logo at a corner or edge → try the <b>Crop</b> method — more reliable on any background",

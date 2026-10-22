@@ -3,7 +3,7 @@
   "copy": "Copy",
   "cancel": "Cancel",
   "proOnly": "API key management is available on Pro only.",
-  "subtitle": "Up to {{max}} keys. API calls are counted per month for the whole account; downloads made through the API still count against the daily download allowance.",
+  "subtitle": "Up to {{max}} keys. API calls are counted per month for the whole account; downloads made through the API still count against your daily download limit.",
   "create": {
     "title": "Create a new API key",
     "label": "Label",

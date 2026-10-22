@@ -15,7 +15,7 @@
   },
   "s3": {
     "title": "3. No guarantee that every platform works at all times",
-    "text": "Platforms change how they work frequently. As a result, at times a platform may be slow, may fail, or may temporarily be impossible to download from. We try to fix this promptly but we do not commit that the service will run continuously or succeed with every link."
+    "text": "Platforms change how they work frequently. As a result, at times a platform may be slow, may fail, or may temporarily be impossible to download from. We try to fix this promptly, but we do not commit to the service running continuously or succeeding with every link."
   },
   "s4": {
     "title": "4. What you must not do",
@@ -30,7 +30,7 @@
     "guestLabel": "Guest (not signed in):",
     "guest": "can download at up to 1080p quality, with a limit on the number of downloads per day.",
     "memberLabel": "Registered account:",
-    "member": "can choose 2K/4K quality (if the source has it) and has its own quota.",
+    "member": "can choose 2K/4K quality (if the source has it) and has its own limit.",
     "adjust": "Specific quotas may be adjusted to keep the service stable for everyone.",
     "credentials": "You are responsible for keeping your sign-in information secure."
   },
@@ -47,7 +47,7 @@
   },
   "s8": {
     "title": "8. Limitation of liability and changes to the terms",
-    "text": "The service is provided as is. We may update these terms; the most recent update date is shown at the top of the page. Continuing to use the service after an update means you agree to the new version. This document is a general description and is not legal advice."
+    "text": "The service is provided \"as is\". We may update these terms; the most recent update date is shown at the top of the page. Continuing to use the service after an update means you agree to the new version. This document is a general description and is not legal advice."
   },
   "s9": {
     "title": "9. Contact",

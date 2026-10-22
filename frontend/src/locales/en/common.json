@@ -5,7 +5,7 @@
     "batch_download": "Download many videos at once from a channel or playlist. Up to 10 videos per batch to avoid being blocked.",
     "schedule": "Schedule automatic downloads with a cron expression. Example: '0 9 * * *' = every day at 9 AM.",
     "archive_pin": "Pin a video to the archive so it isn't deleted after 24 hours. The file is kept permanently (until you delete it).",
-    "remove_watermark": "Remove the watermark with AI inpainting. TikTok/Douyin only. Takes an extra 30–60 seconds to process.",
+    "remove_watermark": "Remove the watermark with AI inpainting. TikTok/Douyin only. Adds 30–60 seconds to processing.",
     "webhook": "Get notified through your webhook URL when a download finishes. We send a POST request with the job details.",
     "approval_workflow": "Large-scale downloads need approval from a workspace admin before they run. You'll be notified once approved.",
     "auto_retry": "The system retries automatically on temporary errors (rate limit, timeout), up to 3–4 times with backoff."
@@ -65,13 +65,13 @@
   "processing": {
     "failed": "Processing failed",
     "errors": {
-      "no_subtitles": "This source has no subtitles/captions",
-      "file_expired": "The file has expired; download it again from the original source",
+      "no_subtitles": "This source has no subtitles or captions",
+      "file_expired": "The file has expired. Download it again from the original source.",
       "invalid_path": "Invalid file path"
     }
   },
   "discover": {
-    "pollError": "Poll error: HTTP {{status}}",
+    "pollError": "Status check failed: HTTP {{status}}",
     "failed": "Discovery failed.",
     "queued": "Queued..."
   },

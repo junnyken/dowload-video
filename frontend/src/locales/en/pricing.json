@@ -2,7 +2,7 @@
   "_note": "wording: BA review — English drafted with AI",
   "tier": {
     "guest": { "name": "Guest", "sub": "Not signed in" },
-    "free": { "name": "Free", "sub": "With an account, free of charge" },
+    "free": { "name": "Free", "sub": "Free with an account" },
     "pro": { "name": "Pro", "sub": "For frequent users" }
   },
   "yes": "Yes",
@@ -10,16 +10,16 @@
   "copied": "Copied",
   "copy": "Copy",
   "copyLabel": "Copy {{label}}",
-  "payLoadError": "Couldn't load the transfer code. Please try again later.",
+  "payLoadError": "Couldn't load the transfer note. Please try again later.",
   "days365": "365 days",
   "days30": "30 days",
   "payTitle": "Payment",
   "contactToUpgrade": "To upgrade to Pro, please contact: {{contact}}",
   "contactViaFeedback": "Use the Feedback button to contact us about upgrading to Pro.",
-  "loginForCode": "Sign in to get the transfer code for your account.",
+  "loginForCode": "Sign in to get the transfer note for your account.",
   "login": "Sign in",
   "payProTitle": "Pay for Pro by bank transfer",
-  "payProIntro": "Transfer the exact amount with the exact message below. Once the money arrives, Pro is turned on manually (usually within a day).",
+  "payProIntro": "Transfer the exact amount with the exact transfer note below. Once the money arrives, Pro is turned on manually (usually within a day).",
   "proActiveWithExpiry": "You're on Pro, expiring {{date}}. Additional transfers are added to your current term.",
   "proActive": "You're on Pro. Additional transfers are added to your current term.",
   "currentFree": "Your current plan: Free.",
@@ -28,8 +28,8 @@
   "accountNo": "Account number",
   "accountHolder": "Account holder",
   "amount": "Amount ({{period}})",
-  "transferContent": "Transfer message",
-  "needHelp": "Need help: {{contact}}",
+  "transferContent": "Transfer note",
+  "needHelp": "Need help? {{contact}}",
   "title": "Pricing",
   "subtitle": "Try it now, no account needed. Sign up for higher limits. Upgrade to Pro when you need more.",
   "loadingAria": "Loading",
@@ -39,5 +39,5 @@
   "yearly": "Yearly",
   "perYear": "year",
   "perMonth": "month",
-  "resetNote": "Download counts reset at {{time}} UTC every day."
+  "resetNote": "Daily downloads reset at {{time}} UTC."
 }

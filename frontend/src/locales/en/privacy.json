@@ -10,15 +10,15 @@
     "account": { "label": "Account", "text": "email and sign-in information (through Supabase Auth), plan, quota used." },
     "history": { "label": "Download history", "text": "video link, title, platform, format and time of download. When the file expires, this information is still kept so that you can look it up again." },
     "prefs": { "label": "Settings and features you turn on", "text": "default settings, channels you follow, download schedules, collections, notes, webhooks you declare, Telegram link, push notification subscription." },
-    "ip": { "label": "IP address", "text": "used to count quota for visitors who are not signed in and to prevent abuse. The IP is stored in its original form in the security log and in quota counters (see section 3). For takedown requests only, the IP is stored as a hash." },
+    "ip": { "label": "IP address", "text": "used to count quota for guests who are not signed in and to prevent abuse. The IP is stored in its original form in the security log and in quota counters (see section 3). For takedown requests only, the IP is stored as a hash." },
     "browser": { "label": "Browser information", "text": "browser type (user agent) in the security log." },
-    "stats": { "label": "Usage statistics", "text": "events of actions on the site, linked to your account or to an anonymous identifier of your browser." }
+    "stats": { "label": "Usage statistics", "text": "events recording actions on the site, linked to your account or to an anonymous identifier of your browser." }
   },
   "s2": {
     "title": "2. What we do not store",
     "card": "Card numbers or payment card information. Payment is handled by Stripe.",
-    "video": "Videos long-term on the server. Some platforms require the server to download the file first and then pass it to you. These files are deleted automatically, usually within about 2 hours.",
-    "sensitive": "Biometric data, health data or contacts, or messages on your device."
+    "video": "Videos kept long-term on the server. Some platforms require the server to download the file first and then pass it to you. These files are deleted automatically, usually within about 2 hours.",
+    "sensitive": "Biometric data, health data, or contacts and messages on your device."
   },
   "s3": {
     "title": "3. How long we keep data",
@@ -38,7 +38,7 @@
     "other": { "label": "downloads, storage, notifications, contextMenus, alarms", "text": "save files to your computer, keep your sign-in session and settings in the browser, show notifications, add a right-click menu." }
   },
   "s5": {
-    "title": "5. VidGrab app for Windows",
+    "title": "5. VidGrab Windows app",
     "cookies": { "label": "Platform sign-in cookies", "text": "stay on your computer, are encrypted using Windows mechanisms, and are not sent to the VidGrab server." },
     "device": { "label": "Device ID", "text": "the app sends a hash derived from a Windows identifier (the original identifier is not sent), together with the computer name, Windows version and app version. This ID is used to count free downloads. The server also stores the most recent IP address of the device." },
     "sync": { "label": "History sync", "text": "if you turn it on, the app sends the link, title, format and result of each download. The path of the folder where files are saved on your computer is not sent." }

@@ -35,7 +35,7 @@
       "desc": "Export animation"
     },
     "cloud": {
-      "label": "Save to Cloud",
+      "label": "Save to cloud",
       "desc": "Drive/Dropbox"
     },
     "full": {
@@ -62,7 +62,7 @@
       "recent": "Just finished"
     },
     "status": {
-      "pending": "Queued",
+      "pending": "Pending",
       "processing": "Processing",
       "completed": "Completed",
       "failed": "Failed"
@@ -84,7 +84,7 @@
     "hd": "Download HD",
     "noWatermark": "No watermark",
     "moreOptions": "More options",
-    "addToBatch": "Add to batch",
+    "addToBatch": "Add to bulk download",
     "cancel": "Cancel"
   }
 }

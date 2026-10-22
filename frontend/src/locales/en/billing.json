@@ -19,7 +19,7 @@
   },
   "portal": {
     "needLogin": "You need to sign in to manage billing.",
-    "openFailed": "Could not open the billing management page.",
+    "openFailed": "Couldn't open the billing management page.",
     "redirecting": "Redirecting...",
     "manage": "Manage billing"
   },
@@ -28,7 +28,7 @@
     "downloads": "Downloads today",
     "ai": "AI analyses today",
     "storage": "Cloud storage",
-    "unit": "uses"
+    "unit": "downloads"
   },
   "credits": {
     "title": "Credits remaining",

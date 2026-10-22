@@ -49,7 +49,7 @@
   "editLoadFailed": "Couldn't load the content for editing.",
   "saveFailed": "Couldn't save your changes.",
   "intro": "Upload an existing .srt/.vtt transcript and choose a target language. The system translates by meaning rather than word for word, and keeps the file's original timestamps.",
-  "title": "Translate Subtitles",
+  "title": "Translate subtitles",
   "asrLink": "No subtitle file yet? Create one with AI from a downloaded video →",
   "closeError": "Dismiss error message",
   "rejectedTitle": "Some files were rejected",

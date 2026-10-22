@@ -18,12 +18,12 @@
   "unitDownloads": "downloads",
   "byPlatformTitle": "Downloads used today by platform",
   "noneToday": "No videos downloaded today.",
-  "resetAt": "New downloads are added back at {{time}} every day.",
+  "resetAt": "Your downloads reset at {{time}} every day.",
   "bulkJobs": "Total bulk jobs",
   "cta": {
     "title": "Upgrade to Pro to download more",
-    "body": "Pro includes {{daily}} downloads per day, ZIP downloads, an API key and tracking of up to {{sources}} sources.",
-    "bodyWithFree": "Pro includes {{daily}} downloads per day (Free: {{free}}), ZIP downloads, an API key and tracking of up to {{sources}} sources.",
+    "body": "Pro includes {{daily}} downloads per day, ZIP downloads, an API key and watching up to {{sources}} sources.",
+    "bodyWithFree": "Pro includes {{daily}} downloads per day (Free: {{free}}), ZIP downloads, an API key and watching up to {{sources}} sources.",
     "noPlan": "See the pricing page to compare plan limits.",
     "button": "See Pro plan →"
   },

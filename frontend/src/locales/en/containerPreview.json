@@ -30,10 +30,10 @@
     "clear": "Clear selection"
   },
   "queue": {
-    "youtubeDisabled": "YouTube download isn't available yet. Queueing is temporarily disabled.",
-    "cookieInvalid": "Invalid cookie. Update the cookie to use queueing.",
-    "queuing": "Queuing...",
-    "button": "Queue {{n}}"
+    "youtubeDisabled": "YouTube downloads aren't available yet. Adding to the queue is temporarily disabled.",
+    "cookieInvalid": "Invalid cookie. Update the cookie to add items to the queue.",
+    "queuing": "Adding to queue...",
+    "button": "Add {{n}} to queue"
   },
   "filter": {
     "allTypes": "All types",
@@ -59,7 +59,7 @@
   },
   "expired": {
     "title": "Session expired",
-    "body": "The previous discovery results have passed their TTL.",
+    "body": "The previous discovery results have expired.",
     "rediscover": "Discover again"
   },
   "queueSuccess": {
@@ -85,11 +85,11 @@
     },
     "cookiePartial": {
       "title": "Partial content",
-      "body": "Public content is shown in full. Some posts require login and may be skipped when queueing."
+      "body": "Public content is shown in full. Some posts require sign-in and may be skipped when adding to the queue."
     },
     "singleDisabled": {
-      "title": "YouTube single video is temporarily unavailable",
-      "body": "YouTube downloads via the server are currently bot-blocked. Instead, paste a <strong>channel</strong> or <strong>playlist</strong> link to use Bulk Browse (requires a configured residential proxy)."
+      "title": "Single YouTube videos are temporarily unavailable",
+      "body": "YouTube downloads via the server are currently blocked as bot traffic. Instead, paste a <strong>channel</strong> or <strong>playlist</strong> link to use Bulk Browse (requires a configured residential proxy)."
     },
     "proxyBad": {
       "title": "YouTube proxy is not working",

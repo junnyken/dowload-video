@@ -24,7 +24,7 @@
     "spotifyListLoad": "Error loading the Spotify list.",
     "retryAfter": "Try again in {{sec}}s",
     "quotaPaid": "You have reached today's download limit. Your limit resets at 07:00 Vietnam time (00:00 UTC).",
-    "quotaFree": "You have reached today's download limit. You can wait until 07:00 Vietnam time (00:00 UTC) or see the Pro plan on the Pricing page.",
+    "quotaFree": "You have reached today's download limit. You can wait until 07:00 Vietnam time (00:00 UTC) or check out Pro on the Pricing page.",
     "videoInfo": "Could not get video information",
     "extractVideo": "Could not extract video information.",
     "linkProcess": "An error occurred while processing the link.",
@@ -76,12 +76,12 @@
     "subsDownloading": "Downloading subtitles...",
     "subsNone": "This platform has no public subtitles.",
     "subsFailed": "Could not extract subtitles. Try again later.",
-    "subsBurnFailed": "⚠️ Could not burn/mux the subtitles into the video — the .srt subtitle file was downloaded separately.",
+    "subsBurnFailed": "⚠️ Couldn't burn the subtitles into the video — the .srt subtitle file was downloaded separately.",
     "downloadingTrack": "Downloading: {{name}}",
     "errorMsg": "Error: {{msg}}",
     "downloadingTracks_one": "Downloading {{count}} track...",
     "downloadingTracks_other": "Downloading {{count}} tracks...",
-    "zipCancelled": "ZIP download cancelled.",
+    "zipCancelled": "ZIP download canceled.",
     "noTracksDownloaded": "No tracks could be downloaded. Please try again.",
     "zipping": "Creating ZIP, please wait...",
     "zipPartial": "Done! {{done}}/{{total}} tracks ({{failed}} failed).",
@@ -112,7 +112,7 @@
     "inpaintNeedDownload": "Download the video first to remove the logo.",
     "inpaintDownloading": "Downloading the logo-free video...",
     "noDownloadLink": "No download link.",
-    "gdrive": "File downloaded → drag it into the open Google Drive!",
+    "gdrive": "Download finished — drag the file into the open Google Drive tab!",
     "dropbox": "Opening Dropbox...",
     "subsDone": "Subtitles downloaded.",
     "subsDownloadFailed": "Could not download subtitles. Try again later.",
@@ -180,7 +180,7 @@
     "upperLeft": "Top left",
     "experimental": "Experimental",
     "webOnly": "Web only",
-    "disclosureTitle": "Logo Inpaint (Experimental) — read before use",
+    "disclosureTitle": "Logo removal (experimental) — read before use",
     "note1": "• Experimental results may contain visual artifacts.",
     "note2": "• Only use this on content you have the right to edit.",
     "note3": "• Quality depends on the content and motion in the video.",
@@ -189,7 +189,7 @@
     "chooseRegion": "Choose the logo position to remove:",
     "commonPositions": "Common logo positions:",
     "previewResult": "Preview result",
-    "previewRough": "The preview is not smooth yet — cropping the logo area will give a cleaner result.",
+    "previewRough": "The preview looks rough — cropping to the logo area will give a cleaner result.",
     "quickPreview": "Preview (quick):",
     "reselect": "Choose area again",
     "processAll": "Process whole video",
@@ -245,7 +245,7 @@
     "download": "Download watermarked video",
     "preview": "Preview",
     "rendering": "Rendering...",
-    "renderFull": "Render full"
+    "renderFull": "Full render"
   },
   "input": {
     "placeholder": "Paste a video or channel link…",
@@ -365,7 +365,7 @@
     "firstSec": "First {{sec}}s",
     "whole": "Entire video",
     "processing": "Trimming and processing...",
-    "action": "Trim & Download ({{from}} → {{to}})"
+    "action": "Trim & download ({{from}} → {{to}})"
   },
   "gif": {
     "title": "Convert to GIF",
@@ -400,16 +400,16 @@
     "audio": "Audio",
     "audioOnlyBadge": "AUDIO ONLY",
     "noAudioFormats": "No individual audio formats found.",
-    "downloadAudio": "Download Audio (MP3 320kbps)",
-    "downloadVideoNoLogo": "Download Video (No logo)",
-    "downloadVideo": "Download Video",
-    "downloadVideoQuality": "Download Video ({{quality}})"
+    "downloadAudio": "Download audio (MP3 320kbps)",
+    "downloadVideoNoLogo": "Download video (no logo)",
+    "downloadVideo": "Download video",
+    "downloadVideoQuality": "Download video ({{quality}})"
   },
   "recent": {
     "title": "Recent downloads",
     "clearAll": "Clear all",
     "redownload": "Download again",
-    "waiting": "Wait"
+    "waiting": "Waiting"
   },
   "threads": {
     "profile": "Profile",
@@ -435,7 +435,7 @@
     "collapse": "▲ Collapse",
     "expand": "▼ Expand",
     "noTitle": "No title",
-    "views": "{{count}} views",
+    "views": "Views: {{count}}",
     "languages": "Languages: {{list}}",
     "hasSubtitles": "Has subtitles",
     "subsAuto": "✓ Auto-generated subtitles",

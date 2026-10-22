@@ -64,7 +64,7 @@
     "preview": "Name preview",
     "useName": "Download with this name",
     "expired": "The local file has expired — download it again from the source.",
-    "zipHint": "For a ZIP of multiple files, use Batch."
+    "zipHint": "To get multiple files as a ZIP, use Bulk download."
   },
   "errorCard": {
     "unknown": "Error",
@@ -106,7 +106,7 @@
     "trimTitle": "Trim the video",
     "trim": "Trim clip",
     "thumbnail": "Get thumbnail",
-    "zipPlaylist": "Zip playlist",
+    "zipPlaylist": "ZIP playlist",
     "another": "Download another link",
     "savePreset": "Save this preset",
     "presetPlaceholder": "Preset name...",
@@ -151,11 +151,11 @@
       "image": "🖼️ Image",
       "carousel": "📚 Carousel",
       "gif": "🌀 GIF",
-      "batch_video": "📦 Batch video",
-      "batch_audio": "📦 Batch audio",
-      "batch_image": "📦 Batch images",
-      "batch_mp3": "📦 Batch MP3",
-      "batch_post": "📦 Batch posts",
+      "batch_video": "📦 Bulk video",
+      "batch_audio": "📦 Bulk audio",
+      "batch_image": "📦 Bulk images",
+      "batch_mp3": "📦 Bulk MP3",
+      "batch_post": "📦 Bulk posts",
       "browse_tracks": "🎛️ Browse tracks",
       "artist_preview": "🎤 Artist preview"
     }

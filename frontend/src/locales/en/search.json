@@ -6,7 +6,7 @@
   "placeholder": "Enter a search keyword...",
   "searchBtn": "Search",
   "sort": {
-    "relevance": "Relevant",
+    "relevance": "Relevance",
     "date": "Newest",
     "viewCount": "Most viewed"
   },

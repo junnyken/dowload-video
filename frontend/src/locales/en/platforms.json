@@ -14,7 +14,7 @@
       "description": "Video and images from public Threads posts."
     },
     "pinterest": {
-      "description": "Video, images, and board/collection scraping."
+      "description": "Videos, images, and boards/collections."
     },
     "soundcloud": {
       "description": "Download tracks, playlists, and artist channels."
