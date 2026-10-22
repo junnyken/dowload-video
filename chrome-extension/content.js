@@ -901,6 +901,64 @@ window.addEventListener('message', (event) => {
     }
   }
 
+  // ── 5.18.1: the video being watched on a feed (owner 22/10) ──────────────
+  // A TikTok / Douyin / Instagram / Facebook feed keeps one address while the
+  // person scrolls, and preloads the next videos — the popup listed 12 bare
+  // "MP4" files and said "not a video page". This finds the <video> on
+  // screen (playing, largest visible area) and the link of THAT video in the
+  // element around it (an id or a link holding the video id).
+  function vgVideoLinkNear(el) {
+    const host = location.hostname;
+    const tiktok = /(^|\.)tiktok\.com$/i.test(host), douyin = /(^|\.)douyin\.com$/i.test(host);
+    const fb = /(^|\.)facebook\.com$/i.test(host), ig = /(^|\.)instagram\.com$/i.test(host);
+    for (let n = el, depth = 0; n && n !== document.body && depth < 18; n = n.parentElement, depth++) {
+      const links = n.querySelectorAll ? [...n.querySelectorAll('a[href]')] : [];
+      for (const a of links) {
+        const h = a.href || '';
+        let m;
+        if (tiktok && (m = h.match(/tiktok\.com\/@([\w.-]+)\/(video|photo)\/(\d{15,25})/))) return `https://www.tiktok.com/@${m[1]}/${m[2]}/${m[3]}`;
+        if (douyin && (m = h.match(/douyin\.com\/(?:video|note)\/(\d{15,25})/))) return `https://www.douyin.com/video/${m[1]}`;
+        if (fb && (m = h.match(/facebook\.com\/(?:reel\/|watch\/?\?v=|[^/?#]+\/videos\/(?:[^/?#]+\/)?)(\d{6,25})/))) return `https://www.facebook.com/reel/${m[1]}`;
+        if (ig && (m = h.match(/instagram\.com\/(?:[\w.]+\/)?(reel|p)\/([\w-]{5,40})/))) return `https://www.instagram.com/${m[1]}/${m[2]}/`;
+      }
+      // TikTok's player wrapper carries the id ("xgwrapper-0-<id>"); the author link is nearby
+      if (tiktok && n.id && /\d{15,25}/.test(n.id)) {
+        const id = n.id.match(/(\d{15,25})/)[1];
+        let user = '';
+        for (let up = n, k = 0; up && k < 10 && !user; up = up.parentElement, k++) {
+          const a = up.querySelector && up.querySelector('a[href*="/@"]');
+          const mm = a && (a.href || '').match(/tiktok\.com\/@([\w.-]+)(?:[/?#]|$)/);
+          if (mm) user = mm[1];
+        }
+        return `https://www.tiktok.com/@${user}/video/${id}`;
+      }
+    }
+    return null;
+  }
+
+  function vgCurrentVideo() {
+    const vh = window.innerHeight, vw = window.innerWidth;
+    let best = null, bestScore = 0;
+    for (const v of document.querySelectorAll('video')) {
+      const r = v.getBoundingClientRect();
+      const w = Math.max(0, Math.min(r.right, vw) - Math.max(r.left, 0));
+      const h = Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0));
+      const score = w * h * (v.paused ? 1 : 3);
+      if (score > bestScore) { best = v; bestScore = score; }
+    }
+    if (!best || bestScore < 5000) return null;
+    const url = vgVideoLinkNear(best);
+    if (!url) return null;
+    let title = '';
+    for (let n = best, k = 0; n && k < 14 && !title; n = n.parentElement, k++) {
+      const d = n.querySelector && n.querySelector('[data-e2e*="desc"], [data-e2e="browse-video-desc"], h1, [class*="caption" i], [class*="desc" i]');
+      if (d && d.textContent.trim().length > 3) title = d.textContent.replace(/\s+/g, ' ').trim().slice(0, 160);
+    }
+    const src = best.currentSrc && /^https?:/.test(best.currentSrc) ? best.currentSrc : '';
+    const poster = best.getAttribute('poster') ? best.poster : '';
+    return { url, title: title || document.title.slice(0, 160), thumb: /^https?:/.test(poster) ? poster : '', src, playing: !best.paused };
+  }
+
   // ── 5.11.0: relay a whole channel to the VidGrab app / website (owner 21/10) ──
   // The app's embedded browser and the server only get Douyin's first ~41
   // videos; this page (the person's own Chrome) gets all of them. The token
@@ -1087,6 +1145,9 @@ window.addEventListener('message', (event) => {
       const btn = document.getElementById('vg-scrape-btn');
       if (btn && !btn.disabled) btn.click();
       sendResponse({ ok: true });
+    }
+    if (msg.type === 'VG_CURRENT_VIDEO') {
+      try { sendResponse({ video: vgCurrentVideo() }); } catch { sendResponse({ video: null }); }
     }
     if (msg.type === 'VG_GET_COUNT') {
       sendResponse({ count: videoSet.size, scrolling: isScraping });

@@ -966,6 +966,15 @@ const urlHint  = document.getElementById('vg-url-hint');
 // this list can never be complete and a wrong guess must not stop the user.
 const FEED_PATHS = /^\/?(home|explore|foryou|for-you|feed|following|notifications|messages|search|settings)?\/?$/i;
 
+/** The video on screen in tab `tabId` (content.js VG_CURRENT_VIDEO), or null. */
+function vgAskCurrentVideo(tabId) {
+  return new Promise((r) => {
+    try {
+      chrome.tabs.sendMessage(tabId, { type: 'VG_CURRENT_VIDEO' }, (res) => { void chrome.runtime.lastError; r((res && res.video) || null); });
+    } catch { r(null); }
+  });
+}
+
 function looksLikeFeed(rawUrl) {
   try {
     const u = new URL(rawUrl);
@@ -1074,6 +1083,13 @@ urlInput?.addEventListener('input', () => {
   if (tabUrl && !looksLikeFeed(tabUrl)) {
     urlInput.placeholder = tabUrl;
     setUrlHint('Đang dùng link của tab hiện tại. Dán link khác để thay.');
+    return;
+  }
+  // 5.18.1: a feed (TikTok For You…) keeps one address — take the video on screen
+  const cur = tabUrl ? await vgAskCurrentVideo(tab.id) : null;
+  if (cur && cur.url) {
+    urlInput.value = cur.url;
+    setUrlHint(`Video đang xem: “${(cur.title || cur.url).slice(0, 90)}” — bấm Tải để tải video này. Lướt sang video khác rồi mở lại để đổi.`, 'ok'); // wording: BA review
     return;
   }
   // No prompt on open: read the clipboard only if the user already granted it.
@@ -2455,10 +2471,44 @@ async function renderSniff(tab) {
   empty.style.display = 'none';
   document.getElementById('vg-sniff-count').textContent = `(${items.length})`;
   list.textContent = '';
-  // newest first, files and streams together
-  [...items].reverse().forEach((it) => list.appendChild(vgSniffRow(tab, it)));
+  // 5.18.1: which file is the video on screen; on TikTok / Douyin / Facebook / Instagram
+  // the page preloads the next videos, so the raw list is folded away (wording: BA review)
+  const cur = await vgAskCurrentVideo(tab.id);
+  const canon = (u) => { try { const x = new URL(u); ['bytestart', 'byteend', 'range'].forEach((k) => x.searchParams.delete(k)); return x.origin + x.pathname; } catch { return u; } };
+  const playing = cur && cur.src ? canon(cur.src) : null;
+  const ordered = [...items].reverse().sort((a, b) => (canon(b.url) === playing) - (canon(a.url) === playing));
+  ordered.forEach((it) => {
+    const row = vgSniffRow(tab, it);
+    if (playing && canon(it.url) === playing) {
+      row.style.borderColor = '#6366f1';
+      const mark = document.createElement('div');
+      mark.style.cssText = 'font-size:10px;color:#a5b4fc;font-weight:700;margin-bottom:4px;';
+      mark.textContent = `▶ Đang phát${cur.title ? `: ${cur.title.slice(0, 60)}` : ''}`;
+      row.prepend(mark);
+    }
+    list.appendChild(row);
+  });
+  const handled = /(^|\.)(tiktok|douyin|facebook|instagram)\.com$/i.test((() => { try { return new URL(tab.url).hostname; } catch { return ''; } })());
+  let fold = document.getElementById('vg-sniff-fold');
+  if (handled) {
+    if (!fold) {
+      fold = document.createElement('button');
+      fold.id = 'vg-sniff-fold';
+      fold.style.cssText = 'width:100%;background:none;border:1px dashed #2d3348;border-radius:8px;padding:6px;color:#94a3b8;font-size:10px;cursor:pointer;text-align:left;line-height:1.4;';
+      fold.onclick = () => { list.style.display = list.style.display === 'none' ? 'flex' : 'none'; vgFoldText(fold, list, items.length); };
+      list.before(fold);
+      list.style.display = 'none';
+    }
+    vgFoldText(fold, list, items.length);
+  } else if (fold) { fold.remove(); list.style.display = 'flex'; }
   clearTimeout(_vgSniffTimer);
   if (items.some((x) => x.pending)) _vgSniffTimer = setTimeout(() => renderSniff(tab), 1200);
+}
+
+function vgFoldText(fold, list, n) {
+  fold.textContent = list.style.display === 'none'
+    ? `▸ ${n} file video trang này đã tải sẵn (gồm cả video sắp lướt tới) — dùng nút “Tải Video Ngay” bên dưới cho video đang xem. Bấm để xem danh sách.`
+    : '▾ Ẩn danh sách file';
 }
 
 function vgSniffRow(tab, it) {

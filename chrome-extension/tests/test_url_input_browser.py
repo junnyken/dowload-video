@@ -4,7 +4,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 EXT    = str(Path(__file__).resolve().parent.parent)
-CHROME = str(Path.home() / ".cache/ms-playwright/chromium-1234/chrome-linux64/chrome")
+CHROME = next((str(p) for p in sorted((Path.home() / ".cache/ms-playwright").glob("chromium-*/chrome-linux64/chrome"), reverse=True)), None)  # newest installed
 res = []
 def check(n, ok, d=""):
     res.append(ok); print(("  PASS  " if ok else "  FAIL  ") + n + (f"   [{d}]" if d else ""), flush=True)
@@ -22,6 +22,9 @@ def main():
 
             # Reproduce the reported scenario: a feed page is the active tab.
             feed = ctx.new_page()
+            # x.com answers this workspace's datacenter IP with an error; the test is about the
+            # popup on a feed address, so a stub page is served there (22/10)
+            ctx.route("https://x.com/home", lambda r: r.fulfill(status=200, content_type="text/html", body="<!doctype html><title>Home / X</title><main>feed</main>"))
             feed.goto("https://x.com/home", wait_until="domcontentloaded", timeout=45000)
             feed.bring_to_front()
 

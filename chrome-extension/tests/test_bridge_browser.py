@@ -20,7 +20,7 @@ from playwright.sync_api import sync_playwright
 
 EXT = str(Path(__file__).resolve().parent.parent)
 WEB = "https://dvid.vibe1.tinhgon.xyz"
-CHROME = str(Path.home() / ".cache/ms-playwright/chromium-1234/chrome-linux64/chrome")
+CHROME = next((str(p) for p in sorted((Path.home() / ".cache/ms-playwright").glob("chromium-*/chrome-linux64/chrome"), reverse=True)), None)  # newest installed
 
 results = []
 def check(name, ok, detail=""):
