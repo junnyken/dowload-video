@@ -105,6 +105,8 @@ def test_login_wall_then_resume(rc):
     ("https://web.facebook.com/NASA/videos/?ref=x", "https://www.facebook.com/NASA/videos/"),
     ("https://www.facebook.com/profile.php?id=100012345678&sk=reels_tab", "https://www.facebook.com/profile.php?id=100012345678&sk=reels_tab"),
     ("https://www.facebook.com/profile.php?sk=videos&id=100012345678", "https://www.facebook.com/profile.php?id=100012345678&sk=reels_tab"),
+    ("https://www.facebook.com/people/Cole-Cooper/61594798577076/?sk=reels_tab", "https://www.facebook.com/profile.php?id=61594798577076&sk=reels_tab"),
+    ("https://m.facebook.com/people/Cole-Cooper/61594798577076/", "https://www.facebook.com/profile.php?id=61594798577076&sk=reels_tab"),
 ])
 def test_facebook_channel_urls(rc, raw, canon):
     r = _start(raw)

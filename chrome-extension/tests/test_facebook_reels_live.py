@@ -16,6 +16,11 @@ import test_sniffer_browser as T  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 PAGE = "https://www.facebook.com/haidee.burrows/reels/"
+# optional: another channel page + the least reels it must send, e.g.
+#   python3 tests/test_facebook_reels_live.py "https://www.facebook.com/profile.php?id=61594798577076&sk=reels_tab" 30
+if len(sys.argv) > 1:
+    PAGE = sys.argv[1]
+MIN_ITEMS = int(sys.argv[2]) if len(sys.argv) > 2 else 11
 TOKEN = "T" * 32
 res = []
 
@@ -66,7 +71,7 @@ def main():
             urls = [i["url"] for i in items]
             print("     progress puts:", [len(x.get("items", [])) for x in puts])
             check("relay finished (done=true)", bool(done), f"{len(puts)} puts")
-            check("more than the 10 shown before the sign-in dialog", len(items) > 10, str(len(items)))
+            check(f"at least {MIN_ITEMS} reels (Facebook shows 10 before the sign-in dialog)", len(items) >= MIN_ITEMS, str(len(items)))
             check("every item is a Facebook reel link", items and all(u.startswith("https://www.facebook.com/reel/") for u in urls), str(urls[:2]))
             check("no duplicates", len(set(urls)) == len(urls))
             check("channel title sent", bool((done or {}).get("channelTitle")), str((done or {}).get("channelTitle")))

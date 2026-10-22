@@ -718,7 +718,8 @@ window.addEventListener('message', (event) => {
 
       let prevCount = videoSet.size;
       let stable = 0;
-      const MAX_STABLE = 5;
+      // Facebook loads the next reels slower than Douyin: more empty rounds before "done".
+      const MAX_STABLE = /(^|\.)facebook\.com$/i.test(location.hostname) ? 8 : 5;
       let round = 0;
       let loginWall = false;
       let stopped = false;
@@ -871,7 +872,12 @@ window.addEventListener('message', (event) => {
 
   function vgIsFacebookChannel(url) {
     return /^https:\/\/(www\.|web\.|m\.)?facebook\.com\/(?!reel\/|watch|groups\/|share\/|events\/|marketplace)[^/?#]+\/(reels|videos)\/?(\?|#|$)/i.test(url)
-      || /^https:\/\/(www\.|web\.|m\.)?facebook\.com\/profile\.php\?[^#]*\bsk=(reels_tab|videos)/i.test(url);
+      || /^https:\/\/(www\.|web\.|m\.)?facebook\.com\/profile\.php\?[^#]*\bsk=(reels_tab|videos)/i.test(url)
+      // 5.16.1: Facebook sends profile.php?id=… to /people/<name>/<id>/?sk=reels_tab
+      // (measured 22/10) — the panel never opened there, so the app / website
+      // waited forever; a named page can also carry ?sk=reels_tab.
+      || /^https:\/\/(www\.|web\.|m\.)?facebook\.com\/people\/[^/?#]+\/\d{5,25}\/?\?[^#]*\bsk=(reels_tab|videos)/i.test(url)
+      || /^https:\/\/(www\.|web\.|m\.)?facebook\.com\/(?!reel\/|watch|groups\/|share\/|events\/|marketplace)[^/?#]+\/?\?[^#]*\bsk=(reels_tab|videos)/i.test(url);
   }
 
   /** {url} of a Facebook reel / video link, or null. */
@@ -985,6 +991,20 @@ window.addEventListener('message', (event) => {
   }
 
   function vgScrollPage() {
+    // 5.16.1: on Facebook the reels grid sits above other sections (Photos…);
+    // a blind 1.8-screen step jumps past its end, so the next row never loads
+    // and the scan stopped early (owner 22/10: 31 sent, 110 on the page;
+    // measured signed out: blind 40, last reel 50 = all Facebook shows).
+    // Bring the last collected reel to the bottom of the screen instead.
+    if (/(^|\.)facebook\.com$/i.test(location.hostname)) {
+      const links = document.querySelectorAll('a[href*="/reel/"], a[href*="/videos/"], a[href*="/watch/?v="]');
+      const last = links[links.length - 1];
+      if (last) {
+        last.scrollIntoView({ block: 'end', behavior: 'smooth' });
+        window.scrollBy({ top: window.innerHeight * 0.6, behavior: 'smooth' });
+        return;
+      }
+    }
     const el = vgScrollTarget();
     const step = window.innerHeight * 1.8;
     if (el) el.scrollBy({ top: step, behavior: 'smooth' });

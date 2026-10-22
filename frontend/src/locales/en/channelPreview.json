@@ -70,5 +70,6 @@
   "downloadPartial_one": "Download {{count}}/{{selected}} selected video",
   "downloadPartial_other": "Download {{count}}/{{selected}} selected videos",
   "downloadSelected_one": "Download {{count}} selected video",
-  "downloadSelected_other": "Download {{count}} selected videos"
+  "downloadSelected_other": "Download {{count}} selected videos",
+  "signIn": "Sign in"
 }

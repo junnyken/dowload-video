@@ -7,7 +7,7 @@
 // choice is preselected and confirmed first; nothing is sent without it.
 // wording: BA review (every sentence in this file)
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Loader2, Puzzle, RefreshCw, Server, X } from 'lucide-react';
+import { Download, Loader2, LogIn, Puzzle, RefreshCw, Server, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocalePath } from '../i18n';
 
@@ -31,7 +31,9 @@ const CN_CHANNEL = [
 export const isFacebookChannel = (url) => {
   const u = (url || '').trim();
   return /^https?:\/\/(www\.|web\.|m\.)?facebook\.com\/(?!(reel|reels|watch|groups|share|events|marketplace|pages|gaming|login|photo|photos|hashtag|story\.php|profile\.php)(\/|\?|#|$))[A-Za-z0-9.-]{1,80}(\/(reels|videos))?\/?([?#].*)?$/i.test(u)
-    || /^https?:\/\/(www\.|web\.|m\.)?facebook\.com\/profile\.php\?(.*&)?id=\d{5,25}/i.test(u);
+    || /^https?:\/\/(www\.|web\.|m\.)?facebook\.com\/profile\.php\?(.*&)?id=\d{5,25}/i.test(u)
+    // where Facebook sends profile.php?id=… (measured 22/10): /people/<name>/<id>/?sk=reels_tab
+    || /^https?:\/\/(www\.|web\.|m\.)?facebook\.com\/people\/[^/?#]+\/\d{5,25}\/?([?#].*)?$/i.test(u);
 };
 
 /** True for a channel link the preview can list (Douyin / Xiaohongshu / Kuaishou / Bilibili / Facebook). */
@@ -151,6 +153,16 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
       setError(e.message); setPhase('error');
     }
   }, [list, autoTab, preselect, url, signedIn, t]);
+
+  // Facebook has no server list: "Try again" must start the extension relay
+  // again (inside this click, so the new tab is not blocked), and a guest
+  // needs the sign-in dialog — calling load() again changed nothing (22/10).
+  const retry = () => {
+    if (!isFacebookChannel(url)) { void load(); return; }
+    if (!signedIn) { window.dispatchEvent(new Event('vidgrab:open-auth')); return; }
+    setError(''); setPhase('loading');
+    void startRelay();
+  };
 
   const loadDeep = async () => {
     setDeepBusy(true); setNote('');
@@ -301,7 +313,7 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
       {relay.state === 'noext' && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-warning">
           <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
-          <span className="flex-1 min-w-0">{t('relayNoExt', { ver: isFacebookChannel(url) ? '5.15.0' : '5.11.1' })}</span>
+          <span className="flex-1 min-w-0">{t('relayNoExt', { ver: isFacebookChannel(url) ? '5.16.1' : '5.11.1' })}</span>
           {/* new tab: leaving this page would stop the wait */}
           <a href={lp('/extension')} target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 px-2.5 py-1 font-medium text-accent-text border border-line hover:border-line-strong rounded-lg">
             <Puzzle className="w-3.5 h-3.5" /> {t('installExt')}
@@ -315,7 +327,9 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
       {phase === 'error' && (
         <div className="flex items-start gap-2 text-xs text-danger">
           <span className="flex-1">{error}</span>
-          <button type="button" onClick={load} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg cursor-pointer"><RefreshCw className="w-3.5 h-3.5" /> {t('retry')}</button>
+          <button type="button" onClick={retry} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg cursor-pointer">
+            {isFacebookChannel(url) && !signedIn ? <><LogIn className="w-3.5 h-3.5" /> {t('signIn')}</> : <><RefreshCw className="w-3.5 h-3.5" /> {t('retry')}</>}
+          </button>
         </div>
       )}
 

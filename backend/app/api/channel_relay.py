@@ -50,6 +50,8 @@ _DOUYIN_VIDEO = re.compile(r"^https://www\.douyin\.com/video/(\d{15,25})$")
 _FB_RESERVED = {"reel", "reels", "watch", "groups", "share", "events", "marketplace", "pages", "gaming", "login", "profile.php", "story.php", "photo", "photos", "video", "videos", "hashtag"}
 _FB_NAMED = re.compile(r"^https://(?:www\.|web\.|m\.)?facebook\.com/([A-Za-z0-9.\-]{1,80})(?:/(reels|videos))?/?(?:[?#].*)?$")
 _FB_PROFILE_ID = re.compile(r"^https://(?:www\.|web\.|m\.)?facebook\.com/profile\.php\?(?:[^#]*&)?id=(\d{5,25})")
+# Where Facebook sends profile.php?id=… (measured 22/10): /people/<name>/<id>/?sk=reels_tab
+_FB_PEOPLE = re.compile(r"^https://(?:www\.|web\.|m\.)?facebook\.com/people/[^/?#]{1,120}/(\d{5,25})/?(?:[?#].*)?$")
 _FB_ITEM = re.compile(r"^https://www\.facebook\.com/(?:reel/(\d{6,25})|watch/\?v=(\d{6,25}))$")
 # wording: BA review
 MSG_BAD_URL = "Chỉ hỗ trợ trang cá nhân Douyin (douyin.com/user/…) hoặc trang Reels / Video của Facebook."
@@ -90,7 +92,7 @@ def _clean_profile(raw: str) -> Optional[str]:
     if m:
         return f"https://www.douyin.com/user/{m.group(1)}"
     url = re.sub(r"^https://facebook\.com/", "https://www.facebook.com/", url)
-    m = _FB_PROFILE_ID.match(url)
+    m = _FB_PROFILE_ID.match(url) or _FB_PEOPLE.match(url)
     if m:
         return f"https://www.facebook.com/profile.php?id={m.group(1)}&sk=reels_tab"
     m = _FB_NAMED.match(url)

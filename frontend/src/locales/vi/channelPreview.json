@@ -49,5 +49,6 @@
   "pickToDownload": "Chọn video để tải",
   "noQuotaToday": "Đã hết lượt tải hôm nay",
   "downloadPartial_other": "Tải {{count}}/{{selected}} video đã chọn",
-  "downloadSelected_other": "Tải {{count}} video đã chọn"
+  "downloadSelected_other": "Tải {{count}} video đã chọn",
+  "signIn": "Đăng nhập"
 }
