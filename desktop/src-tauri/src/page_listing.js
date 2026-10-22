@@ -61,6 +61,15 @@
     if (verify) S.verify = true;
     if (verify && !SHOW && S.items.size === 0 && elapsed > 10000) return send({ meta, error: "verify" });
   } else if (KIND === "facebook") {
+    // 0.19.1: signed out, Facebook shows ~10 reels then a "Xem thêm trên
+    // Facebook" sign-in dialog and locks the page's scroll. Closing it and
+    // unlocking the scroll lets the grid load on (measured 22/10 on a public
+    // profile: 10 → 29 reels, the whole tab). Signed in, there is no dialog.
+    const close = document.querySelector('[role="dialog"] [aria-label="Đóng"], [role="dialog"] [aria-label="Close"]');
+    if (close) { close.click(); S.unblocked = (S.unblocked || 0) + 1; }
+    for (const el of [document.documentElement, document.body]) {
+      if (el && getComputedStyle(el).overflowY === "hidden") el.style.setProperty("overflow", "auto", "important");
+    }
     document.querySelectorAll('a[href*="/videos/"], a[href*="/reel/"], a[href*="/watch/?v="], a[href*="/watch?v="]').forEach((a) => {
       const href = abs(a.getAttribute("href"));
       const m = href.match(/\/(?:videos|reel)\/(\d{6,25})/) || href.match(/[?&]v=(\d{6,25})/);
@@ -119,7 +128,8 @@
 
   if (S.items.size === S.last) S.still += 1; else { S.still = 0; S.last = S.items.size; }
   // Douyin fetches each next page slowly: wait 8 still ticks (16 s) unless the end line showed.
-  const stillMax = KIND === "douyin" ? (S.end ? 2 : 8) : 4;
+  // Facebook loads the next rows of a reels tab in a few seconds: 6 still ticks.
+  const stillMax = KIND === "douyin" ? (S.end ? 2 : 8) : KIND === "facebook" ? 6 : 4;
   if (S.items.size >= LIMIT || (S.items.size > 0 && S.still >= stillMax) || elapsed > MAXMS) {
     const why = S.items.size ? null : S.verify ? "verify" : S.login ? "login" : "empty";
     const diag = KIND === "douyin" && !S.items.size ? douyinDiag() : undefined;

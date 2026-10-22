@@ -85,7 +85,7 @@ function DouyinExtensionHint() {
   );
 }
 import ContainerPreviewPanel from './ContainerPreviewPanel';
-import ChannelPreview, { isDouyinProfile, isPreviewableChannel } from './ChannelPreview';
+import ChannelPreview, { isDouyinProfile, isFacebookChannel, isPreviewableChannel } from './ChannelPreview';
 import { useContainerDiscover } from '../hooks/useContainerDiscover';
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
@@ -370,8 +370,10 @@ export default function BulkContent() {
     // inside the click, or the popup blocker stops it.
     if (urlList.length === 1 && isPreviewableChannel(urlList[0])) {
       const want = channelMode ? (parseInt(customMaxVideos) || parseInt(maxVideos) || 20) : 'all';
+      // Facebook (22/10): only the extension can list it — always the relay tab when signed in.
+      const fb = !!session?.access_token && isFacebookChannel(urlList[0]);
       const whole = !!session?.access_token && isDouyinProfile(urlList[0]) && (want === 'all' || want > DOUYIN_SERVER_PAGE);
-      const tab = whole && !douyinWhole ? window.open('about:blank', '_blank') : null;
+      const tab = fb || (whole && !douyinWhole) ? window.open('about:blank', '_blank') : null;
       setPreview((p) => ({ url: urlList[0], want, tab, n: ((p && p.n) || 0) + 1 }));
       return;
     }
@@ -1137,7 +1139,11 @@ export default function BulkContent() {
                 if (lines.length !== 1 || !isPreviewableChannel(lines[0]) || previewUrl === lines[0]) return null;
                 return (
                   // wording: BA review
-                  <button type="button" onClick={() => setPreview((p) => ({ url: lines[0], n: ((p && p.n) || 0) + 1 }))}
+                  <button type="button" onClick={() => {
+                    // Facebook: the extension's tab opens inside this click (popup blockers)
+                    const tab = session?.access_token && isFacebookChannel(lines[0]) ? window.open('about:blank', '_blank') : null;
+                    setPreview((p) => ({ url: lines[0], tab, n: ((p && p.n) || 0) + 1 }));
+                  }}
                     className="mb-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border border-accent/40 bg-accent/10 text-accent-text hover:bg-accent/20 cursor-pointer">
                     <Eye className="w-3.5 h-3.5" /> Xem danh sách video để chọn
                   </button>

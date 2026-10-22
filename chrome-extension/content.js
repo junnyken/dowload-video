@@ -73,7 +73,7 @@
       /tiktok\.com\/@[^/]+\/video\//.test(url) ||
       /youtube\.com\/watch/.test(url) ||
       /youtube\.com\/shorts\//.test(url) ||
-      /facebook\.com\/.+\/videos\//.test(url) ||
+      /facebook\.com\/.+\/videos\/\d/.test(url) ||   // a video, not the Videos tab
       /facebook\.com\/watch/.test(url) ||
       /facebook\.com\/reel\//.test(url) ||
       /facebook\.com\/share\/r\//.test(url) ||
@@ -90,6 +90,9 @@
     ) return 'video';
     
     if (/douyin\.com\/(user\/|@)/.test(url) && !url.includes('modal_id=')) return 'channel';
+    // 5.15.0: a Facebook profile's Reels / Videos tab — read here, in the
+    // person's own (signed-in) Facebook, like a Douyin channel.
+    if (vgIsFacebookChannel(url)) return 'channel';
     
     if (
       /tiktok\.com\/@/.test(url) ||
@@ -251,8 +254,18 @@
   const vgSentUrls = new Set(); // 5.10.0: already sent to the server from this page
 
   function scanDOM() {
+    const onFacebook = /(^|\.)facebook\.com$/i.test(location.hostname);
     document.querySelectorAll('a[href]').forEach((a) => {
       const href = a.href || '';
+      if (onFacebook) {
+        const id = vgFacebookVideoId(href);
+        if (id) {
+          videoSet.add(id.url);
+          const label = (a.getAttribute('aria-label') || '').trim();
+          if (label && !vgFbTitles.has(id.url)) vgFbTitles.set(id.url, label.slice(0, 300));
+        }
+        return;
+      }
       // Douyin: /video/xxx or /note/xxx
       const dyMatch = href.match(/douyin\.com\/(video|note)\/(\d{15,25})/);
       if (dyMatch) {
@@ -683,6 +696,7 @@ window.addEventListener('message', (event) => {
 
       while (stable < MAX_STABLE) {
         round++;
+        vgFacebookUnblock();
         vgScrollPage();
         await sleep(2200);
         // 5.11.1: Douyin stops a signed-out visitor after a few rows.
@@ -708,7 +722,7 @@ window.addEventListener('message', (event) => {
         ? 'Douyin yêu cầu đăng nhập mới cho xem hết kênh. Hãy đăng nhập Douyin ngay trong tab này; đăng nhập xong tiện ích tự cuộn tiếp (trang không tự tải lại thì bấm F5).'
         : finalCount > 0
           ? `Hoàn tất! ${finalCount} video. Nhấn nút xanh để gửi tải.`
-          : 'Không tìm thấy video. Thử đăng nhập Douyin rồi thử lại.';
+          : `Không tìm thấy video. Thử đăng nhập ${/facebook\.com$/i.test(location.hostname) ? 'Facebook' : 'Douyin'} rồi thử lại.`;
       if (loginWall) statusEl.style.color = '#fbbf24';
 
       scrapeBtn.style.opacity = '1';
@@ -724,6 +738,7 @@ window.addEventListener('message', (event) => {
         const r = await vgRelaySend(relayTok, true);
         if (r && r.ok) {
           try { sessionStorage.removeItem(VG_RELAY_KEY); } catch { /* none */ }
+          statusEl.dataset.locked = '1';   // the page keeps changing: keep this message, not "Live: N"
           statusEl.style.color = '#34d399';
           statusEl.textContent = `✅ Đã gửi ${r.data.count} video về VidGrab (ứng dụng / website). Bạn có thể đóng tab này.`;
         } else {
@@ -817,6 +832,35 @@ window.addEventListener('message', (event) => {
     });
   }
 
+  // ── 5.15.0: Facebook Reels / Videos tabs ─────────────────────────────
+  const vgFbTitles = new Map();   // reel url -> aria-label
+
+  function vgIsFacebookChannel(url) {
+    return /^https:\/\/(www\.|web\.|m\.)?facebook\.com\/(?!reel\/|watch|groups\/|share\/|events\/|marketplace)[^/?#]+\/(reels|videos)\/?(\?|#|$)/i.test(url)
+      || /^https:\/\/(www\.|web\.|m\.)?facebook\.com\/profile\.php\?[^#]*\bsk=(reels_tab|videos)/i.test(url);
+  }
+
+  /** {url} of a Facebook reel / video link, or null. */
+  function vgFacebookVideoId(href) {
+    let m = href.match(/facebook\.com\/reel\/(\d{6,25})/);
+    if (m) return { url: `https://www.facebook.com/reel/${m[1]}` };
+    m = href.match(/facebook\.com\/[^/?#]+\/videos\/(?:[^/?#]+\/)?(\d{6,25})/) || href.match(/facebook\.com\/watch\/?\?(?:[^#]*&)?v=(\d{6,25})/);
+    if (m) return { url: `https://www.facebook.com/watch/?v=${m[1]}` };
+    return null;
+  }
+
+  // Signed out, Facebook shows ~10 reels, then a "Xem thêm trên Facebook"
+  // sign-in dialog and locks the page; closing it and unlocking the scroll
+  // lets the grid load on (measured 22/10: 10 → 29 reels, the whole tab).
+  function vgFacebookUnblock() {
+    if (!/(^|\.)facebook\.com$/i.test(location.hostname)) return;
+    const close = document.querySelector('[role="dialog"] [aria-label="Đóng"], [role="dialog"] [aria-label="Close"]');
+    if (close) close.click();
+    for (const el of [document.documentElement, document.body]) {
+      if (el && getComputedStyle(el).overflowY === 'hidden') el.style.setProperty('overflow', 'auto', 'important');
+    }
+  }
+
   // ── 5.11.0: relay a whole channel to the VidGrab app / website (owner 21/10) ──
   // The app's embedded browser and the server only get Douyin's first ~41
   // videos; this page (the person's own Chrome) gets all of them. The token
@@ -835,6 +879,10 @@ window.addEventListener('message', (event) => {
     const items = [];
     let skipped = 0;
     for (const u of videoSet) {
+      if (/^https:\/\/www\.facebook\.com\/(reel\/|watch\/\?v=)\d/.test(u)) {
+        items.push({ url: u, title: vgFbTitles.get(u) || null });
+        continue;
+      }
       const m = u.match(/douyin\.com\/(video|note)\/(\d{15,25})/);
       if (!m) continue;
       if (m[1] !== 'video') { skipped++; continue; } // image posts: the server's video route cannot use them
@@ -877,6 +925,7 @@ window.addEventListener('message', (event) => {
     if (/(^|\.)(xiaohongshu|rednote)\.com$/.test(h)) return 'xiaohongshu';
     if (/(^|\.)bilibili\.com$/.test(h)) return 'bilibili';
     if (/(^|\.)tiktok\.com$/.test(h)) return 'tiktok';
+    if (/(^|\.)facebook\.com$/.test(h)) return 'facebook';
     return 'other';
   }
 

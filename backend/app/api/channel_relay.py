@@ -21,6 +21,10 @@ The token (24 random bytes) is the only key; a relay lives 30 minutes.
 Items are public video links of the channel that was asked for (same
 host family, video ids only), at most 2000; nothing else is stored and
 nothing is counted — downloads count when they are downloaded.
+
+22/10/2026: also a Facebook profile's Reels / Videos tab (owner). Signed in,
+the person's own Facebook lists the whole tab; the app's hidden window and
+the server see ~10 reels behind a sign-in dialog.
 """
 
 import json
@@ -43,8 +47,12 @@ _KEY = "vidgrab:relay:{}"
 _TOKEN = re.compile(r"^[A-Za-z0-9_-]{32}$")
 _DOUYIN_PROFILE = re.compile(r"^https://www\.douyin\.com/user/(MS4w[A-Za-z0-9_-]{10,120})(?:[/?#].*)?$")
 _DOUYIN_VIDEO = re.compile(r"^https://www\.douyin\.com/video/(\d{15,25})$")
+_FB_RESERVED = {"reel", "reels", "watch", "groups", "share", "events", "marketplace", "pages", "gaming", "login", "profile.php", "story.php", "photo", "photos", "video", "videos", "hashtag"}
+_FB_NAMED = re.compile(r"^https://(?:www\.|web\.|m\.)?facebook\.com/([A-Za-z0-9.\-]{1,80})(?:/(reels|videos))?/?(?:[?#].*)?$")
+_FB_PROFILE_ID = re.compile(r"^https://(?:www\.|web\.|m\.)?facebook\.com/profile\.php\?(?:[^#]*&)?id=(\d{5,25})")
+_FB_ITEM = re.compile(r"^https://www\.facebook\.com/(?:reel/(\d{6,25})|watch/\?v=(\d{6,25}))$")
 # wording: BA review
-MSG_BAD_URL = "Chỉ hỗ trợ trang cá nhân Douyin (douyin.com/user/…)."
+MSG_BAD_URL = "Chỉ hỗ trợ trang cá nhân Douyin (douyin.com/user/…) hoặc trang Reels / Video của Facebook."
 MSG_GONE = "Phiên lấy danh sách đã hết hạn. Hãy bấm lấy lại."
 MSG_LOGIN = "Hãy đăng nhập để lấy đủ cả kênh."
 
@@ -79,7 +87,33 @@ def _clean_profile(raw: str) -> Optional[str]:
     url = (extract_share_url(raw) or raw or "").strip().replace("http://", "https://", 1)
     url = re.sub(r"^https://douyin\.com/", "https://www.douyin.com/", url)
     m = _DOUYIN_PROFILE.match(url)
-    return f"https://www.douyin.com/user/{m.group(1)}" if m else None
+    if m:
+        return f"https://www.douyin.com/user/{m.group(1)}"
+    url = re.sub(r"^https://facebook\.com/", "https://www.facebook.com/", url)
+    m = _FB_PROFILE_ID.match(url)
+    if m:
+        return f"https://www.facebook.com/profile.php?id={m.group(1)}&sk=reels_tab"
+    m = _FB_NAMED.match(url)
+    if m and m.group(1).lower() not in _FB_RESERVED:
+        return f"https://www.facebook.com/{m.group(1)}/{m.group(2) or 'reels'}/"
+    return None
+
+
+def _platform(url: str) -> str:
+    return "facebook" if "facebook.com/" in url else "douyin"
+
+
+def _clean_item(platform: str, raw: str):
+    """(id, canonical url) of a video link of the channel's platform, else None."""
+    u = (raw or "").strip()
+    if platform == "facebook":
+        m = _FB_ITEM.match(u)
+        if not m:
+            return None
+        return (m.group(1), f"https://www.facebook.com/reel/{m.group(1)}") if m.group(1) \
+            else (m.group(2), f"https://www.facebook.com/watch/?v={m.group(2)}")
+    m = _DOUYIN_VIDEO.match(u.split("?")[0])
+    return (m.group(1), f"https://www.douyin.com/video/{m.group(1)}") if m else None
 
 
 @router.post("/channel-relay")
@@ -93,7 +127,8 @@ async def start(payload: StartIn, request: Request, user=Depends(get_optional_us
     if not channel:
         return _err(400, MSG_BAD_URL, "unsupported_url")
     token = secrets.token_urlsafe(24)
-    doc = {"status": "waiting", "channelUrl": channel, "channelTitle": None, "items": [], "skipped": 0}
+    doc = {"status": "waiting", "channelUrl": channel, "platform": _platform(channel),
+           "channelTitle": None, "items": [], "skipped": 0}
     try:
         _rc().set(_KEY.format(token), json.dumps(doc), ex=TTL_S)
     except Exception:  # noqa: BLE001
@@ -118,13 +153,14 @@ async def put(token: str, payload: PutIn, request: Request):
     if doc is None:
         return _err(404, MSG_GONE, "relay_expired")
     seen, items = set(), []
+    platform = doc.get("platform") or _platform(doc.get("channelUrl") or "")
     for it in payload.items:
-        m = _DOUYIN_VIDEO.match((it.url or "").split("?")[0].strip())
-        if not m or m.group(1) in seen:
+        hit = _clean_item(platform, it.url)
+        if not hit or hit[0] in seen:
             continue
-        seen.add(m.group(1))
+        seen.add(hit[0])
         title = " ".join((it.title or "").split())[:300] or None
-        items.append({"id": m.group(1), "url": f"https://www.douyin.com/video/{m.group(1)}", "title": title})
+        items.append({"id": hit[0], "url": hit[1], "title": title})
     doc.update({
         "status": "done" if payload.done else "login" if payload.loginWall else "scrolling",
         "items": items,

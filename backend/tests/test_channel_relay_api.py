@@ -94,3 +94,52 @@ def test_login_wall_then_resume(rc):
     assert client.get(f"/api/v1/channel-relay/{tok}").json()["status"] == "scrolling"
     client.put(f"/api/v1/channel-relay/{tok}", json={"items": item, "done": True, "loginWall": False})
     assert client.get(f"/api/v1/channel-relay/{tok}").json()["status"] == "done"
+
+
+# ── 22/10: Facebook Reels / Videos tabs ─────────────────────────────────────
+
+@pytest.mark.parametrize("raw,canon", [
+    ("https://www.facebook.com/haidee.burrows/reels/", "https://www.facebook.com/haidee.burrows/reels/"),
+    ("https://facebook.com/haidee.burrows/reels", "https://www.facebook.com/haidee.burrows/reels/"),
+    ("https://m.facebook.com/haidee.burrows", "https://www.facebook.com/haidee.burrows/reels/"),
+    ("https://web.facebook.com/NASA/videos/?ref=x", "https://www.facebook.com/NASA/videos/"),
+    ("https://www.facebook.com/profile.php?id=100012345678&sk=reels_tab", "https://www.facebook.com/profile.php?id=100012345678&sk=reels_tab"),
+    ("https://www.facebook.com/profile.php?sk=videos&id=100012345678", "https://www.facebook.com/profile.php?id=100012345678&sk=reels_tab"),
+])
+def test_facebook_channel_urls(rc, raw, canon):
+    r = _start(raw)
+    assert r.status_code == 200, r.text
+    assert r.json()["openUrl"] == f"{canon}#vg-relay={r.json()['token']}"
+
+
+@pytest.mark.parametrize("raw", [
+    "https://www.facebook.com/reel/910445711561956",
+    "https://www.facebook.com/watch/?v=123456789",
+    "https://www.facebook.com/groups/12345/",
+    "https://www.facebook.com/share/r/abc/",
+    "https://evil.example/haidee.burrows/reels/",
+])
+def test_facebook_non_channels_refused(rc, raw):
+    r = _start(raw)
+    assert r.status_code == 400 and r.json()["error_code"] == "unsupported_url", r.text
+
+
+def test_facebook_items_only_for_a_facebook_channel(rc):
+    tok = _start("https://www.facebook.com/haidee.burrows/reels/").json()["token"]
+    assert client.get(f"/api/v1/channel-relay/{tok}").json()["platform"] == "facebook"
+    items = [{"url": "https://www.facebook.com/reel/910445711561956", "title": "Sneaking the pigs food"},
+             {"url": "https://www.facebook.com/reel/910445711561956"},                    # duplicate
+             {"url": "https://www.facebook.com/watch/?v=1024540227023391"},
+             {"url": "https://www.douyin.com/video/7696450520369712419"},                 # other platform
+             {"url": "https://www.facebook.com/reel/910445711561956?s=1"},                # not canonical
+             {"url": "https://evil.example/reel/123456789"}]
+    assert client.put(f"/api/v1/channel-relay/{tok}", json={"items": items, "channelTitle": "Tussock", "done": True}).json()["count"] == 2
+    g = client.get(f"/api/v1/channel-relay/{tok}").json()
+    assert g["status"] == "done" and g["channelTitle"] == "Tussock"
+    assert g["items"] == [
+        {"id": "910445711561956", "url": "https://www.facebook.com/reel/910445711561956", "title": "Sneaking the pigs food"},
+        {"id": "1024540227023391", "url": "https://www.facebook.com/watch/?v=1024540227023391", "title": None},
+    ]
+    # and a Douyin channel takes no Facebook links
+    dtok = _start(PROFILE).json()["token"]
+    assert client.put(f"/api/v1/channel-relay/{dtok}", json={"items": items[:1]}).json()["count"] == 0

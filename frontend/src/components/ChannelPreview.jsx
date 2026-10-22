@@ -20,10 +20,22 @@ const CN_CHANNEL = [
   /^https?:\/\/space\.bilibili\.com\/\d+/i,
 ];
 
-/** True for a channel link the preview can list (Douyin / Xiaohongshu / Kuaishou / Bilibili). */
+/**
+ * 22/10: a Facebook profile (or its Reels / Videos tab). Only the VidGrab
+ * extension in this browser can list it (Facebook shows a signed-out
+ * visitor ~10 reels; the server gets nothing), so it goes straight to the
+ * relay — signed in only, like the whole Douyin channel.
+ */
+export const isFacebookChannel = (url) => {
+  const u = (url || '').trim();
+  return /^https?:\/\/(www\.|web\.|m\.)?facebook\.com\/(?!(reel|reels|watch|groups|share|events|marketplace|pages|gaming|login|photo|photos|hashtag|story\.php|profile\.php)(\/|\?|#|$))[A-Za-z0-9.-]{1,80}(\/(reels|videos))?\/?([?#].*)?$/i.test(u)
+    || /^https?:\/\/(www\.|web\.|m\.)?facebook\.com\/profile\.php\?(.*&)?id=\d{5,25}/i.test(u);
+};
+
+/** True for a channel link the preview can list (Douyin / Xiaohongshu / Kuaishou / Bilibili / Facebook). */
 export function isPreviewableChannel(url) {
   const u = (url || '').trim();
-  return CN_CHANNEL.some((re) => re.test(u));
+  return CN_CHANNEL.some((re) => re.test(u)) || isFacebookChannel(u);
 }
 
 /** Downloads left today for `platform` from GET /quota (null = no limit / unknown). */
@@ -51,7 +63,7 @@ export function pickIds(items, want) {
   return new Set((want === 'all' ? items : items.slice(0, Math.max(0, want))).map((v) => v.id));
 }
 
-/** True for a douyin.com/user/… link, the only kind the extension relay takes. */
+/** True for a douyin.com/user/… link (the extension relay also takes Facebook: isFacebookChannel). */
 export const isDouyinProfile = (url) => /^https?:\/\/([a-z0-9-]+\.)*douyin\.com\/user\//i.test((url || '').trim());
 
 function fmtDuration(s) {
@@ -116,6 +128,14 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
   const load = useCallback(async () => {
     if (relayed.current) return;
     setPhase('loading'); setError(''); setNote(''); setSel(new Set()); setConfirm(false);
+    if (isFacebookChannel(url)) {
+      // no server listing for Facebook: the extension relay is the list
+      if (!signedIn) {
+        setError('Đăng nhập VidGrab để lấy danh sách Reels của trang Facebook này. Cần có tiện ích VidGrab trong trình duyệt.');
+        setPhase('error');
+      }
+      return;
+    }
     try {
       const data = await list(false);
       if (relayed.current) return; // the whole channel arrived first: keep it
@@ -126,7 +146,7 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
       if (relayed.current) return;
       setError(e.message); setPhase('error');
     }
-  }, [list, autoTab, preselect]);
+  }, [list, autoTab, preselect, url, signedIn]);
 
   const loadDeep = async () => {
     setDeepBusy(true); setNote('');
@@ -144,6 +164,7 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
   const failRelay = (msg) => {
     if (relayTimer.current) clearInterval(relayTimer.current);
     setRelay({ state: 'error', count: 0, msg });
+    if (isFacebookChannel(url) && !relayed.current) { setError(msg); setPhase('error'); }
     if (autoTab && !relayFailed.current) {
       relayFailed.current = true;
       if (listingRef.current) preselect(listingRef.current.items || []);
@@ -193,11 +214,12 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
       clearInterval(relayTimer.current);
       const prev = listingRef.current;
       const byId = new Map(((prev && prev.items) || []).map((v) => [v.id, v]));
-      const merged = (doc.items || []).map((i) => byId.get(i.id) || { id: i.id, url: i.url, title: i.title || `Douyin ${i.id.slice(-6)}`, thumbnail: null, durationSec: null });
+      const pname = doc.platform === 'facebook' ? 'Facebook' : 'Douyin';
+      const merged = (doc.items || []).map((i) => byId.get(i.id) || { id: i.id, url: i.url, title: i.title || `${pname} ${i.id.slice(-6)}`, thumbnail: null, durationSec: null });
       const seen = new Set(merged.map((v) => v.id));
       for (const v of (prev && prev.items) || []) if (!seen.has(v.id)) merged.push(v);
       relayed.current = true;
-      setListing({ platform: 'douyin', ...prev, channelTitle: doc.channelTitle || (prev && prev.channelTitle), items: merged, moreHint: null, hasMore: false, whole: true });
+      setListing({ platform: doc.platform || 'douyin', ...prev, channelTitle: doc.channelTitle || (prev && prev.channelTitle), items: merged, moreHint: null, hasMore: false, whole: true });
       setPhase('ready'); setError('');
       setRelay({ state: 'idle', count: 0 });
       setNote(`Đã lấy ${(doc.items || []).length} video của kênh qua tiện ích${doc.skipped ? ` (bỏ qua ${doc.skipped} bài ảnh)` : ''}.`);
@@ -267,13 +289,13 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
       )}
       {relay.state === 'login' && (
         <p className="flex items-start gap-2 text-xs text-warning"><Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0 mt-0.5" />
-          Douyin yêu cầu đăng nhập mới cho xem hết kênh (mới thấy {relay.count} video). Hãy đăng nhập Douyin trong tab vừa mở; đăng nhập xong tiện ích tự cuộn tiếp và danh sách tự về đây.
+          {isFacebookChannel(url) ? 'Facebook' : 'Douyin'} yêu cầu đăng nhập mới cho xem hết kênh (mới thấy {relay.count} video). Hãy đăng nhập trong tab vừa mở; đăng nhập xong tiện ích tự cuộn tiếp và danh sách tự về đây.
         </p>
       )}
       {relay.state === 'noext' && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-warning">
           <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
-          <span className="flex-1 min-w-0">Chưa thấy tiện ích VidGrab trả lời từ tab vừa mở. Trình duyệt này cần có tiện ích VidGrab (bản 5.11.1 trở lên); cài xong, tải lại tab kênh Douyin (F5) — vẫn đang chờ.</span>
+          <span className="flex-1 min-w-0">Chưa thấy tiện ích VidGrab trả lời từ tab vừa mở. Trình duyệt này cần có tiện ích VidGrab (bản {isFacebookChannel(url) ? '5.15.0' : '5.11.1'} trở lên); cài xong, tải lại tab kênh vừa mở (F5) — vẫn đang chờ.</span>
           {/* new tab: leaving this page would stop the wait */}
           <a href="/extension" target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 px-2.5 py-1 font-medium text-accent-text border border-line hover:border-line-strong rounded-lg">
             <Puzzle className="w-3.5 h-3.5" /> Cài tiện ích VidGrab
