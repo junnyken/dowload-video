@@ -29,7 +29,8 @@ assert(manifest.manifest_version === 3, 'manifest_version is 3');
 assert(typeof manifest.version === 'string' && /^\d+\.\d+\.\d+$/.test(manifest.version), 'version semver format');
 assert(manifest.icons && manifest.icons['16'] && manifest.icons['32'] && manifest.icons['48'] && manifest.icons['128'], 'icons: 16, 32, 48, 128 present');
 assert(!manifest.host_permissions.includes('https://dowloadvideo.io.vn/*'), 'legacy domain removed from host_permissions');
-assert(manifest.host_permissions.includes('*://*.youtube.com/*'), 'youtube.com still in host_permissions');
+// 5.12.0: the Chrome Web Store does not allow YouTube downloaders; YouTube is on the web and the app.
+assert(!manifest.host_permissions.some((h) => /youtube|youtu\.be/.test(h)), 'no YouTube host permission (store policy)');
 assert(manifest.host_permissions.includes('*://*.tiktok.com/*'), 'tiktok.com still in host_permissions');
 assert(manifest.permissions.includes('activeTab'), 'activeTab permission present');
 assert(manifest.permissions.includes('storage'), 'storage permission present');

@@ -405,6 +405,11 @@ function showReloadBanner(tabId) {
 
 async function initPopup() {
   initUpdateBanner();   // fire-and-forget: never blocks the popup
+  vgShowVersion();
+  getActiveTab().then((t) => {
+    if (t?.url && vgIsYouTube(t.url)) vgShowYouTubeNote(t.url);
+    void initSniff(t);
+  }).catch(() => {});
   // Chạy health check song song với page detection
   checkServerHealth();
 
@@ -746,6 +751,7 @@ async function getTargetUrl() {
   const typed = (urlInput?.value || '').trim();
   if (typed) {
     if (!isHttpUrl(typed)) throw new Error('Link không hợp lệ. Cần bắt đầu bằng http:// hoặc https://');
+    if (vgIsYouTube(typed)) { vgShowYouTubeNote(typed); throw new Error(VG_YT_TEXT); }
     return typed;
   }
   const tab = await getActiveTab();
@@ -755,6 +761,7 @@ async function getTargetUrl() {
   if (!tab?.url || /^(chrome|chrome-extension|edge|about):/i.test(tab.url)) {
     throw new Error('Không lấy được link ở trang này. Hãy dán link video vào ô phía trên.');
   }
+  if (vgIsYouTube(tab.url)) { vgShowYouTubeNote(tab.url); throw new Error(VG_YT_TEXT); }
   return tab.url;
 }
 
@@ -1510,7 +1517,7 @@ async function loadTierQuota() {
         <div style="height:3px;background:rgba(148,163,184,0.15);border-radius:2px;overflow:hidden;">
           <div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px;transition:width 0.3s;"></div>
         </div>
-        ${tier !== 'pro' ? `<div style="margin-top:5px;font-size:9px;color:#6366f1;cursor:pointer;" id="vg-upgrade-link">▸ Nâng cấp Pro — tải video YouTube, batch 100, ZIP…</div>` : ''}
+        ${tier !== 'pro' ? `<div style="margin-top:5px;font-size:9px;color:#6366f1;cursor:pointer;" id="vg-upgrade-link">▸ Nâng cấp Pro — batch 100, ZIP, chất lượng cao…</div>` : ''}
       `;
       document.getElementById('vg-upgrade-link')?.addEventListener('click', () => {
         chrome.tabs.create({ url: `${base}/upgrade` });
@@ -1993,4 +2000,201 @@ const _activeQPill = document.querySelector('.q-pill.active input');
 if (_activeQPill) {
   document.getElementById('qualitySelect').value = _activeQPill.value;
   updateDownloadBtn(_activeQPill.value);
+}
+
+
+// ── YouTube (5.12.0) ──────────────────────────────────────────────
+// The Chrome Web Store does not allow extensions that download YouTube, so
+// the extension never does: YouTube links are sent to the VidGrab web (or
+// the Windows app), where the same account and quota apply. wording: BA review
+const VG_YT_TEXT = 'Tiện ích không tải video YouTube. Hãy mở trên web VidGrab.';
+
+function vgIsYouTube(url) {
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    return /(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com)$/.test(h);
+  } catch { return false; }
+}
+
+function vgShowYouTubeNote(url) {
+  const box = document.getElementById('vg-yt-note');
+  if (!box) return;
+  box.style.display = 'block';
+  const btn = document.getElementById('vg-yt-open');
+  btn.onclick = () => chrome.tabs.create({ url: `${WEB_BASE}/?url=${encodeURIComponent(url)}` });
+}
+
+function vgShowVersion() {
+  const el = document.getElementById('footer-version');
+  if (el) el.textContent = `v${chrome.runtime.getManifest().version}`;
+}
+
+// ── Media found on the page (5.12.0, media-sniffer.js) ────────────
+// What the tab actually played: direct files download from the user's own
+// browser; HLS / DASH go through the VidGrab server (in-browser merging comes
+// later). DRM / encrypted streams are shown but never downloaded. wording: BA review
+const VG_SNIFF_TEXT = {
+  ask: 'VidGrab chưa được phép xem trang này. Bấm nút bên dưới rồi phát video để VidGrab bắt link.',
+  allow: 'Bắt video trên trang này',
+  reload: 'Tải lại trang',
+  granted: 'Đã cho phép. Tải lại trang rồi phát video, sau đó mở lại VidGrab.',
+  denied: 'Bạn chưa cho phép nên VidGrab không bắt được video trên trang này.',
+  empty: 'Chưa thấy video nào. Hãy bấm phát video trên trang rồi mở lại VidGrab.',
+  reading: 'đang đọc…',
+  drm: 'Có DRM — không tải được',
+  aes: 'Video được mã hoá — chưa hỗ trợ',
+  live: 'Đang phát trực tiếp — chưa hỗ trợ',
+  download: 'Tải',
+  viaServer: 'Tải qua VidGrab',
+  copy: 'Chép link',
+  copied: 'Đã chép link.',
+  started: 'Đã bắt đầu tải. Xem tiến độ ở thanh tải về của trình duyệt.',
+  failed: 'Không tải được. Thử "Tải qua VidGrab" hoặc chép link.',
+};
+
+function vgFmtBytes(b) {
+  if (!b) return '';
+  if (b >= 1073741824) return `${(b / 1073741824).toFixed(1)} GB`;
+  if (b >= 1048576) return `${(b / 1048576).toFixed(1)} MB`;
+  return `${Math.round(b / 1024)} KB`;
+}
+function vgFmtDur(s) {
+  if (!s) return '';
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}` : `${m}:${String(x).padStart(2, '0')}`;
+}
+function vgQ(h) { return !h ? '' : h >= 2160 ? '4K' : h >= 1440 ? '1440p' : `${h}p`; }
+
+function vgOriginPattern(url) {
+  try { const u = new URL(url); return /^https?:$/.test(u.protocol) ? `${u.protocol}//${u.hostname}/*` : null; }
+  catch { return null; }
+}
+function vgHasOrigin(pattern) {
+  return new Promise((r) => chrome.permissions.contains({ origins: [pattern] }, (g) => r(!!g && !chrome.runtime.lastError)));
+}
+
+let _vgSniffTimer = null;
+
+async function initSniff(tab) {
+  const box = document.getElementById('vg-sniff');
+  if (!box || !tab?.id || !tab.url || vgIsYouTube(tab.url)) return;
+  const pattern = vgOriginPattern(tab.url);
+  if (!pattern) return;
+  const allow = document.getElementById('vg-sniff-allow');
+  const empty = document.getElementById('vg-sniff-empty');
+  const granted = await vgHasOrigin(pattern);
+
+  if (!granted) {
+    box.style.display = 'block';
+    empty.style.display = 'block';
+    empty.textContent = VG_SNIFF_TEXT.ask;
+    allow.style.display = 'block';
+    allow.textContent = VG_SNIFF_TEXT.allow;
+    allow.onclick = () => {
+      // must run inside the click: Chrome shows its own permission prompt
+      chrome.permissions.request({ origins: [pattern] }, (ok) => {
+        if (ok) {
+          empty.textContent = VG_SNIFF_TEXT.granted;
+          allow.textContent = VG_SNIFF_TEXT.reload;
+          allow.onclick = () => { chrome.tabs.reload(tab.id); window.close(); };
+        } else {
+          empty.textContent = VG_SNIFF_TEXT.denied;
+        }
+      });
+    };
+    return;
+  }
+
+  document.getElementById('vg-sniff-refresh').onclick = () => renderSniff(tab);
+  await renderSniff(tab);
+}
+
+async function renderSniff(tab) {
+  const box = document.getElementById('vg-sniff');
+  const list = document.getElementById('vg-sniff-list');
+  const empty = document.getElementById('vg-sniff-empty');
+  const resp = await new Promise((r) => chrome.runtime.sendMessage({ type: 'VG_SNIFF_LIST', tabId: tab.id }, r));
+  const items = (resp && resp.items) || [];
+  if (!items.length) {
+    // on a site VidGrab supports by link the panel stays out of the way
+    if (document.getElementById('unsupported-page-state')?.style.display === 'block') {
+      box.style.display = 'block';
+      empty.style.display = 'block';
+      empty.textContent = VG_SNIFF_TEXT.empty;
+    }
+    return;
+  }
+  box.style.display = 'block';
+  empty.style.display = 'none';
+  document.getElementById('vg-sniff-count').textContent = `(${items.length})`;
+  list.textContent = '';
+  // newest first, files and streams together
+  [...items].reverse().forEach((it) => list.appendChild(vgSniffRow(tab, it)));
+  clearTimeout(_vgSniffTimer);
+  if (items.some((x) => x.pending)) _vgSniffTimer = setTimeout(() => renderSniff(tab), 1200);
+}
+
+function vgSniffRow(tab, it) {
+  const row = document.createElement('div');
+  row.className = 'vg-sniff-row';
+  row.style.cssText = 'background:#0f1119;border:1px solid #1e2333;border-radius:10px;padding:7px 8px;';
+  const kind = it.kind === 'file' ? ((it.mime || '').startsWith('audio/') ? 'AUDIO' : 'MP4') : it.kind.toUpperCase();
+  const quality = it.variants && it.variants.length
+    ? it.variants.map((v) => vgQ(v.height)).filter(Boolean).filter((q, i, a) => a.indexOf(q) === i).slice(0, 4).join(' · ')
+    : vgQ(it.height);
+  const meta = [quality, vgFmtDur(it.duration), vgFmtBytes(it.size), it.pending ? VG_SNIFF_TEXT.reading : ''].filter(Boolean).join(' · ');
+
+  const top = document.createElement('div');
+  top.style.cssText = 'display:flex;align-items:center;gap:6px;';
+  const tag = document.createElement('span');
+  tag.className = 'vg-sniff-kind';
+  tag.textContent = kind;
+  tag.style.cssText = `flex-shrink:0;font-size:9px;font-weight:800;padding:1px 6px;border-radius:6px;background:${it.kind === 'file' ? '#14532d' : '#312e81'};color:${it.kind === 'file' ? '#86efac' : '#c7d2fe'};`;
+  const info = document.createElement('span');
+  info.className = 'vg-sniff-meta';
+  info.style.cssText = 'flex:1;min-width:0;font-size:10px;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+  info.textContent = meta || (it.title || '').slice(0, 60);
+  info.title = it.url;
+  top.append(tag, info);
+  row.appendChild(top);
+
+  const actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:6px;margin-top:6px;align-items:center;';
+  const msg = document.getElementById('vg-sniff-msg');
+  const blocked = it.encryption === 'drm' ? VG_SNIFF_TEXT.drm
+    : it.encryption === 'aes128' ? VG_SNIFF_TEXT.aes
+    : it.live ? VG_SNIFF_TEXT.live : '';
+  if (blocked) {
+    const note = document.createElement('span');
+    note.className = 'vg-sniff-blocked';
+    note.style.cssText = 'font-size:10px;color:#fca5a5;flex:1;';
+    note.textContent = blocked;
+    actions.appendChild(note);
+  } else if (!it.pending) {
+    const btn = document.createElement('button');
+    btn.className = 'vg-sniff-dl';
+    btn.style.cssText = 'flex:1;background:#6366f1;border:none;border-radius:8px;padding:5px;color:#fff;font-size:10px;font-weight:700;cursor:pointer;';
+    if (it.kind === 'file') {
+      btn.textContent = VG_SNIFF_TEXT.download;
+      btn.onclick = () => chrome.runtime.sendMessage({ type: 'VG_SNIFF_DOWNLOAD', tabId: tab.id, id: it.id }, (r) => {
+        msg.textContent = r && r.ok ? VG_SNIFF_TEXT.started : VG_SNIFF_TEXT.failed;
+      });
+    } else {
+      btn.textContent = VG_SNIFF_TEXT.viaServer;
+      btn.onclick = () => {
+        showTab('single');
+        if (urlInput) { urlInput.value = it.url; urlInput.dispatchEvent(new Event('input')); }
+        document.getElementById('downloadBtn')?.click();
+      };
+    }
+    actions.appendChild(btn);
+  }
+  const copy = document.createElement('button');
+  copy.className = 'vg-sniff-copy';
+  copy.textContent = VG_SNIFF_TEXT.copy;
+  copy.style.cssText = 'background:#1e2333;border:1px solid #2d3348;border-radius:8px;padding:5px 8px;color:#a5b4fc;font-size:10px;cursor:pointer;';
+  copy.onclick = () => navigator.clipboard.writeText(it.url).then(() => { msg.textContent = VG_SNIFF_TEXT.copied; }).catch(() => {});
+  actions.appendChild(copy);
+  row.appendChild(actions);
+  return row;
 }

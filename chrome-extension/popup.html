@@ -516,6 +516,27 @@
     </button>
   </div>
 
+  <!-- ══════════════════ MEDIA FOUND ON THE PAGE (5.12.0) ══════════════════
+       Filled from media-sniffer.js: what the tab actually played (MP4, HLS,
+       DASH). Shown above every tab, also on sites with no VidGrab support.
+       wording: BA review -->
+  <div id="vg-sniff" style="display:none;margin:10px 14px 0;background:#13151f;border:1px solid #1e2333;border-radius:12px;padding:10px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div class="card-label" style="margin:0;">Video trên trang này <span id="vg-sniff-count" style="color:#a5b4fc;"></span></div>
+      <button id="vg-sniff-refresh" title="Quét lại" style="background:none;border:none;color:#64748b;font-size:11px;cursor:pointer;">↻</button>
+    </div>
+    <div id="vg-sniff-list" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;"></div>
+    <div id="vg-sniff-empty" style="display:none;font-size:10px;color:#64748b;line-height:1.5;"></div>
+    <button id="vg-sniff-allow" style="display:none;margin-top:6px;width:100%;background:#1e2333;border:1px solid #2d3348;border-radius:10px;padding:7px;color:#a5b4fc;font-size:11px;font-weight:600;cursor:pointer;">Bắt video trên trang này</button>
+    <div id="vg-sniff-msg" style="font-size:10px;color:#64748b;margin-top:4px;min-height:0;"></div>
+  </div>
+
+  <!-- YouTube: the extension does not download it (Chrome Web Store policy). -->
+  <div id="vg-yt-note" style="display:none;margin:10px 14px 0;background:#1a1420;border:1px solid #3b2140;border-radius:12px;padding:10px;font-size:11px;color:#e2e8f0;line-height:1.5;">
+    Tiện ích không tải video YouTube. Bạn tải video này trên web hoặc app VidGrab cho Windows.
+    <button id="vg-yt-open" style="display:block;margin-top:8px;width:100%;background:#ef4444;border:none;border-radius:10px;padding:7px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;">Mở trên web VidGrab</button>
+  </div>
+
   <!-- ══════════════════ SINGLE VIDEO ══════════════════ -->
   <div id="single-section" class="content">
 
@@ -710,7 +731,7 @@
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             <span id="ch-discovery-timer">00:00</span>
           </div>
-          <div style="font-size:10px;color:#374151;text-align:center;">YouTube cần 30–90 giây để tải danh sách kênh</div>
+          <div style="font-size:10px;color:#374151;text-align:center;">Kênh lớn có thể cần 30–90 giây để tải danh sách</div>
           <button id="ch-stop-scan" class="ch-stop-btn hidden" type="button" style="margin-top:8px;width:100%;padding:7px 10px;border-radius:10px;border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.08);color:#f87171;font-size:11px;font-weight:700;cursor:pointer;">⏹ Dừng quét kênh</button>
         </div>
       </div>
@@ -828,7 +849,7 @@
         <div style="text-align:center;margin-bottom:16px;">
           <div style="font-size:32px;margin-bottom:8px;">⬇️</div>
           <div style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:6px;">Chào mừng đến VidGrab!</div>
-          <div style="font-size:11px;color:#64748b;line-height:1.5;">Tải video từ YouTube, TikTok, Instagram, Facebook và nhiều nền tảng khác — chỉ 1 click.</div>
+          <div style="font-size:11px;color:#64748b;line-height:1.5;">Tải video từ TikTok, Douyin, Instagram, Facebook và nhiều nền tảng khác — hoặc bắt video ngay trên trang bạn xem.</div>
         </div>
         <button id="ob-next-1" style="width:100%;padding:10px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:12px;font-weight:700;border:none;cursor:pointer;">Tiếp theo →</button>
         <div style="text-align:center;margin-top:8px;font-size:10px;color:#475569;">1 / 3</div>
@@ -839,7 +860,7 @@
           <div style="font-size:32px;margin-bottom:8px;">🌐</div>
           <div style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:6px;">Cách dùng</div>
           <div style="font-size:11px;color:#64748b;line-height:1.6;text-align:left;">
-            <div style="margin-bottom:6px;">① Mở trang video cần tải (YouTube, TikTok...)</div>
+            <div style="margin-bottom:6px;">① Mở trang video cần tải (TikTok, Facebook...)</div>
             <div style="margin-bottom:6px;">② Nhấn icon VidGrab trên thanh công cụ</div>
             <div>③ Chọn chất lượng → <b style="color:#a5b4fc;">Tải ngay</b></div>
           </div>
@@ -853,7 +874,6 @@
           <div style="font-size:32px;margin-bottom:8px;">✨</div>
           <div style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:6px;">Nền tảng hỗ trợ</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:10px;">
-            <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);">YouTube</span>
             <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);">TikTok</span>
             <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);">Instagram</span>
             <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);">Facebook</span>

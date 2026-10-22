@@ -13,16 +13,17 @@ VidGrab - Video Downloader
 
 ### Short Description (max 132 chars)
 ```
-Download videos from YouTube, TikTok, Instagram, Facebook, Douyin, Threads & Reddit. Batch channel download, MP3 extract.
+Download videos from TikTok, Douyin, Instagram, Facebook, X & Reddit, and grab MP4/HLS/DASH from the page you watch.
 ```
-*(121 chars — within limit)*
+*(116 chars — within limit)*
+
+> **5.12.0: no YouTube.** The Chrome Web Store does not allow extensions that download from YouTube. The extension has no YouTube host permission, never lists YouTube media, and refuses YouTube links with a pointer to the VidGrab website. Do not mention YouTube anywhere in the listing or screenshots.
 
 ### Long Description
 ```
 VidGrab lets you download videos from the most popular platforms with one click — no sign-in required for basic use.
 
 ★ SUPPORTED PLATFORMS
-• YouTube — HD, 4K, MP3 audio extract, subtitles
 • TikTok / Douyin — removes watermark automatically
 • Instagram — Reels, stories, posts
 • Facebook — public videos
@@ -31,6 +32,12 @@ VidGrab lets you download videos from the most popular platforms with one click 
 • Threads — public posts
 • Spotify — playlist / album to MP3 (via search)
 • Pinterest — video pins
+
+★ VIDEO ON THE PAGE
+• Lists the videos the page plays — MP4, HLS (.m3u8) and DASH (.mpd) — with their qualities and length
+• Direct files download straight from your browser; streams go through VidGrab
+• Works on any site you allow ("Grab videos on this page"), one site at a time
+• DRM-protected and encrypted streams are shown as unsupported and never downloaded
 
 ★ KEY FEATURES
 • Single video download — click the button, file saves to VidGrab/ folder
@@ -77,13 +84,15 @@ Primary: English | Secondary: Vietnamese
 | `notifications` | Show a Chrome notification when a background download completes (popup may be closed) | Required |
 | `contextMenus` | Add "Download with VidGrab" right-click menu item on supported video pages | Required |
 | `alarms` | Keep the service worker alive during long-running background downloads (MV3 SW can be suspended after ~30s idle) | Required |
+| `webRequest` | (5.12.0) Observe — never block or modify — the responses of the current tab to list the media it plays (content-type, size, URL of .mp4/.m3u8/.mpd). Only on hosts the extension already has, or a site the user allows one at a time. The list stays in `chrome.storage.session` and is deleted with the tab; nothing is sent anywhere | Required |
+
+**Optional host permission `*://*/*` (5.12.0):** never granted at install. The popup's "Bắt video trên trang này" (Grab videos on this page) button calls `chrome.permissions.request` for that one site's origin only, inside the user's click, so media can be listed on sites outside the list below.
 
 ### Host Permissions Justification
 
 | Host Permission | Why it's needed |
 |---|---|
 | `*://*.tiktok.com/*` | Detect video/channel pages; inject content script; watermark removal |
-| `*://*.youtube.com/*` | Detect video/channel/playlist pages; inject content script |
 | `*://*.facebook.com/*` | Detect video pages; inject content script |
 | `*://*.douyin.com/*` | Detect channel pages; inject interceptor.js in MAIN world to capture API responses |
 | `*://*.instagram.com/*` | Detect Reel/story/post pages; inject content script |
@@ -94,7 +103,6 @@ Primary: English | Secondary: Vietnamese
 | `*://*.pinterest.com/*` | Detect video pins; inject content script |
 | `*://*.threads.com/*` | Detect Threads posts; inject content script |
 | `*://*.threads.net/*` | Threads API subdomain — same content script scope |
-| `*://*.youtu.be/*` | YouTube short-link domain — same content script scope as youtube.com |
 | `*://*.bilibili.com/*` | Detect video pages; inject content script |
 | `*://b23.tv/*` | Bilibili short-link domain — same content script scope |
 | `*://*.xiaohongshu.com/*` | Detect post/video pages; inject content script |
@@ -128,6 +136,7 @@ Primary: English | Secondary: Vietnamese
 VidGrab does not collect, transmit, or sell any personal data.
 
 - **Browsing history**: Not collected. The extension only reads the URL of the active tab when you click the download button or open the popup, and only on supported platforms.
+- **Media found on a page** (5.12.0): the addresses of the videos a tab plays (on supported platforms and on sites you allow one at a time) are kept in `chrome.storage.session` on your device to list them in the popup, and are deleted when you leave the page or close the tab. They are sent to the VidGrab server only when you press "Tải qua VidGrab" for a stream.
 - **Video URLs**: Sent to the configured backend server solely to perform the download you requested. Not stored by the extension itself.
 - **Auth token** (optional): If you log in on the VidGrab website, an access token is stored in `chrome.storage.local` on your device only. It is never sent to any third party.
 - **Download history**: Stored locally in `chrome.storage.local` on your device. Not synced or transmitted.
@@ -276,9 +285,9 @@ The `update_url` in manifest.json points to Google's update service — auto-pop
 
 | # | What to show | Resolution |
 |---|---|---|
-| 1 | Popup open on a YouTube video page — quality selector + download button | 1280×800 |
+| 1 | Popup on a news site with "Video trên trang này" listing an MP4 and an HLS stream (qualities, length) | 1280×800 |
 | 2 | Download in progress (status bar + elapsed timer) | 1280×800 |
-| 3 | Channel bulk mode — YouTube channel with video count + discovery radar | 1280×800 |
+| 3 | Channel bulk mode — TikTok / Douyin channel with video count | 1280×800 |
 | 4 | Settings panel — Server URL + version info + auth status | 1280×800 |
 | 5 | History tab — list of downloaded videos | 640×400 |
 

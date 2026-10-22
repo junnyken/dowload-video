@@ -10,6 +10,9 @@
  * - MV3: alarms-based heartbeat to prevent SW suspension during downloads
  */
 
+// Media seen in each tab (5.12.0): HLS / DASH / direct files, listed in the popup.
+importScripts('media-sniffer.js');
+
 const DEFAULT_API_BASE = 'https://dvid-api.vibe1.tinhgon.xyz';
 const STORAGE_KEY = (tabId) => `vg_videos_${tabId}`;
 const HISTORY_KEY = 'vg_download_history';
@@ -290,12 +293,26 @@ async function addToHistory(record) {
 }
 
 // ── Badge Count ───────────────────────────────────────────────────
-async function updateBadgeForTab(tabId) {
+// Media the sniffer found on the tab win: the badge shows how many.
+self.vgSniffBadge = (tabId, count) => {
+  if (count > 0) {
+    chrome.action.setBadgeText({ tabId, text: count > 99 ? '99+' : String(count) }).catch(() => {});
+    chrome.action.setBadgeBackgroundColor({ tabId, color: '#6366f1' }).catch(() => {});
+  } else {
+    updateBadgeForTab(tabId, true);
+  }
+};
+
+async function updateBadgeForTab(tabId, skipSniff = false) {
   try {
     const tab = tabId
       ? await chrome.tabs.get(tabId).catch(() => null)
       : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
     if (!tab?.url) { chrome.action.setBadgeText({ text: '' }); return; }
+    if (!skipSniff && self.vgSniffList) {
+      const found = await self.vgSniffList(tab.id).catch(() => []);
+      if (found.length) { self.vgSniffBadge(tab.id, found.length); return; }
+    }
 
     const url = tab.url;
     const isSupported = /tiktok\.com|youtube\.com|facebook\.com|douyin\.com|instagram\.com|spotify\.com/i.test(url);
@@ -592,6 +609,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // ── VG_DOWNLOAD_NOW: full download pipeline in background — survives popup close ──────────
   // popup sends this instead of VG_FETCH_LINK so the download completes even if popup closes.
   // Flow: fetch-link API → resolve URL → chrome.downloads.download (saveAs:false) → notify.
+  // ── Media found on the page (media-sniffer.js) ──
+  if (msg.type === 'VG_SNIFF_LIST') {
+    self.vgSniffList(msg.tabId).then((items) => sendResponse({ items })).catch(() => sendResponse({ items: [] }));
+    return true;
+  }
+  if (msg.type === 'VG_SNIFF_CLEAR') {
+    self.vgSniffClear(msg.tabId).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg.type === 'VG_SNIFF_DOWNLOAD') {
+    (async () => {
+      const items = await self.vgSniffList(msg.tabId);
+      const item = items.find((x) => x.id === msg.id);
+      if (!item || item.kind !== 'file') { sendResponse({ ok: false, error: 'not_a_file' }); return; }
+      const base = await getApiBase();
+      const ext = (item.url.split('?')[0].match(/\.(mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav)$/i) || [])[1]
+        || (/^audio\//.test(item.mime || '') ? 'm4a' : 'mp4');
+      const safeName = String(item.title || 'video').replace(/[/\\?%*:|"<>\n\r\t]/g, '-').trim().slice(0, 120) || 'video';
+      smartDownload({ rawUrl: item.url, base, safeName, finalExt: ext.toLowerCase(), saveAs: false });
+      sendResponse({ ok: true });
+    })().catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
+    return true;
+  }
+
   if (msg.type === 'VG_DOWNLOAD_NOW') {
     (async () => {
       const base = await getApiBase();
