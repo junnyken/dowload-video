@@ -159,6 +159,33 @@ def main():
                   f"{st} reason={b and b.get('stopReason')}")
             state["refuse"] = False
 
+            # [not a video] a CDN that refuses answers with a web page (TikTok gave an .htm,
+            # owner 22/10): vgSaveFile must call that a failure and remove the file
+            import http.server, socketserver, threading
+            media = tmp / "media"
+            media.mkdir(exist_ok=True)
+            (media / "page.mp4").write_text("<!doctype html><title>TikTok - Make Your Day</title>" + "x" * 50000)
+            (media / "real.mp4").write_bytes(b"\x00\x00\x00\x18ftypmp42" + os.urandom(60000))
+            class H(http.server.SimpleHTTPRequestHandler):
+                def __init__(self, *a, **k):
+                    super().__init__(*a, directory=str(media), **k)
+                def log_message(self, *a):
+                    pass
+                def guess_type(self, path):
+                    return "text/html" if path.endswith("page.mp4") else "video/mp4"
+            class S(socketserver.ThreadingMixIn, http.server.HTTPServer):
+                daemon_threads = True
+            srv = S(("127.0.0.1", 0), H)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            base = f"http://127.0.0.1:{srv.server_address[1]}"
+            bad = sw.evaluate("(u) => vgSaveFile(u, 'refused')", base + "/page.mp4")
+            good = sw.evaluate("(u) => vgSaveFile(u, 'real')", base + "/real.mp4")
+            time.sleep(1)
+            left = sw.evaluate("() => new Promise(r => chrome.downloads.search({}, d => r(d.filter(x => x.url.includes('/page.mp4')).length)))")
+            check("[not a video] an HTML answer is a failure and is removed; a real file is fine", bad is False and good is True and left == 0,
+                  f"bad={bad} good={good} html entries left={left}")
+            srv.shutdown()
+
             # [fallback] YouTube is never tried in the browser. Called in the service worker
             # itself: a routed request sent from a VG_DOWNLOAD_NOW message never reached the
             # Playwright route here (same on 5.17.0, before this change) — a harness quirk.

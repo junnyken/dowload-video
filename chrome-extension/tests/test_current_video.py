@@ -8,7 +8,7 @@ player wrapper "xgwrapper-0-<id>", an author link and a caption; the page is
 scrolled so the SECOND post is on screen and playing. Checks:
   - content.js VG_CURRENT_VIDEO -> the second post's link + caption
   - the popup fills the link box with it and says "Video đang xem: …"
-  - the found-files list is folded away on TikTok, with an explanation
+  - no raw found-files list on TikTok (5.18.2)
 Run: python3 tests/test_current_video.py
 """
 import json, os, shutil, sys, tempfile, time
@@ -92,18 +92,8 @@ def main():
             check("popup: link box = the video on screen", val == f"https://www.tiktok.com/@creator2/video/{IDS[1]}", val)
             check("popup: 'Video đang xem: …' with the caption, not 'không phải video'",
                   hint.startswith("Video đang xem:") and "Caption of post 2" in hint and "không phải video" not in hint, hint[:120])
-            fold = pop2.locator("#vg-sniff-fold")
-            if pop2.locator("#vg-sniff").is_visible():
-                check("popup: found-files list folded on TikTok, with the explanation",
-                      fold.count() == 1 and "đã tải sẵn" in fold.inner_text() and not pop2.locator("#vg-sniff-list").is_visible(),
-                      fold.inner_text()[:100] if fold.count() else "no fold")
-                pop2.locator("#vg-sniff-fold").click()
-                pop2.wait_for_timeout(300)
-                first = pop2.locator("#vg-sniff-list .vg-sniff-row").first.inner_text()
-                check("popup: unfolded, the file on screen is first and marked 'Đang phát'",
-                      first.startswith("▶ Đang phát: Caption of post 2"), first[:80])
-            else:
-                check("popup: the sniffer caught the preloaded files", False, "no #vg-sniff")
+            # 5.18.2: no raw file list on TikTok (preloaded files, blob: player, CDN refuses them)
+            check("popup: no 'Video trên trang này' file list on TikTok", not pop2.locator("#vg-sniff").is_visible())
             ctx.close()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

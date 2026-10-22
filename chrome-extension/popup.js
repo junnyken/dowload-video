@@ -2456,6 +2456,12 @@ async function renderSniff(tab) {
   const box = document.getElementById('vg-sniff');
   const list = document.getElementById('vg-sniff-list');
   const empty = document.getElementById('vg-sniff-empty');
+  // 5.18.2: TikTok / Douyin / Facebook / Instagram preload the next videos and play
+  // through blob: — the raw list could not say which file is which, and their CDN
+  // refuses a file saved outside the page (TikTok gave an .htm). Those sites use
+  // "Video đang xem" + "Tải Video Ngay" only (owner 22/10). wording: BA review
+  const handledHost = /(^|\.)(tiktok|douyin|facebook|instagram)\.com$/i.test((() => { try { return new URL(tab.url).hostname; } catch { return ''; } })());
+  if (handledHost) { box.style.display = 'none'; return; }
   const resp = await new Promise((r) => chrome.runtime.sendMessage({ type: 'VG_SNIFF_LIST', tabId: tab.id }, r));
   const items = (resp && resp.items) || [];
   if (!items.length) {
@@ -2471,8 +2477,7 @@ async function renderSniff(tab) {
   empty.style.display = 'none';
   document.getElementById('vg-sniff-count').textContent = `(${items.length})`;
   list.textContent = '';
-  // 5.18.1: which file is the video on screen; on TikTok / Douyin / Facebook / Instagram
-  // the page preloads the next videos, so the raw list is folded away (wording: BA review)
+  // 5.18.1: which file is the video on screen (when its <video> plays a real URL)
   const cur = await vgAskCurrentVideo(tab.id);
   const canon = (u) => { try { const x = new URL(u); ['bytestart', 'byteend', 'range'].forEach((k) => x.searchParams.delete(k)); return x.origin + x.pathname; } catch { return u; } };
   const playing = cur && cur.src ? canon(cur.src) : null;
@@ -2488,27 +2493,8 @@ async function renderSniff(tab) {
     }
     list.appendChild(row);
   });
-  const handled = /(^|\.)(tiktok|douyin|facebook|instagram)\.com$/i.test((() => { try { return new URL(tab.url).hostname; } catch { return ''; } })());
-  let fold = document.getElementById('vg-sniff-fold');
-  if (handled) {
-    if (!fold) {
-      fold = document.createElement('button');
-      fold.id = 'vg-sniff-fold';
-      fold.style.cssText = 'width:100%;background:none;border:1px dashed #2d3348;border-radius:8px;padding:6px;color:#94a3b8;font-size:10px;cursor:pointer;text-align:left;line-height:1.4;';
-      fold.onclick = () => { list.style.display = list.style.display === 'none' ? 'flex' : 'none'; vgFoldText(fold, list, items.length); };
-      list.before(fold);
-      list.style.display = 'none';
-    }
-    vgFoldText(fold, list, items.length);
-  } else if (fold) { fold.remove(); list.style.display = 'flex'; }
   clearTimeout(_vgSniffTimer);
   if (items.some((x) => x.pending)) _vgSniffTimer = setTimeout(() => renderSniff(tab), 1200);
-}
-
-function vgFoldText(fold, list, n) {
-  fold.textContent = list.style.display === 'none'
-    ? `▸ ${n} file video trang này đã tải sẵn (gồm cả video sắp lướt tới) — dùng nút “Tải Video Ngay” bên dưới cho video đang xem. Bấm để xem danh sách.`
-    : '▾ Ẩn danh sách file';
 }
 
 function vgSniffRow(tab, it) {

@@ -483,8 +483,17 @@ function vgSaveFile(url, name) {
     const done = (ok) => { chrome.downloads.onChanged.removeListener(onChanged); clearTimeout(timer); resolve(ok); };
     const onChanged = (delta) => {
       if (delta.id !== id || !delta.state) return;
-      if (delta.state.current === 'complete') done(true);
-      else if (delta.state.current === 'interrupted') done(false);
+      if (delta.state.current === 'complete') {
+        // 5.18.2: a CDN that refuses answers with a web page (TikTok saved
+        // "TikTok - Make Your Day.htm", owner 22/10) — that is not a video:
+        // remove it and let the caller fall back to the server.
+        chrome.downloads.search({ id }, ([it]) => {
+          const mime = (it && it.mime) || '';
+          const ok = !!it && (it.fileSize || it.totalBytes || 0) >= 30 * 1024 && !/^(text\/|application\/(json|xml|xhtml))/i.test(mime);
+          if (!ok) chrome.downloads.removeFile(id, () => { void chrome.runtime.lastError; chrome.downloads.erase({ id }); });
+          done(ok);
+        });
+      } else if (delta.state.current === 'interrupted') done(false);
     };
     const timer = setTimeout(() => done(true), self.vgDirect.SAVE_TIMEOUT_MS); // still running: count it as started
     chrome.downloads.onChanged.addListener(onChanged);
