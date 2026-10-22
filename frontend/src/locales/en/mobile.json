@@ -1,0 +1,90 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "close": "Close",
+  "theme": {
+    "toLight": "Switch to light theme",
+    "toDark": "Switch to dark theme"
+  },
+  "pwa": {
+    "title": "Add to Home Screen",
+    "subtitle": "Open VidGrab faster, no browser needed",
+    "iosStep1": "Tap the <share/> button in Safari's bottom bar",
+    "iosStep2": "Scroll down → choose \"Add to Home Screen\"",
+    "iosStep3": "Tap \"Add\" → Done!",
+    "skip": "Skip",
+    "install": "Install now — free"
+  },
+  "quickTools": {
+    "title": "Quick tools",
+    "subtitle": {
+      "label": "Subtitles",
+      "desc": "Download or burn in subtitles"
+    },
+    "needDownload": "Download a video first to use this tool",
+    "recentFallback": "Recently downloaded video",
+    "trim": {
+      "label": "Trim clip",
+      "desc": "Quick video trim"
+    },
+    "audio": {
+      "label": "Extract MP3",
+      "desc": "Export audio"
+    },
+    "gif": {
+      "label": "Make GIF",
+      "desc": "Export animation"
+    },
+    "cloud": {
+      "label": "Save to Cloud",
+      "desc": "Drive/Dropbox"
+    },
+    "full": {
+      "label": "Full version",
+      "desc": "Open all tools"
+    },
+    "hint": "Pick a tool to process the video you just downloaded"
+  },
+  "jobs": {
+    "title": "Download tasks",
+    "activeCount": "{{count}} processing",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "download": "Download",
+    "home": "Back to home",
+    "loginPrompt": "Sign in to see your download history",
+    "loadError": "Couldn't load data. Please try again.",
+    "untitled": "Untitled video",
+    "empty": {
+      "title": "No tasks in progress",
+      "hint": "Download a video to see its progress here"
+    },
+    "sections": {
+      "recent": "Just finished"
+    },
+    "status": {
+      "pending": "Queued",
+      "processing": "Processing",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "elapsed": {
+      "justNow": "just now",
+      "seconds_one": "{{count}} second ago",
+      "seconds_other": "{{count}} seconds ago",
+      "minutes_one": "{{count}} minute ago",
+      "minutes_other": "{{count}} minutes ago",
+      "hours_one": "{{count}} hour ago",
+      "hours_other": "{{count}} hours ago"
+    }
+  },
+  "share": {
+    "title": "Share to VidGrab",
+    "thumbnailAlt": "thumbnail",
+    "untitled": "Untitled",
+    "hd": "Download HD",
+    "noWatermark": "No watermark",
+    "moreOptions": "More options",
+    "addToBatch": "Add to batch",
+    "cancel": "Cancel"
+  }
+}

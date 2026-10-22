@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
+import i18n, { getLang } from '../i18n';
 import { useAuth } from '../context/AuthContext';
 import {
   Download, CheckCircle2, XCircle,
@@ -33,6 +35,10 @@ import { localFileId, localAnyId, localVideoFirstId, localDownloadUrl, toFileId 
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+// Translate outside React render (module-level helpers, error text).
+const tr = (key, opts) => i18n.t(key, { ns: 'dashboard', ...opts });
+const dateLocale = () => (getLang() === 'en' ? 'en-US' : 'vi-VN');
+
 // Temporarily hidden result-card tools. Flip to false to bring a tool back.
 const HIDDEN_TOOLS = { inpaint: true, cloud: true };
 
@@ -52,16 +58,7 @@ function isThreadsUrl(url = '') {
 
 // Honest, user-facing copy for each Threads error_code (keys must match the
 // prefixed codes in backend threads_extractor.py ERR_* constants).
-const THREADS_ERROR_COPY = {
-  threads_invalid_url: 'Link Threads không hợp lệ.',
-  threads_unsupported_url: 'Link Threads không được hỗ trợ. Chỉ nhận link bài viết hoặc trang cá nhân công khai.',
-  threads_private_or_login_required: 'Nội dung này yêu cầu đăng nhập hoặc không công khai.',
-  threads_no_media_found: 'Bài viết này không có media tải xuống được.',
-  threads_media_unavailable: 'Bài Threads công khai nhưng không trích xuất được media.',
-  threads_ambiguous_post_match: 'Phát hiện nhiều bài viết trong trang — không xác định chắc chắn được bài cần lấy. Hãy dán đúng link 1 bài.',
-  threads_extraction_blocked: 'Threads tạm thời chặn yêu cầu. Vui lòng thử lại sau ít phút.',
-  threads_extractor_failed: 'Không trích xuất được nội dung Threads này.',
-};
+const threadsErrorCopy = (code) => (code ? tr(`threadsErrors.${code}`, { defaultValue: '' }) : '');
 
 // Parse response JSON safely — when backend is down nginx returns HTML (502/403/429)
 async function safeJson(response) {
@@ -70,12 +67,12 @@ async function safeJson(response) {
     return JSON.parse(text);
   } catch {
     if (response.status === 502 || response.status === 503 || response.status === 504) {
-      throw new Error('🔧 Máy chủ đang bảo trì hoặc khởi động lại. Vui lòng thử lại sau vài giây.');
+      throw new Error(tr('errors.serverMaintenance'));
     }
     if (response.status === 429) {
-      throw new Error('⏳ Bạn đã gửi quá nhiều yêu cầu. Vui lòng chờ 1 phút rồi thử lại.');
+      throw new Error(tr('errors.tooManyRequests'));
     }
-    throw new Error(`Lỗi máy chủ (${response.status}). Vui lòng thử lại.`);
+    throw new Error(tr('errors.server', { status: response.status }));
   }
 }
 
@@ -116,6 +113,7 @@ const measuredResLabel = (p) => {
 const CODEC_NAMES = { h264: 'H.264', hevc: 'H.265', h265: 'H.265', av1: 'AV1', vp9: 'VP9' };
 
 export default function DashboardContent() {
+  const { t } = useTranslation('dashboard');
   const { withAuth, session } = useAuth();
 
   /**
@@ -291,7 +289,7 @@ export default function DashboardContent() {
     if (!isLoading && videoInfo) {
       if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
         const title = videoInfo.title || 'VidGrab';
-        new Notification('Tải xong!', {
+        new Notification(tr('notify.done'), {
           body: title.length > 60 ? title.slice(0, 57) + '…' : title,
           icon: '/icon-192.png',
         });
@@ -337,7 +335,7 @@ export default function DashboardContent() {
   const handleLockedRow = (kind) => {
     if (kind === 'signin') {
       window.dispatchEvent(new CustomEvent('vidgrab:open-auth'));
-      showToast('Vui lòng đăng nhập để tải chất lượng này.'); // wording: BA review
+      showToast(t('toast.signInForQuality')); // wording: BA review
     } else {
       setUpgradeErrorCode('tier_limit_quality');
       setShowUpgradeModal(true);
@@ -386,7 +384,7 @@ export default function DashboardContent() {
   const handleDeleteJob = async (jobId) => {
     if (!session?.access_token) {
       setRecentDownloads(removeGuestHistory(jobId).slice(0, 5));
-      showToast('Đã xóa thành công!');
+      showToast(t('toast.deleted'));
       return;
     }
     try {
@@ -396,16 +394,16 @@ export default function DashboardContent() {
       });
       if (res.ok) {
         setRecentDownloads(prev => prev.filter(j => j.id !== jobId));
-        showToast('Đã xóa thành công!');
+        showToast(t('toast.deleted'));
       }
-    } catch { showToast('Lỗi khi xóa!'); }
+    } catch { showToast(t('toast.deleteFailed')); }
   };
 
   const handleClearAllHistory = async () => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa tất cả lịch sử tải gần đây không?')) return;
+    if (!window.confirm(t('confirm.clearHistory'))) return;
     if (!session?.access_token) {
       setRecentDownloads(clearGuestHistory());
-      showToast('Đã xóa tất cả lịch sử!');
+      showToast(t('toast.historyCleared'));
       return;
     }
     try {
@@ -415,9 +413,9 @@ export default function DashboardContent() {
       });
       if (res.ok) {
         setRecentDownloads([]);
-        showToast('Đã xóa tất cả lịch sử!');
+        showToast(t('toast.historyCleared'));
       }
-    } catch { showToast('Lỗi khi xóa!'); }
+    } catch { showToast(t('toast.deleteFailed')); }
   };
 
   const extractUrl = (text) => {
@@ -431,7 +429,7 @@ export default function DashboardContent() {
     const cleanUrl = extractUrl(pasted);
     setUrl(cleanUrl);
     trackEvent(EVENT.PASTE_URL, { url_length: cleanUrl.length });
-    if (cleanUrl !== pasted.trim()) showToast('Đã tự động trích xuất URL!');
+    if (cleanUrl !== pasted.trim()) showToast(t('toast.urlExtracted'));
   };
 
   const isSpotifyPlaylistOrAlbum = (u) =>
@@ -447,7 +445,7 @@ export default function DashboardContent() {
     // isn't yet committed to state. Ignore event objects from onClick/onKeyDown.
     const effUrl = (typeof overrideUrl === 'string' && overrideUrl) ? overrideUrl : url;
     if (typeof overrideUrl === 'string' && overrideUrl && overrideUrl !== url) setUrl(overrideUrl);
-    if (!effUrl.trim()) { setError('Vui lòng nhập liên kết hợp lệ.'); return; }
+    if (!effUrl.trim()) { setError(t('errors.enterValidLink')); return; }
     setIsLoading(true); setError(''); setDelayedInfo(null); setVideoInfo(null); setSpotifyData(null); setArtistData(null); setThreadsData(null); setFormatTab('video');
     setShowInpaint(false); setInpaintStep('region'); setInpaintTempId(null); setInpaintFrameUrl(null);
     setInpaintVideoDims(null); setInpaintPreset(null); setInpaintPixelRegion(null);
@@ -493,14 +491,14 @@ export default function DashboardContent() {
           withAuth({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: effUrl.trim() }) })
         );
         const data = await safeJson(response);
-        if (!response.ok) throw new Error(data.detail || 'Không thể xử lý link Threads.');
+        if (!response.ok) throw new Error(data.detail || t('errors.threadsProcess'));
         setThreadsData(data);
         if (data.success) {
-          if (data.source_type === 'profile') showToast(`Tìm thấy ${data.posts?.length || 0} bài Threads công khai.`);
-          else if (data.downloadable) showToast('Đã tìm thấy media từ bài Threads.');
+          if (data.source_type === 'profile') showToast(t('toast.threadsPostsFound', { count: data.posts?.length || 0 }));
+          else if (data.downloadable) showToast(t('toast.threadsMediaFound'));
         }
       } catch (err) {
-        setError(err.message || 'Lỗi khi xử lý link Threads.');
+        setError(err.message || t('errors.threadsLink'));
       } finally {
         setIsLoading(false);
         if (progressPollRef.current) { clearTimeout(progressPollRef.current); progressPollRef.current = null; }
@@ -519,7 +517,7 @@ export default function DashboardContent() {
         const data = await safeJson(response);
         if (!response.ok) {
           const d = data.detail;
-          throw new Error((d && (d.message || d)) || 'Không thể tải thông tin nghệ sĩ.');
+          throw new Error((d && (d.message || d)) || t('errors.artistInfo'));
         }
         if (data.success) {
           setArtistData(data);
@@ -529,11 +527,11 @@ export default function DashboardContent() {
           setSelectedTracks(new Set());
           const n = data.summary?.top_tracks_count || 0;
           showToast(data.partial
-            ? `Đã lấy ${n} top tracks. Albums/Singles cần cấu hình Spotify API.`
-            : `Nghệ sĩ ${data.artist?.name}: ${n} top tracks, ${data.summary?.albums_count || 0} album.`);
-        } else throw new Error('Không thể tải thông tin nghệ sĩ.');
+            ? t('toast.artistPartial', { n })
+            : t('toast.artistFull', { name: data.artist?.name, n, albums: data.summary?.albums_count || 0 }));
+        } else throw new Error(t('errors.artistInfo'));
       } catch (err) {
-        setError(err.message || 'Lỗi khi tải nghệ sĩ Spotify.');
+        setError(err.message || t('errors.spotifyArtist'));
       } finally {
         setIsLoading(false);
         if (progressPollRef.current) { clearTimeout(progressPollRef.current); progressPollRef.current = null; }
@@ -550,14 +548,14 @@ export default function DashboardContent() {
           withAuth({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: effUrl.trim() }) })
         );
         const data = await safeJson(response);
-        if (!response.ok) throw new Error(data.detail || 'Không thể tải danh sách nhạc Spotify');
+        if (!response.ok) throw new Error(data.detail || t('errors.spotifyList'));
         if (data.success) {
           setSpotifyData(data);
           setTrackDownloads({});
-          showToast(`Tìm thấy ${data.tracks?.length || 0} bài nhạc!`);
-        } else throw new Error('Không thể tải danh sách nhạc.');
+          showToast(t('toast.tracksFound', { count: data.tracks?.length || 0 }));
+        } else throw new Error(t('errors.trackList'));
       } catch (err) {
-        setError(err.message || 'Lỗi khi tải danh sách Spotify.');
+        setError(err.message || t('errors.spotifyListLoad'));
       } finally {
         setIsLoading(false);
         if (progressPollRef.current) { clearTimeout(progressPollRef.current); progressPollRef.current = null; }
@@ -581,8 +579,8 @@ export default function DashboardContent() {
       const data = await safeJson(response);
       // Scheduled download: 202 + data.scheduled=true → show success toast, reset picker
       if (response.status === 202 && data?.scheduled === true) {
-        const t = scheduledAt ? new Date(scheduledAt).toLocaleString('vi-VN') : '';
-        setToastMessage(`Đã lên lịch tải lúc ${t}. Theo dõi ở tab Lịch sử.`);
+        const when = scheduledAt ? new Date(scheduledAt).toLocaleString(dateLocale()) : '';
+        setToastMessage(t('toast.scheduled', { when }));
         setScheduledAt(''); setShowSchedulePicker(false); setUrl('');
         return;
       }
@@ -608,18 +606,18 @@ export default function DashboardContent() {
         if (response.status === 429) {
           // Check if it's a fairness cap rejection (has retryAfter) — show as delayed, not error
           if (data?.error === 'fairness_cap_reached' && data?.retryAfter) {
-            setDelayedInfo({ ...data, delayed: true, message: data.message || `Thử lại sau ${data.retryAfter}s` });
+            setDelayedInfo({ ...data, delayed: true, message: data.message || t('errors.retryAfter', { sec: data.retryAfter }) });
             return;
           }
-          throw new Error('⏳ Bạn đã gửi quá nhiều yêu cầu. Vui lòng chờ 1 phút rồi thử lại.');
+          throw new Error(tr('errors.tooManyRequests'));
         }
         if (response.status === 403 && data.detail === 'QUOTA_EXCEEDED') {
           setUpgradeErrorCode('quota_exceeded_daily');
           setShowUpgradeModal(true);
           // wording: BA review
           throw new Error(['pro', 'team', 'enterprise', 'api'].includes(userTier)
-            ? 'Đã đạt giới hạn tải trong ngày. Lượt tải được tính lại lúc 07:00 giờ Việt Nam (00:00 UTC).'
-            : 'Đã đạt giới hạn tải trong ngày. Bạn có thể đợi đến 07:00 giờ Việt Nam (00:00 UTC) hoặc xem gói Pro tại trang Bảng giá.');
+            ? t('errors.quotaPaid')
+            : t('errors.quotaFree'));
         }
         // Structured tier errors: 402 or known error_code → UpgradeModal
         {
@@ -638,7 +636,7 @@ export default function DashboardContent() {
           }
           throw new Error(
             (_det && typeof _det === 'object' ? _det.message : _det)
-            || 'Không thể lấy thông tin video'
+            || t('errors.videoInfo')
           );
         }
       }
@@ -656,7 +654,7 @@ export default function DashboardContent() {
         // single 'unknown' row on its first real data. The browser always
         // knows the URL, so it can always derive this.
         trackEvent(EVENT.FETCH_SUCCESS, { platform: data.platform || detectedPlatform || 'unknown', has_subtitles: !!data.has_subtitles });
-        showToast('Trích xuất thành công!');
+        showToast(t('toast.extracted'));
         if (!session?.access_token) {
           setRecentDownloads(addGuestHistory({ title: data.title, original_url: effUrl.trim(), status: 'success', data }).slice(0, 5));
         }
@@ -666,21 +664,21 @@ export default function DashboardContent() {
             a.href = `${API_BASE}${data.subtitle_file_url}`;
             a.setAttribute('download', '');
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
-            showToast('Phụ đề đã được tải kèm (.srt).');
+            showToast(t('toast.subsIncluded'));
           } else if (data.subtitle_url) {
             const a = document.createElement('a');
             a.href = data.subtitle_url; a.setAttribute('download', '');
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
-            showToast('Đang tải phụ đề...');
+            showToast(t('toast.subsDownloading'));
           } else if (data.subtitle_error === 'no_subtitles_available') {
-            showToast('Nền tảng này không có phụ đề công khai.');
+            showToast(t('toast.subsNone'));
           } else if (data.subtitle_error === 'subtitle_extraction_failed') {
-            showToast('Không trích xuất được phụ đề. Thử lại sau.');
+            showToast(t('toast.subsFailed'));
           } else if (data.subtitle_error === 'subtitle_embed_failed') {
-            showToast?.('⚠️ Không thể đốt/mux phụ đề vào video — file phụ đề .srt đã được tải riêng.', 'warning');
+            showToast?.(t('toast.subsBurnFailed'), 'warning');
           }
         }
-      } else throw new Error('Không thể trích xuất thông tin video.');
+      } else throw new Error(t('errors.extractVideo'));
     } catch (err) {
       // fetch_success had no counterpart here, so a link that never resolved
       // left no trace in the funnel at all — the failure mode that matters most
@@ -693,7 +691,7 @@ export default function DashboardContent() {
             : fetchStatus >= 400 ? `http_${fetchStatus}` : 'unexpected_response'),
         reason: String(err?.message || '').slice(0, 120),
       });
-      setError(err.message || 'Đã xảy ra lỗi khi xử lý link.');
+      setError(err.message || t('errors.linkProcess'));
       if (!session?.access_token && fetchStatus != null && fetchStatus >= 400 && fetchStatus !== 402 && fetchStatus !== 429) {
         setRecentDownloads(addGuestHistory({ title: effUrl.trim(), original_url: effUrl.trim(), status: 'failed' }).slice(0, 5));
       }
@@ -717,7 +715,7 @@ export default function DashboardContent() {
         body: JSON.stringify({ url: key, quality: 'mp3_128' }),
       }));
       const data = await safeJson(response);
-      if (!response.ok) throw new Error(data.detail || 'Lỗi tải nhạc');
+      if (!response.ok) throw new Error(data.detail || t('errors.musicDownload'));
       if (data.success) {
         const localPath = localAnyId(data);
         const title = track.title || data.title || 'audio';
@@ -732,11 +730,11 @@ export default function DashboardContent() {
           a.setAttribute('download', ''); document.body.appendChild(a); a.click(); document.body.removeChild(a);
         }
         setTrackDownloads(prev => ({ ...prev, [key]: 'done' }));
-        showToast(`Đang tải: ${track.name || title}`);
+        showToast(t('toast.downloadingTrack', { name: track.name || title }));
       }
     } catch (err) {
       setTrackDownloads(prev => ({ ...prev, [key]: 'error' }));
-      showToast(`Lỗi: ${err.message}`);
+      showToast(t('toast.errorMsg', { msg: err.message }));
     }
   };
 
@@ -762,7 +760,7 @@ export default function DashboardContent() {
           body: JSON.stringify({ url: key, quality: 'mp3_320' }),
         }));
         const data = await safeJson(res);
-        if (!res.ok || !data.success) throw new Error(data.detail || 'Fetch thất bại');
+        if (!res.ok || !data.success) throw new Error(data.detail || t('errors.fetchFailed'));
 
         const localPath = localAnyId(data);
         let downloadUrl;
@@ -771,11 +769,11 @@ export default function DashboardContent() {
         } else if (data.direct_mp4_url) {
           downloadUrl = `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(data.direct_mp4_url)}&filename=temp&ext=mp3`;
         } else {
-          throw new Error('Không có URL tải');
+          throw new Error(t('errors.noDownloadUrl'));
         }
 
         const fileResp = await fetch(downloadUrl);
-        if (!fileResp.ok) throw new Error('Tải file thất bại');
+        if (!fileResp.ok) throw new Error(t('errors.fileDownloadFailed'));
         const blob = await fileResp.blob();
 
         const num = String(idx + 1).padStart(2, '0');
@@ -791,32 +789,32 @@ export default function DashboardContent() {
     };
 
     try {
-      showToast(`Đang tải ${tracksToDownload.length} bài nhạc...`);
+      showToast(t('toast.downloadingTracks', { count: tracksToDownload.length }));
 
       // Process 2 tracks concurrently
       for (let i = 0; i < tracksToDownload.length; i += 2) {
-        if (cancelZipRef.current) { showToast('Đã hủy quá trình tải ZIP.'); break; }
+        if (cancelZipRef.current) { showToast(t('toast.zipCancelled')); break; }
         const batch = tracksToDownload.slice(i, i + 2);
         await Promise.allSettled(batch.map((t, j) => downloadTrack(t, i + j)));
       }
 
       if (!cancelZipRef.current) {
         if (done === 0) {
-          showToast('Không có bài nào tải được. Vui lòng thử lại.');
+          showToast(t('toast.noTracksDownloaded'));
           return;
         }
         setZipProgress(100);
-        showToast('Đang nén ZIP, vui lòng chờ...');
+        showToast(t('toast.zipping'));
         const content = await zip.generateAsync({ type: 'blob' });
         const safeName = (zipName || 'VidGrab').replace(/[/\\?%*:|"<>]/g, '-');
         saveAs(content, `${safeName}.zip`);
         showToast(failed > 0
-          ? `Xong! ${done}/${tracksToDownload.length} bài (${failed} bài lỗi).`
-          : `Tải ZIP thành công! ${done} bài nhạc.`
+          ? t('toast.zipPartial', { done, total: tracksToDownload.length, failed })
+          : t('toast.zipDone', { count: done })
         );
       }
     } catch (err) {
-      showToast(`Lỗi tạo ZIP: ${err.message}`);
+      showToast(t('toast.zipError', { msg: err.message }));
     } finally {
       setIsZipping(false);
       setZipProgress(0);
@@ -846,14 +844,14 @@ export default function DashboardContent() {
     if (mode === 'top_tracks') {
       const tt = artistData.top_tracks || [];
       const chosen = selectedTracks.size > 0 ? tt.filter(t => selectedTracks.has(t.search_query)) : tt;
-      if (chosen.length === 0) { showToast('Chưa có bài nào để tải.'); return; }
+      if (chosen.length === 0) { showToast(t('toast.noTracksToDownload')); return; }
       await zipDownloadTracks(chosen, `${artistData.artist?.name || 'Artist'} - Top tracks`);
       return;
     }
 
     // albums / singles / all_tracks → expand on the backend (real deduped list)
     try {
-      showToast('Đang gom & loại trùng danh sách bài hát...');
+      showToast(t('toast.collecting'));
 
       // Backend caps large catalogs (P3): it returns {needs_confirmation, real_count}
       // BEFORE expanding instead of queueing thousands of tracks. Ask the user,
@@ -866,14 +864,14 @@ export default function DashboardContent() {
         const d = await safeJson(r);
         if (!r.ok || !d.success) {
           const det = d.detail;
-          throw new Error((det && (det.message || det)) || 'Không lấy được danh sách bài hát.');
+          throw new Error((det && (det.message || det)) || t('errors.trackListFetch'));
         }
         return d;
       };
 
       let data = await collect(false);
       if (data.needs_confirmation) {
-        if (!window.confirm(`${data.message || `Nghệ sĩ có ${data.real_count} bài.`}\n\nTải tối đa ${data.cap} bài. Tiếp tục?`)) return;
+        if (!window.confirm(`${data.message || t('confirm.artistTrackCount', { count: data.real_count })}\n\n${t('confirm.artistCap', { cap: data.cap })}`)) return;
         data = await collect(true);
         if (data.needs_confirmation) return; // defensive: shouldn't recur
         data._userConfirmed = true;          // skip the secondary count confirm
@@ -882,23 +880,24 @@ export default function DashboardContent() {
       const count = data.count || data.tracks?.length || 0;
       const sm = data.summary || {};
       if (sm.capped) {
-        showToast(`Đã giới hạn còn ${count} bài (catalog lớn). Tải phần này trước.`);
+        showToast(t('toast.capped', { count }));
       }
       // Confirm large jobs with the REAL deduped count — but skip if the user
       // already confirmed the catalog-cap prompt above (avoid double-confirm).
       if (!data._userConfirmed && count > 20 && !window.confirm(
-        `Nghệ sĩ này có ${count} bài sau khi loại trùng${sm.requested_count ? ` (từ ${sm.requested_count} bản)` : ''}. `
-        + `Quá trình có thể mất vài phút. Tiếp tục?`
+        t('confirm.largeJob', { count })
+        + (sm.requested_count ? t('confirm.largeJobFrom', { n: sm.requested_count }) : '')
+        + t('confirm.largeJobTail')
       )) return;
       // Partial-expansion notice (e.g. expanded 8/10 albums)
       if (sm.albums_requested && sm.albums_expanded < sm.albums_requested) {
-        showToast(`Lưu ý: lấy được ${sm.albums_expanded}/${sm.albums_requested} album. Vẫn tải phần thành công.`);
+        showToast(t('toast.albumsPartial', { done: sm.albums_expanded, total: sm.albums_requested }));
       }
-      const label = mode === 'albums' ? 'Albums' : mode === 'singles' ? 'Singles' : 'Tất cả';
-      showToast(`Đã gom ${count} bài, bắt đầu tải...`);
+      const label = mode === 'albums' ? 'Albums' : mode === 'singles' ? 'Singles' : t('spotify.allLabel');
+      showToast(t('toast.collected', { count }));
       await zipDownloadTracks(data.tracks, `${artistData.artist?.name || 'Artist'} - ${label}`);
     } catch (e) {
-      showToast(`Lỗi: ${e.message}`);
+      showToast(t('toast.errorMsg', { msg: e.message }));
     }
   };
 
@@ -906,16 +905,16 @@ export default function DashboardContent() {
   const handleArtistAlbumDownload = async (album) => {
     if (!album?.external_url) return;
     try {
-      showToast(`Đang lấy bài hát của "${album.title}"...`);
+      showToast(t('toast.albumLoading', { title: album.title }));
       const res = await fetch(`${API_BASE}/api/v1/fetch-spotify`,
         withAuth({ method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: album.external_url }) })
       );
       const data = await safeJson(res);
-      if (!res.ok || !data.success || !data.tracks?.length) throw new Error('Không lấy được bài hát của album này.');
+      if (!res.ok || !data.success || !data.tracks?.length) throw new Error(t('errors.albumTracks'));
       await zipDownloadTracks(data.tracks, `${artistData?.artist?.name || 'Artist'} - ${album.title}`);
     } catch (e) {
-      showToast(`Lỗi: ${e.message}`);
+      showToast(t('toast.errorMsg', { msg: e.message }));
     }
   };
 
@@ -924,7 +923,7 @@ export default function DashboardContent() {
     const k = track.spotify_track_id || track.search_query;
     if (artistPreviewRef.current) { artistPreviewRef.current.pause(); artistPreviewRef.current = null; }
     if (artistPreviewKey === k) { setArtistPreviewKey(null); return; }
-    if (!track.preview_url) { showToast('Bài này không có đoạn nghe thử.'); return; }
+    if (!track.preview_url) { showToast(t('toast.noPreview')); return; }
     try {
       const audio = new Audio(track.preview_url);
       audio.onended = () => setArtistPreviewKey(null);
@@ -988,7 +987,7 @@ export default function DashboardContent() {
         const thumbUrl = `${API_BASE}/api/v1/download-thumbnail?url=${encodeURIComponent(videoInfo.thumbnail)}&filename=${encodeURIComponent(videoInfo.title || 'thumbnail')}`;
         const a = document.createElement('a'); a.href = thumbUrl; a.setAttribute('download', '');
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        showToast('Đang tải thumbnail...');
+        showToast(t('toast.thumbDownloading'));
       }
     } else if (quality.startsWith('mp3')) {
       handleMergeDownload(quality === 'mp3_320' ? 'mp3' : 'ogg');
@@ -1007,7 +1006,7 @@ export default function DashboardContent() {
     const a = document.createElement('a');
     a.href = downloadUrl; a.setAttribute('download', '');
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    showToast('Bắt đầu tải về!');
+    showToast(t('toast.downloadStarted'));
     showSuccessAfterDownload(ext, fmt.label || ext, downloadUrl);
   };
 
@@ -1024,7 +1023,7 @@ export default function DashboardContent() {
     const a = document.createElement('a');
     a.href = downloadUrl; a.setAttribute('download', '');
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    showToast('Bắt đầu tải về!');
+    showToast(t('toast.downloadStarted'));
   };
 
   // Load a single post from a profile listing into the post preview
@@ -1035,7 +1034,7 @@ export default function DashboardContent() {
   // Download "best" (the default direct_mp4_url)
   const handleDefaultDownload = () => {
     if (!videoInfo) {
-      setError("Không có thông tin video.");
+      setError(t('errors.noVideoInfo'));
       return;
     }
     
@@ -1047,13 +1046,13 @@ export default function DashboardContent() {
       const a = document.createElement('a');
       a.href = downloadUrl; a.setAttribute('download', '');
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      showToast('Bắt đầu tải về!');
+      showToast(t('toast.downloadStarted'));
       showSuccessAfterDownload(fileExt, fileExt, downloadUrl);
       return;
     }
 
     if (!videoInfo.direct_mp4_url) {
-      setError("Không tìm thấy link tải video gốc.");
+      setError(t('errors.noSourceLink'));
       return;
     }
     handleFormatDownload({ url: videoInfo.direct_mp4_url, ext: 'mp4' });
@@ -1083,7 +1082,7 @@ export default function DashboardContent() {
       const a = document.createElement('a');
       a.href = downloadUrl; a.setAttribute('download', '');
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      showToast(`Bắt đầu tải ${downloadedHeight}p!`);
+      showToast(t('toast.downloadStartedQuality', { height: downloadedHeight }));
       return;
     }
 
@@ -1114,7 +1113,7 @@ export default function DashboardContent() {
           throw new Error(dmsg);
         }
         if (response.status === 429) {
-          throw new Error('⏳ Quá nhiều yêu cầu. Vui lòng chờ 1 phút rồi thử lại.');
+          throw new Error(t('errors.tooManyRequestsShort'));
         }
         if (response.status === 403 && det === 'QUOTA_EXCEEDED') {
           setUpgradeErrorCode('quota_exceeded_daily');
@@ -1140,14 +1139,14 @@ export default function DashboardContent() {
           data = await safeJson(response);
           if (!response.ok) {
             const d2 = data.detail;
-            throw new Error((d2 && (d2.message || d2)) || 'Không thể tải chất lượng này.');
+            throw new Error((d2 && (d2.message || d2)) || t('errors.qualityDownload'));
           }
         } else if (code) {
           // Blocked by phase-8 gate / circuit / cost-limit — show message + suggest
-          const sug = det.suggested ? ` Gợi ý: chọn ${det.suggested.replace('video_', '')}p.` : '';
+          const sug = det.suggested ? ` ${t('errors.suggestQuality', { height: det.suggested.replace('video_', '') })}` : '';
           throw new Error(`${dmsg}${sug}`);
         } else {
-          throw new Error(dmsg || 'Không thể xử lý ghép tệp video');
+          throw new Error(dmsg || t('errors.mergeProcess'));
         }
       }
       if (data.success) {
@@ -1159,8 +1158,8 @@ export default function DashboardContent() {
         } catch {}
         addNotification({
           type: 'download_done',
-          title: 'Tải xong!',
-          body: videoInfo?.title || 'File đã sẵn sàng',
+          title: t('notify.done'),
+          body: videoInfo?.title || t('notify.fileReady'),
           url: '/history',
         });
         // Determine file path and extension from the actual file
@@ -1171,7 +1170,7 @@ export default function DashboardContent() {
           const a = document.createElement('a');
           a.href = downloadUrl; a.setAttribute('download', '');
           document.body.appendChild(a); a.click(); document.body.removeChild(a);
-          showToast('Bắt đầu tải về!');
+          showToast(t('toast.downloadStarted'));
           if (localFileId(data)) {
             setLastDownloadInfo({ file_id: localFileId(data) });
           }
@@ -1184,11 +1183,11 @@ export default function DashboardContent() {
         platform: videoInfo?.platform || detectedPlatform || 'unknown',
         reason: String(err?.message || '').slice(0, 120),
       });
-      setError(err.message || 'Đã xảy ra lỗi khi xử lý ghép tệp.');
+      setError(err.message || t('errors.mergeError'));
       addNotification({
         type: 'download_failed',
-        title: 'Tải thất bại',
-        body: typeof err.message === 'string' ? err.message : 'Vui lòng thử lại',
+        title: t('notify.failed'),
+        body: typeof err.message === 'string' ? err.message : t('notify.tryAgain'),
         url: null,
       });
     } finally { setDownloadingId(null); }
@@ -1217,7 +1216,7 @@ export default function DashboardContent() {
           setUpgradeErrorCode('quota_exceeded_daily');
           setShowUpgradeModal(true); return;
         }
-        throw new Error(data.detail || 'Không thể lấy âm thanh');
+        throw new Error(data.detail || t('errors.audio'));
       }
       if (data.success) {
         if (localAnyId(data)) {
@@ -1231,7 +1230,7 @@ export default function DashboardContent() {
         }
       }
     } catch (err) {
-      setError(err.message || 'Đã xảy ra lỗi khi tải âm thanh.');
+      setError(err.message || t('errors.audioError'));
     } finally { setDownloadingId(null); }
   };
 
@@ -1243,7 +1242,7 @@ export default function DashboardContent() {
     const a = document.createElement('a');
     a.href = downloadUrl; a.setAttribute('download', '');
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    showToast('Đang tải ảnh bìa...');
+    showToast(t('toast.coverDownloading'));
   };
 
   // ── Preview Player ───────────────────────────────────────────
@@ -1290,7 +1289,7 @@ export default function DashboardContent() {
       // Prefer local file (YouTube merge, TikTok, etc.) served via download-local endpoint
       const localPath = localVideoFirstId(videoInfo);
       const sourceUrl = videoInfo.direct_mp4_url;
-      if (!localPath && !sourceUrl) { showToast('Không có nguồn để cắt.'); return; }
+      if (!localPath && !sourceUrl) { showToast(t('toast.noSourceTrim')); return; }
 
       const response = await fetch(`${API_BASE}/api/v1/trim`, {
         method: 'POST',
@@ -1310,10 +1309,10 @@ export default function DashboardContent() {
         a.href = localDownloadUrl(API_BASE, data.trimmed_file_id || toFileId(data.trimmed_file_path), data.filename);
         a.setAttribute('download', '');
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        showToast(`Đã cắt thành công! (${data.file_size_mb} MB)`);
+        showToast(t('toast.trimDone', { size: data.file_size_mb }));
       }
     } catch (err) {
-      setError(err.message || 'Lỗi khi cắt video.');
+      setError(err.message || t('errors.trim'));
     } finally { setIsTrimming(false); }
   };
 
@@ -1335,8 +1334,8 @@ export default function DashboardContent() {
     if (!videoInfo) return;
     const localPath = localVideoFirstId(videoInfo);
     const sourceUrl = videoInfo.direct_mp4_url;
-    if (!localPath && !sourceUrl) { showToast('Không có nguồn để chuyển GIF.'); return; }
-    if (gifEnd - gifStart > 30) { showToast('Giới hạn 30 giây cho GIF.'); return; }
+    if (!localPath && !sourceUrl) { showToast(t('toast.noSourceGif')); return; }
+    if (gifEnd - gifStart > 30) { showToast(t('toast.gifLimit')); return; }
 
     setIsConverting(true);
     try {
@@ -1363,11 +1362,11 @@ export default function DashboardContent() {
         a.href = localDownloadUrl(API_BASE, data.gif_file_id || toFileId(data.gif_path), data.filename);
         a.setAttribute('download', '');
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        showToast(`GIF tạo thành công! ${data.file_size_mb} MB · ${data.width}px · ${data.fps}fps`);
+        showToast(t('toast.gifDone', { size: data.file_size_mb, width: data.width, fps: data.fps }));
         setShowGifPanel(false);
       }
     } catch (err) {
-      setError(err.message || 'Lỗi khi tạo GIF.');
+      setError(err.message || t('errors.gif'));
     } finally { setIsConverting(false); }
   };
 
@@ -1375,7 +1374,7 @@ export default function DashboardContent() {
   const handleChapterDownload = async (chapter) => {
     const localPath = localFileId(videoInfo);
     const sourceUrl = videoInfo?.direct_mp4_url;
-    if (!localPath && !sourceUrl) { showToast('Không có nguồn để tải chapter.'); return; }
+    if (!localPath && !sourceUrl) { showToast(t('toast.noSourceChapter')); return; }
 
     setDownloadingChapter(chapter.title);
     try {
@@ -1397,19 +1396,19 @@ export default function DashboardContent() {
         a.href = localDownloadUrl(API_BASE, data.trimmed_file_id || toFileId(data.trimmed_file_path), data.filename);
         a.setAttribute('download', '');
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        showToast(`Đã tải chapter: ${chapter.title}`);
+        showToast(t('toast.chapterDone', { title: chapter.title }));
       }
     } catch (err) {
-      showToast(`Lỗi tải chapter: ${err.message}`);
+      showToast(t('toast.chapterError', { msg: err.message }));
     } finally { setDownloadingChapter(null); }
   };
 
   // ── Logo Inpaint ─────────────────────────────────────────────
   const INPAINT_PRESETS = [
-    { label: 'Dưới phải', key: 'lower-right' },
-    { label: 'Dưới trái', key: 'lower-left'  },
-    { label: 'Trên phải', key: 'upper-right' },
-    { label: 'Trên trái', key: 'upper-left'  },
+    { label: t('inpaint.lowerRight'), key: 'lower-right' },
+    { label: t('inpaint.lowerLeft'), key: 'lower-left'  },
+    { label: t('inpaint.upperRight'), key: 'upper-right' },
+    { label: t('inpaint.upperLeft'), key: 'upper-left'  },
   ];
 
   const handleOpenInpaint = async () => {
@@ -1422,7 +1421,7 @@ export default function DashboardContent() {
     }
     if (showInpaint) { setShowInpaint(false); return; }
     const localPath = localFileId(videoInfo);
-    if (!localPath) { showToast('Cần tải video về trước để xoá logo.'); return; }
+    if (!localPath) { showToast(t('toast.inpaintNeedDownload')); return; }
     setShowInpaint(true);
     setInpaintStep('region');
     setInpaintTempId(null);
@@ -1441,7 +1440,7 @@ export default function DashboardContent() {
         body: JSON.stringify({ local_path: localPath, title: videoInfo.title || '' }),
       }));
       const data = await safeJson(res);
-      if (!res.ok) throw new Error(data.detail || 'Không khởi tạo được session.');
+      if (!res.ok) throw new Error(data.detail || t('errors.inpaintSession'));
       setInpaintTempId(data.temp_id);
       setInpaintFrameUrl(`${API_BASE}${data.preview_url}`);
       if (data.video_info?.width && data.video_info?.height) {
@@ -1465,7 +1464,7 @@ export default function DashboardContent() {
         body: JSON.stringify({ temp_id: inpaintTempId, preset }),
       }));
       const data = await safeJson(res);
-      if (!res.ok) throw new Error(data.detail || 'Xem trước thất bại.');
+      if (!res.ok) throw new Error(data.detail || t('errors.previewFailed'));
       setInpaintPreviewResult(data);
       // Store the pixel region returned by backend for process step
       if (data.region) setInpaintPixelRegion(data.region);
@@ -1488,7 +1487,7 @@ export default function DashboardContent() {
         body: JSON.stringify(body),
       }));
       const data = await safeJson(res);
-      if (!res.ok) throw new Error(data.detail || 'Xử lý thất bại.');
+      if (!res.ok) throw new Error(data.detail || t('errors.processFailed'));
       if (data.success && data.download_url) {
         const ext = (data.cleaned_file_id || '').split('.').pop() || 'mp4';
         const fname = `${videoInfo?.title || 'cleaned'}_nologin.${ext}`;
@@ -1499,7 +1498,7 @@ export default function DashboardContent() {
         );
         setInpaintStep('done');
       } else {
-        throw new Error(data.detail || 'Xử lý không trả về file kết quả.');
+        throw new Error(data.detail || t('errors.noResultFile'));
       }
     } catch (err) {
       setInpaintError(err.message);
@@ -1513,14 +1512,14 @@ export default function DashboardContent() {
     a.href = inpaintFinalUrl;
     a.setAttribute('download', '');
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    showToast('Đang tải video đã xoá logo...');
+    showToast(t('toast.inpaintDownloading'));
   };
 
   // ── Merge Clips ──────────────────────────────────────────────
   const handleMergeClips = async () => {
     const ids = mergeJobIds.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-    if (ids.length < 2) { setMergeError('Cần ít nhất 2 job ID để ghép.'); return; }
-    if (ids.length > 5) { setMergeError('Tối đa 5 clip cùng lúc.'); return; }
+    if (ids.length < 2) { setMergeError(t('merge.needTwo')); return; }
+    if (ids.length > 5) { setMergeError(t('merge.maxFiveAtOnce')); return; }
     setMergeLoading(true);
     setMergeError('');
     setMergeResult(null);
@@ -1533,14 +1532,14 @@ export default function DashboardContent() {
       const data = await res.json();
       if (!res.ok) {
         const code = data?.detail?.error_code || '';
-        if (code === 'merge_duration_exceeded') setMergeError('Tổng thời lượng vượt quá 30 phút.');
-        else if (code === 'merge_too_many_clips') setMergeError('Tối đa 5 clip.');
-        else setMergeError(data?.detail?.message || data?.detail || 'Ghép thất bại.');
+        if (code === 'merge_duration_exceeded') setMergeError(t('merge.durationExceeded'));
+        else if (code === 'merge_too_many_clips') setMergeError(t('merge.maxFive'));
+        else setMergeError(data?.detail?.message || data?.detail || t('merge.failed'));
         return;
       }
       setMergeResult(data);
     } catch (err) {
-      setMergeError(err.message || 'Lỗi kết nối.');
+      setMergeError(err.message || t('errors.connection'));
     } finally {
       setMergeLoading(false);
     }
@@ -1558,9 +1557,9 @@ export default function DashboardContent() {
   // ── Watermark Embed ──────────────────────────────────────────
   const handleWatermarkRender = async (previewOnly = false) => {
     const sourcePath = localFileId(videoInfo);
-    if (!sourcePath) { setWmError('Không có video nguồn.'); return; }
-    if (wmType === 'text' && !wmText.trim()) { setWmError('Nhập nội dung watermark.'); return; }
-    if (wmType === 'image' && !wmImageB64) { setWmError('Chọn ảnh watermark.'); return; }
+    if (!sourcePath) { setWmError(t('watermark.noSource')); return; }
+    if (wmType === 'text' && !wmText.trim()) { setWmError(t('watermark.enterText')); return; }
+    if (wmType === 'image' && !wmImageB64) { setWmError(t('watermark.chooseImage')); return; }
     setWmLoading(true);
     setWmError('');
     if (!previewOnly) setWmResult(null);
@@ -1582,9 +1581,9 @@ export default function DashboardContent() {
       const data = await res.json();
       if (!res.ok) {
         const code = data?.detail?.error_code || '';
-        if (code === 'watermark_duration_exceeded') setWmError('Video quá dài (tối đa 10 phút).');
-        else if (code === 'watermark_image_too_large') setWmError('Ảnh watermark quá lớn (tối đa 200KB).');
-        else setWmError(data?.detail?.message || data?.detail || 'Render thất bại.');
+        if (code === 'watermark_duration_exceeded') setWmError(t('watermark.tooLong'));
+        else if (code === 'watermark_image_too_large') setWmError(t('watermark.imageTooLarge'));
+        else setWmError(data?.detail?.message || data?.detail || t('watermark.renderFailed'));
         return;
       }
       if (previewOnly) {
@@ -1593,7 +1592,7 @@ export default function DashboardContent() {
         setWmResult(data);
       }
     } catch (err) {
-      setWmError(err.message || 'Lỗi kết nối.');
+      setWmError(err.message || t('errors.connection'));
     } finally {
       setWmLoading(false);
     }
@@ -1602,7 +1601,7 @@ export default function DashboardContent() {
   const handleWmImageUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 200 * 1024) { setWmError('Ảnh quá lớn (tối đa 200KB).'); return; }
+    if (file.size > 200 * 1024) { setWmError(t('watermark.fileTooLarge')); return; }
     const reader = new FileReader();
     reader.onload = (ev) => {
       const b64 = ev.target.result.split(',')[1];
@@ -1638,7 +1637,7 @@ export default function DashboardContent() {
 
   const handleSaveToGDrive = () => {
     const fileUrl = getDownloadUrl();
-    if (!fileUrl) { showToast('Không có link tải.'); return; }
+    if (!fileUrl) { showToast(t('toast.noDownloadLink')); return; }
     const fullUrl = fileUrl.startsWith('http') ? fileUrl : `${window.location.origin}${fileUrl}`;
     // Google Drive không hỗ trợ upload từ URL trực tiếp — tải file về máy trước,
     // sau đó mở Drive để upload thủ công
@@ -1646,16 +1645,16 @@ export default function DashboardContent() {
     a.href = fullUrl; a.setAttribute('download', '');
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => window.open('https://drive.google.com/drive/my-drive', '_blank'), 800);
-    showToast('Tải file xong → kéo vào Google Drive đang mở!');
+    showToast(t('toast.gdrive'));
     setShowCloudMenu(false);
   };
 
   const handleSaveToDropbox = () => {
     const fileUrl = getDownloadUrl();
-    if (!fileUrl) { showToast('Không có link tải.'); return; }
+    if (!fileUrl) { showToast(t('toast.noDownloadLink')); return; }
     const fullUrl = fileUrl.startsWith('http') ? fileUrl : `${window.location.origin}${fileUrl}`;
     window.open(`https://www.dropbox.com/save?url=${encodeURIComponent(fullUrl)}&filename=${encodeURIComponent(videoInfo?.title || 'video')}`, '_blank');
-    showToast('Đang mở Dropbox...');
+    showToast(t('toast.dropbox'));
     setShowCloudMenu(false);
   };
 
@@ -1692,9 +1691,9 @@ export default function DashboardContent() {
       a.href = `${API_BASE}${data.download_url}`;
       a.setAttribute('download', '');
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      showToast('Đã tải phụ đề.');
+      showToast(t('toast.subsDone'));
     } catch (err) {
-      showToast(err.message || 'Không tải được phụ đề. Thử lại sau.');
+      showToast(err.message || t('toast.subsDownloadFailed'));
     } finally {
       setSrtBusy(false);
     }
@@ -1785,8 +1784,8 @@ export default function DashboardContent() {
                    glyphs in a row — and it pushed the text long enough to clip
                    against the button, so the field's only label read "…vào đâ".
                    Shortened to fit; the Link2 icon carries the visual cue. */
-                placeholder="Dán liên kết video hoặc kênh…"
-                aria-label="Liên kết video hoặc kênh"
+                placeholder={t('input.placeholder')}
+                aria-label={t('input.ariaLabel')}
                 disabled={isLoading}
                 className="w-full min-w-0 bg-transparent text-fg placeholder:text-fg-muted text-base font-medium focus:outline-none disabled:opacity-50 h-11"
               />
@@ -1801,7 +1800,7 @@ export default function DashboardContent() {
                     }
                   }}
                   className="p-2 text-fg-muted hover:text-accent-text transition-colors cursor-pointer"
-                  title="Dán từ bộ nhớ tạm"
+                  title={t('input.pasteTitle')}
                 >
                   <ClipboardPaste className="w-5 h-5" />
                 </button>
@@ -1819,7 +1818,7 @@ export default function DashboardContent() {
               }`}
             >
               {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 fill-current" />}
-              <span>{isLoading ? 'ĐANG XỬ LÝ...' : 'BÓC TÁCH NGAY'}</span>
+              <span>{isLoading ? t('input.processing') : t('input.extractNow')}</span>
             </button>
           </div>
 
@@ -1835,10 +1834,10 @@ export default function DashboardContent() {
                   className="w-4 h-4 accent-accent rounded"
                 />
                 <span className="font-medium text-fg group-hover:text-fg transition-colors">
-                  Xoá watermark / logo
+                  {t('options.removeWatermark')}
                 </span>
                 <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-accent-soft text-accent-text font-mono font-semibold leading-tight">
-                  ✓ Hỗ trợ
+                  {t('options.supported')}
                 </span>
               </label>
             ) : url.trim() ? (
@@ -1849,9 +1848,9 @@ export default function DashboardContent() {
                   disabled
                   className="w-4 h-4 rounded"
                 />
-                <span className="font-medium text-fg-muted line-through">Xoá watermark / logo</span>
+                <span className="font-medium text-fg-muted line-through">{t('options.removeWatermark')}</span>
                 <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-surface-2 text-fg-muted font-medium border border-line leading-tight">
-                  Chỉ TikTok / Douyin
+                  {t('options.tiktokOnly')}
                 </span>
               </label>
             ) : (
@@ -1862,22 +1861,22 @@ export default function DashboardContent() {
                   onChange={e => setRemoveWatermark(e.target.checked)}
                   className="w-4 h-4 accent-accent rounded"
                 />
-                <span className="font-medium">Xoá logo (TikTok / Douyin)</span>
+                <span className="font-medium">{t('options.removeLogoPlatform')}</span>
               </label>
             )}
 
               <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-medium text-fg-muted">Phụ đề:</span>
+                  <span className="text-xs font-medium text-fg-muted">{t('subtitle.label')}</span>
                   <select
                     value={subtitleMode}
                     onChange={e => setSubtitleMode(e.target.value)}
                     className="text-xs px-2 py-1 rounded-md bg-surface-2 border border-line text-fg-2 cursor-pointer outline-none hover:border-line-strong focus-visible:border-line-strong"
                   >
-                    <option value="off">Không có</option>
-                    <option value="file">File .srt rời</option>
-                    <option value="burned">Đốt vào video</option>
-                    <option value="soft">Phụ đề mềm (MKV)</option>
+                    <option value="off">{t('subtitle.none')}</option>
+                    <option value="file">{t('subtitle.file')}</option>
+                    <option value="burned">{t('subtitle.burned')}</option>
+                    <option value="soft">{t('subtitle.soft')}</option>
                   </select>
                   {subtitleMode !== 'off' && (
                     <select
@@ -1885,26 +1884,26 @@ export default function DashboardContent() {
                       onChange={e => setSubtitleLang(e.target.value)}
                       className="text-xs px-2 py-1 rounded-md bg-surface-2 border border-line text-fg-2 cursor-pointer outline-none hover:border-line-strong focus-visible:border-line-strong"
                     >
-                      <option value="auto">Tự động</option>
-                      <option value="vi">Tiếng Việt</option>
+                      <option value="auto">{t('subtitle.langAuto')}</option>
+                      <option value="vi">{t('subtitle.langVi')}</option>
                       <option value="en">English</option>
-                      <option value="all">Tất cả ngôn ngữ</option>
+                      <option value="all">{t('subtitle.langAll')}</option>
                     </select>
                   )}
                   {videoInfo && subtitleMode !== 'off' && (
                     videoInfo.has_subtitles
                       ? <span className="text-[10px] font-bold text-fg-2 bg-surface-2 px-2 py-0.5 rounded-full border border-line">
-                          {videoInfo.subtitle_source === 'auto' ? 'tự động' : 'có sẵn'}
+                          {videoInfo.subtitle_source === 'auto' ? t('subtitle.sourceAuto') : t('subtitle.sourceNative')}
                           {videoInfo.available_subtitle_languages?.length > 0 ? ` · ${videoInfo.available_subtitle_languages.slice(0,3).join(', ')}` : ''}
                         </span>
-                      : <span className="text-[10px] text-fg-muted bg-surface px-2 py-0.5 rounded-full border border-line">không có</span>
+                      : <span className="text-[10px] text-fg-muted bg-surface px-2 py-0.5 rounded-full border border-line">{t('subtitle.unavailable')}</span>
                   )}
                 </div>
                 {subtitleMode === 'burned' && (
-                  <p className="text-[10px] text-accent-text mt-1">Đốt phụ đề vào video — quá trình xử lý lâu hơn, file không có phụ đề riêng.</p>
+                  <p className="text-[10px] text-accent-text mt-1">{t('subtitle.burnedNote')}</p>
                 )}
                 {subtitleMode === 'soft' && (
-                  <p className="text-[10px] text-fg-2 mt-1">Phụ đề mềm: video xuất ra file .mkv, dùng VLC để bật/tắt phụ đề khi xem.</p>
+                  <p className="text-[10px] text-fg-2 mt-1">{t('subtitle.softNote')}</p>
                 )}
               </div>
 
@@ -1919,8 +1918,8 @@ export default function DashboardContent() {
             >
               <CalendarClock className="w-3.5 h-3.5" />
               {scheduledAt
-                ? `Lên lịch: ${new Date(scheduledAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}`
-                : 'Lên lịch tải'}
+                ? t('schedule.scheduledFor', { when: new Date(scheduledAt).toLocaleString(dateLocale(), { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) })
+                : t('schedule.button')}
             </button>
 
             <button
@@ -1929,8 +1928,8 @@ export default function DashboardContent() {
               className="flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg-2 transition-colors cursor-pointer"
             >
               <span className="font-mono text-[10px]">{showUserCookie ? '▼' : '▶'}</span>
-              <span>Dùng cookie của tôi</span>
-              <span className="hidden sm:inline text-[10px] text-fg-muted">(nội dung riêng tư, members-only)</span>
+              <span>{t('cookie.use')}</span>
+              <span className="hidden sm:inline text-[10px] text-fg-muted">{t('cookie.useHint')}</span>
             </button>
           </div>
         </div>
@@ -1959,8 +1958,7 @@ export default function DashboardContent() {
         {showUserCookie && (
           <div className="mt-2 rounded-xl border border-line bg-surface-2 p-3 space-y-3">
             <p className="text-[11px] text-fg-muted leading-relaxed">
-              Dán cookie từ trình duyệt để tải nội dung <span className="text-accent-text font-semibold">members-only, channel membership, hoặc tài khoản đăng nhập</span>.
-              Cookie chỉ dùng cho lần tải này — không lưu lại.
+              <Trans t={t} i18nKey="cookie.intro" components={{ b: <span className="text-accent-text font-semibold" /> }} />
             </p>
 
             {/* Guide */}
@@ -1969,43 +1967,43 @@ export default function DashboardContent() {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 transition-transform group-open:rotate-90">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
-                Hướng dẫn lấy cookie từ trình duyệt
+                {t('cookie.guideTitle')}
               </summary>
               <div className="mt-2.5 rounded-lg border border-line bg-surface-2 p-3 space-y-3 text-[11px]">
 
                 {/* Chrome / Edge */}
                 <div>
-                  <p className="font-semibold text-fg-2 mb-1.5">🔵 Chrome / Edge (cách nhanh nhất)</p>
+                  <p className="font-semibold text-fg-2 mb-1.5">{t('cookie.chromeTitle')}</p>
                   <ol className="space-y-1 text-fg-muted pl-1">
-                    <li><span className="text-fg-muted mr-1.5">1.</span>Cài extension <span className="font-mono bg-surface-2 px-1 rounded text-fg-2">Get cookies.txt LOCALLY</span> từ Chrome Web Store</li>
-                    <li><span className="text-fg-muted mr-1.5">2.</span>Truy cập trang cần tải (YouTube, Instagram…) và <span className="text-fg">đăng nhập tài khoản</span></li>
-                    <li><span className="text-fg-muted mr-1.5">3.</span>Click icon extension → chọn <span className="text-fg font-medium">Export as Netscape</span></li>
-                    <li><span className="text-fg-muted mr-1.5">4.</span>Copy toàn bộ nội dung file <span className="font-mono text-fg-2">.txt</span> → dán vào ô bên dưới</li>
+                    <li><span className="text-fg-muted mr-1.5">1.</span><Trans t={t} i18nKey="cookie.chrome1" components={{ m: <span className="font-mono bg-surface-2 px-1 rounded text-fg-2" /> }} /></li>
+                    <li><span className="text-fg-muted mr-1.5">2.</span><Trans t={t} i18nKey="cookie.chrome2" components={{ b: <span className="text-fg" /> }} /></li>
+                    <li><span className="text-fg-muted mr-1.5">3.</span><Trans t={t} i18nKey="cookie.chrome3" components={{ b: <span className="text-fg font-medium" /> }} /></li>
+                    <li><span className="text-fg-muted mr-1.5">4.</span><Trans t={t} i18nKey="cookie.chrome4" components={{ m: <span className="font-mono text-fg-2" /> }} /></li>
                   </ol>
                 </div>
 
                 {/* Firefox */}
                 <div>
-                  <p className="font-semibold text-fg-2 mb-1.5">🦊 Firefox</p>
+                  <p className="font-semibold text-fg-2 mb-1.5">{t('cookie.firefoxTitle')}</p>
                   <ol className="space-y-1 text-fg-muted pl-1">
-                    <li><span className="text-fg-muted mr-1.5">1.</span>Cài add-on <span className="font-mono bg-surface-2 px-1 rounded text-fg-2">Cookie Quick Manager</span></li>
-                    <li><span className="text-fg-muted mr-1.5">2.</span>Đăng nhập trang cần tải, mở add-on → <span className="text-fg font-medium">Export cookies</span> dạng Netscape</li>
-                    <li><span className="text-fg-muted mr-1.5">3.</span>Dán nội dung vào ô bên dưới</li>
+                    <li><span className="text-fg-muted mr-1.5">1.</span><Trans t={t} i18nKey="cookie.firefox1" components={{ m: <span className="font-mono bg-surface-2 px-1 rounded text-fg-2" /> }} /></li>
+                    <li><span className="text-fg-muted mr-1.5">2.</span><Trans t={t} i18nKey="cookie.firefox2" components={{ b: <span className="text-fg font-medium" /> }} /></li>
+                    <li><span className="text-fg-muted mr-1.5">3.</span>{t('cookie.firefox3')}</li>
                   </ol>
                 </div>
 
                 {/* DevTools */}
                 <div>
-                  <p className="font-semibold text-fg-2 mb-1.5">⚙️ DevTools (không cần extension)</p>
+                  <p className="font-semibold text-fg-2 mb-1.5">{t('cookie.devtoolsTitle')}</p>
                   <ol className="space-y-1 text-fg-muted pl-1">
-                    <li><span className="text-fg-muted mr-1.5">1.</span>Nhấn <span className="font-mono bg-surface-2 px-1 rounded text-fg-2">F12</span> → tab <span className="text-fg">Application</span> (Chrome) hoặc <span className="text-fg">Storage</span> (Firefox)</li>
-                    <li><span className="text-fg-muted mr-1.5">2.</span>Mục <span className="text-fg">Cookies</span> → chọn domain trang</li>
-                    <li><span className="text-fg-muted mr-1.5">3.</span>Dán dạng <span className="font-mono bg-surface-2 px-1 rounded text-fg-2">Name=Value; Name2=Value2</span> (Raw format)</li>
+                    <li><span className="text-fg-muted mr-1.5">1.</span><Trans t={t} i18nKey="cookie.dev1" components={{ m: <span className="font-mono bg-surface-2 px-1 rounded text-fg-2" />, b: <span className="text-fg" /> }} /></li>
+                    <li><span className="text-fg-muted mr-1.5">2.</span><Trans t={t} i18nKey="cookie.dev2" components={{ b: <span className="text-fg" /> }} /></li>
+                    <li><span className="text-fg-muted mr-1.5">3.</span><Trans t={t} i18nKey="cookie.dev3" components={{ m: <span className="font-mono bg-surface-2 px-1 rounded text-fg-2" /> }} /></li>
                   </ol>
                 </div>
 
                 <p className="text-[10px] text-fg-muted border-t border-line pt-2">
-                  ⚠️ Cookie chứa thông tin đăng nhập — chỉ dùng trên thiết bị tin cậy. Không chia sẻ cookie với người khác.
+                  {t('cookie.warning')}
                 </p>
               </div>
             </details>
@@ -2014,7 +2012,7 @@ export default function DashboardContent() {
             <textarea
               value={userCookieText}
               onChange={e => setUserCookieText(e.target.value)}
-              placeholder={"# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t...\n\nhoặc dán Raw: SID=abc123; HSID=def456\nhoặc JSON array: [{\"name\":\"SID\",\"value\":\"abc123\",...}]"}
+              placeholder={t('cookie.placeholder')}
               rows={4}
               className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[11px] text-fg-2 placeholder:text-fg-muted outline-none resize-y focus:border-line focus:ring-1 focus:ring-line-strong"
               spellCheck={false}
@@ -2025,18 +2023,18 @@ export default function DashboardContent() {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3 h-3">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
-                  Cookie sẽ được dùng cho lần tải này
+                  {t('cookie.willUse')}
                 </span>
                 <button
                   type="button"
                   onClick={() => setUserCookieText('')}
                   className="text-[10px] text-fg-muted hover:text-danger transition-colors"
                 >
-                  Xoá cookie
+                  {t('cookie.clear')}
                 </button>
               </div>
             ) : (
-              <p className="text-[10px] text-fg-muted">Hỗ trợ: Netscape (.txt từ extension), JSON array, hoặc Raw cookie string</p>
+              <p className="text-[10px] text-fg-muted">{t('cookie.supported')}</p>
             )}
           </div>
         )}
@@ -2051,13 +2049,13 @@ export default function DashboardContent() {
         {hasSuggestion && !url && clipboardURL && (
           <div className="mt-2 flex items-center gap-2 bg-surface-2 border border-line rounded-lg px-3 py-2">
             <span className="text-xs text-fg-2 flex-1 truncate min-w-0">
-              Dán: {(() => { try { return new URL(clipboardURL).hostname; } catch { return clipboardURL; } })()}...
+              {t('clipboard.pasteLabel')} {(() => { try { return new URL(clipboardURL).hostname; } catch { return clipboardURL; } })()}...
             </span>
             <button
               onClick={() => { setUrl(clipboardURL); clearSuggestion(); }}
               className="text-xs bg-accent text-accent-fg px-2.5 py-1 rounded-lg font-semibold flex-shrink-0"
             >
-              Dán
+              {t('clipboard.paste')}
             </button>
             <button onClick={clearSuggestion} className="text-fg-muted hover:text-fg-muted text-xs flex-shrink-0">✕</button>
           </div>
@@ -2070,12 +2068,12 @@ export default function DashboardContent() {
         <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-surface border border-line animate-in fade-in slide-in-from-top-2 duration-300">
           <Loader2 className="w-4 h-4 text-accent-text animate-spin flex-shrink-0" />
           <p className="flex-1 text-sm font-semibold text-fg-2">
-            {isSpotifyArtist(url) ? 'Đang tải thông tin nghệ sĩ Spotify...' :
-             isSpotifyPlaylistOrAlbum(url) ? 'Đang tải danh sách Spotify...' :
-             isSpotifyTrack(url) ? 'Đang tìm và trích xuất bài nhạc...' :
-             isWatermarkPlatform(url) && removeWatermark ? 'Đang trích xuất TikTok / Douyin — bỏ watermark khi tải xong...' :
-             isWatermarkPlatform(url) ? 'Đang trích xuất TikTok / Douyin...' :
-             'Đang phân tích liên kết và trích xuất...'}
+            {isSpotifyArtist(url) ? t('extracting.spotifyArtist') :
+             isSpotifyPlaylistOrAlbum(url) ? t('extracting.spotifyList') :
+             isSpotifyTrack(url) ? t('extracting.spotifyTrack') :
+             isWatermarkPlatform(url) && removeWatermark ? t('extracting.tiktokNoWatermark') :
+             isWatermarkPlatform(url) ? t('extracting.tiktok') :
+             t('extracting.generic')}
           </p>
           {loadElapsed > 0 && (
             <span className="text-xs text-fg-muted font-mono tabular-nums flex-shrink-0">{loadElapsed}s</span>
@@ -2088,9 +2086,9 @@ export default function DashboardContent() {
         <div className="w-full max-w-3xl mb-4 px-5 py-4 rounded-2xl bg-surface border border-line animate-in fade-in slide-in-from-top-2 duration-300">
           <div className="flex items-center justify-between mb-2 text-sm font-semibold">
             <span className="text-fg-2">
-              {isWatermarkPlatform(url) ? 'Đang tải bản sạch TikTok / Douyin...' :
-               url.includes('spotify') ? 'Đang xử lý nhạc Spotify...' :
-               'Đang tải video...'}
+              {isWatermarkPlatform(url) ? t('progress.tiktokClean') :
+               url.includes('spotify') ? t('progress.spotify') :
+               t('progress.video')}
             </span>
             <span className="text-accent-text tabular-nums">{downloadProgress.percent}%</span>
           </div>
@@ -2107,7 +2105,7 @@ export default function DashboardContent() {
                 : `${downloadProgress.speed_kbps} KB/s`}
             </span>
             <span>
-              {downloadProgress.eta_seconds > 0 && `còn ~${downloadProgress.eta_seconds}s`}
+              {downloadProgress.eta_seconds > 0 && t('progress.eta', { sec: downloadProgress.eta_seconds })}
             </span>
             <span>
               {downloadProgress.total_bytes > 0 && `${(downloadProgress.total_bytes / 1048576).toFixed(1)} MB`}
@@ -2121,9 +2119,7 @@ export default function DashboardContent() {
         <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-card bg-surface border border-line text-fg-2 text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
           <Music className="w-4 h-4 flex-shrink-0 text-accent-text" />
           <span>
-            Nhạc Spotify đơn — sẽ tự động tìm trên YouTube và tải dạng{' '}
-            <strong className="text-fg">MP3 128kbps</strong>.
-            Nhấn <strong className="text-fg">BÓC TÁCH NGAY</strong> để bắt đầu.
+            <Trans t={t} i18nKey="hint.spotifyTrack" components={{ b: <strong className="text-fg" /> }} />
           </span>
         </div>
       )}
@@ -2132,8 +2128,7 @@ export default function DashboardContent() {
         <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-card bg-surface border border-line text-fg-2 text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
           <Music className="w-4 h-4 flex-shrink-0 text-accent-text" />
           <span>
-            Playlist / Album Spotify — sẽ hiển thị danh sách bài nhạc để tải từng bài hoặc tải tất cả dạng{' '}
-            <strong className="text-fg">ZIP MP3</strong>.
+            <Trans t={t} i18nKey="hint.spotifyList" components={{ b: <strong className="text-fg" /> }} />
           </span>
         </div>
       )}
@@ -2143,7 +2138,7 @@ export default function DashboardContent() {
         <div className="w-full max-w-3xl mb-4 flex items-center gap-3 px-5 py-3 rounded-card bg-surface border border-line text-fg-2 text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-300">
           <Sparkles className="w-4 h-4 flex-shrink-0 text-accent-text" />
           <span>
-            <strong className="text-fg">TikTok / Douyin</strong> — {removeWatermark ? 'Tùy chọn bỏ watermark đang bật — sẽ tải bản sạch không logo.' : 'Bật tùy chọn bên dưới để tải bản không watermark / logo.'}
+            <strong className="text-fg">TikTok / Douyin</strong> — {removeWatermark ? t('hint.watermarkOn') : t('hint.watermarkOff')}
           </span>
         </div>
       )}
@@ -2157,11 +2152,11 @@ export default function DashboardContent() {
             </svg>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold leading-snug">
-                {delayedInfo.message || 'Yêu cầu đang xếp hàng chờ xử lý.'}
+                {delayedInfo.message || t('delayed.queued')}
               </p>
               {delayedInfo.estimatedWaitSec && (
                 <p className="text-xs text-accent-text mt-0.5">
-                  Ước tính chờ ~{delayedInfo.estimatedWaitSec}s · Thử lại để kiểm tra trạng thái
+                  {t('delayed.estimate', { sec: delayedInfo.estimatedWaitSec })}
                 </p>
               )}
             </div>
@@ -2170,7 +2165,7 @@ export default function DashboardContent() {
                 onClick={() => { setDelayedInfo(null); handleFetchLink(); }}
                 className="flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg bg-accent-soft hover:bg-accent/20 text-accent-text transition-colors whitespace-nowrap"
               >
-                Thử lại
+                {t('common.retry')}
               </button>
             )}
           </div>
@@ -2188,7 +2183,7 @@ export default function DashboardContent() {
                 onClick={() => { setError(''); handleFetchLink(); }}
                 className="flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg bg-danger-soft hover:bg-danger/20 text-danger transition-colors whitespace-nowrap"
               >
-                Thử lại
+                {t('common.retry')}
               </button>
             )}
           </div>
@@ -2206,21 +2201,21 @@ export default function DashboardContent() {
                 {videoInfo.thumbnail_url ? (
                   <img src={videoInfo.thumbnail_url} alt="Thumbnail" className="w-full h-full object-cover" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-fg-muted text-sm">Không có ảnh</div>
+                  <div className="w-full h-full flex items-center justify-center text-fg-muted text-sm">{t('result.noImage')}</div>
                 )}
               </div>
               <div className="flex-1 text-center sm:text-left min-w-0">
-                <h4 className="text-fg font-bold text-lg md:text-xl line-clamp-3 mb-3 leading-snug">{videoInfo.title || 'Video tải về'}</h4>
+                <h4 className="text-fg font-bold text-lg md:text-xl line-clamp-3 mb-3 leading-snug">{videoInfo.title || t('result.defaultTitle')}</h4>
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-xs font-medium text-fg-2">
                   <span className="bg-surface border border-line px-3 py-1.5 rounded-lg flex items-center gap-1.5">
                     <Link2 className="w-3.5 h-3.5" /> {(() => {
                       try { return new URL(videoInfo.original_url || url).hostname.replace('www.',''); }
-                      catch { return 'Liên kết'; }
+                      catch { return t('result.link'); }
                     })()}
                   </span>
                   {isWatermarkPlatform(videoInfo.original_url || url) && removeWatermark && (
                     <span className="bg-success-soft border border-success/30 text-success px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                      <Sparkles className="w-3 h-3" /> Không watermark
+                      <Sparkles className="w-3 h-3" /> {t('result.noWatermark')}
                     </span>
                   )}
                   {videoInfo.duration > 0 && (
@@ -2261,9 +2256,9 @@ export default function DashboardContent() {
             {/* ── Subtitle (.srt) download ───────────────────── */}
             {videoInfo.available_subtitle_languages?.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 mb-4 text-xs">
-                <span className="font-semibold text-fg-2">Phụ đề</span>
+                <span className="font-semibold text-fg-2">{t('result.subtitles')}</span>
                 <select
-                  aria-label="Ngôn ngữ phụ đề"
+                  aria-label={t('result.subtitleLang')}
                   value={srtLang && videoInfo.available_subtitle_languages.includes(srtLang)
                     ? srtLang
                     : (['vi', 'en'].find(l => videoInfo.available_subtitle_languages.includes(l)) || videoInfo.available_subtitle_languages[0])}
@@ -2281,7 +2276,7 @@ export default function DashboardContent() {
                   className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-surface text-fg-2 border border-line hover:border-accent/40 hover:text-accent-text transition-all disabled:opacity-60"
                 >
                   {srtBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                  {srtBusy ? 'Đang tải phụ đề...' : 'Tải phụ đề (.srt)'}
+                  {srtBusy ? t('toast.subsDownloading') : t('result.downloadSrt')}
                 </button>
               </div>
             )}
@@ -2299,7 +2294,7 @@ export default function DashboardContent() {
                   }`}
                 >
                   {showPreview ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                  {showPreview ? 'Ẩn xem trước' : 'Xem trước'}
+                  {showPreview ? t('tools.hidePreview') : t('tools.preview')}
                 </button>
               )}
 
@@ -2310,7 +2305,7 @@ export default function DashboardContent() {
                   className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-surface text-fg-2 border border-line hover:border-line hover:text-fg-2 transition-all"
                 >
                   <ImageDown className="w-3.5 h-3.5" />
-                  Tải ảnh bìa
+                  {t('tools.cover')}
                 </button>
               )}
 
@@ -2325,7 +2320,7 @@ export default function DashboardContent() {
                   }`}
                 >
                   <Scissors className="w-3.5 h-3.5" />
-                  Cắt đoạn
+                  {t('tools.trim')}
                 </button>
               )}
 
@@ -2340,7 +2335,7 @@ export default function DashboardContent() {
                   }`}
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  Tạo GIF
+                  {t('tools.gif')}
                 </button>
               )}
 
@@ -2355,7 +2350,7 @@ export default function DashboardContent() {
                   }`}
                 >
                   <Eraser className="w-3.5 h-3.5" />
-                  Xoá Logo
+                  {t('tools.removeLogo')}
                   <span className="bg-accent text-accent-fg text-xs px-1 rounded font-bold leading-tight">PRO</span>
                 </button>
               )}
@@ -2370,7 +2365,7 @@ export default function DashboardContent() {
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                Ghép Video
+                {t('tools.merge')}
               </button>
 
               {/* Watermark Embed */}
@@ -2384,7 +2379,7 @@ export default function DashboardContent() {
                   }`}
                 >
                   <Stamp className="w-3.5 h-3.5" />
-                  Thêm Watermark
+                  {t('tools.addWatermark')}
                 </button>
               )}
 
@@ -2412,7 +2407,7 @@ export default function DashboardContent() {
                   className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-surface text-fg-2 border border-line hover:border-line hover:text-fg-2 transition-all"
                 >
                   <Upload className="w-3.5 h-3.5" />
-                  Lưu Cloud
+                  {t('tools.saveCloud')}
                   <span className="bg-accent text-accent-fg text-xs px-1 rounded font-bold leading-tight">PRO</span>
                 </button>
                 {showCloudMenu && (
@@ -2477,7 +2472,7 @@ export default function DashboardContent() {
                 <div className="flex items-center justify-between mb-3">
                   <h5 className="text-fg font-bold text-sm flex items-center gap-2">
                     <Scissors className="w-4 h-4 text-accent-text" />
-                    Cắt đoạn Video / Nhạc
+                    {t('trim.title')}
                   </h5>
                   <button onClick={() => setShowTrimmer(false)} className="text-fg-muted hover:text-fg transition-colors">
                     <X className="w-4 h-4" />
@@ -2489,7 +2484,7 @@ export default function DashboardContent() {
                   <span className="bg-canvas px-3 py-1.5 rounded-lg text-success font-mono font-bold border border-line">
                     {formatTime(trimStart)}
                   </span>
-                  <span className="text-fg-muted text-xs">→ Thời lượng: {formatTime(trimEnd - trimStart)}</span>
+                  <span className="text-fg-muted text-xs">{t('trim.duration', { time: formatTime(trimEnd - trimStart) })}</span>
                   <span className="bg-canvas px-3 py-1.5 rounded-lg text-accent-text font-mono font-bold border border-line">
                     {formatTime(trimEnd)}
                   </span>
@@ -2498,7 +2493,7 @@ export default function DashboardContent() {
                 {/* Range Sliders */}
                 <div className="space-y-3 mb-4">
                   <div>
-                    <label className="text-xs text-fg-muted font-medium mb-1 block">Bắt đầu</label>
+                    <label className="text-xs text-fg-muted font-medium mb-1 block">{t('trim.start')}</label>
                     <input
                       type="range"
                       min={0}
@@ -2513,7 +2508,7 @@ export default function DashboardContent() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-fg-muted font-medium mb-1 block">Kết thúc</label>
+                    <label className="text-xs text-fg-muted font-medium mb-1 block">{t('trim.end')}</label>
                     <input
                       type="range"
                       min={0}
@@ -2537,14 +2532,14 @@ export default function DashboardContent() {
                       onClick={() => { setTrimStart(0); setTrimEnd(Math.min(sec, videoInfo.duration)); }}
                       className="px-3 py-1.5 rounded-lg text-xs font-bold bg-surface-2 text-fg-2 border border-line-strong hover:border-accent/40 hover:text-accent-text transition-all"
                     >
-                      {sec}s đầu
+                      {t('trim.firstSec', { sec })}
                     </button>
                   ))}
                   <button
                     onClick={() => { setTrimStart(0); setTrimEnd(videoInfo.duration); }}
                     className="px-3 py-1.5 rounded-lg text-xs font-bold bg-surface-2 text-fg-2 border border-line-strong hover:border-success/40 hover:text-success transition-all"
                   >
-                    Toàn bộ
+                    {t('trim.whole')}
                   </button>
                 </div>
 
@@ -2555,7 +2550,7 @@ export default function DashboardContent() {
                   className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-accent text-accent-fg font-bold text-sm shadow-lg hover:shadow-xl transition-all active:scale-[0.98] border border-transparent disabled:bg-surface-2 disabled:text-fg-muted disabled:border disabled:border-line disabled:shadow-none disabled:cursor-not-allowed"
                 >
                   {isTrimming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
-                  {isTrimming ? 'Đang cắt và xử lý...' : `Cắt & Tải về (${formatTime(trimStart)} → ${formatTime(trimEnd)})`}
+                  {isTrimming ? t('trim.processing') : t('trim.action', { from: formatTime(trimStart), to: formatTime(trimEnd) })}
                 </button>
               </div>
             )}
@@ -2566,7 +2561,7 @@ export default function DashboardContent() {
                 <div className="flex items-center justify-between mb-3">
                   <h5 className="text-fg font-bold text-sm flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-fg-2" />
-                    Chuyển đổi sang GIF
+                    {t('gif.title')}
                   </h5>
                   <button onClick={() => setShowGifPanel(false)} className="text-fg-muted hover:text-fg transition-colors">
                     <X className="w-4 h-4" />
@@ -2576,18 +2571,18 @@ export default function DashboardContent() {
                 {/* Time range */}
                 <div className="flex items-center justify-between mb-2 text-sm">
                   <span className="bg-canvas px-3 py-1.5 rounded-lg text-fg-2 font-mono font-bold border border-line">{formatTime(gifStart)}</span>
-                  <span className="text-fg-muted text-xs">→ {formatTime(gifEnd - gifStart)} (tối đa 30s)</span>
+                  <span className="text-fg-muted text-xs">{t('gif.duration', { time: formatTime(gifEnd - gifStart) })}</span>
                   <span className="bg-canvas px-3 py-1.5 rounded-lg text-accent-text font-mono font-bold border border-line">{formatTime(gifEnd)}</span>
                 </div>
                 <div className="space-y-2 mb-4">
                   <div>
-                    <label className="text-xs text-fg-muted font-medium mb-1 block">Bắt đầu</label>
+                    <label className="text-xs text-fg-muted font-medium mb-1 block">{t('trim.start')}</label>
                     <input type="range" min={0} max={videoInfo.duration} step={1} value={gifStart}
                       onChange={e => { const v = Number(e.target.value); if (v < gifEnd) setGifStart(v); }}
                       className="w-full accent-accent h-2 bg-surface-2 rounded-full cursor-pointer" />
                   </div>
                   <div>
-                    <label className="text-xs text-fg-muted font-medium mb-1 block">Kết thúc (tối đa +30s)</label>
+                    <label className="text-xs text-fg-muted font-medium mb-1 block">{t('gif.endMax')}</label>
                     <input type="range" min={0} max={videoInfo.duration} step={1} value={gifEnd}
                       onChange={e => { const v = Number(e.target.value); if (v > gifStart && v - gifStart <= 30) setGifEnd(v); }}
                       className="w-full accent-accent h-2 bg-surface-2 rounded-full cursor-pointer" />
@@ -2597,7 +2592,7 @@ export default function DashboardContent() {
                 {/* GIF options */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <div>
-                    <label className="text-xs text-fg-muted font-medium mb-1 block">Chiều rộng (px)</label>
+                    <label className="text-xs text-fg-muted font-medium mb-1 block">{t('gif.width')}</label>
                     <div className="flex flex-wrap gap-1">
                       {[320, 480, 640, 1080].map(w => (
                         <button key={w} onClick={() => setGifWidth(w)}
@@ -2623,7 +2618,7 @@ export default function DashboardContent() {
                 <button onClick={handleConvertGif} disabled={isConverting || gifEnd <= gifStart || gifEnd - gifStart > 30}
                   className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-accent text-accent-fg font-bold text-sm shadow-lg transition-all active:scale-[0.98] border border-transparent disabled:bg-surface-2 disabled:text-fg-muted disabled:border disabled:border-line disabled:shadow-none disabled:cursor-not-allowed">
                   {isConverting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                  {isConverting ? 'Đang tạo GIF...' : `Tạo GIF · ${gifWidth}px · ${gifFps}fps · ${formatTime(gifEnd - gifStart)}`}
+                  {isConverting ? t('gif.creating') : t('gif.action', { width: gifWidth, fps: gifFps, time: formatTime(gifEnd - gifStart) })}
                 </button>
               </div>
             )}
@@ -2635,8 +2630,8 @@ export default function DashboardContent() {
                   <h5 className="text-fg font-bold text-sm flex items-center gap-2">
                     <Eraser className="w-4 h-4 text-fg-2" />
                     Logo Inpaint
-                    <span className="px-2 py-0.5 rounded-full text-xs bg-surface-2 text-fg-2 border border-line font-semibold">Thử nghiệm</span>
-                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-surface-2 text-fg-muted border border-line-strong font-medium">Chỉ web</span>
+                    <span className="px-2 py-0.5 rounded-full text-xs bg-surface-2 text-fg-2 border border-line font-semibold">{t('inpaint.experimental')}</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-surface-2 text-fg-muted border border-line-strong font-medium">{t('inpaint.webOnly')}</span>
                   </h5>
                   <button onClick={() => setShowInpaint(false)} className="text-fg-muted hover:text-fg transition-colors">
                     <X className="w-4 h-4" />
@@ -2647,26 +2642,26 @@ export default function DashboardContent() {
                 <div className="mb-3 px-3 py-2.5 rounded-xl bg-surface-2 border border-line space-y-1">
                   <p className="text-fg-2 font-semibold text-xs flex items-center gap-1.5">
                     <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                    Logo Inpaint (Experimental) — đọc trước khi dùng
+                    {t('inpaint.disclosureTitle')}
                   </p>
-                  <p className="text-fg-muted text-xs">• Kết quả thực nghiệm có thể chứa nhiễu hình ảnh.</p>
-                  <p className="text-fg-muted text-xs">• Chỉ sử dụng với nội dung bạn có quyền chỉnh sửa.</p>
-                  <p className="text-fg-muted text-xs">• Chất lượng phụ thuộc vào nội dung và chuyển động trong video.</p>
-                  <p className="text-fg-muted text-xs">• Tính năng này không hoạt động tự động — bạn phải xác nhận từng bước.</p>
+                  <p className="text-fg-muted text-xs">{t('inpaint.note1')}</p>
+                  <p className="text-fg-muted text-xs">{t('inpaint.note2')}</p>
+                  <p className="text-fg-muted text-xs">{t('inpaint.note3')}</p>
+                  <p className="text-fg-muted text-xs">{t('inpaint.note4')}</p>
                 </div>
 
                 {/* Loading init */}
                 {inpaintLoading && inpaintStep === 'region' && (
                   <div className="flex flex-col items-center gap-3 py-6">
                     <Loader2 className="w-8 h-8 text-fg-2 animate-spin" />
-                    <p className="text-fg-muted text-sm">Đang tải khung hình...</p>
+                    <p className="text-fg-muted text-sm">{t('inpaint.loadingFrame')}</p>
                   </div>
                 )}
 
                 {/* Step 1: Region select */}
                 {!inpaintLoading && inpaintStep === 'region' && inpaintFrameUrl && (
                   <div>
-                    <p className="text-fg-muted text-xs mb-3">Chọn vị trí logo cần xoá:</p>
+                    <p className="text-fg-muted text-xs mb-3">{t('inpaint.chooseRegion')}</p>
                     {/* Preview frame */}
                     <div className="relative mb-3 rounded-xl overflow-hidden border border-line bg-black">
                       <img src={inpaintFrameUrl} alt="preview frame" className="w-full max-h-[220px] object-contain" />
@@ -2678,7 +2673,7 @@ export default function DashboardContent() {
                       )}
                     </div>
                     {/* Preset buttons */}
-                    <p className="text-xs text-fg-muted mb-2">Vị trí logo thường gặp:</p>
+                    <p className="text-xs text-fg-muted mb-2">{t('inpaint.commonPositions')}</p>
                     <div className="grid grid-cols-2 gap-2 mb-3">
                       {INPAINT_PRESETS.map(preset => (
                         <button
@@ -2701,7 +2696,7 @@ export default function DashboardContent() {
                       className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm shadow transition-all active:scale-[0.98] border border-transparent disabled:bg-surface-2 disabled:text-fg-muted disabled:border disabled:border-line disabled:shadow-none disabled:cursor-not-allowed"
                     >
                       <ZoomIn className="w-4 h-4" />
-                      Xem trước kết quả
+                      {t('inpaint.previewResult')}
                     </button>
                   </div>
                 )}
@@ -2712,10 +2707,10 @@ export default function DashboardContent() {
                     {inpaintPreviewResult.recommend_crop && (
                       <div className="mb-3 px-3 py-2 rounded-xl bg-accent-soft border border-accent/30 text-accent-text text-xs font-semibold flex items-center gap-2">
                         <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                        Kết quả xem trước chưa mịn — hãy thử crop vùng logo sẽ sạch hơn.
+                        {t('inpaint.previewRough')}
                       </div>
                     )}
-                    <p className="text-fg-muted text-xs mb-2">Xem trước (nhanh):</p>
+                    <p className="text-fg-muted text-xs mb-2">{t('inpaint.quickPreview')}</p>
                     <div className="rounded-xl overflow-hidden border border-line bg-black mb-3">
                       <img
                         src={`${API_BASE}${inpaintPreviewResult.preview_clean_url || `/api/v1/flow-cleanup/preview-clean/${inpaintTempId}`}`}
@@ -2728,14 +2723,14 @@ export default function DashboardContent() {
                         onClick={() => { setInpaintStep('region'); setInpaintPixelRegion(null); setInpaintPreviewResult(null); }}
                         className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-surface-2 text-fg-2 border border-line-strong hover:bg-line transition-all"
                       >
-                        Chọn lại vùng
+                        {t('inpaint.reselect')}
                       </button>
                       <button
                         onClick={handleInpaintProcess}
                         className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold bg-accent text-accent-fg shadow transition-all active:scale-[0.98]"
                       >
                         <Eraser className="w-4 h-4" />
-                        Xử lý toàn video
+                        {t('inpaint.processAll')}
                       </button>
                     </div>
                   </div>
@@ -2745,7 +2740,7 @@ export default function DashboardContent() {
                 {inpaintStep === 'preview' && inpaintLoading && (
                   <div className="flex flex-col items-center gap-3 py-6">
                     <Loader2 className="w-8 h-8 text-fg-2 animate-spin" />
-                    <p className="text-fg-muted text-sm">Đang tạo xem trước...</p>
+                    <p className="text-fg-muted text-sm">{t('inpaint.creatingPreview')}</p>
                   </div>
                 )}
 
@@ -2753,9 +2748,9 @@ export default function DashboardContent() {
                 {inpaintStep === 'processing' && (
                   <div className="flex flex-col items-center gap-3 py-6">
                     <Loader2 className="w-10 h-10 text-fg-2 animate-spin" />
-                    <p className="text-fg font-semibold text-sm">Đang xoá logo toàn video...</p>
-                    <p className="text-fg-muted text-xs text-center">Sử dụng SHIFTMAP motion-aware — có thể mất vài phút tùy độ dài video.</p>
-                    <p className="text-fg-muted text-xs text-center">Khuyến nghị: clip dưới 5 phút · file dưới 500 MB · tối đa 1080p</p>
+                    <p className="text-fg font-semibold text-sm">{t('inpaint.removing')}</p>
+                    <p className="text-fg-muted text-xs text-center">{t('inpaint.shiftmap')}</p>
+                    <p className="text-fg-muted text-xs text-center">{t('inpaint.recommend')}</p>
                   </div>
                 )}
 
@@ -2763,23 +2758,23 @@ export default function DashboardContent() {
                 {inpaintStep === 'done' && (
                   <div className="flex flex-col items-center gap-3 py-4">
                     <CheckCircle2 className="w-10 h-10 text-success" />
-                    <p className="text-fg font-semibold text-sm">Xoá logo thành công!</p>
+                    <p className="text-fg font-semibold text-sm">{t('inpaint.success')}</p>
                     <div className="w-full px-3 py-2 rounded-xl bg-surface-2 border border-line-strong text-xs text-fg-muted space-y-0.5">
-                      <p><span className="text-fg-2 font-semibold">Nguồn:</span> {videoInfo?.title || 'video gốc'}</p>
-                      <p><span className="text-fg-2 font-semibold">Đầu ra:</span> video đã xoá logo (file mới, không ghi đè bản gốc)</p>
+                      <p><span className="text-fg-2 font-semibold">{t('inpaint.source')}</span> {videoInfo?.title || t('inpaint.originalVideo')}</p>
+                      <p><span className="text-fg-2 font-semibold">{t('inpaint.output')}</span> {t('inpaint.outputValue')}</p>
                     </div>
                     <button
                       onClick={handleInpaintDownload}
                       className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm shadow transition-all active:scale-[0.98]"
                     >
                       <Download className="w-4 h-4" />
-                      Tải video đã xoá logo
+                      {t('inpaint.downloadResult')}
                     </button>
                     <button
                       onClick={() => { setInpaintStep('region'); setInpaintPreset(null); setInpaintPixelRegion(null); setInpaintPreviewResult(null); setInpaintFinalUrl(null); }}
                       className="text-xs text-fg-muted hover:text-fg transition-colors"
                     >
-                      Xoá vùng khác
+                      {t('inpaint.removeOther')}
                     </button>
                   </div>
                 )}
@@ -2788,12 +2783,12 @@ export default function DashboardContent() {
                 {inpaintStep === 'error' && (
                   <div className="flex flex-col items-center gap-3 py-4">
                     <XCircle className="w-8 h-8 text-danger" />
-                    <p className="text-danger text-sm font-semibold text-center">{inpaintError || 'Xử lý thất bại.'}</p>
+                    <p className="text-danger text-sm font-semibold text-center">{inpaintError || t('errors.processFailed')}</p>
                     <button
                       onClick={() => { setInpaintStep('region'); setInpaintError(''); }}
                       className="px-5 py-2 rounded-xl text-sm font-bold bg-surface-2 text-fg-2 border border-line-strong hover:bg-line transition-all"
                     >
-                      Thử lại
+                      {t('common.retry')}
                     </button>
                   </div>
                 )}
@@ -2804,10 +2799,10 @@ export default function DashboardContent() {
             {showMerge && (
               <div className="mt-4 p-4 rounded-xl bg-surface-2 border border-line">
                 <h3 className="text-sm font-bold text-fg-2 mb-3 flex items-center gap-2">
-                  <Layers className="w-4 h-4" /> Ghép Video (2–5 clip)
+                  <Layers className="w-4 h-4" /> {t('merge.title')}
                 </h3>
                 <p className="text-xs text-fg-muted mb-3">
-                  Nhập Job ID (từ trang Lịch sử) mỗi dòng một ID hoặc cách nhau bằng dấu phẩy. Tối đa 5 clip, tổng thời lượng ≤30 phút.
+                  {t('merge.help')}
                 </p>
                 <textarea
                   value={mergeJobIds}
@@ -2819,13 +2814,13 @@ export default function DashboardContent() {
                 {mergeError && <p className="text-xs text-danger mb-2">{mergeError}</p>}
                 {mergeResult && (
                   <div className="mb-3 p-3 rounded-lg bg-surface-2 border border-line">
-                    <p className="text-xs text-fg-2 font-semibold mb-1">Ghep thanh cong!</p>
+                    <p className="text-xs text-fg-2 font-semibold mb-1">{t('merge.success')}</p>
                     <p className="text-xs text-fg-muted">{mergeResult.title} · {Math.round(mergeResult.duration_seconds)}s · {mergeResult.file_size_mb?.toFixed(1)} MB</p>
                     <button
                       onClick={handleMergeClipsDownload}
                       className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-2 text-fg-2 text-xs font-bold hover:bg-line transition-colors cursor-pointer"
                     >
-                      <Download className="w-3.5 h-3.5" /> Tai video da ghep
+                      <Download className="w-3.5 h-3.5" /> {t('merge.download')}
                     </button>
                   </div>
                 )}
@@ -2835,7 +2830,7 @@ export default function DashboardContent() {
                   className="px-4 py-2 rounded-xl bg-surface-2 text-fg-2 text-xs font-bold border border-line hover:bg-line transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {mergeLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  {mergeLoading ? 'Dang ghep...' : 'Ghep ngay'}
+                  {mergeLoading ? t('merge.merging') : t('merge.mergeNow')}
                 </button>
               </div>
             )}
@@ -2844,17 +2839,17 @@ export default function DashboardContent() {
             {showWatermark && localFileId(videoInfo) && !videoInfo?.is_audio_only && (
               <div className="mt-4 p-4 rounded-xl bg-accent-soft border border-accent/20">
                 <h3 className="text-sm font-bold text-accent-text mb-3 flex items-center gap-2">
-                  <Stamp className="w-4 h-4" /> Them Watermark vao Video
+                  <Stamp className="w-4 h-4" /> {t('watermark.title')}
                 </h3>
 
                 {/* Type toggle */}
                 <div className="flex gap-2 mb-3">
-                  {['text', 'image'].map(t => (
-                    <button key={t} onClick={() => setWmType(t)}
+                  {['text', 'image'].map(kind => (
+                    <button key={kind} onClick={() => setWmType(kind)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
-                        wmType === t ? 'bg-accent-soft text-accent-text border-accent/40' : 'bg-surface text-fg-muted border-line hover:text-fg-2'
+                        wmType === kind ? 'bg-accent-soft text-accent-text border-accent/40' : 'bg-surface text-fg-muted border-line hover:text-fg-2'
                       }`}
-                    >{t === 'text' ? 'Chu' : 'Anh'}</button>
+                    >{kind === 'text' ? t('watermark.typeText') : t('watermark.typeImage')}</button>
                   ))}
                 </div>
 
@@ -2862,11 +2857,11 @@ export default function DashboardContent() {
                 {wmType === 'text' && (
                   <div className="space-y-2 mb-3">
                     <input value={wmText} onChange={e => setWmText(e.target.value)}
-                      placeholder="Noi dung watermark..."
+                      placeholder={t('watermark.textPlaceholder')}
                       className="w-full bg-surface-2 border border-line rounded-lg px-3 py-2 text-xs text-fg-2 placeholder:text-fg-muted focus:outline-none focus:border-accent/50"
                     />
                     <div className="flex gap-2 items-center">
-                      <label className="text-xs text-fg-muted">Co chu:</label>
+                      <label className="text-xs text-fg-muted">{t('watermark.fontSize')}</label>
                       <input type="number" value={wmFontSize} onChange={e => setWmFontSize(+e.target.value)}
                         min={12} max={72} className="w-16 bg-surface-2 border border-line rounded px-2 py-1 text-xs text-fg-2 focus:outline-none"
                       />
@@ -2880,25 +2875,25 @@ export default function DashboardContent() {
                     <input type="file" accept="image/png" onChange={handleWmImageUpload}
                       className="text-xs text-fg-muted file:mr-2 file:px-3 file:py-1 file:rounded-lg file:bg-accent-soft file:text-accent-text file:border-0 file:text-xs file:cursor-pointer cursor-pointer"
                     />
-                    {wmImageB64 && <p className="text-xs text-success mt-1">Anh da tai len</p>}
-                    <p className="text-[10px] text-fg-muted mt-1">PNG · toi da 200KB</p>
+                    {wmImageB64 && <p className="text-xs text-success mt-1">{t('watermark.imageUploaded')}</p>}
+                    <p className="text-[10px] text-fg-muted mt-1">{t('watermark.pngMax')}</p>
                   </div>
                 )}
 
                 {/* Position + opacity */}
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   <div>
-                    <label className="text-[10px] text-fg-muted uppercase mb-1 block">Vi tri</label>
+                    <label className="text-[10px] text-fg-muted uppercase mb-1 block">{t('watermark.position')}</label>
                     <select value={wmPosition} onChange={e => setWmPosition(e.target.value)}
                       className="w-full bg-surface-2 border border-line rounded-lg px-2 py-1.5 text-xs text-fg-2 focus:outline-none"
                     >
-                      {[['bottom-right','Goc duoi phai'],['bottom-left','Goc duoi trai'],
-                        ['top-right','Goc tren phai'],['top-left','Goc tren trai'],
-                        ['center','Giua']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                      {[['bottom-right', t('watermark.posBottomRight')],['bottom-left', t('watermark.posBottomLeft')],
+                        ['top-right', t('watermark.posTopRight')],['top-left', t('watermark.posTopLeft')],
+                        ['center', t('watermark.posCenter')]].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="text-[10px] text-fg-muted uppercase mb-1 block">Do trong ({Math.round(wmOpacity*100)}%)</label>
+                    <label className="text-[10px] text-fg-muted uppercase mb-1 block">{t('watermark.opacity', { percent: Math.round(wmOpacity*100) })}</label>
                     <input type="range" min={0.1} max={1} step={0.05} value={wmOpacity}
                       onChange={e => setWmOpacity(+e.target.value)}
                       className="w-full accent-accent"
@@ -2910,21 +2905,21 @@ export default function DashboardContent() {
 
                 {wmPreviewUrl && (
                   <div className="mb-3 p-2 rounded-lg bg-accent-soft border border-accent/20">
-                    <p className="text-xs text-accent-text mb-1 font-semibold">Xem truoc (3 giay dau):</p>
+                    <p className="text-xs text-accent-text mb-1 font-semibold">{t('watermark.previewLabel')}</p>
                     <video src={wmPreviewUrl} controls className="w-full rounded max-h-32" />
                   </div>
                 )}
 
                 {wmResult && (
                   <div className="mb-3 p-3 rounded-lg bg-success-soft border border-success/30">
-                    <p className="text-xs text-success font-semibold mb-1">Render thanh cong!</p>
+                    <p className="text-xs text-success font-semibold mb-1">{t('watermark.success')}</p>
                     <p className="text-xs text-fg-muted">{wmResult.file_size_mb?.toFixed(1)} MB</p>
                     <a
                       href={localDownloadUrl(API_BASE, wmResult.output_file_id || toFileId(wmResult.output_path), 'watermarked.mp4')}
                       download="watermarked.mp4"
                       className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success-soft text-success text-xs font-bold hover:bg-success/20 transition-colors"
                     >
-                      <Download className="w-3.5 h-3.5" /> Tai video da watermark
+                      <Download className="w-3.5 h-3.5" /> {t('watermark.download')}
                     </a>
                   </div>
                 )}
@@ -2934,12 +2929,12 @@ export default function DashboardContent() {
                     className="px-3 py-1.5 rounded-lg bg-surface-2 text-fg-2 text-xs font-semibold border border-line-strong hover:bg-line transition-colors cursor-pointer disabled:opacity-50"
                   >
                     {wmLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1" /> : null}
-                    Xem truoc
+                    {t('watermark.preview')}
                   </button>
                   <button onClick={() => handleWatermarkRender(false)} disabled={wmLoading}
                     className="px-4 py-1.5 rounded-lg bg-accent-soft text-accent-text text-xs font-bold border border-accent/30 hover:bg-accent/20 transition-colors cursor-pointer disabled:opacity-50"
                   >
-                    {wmLoading ? 'Dang render...' : 'Render day du'}
+                    {wmLoading ? t('watermark.rendering') : t('watermark.renderFull')}
                   </button>
                 </div>
               </div>
@@ -2973,7 +2968,7 @@ export default function DashboardContent() {
                         {downloadingChapter === ch.title
                           ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                           : <Download className="w-3.5 h-3.5" />}
-                        Tải
+                        {t('chapters.download')}
                       </button>
                     </div>
                   ))}
@@ -3025,7 +3020,7 @@ export default function DashboardContent() {
                     onClick={() => setFormatTab('audio')}
                     className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${formatTab === 'audio' ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg'}`}
                   >
-                    <Music className="w-4 h-4" /> Âm thanh ({audioFormats.length})
+                    <Music className="w-4 h-4" /> {t('format.audioTab', { count: audioFormats.length })}
                   </button>
                 </div>
 
@@ -3044,7 +3039,7 @@ export default function DashboardContent() {
                               <Video className="w-5 h-5 text-success" />
                               <div className="text-left">
                                 {/* wording: BA review */}
-                                <span className="text-sm font-bold">Đã tải: {downloadedLabel}{downloadedUniversal ? ' · Mọi máy' : ''}</span>
+                                <span className="text-sm font-bold">{downloadedUniversal ? t('format.downloadedAll', { label: downloadedLabel }) : t('format.downloaded', { label: downloadedLabel })}</span>
                                 {videoInfo.file_size_mb > 0 && <p className="text-xs text-fg-muted mt-0.5">{videoInfo.file_size_mb.toFixed(1)} MB</p>}
                               </div>
                             </div>
@@ -3066,10 +3061,10 @@ export default function DashboardContent() {
                             <div className="text-left">
                               <div className="flex items-center gap-2">
                                 <ResBadge label={maxMergeHeight >= 2160 ? '4K' : maxMergeHeight >= 1440 ? '2K' : `${maxMergeHeight}p`} height={maxMergeHeight} />
-                                <span className="text-sm font-bold">Chất lượng cao nhất</span>
+                                <span className="text-sm font-bold">{t('format.best')}</span>
                                 <span className="bg-accent text-accent-fg text-xs px-1 rounded font-bold">PRO</span>
                               </div>
-                              <p className="text-xs text-fg-muted mt-0.5">Video + Audio ghép • Cần xử lý</p>
+                              <p className="text-xs text-fg-muted mt-0.5">{t('format.bestNote')}</p>
                             </div>
                           </div>
                           {downloadingId === 'merge_4k' ? <Loader2 className="w-5 h-5 animate-spin text-accent-text" /> : <Download className="w-5 h-5 text-accent-text group-hover:scale-110 transition-transform" />}
@@ -3103,7 +3098,7 @@ export default function DashboardContent() {
                                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-surface-2 text-fg-2 border border-line">
                                     <Lock className="w-3 h-3" aria-hidden="true" />
                                     {/* wording: BA review */}
-                                    {fmt.locked === 'signin' ? 'Đăng nhập để tải' : 'Nâng cấp để tải'}
+                                    {fmt.locked === 'signin' ? t('format.signInToDownload') : t('format.upgradeToDownload')}
                                   </span>
                                 )}
                                 {!(fmt.height > 0) && (() => {
@@ -3112,7 +3107,7 @@ export default function DashboardContent() {
                                     const codec = CODEC_NAMES[String(m.vcodec || '').toLowerCase()];
                                     return (
                                       <>
-                                        <span className="text-sm font-bold" title={`${m.width}×${m.height} (đo thực tế)`}>{measuredResLabel(m)}</span>
+                                        <span className="text-sm font-bold" title={t('format.measured', { width: m.width, height: m.height })}>{measuredResLabel(m)}</span>
                                         {codec && <span className="text-[10px] font-mono text-fg-muted">{codec}</span>}
                                       </>
                                     );
@@ -3124,7 +3119,7 @@ export default function DashboardContent() {
                                 <span className="text-xs text-fg-muted uppercase">{fmt.ext}</span>
                                 {fmt.recommended && (
                                   <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-accent-soft text-accent-text border border-accent/30">
-                                    ✓ MỌI THIẾT BỊ
+                                    {t('format.allDevicesBadge')}
                                   </span>
                                 )}
                                 {fmt.universal === false && (
@@ -3134,29 +3129,29 @@ export default function DashboardContent() {
                                 )}
                                 {isAlreadyDownloaded ? (
                                   <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-success-soft text-success border border-success/30">
-                                    SẴN SÀNG
+                                    {t('format.readyBadge')}
                                   </span>
                                 ) : fmt.requires_merge && (
                                   <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-surface-2 text-fg-2 border border-line">
-                                    GHÉP TỆP
+                                    {t('format.mergeBadge')}
                                   </span>
                                 )}
                                 {fmt.label?.includes('No Watermark') && (
                                   <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-success-soft text-success border border-success/30">
-                                    KHÔNG LOGO
+                                    {t('format.noLogoBadge')}
                                   </span>
                                 )}
                                 {/* Legacy label from cached results; TikWM now labels it "Có logo". */}
                                 {fmt.label?.includes('With Watermark') && (
                                   <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-warning-soft text-warning border border-warning/30">
-                                    CÓ LOGO
+                                    {t('format.withLogoBadge')}
                                   </span>
                                 )}
                               </div>
-                              {displaySize > 0 && <p className="text-xs text-fg-muted mt-0.5">{fmt.size_estimated && !isAlreadyDownloaded ? '~' : ''}{displaySize.toFixed(1)} MB{isAlreadyDownloaded ? ' (đã tải)' : ''}</p>}
+                              {displaySize > 0 && <p className="text-xs text-fg-muted mt-0.5">{fmt.size_estimated && !isAlreadyDownloaded ? '~' : ''}{displaySize.toFixed(1)} MB{isAlreadyDownloaded ? t('format.alreadyDownloaded') : ''}</p>}
                               {fmt.universal === false && (
                                 // wording: BA review
-                                <p className="text-[11px] text-accent-text mt-0.5" title="Nếu máy không phát được, mở bằng VLC (miễn phí, mọi nền tảng)">Nét hơn · có thể không mở được trên máy cũ</p>
+                                <p className="text-[11px] text-accent-text mt-0.5" title={t('format.vp9Title')}>{t('format.vp9Note')}</p>
                               )}
                             </div>
                           </div>
@@ -3170,9 +3165,9 @@ export default function DashboardContent() {
 
                       {otherVideoFormats.length === 0 && !showMergeOption && !hasDownloadedItem && (
                         <div className="text-center py-6 text-fg-muted text-sm">
-                          Không tìm thấy định dạng video riêng lẻ.
+                          {t('format.noVideoFormats')}
                           <button onClick={handleDefaultDownload} className="block mx-auto mt-3 px-6 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm">
-                            <Download className="w-4 h-4 inline mr-1.5" />Tải video mặc định
+                            <Download className="w-4 h-4 inline mr-1.5" />{t('format.downloadDefault')}
                           </button>
                         </div>
                       )}
@@ -3192,14 +3187,14 @@ export default function DashboardContent() {
                             <Music className="w-5 h-5 text-fg-2" />
                             <div className="text-left">
                               <div className="flex items-center gap-2 mb-1">
-                                <span className="text-sm font-bold text-fg">Âm thanh</span>
+                                <span className="text-sm font-bold text-fg">{t('format.audio')}</span>
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-surface-2 text-fg-2 border border-line uppercase">
                                   {fmt.ext}
                                 </span>
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-surface-2 text-fg-2 border border-line uppercase">
-                                  CHỈ ÂM THANH
+                                  {t('format.audioOnlyBadge')}
                                 </span>
                                 <span className="text-xs font-semibold text-fg-muted">{fmt.label}</span>
                               </div>
@@ -3214,7 +3209,7 @@ export default function DashboardContent() {
                       ))}
                       {audioFormats.length === 0 && (
                         <div className="text-center py-6 text-fg-muted text-sm">
-                          <p className="mb-4">Không tìm thấy định dạng âm thanh riêng lẻ.</p>
+                          <p className="mb-4">{t('format.noAudioFormats')}</p>
                           <button
                             onClick={handleAudioDownload}
                             disabled={downloadingId === 'audio_mp3'}
@@ -3222,7 +3217,7 @@ export default function DashboardContent() {
                           >
                             <div className="flex items-center gap-3">
                               <Music className="w-6 h-6 text-accent-text" />
-                              <span className="text-base sm:text-lg">Tải Âm Thanh (MP3 320kbps)</span>
+                              <span className="text-base sm:text-lg">{t('format.downloadAudio')}</span>
                             </div>
                             {downloadingId === 'audio_mp3' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
                           </button>
@@ -3240,7 +3235,7 @@ export default function DashboardContent() {
                   <div className="flex items-center gap-3">
                     <Video className="w-6 h-6" />
                     {/* wording: BA review */}
-                    <span className="text-base">{downloadedH > 0 ? `Đã tải: ${downloadedLabel}${downloadedUniversal ? ' · Mọi máy' : ''}` : (removeWatermark ? 'Tải Video (Không logo)' : 'Tải Video')}</span>
+                    <span className="text-base">{downloadedH > 0 ? (downloadedUniversal ? t('format.downloadedAll', { label: downloadedLabel }) : t('format.downloaded', { label: downloadedLabel })) : (removeWatermark ? t('format.downloadVideoNoLogo') : t('format.downloadVideo'))}</span>
                   </div>
                   <Download className="w-5 h-5" />
                 </button>
@@ -3253,7 +3248,7 @@ export default function DashboardContent() {
                   <div className="flex items-center gap-3">
                     <Crown className="w-6 h-6" />
                     {/* wording: BA review */}
-                    <span className="text-base">{maxMergeHeight > 0 ? `Tải Video (${qualityLabel(maxMergeHeight)})` : 'Tải Video'}</span>
+                    <span className="text-base">{maxMergeHeight > 0 ? t('format.downloadVideoQuality', { quality: qualityLabel(maxMergeHeight) }) : t('format.downloadVideo')}</span>
                   </div>
                   {downloadingId === 'merge_4k' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
                 </button>
@@ -3265,7 +3260,7 @@ export default function DashboardContent() {
                 >
                   <div className="flex items-center gap-3">
                     <Music className="w-6 h-6 text-accent-text" />
-                    <span className="text-base">Tải Âm Thanh (MP3 320kbps)</span>
+                    <span className="text-base">{t('format.downloadAudio')}</span>
                   </div>
                   {downloadingId === 'audio_mp3' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
                 </button>
@@ -3310,7 +3305,7 @@ export default function DashboardContent() {
             {/* Cancel/Reset */}
             <div className="text-center mt-6">
               <button onClick={() => { setVideoInfo(null); setLastDownloadInfo(null); setShowSuccessCard(false); setSuccessCardInfo(null); }} className="px-8 py-2.5 rounded-full text-fg-muted font-semibold hover:text-fg hover:bg-surface-2 transition-colors text-sm border border-transparent hover:border-line">
-                Tải video khác
+                {t('result.downloadAnother')}
               </button>
             </div>
           </div>
@@ -3339,7 +3334,7 @@ export default function DashboardContent() {
                 {spotifyData.artist && (
                   <p className="text-fg-muted text-sm mt-0.5">{spotifyData.artist}</p>
                 )}
-                <p className="text-fg-muted text-xs mt-1">{spotifyData.tracks?.length || 0} bài nhạc</p>
+                <p className="text-fg-muted text-xs mt-1">{t('spotify.trackCount', { count: spotifyData.tracks?.length || 0 })}</p>
               </div>
               <button onClick={() => setSpotifyData(null)}
                 className="text-fg-muted hover:text-fg transition-colors text-sm px-3 py-1.5 rounded-lg hover:bg-surface-2">
@@ -3352,10 +3347,10 @@ export default function DashboardContent() {
               <div className="flex justify-between items-center px-2 mb-2 gap-2">
                 {selectedTracks.size > 0 ? (
                   <span className="text-xs text-success font-medium">
-                    Đã chọn {selectedTracks.size}/{spotifyData.tracks.length} bài
+                    {t('spotify.selected', { selected: selectedTracks.size, total: spotifyData.tracks.length })}
                   </span>
                 ) : (
-                  <span className="text-xs text-fg-muted">Chọn bài hoặc tải tất cả</span>
+                  <span className="text-xs text-fg-muted">{t('spotify.selectHint')}</span>
                 )}
                 <div className="flex gap-2">
                   <button
@@ -3365,17 +3360,17 @@ export default function DashboardContent() {
                   >
                     {isZipping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                     {isZipping
-                      ? `Đang tải & Nén... ${zipProgress}%`
+                      ? t('spotify.zipping', { percent: zipProgress })
                       : selectedTracks.size > 0
-                        ? `Tải ${selectedTracks.size} bài (.ZIP)`
-                        : `Tải tất cả (.ZIP)`
+                        ? t('spotify.downloadSelectedZip', { count: selectedTracks.size })
+                        : t('spotify.downloadAllZip')
                     }
                   </button>
                   {isZipping && (
                     <button
                       onClick={handleCancelZip}
                       className="flex items-center justify-center w-9 h-9 bg-danger-soft text-danger hover:bg-danger/40 hover:text-fg rounded-xl transition-all"
-                      title="Hủy nén ZIP"
+                      title={t('spotify.cancelZip')}
                     >
                       <X className="w-5 h-5" />
                     </button>
@@ -3395,14 +3390,14 @@ export default function DashboardContent() {
                         checked={spotifyData.tracks?.length > 0 && selectedTracks.size === spotifyData.tracks.length}
                         onChange={handleToggleAll}
                         className="w-4 h-4 accent-accent rounded cursor-pointer"
-                        title="Chọn tất cả"
+                        title={t('spotify.selectAll')}
                       />
                     </th>
                     <th className="px-4 py-3 w-12">#</th>
-                    <th className="px-4 py-3">Bài hát</th>
-                    <th className="px-4 py-3">Ca sĩ</th>
-                    <th className="px-4 py-3 w-20 text-center">Thời lượng</th>
-                    <th className="px-4 py-3 w-28 text-right">Hành động</th>
+                    <th className="px-4 py-3">{t('spotify.colTrack')}</th>
+                    <th className="px-4 py-3">{t('spotify.colArtist')}</th>
+                    <th className="px-4 py-3 w-20 text-center">{t('spotify.colDuration')}</th>
+                    <th className="px-4 py-3 w-28 text-right">{t('spotify.colActions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -3459,7 +3454,7 @@ export default function DashboardContent() {
                             ) : (
                               <Download className="w-3.5 h-3.5" />
                             )}
-                            {dlState === 'done' ? 'Xong' : dlState === 'error' ? 'Lỗi' : 'Tải MP3'}
+                            {dlState === 'done' ? t('spotify.done') : dlState === 'error' ? t('spotify.error') : t('spotify.downloadMp3')}
                           </button>
                         </td>
                       </tr>
@@ -3488,18 +3483,18 @@ export default function DashboardContent() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-accent-soft text-accent-text border border-accent/40 uppercase tracking-wider">
-                    Nghệ sĩ • Spotify
+                    {t('spotify.artistBadge')}
                   </span>
                   {typeof artistData.artist?.popularity === 'number' && (
                     <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-surface-2 text-fg-2 border border-line-strong">
-                      Độ phổ biến {artistData.artist.popularity}/100
+                      {t('spotify.popularity', { value: artistData.artist.popularity })}
                     </span>
                   )}
                 </div>
                 <h3 className="text-fg font-bold text-xl sm:text-2xl line-clamp-1 mt-1">{artistData.artist?.name}</h3>
                 <p className="text-fg-muted text-xs mt-1">
-                  {artistData.artist?.followers ? `${artistData.artist.followers.toLocaleString()} người theo dõi · ` : ''}
-                  {artistData.summary?.top_tracks_count || 0} top tracks · {artistData.summary?.albums_count || 0} album · {artistData.summary?.singles_count || 0} single
+                  {artistData.artist?.followers ? t('spotify.followers', { count: artistData.artist.followers, formatted: artistData.artist.followers.toLocaleString() }) : ''}
+                  {t('spotify.summary', { top: artistData.summary?.top_tracks_count || 0, albums: artistData.summary?.albums_count || 0, singles: artistData.summary?.singles_count || 0 })}
                 </p>
                 {artistData.artist?.genres?.length > 0 && (
                   <p className="text-fg-muted text-[11px] mt-0.5 line-clamp-1">{artistData.artist.genres.join(', ')}</p>
@@ -3507,7 +3502,7 @@ export default function DashboardContent() {
                 {artistData.artist?.external_url && (
                   <a href={artistData.artist.external_url} target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-[11px] text-accent-text hover:underline mt-1">
-                    <ExternalLink className="w-3 h-3" /> Mở trên Spotify
+                    <ExternalLink className="w-3 h-3" /> {t('spotify.openOn')}
                   </a>
                 )}
               </div>
@@ -3522,17 +3517,17 @@ export default function DashboardContent() {
             {/* Partial notice (no API key) */}
             {artistData.partial && (
               <div className="mb-4 text-xs text-accent-text bg-accent-soft border border-accent/30 rounded-xl px-3 py-2">
-                Hiện chỉ lấy được <b>Top tracks</b> cho nghệ sĩ này. Albums/Singles tạm chưa khả dụng.
+                <Trans t={t} i18nKey="spotify.partialNotice" components={{ b: <b /> }} />
               </div>
             )}
 
             {/* Action buttons */}
             <div className="flex flex-wrap gap-2 mb-3">
               {[
-                { mode: 'top_tracks', label: 'Tải Top tracks', on: artistData.actions?.can_download_top_tracks },
-                { mode: 'albums', label: 'Tải tất cả album', on: artistData.actions?.can_download_all_albums },
-                { mode: 'singles', label: 'Tải tất cả single', on: artistData.actions?.can_download_all_singles },
-                { mode: 'all_tracks', label: 'Tải tất cả bài', on: artistData.actions?.can_download_all_tracks },
+                { mode: 'top_tracks', label: t('spotify.actionTop'), on: artistData.actions?.can_download_top_tracks },
+                { mode: 'albums', label: t('spotify.actionAlbums'), on: artistData.actions?.can_download_all_albums },
+                { mode: 'singles', label: t('spotify.actionSingles'), on: artistData.actions?.can_download_all_singles },
+                { mode: 'all_tracks', label: t('spotify.actionAll'), on: artistData.actions?.can_download_all_tracks },
               ].map(b => (
                 <button key={b.mode} onClick={() => handleArtistDownload(b.mode)} disabled={isZipping || !b.on}
                   className={`flex items-center gap-1.5 px-3.5 py-2 text-sm font-bold rounded-xl transition-all ${
@@ -3546,8 +3541,8 @@ export default function DashboardContent() {
             </div>
             {isZipping && (
               <div className="mb-3 text-xs text-success flex items-center gap-2">
-                Đang tải & nén... {zipProgress}%
-                <button onClick={handleCancelZip} className="text-danger hover:text-danger font-semibold">Hủy</button>
+                {t('spotify.zippingLower', { percent: zipProgress })}
+                <button onClick={handleCancelZip} className="text-danger hover:text-danger font-semibold">{t('common.cancel')}</button>
               </div>
             )}
 
@@ -3568,7 +3563,7 @@ export default function DashboardContent() {
             {/* Top tracks */}
             {artistTab === 'top' && (
               (artistData.top_tracks || []).length === 0 ? (
-                <p className="text-fg-muted text-sm py-8 text-center">Chưa lấy được top tracks của nghệ sĩ này.</p>
+                <p className="text-fg-muted text-sm py-8 text-center">{t('spotify.noTopTracks')}</p>
               ) : (() => {
                 const topKeys = (artistData.top_tracks || []).map(t => t.search_query);
                 const allTopSelected = topKeys.length > 0 && topKeys.every(k => selectedTracks.has(k));
@@ -3582,10 +3577,10 @@ export default function DashboardContent() {
                   <>
                     <div className="flex items-center justify-between px-1 mb-2">
                       <button onClick={toggleAllTop} className="text-xs font-semibold text-accent-text hover:underline">
-                        {allTopSelected ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+                        {allTopSelected ? t('spotify.deselectAll') : t('spotify.selectAll')}
                       </button>
                       {selectedTracks.size > 0 && (
-                        <span className="text-xs text-success">Đã chọn {topKeys.filter(k => selectedTracks.has(k)).length}/{topKeys.length}</span>
+                        <span className="text-xs text-success">{t('spotify.selected', { selected: topKeys.filter(k => selectedTracks.has(k)).length, total: topKeys.length })}</span>
                       )}
                     </div>
                     <div className="max-h-[420px] overflow-y-auto pr-1 custom-scrollbar bg-surface-2 rounded-xl border border-line divide-y divide-line">
@@ -3612,7 +3607,7 @@ export default function DashboardContent() {
                               </p>
                             </div>
                             {track.preview_url && (
-                              <button onClick={() => toggleArtistPreview(track)} title="Nghe thử 30s"
+                              <button onClick={() => toggleArtistPreview(track)} title={t('spotify.preview30')}
                                 className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center border transition-colors ${
                                   isPreviewing ? 'bg-accent text-accent-fg border-accent' : 'bg-surface-2 text-fg-2 border-line-strong hover:text-fg'}`}>
                                 {isPreviewing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
@@ -3628,7 +3623,7 @@ export default function DashboardContent() {
                                 : dlState === 'loading' ? 'bg-surface-2 text-fg-muted border-line-strong cursor-wait'
                                 : 'bg-accent-soft text-accent-text border-accent/30 hover:bg-accent/20'}`}>
                               {dlState === 'loading' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : dlState === 'done' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
-                              <span className="hidden sm:inline">{dlState === 'done' ? 'Xong' : dlState === 'error' ? 'Lỗi' : 'MP3'}</span>
+                              <span className="hidden sm:inline">{dlState === 'done' ? t('spotify.done') : dlState === 'error' ? t('spotify.error') : 'MP3'}</span>
                             </button>
                           </div>
                         );
@@ -3645,15 +3640,15 @@ export default function DashboardContent() {
               if (artistData.partial) {
                 return (
                   <p className="text-fg-muted text-sm py-8 text-center px-4">
-                    {artistTab === 'albums' ? 'Danh sách album' : 'Danh sách single'} tạm chưa khả dụng cho nghệ sĩ này.
-                    <br /><span className="text-fg-muted text-xs">(Cần Spotify API với tài khoản Premium của chủ app.)</span>
+                    {artistTab === 'albums' ? t('spotify.albumListUnavailable') : t('spotify.singleListUnavailable')}
+                    <br /><span className="text-fg-muted text-xs">{t('spotify.needPremiumApi')}</span>
                   </p>
                 );
               }
               if (list.length === 0) {
                 return (
                   <p className="text-fg-muted text-sm py-8 text-center">
-                    {artistTab === 'albums' ? 'Nghệ sĩ này chưa có album.' : 'Nghệ sĩ này chưa có single riêng.'}
+                    {artistTab === 'albums' ? t('spotify.noAlbums') : t('spotify.noSingles')}
                   </p>
                 );
               }
@@ -3662,7 +3657,7 @@ export default function DashboardContent() {
                   {list.map((al, i) => {
                     const isOpen = expandedAlbum === al.album_id;
                     const cached = albumTracksCache[al.album_id];
-                    const kind = artistTab === 'singles' ? (al.total_tracks >= 4 ? 'EP' : 'Single') : (al.album_type === 'compilation' ? 'Tuyển tập' : 'Album');
+                    const kind = artistTab === 'singles' ? (al.total_tracks >= 4 ? 'EP' : 'Single') : (al.album_type === 'compilation' ? t('spotify.compilation') : 'Album');
                     return (
                       <div key={i} className="rounded-xl bg-surface-2 border border-line overflow-hidden">
                         <div className="flex items-center gap-3 p-3">
@@ -3674,25 +3669,25 @@ export default function DashboardContent() {
                           <div className="flex-1 min-w-0">
                             <p className="text-fg text-sm font-medium truncate" title={al.title}>{al.title}</p>
                             <p className="text-fg-muted text-xs">
-                              <span className="text-accent-text">{kind}</span> · {(al.release_date || '').slice(0, 4) || '—'} · {al.total_tracks} bài
+                              <span className="text-accent-text">{kind}</span> · {(al.release_date || '').slice(0, 4) || '—'} · {t('spotify.tracksCount', { count: al.total_tracks })}
                             </p>
                           </div>
-                          <button onClick={() => toggleAlbumExpand(al)} title="Xem bài hát"
+                          <button onClick={() => toggleAlbumExpand(al)} title={t('spotify.viewTracks')}
                             className="flex-shrink-0 px-2 py-1.5 rounded-lg text-xs font-bold text-fg-2 border border-line-strong hover:bg-surface-2">
                             {isOpen ? '▴' : '▾'}
                           </button>
                           <button onClick={() => handleArtistAlbumDownload(al)} disabled={isZipping}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-accent-soft text-accent-text border border-accent/30 hover:bg-accent/20 disabled:opacity-40 flex-shrink-0">
-                            <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Tải</span>
+                            <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('common.download')}</span>
                           </button>
                         </div>
                         {isOpen && (
                           <div className="px-3 pb-3 border-t border-line pt-2">
                             {cached?.state === 'loading' && (
-                              <p className="text-fg-muted text-xs py-2 flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang tải tracklist...</p>
+                              <p className="text-fg-muted text-xs py-2 flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> {t('spotify.loadingTracklist')}</p>
                             )}
                             {cached?.state === 'error' && (
-                              <p className="text-fg-muted text-xs py-2">Chưa lấy được tracklist của album này.</p>
+                              <p className="text-fg-muted text-xs py-2">{t('spotify.noTracklist')}</p>
                             )}
                             {cached?.state === 'ok' && (
                               <ol className="text-xs text-fg-2 space-y-1 mt-1">
@@ -3721,12 +3716,12 @@ export default function DashboardContent() {
       {recentDownloads.length > 0 && (
         <div className="w-full max-w-3xl">
           <div className="flex items-center justify-between mb-3 px-1">
-            <h3 className="text-sm font-bold text-fg-2">Tải gần đây</h3>
+            <h3 className="text-sm font-bold text-fg-2">{t('recent.title')}</h3>
             <button
               onClick={handleClearAllHistory}
               className="text-xs font-semibold text-danger hover:text-danger transition-colors"
             >
-              Xóa tất cả
+              {t('recent.clearAll')}
             </button>
           </div>
           <div className="space-y-2.5">
@@ -3738,7 +3733,7 @@ export default function DashboardContent() {
                     {job.status === 'success' ? (
                       <span className="text-success flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> OK</span>
                     ) : job.status === 'failed' ? (
-                      <span className="text-danger flex items-center gap-1"><XCircle className="w-3 h-3" /> Lỗi</span>
+                      <span className="text-danger flex items-center gap-1"><XCircle className="w-3 h-3" /> {t('spotify.error')}</span>
                     ) : (
                       <span className="text-accent-text flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> ...</span>
                     )}
@@ -3750,10 +3745,10 @@ export default function DashboardContent() {
                       ? `${API_BASE}/api/v1/download-local?file=${encodeURIComponent(localVideoFirstId(job))}&filename=${encodeURIComponent((job.title || 'video') + '.' + (localVideoFirstId(job).split('.').pop() || 'mp4'))}`
                       : `${API_BASE}/api/v1/proxy-download?url=${encodeURIComponent(job.direct_mp4_url)}&filename=${encodeURIComponent(job.title || 'video')}`}
                       className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-accent-soft text-accent-text font-bold hover:bg-accent/20 transition-colors border border-accent/30 text-xs">
-                      <Download className="w-3.5 h-3.5" /> Tải lại
+                      <Download className="w-3.5 h-3.5" /> {t('recent.redownload')}
                     </a>
                   ) : (
-                    <button disabled className="flex-1 sm:flex-none px-3 py-2 rounded-xl bg-surface text-fg-muted font-bold cursor-not-allowed border border-line text-xs">Chờ</button>
+                    <button disabled className="flex-1 sm:flex-none px-3 py-2 rounded-xl bg-surface text-fg-muted font-bold cursor-not-allowed border border-line text-xs">{t('recent.waiting')}</button>
                   )}
                   <button onClick={() => handleDeleteJob(job.id)} className="px-2.5 py-2 rounded-xl bg-surface hover:bg-danger-soft text-fg-muted hover:text-danger border border-line hover:border-danger/30 transition-colors">
                     <Trash2 className="w-3.5 h-3.5" />
@@ -3774,7 +3769,7 @@ export default function DashboardContent() {
               <span className="text-base leading-none">@</span> Threads
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-fg-2 bg-surface-2 border border-line">
-              {threadsData.source_type === 'profile' ? <><List className="w-3 h-3" /> Trang cá nhân</> : <><Clapperboard className="w-3 h-3" /> Bài viết</>}
+              {threadsData.source_type === 'profile' ? <><List className="w-3 h-3" /> {t('threads.profile')}</> : <><Clapperboard className="w-3 h-3" /> {t('threads.post')}</>}
             </span>
             {threadsData.author_handle && (
               <span className="px-3 py-1.5 rounded-xl text-xs font-semibold text-fg-2 bg-surface border border-line">@{threadsData.author_handle}</span>
@@ -3799,29 +3794,29 @@ export default function DashboardContent() {
               <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-semibold text-accent-text">
-                  {THREADS_ERROR_COPY[threadsData.error_code] || threadsData.error_message || 'Không xử lý được nội dung Threads.'}
+                  {threadsErrorCopy(threadsData.error_code) || threadsData.error_message || t('threads.processFailed')}
                 </p>
-                <p className="text-xs text-fg-muted mt-1">Chỉ hỗ trợ nội dung Threads công khai.</p>
+                <p className="text-xs text-fg-muted mt-1">{t('threads.publicOnly')}</p>
               </div>
             </div>
           ) : threadsData.source_type === 'profile' ? (
             /* ── Profile: recent public post list ── */
             <div className="bg-surface-2 border border-line rounded-2xl p-4">
-              <p className="text-xs text-fg-muted mb-3">Bài công khai gần đây — chọn để bóc tách media.</p>
+              <p className="text-xs text-fg-muted mb-3">{t('threads.recentPosts')}</p>
               <div className="flex flex-col gap-2">
                 {threadsData.posts?.map((post, i) => (
                   <div key={post.post_id || i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-surface border border-line hover:border-line-strong transition-colors">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-fg-2 truncate">{post.caption_snippet || `Bài viết #${i + 1}`}</p>
-                      <p className="text-[11px] text-fg-muted truncate">{post.post_id}{post.has_media ? ' · có media' : ''}</p>
+                      <p className="text-sm font-semibold text-fg-2 truncate">{post.caption_snippet || t('threads.postNumber', { n: i + 1 })}</p>
+                      <p className="text-[11px] text-fg-muted truncate">{post.post_id}{post.has_media ? t('threads.hasMedia') : ''}</p>
                     </div>
                     {post.has_media && (
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-bold text-success bg-success-soft border border-success/20">MEDIA</span>
                     )}
                     <button onClick={() => handleLoadThreadsPost(post.url)} className="px-3 py-1.5 rounded-lg text-xs font-bold text-accent-fg bg-accent active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap">
-                      <Zap className="w-3.5 h-3.5" /> Bóc tách
+                      <Zap className="w-3.5 h-3.5" /> {t('threads.extract')}
                     </button>
-                    <a href={post.url} target="_blank" rel="noreferrer" className="p-1.5 text-fg-muted hover:text-fg-2 transition-colors" title="Mở trên Threads">
+                    <a href={post.url} target="_blank" rel="noreferrer" className="p-1.5 text-fg-muted hover:text-fg-2 transition-colors" title={t('threads.openOn')}>
                       <ExternalLink className="w-4 h-4" />
                     </a>
                   </div>
@@ -3835,7 +3830,7 @@ export default function DashboardContent() {
                 <p className="text-sm text-fg-2 mb-3 whitespace-pre-line line-clamp-4">{threadsData.caption}</p>
               )}
               {threadsData.timestamp && (
-                <p className="text-[11px] text-fg-muted mb-3 flex items-center gap-1.5"><Clock className="w-3 h-3" /> {new Date(threadsData.timestamp).toLocaleString('vi-VN')}</p>
+                <p className="text-[11px] text-fg-muted mb-3 flex items-center gap-1.5"><Clock className="w-3 h-3" /> {new Date(threadsData.timestamp).toLocaleString(dateLocale())}</p>
               )}
               {threadsData.downloadable && threadsData.media_items?.length ? (
                 <>
@@ -3850,26 +3845,26 @@ export default function DashboardContent() {
                             <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold text-white bg-black/70 flex items-center gap-1"><Play className="w-2.5 h-2.5 fill-white" /> Video</span>
                           </div>
                         )}
-                        <button onClick={() => handleThreadsMediaDownload(item, i)} className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/50 transition-colors opacity-0 group-hover:opacity-100" title="Tải media này">
+                        <button onClick={() => handleThreadsMediaDownload(item, i)} className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/50 transition-colors opacity-0 group-hover:opacity-100" title={t('threads.downloadThis')}>
                           <span className="px-3 py-1.5 rounded-lg text-xs font-bold text-accent-fg bg-accent flex items-center gap-1.5">
-                            {item.type === 'image' ? <ImageDown className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />} Tải
+                            {item.type === 'image' ? <ImageDown className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />} {t('common.download')}
                           </span>
                         </button>
                       </div>
                     ))}
                   </div>
-                  <p className="text-xs text-fg-muted mt-3 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-success" /> Đã tìm thấy {threadsData.media_items.length} media từ bài Threads.</p>
+                  <p className="text-xs text-fg-muted mt-3 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-success" /> {t('toast.threadsMediaFoundCount', { count: threadsData.media_items.length })}</p>
                 </>
               ) : (
                 <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-surface border border-line">
                   <AlertCircle className="w-4 h-4 text-fg-muted flex-shrink-0" />
-                  <p className="text-sm text-fg-2">Bài viết này không có media tải xuống được.</p>
+                  <p className="text-sm text-fg-2">{t('threads.noMedia')}</p>
                 </div>
               )}
             </div>
           )}
 
-          <p className="text-[11px] text-fg-muted mt-3 px-1">Một số bài Threads có thể không trích xuất ổn định. Chỉ hỗ trợ nội dung công khai.</p>
+          <p className="text-[11px] text-fg-muted mt-3 px-1">{t('threads.footnote')}</p>
         </div>
       )}
 
@@ -3878,16 +3873,16 @@ export default function DashboardContent() {
         <div className="w-full max-w-3xl mt-2 mb-6">
           <div className="flex flex-wrap justify-center gap-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg-2 bg-surface border border-line hover:border-line-strong transition-colors">
-              <Sparkles className="w-3 h-3 flex-shrink-0 text-accent-text" /> TikTok / Douyin → bản không watermark
+              <Sparkles className="w-3 h-3 flex-shrink-0 text-accent-text" /> {t('idle.tiktok')}
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg-2 bg-surface border border-line hover:border-line-strong transition-colors">
-              <Video className="w-3 h-3 flex-shrink-0 text-[#FF0000]" /> YouTube → 4K{!session && ' (đăng nhập)'} · 1080p · MP3{/* wording: BA review */}
+              <Video className="w-3 h-3 flex-shrink-0 text-[#FF0000]" /> YouTube → 4K{!session && t('idle.signInSuffix')} · 1080p · MP3{/* wording: BA review */}
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg-2 bg-surface border border-line hover:border-line-strong transition-colors">
               <Music className="w-3 h-3 flex-shrink-0 text-[#1DB954]" /> Spotify → MP3 320kbps
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg-2 bg-surface border border-line hover:border-line-strong transition-colors">
-              <span className="text-sm leading-none font-black text-fg">@</span> Threads → bài & trang công khai
+              <span className="text-sm leading-none font-black text-fg">@</span> {t('idle.threads')}
             </span>
           </div>
         </div>
@@ -3902,6 +3897,7 @@ export default function DashboardContent() {
 
 // ── Video Digest Component ──────────────────────────────────────────────────
 function DigestCard({ info, onToggle, isVisible }) {
+  const { t } = useTranslation('dashboard');
   const dur = info.duration;
   const tags = (info.tags || []).slice(0, 5);
   const fmtDur = dur
@@ -3927,7 +3923,7 @@ function DigestCard({ info, onToggle, isVisible }) {
 
   function fmtDate(iso) {
     if (!iso) return null;
-    try { return new Date(iso).toLocaleDateString('vi-VN'); } catch { return iso; }
+    try { return new Date(iso).toLocaleDateString(dateLocale()); } catch { return iso; }
   }
 
   return (
@@ -3937,8 +3933,8 @@ function DigestCard({ info, onToggle, isVisible }) {
         onClick={onToggle}
         className="w-full flex items-center justify-between px-4 py-2.5 bg-surface hover:bg-surface-2 transition-colors cursor-pointer"
       >
-        <span className="text-xs font-bold text-fg-2 uppercase tracking-wider">Thong tin video</span>
-        <span className="text-[10px] text-fg-muted">{isVisible ? '▲ Thu gọn' : '▼ Mở rộng'}</span>
+        <span className="text-xs font-bold text-fg-2 uppercase tracking-wider">{t('digest.title')}</span>
+        <span className="text-[10px] text-fg-muted">{isVisible ? t('digest.collapse') : t('digest.expand')}</span>
       </button>
 
       {isVisible && (
@@ -3955,7 +3951,7 @@ function DigestCard({ info, onToggle, isVisible }) {
 
           {/* Title */}
           <div>
-            <p className="text-fg font-bold text-sm leading-snug">{info.title || 'Không có tiêu đề'}</p>
+            <p className="text-fg font-bold text-sm leading-snug">{info.title || t('digest.noTitle')}</p>
           </div>
 
           {/* Creator + Meta row */}
@@ -3975,7 +3971,7 @@ function DigestCard({ info, onToggle, isVisible }) {
               <span>📅 {fmtDate(info.upload_date_iso)}</span>
             )}
             {info.view_count && (
-              <span>👁 {fmtViews(info.view_count)} lượt xem</span>
+              <span>👁 {t('digest.views', { count: fmtViews(info.view_count) })}</span>
             )}
             {info.language && (
               <span>🌐 {info.language.toUpperCase()}</span>
@@ -3998,21 +3994,21 @@ function DigestCard({ info, onToggle, isVisible }) {
             {info.has_subtitles ? (
               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-success-soft border-success/30 text-success" title={
                 info.available_subtitle_languages?.length
-                  ? `Ngôn ngữ: ${info.available_subtitle_languages.slice(0, 6).join(', ')}${info.available_subtitle_languages.length > 6 ? '…' : ''}`
-                  : 'Có phụ đề'
+                  ? t('digest.languages', { list: `${info.available_subtitle_languages.slice(0, 6).join(', ')}${info.available_subtitle_languages.length > 6 ? '…' : ''}` })
+                  : t('digest.hasSubtitles')
               }>
-                {info.subtitle_source === 'auto' ? '✓ Phụ đề tự động' : '✓ Có phụ đề'}
+                {info.subtitle_source === 'auto' ? t('digest.subsAuto') : t('digest.subsYes')}
                 {info.available_subtitle_languages?.length > 0 && (
                   <span className="ml-1 opacity-70">({info.available_subtitle_languages.slice(0, 3).join(', ')}{info.available_subtitle_languages.length > 3 ? '…' : ''})</span>
                 )}
               </span>
             ) : (
               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-surface border-line text-fg-muted">
-                ✕ Không có phụ đề
+                {t('digest.subsNo')}
               </span>
             )}
             <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-accent-soft border-accent/30 text-accent-text">
-              ✓ Có thể tải
+              {t('digest.downloadable')}
             </span>
           </div>
 

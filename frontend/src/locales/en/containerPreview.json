@@ -1,0 +1,105 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "retry": "Retry",
+  "scanning": "Scanning content...",
+  "discoveryFailed": "Discovery failed.",
+  "itemCount_one": "{{count}} item",
+  "itemCount_other": "{{count}} items",
+  "partialBanner": "Partial results — the scan didn't fully complete (timeout or rate limit). Items found so far can still be downloaded.",
+  "noItems": "No items to show.",
+  "exportCsv": "Export CSV",
+  "selectedCount_one": "<b>{{count}}</b> selected",
+  "selectedCount_other": "<b>{{count}}</b> selected",
+  "noneSelected": "No items selected",
+  "quality": {
+    "best": "Video (best quality)"
+  },
+  "status": {
+    "ready": "Ready",
+    "partial": "Partial",
+    "discovering": "Scanning...",
+    "resolving": "Identifying…",
+    "queued": "Queuing…",
+    "failed": "Failed",
+    "expired": "Expired",
+    "pending": "Pending"
+  },
+  "toolbar": {
+    "selectAll": "Select all ({{count}})",
+    "latest": "Latest {{count}}",
+    "clear": "Clear selection"
+  },
+  "queue": {
+    "youtubeDisabled": "YouTube download isn't available yet. Queueing is temporarily disabled.",
+    "cookieInvalid": "Invalid cookie. Update the cookie to use queueing.",
+    "queuing": "Queuing...",
+    "button": "Queue {{n}}"
+  },
+  "filter": {
+    "allTypes": "All types",
+    "audio": "Audio",
+    "image": "Images",
+    "sortDefault": "Default",
+    "sortViews": "Most viewed",
+    "sortDurationAsc": "Duration: shortest",
+    "sortDurationDesc": "Duration: longest"
+  },
+  "section": {
+    "httpError": "HTTP error {{status}}",
+    "expandFailed": "Couldn't expand this section.",
+    "notLoaded": "(not loaded)",
+    "expandError": "(expand error)",
+    "deselect": "Deselect this section",
+    "select": "Select this section",
+    "hasMore": "There are more items — click \"Expand\" to load more.",
+    "empty": "This section has no items.",
+    "tracks_one": "{{count}} track",
+    "tracks_other": "{{count}} tracks",
+    "expandHint": "Click this section to expand it and pick individual items."
+  },
+  "expired": {
+    "title": "Session expired",
+    "body": "The previous discovery results have passed their TTL.",
+    "rediscover": "Discover again"
+  },
+  "queueSuccess": {
+    "title": "Added to the queue!",
+    "accepted_one": "{{count}} item queued.",
+    "accepted_other": "{{count}} items queued.",
+    "dropped_one": "{{count}} item dropped (duplicate).",
+    "dropped_other": "{{count}} items dropped (duplicates)."
+  },
+  "gate": {
+    "platformFallback": "Platform",
+    "cookieUnavailable": {
+      "title": "Cookie not configured",
+      "body": "{{platform}} requires a login cookie but none is configured. Contact an admin to add one (Settings → Cookie)."
+    },
+    "cookieExpired": {
+      "title": "Cookie expired",
+      "body": "The {{platform}} cookie has expired. Please update it in Settings → Cookie → {{platform}}."
+    },
+    "cookieBlocked": {
+      "title": "Cookie temporarily blocked",
+      "body": "{{platform}} rate-limited us or detected a bot. The cookie unblocks automatically after 15 minutes (soft block) or 6 hours (hard block). Try again later."
+    },
+    "cookiePartial": {
+      "title": "Partial content",
+      "body": "Public content is shown in full. Some posts require login and may be skipped when queueing."
+    },
+    "singleDisabled": {
+      "title": "YouTube single video is temporarily unavailable",
+      "body": "YouTube downloads via the server are currently bot-blocked. Instead, paste a <strong>channel</strong> or <strong>playlist</strong> link to use Bulk Browse (requires a configured residential proxy)."
+    },
+    "proxyBad": {
+      "title": "YouTube proxy is not working",
+      "body": "YTDL_PROXY is configured but can't connect. The system will retry automatically in a few minutes. If it keeps failing, contact an admin to check the proxy."
+    },
+    "generic": {
+      "cookieTitle": "Sign-in required to use this feature",
+      "proxyTitle": "A proxy is required to use this feature",
+      "cookieBody": "{{platform}} requires a login session cookie. Contact an admin to add one.",
+      "proxyBody": "YouTube container discovery needs a residential proxy. Contact an admin to configure YTDL_PROXY."
+    }
+  }
+}

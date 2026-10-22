@@ -1,0 +1,25 @@
+{
+  "legalNav": "Liên kết pháp lý và trợ giúp",
+  "links": {
+    "pricing": "Bảng giá",
+    "terms": "Điều khoản",
+    "privacy": "Chính sách riêng tư",
+    "takedown": "Gỡ nội dung",
+    "faq": "Câu hỏi thường gặp"
+  },
+  "status": "Trạng thái hệ thống",
+  "banner": {
+    "close": "Đóng",
+    "title": "Cài extension để tải 1 chạm",
+    "sub": "Không cần mở tab mới",
+    "guide": "Xem hướng dẫn",
+    "skip": "Bỏ qua"
+  },
+  "tabs": {
+    "landing": "Trang chủ",
+    "active": "Đang xử lý",
+    "history": "Lịch sử",
+    "tools": "Công cụ",
+    "account": "Tài khoản"
+  }
+}

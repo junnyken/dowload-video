@@ -94,6 +94,24 @@ def main():
             pg.wait_for_timeout(800)
             check("switch on a platform page -> Vietnamese slug", pg.url == f"{base}/tai-video-tiktok", pg.url)
             check("Vietnamese platform page", pg.locator("h1").first.inner_text() == "Tải video TikTok không logo")
+
+            # every public English page: no Vietnamese words on screen, no raw
+            # i18n keys ("ns.key" / "key_other"), no JavaScript errors
+            errors = []
+            pg.on("pageerror", lambda e: errors.append(str(e)[:120]))
+            for path in ["/en", "/en/pricing", "/en/faq", "/en/platforms", "/en/extension", "/en/download",
+                         "/en/privacy", "/en/terms", "/en/takedown", "/en/douyin-video-downloader"]:
+                errors.clear()
+                pg.goto(f"{base}{path}", wait_until="networkidle")
+                pg.wait_for_timeout(800)
+                words = pg.evaluate(r"""() => {
+                  const text = document.body.innerText.replace(/Tiếng Việt|Cốc Cốc/g, '');
+                  const vi = text.match(/\S*[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]\S*/gi) || [];
+                  const keys = text.match(/\b[a-z]+[A-Z]\w*\.[a-z]\w+\b|\b\w+_(one|other)\b/g) || [];
+                  return { vi: [...new Set(vi)].slice(0, 8), keys: [...new Set(keys)].slice(0, 5) };
+                }""")
+                check(f"{path}: all English on screen", not words["vi"] and not words["keys"], f"{words}" if words["vi"] or words["keys"] else "")
+                check(f"{path}: no JavaScript error", not errors, "; ".join(errors))
             b.close()
     finally:
         srv.shutdown()

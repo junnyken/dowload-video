@@ -1,0 +1,61 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "alertSignInToClear": "Sign in to clear your download history.",
+  "confirmClearAll": "Are you sure you want to delete all history?",
+  "exportNeedSignIn": "Export failed — you need to sign in.",
+  "exportFailed": "Export failed.",
+  "expired": "Expired",
+  "daysLeft": "{{days}}d left",
+  "status": {
+    "success": "Success",
+    "failed": "Failed",
+    "abandoned": "Abandoned",
+    "processing": "Processing",
+    "cancelled": "Cancelled",
+    "expiredStatus": "Expired",
+    "metadataOnly": "Metadata only",
+    "archived": "Archived",
+    "queued": "Queued",
+    "pending": "Pending",
+    "waiting": "Waiting"
+  },
+  "justNow": "Just now",
+  "minutesAgo_one": "{{count}} minute ago",
+  "minutesAgo_other": "{{count}} minutes ago",
+  "hoursAgo_one": "{{count}} hour ago",
+  "hoursAgo_other": "{{count}} hours ago",
+  "title": "Download history",
+  "subtitle": "View and manage all your past downloads",
+  "refresh": "Refresh",
+  "export": "Export",
+  "clearAll": "Delete all",
+  "tabs": {
+    "all": "All",
+    "today": "Today",
+    "recent": "7 days",
+    "failed": "Failed"
+  },
+  "searchPlaceholder": "Search by URL, title or Batch ID...",
+  "filter": {
+    "all": "All",
+    "success": "Success",
+    "failed": "Failed"
+  },
+  "allPlatforms": "All platforms",
+  "offlineCached": "Showing saved data — reconnect to update",
+  "loading": "Loading history...",
+  "emptyNoResults": "No results found",
+  "emptyNone": "No download history yet",
+  "emptyTryOther": "Try another keyword",
+  "emptyHint": "Finished downloads will appear here",
+  "col": {
+    "titleUrl": "Title / URL",
+    "status": "Status",
+    "time": "Time",
+    "actions": "Actions"
+  },
+  "redownload": "Download again",
+  "rerunUrl": "Download this URL again",
+  "copyUrl": "Copy original URL",
+  "loadMore": "Load more"
+}

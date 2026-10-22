@@ -1,0 +1,29 @@
+{
+  "title": "Câu hỏi thường gặp",
+  "subtitle": "10 tình huống hay gặp nhất khi tải không được.",
+  "items": [
+    { "q": "Video riêng tư không tải được", "a": "Video đặt chế độ riêng tư chỉ chủ sở hữu xem được, nên VidGrab không thể truy cập. Nếu là video của bạn, hãy chuyển sang chế độ công khai hoặc \"không công khai\" rồi thử lại." },
+    { "q": "Nội dung yêu cầu đăng nhập", "a": "Một số bài chỉ hiện khi đã đăng nhập vào nền tảng gốc (nhóm kín, nội dung giới hạn độ tuổi, …). Với những nội dung này, dịch vụ trên web có thể không tải được. Ứng dụng Windows có thể dùng phiên đăng nhập của chính bạn ngay trên máy để xử lý một số trường hợp." },
+    { "q": "Giới hạn theo vùng", "a": "Nội dung có thể bị chặn ở một số quốc gia. Nếu nền tảng gốc không cho xem ở khu vực của bạn hoặc của máy chủ, việc tải có thể thất bại." },
+    { "q": "Link hết hạn hoặc nội dung đã bị xoá", "a": "Hãy mở lại link trên nền tảng gốc để chắc chắn nội dung còn xem được. Link tải do VidGrab tạo cũng tự hết hạn sau một thời gian; chỉ cần dán lại link gốc để tạo link mới." },
+    { "q": "Nền tảng đang gặp sự cố", "a": "Nền tảng thay đổi thường xuyên nên đôi khi tải lỗi tạm thời. Bạn xem tình trạng từng nền tảng ngay trên trang chủ (nếu có sự cố sẽ hiện thông báo), rồi thử lại sau ít phút." },
+    { "q": "Vì sao khách chỉ tải được tối đa 1080p?", "a": "Khách (chưa đăng nhập) được tải chất lượng tối đa 1080p. Đăng ký tài khoản để chọn 2K/4K khi nguồn có sẵn." },
+    { "q": "Báo \"hết lượt tải trong ngày\"", "a": "Mỗi ngày có một hạn mức tải, tính lại vào ngày hôm sau. Đăng nhập tài khoản để có hạn mức riêng theo tài khoản." },
+    { "q": "Tải chậm khi máy chủ bận", "a": "Lúc đông người dùng, yêu cầu của bạn có thể phải xếp hàng. Bạn không cần gửi lại nhiều lần — gửi lặp lại chỉ làm hàng đợi dài thêm. Hãy đợi hoặc thử lại sau." },
+    { "q": "Tiện ích Chrome không tự cập nhật", "a": "Tiện ích cài thủ công (tải về và nạp ở chế độ nhà phát triển) không được Chrome tự cập nhật. Khi có bản mới, hãy tải lại tiện ích từ trang Tiện ích của VidGrab và nạp lại." },
+    { "q": "Ứng dụng Windows bị SmartScreen cảnh báo", "a": "Đây là cảnh báo thường gặp với ứng dụng chưa được ký số. Xem hướng dẫn cài đặt an toàn ở phần bên dưới." }
+  ],
+  "winTitle": "Cài ứng dụng Windows an toàn",
+  "whyWarnTitle": "Vì sao Windows hiện cảnh báo?",
+  "whyWarnBody": "Bản cài đặt hiện chưa được ký số, nên Windows SmartScreen hiện \"Windows protected your PC\" với mọi ứng dụng chưa có chữ ký. Đây là cảnh báo về việc chưa xác minh nhà phát hành, không có nghĩa tệp chứa mã độc. Dù vậy, bạn nên kiểm tra tệp như hướng dẫn dưới đây.",
+  "runTitle": "Cách chạy tiếp",
+  "runStep1": "Trên hộp thoại cảnh báo, bấm <b>More info</b> (Thông tin thêm).",
+  "runStep2": "Bấm <b>Run anyway</b> (Vẫn chạy).",
+  "shaTitle": "Kiểm tra tệp cài đặt bằng SHA-256",
+  "shaIntro": "Mở PowerShell tại thư mục chứa tệp vừa tải và chạy (đổi tên tệp cho đúng phiên bản):",
+  "shaCompare": "So sánh giá trị <code>Hash</code> với giá trị SHA-256 được công bố trên trang <downloadLink>Tải ứng dụng</downloadLink> hoặc bản phát hành. Nếu hai giá trị khác nhau, đừng chạy tệp — hãy tải lại từ trang chính thức hoặc báo cho chúng tôi.",
+  "dataTitle": "Ứng dụng gửi gì lên máy chủ, giữ gì trên máy bạn?",
+  "dataKeep": "<b>Giữ trên máy bạn:</b> cookie đăng nhập các nền tảng. Cookie không rời khỏi máy và được Windows mã hoá.",
+  "dataSend": "<b>Gửi lên máy chủ:</b> thông tin cần để vận hành dịch vụ như tài khoản VidGrab (nếu đăng nhập), phiên bản ứng dụng, mã nhận diện máy ở dạng băm, và số lượt tải để tính hạn mức.",
+  "moreInfo": "Chi tiết xem <privacyLink>Chính sách riêng tư</privacyLink>. Vẫn chưa giải quyết được? Gửi email về <mailLink>{{email}}</mailLink>."
+}

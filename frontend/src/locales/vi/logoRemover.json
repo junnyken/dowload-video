@@ -1,0 +1,159 @@
+{
+  "presets": {
+    "lowerRight": "Dưới phải",
+    "lowerLeft": "Dưới trái",
+    "upperRight": "Trên phải",
+    "upperLeft": "Trên trái"
+  },
+  "methods": {
+    "natural": {
+      "label": "Tự nhiên",
+      "desc": "Tự nhiên hơn, ít nhòe hơn. Phù hợp hơn khi có chuyển động (lấy nền thật từ khung hình lân cận). Nếu preview còn lem, nên chuyển sang Cắt viền."
+    },
+    "crop": {
+      "label": "Cắt viền",
+      "desc": "Cắt bỏ cạnh chứa logo — thay đổi kích thước video, thường sạch nhất khi logo sát mép"
+    },
+    "blur": {
+      "label": "Che mờ",
+      "desc": "Phủ mờ lên vùng logo — nhanh, nhưng để lại vệt rõ ràng"
+    },
+    "teleaSoft": "TELEA mềm"
+  },
+  "suitability": {
+    "good": "Trường hợp này phù hợp để làm sạch tự động.",
+    "manual": "Hệ thống cần bạn xác nhận vùng logo để xử lý chính xác hơn.",
+    "crop": "Với video này, cắt khung hình có thể cho kết quả tốt hơn lấp pixel.",
+    "low": "Vùng này chưa phù hợp để làm sạch tự động — kết quả có thể thấy vệt."
+  },
+  "zoom": {
+    "before": "Trước",
+    "after": "Sau (tự nhiên)"
+  },
+  "synthIdNote": "Chỉ áp dụng cho logo <b>hiển thị trên khung hình</b>. Watermark vô hình <b>SynthID</b> không nằm trong phạm vi hỗ trợ và <b>không thể xóa bằng bất kỳ công cụ nào</b>.",
+  "duration": {
+    "title": "⏱ Video quá dài",
+    "pro": "Video dài {{seconds}}s (giới hạn Pro: 2 phút). Hãy trim video trước.",
+    "free": "Video dài {{seconds}}s (giới hạn free: 30 giây). Nâng lên Pro hoặc trim video ngắn hơn."
+  },
+  "errors": {
+    "unsupportedFormat": "Chỉ hỗ trợ MP4, MOV, WebM, MKV.",
+    "tooLarge": "File vượt quá 500MB.",
+    "uploadFailed": "Upload lỗi ({{status}})",
+    "processFailed": "Xử lý lỗi ({{status}})"
+  },
+  "cta": {
+    "preview": "Xem trước kết quả →",
+    "useCrop": "Dùng cách cắt khung hình"
+  },
+  "header": {
+    "badge": "Flow/Veo · Làm sạch logo hiển thị",
+    "title": "Làm sạch logo hiển thị",
+    "subtitle": "Dành cho video Flow/Veo có logo hiển thị <b>trên khung hình</b>. Không phải video nào cũng có."
+  },
+  "idle": {
+    "drop": "Kéo thả video vào đây hoặc bấm để chọn file",
+    "formats": "MP4 · MOV · WebM · MKV · tối đa 500MB",
+    "hint": "Ưu tiên video có logo hiển thị rõ trên khung hình · Clip < 2 phút tốt nhất"
+  },
+  "uploading": {
+    "title": "Đang tải lên video...",
+    "subtitle": "Trích xuất khung hình để xác định vùng logo hiển thị"
+  },
+  "preview": {
+    "firstFrameAlt": "Khung hình đầu video",
+    "keptAfterCrop": "Phần giữ lại sau khi cắt",
+    "cropHint": "Vùng sáng trong ảnh là phần giữ lại sau khi cắt — vùng tối chứa logo sẽ bị loại bỏ. Đổi góc bên dưới để thay đổi vùng cắt.",
+    "dragHint": "Kéo vùng cam để di chuyển · kéo góc/cạnh để đổi kích thước. Căn chính xác vào vùng logo hiển thị.",
+    "whichCorner": "Vùng logo hiển thị ở góc nào?",
+    "noLogo": "Không thấy logo hiển thị trên video này",
+    "expand": "Mở rộng vùng:",
+    "tight": "Khít",
+    "chooseMethod": "Chọn phương thức",
+    "methodTip": "⚡ Tốt nhất với logo nhỏ, nền ít chuyển động. Video quá dài → hãy trim trước.",
+    "recommendedSelected": "✓ Khuyến nghị",
+    "recommended": "Khuyến nghị",
+    "pixelMode": "Chế độ lấp pixel:",
+    "variantStandard": "Chuẩn",
+    "variantSoft": "Mềm",
+    "softNote": "làm mịn viền sau TELEA",
+    "changeVideo": "Đổi video",
+    "tryNatural": "Vẫn muốn thử xóa tự nhiên thay thế",
+    "tryCrop": "Dùng cách cắt khung hình thay thế"
+  },
+  "guidance": {
+    "telea": "· TELEA phù hợp với logo nhỏ ở góc và nền tương đối sạch. Nên chọn dư ra một chút.",
+    "crop": "· Cắt viền thường sạch nhất khi logo sát mép — không để vệt trên nền.",
+    "longClip": "· Clip này dài hoặc phức tạp — cắt viền có thể cho kết quả tốt hơn.",
+    "adjusted": "· Đã chỉnh vùng thủ công — xem preview để kiểm tra trước khi xử lý toàn bộ.",
+    "padding0": "· Padding 0px — nếu còn thấy viền mờ, thử tăng lên 8px."
+  },
+  "noLogo": {
+    "badge": "Không thấy logo hiển thị",
+    "title": "Video này không cần làm sạch logo",
+    "body": "Không phát hiện logo hiển thị trên khung hình. Nếu bạn vẫn thấy logo, hãy thử chọn vùng thủ công.",
+    "commonCases": "Một số trường hợp phổ biến:",
+    "case1": "· <b>Google One Ultra</b> — Flow trên plan này thường không kèm logo hiển thị",
+    "case2": "· <b>Logo chỉ ở vài giây</b> — kiểm tra đầu hoặc cuối clip, không chỉ khung hình đầu tiên",
+    "case3": "· <b>Xuất từ project riêng</b> — một số luồng xuất không áp dụng logo nhìn thấy",
+    "synthId": "Tất cả video Flow/Veo đều có <b>SynthID</b> — watermark vô hình, không thấy bằng mắt thường. SynthID khác hoàn toàn với logo hiển thị và <b>không nằm trong phạm vi hỗ trợ</b>.",
+    "continue": "Tiếp tục với video gốc",
+    "manual": "Tôi vẫn thấy logo — chọn vùng thủ công"
+  },
+  "frame": {
+    "title": "Kết quả trên khung hình đầu",
+    "subtitle": "Kiểm tra trước khi xử lý toàn bộ video",
+    "processedAlt": "Khung hình đã xử lý",
+    "badge": "Khung hình đầu · sau xử lý tự nhiên",
+    "error": "Không thể tải preview — vẫn có thể tiếp tục xử lý.",
+    "loading": "Đang tạo preview từ khung hình đầu…",
+    "motionMode": "Chế độ chuyển động · Ít nhòe hơn",
+    "staticMode": "Nền tĩnh · Tự nhiên hơn",
+    "weak": "Preview còn lem",
+    "weakHint": "Nếu preview còn lem, nên chuyển sang Cắt viền.",
+    "switchCrop": "✂ Chuyển sang Cắt viền (sạch hơn)",
+    "keepNatural": "Vẫn xử lý tự nhiên",
+    "defaultReason": "Phù hợp hơn khi có chuyển động — lấy nền thật từ khung hình lân cận.",
+    "tipBlur": "· Nếu thấy viền mờ — quay lại tăng padding hoặc mở rộng vùng chọn.",
+    "tipFirstFrame": "· Đây là khung hình đầu — toàn clip dùng cùng cách xử lý này.",
+    "adjustRegion": "← Chỉnh lại vùng",
+    "processAll": "Xử lý toàn bộ video →"
+  },
+  "processing": {
+    "title": "Đang làm sạch logo hiển thị...",
+    "natural": "Đang tái tạo nền bằng patch texture + lấy nền thật từ các khung hình lân cận",
+    "crop": "Đang tính toán và cắt viền chứa vùng logo",
+    "blur": "Đang che mờ vùng logo hiển thị",
+    "suffix": "· 30–180 giây tùy độ dài & chuyển động clip"
+  },
+  "done": {
+    "titleCrop": "Đã cắt viền để loại bỏ logo",
+    "titleBlur": "Đã che mờ vùng logo",
+    "titleNatural": "Đã xử lý bằng xóa logo tự nhiên",
+    "sizeExpiry": "{{size}} MB · Bản xuất hết hạn sau ~20 phút",
+    "referenceAlt": "Khung hình tham chiếu",
+    "processedRegion": "Vùng đã xử lý",
+    "afterCrop": "Khung hình sau khi cắt",
+    "originalFrame": "Khung hình gốc · để tham chiếu",
+    "method": "Phương thức:",
+    "cropEdge": "Viền cắt:",
+    "region": "Vùng xử lý:",
+    "customRegion": "Vùng tùy chỉnh",
+    "download": "Tải video đã xử lý",
+    "adjust": "Chỉnh lại vùng xử lý",
+    "another": "Xử lý video khác",
+    "lowConfidence": "Xử lý từ trường hợp độ tin cậy thấp — nếu thấy vệt, thử lại với phương thức <b>Cắt viền</b>.",
+    "variance": "Kết quả có thể khác nhau tùy kích thước logo và nền phía sau vùng xử lý."
+  },
+  "error": {
+    "title": "Chưa thể xử lý video này",
+    "fallback": "Vùng logo hiện chưa phù hợp để làm sạch tự động.",
+    "tryThese": "Thử các cách sau:",
+    "tip1": "· Logo ở góc cạnh → thử phương thức <b>Cắt viền</b> — ổn định hơn trên mọi nền",
+    "tip2": "· Nền phức tạp → <b>Lấp pixel</b> có thể để vết không đều; Cắt viền hoặc Che mờ sẽ ổn hơn",
+    "tip3": "· Clip > 2 phút → cắt ngắn đoạn cần thiết trước khi xử lý",
+    "tryOther": "Thử vùng hoặc phương thức khác",
+    "retry": "Thử lại",
+    "changeVideo": "Đổi video khác"
+  }
+}

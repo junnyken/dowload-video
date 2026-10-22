@@ -1,0 +1,155 @@
+{
+  "items": {
+    "tiktok": {
+      "description": "Video, âm thanh, kênh, tải hàng loạt không watermark."
+    },
+    "douyin": {
+      "description": "TikTok phiên bản Trung Quốc, hỗ trợ đầy đủ qua Apify."
+    },
+    "facebook": {
+      "description": "Video, Reels, VOD live, trang/nhóm hàng loạt."
+    },
+    "threads": {
+      "description": "Video và ảnh từ bài đăng Threads công khai."
+    },
+    "pinterest": {
+      "description": "Video, ảnh, scrape board/bộ sưu tập."
+    },
+    "soundcloud": {
+      "description": "Tải nhạc, playlist, kênh nghệ sĩ."
+    },
+    "spotify": {
+      "description": "Tải qua YouTube match (độ chính xác cao cho nhạc phổ biến)."
+    },
+    "youtube": {
+      "description": "Video, 4K (đăng nhập), phụ đề, playlist.",
+      "note": "Có thể chậm hơn các nền tảng khác."
+    },
+    "instagram": {
+      "description": "Reel, carousel, story, batch profile. Cần cookie để xem nội dung riêng tư."
+    },
+    "twitter": {
+      "description": "Video tweet, GIF, batch timeline. Cần cookie cho tweet giới hạn."
+    },
+    "reddit": {
+      "description": "v.redd.it với merge audio, batch subreddit, cookie cho NSFW."
+    },
+    "bilibili": {
+      "description": "Video, playlist, UP owner batch, phụ đề. Cookie cho nội dung VIP."
+    },
+    "xiaohongshu": {
+      "description": "Video và ảnh carousel. Một số nội dung có thể không tải được.",
+      "note": "Chỉ tải được nội dung công khai."
+    },
+    "lemon8": {
+      "description": "Video và ảnh carousel từ bài đăng công khai."
+    },
+    "snapchat": {
+      "description": "Spotlight và Story công khai. Không hỗ trợ nội dung riêng tư."
+    },
+    "vk": {
+      "description": "Video đơn, playlist từ VKontakte."
+    },
+    "twitch": {
+      "description": "VOD và Clip (không hỗ trợ livestream)."
+    },
+    "rumble": {
+      "description": "Video đơn từ Rumble."
+    },
+    "odysee": {
+      "description": "Video và audio từ Odysee (LBRY)."
+    },
+    "dailymotion": {
+      "description": "Video và playlist Dailymotion."
+    },
+    "podcast": {
+      "description": "Tải episode từ RSS feed hoặc Apple Podcasts URL."
+    }
+  },
+  "features": {
+    "video": "Video",
+    "audio": "Audio / MP3",
+    "image": "Ảnh",
+    "carousel": "Carousel",
+    "batch": "Tải hàng loạt",
+    "channel": "Kênh",
+    "playlist": "Playlist",
+    "subtitle": "Phụ đề",
+    "story": "Story",
+    "reels": "Reels",
+    "4K": "4K",
+    "watermark-free": "Không watermark",
+    "audio-merge": "Merge audio",
+    "gif": "GIF / MP4",
+    "vod": "VOD",
+    "clip": "Clip",
+    "spotlight": "Spotlight",
+    "rss": "RSS Feed",
+    "apple-podcasts": "Apple Podcasts",
+    "thread": "Thread",
+    "subreddit": "Subreddit",
+    "live-vod": "Live VOD",
+    "album": "Album",
+    "board": "Board"
+  },
+  "status": {
+    "full": "Đầy đủ",
+    "basic": "Cơ bản",
+    "partial": "Một phần",
+    "cookie_required": "Cần cookie",
+    "proxy_required": "Có thể chậm hơn",
+    "temporarily_disabled": "Tạm dừng",
+    "unsupported": "Chưa hỗ trợ",
+    "degraded": "Đang gặp sự cố",
+    "experimental": "Đang thử nghiệm"
+  },
+  "sourceTypes": {
+    "single_video": "Video",
+    "single_audio": "Audio",
+    "single_post": "Bài đăng",
+    "playlist": "Playlist",
+    "album": "Album",
+    "artist": "Nghệ sĩ",
+    "channel": "Kênh",
+    "profile": "Profile",
+    "board": "Board",
+    "subreddit": "Cộng đồng",
+    "podcast_feed": "Podcast"
+  },
+  "newBadge": "NEW",
+  "liveBadge": "LIVE",
+  "title": "Nền tảng được hỗ trợ",
+  "syncing": "Đang đồng bộ…",
+  "liveCount_other": "● LIVE · {{count}} nền tảng",
+  "summary_other": "VidGrab hỗ trợ <b>{{count}}</b> nền tảng — <full>{{full}} đầy đủ</full>, <basic>{{basic}} cơ bản</basic>.",
+  "degradedCount": "{{n}} đang gặp sự cố",
+  "experimentalCount": "{{n}} đang thử nghiệm",
+  "statFull": "{{n}} Đầy đủ",
+  "statBasic": "{{n}} Cơ bản",
+  "statNew": "🆕 {{n}} Mới thêm",
+  "searchPlaceholder": "Tìm nền tảng, domain, tính năng… (vd: tiktok.com, playlist, 4K)",
+  "clearSearch": "Xóa tìm kiếm",
+  "filters": {
+    "all": "Tất cả",
+    "full": "✅ Đầy đủ",
+    "basic": "🟡 Cơ bản",
+    "cookie_required": "🔒 Cần cookie",
+    "proxy_required": "🌐 Có thể chậm hơn",
+    "new": "🆕 Mới"
+  },
+  "resultsMatch_other": "{{count}} nền tảng phù hợp với \"<q>{{query}}</q>\"",
+  "resultsNone": "Không tìm thấy nền tảng nào cho \"<q>{{query}}</q>\"",
+  "emptyTitle": "Không tìm thấy nền tảng nào.",
+  "emptyHint": "Thử từ khóa khác hoặc bỏ bộ lọc.",
+  "sections": {
+    "full": "✅ Hỗ trợ đầy đủ",
+    "upgraded": "⬆️ Mới nâng cấp",
+    "basic": "🟡 Hỗ trợ cơ bản",
+    "degraded": "⚠️ Đang gặp sự cố",
+    "experimental": "🧪 Đang thử nghiệm"
+  },
+  "noteLabel": "Ghi chú:",
+  "noteBody": "Một số nền tảng chỉ tải được nội dung công khai.",
+  "autoUpdated": "Trạng thái được cập nhật tự động.",
+  "requestMissing": "Không tìm thấy nền tảng bạn cần? Gửi yêu cầu qua nút <b>Góp ý & Phản hồi</b>."
+}

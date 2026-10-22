@@ -1,18 +1,20 @@
 /**
- * Supabase Auth errors -> Vietnamese messages for the auth forms.
+ * Supabase Auth errors -> messages for the auth forms, in the page language
+ * (text: locales/<lang>/auth.json "errors"; getters, so read at use time).
  * Wording is listed for BA review in docs/runbooks/antispam-signup.md.
  */
+import i18n from '../i18n';
 export const MSG = {
-  captchaNeeded: 'Vui lòng hoàn tất bước xác minh chống spam bên dưới rồi thử lại.',
-  captchaFailed: 'Xác minh chống spam không thành công hoặc đã hết hạn. Vui lòng xác minh lại rồi thử lần nữa.',
-  captchaLoadFailed: 'Không tải được bước xác minh chống spam. Hãy kiểm tra kết nối, tắt chặn quảng cáo cho trang này rồi tải lại trang.',
-  disposableEmail: 'Không nhận đăng ký bằng email tạm thời (email dùng một lần). Vui lòng dùng email thật như Gmail, Outlook hoặc email công ty.',
-  signupRejected: 'Không tạo được tài khoản với email này. Nếu đây là email tạm thời (dùng một lần), hãy đăng ký bằng email thật như Gmail, Outlook hoặc email công ty.',
-  invalidCredentials: 'Email hoặc mật khẩu không đúng.',
-  emailNotConfirmed: 'Email chưa được xác nhận. Hãy mở thư xác nhận trong hộp thư trước khi đăng nhập.',
-  rateLimited: 'Bạn thao tác quá nhanh. Vui lòng chờ một lát rồi thử lại.',
-  network: 'Lỗi kết nối mạng. Hãy kiểm tra Internet rồi thử lại.',
-  generic: 'Đã xảy ra lỗi. Vui lòng thử lại.',
+  get captchaNeeded() { return i18n.t('errors.captchaNeeded', { ns: 'auth' }); },
+  get captchaFailed() { return i18n.t('errors.captchaFailed', { ns: 'auth' }); },
+  get captchaLoadFailed() { return i18n.t('errors.captchaLoadFailed', { ns: 'auth' }); },
+  get disposableEmail() { return i18n.t('errors.disposableEmail', { ns: 'auth' }); },
+  get signupRejected() { return i18n.t('errors.signupRejected', { ns: 'auth' }); },
+  get invalidCredentials() { return i18n.t('errors.invalidCredentials', { ns: 'auth' }); },
+  get emailNotConfirmed() { return i18n.t('errors.emailNotConfirmed', { ns: 'auth' }); },
+  get rateLimited() { return i18n.t('errors.rateLimited', { ns: 'auth' }); },
+  get network() { return i18n.t('errors.network', { ns: 'auth' }); },
+  get generic() { return i18n.t('errors.generic', { ns: 'auth' }); },
 };
 
 export function authErrorMessage(error) {

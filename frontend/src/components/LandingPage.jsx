@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
+import { useLocalePath } from '../i18n';
 import {
   Download, Layers, History, Wand2, Lock,
   Sparkles, Smartphone, X, ShieldCheck, Puzzle, Lightbulb, Code, Building2, ArrowRight
@@ -42,23 +44,18 @@ const platforms = [
 // screen not rendered, until it is rebuilt. Flip to false to reopen.
 const FLOW_LOCKED = true;
 
+// Tab text lives in locales/<lang>/landing.json under tabs.<id>.{label,short,title}.
 const tabs = [
-  { id: 'single',  label: 'Tải Video & Nhạc', shortLabel: 'Video & Nhạc', icon: Download },
-  { id: 'bulk',    label: 'Hàng Loạt · Kênh', shortLabel: 'Hàng Loạt',   icon: Layers  },
-  { id: 'flow',    label: 'Xóa Logo Video',       shortLabel: 'Xóa Logo',     icon: Wand2   },
-  { id: 'history', label: 'Đã Tải',             shortLabel: 'Đã Tải',       icon: History },
+  { id: 'single',  icon: Download },
+  { id: 'bulk',    icon: Layers  },
+  { id: 'flow',    icon: Wand2   },
+  { id: 'history', icon: History },
 ];
-
-const TAB_TITLES = {
-  single:  'Tải 1 link — video, nhạc, phụ đề',
-  bulk:    'Tải nhiều link, kênh, playlist cùng lúc',
-  flow:    'Xóa logo watermark trên video Flow / Veo',
-  history: 'Lịch sử các lượt tải gần đây',
-};
 
 // Segmented pill row: surface-2 track, active = surface + fg. Scrolls
 // horizontally on narrow screens instead of clipping labels.
 function ModeTabs({ activeTab, onChange }) {
+  const { t } = useTranslation('landing');
   return (
     <div className="grid grid-cols-4 gap-1 p-1 rounded-control bg-surface-2 border border-line w-full sm:w-fit sm:inline-flex sm:items-center">
       {tabs.map((tab) => {
@@ -73,7 +70,7 @@ function ModeTabs({ activeTab, onChange }) {
             onClick={() => { if (!locked) onChange(tab.id); }}
             disabled={locked}
             aria-disabled={locked || undefined}
-            title={locked ? 'Đang nâng cấp — sẽ mở lại sau' : TAB_TITLES[tab.id]}
+            title={locked ? t('tabs.lockedTitle') : t(`tabs.${tab.id}.title`)}
             aria-pressed={isActive}
             className={`relative min-w-0 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 py-2 sm:py-1.5 rounded-lg text-[11px] sm:text-[13px] leading-tight font-medium whitespace-nowrap transition-colors ${
               locked
@@ -84,12 +81,12 @@ function ModeTabs({ activeTab, onChange }) {
             }`}
           >
             {locked ? <Lock className="w-3.5 h-3.5" /> : <Icon className="w-3.5 h-3.5" />}
-            <span className="hidden sm:inline">{tab.label}</span>
-            <span className="sm:hidden">{tab.shortLabel}</span>
+            <span className="hidden sm:inline">{t(`tabs.${tab.id}.label`)}</span>
+            <span className="sm:hidden">{t(`tabs.${tab.id}.short`)}</span>
             {isFlow && (
               // wording: BA review — owner 15/10: logo removal locked until it is reworked
               <span className={`${isActive ? 'invisible ' : ''}absolute top-0.5 right-0.5 sm:static text-[9px] font-mono font-semibold px-1 py-0.5 rounded leading-none ${locked ? 'bg-surface text-fg-muted border border-line' : 'bg-accent-soft text-accent-text'}`}>
-                {locked ? 'Sắp có' : 'New'}
+                {locked ? t('tabs.soon') : t('tabs.new')}
               </span>
             )}
           </button>
@@ -100,6 +97,8 @@ function ModeTabs({ activeTab, onChange }) {
 }
 
 export default function LandingPage() {
+  const { t } = useTranslation('landing');
+  const lp = useLocalePath();
   // Top of the funnel. Without it there is no denominator, so no conversion
   // rate can be computed from any of the steps below it. Empty dep array: once
   // per mount, not once per re-render.
@@ -213,8 +212,17 @@ export default function LandingPage() {
               <Smartphone className="w-5 h-5 text-accent-text" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-fg">Cài VidGrab trên iPhone</p>
-              <p className="text-xs text-fg-muted">Nhấn <span className="text-accent-text font-bold">⬆ Chia sẻ</span> → <span className="text-fg font-semibold">Thêm vào Màn hình chính</span></p>
+              <p className="text-sm font-bold text-fg">{t('ios.title')}</p>
+              <p className="text-xs text-fg-muted">
+                <Trans
+                  t={t}
+                  i18nKey="ios.body"
+                  components={{
+                    c1: <span className="text-accent-text font-bold" />,
+                    c2: <span className="text-fg font-semibold" />,
+                  }}
+                />
+              </p>
             </div>
             <button onClick={dismissInstall} className="p-1.5 text-fg-muted hover:text-fg transition-colors cursor-pointer">
               <X className="w-4 h-4" />
@@ -243,15 +251,15 @@ export default function LandingPage() {
           {/* Mono label — what the product does, in one line */}
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface border border-line text-[11px] font-mono text-fg-2 max-w-full mb-5">
             <Sparkles className="w-3 h-3 flex-shrink-0 text-accent-text" />
-            <span className="truncate">{'// 30+ nền tảng \\\\'}</span>
+            <span className="truncate">{t('heroLabel')}</span>
           </div>
 
           <h1 className={`font-semibold tracking-tight leading-[1.08] text-fg text-balance ${
             compactHero ? 'text-3xl sm:text-4xl md:text-5xl' : 'text-4xl sm:text-5xl md:text-6xl'
           }`}>
-            Tải video TikTok / Douyin
+            {t('heroTitle1')}
             <br />
-            <span className="text-accent-text">không watermark</span>
+            <span className="text-accent-text">{t('heroTitle2')}</span>
           </h1>
 
           {/* Product depth cues — kept in both. Two of these are navigation
@@ -263,13 +271,13 @@ export default function LandingPage() {
               className="inline-flex items-center gap-1.5 hover:text-fg transition-colors cursor-pointer"
             >
               <Layers className="w-3 h-3" />
-              Hàng loạt · kênh · ZIP
+              {t('cueBulk')}
             </button>
             <span aria-hidden="true" className="hidden sm:inline">·</span>
             <span className="inline-flex items-center gap-1.5">
               <Download className="w-3 h-3" />
               {/* wording: BA review */}
-              {isAuthenticated ? '4K' : '4K (đăng nhập)'} · 1080p · MP3 320kbps
+              {isAuthenticated ? t('qualityAuth') : t('qualityGuest')}
             </span>
             <span aria-hidden="true" className="hidden sm:inline">·</span>
             <button
@@ -277,12 +285,12 @@ export default function LandingPage() {
               className="inline-flex items-center gap-1.5 hover:text-fg transition-colors cursor-pointer"
             >
               <History className="w-3 h-3" />
-              Lịch sử tải
+              {t('cueHistory')}
             </button>
             <span aria-hidden="true" className="hidden sm:inline">·</span>
             <span className="inline-flex items-center gap-1.5">
               <ShieldCheck className="w-3 h-3" />
-              Không quảng cáo · không giới hạn giả
+              {t('cueNoAds')}
             </span>
           </div>
 
@@ -293,7 +301,7 @@ export default function LandingPage() {
           <>
           {typeof window !== 'undefined' && !window.matchMedia('(display-mode: standalone)').matches && (
             <p className="text-xs text-fg-muted text-center mt-3 sm:hidden inline-flex items-center gap-1.5">
-              <Lightbulb className="w-3 h-3" /> Thêm vào màn hình chính để mở nhanh hơn
+              <Lightbulb className="w-3 h-3" /> {t('addToHome')}
             </p>
           )}
 
@@ -304,14 +312,14 @@ export default function LandingPage() {
               return (
                 <div
                   key={i}
-                  title={degraded ? 'Đang gặp sự cố' : undefined} /* wording: BA review */
+                  title={degraded ? t('degraded') : undefined} /* wording: BA review */
                   className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${p.bg} hover:border-line-strong transition-colors cursor-default ${degraded ? 'opacity-70' : ''}`}
                 >
                   <span className={`${p.ic} [&_svg]:w-4 [&_svg]:h-4`}><p.icon /></span>
                   <span className="hidden sm:inline">{p.label}</span>
                   {degraded && (
                     <span className="text-[10px] font-normal text-fg-muted">
-                      <span className="sr-only">{p.label}: </span>Đang gặp sự cố{/* wording: BA review */}
+                      <span className="sr-only">{p.label}: </span>{t('degraded')}{/* wording: BA review */}
                     </span>
                   )}
                 </div>
@@ -323,7 +331,7 @@ export default function LandingPage() {
               the loudest button on the page; it must stay a quiet link). The
               Puzzle glyph comes from lucide; no hotlinked Chrome mark. */}
           <a
-            href="/extension"
+            href={lp('/extension')}
             onClick={(e) => {
               e.preventDefault();
               window.history.pushState({}, '', '/extension');
@@ -332,7 +340,7 @@ export default function LandingPage() {
             className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-fg-2 border border-line hover:border-line-strong hover:text-fg rounded-control transition-colors"
           >
             <Puzzle className="w-4 h-4 text-accent-text" />
-            Cài Extension Chrome — TikTok sạch 1 click
+            {t('extension')}
           </a>
           </>
           )}
@@ -351,12 +359,12 @@ export default function LandingPage() {
         </div>
 
         {/* Internal links to the per-platform SEO pages */}
-        <nav aria-label="Tải video theo nền tảng" className="w-full mt-10 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-fg-muted">
-          <span>Tải video theo nền tảng:</span>
+        <nav aria-label={t('platformNavLabel')} className="w-full mt-10 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-fg-muted">
+          <span>{t('platformNav')}</span>
           {platformPages.filter((p) => classify(p.platform) === 'healthy').map((p) => (
             <a
               key={p.slug}
-              href={`/${p.slug}`}
+              href={lp(`/${p.slug}`)}
               onClick={spaLink(`/${p.slug}`)}
               className="hover:text-fg underline-offset-4 hover:underline transition-colors"
             >
@@ -368,52 +376,57 @@ export default function LandingPage() {
         {/* wording: BA review (whole API section) */}
         <section aria-labelledby="landing-api-title" className="w-full mt-12">
           <h2 id="landing-api-title" className="text-lg font-semibold text-fg tracking-tight">
-            Kết nối VidGrab vào hệ thống của bạn (API)
+            {t('api.title')}
           </h2>
           <p className="mt-1 text-sm text-fg-muted">
-            Tự động tải video từ ứng dụng hoặc máy chủ của bạn, có hai mức dùng: cá nhân và doanh nghiệp.
+            {t('api.intro')}
           </p>
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="p-5 rounded-2xl bg-surface border border-line flex flex-col">
               <div className="flex items-center gap-2">
                 <Code className="w-4 h-4 text-fg-2" aria-hidden="true" />
-                <h3 className="text-sm font-semibold text-fg">API key cá nhân</h3>
+                <h3 className="text-sm font-semibold text-fg">{t('api.personal.title')}</h3>
               </div>
               <p className="mt-2 text-xs text-fg-muted leading-relaxed">
-                Dành cho lập trình viên và nhu cầu nhỏ. Dùng gói Pro hoặc Team, tự tạo API key ở trang API Keys,
-                rồi gọi <code className="bg-surface-2 px-1 rounded">POST /api/v1/fetch-link</code> kèm header{' '}
-                <code className="bg-surface-2 px-1 rounded">X-API-Key: vidgrab_…</code>. Lệnh gọi giữ kết nối đến khi tải xong rồi trả kết quả.
-                Giới hạn 30 lượt gọi mỗi phút cho mỗi key, và tổng lượt gọi mỗi tháng tuỳ gói.
+                <Trans
+                  t={t}
+                  i18nKey="api.personal.body"
+                  components={{
+                    c1: <code className="bg-surface-2 px-1 rounded" />,
+                    c2: <code className="bg-surface-2 px-1 rounded" />,
+                  }}
+                />
               </p>
               <div className="pt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs mt-auto">
-                <a href="/api-docs" onClick={spaLink('/api-docs')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">
-                  Xem tài liệu API <ArrowRight className="w-3 h-3" aria-hidden="true" />
+                <a href={lp('/api-docs')} onClick={spaLink('/api-docs')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">
+                  {t('api.personal.docs')} <ArrowRight className="w-3 h-3" aria-hidden="true" />
                 </a>
-                <a href="/api-keys" onClick={spaLink('/api-keys')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">
-                  Tạo API key <ArrowRight className="w-3 h-3" aria-hidden="true" />
+                <a href={lp('/api-keys')} onClick={spaLink('/api-keys')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">
+                  {t('api.personal.createKey')} <ArrowRight className="w-3 h-3" aria-hidden="true" />
                 </a>
-                <a href="/pricing" onClick={spaLink('/pricing')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">
-                  Xem bảng giá <ArrowRight className="w-3 h-3" aria-hidden="true" />
+                <a href={lp('/pricing')} onClick={spaLink('/pricing')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">
+                  {t('api.personal.pricing')} <ArrowRight className="w-3 h-3" aria-hidden="true" />
                 </a>
               </div>
             </div>
             <div className="p-5 rounded-2xl bg-surface border border-line flex flex-col">
               <div className="flex items-center gap-2">
                 <Building2 className="w-4 h-4 text-fg-2" aria-hidden="true" />
-                <h3 className="text-sm font-semibold text-fg">Partner API cho doanh nghiệp</h3>
+                <h3 className="text-sm font-semibold text-fg">{t('api.partner.title')}</h3>
               </div>
               <p className="mt-2 text-xs text-fg-muted leading-relaxed">
-                Dành cho doanh nghiệp gọi từ máy chủ của mình: tạo lệnh tải (job) chạy nền, nhận kết quả qua webhook có chữ ký xác thực.
-                Giới hạn đặt riêng cho từng key (số lệnh mỗi phút và mỗi ngày), số lệnh mỗi tháng theo hợp đồng.
-                Có thể chỉ cho phép key hoạt động từ IP máy chủ của bạn.
-                Key dạng <code className="bg-surface-2 px-1 rounded">vgp_…</code> do VidGrab cấp, bạn không tự tạo được.
+                <Trans
+                  t={t}
+                  i18nKey="api.partner.body"
+                  components={{ c1: <code className="bg-surface-2 px-1 rounded" /> }}
+                />
               </p>
               <div className="pt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs mt-auto">
-                <a href="/api-docs#partner" onClick={spaLink('/api-docs#partner')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">
-                  Tài liệu Partner API <ArrowRight className="w-3 h-3" aria-hidden="true" />
+                <a href={lp('/api-docs#partner')} onClick={spaLink('/api-docs#partner')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">
+                  {t('api.partner.docs')} <ArrowRight className="w-3 h-3" aria-hidden="true" />
                 </a>
-                <span className="text-fg-muted">Liên hệ để nhận key:</span>
-                <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Đăng ký Partner API')}`} className="text-fg-2 hover:text-fg underline-offset-4 hover:underline">
+                <span className="text-fg-muted">{t('api.partner.contact')}</span>
+                <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(t('api.partner.mailSubject'))}`} className="text-fg-2 hover:text-fg underline-offset-4 hover:underline">
                   Email
                 </a>
                 <a href="https://t.me/vidgrab_support" target="_blank" rel="noopener noreferrer" className="text-fg-2 hover:text-fg underline-offset-4 hover:underline">
@@ -427,7 +440,7 @@ export default function LandingPage() {
         {/* Share prompt */}
         {false && !shareShown && (
           <div className="mt-4 flex items-center justify-between bg-surface-2 border border-line rounded-xl px-4 py-3">
-            <p className="text-sm text-fg-muted">Tìm thấy hữu ích? Chia sẻ với bạn bè</p>
+            <p className="text-sm text-fg-muted">{t('share.prompt')}</p>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
@@ -437,7 +450,7 @@ export default function LandingPage() {
                 }}
                 className="text-xs bg-accent hover:bg-accent-hover text-accent-fg px-3 py-1.5 rounded-lg font-medium transition-colors flex-shrink-0"
               >
-                Chia sẻ
+                {t('share.button')}
               </button>
               <button
                 onClick={() => { setShareShown(true); try { sessionStorage.setItem('vg_share_shown', '1'); } catch {} }}

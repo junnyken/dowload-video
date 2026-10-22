@@ -8,6 +8,8 @@
 // wording: BA review (every sentence in this file)
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Loader2, Puzzle, RefreshCw, Server, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useLocalePath } from '../i18n';
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 
@@ -78,6 +80,8 @@ function fmtDuration(s) {
 // to fetch the whole Douyin channel through the extension straight away.
 // `serverWhole`: the server reads the whole Douyin channel itself (slower first answer).
 export default function ChannelPreview({ url, withAuth, signedIn, onDownload, onClose, want, autoTab, serverWhole }) {
+  const { t } = useTranslation('channelPreview');
+  const lp = useLocalePath();
   const [phase, setPhase] = useState('loading');
   const [listing, setListing] = useState(null);
   const [error, setError] = useState('');
@@ -119,11 +123,11 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
     if (!res.ok) {
       const d = data && data.detail;
       throw new Error(typeof d === 'string' && d ? d : res.status === 429
-        ? 'Bạn lấy danh sách quá nhanh. Vui lòng chờ khoảng một phút rồi thử lại.'
-        : 'Không lấy được danh sách video của kênh. Vui lòng thử lại sau.');
+        ? t('errTooFast')
+        : t('errListFail'));
     }
     return data;
-  }, [url, withAuth]);
+  }, [url, withAuth, t]);
 
   const load = useCallback(async () => {
     if (relayed.current) return;
@@ -131,7 +135,7 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
     if (isFacebookChannel(url)) {
       // no server listing for Facebook: the extension relay is the list
       if (!signedIn) {
-        setError('Đăng nhập VidGrab để lấy danh sách Reels của trang Facebook này. Cần có tiện ích VidGrab trong trình duyệt.');
+        setError(t('errFbSignIn'));
         setPhase('error');
       }
       return;
@@ -146,14 +150,14 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
       if (relayed.current) return;
       setError(e.message); setPhase('error');
     }
-  }, [list, autoTab, preselect, url, signedIn]);
+  }, [list, autoTab, preselect, url, signedIn, t]);
 
   const loadDeep = async () => {
     setDeepBusy(true); setNote('');
     try {
       const deep = await list(true);
       if ((deep.items || []).length > (listing.items || []).length) setListing({ ...deep, moreHint: null, hasMore: false });
-      else setNote('Máy chủ không lấy thêm được video nào cho kênh này. Hãy dùng tiện ích VidGrab để lấy đủ.');
+      else setNote(t('noMoreFromServer'));
     } catch (e) {
       setNote(e.message);
     } finally {
@@ -184,7 +188,7 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: (listingRef.current && listingRef.current.channelUrl) || url }),
       }));
       start = await res.json();
-      if (!res.ok || !start.openUrl) throw new Error((start && typeof start.detail === 'string' && start.detail) || 'Không tạo được phiên lấy danh sách.');
+      if (!res.ok || !start.openUrl) throw new Error((start && typeof start.detail === 'string' && start.detail) || t('errRelaySession'));
     } catch (e) {
       if (tab) tab.close();
       failRelay(e.message);
@@ -195,13 +199,13 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
     const until = opened + 15 * 60_000;
     relayTimer.current = setInterval(async () => {
       if (Date.now() > until) {
-        failRelay('Chưa nhận được danh sách sau 15 phút. Kiểm tra tiện ích VidGrab (bản 5.11.1 trở lên) đã cài trong trình duyệt này rồi bấm lại.');
+        failRelay(t('errRelayTimeout'));
         return;
       }
       let doc = null;
       try {
         const r = await fetch(`${API}/channel-relay/${encodeURIComponent(start.token)}`);
-        if (r.status === 404) { failRelay('Phiên lấy danh sách đã hết hạn. Hãy bấm lại.'); return; }
+        if (r.status === 404) { failRelay(t('errRelayExpired')); return; }
         if (r.ok) doc = await r.json();
       } catch { /* try again next tick */ }
       if (!doc) return;
@@ -222,7 +226,9 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
       setListing({ platform: doc.platform || 'douyin', ...prev, channelTitle: doc.channelTitle || (prev && prev.channelTitle), items: merged, moreHint: null, hasMore: false, whole: true });
       setPhase('ready'); setError('');
       setRelay({ state: 'idle', count: 0 });
-      setNote(`Đã lấy ${(doc.items || []).length} video của kênh qua tiện ích${doc.skipped ? ` (bỏ qua ${doc.skipped} bài ảnh)` : ''}.`);
+      setNote(doc.skipped
+        ? t('relayDoneSkipped', { count: (doc.items || []).length, skipped: doc.skipped })
+        : t('relayDone', { count: (doc.items || []).length }));
       preselect(merged);
     }, 3000);
   };
@@ -240,9 +246,8 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
   const quotaBound = cap != null && cap <= PER_PRESS; // what is left today stops this press, not the 200 per request
   const { now, later } = splitByCap(selected, cap == null ? PER_PRESS : Math.min(cap, PER_PRESS));
   // wording: BA review
-  const laterText = quotaBound
-    ? `hôm nay bạn còn ${cap} lượt: lần này tải ${now.length} video mới nhất, ${later.length} video còn lại vẫn được giữ chọn để tải sau`
-    : `mỗi lần gửi tối đa ${PER_PRESS} video: lần này tải ${now.length} video, ${later.length} video còn lại vẫn được giữ chọn, bấm tải tiếp sau khi lượt này chạy`;
+  // `pre`: 'warn' = "You selected N videos but …", 'note' = "Note: …"
+  const laterText = (pre) => t(`${pre}${quotaBound ? 'Quota' : 'Cap'}`, { count: now.length, later: later.length, selected: selected.length, cap, per: PER_PRESS });
   const toggle = (id) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const submit = async () => {
@@ -252,11 +257,12 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
       const ok = await onDownload(now.map((v) => v.url));
       if (ok) {
         setSel(new Set(later.map((v) => v.id)));
+        const resetAt = quota && quota.platform_quota && quota.platform_quota.reset_time_vn;
         setNote(!later.length
-          ? `Đã gửi tải ${now.length} video.`
+          ? t('sent', { count: now.length })
           : quotaBound
-            ? `Đã gửi tải ${now.length} video. Còn ${later.length} video đã chọn chưa tải vì hết lượt hôm nay${quota && quota.platform_quota && quota.platform_quota.reset_time_vn ? ` — lượt mới lúc ${quota.platform_quota.reset_time_vn}` : ''}; danh sách vẫn được giữ chọn ở đây.`
-            : `Đã gửi tải ${now.length} video. Còn ${later.length} video đã chọn (mỗi lần gửi tối đa ${PER_PRESS} video); bấm tải tiếp khi lượt này chạy xong.`);
+            ? t(resetAt ? 'sentQuotaReset' : 'sentQuota', { count: now.length, later: later.length, time: resetAt })
+            : t('sentCap', { count: now.length, later: later.length, per: PER_PRESS }));
         refreshQuota();
       }
     } finally {
@@ -271,45 +277,45 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
   };
 
   return (
-    <div className="mb-4 p-4 rounded-xl border border-line bg-surface space-y-3" aria-label="Danh sách video của kênh">
+    <div className="mb-4 p-4 rounded-xl border border-line bg-surface space-y-3" aria-label={t('listLabel')}>
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-fg truncate">{listing ? listing.channelTitle : 'Danh sách video của kênh'}</p>
+          <p className="text-sm font-semibold text-fg truncate">{listing ? listing.channelTitle : t('listLabel')}</p>
           <p className="text-[11px] text-fg-muted truncate">{url}</p>
         </div>
-        <button type="button" onClick={onClose} className="p-1 text-fg-muted hover:text-fg cursor-pointer" aria-label="Đóng danh sách">
+        <button type="button" onClick={onClose} className="p-1 text-fg-muted hover:text-fg cursor-pointer" aria-label={t('closeList')}>
           <X className="w-4 h-4" />
         </button>
       </div>
 
       {(relay.state === 'waiting' || relay.state === 'scrolling') && (
         <p className="flex items-center gap-2 text-xs text-fg"><Loader2 className="w-3.5 h-3.5 animate-spin" />
-          {relay.state === 'waiting' ? 'Đã mở kênh ở tab mới — chờ tiện ích VidGrab bắt đầu cuộn để lấy đủ cả kênh (đừng đóng tab đó)…' : `Tiện ích đang cuộn kênh: đã nhận ${relay.count} video…`}
+          {relay.state === 'waiting' ? t('relayWaiting') : t('relayScrolling', { count: relay.count })}
         </p>
       )}
       {relay.state === 'login' && (
         <p className="flex items-start gap-2 text-xs text-warning"><Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0 mt-0.5" />
-          {isFacebookChannel(url) ? 'Facebook' : 'Douyin'} yêu cầu đăng nhập mới cho xem hết kênh (mới thấy {relay.count} video). Hãy đăng nhập trong tab vừa mở; đăng nhập xong tiện ích tự cuộn tiếp và danh sách tự về đây.
+          {t('relayLogin', { platform: isFacebookChannel(url) ? 'Facebook' : 'Douyin', count: relay.count })}
         </p>
       )}
       {relay.state === 'noext' && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-warning">
           <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
-          <span className="flex-1 min-w-0">Chưa thấy tiện ích VidGrab trả lời từ tab vừa mở. Trình duyệt này cần có tiện ích VidGrab (bản {isFacebookChannel(url) ? '5.15.0' : '5.11.1'} trở lên); cài xong, tải lại tab kênh vừa mở (F5) — vẫn đang chờ.</span>
+          <span className="flex-1 min-w-0">{t('relayNoExt', { ver: isFacebookChannel(url) ? '5.15.0' : '5.11.1' })}</span>
           {/* new tab: leaving this page would stop the wait */}
-          <a href="/extension" target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 px-2.5 py-1 font-medium text-accent-text border border-line hover:border-line-strong rounded-lg">
-            <Puzzle className="w-3.5 h-3.5" /> Cài tiện ích VidGrab
+          <a href={lp('/extension')} target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 px-2.5 py-1 font-medium text-accent-text border border-line hover:border-line-strong rounded-lg">
+            <Puzzle className="w-3.5 h-3.5" /> {t('installExt')}
           </a>
         </div>
       )}
       {relay.state === 'error' && relay.msg && <p className="text-xs text-danger">{relay.msg}</p>}
       {phase === 'loading' && (relay.state === 'idle' || relay.state === 'error') && (
-        <p className="flex items-center gap-2 text-xs text-fg-muted"><Loader2 className="w-4 h-4 animate-spin" /> {serverWhole ? 'Đang lấy cả kênh, có thể mất khoảng 1 phút…' : 'Đang lấy danh sách video của kênh…'}</p>
+        <p className="flex items-center gap-2 text-xs text-fg-muted"><Loader2 className="w-4 h-4 animate-spin" /> {serverWhole ? t('loadingWhole') : t('loadingList')}</p>
       )}
       {phase === 'error' && (
         <div className="flex items-start gap-2 text-xs text-danger">
           <span className="flex-1">{error}</span>
-          <button type="button" onClick={load} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg cursor-pointer"><RefreshCw className="w-3.5 h-3.5" /> Thử lại</button>
+          <button type="button" onClick={load} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg cursor-pointer"><RefreshCw className="w-3.5 h-3.5" /> {t('retry')}</button>
         </div>
       )}
 
@@ -318,23 +324,21 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
           {listing.moreHint === 'douyin_extension' && (
             <div className="p-2.5 rounded-lg border border-line bg-surface-2 text-[11px] text-fg-2 space-y-2">
               <p>
-                Kênh này còn nhiều video hơn; máy chủ chỉ lấy được {items.length} video mới nhất (Douyin chỉ cho trình duyệt thật xem hết).
-                {signedIn
-                  ? ' Bấm “Lấy đủ kênh bằng tiện ích”: kênh mở ở tab mới, tiện ích VidGrab tự cuộn hết rồi gửi danh sách về đây.'
-                  : ' Hãy đăng nhập để lấy đủ cả kênh bằng tiện ích VidGrab.'}
+                {t('moreHint', { count: items.length })}
+                {' '}{signedIn ? t('moreHintSignedIn') : t('moreHintGuest')}
               </p>
               <div className="flex flex-wrap gap-2">
                 {signedIn && (
                   <button type="button" onClick={() => startRelay()} disabled={['waiting', 'scrolling', 'login', 'noext'].includes(relay.state)} className="inline-flex items-center gap-1.5 px-2.5 py-1 font-semibold text-accent-fg bg-accent hover:bg-accent-hover rounded-lg cursor-pointer disabled:opacity-60">
-                    <Puzzle className="w-3.5 h-3.5" /> Lấy đủ kênh bằng tiện ích
+                    <Puzzle className="w-3.5 h-3.5" /> {t('fetchWholeExt')}
                   </button>
                 )}
-                <a href="/extension" onClick={openExtensionPage} className="inline-flex items-center gap-1.5 px-2.5 py-1 font-medium text-accent-text border border-line hover:border-line-strong rounded-lg">
-                  <Puzzle className="w-3.5 h-3.5" /> Cài tiện ích VidGrab
+                <a href={lp('/extension')} onClick={openExtensionPage} className="inline-flex items-center gap-1.5 px-2.5 py-1 font-medium text-accent-text border border-line hover:border-line-strong rounded-lg">
+                  <Puzzle className="w-3.5 h-3.5" /> {t('installExt')}
                 </a>
                 {signedIn && (
                   <button type="button" onClick={loadDeep} disabled={deepBusy} className="inline-flex items-center gap-1.5 px-2.5 py-1 font-medium text-fg-2 border border-line hover:border-line-strong rounded-lg cursor-pointer disabled:opacity-60">
-                    {deepBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Server className="w-3.5 h-3.5" />} Lấy thêm qua máy chủ (tối đa 200 video)
+                    {deepBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Server className="w-3.5 h-3.5" />} {t('fetchMoreServer')}
                   </button>
                 )}
               </div>
@@ -342,13 +346,13 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
           )}
 
           <div className="flex flex-wrap items-center gap-2 text-[11px]">
-            <span className="text-fg-muted">{items.length} video</span>
-            <button type="button" onClick={() => setSel(new Set(items.map((v) => v.id)))} className="px-2 py-1 rounded-lg border border-line text-fg-2 hover:text-fg cursor-pointer">Chọn tất cả</button>
-            <button type="button" onClick={() => setSel(new Set())} disabled={!sel.size} className="px-2 py-1 rounded-lg text-fg-muted hover:text-fg cursor-pointer disabled:opacity-50">Bỏ chọn</button>
+            <span className="text-fg-muted">{t('videoCount', { count: items.length })}</span>
+            <button type="button" onClick={() => setSel(new Set(items.map((v) => v.id)))} className="px-2 py-1 rounded-lg border border-line text-fg-2 hover:text-fg cursor-pointer">{t('selectAll')}</button>
+            <button type="button" onClick={() => setSel(new Set())} disabled={!sel.size} className="px-2 py-1 rounded-lg text-fg-muted hover:text-fg cursor-pointer disabled:opacity-50">{t('deselect')}</button>
             {[10, 50].map((k) => (
-              <button key={k} type="button" onClick={() => setSel(new Set(items.slice(0, k).map((v) => v.id)))} className="px-2 py-1 rounded-lg border border-line text-fg-2 hover:text-fg cursor-pointer">{k} mới nhất</button>
+              <button key={k} type="button" onClick={() => setSel(new Set(items.slice(0, k).map((v) => v.id)))} className="px-2 py-1 rounded-lg border border-line text-fg-2 hover:text-fg cursor-pointer">{t('newestN', { count: k })}</button>
             ))}
-            {cap != null && <span className={`ml-auto ${cap === 0 ? 'text-danger' : 'text-fg-muted'}`}>Còn {cap} lượt tải hôm nay</span>}
+            {cap != null && <span className={`ml-auto ${cap === 0 ? 'text-danger' : 'text-fg-muted'}`}>{t('capLeft', { count: cap })}</span>}
           </div>
 
           <div className="max-h-96 overflow-y-auto space-y-1.5 pr-1">
@@ -357,7 +361,7 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
               const dur = fmtDuration(v.durationSec);
               return (
                 <label key={v.id} className={`flex items-center gap-3 p-2 rounded-xl border cursor-pointer transition-colors ${on ? 'bg-accent-soft border-accent/40' : 'bg-surface-2 border-line hover:border-line-strong'}`}>
-                  <input type="checkbox" checked={on} onChange={() => toggle(v.id)} className="w-3.5 h-3.5 accent-accent flex-shrink-0" aria-label={`Chọn ${v.title}`} />
+                  <input type="checkbox" checked={on} onChange={() => toggle(v.id)} className="w-3.5 h-3.5 accent-accent flex-shrink-0" aria-label={t('selectVideo', { title: v.title })} />
                   {v.thumbnail && <img src={v.thumbnail} alt="" referrerPolicy="no-referrer" className="w-14 h-9 object-cover rounded-lg flex-shrink-0 bg-surface" />}
                   <span className="flex-1 min-w-0 text-xs text-fg font-medium truncate" title={v.title}>{v.title}</span>
                   {dur && <span className="text-[10px] text-fg-muted tabular-nums">{dur}</span>}
@@ -367,27 +371,27 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
           </div>
 
           {later.length > 0 && !confirm && (
-            <p className="text-[11px] text-warning">Bạn chọn {selected.length} video nhưng {laterText}.</p>
+            <p className="text-[11px] text-warning">{laterText('warn')}</p>
           )}
           {note && <p className="text-[11px] text-fg-2">{note}</p>}
 
           {confirm && selected.length > 0 && (
             // wording: BA review
-            <div className="p-3 rounded-xl border border-accent/40 bg-accent-soft text-xs text-fg space-y-2" role="alertdialog" aria-label="Xác nhận tải video của kênh">
+            <div className="p-3 rounded-xl border border-accent/40 bg-accent-soft text-xs text-fg space-y-2" role="alertdialog" aria-label={t('confirmLabel')}>
               <p className="font-semibold">
-                Kênh có {items.length} video{listing.whole ? '' : ' (máy chủ lấy được)'}, đã chọn sẵn {selected.length === items.length ? 'tất cả' : `${selected.length} video mới nhất`}.
+                {t(`confirmHead${listing.whole ? 'Whole' : 'Server'}${selected.length === items.length ? 'All' : 'N'}`, { total: items.length, count: selected.length })}
               </p>
               <p className="text-fg-2">
                 {cap === 0
-                  ? 'Hôm nay bạn đã hết lượt tải; danh sách vẫn được giữ chọn để tải sau.'
-                  : later.length ? `Lưu ý: ${laterText}.` : `Tải ${now.length} video này?`}
+                  ? t('confirmNoQuota')
+                  : later.length ? laterText('note') : t('confirmAsk', { count: now.length })}
               </p>
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={submit} disabled={!now.length || sending} className="inline-flex items-center gap-1.5 px-3 py-1.5 font-semibold text-accent-fg bg-accent hover:bg-accent-hover rounded-lg cursor-pointer disabled:opacity-60">
-                  {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Tải {now.length} video
+                  {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} {t('downloadN', { count: now.length })}
                 </button>
                 <button type="button" onClick={() => setConfirm(false)} className="px-3 py-1.5 font-medium text-fg-2 border border-line hover:border-line-strong rounded-lg cursor-pointer">
-                  Chọn lại
+                  {t('reselect')}
                 </button>
               </div>
             </div>
@@ -398,7 +402,7 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent text-accent-fg border border-transparent text-sm font-semibold disabled:bg-surface-2 disabled:text-fg-muted disabled:border disabled:border-line disabled:cursor-not-allowed hover:bg-accent-hover transition-colors cursor-pointer"
           >
             {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            {selected.length === 0 ? 'Chọn video để tải' : cap === 0 ? 'Đã hết lượt tải hôm nay' : `Tải ${later.length ? `${now.length}/${selected.length}` : now.length} video đã chọn`}
+            {selected.length === 0 ? t('pickToDownload') : cap === 0 ? t('noQuotaToday') : later.length ? t('downloadPartial', { count: now.length, selected: selected.length }) : t('downloadSelected', { count: now.length })}
           </button>
         </>
       )}

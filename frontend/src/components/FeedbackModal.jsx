@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, MessageSquare, Send, CheckCircle } from 'lucide-react';
 
 // VITE_API_BASE/VITE_API_BASE_URL are not defined in any build —
@@ -6,6 +7,7 @@ import { X, MessageSquare, Send, CheckCircle } from 'lucide-react';
 import { API_BASE } from '../lib/apiBase';
 
 export default function FeedbackModal({ onClose }) {
+  const { t } = useTranslation('feedback');
   const [name, setName]       = useState('');
   const [email, setEmail]     = useState('');
   const [content, setContent] = useState('');
@@ -15,7 +17,7 @@ export default function FeedbackModal({ onClose }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!content.trim()) { setError('Vui lòng nhập nội dung góp ý.'); return; }
+    if (!content.trim()) { setError(t('errors.emptyContent')); return; }
     setSending(true);
     setError('');
     try {
@@ -33,10 +35,10 @@ export default function FeedbackModal({ onClose }) {
         setDone(true);
         setTimeout(onClose, 2500);
       } else {
-        setError('Gửi thất bại, vui lòng thử lại.');
+        setError(t('errors.sendFailed'));
       }
     } catch {
-      setError('Lỗi kết nối, vui lòng thử lại.');
+      setError(t('errors.connection'));
     } finally {
       setSending(false);
     }
@@ -58,7 +60,7 @@ export default function FeedbackModal({ onClose }) {
             <div className="w-8 h-8 rounded-lg bg-accent-soft flex items-center justify-center">
               <MessageSquare className="w-4 h-4 text-accent-text" />
             </div>
-            <h2 className="text-base font-bold text-fg">Góp ý & Phản hồi</h2>
+            <h2 className="text-base font-bold text-fg">{t('title')}</h2>
           </div>
           <button
             onClick={onClose}
@@ -71,28 +73,28 @@ export default function FeedbackModal({ onClose }) {
         {done ? (
           <div className="flex flex-col items-center gap-3 py-6 text-center">
             <CheckCircle className="w-12 h-12 text-success" />
-            <p className="text-fg font-semibold">Gửi thành công!</p>
-            <p className="text-fg-muted text-sm">Cảm ơn bạn đã góp ý. Chúng tôi sẽ xem xét và cải thiện.</p>
+            <p className="text-fg font-semibold">{t('success.title')}</p>
+            <p className="text-fg-muted text-sm">{t('success.body')}</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <p className="text-fg-muted text-sm">
-              Ý kiến của bạn giúp VidGrab trở nên tốt hơn. Chúng tôi đọc từng phản hồi.
+              {t('intro')}
             </p>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-fg-muted mb-1.5">Tên (tuỳ chọn)</label>
+                <label className="block text-xs font-medium text-fg-muted mb-1.5">{t('name.label')}</label>
                 <input
                   type="text"
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  placeholder="Nguyễn Văn A"
+                  placeholder={t('name.placeholder')}
                   className="w-full bg-surface border border-line rounded-lg px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:outline-none focus:border-accent/50 transition-colors"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-fg-muted mb-1.5">Email (tuỳ chọn)</label>
+                <label className="block text-xs font-medium text-fg-muted mb-1.5">{t('email.label')}</label>
                 <input
                   type="email"
                   value={email}
@@ -105,12 +107,12 @@ export default function FeedbackModal({ onClose }) {
 
             <div>
               <label className="block text-xs font-medium text-fg-muted mb-1.5">
-                Nội dung góp ý <span className="text-danger">*</span>
+                {t('content.label')} <span className="text-danger">*</span>
               </label>
               <textarea
                 value={content}
                 onChange={e => { setContent(e.target.value); setError(''); }}
-                placeholder="Mô tả vấn đề bạn gặp, tính năng muốn có, hoặc bất kỳ phản hồi nào..."
+                placeholder={t('content.placeholder')}
                 rows={4}
                 className="w-full bg-surface border border-line rounded-lg px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted focus:outline-none focus:border-accent/50 transition-colors resize-none"
               />
@@ -131,12 +133,12 @@ export default function FeedbackModal({ onClose }) {
               {sending ? (
                 <>
                   <span className="w-4 h-4 border-2 border-canvas border-t-canvas rounded-full animate-spin" />
-                  Đang gửi...
+                  {t('sending')}
                 </>
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  Gửi góp ý
+                  {t('submit')}
                 </>
               )}
             </button>

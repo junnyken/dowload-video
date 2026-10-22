@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Download, Loader2, RefreshCw, Monitor } from 'lucide-react';
 import { apiUrl } from '../lib/apiBase';
+import { Trans, useTranslation } from 'react-i18next';
 
 // Public page (no login) for the VidGrab Windows app — task #6125.
 // The installer is ~100 MB, so the button is a plain <a href>, never a fetch.
@@ -16,6 +17,7 @@ function safeHttpsUrl(value) {
 }
 
 export default function DownloadPage() {
+  const { t } = useTranslation('downloadApp');
   const [state, setState] = useState('loading'); // loading | ready | error
   const [info, setInfo] = useState(null);
 
@@ -49,11 +51,11 @@ export default function DownloadPage() {
           <Monitor size={20} className="text-accent-fg" aria-hidden="true" />
         </div>
         {/* wording: BA review */}
-        <h1 className="text-2xl md:text-3xl font-extrabold">Tải VidGrab cho Windows</h1>
+        <h1 className="text-2xl md:text-3xl font-extrabold">{t('title')}</h1>
       </div>
       {/* wording: BA review */}
       <p className="text-fg-2 mb-6">
-        Ứng dụng VidGrab cho máy tính: tải video từ TikTok, YouTube, Facebook, Instagram ngay trên Windows.
+        {t('intro')}
       </p>
 
       <section className="rounded-xl border border-line bg-surface p-4 md:p-6 mb-6" aria-live="polite">
@@ -61,14 +63,14 @@ export default function DownloadPage() {
           <p className="flex items-center gap-2 text-fg-muted">
             <Loader2 size={18} className="animate-spin" aria-hidden="true" />
             {/* wording: BA review */}
-            Đang kiểm tra phiên bản mới nhất...
+            {t('checking')}
           </p>
         )}
 
         {state === 'error' && (
           <div role="alert">
             {/* wording: BA review */}
-            <p className="text-danger mb-3">Không lấy được thông tin phiên bản. Vui lòng thử lại.</p>
+            <p className="text-danger mb-3">{t('versionError')}</p>
             <button
               type="button"
               onClick={retry}
@@ -76,7 +78,7 @@ export default function DownloadPage() {
             >
               <RefreshCw size={16} aria-hidden="true" />
               {/* wording: BA review */}
-              Thử lại
+              {t('retry')}
             </button>
           </div>
         )}
@@ -85,7 +87,7 @@ export default function DownloadPage() {
           <div>
             {info?.latest && (
               // wording: BA review
-              <p className="font-semibold mb-1">Phiên bản mới nhất: {String(info.latest)}</p>
+              <p className="font-semibold mb-1">{t('latest', { version: String(info.latest) })}</p>
             )}
             {notes && <p className="text-sm text-fg-muted whitespace-pre-line mb-3">{notes}</p>}
             {url ? (
@@ -96,16 +98,16 @@ export default function DownloadPage() {
               >
                 <Download size={18} aria-hidden="true" />
                 {/* wording: BA review */}
-                Tải bộ cài (.exe)
+                {t('downloadExe')}
               </a>
             ) : (
               // wording: BA review
-              <p className="mt-2 text-fg-muted">Bộ cài đang được cập nhật, vui lòng quay lại sau.</p>
+              <p className="mt-2 text-fg-muted">{t('updating')}</p>
             )}
             {url && /^[0-9a-f]{64}$/.test(String(info?.sha256 || '')) && (
               <div className="mt-4 text-xs text-fg-muted">
                 {/* wording: BA review */}
-                <p className="mb-1">Mã kiểm tra SHA-256 của bộ cài (so với kết quả lệnh <code>Get-FileHash</code>, xem Câu hỏi thường gặp):</p>
+                <p className="mb-1"><Trans t={t} i18nKey="shaNote" components={{ code: <code /> }} /></p>
                 <code className="block break-all rounded-lg bg-surface-2 px-2 py-1.5 text-fg-2 select-all">{info.sha256}</code>
               </div>
             )}
@@ -115,28 +117,25 @@ export default function DownloadPage() {
 
       <section className="mb-6">
         {/* wording: BA review */}
-        <h2 className="text-lg font-bold mb-2">Yêu cầu hệ thống</h2>
+        <h2 className="text-lg font-bold mb-2">{t('reqTitle')}</h2>
         {/* wording: BA review */}
-        <p className="text-fg-2">Windows 10/11 64-bit.</p>
+        <p className="text-fg-2">{t('reqBody')}</p>
       </section>
 
       <section className="mb-6">
         {/* wording: BA review */}
-        <h2 className="text-lg font-bold mb-2">Lưu ý khi cài đặt</h2>
+        <h2 className="text-lg font-bold mb-2">{t('installTitle')}</h2>
         <ul className="list-disc list-inside space-y-2 text-fg-2">
           {/* wording: BA review */}
-          <li>
-            Windows SmartScreen có thể hiện cảnh báo &ldquo;Windows protected your PC&rdquo; vì ứng dụng chưa được
-            ký số. Hãy bấm &ldquo;More info&rdquo; &rarr; &ldquo;Run anyway&rdquo; để tiếp tục cài đặt.
-          </li>
+          <li>{t('installSmartScreen')}</li>
           {/* wording: BA review */}
-          <li>Cài bản mới đè lên bản cũ vẫn giữ nguyên video đã tải và các kênh đã lưu.</li>
+          <li>{t('installKeepData')}</li>
         </ul>
       </section>
 
       {/* wording: BA review */}
       <p className="text-sm text-fg-muted">
-        Đăng nhập trong ứng dụng dùng chung tài khoản và hạn mức hằng ngày với website.
+        {t('sharedAccount')}
       </p>
     </div>
   );

@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Info,
 } from 'lucide-react';
+import { Trans, useTranslation } from 'react-i18next';
 import { trackEvent, EVENT } from '../utils/trackEvent';
 
 // ── Constants ────────────────────────────────────────────────
@@ -79,6 +80,7 @@ function ExtVersion() {
 
 // Copyable mono chip — chrome:// links can't be opened from a web page.
 function CopyChip({ text }) {
+  const { t } = useTranslation('extensionPage');
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -100,11 +102,11 @@ function CopyChip({ text }) {
       <button
         type="button"
         onClick={copy}
-        aria-label={`Sao chép ${text}`}
+        aria-label={t('copyAria', { text })}
         className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold text-accent-text hover:bg-accent-soft transition-colors"
       >
         {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-        {copied ? 'Đã chép' : 'Sao chép'}
+        {copied ? t('copied') : t('copy')}
       </button>
     </span>
   );
@@ -114,61 +116,74 @@ const Code = ({ children }) => (
   <code className="font-mono text-[0.85em] bg-surface border border-line rounded px-1.5 py-0.5 text-fg">{children}</code>
 );
 
-const steps = [
-  {
-    title: 'Tải file ZIP',
-    body: (
-      <>
-        <p>Nhấn nút bên dưới để tải file ZIP (phiên bản <ExtVersion />) về máy.</p>
-        <a
-          href={`${API_BASE}/api/v1/extension/download`}
-          onClick={() => trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'extension_guide' })}
-          download
-          className="mt-3 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm hover:bg-accent-hover transition-colors"
+// Step copy lives in locales/*/extensionPage.json (steps.<id>.title / body).
+const bold = <strong className="text-fg" />;
+
+function InstallSteps() {
+  const { t } = useTranslation('extensionPage');
+  const steps = [
+    {
+      id: 'download',
+      body: (
+        <>
+          <p><Trans t={t} i18nKey="steps.download.body" components={{ ver: <ExtVersion /> }} /></p>
+          <a
+            href={`${API_BASE}/api/v1/extension/download`}
+            onClick={() => trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'extension_guide' })}
+            download
+            className="mt-3 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm hover:bg-accent-hover transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            {t('steps.download.button')}
+          </a>
+        </>
+      ),
+    },
+    { id: 'unzip', body: <p>{t('steps.unzip.body')}</p> },
+    {
+      id: 'open',
+      body: (
+        <>
+          <p className="mb-2">{t('steps.open.body')}</p>
+          <CopyChip text="chrome://extensions" />
+        </>
+      ),
+    },
+    { id: 'devMode', body: <p><Trans t={t} i18nKey="steps.devMode.body" components={{ b: bold }} /></p> },
+    { id: 'load', body: <p><Trans t={t} i18nKey="steps.load.body" components={{ b: bold }} /></p> },
+    { id: 'pin', body: <p>{t('steps.pin.body')}</p> },
+    {
+      id: 'update',
+      body: (
+        <>
+          <p><Trans t={t} i18nKey="steps.update.body" components={{ b: bold, code: <Code>{null}</Code> }} /></p>
+        </>
+      ),
+    },
+  ];
+  return (
+    <ol className="flex flex-col gap-3">
+      {steps.map(({ id, body }, i) => (
+        <li
+          key={id}
+          className="flex gap-4 p-5 rounded-2xl bg-surface-2 border border-line"
         >
-          <Download className="w-4 h-4" />
-          Tải Extension (.ZIP)
-        </a>
-      </>
-    ),
-  },
-  {
-    title: 'Giải nén',
-    body: <p>Giải nén file ZIP ra một thư mục cố định. Đừng xoá thư mục này, trình duyệt cần nó để chạy extension.</p>,
-  },
-  {
-    title: 'Mở trang tiện ích',
-    body: (
-      <>
-        <p className="mb-2">Dán địa chỉ này vào thanh địa chỉ của trình duyệt rồi nhấn Enter:</p>
-        <CopyChip text="chrome://extensions" />
-      </>
-    ),
-  },
-  {
-    title: 'Bật chế độ nhà phát triển',
-    body: <p>Bật <strong className="text-fg">Chế độ dành cho nhà phát triển</strong> (Developer mode) ở góc trên bên phải.</p>,
-  },
-  {
-    title: 'Tải tiện ích đã giải nén',
-    body: <p>Nhấn <strong className="text-fg">Tải tiện ích đã giải nén</strong> (Load unpacked), rồi chọn thư mục vừa giải nén.</p>,
-  },
-  {
-    title: 'Ghim extension',
-    body: <p>Nhấn biểu tượng mảnh ghép trên thanh công cụ, rồi nhấn biểu tượng ghim cạnh VidGrab.</p>,
-  },
-  {
-    title: 'Cập nhật phiên bản mới',
-    body: (
-      <>
-        <p>Tải file ZIP mới, giải nén <strong className="text-fg">đè lên thư mục cũ</strong> (hoặc xoá thư mục cũ rồi giải nén vào cùng chỗ), rồi nhấn nút tải lại (mũi tên vòng) ở thẻ VidGrab trong trang <Code>chrome://extensions</Code>.</p>
-      </>
-    ),
-  },
-];
+          <span className="w-8 h-8 shrink-0 rounded-xl bg-accent text-accent-fg font-black text-sm flex items-center justify-center select-none">
+            {i + 1}
+          </span>
+          <div className="min-w-0 text-sm text-fg-muted leading-relaxed">
+            <h3 className="font-bold text-fg text-base mb-1">{t(`steps.${id}.title`)}</h3>
+            {body}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 // ── Component ────────────────────────────────────────────────
 export default function ExtensionPage() {
+  const { t } = useTranslation('extensionPage');
   return (
     <div className="min-h-screen pb-28 md:pb-24">
       <div className="relative z-10 w-full max-w-3xl mx-auto px-4 sm:px-6 pt-20 md:pt-28 flex flex-col items-center gap-12 md:gap-16">
@@ -183,14 +198,10 @@ export default function ExtensionPage() {
           {/* Heading */}
           <div className="flex flex-col items-center gap-3">
             <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-fg leading-tight">
-              Cài{' '}
-              <span className=" text-accent-text">
-                VidGrab
-              </span>{' '}
-              Extension
+              <Trans t={t} i18nKey="heroTitle" components={{ accent: <span className=" text-accent-text" /> }} />
             </h1>
             <p className="max-w-lg text-sm sm:text-base text-fg-2 font-medium leading-relaxed">
-              Tải video 1 click ngay trên trang TikTok, YouTube, Facebook và nhiều nền tảng khác — không cần copy link.
+              {t('heroSub')}
             </p>
           </div>
 
@@ -203,7 +214,7 @@ export default function ExtensionPage() {
               className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-accent text-accent-fg font-extrabold text-sm shadow-lg hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
             >
               <Download className="w-4 h-4 flex-shrink-0" />
-              Tải Extension (.ZIP)
+              {t('download')}
             </a>
             <a
               href={TELEGRAM_BOT_URL}
@@ -212,22 +223,22 @@ export default function ExtensionPage() {
               className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-surface/60 border border-line-strong text-fg font-bold text-sm hover:border-accent/50 hover:bg-surface/80 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer backdrop-blur-sm"
             >
               <Send className="w-4 h-4 flex-shrink-0" />
-              Nhận qua Telegram
+              {t('telegram')}
             </a>
           </div>
         </section>
 
         {/* ── Platform chips ────────────────────────────────── */}
-        <section className="w-full" aria-label="Nền tảng hỗ trợ">
+        <section className="w-full" aria-label={t('platformsAria')}>
           <p className="text-center text-xs font-semibold text-fg-muted uppercase tracking-widest mb-4">
-            Hỗ trợ tải từ
+            {t('supportedFrom')}
           </p>
           {/* Wraps at every width: the old hidden-scrollbar row showed 2.5 of 6
               chips on a 390 px phone with no hint that it scrolled (13/10). */}
           <div className="relative">
             <div
               className="flex flex-wrap justify-center gap-2.5 pb-2"
-              aria-label="Danh sách nền tảng"
+              aria-label={t('platformListAria')}
             >
               {platforms.map(({ icon: Icon, label, color, ic }) => (
                 <span
@@ -250,41 +261,25 @@ export default function ExtensionPage() {
             id="install-heading"
             className="text-center text-xl sm:text-2xl font-black text-fg mb-8"
           >
-            Hướng dẫn cài đặt
+            {t('installHeading')}
           </h2>
 
-          <ol className="flex flex-col gap-3">
-            {steps.map(({ title, body }, i) => (
-              <li
-                key={title}
-                className="flex gap-4 p-5 rounded-2xl bg-surface-2 border border-line"
-              >
-                <span className="w-8 h-8 shrink-0 rounded-xl bg-accent text-accent-fg font-black text-sm flex items-center justify-center select-none">
-                  {i + 1}
-                </span>
-                <div className="min-w-0 text-sm text-fg-muted leading-relaxed">
-                  <h3 className="font-bold text-fg text-base mb-1">{title}</h3>
-                  {body}
-                </div>
-              </li>
-            ))}
-          </ol>
+          <InstallSteps />
         </section>
 
         {/* ── Manual-install update note (Phase 34D-5) ── wording: BA review */}
         <div
           className="w-full flex items-start gap-3 p-4 rounded-2xl bg-accent-soft border border-accent/25"
           role="note"
-          aria-label="Về việc cập nhật"
+          aria-label={t('updateNoteAria')}
         >
           <Info className="w-5 h-5 text-accent-text flex-shrink-0 mt-0.5" />
           <div className="text-sm text-accent-text leading-relaxed">
-            <p className="font-bold mb-1">Extension cài thủ công không tự cập nhật</p>
+            <p className="font-bold mb-1">{t('updateNoteTitle')}</p>
             <p>
-              Vì cài từ file ZIP (không qua Chrome Web Store), trình duyệt sẽ không tự nâng cấp VidGrab.
-              Khi có phiên bản mới, popup của extension sẽ hiện một thanh thông báo «Có bản tiện ích mới» kèm nút Tải về.
-              Để cập nhật: tải ZIP mới, giải nén đè lên thư mục cũ rồi nhấn nút tải lại ở thẻ VidGrab trong{' '}
-              <span className="font-mono font-semibold">chrome://extensions</span>.
+              {t('updateNoteBody1')}
+              {' '}{t('updateNoteBody2')}
+              {' '}<Trans t={t} i18nKey="updateNoteBody3" components={{ mono: <span className="font-mono font-semibold" /> }} />
             </p>
           </div>
         </div>
@@ -293,13 +288,11 @@ export default function ExtensionPage() {
         <div
           className="w-full flex items-start gap-3 p-4 rounded-2xl bg-accent-soft border border-accent/25"
           role="note"
-          aria-label="Trình duyệt khác"
+          aria-label={t('otherBrowsersAria')}
         >
           <Info className="w-5 h-5 text-accent-text flex-shrink-0 mt-0.5" />
           <p className="text-sm text-accent-text leading-relaxed">
-            Edge, Cốc Cốc và Brave cài tương tự. Trên Edge dùng{' '}
-            <span className="font-mono font-semibold">edge://extensions</span>, trên Brave dùng{' '}
-            <span className="font-mono font-semibold">brave://extensions</span>.
+            <Trans t={t} i18nKey="otherBrowsers" components={{ mono: <span className="font-mono font-semibold" />, mono2: <span className="font-mono font-semibold" /> }} />
           </p>
         </div>
 
@@ -319,10 +312,10 @@ export default function ExtensionPage() {
                 id="telegram-heading"
                 className="text-xl sm:text-2xl font-black text-fg"
               >
-                Nhận file qua Telegram Bot
+                {t('tgHeading')}
               </h2>
               <p className="text-sm sm:text-base text-fg-muted max-w-sm mx-auto leading-relaxed">
-                Nhận bất kỳ nội dung → bot tự gửi file ZIP + hướng dẫn cài đặt chi tiết.
+                {t('tgBody')}
               </p>
             </div>
 
@@ -332,7 +325,7 @@ export default function ExtensionPage() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-7 py-3.5 rounded-2xl bg-accent text-accent-fg font-extrabold text-sm hover:bg-accent-hover hover:scale-[1.03] active:scale-[0.98] transition-all duration-200 shadow-lg cursor-pointer"
             >
-              Mở Telegram Bot
+              {t('tgOpen')}
               <ArrowRight className="w-4 h-4" />
             </a>
           </div>

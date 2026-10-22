@@ -1,16 +1,19 @@
 import { Home, Activity, History, Zap, UserCircle } from 'lucide-react';
 import { useNotifications } from '../context/NotificationContext';
+import { useTranslation } from 'react-i18next';
 
+// Labels: locales/*/footer.json, tabs.<id>
 const navItems = [
-  { id: 'landing',  label: 'Trang chủ',   icon: Home,       path: '/' },
-  { id: 'active',   label: 'Đang xử lý',  icon: Activity,   path: '/active' },
-  { id: 'history',  label: 'Lịch sử',     icon: History,    path: '/history' },
-  { id: 'tools',    label: 'Công cụ',     icon: Zap,        path: null },
-  { id: 'account',  label: 'Tài khoản',   icon: UserCircle, path: '/preferences' },
+  { id: 'landing',  icon: Home,       path: '/' },
+  { id: 'active',   icon: Activity,   path: '/active' },
+  { id: 'history',  icon: History,    path: '/history' },
+  { id: 'tools',    icon: Zap,        path: null },
+  { id: 'account',  icon: UserCircle, path: '/preferences' },
 ];
 
 export default function MobileTabBar({ activeTab, onTabChange, activeJobCount = 0 }) {
   const { unreadCount } = useNotifications();
+  const { t } = useTranslation('footer');
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 w-full z-50 bg-surface/95 backdrop-blur-xl border-t border-line px-2 py-2 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.25)] flex justify-around items-center">
@@ -23,7 +26,7 @@ export default function MobileTabBar({ activeTab, onTabChange, activeJobCount = 
             key={item.id}
             onClick={() => onTabChange(item.id)}
             className="flex flex-col items-center justify-center w-full py-1 rounded-xl transition-all duration-200"
-            aria-label={item.label}
+            aria-label={t(`tabs.${item.id}`)}
             aria-current={isActive ? 'page' : undefined}
           >
             <div
@@ -57,7 +60,7 @@ export default function MobileTabBar({ activeTab, onTabChange, activeJobCount = 
                 isActive ? 'text-accent-text opacity-100' : 'text-fg-muted opacity-70'
               }`}
             >
-              {item.label}
+              {t(`tabs.${item.id}`)}
             </span>
           </button>
         );

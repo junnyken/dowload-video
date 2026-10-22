@@ -1,0 +1,37 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "unlimited": "Unlimited",
+  "unit": {
+    "downloads_one": "{{count}} download",
+    "downloads_other": "{{count}} downloads",
+    "videosPerDay_one": "{{count}} video/day",
+    "videosPerDay_other": "{{count}} videos/day",
+    "timesPerDay_one": "{{count}} time/day",
+    "timesPerDay_other": "{{count}} times/day",
+    "files_one": "{{count}} file",
+    "files_other": "{{count}} files",
+    "schedules_one": "{{count}} schedule",
+    "schedules_other": "{{count}} schedules"
+  },
+  "rows": {
+    "daily": "Downloads per day",
+    "quality": "Max quality",
+    "youtube": "YouTube",
+    "batch": "Paste many links at once",
+    "zip": "ZIP download",
+    "watch": "Channel watch",
+    "spotify": "Spotify artists",
+    "smart": "Smart analysis",
+    "pins": "Pinned files",
+    "schedules": "Scheduled downloads",
+    "api": "API key"
+  },
+  "youtubeUpTo": "{{per}}, up to {{quality}}",
+  "batchMax": "Up to {{n}} links",
+  "watchSources": "{{n}} sources",
+  "spotifyTracks": "Up to {{n}} tracks",
+  "smartMax": "{{base}} (videos up to {{min}} min)",
+  "pinKeep": "{{base}}, kept {{days}} days",
+  "apiUnlimited": "Unlimited calls",
+  "apiPerMonth": "{{n}} calls/month"
+}

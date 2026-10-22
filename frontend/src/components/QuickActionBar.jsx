@@ -4,7 +4,7 @@
  * Context-aware quick action buttons shown AFTER metadata is fetched.
  * Reduces "which format/quality do I pick?" friction to a single tap.
  *
- * Renders 2–4 platform-specific actions (e.g. "MP3", "HD", "Sạch WM")
+ * Renders 2–4 platform-specific actions (e.g. "MP3", "HD", "No WM")
  * alongside a "More" overflow for less common options.
  *
  * Props:
@@ -17,6 +17,7 @@
  */
 
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Music, Video, Sparkles, Image, Film, Lock, ChevronDown } from 'lucide-react';
 
 const ICON_MAP = {
@@ -35,13 +36,13 @@ function ActionIcon({ icon, className = 'w-3.5 h-3.5' }) {
 
 const PLATFORM_ACTIONS = {
   tiktok: [
-    { id: 'no_wm',     label: 'Sạch WM',   icon: '✨', settings: { remove_watermark: true, quality: 'video' },   tier: 'free', primary: true  },
+    { id: 'no_wm',     labelKey: 'noWm', icon: '✨', settings: { remove_watermark: true, quality: 'video' },   tier: 'free', primary: true  },
     { id: 'mp3',       label: 'MP3',        icon: '🎵', settings: { quality: 'mp3_128' },                          tier: 'free', primary: false },
     { id: 'thumb',     label: 'Thumbnail',  icon: '🖼', settings: { quality: 'thumbnail_only' },                    tier: 'free', primary: false },
     { id: 'gif15',     label: 'GIF 15s',    icon: '🎞', settings: { quality: 'video', _trigger_gif: true },         tier: 'free', primary: false },
   ],
   douyin: [
-    { id: 'no_wm',     label: 'Sạch WM',   icon: '✨', settings: { remove_watermark: true, quality: 'video' },   tier: 'free', primary: true  },
+    { id: 'no_wm',     labelKey: 'noWm', icon: '✨', settings: { remove_watermark: true, quality: 'video' },   tier: 'free', primary: true  },
     { id: 'mp3',       label: 'MP3',        icon: '🎵', settings: { quality: 'mp3_128' },                          tier: 'free', primary: false },
     { id: 'thumb',     label: 'Thumbnail',  icon: '🖼', settings: { quality: 'thumbnail_only' },                    tier: 'free', primary: false },
   ],
@@ -73,7 +74,9 @@ const PLATFORM_ACTIONS = {
 
 const PRO_PLATFORMS = new Set(['pro', 'team', 'enterprise', 'api']);
 
+// The no-watermark entries carry labelKey 'noWm' (guide.json quickBar.noWm); other labels are product/format names.
 export default function QuickActionBar({ platform, videoInfo, activePreset, onAction, disabled = false, userTier = 'free' }) {
+  const { t } = useTranslation('guide');
   const [showMore, setShowMore] = useState(false);
   const isPro = PRO_PLATFORMS.has(userTier);
 
@@ -106,8 +109,12 @@ export default function QuickActionBar({ platform, videoInfo, activePreset, onAc
   const primary = actions.filter((a) => a.primary || actions.indexOf(a) < 2);
   const secondary = actions.filter((a) => !primary.includes(a));
 
+  function plainLabel(action) {
+    return action.labelKey ? t(`quickBar.${action.labelKey}`) : action.label;
+  }
+
   function displayLabel(action) {
-    return presetDup && action.id === presetDup.id ? activePreset.name : action.label;
+    return presetDup && action.id === presetDup.id ? activePreset.name : plainLabel(action);
   }
 
   function handleAction(action) {
@@ -130,7 +137,7 @@ export default function QuickActionBar({ platform, videoInfo, activePreset, onAc
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
       {/* Label */}
-      <span className="text-xs text-fg-muted font-medium shrink-0">Tải nhanh:</span>
+      <span className="text-xs text-fg-muted font-medium shrink-0">{t('quickBar.label')}</span>
 
       {/* Primary actions */}
       {primary.map((action) => {
@@ -140,7 +147,7 @@ export default function QuickActionBar({ platform, videoInfo, activePreset, onAc
             key={action.id}
             onClick={() => handleAction(action)}
             className={buttonCls(action, action.primary)}
-            title={locked ? `${displayLabel(action)} — Yêu cầu Pro` : displayLabel(action)}
+            title={locked ? t('quickBar.proRequired', { label: displayLabel(action) }) : displayLabel(action)}
             disabled={disabled}
           >
             <ActionIcon icon={action.icon} />
@@ -155,7 +162,7 @@ export default function QuickActionBar({ platform, videoInfo, activePreset, onAc
         <button
           onClick={() => onAction(activePreset.settings)}
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-surface-2 hover:bg-line text-fg-2 border border-line transition-all cursor-pointer"
-          title={`Preset: ${activePreset.name}`}
+          title={t('quickBar.preset', { name: activePreset.name })}
           disabled={disabled}
         >
           ⚡ {activePreset.name}
@@ -170,7 +177,7 @@ export default function QuickActionBar({ platform, videoInfo, activePreset, onAc
             className="flex items-center gap-0.5 px-2 py-1.5 rounded-lg text-xs text-fg-muted hover:text-fg-2 hover:bg-surface-2 transition-all cursor-pointer"
             disabled={disabled}
           >
-            Thêm <ChevronDown className={`w-3 h-3 transition-transform ${showMore ? 'rotate-180' : ''}`} />
+            {t('quickBar.more')} <ChevronDown className={`w-3 h-3 transition-transform ${showMore ? 'rotate-180' : ''}`} />
           </button>
           {showMore && (
             <div className="absolute left-0 top-full mt-1 z-20 bg-surface-2 border border-line rounded-xl shadow-xl p-1.5 min-w-36 flex flex-col gap-0.5">
@@ -184,7 +191,7 @@ export default function QuickActionBar({ platform, videoInfo, activePreset, onAc
                     disabled={disabled || locked}
                   >
                     <ActionIcon icon={action.icon} />
-                    {action.label}
+                    {plainLabel(action)}
                     {locked && <Lock className="w-2.5 h-2.5 text-fg-muted ml-auto" />}
                   </button>
                 );

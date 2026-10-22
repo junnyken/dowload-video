@@ -1,4 +1,6 @@
 import { X, Crown, Check, Zap } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useLocalePath } from '../i18n';
 import { trackEvent, EVENT } from '../utils/trackEvent';
 import { useAuth } from '../context/AuthContext';
 import { usePlans, qualityLabel } from '../lib/usePlans';
@@ -8,71 +10,76 @@ import { buildPlanRows } from '../lib/planRows';
 // same table the server enforces. When it has not loaded, the subtitle drops
 // the numbers instead of guessing them.
 // wording: BA review
-const perDay = (n) => (n === -1 ? 'không giới hạn lượt' : `${n} lượt`);
+const perDay = (t, n) => (n === -1 ? t('unlimitedPerDay') : t('perDay', { count: n }));
 
-function buildCopy(code, { guest, free, pro }, signedIn) {
+// Copy lives in upgrade.json under <error code>.title / .subtitle / .fallback.
+function buildCopy(t, code, { guest, free, pro }, signedIn) {
   const have = signedIn ? free : guest;
+  const both = !!(have && pro);
   switch (code) {
     case 'quota_exceeded_daily':
       return {
-        title: 'Đã đạt giới hạn hôm nay',
-        subtitle: have && pro
-          ? `Gói hiện tại: ${perDay(have.daily_downloads)}/ngày. Pro: ${perDay(pro.daily_downloads)}/ngày.`
-          : 'Nâng cấp Pro để có thêm lượt tải mỗi ngày.',
+        title: t('quota_exceeded_daily.title'),
+        subtitle: both
+          ? t('quota_exceeded_daily.subtitle', { have: perDay(t, have.daily_downloads), pro: perDay(t, pro.daily_downloads) })
+          : t('quota_exceeded_daily.fallback'),
       };
     case 'tier_limit_quality':
       return {
-        title: 'Chất lượng này dành cho Pro',
-        subtitle: have && pro
-          ? `Gói hiện tại tải tối đa ${qualityLabel(have.max_height)}. Pro tải tối đa ${qualityLabel(pro.max_height)}.`
-          : 'Nâng cấp Pro để chọn chất lượng cao hơn.',
+        title: t('tier_limit_quality.title'),
+        subtitle: both
+          ? t('tier_limit_quality.subtitle', { have: qualityLabel(have.max_height), pro: qualityLabel(pro.max_height) })
+          : t('tier_limit_quality.fallback'),
       };
     case 'tier_limit_batch':
       return {
-        title: 'Đã vượt số link được dán một lần',
-        subtitle: have && pro
-          ? `Gói hiện tại: tối đa ${have.batch_links} link. Pro: tối đa ${pro.batch_links} link.`
-          : 'Nâng cấp Pro để dán được nhiều link hơn.',
+        title: t('tier_limit_batch.title'),
+        subtitle: both
+          ? t('tier_limit_batch.subtitle', { have: have.batch_links, pro: pro.batch_links })
+          : t('tier_limit_batch.fallback'),
       };
     case 'tier_required_feature':
-      return { title: 'Tính năng Pro', subtitle: 'Tính năng này chỉ dành cho thành viên Pro.' };
+      return { title: t('tier_required_feature.title'), subtitle: t('tier_required_feature.subtitle') };
     case 'youtube_pro_only':
       return {
-        title: 'Đã đạt giới hạn YouTube',
-        subtitle: have && pro
-          ? `Gói hiện tại: ${have.youtube_per_day === -1 ? 'không giới hạn' : have.youtube_per_day} video/ngày${have.youtube_max_height > 0 ? `, đến ${qualityLabel(have.youtube_max_height)}` : ''}.`
-          : 'Nâng cấp Pro để có thêm hạn mức YouTube.',
+        title: t('youtube_pro_only.title'),
+        subtitle: both
+          ? t('youtube_pro_only.subtitle', {
+              limit: have.youtube_per_day === -1 ? t('youtube_pro_only.unlimited') : have.youtube_per_day,
+              extra: have.youtube_max_height > 0 ? t('youtube_pro_only.upTo', { quality: qualityLabel(have.youtube_max_height) }) : '',
+            })
+          : t('youtube_pro_only.fallback'),
       };
     case 'spotify_artist_full':
       return {
-        title: 'Spotify nghệ sĩ: giới hạn số bài',
-        subtitle: have && pro
-          ? `Gói hiện tại: đến ${have.spotify_artist_tracks} bài. Pro: đến ${pro.spotify_artist_tracks} bài.`
-          : 'Nâng cấp Pro để tải được nhiều bài hơn.',
+        title: t('spotify_artist_full.title'),
+        subtitle: both
+          ? t('spotify_artist_full.subtitle', { have: have.spotify_artist_tracks, pro: pro.spotify_artist_tracks })
+          : t('spotify_artist_full.fallback'),
       };
     case 'bulk_zip_pro':
-      return {
-        title: 'Tải ZIP dành cho Pro',
-        subtitle: 'Đóng gói cả lượt tải thành một tệp ZIP chỉ dành cho thành viên Pro.',
-      };
+      return { title: t('bulk_zip_pro.title'), subtitle: t('bulk_zip_pro.subtitle') };
     default:
-      return { title: 'Nâng cấp Pro', subtitle: 'Xem các gói và quyền lợi của từng gói.' };
+      return { title: t('default.title'), subtitle: t('default.subtitle') };
   }
 }
 
 function CellValue({ value }) {
-  if (value === true)  return <Check className="w-4 h-4 text-fg-2 mx-auto" aria-label="Có" />;
-  if (value === false) return <X     className="w-4 h-4 text-fg-muted   mx-auto" aria-label="Không" />;
+  const { t } = useTranslation('upgrade');
+  if (value === true)  return <Check className="w-4 h-4 text-fg-2 mx-auto" aria-label={t('yes')} />;
+  if (value === false) return <X     className="w-4 h-4 text-fg-muted   mx-auto" aria-label={t('no')} />;
   return <span>{value}</span>;
 }
 
 export default function UpgradeModal({ isOpen, onClose, errorCode = null }) {
+  const { t } = useTranslation('upgrade');
+  const lp = useLocalePath();
   const { isAuthenticated } = useAuth();
   const { guest, free, pro } = usePlans();
 
   if (!isOpen) return null;
 
-  const copy = buildCopy(errorCode, { guest, free, pro }, isAuthenticated);
+  const copy = buildCopy(t, errorCode, { guest, free, pro }, isAuthenticated);
   const rows = free && pro ? buildPlanRows([free, pro]) : [];
 
   const handleBackdrop = (e) => {
@@ -83,7 +90,7 @@ export default function UpgradeModal({ isOpen, onClose, errorCode = null }) {
     // paywall_seen fires when this modal opens; this records the intent to climb it.
     trackEvent(EVENT.UPGRADE_CLICKED, { trigger: errorCode || 'unknown' });
     onClose();
-    window.history.pushState({}, '', '/pricing');
+    window.history.pushState({}, '', lp('/pricing'));
     window.dispatchEvent(new PopStateEvent('popstate'));
     window.scrollTo(0, 0);
   };
@@ -106,7 +113,7 @@ export default function UpgradeModal({ isOpen, onClose, errorCode = null }) {
         {/* Close */}
         <button
           onClick={onClose}
-          aria-label="Đóng"
+          aria-label={t('close')}
           className="absolute top-4 right-4 p-1.5 rounded-lg text-fg-muted hover:text-fg hover:bg-surface transition-colors"
         >
           <X className="w-4 h-4" />
@@ -132,7 +139,7 @@ export default function UpgradeModal({ isOpen, onClose, errorCode = null }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-surface">
-                  <th className="text-left px-3 py-2.5 text-fg-muted font-medium w-2/5">Tính năng</th>
+                  <th className="text-left px-3 py-2.5 text-fg-muted font-medium w-2/5">{t('feature')}</th>
                   <th className="text-center px-3 py-2.5 text-fg-muted font-medium w-[30%]">Free</th>
                   <th className="text-center px-3 py-2.5 text-fg-2 font-semibold w-[30%]">Pro</th>
                 </tr>
@@ -161,14 +168,14 @@ export default function UpgradeModal({ isOpen, onClose, errorCode = null }) {
             className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-xl bg-accent text-accent-fg font-semibold text-sm shadow-lg hover:opacity-90 active:scale-[0.98] transition-all mb-2"
           >
             <Zap className="w-4 h-4" />
-            Xem bảng giá Pro →
+            {t('viewPricing')}
           </button>
 
           <button
             onClick={onClose}
             className="w-full py-2.5 px-6 rounded-xl text-fg-muted hover:text-fg hover:bg-surface text-sm transition-colors"
           >
-            Để sau
+            {t('later')}
           </button>
         </div>
       </div>

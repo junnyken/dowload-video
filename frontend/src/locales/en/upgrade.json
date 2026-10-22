@@ -1,0 +1,51 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "unlimitedPerDay": "unlimited downloads",
+  "quota_exceeded_daily": {
+    "title": "Daily limit reached",
+    "subtitle": "Current plan: {{have}}/day. Pro: {{pro}}/day.",
+    "fallback": "Upgrade to Pro for more downloads every day."
+  },
+  "tier_limit_quality": {
+    "title": "This quality is for Pro",
+    "subtitle": "Your current plan downloads up to {{have}}. Pro goes up to {{pro}}.",
+    "fallback": "Upgrade to Pro to choose higher quality."
+  },
+  "tier_limit_batch": {
+    "title": "Too many links pasted at once",
+    "subtitle": "Current plan: up to {{have}} links. Pro: up to {{pro}} links.",
+    "fallback": "Upgrade to Pro to paste more links at once."
+  },
+  "tier_required_feature": {
+    "title": "Pro feature",
+    "subtitle": "This feature is only available to Pro members."
+  },
+  "youtube_pro_only": {
+    "title": "YouTube limit reached",
+    "subtitle": "Current plan: {{limit}} videos/day{{extra}}.",
+    "unlimited": "unlimited",
+    "upTo": ", up to {{quality}}",
+    "fallback": "Upgrade to Pro for a higher YouTube limit."
+  },
+  "spotify_artist_full": {
+    "title": "Spotify artist: track limit",
+    "subtitle": "Current plan: up to {{have}} tracks. Pro: up to {{pro}} tracks.",
+    "fallback": "Upgrade to Pro to download more tracks."
+  },
+  "bulk_zip_pro": {
+    "title": "ZIP download is for Pro",
+    "subtitle": "Packing a whole batch into one ZIP file is only for Pro members."
+  },
+  "default": {
+    "title": "Upgrade to Pro",
+    "subtitle": "See the plans and what each one includes."
+  },
+  "yes": "Yes",
+  "no": "No",
+  "close": "Close",
+  "feature": "Feature",
+  "viewPricing": "See Pro pricing →",
+  "later": "Not now",
+  "perDay_one": "{{count}} download",
+  "perDay_other": "{{count}} downloads"
+}

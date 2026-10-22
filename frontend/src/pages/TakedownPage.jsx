@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { API_BASE } from '../lib/apiBase';
 import { SUPPORT_EMAIL } from '../lib/contact';
 
@@ -15,16 +16,16 @@ const INPUT =
   'w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted ' +
   'focus:outline-none focus:ring-2 focus:ring-accent';
 
-function validate(f) {
+function validate(f, t) {
   const e = {};
-  if (!f.name.trim()) e.name = 'Vui lòng nhập họ tên';
-  if (!EMAIL_RE.test(f.email.trim())) e.email = 'Email không hợp lệ';
-  if (!f.capacity) e.capacity = 'Vui lòng chọn tư cách của bạn';
-  if (!HTTPS_RE.test(f.content_url.trim())) e.content_url = 'Link phải bắt đầu bằng https://';
-  if (f.related.trim().length > MAX) e.related = `Tối đa ${MAX} ký tự`;
-  if (!f.description.trim()) e.description = 'Vui lòng mô tả yêu cầu';
-  else if (f.description.length > MAX) e.description = `Tối đa ${MAX} ký tự`;
-  if (!f.declaration) e.declaration = 'Bạn cần xác nhận thông tin là đúng';
+  if (!f.name.trim()) e.name = t('errors.name');
+  if (!EMAIL_RE.test(f.email.trim())) e.email = t('errors.email');
+  if (!f.capacity) e.capacity = t('errors.capacity');
+  if (!HTTPS_RE.test(f.content_url.trim())) e.content_url = t('errors.url');
+  if (f.related.trim().length > MAX) e.related = t('errors.max', { max: MAX });
+  if (!f.description.trim()) e.description = t('errors.description');
+  else if (f.description.length > MAX) e.description = t('errors.max', { max: MAX });
+  if (!f.declaration) e.declaration = t('errors.declaration');
   return e;
 }
 
@@ -40,6 +41,8 @@ function Field({ id, label, error, hint, children }) {
 }
 
 export default function TakedownPage() {
+  const { t } = useTranslation('takedown');
+  const notice = t('translationNotice');
   const [form, setForm] = useState(EMPTY);
   const [errors, setErrors] = useState({});
   const [sending, setSending] = useState(false);
@@ -56,7 +59,7 @@ export default function TakedownPage() {
     e.preventDefault();
     if (sending) return;
     setServerError('');
-    const errs = validate(form);
+    const errs = validate(form, t);
     setErrors(errs);
     if (Object.keys(errs).length) return;
     setSending(true);
@@ -73,14 +76,14 @@ export default function TakedownPage() {
       });
       if (res.ok) { setDone(true); return; }
       if (res.status === 429) {
-        setServerError('Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau 1 giờ.');
+        setServerError(t('errors.rateLimit'));
       } else if (res.status === 422) {
-        setServerError('Thông tin chưa hợp lệ. Vui lòng kiểm tra lại các ô đã nhập.');
+        setServerError(t('errors.invalid'));
       } else {
-        setServerError('Chưa gửi được yêu cầu. Vui lòng thử lại sau ít phút.');
+        setServerError(t('errors.generic'));
       }
     } catch {
-      setServerError('Không kết nối được máy chủ. Vui lòng kiểm tra mạng và thử lại.');
+      setServerError(t('errors.network'));
     } finally {
       setSending(false);
     }
@@ -88,72 +91,73 @@ export default function TakedownPage() {
 
   return (
     <div className="text-fg">
+      {notice && (
+        <p role="note" className="mb-6 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg-muted">{notice}</p>
+      )}
       <div className="mb-8 border-b border-line pb-6">
-        <h1 className="text-3xl font-extrabold text-fg mb-2">Yêu cầu gỡ nội dung</h1>
-        <p className="text-fg-muted text-sm">Dành cho chủ sở hữu nội dung hoặc người được ủy quyền.</p>
+        <h1 className="text-3xl font-extrabold text-fg mb-2">{t('title')}</h1>
+        <p className="text-fg-muted text-sm">{t('subtitle')}</p>
       </div>
 
       <section className="mb-8 space-y-3 text-fg-2 leading-relaxed">
         <p>
-          VidGrab không lưu video của người dùng lâu dài: tệp chỉ tồn tại tạm thời để bạn tải về rồi
-          tự hết hạn. Nội dung gốc vẫn nằm trên nền tảng đăng tải, nên nếu muốn gỡ hẳn, bạn cũng cần
-          báo cho nền tảng đó.
+          {t('intro1')}
         </p>
-        <p>Mọi yêu cầu đều được xem xét thủ công. Để xử lý nhanh, vui lòng cung cấp:</p>
+        <p>{t('intro2')}</p>
         <ul className="list-disc list-inside space-y-1 pl-2">
-          <li>Link nội dung trên nền tảng gốc và cho biết bạn là chủ sở hữu hay người đại diện.</li>
-          <li>Link hoặc mô tả liên quan đến VidGrab (nếu có), ví dụ link tải đã chia sẻ.</li>
-          <li>Mô tả rõ yêu cầu của bạn và email để chúng tôi phản hồi.</li>
+          <li>{t('li1')}</li>
+          <li>{t('li2')}</li>
+          <li>{t('li3')}</li>
         </ul>
         <p className="text-sm text-fg-muted">
-          Cần hỗ trợ khác? Gửi email về{' '}
+          {t('otherHelp')}{' '}
           <a href={`mailto:${SUPPORT_EMAIL}`} className="text-accent-text underline break-all">{SUPPORT_EMAIL}</a>.
         </p>
       </section>
 
       {done ? (
         <div role="status" className="rounded-xl border border-success bg-success-soft p-5">
-          <p className="font-semibold text-fg mb-1">Đã nhận yêu cầu của bạn</p>
+          <p className="font-semibold text-fg mb-1">{t('doneTitle')}</p>
           <p className="text-sm text-fg-2">
-            Chúng tôi sẽ xem xét và phản hồi qua email bạn đã cung cấp. Cảm ơn bạn.
+            {t('doneText')}
           </p>
         </div>
       ) : (
         <form onSubmit={submit} noValidate className="space-y-5">
           {/* Honeypot: hidden from people and assistive tech; bots fill it. */}
           <div aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 overflow-hidden">
-            <label>Website
+            <label>{t('honeypot')}
               <input type="text" tabIndex={-1} autoComplete="off" value={form.website} onChange={set('website')} />
             </label>
           </div>
 
-          <Field id="td-name" label="Họ tên" error={errors.name}>
+          <Field id="td-name" label={t('fields.name')} error={errors.name}>
             <input id="td-name" className={INPUT} value={form.name} onChange={set('name')}
               maxLength={MAX} autoComplete="name" aria-invalid={!!errors.name} />
           </Field>
-          <Field id="td-email" label="Email" error={errors.email}>
+          <Field id="td-email" label={t('fields.email')} error={errors.email}>
             <input id="td-email" type="email" className={INPUT} value={form.email} onChange={set('email')}
               maxLength={MAX} autoComplete="email" aria-invalid={!!errors.email} />
           </Field>
-          <Field id="td-capacity" label="Tư cách của bạn" error={errors.capacity}>
+          <Field id="td-capacity" label={t('fields.capacity')} error={errors.capacity}>
             <select id="td-capacity" className={INPUT} value={form.capacity} onChange={set('capacity')}
               aria-invalid={!!errors.capacity}>
-              <option value="">Chọn…</option>
-              <option value="owner">Chủ sở hữu nội dung</option>
-              <option value="agent">Đại diện / được ủy quyền</option>
+              <option value="">{t('fields.capacityPlaceholder')}</option>
+              <option value="owner">{t('fields.capacityOwner')}</option>
+              <option value="agent">{t('fields.capacityAgent')}</option>
             </select>
           </Field>
-          <Field id="td-url" label="Link nội dung trên nền tảng gốc" error={errors.content_url}
-            hint="Bắt đầu bằng https://">
+          <Field id="td-url" label={t('fields.url')} error={errors.content_url}
+            hint={t('fields.urlHint')}>
             <input id="td-url" type="url" className={INPUT} value={form.content_url} onChange={set('content_url')}
-              maxLength={MAX} placeholder="https://" aria-invalid={!!errors.content_url} />
+              maxLength={MAX} placeholder={t('fields.urlPlaceholder')} aria-invalid={!!errors.content_url} />
           </Field>
-          <Field id="td-related" label="Link / mô tả liên quan đến VidGrab (không bắt buộc)" error={errors.related}>
+          <Field id="td-related" label={t('fields.related')} error={errors.related}>
             <input id="td-related" className={INPUT} value={form.related} onChange={set('related')}
               maxLength={MAX} aria-invalid={!!errors.related} />
           </Field>
-          <Field id="td-desc" label="Mô tả yêu cầu" error={errors.description}
-            hint={`${form.description.length}/${MAX} ký tự`}>
+          <Field id="td-desc" label={t('fields.description')} error={errors.description}
+            hint={t('fields.charCount', { current: form.description.length, max: MAX })}>
             <textarea id="td-desc" rows={5} className={INPUT} value={form.description} onChange={set('description')}
               maxLength={MAX} aria-invalid={!!errors.description} />
           </Field>
@@ -162,7 +166,7 @@ export default function TakedownPage() {
             <label className="flex items-start gap-3 text-sm text-fg-2">
               <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-[var(--vg-accent)]"
                 checked={form.declaration} onChange={set('declaration')} aria-invalid={!!errors.declaration} />
-              <span>Tôi cam kết các thông tin trên là đúng và tôi là chủ sở hữu hoặc người được ủy quyền hợp pháp.</span>
+              <span>{t('fields.declaration')}</span>
             </label>
             {errors.declaration && <p role="alert" className="mt-1 text-xs text-danger">{errors.declaration}</p>}
           </div>
@@ -175,7 +179,7 @@ export default function TakedownPage() {
 
           <button type="submit" disabled={sending}
             className="w-full sm:w-auto rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-accent-fg hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
-            {sending ? 'Đang gửi…' : 'Gửi yêu cầu'}
+            {sending ? t('sending') : t('submit')}
           </button>
         </form>
       )}

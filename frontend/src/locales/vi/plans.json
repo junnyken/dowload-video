@@ -1,0 +1,31 @@
+{
+  "unlimited": "Không giới hạn",
+  "unit": {
+    "downloads": "{{count}} lượt",
+    "videosPerDay": "{{count}} video/ngày",
+    "timesPerDay": "{{count}} lần/ngày",
+    "files": "{{count}} tệp",
+    "schedules": "{{count}} lịch"
+  },
+  "rows": {
+    "daily": "Lượt tải mỗi ngày",
+    "quality": "Chất lượng tối đa",
+    "youtube": "YouTube",
+    "batch": "Dán nhiều link một lần",
+    "zip": "Tải ZIP",
+    "watch": "Theo dõi kênh",
+    "spotify": "Spotify nghệ sĩ",
+    "smart": "Phân tích thông minh",
+    "pins": "Ghim tệp",
+    "schedules": "Lịch tải",
+    "api": "API key"
+  },
+  "youtubeUpTo": "{{per}}, đến {{quality}}",
+  "batchMax": "Tối đa {{n}} link",
+  "watchSources": "{{n}} nguồn",
+  "spotifyTracks": "Đến {{n}} bài",
+  "smartMax": "{{base}} (video đến {{min}} phút)",
+  "pinKeep": "{{base}}, giữ {{days}} ngày",
+  "apiUnlimited": "Không giới hạn lượt gọi",
+  "apiPerMonth": "{{n}} lượt gọi/tháng"
+}

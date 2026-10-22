@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Zap } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const DISMISS_KEY = 'ext-banner-dismissed-at';
 const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
@@ -17,6 +18,7 @@ function hasDownloaded() {
 }
 
 export default function ExtensionInstallBanner() {
+  const { t } = useTranslation('footer');
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -25,8 +27,8 @@ export default function ExtensionInstallBanner() {
     if (!hasDownloaded()) return;
     const dismissedAt = parseInt(localStorage.getItem(DISMISS_KEY) || '0', 10);
     if (Date.now() - dismissedAt < COOLDOWN_MS) return;
-    const t = setTimeout(() => setVisible(true), 2500);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setVisible(true), 2500);
+    return () => clearTimeout(timer);
   }, []);
 
   const dismiss = () => {
@@ -42,7 +44,7 @@ export default function ExtensionInstallBanner() {
         <button
           onClick={dismiss}
           className="absolute top-2.5 right-2.5 text-fg-muted hover:text-fg-2 transition-colors"
-          aria-label="Đóng"
+          aria-label={t('banner.close')}
         >
           <X className="w-3.5 h-3.5" />
         </button>
@@ -51,8 +53,8 @@ export default function ExtensionInstallBanner() {
             <Zap className="w-4 h-4 text-fg-2" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-fg">Cài extension để tải 1 chạm</p>
-            <p className="text-[11px] text-fg-muted mt-0.5">Không cần mở tab mới</p>
+            <p className="text-xs font-semibold text-fg">{t('banner.title')}</p>
+            <p className="text-[11px] text-fg-muted mt-0.5">{t('banner.sub')}</p>
           </div>
         </div>
         <div className="flex gap-2 mt-3">
@@ -64,13 +66,13 @@ export default function ExtensionInstallBanner() {
             }}
             className="flex-1 text-center text-xs font-semibold bg-accent hover:bg-accent-hover text-accent-fg py-1.5 rounded-lg transition-colors"
           >
-            Xem hướng dẫn
+            {t('banner.guide')}
           </button>
           <button
             onClick={dismiss}
             className="text-xs text-fg-muted hover:text-fg-muted px-2 transition-colors"
           >
-            Bỏ qua
+            {t('banner.skip')}
           </button>
         </div>
       </div>

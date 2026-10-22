@@ -1,0 +1,95 @@
+{
+  "header": "// Hướng dẫn nhanh \\\\",
+  "subhead": "Người mới làm theo từng bước dưới đây.",
+  "tabsLabel": "Loại hướng dẫn",
+  "collapseAria": "Thu gọn hướng dẫn",
+  "expandAria": "Mở rộng hướng dẫn",
+  "collapse": "Thu gọn",
+  "expand": "Xem bước",
+  "single": {
+    "label": "Tải 1 video",
+    "title": "Cách tải video hoặc nhạc nhanh",
+    "description": "Dành cho nhu cầu tải từng link riêng lẻ.",
+    "steps": [
+      "Dán link video hoặc bài nhạc vào ô nhập.",
+      "Chọn định dạng: MP4 HD, 4K hoặc MP3.",
+      "Bật Bỏ watermark (chỉ TikTok / Douyin) hoặc Tải phụ đề nếu cần.",
+      "Nhấn \"Bóc tách ngay\", chờ xử lý và tải file về."
+    ],
+    "notes": [
+      "TikTok / Douyin: tải không watermark. Hỗ trợ YouTube, Instagram, Facebook, Spotify, SoundCloud và nhiều nền tảng khác."
+    ]
+  },
+  "bulk": {
+    "label": "Tải hàng loạt",
+    "title": "Cách tải nhiều link cùng lúc",
+    "description": "Phù hợp khi cần xử lý nhiều URL trong một lần.",
+    "steps": [
+      "Dán nhiều link (mỗi dòng một URL), hoặc từ file .txt/.csv.",
+      "Chọn định dạng đầu ra cho toàn bộ danh sách.",
+      "Nhấn bắt đầu, hệ thống xử lý lần lượt theo đợt.",
+      "Sau khi xong, tải từng file, sao chép link hoặc tải ZIP."
+    ],
+    "notes": [
+      "Phù hợp khi cần tải nhiều video từ nhiều link khác nhau.",
+      "Link tải có thời hạn, nên tải ngay sau khi xử lý xong."
+    ]
+  },
+  "channel": {
+    "label": "Tải cả kênh",
+    "title": "Cách quét và tải video từ kênh",
+    "description": "Dùng khi muốn lấy nhiều video từ kênh, profile hoặc playlist.",
+    "steps": [
+      "Chuyển sang tab \"Tải Hàng Loạt\".",
+      "Dán link kênh, profile hoặc playlist vào ô nhập.",
+      "Bật Channel Mode để quét video từ kênh thay vì tải 1 link.",
+      "Chọn số video muốn lấy: 10, 20, 50, 100, 200, 500 hoặc tự nhập.",
+      "Nhấn bắt đầu, theo dõi tiến trình và tải kết quả sau khi xong."
+    ],
+    "notes": [
+      "Hỗ trợ YouTube, TikTok, Instagram profile, Facebook videos.",
+      "Lần đầu nên chọn 10–50 video để kiểm tra nhanh hơn.",
+      "Hệ thống xử lý theo đợt để tránh giới hạn nền tảng."
+    ]
+  },
+  "quickBar": {
+    "label": "Tải nhanh:",
+    "noWm": "Sạch WM",
+    "more": "Thêm",
+    "proRequired": "{{label}} — Yêu cầu Pro",
+    "preset": "Preset: {{name}}"
+  },
+  "banner": {
+    "new_user": {
+      "text": "Chào mừng! Dán link video bất kỳ để tải xuống ngay — YouTube, TikTok, Facebook và hơn 30 nền tảng."
+    },
+    "first_success": {
+      "text": "Tuyệt! Cài extension Chrome để tải nhanh hơn ngay từ bất kỳ trang nào.",
+      "cta": "Cài Extension"
+    },
+    "quota_warning": {
+      "text": "Bạn đã dùng hơn 80% lượt tải hôm nay. Pro có hạn mức lượt tải cao hơn.",
+      "cta": "Nâng cấp Pro"
+    },
+    "quota_reached": {
+      "text": "Bạn đã hết lượt tải hôm nay. Lượt tải được tính lại mỗi ngày, hoặc xem gói Pro để có hạn mức cao hơn.",
+      "cta": "Nâng cấp Pro ngay"
+    },
+    "paywall_hit": {
+      "text": "Tính năng này dành cho Pro — như tải ZIP, API key và theo dõi nhiều kênh hơn.",
+      "cta": "Xem gói Pro"
+    },
+    "extension_nudge": {
+      "text": "Đang dùng desktop? Cài extension để tải ngay từ tab đang xem, không cần dán link.",
+      "cta": "Cài Extension"
+    },
+    "telegram_nudge": {
+      "text": "Trên mobile? Dùng Telegram bot @vidgrab_bot để tải nhanh chóng ngay trong app nhắn tin.",
+      "cta": "Mở Bot"
+    },
+    "pro_power_user": {
+      "text": "Bạn là Pro — hãy tạo API key để tích hợp VidGrab vào workflow của bạn.",
+      "cta": "Tạo API Key"
+    }
+  }
+}

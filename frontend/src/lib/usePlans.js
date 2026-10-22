@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { API_BASE } from './apiBase';
+import i18n from '../i18n';
 
 // One source for plan numbers: GET /api/v1/plans (backend app/core/plans.py).
 // Every surface that talks about Khách / Free / Pro limits reads from here so
@@ -62,7 +63,7 @@ export function qualityLabel(h) {
 }
 
 export function limitLabel(n, unit = '') {
-  if (n === -1) return 'Không giới hạn';
+  if (n === -1) return i18n.t('unlimited', { ns: 'plans' });
   return unit ? `${n} ${unit}` : String(n);
 }
 

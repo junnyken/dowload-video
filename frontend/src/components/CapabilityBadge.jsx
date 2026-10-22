@@ -5,6 +5,7 @@
  * Receives a ResolvedItem from useResolveInput.
  */
 import { CheckCircle, AlertCircle, Clock, Lock, Wifi, Info } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const SUPPORT_CONFIG = {
   full: {
@@ -51,25 +52,28 @@ const SUPPORT_CONFIG = {
   },
 };
 
+// Labels (with emoji) live in results.json capability.actions.<id>; this list
+// only fixes the known ids.
 const ACTION_LABELS = {
-  video:         '🎬 Video',
-  audio:         '🎵 Audio',
-  no_watermark:  '✨ Không watermark',
-  subtitle:      '💬 Phụ đề',
-  '4k':          '🔆 4K',
-  image:         '🖼️ Ảnh',
-  carousel:      '📚 Carousel',
-  gif:           '🌀 GIF',
-  batch_video:   '📦 Batch video',
-  batch_audio:   '📦 Batch audio',
-  batch_image:   '📦 Batch ảnh',
-  batch_mp3:     '📦 Batch MP3',
-  batch_post:    '📦 Batch bài',
-  browse_tracks: '🎛️ Duyệt track',
-  artist_preview:'🎤 Preview nghệ sĩ',
+  video:         true,
+  audio:         true,
+  no_watermark:  true,
+  subtitle:      true,
+  '4k':          true,
+  image:         true,
+  carousel:      true,
+  gif:           true,
+  batch_video:   true,
+  batch_audio:   true,
+  batch_image:   true,
+  batch_mp3:     true,
+  batch_post:    true,
+  browse_tracks: true,
+  artist_preview:true,
 };
 
 export default function CapabilityBadge({ result, loading, className = '' }) {
+  const { t } = useTranslation('results');
   if (loading) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
@@ -109,7 +113,7 @@ export default function CapabilityBadge({ result, loading, className = '' }) {
       {/* Short-link indicator */}
       {isShortLink && (
         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-line border border-line-strong text-[10px] text-fg-muted">
-          🔗 Rút gọn
+          {t('capability.short')}
         </span>
       )}
 
@@ -132,6 +136,7 @@ export default function CapabilityBadge({ result, loading, className = '' }) {
  * Optional; used in intake overlays or batch preview.
  */
 export function CapabilityDetail({ result }) {
+  const { t } = useTranslation('results');
   if (!result || result.platform === 'unknown') return null;
   const cfg = SUPPORT_CONFIG[result.support_level] || SUPPORT_CONFIG.partial;
 
@@ -148,7 +153,7 @@ export function CapabilityDetail({ result }) {
         <div className="flex flex-wrap gap-1">
           {result.supported_actions.map(a => (
             <span key={a} className="text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-fg-2 border border-line-strong">
-              {ACTION_LABELS[a] || a}
+              {ACTION_LABELS[a] ? t(`capability.actions.${a}`) : a}
             </span>
           ))}
         </div>

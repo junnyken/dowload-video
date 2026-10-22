@@ -1,0 +1,159 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "items": {
+    "tiktok": {
+      "description": "Video, audio, channels, and bulk downloads without a watermark."
+    },
+    "douyin": {
+      "description": "The Chinese version of TikTok, fully supported via Apify."
+    },
+    "facebook": {
+      "description": "Videos, Reels, live VODs, and bulk downloads from pages and groups."
+    },
+    "threads": {
+      "description": "Video and images from public Threads posts."
+    },
+    "pinterest": {
+      "description": "Video, images, and board/collection scraping."
+    },
+    "soundcloud": {
+      "description": "Download tracks, playlists, and artist channels."
+    },
+    "spotify": {
+      "description": "Downloads via YouTube matching (high accuracy for popular music)."
+    },
+    "youtube": {
+      "description": "Video, 4K (sign-in required), subtitles, playlists.",
+      "note": "May be slower than other platforms."
+    },
+    "instagram": {
+      "description": "Reels, carousels, stories, and bulk profile downloads. Cookie required for private content."
+    },
+    "twitter": {
+      "description": "Tweet videos, GIFs, and bulk timeline downloads. Cookie required for restricted tweets."
+    },
+    "reddit": {
+      "description": "v.redd.it with audio merge, bulk subreddit downloads, cookie for NSFW."
+    },
+    "bilibili": {
+      "description": "Video, playlists, bulk downloads by uploader, subtitles. Cookie for VIP content."
+    },
+    "xiaohongshu": {
+      "description": "Video and carousel images. Some content may not be downloadable.",
+      "note": "Only public content can be downloaded."
+    },
+    "lemon8": {
+      "description": "Video and carousel images from public posts."
+    },
+    "snapchat": {
+      "description": "Public Spotlight and Stories. Private content is not supported."
+    },
+    "vk": {
+      "description": "Single videos and playlists from VKontakte."
+    },
+    "twitch": {
+      "description": "VODs and clips (livestreams not supported)."
+    },
+    "rumble": {
+      "description": "Single videos from Rumble."
+    },
+    "odysee": {
+      "description": "Video and audio from Odysee (LBRY)."
+    },
+    "dailymotion": {
+      "description": "Dailymotion videos and playlists."
+    },
+    "podcast": {
+      "description": "Download episodes from an RSS feed or Apple Podcasts URL."
+    }
+  },
+  "features": {
+    "video": "Video",
+    "audio": "Audio / MP3",
+    "image": "Images",
+    "carousel": "Carousel",
+    "batch": "Bulk download",
+    "channel": "Channel",
+    "playlist": "Playlist",
+    "subtitle": "Subtitles",
+    "story": "Story",
+    "reels": "Reels",
+    "4K": "4K",
+    "watermark-free": "No watermark",
+    "audio-merge": "Audio merge",
+    "gif": "GIF / MP4",
+    "vod": "VOD",
+    "clip": "Clip",
+    "spotlight": "Spotlight",
+    "rss": "RSS feed",
+    "apple-podcasts": "Apple Podcasts",
+    "thread": "Thread",
+    "subreddit": "Subreddit",
+    "live-vod": "Live VOD",
+    "album": "Album",
+    "board": "Board"
+  },
+  "status": {
+    "full": "Full",
+    "basic": "Basic",
+    "partial": "Partial",
+    "cookie_required": "Cookie required",
+    "proxy_required": "May be slower",
+    "temporarily_disabled": "Paused",
+    "unsupported": "Not supported",
+    "degraded": "Having issues",
+    "experimental": "Experimental"
+  },
+  "sourceTypes": {
+    "single_video": "Video",
+    "single_audio": "Audio",
+    "single_post": "Post",
+    "playlist": "Playlist",
+    "album": "Album",
+    "artist": "Artist",
+    "channel": "Channel",
+    "profile": "Profile",
+    "board": "Board",
+    "subreddit": "Community",
+    "podcast_feed": "Podcast"
+  },
+  "newBadge": "NEW",
+  "liveBadge": "LIVE",
+  "title": "Supported platforms",
+  "syncing": "Syncing…",
+  "liveCount_one": "● LIVE · {{count}} platform",
+  "liveCount_other": "● LIVE · {{count}} platforms",
+  "summary_one": "VidGrab supports <b>{{count}}</b> platform — <full>{{full}} full</full>, <basic>{{basic}} basic</basic>.",
+  "summary_other": "VidGrab supports <b>{{count}}</b> platforms — <full>{{full}} full</full>, <basic>{{basic}} basic</basic>.",
+  "degradedCount": "{{n}} having issues",
+  "experimentalCount": "{{n}} experimental",
+  "statFull": "{{n}} Full",
+  "statBasic": "{{n}} Basic",
+  "statNew": "🆕 {{n}} New",
+  "searchPlaceholder": "Search platforms, domains, features… (e.g. tiktok.com, playlist, 4K)",
+  "clearSearch": "Clear search",
+  "filters": {
+    "all": "All",
+    "full": "✅ Full",
+    "basic": "🟡 Basic",
+    "cookie_required": "🔒 Cookie required",
+    "proxy_required": "🌐 May be slower",
+    "new": "🆕 New"
+  },
+  "resultsMatch_one": "{{count}} platform matches \"<q>{{query}}</q>\"",
+  "resultsMatch_other": "{{count}} platforms match \"<q>{{query}}</q>\"",
+  "resultsNone": "No platforms found for \"<q>{{query}}</q>\"",
+  "emptyTitle": "No platforms found.",
+  "emptyHint": "Try a different keyword or clear the filter.",
+  "sections": {
+    "full": "✅ Fully supported",
+    "upgraded": "⬆️ Newly upgraded",
+    "basic": "🟡 Basic support",
+    "degraded": "⚠️ Having issues",
+    "experimental": "🧪 Experimental"
+  },
+  "noteLabel": "Note:",
+  "noteBody": "Some platforms only support downloading public content.",
+  "autoUpdated": "Status updates automatically.",
+  "requestMissing": "Can't find the platform you need? Send a request with the <b>Feedback</b> button."
+}

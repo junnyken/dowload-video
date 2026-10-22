@@ -18,5 +18,7 @@
   "signIn": "Sign in",
   "menu": "Menu",
   "langLabel": "Language",
-  "langSwitchTo": "Tiếng Việt"
+  "langSwitchTo": "Tiếng Việt",
+  "feedbackTitle": "Feedback",
+  "feedback": "Feedback"
 }

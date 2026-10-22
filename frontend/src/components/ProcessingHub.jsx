@@ -12,6 +12,7 @@
  */
 
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   X, Download, Scissors, Music, Film, FileText, Package,
   Loader2, AlertCircle, CheckCircle2, Lock,
@@ -22,12 +23,13 @@ import { localFileId, localDownloadUrl } from '../lib/localFile';
 
 const API = import.meta.env.VITE_API_URL || '';
 
+// Tab labels: results.json tabs.<id>
 const TABS = [
-  { id: 'trim',     label: 'Cắt clip',     icon: Scissors },
-  { id: 'audio',    label: 'Âm thanh',     icon: Music    },
-  { id: 'gif',      label: 'GIF / Loop',   icon: Film     },
-  { id: 'subtitle', label: 'Phụ đề',       icon: FileText },
-  { id: 'package',  label: 'Đóng gói',     icon: Package  },
+  { id: 'trim',     icon: Scissors },
+  { id: 'audio',    icon: Music    },
+  { id: 'gif',      icon: Film     },
+  { id: 'subtitle', icon: FileText },
+  { id: 'package',  icon: Package  },
 ];
 
 // Quick-trim presets in seconds
@@ -37,13 +39,13 @@ const TRIM_PRESETS = [
   { label: '15s', value: 15 },
   { label: '30s', value: 30 },
   { label: '60s', value: 60 },
-  { label: 'Tùy', value: 0  },
+  { label: 'custom', value: 0  }, // 'custom' -> results.json trimPreset.custom
 ];
 
 const GIF_PRESETS = [
-  { label: 'Nhỏ',    width: 320, fps: 10, desc: '~320px · 10fps' },
-  { label: 'Social', width: 480, fps: 15, desc: '~480px · 15fps' },
-  { label: 'HQ',     width: 720, fps: 24, desc: '720px · 24fps · Pro', tier: 'pro' },
+  { label: 'small', key: 'small',  width: 320, fps: 10, desc: '~320px · 10fps' },
+  { label: 'Social', key: 'social', width: 480, fps: 15, desc: '~480px · 15fps' },
+  { label: 'HQ', key: 'hq',     width: 720, fps: 24, desc: '720px · 24fps · Pro', tier: 'pro' },
 ];
 
 const NAMING_TEMPLATES = [
@@ -54,12 +56,13 @@ const NAMING_TEMPLATES = [
 ];
 
 function ResultRow({ result, label }) {
+  const { t } = useTranslation('results');
   if (!result) return null;
   return (
     <div className="mt-3 flex items-center gap-2 p-2.5 bg-success-soft border border-success/40 rounded-xl">
       <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
       <div className="flex-1 min-w-0">
-        <p className="text-xs text-success font-semibold truncate">{label || 'Hoàn tất'}</p>
+        <p className="text-xs text-success font-semibold truncate">{label || t('hub.done')}</p>
         {result.file_size_mb && (
           <p className="text-[10px] text-fg-muted">{result.file_size_mb.toFixed(1)} MB</p>
         )}
@@ -73,7 +76,7 @@ function ResultRow({ result, label }) {
           download
           className="flex items-center gap-1 px-2.5 py-1.5 bg-accent hover:opacity-90 text-accent-fg text-xs font-semibold rounded-lg transition-colors"
         >
-          <Download className="w-3.5 h-3.5" /> Tải
+          <Download className="w-3.5 h-3.5" /> {t('hub.download')}
         </a>
       )}
     </div>
@@ -97,6 +100,7 @@ function TrimTab({ localPath, sourceUrl, title, duration, processing }) {
   const [start, setStart]       = useState(0);
   const [end, setEnd]           = useState(15);
   const [isAudio, setIsAudio]   = useState(false);
+  const { t } = useTranslation('results');
   const st = processing.getState('trim');
 
   const handlePreset = (p) => {
@@ -123,7 +127,7 @@ function TrimTab({ localPath, sourceUrl, title, duration, processing }) {
     <div className="space-y-4">
       {/* Presets */}
       <div>
-        <p className="text-xs text-fg-muted mb-2 font-medium">Chọn độ dài nhanh</p>
+        <p className="text-xs text-fg-muted mb-2 font-medium">{t('trim.quick')}</p>
         <div className="flex gap-1.5 flex-wrap">
           {TRIM_PRESETS.map(p => (
             <button
@@ -135,7 +139,7 @@ function TrimTab({ localPath, sourceUrl, title, duration, processing }) {
                   : 'bg-surface-2 text-fg-2 hover:bg-line hover:text-fg border border-line'
                 }`}
             >
-              {p.label}
+              {p.value === 0 ? t('trimPreset.custom') : p.label}
             </button>
           ))}
         </div>
@@ -145,7 +149,7 @@ function TrimTab({ localPath, sourceUrl, title, duration, processing }) {
       {isCustom && (
         <div className="flex items-center gap-3">
           <div className="flex-1">
-            <label className="text-[10px] text-fg-muted font-semibold uppercase tracking-wide">Từ (giây)</label>
+            <label className="text-[10px] text-fg-muted font-semibold uppercase tracking-wide">{t('hub.fromSec')}</label>
             <input
               type="number" min={0} max={end - 1} value={start}
               onChange={e => setStart(Math.max(0, parseFloat(e.target.value) || 0))}
@@ -153,7 +157,7 @@ function TrimTab({ localPath, sourceUrl, title, duration, processing }) {
             />
           </div>
           <div className="flex-1">
-            <label className="text-[10px] text-fg-muted font-semibold uppercase tracking-wide">Đến (giây)</label>
+            <label className="text-[10px] text-fg-muted font-semibold uppercase tracking-wide">{t('hub.toSec')}</label>
             <input
               type="number" min={start + 1} max={Math.min((duration || 600), start + 600)} value={end}
               onChange={e => setEnd(parseFloat(e.target.value) || start + 1)}
@@ -167,12 +171,12 @@ function TrimTab({ localPath, sourceUrl, title, duration, processing }) {
       <label className="flex items-center gap-2 cursor-pointer">
         <input type="checkbox" checked={isAudio} onChange={e => setIsAudio(e.target.checked)}
           className="w-4 h-4 rounded accent-accent" />
-        <span className="text-sm text-fg-2">Chỉ trích âm thanh (MP3)</span>
+        <span className="text-sm text-fg-2">{t('trim.audioOnly')}</span>
       </label>
 
       {/* Duration hint */}
       <p className="text-xs text-fg-muted">
-        Đoạn chọn: {(end - start).toFixed(0)}s {!localPath && '· Sẽ tải lại từ nguồn'}
+        {t('trim.selected', { seconds: (end - start).toFixed(0) })} {!localPath && t('trim.refetch')}
       </p>
 
       <button
@@ -181,10 +185,10 @@ function TrimTab({ localPath, sourceUrl, title, duration, processing }) {
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent hover:opacity-90 disabled:opacity-50 text-accent-fg font-semibold text-sm transition-colors cursor-pointer"
       >
         {st.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
-        {st.loading ? 'Đang xử lý...' : 'Cắt clip'}
+        {st.loading ? t('hub.processing') : t('trim.submit')}
       </button>
 
-      <ResultRow result={st.result} label={`Clip ${start}s–${end}s`} />
+      <ResultRow result={st.result} label={t('trim.resultLabel', { start, end })} />
       <ErrorRow error={st.error} />
     </div>
   );
@@ -195,6 +199,7 @@ function AudioTab({ localPath, sourceUrl, title, processing }) {
   const [format, setFormat]       = useState('mp3');
   const [quality, setQuality]     = useState('320');
   const [normalize, setNormalize] = useState(false);
+  const { t } = useTranslation('results');
   const st = processing.getState('audio');
 
   const handleSubmit = async () => {
@@ -208,7 +213,7 @@ function AudioTab({ localPath, sourceUrl, title, processing }) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-[10px] text-fg-muted font-semibold uppercase tracking-wide">Định dạng</label>
+          <label className="text-[10px] text-fg-muted font-semibold uppercase tracking-wide">{t('hub.format')}</label>
           <div className="flex gap-1.5 mt-1">
             {['mp3', 'm4a'].map(f => (
               <button key={f} onClick={() => setFormat(f)}
@@ -220,7 +225,7 @@ function AudioTab({ localPath, sourceUrl, title, processing }) {
           </div>
         </div>
         <div>
-          <label className="text-[10px] text-fg-muted font-semibold uppercase tracking-wide">Chất lượng</label>
+          <label className="text-[10px] text-fg-muted font-semibold uppercase tracking-wide">{t('audio.quality')}</label>
           <div className="flex gap-1 mt-1 flex-wrap">
             {['128', '192', '320'].map(q => (
               <button key={q} onClick={() => setQuality(q)}
@@ -236,7 +241,7 @@ function AudioTab({ localPath, sourceUrl, title, processing }) {
       <label className="flex items-center gap-2 cursor-pointer">
         <input type="checkbox" checked={normalize} onChange={e => setNormalize(e.target.checked)}
           className="w-4 h-4 rounded accent-accent" />
-        <span className="text-sm text-fg-2">Cân bằng âm lượng (loudnorm)</span>
+        <span className="text-sm text-fg-2">{t('audio.normalize')}</span>
       </label>
 
       <button
@@ -245,7 +250,7 @@ function AudioTab({ localPath, sourceUrl, title, processing }) {
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-fg font-semibold text-sm transition-colors cursor-pointer"
       >
         {st.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Music className="w-4 h-4" />}
-        {st.loading ? 'Đang trích...' : `Trích âm thanh ${format.toUpperCase()} ${quality}k`}
+        {st.loading ? t('audio.extracting') : t('audio.submit', { format: format.toUpperCase(), quality })}
       </button>
 
       <ResultRow result={st.result} label={`${format.toUpperCase()} ${quality}kbps`} />
@@ -260,6 +265,7 @@ function GifTab({ localPath, sourceUrl, title, duration, processing, userTier })
   const [gifPreset, setGifPreset] = useState(1);
   const [start, setStart]         = useState(0);
   const [end, setEnd]             = useState(Math.min(10, duration || 10));
+  const { t } = useTranslation('results');
   const isPro = ['pro', 'team', 'enterprise', 'api'].includes(userTier);
   const stGif  = processing.getState('gif');
   const stLoop = processing.getState('loop');
@@ -291,13 +297,13 @@ function GifTab({ localPath, sourceUrl, title, duration, processing, userTier })
     <div className="space-y-4">
       {/* Sub-tabs */}
       <div className="flex gap-1 p-1 bg-surface rounded-xl">
-        {['gif', 'mp4'].map(t => (
-          <button key={t} onClick={() => setSubTab(t === 'mp4' ? 'loop' : 'gif')}
+        {['gif', 'mp4'].map(k => (
+          <button key={k} onClick={() => setSubTab(k === 'mp4' ? 'loop' : 'gif')}
             className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer
-              ${(t === 'gif' ? subTab === 'gif' : subTab === 'loop')
+              ${(k === 'gif' ? subTab === 'gif' : subTab === 'loop')
                 ? 'bg-accent text-accent-fg'
                 : 'text-fg-muted hover:text-fg'}`}>
-            {t === 'gif' ? 'GIF animated' : 'MP4 Loop'}
+            {k === 'gif' ? t('gif.subGif') : t('gif.subLoop')}
           </button>
         ))}
       </div>
@@ -312,7 +318,7 @@ function GifTab({ localPath, sourceUrl, title, duration, processing, userTier })
               className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer
                 ${i === gifPreset ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-fg-muted hover:bg-line border border-line'}
                 ${locked ? 'opacity-40 cursor-not-allowed' : ''}`}>
-              {p.label}
+              {t(`gifPreset.${p.key}`)}
               {locked && <Lock className="w-2.5 h-2.5 inline ml-1" />}
             </button>
           );
@@ -326,7 +332,7 @@ function GifTab({ localPath, sourceUrl, title, duration, processing, userTier })
           ['end',   end,   setEnd,   start + 1,  Math.min((duration || 30), start + 30)],
         ].map(([lbl, val, setVal, min, max]) => (
           <div key={lbl} className="flex-1">
-            <label className="text-[10px] text-fg-muted uppercase tracking-wide">{lbl === 'start' ? 'Từ' : 'Đến'} (giây)</label>
+            <label className="text-[10px] text-fg-muted uppercase tracking-wide">{lbl === 'start' ? t('hub.fromSec') : t('hub.toSec')}</label>
             <input type="number" min={min} max={max} value={val}
               onChange={e => setVal(parseFloat(e.target.value) || 0)}
               className="w-full mt-1 px-3 py-2 bg-surface-2 border border-line rounded-lg text-sm text-fg outline-none focus:border-line" />
@@ -337,17 +343,17 @@ function GifTab({ localPath, sourceUrl, title, duration, processing, userTier })
       {/* Size estimate */}
       <p className="text-xs text-fg-muted">
         {preset.desc} · {dur.toFixed(0)}s
-        {subTab === 'gif' && ` · Ước tính ~${estKB > 1024 ? `${(estKB / 1024).toFixed(1)}MB` : `${estKB}KB`}`}
-        {estKB > 5120 && subTab === 'gif' && <span className="text-accent-text ml-1">⚠ Có thể nặng</span>}
+        {subTab === 'gif' && ` ${t('gif.estimate', { size: estKB > 1024 ? `${(estKB / 1024).toFixed(1)}MB` : `${estKB}KB` })}`}
+        {estKB > 5120 && subTab === 'gif' && <span className="text-accent-text ml-1">{t('gif.heavy')}</span>}
       </p>
 
       <button onClick={handleSubmit} disabled={st.loading || dur <= 0 || dur > 30}
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-fg font-semibold text-sm transition-colors cursor-pointer">
         {st.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
-        {st.loading ? 'Đang tạo...' : subTab === 'gif' ? 'Tạo GIF' : 'Xuất MP4 Loop'}
+        {st.loading ? t('gif.creating') : subTab === 'gif' ? t('gif.makeGif') : t('gif.exportLoop')}
       </button>
 
-      <ResultRow result={st.result} label={subTab === 'gif' ? 'GIF' : 'MP4 Loop'} />
+      <ResultRow result={st.result} label={subTab === 'gif' ? 'GIF' : t('gif.subLoop')} />
       <ErrorRow error={st.error} />
     </div>
   );
@@ -359,6 +365,7 @@ function SubtitleTab({ videoInfo, sourceUrl, processing, userTier }) {
   const [lang, setLang]     = useState(langs[0] || 'auto');
   const [fmt, setFmt]       = useState('srt');
   const [burn, setBurn]     = useState(false);
+  const { t } = useTranslation('results');
   const isPro = ['pro', 'team', 'enterprise', 'api'].includes(userTier);
   const stSub  = processing.getState('subtitle');
   const stBurn = processing.getState('burn');
@@ -389,18 +396,18 @@ function SubtitleTab({ videoInfo, sourceUrl, processing, userTier }) {
       {langs.length === 0 ? (
         <div className="p-4 rounded-xl bg-surface-2 border border-line text-center">
           <FileText className="w-8 h-8 text-fg-muted mx-auto mb-2" />
-          <p className="text-sm text-fg-muted">Không phát hiện phụ đề từ metadata.</p>
-          <p className="text-xs text-fg-muted mt-1">Thử tải thử — một số nguồn có phụ đề ẩn.</p>
+          <p className="text-sm text-fg-muted">{t('subtitle.none')}</p>
+          <p className="text-xs text-fg-muted mt-1">{t('subtitle.noneHint')}</p>
         </div>
       ) : (
         <div>
-          <label className="text-[10px] text-fg-muted uppercase tracking-wide">Ngôn ngữ</label>
+          <label className="text-[10px] text-fg-muted uppercase tracking-wide">{t('subtitle.language')}</label>
           <div className="flex gap-1.5 flex-wrap mt-1">
             {['auto', ...langs.slice(0, 5)].map(l => (
               <button key={l} onClick={() => setLang(l)}
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer
                   ${lang === l ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-fg-muted hover:bg-line border border-line'}`}>
-                {l === 'auto' ? 'Tự động' : l}
+                {l === 'auto' ? t('subtitle.auto') : l}
               </button>
             ))}
           </div>
@@ -409,7 +416,7 @@ function SubtitleTab({ videoInfo, sourceUrl, processing, userTier }) {
 
       {/* Format */}
       <div>
-        <label className="text-[10px] text-fg-muted uppercase tracking-wide">Định dạng</label>
+        <label className="text-[10px] text-fg-muted uppercase tracking-wide">{t('hub.format')}</label>
         <div className="flex gap-1.5 mt-1">
           {['srt', 'vtt', 'txt'].map(f => (
             <button key={f} onClick={() => setFmt(f)} disabled={burn}
@@ -427,17 +434,17 @@ function SubtitleTab({ videoInfo, sourceUrl, processing, userTier }) {
         <input type="checkbox" checked={burn} disabled={!isPro}
           onChange={e => setBurn(e.target.checked)}
           className="w-4 h-4 rounded accent-accent" />
-        <span className="text-sm text-fg-2">Ghép phụ đề vào video (burn-in)</span>
+        <span className="text-sm text-fg-2">{t('subtitle.burn')}</span>
         {!isPro && <span className="text-[10px] text-accent-text ml-1">Pro</span>}
       </label>
 
       <button onClick={handleSubmit} disabled={st.loading}
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-fg font-semibold text-sm transition-colors cursor-pointer">
         {st.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-        {st.loading ? 'Đang xử lý...' : burn ? 'Ghép phụ đề' : `Tải phụ đề ${fmt.toUpperCase()}`}
+        {st.loading ? t('hub.processing') : burn ? t('subtitle.burnSubmit') : t('subtitle.download', { format: fmt.toUpperCase() })}
       </button>
 
-      <ResultRow result={st.result} label={burn ? 'Video + phụ đề' : `Phụ đề ${fmt.toUpperCase()}`} />
+      <ResultRow result={st.result} label={burn ? t('subtitle.resultBurn') : t('subtitle.resultSub', { format: fmt.toUpperCase() })} />
       <ErrorRow error={st.error} />
     </div>
   );
@@ -446,6 +453,7 @@ function SubtitleTab({ videoInfo, sourceUrl, processing, userTier }) {
 // ── Tab: Package ───────────────────────────────────────────────────────────
 function PackageTab({ videoInfo, sourceUrl }) {
   const [template, setTemplate] = useState('{title}');
+  const { t } = useTranslation('results');
   const title    = videoInfo?.title    || 'video';
   const platform = videoInfo?.platform || '';
   const date     = new Date().toISOString().slice(0, 10);
@@ -463,13 +471,13 @@ function PackageTab({ videoInfo, sourceUrl }) {
   return (
     <div className="space-y-4">
       <div>
-        <label className="text-[10px] text-fg-muted uppercase tracking-wide">Template tên file</label>
+        <label className="text-[10px] text-fg-muted uppercase tracking-wide">{t('package.template')}</label>
         <div className="flex flex-col gap-1.5 mt-1">
-          {NAMING_TEMPLATES.map(t => (
-            <button key={t.value} onClick={() => setTemplate(t.value)}
+          {NAMING_TEMPLATES.map(tpl => (
+            <button key={tpl.value} onClick={() => setTemplate(tpl.value)}
               className={`px-3 py-2 rounded-lg text-xs text-left transition-all cursor-pointer font-mono
-                ${template === t.value ? 'bg-surface-2 text-fg-2 border border-line' : 'bg-surface-2 text-fg-muted hover:bg-line border border-line'}`}>
-              {t.label}
+                ${template === tpl.value ? 'bg-surface-2 text-fg-2 border border-line' : 'bg-surface-2 text-fg-muted hover:bg-line border border-line'}`}>
+              {tpl.label}
             </button>
           ))}
         </div>
@@ -477,7 +485,7 @@ function PackageTab({ videoInfo, sourceUrl }) {
 
       {/* Preview */}
       <div className="p-3 bg-surface rounded-xl border border-line">
-        <p className="text-[10px] text-fg-muted uppercase tracking-wide mb-1">Xem trước tên</p>
+        <p className="text-[10px] text-fg-muted uppercase tracking-wide mb-1">{t('package.preview')}</p>
         <p className="text-sm text-fg-2 font-mono break-all">{preview}.mp4</p>
       </div>
 
@@ -485,13 +493,13 @@ function PackageTab({ videoInfo, sourceUrl }) {
         <a href={downloadUrl} download={`${preview}.mp4`}
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-fg font-semibold text-sm transition-colors">
           <Download className="w-4 h-4" />
-          Tải với tên này
+          {t('package.useName')}
         </a>
       ) : (
-        <p className="text-xs text-fg-muted text-center">File local đã hết hạn — tải lại từ nguồn.</p>
+        <p className="text-xs text-fg-muted text-center">{t('package.expired')}</p>
       )}
 
-      <p className="text-xs text-fg-muted text-center">ZIP nhiều file: dùng tính năng Batch.</p>
+      <p className="text-xs text-fg-muted text-center">{t('package.zipHint')}</p>
     </div>
   );
 }
@@ -499,6 +507,7 @@ function PackageTab({ videoInfo, sourceUrl }) {
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function ProcessingHub({ videoInfo, localPath, sourceUrl, onClose, userTier = 'free', initialTab = 'trim' }) {
   const [activeTab, setActiveTab] = useState(initialTab);
+  const { t } = useTranslation('results');
   const processing = useProcessing();
 
   const title    = videoInfo?.title    || '';
@@ -514,7 +523,7 @@ export default function ProcessingHub({ videoInfo, localPath, sourceUrl, onClose
             <img src={videoInfo.thumbnail} alt="" className="w-12 h-8 object-cover rounded-lg bg-black/30 shrink-0" />
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-fg truncate">{title || 'Xử lý media'}</p>
+            <p className="text-sm font-semibold text-fg truncate">{title || t('hub.defaultTitle')}</p>
             <p className="text-[10px] text-fg-muted">Post-Processing Suite 2.0</p>
           </div>
           <button onClick={onClose} className="p-1.5 text-fg-muted hover:text-fg-2 transition-colors cursor-pointer shrink-0">
@@ -524,7 +533,7 @@ export default function ProcessingHub({ videoInfo, localPath, sourceUrl, onClose
 
         {/* Tabs */}
         <div className="flex gap-0.5 p-2 border-b border-line overflow-x-auto shrink-0">
-          {TABS.map(({ id, label, icon: Icon }) => (
+          {TABS.map(({ id, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
@@ -534,7 +543,7 @@ export default function ProcessingHub({ videoInfo, localPath, sourceUrl, onClose
                   : 'text-fg-muted hover:text-fg-2 hover:bg-surface-2'}`}
             >
               <Icon className="w-3.5 h-3.5" />
-              {label}
+              {t(`tabs.${id}`)}
               {id === 'subtitle' && hasSubs && (
                 <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
               )}
@@ -563,7 +572,7 @@ export default function ProcessingHub({ videoInfo, localPath, sourceUrl, onClose
 
         {/* Footer */}
         <div className="px-4 py-2.5 border-t border-line shrink-0">
-          <p className="text-[10px] text-fg-muted text-center">File xử lý hết hạn sau 20 phút · Giới hạn: trim 10 phút · GIF/loop 30 giây</p>
+          <p className="text-[10px] text-fg-muted text-center">{t('hub.footer')}</p>
         </div>
       </div>
     </div>

@@ -1,0 +1,26 @@
+{
+  "title": "Góp ý & Phản hồi",
+  "errors": {
+    "emptyContent": "Vui lòng nhập nội dung góp ý.",
+    "sendFailed": "Gửi thất bại, vui lòng thử lại.",
+    "connection": "Lỗi kết nối, vui lòng thử lại."
+  },
+  "success": {
+    "title": "Gửi thành công!",
+    "body": "Cảm ơn bạn đã góp ý. Chúng tôi sẽ xem xét và cải thiện."
+  },
+  "intro": "Ý kiến của bạn giúp VidGrab trở nên tốt hơn. Chúng tôi đọc từng phản hồi.",
+  "name": {
+    "label": "Tên (tuỳ chọn)",
+    "placeholder": "Nguyễn Văn A"
+  },
+  "email": {
+    "label": "Email (tuỳ chọn)"
+  },
+  "content": {
+    "label": "Nội dung góp ý",
+    "placeholder": "Mô tả vấn đề bạn gặp, tính năng muốn có, hoặc bất kỳ phản hồi nào..."
+  },
+  "sending": "Đang gửi...",
+  "submit": "Gửi góp ý"
+}

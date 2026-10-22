@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n, { useLocalePath } from '../i18n';
 import { trackEvent, EVENT } from '../utils/trackEvent';
 import { useAuth } from '../context/AuthContext';
 import { localAnyId, localMp3Id, toFileId } from '../lib/localFile';
@@ -44,6 +46,9 @@ import QuickGuideSection from './QuickGuideSection';
 // Every refusal used to fall through to "Failed to submit bulk jobs" unless
 // it was exactly quota_exceeded_daily, hiding why (20/10).
 // wording: BA review
+// Not a component: uses the i18n instance directly (language = current page language).
+const tb = (key, opts) => i18n.t(key, { ns: 'bulk', ...opts });
+
 export function bulkRefusalText(status, data) {
   const d = data && data.detail;
   if (typeof d === 'string' && d.trim()) return d;
@@ -51,16 +56,18 @@ export function bulkRefusalText(status, data) {
     const m = d.message || d.user_message;
     if (m) return d.suggested_action && !d.message ? `${m} ${d.suggested_action}` : m;
   }
-  if (status === 429) return 'Bạn gửi yêu cầu quá nhanh. Vui lòng chờ khoảng một phút rồi thử lại.';
-  if (status === 422) return 'Dữ liệu gửi lên không hợp lệ. Hãy kiểm tra lại danh sách link rồi thử lại.';
+  if (status === 429) return tb('refusal.tooFast');
+  if (status === 422) return tb('refusal.invalid');
   if (data && typeof data.message === 'string' && data.message) return data.message;
-  return `Không gửi được danh sách tải (mã lỗi ${status}). Vui lòng thử lại sau ít phút.`;
+  return tb('refusal.generic', { status });
 }
 
 // Shown under a Douyin channel row when the server listed only the newest
 // videos and Douyin has more (channel_hint from GET /jobs/{batch_id}).
 // wording: BA review
 function DouyinExtensionHint() {
+  const { t } = useTranslation('bulk');
+  const lp = useLocalePath();
   const openExtensionPage = (e) => {
     e.preventDefault();
     window.history.pushState({}, '', '/extension');
@@ -68,18 +75,17 @@ function DouyinExtensionHint() {
   };
   return (
     <div className="mt-2 p-2.5 rounded-control border border-line bg-surface text-[11px] text-fg-2 whitespace-normal">
-      <p className="font-semibold text-fg mb-1">Muốn lấy đầy đủ video của kênh?</p>
+      <p className="font-semibold text-fg mb-1">{t('douyinHint.title')}</p>
       <p className="mb-2">
-        Máy chủ chỉ lấy được những video mới nhất. Dùng tiện ích VidGrab để lấy hết:
-        mở trang kênh trên Douyin, bấm nút cuộn trên khung VidGrab, chờ báo hoàn tất rồi bấm gửi tải.
+        {t('douyinHint.body')}
       </p>
       <a
-        href="/extension"
+        href={lp('/extension')}
         onClick={openExtensionPage}
         className="inline-flex items-center gap-1.5 px-2.5 py-1 font-medium text-accent-text border border-line hover:border-line-strong rounded-control transition-colors"
       >
         <Puzzle className="w-3.5 h-3.5" />
-        Cài tiện ích VidGrab
+        {t('douyinHint.install')}
       </a>
     </div>
   );
@@ -98,17 +104,18 @@ async function safeJson(response) {
     return JSON.parse(text);
   } catch {
     if (response.status === 502 || response.status === 503 || response.status === 504) {
-      throw new Error('🔧 Máy chủ đang bảo trì hoặc khởi động lại. Vui lòng thử lại sau vài giây.');
+      throw new Error(tb('safeJson.maintenance'));
     }
     if (response.status === 429) {
-      throw new Error('⏳ Bạn đã gửi quá nhiều yêu cầu. Vui lòng chờ 1 phút rồi thử lại.');
+      throw new Error(tb('safeJson.rateLimited'));
     }
-    throw new Error(`Lỗi máy chủ (${response.status}). Vui lòng thử lại.`);
+    throw new Error(tb('safeJson.server', { status: response.status }));
   }
 }
 
 // ── Countdown Timer + Recovery Action Cell ─────────────────────────
 const JobActionCell = ({ job, onDownload, onRefresh }) => {
+  const { t } = useTranslation('bulk');
   const [expired, setExpired] = useState(false);
   const [timeLeft, setTimeLeft] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -145,14 +152,14 @@ const JobActionCell = ({ job, onDownload, onRefresh }) => {
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-warning/10 text-warning hover:bg-warning/20 transition-colors cursor-pointer disabled:opacity-50"
         >
           {refreshing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-          Thử lại
+          {t('retry')}
         </button>
       );
     }
     return <span className="text-xs text-fg-muted">-</span>;
   }
 
-  if (job.status !== 'success') return <span className="text-xs text-fg-muted">Đang chờ...</span>;
+  if (job.status !== 'success') return <span className="text-xs text-fg-muted">{t('waiting')}</span>;
 
   const hasLink = job.direct_mp4_url || localAnyId(job) || job.direct_file_id;
   if (!hasLink) return <span className="text-xs text-fg-muted">-</span>;
@@ -168,11 +175,11 @@ const JobActionCell = ({ job, onDownload, onRefresh }) => {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-error/10 text-error hover:bg-error/20 border border-error/20 transition-colors cursor-pointer disabled:opacity-50"
           >
             {refreshing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-            {refreshing ? 'Đang gia hạn...' : 'Link đã hết hạn — Gia hạn'}
+            {refreshing ? t('renewing') : t('linkExpiredRenew')}
           </button>
         ) : (
           <span className="text-[11px] text-error italic border border-error/20 bg-error/5 px-2 py-1 rounded">
-            Link đã hết hạn
+            {t('linkExpired')}
           </span>
         )}
       </div>
@@ -202,6 +209,7 @@ const JobActionCell = ({ job, onDownload, onRefresh }) => {
 };
 
 export default function BulkContent() {
+  const { t } = useTranslation('bulk');
   const { withAuth, session } = useAuth();
   const [urls, setUrls] = useState('');
   const [batchId, setBatchId] = useState(() => {
@@ -407,7 +415,7 @@ export default function BulkContent() {
             });
             const spData = await safeJson(spRes);
             if (spData.success && spData.tracks) {
-              spData.tracks.forEach(t => expandedUrls.push(t.query));
+              spData.tracks.forEach(trk => expandedUrls.push(trk.query));
             } else {
               expandedUrls.push(u); // fallback
             }
@@ -455,8 +463,8 @@ export default function BulkContent() {
       // wording: BA review
       const network = err instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(err?.message || '');
       alert(network
-        ? 'Lỗi kết nối mạng, chưa gửi được danh sách. Hãy kiểm tra Internet rồi thử lại.'
-        : (err?.message || 'Không gửi được danh sách tải. Vui lòng thử lại.'));
+        ? t('errNetwork')
+        : (err?.message || t('errSubmit')));
       return false;
     } finally {
       setIsSubmitting(false);
@@ -655,7 +663,7 @@ export default function BulkContent() {
     const recoveryState = job.recovery_state;
 
     if (status === 'pending') {
-      const label = stage === 'queued' && job.recovery_attempts > 0 ? 'Đang khôi phục...' : 'Chờ xử lý';
+      const label = stage === 'queued' && job.recovery_attempts > 0 ? t('status.recovering') : t('status.pending');
       return (
         <span className="inline-flex items-center gap-1 text-fg-muted bg-surface/50 px-2.5 py-1 rounded-lg text-xs font-medium">
           <Clock className="w-3 h-3" /> {label}
@@ -663,12 +671,12 @@ export default function BulkContent() {
       );
     }
     if (status === 'processing') {
-      const stageLabel = stage === 'extracting' ? 'Đang trích xuất' : stage === 'downloading' ? 'Đang tải' : stage === 'zipping' ? 'Đang nén ZIP' : 'Đang xử lý';
+      const stageLabel = stage === 'extracting' ? t('status.extracting') : stage === 'downloading' ? t('status.downloading') : stage === 'zipping' ? t('status.zipping') : t('status.processing');
       const isStuck = recoveryState === 'stuck';
       return (
         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium ${isStuck ? 'text-error bg-error/10' : 'text-warning bg-warning/10'}`}>
           {isStuck ? <AlertTriangle className="w-3 h-3" /> : <Loader2 className="w-3 h-3 animate-spin" />}
-          {isStuck ? 'Bị kẹt' : stageLabel}
+          {isStuck ? t('status.stuck') : stageLabel}
         </span>
       );
     }
@@ -676,13 +684,13 @@ export default function BulkContent() {
       if (recoveryState === 'expired_refreshable') {
         return (
           <span className="inline-flex items-center gap-1 text-error bg-error/10 px-2.5 py-1 rounded-lg text-xs font-medium">
-            <Clock className="w-3 h-3" /> Hết hạn
+            <Clock className="w-3 h-3" /> {t('status.expired')}
           </span>
         );
       }
       return (
         <span className="inline-flex items-center gap-1 text-success bg-success/10 px-2.5 py-1 rounded-lg text-xs font-medium">
-          <CheckCircle2 className="w-3 h-3" /> Thành công
+          <CheckCircle2 className="w-3 h-3" /> {t('status.success')}
         </span>
       );
     }
@@ -690,14 +698,14 @@ export default function BulkContent() {
       const isAbandoned = stage === 'abandoned' || recoveryState === 'abandoned';
       return (
         <span className="inline-flex items-center gap-1 text-error bg-error/10 px-2.5 py-1 rounded-lg text-xs font-medium">
-          <XCircle className="w-3 h-3" /> {isAbandoned ? 'Đã dừng' : 'Thất bại'}
+          <XCircle className="w-3 h-3" /> {isAbandoned ? t('status.stopped') : t('status.failed')}
         </span>
       );
     }
     if (status === 'cancelled') {
       return (
         <span className="inline-flex items-center gap-1 text-fg-muted bg-surface px-2.5 py-1 rounded-lg text-xs font-medium">
-          <OctagonX className="w-3 h-3" /> Đã dừng
+          <OctagonX className="w-3 h-3" /> {t('status.stopped')}
         </span>
       );
     }
@@ -772,7 +780,7 @@ export default function BulkContent() {
       className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-surface text-fg-2 border border-line hover:bg-error/10 hover:text-error hover:border-error/30 transition-all disabled:opacity-50"
     >
       {isStopping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <OctagonX className="w-3.5 h-3.5" />}
-      {isStopping ? 'Đang dừng...' : label}
+      {isStopping ? t('stopping') : label}
     </button>
   );
 
@@ -817,7 +825,7 @@ export default function BulkContent() {
       setRefreshTrigger(prev => prev + 1);
     } catch (e) {
       console.error(e);
-      alert('Không thể tạo file ZIP: ' + e.message);
+      alert(t('zipFailed', { message: e.message }));
     } finally {
       setIsZipping(false);
     }
@@ -859,7 +867,7 @@ export default function BulkContent() {
 
   // ── Keyword Search Handler ─────────────────────────────────────────
   const handleKeywordSearch = async () => {
-    if (kw.trim().length < 3) { setKwError('Từ khóa phải có ít nhất 3 ký tự.'); return; }
+    if (kw.trim().length < 3) { setKwError(t('kw.tooShort')); return; }
     setKwLoading(true);
     setKwError('');
     setKwResults([]);
@@ -880,16 +888,16 @@ export default function BulkContent() {
       const data = await res.json();
       if (!res.ok) {
         const code = data?.detail?.error_code || '';
-        if (code === 'search_rate_limited') setKwError('Bạn đã tìm kiếm quá nhiều. Thử lại sau.');
-        else if (code === 'search_no_results') setKwError(`Không tìm thấy video nào cho "${kw}".`);
-        else setKwError(data?.detail?.message || data?.detail || 'Tìm kiếm thất bại.');
+        if (code === 'search_rate_limited') setKwError(t('kw.rateLimited'));
+        else if (code === 'search_no_results') setKwError(t('kw.noVideosFor', { kw }));
+        else setKwError(data?.detail?.message || data?.detail || t('kw.failed'));
         return;
       }
       setKwResults(data.results || []);
       setKwCached(data.cached || false);
-      if ((data.results || []).length === 0) setKwError('Không tìm thấy kết quả nào.');
+      if ((data.results || []).length === 0) setKwError(t('kw.noResults'));
     } catch (e) {
-      setKwError(e.message || 'Lỗi kết nối.');
+      setKwError(e.message || t('connError'));
     } finally {
       setKwLoading(false);
     }
@@ -928,10 +936,10 @@ export default function BulkContent() {
         body: JSON.stringify({ batch_id: batchId, pattern: renamePattern }),
       });
       const data = await res.json();
-      if (!res.ok) { setRenameError(data?.detail || 'Tạo ZIP thất bại.'); return; }
+      if (!res.ok) { setRenameError(data?.detail || t('rename.failed')); return; }
       setRenameResult(data);
     } catch (e) {
-      setRenameError(e.message || 'Lỗi kết nối.');
+      setRenameError(e.message || t('connError'));
     } finally {
       setRenameLoading(false);
     }
@@ -984,11 +992,11 @@ export default function BulkContent() {
           <div className="flex items-center gap-3 mb-1">
             <Layers className="w-5 h-5 text-accent-text" />
             <h2 className="text-2xl font-bold text-fg tracking-tight">
-              Tải Hàng Loạt
+              {t('title')}
             </h2>
           </div>
           <p className="text-sm text-fg-muted ml-8">
-            Xử lý đồng thời nhiều video hoặc toàn bộ kênh
+            {t('subtitle')}
           </p>
         </div>
         {quotaInfo && ['pro', 'vip'].includes(quotaInfo.plan) && (
@@ -1004,10 +1012,10 @@ export default function BulkContent() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
           <div>
             <h3 className="text-base font-semibold text-fg">
-              Dán URL vào đây
+              {t('pasteHere')}
             </h3>
             <p className="text-xs text-fg-muted mt-0.5">
-              Mỗi dòng một link. Có thể dán nhiều URL hoặc import file .txt / .csv.
+              {t('pasteHint')}
             </p>
           </div>
 
@@ -1045,7 +1053,7 @@ export default function BulkContent() {
               ) : (
                 <ToggleLeft className="w-4 h-4" />
               )}
-              Tự động tải khi xong
+              {t('autoDownload')}
             </button>
             
             {/* Mode Tabs */}
@@ -1054,7 +1062,7 @@ export default function BulkContent() {
                 {[
                   { key: 'bulk',      label: 'Bulk URL',  icon: Link2,      active: !channelMode && !searchMode && !containerMode },
                   { key: 'channel',   label: 'Channel',   icon: Tv,         active: channelMode && !searchMode && !containerMode },
-                  { key: 'search',    label: 'Từ khóa',   icon: Search,     active: searchMode && !containerMode },
+                  { key: 'search',    label: t('tabKeyword'),   icon: Search,     active: searchMode && !containerMode },
                   { key: 'container', label: 'Browse',    icon: FolderOpen, active: containerMode },
                 ].map(tab => (
                   <button
@@ -1078,10 +1086,10 @@ export default function BulkContent() {
                 ))}
               </div>
               <p className="text-xs text-fg-muted mt-1">
-                {channelMode ? 'Bật chế độ này khi bạn dán link kênh/profile thay vì link video đơn.'
-                  : searchMode ? 'Tìm video theo từ khóa và chọn để tải.'
-                  : containerMode ? 'Xem trước và chọn nội dung trước khi queue tải.'
-                  : 'Dán link video trực tiếp để tải hàng loạt.'}
+                {channelMode ? t('modeHint.channel')
+                  : searchMode ? t('modeHint.search')
+                  : containerMode ? t('modeHint.container')
+                  : t('modeHint.bulk')}
               </p>
             </div>
 
@@ -1115,16 +1123,16 @@ export default function BulkContent() {
                       <ToggleLeft className="w-4 h-4" />
                     )}
                     <Sparkles className="w-3.5 h-3.5" />
-                    Bỏ watermark
+                    {t('removeWatermark')}
                     {hasTikTok && (
                       <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-success-soft text-success">TikTok/Douyin</span>
                     )}
                     {isOtherPlatform && (
-                      <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-surface border border-line text-fg-muted">Chỉ TikTok</span>
+                      <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-surface border border-line text-fg-muted">{t('tiktokOnly')}</span>
                     )}
                   </button>
                   <p className="text-xs text-fg-muted mt-1">
-                    {isOtherPlatform ? 'Chỉ áp dụng cho TikTok và Douyin.' : 'Tải bản không có logo/watermark (TikTok, Douyin).'}
+                    {isOtherPlatform ? t('watermarkOnlyTikTok') : t('watermarkHint')}
                   </p>
                 </div>
               );
@@ -1145,7 +1153,7 @@ export default function BulkContent() {
                     setPreview((p) => ({ url: lines[0], tab, n: ((p && p.n) || 0) + 1 }));
                   }}
                     className="mb-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border border-accent/40 bg-accent/10 text-accent-text hover:bg-accent/20 cursor-pointer">
-                    <Eye className="w-3.5 h-3.5" /> Xem danh sách video để chọn
+                    <Eye className="w-3.5 h-3.5" /> {t('listToChoose')}
                   </button>
                 );
               })()}
@@ -1163,45 +1171,45 @@ export default function BulkContent() {
           <div className="mb-4 p-4 rounded-xl bg-accent/5 border border-accent/20">
             <p className="text-xs text-accent-text flex items-center gap-2 mb-3">
               <Tv className="w-4 h-4" />
-              <strong>Channel Mode ON:</strong> Tự động bóc tách và lọc video trong kênh
+              <strong>{t('channelModeOn')}</strong> {t('channelModeDesc')}
             </p>
             {/* Platform-specific hint */}
             {(() => {
               const allUrls = urls.toLowerCase();
               if (allUrls.includes('twitter.com') || allUrls.includes('x.com')) return (
                 <div className="mb-3 p-2.5 rounded-lg bg-surface-2 border border-line text-xs text-fg-2">
-                  <strong>Twitter/X:</strong> Nhập @username hoặc link trang cá nhân. Tải video từ Media tab công khai. Giới hạn 100 video/lần — Twitter rate-limit rất chặt với scrape lớn.
+                  <strong>Twitter/X:</strong> {t('hint.twitter')}
                 </div>
               );
               if (allUrls.includes('reddit.com')) return (
                 <div className="mb-3 p-2.5 rounded-lg bg-accent-soft border border-accent/20 text-xs text-accent-text">
-                  <strong>Reddit:</strong> Nhập link subreddit (r/videos) hoặc user page. Hỗ trợ sort hot/new/top. Chỉ lấy các bài có video. Tối đa 50 video/lần.
+                  <strong>Reddit:</strong> {t('hint.reddit')}
                 </div>
               );
               if (allUrls.includes('pinterest.com') || allUrls.includes('pin.it')) return (
                 <div className="mb-3 p-2.5 rounded-lg bg-danger-soft border border-danger/20 text-xs text-danger">
-                  <strong>Pinterest:</strong> Nhập link board (pinterest.com/user/board-name). Chỉ Video Pin được tải. Board riêng tư sẽ báo lỗi.
+                  <strong>Pinterest:</strong> {t('hint.pinterest')}
                 </div>
               );
               if (allUrls.includes('threads.com') || allUrls.includes('threads.net')) return (
                 <div className="mb-3 p-2.5 rounded-lg bg-surface-2 border border-line text-xs text-fg-2">
-                  <strong>Threads:</strong> Nhập @username hoặc link trang cá nhân công khai. Lấy tối đa 100 bài gần đây có media.
+                  <strong>Threads:</strong> {t('hint.threads')}
                 </div>
               );
               return null;
             })()}
             <div>
               <label className="block text-[10px] font-semibold text-fg-muted uppercase mb-2">
-                Số lượng video muốn tải
+                {t('howMany')}
               </label>
-              <p className="text-xs text-fg-muted mb-2">Chọn số video muốn quét từ kênh. Nếu mới dùng, hãy thử 10–50 video trước.</p>
+              <p className="text-xs text-fg-muted mb-2">{t('howManyHint')}</p>
               {/douyin\.com/i.test(urls) && (
                 // 21/10 — wording: BA review. Listing is free (~41 newest); only downloads count.
-                <p className="text-xs text-fg-muted mb-2">Kênh Douyin: máy chủ lấy được khoảng 40 video mới nhất. Muốn lấy đủ cả kênh, dùng tiện ích VidGrab trên Chrome hoặc ứng dụng VidGrab cho Windows.</p>
+                <p className="text-xs text-fg-muted mb-2">{t('douyinChannelNote')}</p>
               )}
               {/(xiaohongshu\.com|rednote\.com|xhslink\.c|kuaishou\.c|chenzhongtech\.c)/i.test(urls) && (
                 // Task #6171 — wording: BA review. Server rule: signed-in only, ≤ 20 per scan, ≤ remaining today.
-                <p className="text-xs text-fg-muted mb-2">Kênh Xiaohongshu/Kuaishou: cần đăng nhập; mỗi lần quét tối đa 20 video và không quá số lượt tải còn lại hôm nay của bạn.</p>
+                <p className="text-xs text-fg-muted mb-2">{t('xhsChannelNote')}</p>
               )}
               <div className="flex flex-wrap gap-2 mb-2">
                 {[
@@ -1226,7 +1234,7 @@ export default function BulkContent() {
                 ))}
               </div>
               {(urls.toLowerCase().includes('twitter.com') || urls.toLowerCase().includes('x.com')) && (
-                <p className="text-xs text-fg-2 mt-1 inline-flex items-center gap-1"><AlertTriangle className="w-3 h-3 flex-shrink-0" /> Twitter rate-limit: &gt;50 video có thể chậm hoặc bị gián đoạn.</p>
+                <p className="text-xs text-fg-2 mt-1 inline-flex items-center gap-1"><AlertTriangle className="w-3 h-3 flex-shrink-0" /> {t('twitterLimit')}</p>
               )}
               <input
                 type="number"
@@ -1235,10 +1243,10 @@ export default function BulkContent() {
                 value={customMaxVideos}
                 onChange={(e) => { setCustomMaxVideos(e.target.value); setMaxVideos(0); }}
                 className="w-full px-3 py-2 bg-surface border border-line rounded-lg text-sm text-fg focus:outline-none focus:border-accent/50"
-                placeholder="Hoặc nhập số lượng tuỳ chỉnh..."
+                placeholder={t('customCountPlaceholder')}
               />
               <p className="text-[10px] text-fg-muted mt-1.5">
-                💡 Video được xử lý theo đợt (10 video/đợt) để tối ưu hiệu suất
+                {t('batchNote')}
               </p>
             </div>
           </div>
@@ -1250,17 +1258,17 @@ export default function BulkContent() {
             {/* Search controls */}
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <div className="col-span-2 sm:col-span-2">
-                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">Từ khóa</label>
+                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">{t('kw.label')}</label>
                 <input
                   value={kw}
                   onChange={e => setKw(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleKeywordSearch()}
-                  placeholder="Nhập từ khóa tìm kiếm..."
+                  placeholder={t('kw.placeholder')}
                   className="w-full bg-surface border border-line rounded-xl px-3 py-2 text-sm text-fg placeholder:text-fg-muted focus:outline-none focus:border-accent/40"
                 />
               </div>
               <div>
-                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">Nền tảng</label>
+                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">{t('kw.platform')}</label>
                 <select value={kwPlatform} onChange={e => setKwPlatform(e.target.value)}
                   className="w-full bg-surface border border-line rounded-xl px-2 py-2 text-sm text-fg focus:outline-none cursor-pointer">
                   <option value="youtube">YouTube</option>
@@ -1268,34 +1276,34 @@ export default function BulkContent() {
                 </select>
               </div>
               <div>
-                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">Số lượng</label>
+                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">{t('kw.count')}</label>
                 <select value={kwCount} onChange={e => setKwCount(Number(e.target.value))}
                   className="w-full bg-surface border border-line rounded-xl px-2 py-2 text-sm text-fg focus:outline-none cursor-pointer">
-                  {[10, 20, 50].map(n => <option key={n} value={n}>{n} video</option>)}
+                  {[10, 20, 50].map(n => <option key={n} value={n}>{t('kw.nVideos', { count: n })}</option>)}
                 </select>
               </div>
             </div>
             <div className="flex gap-2 flex-wrap items-end">
               <div>
-                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">Sắp xếp</label>
+                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">{t('kw.sort')}</label>
                 <select value={kwSort} onChange={e => setKwSort(e.target.value)}
                   className="bg-surface border border-line rounded-xl px-2 py-2 text-sm text-fg focus:outline-none cursor-pointer">
-                  <option value="relevance">Liên quan</option>
-                  <option value="date">Mới nhất</option>
-                  <option value="view_count">Nhiều xem</option>
+                  <option value="relevance">{t('kw.sortRelevance')}</option>
+                  <option value="date">{t('kw.sortNewest')}</option>
+                  <option value="view_count">{t('kw.sortViews')}</option>
                 </select>
               </div>
               <div>
-                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">Thời lượng tối thiểu (giây)</label>
+                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">{t('kw.minDur')}</label>
                 <input type="number" value={kwMinDur} onChange={e => setKwMinDur(e.target.value)}
                   placeholder="0"
                   className="w-24 bg-surface border border-line rounded-xl px-2 py-2 text-sm text-fg focus:outline-none"
                 />
               </div>
               <div>
-                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">Thời lượng tối đa (giây)</label>
+                <label className="text-[10px] text-fg-muted uppercase font-semibold mb-1 block">{t('kw.maxDur')}</label>
                 <input type="number" value={kwMaxDur} onChange={e => setKwMaxDur(e.target.value)}
-                  placeholder="không giới hạn"
+                  placeholder={t('kw.unlimited')}
                   className="w-32 bg-surface border border-line rounded-xl px-2 py-2 text-sm text-fg focus:outline-none"
                 />
               </div>
@@ -1305,7 +1313,7 @@ export default function BulkContent() {
                 className="flex items-center gap-2 px-5 py-2 rounded-xl bg-accent text-accent-fg text-sm font-semibold border border-transparent hover:bg-accent-hover transition-colors cursor-pointer disabled:bg-surface-2 disabled:text-fg-muted disabled:border disabled:border-line disabled:shadow-none disabled:cursor-not-allowed"
               >
                 {kwLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                {kwLoading ? 'Đang tìm...' : 'Tìm kiếm'}
+                {kwLoading ? t('kw.searching') : t('kw.search')}
               </button>
             </div>
 
@@ -1316,20 +1324,20 @@ export default function BulkContent() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-fg-muted">
-                    Tìm thấy {kwResults.length} video cho "{kw}"{kwCached ? ' (từ cache)' : ''}
+                    {t(kwCached ? 'kw.foundCached' : 'kw.found', { count: kwResults.length, kw })}
                   </p>
                   <div className="flex gap-2">
                     <button
                       onClick={() => setKwSelected(new Set(kwResults.map(r => r.url)))}
                       className="text-[10px] text-fg-muted hover:text-fg cursor-pointer"
                     >
-                      Chọn tất cả
+                      {t('selectAll')}
                     </button>
                     <button
                       onClick={() => setKwSelected(new Set())}
                       className="text-[10px] text-fg-muted hover:text-fg cursor-pointer"
                     >
-                      Bỏ chọn
+                      {t('deselect')}
                     </button>
                   </div>
                 </div>
@@ -1382,9 +1390,9 @@ export default function BulkContent() {
                   className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent text-accent-fg border border-transparent text-sm font-semibold disabled:bg-surface-2 disabled:text-fg-muted disabled:border disabled:border-line disabled:shadow-none disabled:cursor-not-allowed hover:bg-accent-hover transition-colors cursor-pointer"
                 >
                   <Download className="w-4 h-4" />
-                  Tải {kwSelected.size} video đã chọn →
+                  {t('kw.downloadSelected', { count: kwSelected.size })}
                 </button>
-                <p className="text-[10px] text-center text-fg-muted">Các URL sẽ được chuyển sang tab Bulk URL để tải.</p>
+                <p className="text-[10px] text-center text-fg-muted">{t('kw.movedToBulk')}</p>
               </div>
             )}
           </div>
@@ -1425,7 +1433,7 @@ export default function BulkContent() {
             <button
               onClick={() => fileInputRef.current?.click()}
               className="p-1.5 bg-surface-2 text-fg-muted hover:text-accent-text border border-line rounded-lg transition-colors shadow-sm"
-              title="Import URL từ file .txt hoặc .csv"
+              title={t('importFile')}
             >
               <FileDown className="w-4 h-4" />
             </button>
@@ -1443,7 +1451,7 @@ export default function BulkContent() {
                   }
                 }}
                 className="p-1.5 bg-surface-2 text-fg-muted hover:text-accent-text border border-line rounded-lg transition-colors shadow-sm"
-                title="Dán từ bộ nhớ tạm"
+                title={t('pasteClipboard')}
               >
                 <ClipboardPaste className="w-4 h-4" />
               </button>
@@ -1457,7 +1465,7 @@ export default function BulkContent() {
             const dups = lines.length - new Set(lines).size;
             return dups > 0 ? (
               <span className="text-xs text-accent-text flex items-center gap-1">
-                ⚠ {dups} URL trùng sẽ bị bỏ qua
+                {t('dupUrls', { count: dups })}
               </span>
             ) : <span />;
           })()}
@@ -1484,7 +1492,7 @@ export default function BulkContent() {
               "
             >
               <FolderOpen className="w-4 h-4" />
-              Xem trước &amp; chọn nội dung
+              {t('previewAndPick')}
             </button>
           ) : (
             <button
@@ -1507,7 +1515,7 @@ export default function BulkContent() {
               ) : (
                 <Play className="w-4 h-4" />
               )}
-              {isSubmitting ? 'Đang gửi...' : 'Bắt Đầu Tải Hàng Loạt'}
+              {isSubmitting ? t('sending') : t('startBulk')}
             </button>
           )}
         </div>
@@ -1518,10 +1526,10 @@ export default function BulkContent() {
         <div className="p-5 rounded-2xl bg-surface border border-line shadow-lg">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-fg">
-              Tiến độ xử lý
+              {t('progress')}
             </h3>
             <span className="text-xs text-fg-muted">
-              {totalData.success + totalData.failed + (totalData.cancelled || 0)} / {totalData.total} hoàn tất
+              {t('progressDone', { done: totalData.success + totalData.failed + (totalData.cancelled || 0), total: totalData.total })}
             </span>
           </div>
 
@@ -1536,34 +1544,34 @@ export default function BulkContent() {
           {/* Stat Pills */}
           <div className="flex flex-wrap gap-3">
             <span className="text-xs px-3 py-1.5 rounded-lg bg-surface font-medium text-fg-2">
-              Tổng: <strong className="text-fg">{totalData.total}</strong>
+              {t('stat.total')} <strong className="text-fg">{totalData.total}</strong>
             </span>
             {totalData.pending > 0 && (
               <span className="text-xs px-3 py-1.5 rounded-lg bg-surface font-medium text-fg-muted">
-                Chờ: {totalData.pending}
+                {t('stat.pending')} {totalData.pending}
               </span>
             )}
             {totalData.processing > 0 && (
               <span className="text-xs px-3 py-1.5 rounded-lg bg-warning/10 font-medium text-warning">
-                Đang xử lý: {totalData.processing}
+                {t('stat.processing')} {totalData.processing}
               </span>
             )}
             <span className="text-xs px-3 py-1.5 rounded-lg bg-success/10 font-medium text-success">
-              Thành công: {totalData.success}
+              {t('stat.success')} {totalData.success}
             </span>
             {totalData.failed > 0 && (
               <span className="text-xs px-3 py-1.5 rounded-lg bg-error/10 font-medium text-error">
-                Thất bại: {totalData.failed}
+                {t('stat.failed')} {totalData.failed}
               </span>
             )}
             {totalData.cancelled > 0 && (
               <span className="text-xs px-3 py-1.5 rounded-lg bg-surface font-medium text-fg-muted">
-                Đã dừng: {totalData.cancelled}
+                {t('stat.stopped')} {totalData.cancelled}
               </span>
             )}
             {(summary?.recoverable > 0) && (
               <span className="text-xs px-3 py-1.5 rounded-lg bg-accent/10 font-medium text-accent">
-                Có thể khôi phục: {summary.recoverable}
+                {t('stat.recoverable')} {summary.recoverable}
               </span>
             )}
           </div>
@@ -1571,8 +1579,8 @@ export default function BulkContent() {
           {/* Stop: cancels the videos not started yet */}
           {canStop && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {stopButton('Dừng tải phần còn lại')}
-              <span className="text-[11px] text-fg-muted">Video đang tải dở sẽ được tải nốt.</span>
+              {stopButton(t('stopRest'))}
+              <span className="text-[11px] text-fg-muted">{t('stopNote')}</span>
             </div>
           )}
 
@@ -1585,7 +1593,7 @@ export default function BulkContent() {
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-error/10 text-error border border-error/30 hover:bg-error/20 transition-all disabled:opacity-50"
               >
                 {isRetrying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-                {isRetrying ? 'Đang thêm lại hàng đợi...' : `Thử lại ${totalData.failed} job lỗi`}
+                {isRetrying ? t('requeueing') : t('retryFailed', { count: totalData.failed })}
               </button>
             </div>
           )}
@@ -1611,7 +1619,7 @@ export default function BulkContent() {
                     ) : (zipJob && (zipJob.status === "processing" || zipJob.status === "pending")) || isZipping ? (
                         <button disabled className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-accent/50 text-fg text-xs font-bold uppercase tracking-wider cursor-not-allowed">
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          Đang tạo file ZIP...
+                          {t('creatingZip')}
                         </button>
                     ) : (
                         <div className="flex flex-col items-start gap-2">
@@ -1626,7 +1634,7 @@ export default function BulkContent() {
                             className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-accent shadow-lg hover:shadow-xl text-accent-fg text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer"
                           >
                             <FileDown className="w-4 h-4" />
-                            Tải tất cả (ZIP) {zipJob?.error_message ? " (Thử lại)" : ""}
+                            {t('zipAll')} {zipJob?.error_message ? t('zipRetry') : ""}
                           </button>
                           {/* Organize by channel toggle */}
                           <label className="flex items-center gap-1.5 cursor-pointer select-none ml-1">
@@ -1636,12 +1644,12 @@ export default function BulkContent() {
                               onChange={e => setOrganizeByChannel(e.target.checked)}
                               className="w-3.5 h-3.5 accent-primary rounded"
                             />
-                            <span className="text-[10px] text-fg-muted">Chia thư mục theo kênh</span>
+                            <span className="text-[10px] text-fg-muted">{t('byChannel')}</span>
                           </label>
                           {/* Show estimated total size before zipping */}
                           {successJobs.length > 0 && (
                             <span className="text-[10px] text-fg-muted ml-1">
-                              Ước tính: {successJobs.reduce((sum, j) => sum + (j.file_size_mb || 0), 0).toFixed(1)} MB • {successJobs.length} files
+                              {t('zipEstimate', { mb: successJobs.reduce((sum, j) => sum + (j.file_size_mb || 0), 0).toFixed(1), count: successJobs.length })}
                             </span>
                           )}
                         </div>
@@ -1679,7 +1687,7 @@ export default function BulkContent() {
                 `}
               >
                 <FileDown className="w-4 h-4" />
-                Tải {selectedJobIds.size} đã chọn
+                {t('downloadSelectedN', { count: selectedJobIds.size })}
               </button>
               <button
                 onClick={handleExportCSV}
@@ -1691,7 +1699,7 @@ export default function BulkContent() {
                 "
               >
                 <TableIcon className="w-4 h-4" />
-                Xuất CSV
+                {t('exportCsv')}
               </button>
               <button
                 onClick={handleCopyAll}
@@ -1703,7 +1711,7 @@ export default function BulkContent() {
                 "
               >
                 <Layers className="w-4 h-4" />
-                Sao chép link
+                {t('copyLinks')}
               </button>
               <button
                 onClick={handleOpenAll}
@@ -1715,7 +1723,7 @@ export default function BulkContent() {
                 "
               >
                 <ExternalLink className="w-4 h-4" />
-                Mở trong trình duyệt ({successJobs.length})
+                {t('openAll', { n: successJobs.length })}
               </button>
             </div>
           )}
@@ -1723,11 +1731,11 @@ export default function BulkContent() {
           {/* ── Rename Panel ────────────────────────────────────── */}
           {showRename && batchId && (
             <div className="mt-3 p-4 rounded-xl bg-surface-2 border border-line space-y-3">
-              <h3 className="text-sm font-bold text-fg-2 inline-flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5" /> Đổi tên & Tải ZIP</h3>
+              <h3 className="text-sm font-bold text-fg-2 inline-flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5" /> {t('rename.title')}</h3>
 
               {/* Token chips */}
               <div>
-                <p className="text-[10px] text-fg-muted mb-1.5">Click token để chèn vào pattern:</p>
+                <p className="text-[10px] text-fg-muted mb-1.5">{t('rename.tokenHint')}</p>
                 <div className="flex flex-wrap gap-1.5">
                   {TOKEN_CHIPS.map(tok => (
                     <button
@@ -1754,7 +1762,7 @@ export default function BulkContent() {
               {/* Live preview */}
               {successJobs.length > 0 && (
                 <div>
-                  <p className="text-[10px] text-fg-muted uppercase font-semibold mb-1">Xem trước (3 file đầu):</p>
+                  <p className="text-[10px] text-fg-muted uppercase font-semibold mb-1">{t('rename.preview')}</p>
                   <div className="space-y-1">
                     {renamePreview.map((name, i) => (
                       <p key={i} className="text-[11px] text-fg-2 font-mono bg-surface-2 px-2 py-1 rounded truncate">
@@ -1762,7 +1770,7 @@ export default function BulkContent() {
                       </p>
                     ))}
                   </div>
-                  <p className="text-[10px] text-fg-muted mt-1">? = giá trị sẽ được điền khi tạo ZIP</p>
+                  <p className="text-[10px] text-fg-muted mt-1">{t('rename.placeholderNote')}</p>
                 </div>
               )}
 
@@ -1770,13 +1778,13 @@ export default function BulkContent() {
 
               {renameResult && (
                 <div className="p-3 rounded-lg bg-surface-2 border border-line">
-                  <p className="text-xs text-fg-2 font-semibold">ZIP đã sẵn sàng! ({renameResult.file_count} files, {renameResult.file_size_mb} MB)</p>
+                  <p className="text-xs text-fg-2 font-semibold">{t('rename.ready', { count: renameResult.file_count, mb: renameResult.file_size_mb })}</p>
                   <a
                     href={`${API}${renameResult.zip_url.replace('/api/v1', '')}`}
                     download={renameResult.filename}
                     className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-2 text-fg-2 text-xs font-bold hover:bg-line transition-colors"
                   >
-                    <Download className="w-3.5 h-3.5" /> Tải ZIP đã đổi tên
+                    <Download className="w-3.5 h-3.5" /> {t('rename.download')}
                   </a>
                 </div>
               )}
@@ -1787,7 +1795,7 @@ export default function BulkContent() {
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-2 text-fg-2 text-xs font-bold border border-line hover:bg-line transition-colors cursor-pointer disabled:opacity-50"
               >
                 {renameLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                {renameLoading ? 'Đang tạo ZIP...' : 'Tạo ZIP đổi tên'}
+                {renameLoading ? t('rename.creating') : t('rename.create')}
               </button>
             </div>
           )}
@@ -1800,12 +1808,12 @@ export default function BulkContent() {
           <div className="px-6 py-4 border-b border-line bg-surface-2/30 flex justify-between items-center">
             <div className="flex items-center gap-3">
               <h3 className="font-semibold text-fg">
-                Danh sách ({isDiscovering ? '...' : displayJobs.length})
+                {t('listTitle', { n: isDiscovering ? '...' : displayJobs.length })}
               </h3>
               {selectedJobIds.size > 0 && (
                 <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-lg bg-accent/15 text-accent-text border border-accent/25 animate-in fade-in duration-200">
                   <CheckSquare className="w-3 h-3" />
-                  Đã chọn {selectedJobIds.size}
+                  {t('selectedN', { count: selectedJobIds.size })}
                 </span>
               )}
             </div>
@@ -1825,31 +1833,31 @@ export default function BulkContent() {
 
               <div className="text-center">
                 <p className="text-sm font-semibold text-fg mb-1">
-                  Đang quét danh sách video từ kênh...
+                  {t('discover.scanning')}
                 </p>
                 <p className="text-xs text-fg-muted">
-                  {discoveryJob?.error_message || 'Đang kết nối tới YouTube...'}
+                  {discoveryJob?.error_message || t('discover.connecting')}
                 </p>
               </div>
 
               {/* Elapsed timer */}
               <div className="flex items-center gap-3 text-xs text-fg-muted bg-surface border border-line rounded-xl px-5 py-3">
                 <Clock className="w-4 h-4 text-accent-text" />
-                <span>Thời gian đã chờ:</span>
+                <span>{t('discover.elapsed')}</span>
                 <span className="font-mono font-bold text-fg text-sm tabular-nums">
                   {String(Math.floor(discoverElapsed / 60)).padStart(2, '0')}:{String(discoverElapsed % 60).padStart(2, '0')}
                 </span>
               </div>
 
               <p className="text-[11px] text-fg-muted text-center max-w-xs leading-relaxed">
-                YouTube có thể mất 30–90 giây để tải toàn bộ danh sách video của kênh. Vui lòng chờ trong giây lát.
+                {t('discover.slowNote')}
               </p>
-              {discoveryJob && stopButton('Dừng quét kênh')}
+              {discoveryJob && stopButton(t('discover.stop'))}
             </div>
           ) : displayJobs.length === 0 ? (
             <div className="p-10 text-center text-fg-muted text-sm flex flex-col items-center gap-2">
               <Loader2 className="w-5 h-5 animate-spin text-accent-text" />
-              {channelMode ? 'Đang khởi tạo...' : 'Đang tạo jobs...'}
+              {channelMode ? t('initializing') : t('creatingJobs')}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -1871,9 +1879,9 @@ export default function BulkContent() {
                       />
                     </th>
                     <th className="px-6 py-3 font-medium w-8">#</th>
-                    <th className="px-6 py-3 font-medium">URL gốc</th>
-                    <th className="px-6 py-3 font-medium">Trạng thái</th>
-                    <th className="px-6 py-3 font-medium text-right">Hành động</th>
+                    <th className="px-6 py-3 font-medium">{t('col.originalUrl')}</th>
+                    <th className="px-6 py-3 font-medium">{t('col.status')}</th>
+                    <th className="px-6 py-3 font-medium text-right">{t('col.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
@@ -1961,7 +1969,7 @@ export default function BulkContent() {
             <div className="flex items-center gap-2 pr-3 border-r border-line">
               <CheckSquare className="w-4 h-4 text-accent-text" />
               <span className="text-sm font-bold text-fg">{selectedJobIds.size}</span>
-              <span className="text-xs text-fg-muted">video đã chọn</span>
+              <span className="text-xs text-fg-muted">{t('floatingSelected', { count: selectedJobIds.size })}</span>
             </div>
 
             <button
@@ -1969,13 +1977,13 @@ export default function BulkContent() {
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent text-accent-fg text-sm font-extrabold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
             >
               <Download className="w-4 h-4" />
-              Tải {selectedJobIds.size} video
+              {t('downloadVideosN', { count: selectedJobIds.size })}
             </button>
 
             <button
               onClick={() => setSelectedJobIds(new Set())}
               className="p-2 rounded-xl text-fg-muted hover:text-fg hover:bg-surface-2 transition-colors cursor-pointer"
-              title="Bỏ chọn tất cả"
+              title={t('deselectAll')}
             >
               <X className="w-4 h-4" />
             </button>

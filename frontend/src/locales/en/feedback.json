@@ -1,0 +1,27 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "title": "Feedback",
+  "errors": {
+    "emptyContent": "Please enter your feedback.",
+    "sendFailed": "Failed to send. Please try again.",
+    "connection": "Connection error. Please try again."
+  },
+  "success": {
+    "title": "Sent successfully!",
+    "body": "Thanks for your feedback. We'll review it and keep improving."
+  },
+  "intro": "Your feedback helps make VidGrab better. We read every message.",
+  "name": {
+    "label": "Name (optional)",
+    "placeholder": "John Smith"
+  },
+  "email": {
+    "label": "Email (optional)"
+  },
+  "content": {
+    "label": "Your feedback",
+    "placeholder": "Describe the problem you ran into, a feature you'd like, or any other feedback..."
+  },
+  "sending": "Sending...",
+  "submit": "Send feedback"
+}

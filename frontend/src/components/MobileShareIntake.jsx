@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, ChevronDown, ChevronUp } from 'lucide-react';
 import { API_BASE } from '../lib/apiBase';
 import { useAuth } from '../context/AuthContext';
@@ -21,6 +22,7 @@ function shimmerCls() {
 }
 
 export default function MobileShareIntake({ onNavigate }) {
+  const { t } = useTranslation('mobile');
   const [show, setShow]             = useState(false);
   const [url, setUrl]               = useState('');
   const [platform, setPlatform]     = useState(null);
@@ -139,7 +141,7 @@ export default function MobileShareIntake({ onNavigate }) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Chia sẻ vào VidGrab"
+        aria-label={t('share.title')}
         className={`fixed inset-x-0 bottom-0 z-[71] bg-surface/98 backdrop-blur-xl rounded-t-3xl shadow-[0_-8px_40px_rgba(0,0,0,0.4)] transition-transform duration-300 ease-out ${
           visible ? 'translate-y-0' : 'translate-y-full'
         }`}
@@ -152,11 +154,11 @@ export default function MobileShareIntake({ onNavigate }) {
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-line">
-          <h2 className="text-fg font-semibold text-base">Chia sẻ vào VidGrab</h2>
+          <h2 className="text-fg font-semibold text-base">{t('share.title')}</h2>
           <button
             onClick={close}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-2 text-fg-muted hover:text-fg hover:bg-line transition-colors"
-            aria-label="Đóng"
+            aria-label={t('close')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -187,13 +189,13 @@ export default function MobileShareIntake({ onNavigate }) {
               {thumbnail && (
                 <img
                   src={thumbnail}
-                  alt="thumbnail"
+                  alt={t('share.thumbnailAlt')}
                   className="w-20 h-14 flex-shrink-0 rounded-xl object-cover bg-surface-2"
                   onError={(e) => { e.target.style.display = 'none'; }}
                 />
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-fg text-sm font-medium line-clamp-2 leading-snug">{title || 'Không có tiêu đề'}</p>
+                <p className="text-fg text-sm font-medium line-clamp-2 leading-snug">{title || t('share.untitled')}</p>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   {duration && <span className="text-fg-muted text-[11px]">⏱ {duration}</span>}
                   {quality  && <span className="text-fg-muted text-[11px]">{quality}</span>}
@@ -212,7 +214,7 @@ export default function MobileShareIntake({ onNavigate }) {
             className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-surface-2 border border-accent/30 text-accent-text hover:bg-accent-soft transition-colors active:scale-95"
           >
             <span className="text-xl">⬇️</span>
-            <span className="text-[11px] font-semibold">Tải HD</span>
+            <span className="text-[11px] font-semibold">{t('share.hd')}</span>
           </button>
 
           <button
@@ -228,7 +230,7 @@ export default function MobileShareIntake({ onNavigate }) {
             className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-surface-2/60 border border-line text-fg-2 hover:bg-surface-2 transition-colors active:scale-95"
           >
             <span className="text-xl">✨</span>
-            <span className="text-[11px] font-semibold leading-tight text-center">Không watermark</span>
+            <span className="text-[11px] font-semibold leading-tight text-center">{t('share.noWatermark')}</span>
           </button>
         </div>
 
@@ -238,7 +240,7 @@ export default function MobileShareIntake({ onNavigate }) {
             onClick={() => setExpanded((v) => !v)}
             className="w-full flex items-center justify-between py-2 text-fg-muted text-xs font-medium hover:text-fg-2 transition-colors"
           >
-            <span>Thêm lựa chọn</span>
+            <span>{t('share.moreOptions')}</span>
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
 
@@ -248,13 +250,13 @@ export default function MobileShareIntake({ onNavigate }) {
                 onClick={handleBatch}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-2/60 border border-line text-fg-2 text-xs font-medium hover:bg-surface-2 transition-colors active:scale-95"
               >
-                <span>📦</span> Thêm vào batch
+                <span>📦</span> {t('share.addToBatch')}
               </button>
               <button
                 onClick={close}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-2/60 border border-line text-fg-muted text-xs font-medium hover:bg-surface-2 transition-colors active:scale-95"
               >
-                <span>✕</span> Huỷ
+                <span>✕</span> {t('share.cancel')}
               </button>
             </div>
           )}

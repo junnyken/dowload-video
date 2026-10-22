@@ -4,6 +4,8 @@
 // Default collapsed to not overwhelm the main download UI
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
+import { useLocalePath } from "../i18n";
 import { API_BASE as API_ROOT } from "../lib/apiBase";
 
 // Was the literal "/api/v1" — relative, so 502 on the split-domain deploy.
@@ -66,17 +68,19 @@ function LoadingSkeleton() {
 }
 
 function ProGate({ feature }) {
+  const { t } = useTranslation("results");
+  const lp = useLocalePath();
   return (
     <div className="flex flex-col items-center justify-center py-6 text-center">
       <span className="text-2xl mb-2">🔒</span>
       <p className="text-sm font-medium text-fg-muted">
-        Nâng cấp Pro để xem {feature}
+        {t("smart.proGate", { feature })}
       </p>
       <a
-        href="/pricing"
+        href={lp("/pricing")}
         className="mt-3 text-xs text-fg-2 underline hover:text-fg-2"
       >
-        Xem gói Pro →
+        {t("smart.viewPro")}
       </a>
     </div>
   );
@@ -87,10 +91,11 @@ function ProGate({ feature }) {
 // ---------------------------------------------------------------------------
 
 function TrimTab({ suggestions, onApplyTrim }) {
+  const { t } = useTranslation("results");
   if (!suggestions || suggestions.length === 0) {
     return (
       <p className="text-xs text-fg-muted py-4 text-center">
-        Không có gợi ý cắt nào.
+        {t("smart.noTrim")}
       </p>
     );
   }
@@ -101,7 +106,7 @@ function TrimTab({ suggestions, onApplyTrim }) {
         <div key={i} className="border border-line rounded-lg p-3 bg-surface-2">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-semibold text-fg-muted">
-              {s.mode_label || s.mode || `Gợi ý ${i + 1}`}
+              {s.mode_label || s.mode || t("smart.suggestion", { n: i + 1 })}
             </span>
             <ConfidenceBadge value={s.confidence} />
           </div>
@@ -124,7 +129,7 @@ function TrimTab({ suggestions, onApplyTrim }) {
             onClick={() => onApplyTrim({ start: s.suggested_start, end: s.suggested_end })}
             className="w-full text-xs font-medium bg-accent hover:bg-accent-hover text-accent-fg py-1.5 rounded transition-colors"
           >
-            Áp dụng gợi ý này
+            {t("smart.applyThis")}
           </button>
         </div>
       ))}
@@ -137,6 +142,7 @@ function TrimTab({ suggestions, onApplyTrim }) {
 // ---------------------------------------------------------------------------
 
 function HighlightsTab({ suggestions, onQueueClips, tierFiltered }) {
+  const { t } = useTranslation("results");
   if (tierFiltered && (!suggestions || suggestions.length === 0)) {
     return <ProGate feature="highlights" />;
   }
@@ -144,7 +150,7 @@ function HighlightsTab({ suggestions, onQueueClips, tierFiltered }) {
   if (!suggestions || suggestions.length === 0) {
     return (
       <p className="text-xs text-fg-muted py-4 text-center">
-        Không phát hiện highlight nào.
+        {t("smart.noHighlights")}
       </p>
     );
   }
@@ -155,7 +161,7 @@ function HighlightsTab({ suggestions, onQueueClips, tierFiltered }) {
         <div key={i} className="border border-line rounded-lg p-3 bg-surface-2">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-semibold text-fg-muted">
-              {s.label || `Highlight ${i + 1}`}
+              {s.label || t("smart.highlight", { n: i + 1 })}
             </span>
             <div className="flex items-center gap-1.5">
               {s.duration != null && (
@@ -180,13 +186,13 @@ function HighlightsTab({ suggestions, onQueueClips, tierFiltered }) {
               }}
               className="flex-1 text-xs border border-line text-fg-muted hover:bg-surface-2 py-1.5 rounded transition-colors"
             >
-              Xem đoạn này
+              {t("smart.viewClip")}
             </button>
             <button
               onClick={() => onQueueClips([i])}
               className="flex-1 text-xs font-medium bg-accent hover:bg-accent-hover text-accent-fg py-1.5 rounded transition-colors"
             >
-              Cắt clip
+              {t("smart.cutClip")}
             </button>
           </div>
         </div>
@@ -200,10 +206,11 @@ function HighlightsTab({ suggestions, onQueueClips, tierFiltered }) {
 // ---------------------------------------------------------------------------
 
 function GifTab({ suggestions, onApplyGif }) {
+  const { t } = useTranslation("results");
   if (!suggestions || suggestions.length === 0) {
     return (
       <p className="text-xs text-fg-muted py-4 text-center">
-        Không tìm thấy đoạn phù hợp để tạo GIF.
+        {t("smart.noGif")}
       </p>
     );
   }
@@ -218,7 +225,7 @@ function GifTab({ suggestions, onApplyGif }) {
             </span>
             {s.has_scene_cut && (
               <span className="text-xs bg-accent-soft text-accent-text border border-accent px-1.5 py-0.5 rounded">
-                ⚠ cắt cảnh
+                {t("smart.sceneCut")}
               </span>
             )}
           </div>
@@ -252,11 +259,12 @@ function GifTab({ suggestions, onApplyGif }) {
 
 function MetadataTab({ suggestions }) {
   const [copied, setCopied] = useState(false);
+  const { t } = useTranslation("results");
 
   if (!suggestions || (!suggestions.filename_cleaned && !suggestions.tags)) {
     return (
       <p className="text-xs text-fg-muted py-4 text-center">
-        Không có gợi ý metadata.
+        {t("smart.noMetadata")}
       </p>
     );
   }
@@ -277,7 +285,7 @@ function MetadataTab({ suggestions }) {
       {filename_cleaned && (
         <div className="border border-line rounded-lg p-3 bg-surface-2">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-semibold text-fg-muted">Tên file gợi ý</span>
+            <span className="text-xs font-semibold text-fg-muted">{t("smart.suggestedName")}</span>
             <ConfidenceBadge value={confidence} />
           </div>
           {original_filename && original_filename !== filename_cleaned && (
@@ -293,7 +301,7 @@ function MetadataTab({ suggestions }) {
               onClick={handleCopy}
               className="flex-1 text-xs border border-line text-fg-muted hover:bg-surface-2 py-1.5 rounded transition-colors"
             >
-              {copied ? "Đã sao chép ✓" : "Sao chép"}
+              {copied ? t("smart.copied") : t("smart.copy")}
             </button>
             <button
               onClick={() => {
@@ -303,7 +311,7 @@ function MetadataTab({ suggestions }) {
               }}
               className="flex-1 text-xs font-medium bg-surface-2 hover:bg-surface text-fg py-1.5 rounded transition-colors"
             >
-              Dùng tên này
+              {t("smart.useName")}
             </button>
           </div>
         </div>
@@ -347,6 +355,7 @@ export default function SmartActionsPanel({
   onQueueClips,
   hidePoweredBy = false,
 }) {
+  const { t } = useTranslation("results");
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -389,9 +398,9 @@ export default function SmartActionsPanel({
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         if (res.status === 429) {
-          throw new Error(err.detail || "Đã đạt giới hạn phân tích hôm nay.");
+          throw new Error(err.detail || t("smart.quotaReached"));
         }
-        throw new Error(err.detail || `Lỗi ${res.status}`);
+        throw new Error(err.detail || t("smart.errorStatus", { status: res.status }));
       }
 
       const { job_id, status } = await res.json();
@@ -408,17 +417,17 @@ export default function SmartActionsPanel({
         if (pollCountRef.current >= POLL_MAX_ATTEMPTS) {
           clearInterval(pollRef.current);
           setLoading(false);
-          setError("Phân tích mất quá lâu. Vui lòng thử lại.");
+          setError(t("smart.tooLong"));
           return;
         }
         const done = await fetchResult(job_id);
         if (done) clearInterval(pollRef.current);
       }, POLL_INTERVAL_MS);
     } catch (err) {
-      setError(err.message || "Phân tích thất bại.");
+      setError(err.message || t("smart.failed"));
       setLoading(false);
     }
-  }, [mediaUrl, videoInfo]);
+  }, [mediaUrl, videoInfo, t]);
 
   async function fetchResult(jobId) {
     try {
@@ -459,10 +468,10 @@ export default function SmartActionsPanel({
 
   // Determine visible tabs (those with data)
   const visibleTabs = result
-    ? TAB_CONFIG.filter((t) => {
-        const val = result[t.key];
+    ? TAB_CONFIG.filter((tc) => {
+        const val = result[tc.key];
         // Always show metadata tab if present, even if empty object
-        if (t.id === "metadata") return val != null;
+        if (tc.id === "metadata") return val != null;
         return Array.isArray(val) ? val.length > 0 : false;
       })
     : [];
@@ -540,11 +549,11 @@ export default function SmartActionsPanel({
           <span className="text-base">✨</span>
           <span className="text-sm font-semibold text-fg">Smart Analysis</span>
           {loading && (
-            <span className="text-xs text-fg-muted animate-pulse">Đang phân tích...</span>
+            <span className="text-xs text-fg-muted animate-pulse">{t("smart.analyzing")}</span>
           )}
           {result && !loading && (
             <span className="text-xs bg-success-soft text-success px-1.5 py-0.5 rounded">
-              Xong
+              {t("smart.done")}
             </span>
           )}
         </div>
@@ -559,7 +568,7 @@ export default function SmartActionsPanel({
             <div className="px-4 pt-3">
               <p className="text-xs text-fg-muted mb-2 flex items-center gap-1">
                 <span className="inline-block w-4 h-4 border-2 border-line border-t-line rounded-full animate-spin" />
-                Đang phân tích
+                {t("smart.analyzingShort")}
                 <span className="animate-pulse">...</span>
               </p>
               <LoadingSkeleton />
@@ -574,10 +583,10 @@ export default function SmartActionsPanel({
                 onClick={startAnalysis}
                 className="text-xs text-fg-2 underline hover:text-fg-2"
               >
-                Thử lại
+                {t("smart.retry")}
               </button>
               <p className="text-xs text-fg-muted mt-1">
-                (hoặc dùng trim thủ công bên dưới)
+                {t("smart.manualHint")}
               </p>
             </div>
           )}

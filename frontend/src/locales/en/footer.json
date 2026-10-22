@@ -1,0 +1,26 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "legalNav": "Legal and help links",
+  "links": {
+    "pricing": "Pricing",
+    "terms": "Terms",
+    "privacy": "Privacy Policy",
+    "takedown": "Content removal",
+    "faq": "FAQ"
+  },
+  "status": "System status",
+  "banner": {
+    "close": "Close",
+    "title": "Install the extension for one-tap downloads",
+    "sub": "No need to open a new tab",
+    "guide": "View guide",
+    "skip": "Dismiss"
+  },
+  "tabs": {
+    "landing": "Home",
+    "active": "In progress",
+    "history": "History",
+    "tools": "Tools",
+    "account": "Account"
+  }
+}

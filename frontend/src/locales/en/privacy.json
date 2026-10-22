@@ -1,0 +1,67 @@
+{
+  "_note": "LEGAL — English drafted with AI; must be reviewed by BA/legal before it is relied on. The Vietnamese version prevails.",
+  "translationNotice": "This English translation is provided for convenience. If it differs from the Vietnamese version, the Vietnamese version prevails.",
+  "title": "Privacy Policy",
+  "subtitle": "",
+  "updated": "Last updated: {{date}}",
+  "s1": {
+    "title": "1. Data we store",
+    "intro": "This page lists what VidGrab actually stores when you use the website, the browser extension and the Windows app.",
+    "account": { "label": "Account", "text": "email and sign-in information (through Supabase Auth), plan, quota used." },
+    "history": { "label": "Download history", "text": "video link, title, platform, format and time of download. When the file expires, this information is still kept so that you can look it up again." },
+    "prefs": { "label": "Settings and features you turn on", "text": "default settings, channels you follow, download schedules, collections, notes, webhooks you declare, Telegram link, push notification subscription." },
+    "ip": { "label": "IP address", "text": "used to count quota for visitors who are not signed in and to prevent abuse. The IP is stored in its original form in the security log and in quota counters (see section 3). For takedown requests only, the IP is stored as a hash." },
+    "browser": { "label": "Browser information", "text": "browser type (user agent) in the security log." },
+    "stats": { "label": "Usage statistics", "text": "events of actions on the site, linked to your account or to an anonymous identifier of your browser." }
+  },
+  "s2": {
+    "title": "2. What we do not store",
+    "card": "Card numbers or payment card information. Payment is handled by Stripe.",
+    "video": "Videos long-term on the server. Some platforms require the server to download the file first and then pass it to you. These files are deleted automatically, usually within about 2 hours.",
+    "sensitive": "Biometric data, health data or contacts, or messages on your device."
+  },
+  "s3": {
+    "title": "3. How long we keep data",
+    "links": { "label": "Download links", "text": "expire about 60 minutes after they are created." },
+    "temp": { "label": "Temporary files on the server", "text": "deleted automatically, by default after 2 hours." },
+    "history": { "label": "Download history", "text": "kept until you delete each item in the \"History\" section." },
+    "counters": { "label": "Quota and anti-abuse counters (with IP, device ID)", "text": "deleted automatically after 1 to 40 days, depending on the type of counter." },
+    "securityLog": { "label": "Security log (with IP, browser)", "text": "there is currently no automatic deletion schedule." },
+    "takedown": { "label": "Takedown requests", "text": "the most recent 1,000 requests are kept. Older requests are deleted when new requests arrive." },
+    "backup": { "label": "Database backups", "text": "kept for 14 days. Data you have deleted may remain in backups until this period ends." },
+    "account": { "label": "Account", "text": "kept until you email us to request deletion. There is currently no button to delete your account yourself." }
+  },
+  "s4": {
+    "title": "4. Browser extension (Chrome)",
+    "tabs": { "label": "activeTab, tabs, scripting", "text": "read the address of the page that is open and detect videos on the page." },
+    "cookies": { "label": "cookies", "text": "when you download a video that requires sign-in, the extension reads the cookies of that video site itself and sends them with the download request. The cookies are sent only to the VidGrab server. The server uses the cookies only for that download and then deletes them immediately, without storing them." },
+    "other": { "label": "downloads, storage, notifications, contextMenus, alarms", "text": "save files to your computer, keep your sign-in session and settings in the browser, show notifications, add a right-click menu." }
+  },
+  "s5": {
+    "title": "5. VidGrab app for Windows",
+    "cookies": { "label": "Platform sign-in cookies", "text": "stay on your computer, are encrypted using Windows mechanisms, and are not sent to the VidGrab server." },
+    "device": { "label": "Device ID", "text": "the app sends a hash derived from a Windows identifier (the original identifier is not sent), together with the computer name, Windows version and app version. This ID is used to count free downloads. The server also stores the most recent IP address of the device." },
+    "sync": { "label": "History sync", "text": "if you turn it on, the app sends the link, title, format and result of each download. The path of the folder where files are saved on your computer is not sent." }
+  },
+  "s6": {
+    "title": "6. Third parties that receive data",
+    "supabase": { "label": "Supabase", "text": "sign-in and database." },
+    "stripe": { "label": "Stripe", "text": "payment. Receives your email when you buy a plan." },
+    "proxy": { "label": "Intermediary download services (such as Apify, ScraperAPI)", "text": "for some platforms, the video link you submit is passed through these services to fetch the video." },
+    "ai": { "label": "AI services (Gemini, OpenAI/Whisper)", "text": "only when you use the transcription, translation or video analysis features. In that case the audio or the text content of the video is sent for processing." },
+    "telegram": { "label": "Telegram and email", "text": "feedback content (name, email, content, IP) and notifications of new takedown requests are sent to the operations team. Feedback is not stored in the database." },
+    "sentry": { "label": "Sentry", "text": "if enabled, receives technical error reports, without personal information." },
+    "fonts": { "label": "Google Fonts", "text": "the website loads fonts from Google, so Google receives your browser's IP address." },
+    "push": { "label": "Browser push notification service", "text": "receives the content of notifications when you turn on push notifications." },
+    "noSale": "We do NOT sell, rent or share your data with any third party for advertising purposes."
+  },
+  "s7": {
+    "title": "7. Takedown requests",
+    "text": "When you submit a takedown request, we store your full name, email, your capacity as the sender, the content link, the description and a hash of your IP address. This information is used only to process the request."
+  },
+  "s8": {
+    "title": "8. Contact",
+    "intro": "If you have questions about this policy or want to request deletion of your data, please contact:",
+    "sla": "We commit to responding within 5 business days."
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "translationNotice": "",
+  "title": "Điều khoản sử dụng",
+  "updated": "Cập nhật lần cuối:",
+  "s1": {
+    "title": "1. Dịch vụ này dùng để làm gì",
+    "text": "VidGrab giúp bạn lưu lại nội dung mà bạn có quyền lưu: video của chính bạn, nội dung được chủ sở hữu cho phép, hoặc nội dung được pháp luật cho phép dùng cho mục đích cá nhân. Khi dùng VidGrab, bạn đồng ý với các điều khoản dưới đây."
+  },
+  "s2": {
+    "title": "2. Trách nhiệm của bạn",
+    "own": "Bạn tự chịu trách nhiệm về nội dung mình tải và cách bạn sử dụng nội dung đó.",
+    "platformTerms": "Bạn cần tuân thủ điều khoản của từng nền tảng gốc (YouTube, TikTok, Facebook, …) và luật bản quyền hiện hành.",
+    "noRights": "VidGrab không cấp cho bạn bất kỳ quyền nào đối với nội dung của người khác."
+  },
+  "s3": {
+    "title": "3. Không bảo đảm nền tảng nào cũng dùng được mọi lúc",
+    "text": "Các nền tảng thường xuyên thay đổi cách hoạt động. Vì vậy có thể có lúc một nền tảng tải chậm, lỗi hoặc tạm thời không tải được. Chúng tôi cố gắng khắc phục sớm nhưng không cam kết dịch vụ hoạt động liên tục hay thành công với mọi liên kết."
+  },
+  "s4": {
+    "title": "4. Những việc không được làm",
+    "repost": "Tải nội dung khi chưa được phép rồi đăng lại, bán lại hoặc phân phối lại.",
+    "automation": "Dùng công cụ tự động, gửi yêu cầu dồn dập vượt quá giới hạn cho phép của dịch vụ.",
+    "evade": "Tìm cách lách giới hạn lượt tải (ví dụ tạo nhiều tài khoản, đổi địa chỉ để lấy thêm lượt).",
+    "illegal": "Dùng VidGrab vào mục đích vi phạm pháp luật hoặc xâm phạm quyền của người khác.",
+    "consequence": "Vi phạm có thể dẫn đến việc hạn chế hoặc khoá quyền truy cập."
+  },
+  "s5": {
+    "title": "5. Tài khoản và giới hạn sử dụng",
+    "guestLabel": "Khách (chưa đăng nhập):",
+    "guest": "tải được chất lượng tối đa 1080p, có giới hạn số lượt mỗi ngày.",
+    "memberLabel": "Tài khoản đã đăng ký:",
+    "member": "được chọn chất lượng 2K/4K (nếu nguồn có) và có hạn mức riêng.",
+    "adjust": "Hạn mức cụ thể có thể được điều chỉnh để giữ dịch vụ ổn định cho mọi người.",
+    "credentials": "Bạn chịu trách nhiệm giữ an toàn thông tin đăng nhập của mình."
+  },
+  "s6": {
+    "title": "6. Gói trả phí",
+    "before": "Giá và quyền lợi hiện hành của các gói trả phí được công bố tại trang ",
+    "link": "Bảng giá",
+    "after": ". Về chính sách hoàn tiền, vui lòng xem trang Bảng giá hoặc liên hệ hỗ trợ."
+  },
+  "s7": {
+    "title": "7. Yêu cầu gỡ nội dung",
+    "before": "Nếu bạn là chủ sở hữu nội dung (hoặc người được ủy quyền) và muốn yêu cầu gỡ, vui lòng gửi yêu cầu tại",
+    "after": "."
+  },
+  "s8": {
+    "title": "8. Giới hạn trách nhiệm và thay đổi điều khoản",
+    "text": "Dịch vụ được cung cấp theo hiện trạng. Chúng tôi có thể cập nhật điều khoản này; ngày cập nhật gần nhất được ghi ở đầu trang. Tiếp tục sử dụng sau khi cập nhật nghĩa là bạn đồng ý với bản mới. Văn bản này là mô tả chung, không phải tư vấn pháp lý."
+  },
+  "s9": {
+    "title": "9. Liên hệ",
+    "before": "Mọi thắc mắc xin gửi về",
+    "after": "."
+  }
+}

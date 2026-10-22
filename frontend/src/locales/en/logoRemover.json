@@ -1,0 +1,160 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "presets": {
+    "lowerRight": "Lower right",
+    "lowerLeft": "Lower left",
+    "upperRight": "Upper right",
+    "upperLeft": "Upper left"
+  },
+  "methods": {
+    "natural": {
+      "label": "Natural",
+      "desc": "More natural, less blur. Works better with motion (uses real background from neighboring frames). If the preview is still smeared, switch to Crop."
+    },
+    "crop": {
+      "label": "Crop",
+      "desc": "Cuts off the edge containing the logo — changes the video size, usually the cleanest when the logo is near the edge"
+    },
+    "blur": {
+      "label": "Blur",
+      "desc": "Blurs over the logo area — fast, but leaves a visible smudge"
+    },
+    "teleaSoft": "Soft TELEA"
+  },
+  "suitability": {
+    "good": "This case is suitable for automatic cleanup.",
+    "manual": "Please confirm the logo area so we can process it more accurately.",
+    "crop": "For this video, cropping the frame may give better results than pixel fill.",
+    "low": "This area isn't suitable for automatic cleanup — you may see smudges."
+  },
+  "zoom": {
+    "before": "Before",
+    "after": "After (natural)"
+  },
+  "synthIdNote": "Only applies to logos <b>visible on the frame</b>. The invisible <b>SynthID</b> watermark is not supported and <b>can't be removed by any tool</b>.",
+  "duration": {
+    "title": "⏱ Video too long",
+    "pro": "Video is {{seconds}}s long (Pro limit: 2 minutes). Please trim the video first.",
+    "free": "Video is {{seconds}}s long (free limit: 30 seconds). Upgrade to Pro or trim the video shorter."
+  },
+  "errors": {
+    "unsupportedFormat": "Only MP4, MOV, WebM and MKV are supported.",
+    "tooLarge": "File exceeds 500MB.",
+    "uploadFailed": "Upload failed ({{status}})",
+    "processFailed": "Processing failed ({{status}})"
+  },
+  "cta": {
+    "preview": "Preview result →",
+    "useCrop": "Use frame cropping"
+  },
+  "header": {
+    "badge": "Flow/Veo · Visible logo cleanup",
+    "title": "Visible logo cleanup",
+    "subtitle": "For Flow/Veo videos with a logo visible <b>on the frame</b>. Not every video has one."
+  },
+  "idle": {
+    "drop": "Drag and drop a video here or click to choose a file",
+    "formats": "MP4 · MOV · WebM · MKV · up to 500MB",
+    "hint": "Best for videos with a clearly visible logo on the frame · Clips < 2 minutes work best"
+  },
+  "uploading": {
+    "title": "Uploading video...",
+    "subtitle": "Extracting a frame to locate the visible logo area"
+  },
+  "preview": {
+    "firstFrameAlt": "First frame of the video",
+    "keptAfterCrop": "Area kept after cropping",
+    "cropHint": "The bright area is what's kept after cropping — the dark area containing the logo will be removed. Change the corner below to change the crop.",
+    "dragHint": "Drag the orange box to move it · drag corners/edges to resize. Align it precisely with the visible logo.",
+    "whichCorner": "Which corner is the logo in?",
+    "noLogo": "I don't see a visible logo in this video",
+    "expand": "Expand area:",
+    "tight": "Tight",
+    "chooseMethod": "Choose a method",
+    "methodTip": "⚡ Best for small logos on low-motion backgrounds. If the video is too long, trim it first.",
+    "recommendedSelected": "✓ Recommended",
+    "recommended": "Recommended",
+    "pixelMode": "Pixel fill mode:",
+    "variantStandard": "Standard",
+    "variantSoft": "Soft",
+    "softNote": "smooths edges after TELEA",
+    "changeVideo": "Change video",
+    "tryNatural": "I still want to try natural removal instead",
+    "tryCrop": "Use frame cropping instead"
+  },
+  "guidance": {
+    "telea": "· TELEA works best for small logos in a corner on a fairly clean background. Select a bit extra margin.",
+    "crop": "· Crop is usually cleanest when the logo is near the edge — no smudge left on the background.",
+    "longClip": "· This clip is long or complex — cropping may give a better result.",
+    "adjusted": "· Area adjusted manually — check the preview before processing the whole video.",
+    "padding0": "· Padding 0px — if you still see a blurry edge, try raising it to 8px."
+  },
+  "noLogo": {
+    "badge": "No visible logo",
+    "title": "This video doesn't need logo cleanup",
+    "body": "No visible logo detected on the frame. If you still see one, try selecting the area manually.",
+    "commonCases": "Some common cases:",
+    "case1": "· <b>Google One Ultra</b> — Flow on this plan usually doesn't include a visible logo",
+    "case2": "· <b>Logo only for a few seconds</b> — check the start or end of the clip, not just the first frame",
+    "case3": "· <b>Exported from your own project</b> — some export flows don't add a visible logo",
+    "synthId": "All Flow/Veo videos carry <b>SynthID</b> — an invisible watermark you can't see with the naked eye. SynthID is completely different from a visible logo and is <b>not supported</b>.",
+    "continue": "Continue with the original video",
+    "manual": "I still see a logo — select the area manually"
+  },
+  "frame": {
+    "title": "Result on the first frame",
+    "subtitle": "Check before processing the whole video",
+    "processedAlt": "Processed frame",
+    "badge": "First frame · after natural cleanup",
+    "error": "Couldn't load the preview — you can still continue processing.",
+    "loading": "Generating a preview from the first frame…",
+    "motionMode": "Motion mode · Less blur",
+    "staticMode": "Static background · More natural",
+    "weak": "Preview still smeared",
+    "weakHint": "If the preview is still smeared, switch to Crop.",
+    "switchCrop": "✂ Switch to Crop (cleaner)",
+    "keepNatural": "Process naturally anyway",
+    "defaultReason": "Works better with motion — uses real background from neighboring frames.",
+    "tipBlur": "· If you see a blurry edge — go back and increase padding or enlarge the selection.",
+    "tipFirstFrame": "· This is the first frame — the whole clip uses the same processing.",
+    "adjustRegion": "← Adjust area",
+    "processAll": "Process whole video →"
+  },
+  "processing": {
+    "title": "Cleaning up the visible logo...",
+    "natural": "Rebuilding the background with patch texture + real background from neighboring frames",
+    "crop": "Calculating and cropping the edge containing the logo",
+    "blur": "Blurring the visible logo area",
+    "suffix": "· 30–180 seconds depending on clip length & motion"
+  },
+  "done": {
+    "titleCrop": "Cropped to remove the logo",
+    "titleBlur": "Blurred the logo area",
+    "titleNatural": "Processed with natural logo removal",
+    "sizeExpiry": "{{size}} MB · Export expires in ~20 minutes",
+    "referenceAlt": "Reference frame",
+    "processedRegion": "Processed area",
+    "afterCrop": "Frame after cropping",
+    "originalFrame": "Original frame · for reference",
+    "method": "Method:",
+    "cropEdge": "Crop edge:",
+    "region": "Processed area:",
+    "customRegion": "Custom area",
+    "download": "Download processed video",
+    "adjust": "Adjust processed area",
+    "another": "Process another video",
+    "lowConfidence": "Processed from a low-confidence case — if you see smudges, try again with the <b>Crop</b> method.",
+    "variance": "Results may vary depending on the logo size and the background behind the processed area."
+  },
+  "error": {
+    "title": "Can't process this video",
+    "fallback": "The logo area isn't suitable for automatic cleanup yet.",
+    "tryThese": "Try the following:",
+    "tip1": "· Logo at a corner or edge → try the <b>Crop</b> method — more reliable on any background",
+    "tip2": "· Complex background → <b>Pixel fill</b> may leave uneven marks; Crop or Blur will work better",
+    "tip3": "· Clip > 2 minutes → trim to the part you need before processing",
+    "tryOther": "Try another area or method",
+    "retry": "Retry",
+    "changeVideo": "Choose a different video"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "title": "Tải VidGrab cho Windows",
+  "intro": "Ứng dụng VidGrab cho máy tính: tải video từ TikTok, YouTube, Facebook, Instagram ngay trên Windows.",
+  "checking": "Đang kiểm tra phiên bản mới nhất...",
+  "versionError": "Không lấy được thông tin phiên bản. Vui lòng thử lại.",
+  "retry": "Thử lại",
+  "latest": "Phiên bản mới nhất: {{version}}",
+  "downloadExe": "Tải bộ cài (.exe)",
+  "updating": "Bộ cài đang được cập nhật, vui lòng quay lại sau.",
+  "shaNote": "Mã kiểm tra SHA-256 của bộ cài (so với kết quả lệnh <code>Get-FileHash</code>, xem Câu hỏi thường gặp):",
+  "reqTitle": "Yêu cầu hệ thống",
+  "reqBody": "Windows 10/11 64-bit.",
+  "installTitle": "Lưu ý khi cài đặt",
+  "installSmartScreen": "Windows SmartScreen có thể hiện cảnh báo “Windows protected your PC” vì ứng dụng chưa được ký số. Hãy bấm “More info” → “Run anyway” để tiếp tục cài đặt.",
+  "installKeepData": "Cài bản mới đè lên bản cũ vẫn giữ nguyên video đã tải và các kênh đã lưu.",
+  "sharedAccount": "Đăng nhập trong ứng dụng dùng chung tài khoản và hạn mức hằng ngày với website."
+}

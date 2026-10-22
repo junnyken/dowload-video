@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTranslation } from 'react-i18next';
+import { useLang } from '../i18n';
 import { localAnyId, localMp3Id, toFileId } from '../lib/localFile';
 import {
   History,
@@ -27,6 +29,8 @@ import {
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export default function HistoryContent() {
+  const { t } = useTranslation('historyPanel');
+  const lang = useLang();
   // /api/v1/history is scoped to the caller now — without this header a
   // signed-in user is served the anonymous pool instead of their own rows,
   // and clearing history answers 401.
@@ -110,10 +114,10 @@ export default function HistoryContent() {
 
   const handleClearAll = async () => {
     if (!session?.access_token) {
-      window.alert('Cần đăng nhập để xóa lịch sử tải.');
+      window.alert(t('alertSignInToClear'));
       return;
     }
-    if (!window.confirm('Bạn có chắc chắn muốn xóa tất cả lịch sử?')) return;
+    if (!window.confirm(t('confirmClearAll'))) return;
     try {
       const res = await fetch(`${API_BASE}/api/v1/history/all`, {
         method: 'DELETE',
@@ -161,7 +165,7 @@ export default function HistoryContent() {
         `${API_BASE}/api/v1/user/history/export?format=${format}&range_days=365`,
         { credentials: 'include' }
       );
-      if (!res.ok) { alert('Xuất thất bại — bạn cần đăng nhập.'); return; }
+      if (!res.ok) { alert(t('exportNeedSignIn')); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -172,7 +176,7 @@ export default function HistoryContent() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch {
-      alert('Xuất thất bại.');
+      alert(t('exportFailed'));
     } finally {
       setExportLoading(false);
     }
@@ -207,7 +211,7 @@ export default function HistoryContent() {
     if (ms < 0) {
       return (
         <span className="text-[10px] bg-danger-soft text-danger border border-danger/30 px-1.5 py-0.5 rounded font-semibold">
-          Hết hạn
+          {t('expired')}
         </span>
       );
     }
@@ -215,7 +219,7 @@ export default function HistoryContent() {
     if (days <= 3) {
       return (
         <span className="text-[10px] bg-accent-soft text-accent-text border border-accent/30 px-1.5 py-0.5 rounded font-semibold">
-          Còn {days}d
+          {t('daysLeft', { days })}
         </span>
       );
     }
@@ -243,61 +247,61 @@ export default function HistoryContent() {
       case 'success':
         return (
           <span className="inline-flex items-center gap-1 text-success bg-success/10 px-2.5 py-1 rounded-lg text-xs font-medium">
-            <CheckCircle2 className="w-3 h-3" /> Thành công
+            <CheckCircle2 className="w-3 h-3" /> {t('status.success')}
           </span>
         );
       case 'failed':
         return (
           <span className="inline-flex items-center gap-1 text-error bg-error/10 px-2.5 py-1 rounded-lg text-xs font-medium">
-            <XCircle className="w-3 h-3" /> Thất bại
+            <XCircle className="w-3 h-3" /> {t('status.failed')}
           </span>
         );
       case 'abandoned':
         return (
           <span className="inline-flex items-center gap-1 text-error bg-error/10 px-2.5 py-1 rounded-lg text-xs font-medium">
-            <XCircle className="w-3 h-3" /> Đã từ bỏ
+            <XCircle className="w-3 h-3" /> {t('status.abandoned')}
           </span>
         );
       case 'processing':
         return (
           <span className="inline-flex items-center gap-1 text-warning bg-warning/10 px-2.5 py-1 rounded-lg text-xs font-medium">
-            <Loader2 className="w-3 h-3 animate-spin" /> Đang xử lý
+            <Loader2 className="w-3 h-3 animate-spin" /> {t('status.processing')}
           </span>
         );
       case 'cancelled':
         return (
           <span className="inline-flex items-center gap-1 text-fg-muted bg-surface/50 px-2.5 py-1 rounded-lg text-xs font-medium">
-            <XCircle className="w-3 h-3" /> Đã hủy
+            <XCircle className="w-3 h-3" /> {t('status.cancelled')}
           </span>
         );
       case 'expired':
         return (
           <span className="inline-flex items-center gap-1 text-accent-text bg-accent-soft px-2.5 py-1 rounded-lg text-xs font-medium">
-            <Clock className="w-3 h-3" /> Hết hạn
+            <Clock className="w-3 h-3" /> {t('status.expiredStatus')}
           </span>
         );
       case 'metadata_only':
         return (
           <span className="inline-flex items-center gap-1 text-fg-muted bg-surface/50 px-2.5 py-1 rounded-lg text-xs font-medium">
-            <ExternalLink className="w-3 h-3" /> Chỉ metadata
+            <ExternalLink className="w-3 h-3" /> {t('status.metadataOnly')}
           </span>
         );
       case 'archived':
         return (
           <span className="inline-flex items-center gap-1 text-accent-text bg-accent/10 px-2.5 py-1 rounded-lg text-xs font-medium">
-            <CheckCircle2 className="w-3 h-3" /> Đã lưu trữ
+            <CheckCircle2 className="w-3 h-3" /> {t('status.archived')}
           </span>
         );
       case 'queued':
         return (
           <span className="inline-flex items-center gap-1 text-fg-muted bg-surface/50 px-2.5 py-1 rounded-lg text-xs font-medium">
-            <Clock className="w-3 h-3" /> Trong hàng đợi
+            <Clock className="w-3 h-3" /> {t('status.queued')}
           </span>
         );
       default:
         return (
           <span className="inline-flex items-center gap-1 text-fg-muted bg-surface/50 px-2.5 py-1 rounded-lg text-xs font-medium">
-            <Clock className="w-3 h-3" /> {status === 'pending' ? 'Chờ xử lý' : 'Chờ'}
+            <Clock className="w-3 h-3" /> {status === 'pending' ? t('status.pending') : t('status.waiting')}
           </span>
         );
     }
@@ -308,10 +312,10 @@ export default function HistoryContent() {
     const d = new Date(dateStr);
     const now = new Date();
     const diff = now - d;
-    if (diff < 60000) return 'Vừa xong';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)} phút trước`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)} giờ trước`;
-    return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    if (diff < 60000) return t('justNow');
+    if (diff < 3600000) return t('minutesAgo', { count: Math.floor(diff / 60000) });
+    if (diff < 86400000) return t('hoursAgo', { count: Math.floor(diff / 3600000) });
+    return d.toLocaleDateString(lang === 'en' ? 'en-US' : 'vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
 
   return (
@@ -322,11 +326,11 @@ export default function HistoryContent() {
           <div className="flex items-center gap-3 mb-1">
             <History className="w-5 h-5 text-accent-text" />
             <h2 className="text-2xl font-bold text-fg tracking-tight">
-              Lịch sử tải xuống
+              {t('title')}
             </h2>
           </div>
           <p className="text-sm text-fg-muted ml-8">
-            Xem và quản lý tất cả các lần tải trước đây
+            {t('subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -334,7 +338,7 @@ export default function HistoryContent() {
             onClick={() => { setPage(1); fetchHistory(1); }}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface border border-line text-fg-muted hover:text-fg text-xs font-semibold transition-colors cursor-pointer"
           >
-            <RefreshCw className="w-3.5 h-3.5" /> Làm mới
+            <RefreshCw className="w-3.5 h-3.5" /> {t('refresh')}
           </button>
           {jobs.length > 0 && (
             <>
@@ -343,7 +347,7 @@ export default function HistoryContent() {
                   disabled={exportLoading}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-accent/10 border border-accent/30 text-accent-text text-xs font-semibold hover:bg-accent/20 transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  <FileDown className="w-3.5 h-3.5" /> Xuất
+                  <FileDown className="w-3.5 h-3.5" /> {t('export')}
                 </button>
                 <div className="absolute right-0 top-full mt-1 hidden group-hover:flex group-focus-within:flex flex-col z-20 bg-surface border border-line rounded-xl shadow-lg overflow-hidden min-w-[100px]">
                   <button onClick={() => handleExport('csv')} className="px-4 py-2 text-xs text-fg-2 hover:bg-surface-2/50 text-left">CSV</button>
@@ -354,7 +358,7 @@ export default function HistoryContent() {
                 onClick={handleClearAll}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-error/10 border border-error/20 text-error text-xs font-semibold hover:bg-error/20 transition-colors cursor-pointer"
               >
-                <Trash2 className="w-3.5 h-3.5" /> Xóa tất cả
+                <Trash2 className="w-3.5 h-3.5" /> {t('clearAll')}
               </button>
             </>
           )}
@@ -363,10 +367,10 @@ export default function HistoryContent() {
 
       {/* ── Tab Filter ───────────────────────────────── */}
       <div className="flex gap-2 mb-4 flex-wrap">
-        {[['all', 'Tất cả'], ['today', 'Hôm nay'], ['recent', '7 ngày'], ['failed', 'Thất bại']].map(([key, label]) => (
+        {['all', 'today', 'recent', 'failed'].map((key) => (
           <button key={key} onClick={() => setFilterTab(key)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterTab === key ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-accent-fg hover:bg-line'}`}>
-            {label}
+            {t(`tabs.${key}`)}
           </button>
         ))}
       </div>
@@ -380,7 +384,7 @@ export default function HistoryContent() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm theo URL, tiêu đề hoặc Batch ID..."
+              placeholder={t('searchPlaceholder')}
               className="
                 w-full pl-10 pr-4 py-2.5 rounded-xl
                 bg-surface border border-line
@@ -393,9 +397,9 @@ export default function HistoryContent() {
           </div>
           <div className="flex items-center gap-1 p-1 bg-surface border border-line rounded-xl">
             {[
-              { key: 'all', label: 'Tất cả' },
-              { key: 'success', label: 'Thành công' },
-              { key: 'failed', label: 'Thất bại' },
+              { key: 'all', label: t('filter.all') },
+              { key: 'success', label: t('filter.success') },
+              { key: 'failed', label: t('filter.failed') },
             ].map(f => (
               <button
                 key={f.key}
@@ -424,7 +428,7 @@ export default function HistoryContent() {
                   : 'text-fg-muted hover:text-fg-2 border border-transparent'
               }`}
             >
-              {p === 'all' ? 'Tất cả nền tảng' : p.charAt(0).toUpperCase() + p.slice(1)}
+              {p === 'all' ? t('allPlatforms') : p.charAt(0).toUpperCase() + p.slice(1)}
             </button>
           ))}
         </div>
@@ -433,14 +437,14 @@ export default function HistoryContent() {
       {/* ── Table ──────────────────────────────────────── */}
       {isOfflineCached && (
         <div className="flex items-center gap-2 bg-accent-soft border border-accent/30 rounded-lg px-3 py-2 mb-3 text-xs text-accent-text">
-          <WifiOff className="w-3.5 h-3.5 inline" /> Đang hiển thị dữ liệu đã lưu — kết nối lại để cập nhật
+          <WifiOff className="w-3.5 h-3.5 inline" /> {t('offlineCached')}
         </div>
       )}
       <div className="rounded-2xl bg-surface border border-line shadow-lg overflow-hidden">
         {isLoading && jobs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Loader2 className="w-6 h-6 animate-spin text-accent-text mb-3" />
-            <p className="text-sm text-fg-muted">Đang tải lịch sử...</p>
+            <p className="text-sm text-fg-muted">{t('loading')}</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -448,10 +452,10 @@ export default function HistoryContent() {
               <FileVideo className="w-7 h-7 text-fg-muted" />
             </div>
             <p className="text-sm text-fg-2 font-medium">
-              {search ? 'Không tìm thấy kết quả' : 'Chưa có lịch sử tải xuống'}
+              {search ? t('emptyNoResults') : t('emptyNone')}
             </p>
             <p className="text-xs text-fg-muted mt-1">
-              {search ? 'Thử từ khóa khác' : 'Các file đã tải xong sẽ hiển thị ở đây'}
+              {search ? t('emptyTryOther') : t('emptyHint')}
             </p>
           </div>
         ) : (
@@ -462,10 +466,10 @@ export default function HistoryContent() {
                 <thead className="bg-surface-2/50 text-xs uppercase text-fg-muted">
                   <tr>
                     <th className="px-6 py-3 font-medium w-8">#</th>
-                    <th className="px-6 py-3 font-medium">Tiêu đề / URL</th>
-                    <th className="px-6 py-3 font-medium">Trạng thái</th>
-                    <th className="px-6 py-3 font-medium">Thời gian</th>
-                    <th className="px-6 py-3 font-medium text-right">Hành động</th>
+                    <th className="px-6 py-3 font-medium">{t('col.titleUrl')}</th>
+                    <th className="px-6 py-3 font-medium">{t('col.status')}</th>
+                    <th className="px-6 py-3 font-medium">{t('col.time')}</th>
+                    <th className="px-6 py-3 font-medium text-right">{t('col.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
@@ -524,13 +528,13 @@ export default function HistoryContent() {
                                 )}
                                 className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer"
                               >
-                                <Download className="w-3 h-3" /> Tải lại
+                                <Download className="w-3 h-3" /> {t('redownload')}
                               </button>
                             )}
                             {job.original_url && (
                               <button
                                 onClick={() => handleRerun(job.original_url)}
-                                title="Tải lại URL này"
+                                title={t('rerunUrl')}
                                 className="p-1.5 rounded-lg text-fg-muted hover:text-success hover:bg-success-soft transition-colors cursor-pointer"
                               >
                                 <RotateCcw className="w-3.5 h-3.5" />
@@ -539,7 +543,7 @@ export default function HistoryContent() {
                             {job.original_url && (
                               <button
                                 onClick={() => handleCopyUrl(job.id, job.original_url)}
-                                title="Copy URL gốc"
+                                title={t('copyUrl')}
                                 className="p-1.5 rounded-lg text-fg-muted hover:text-accent-text hover:bg-accent/10 transition-colors cursor-pointer"
                               >
                                 {copiedId === job.id
@@ -610,7 +614,7 @@ export default function HistoryContent() {
                         {job.original_url && (
                           <button
                             onClick={() => handleRerun(job.original_url)}
-                            title="Tải lại URL này"
+                            title={t('rerunUrl')}
                             className="p-1.5 rounded-lg text-fg-muted hover:text-success hover:bg-success-soft transition-colors"
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
@@ -649,7 +653,7 @@ export default function HistoryContent() {
                   className="flex items-center gap-2 px-5 py-2 rounded-xl bg-surface border border-line text-fg-2 text-xs font-semibold hover:text-fg hover:border-accent/30 transition-all cursor-pointer disabled:opacity-50"
                 >
                   {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                  Tải thêm
+                  {t('loadMore')}
                 </button>
               </div>
             )}

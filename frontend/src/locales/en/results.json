@@ -1,0 +1,163 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "tabs": {
+    "trim": "Trim clip",
+    "audio": "Audio",
+    "gif": "GIF / Loop",
+    "subtitle": "Subtitles",
+    "package": "Package"
+  },
+  "trimPreset": {
+    "custom": "Custom"
+  },
+  "gifPreset": {
+    "small": "Small",
+    "social": "Social",
+    "hq": "HQ"
+  },
+  "hub": {
+    "done": "Done",
+    "download": "Download",
+    "fromSec": "From (sec)",
+    "toSec": "To (sec)",
+    "format": "Format",
+    "processing": "Processing...",
+    "defaultTitle": "Process media",
+    "footer": "Processed files expire after 20 minutes · Limits: trim 10 min · GIF/loop 30 sec"
+  },
+  "trim": {
+    "quick": "Quick length",
+    "audioOnly": "Extract audio only (MP3)",
+    "selected": "Selected: {{seconds}}s",
+    "refetch": "· Will re-download from source",
+    "submit": "Trim clip",
+    "resultLabel": "Clip {{start}}s–{{end}}s"
+  },
+  "audio": {
+    "quality": "Quality",
+    "normalize": "Normalize volume (loudnorm)",
+    "extracting": "Extracting...",
+    "submit": "Extract {{format}} audio {{quality}}k"
+  },
+  "gif": {
+    "subGif": "Animated GIF",
+    "subLoop": "MP4 Loop",
+    "estimate": "· Estimated ~{{size}}",
+    "heavy": "⚠ May be large",
+    "creating": "Creating...",
+    "makeGif": "Create GIF",
+    "exportLoop": "Export MP4 Loop"
+  },
+  "subtitle": {
+    "none": "No subtitles detected in the metadata.",
+    "noneHint": "Try downloading anyway — some sources have hidden subtitles.",
+    "language": "Language",
+    "auto": "Auto",
+    "burn": "Burn subtitles into video",
+    "burnSubmit": "Burn subtitles",
+    "download": "Download {{format}} subtitles",
+    "resultBurn": "Video + subtitles",
+    "resultSub": "{{format}} subtitles"
+  },
+  "package": {
+    "template": "Filename template",
+    "preview": "Name preview",
+    "useName": "Download with this name",
+    "expired": "The local file has expired — download it again from the source.",
+    "zipHint": "For a ZIP of multiple files, use Batch."
+  },
+  "errorCard": {
+    "unknown": "Error",
+    "unknownError": "Unknown error.",
+    "retry": "Retry",
+    "noRetry": "Retrying won’t help with this error",
+    "codes": {
+      "unsupported_url": "Unsupported URL",
+      "private_or_login_required": "Private content",
+      "rate_limited": "Rate limited",
+      "temporary_blocked": "Temporarily blocked",
+      "no_media_found": "No media found",
+      "processing_failed": "Processing failed",
+      "drm_protected": "DRM protected",
+      "geo_blocked": "Blocked in your region",
+      "file_expired": "File expired",
+      "storage_limit_reached": "Storage limit reached",
+      "quota_exceeded_daily": "Daily limit reached",
+      "tier_limit_quality": "Quality limit",
+      "tier_limit_batch": "Batch limit",
+      "tier_required_feature": "Pro feature",
+      "archive_sync_failed": "Archive sync error",
+      "schedule_failed": "Schedule error",
+      "invalid_url": "Invalid URL",
+      "concurrency_limit": "Server busy",
+      "server_error": "Server error"
+    }
+  },
+  "success": {
+    "defaultTitle": "Download complete",
+    "copied": "Copied",
+    "copyLink": "Copy link",
+    "download": "Download file",
+    "source": "Source",
+    "processMore": "Process more",
+    "next": "What next?",
+    "gifTitle": "Create a GIF from the video you just downloaded",
+    "makeGif": "Create GIF",
+    "trimTitle": "Trim the video",
+    "trim": "Trim clip",
+    "thumbnail": "Get thumbnail",
+    "zipPlaylist": "Zip playlist",
+    "another": "Download another link",
+    "savePreset": "Save this preset",
+    "presetPlaceholder": "Preset name...",
+    "save": "Save"
+  },
+  "smart": {
+    "proGate": "Upgrade to Pro to see {{feature}}",
+    "featureHighlights": "highlights",
+    "viewPro": "See Pro plans →",
+    "noTrim": "No trim suggestions.",
+    "suggestion": "Suggestion {{n}}",
+    "applyThis": "Apply this suggestion",
+    "noHighlights": "No highlights detected.",
+    "highlight": "Highlight {{n}}",
+    "viewClip": "View this segment",
+    "cutClip": "Trim clip",
+    "noGif": "No suitable segment found for a GIF.",
+    "sceneCut": "⚠ scene cut",
+    "noMetadata": "No metadata suggestions.",
+    "suggestedName": "Suggested filename",
+    "copied": "Copied ✓",
+    "copy": "Copy",
+    "useName": "Use this name",
+    "quotaReached": "You’ve reached today’s analysis limit.",
+    "errorStatus": "Error {{status}}",
+    "tooLong": "Analysis is taking too long. Please try again.",
+    "failed": "Analysis failed.",
+    "analyzing": "Analyzing...",
+    "analyzingShort": "Analyzing",
+    "done": "Done",
+    "retry": "Retry",
+    "manualHint": "(or trim manually below)"
+  },
+  "capability": {
+    "short": "🔗 Short link",
+    "actions": {
+      "video": "🎬 Video",
+      "audio": "🎵 Audio",
+      "no_watermark": "✨ No watermark",
+      "subtitle": "💬 Subtitles",
+      "4k": "🔆 4K",
+      "image": "🖼️ Image",
+      "carousel": "📚 Carousel",
+      "gif": "🌀 GIF",
+      "batch_video": "📦 Batch video",
+      "batch_audio": "📦 Batch audio",
+      "batch_image": "📦 Batch images",
+      "batch_mp3": "📦 Batch MP3",
+      "batch_post": "📦 Batch posts",
+      "browse_tracks": "🎛️ Browse tracks",
+      "artist_preview": "🎤 Artist preview"
+    }
+  }
+}

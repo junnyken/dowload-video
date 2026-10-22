@@ -1,0 +1,18 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "title": "Download VidGrab for Windows",
+  "intro": "The VidGrab desktop app: download videos from TikTok, YouTube, Facebook and Instagram right on Windows.",
+  "checking": "Checking for the latest version...",
+  "versionError": "Couldn't get version information. Please try again.",
+  "retry": "Try again",
+  "latest": "Latest version: {{version}}",
+  "downloadExe": "Download installer (.exe)",
+  "updating": "The installer is being updated, please check back later.",
+  "shaNote": "SHA-256 checksum of the installer (compare with the output of <code>Get-FileHash</code>, see the FAQ):",
+  "reqTitle": "System requirements",
+  "reqBody": "Windows 10/11 64-bit.",
+  "installTitle": "Installation notes",
+  "installSmartScreen": "Windows SmartScreen may show a “Windows protected your PC” warning because the app isn't code-signed. Click “More info” → “Run anyway” to continue the installation.",
+  "installKeepData": "Installing a new version over the old one keeps your downloaded videos and saved channels.",
+  "sharedAccount": "Signing in to the app uses the same account and daily limit as the website."
+}

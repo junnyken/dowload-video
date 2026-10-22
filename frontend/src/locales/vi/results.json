@@ -1,0 +1,162 @@
+{
+  "tabs": {
+    "trim": "Cắt clip",
+    "audio": "Âm thanh",
+    "gif": "GIF / Loop",
+    "subtitle": "Phụ đề",
+    "package": "Đóng gói"
+  },
+  "trimPreset": {
+    "custom": "Tùy"
+  },
+  "gifPreset": {
+    "small": "Nhỏ",
+    "social": "Social",
+    "hq": "HQ"
+  },
+  "hub": {
+    "done": "Hoàn tất",
+    "download": "Tải",
+    "fromSec": "Từ (giây)",
+    "toSec": "Đến (giây)",
+    "format": "Định dạng",
+    "processing": "Đang xử lý...",
+    "defaultTitle": "Xử lý media",
+    "footer": "File xử lý hết hạn sau 20 phút · Giới hạn: trim 10 phút · GIF/loop 30 giây"
+  },
+  "trim": {
+    "quick": "Chọn độ dài nhanh",
+    "audioOnly": "Chỉ trích âm thanh (MP3)",
+    "selected": "Đoạn chọn: {{seconds}}s",
+    "refetch": "· Sẽ tải lại từ nguồn",
+    "submit": "Cắt clip",
+    "resultLabel": "Clip {{start}}s–{{end}}s"
+  },
+  "audio": {
+    "quality": "Chất lượng",
+    "normalize": "Cân bằng âm lượng (loudnorm)",
+    "extracting": "Đang trích...",
+    "submit": "Trích âm thanh {{format}} {{quality}}k"
+  },
+  "gif": {
+    "subGif": "GIF animated",
+    "subLoop": "MP4 Loop",
+    "estimate": "· Ước tính ~{{size}}",
+    "heavy": "⚠ Có thể nặng",
+    "creating": "Đang tạo...",
+    "makeGif": "Tạo GIF",
+    "exportLoop": "Xuất MP4 Loop"
+  },
+  "subtitle": {
+    "none": "Không phát hiện phụ đề từ metadata.",
+    "noneHint": "Thử tải thử — một số nguồn có phụ đề ẩn.",
+    "language": "Ngôn ngữ",
+    "auto": "Tự động",
+    "burn": "Ghép phụ đề vào video (burn-in)",
+    "burnSubmit": "Ghép phụ đề",
+    "download": "Tải phụ đề {{format}}",
+    "resultBurn": "Video + phụ đề",
+    "resultSub": "Phụ đề {{format}}"
+  },
+  "package": {
+    "template": "Template tên file",
+    "preview": "Xem trước tên",
+    "useName": "Tải với tên này",
+    "expired": "File local đã hết hạn — tải lại từ nguồn.",
+    "zipHint": "ZIP nhiều file: dùng tính năng Batch."
+  },
+  "errorCard": {
+    "unknown": "Lỗi",
+    "unknownError": "Lỗi không xác định.",
+    "retry": "Thử lại",
+    "noRetry": "Retry không khả thi với lỗi này",
+    "codes": {
+      "unsupported_url": "URL không hỗ trợ",
+      "private_or_login_required": "Nội dung riêng tư",
+      "rate_limited": "Giới hạn tốc độ",
+      "temporary_blocked": "Tạm thời bị chặn",
+      "no_media_found": "Không tìm thấy media",
+      "processing_failed": "Xử lý thất bại",
+      "drm_protected": "Được bảo vệ DRM",
+      "geo_blocked": "Bị chặn theo khu vực",
+      "file_expired": "File đã hết hạn",
+      "storage_limit_reached": "Hết giới hạn lưu trữ",
+      "quota_exceeded_daily": "Hết giới hạn hôm nay",
+      "tier_limit_quality": "Giới hạn chất lượng",
+      "tier_limit_batch": "Giới hạn số lượng",
+      "tier_required_feature": "Tính năng Pro",
+      "archive_sync_failed": "Lỗi đồng bộ Archive",
+      "schedule_failed": "Lỗi lịch tải",
+      "invalid_url": "URL không hợp lệ",
+      "concurrency_limit": "Server bận",
+      "server_error": "Lỗi server"
+    }
+  },
+  "success": {
+    "defaultTitle": "Tải hoàn tất",
+    "copied": "Đã sao chép",
+    "copyLink": "Copy link",
+    "download": "Tải file",
+    "source": "Nguồn",
+    "processMore": "Xử lý thêm",
+    "next": "Làm gì tiếp?",
+    "gifTitle": "Tạo GIF từ video vừa tải",
+    "makeGif": "Tạo GIF",
+    "trimTitle": "Cắt đoạn video",
+    "trim": "Cắt clip",
+    "thumbnail": "Lấy thumbnail",
+    "zipPlaylist": "ZIP playlist",
+    "another": "Tải link khác",
+    "savePreset": "Lưu preset này",
+    "presetPlaceholder": "Tên preset...",
+    "save": "Lưu"
+  },
+  "smart": {
+    "proGate": "Nâng cấp Pro để xem {{feature}}",
+    "featureHighlights": "highlights",
+    "viewPro": "Xem gói Pro →",
+    "noTrim": "Không có gợi ý cắt nào.",
+    "suggestion": "Gợi ý {{n}}",
+    "applyThis": "Áp dụng gợi ý này",
+    "noHighlights": "Không phát hiện highlight nào.",
+    "highlight": "Highlight {{n}}",
+    "viewClip": "Xem đoạn này",
+    "cutClip": "Cắt clip",
+    "noGif": "Không tìm thấy đoạn phù hợp để tạo GIF.",
+    "sceneCut": "⚠ cắt cảnh",
+    "noMetadata": "Không có gợi ý metadata.",
+    "suggestedName": "Tên file gợi ý",
+    "copied": "Đã sao chép ✓",
+    "copy": "Sao chép",
+    "useName": "Dùng tên này",
+    "quotaReached": "Đã đạt giới hạn phân tích hôm nay.",
+    "errorStatus": "Lỗi {{status}}",
+    "tooLong": "Phân tích mất quá lâu. Vui lòng thử lại.",
+    "failed": "Phân tích thất bại.",
+    "analyzing": "Đang phân tích...",
+    "analyzingShort": "Đang phân tích",
+    "done": "Xong",
+    "retry": "Thử lại",
+    "manualHint": "(hoặc dùng trim thủ công bên dưới)"
+  },
+  "capability": {
+    "short": "🔗 Rút gọn",
+    "actions": {
+      "video": "🎬 Video",
+      "audio": "🎵 Audio",
+      "no_watermark": "✨ Không watermark",
+      "subtitle": "💬 Phụ đề",
+      "4k": "🔆 4K",
+      "image": "🖼️ Ảnh",
+      "carousel": "📚 Carousel",
+      "gif": "🌀 GIF",
+      "batch_video": "📦 Batch video",
+      "batch_audio": "📦 Batch audio",
+      "batch_image": "📦 Batch ảnh",
+      "batch_mp3": "📦 Batch MP3",
+      "batch_post": "📦 Batch bài",
+      "browse_tracks": "🎛️ Duyệt track",
+      "artist_preview": "🎤 Preview nghệ sĩ"
+    }
+  }
+}

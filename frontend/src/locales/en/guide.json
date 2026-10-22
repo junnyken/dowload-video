@@ -1,0 +1,96 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "header": "// Quick guide \\\\",
+  "subhead": "New here? Follow the steps below.",
+  "tabsLabel": "Guide type",
+  "collapseAria": "Collapse guide",
+  "expandAria": "Expand guide",
+  "collapse": "Collapse",
+  "expand": "Show steps",
+  "single": {
+    "label": "Single video",
+    "title": "How to download a video or song fast",
+    "description": "For downloading one link at a time.",
+    "steps": [
+      "Paste the video or song link into the input box.",
+      "Choose a format: MP4 HD, 4K or MP3.",
+      "Turn on Remove watermark (TikTok / Douyin only) or Download subtitles if needed.",
+      "Click \"Extract now\", wait for processing, then download the file."
+    ],
+    "notes": [
+      "TikTok / Douyin: download without watermark. Also supports YouTube, Instagram, Facebook, Spotify, SoundCloud and many more platforms."
+    ]
+  },
+  "bulk": {
+    "label": "Bulk download",
+    "title": "How to download many links at once",
+    "description": "Best when you need to process many URLs in one go.",
+    "steps": [
+      "Paste multiple links (one URL per line), or load them from a .txt/.csv file.",
+      "Choose the output format for the whole list.",
+      "Click start; the system processes them in batches.",
+      "When done, download each file, copy links or download a ZIP."
+    ],
+    "notes": [
+      "Best when you need videos from many different links.",
+      "Download links expire, so download right after processing finishes."
+    ]
+  },
+  "channel": {
+    "label": "Whole channel",
+    "title": "How to scan and download videos from a channel",
+    "description": "Use this to grab many videos from a channel, profile or playlist.",
+    "steps": [
+      "Switch to the \"Bulk Download\" tab.",
+      "Paste the channel, profile or playlist link into the input box.",
+      "Turn on Channel Mode to scan the channel's videos instead of downloading a single link.",
+      "Choose how many videos to fetch: 10, 20, 50, 100, 200, 500 or enter your own.",
+      "Click start, follow the progress and download the results when done."
+    ],
+    "notes": [
+      "Supports YouTube, TikTok, Instagram profiles and Facebook videos.",
+      "For your first run, pick 10–50 videos to check things faster.",
+      "The system processes in batches to avoid platform limits."
+    ]
+  },
+  "quickBar": {
+    "label": "Quick download:",
+    "noWm": "No WM",
+    "more": "More",
+    "proRequired": "{{label}} — Requires Pro",
+    "preset": "Preset: {{name}}"
+  },
+  "banner": {
+    "new_user": {
+      "text": "Welcome! Paste any video link to download it right away — YouTube, TikTok, Facebook and 30+ platforms."
+    },
+    "first_success": {
+      "text": "Nice! Install the Chrome extension to download faster from any page.",
+      "cta": "Install extension"
+    },
+    "quota_warning": {
+      "text": "You’ve used over 80% of today’s downloads. Pro has a higher download limit.",
+      "cta": "Upgrade to Pro"
+    },
+    "quota_reached": {
+      "text": "You’re out of downloads for today. Your limit resets every day, or see Pro for a higher limit.",
+      "cta": "Upgrade to Pro now"
+    },
+    "paywall_hit": {
+      "text": "This feature is for Pro — like ZIP downloads, API keys and tracking more channels.",
+      "cta": "See Pro plans"
+    },
+    "extension_nudge": {
+      "text": "On desktop? Install the extension to download straight from the tab you’re viewing, no pasting needed.",
+      "cta": "Install extension"
+    },
+    "telegram_nudge": {
+      "text": "On mobile? Use the Telegram bot @vidgrab_bot to download quickly right inside your messaging app.",
+      "cta": "Open bot"
+    },
+    "pro_power_user": {
+      "text": "You’re on Pro — create an API key to plug VidGrab into your workflow.",
+      "cta": "Create API key"
+    }
+  }
+}

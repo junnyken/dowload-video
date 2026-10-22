@@ -1,0 +1,86 @@
+{
+  "close": "Đóng",
+  "theme": {
+    "toLight": "Chuyển sang giao diện sáng",
+    "toDark": "Chuyển sang giao diện tối"
+  },
+  "pwa": {
+    "title": "Thêm vào màn hình chính",
+    "subtitle": "Mở VidGrab nhanh hơn, không cần trình duyệt",
+    "iosStep1": "Nhấn nút <share/> ở thanh dưới Safari",
+    "iosStep2": "Kéo xuống → chọn \"Thêm vào màn hình chính\"",
+    "iosStep3": "Nhấn \"Thêm\" → Xong!",
+    "skip": "Bỏ qua",
+    "install": "Cài đặt ngay — miễn phí"
+  },
+  "quickTools": {
+    "title": "Công cụ nhanh",
+    "subtitle": {
+      "label": "Phụ đề",
+      "desc": "Tải hoặc đốt phụ đề"
+    },
+    "needDownload": "Tải video trước để dùng công cụ này",
+    "recentFallback": "Video vừa tải",
+    "trim": {
+      "label": "Cắt clip",
+      "desc": "Trim video nhanh"
+    },
+    "audio": {
+      "label": "Trích MP3",
+      "desc": "Xuất âm thanh"
+    },
+    "gif": {
+      "label": "Tạo GIF",
+      "desc": "Xuất ảnh động"
+    },
+    "cloud": {
+      "label": "Lưu Cloud",
+      "desc": "Drive/Dropbox"
+    },
+    "full": {
+      "label": "Bản đầy đủ",
+      "desc": "Mở tất cả công cụ"
+    },
+    "hint": "Chọn công cụ để xử lý video vừa tải"
+  },
+  "jobs": {
+    "title": "Tác vụ tải",
+    "activeCount": "{{count}} đang xử lý",
+    "refresh": "Làm mới",
+    "retry": "Thử lại",
+    "download": "Tải về",
+    "home": "Về trang chủ",
+    "loginPrompt": "Đăng nhập để xem lịch sử tải",
+    "loadError": "Không thể tải dữ liệu. Vui lòng thử lại.",
+    "untitled": "Video không có tiêu đề",
+    "empty": {
+      "title": "Chưa có tác vụ nào đang xử lý",
+      "hint": "Tải video để xem tiến trình ở đây"
+    },
+    "sections": {
+      "recent": "Vừa xong"
+    },
+    "status": {
+      "pending": "Chờ xử lý",
+      "processing": "Đang xử lý",
+      "completed": "Hoàn thành",
+      "failed": "Thất bại"
+    },
+    "elapsed": {
+      "justNow": "vừa xong",
+      "seconds": "{{count}} giây trước",
+      "minutes": "{{count}} phút trước",
+      "hours": "{{count}} giờ trước"
+    }
+  },
+  "share": {
+    "title": "Chia sẻ vào VidGrab",
+    "thumbnailAlt": "thumbnail",
+    "untitled": "Không có tiêu đề",
+    "hd": "Tải HD",
+    "noWatermark": "Không watermark",
+    "moreOptions": "Thêm lựa chọn",
+    "addToBatch": "Thêm vào batch",
+    "cancel": "Huỷ"
+  }
+}

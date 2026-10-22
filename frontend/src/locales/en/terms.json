@@ -1,0 +1,57 @@
+{
+  "_note": "LEGAL — English drafted with AI; must be reviewed by BA/legal before it is relied on. The Vietnamese version prevails.",
+  "translationNotice": "This English translation is provided for convenience. If it differs from the Vietnamese version, the Vietnamese version prevails.",
+  "title": "Terms of Use",
+  "updated": "Last updated:",
+  "s1": {
+    "title": "1. What this service is for",
+    "text": "VidGrab helps you save content that you have the right to save: your own videos, content the owner has permitted, or content the law permits you to use for personal purposes. By using VidGrab, you agree to the terms below."
+  },
+  "s2": {
+    "title": "2. Your responsibilities",
+    "own": "You are solely responsible for the content you download and how you use that content.",
+    "platformTerms": "You must comply with the terms of each original platform (YouTube, TikTok, Facebook, …) and applicable copyright law.",
+    "noRights": "VidGrab does not grant you any rights in other people's content."
+  },
+  "s3": {
+    "title": "3. No guarantee that every platform works at all times",
+    "text": "Platforms change how they work frequently. As a result, at times a platform may be slow, may fail, or may temporarily be impossible to download from. We try to fix this promptly but we do not commit that the service will run continuously or succeed with every link."
+  },
+  "s4": {
+    "title": "4. What you must not do",
+    "repost": "Download content without permission and then repost, resell or redistribute it.",
+    "automation": "Use automated tools or send bursts of requests beyond the limits the service allows.",
+    "evade": "Try to get around the download limits (for example by creating multiple accounts or changing addresses to get more downloads).",
+    "illegal": "Use VidGrab for purposes that violate the law or infringe the rights of others.",
+    "consequence": "A violation may result in your access being restricted or blocked."
+  },
+  "s5": {
+    "title": "5. Accounts and usage limits",
+    "guestLabel": "Guest (not signed in):",
+    "guest": "can download at up to 1080p quality, with a limit on the number of downloads per day.",
+    "memberLabel": "Registered account:",
+    "member": "can choose 2K/4K quality (if the source has it) and has its own quota.",
+    "adjust": "Specific quotas may be adjusted to keep the service stable for everyone.",
+    "credentials": "You are responsible for keeping your sign-in information secure."
+  },
+  "s6": {
+    "title": "6. Paid plans",
+    "before": "The current prices and benefits of the paid plans are published on the ",
+    "link": "Pricing",
+    "after": " page. For the refund policy, please see the Pricing page or contact support."
+  },
+  "s7": {
+    "title": "7. Takedown requests",
+    "before": "If you are the content owner (or an authorized representative) and want to request removal, please submit your request at",
+    "after": "."
+  },
+  "s8": {
+    "title": "8. Limitation of liability and changes to the terms",
+    "text": "The service is provided as is. We may update these terms; the most recent update date is shown at the top of the page. Continuing to use the service after an update means you agree to the new version. This document is a general description and is not legal advice."
+  },
+  "s9": {
+    "title": "9. Contact",
+    "before": "Please send any questions to",
+    "after": "."
+  }
+}

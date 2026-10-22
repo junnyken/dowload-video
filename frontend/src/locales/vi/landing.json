@@ -1,0 +1,66 @@
+{
+  "tabs": {
+    "single": {
+      "label": "Tải Video & Nhạc",
+      "short": "Video & Nhạc",
+      "title": "Tải 1 link — video, nhạc, phụ đề"
+    },
+    "bulk": {
+      "label": "Hàng Loạt · Kênh",
+      "short": "Hàng Loạt",
+      "title": "Tải nhiều link, kênh, playlist cùng lúc"
+    },
+    "flow": {
+      "label": "Xóa Logo Video",
+      "short": "Xóa Logo",
+      "title": "Xóa logo watermark trên video Flow / Veo"
+    },
+    "history": {
+      "label": "Đã Tải",
+      "short": "Đã Tải",
+      "title": "Lịch sử các lượt tải gần đây"
+    },
+    "lockedTitle": "Đang nâng cấp — sẽ mở lại sau",
+    "soon": "Sắp có",
+    "new": "New"
+  },
+  "heroLabel": "// 30+ nền tảng \\\\",
+  "heroTitle1": "Tải video TikTok / Douyin",
+  "heroTitle2": "không watermark",
+  "cueBulk": "Hàng loạt · kênh · ZIP",
+  "qualityAuth": "4K · 1080p · MP3 320kbps",
+  "qualityGuest": "4K (đăng nhập) · 1080p · MP3 320kbps",
+  "cueHistory": "Lịch sử tải",
+  "cueNoAds": "Không quảng cáo · không giới hạn giả",
+  "addToHome": "Thêm vào màn hình chính để mở nhanh hơn",
+  "degraded": "Đang gặp sự cố",
+  "extension": "Cài Extension Chrome — TikTok sạch 1 click",
+  "platformNavLabel": "Tải video theo nền tảng",
+  "platformNav": "Tải video theo nền tảng:",
+  "api": {
+    "title": "Kết nối VidGrab vào hệ thống của bạn (API)",
+    "intro": "Tự động tải video từ ứng dụng hoặc máy chủ của bạn, có hai mức dùng: cá nhân và doanh nghiệp.",
+    "personal": {
+      "title": "API key cá nhân",
+      "body": "Dành cho lập trình viên và nhu cầu nhỏ. Dùng gói Pro hoặc Team, tự tạo API key ở trang API Keys, rồi gọi <c1>POST /api/v1/fetch-link</c1> kèm header <c2>X-API-Key: vidgrab_…</c2>. Lệnh gọi giữ kết nối đến khi tải xong rồi trả kết quả. Giới hạn 30 lượt gọi mỗi phút cho mỗi key, và tổng lượt gọi mỗi tháng tuỳ gói.",
+      "docs": "Xem tài liệu API",
+      "createKey": "Tạo API key",
+      "pricing": "Xem bảng giá"
+    },
+    "partner": {
+      "title": "Partner API cho doanh nghiệp",
+      "body": "Dành cho doanh nghiệp gọi từ máy chủ của mình: tạo lệnh tải (job) chạy nền, nhận kết quả qua webhook có chữ ký xác thực. Giới hạn đặt riêng cho từng key (số lệnh mỗi phút và mỗi ngày), số lệnh mỗi tháng theo hợp đồng. Có thể chỉ cho phép key hoạt động từ IP máy chủ của bạn. Key dạng <c1>vgp_…</c1> do VidGrab cấp, bạn không tự tạo được.",
+      "docs": "Tài liệu Partner API",
+      "contact": "Liên hệ để nhận key:",
+      "mailSubject": "Đăng ký Partner API"
+    }
+  },
+  "share": {
+    "prompt": "Tìm thấy hữu ích? Chia sẻ với bạn bè",
+    "button": "Chia sẻ"
+  },
+  "ios": {
+    "title": "Cài VidGrab trên iPhone",
+    "body": "Nhấn <c1>⬆ Chia sẻ</c1> → <c2>Thêm vào Màn hình chính</c2>"
+  }
+}

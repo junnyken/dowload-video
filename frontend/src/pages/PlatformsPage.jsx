@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { CheckCircle, Clock, AlertCircle, Lock, Wifi, RefreshCw, Search, X } from 'lucide-react';
 
 // VITE_API_BASE is not defined in any build — this fell back to ''
@@ -6,212 +7,191 @@ import { CheckCircle, Clock, AlertCircle, Lock, Wifi, RefreshCw, Search, X } fro
 import { API_BASE } from '../lib/apiBase';
 import { usePlatformHealth } from '../lib/usePlatformHealth';
 
+// Names/domains stay here; descriptions and notes are in locales/*/platforms.json
+// (items.<platformKey(name)>.description / .note). // wording: BA review
 const PLATFORMS = [
   // ── Fully supported ────────────────────────────────────────────────
   {
     name: 'TikTok', status: 'full', logo: '🎵',
     features: ['video', 'audio', 'batch', 'channel', 'watermark-free'],
-    description: 'Video, âm thanh, kênh, tải hàng loạt không watermark.',
     domains: ['tiktok.com'],
   },
   {
     name: 'Douyin', status: 'full', logo: '🎵',
     features: ['video', 'audio', 'channel', 'watermark-free'],
-    description: 'TikTok phiên bản Trung Quốc, hỗ trợ đầy đủ qua Apify.',
     domains: ['douyin.com', 'v.douyin.com'],
   },
   {
     name: 'Facebook', status: 'full', logo: '📘',
     features: ['video', 'audio', 'batch', 'reels', 'live-vod'],
-    description: 'Video, Reels, VOD live, trang/nhóm hàng loạt.',
     domains: ['facebook.com', 'fb.watch'],
   },
   {
     name: 'Threads', status: 'full', logo: '🧵',
     features: ['video', 'image', 'carousel'],
-    description: 'Video và ảnh từ bài đăng Threads công khai.',
     domains: ['threads.com', 'threads.net'],
   },
   {
     name: 'Pinterest', status: 'full', logo: '📌',
     features: ['video', 'image', 'batch', 'board'],
-    description: 'Video, ảnh, scrape board/bộ sưu tập.',
     domains: ['pinterest.com'],
   },
   {
     name: 'SoundCloud', status: 'full', logo: '🎧',
     features: ['audio', 'batch', 'playlist'],
-    description: 'Tải nhạc, playlist, kênh nghệ sĩ.',
     domains: ['soundcloud.com'],
   },
   {
     name: 'Spotify', status: 'full', logo: '🎵',
     features: ['audio', 'batch', 'playlist', 'album'],
-    description: 'Tải qua YouTube match (độ chính xác cao cho nhạc phổ biến).',
     domains: ['open.spotify.com'],
   },
   {
     name: 'YouTube', status: 'full', logo: '▶️',
     features: ['video', 'audio', 'subtitle', 'batch', 'playlist', '4K'],
-    description: 'Video, 4K (đăng nhập), phụ đề, playlist.', // wording: BA review
     domains: ['youtube.com', 'youtu.be'],
-    note: 'Có thể chậm hơn các nền tảng khác.', // wording: BA review
+    note: true, // text: locales/*/platforms.json items.youtube.note — wording: BA review
   },
   // ── Upgraded in Phase 15 ───────────────────────────────────────────
   {
     name: 'Instagram', status: 'full', logo: '📸',
     features: ['video', 'image', 'carousel', 'story', 'batch', 'reels'],
-    description: 'Reel, carousel, story, batch profile. Cần cookie để xem nội dung riêng tư.',
     domains: ['instagram.com', 'instagr.am'],
     isNew: true,
   },
   {
     name: 'Twitter / X', status: 'full', logo: '🐦',
     features: ['video', 'gif', 'batch', 'thread'],
-    description: 'Video tweet, GIF, batch timeline. Cần cookie cho tweet giới hạn.',
     domains: ['twitter.com', 'x.com', 't.co'],
     isNew: true,
   },
   {
     name: 'Reddit', status: 'full', logo: '🤖',
     features: ['video', 'audio-merge', 'batch', 'subreddit'],
-    description: 'v.redd.it với merge audio, batch subreddit, cookie cho NSFW.',
     domains: ['reddit.com', 'redd.it'],
     isNew: true,
   },
   {
     name: 'Bilibili', status: 'full', logo: '📺',
     features: ['video', 'audio', 'subtitle', 'batch', 'playlist'],
-    description: 'Video, playlist, UP owner batch, phụ đề. Cookie cho nội dung VIP.',
     domains: ['bilibili.com', 'b23.tv'],
     isNew: true,
   },
   {
     name: 'Xiaohongshu', status: 'full', logo: '🌸',
     features: ['video', 'image', 'carousel', 'batch'],
-    description: 'Video và ảnh carousel. Một số nội dung có thể không tải được.', // wording: BA review
     domains: ['xiaohongshu.com', 'xhslink.com', 'rednote.com'],
     isNew: true,
-    note: 'Chỉ tải được nội dung công khai.', // wording: BA review
+    note: true, // text: locales/*/platforms.json items.xiaohongshu.note — wording: BA review
   },
   // ── Basic new platforms ────────────────────────────────────────────
   {
     name: 'Lemon8', status: 'basic', logo: '🍋',
     features: ['video', 'image', 'carousel'],
-    description: 'Video và ảnh carousel từ bài đăng công khai.',
     domains: ['lemon8-app.com'],
     isNew: true,
   },
   {
     name: 'Snapchat', status: 'basic', logo: '👻',
     features: ['video', 'spotlight'],
-    description: 'Spotlight và Story công khai. Không hỗ trợ nội dung riêng tư.',
     domains: ['snapchat.com', 'story.snapchat.com'],
     isNew: true,
   },
   {
     name: 'VK', status: 'basic', logo: '💙',
     features: ['video', 'batch', 'playlist'],
-    description: 'Video đơn, playlist từ VKontakte.',
     domains: ['vk.com', 'vkvideo.ru'],
     isNew: true,
   },
   {
     name: 'Twitch', status: 'basic', logo: '🎮',
     features: ['vod', 'clip'],
-    description: 'VOD và Clip (không hỗ trợ livestream).',
     domains: ['twitch.tv', 'clips.twitch.tv'],
     isNew: true,
   },
   {
     name: 'Rumble', status: 'basic', logo: '📹',
     features: ['video'],
-    description: 'Video đơn từ Rumble.',
     domains: ['rumble.com'],
     isNew: true,
   },
   {
     name: 'Odysee', status: 'basic', logo: '🌊',
     features: ['video', 'audio'],
-    description: 'Video và audio từ Odysee (LBRY).',
     domains: ['odysee.com', 'lbry.tv'],
     isNew: true,
   },
   {
     name: 'Dailymotion', status: 'basic', logo: '📽️',
     features: ['video', 'batch'],
-    description: 'Video và playlist Dailymotion.',
     domains: ['dailymotion.com'],
     isNew: true,
   },
   {
     name: 'Podcast RSS', status: 'basic', logo: '🎙️',
     features: ['audio', 'rss', 'apple-podcasts'],
-    description: 'Tải episode từ RSS feed hoặc Apple Podcasts URL.',
     domains: ['podcasts.apple.com', 'feeds.*'],
     isNew: true,
   },
 ];
 
 const FEATURE_ICONS = {
-  video:           { icon: '🎬', label: 'Video' },
-  audio:           { icon: '🎵', label: 'Audio / MP3' },
-  image:           { icon: '🖼️', label: 'Ảnh' },
-  carousel:        { icon: '📚', label: 'Carousel' },
-  batch:           { icon: '📦', label: 'Tải hàng loạt' },
-  channel:         { icon: '📡', label: 'Kênh' },
-  playlist:        { icon: '🎛️', label: 'Playlist' },
-  subtitle:        { icon: '💬', label: 'Phụ đề' },
-  story:           { icon: '⭕', label: 'Story' },
-  reels:           { icon: '🎞️', label: 'Reels' },
-  '4K':            { icon: '🔆', label: '4K' },
-  'watermark-free':{ icon: '✨', label: 'Không watermark' },
-  'audio-merge':   { icon: '🔊', label: 'Merge audio' },
-  gif:             { icon: '🌀', label: 'GIF / MP4' },
-  vod:             { icon: '📼', label: 'VOD' },
-  clip:            { icon: '✂️', label: 'Clip' },
-  spotlight:       { icon: '⚡', label: 'Spotlight' },
-  rss:             { icon: '📡', label: 'RSS Feed' },
-  'apple-podcasts':{ icon: '🎙️', label: 'Apple Podcasts' },
-  thread:          { icon: '🧵', label: 'Thread' },
-  subreddit:       { icon: '📋', label: 'Subreddit' },
-  'live-vod':      { icon: '🔴', label: 'Live VOD' },
-  album:           { icon: '💿', label: 'Album' },
-  board:           { icon: '📌', label: 'Board' },
+  video:           { icon: '🎬' },
+  audio:           { icon: '🎵' },
+  image:           { icon: '🖼️' },
+  carousel:        { icon: '📚' },
+  batch:           { icon: '📦' },
+  channel:         { icon: '📡' },
+  playlist:        { icon: '🎛️' },
+  subtitle:        { icon: '💬' },
+  story:           { icon: '⭕' },
+  reels:           { icon: '🎞️' },
+  '4K':            { icon: '🔆' },
+  'watermark-free':{ icon: '✨' },
+  'audio-merge':   { icon: '🔊' },
+  gif:             { icon: '🌀' },
+  vod:             { icon: '📼' },
+  clip:            { icon: '✂️' },
+  spotlight:       { icon: '⚡' },
+  rss:             { icon: '📡' },
+  'apple-podcasts':{ icon: '🎙️' },
+  thread:          { icon: '🧵' },
+  subreddit:       { icon: '📋' },
+  'live-vod':      { icon: '🔴' },
+  album:           { icon: '💿' },
+  board:           { icon: '📌' },
 };
 
 function StatusBadge({ status }) {
+  const { t } = useTranslation('platforms');
   // status may be legacy ('full','basic') or from live capability API
   const map = {
-    full:                 { Icon: CheckCircle, cls: 'bg-success-soft text-success border-success/30', label: 'Đầy đủ' },
-    basic:                { Icon: Clock,       cls: 'bg-accent-soft text-accent-text border-accent/30',       label: 'Cơ bản' },
-    partial:              { Icon: AlertCircle, cls: 'bg-warning-soft text-warning border-warning/30',       label: 'Một phần' },
-    cookie_required:      { Icon: Lock,        cls: 'bg-surface-2 text-fg-2 border-line',         label: 'Cần cookie' },
-    proxy_required:       { Icon: Wifi,        cls: 'bg-surface-2 text-fg-2 border-line',   label: 'Có thể chậm hơn' }, // wording: BA review
-    temporarily_disabled: { Icon: Clock,       cls: 'bg-danger-soft text-danger border-danger/30',            label: 'Tạm dừng' },
-    unsupported:          { Icon: AlertCircle, cls: 'bg-line-strong text-fg-muted border-line-strong',      label: 'Chưa hỗ trợ' },
+    full:                 { Icon: CheckCircle, cls: 'bg-success-soft text-success border-success/30' },
+    basic:                { Icon: Clock,       cls: 'bg-accent-soft text-accent-text border-accent/30' },
+    partial:              { Icon: AlertCircle, cls: 'bg-warning-soft text-warning border-warning/30' },
+    cookie_required:      { Icon: Lock,        cls: 'bg-surface-2 text-fg-2 border-line' },
+    proxy_required:       { Icon: Wifi,        cls: 'bg-surface-2 text-fg-2 border-line' }, // wording: BA review
+    temporarily_disabled: { Icon: Clock,       cls: 'bg-danger-soft text-danger border-danger/30' },
+    unsupported:          { Icon: AlertCircle, cls: 'bg-line-strong text-fg-muted border-line-strong' },
     // Phase 34D: health-probe driven, deliberately neutral (no "full support" claim).
-    degraded:             { Icon: AlertCircle, cls: 'bg-surface-2 text-fg-2 border-line',         label: 'Đang gặp sự cố' }, // wording: BA review
-    experimental:         { Icon: Clock,       cls: 'bg-surface-2 text-fg-2 border-line',         label: 'Đang thử nghiệm' }, // wording: BA review
+    degraded:             { Icon: AlertCircle, cls: 'bg-surface-2 text-fg-2 border-line' }, // wording: BA review
+    experimental:         { Icon: Clock,       cls: 'bg-surface-2 text-fg-2 border-line' }, // wording: BA review
   };
   const cfg = map[status] || map.basic;
-  const { Icon, cls, label } = cfg;
+  const { Icon, cls } = cfg;
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${cls}`}>
       <Icon size={10} />
-      {label}
+      {t(`status.${map[status] ? status : 'basic'}`)}
     </span>
   );
 }
 
-// source_type labels (matching backend)
-const SOURCE_TYPE_LABELS = {
-  single_video: 'Video', single_audio: 'Audio', single_post: 'Bài đăng',
-  playlist: 'Playlist', album: 'Album', artist: 'Nghệ sĩ', channel: 'Kênh',
-  profile: 'Profile', board: 'Board', subreddit: 'Cộng đồng', podcast_feed: 'Podcast',
-};
+// source_type labels (matching backend): locales/*/platforms.json sourceTypes.<source_type>
 
 function PlatformCard({ platform, liveData, health }) {
+  const { t } = useTranslation('platforms');
+  const itemKey = platformKey(platform.name);
   const effectiveStatus = health === 'degraded' ? 'degraded'
     : health === 'unknown' ? 'experimental'
     : (liveData?.overall_status || platform.status);
@@ -228,7 +208,7 @@ function PlatformCard({ platform, liveData, health }) {
     <div className={`relative rounded-xl border p-4 transition-all bg-surface/70 backdrop-blur-sm hover:bg-surface/90 hover:shadow-lg hover:shadow-black/20 ${borderCls}`}>
       {platform.isNew && (
         <span className="absolute top-3 right-3 text-xs font-bold px-1.5 py-0.5 rounded bg-surface-2 text-fg-2 border border-line">
-          NEW
+          {t('newBadge')}
         </span>
       )}
       <div className="flex items-start gap-3">
@@ -239,16 +219,16 @@ function PlatformCard({ platform, liveData, health }) {
             <StatusBadge status={effectiveStatus} />
             {liveData && health === 'healthy' && (
               <span className="text-[9px] px-1 py-0.5 rounded bg-success-soft text-success border border-success/15">
-                LIVE
+                {t('liveBadge')}
               </span>
             )}
           </div>
-          <p className="mt-1 text-sm text-fg-muted leading-snug">{platform.description}</p>
+          <p className="mt-1 text-sm text-fg-muted leading-snug">{t(`items.${itemKey}.description`)}</p>
           {platform.known_limitation && (
             <p className="mt-1 text-xs text-fg-2">ℹ {platform.known_limitation}</p>
           )}
           {platform.note && (
-            <p className="mt-1 text-xs text-accent-text">⚠ {platform.note}</p>
+            <p className="mt-1 text-xs text-accent-text">⚠ {t(`items.${itemKey}.note`)}</p>
           )}
 
           {/* Domains — helps users know what URLs they can paste */}
@@ -274,7 +254,7 @@ function PlatformCard({ platform, liveData, health }) {
                   className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-surface-2 text-fg-muted border border-line-strong"
                   title={st.support_level_label}
                 >
-                  {SOURCE_TYPE_LABELS[st.source_type] || st.source_type}
+                  {t(`sourceTypes.${st.source_type}`, { defaultValue: st.source_type })}
                 </span>
               ))}
             </div>
@@ -283,14 +263,14 @@ function PlatformCard({ platform, liveData, health }) {
           {/* Feature tags */}
           <div className="mt-2 flex flex-wrap gap-1">
             {platform.features.map(f => {
-              const fi = FEATURE_ICONS[f] || { icon: '•', label: f };
+              const fi = FEATURE_ICONS[f] || { icon: '•' };
               return (
                 <span
                   key={f}
                   className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs bg-surface-2 text-fg-2 border border-line-strong"
                 >
                   <span className="text-[10px]">{fi.icon}</span>
-                  <span>{fi.label}</span>
+                  <span>{t(`features.${f}`, { defaultValue: f })}</span>
                 </span>
               );
             })}
@@ -325,17 +305,18 @@ function Section({ title, platforms, liveCapMap, classify, info }) {
 }
 
 // Build a flat searchable text blob for each platform
-function searchText(p) {
+function searchText(p, t) {
   return [
     p.name,
-    p.description,
-    p.note || '',
+    t(`items.${platformKey(p.name)}.description`),
+    p.note ? t(`items.${platformKey(p.name)}.note`) : '',
     ...(p.domains || []),
-    ...p.features.map(f => FEATURE_ICONS[f]?.label || f),
+    ...p.features.map(f => t(`features.${f}`, { defaultValue: f })),
   ].join(' ').toLowerCase();
 }
 
 export default function PlatformsPage() {
+  const { t } = useTranslation('platforms');
   const [filter, setFilter]           = useState('all');
   const [query,  setQuery]            = useState('');
   const [liveCapMap, setLiveCapMap]   = useState({});
@@ -369,7 +350,7 @@ export default function PlatformsPage() {
   const displayList = useMemo(() => {
     const q = query.trim().toLowerCase();
     return PLATFORMS.filter(p => {
-      const matchesSearch = !q || searchText(p).includes(q);
+      const matchesSearch = !q || searchText(p, t).includes(q);
       const status = resolveStatus(p);
       const matchesFilter =
         filter === 'all'             ? true
@@ -381,7 +362,7 @@ export default function PlatformsPage() {
       return matchesSearch && matchesFilter;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, filter, liveCapMap, classify]);
+  }, [query, filter, liveCapMap, classify, t]);
 
   const healthyList = PLATFORMS.filter(p => classify(p.name) === 'healthy');
   const fullCount  = healthyList.filter(p => p.status === 'full').length;
@@ -406,23 +387,30 @@ export default function PlatformsPage() {
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <h1 className="text-2xl font-bold text-fg">Nền tảng được hỗ trợ</h1>
+          <h1 className="text-2xl font-bold text-fg">{t('title')}</h1>
           {liveLoading ? (
             <span className="flex items-center gap-1.5 text-xs text-fg-muted">
-              <RefreshCw size={12} className="animate-spin" /> Đang đồng bộ…
+              <RefreshCw size={12} className="animate-spin" /> {t('syncing')}
             </span>
           ) : liveCount > 0 ? (
             <span className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-full bg-success-soft border border-success/20 text-success">
-              ● LIVE · {liveCount} nền tảng
+              {t('liveCount', { count: liveCount })}
             </span>
           ) : null}
         </div>
         <p className="mt-1 text-fg-muted">
-          VidGrab hỗ trợ <strong className="text-fg">{healthyList.length}</strong> nền tảng —{' '}
-          <span className="text-success">{fullCount} đầy đủ</span>,{' '}
-          <span className="text-accent-text">{basicCount} cơ bản</span>.
+          <Trans
+            t={t}
+            i18nKey="summary"
+            count={healthyList.length}
+            values={{ full: fullCount, basic: basicCount }}
+            components={{ b: <strong className="text-fg" />, full: <span className="text-success" />, basic: <span className="text-accent-text" /> }}
+          />
           {(degradedCount + experimentalCount) > 0 && (
-            <> {degradedCount > 0 && `${degradedCount} đang gặp sự cố`}{degradedCount > 0 && experimentalCount > 0 && ', '}{experimentalCount > 0 && `${experimentalCount} đang thử nghiệm`}.</> /* wording: BA review */
+            <> {[
+              degradedCount > 0 && t('degradedCount', { n: degradedCount }),
+              experimentalCount > 0 && t('experimentalCount', { n: experimentalCount }),
+            ].filter(Boolean).join(', ')}.</> /* wording: BA review */
           )}
         </p>
 
@@ -430,14 +418,14 @@ export default function PlatformsPage() {
         <div className="mt-4 flex gap-2.5 flex-wrap">
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-success-soft border border-success/25">
             <CheckCircle size={14} className="text-success" />
-            <span className="text-sm font-semibold text-success">{fullCount} Đầy đủ</span>
+            <span className="text-sm font-semibold text-success">{t('statFull', { n: fullCount })}</span>
           </div>
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent-soft border border-accent/25">
             <Clock size={14} className="text-accent-text" />
-            <span className="text-sm font-semibold text-accent-text">{basicCount} Cơ bản</span>
+            <span className="text-sm font-semibold text-accent-text">{t('statBasic', { n: basicCount })}</span>
           </div>
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-2 border border-line">
-            <span className="text-sm font-semibold text-fg-2">🆕 {newCount} Mới thêm</span>
+            <span className="text-sm font-semibold text-fg-2">{t('statNew', { n: newCount })}</span>
           </div>
         </div>
       </div>
@@ -451,7 +439,7 @@ export default function PlatformsPage() {
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Tìm nền tảng, domain, tính năng… (vd: tiktok.com, playlist, 4K)"
+            placeholder={t('searchPlaceholder')}
             className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-surface/80 border border-line text-fg placeholder:text-fg-muted text-sm focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition-all"
           />
           {query && (
@@ -459,7 +447,7 @@ export default function PlatformsPage() {
               type="button"
               onClick={() => setQuery('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-fg-muted hover:text-fg-2 transition-colors"
-              aria-label="Xóa tìm kiếm"
+              aria-label={t('clearSearch')}
             >
               <X size={15} />
             </button>
@@ -469,12 +457,12 @@ export default function PlatformsPage() {
         {/* Category filter */}
         <div className="flex gap-2 flex-wrap">
           {[
-            { key: 'all',             label: 'Tất cả' },
-            { key: 'full',            label: '✅ Đầy đủ' },
-            { key: 'basic',           label: '🟡 Cơ bản' },
-            { key: 'cookie_required', label: '🔒 Cần cookie' },
-            { key: 'proxy_required',  label: '🌐 Có thể chậm hơn' }, // wording: BA review
-            { key: 'new',             label: '🆕 Mới' },
+            { key: 'all' },
+            { key: 'full' },
+            { key: 'basic' },
+            { key: 'cookie_required' },
+            { key: 'proxy_required' }, // wording: BA review
+            { key: 'new' },
           ].map(f => (
             <button
               key={f.key}
@@ -486,7 +474,7 @@ export default function PlatformsPage() {
                   : 'bg-surface/70 text-fg-2 border border-line hover:border-line-strong hover:text-fg'
               }`}
             >
-              {f.label}
+              {t(`filters.${f.key}`)}
             </button>
           ))}
         </div>
@@ -495,8 +483,8 @@ export default function PlatformsPage() {
         {isSearching && (
           <p className="text-xs text-fg-muted">
             {displayList.length > 0
-              ? <>{displayList.length} nền tảng phù hợp với "<span className="text-fg-2">{query}</span>"</>
-              : <>Không tìm thấy nền tảng nào cho "<span className="text-fg-2">{query}</span>"</>
+              ? <Trans t={t} i18nKey="resultsMatch" count={displayList.length} values={{ query }} components={{ q: <span className="text-fg-2" /> }} />
+              : <Trans t={t} i18nKey="resultsNone" values={{ query }} components={{ q: <span className="text-fg-2" /> }} />
             }
           </p>
         )}
@@ -506,18 +494,18 @@ export default function PlatformsPage() {
       {displayList.length === 0 ? (
         <div className="text-center py-16 text-fg-muted">
           <Search className="w-10 h-10 mx-auto mb-3 opacity-20" />
-          <p className="text-sm">Không tìm thấy nền tảng nào.</p>
-          <p className="text-xs mt-1">Thử từ khóa khác hoặc bỏ bộ lọc.</p>
+          <p className="text-sm">{t('emptyTitle')}</p>
+          <p className="text-xs mt-1">{t('emptyHint')}</p>
         </div>
       ) : (filter === 'all' && !isSearching) ? (
         <>
-          <Section title="✅ Hỗ trợ đầy đủ" platforms={full} liveCapMap={liveCapMap} classify={classify} info={info} />
+          <Section title={t('sections.full')} platforms={full} liveCapMap={liveCapMap} classify={classify} info={info} />
           {upgraded.length > 0 && (
-            <Section title="⬆️ Mới nâng cấp" platforms={upgraded} liveCapMap={liveCapMap} classify={classify} info={info} />
+            <Section title={t('sections.upgraded')} platforms={upgraded} liveCapMap={liveCapMap} classify={classify} info={info} />
           )}
-          <Section title="🟡 Hỗ trợ cơ bản" platforms={basic} liveCapMap={liveCapMap} classify={classify} info={info} />
-          <Section title="⚠️ Đang gặp sự cố" platforms={degraded} liveCapMap={liveCapMap} classify={classify} info={info} /> {/* wording: BA review */}
-          <Section title="🧪 Đang thử nghiệm" platforms={experimental} liveCapMap={liveCapMap} classify={classify} info={info} /> {/* wording: BA review */}
+          <Section title={t('sections.basic')} platforms={basic} liveCapMap={liveCapMap} classify={classify} info={info} />
+          <Section title={t('sections.degraded')} platforms={degraded} liveCapMap={liveCapMap} classify={classify} info={info} /> {/* wording: BA review */}
+          <Section title={t('sections.experimental')} platforms={experimental} liveCapMap={liveCapMap} classify={classify} info={info} /> {/* wording: BA review */}
         </>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -536,13 +524,13 @@ export default function PlatformsPage() {
       <div className="mt-8 p-4 rounded-xl bg-surface/60 border border-line">
         <p className="text-sm text-fg-muted">
           {/* wording: BA review — internal names (Admin → Cookie Pool, capability registry) removed 13/10 */}
-          <strong className="text-fg-2">Ghi chú:</strong> Một số nền tảng chỉ tải được nội dung công khai.
+          <strong className="text-fg-2">{t('noteLabel')}</strong> {t('noteBody')}
           {liveCount > 0 && (
-            <span className="ml-1 text-success"> Trạng thái được cập nhật tự động.</span>
+            <span className="ml-1 text-success">{' '}{t('autoUpdated')}</span>
           )}
         </p>
         <p className="mt-2 text-sm text-fg-muted">
-          Không tìm thấy nền tảng bạn cần? Gửi yêu cầu qua nút <strong className="text-fg-2">Góp ý &amp; Phản hồi</strong>.
+          <Trans t={t} i18nKey="requestMissing" components={{ b: <strong className="text-fg-2" /> }} />
         </p>
       </div>
     </div>

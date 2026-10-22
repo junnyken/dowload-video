@@ -18,5 +18,7 @@
   "signIn": "Đăng nhập",
   "menu": "Menu",
   "langLabel": "Ngôn ngữ",
-  "langSwitchTo": "English"
+  "langSwitchTo": "English",
+  "feedbackTitle": "Góp ý & Phản hồi",
+  "feedback": "Góp ý"
 }

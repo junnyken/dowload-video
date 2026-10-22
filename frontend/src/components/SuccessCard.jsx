@@ -17,6 +17,7 @@
  */
 
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   CheckCircle2, Download, Copy, ExternalLink, Scissors,
   Film, CloudUpload, Bookmark, X, Image, RotateCcw, Zap, Sparkles,
@@ -36,6 +37,7 @@ function fmt_duration(s) {
 }
 
 function CopyButton({ text, label, className = '' }) {
+  const { t } = useTranslation('results');
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -47,7 +49,7 @@ function CopyButton({ text, label, className = '' }) {
   return (
     <button onClick={copy} className={`flex items-center gap-1.5 ${className}`}>
       {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
-      {copied ? 'Đã sao chép' : label}
+      {copied ? t('success.copied') : label}
     </button>
   );
 }
@@ -83,6 +85,7 @@ export default function SuccessCard({
 }) {
   const [showPresetForm, setShowPresetForm] = useState(false);
   const [presetName, setPresetName] = useState('');
+  const { t } = useTranslation('results');
 
   if (!jobInfo) return null;
 
@@ -112,7 +115,7 @@ export default function SuccessCard({
         )}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-fg truncate leading-tight">
-            {title || 'Tải hoàn tất'}
+            {title || t('success.defaultTitle')}
           </p>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {platform && (
@@ -145,13 +148,13 @@ export default function SuccessCard({
             className="flex items-center gap-1.5 px-3 py-2 bg-accent hover:opacity-90 text-accent-fg text-xs font-semibold rounded-lg transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
-            Tải file
+            {t('success.download')}
           </a>
         )}
         {file_url && (
           <CopyButton
             text={file_url}
-            label="Copy link"
+            label={t('success.copyLink')}
             className="px-3 py-2 bg-surface-2 hover:bg-line text-fg-2 text-xs font-semibold rounded-lg transition-colors border border-line cursor-pointer"
           />
         )}
@@ -163,7 +166,7 @@ export default function SuccessCard({
             className="flex items-center gap-1.5 px-3 py-2 bg-surface-2 hover:bg-line text-fg-muted text-xs rounded-lg transition-colors border border-line cursor-pointer"
           >
             <ExternalLink className="w-3 h-3" />
-            Nguồn
+            {t('success.source')}
           </a>
         )}
         {onProcessing && (
@@ -172,7 +175,7 @@ export default function SuccessCard({
             className="flex items-center gap-1.5 px-3 py-2 bg-surface-2 hover:bg-line text-fg-2 text-xs font-semibold rounded-lg transition-colors border border-line cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            Xử lý thêm
+            {t('success.processMore')}
           </button>
         )}
       </div>
@@ -180,26 +183,26 @@ export default function SuccessCard({
       {/* Next best actions */}
       {nextActions.length > 0 && (
         <div className="p-3 border-b border-line">
-          <p className="text-[10px] font-semibold text-fg-muted uppercase tracking-wider mb-2">Làm gì tiếp?</p>
+          <p className="text-[10px] font-semibold text-fg-muted uppercase tracking-wider mb-2">{t('success.next')}</p>
           <div className="flex items-center gap-2 flex-wrap">
             {nextActions.includes('gif') && (
               <button
                 onClick={onGif}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer bg-surface-2 hover:bg-line text-fg-2 border border-line"
-                title="Tạo GIF từ video vừa tải"
+                title={t('success.gifTitle')}
               >
                 <Film className="w-3.5 h-3.5" />
-                Tạo GIF
+                {t('success.makeGif')}
               </button>
             )}
             {nextActions.includes('trim') && (
               <button
                 onClick={onTrim}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer bg-surface-2 hover:bg-line text-fg-2 border border-line"
-                title="Cắt đoạn video"
+                title={t('success.trimTitle')}
               >
                 <Scissors className="w-3.5 h-3.5" />
-                Cắt clip
+                {t('success.trim')}
               </button>
             )}
             {nextActions.includes('thumbnail') && (
@@ -208,7 +211,7 @@ export default function SuccessCard({
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-surface-2 hover:bg-line text-fg-2 border border-line transition-colors cursor-pointer"
               >
                 <Image className="w-3.5 h-3.5" />
-                Lấy thumbnail
+                {t('success.thumbnail')}
               </button>
             )}
             {nextActions.includes('playlist_zip') && (
@@ -217,7 +220,7 @@ export default function SuccessCard({
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-surface-2 hover:bg-line text-fg-2 border border-line transition-colors cursor-pointer"
               >
                 <Zap className="w-3.5 h-3.5" />
-                ZIP playlist
+                {t('success.zipPlaylist')}
               </button>
             )}
             {nextActions.includes('new_url') && (
@@ -226,7 +229,7 @@ export default function SuccessCard({
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-surface-2 hover:bg-line text-fg-muted border border-line transition-colors cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3" />
-                Tải link khác
+                {t('success.another')}
               </button>
             )}
           </div>
@@ -241,7 +244,7 @@ export default function SuccessCard({
             className="flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg-2 transition-colors cursor-pointer"
           >
             <Bookmark className="w-3 h-3" />
-            Lưu preset này
+            {t('success.savePreset')}
           </button>
         ) : (
           <form
@@ -257,7 +260,7 @@ export default function SuccessCard({
               autoFocus
               value={presetName}
               onChange={(e) => setPresetName(e.target.value)}
-              placeholder="Tên preset..."
+              placeholder={t('success.presetPlaceholder')}
               className="flex-1 bg-surface-2 border border-line rounded-lg px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-muted outline-none focus:border-success/60"
               maxLength={60}
             />
@@ -266,7 +269,7 @@ export default function SuccessCard({
               disabled={!presetName.trim()}
               className="px-2.5 py-1.5 bg-accent hover:opacity-90 disabled:opacity-40 text-accent-fg text-xs font-semibold rounded-lg transition-colors cursor-pointer"
             >
-              Lưu
+              {t('success.save')}
             </button>
             <button
               type="button"

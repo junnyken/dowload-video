@@ -1,0 +1,54 @@
+{
+  "copy": "Sao chép",
+  "copied": "Đã chép",
+  "copyAria": "Sao chép {{text}}",
+  "steps": {
+    "download": {
+      "title": "Tải file ZIP",
+      "body": "Nhấn nút bên dưới để tải file ZIP (phiên bản <ver/>) về máy.",
+      "button": "Tải Extension (.ZIP)"
+    },
+    "unzip": {
+      "title": "Giải nén",
+      "body": "Giải nén file ZIP ra một thư mục cố định. Đừng xoá thư mục này, trình duyệt cần nó để chạy extension."
+    },
+    "open": {
+      "title": "Mở trang tiện ích",
+      "body": "Dán địa chỉ này vào thanh địa chỉ của trình duyệt rồi nhấn Enter:"
+    },
+    "devMode": {
+      "title": "Bật chế độ nhà phát triển",
+      "body": "Bật <b>Chế độ dành cho nhà phát triển</b> (Developer mode) ở góc trên bên phải."
+    },
+    "load": {
+      "title": "Tải tiện ích đã giải nén",
+      "body": "Nhấn <b>Tải tiện ích đã giải nén</b> (Load unpacked), rồi chọn thư mục vừa giải nén."
+    },
+    "pin": {
+      "title": "Ghim extension",
+      "body": "Nhấn biểu tượng mảnh ghép trên thanh công cụ, rồi nhấn biểu tượng ghim cạnh VidGrab."
+    },
+    "update": {
+      "title": "Cập nhật phiên bản mới",
+      "body": "Tải file ZIP mới, giải nén <b>đè lên thư mục cũ</b> (hoặc xoá thư mục cũ rồi giải nén vào cùng chỗ), rồi nhấn nút tải lại (mũi tên vòng) ở thẻ VidGrab trong trang <code>chrome://extensions</code>."
+    }
+  },
+  "heroTitle": "Cài <accent>VidGrab</accent> Extension",
+  "heroSub": "Tải video 1 click ngay trên trang TikTok, YouTube, Facebook và nhiều nền tảng khác — không cần copy link.",
+  "download": "Tải Extension (.ZIP)",
+  "telegram": "Nhận qua Telegram",
+  "platformsAria": "Nền tảng hỗ trợ",
+  "supportedFrom": "Hỗ trợ tải từ",
+  "platformListAria": "Danh sách nền tảng",
+  "installHeading": "Hướng dẫn cài đặt",
+  "updateNoteAria": "Về việc cập nhật",
+  "updateNoteTitle": "Extension cài thủ công không tự cập nhật",
+  "updateNoteBody1": "Vì cài từ file ZIP (không qua Chrome Web Store), trình duyệt sẽ không tự nâng cấp VidGrab.",
+  "updateNoteBody2": "Khi có phiên bản mới, popup của extension sẽ hiện một thanh thông báo «Có bản tiện ích mới» kèm nút Tải về.",
+  "updateNoteBody3": "Để cập nhật: tải ZIP mới, giải nén đè lên thư mục cũ rồi nhấn nút tải lại ở thẻ VidGrab trong <mono>chrome://extensions</mono>.",
+  "otherBrowsersAria": "Trình duyệt khác",
+  "otherBrowsers": "Edge, Cốc Cốc và Brave cài tương tự. Trên Edge dùng <mono>edge://extensions</mono>, trên Brave dùng <mono2>brave://extensions</mono2>.",
+  "tgHeading": "Nhận file qua Telegram Bot",
+  "tgBody": "Nhận bất kỳ nội dung → bot tự gửi file ZIP + hướng dẫn cài đặt chi tiết.",
+  "tgOpen": "Mở Telegram Bot"
+}

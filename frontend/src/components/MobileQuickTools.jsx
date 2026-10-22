@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 
 const TWO_HOURS = 2 * 60 * 60 * 1000;
@@ -7,52 +8,52 @@ const tools = [
   {
     id: 'trim',
     emoji: '✂️',
-    label: 'Cắt clip',
-    desc: 'Trim video nhanh',
+    labelKey: 'quickTools.trim.label',
+    descKey: 'quickTools.trim.desc',
     event: 'vidgrab:open-tool:trim',
   },
   {
     id: 'audio',
     emoji: '🎵',
-    label: 'Trích MP3',
-    desc: 'Xuất âm thanh',
+    labelKey: 'quickTools.audio.label',
+    descKey: 'quickTools.audio.desc',
     event: 'vidgrab:open-tool:audio',
   },
   {
     id: 'gif',
     emoji: '🎞️',
-    label: 'Tạo GIF',
-    desc: 'Xuất ảnh động',
+    labelKey: 'quickTools.gif.label',
+    descKey: 'quickTools.gif.desc',
     event: 'vidgrab:open-tool:gif',
   },
   {
     id: 'subtitle',
     emoji: '📝',
-    label: 'Phụ đề',
-    desc: 'Tải hoặc đốt phụ đề',
+    labelKey: 'quickTools.subtitle.label',
+    descKey: 'quickTools.subtitle.desc',
     event: 'vidgrab:open-tool:subtitle',
   },
   {
     id: 'cloud',
     emoji: '☁️',
-    label: 'Lưu Cloud',
+    labelKey: 'quickTools.cloud.label',
     hidden: true, // temporarily hidden, same as the result-card button
-    desc: 'Drive/Dropbox',
+    descKey: 'quickTools.cloud.desc',
     event: 'vidgrab:open-tool:cloud',
   },
   {
     id: 'full',
     emoji: '🖥️',
-    label: 'Bản đầy đủ',
-    desc: 'Mở tất cả công cụ',
+    labelKey: 'quickTools.full.label',
+    descKey: 'quickTools.full.desc',
     event: null,
   },
 ];
 
 function Toast({ message, onDone }) {
   useEffect(() => {
-    const t = setTimeout(onDone, 2500);
-    return () => clearTimeout(t);
+    const timer = setTimeout(onDone, 2500);
+    return () => clearTimeout(timer);
   }, [onDone]);
 
   return (
@@ -63,6 +64,7 @@ function Toast({ message, onDone }) {
 }
 
 export default function MobileQuickTools({ show, onClose, onNavigate }) {
+  const { t } = useTranslation('mobile');
   const [visible, setVisible]       = useState(false);
   const [toast, setToast]           = useState('');
   const [recentDownload, setRecentDownload] = useState(null);
@@ -87,8 +89,8 @@ export default function MobileQuickTools({ show, onClose, onNavigate }) {
       } catch {
         setRecentDownload(null);
       }
-      const t = requestAnimationFrame(() => setVisible(true));
-      return () => cancelAnimationFrame(t);
+      const raf = requestAnimationFrame(() => setVisible(true));
+      return () => cancelAnimationFrame(raf);
     } else {
       setVisible(false);
     }
@@ -101,7 +103,7 @@ export default function MobileQuickTools({ show, onClose, onNavigate }) {
 
   const handleTool = (tool) => {
     if (!recentDownload && tool.id !== 'full') {
-      setToast('Tải video trước để dùng công cụ này');
+      setToast(t('quickTools.needDownload'));
       return;
     }
 
@@ -138,7 +140,7 @@ export default function MobileQuickTools({ show, onClose, onNavigate }) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Công cụ nhanh"
+        aria-label={t('quickTools.title')}
         className={`fixed inset-x-0 bottom-0 z-[73] bg-surface/98 backdrop-blur-xl rounded-t-3xl shadow-[0_-8px_40px_rgba(0,0,0,0.4)] transition-transform duration-300 ease-out ${
           visible ? 'translate-y-0' : 'translate-y-full'
         }`}
@@ -151,13 +153,13 @@ export default function MobileQuickTools({ show, onClose, onNavigate }) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-line">
           <div>
-            <h2 className="text-fg font-semibold text-base">Công cụ nhanh</h2>
-            <p className="text-fg-muted text-xs mt-0.5">Chọn công cụ để xử lý video vừa tải</p>
+            <h2 className="text-fg font-semibold text-base">{t('quickTools.title')}</h2>
+            <p className="text-fg-muted text-xs mt-0.5">{t('quickTools.hint')}</p>
           </div>
           <button
             onClick={handleClose}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-2 text-fg-muted hover:text-fg hover:bg-line transition-colors"
-            aria-label="Đóng"
+            aria-label={t('close')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -169,7 +171,7 @@ export default function MobileQuickTools({ show, onClose, onNavigate }) {
             <span className="text-accent-text text-lg">⬇️</span>
             <div className="flex-1 min-w-0">
               <p className="text-accent-text text-xs font-semibold truncate">
-                {recentDownload.title || 'Video vừa tải'}
+                {recentDownload.title || t('quickTools.recentFallback')}
               </p>
               <p className="text-fg-muted text-[10px] truncate">{recentDownload.url}</p>
             </div>
@@ -187,9 +189,9 @@ export default function MobileQuickTools({ show, onClose, onNavigate }) {
               <span className="text-2xl">{tool.emoji}</span>
               <div className="text-center">
                 <p className="text-fg text-xs font-semibold group-hover:text-accent-text transition-colors">
-                  {tool.label}
+                  {t(tool.labelKey)}
                 </p>
-                <p className="text-fg-muted text-[10px] mt-0.5 leading-tight">{tool.desc}</p>
+                <p className="text-fg-muted text-[10px] mt-0.5 leading-tight">{t(tool.descKey)}</p>
               </div>
             </button>
           ))}

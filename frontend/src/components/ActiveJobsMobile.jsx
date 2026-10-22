@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { RefreshCw, Download, RotateCcw, Home, Loader2 } from 'lucide-react';
 import { API_BASE } from '../lib/apiBase';
@@ -19,15 +20,15 @@ function getPlatform(platform) {
   return PLATFORM_MAP[key] || { emoji: '🌐', label: 'Video' };
 }
 
-function getElapsed(createdAt) {
+function getElapsed(createdAt, t) {
   const diff = Date.now() - new Date(createdAt).getTime();
   const secs = Math.floor(diff / 1000);
-  if (secs < 10) return 'vừa xong';
-  if (secs < 60) return `${secs} giây trước`;
+  if (secs < 10) return t('jobs.elapsed.justNow');
+  if (secs < 60) return t('jobs.elapsed.seconds', { count: secs });
   const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins} phút trước`;
+  if (mins < 60) return t('jobs.elapsed.minutes', { count: mins });
   const hrs = Math.floor(mins / 60);
-  return `${hrs} giờ trước`;
+  return t('jobs.elapsed.hours', { count: hrs });
 }
 
 function formatBytes(bytes) {
@@ -37,11 +38,12 @@ function formatBytes(bytes) {
 }
 
 function StatusChip({ status }) {
+  const { t } = useTranslation('mobile');
   if (status === 'processing' || status === 'pending') {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent-soft text-accent-text text-[10px] font-semibold">
         <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-        {status === 'pending' ? 'Chờ xử lý' : 'Đang xử lý'}
+        {status === 'pending' ? t('jobs.status.pending') : t('jobs.status.processing')}
       </span>
     );
   }
@@ -49,19 +51,20 @@ function StatusChip({ status }) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-success-soft text-success text-[10px] font-semibold">
         <span className="w-1.5 h-1.5 rounded-full bg-success" />
-        Hoàn thành
+        {t('jobs.status.completed')}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-danger-soft text-danger text-[10px] font-semibold">
       <span className="w-1.5 h-1.5 rounded-full bg-danger" />
-      Thất bại
+      {t('jobs.status.failed')}
     </span>
   );
 }
 
 function JobCard({ job, onRetry }) {
+  const { t } = useTranslation('mobile');
   const plat = getPlatform(job.platform);
   const isActive = job.status === 'processing' || job.status === 'pending';
   const isDone = job.status === 'completed';
@@ -77,7 +80,7 @@ function JobCard({ job, onRetry }) {
       {/* Content */}
       <div className="flex-1 min-w-0">
         <p className="text-fg text-sm font-medium line-clamp-2 leading-snug">
-          {job.title || job.original_url || 'Video không có tiêu đề'}
+          {job.title || job.original_url || t('jobs.untitled')}
         </p>
 
         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
@@ -85,7 +88,7 @@ function JobCard({ job, onRetry }) {
           {job.file_size > 0 && isDone && (
             <span className="text-fg-muted text-[10px]">{formatBytes(job.file_size)}</span>
           )}
-          <span className="text-fg-muted text-[10px]">{getElapsed(job.created_at)}</span>
+          <span className="text-fg-muted text-[10px]">{getElapsed(job.created_at, t)}</span>
         </div>
 
         {/* Progress bar for active jobs */}
@@ -106,7 +109,7 @@ function JobCard({ job, onRetry }) {
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-soft border border-accent/30 text-accent-text text-xs font-semibold hover:bg-accent/20 transition-colors"
             >
               <Download className="w-3.5 h-3.5" />
-              Tải về
+              {t('jobs.download')}
             </a>
           )}
           {isFailed && job.original_url && (
@@ -115,7 +118,7 @@ function JobCard({ job, onRetry }) {
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-2 border border-line-strong text-fg-2 text-xs font-semibold hover:bg-line transition-colors"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              Thử lại
+              {t('jobs.retry')}
             </button>
           )}
         </div>
@@ -139,6 +142,7 @@ function Section({ title, jobs, onRetry }) {
 }
 
 export default function ActiveJobsMobile({ onNavigate, onActiveCountChange }) {
+  const { t } = useTranslation('mobile');
   const { isAuthenticated, session } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [loadingState, setLoadingState] = useState('idle'); // idle | loading | loaded | error
@@ -216,12 +220,12 @@ export default function ActiveJobsMobile({ onNavigate, onActiveCountChange }) {
     return (
       <div className="min-h-screen bg-canvas flex flex-col items-center justify-center gap-4 px-6">
         <div className="text-4xl">🔐</div>
-        <p className="text-fg-2 text-center text-sm">Đăng nhập để xem lịch sử tải</p>
+        <p className="text-fg-2 text-center text-sm">{t('jobs.loginPrompt')}</p>
         <button
           onClick={() => onNavigate('landing', '/')}
           className="px-5 py-2.5 rounded-xl bg-accent text-accent-fg text-sm font-bold"
         >
-          Về trang chủ
+          {t('jobs.home')}
         </button>
       </div>
     );
@@ -232,9 +236,9 @@ export default function ActiveJobsMobile({ onNavigate, onActiveCountChange }) {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-lg font-bold text-fg">Tác vụ tải</h1>
+          <h1 className="text-lg font-bold text-fg">{t('jobs.title')}</h1>
           {activeJobs.length > 0 && (
-            <p className="text-xs text-fg-muted mt-0.5">{activeJobs.length} đang xử lý</p>
+            <p className="text-xs text-fg-muted mt-0.5">{t('jobs.activeCount', { count: activeJobs.length })}</p>
           )}
         </div>
         <button
@@ -243,7 +247,7 @@ export default function ActiveJobsMobile({ onNavigate, onActiveCountChange }) {
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface/80 border border-line text-fg-2 text-xs font-medium hover:bg-surface-2 transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-          Làm mới
+          {t('jobs.refresh')}
         </button>
       </div>
 
@@ -268,12 +272,12 @@ export default function ActiveJobsMobile({ onNavigate, onActiveCountChange }) {
       {/* Error */}
       {loadingState === 'error' && (
         <div className="text-center py-12 text-fg-muted text-sm">
-          <p>Không thể tải dữ liệu. Vui lòng thử lại.</p>
+          <p>{t('jobs.loadError')}</p>
           <button
             onClick={handleRefresh}
             className="mt-3 px-4 py-2 rounded-xl border border-line-strong text-xs hover:bg-surface-2 transition-colors"
           >
-            Thử lại
+            {t('jobs.retry')}
           </button>
         </div>
       )}
@@ -283,15 +287,15 @@ export default function ActiveJobsMobile({ onNavigate, onActiveCountChange }) {
         <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
           <div className="text-5xl">📭</div>
           <div>
-            <p className="text-fg-2 font-medium">Chưa có tác vụ nào đang xử lý</p>
-            <p className="text-fg-muted text-sm mt-1">Tải video để xem tiến trình ở đây</p>
+            <p className="text-fg-2 font-medium">{t('jobs.empty.title')}</p>
+            <p className="text-fg-muted text-sm mt-1">{t('jobs.empty.hint')}</p>
           </div>
           <button
             onClick={() => onNavigate('landing', '/')}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent text-accent-fg text-sm font-bold shadow-md"
           >
             <Home className="w-4 h-4" />
-            Về trang chủ
+            {t('jobs.home')}
           </button>
         </div>
       )}
@@ -299,9 +303,9 @@ export default function ActiveJobsMobile({ onNavigate, onActiveCountChange }) {
       {/* Job sections */}
       {loadingState === 'loaded' && totalVisible > 0 && (
         <div className="flex flex-col gap-6">
-          <Section title="Đang xử lý" jobs={activeJobs} onRetry={handleRetry} />
-          <Section title="Vừa xong" jobs={recentDone} onRetry={handleRetry} />
-          <Section title="Thất bại" jobs={failedJobs} onRetry={handleRetry} />
+          <Section title={t('jobs.status.processing')} jobs={activeJobs} onRetry={handleRetry} />
+          <Section title={t('jobs.sections.recent')} jobs={recentDone} onRetry={handleRetry} />
+          <Section title={t('jobs.status.failed')} jobs={failedJobs} onRetry={handleRetry} />
         </div>
       )}
     </div>

@@ -3,10 +3,12 @@ import { History, Settings2, BarChart2, LogOut, ChevronDown, Crown, ListVideo, A
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { API_BASE } from '../lib/apiBase';
+import { useTranslation } from 'react-i18next';
 
 export default function AccountMenu({ onNavigate }) {
   const { user, session, signOut, isAuthenticated } = useAuth();
   const { can } = useWorkspace();
+  const { t } = useTranslation('auth');
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -50,7 +52,7 @@ export default function AccountMenu({ onNavigate }) {
 
   const displayName = user?.user_metadata?.display_name
     || user?.email?.split('@')[0]
-    || 'Tài khoản';
+    || t('menu.account');
 
   const avatar = user?.user_metadata?.avatar_url;
 
@@ -106,12 +108,12 @@ export default function AccountMenu({ onNavigate }) {
               <p className="text-xs text-fg-muted mb-1.5">
                 <span className="text-fg font-medium">{usage.used}</span>
                 {usage.unlimited
-                  ? <span className="text-accent-text font-medium"> / Không giới hạn</span>
-                  : <> / {usage.limit} lượt hôm nay{usage.platformLabel ? ` · ${usage.platformLabel}` : ''}</>
+                  ? <span className="text-accent-text font-medium"> / {t('menu.unlimited')}</span>
+                  : <> / {usage.limit} {t('menu.usedToday')}{usage.platformLabel ? ` · ${usage.platformLabel}` : ''}</>
                 }
               </p>
               {usage.perPlatform && !usage.unlimited && (
-                <p className="text-[10px] text-fg-muted mb-1.5">Giới hạn tính riêng cho từng nền tảng</p>
+                <p className="text-[10px] text-fg-muted mb-1.5">{t('menu.perPlatformNote')}</p>
               )}
               <div className="h-1 w-full rounded-full bg-surface-2 overflow-hidden">
                 <div
@@ -128,37 +130,37 @@ export default function AccountMenu({ onNavigate }) {
 
           {/* Nav items */}
           <div className="py-1">
-            <MenuItem icon={<History className="w-4 h-4" />} label="Lịch sử tải"
+            <MenuItem icon={<History className="w-4 h-4" />} label={t('menu.history')}
               onClick={() => nav('history', '/history')} />
-            <MenuItem icon={<Archive className="w-4 h-4" />} label="Archive"
+            <MenuItem icon={<Archive className="w-4 h-4" />} label={t('menu.archive')}
               onClick={() => nav('archive', '/archive')} />
-            <MenuItem icon={<Calendar className="w-4 h-4" />} label="Lịch Tải"
+            <MenuItem icon={<Calendar className="w-4 h-4" />} label={t('menu.schedule')}
               onClick={() => nav('schedule', '/schedule')} />
-            <MenuItem icon={<ListVideo className="w-4 h-4" />} label="Playlists"
+            <MenuItem icon={<ListVideo className="w-4 h-4" />} label={t('menu.playlists')}
               onClick={() => nav('playlists', '/playlists')} />
-            <MenuItem icon={<BarChart2 className="w-4 h-4" />} label="Analytics"
+            <MenuItem icon={<BarChart2 className="w-4 h-4" />} label={t('menu.analytics')}
               onClick={() => nav('analytics', '/analytics')} />
-            <MenuItem icon={<Languages className="w-4 h-4" />} label="Phụ đề & Phiên âm"
+            <MenuItem icon={<Languages className="w-4 h-4" />} label={t('menu.subtitleHub')}
               onClick={() => nav('subtitle-hub', '/phu-de')} />
           </div>
           <div className="py-1 border-t border-line">
-            <MenuItem icon={<Settings2 className="w-4 h-4" />} label="Preferences"
+            <MenuItem icon={<Settings2 className="w-4 h-4" />} label={t('menu.preferences')}
               onClick={() => nav('preferences', '/preferences')} />
-            <MenuItem icon={<BarChart2 className="w-4 h-4" />} label="Quota & Usage"
+            <MenuItem icon={<BarChart2 className="w-4 h-4" />} label={t('menu.usage')}
               onClick={() => nav('usage', '/usage')} />
           </div>
           {(can('workspace.settings') || can('audit.read') || can('approvals.manage')) && (
             <div className="py-1 border-t border-line">
               {can('workspace.settings') && (
-                <MenuItem icon={<Building2 className="w-4 h-4" />} label="Workspace"
+                <MenuItem icon={<Building2 className="w-4 h-4" />} label={t('menu.workspace')}
                   onClick={() => nav('workspace-settings', '/workspace-settings')} />
               )}
               {can('audit.read') && (
-                <MenuItem icon={<Shield className="w-4 h-4" />} label="Audit Log"
+                <MenuItem icon={<Shield className="w-4 h-4" />} label={t('menu.audit')}
                   onClick={() => nav('audit', '/audit')} />
               )}
               {can('approvals.manage') && (
-                <MenuItem icon={<ClipboardCheck className="w-4 h-4" />} label="Phê duyệt"
+                <MenuItem icon={<ClipboardCheck className="w-4 h-4" />} label={t('menu.approvals')}
                   onClick={() => nav('approvals', '/approvals')} />
               )}
             </div>
@@ -172,14 +174,14 @@ export default function AccountMenu({ onNavigate }) {
                 className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg bg-surface-2 border border-accent/20 hover:border-accent/40 transition-colors text-left"
               >
                 <Crown className="w-3.5 h-3.5 text-accent-text" />
-                <span className="text-accent-text text-xs font-semibold">Nâng cấp Pro</span>
+                <span className="text-accent-text text-xs font-semibold">{t('menu.upgrade')}</span>
               </button>
             </div>
           )}
 
           {/* Sign out */}
           <div className="py-1 border-t border-line">
-            <MenuItem icon={<LogOut className="w-4 h-4" />} label="Đăng xuất"
+            <MenuItem icon={<LogOut className="w-4 h-4" />} label={t('menu.signOut')}
               onClick={handleSignOut} danger />
           </div>
         </div>

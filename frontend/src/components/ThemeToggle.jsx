@@ -1,10 +1,12 @@
 import { Sun, Moon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../hooks/useTheme';
 
 export default function ThemeToggle() {
+  const { t } = useTranslation('mobile');
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
-  const label = isDark ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối';
+  const label = isDark ? t('theme.toLight') : t('theme.toDark');
   return (
     <button
       type="button"

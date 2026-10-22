@@ -1,0 +1,58 @@
+{
+  "alertSignInToClear": "Cần đăng nhập để xóa lịch sử tải.",
+  "confirmClearAll": "Bạn có chắc chắn muốn xóa tất cả lịch sử?",
+  "exportNeedSignIn": "Xuất thất bại — bạn cần đăng nhập.",
+  "exportFailed": "Xuất thất bại.",
+  "expired": "Hết hạn",
+  "daysLeft": "Còn {{days}}d",
+  "status": {
+    "success": "Thành công",
+    "failed": "Thất bại",
+    "abandoned": "Đã từ bỏ",
+    "processing": "Đang xử lý",
+    "cancelled": "Đã hủy",
+    "expiredStatus": "Hết hạn",
+    "metadataOnly": "Chỉ metadata",
+    "archived": "Đã lưu trữ",
+    "queued": "Trong hàng đợi",
+    "pending": "Chờ xử lý",
+    "waiting": "Chờ"
+  },
+  "justNow": "Vừa xong",
+  "minutesAgo_other": "{{count}} phút trước",
+  "hoursAgo_other": "{{count}} giờ trước",
+  "title": "Lịch sử tải xuống",
+  "subtitle": "Xem và quản lý tất cả các lần tải trước đây",
+  "refresh": "Làm mới",
+  "export": "Xuất",
+  "clearAll": "Xóa tất cả",
+  "tabs": {
+    "all": "Tất cả",
+    "today": "Hôm nay",
+    "recent": "7 ngày",
+    "failed": "Thất bại"
+  },
+  "searchPlaceholder": "Tìm theo URL, tiêu đề hoặc Batch ID...",
+  "filter": {
+    "all": "Tất cả",
+    "success": "Thành công",
+    "failed": "Thất bại"
+  },
+  "allPlatforms": "Tất cả nền tảng",
+  "offlineCached": "Đang hiển thị dữ liệu đã lưu — kết nối lại để cập nhật",
+  "loading": "Đang tải lịch sử...",
+  "emptyNoResults": "Không tìm thấy kết quả",
+  "emptyNone": "Chưa có lịch sử tải xuống",
+  "emptyTryOther": "Thử từ khóa khác",
+  "emptyHint": "Các file đã tải xong sẽ hiển thị ở đây",
+  "col": {
+    "titleUrl": "Tiêu đề / URL",
+    "status": "Trạng thái",
+    "time": "Thời gian",
+    "actions": "Hành động"
+  },
+  "redownload": "Tải lại",
+  "rerunUrl": "Tải lại URL này",
+  "copyUrl": "Copy URL gốc",
+  "loadMore": "Tải thêm"
+}

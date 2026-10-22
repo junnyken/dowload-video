@@ -1,0 +1,49 @@
+{
+  "unlimitedPerDay": "không giới hạn lượt",
+  "quota_exceeded_daily": {
+    "title": "Đã đạt giới hạn hôm nay",
+    "subtitle": "Gói hiện tại: {{have}}/ngày. Pro: {{pro}}/ngày.",
+    "fallback": "Nâng cấp Pro để có thêm lượt tải mỗi ngày."
+  },
+  "tier_limit_quality": {
+    "title": "Chất lượng này dành cho Pro",
+    "subtitle": "Gói hiện tại tải tối đa {{have}}. Pro tải tối đa {{pro}}.",
+    "fallback": "Nâng cấp Pro để chọn chất lượng cao hơn."
+  },
+  "tier_limit_batch": {
+    "title": "Đã vượt số link được dán một lần",
+    "subtitle": "Gói hiện tại: tối đa {{have}} link. Pro: tối đa {{pro}} link.",
+    "fallback": "Nâng cấp Pro để dán được nhiều link hơn."
+  },
+  "tier_required_feature": {
+    "title": "Tính năng Pro",
+    "subtitle": "Tính năng này chỉ dành cho thành viên Pro."
+  },
+  "youtube_pro_only": {
+    "title": "Đã đạt giới hạn YouTube",
+    "subtitle": "Gói hiện tại: {{limit}} video/ngày{{extra}}.",
+    "unlimited": "không giới hạn",
+    "upTo": ", đến {{quality}}",
+    "fallback": "Nâng cấp Pro để có thêm hạn mức YouTube."
+  },
+  "spotify_artist_full": {
+    "title": "Spotify nghệ sĩ: giới hạn số bài",
+    "subtitle": "Gói hiện tại: đến {{have}} bài. Pro: đến {{pro}} bài.",
+    "fallback": "Nâng cấp Pro để tải được nhiều bài hơn."
+  },
+  "bulk_zip_pro": {
+    "title": "Tải ZIP dành cho Pro",
+    "subtitle": "Đóng gói cả lượt tải thành một tệp ZIP chỉ dành cho thành viên Pro."
+  },
+  "default": {
+    "title": "Nâng cấp Pro",
+    "subtitle": "Xem các gói và quyền lợi của từng gói."
+  },
+  "yes": "Có",
+  "no": "Không",
+  "close": "Đóng",
+  "feature": "Tính năng",
+  "viewPricing": "Xem bảng giá Pro →",
+  "later": "Để sau",
+  "perDay_other": "{{count}} lượt"
+}

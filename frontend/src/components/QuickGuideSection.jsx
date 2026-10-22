@@ -1,57 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { hasUsedBefore } from '../lib/returningUser';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
-// ── Guide content data ─────────────────────────────────────────────
-const GUIDE_CONTENT = {
-  single: {
-    label: 'Tải 1 video',
-    title: 'Cách tải video hoặc nhạc nhanh',
-    description: 'Dành cho nhu cầu tải từng link riêng lẻ.',
-    steps: [
-      'Dán link video hoặc bài nhạc vào ô nhập.',
-      'Chọn định dạng: MP4 HD, 4K hoặc MP3.',
-      'Bật Bỏ watermark (chỉ TikTok / Douyin) hoặc Tải phụ đề nếu cần.',
-      'Nhấn "Bóc tách ngay", chờ xử lý và tải file về.',
-    ],
-    notes: [
-      'TikTok / Douyin: tải không watermark. Hỗ trợ YouTube, Instagram, Facebook, Spotify, SoundCloud và nhiều nền tảng khác.',
-    ],
-  },
-  bulk: {
-    label: 'Tải hàng loạt',
-    title: 'Cách tải nhiều link cùng lúc',
-    description: 'Phù hợp khi cần xử lý nhiều URL trong một lần.',
-    steps: [
-      'Dán nhiều link (mỗi dòng một URL), hoặc từ file .txt/.csv.',
-      'Chọn định dạng đầu ra cho toàn bộ danh sách.',
-      'Nhấn bắt đầu, hệ thống xử lý lần lượt theo đợt.',
-      'Sau khi xong, tải từng file, sao chép link hoặc tải ZIP.',
-    ],
-    notes: [
-      'Phù hợp khi cần tải nhiều video từ nhiều link khác nhau.',
-      'Link tải có thời hạn, nên tải ngay sau khi xử lý xong.',
-    ],
-  },
-  channel: {
-    label: 'Tải cả kênh',
-    title: 'Cách quét và tải video từ kênh',
-    description: 'Dùng khi muốn lấy nhiều video từ kênh, profile hoặc playlist.',
-    steps: [
-      'Chuyển sang tab "Tải Hàng Loạt".',
-      'Dán link kênh, profile hoặc playlist vào ô nhập.',
-      'Bật Channel Mode để quét video từ kênh thay vì tải 1 link.',
-      'Chọn số video muốn lấy: 10, 20, 50, 100, 200, 500 hoặc tự nhập.',
-      'Nhấn bắt đầu, theo dõi tiến trình và tải kết quả sau khi xong.',
-    ],
-    notes: [
-      'Hỗ trợ YouTube, TikTok, Instagram profile, Facebook videos.',
-      'Lần đầu nên chọn 10–50 video để kiểm tra nhanh hơn.',
-      'Hệ thống xử lý theo đợt để tránh giới hạn nền tảng.',
-    ],
-  },
-};
-
+// Guide copy (label/title/description/steps/notes per tab) lives in
+// locales/<lang>/guide.json under single / bulk / channel.
 const TAB_KEYS = ['single', 'bulk', 'channel'];
 
 // Maps parent tool tab → guide tab key
@@ -65,8 +18,9 @@ function resolveInitialTab(effectiveToolTab, defaultGuideTab) {
 // ── Subcomponents ──────────────────────────────────────────────────
 
 function GuideTabPills({ activeTab, onSelect }) {
+  const { t } = useTranslation('guide');
   return (
-    <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Loại hướng dẫn">
+    <div className="flex flex-wrap gap-1.5" role="tablist" aria-label={t('tabsLabel')}>
       {TAB_KEYS.map((key) => {
         const isActive = activeTab === key;
         return (
@@ -86,7 +40,7 @@ function GuideTabPills({ activeTab, onSelect }) {
                 : 'bg-surface border border-line text-fg-2 hover:text-fg hover:border-line-strong',
             ].join(' ')}
           >
-            {GUIDE_CONTENT[key].label}
+            {t(`${key}.label`)}
           </button>
         );
       })}
@@ -121,7 +75,14 @@ function GuideNotes({ notes }) {
 }
 
 function GuidePanel({ tabKey, visible }) {
-  const content = GUIDE_CONTENT[tabKey];
+  const { t } = useTranslation('guide');
+  const content = {
+    label: t(`${tabKey}.label`),
+    title: t(`${tabKey}.title`),
+    description: t(`${tabKey}.description`),
+    steps: t(`${tabKey}.steps`, { returnObjects: true }),
+    notes: t(`${tabKey}.notes`, { returnObjects: true }),
+  };
   return (
     <div
       role="tabpanel"
@@ -180,6 +141,7 @@ export default function QuickGuideSection({
   defaultGuideTab,
   onGuideTabChange,
 }) {
+  const { t } = useTranslation('guide');
   const effectiveToolTab = currentToolTab ?? activeToolTab;
 
   const [activeGuide, setActiveGuide] = useState(() =>
@@ -254,18 +216,18 @@ export default function QuickGuideSection({
         {/* Header */}
         <div className="flex items-center justify-between mb-3 gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <p className="text-xs font-mono font-semibold text-fg whitespace-nowrap">{'// Hướng dẫn nhanh \\\\'}</p>
+            <p className="text-xs font-mono font-semibold text-fg whitespace-nowrap">{t('header')}</p>
             <p className="hidden sm:block text-xs text-fg-muted truncate">
-              Người mới làm theo từng bước dưới đây.
+              {t('subhead')}
             </p>
           </div>
           <button
             onClick={() => setIsExpanded((v) => !v)}
             className="flex-shrink-0 flex items-center gap-1 px-2 py-1.5 sm:py-1 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-2 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-line-strong"
-            aria-label={isExpanded ? 'Thu gọn hướng dẫn' : 'Mở rộng hướng dẫn'}
+            aria-label={isExpanded ? t('collapseAria') : t('expandAria')}
             aria-expanded={isExpanded}
           >
-            <span className="text-xs">{isExpanded ? 'Thu gọn' : 'Xem bước'}</span>
+            <span className="text-xs">{isExpanded ? t('collapse') : t('expand')}</span>
             {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
         </div>

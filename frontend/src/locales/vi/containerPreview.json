@@ -1,0 +1,99 @@
+{
+  "retry": "Thử lại",
+  "scanning": "Đang quét nội dung...",
+  "discoveryFailed": "Discovery thất bại.",
+  "itemCount": "{{count}} mục",
+  "partialBanner": "Kết quả một phần — quét chưa hoàn toàn (timeout hoặc rate limit). Các mục đã tìm được vẫn có thể tải.",
+  "noItems": "Không có mục nào để hiển thị.",
+  "exportCsv": "Xuất CSV",
+  "selectedCount": "<b>{{count}}</b> đã chọn",
+  "noneSelected": "Chưa chọn mục nào",
+  "quality": {
+    "best": "Video (chất lượng tốt nhất)"
+  },
+  "status": {
+    "ready": "Sẵn sàng",
+    "partial": "Một phần",
+    "discovering": "Đang quét...",
+    "resolving": "Đang nhận diện…",
+    "queued": "Đang xếp hàng…",
+    "failed": "Thất bại",
+    "expired": "Hết hạn",
+    "pending": "Đang chờ"
+  },
+  "toolbar": {
+    "selectAll": "Chọn tất cả ({{count}})",
+    "latest": "{{count}} mới nhất",
+    "clear": "Bỏ chọn"
+  },
+  "queue": {
+    "youtubeDisabled": "YouTube download chưa khả dụng. Tính năng queue bị tạm khóa.",
+    "cookieInvalid": "Cookie không hợp lệ. Cập nhật cookie để sử dụng tính năng queue.",
+    "queuing": "Đang queue...",
+    "button": "Queue {{n}}"
+  },
+  "filter": {
+    "allTypes": "Tất cả loại",
+    "audio": "Âm thanh",
+    "image": "Ảnh",
+    "sortDefault": "Mặc định",
+    "sortViews": "Lượt xem nhiều nhất",
+    "sortDurationAsc": "Thời lượng: ngắn nhất",
+    "sortDurationDesc": "Thời lượng: dài nhất"
+  },
+  "section": {
+    "httpError": "Lỗi HTTP {{status}}",
+    "expandFailed": "Không thể mở rộng phần này.",
+    "notLoaded": "(chưa tải)",
+    "expandError": "(lỗi mở rộng)",
+    "deselect": "Bỏ chọn phần này",
+    "select": "Chọn phần này",
+    "hasMore": "Còn nhiều mục hơn — nhấn \"Expand\" để tải thêm.",
+    "empty": "Phần này không có mục nào.",
+    "tracks": "{{count}} tracks",
+    "expandHint": "Nhấn vào phần này để mở rộng và chọn từng mục."
+  },
+  "expired": {
+    "title": "Session đã hết hạn",
+    "body": "Kết quả khám phá trước đã hết TTL.",
+    "rediscover": "Khám phá lại"
+  },
+  "queueSuccess": {
+    "title": "Đã đưa vào hàng đợi!",
+    "accepted": "{{count}} mục được xếp hàng.",
+    "dropped": "{{count}} mục bị loại (trùng lặp)."
+  },
+  "gate": {
+    "platformFallback": "Nền tảng",
+    "cookieUnavailable": {
+      "title": "Chưa cấu hình cookie",
+      "body": "{{platform}} yêu cầu cookie đăng nhập nhưng chưa được cấu hình. Liên hệ admin để thêm cookie vào hệ thống (Cài đặt → Cookie)."
+    },
+    "cookieExpired": {
+      "title": "Cookie đã hết hạn",
+      "body": "Cookie {{platform}} đã hết hạn. Vui lòng cập nhật cookie trong Cài đặt → Cookie → {{platform}}."
+    },
+    "cookieBlocked": {
+      "title": "Cookie tạm thời bị khoá",
+      "body": "{{platform}} đã rate-limit hoặc phát hiện bot. Cookie sẽ tự mở khoá sau 15 phút (soft block) hoặc 6 giờ (hard block). Thử lại sau."
+    },
+    "cookiePartial": {
+      "title": "Nội dung một phần",
+      "body": "Nội dung công khai hiển thị đầy đủ. Một số bài đăng yêu cầu đăng nhập và có thể bị bỏ qua khi queue."
+    },
+    "singleDisabled": {
+      "title": "YouTube single video tạm thời không khả dụng",
+      "body": "YouTube download qua server hiện bị bot-block. Thay vào đó, hãy dán link <strong>channel</strong> hoặc <strong>playlist</strong> để dùng tính năng Bulk Browse (cần proxy residential được cấu hình)."
+    },
+    "proxyBad": {
+      "title": "YouTube proxy hiện không hoạt động",
+      "body": "YTDL_PROXY được cấu hình nhưng không kết nối được. Hệ thống sẽ tự thử lại sau vài phút. Nếu vẫn lỗi, liên hệ admin để kiểm tra proxy."
+    },
+    "generic": {
+      "cookieTitle": "Cần đăng nhập để dùng tính năng này",
+      "proxyTitle": "Cần proxy để dùng tính năng này",
+      "cookieBody": "{{platform}} yêu cầu cookie phiên đăng nhập. Liên hệ admin để thêm cookie vào hệ thống.",
+      "proxyBody": "YouTube container discovery cần proxy residential. Liên hệ admin để cấu hình YTDL_PROXY."
+    }
+  }
+}

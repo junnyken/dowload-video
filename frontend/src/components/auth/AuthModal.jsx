@@ -5,11 +5,13 @@ import TurnstileWidget from './TurnstileWidget';
 import { TURNSTILE_SITE_KEY } from '../../lib/turnstile';
 import { authErrorMessage, MSG } from '../../lib/authErrors';
 import { isDisposableEmail } from '../../lib/disposableEmail';
+import { useTranslation } from 'react-i18next';
 
 const VIEWS = { SIGNIN: 'signin', SIGNUP: 'signup', RESET: 'reset' };
 
 export default function AuthModal({ onClose, initialView = VIEWS.SIGNIN }) {
   const { signIn, signUp, resetPassword } = useAuth();
+  const { t } = useTranslation('auth');
   const [view, setView]       = useState(Object.values(VIEWS).includes(initialView) ? initialView : VIEWS.SIGNIN);
   const [email, setEmail]     = useState('');
   const [password, setPassword] = useState('');
@@ -48,7 +50,7 @@ export default function AuthModal({ onClose, initialView = VIEWS.SIGNIN }) {
 
   const handleSignUp = async (e) => {
     e.preventDefault();
-    if (password.length < 6) { setError('Mật khẩu ít nhất 6 ký tự'); return; }
+    if (password.length < 6) { setError(t('pwMin')); return; }
     setLoading(true); setError('');
     // Early hint only; the database trigger (migration 036) is the real gate.
     if (await isDisposableEmail(email)) {
@@ -61,7 +63,7 @@ export default function AuthModal({ onClose, initialView = VIEWS.SIGNIN }) {
     setLoading(false);
     spendCaptcha();
     if (error) { setError(authErrorMessage(error)); return; }
-    setSuccess('Kiểm tra email để xác nhận tài khoản!');
+    setSuccess(t('signupSuccess'));
   };
 
   const handleReset = async (e) => {
@@ -72,7 +74,7 @@ export default function AuthModal({ onClose, initialView = VIEWS.SIGNIN }) {
     setLoading(false);
     spendCaptcha();
     if (error) { setError(authErrorMessage(error)); return; }
-    setSuccess('Đã gửi link đặt lại mật khẩu. Kiểm tra email nhé!');
+    setSuccess(t('resetSuccess'));
   };
 
   return (
@@ -99,14 +101,10 @@ export default function AuthModal({ onClose, initialView = VIEWS.SIGNIN }) {
 
         {/* Title */}
         <h2 className="text-center text-fg font-bold text-lg mb-1">
-          {view === VIEWS.SIGNIN && 'Đăng nhập'}
-          {view === VIEWS.SIGNUP && 'Tạo tài khoản'}
-          {view === VIEWS.RESET  && 'Quên mật khẩu'}
+          {t(`title.${view}`)}
         </h2>
         <p className="text-center text-fg-muted text-xs mb-5">
-          {view === VIEWS.SIGNIN && 'Lịch sử & preferences được lưu theo tài khoản'}
-          {view === VIEWS.SIGNUP && 'Miễn phí — không cần thẻ tín dụng'}
-          {view === VIEWS.RESET  && 'Nhập email để nhận link đặt lại mật khẩu'}
+          {t(`subtitle.${view}`)}
         </p>
 
         {/* Success */}
@@ -127,32 +125,32 @@ export default function AuthModal({ onClose, initialView = VIEWS.SIGNIN }) {
         {/* Forms */}
         {view === VIEWS.SIGNIN && (
           <form onSubmit={handleSignIn} className="space-y-3">
-            <InputField icon={<Mail />} type="email" placeholder="Email" value={email} onChange={setEmail} />
+            <InputField icon={<Mail />} type="email" placeholder={t('email')} value={email} onChange={setEmail} />
             <PasswordField value={password} onChange={setPassword} show={showPw} toggle={() => setShowPw(p => !p)} />
             <TurnstileWidget key="signin" ref={turnstile} onToken={setCaptcha} />
-            <SubmitBtn loading={loading} label="Đăng nhập" />
+            <SubmitBtn loading={loading} label={t('signIn')} />
             <button type="button" onClick={() => reset(VIEWS.RESET)}
               className="w-full text-center text-fg-muted hover:text-accent-text text-xs transition-colors">
-              Quên mật khẩu?
+              {t('forgot')}
             </button>
           </form>
         )}
 
         {view === VIEWS.SIGNUP && (
           <form onSubmit={handleSignUp} className="space-y-3">
-            <InputField icon={<User />} type="text" placeholder="Tên hiển thị" value={name} onChange={setName} />
-            <InputField icon={<Mail />} type="email" placeholder="Email" value={email} onChange={setEmail} />
+            <InputField icon={<User />} type="text" placeholder={t('displayName')} value={name} onChange={setName} />
+            <InputField icon={<Mail />} type="email" placeholder={t('email')} value={email} onChange={setEmail} />
             <PasswordField value={password} onChange={setPassword} show={showPw} toggle={() => setShowPw(p => !p)} />
             <TurnstileWidget key="signup" ref={turnstile} onToken={setCaptcha} />
-            <SubmitBtn loading={loading} label="Tạo tài khoản" />
+            <SubmitBtn loading={loading} label={t('createAccount')} />
           </form>
         )}
 
         {view === VIEWS.RESET && !success && (
           <form onSubmit={handleReset} className="space-y-3">
-            <InputField icon={<Mail />} type="email" placeholder="Email" value={email} onChange={setEmail} />
+            <InputField icon={<Mail />} type="email" placeholder={t('email')} value={email} onChange={setEmail} />
             <TurnstileWidget key="reset" ref={turnstile} onToken={setCaptcha} />
-            <SubmitBtn loading={loading} label="Gửi link đặt lại" />
+            <SubmitBtn loading={loading} label={t('sendReset')} />
           </form>
         )}
 
@@ -160,14 +158,14 @@ export default function AuthModal({ onClose, initialView = VIEWS.SIGNIN }) {
         {!success && (
           <p className="mt-4 text-center text-fg-muted text-xs">
             {view === VIEWS.SIGNIN ? (
-              <>Chưa có tài khoản?{' '}
+              <>{t('noAccount')}{' '}
                 <button onClick={() => reset(VIEWS.SIGNUP)}
-                  className="text-accent-text hover:underline font-semibold">Đăng ký</button>
+                  className="text-accent-text hover:underline font-semibold">{t('signUp')}</button>
               </>
             ) : (
-              <>Đã có tài khoản?{' '}
+              <>{t('haveAccount')}{' '}
                 <button onClick={() => reset(VIEWS.SIGNIN)}
-                  className="text-accent-text hover:underline font-semibold">Đăng nhập</button>
+                  className="text-accent-text hover:underline font-semibold">{t('signIn')}</button>
               </>
             )}
           </p>
@@ -176,8 +174,8 @@ export default function AuthModal({ onClose, initialView = VIEWS.SIGNIN }) {
         {/* Guest benefit hint */}
         {view === VIEWS.SIGNIN && (
           <div className="mt-4 pt-4 border-t border-line grid grid-cols-3 gap-2 text-center">
-            {['Lịch sử cá nhân', 'Lưu preferences', 'Quota riêng'].map(t => (
-              <div key={t} className="text-[10px] text-fg-muted">{t}</div>
+            {[0, 1, 2].map(i => (
+              <div key={i} className="text-[10px] text-fg-muted">{t(`benefits.${i}`)}</div>
             ))}
           </div>
         )}
@@ -205,6 +203,7 @@ function InputField({ icon, type, placeholder, value, onChange }) {
 }
 
 function PasswordField({ value, onChange, show, toggle }) {
+  const { t } = useTranslation('auth');
   return (
     <div className="relative">
       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted w-4 h-4">
@@ -212,7 +211,7 @@ function PasswordField({ value, onChange, show, toggle }) {
       </span>
       <input
         type={show ? 'text' : 'password'}
-        placeholder="Mật khẩu"
+        placeholder={t('password')}
         value={value}
         onChange={e => onChange(e.target.value)}
         required

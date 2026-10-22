@@ -1,0 +1,67 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "tabs": {
+    "single": {
+      "label": "Video & Music",
+      "short": "Video & Music",
+      "title": "Download one link — video, music, subtitles"
+    },
+    "bulk": {
+      "label": "Bulk · Channels",
+      "short": "Bulk",
+      "title": "Download many links, channels and playlists at once"
+    },
+    "flow": {
+      "label": "Remove Video Logo",
+      "short": "Remove Logo",
+      "title": "Remove the watermark logo from Flow / Veo videos"
+    },
+    "history": {
+      "label": "Downloaded",
+      "short": "Downloaded",
+      "title": "History of your recent downloads"
+    },
+    "lockedTitle": "Being upgraded — reopening soon",
+    "soon": "Coming soon",
+    "new": "New"
+  },
+  "heroLabel": "// 30+ platforms \\\\",
+  "heroTitle1": "Download TikTok / Douyin videos",
+  "heroTitle2": "without watermark",
+  "cueBulk": "Bulk · channels · ZIP",
+  "qualityAuth": "4K · 1080p · MP3 320kbps",
+  "qualityGuest": "4K (sign in) · 1080p · MP3 320kbps",
+  "cueHistory": "Download history",
+  "cueNoAds": "No ads · no fake limits",
+  "addToHome": "Add to your home screen to open it faster",
+  "degraded": "Having issues",
+  "extension": "Install the Chrome Extension — clean TikTok in 1 click",
+  "platformNavLabel": "Download videos by platform",
+  "platformNav": "Download videos by platform:",
+  "api": {
+    "title": "Connect VidGrab to your own system (API)",
+    "intro": "Download videos automatically from your app or server, with two tiers: personal and business.",
+    "personal": {
+      "title": "Personal API key",
+      "body": "For developers and small needs. On the Pro or Team plan, create an API key yourself on the API Keys page, then call <c1>POST /api/v1/fetch-link</c1> with the header <c2>X-API-Key: vidgrab_…</c2>. The request stays open until the download finishes, then returns the result. Limit of 30 requests per minute per key, and a monthly request total that depends on your plan.",
+      "docs": "View API docs",
+      "createKey": "Create API key",
+      "pricing": "View pricing"
+    },
+    "partner": {
+      "title": "Partner API for businesses",
+      "body": "For businesses calling from their own servers: create background download jobs and receive results through signed webhooks. Limits are set per key (jobs per minute and per day), with a monthly job quota set by contract. A key can be restricted to your server's IP. Keys that look like <c1>vgp_…</c1> are issued by VidGrab; you cannot create them yourself.",
+      "docs": "Partner API docs",
+      "contact": "Contact us to get a key:",
+      "mailSubject": "Partner API registration"
+    }
+  },
+  "share": {
+    "prompt": "Found this useful? Share it with friends",
+    "button": "Share"
+  },
+  "ios": {
+    "title": "Install VidGrab on iPhone",
+    "body": "Tap <c1>⬆ Share</c1> → <c2>Add to Home Screen</c2>"
+  }
+}

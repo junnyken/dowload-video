@@ -16,6 +16,7 @@
  * Queue success shows dedupe summary inline before closing.
  */
 import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import {
   X, CheckSquare, Square, Music, Video, Image, ChevronDown, ChevronRight,
   Download, Filter, RefreshCw, FileDown, AlertTriangle, Loader2, Info,
@@ -29,7 +30,7 @@ const QUALITY_OPTIONS = [
   { value: 'mp3_320',    label: 'MP3 320kbps' },
   { value: 'video_720',  label: 'Video 720p' },
   { value: 'video_1080', label: 'Video 1080p' },
-  { value: 'video',      label: 'Video (chất lượng tốt nhất)' },
+  { value: 'video',      labelKey: 'quality.best' },
 ];
 
 const MEDIA_TYPE_ICONS = { video: Video, audio: Music, image: Image, mixed: Play };
@@ -52,6 +53,7 @@ function fmtViews(n) {
 // ── Capability gating banners ─────────────────────────────────────────────────
 
 function CapabilityGateBanner({ gate, platform }) {
+  const { t } = useTranslation('containerPreview');
   const isCookie         = gate?.required === 'cookie';
   const isProxy          = gate?.required === 'proxy';
   const isProxyBad       = gate?.required === 'proxy_unhealthy';
@@ -64,7 +66,7 @@ function CapabilityGateBanner({ gate, platform }) {
 
   const platformLabel = platform
     ? platform.charAt(0).toUpperCase() + platform.slice(1)
-    : 'Nền tảng';
+    : t('gate.platformFallback');
 
   if (isCookieUnavailable) {
     return (
@@ -72,10 +74,9 @@ function CapabilityGateBanner({ gate, platform }) {
         <div className="flex items-start gap-2">
           <Lock size={15} className="text-fg-muted shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-fg-2">Chưa cấu hình cookie</p>
+            <p className="text-sm font-medium text-fg-2">{t('gate.cookieUnavailable.title')}</p>
             <p className="text-xs text-fg-muted mt-1">
-              {platformLabel} yêu cầu cookie đăng nhập nhưng chưa được cấu hình.
-              Liên hệ admin để thêm cookie vào hệ thống (Cài đặt → Cookie).
+              {t('gate.cookieUnavailable.body', { platform: platformLabel })}
             </p>
           </div>
         </div>
@@ -89,10 +90,9 @@ function CapabilityGateBanner({ gate, platform }) {
         <div className="flex items-start gap-2">
           <Lock size={15} className="text-accent-text shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-warning">Cookie đã hết hạn</p>
+            <p className="text-sm font-medium text-warning">{t('gate.cookieExpired.title')}</p>
             <p className="text-xs text-accent-text mt-1">
-              Cookie {platformLabel} đã hết hạn. Vui lòng cập nhật cookie trong
-              Cài đặt → Cookie → {platformLabel}.
+              {t('gate.cookieExpired.body', { platform: platformLabel })}
             </p>
           </div>
         </div>
@@ -106,10 +106,9 @@ function CapabilityGateBanner({ gate, platform }) {
         <div className="flex items-start gap-2">
           <Shield size={15} className="text-accent-text shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-accent-text">Cookie tạm thời bị khoá</p>
+            <p className="text-sm font-medium text-accent-text">{t('gate.cookieBlocked.title')}</p>
             <p className="text-xs text-accent-text mt-1">
-              {platformLabel} đã rate-limit hoặc phát hiện bot. Cookie sẽ tự mở khoá
-              sau 15 phút (soft block) hoặc 6 giờ (hard block). Thử lại sau.
+              {t('gate.cookieBlocked.body', { platform: platformLabel })}
             </p>
           </div>
         </div>
@@ -123,10 +122,9 @@ function CapabilityGateBanner({ gate, platform }) {
         <div className="flex items-start gap-2">
           <Info size={15} className="text-fg-2 shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-fg-2">Nội dung một phần</p>
+            <p className="text-sm font-medium text-fg-2">{t('gate.cookiePartial.title')}</p>
             <p className="text-xs text-fg-2 mt-1">
-              Nội dung công khai hiển thị đầy đủ. Một số bài đăng yêu cầu đăng nhập
-              và có thể bị bỏ qua khi queue.
+              {t('gate.cookiePartial.body')}
             </p>
           </div>
         </div>
@@ -141,13 +139,14 @@ function CapabilityGateBanner({ gate, platform }) {
           <Info size={15} className="text-fg-muted shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-fg-2">
-              YouTube single video tạm thời không khả dụng
+              {t('gate.singleDisabled.title')}
             </p>
             <p className="text-xs text-fg-muted mt-1">
-              YouTube download qua server hiện bị bot-block. Thay vào đó, hãy dán link
-              <strong className="text-fg-2"> channel</strong> hoặc{' '}
-              <strong className="text-fg-2">playlist</strong> để dùng tính năng Bulk Browse
-              (cần proxy residential được cấu hình).
+              <Trans
+                t={t}
+                i18nKey="gate.singleDisabled.body"
+                components={{ strong: <strong className="text-fg-2" /> }}
+              />
             </p>
           </div>
         </div>
@@ -162,11 +161,10 @@ function CapabilityGateBanner({ gate, platform }) {
           <Shield size={15} className="text-danger shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-danger">
-              YouTube proxy hiện không hoạt động
+              {t('gate.proxyBad.title')}
             </p>
             <p className="text-xs text-danger mt-1">
-              YTDL_PROXY được cấu hình nhưng không kết nối được. Hệ thống sẽ tự thử lại
-              sau vài phút. Nếu vẫn lỗi, liên hệ admin để kiểm tra proxy.
+              {t('gate.proxyBad.body')}
             </p>
           </div>
         </div>
@@ -182,12 +180,12 @@ function CapabilityGateBanner({ gate, platform }) {
         <Icon size={15} className={`text-${color}-400 shrink-0 mt-0.5`} />
         <div>
           <p className="text-sm font-medium text-accent-text">
-            {isCookie ? 'Cần đăng nhập để dùng tính năng này' : 'Cần proxy để dùng tính năng này'}
+            {isCookie ? t('gate.generic.cookieTitle') : t('gate.generic.proxyTitle')}
           </p>
           <p className="text-xs text-accent-text mt-1">
             {isCookie
-              ? `${platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'Platform'} yêu cầu cookie phiên đăng nhập. Liên hệ admin để thêm cookie vào hệ thống.`
-              : 'YouTube container discovery cần proxy residential. Liên hệ admin để cấu hình YTDL_PROXY.'}
+              ? t('gate.generic.cookieBody', { platform: platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'Platform' })
+              : t('gate.generic.proxyBody')}
           </p>
         </div>
       </div>
@@ -198,14 +196,15 @@ function CapabilityGateBanner({ gate, platform }) {
 // ── Expired state ─────────────────────────────────────────────────────────────
 
 function ExpiredState({ onRefresh }) {
+  const { t } = useTranslation('containerPreview');
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-4">
       <div className="w-12 h-12 rounded-full bg-surface flex items-center justify-center">
         <RotateCcw size={22} className="text-fg-muted" />
       </div>
       <div className="text-center">
-        <p className="text-sm font-medium text-fg-2">Session đã hết hạn</p>
-        <p className="text-xs text-fg-muted mt-1">Kết quả khám phá trước đã hết TTL.</p>
+        <p className="text-sm font-medium text-fg-2">{t('expired.title')}</p>
+        <p className="text-xs text-fg-muted mt-1">{t('expired.body')}</p>
       </div>
       {onRefresh && (
         <button
@@ -213,7 +212,7 @@ function ExpiredState({ onRefresh }) {
           className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-accent-fg text-sm rounded-lg transition-colors"
         >
           <RotateCcw size={14} />
-          Khám phá lại
+          {t('expired.rediscover')}
         </button>
       )}
     </div>
@@ -223,16 +222,17 @@ function ExpiredState({ onRefresh }) {
 // ── Queue success summary ─────────────────────────────────────────────────────
 
 function QueueSuccessBanner({ summary, batchId, onClose }) {
+  const { t } = useTranslation('containerPreview');
   return (
     <div className="mx-4 my-3 p-3 bg-success-soft border border-success/50 rounded-lg">
       <div className="flex items-start gap-2">
         <CheckCircle size={15} className="text-success shrink-0 mt-0.5" />
         <div className="flex-1">
-          <p className="text-sm font-medium text-success">Đã đưa vào hàng đợi!</p>
+          <p className="text-sm font-medium text-success">{t('queueSuccess.title')}</p>
           {summary && (
             <p className="text-xs text-success mt-0.5">
-              {summary.accepted_count > 0 && <span>{summary.accepted_count} mục được xếp hàng. </span>}
-              {summary.dropped_count > 0 && <span>{summary.dropped_count} mục bị loại (trùng lặp). </span>}
+              {summary.accepted_count > 0 && <span>{t('queueSuccess.accepted', { count: summary.accepted_count })} </span>}
+              {summary.dropped_count > 0 && <span>{t('queueSuccess.dropped', { count: summary.dropped_count })} </span>}
             </p>
           )}
           {batchId && (
@@ -298,6 +298,7 @@ function ItemRow({ item, checked, onToggle }) {
 // ── Section block (isolated error handling) ───────────────────────────────────
 
 function SectionBlock({ section, selected, onToggleItem, onSelectSection, containerId, onExpanded }) {
+  const { t } = useTranslation('containerPreview');
   const [open, setOpen]         = useState(section.items_loaded);
   const [expanding, setExpanding] = useState(false);
   const [expandError, setExpandError] = useState(null);   // section-local error
@@ -318,10 +319,10 @@ function SectionBlock({ section, selected, onToggleItem, onSelectSection, contai
         } else {
           const body = await res.json().catch(() => ({}));
           // Isolated failure — only this section errors, panel stays usable
-          setExpandError(body.detail || `Lỗi HTTP ${res.status}`);
+          setExpandError(body.detail || t('section.httpError', { status: res.status }));
         }
       } catch (e) {
-        setExpandError(e.message || 'Không thể mở rộng phần này.');
+        setExpandError(e.message || t('section.expandFailed'));
       } finally {
         setExpanding(false);
       }
@@ -346,10 +347,10 @@ function SectionBlock({ section, selected, onToggleItem, onSelectSection, contai
           }
           <span className="text-sm font-medium text-fg">{section.label}</span>
           {!section.items_loaded && !expandError && (
-            <span className="text-xs text-fg-muted ml-1">(chưa tải)</span>
+            <span className="text-xs text-fg-muted ml-1">{t('section.notLoaded')}</span>
           )}
           {expandError && (
-            <span className="text-xs text-danger ml-1">(lỗi mở rộng)</span>
+            <span className="text-xs text-danger ml-1">{t('section.expandError')}</span>
           )}
         </div>
         {open && section.items.length > 0 && (
@@ -362,7 +363,7 @@ function SectionBlock({ section, selected, onToggleItem, onSelectSection, contai
                 : 'bg-surface-2 text-fg-2 hover:bg-line'
             }`}
           >
-            {sectionSelected ? 'Bỏ chọn phần này' : 'Chọn phần này'}
+            {sectionSelected ? t('section.deselect') : t('section.select')}
           </button>
         )}
       </div>
@@ -376,7 +377,7 @@ function SectionBlock({ section, selected, onToggleItem, onSelectSection, contai
             className="ml-auto text-danger hover:text-danger underline"
             onClick={(e) => { e.stopPropagation(); setExpandError(null); setOpen(false); }}
           >
-            Thử lại
+            {t('retry')}
           </button>
         </div>
       )}
@@ -393,14 +394,14 @@ function SectionBlock({ section, selected, onToggleItem, onSelectSection, contai
           ))}
           {section.has_more && (
             <p className="text-xs text-fg-muted px-4 py-2 italic">
-              Còn nhiều mục hơn — nhấn &quot;Expand&quot; để tải thêm.
+              {t('section.hasMore')}
             </p>
           )}
         </div>
       )}
 
       {open && section.items_loaded && section.items.length === 0 && (
-        <p className="text-xs text-fg-muted px-4 py-3 italic">Phần này không có mục nào.</p>
+        <p className="text-xs text-fg-muted px-4 py-3 italic">{t('section.empty')}</p>
       )}
 
       {open && !section.items_loaded && !expandError && section.children?.length > 0 && (
@@ -412,12 +413,12 @@ function SectionBlock({ section, selected, onToggleItem, onSelectSection, contai
               )}
               <span className="flex-1 truncate">{child.label}</span>
               {child.item_count > 0 && (
-                <span className="text-xs text-fg-muted">{child.item_count} tracks</span>
+                <span className="text-xs text-fg-muted">{t('section.tracks', { count: child.item_count })}</span>
               )}
             </div>
           ))}
           <p className="text-xs text-fg-muted italic mt-2">
-            Nhấn vào phần này để mở rộng và chọn từng mục.
+            {t('section.expandHint')}
           </p>
         </div>
       )}
@@ -428,6 +429,7 @@ function SectionBlock({ section, selected, onToggleItem, onSelectSection, contai
 // ── Filter toolbar ────────────────────────────────────────────────────────────
 
 function FilterToolbar({ filter, onChange }) {
+  const { t } = useTranslation('containerPreview');
   return (
     <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-line bg-surface-2">
       <Filter size={14} className="text-fg-muted shrink-0" />
@@ -436,20 +438,20 @@ function FilterToolbar({ filter, onChange }) {
         onChange={e => onChange({ ...filter, mediaType: e.target.value })}
         className="text-xs bg-surface border border-line rounded px-2 py-1 text-fg-2"
       >
-        <option value="all">Tất cả loại</option>
+        <option value="all">{t('filter.allTypes')}</option>
         <option value="video">Video</option>
-        <option value="audio">Âm thanh</option>
-        <option value="image">Ảnh</option>
+        <option value="audio">{t('filter.audio')}</option>
+        <option value="image">{t('filter.image')}</option>
       </select>
       <select
         value={filter.sortBy}
         onChange={e => onChange({ ...filter, sortBy: e.target.value })}
         className="text-xs bg-surface border border-line rounded px-2 py-1 text-fg-2"
       >
-        <option value="default">Mặc định</option>
-        <option value="views">Lượt xem nhiều nhất</option>
-        <option value="duration_asc">Thời lượng: ngắn nhất</option>
-        <option value="duration_desc">Thời lượng: dài nhất</option>
+        <option value="default">{t('filter.sortDefault')}</option>
+        <option value="views">{t('filter.sortViews')}</option>
+        <option value="duration_asc">{t('filter.sortDurationAsc')}</option>
+        <option value="duration_desc">{t('filter.sortDurationDesc')}</option>
       </select>
     </div>
   );
@@ -467,6 +469,7 @@ export default function ContainerPreviewPanel({
   onQueued,
   onRefresh,
 }) {
+  const { t } = useTranslation('containerPreview');
   const [selected, setSelected]       = useState(new Set());
   const [quality, setQuality]         = useState('mp3_320');
   const [isQueuing, setIsQueuing]     = useState(false);
@@ -574,15 +577,15 @@ export default function ContainerPreviewPanel({
 
   // ── Status badge ────────────────────────────────────────────────────────────
   const statusBadge = {
-    ready:       { label: 'Sẵn sàng',      cls: 'bg-success-soft text-success' },
-    success:     { label: 'Sẵn sàng',      cls: 'bg-success-soft text-success' },
-    partial:     { label: 'Một phần',       cls: 'bg-accent-soft text-accent-text' },
-    discovering: { label: 'Đang quét...',   cls: 'bg-surface-2 text-fg-2 animate-pulse' },
-    resolving:   { label: 'Đang nhận diện…', cls: 'bg-surface-2 text-fg-2 animate-pulse' },
-    queued:      { label: 'Đang xếp hàng…', cls: 'bg-surface-2 text-fg-muted animate-pulse' },
-    failed:      { label: 'Thất bại',       cls: 'bg-danger-soft text-danger' },
-    expired:     { label: 'Hết hạn',        cls: 'bg-surface-2 text-fg-muted' },
-    pending:     { label: 'Đang chờ',       cls: 'bg-surface-2 text-fg-muted' },
+    ready:       { label: t('status.ready'),      cls: 'bg-success-soft text-success' },
+    success:     { label: t('status.ready'),      cls: 'bg-success-soft text-success' },
+    partial:     { label: t('status.partial'),       cls: 'bg-accent-soft text-accent-text' },
+    discovering: { label: t('status.discovering'),   cls: 'bg-surface-2 text-fg-2 animate-pulse' },
+    resolving:   { label: t('status.resolving'), cls: 'bg-surface-2 text-fg-2 animate-pulse' },
+    queued:      { label: t('status.queued'), cls: 'bg-surface-2 text-fg-muted animate-pulse' },
+    failed:      { label: t('status.failed'),       cls: 'bg-danger-soft text-danger' },
+    expired:     { label: t('status.expired'),        cls: 'bg-surface-2 text-fg-muted' },
+    pending:     { label: t('status.pending'),       cls: 'bg-surface-2 text-fg-muted' },
   }[status] || { label: status, cls: 'bg-surface-2 text-fg-muted' };
 
   const containerTitle = container?.title || jobSnapshot?.summary?.title || '';
@@ -598,9 +601,9 @@ export default function ContainerPreviewPanel({
   );
   const queueDisabledByPolicy = platform === 'youtube' || cookieGateBlocked;
   const queueTooltip = platform === 'youtube'
-    ? 'YouTube download chưa khả dụng. Tính năng queue bị tạm khóa.'
+    ? t('queue.youtubeDisabled')
     : cookieGateBlocked
-      ? 'Cookie không hợp lệ. Cập nhật cookie để sử dụng tính năng queue.'
+      ? t('queue.cookieInvalid')
       : '';
 
   return (
@@ -615,7 +618,7 @@ export default function ContainerPreviewPanel({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-semibold text-fg truncate">
-                {containerTitle || (isLoading ? 'Đang quét...' : 'Container')}
+                {containerTitle || (isLoading ? t('status.discovering') : 'Container')}
               </h2>
               <span className={`text-xs px-1.5 py-0.5 rounded ${statusBadge.cls}`}>
                 {statusBadge.label}
@@ -624,7 +627,7 @@ export default function ContainerPreviewPanel({
             <p className="text-xs text-fg-muted mt-0.5">
               {platform && <span className="capitalize">{platform}</span>}
               {containerType && <span> · {containerType}</span>}
-              {itemCount > 0 && <span> · {itemCount} mục</span>}
+              {itemCount > 0 && <span> · {t('itemCount', { count: itemCount })}</span>}
             </p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
@@ -654,7 +657,7 @@ export default function ContainerPreviewPanel({
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <Loader2 size={32} className="animate-spin text-fg-2" />
             <p className="text-sm text-fg-muted">
-              {jobSnapshot?.message || 'Đang quét nội dung...'}
+              {jobSnapshot?.message || t('scanning')}
             </p>
           </div>
         )}
@@ -675,10 +678,10 @@ export default function ContainerPreviewPanel({
             <AlertTriangle size={16} className="text-danger shrink-0 mt-0.5" />
             <div>
               <p className="text-sm text-danger">
-                {container?.error_message || jobSnapshot?.error?.message || error || 'Discovery thất bại.'}
+                {container?.error_message || jobSnapshot?.error?.message || error || t('discoveryFailed')}
               </p>
               {onRefresh && (
-                <button onClick={onRefresh} className="text-xs text-danger underline mt-1">Thử lại</button>
+                <button onClick={onRefresh} className="text-xs text-danger underline mt-1">{t('retry')}</button>
               )}
             </div>
           </div>
@@ -689,7 +692,7 @@ export default function ContainerPreviewPanel({
           <div className="mx-4 mt-3 p-2.5 bg-accent-soft border border-accent/50 rounded-lg flex items-start gap-2">
             <Info size={13} className="text-accent-text shrink-0 mt-0.5" />
             <p className="text-xs text-accent-text">
-              Kết quả một phần — quét chưa hoàn toàn (timeout hoặc rate limit). Các mục đã tìm được vẫn có thể tải.
+              {t('partialBanner')}
             </p>
           </div>
         )}
@@ -719,16 +722,16 @@ export default function ContainerPreviewPanel({
                 <FilterToolbar filter={filter} onChange={setFilter} />
                 <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-line shrink-0">
                   <button onClick={selectAll} className="text-xs px-2 py-1 bg-surface-2 hover:bg-line text-fg-2 rounded transition-colors">
-                    Chọn tất cả ({visibleItems.length})
+                    {t('toolbar.selectAll', { count: visibleItems.length })}
                   </button>
                   <button onClick={() => selectLatestN(20)} className="text-xs px-2 py-1 bg-surface-2 hover:bg-line text-fg-2 rounded transition-colors">
-                    20 mới nhất
+                    {t('toolbar.latest', { count: 20 })}
                   </button>
                   <button onClick={() => selectLatestN(50)} className="text-xs px-2 py-1 bg-surface-2 hover:bg-line text-fg-2 rounded transition-colors">
-                    50 mới nhất
+                    {t('toolbar.latest', { count: 50 })}
                   </button>
                   <button onClick={clearAll} className="text-xs px-2 py-1 bg-surface-2 hover:bg-line text-fg-2 rounded transition-colors">
-                    Bỏ chọn
+                    {t('toolbar.clear')}
                   </button>
                   <div className="flex-1" />
                   <select
@@ -736,7 +739,7 @@ export default function ContainerPreviewPanel({
                     onChange={e => setQuality(e.target.value)}
                     className="text-xs bg-surface border border-line rounded px-2 py-1 text-fg-2"
                   >
-                    {QUALITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    {QUALITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.labelKey ? t(o.labelKey) : o.label}</option>)}
                   </select>
                 </div>
               </>
@@ -757,7 +760,7 @@ export default function ContainerPreviewPanel({
 
               {!isLoading && (status === 'ready' || status === 'success') && allItems.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 gap-2 text-fg-muted">
-                  <p className="text-sm">Không có mục nào để hiển thị.</p>
+                  <p className="text-sm">{t('noItems')}</p>
                 </div>
               )}
             </div>
@@ -767,16 +770,16 @@ export default function ContainerPreviewPanel({
               <button
                 onClick={handleDownloadManifest}
                 className="p-2 text-fg-muted hover:text-fg-2 rounded-lg hover:bg-surface transition-colors"
-                title="Xuất CSV"
+                title={t('exportCsv')}
               >
                 <FileDown size={16} />
               </button>
 
               <div className="flex-1 text-sm text-fg-muted">
                 {selected.size > 0 ? (
-                  <span><span className="text-fg font-medium">{selected.size}</span> đã chọn</span>
+                  <span><Trans t={t} i18nKey="selectedCount" count={selected.size} components={{ b: <span className="text-fg font-medium" /> }} /></span>
                 ) : (
-                  <span className="text-fg-muted">Chưa chọn mục nào</span>
+                  <span className="text-fg-muted">{t('noneSelected')}</span>
                 )}
               </div>
 
@@ -795,7 +798,7 @@ export default function ContainerPreviewPanel({
                   }`}
                 >
                   {isQueuing ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                  {isQueuing ? 'Đang queue...' : `Queue ${selected.size || ''}`}
+                  {isQueuing ? t('queue.queuing') : t('queue.button', { n: selected.size || '' })}
                 </button>
                 {queueDisabledByPolicy && (
                   <div className="absolute bottom-full right-0 mb-2 w-60 px-3 py-2 bg-surface border border-line rounded-lg text-xs text-fg-2 opacity-0 group-hover/queue:opacity-100 transition-opacity pointer-events-none z-10">
