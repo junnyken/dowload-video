@@ -93,6 +93,12 @@
     // 5.15.0: a Facebook profile's Reels / Videos tab — read here, in the
     // person's own (signed-in) Facebook, like a Douyin channel.
     if (vgIsFacebookChannel(url)) return 'channel';
+    // 5.19.0: TikTok, YouTube and Instagram reels channels are read here too, in
+    // the person's own browser (the server only got a first page — TikTok
+    // blocks it — and then downloaded everything itself, owner 22/10). X,
+    // Reddit, Pinterest and Threads stay with the server: their pages mix
+    // photos, text and videos, and only the server can tell which is a video.
+    if (vgIsBrowserChannel(url)) return 'channel';
     
     if (
       /tiktok\.com\/@/.test(url) ||
@@ -262,7 +268,13 @@
     let title = ((a && a.getAttribute('aria-label')) || (img && img.alt) || '').replace(/\s+/g, ' ').trim().slice(0, 200);
     // Facebook labels every reel tile the same ("Bản xem trước ô thước phim"): not a title
     if (/^(bản xem trước|reel tile preview|preview)/i.test(title)) title = '';
-    const thumb = img && /^https:/.test(img.currentSrc || img.src || '') ? (img.currentSrc || img.src) : '';
+    let thumb = img && /^https:/.test(img.currentSrc || img.src || '') ? (img.currentSrc || img.src) : '';
+    if (!thumb && a) {
+      // 5.19.0: Instagram's grid paints the cover as a CSS background, not an <img>
+      const bg = [a, ...a.querySelectorAll('[style*="background-image"]')].map((el) => (el.style && el.style.backgroundImage) || '').find((v) => /url\(/.test(v));
+      const m = bg && bg.match(/url\(["']?(https:[^"')]+)["']?\)/);
+      if (m) thumb = m[1];
+    }
     vgItemMeta.set(url, { title, thumb });
   }
 
@@ -292,6 +304,27 @@
       const tkMatch = href.match(/tiktok\.com\/@[\w.-]+\/video\/(\d{15,25})/);
       if (tkMatch) {
         const u = href.split('?')[0]; // clean tracking params
+        videoSet.add(u);
+        vgRemember(u, a);
+        return;
+      }
+      // 5.19.0 YouTube: watch?v= / shorts/ of the channel's grid
+      const ytMatch = href.match(/youtube\.com\/(?:watch\?(?:[^#]*&)?v=|shorts\/)([\w-]{11})/);
+      if (ytMatch && /(^|\.)youtube\.com$/i.test(location.hostname)) {
+        const u = /\/shorts\//.test(href) ? `https://www.youtube.com/shorts/${ytMatch[1]}` : `https://www.youtube.com/watch?v=${ytMatch[1]}`;
+        videoSet.add(u);
+        vgRemember(u, a);
+        if (!vgItemMeta.get(u).title) {
+          const box = a.closest('ytd-rich-item-renderer, ytd-grid-video-renderer, ytd-reel-item-renderer, ytm-shorts-lockup-view-model, ytd-rich-grid-media');
+          const t = box && box.querySelector('#video-title, h3, [class*="title" i]');
+          if (t && t.textContent.trim()) vgItemMeta.get(u).title = t.textContent.replace(/\s+/g, ' ').trim().slice(0, 200);
+        }
+        return;
+      }
+      // 5.19.0 Instagram: reels only (a /p/ post may be a photo)
+      const igMatch = href.match(/instagram\.com\/(?:[\w.]+\/)?reels?\/([\w-]{5,40})/);
+      if (igMatch && /(^|\.)instagram\.com$/i.test(location.hostname)) {
+        const u = `https://www.instagram.com/reel/${igMatch[1]}/`;
         videoSet.add(u);
         vgRemember(u, a);
         return;
@@ -878,6 +911,13 @@ window.addEventListener('message', (event) => {
       // waited forever; a named page can also carry ?sk=reels_tab.
       || /^https:\/\/(www\.|web\.|m\.)?facebook\.com\/people\/[^/?#]+\/\d{5,25}\/?\?[^#]*\bsk=(reels_tab|videos)/i.test(url)
       || /^https:\/\/(www\.|web\.|m\.)?facebook\.com\/(?!reel\/|watch|groups\/|share\/|events\/|marketplace)[^/?#]+\/?\?[^#]*\bsk=(reels_tab|videos)/i.test(url);
+  }
+
+  /** 5.19.0: a TikTok / YouTube / Instagram channel page the browser lists itself. */
+  function vgIsBrowserChannel(url) {
+    return /^https:\/\/(www\.|m\.)?tiktok\.com\/@[\w.-]+\/?(\?|#|$)/i.test(url)
+      || /^https:\/\/(www\.|m\.)?youtube\.com\/(@[\w.-]+|channel\/[\w-]+|c\/[\w.-]+|user\/[\w.-]+)(\/(videos|shorts|streams|featured))?\/?(\?|#|$)/i.test(url)
+      || /^https:\/\/(www\.)?instagram\.com\/(?!(p|reel|reels|stories|explore|accounts|direct)\/)[\w.]+\/(reels\/)?(\?|#|$)/i.test(url);
   }
 
   /** {url} of a Facebook reel / video link, or null. */

@@ -96,6 +96,20 @@ def main():
                   pop2.locator("#page-badge").inner_text().strip() == "▶ Video đang xem", pop2.locator("#page-badge").inner_text())
             # 5.18.2: no raw file list on TikTok (preloaded files, blob: player, CDN refuses them)
             check("popup: no 'Video trên trang này' file list on TikTok", not pop2.locator("#vg-sniff").is_visible())
+            # 5.19.0: a TikTok PROFILE is listed by the browser (it was sent whole to the server)
+            prof = "<!doctype html><title>creator (@creator) | TikTok</title><body>" + "".join(
+                f'<div><a href="https://www.tiktok.com/@creator/video/{7400000000000000100 + k}"><img alt="clip {k}" src="https://p16.tiktokcdn.com/{k}.jpg"></a></div>' for k in range(6)) + "</body>"
+            ctx.route("https://www.tiktok.com/@creator", lambda r: r.fulfill(status=200, content_type="text/html", body=prof))
+            pp = ctx.new_page()
+            pp.goto("https://www.tiktok.com/@creator", wait_until="domcontentloaded")
+            pp.wait_for_timeout(2000)
+            ptab = pop.evaluate("() => new Promise(r => chrome.tabs.query({}, ts => r((ts.find(t => (t.url || '').endsWith('tiktok.com/@creator')) || {}).id)))")
+            info = pop.evaluate("(id) => new Promise(r => chrome.tabs.sendMessage(id, { type: 'VG_GET_PAGE_INFO' }, r))", ptab)
+            items = pop.evaluate("(id) => new Promise(r => chrome.tabs.sendMessage(id, { type: 'VG_GET_ITEMS' }, r))", ptab)["items"]
+            check("TikTok profile: a channel the browser lists (panel on, 6 videos with thumbnails)",
+                  info.get("pageType") == "channel" and pp.locator("#vg-channel-panel").count() == 1 and len(items) == 6
+                  and all(i["url"].startswith("https://www.tiktok.com/@creator/video/") and i["thumb"] for i in items),
+                  f"{info.get('pageType')} {len(items)} {items[:1]}")
             ctx.close()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

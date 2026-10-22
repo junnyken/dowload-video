@@ -375,7 +375,7 @@ async function checkServerHealth() {
 // ── Page detection ─────────────────────────────────────────────────
 const BADGE_MAP = {
   video:   { label: '▶ Video / Nhạc', cls: 'bg-green-900 text-green-400 border-green-800' },
-  channel: { label: '📡 Kênh Douyin', cls: 'bg-orange-900 text-orange-400 border-orange-800' },
+  channel: { label: '📡 Kênh', cls: 'bg-orange-900 text-orange-400 border-orange-800' }, // 5.19.0: Douyin, Facebook, TikTok, YouTube, Instagram
   generic_channel: { label: '📺 Kênh / Playlist', cls: 'bg-orange-900 text-orange-400 border-orange-800' },
   spotify_playlist: { label: '🎵 Spotify Playlist', cls: 'bg-green-900 text-green-400 border-green-800' },
   instagram: { label: '📸 Instagram', cls: 'bg-pink-900 text-pink-400 border-pink-800' },
@@ -466,6 +466,8 @@ async function initPopup() {
         }
         // 5.16.0: live list + stop button without having to press the tab
         document.getElementById('tab-channel').click();
+        // 5.19.0: TikTok / YouTube channels moved here from generic_channel — keep "Theo dõi kênh này"
+        void initWatchFollow(pageInfo.url);
       }
     } else {
       showTab('single');
