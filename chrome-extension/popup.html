@@ -489,6 +489,16 @@
     </div>
     <button id="settings-reset" style="font-size:10px;color:#475569;background:none;border:none;cursor:pointer;">↩ Đặt lại mặc định</button>
 
+    <!-- 5.20.0: file name template. wording: BA review -->
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(148,163,184,0.15);">
+      <div style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:6px;">📝 Mẫu tên file</div>
+      <div style="display:flex;gap:6px;">
+        <input id="settings-name-tpl" type="text" placeholder="{title}">
+        <button id="settings-name-save" style="padding:6px 12px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;font-weight:700;border:none;cursor:pointer;flex-shrink:0;">Lưu</button>
+      </div>
+      <div id="settings-name-hint" style="font-size:9px;color:#64748b;margin-top:4px;line-height:1.4;">Dùng {title} {platform} {id} {date} — ví dụ: {platform} - {date} - {title}</div>
+    </div>
+
     <!-- ── Account bridge ── -->
     <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(148,163,184,0.15);">
       <div style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:8px;">👤 Tài khoản VidGrab</div>
@@ -629,6 +639,22 @@
     </button>
 
     <div id="statusMsg" class="status-msg">Tải bằng trình duyệt của bạn · máy chủ VidGrab dự phòng</div><!-- wording: BA review -->
+
+    <!-- 5.20.0: preview · send to phone · record the tab. wording: BA review -->
+    <div id="vg-tools" style="display:flex;gap:6px;margin-top:8px;">
+      <button id="vg-preview-btn" type="button" class="vg-chip" style="flex:1;padding:6px;">👁 Xem trước</button>
+      <button id="vg-qr-btn" type="button" class="vg-chip" style="flex:1;padding:6px;">📱 Gửi sang điện thoại</button>
+      <button id="vg-rec-btn" type="button" class="vg-chip" style="flex:1;padding:6px;">⏺ Quay tab</button>
+    </div>
+    <div id="vg-preview" class="hidden" style="margin-top:8px;background:#0f1119;border:1px solid #1e2333;border-radius:10px;padding:8px;">
+      <video id="vg-preview-video" controls muted playsinline preload="metadata" style="width:100%;max-height:200px;border-radius:8px;background:#000;"></video>
+      <div id="vg-preview-info" style="font-size:10px;color:#cbd5e1;margin-top:6px;line-height:1.5;"></div>
+    </div>
+    <div id="vg-qr" class="hidden" style="margin-top:8px;background:#fff;border-radius:10px;padding:10px;text-align:center;">
+      <div id="vg-qr-code" style="display:inline-block;"></div>
+      <div style="font-size:10px;color:#334155;margin-top:4px;line-height:1.4;">Quét bằng camera điện thoại — trang VidGrab mở với video này để tải ngay trên điện thoại.</div>
+    </div>
+    <div id="vg-rec" class="hidden" style="margin-top:8px;background:#1f0f13;border:1px solid #7f1d1d;border-radius:10px;padding:8px;font-size:10px;color:#fecaca;line-height:1.5;"></div>
 
     <!-- Error -->
     <div id="error-card" class="error-card hidden">
@@ -949,6 +975,7 @@
     <span id="footer-version" style="font-size:9px;color:#1e2333;font-weight:600;">v5.0.0</span>
   </div>
 
+  <script src="lib/qrcode.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

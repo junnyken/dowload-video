@@ -2610,3 +2610,117 @@ function vgSniffRow(tab, it) {
   row.appendChild(actions);
   return row;
 }
+
+
+// ══════════════════════════════════════════════════════════════════
+// 5.20.0 — preview before downloading · send to the phone (QR) ·
+// record the tab (last resort) · file name template. wording: BA review
+// ══════════════════════════════════════════════════════════════════
+function vgFmtSize(b) {
+  if (!b) return '';
+  return b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.round(b / 1024)} KB`;
+}
+
+document.getElementById('vg-preview-btn')?.addEventListener('click', async () => {
+  const box = document.getElementById('vg-preview');
+  const info = document.getElementById('vg-preview-info');
+  const video = document.getElementById('vg-preview-video');
+  box.classList.remove('hidden');
+  video.removeAttribute('src');
+  video.style.display = 'none';
+  info.style.color = '#cbd5e1';
+  info.textContent = '⏳ Đang tìm video trên trang…';
+  let url;
+  try { url = await getTargetUrl(); } catch (e) { info.textContent = e.message; return; }
+  const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'VG_PROBE', url, pageTabId: _activeTabId }, res));
+  if (!r || !r.direct) {
+    info.textContent = 'Video này tải qua máy chủ VidGrab (YouTube, TikTok, MP3…) — chọn chất lượng ở trên rồi bấm Tải.';
+    return;
+  }
+  if (!r.media) {
+    info.style.color = '#fbbf24';
+    info.textContent = r.reason === 'not_this_tab'
+      ? 'Xem trước dùng cho video của tab đang mở. Mở trang video rồi bấm lại.'
+      : 'Không thấy file video trên trang. Bấm Tải để nhờ máy chủ, hoặc dùng “⏺ Quay tab”.';
+    return;
+  }
+  video.style.display = 'block';
+  video.src = r.media.url;
+  const base = [r.media.title && `“${r.media.title.slice(0, 80)}”`, vgFmtSize(r.media.size)].filter(Boolean).join(' · ');
+  info.textContent = `${base} — tải thẳng về máy bạn.`;
+  video.onloadedmetadata = () => {
+    const q = video.videoHeight ? `${video.videoWidth}×${video.videoHeight}` : '';
+    const d = video.duration && isFinite(video.duration) ? `${Math.floor(video.duration / 60)}:${String(Math.round(video.duration % 60)).padStart(2, '0')}` : '';
+    info.textContent = [base, q, d].filter(Boolean).join(' · ') + ' — tải thẳng về máy bạn, chất lượng cao nhất trang có.';
+  };
+  video.onerror = () => { video.style.display = 'none'; };
+});
+
+document.getElementById('vg-qr-btn')?.addEventListener('click', async () => {
+  const box = document.getElementById('vg-qr');
+  if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
+  let url;
+  try { url = await getTargetUrl(); } catch (e) { setUrlHint(e.message, 'warn'); return; }
+  const link = `${WEB_BASE}/share-target?url=${encodeURIComponent(url)}`;
+  const qr = qrcode(0, 'M');
+  qr.addData(link);
+  qr.make();
+  const holder = document.getElementById('vg-qr-code');
+  holder.textContent = '';
+  const img = document.createElement('img');
+  img.src = qr.createDataURL(4, 8);
+  img.alt = 'QR';
+  img.style.cssText = 'width:168px;height:168px;image-rendering:pixelated;';
+  holder.appendChild(img);
+  box.classList.remove('hidden');
+});
+
+async function vgRecRender() {
+  const btn = document.getElementById('vg-rec-btn');
+  const box = document.getElementById('vg-rec');
+  if (!btn || !box) return;
+  const cur = (await chrome.storage.session.get('vg_rec').catch(() => ({}))).vg_rec;
+  if (cur && cur.state === 'recording') {
+    const s = Math.round((Date.now() - cur.startedAt) / 1000);
+    btn.textContent = '⏹ Dừng quay';
+    box.classList.remove('hidden');
+    box.textContent = `● Đang quay “${(cur.title || '').slice(0, 60)}” — ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}. Cứ để video chạy hết; đóng cửa sổ này vẫn quay tiếp. Bấm “Dừng quay” để lưu (WebM).`;
+    clearTimeout(vgRecRender._t);
+    vgRecRender._t = setTimeout(vgRecRender, 1000);
+  } else {
+    btn.textContent = '⏺ Quay tab';
+  }
+}
+document.getElementById('vg-rec-btn')?.addEventListener('click', async () => {
+  const box = document.getElementById('vg-rec');
+  const cur = (await chrome.storage.session.get('vg_rec').catch(() => ({}))).vg_rec;
+  box.classList.remove('hidden');
+  if (cur && cur.state === 'recording') {
+    box.textContent = '⏳ Đang lưu bản quay…';
+    const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'VG_REC_STOP' }, res));
+    box.textContent = r && r.ok ? `✅ Đã lưu bản quay (${r.seconds}s, ${vgFmtSize(r.bytes)}) vào thư mục VidGrab.` : `❌ ${(r && r.error) || 'Không lưu được.'}`;
+    vgRecRender();
+    return;
+  }
+  if (!_activeTabId) return;
+  box.textContent = 'Chế độ quay dùng khi trang không có file để tải: tiện ích ghi lại hình và tiếng của tab trong lúc video phát. Video có DRM sẽ ra màn hình đen.';
+  const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'VG_REC_START', tabId: _activeTabId }, res));
+  if (!r || !r.ok) { box.textContent = `❌ ${(r && r.error) || 'Không quay được tab này.'}`; return; }
+  vgRecRender();
+});
+vgRecRender();
+
+// file name template
+(async () => {
+  const input = document.getElementById('settings-name-tpl');
+  if (!input) return;
+  try { input.value = (await chrome.storage.sync.get('vg_name_template')).vg_name_template || ''; } catch { /* none */ }
+  document.getElementById('settings-name-save')?.addEventListener('click', async () => {
+    const v = input.value.trim();
+    const hint = document.getElementById('settings-name-hint');
+    if (v && !/\{(title|id)\}/.test(v)) { hint.style.color = '#fbbf24'; hint.textContent = 'Mẫu cần có {title} hoặc {id} để các file không trùng tên.'; return; }
+    await chrome.storage.sync.set({ vg_name_template: v || '{title}' });
+    hint.style.color = '#4ade80';
+    hint.textContent = '✓ Đã lưu. Áp dụng cho lần tải tới.';
+  });
+})();

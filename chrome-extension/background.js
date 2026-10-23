@@ -316,8 +316,8 @@ async function ensureOffscreen() {
   try {
     await chrome.offscreen.createDocument({
       url: 'offscreen.html',
-      reasons: ['BLOBS'],
-      justification: 'Ghép các đoạn video HLS thành một tệp MP4 ngay trong trình duyệt của người dùng.',
+      reasons: ['BLOBS', 'USER_MEDIA'],
+      justification: 'Ghép các đoạn video HLS thành MP4 và quay tab (khi người dùng bấm Quay) ngay trong trình duyệt của người dùng.',
     });
   } catch (e) {
     if (!/single offscreen|already/i.test(String(e && e.message))) throw e;
@@ -325,6 +325,8 @@ async function ensureOffscreen() {
 }
 async function closeOffscreenIfIdle() {
   if ([...hlsJobs.values()].some((j) => j.state === 'running' || j.state === 'saving')) return;
+  const rec = (await chrome.storage.session.get('vg_rec').catch(() => ({}))).vg_rec;
+  if (rec && (rec.state === 'recording' || rec.state === 'saving')) return;
   try { if (await chrome.offscreen.hasDocument()) await chrome.offscreen.closeDocument(); } catch { /* gone */ }
 }
 function hlsSafeName(t) {
@@ -371,7 +373,7 @@ async function vgFetchAndSave({ url, quality, remove_watermark, download_subs },
 
   if (!dlUrl) throw new Error('Không lấy được link tải');
 
-  const safeName = (data.title || 'video').replace(/[/\\?%*:|"<>]/g, '-');
+  const safeName = await vgFileName(data.title || 'video', url);
   const finalExt = (data.is_audio_only || dlUrl.endsWith('.mp3') || dlUrl.endsWith('.m4a')) ? 'mp3' : ext;
 
   // E1: prefer direct (user IP), fall back to server proxy on failure
@@ -516,8 +518,19 @@ function vgSaveFile(url, name) {
           if (!ok) chrome.downloads.removeFile(id, () => { void chrome.runtime.lastError; chrome.downloads.erase({ id }); });
           done(ok);
         });
-      } else if (delta.state.current === 'interrupted') done(false);
+      } else if (delta.state.current === 'interrupted') {
+        // 5.20.0: a dropped connection resumes where it stopped (up to 3 times),
+        // instead of a half file / a failure (competitors' #1 complaint)
+        chrome.downloads.search({ id }, ([it]) => {
+          const err = (it && it.error) || '';
+          if (it && it.canResume && /^NETWORK_|^SERVER_(FAILED|UNREACHABLE|CONTENT_LENGTH_MISMATCH)/.test(err) && tries < 3) {
+            tries++;
+            setTimeout(() => chrome.downloads.resume(id, () => { if (chrome.runtime.lastError) done(false); }), 2000 * tries);
+          } else done(false);
+        });
+      }
     };
+    let tries = 0;
     const timer = setTimeout(() => done(true), self.vgDirect.SAVE_TIMEOUT_MS); // still running: count it as started
     chrome.downloads.onChanged.addListener(onChanged);
     chrome.downloads.download({ url, filename: `VidGrab/${name}.mp4`, saveAs: false, conflictAction: 'uniquify' }, (downloadId) => {
@@ -525,6 +538,21 @@ function vgSaveFile(url, name) {
       id = downloadId;
     });
   });
+}
+
+// 5.20.0: file name template (popup settings, storage.sync vg_name_template):
+// {title} {platform} {id} {date}. Default "{title}" = as before.
+async function vgFileName(title, url) {
+  let tpl = '{title}';
+  try { tpl = (await chrome.storage.sync.get('vg_name_template')).vg_name_template || '{title}'; } catch { /* default */ }
+  const host = (() => { try { return new URL(url).hostname.replace(/^www\.|^m\./, ''); } catch { return ''; } })();
+  const platform = (host.split('.').slice(-2, -1)[0] || 'video');
+  const id = ((url || '').match(/(\d{6,25})(?:\/?$|[/?#])/) || (url || '').match(/(?:v=|reel\/|shorts\/|video\/|p\/)([\w-]{5,40})/) || [])[1] || '';
+  const d = new Date();
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const name = String(tpl).replace(/\{title\}/g, title || 'video').replace(/\{platform\}/g, platform)
+    .replace(/\{id\}/g, id).replace(/\{date\}/g, date);
+  return self.vgDirect.safeName(name.replace(/\s*-\s*(?=-|$)/g, '').trim() || title || 'video');
 }
 
 /** Same tab URL, ignoring the hash and trailing slash. */
@@ -560,7 +588,7 @@ async function vgSaveVideo(payload, signal, pageTabId) {
   if (ownTab && helper) chrome.windows.remove(helper.windowId).catch(() => {});
 
   if (media && !(signal && signal.aborted)) {
-    const name = self.vgDirect.safeName(media.title);
+    const name = await vgFileName(media.title, payload.url);
     if (await vgSaveFile(media.url, name)) {
       if (claim && claim.claimId) vgSettle(claim.claimId, 'completed');
       addToHistory({ title: media.title || 'Video', thumbnail: '', url: payload.url, quality: 'HD', fileSize: '',
@@ -573,6 +601,70 @@ async function vgSaveVideo(payload, signal, pageTabId) {
   if (claim && claim.claimId) await vgSettle(claim.claimId, 'failed');
   return { ...(await vgFetchAndSave(payload, signal)), via: 'server' };
 }
+
+// ── 5.20.0: preview before downloading (popup) ───────────────────────────
+// The file the browser would save for the page the person is on, with its
+// size when the CDN tells it. Only the person's own tab (no extra window).
+async function vgProbe(url, pageTabId) {
+  if (!self.vgDirect.directEligible({ url, quality: 'video' })) return { direct: false };
+  const t = pageTabId != null ? await chrome.tabs.get(pageTabId).catch(() => null) : null;
+  if (!t || !vgSamePage(t.url || '', url)) return { direct: true, media: null, reason: 'not_this_tab' };
+  const media = await vgFindMedia(pageTabId);
+  if (!media) return { direct: true, media: null };
+  // Content-Length is readable across origins (Content-Range usually is not)
+  let size = null;
+  try {
+    const h = await fetch(media.url, { method: 'HEAD' });
+    size = h.ok ? Number(h.headers.get('content-length')) || null : null;
+  } catch { /* no answer to HEAD */ }
+  if (!size) {
+    try {
+      const r = await fetch(media.url, { headers: { Range: 'bytes=0-0' } });
+      size = Number(((r.headers.get('content-range') || '').match(/\/(\d+)$/) || [])[1]) || null;
+      r.body && r.body.cancel && r.body.cancel();
+    } catch { /* the CDN does not answer the extension: size unknown */ }
+  }
+  return { direct: true, media: { ...media, size } };
+}
+
+// ── 5.20.0: recording mode — the last resort when nothing can be downloaded ──
+// (blob: players, a site with no file). The tab's picture and sound are
+// recorded in the offscreen page (MediaRecorder, WebM) while it plays, then
+// saved with chrome.downloads. DRM players give a black picture: that is the
+// site's protection and it is not worked around. wording: BA review
+const VG_REC_KEY = 'vg_rec';
+async function vgRecStart(tabId) {
+  const cur = (await chrome.storage.session.get(VG_REC_KEY))[VG_REC_KEY];
+  if (cur && cur.state === 'recording') return { ok: false, error: 'Đang quay một tab khác — hãy dừng trước.' };
+  const tab = await chrome.tabs.get(tabId);
+  const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
+  await ensureOffscreen();
+  const r = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'REC_START', streamId });
+  if (!r || !r.ok) return { ok: false, error: (r && r.error) || 'Không quay được tab này.' };
+  await chrome.storage.session.set({ [VG_REC_KEY]: { state: 'recording', tabId, title: tab.title || 'video', url: tab.url || '', startedAt: Date.now() } });
+  chrome.action.setBadgeText({ text: 'REC' }).catch(() => {});
+  chrome.action.setBadgeBackgroundColor({ color: '#dc2626' }).catch(() => {});
+  return { ok: true };
+}
+async function vgRecStop() {
+  const cur = (await chrome.storage.session.get(VG_REC_KEY))[VG_REC_KEY];
+  if (!cur || cur.state !== 'recording') return { ok: false };
+  await chrome.storage.session.set({ [VG_REC_KEY]: { ...cur, state: 'saving' } });
+  const r = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'REC_STOP' }).catch(() => null);
+  chrome.action.setBadgeText({ text: '' }).catch(() => {});
+  if (!r || !r.url) { await chrome.storage.session.remove(VG_REC_KEY); return { ok: false, error: 'Không lưu được bản quay.' }; }
+  const name = await vgFileName(`${cur.title} (quay)`, cur.url);
+  return new Promise((resolve) => chrome.downloads.download({ url: r.url, filename: `VidGrab/${name}.webm`, saveAs: false, conflictAction: 'uniquify' }, (id) => {
+    chrome.storage.session.remove(VG_REC_KEY);
+    setTimeout(() => chrome.runtime.sendMessage({ target: 'offscreen', type: 'REC_RELEASE' }).catch(() => {}).finally(() => closeOffscreenIfIdle()), 60_000);
+    resolve({ ok: !!id && !chrome.runtime.lastError, seconds: Math.round((Date.now() - cur.startedAt) / 1000), bytes: r.bytes });
+  }));
+}
+// the recorded tab closed: stop and save what was recorded
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  const cur = (await chrome.storage.session.get(VG_REC_KEY).catch(() => ({})))[VG_REC_KEY];
+  if (cur && cur.state === 'recording' && cur.tabId === tabId) vgRecStop();
+});
 
 // ── 5.17.0: download many collected videos to this computer (owner 22/10) ──
 // The popup's channel list sends the chosen videos; two at a time go through
@@ -1193,6 +1285,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       sendResponse({ ok: true });
     })();
+    return true;
+  }
+
+  // ── 5.20.0: preview + recording (popup) ──
+  if (msg.type === 'VG_PROBE') {
+    vgProbe(msg.url, msg.pageTabId).then(sendResponse, () => sendResponse({ direct: false }));
+    return true;
+  }
+  if (msg.type === 'VG_REC_START') {
+    vgRecStart(msg.tabId).then(sendResponse, (e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
+    return true;
+  }
+  if (msg.type === 'VG_REC_STOP') {
+    vgRecStop().then(sendResponse, (e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
     return true;
   }
 
