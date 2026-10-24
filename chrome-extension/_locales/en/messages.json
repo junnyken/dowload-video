@@ -1,0 +1,1944 @@
+{
+  "act_ai": {
+    "message": "🤖 AI tips"
+  },
+  "act_copied": {
+    "message": "✅ Copied!"
+  },
+  "act_copy_link": {
+    "message": "📋 Copy link"
+  },
+  "act_downloading": {
+    "message": "✅ Downloading"
+  },
+  "act_error": {
+    "message": "❌ Error"
+  },
+  "act_thumb": {
+    "message": "🖼️ Thumbnail"
+  },
+  "act_translate_subs": {
+    "message": "💬 Translate subtitles"
+  },
+  "act_web": {
+    "message": "🌐 Web"
+  },
+  "ago_day": {
+    "message": "$p1$ d ago",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ago_hour": {
+    "message": "$p1$ h ago",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ago_min": {
+    "message": "$p1$ min ago",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ago_now": {
+    "message": "Just now"
+  },
+  "ai_busy_box": {
+    "message": "⏳ Analyzing the video (this can take a few dozen seconds)..."
+  },
+  "ai_busy_btn": {
+    "message": "⏳ Analyzing..."
+  },
+  "ai_clips_best": {
+    "message": "— best: $p1$ → $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "ai_clips_head": {
+    "message": "🎬 $p1$ highlights",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ai_clips_head_one": {
+    "message": "🎬 $p1$ highlight",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ai_gifs_head": {
+    "message": "🖼️ $p1$ suggested GIF clips",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ai_gifs_head_one": {
+    "message": "🖼️ $p1$ suggested GIF clip",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ai_gifs_start": {
+    "message": "— starts at $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ai_no_data": {
+    "message": "Not enough data for a deep analysis (fallback mode)."
+  },
+  "ai_none": {
+    "message": "No notable suggestions found for this video."
+  },
+  "ai_open_web": {
+    "message": "See details & apply on the web →"
+  },
+  "ai_result_fail": {
+    "message": "❌ Couldn't get the analysis result."
+  },
+  "ai_send_fail": {
+    "message": "❌ Couldn't send the analysis request."
+  },
+  "ai_timeout": {
+    "message": "⏱️ The analysis is taking too long. Try again later."
+  },
+  "ai_trim_head": {
+    "message": "✂️ Suggested trim:"
+  },
+  "ai_trim_range": {
+    "message": "$p1$ → $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "archive_empty": {
+    "message": "Archive is empty 📭"
+  },
+  "archive_loading": {
+    "message": "Loading archive..."
+  },
+  "archive_login": {
+    "message": "Sign in to see VidGrab Archive"
+  },
+  "archive_need_login": {
+    "message": "Sign in to save to Archive."
+  },
+  "auth_login_web": {
+    "message": "Sign in on the web →"
+  },
+  "auth_logout": {
+    "message": "Sign out"
+  },
+  "auth_signed_in": {
+    "message": "✓ Signed in"
+  },
+  "auth_signed_in_email": {
+    "message": "✓ Signed in — $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "auth_signed_out": {
+    "message": "Not signed in — your history won't be saved"
+  },
+  "backend_checking": {
+    "message": "checking..."
+  },
+  "badge_channel": {
+    "message": "📡 Channel"
+  },
+  "badge_current_video": {
+    "message": "▶ Video you're watching",
+    "description": "wording: BA review"
+  },
+  "badge_detecting": {
+    "message": "Detecting..."
+  },
+  "badge_generic_channel": {
+    "message": "📺 Channel / Playlist"
+  },
+  "badge_instagram": {
+    "message": "📸 Instagram"
+  },
+  "badge_no_wm": {
+    "message": "✓ No watermark"
+  },
+  "badge_reload": {
+    "message": "Reload needed"
+  },
+  "badge_spotify": {
+    "message": "🎵 Spotify Playlist"
+  },
+  "badge_this_page": {
+    "message": "This page",
+    "description": "wording: BA review"
+  },
+  "badge_unsupported": {
+    "message": "Not supported"
+  },
+  "badge_video": {
+    "message": "▶ Video / Music"
+  },
+  "batch_done": {
+    "message": "✅ Batch finished ($p1$ videos)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "batch_done_one": {
+    "message": "✅ Batch finished ($p1$ video)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "batch_partial": {
+    "message": "⚠️ Batch finished ($p1$/$p2$ succeeded)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "batch_stopped": {
+    "message": "⏹ Stopped ($p1$/$p2$ videos downloaded)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "bg_notif_err": {
+    "message": "❌ Download failed"
+  },
+  "bg_notif_msg": {
+    "message": "VidGrab finished • $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bg_notif_ok": {
+    "message": "✅ $p1$ — downloading",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bg_notif_processing": {
+    "message": "VidGrab — Processing..."
+  },
+  "bn_err": {
+    "message": "$p1$ videos failed",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bn_err_one": {
+    "message": "$p1$ video failed",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bn_files_in": {
+    "message": "The files are in your Downloads / VidGrab folder."
+  },
+  "bn_skip": {
+    "message": "$p1$ videos not downloaded",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bn_skip_one": {
+    "message": "$p1$ video not downloaded",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bn_skip_reason": {
+    "message": "$p1$ videos not downloaded ($p2$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "bn_title_done": {
+    "message": "✅ VidGrab — downloaded $p1$/$p2$ videos",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "bn_title_stopped": {
+    "message": "VidGrab — stopped: $p1$/$p2$ videos",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "btn_download_mp3": {
+    "message": "Download MP3 Now"
+  },
+  "btn_download_video": {
+    "message": "Download Video Now"
+  },
+  "btn_processing": {
+    "message": "Processing..."
+  },
+  "bulk_busy": {
+    "message": "A bulk download is already running — wait for it to finish or click Stop.",
+    "description": "wording: BA review"
+  },
+  "bulk_head_done": {
+    "message": "Finished: $p1$/$p2$ videos saved to this computer",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "bulk_head_stopped": {
+    "message": "Stopped: $p1$/$p2$ videos saved to this computer",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "bulk_info_running": {
+    "message": "Downloading to this computer: $p1$/$p2$ done",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "bulk_info_running_tail": {
+    "message": "closing this window won't stop it."
+  },
+  "bulk_none_selected": {
+    "message": "No videos selected."
+  },
+  "bulk_part_error": {
+    "message": "$p1$ failed",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bulk_part_skipped": {
+    "message": "$p1$ not downloaded",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bulk_part_skipped_reason": {
+    "message": "$p1$ not downloaded ($p2$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "bulk_reason_quota": {
+    "message": "out of downloads for today"
+  },
+  "bulk_reason_quota_reset": {
+    "message": "out of downloads for today, new ones at $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bulk_reason_user_stop": {
+    "message": "you clicked Stop"
+  },
+  "bulk_st_done": {
+    "message": "✓ Saved"
+  },
+  "bulk_st_error": {
+    "message": "Error"
+  },
+  "bulk_st_queued": {
+    "message": "Waiting"
+  },
+  "bulk_st_running": {
+    "message": "Downloading…"
+  },
+  "bulk_st_skipped": {
+    "message": "Not downloaded"
+  },
+  "bulk_start_failed": {
+    "message": "Couldn't start. Please try again."
+  },
+  "bulk_started": {
+    "message": "Downloading $p1$ videos to this computer — you can close this window, the download will continue.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bulk_started_later": {
+    "message": "Downloading $p1$ videos to this computer. $p2$ videos weren't started because you're out of downloads for today.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "bulk_started_later_reset": {
+    "message": "Downloading $p1$ videos to this computer. $p2$ videos weren't started because you're out of downloads for today — new ones at $p3$.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      },
+      "p3": {
+        "content": "$3"
+      }
+    }
+  },
+  "bulk_started_one": {
+    "message": "Downloading $p1$ video to this computer — you can close this window, the download will continue.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_autoscroll": {
+    "message": "The panel is auto-scrolling and capturing the Douyin API..."
+  },
+  "ch_big_hint": {
+    "message": "Large channels can take 30–90 seconds to load the list"
+  },
+  "ch_btn_generic": {
+    "message": "Start Downloading Channel"
+  },
+  "ch_btn_scan": {
+    "message": "Start Scanning Channel"
+  },
+  "ch_btn_scanning": {
+    "message": "⏳ Scanning..."
+  },
+  "ch_btn_spotify": {
+    "message": "Get Spotify list"
+  },
+  "ch_bulk_checking": {
+    "message": "⏳ Checking your remaining downloads..."
+  },
+  "ch_bulk_clear": {
+    "message": "Clear results"
+  },
+  "ch_bulk_default": {
+    "message": "Download selected videos"
+  },
+  "ch_bulk_n": {
+    "message": "⬇ Download $p1$ videos",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_bulk_n_one": {
+    "message": "⬇ Download $p1$ video",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_bulk_pick": {
+    "message": "Select videos to download"
+  },
+  "ch_bulk_stop": {
+    "message": "⏹ Stop"
+  },
+  "ch_collected": {
+    "message": "Videos collected"
+  },
+  "ch_collected_n": {
+    "message": "Collected $p1$ videos. Scroll for more or send now.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_collected_n_one": {
+    "message": "Collected $p1$ video. Scroll for more or send now.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_connecting": {
+    "message": "Connecting to the server..."
+  },
+  "ch_done": {
+    "message": "✅ Done: $p1$/$p2$ videos downloaded.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "ch_done_extra": {
+    "message": "✅ Done: $p1$/$p2$ videos downloaded ($p3$).",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      },
+      "p3": {
+        "content": "$3"
+      }
+    }
+  },
+  "ch_list_title": {
+    "message": "Video list"
+  },
+  "ch_live_hint": {
+    "message": "The live panel is watching the page — scroll to load videos."
+  },
+  "ch_no_videos": {
+    "message": "No videos yet. Scroll the channel page first."
+  },
+  "ch_open_douyin_first": {
+    "message": "Error: Open the Douyin channel page first, then try again."
+  },
+  "ch_open_label": {
+    "message": "Open channel"
+  },
+  "ch_open_web_full": {
+    "message": "📂 See everything on the web →"
+  },
+  "ch_panel_open": {
+    "message": "The VidGrab panel is open on the channel page."
+  },
+  "ch_pick_10": {
+    "message": "First 10"
+  },
+  "ch_pick_all": {
+    "message": "Select all"
+  },
+  "ch_pick_none": {
+    "message": "Deselect"
+  },
+  "ch_pick_this": {
+    "message": "Select this video",
+    "description": "wording: BA review"
+  },
+  "ch_picked_count": {
+    "message": "$p1$/$p2$ selected",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "ch_progress": {
+    "message": "Download progress"
+  },
+  "ch_qty_custom": {
+    "message": "Or enter a custom number..."
+  },
+  "ch_qty_label": {
+    "message": "Number of videos to download"
+  },
+  "ch_queued_n": {
+    "message": "✅ $p1$ videos queued successfully!",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_queued_n_one": {
+    "message": "✅ $p1$ video queued successfully!",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_retry": {
+    "message": "📤 Try again"
+  },
+  "ch_retry_n": {
+    "message": "📤 Try again ($p1$ videos)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_retry_n_one": {
+    "message": "📤 Try again ($p1$ video)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_scanning": {
+    "message": "Scanning the video list..."
+  },
+  "ch_scanning_n": {
+    "message": "🔍 Scanning $p1$ videos from the channel...",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_scanning_n_one": {
+    "message": "🔍 Scanning $p1$ video from the channel...",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_scroll_more": {
+    "message": "Scroll more"
+  },
+  "ch_scrolling": {
+    "message": "Scrolling..."
+  },
+  "ch_send_n": {
+    "message": "Send $p1$ videos to download",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_send_n_one": {
+    "message": "Send $p1$ video to download",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_send_text": {
+    "message": "Send to server to download"
+  },
+  "ch_sending_n": {
+    "message": "⏳ Sending $p1$ videos...",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_sending_n_one": {
+    "message": "⏳ Sending $p1$ video...",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_sending_urls": {
+    "message": "Sending $p1$ URLs to the server...",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_sending_urls_one": {
+    "message": "Sending $p1$ URL to the server...",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_sent": {
+    "message": "✅ Sent"
+  },
+  "ch_status_generic": {
+    "message": "Choose how many videos, then click Start."
+  },
+  "ch_status_spotify": {
+    "message": "Click the button to get the track list from Spotify."
+  },
+  "ch_stop_batch": {
+    "message": "⏹ Stop remaining downloads"
+  },
+  "ch_stop_local": {
+    "message": "⏹ Stop scanning"
+  },
+  "ch_stop_scan": {
+    "message": "⏹ Stop scanning channel"
+  },
+  "ch_working": {
+    "message": "⏳ Processing... ($p1$ left)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_working_extra": {
+    "message": "⏳ Processing... ($p1$ left, $p2$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "common_close": {
+    "message": "Close"
+  },
+  "common_save": {
+    "message": "Save"
+  },
+  "common_sign_in": {
+    "message": "Sign in"
+  },
+  "ctx_mp3": {
+    "message": "🎵 Download MP3 with VidGrab"
+  },
+  "ctx_page_media": {
+    "message": "⚡ Download media from the page (your session)"
+  },
+  "ctx_video": {
+    "message": "⬇ Download with VidGrab"
+  },
+  "date_locale": {
+    "message": "en-US",
+    "description": "Locale tag for dates (not shown)"
+  },
+  "digest_title": {
+    "message": "📋 Info"
+  },
+  "dl_done": {
+    "message": "✅ Done!"
+  },
+  "dl_notif_ok": {
+    "message": "✅ VidGrab — Download complete!"
+  },
+  "dl_progress_title": {
+    "message": "Downloading..."
+  },
+  "done_mp3": {
+    "message": "✅ Music download complete! The MP3 file was saved to the VidGrab folder."
+  },
+  "done_no_wm": {
+    "message": "✅ Downloaded without watermark! The file was saved to the VidGrab folder."
+  },
+  "done_video": {
+    "message": "✅ Download complete! The file was saved to the VidGrab folder."
+  },
+  "err_120": {
+    "message": "The server took more than 120s. Try a lower quality or open the website."
+  },
+  "err_bad_link": {
+    "message": "Invalid link. It must start with http:// or https://"
+  },
+  "err_connection": {
+    "message": "Connection error"
+  },
+  "err_generic": {
+    "message": "Error"
+  },
+  "err_no_dl_link": {
+    "message": "Couldn't get the download link"
+  },
+  "err_no_tab_link": {
+    "message": "Couldn't get a link from this page. Paste the video link in the box above."
+  },
+  "err_prefix": {
+    "message": "Error: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "err_prefix_x": {
+    "message": "❌ Error: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "err_server": {
+    "message": "Server error"
+  },
+  "err_server_reported": {
+    "message": "The server reported an error"
+  },
+  "err_server_short": {
+    "message": "Server error"
+  },
+  "err_server_slow": {
+    "message": "The server took too long"
+  },
+  "err_too_long": {
+    "message": "Took too long"
+  },
+  "err_unknown": {
+    "message": "Unknown error"
+  },
+  "ext_action_title": {
+    "message": "VidGrab Downloader"
+  },
+  "ext_description": {
+    "message": "Download videos from TikTok, Douyin, Facebook, Instagram, X, Bilibili, Xiaohongshu… and catch MP4/HLS/DASH video as you browse.",
+    "description": "Chrome limit: 132 characters"
+  },
+  "ext_name": {
+    "message": "VidGrab - Video Downloader",
+    "description": "Store listing name; keep identical in both languages"
+  },
+  "fb_dl": {
+    "message": "✅ Downloading"
+  },
+  "fb_dl_direct": {
+    "message": "✅ Downloading (direct)"
+  },
+  "fb_dl_size": {
+    "message": "✅ Downloading ($p1$ MB)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "fb_getting": {
+    "message": "Getting link..."
+  },
+  "fb_retry": {
+    "message": "❌ Try again"
+  },
+  "fmt_dl": {
+    "message": "⬇ Download"
+  },
+  "fmt_got": {
+    "message": "Downloaded: $p1$p",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "fmt_got_universal": {
+    "message": "Downloaded: $p1$p · Plays everywhere",
+    "description": "wording: BA review",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "fmt_locked_plan": {
+    "message": "Upgrade to download",
+    "description": "wording: BA review"
+  },
+  "fmt_locked_signin": {
+    "message": "Sign in to download",
+    "description": "wording: BA review"
+  },
+  "fmt_merge": {
+    "message": "MERGE FILES"
+  },
+  "fmt_sharper": {
+    "message": "Sharper · may not play on older devices",
+    "description": "wording: BA review"
+  },
+  "formats_title": {
+    "message": "All qualities"
+  },
+  "health_checking": {
+    "message": "Checking..."
+  },
+  "health_checking_server": {
+    "message": "Checking the server..."
+  },
+  "health_fail_status": {
+    "message": "⚠ Can't reach the server"
+  },
+  "health_fail_title": {
+    "message": "Can't reach the server — check the URL or your network"
+  },
+  "health_ok": {
+    "message": "Server is working normally"
+  },
+  "hint_clip_invalid": {
+    "message": "The clipboard doesn't contain a valid link."
+  },
+  "hint_copied_link": {
+    "message": "This page isn't a video — using the link you just copied."
+  },
+  "hint_link_invalid": {
+    "message": "This link isn't valid."
+  },
+  "hint_no_clip_perm": {
+    "message": "Clipboard access isn't allowed — press Ctrl+V to paste into this box."
+  },
+  "hint_not_video": {
+    "message": "This page isn't a video. Paste a link into this box (Ctrl+V) or click Paste."
+  },
+  "hint_pasted": {
+    "message": "Link pasted from the clipboard."
+  },
+  "hint_using_tab": {
+    "message": "Using the current tab's link. Paste another link to replace it."
+  },
+  "hint_watching": {
+    "message": "Now watching: “$p1$” — click Download to get this video. Scroll to another video and reopen to switch.",
+    "description": "wording: BA review",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "hint_will_download": {
+    "message": "This link will be downloaded."
+  },
+  "hist_clear": {
+    "message": "🗑 Clear"
+  },
+  "hist_empty": {
+    "message": "No download history yet 📭"
+  },
+  "hist_save_archive": {
+    "message": "Save to Archive"
+  },
+  "hist_title": {
+    "message": "Recently downloaded videos (local)"
+  },
+  "hls_cancelled": {
+    "message": "Canceled."
+  },
+  "hls_done_msg": {
+    "message": "$p1$ was saved to your Downloads folder.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "hls_done_title": {
+    "message": "VidGrab — Download finished"
+  },
+  "hls_empty": {
+    "message": "The playlist has no segments."
+  },
+  "hls_encrypted": {
+    "message": "The video is encrypted — it can't be downloaded."
+  },
+  "hls_error": {
+    "message": "Error: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "hls_live": {
+    "message": "Live stream — not supported yet."
+  },
+  "hls_not_hls": {
+    "message": "This isn't an HLS playlist."
+  },
+  "hls_remux_failed": {
+    "message": "Couldn't convert to MP4."
+  },
+  "hls_save_failed": {
+    "message": "The browser couldn't save the file."
+  },
+  "hls_save_interrupted": {
+    "message": "Saving the file was interrupted."
+  },
+  "hls_separate_audio": {
+    "message": "Video and audio are separate — use \"App\" (the VidGrab app on this computer) or \"Via VidGrab\"."
+  },
+  "hls_too_long": {
+    "message": "The video is too long to download in the browser."
+  },
+  "htab_local": {
+    "message": "📋 Local"
+  },
+  "job_n_failed": {
+    "message": "$p1$ failed",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "job_n_stopped": {
+    "message": "$p1$ stopped",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ob_finish": {
+    "message": "🚀 Start downloading!"
+  },
+  "ob_how_title": {
+    "message": "How it works"
+  },
+  "ob_intro": {
+    "message": "Download videos from TikTok, Douyin, Instagram, Facebook and many more platforms — or capture videos right on the page you're watching."
+  },
+  "ob_next": {
+    "message": "Next →"
+  },
+  "ob_platforms": {
+    "message": "Supported platforms"
+  },
+  "ob_step_a": {
+    "message": "① Open the page of the video you want (TikTok, Facebook...)"
+  },
+  "ob_step_b": {
+    "message": "② Click the VidGrab icon in the toolbar"
+  },
+  "ob_step_c1": {
+    "message": "③ Choose the quality →"
+  },
+  "ob_step_c2": {
+    "message": "Download now"
+  },
+  "ob_welcome": {
+    "message": "Welcome to VidGrab!"
+  },
+  "open_web_title": {
+    "message": "Open website"
+  },
+  "opt_mp3": {
+    "message": "MP3 (320kbps audio)"
+  },
+  "opt_mp4": {
+    "message": "MP4 (best available)"
+  },
+  "opt_remove_wm": {
+    "message": "Remove watermark"
+  },
+  "pnl_all_sent": {
+    "message": "All collected videos were sent. Scroll for more."
+  },
+  "pnl_done": {
+    "message": "Done! $p1$ videos. Click the green button to send them to download.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_done_one": {
+    "message": "Done! $p1$ video. Click the green button to send it to download.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_later": {
+    "message": "✅ Sent $p1$ videos. $p2$ videos weren't sent because you're out of downloads for today; click send again when you have new ones.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "pnl_later_reset": {
+    "message": "✅ Sent $p1$ videos. $p2$ videos weren't sent because you're out of downloads for today — new ones at $p3$; click send again when you have new ones.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      },
+      "p3": {
+        "content": "$3"
+      }
+    }
+  },
+  "pnl_live_collected": {
+    "message": "Live: $p1$ videos collected. Scroll for more or send now.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_live_collected_one": {
+    "message": "Live: $p1$ video collected. Scroll for more or send now.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_live_dom": {
+    "message": "Live: $p1$ videos on the page. Scroll to load more.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_live_dom_one": {
+    "message": "Live: $p1$ video on the page. Scroll to load more.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_live_initial": {
+    "message": "Live: $p1$ videos collected. Scroll to load more.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_live_initial_one": {
+    "message": "Live: $p1$ video collected. Scroll to load more.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_login_wall": {
+    "message": "Douyin requires signing in to see the whole channel. Sign in to Douyin in this tab; once you're signed in, the extension keeps scrolling by itself (if the page doesn't reload, press F5)."
+  },
+  "pnl_no_videos": {
+    "message": "No videos yet — scroll the page to load more."
+  },
+  "pnl_none": {
+    "message": "No videos found. Try signing in to $p1$ and try again.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_queued": {
+    "message": "✅ $p1$ videos queued!",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_queued_one": {
+    "message": "✅ $p1$ video queued!",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_quota_out": {
+    "message": "You've used all your downloads for today. $p1$ videos are kept here to send later.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_quota_out_one": {
+    "message": "You've used all your downloads for today. $p1$ video is kept here to send later.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_quota_out_reset": {
+    "message": "You've used all your downloads for today — new ones at $p2$. $p1$ videos are kept here to send later.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "pnl_retry_n": {
+    "message": "📤 Try again ($p1$ videos)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_retry_n_one": {
+    "message": "📤 Try again ($p1$ video)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_scroll_info": {
+    "message": "Scroll #$p1$ • $p2$ videos • stable $p3$/$p4$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      },
+      "p3": {
+        "content": "$3"
+      },
+      "p4": {
+        "content": "$4"
+      }
+    }
+  },
+  "pnl_scroll_more": {
+    "message": "🔄 Scroll more"
+  },
+  "pnl_scrolling": {
+    "message": "⏳ Scrolling..."
+  },
+  "pnl_send_n": {
+    "message": "📤 Send $p1$ videos to download",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_send_n_one": {
+    "message": "📤 Send $p1$ video to download",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_send_rest": {
+    "message": "📤 Send the remaining $p1$ videos",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_send_rest_one": {
+    "message": "📤 Send the remaining $p1$ video",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_send_server": {
+    "message": "📤 Send to server to download"
+  },
+  "pnl_sent_all": {
+    "message": "✅ All sent"
+  },
+  "pnl_sent_ok": {
+    "message": "✅ Sent successfully"
+  },
+  "pnl_stopped": {
+    "message": "Scan stopped — $p1$ videos. Click \"Scroll more\" to keep scanning, or send them to download.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_stopped_one": {
+    "message": "Scan stopped — $p1$ video. Click \"Scroll more\" to keep scanning, or send it to download.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_watching": {
+    "message": "Watching the page... scroll to load more videos."
+  },
+  "prev_direct": {
+    "message": "$p1$ — downloads straight to your computer.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "prev_direct_best": {
+    "message": "$p1$ — downloads straight to your computer, in the best quality the page offers.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "prev_no_file": {
+    "message": "No video file found on the page. Click Download to use the server, or use “⏺ Record tab”."
+  },
+  "prev_not_this_tab": {
+    "message": "Preview works for the video in the open tab. Open the video page and try again."
+  },
+  "prev_searching": {
+    "message": "⏳ Looking for the video on the page…"
+  },
+  "prev_server": {
+    "message": "This video downloads through the VidGrab server (YouTube, TikTok, MP3…) — pick a quality above and click Download."
+  },
+  "qr_hint": {
+    "message": "Scan with your phone camera — VidGrab opens with this video so you can download it right on your phone.",
+    "description": "wording: BA review"
+  },
+  "quality_best": {
+    "message": "🎬 Best",
+    "description": "wording: BA review"
+  },
+  "quality_best_sub": {
+    "message": "Highest available",
+    "description": "wording: BA review"
+  },
+  "quality_label": {
+    "message": "Download quality"
+  },
+  "quota_claim_reset": {
+    "message": "$p1$ — new downloads at $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "quota_out": {
+    "message": "You've used all your downloads for today."
+  },
+  "quota_out_reset": {
+    "message": "You've used all your downloads for today — new ones at $p1$.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "rec_intro": {
+    "message": "Recording is for pages with no file to download: the extension captures the tab's picture and sound while the video plays. DRM-protected videos will come out black."
+  },
+  "rec_lost": {
+    "message": "Couldn't save the recording."
+  },
+  "rec_other_tab": {
+    "message": "Another tab is already being recorded — stop it first."
+  },
+  "rec_running": {
+    "message": "● Recording “$p1$” — $p2$:$p3$. Let the video play to the end; recording continues if you close this window. Click “Stop recording” to save (WebM).",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      },
+      "p3": {
+        "content": "$3"
+      }
+    }
+  },
+  "rec_save_fail": {
+    "message": "Couldn't save."
+  },
+  "rec_saved": {
+    "message": "✅ Recording saved ($p1$s, $p2$) to the VidGrab folder.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "rec_saving": {
+    "message": "⏳ Saving the recording…"
+  },
+  "rec_start_fail": {
+    "message": "Couldn't record this tab."
+  },
+  "rec_stop": {
+    "message": "⏹ Stop recording"
+  },
+  "relay_failed": {
+    "message": "Couldn't send the list to VidGrab — the session may have expired. Request it again in the app / website."
+  },
+  "relay_sent": {
+    "message": "✅ Sent $p1$ videos to VidGrab (app / website). You can close this tab.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "relay_sent_one": {
+    "message": "✅ Sent $p1$ video to VidGrab (app / website). You can close this tab.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "relay_waiting": {
+    "message": "VidGrab is waiting for this channel's list — scrolling through the whole channel, don't close the tab…",
+    "description": "wording: BA review"
+  },
+  "reload_banner_btn": {
+    "message": "🔄 Reload page"
+  },
+  "reload_banner_title": {
+    "message": "⚡ VidGrab isn't active on this page"
+  },
+  "retry_btn": {
+    "message": "🔄 Try again"
+  },
+  "row_bg_queued": {
+    "message": "Downloading in the background — you'll get a notification when it's done"
+  },
+  "row_download": {
+    "message": "Download"
+  },
+  "row_error": {
+    "message": "Error: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "row_send_failed": {
+    "message": "Couldn't send, try again"
+  },
+  "server_working": {
+    "message": "⏳ The server is working... $p1$s",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "settings_account_title": {
+    "message": "👤 VidGrab account"
+  },
+  "settings_name_hint": {
+    "message": "Use {title} {platform} {id} {date} — for example: {platform} - {date} - {title}",
+    "description": "Placeholders in braces are literal template tokens; do not translate"
+  },
+  "settings_name_title": {
+    "message": "📝 File name template"
+  },
+  "settings_need_https": {
+    "message": "❌ Enter a valid https URL"
+  },
+  "settings_reset": {
+    "message": "↩ Reset to default"
+  },
+  "settings_reset_done": {
+    "message": "✅ Reset"
+  },
+  "settings_reset_plain": {
+    "message": "Reset to default"
+  },
+  "settings_saved": {
+    "message": "✅ Saved"
+  },
+  "settings_server_title": {
+    "message": "⚙ Server settings"
+  },
+  "settings_title": {
+    "message": "Settings"
+  },
+  "sniff_aes": {
+    "message": "Encrypted video — not supported yet",
+    "description": "wording: BA review"
+  },
+  "sniff_allow": {
+    "message": "Allow detecting videos on all pages",
+    "description": "wording: BA review"
+  },
+  "sniff_allow_btn": {
+    "message": "Detect videos on this page"
+  },
+  "sniff_appFailed": {
+    "message": "Couldn't send to the VidGrab app. Open the app and try again.",
+    "description": "wording: BA review"
+  },
+  "sniff_appHint": {
+    "message": "Install the VidGrab app for Windows to download this kind of video on your computer.",
+    "description": "wording: BA review"
+  },
+  "sniff_appSent": {
+    "message": "Sent to the VidGrab app on this computer — the app is downloading.",
+    "description": "wording: BA review"
+  },
+  "sniff_ask": {
+    "message": "Let VidGrab detect videos on every page you view (a video is often hosted on a different server than the page). The list stays in your browser only; you can revoke this anytime on the extensions management page.",
+    "description": "wording: BA review"
+  },
+  "sniff_cancel": {
+    "message": "Cancel",
+    "description": "wording: BA review"
+  },
+  "sniff_copied": {
+    "message": "Link copied.",
+    "description": "wording: BA review"
+  },
+  "sniff_copy": {
+    "message": "Copy link",
+    "description": "wording: BA review"
+  },
+  "sniff_denied": {
+    "message": "Permission wasn't granted, so VidGrab can't detect videos on this page.",
+    "description": "wording: BA review"
+  },
+  "sniff_download": {
+    "message": "Download",
+    "description": "wording: BA review"
+  },
+  "sniff_drm": {
+    "message": "DRM-protected — can't be downloaded",
+    "description": "wording: BA review"
+  },
+  "sniff_empty": {
+    "message": "No videos found yet. Play a video on the page, then reopen VidGrab.",
+    "description": "wording: BA review"
+  },
+  "sniff_failed": {
+    "message": "Couldn't download. Try \"Download via VidGrab\" or copy the link.",
+    "description": "wording: BA review"
+  },
+  "sniff_granted": {
+    "message": "Allowed. Reload the page, play the video, then reopen VidGrab.",
+    "description": "wording: BA review"
+  },
+  "sniff_jobCancelled": {
+    "message": "Canceled",
+    "description": "wording: BA review"
+  },
+  "sniff_jobDone": {
+    "message": "Saved to your Downloads folder",
+    "description": "wording: BA review"
+  },
+  "sniff_jobRunning": {
+    "message": "Downloading",
+    "description": "wording: BA review"
+  },
+  "sniff_jobSaving": {
+    "message": "Saving file…",
+    "description": "wording: BA review"
+  },
+  "sniff_live": {
+    "message": "Live stream — not supported yet",
+    "description": "wording: BA review"
+  },
+  "sniff_local": {
+    "message": "Download to this computer",
+    "description": "wording: BA review"
+  },
+  "sniff_playing": {
+    "message": "▶ Now playing",
+    "description": "wording: BA review"
+  },
+  "sniff_playing_title": {
+    "message": "▶ Now playing: $p1$",
+    "description": "wording: BA review",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sniff_reading": {
+    "message": "reading…",
+    "description": "wording: BA review"
+  },
+  "sniff_reload": {
+    "message": "Reload page",
+    "description": "wording: BA review"
+  },
+  "sniff_rescan": {
+    "message": "Rescan"
+  },
+  "sniff_started": {
+    "message": "Download started. Check progress in your browser's downloads bar.",
+    "description": "wording: BA review"
+  },
+  "sniff_started2": {
+    "message": "Downloading right in your browser — no server needed.",
+    "description": "wording: BA review"
+  },
+  "sniff_title": {
+    "message": "Videos on this page"
+  },
+  "sniff_viaApp": {
+    "message": "Download with app",
+    "description": "wording: BA review"
+  },
+  "sniff_viaServer": {
+    "message": "Download via VidGrab",
+    "description": "wording: BA review"
+  },
+  "sniff_viaServerShort": {
+    "message": "Via VidGrab",
+    "description": "wording: BA review"
+  },
+  "sp_album_label": {
+    "message": "ALBUM • SPOTIFY"
+  },
+  "sp_calling": {
+    "message": "Calling the Spotify API..."
+  },
+  "sp_getting": {
+    "message": "Getting Spotify data..."
+  },
+  "sp_n_tracks": {
+    "message": "$p1$ tracks",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sp_n_tracks_one": {
+    "message": "$p1$ track",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sp_not_loaded": {
+    "message": "Spotify list not loaded yet."
+  },
+  "sp_playlist_label": {
+    "message": "PLAYLIST • SPOTIFY"
+  },
+  "sp_zero": {
+    "message": "0 tracks"
+  },
+  "sp_zip": {
+    "message": "Download all (.ZIP)"
+  },
+  "star_add": {
+    "message": "Add star"
+  },
+  "star_remove": {
+    "message": "Remove star"
+  },
+  "status_bg": {
+    "message": "⚡ Downloading in the background — you can close the popup!"
+  },
+  "status_err": {
+    "message": "❌ $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "status_idle": {
+    "message": "Downloads in your browser · VidGrab server as backup",
+    "description": "wording: BA review"
+  },
+  "stopping": {
+    "message": "Stopping..."
+  },
+  "stopping_dots": {
+    "message": "⏳ Stopping…"
+  },
+  "subs_burned": {
+    "message": "Burn into video"
+  },
+  "subs_file": {
+    "message": "Separate .srt file"
+  },
+  "subs_label": {
+    "message": "Subtitles:"
+  },
+  "subs_off": {
+    "message": "None"
+  },
+  "tab_channel": {
+    "message": "Channel"
+  },
+  "tab_history": {
+    "message": "History"
+  },
+  "tab_single": {
+    "message": "Download"
+  },
+  "tier_checking": {
+    "message": "Checking quota…"
+  },
+  "tier_guest": {
+    "message": "Guest · 5 downloads/day"
+  },
+  "tier_load_fail": {
+    "message": "Couldn't load"
+  },
+  "tier_plan": {
+    "message": "Plan"
+  },
+  "tier_quota_today": {
+    "message": "Today's quota"
+  },
+  "tier_upgrade": {
+    "message": "▸ Upgrade to Pro — batch of 100, ZIP, high quality…"
+  },
+  "toast_direct_interrupted": {
+    "message": "The direct download was interrupted — trying through the VidGrab server…"
+  },
+  "toast_dl": {
+    "message": "✅ Downloading: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "toast_dl_direct": {
+    "message": "✅ Downloading (direct): $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "toast_downloading": {
+    "message": "✅ Downloading!"
+  },
+  "toast_err": {
+    "message": "❌ $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "toast_fallback": {
+    "message": "↪ No direct media found — downloading through VidGrab..."
+  },
+  "toast_page_media_dl": {
+    "message": "✅ Downloading media from the page (your session)!"
+  },
+  "toast_processing": {
+    "message": "⚡ VidGrab: Processing..."
+  },
+  "toast_scanning": {
+    "message": "⚡ VidGrab: Scanning the page for media..."
+  },
+  "tool_preview": {
+    "message": "👁 Preview",
+    "description": "wording: BA review"
+  },
+  "tool_qr": {
+    "message": "📱 Send to phone",
+    "description": "wording: BA review"
+  },
+  "tool_record": {
+    "message": "⏺ Record tab",
+    "description": "wording: BA review"
+  },
+  "tpl_need_token": {
+    "message": "The template needs {title} or {id} so file names don't collide."
+  },
+  "tpl_saved": {
+    "message": "✓ Saved. Applies to your next download."
+  },
+  "unsup_body": {
+    "message": "VidGrab can only download from supported sites. Open one of these:"
+  },
+  "unsup_open_web": {
+    "message": "Open VidGrab Web →"
+  },
+  "unsup_title": {
+    "message": "This page isn't supported"
+  },
+  "update_get": {
+    "message": "Get it",
+    "description": "wording: BA review"
+  },
+  "update_new": {
+    "message": "A new extension version is available: $p1$",
+    "description": "wording: BA review",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "update_outdated": {
+    "message": "This extension version is out of date. Please update.",
+    "description": "wording: BA review"
+  },
+  "url_label": {
+    "message": "Video link"
+  },
+  "url_paste_btn": {
+    "message": "Paste"
+  },
+  "url_paste_title": {
+    "message": "Paste from clipboard"
+  },
+  "url_placeholder": {
+    "message": "Paste the video link here…"
+  },
+  "watch_already": {
+    "message": "You're already following this channel."
+  },
+  "watch_btn": {
+    "message": "Follow this channel"
+  },
+  "watch_checking": {
+    "message": "Checking the channel…"
+  },
+  "watch_done": {
+    "message": "Channel followed. New videos will be announced in the VidGrab app and on the web."
+  },
+  "watch_following": {
+    "message": "Following"
+  },
+  "watch_generic": {
+    "message": "Something went wrong. Please try again."
+  },
+  "watch_login": {
+    "message": "Sign in to follow channels."
+  },
+  "watch_offline": {
+    "message": "Can't reach the server. Please try again."
+  },
+  "wm_only_tiktok": {
+    "message": "TikTok only"
+  },
+  "yt_note": {
+    "message": "The extension doesn't download YouTube videos. Download this video on the VidGrab website or the VidGrab app for Windows.",
+    "description": "wording: BA review"
+  },
+  "yt_open_web": {
+    "message": "Open on VidGrab web"
+  },
+  "yt_text": {
+    "message": "The extension doesn't download YouTube videos. Open it on the VidGrab website.",
+    "description": "wording: BA review"
+  }
+}

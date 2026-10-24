@@ -50,7 +50,7 @@ def main():
             ctx = p.chromium.launch_persistent_context(
                 str(tmp / "profile"), headless=False, executable_path=T.CHROME, locale="vi-VN",
                 viewport={"width": 1280, "height": 900},
-                args=["--headless=new", f"--disable-extensions-except={T.EXT}", f"--load-extension={T.EXT}", "--no-sandbox"])
+                args=["--headless=new", f"--disable-extensions-except={T.EXT}", f"--load-extension={T.EXT}", "--lang=vi", "--no-sandbox"])
             ctx.route(f"**/api/v1/channel-relay/{TOKEN}", on_relay)
             sw = ctx.service_workers[0] if ctx.service_workers else ctx.wait_for_event("serviceworker", timeout=20000)
             for _ in range(50):

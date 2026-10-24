@@ -54,7 +54,7 @@ def main():
             ctx = p.chromium.launch_persistent_context(
                 str(tmp / "profile"), headless=False, executable_path=T.CHROME, locale="vi-VN",
                 viewport={"width": 1280, "height": 900},
-                args=["--headless=new", f"--disable-extensions-except={T.EXT}", f"--load-extension={T.EXT}", "--no-sandbox",
+                args=["--headless=new", f"--disable-extensions-except={T.EXT}", f"--load-extension={T.EXT}", "--lang=vi", "--no-sandbox",
                       "--autoplay-policy=no-user-gesture-required"])
             ctx.route("https://www.tiktok.com/foryou", lambda r: r.fulfill(status=200, content_type="text/html", body=html))
             # each preloaded "video" is a 400 KB MP4-looking file, so the sniffer lists it (>300 KB)

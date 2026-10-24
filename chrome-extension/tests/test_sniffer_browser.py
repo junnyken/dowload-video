@@ -110,7 +110,7 @@ def main():
         with sync_playwright() as p:
             ctx = p.chromium.launch_persistent_context(
                 str(tmp / "profile"), headless=False, executable_path=CHROME, accept_downloads=True,
-                args=["--headless=new", f"--disable-extensions-except={EXT}", f"--load-extension={EXT}",
+                args=["--headless=new", f"--disable-extensions-except={EXT}", f"--load-extension={EXT}", "--lang=vi",
                       "--no-sandbox", "--autoplay-policy=no-user-gesture-required",
                       "--host-resolver-rules=MAP vgfixture.test 127.0.0.1"])
             sw = ctx.service_workers[0] if ctx.service_workers else ctx.wait_for_event("serviceworker", timeout=20000)

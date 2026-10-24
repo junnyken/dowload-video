@@ -91,7 +91,7 @@ def main():
         with sync_playwright() as p:
             ctx = p.chromium.launch_persistent_context(
                 str(tmp / "profile"), headless=False, executable_path=T.CHROME, locale="vi-VN", accept_downloads=True,
-                args=["--headless=new", f"--disable-extensions-except={T.EXT}", f"--load-extension={T.EXT}", "--no-sandbox",
+                args=["--headless=new", f"--disable-extensions-except={T.EXT}", f"--load-extension={T.EXT}", "--lang=vi", "--no-sandbox",
                       "--auto-accept-this-tab-capture", "--use-fake-ui-for-media-stream"])
             ctx.route(page_url, lambda r: r.fulfill(status=200, content_type="text/html", body=page))
             ctx.route(cdn, lambda r: r.fulfill(status=200, headers={"Content-Type": "video/mp4", "Content-Length": "7340032"}, body=b"")

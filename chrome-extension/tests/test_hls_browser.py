@@ -109,7 +109,7 @@ def main():
             ctx = p.chromium.launch_persistent_context(
                 str(tmp / "profile"), headless=False, executable_path=T.CHROME, accept_downloads=True,
                 downloads_path=str(dl_dir),
-                args=["--headless=new", f"--disable-extensions-except={T.EXT}", f"--load-extension={T.EXT}", "--no-sandbox"])
+                args=["--headless=new", f"--disable-extensions-except={T.EXT}", f"--load-extension={T.EXT}", "--lang=vi", "--no-sandbox"])
             ctx.route("**/dvid-api.vibe1.tinhgon.xyz/**", lambda r: (server_calls.append(r.request.url), r.abort()))
             sw = ctx.service_workers[0] if ctx.service_workers else ctx.wait_for_event("serviceworker", timeout=20000)
             ext_id = sw.url.split("/")[2]

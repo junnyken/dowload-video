@@ -6,12 +6,30 @@
   "s1": {
     "title": "1. Dữ liệu chúng tôi lưu",
     "intro": "Trang này liệt kê những gì VidGrab thực sự lưu khi bạn dùng website, tiện ích trình duyệt và ứng dụng Windows.",
-    "account": { "label": "Tài khoản", "text": "email và thông tin đăng nhập (qua Supabase Auth), gói dịch vụ, hạn mức đã dùng." },
-    "history": { "label": "Lịch sử tải", "text": "đường dẫn video, tiêu đề, nền tảng, định dạng và thời điểm tải. Khi file hết hạn, thông tin này vẫn được giữ để bạn tra cứu lại." },
-    "prefs": { "label": "Tùy chọn và tính năng bạn bật", "text": "cài đặt mặc định, kênh bạn theo dõi, lịch tải, bộ sưu tập, ghi chú, webhook bạn khai báo, liên kết Telegram, đăng ký nhận thông báo đẩy." },
-    "ip": { "label": "Địa chỉ IP", "text": "dùng để tính hạn mức cho khách chưa đăng nhập và chống lạm dụng. IP được lưu ở dạng gốc trong nhật ký bảo mật và bộ đếm hạn mức (xem mục 3). Riêng yêu cầu gỡ nội dung chỉ lưu IP ở dạng mã băm." },
-    "browser": { "label": "Thông tin trình duyệt", "text": "loại trình duyệt (user agent) trong nhật ký bảo mật." },
-    "stats": { "label": "Thống kê sử dụng", "text": "sự kiện thao tác trên trang, gắn với tài khoản hoặc một mã ẩn danh của trình duyệt." }
+    "account": {
+      "label": "Tài khoản",
+      "text": "email và thông tin đăng nhập (qua Supabase Auth), gói dịch vụ, hạn mức đã dùng."
+    },
+    "history": {
+      "label": "Lịch sử tải",
+      "text": "đường dẫn video, tiêu đề, nền tảng, định dạng và thời điểm tải. Khi file hết hạn, thông tin này vẫn được giữ để bạn tra cứu lại."
+    },
+    "prefs": {
+      "label": "Tùy chọn và tính năng bạn bật",
+      "text": "cài đặt mặc định, kênh bạn theo dõi, lịch tải, bộ sưu tập, ghi chú, webhook bạn khai báo, liên kết Telegram, đăng ký nhận thông báo đẩy."
+    },
+    "ip": {
+      "label": "Địa chỉ IP",
+      "text": "dùng để tính hạn mức cho khách chưa đăng nhập và chống lạm dụng. IP được lưu ở dạng gốc trong nhật ký bảo mật và bộ đếm hạn mức (xem mục 3). Riêng yêu cầu gỡ nội dung chỉ lưu IP ở dạng mã băm."
+    },
+    "browser": {
+      "label": "Thông tin trình duyệt",
+      "text": "loại trình duyệt (user agent) trong nhật ký bảo mật."
+    },
+    "stats": {
+      "label": "Thống kê sử dụng",
+      "text": "sự kiện thao tác trên trang, gắn với tài khoản hoặc một mã ẩn danh của trình duyệt."
+    }
   },
   "s2": {
     "title": "2. Những gì chúng tôi không lưu",
@@ -21,37 +39,129 @@
   },
   "s3": {
     "title": "3. Thời gian lưu",
-    "links": { "label": "Link tải", "text": "hết hạn sau khoảng 60 phút kể từ khi tạo." },
-    "temp": { "label": "File tạm trên máy chủ", "text": "tự xoá, mặc định sau 2 giờ." },
-    "history": { "label": "Lịch sử tải", "text": "giữ đến khi bạn xoá từng mục trong phần \"Lịch sử\"." },
-    "counters": { "label": "Bộ đếm hạn mức và chống lạm dụng (có IP, mã máy)", "text": "tự xoá sau 1 đến 40 ngày, tuỳ loại bộ đếm." },
-    "securityLog": { "label": "Nhật ký bảo mật (có IP, trình duyệt)", "text": "hiện chưa có lịch xoá tự động." },
-    "takedown": { "label": "Yêu cầu gỡ nội dung", "text": "giữ 1.000 yêu cầu gần nhất. Yêu cầu cũ hơn bị xoá khi có yêu cầu mới." },
-    "backup": { "label": "Bản sao lưu cơ sở dữ liệu", "text": "giữ 14 ngày. Dữ liệu bạn đã xoá có thể còn trong bản sao lưu đến hết thời hạn này." },
-    "account": { "label": "Tài khoản", "text": "giữ đến khi bạn gửi email yêu cầu xoá. Hiện chưa có nút tự xoá tài khoản." }
+    "links": {
+      "label": "Link tải",
+      "text": "hết hạn sau khoảng 60 phút kể từ khi tạo."
+    },
+    "temp": {
+      "label": "File tạm trên máy chủ",
+      "text": "tự xoá, mặc định sau 2 giờ."
+    },
+    "history": {
+      "label": "Lịch sử tải",
+      "text": "giữ đến khi bạn xoá từng mục trong phần \"Lịch sử\"."
+    },
+    "counters": {
+      "label": "Bộ đếm hạn mức và chống lạm dụng (có IP, mã máy)",
+      "text": "tự xoá sau 1 đến 40 ngày, tuỳ loại bộ đếm."
+    },
+    "securityLog": {
+      "label": "Nhật ký bảo mật (có IP, trình duyệt)",
+      "text": "hiện chưa có lịch xoá tự động."
+    },
+    "takedown": {
+      "label": "Yêu cầu gỡ nội dung",
+      "text": "giữ 1.000 yêu cầu gần nhất. Yêu cầu cũ hơn bị xoá khi có yêu cầu mới."
+    },
+    "backup": {
+      "label": "Bản sao lưu cơ sở dữ liệu",
+      "text": "giữ 14 ngày. Dữ liệu bạn đã xoá có thể còn trong bản sao lưu đến hết thời hạn này."
+    },
+    "account": {
+      "label": "Tài khoản",
+      "text": "giữ đến khi bạn gửi email yêu cầu xoá. Hiện chưa có nút tự xoá tài khoản."
+    }
   },
   "s4": {
     "title": "4. Tiện ích trình duyệt (Chrome)",
-    "tabs": { "label": "activeTab, tabs, scripting", "text": "đọc địa chỉ trang đang mở và nhận diện video trên trang." },
-    "cookies": { "label": "cookies", "text": "khi bạn tải video cần đăng nhập, tiện ích đọc cookie của chính trang video đó và gửi kèm yêu cầu tải. Cookie chỉ được gửi đến máy chủ VidGrab. Máy chủ chỉ dùng cookie cho lần tải đó rồi xoá ngay, không lưu lại." },
-    "other": { "label": "downloads, storage, notifications, contextMenus, alarms", "text": "lưu file về máy, giữ phiên đăng nhập và cài đặt trong trình duyệt, hiện thông báo, thêm menu chuột phải." }
+    "tabs": {
+      "label": "activeTab, tabs, scripting",
+      "text": "đọc địa chỉ trang đang mở và nhận diện video trên trang."
+    },
+    "cookies": {
+      "label": "cookies",
+      "text": "khi bạn tải video cần đăng nhập, tiện ích đọc cookie của chính trang video đó và gửi kèm yêu cầu tải. Cookie chỉ được gửi đến máy chủ VidGrab. Máy chủ chỉ dùng cookie cho lần tải đó rồi xoá ngay, không lưu lại."
+    },
+    "other": {
+      "label": "downloads, storage, notifications, contextMenus, alarms",
+      "text": "lưu file về máy, giữ phiên đăng nhập và cài đặt trong trình duyệt, hiện thông báo, thêm menu chuột phải."
+    },
+    "cookiesDomains": "Cookie chỉ được đọc trên các trang: Facebook, Instagram, X (Twitter), Reddit, Bilibili, Xiaohongshu (RedNote), Lemon8 và Douyin, và chỉ khi tiện ích đang nối với máy chủ chính thức của VidGrab.",
+    "sniffer": {
+      "label": "webRequest (bắt video trên trang)",
+      "text": "tiện ích chỉ quan sát các phản hồi mạng của tab để nhận ra file video (MP4, HLS, DASH) mà trang đang phát; không chặn hay sửa yêu cầu nào. Danh sách video nằm trong bộ nhớ tạm của trình duyệt và mất khi đóng tab, không gửi về VidGrab."
+    },
+    "record": {
+      "label": "tabCapture, offscreen (chế độ quay)",
+      "text": "chỉ khi bạn bấm “Quay tab”, tiện ích ghi lại hình và tiếng của tab đó ngay trong trình duyệt và lưu thành file trên máy bạn. Bản quay không được gửi về VidGrab. Video có DRM không được quay."
+    },
+    "optional": {
+      "label": "Quyền tuỳ chọn: truy cập mọi trang, clipboardRead",
+      "text": "chỉ được xin khi bạn bấm “Bắt video trên trang này” hoặc nút Dán; bạn có thể từ chối hoặc thu hồi bất cứ lúc nào trong cài đặt tiện ích của Chrome."
+    },
+    "session": {
+      "label": "Phiên đăng nhập của tiện ích",
+      "text": "khi bạn đăng nhập trên website VidGrab, tiện ích nhận một mã phiên riêng, hiệu lực 30 ngày, lưu trong trình duyệt của bạn. Đăng xuất ở tiện ích hoặc website sẽ thu hồi mã này trên máy chủ."
+    },
+    "quota": {
+      "label": "Lượt tải và tải trực tiếp",
+      "text": "tiện ích ưu tiên tải video bằng chính trình duyệt của bạn. Mỗi lượt tải, tiện ích gửi đường dẫn trang video lên máy chủ VidGrab để tính hạn mức trong ngày (cùng hạn mức với website và ứng dụng); file video không đi qua máy chủ trong trường hợp này. Khi trình duyệt không tải được, đường dẫn được gửi để máy chủ tải thay như trước."
+    },
+    "app": {
+      "label": "Kết nối với ứng dụng VidGrab cho Windows",
+      "text": "nếu ứng dụng đang chạy trên máy bạn, tiện ích có thể chuyển đường dẫn video cho ứng dụng qua địa chỉ nội bộ 127.0.0.1; dữ liệu này không rời khỏi máy bạn."
+    },
+    "limitedUse": "Việc tiện ích dùng và chuyển dữ liệu tuân thủ Chính sách dữ liệu người dùng của Chrome Web Store, bao gồm các yêu cầu về Sử dụng giới hạn (Limited Use)."
   },
   "s5": {
     "title": "5. Ứng dụng VidGrab cho Windows",
-    "cookies": { "label": "Cookie đăng nhập nền tảng", "text": "nằm trên máy bạn, được mã hoá bằng cơ chế của Windows, và không gửi về máy chủ VidGrab." },
-    "device": { "label": "Mã máy", "text": "ứng dụng gửi một mã băm từ mã định danh của Windows (không gửi mã gốc), kèm tên máy, phiên bản Windows và phiên bản ứng dụng. Mã này dùng để tính lượt tải miễn phí. Máy chủ lưu kèm địa chỉ IP gần nhất của máy." },
-    "sync": { "label": "Đồng bộ lịch sử", "text": "nếu bạn bật, ứng dụng gửi đường dẫn, tiêu đề, định dạng và kết quả mỗi lượt tải. Đường dẫn thư mục lưu file trên máy bạn không được gửi." }
+    "cookies": {
+      "label": "Cookie đăng nhập nền tảng",
+      "text": "nằm trên máy bạn, được mã hoá bằng cơ chế của Windows, và không gửi về máy chủ VidGrab."
+    },
+    "device": {
+      "label": "Mã máy",
+      "text": "ứng dụng gửi một mã băm từ mã định danh của Windows (không gửi mã gốc), kèm tên máy, phiên bản Windows và phiên bản ứng dụng. Mã này dùng để tính lượt tải miễn phí. Máy chủ lưu kèm địa chỉ IP gần nhất của máy."
+    },
+    "sync": {
+      "label": "Đồng bộ lịch sử",
+      "text": "nếu bạn bật, ứng dụng gửi đường dẫn, tiêu đề, định dạng và kết quả mỗi lượt tải. Đường dẫn thư mục lưu file trên máy bạn không được gửi."
+    }
   },
   "s6": {
     "title": "6. Bên thứ ba nhận dữ liệu",
-    "supabase": { "label": "Supabase", "text": "đăng nhập và cơ sở dữ liệu." },
-    "stripe": { "label": "Stripe", "text": "thanh toán. Nhận email của bạn khi bạn mua gói." },
-    "proxy": { "label": "Dịch vụ tải trung gian (như Apify, ScraperAPI)", "text": "với một số nền tảng, đường dẫn video bạn gửi được chuyển qua các dịch vụ này để lấy video." },
-    "ai": { "label": "Dịch vụ AI (Gemini, OpenAI/Whisper)", "text": "chỉ khi bạn dùng tính năng phiên âm, dịch hoặc phân tích video. Khi đó âm thanh hoặc nội dung chữ của video được gửi đi để xử lý." },
-    "telegram": { "label": "Telegram và email", "text": "nội dung góp ý (tên, email, nội dung, IP) và thông báo có yêu cầu gỡ nội dung mới được gửi đến nhóm vận hành. Góp ý không lưu trong cơ sở dữ liệu." },
-    "sentry": { "label": "Sentry", "text": "nếu được bật, nhận báo cáo lỗi kỹ thuật, không kèm thông tin cá nhân." },
-    "fonts": { "label": "Google Fonts", "text": "trang web tải phông chữ từ Google, nên Google nhận địa chỉ IP của trình duyệt bạn." },
-    "push": { "label": "Dịch vụ thông báo đẩy của trình duyệt", "text": "nhận nội dung thông báo khi bạn bật thông báo đẩy." },
+    "supabase": {
+      "label": "Supabase",
+      "text": "đăng nhập và cơ sở dữ liệu."
+    },
+    "stripe": {
+      "label": "Stripe",
+      "text": "thanh toán. Nhận email của bạn khi bạn mua gói."
+    },
+    "proxy": {
+      "label": "Dịch vụ tải trung gian (như Apify, ScraperAPI)",
+      "text": "với một số nền tảng, đường dẫn video bạn gửi được chuyển qua các dịch vụ này để lấy video."
+    },
+    "ai": {
+      "label": "Dịch vụ AI (Gemini, OpenAI/Whisper)",
+      "text": "chỉ khi bạn dùng tính năng phiên âm, dịch hoặc phân tích video. Khi đó âm thanh hoặc nội dung chữ của video được gửi đi để xử lý."
+    },
+    "telegram": {
+      "label": "Telegram và email",
+      "text": "nội dung góp ý (tên, email, nội dung, IP) và thông báo có yêu cầu gỡ nội dung mới được gửi đến nhóm vận hành. Góp ý không lưu trong cơ sở dữ liệu."
+    },
+    "sentry": {
+      "label": "Sentry",
+      "text": "nếu được bật, nhận báo cáo lỗi kỹ thuật, không kèm thông tin cá nhân."
+    },
+    "fonts": {
+      "label": "Google Fonts",
+      "text": "trang web tải phông chữ từ Google, nên Google nhận địa chỉ IP của trình duyệt bạn."
+    },
+    "push": {
+      "label": "Dịch vụ thông báo đẩy của trình duyệt",
+      "text": "nhận nội dung thông báo khi bạn bật thông báo đẩy."
+    },
     "noSale": "Chúng tôi KHÔNG bán, cho thuê hoặc chia sẻ dữ liệu của bạn cho bất kỳ bên thứ ba nào cho mục đích quảng cáo."
   },
   "s7": {

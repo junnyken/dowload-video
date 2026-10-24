@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <title>VidGrab</title>
   <link rel="stylesheet" href="tailwind.css">
+  <link rel="stylesheet" href="assets/fonts/inter.css">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
     * { box-sizing: border-box; }
 
@@ -453,14 +453,14 @@
    <div style="display:flex;align-items:center;gap:8px;">
     <span id="update-banner-text" style="flex:1;font-weight:600;color:#c7d2fe;"></span>
     <button id="update-banner-link" style="padding:4px 10px;border-radius:8px;background:#6366f1;color:#fff;font-size:11px;font-weight:700;border:none;cursor:pointer;"></button>
-    <button id="update-banner-close" aria-label="Đóng" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:14px;line-height:1;">×</button>
+    <button id="update-banner-close" aria-label="Đóng" data-i18n-aria="common_close" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:14px;line-height:1;">×</button>
    </div>
   </div>
 
   <!-- Reload banner -->
   <div id="reload-banner" class="reload-banner hidden">
-    <div style="font-size:11px;font-weight:700;color:#fbbf24;margin-bottom:6px;">⚡ VidGrab chưa kích hoạt trên trang này</div>
-    <button id="reload-btn" style="width:100%;padding:6px;border-radius:8px;background:#fbbf24;color:#0c0e14;font-size:11px;font-weight:700;border:none;cursor:pointer;">🔄 Reload trang</button>
+    <div data-i18n="reload_banner_title" style="font-size:11px;font-weight:700;color:#fbbf24;margin-bottom:6px;">⚡ VidGrab chưa kích hoạt trên trang này</div>
+    <button id="reload-btn" style="width:100%;padding:6px;border-radius:8px;background:#fbbf24;color:#0c0e14;font-size:11px;font-weight:700;border:none;cursor:pointer;" data-i18n="reload_banner_btn">🔄 Reload trang</button>
   </div>
 
   <!-- ── HEADER ── -->
@@ -470,45 +470,45 @@
       <div style="flex:1;">
         <div style="font-size:13px;font-weight:800;color:#e2e8f0;letter-spacing:-0.3px;display:flex;align-items:center;gap:6px;">
           VidGrab
-          <span id="server-health-dot" class="health-dot" title="Đang kiểm tra..."></span>
+          <span id="server-health-dot" class="health-dot" title="Đang kiểm tra..." data-i18n-title="health_checking"></span>
         </div>
-        <div id="page-badge" class="page-badge" style="display:inline-block;margin-top:2px;">Đang nhận diện...</div>
+        <div id="page-badge" class="page-badge" style="display:inline-block;margin-top:2px;" data-i18n="badge_detecting">Đang nhận diện...</div>
       </div>
-      <button id="settings-btn" class="icon-btn" title="Cài đặt">⚙️</button>
-      <a id="open-web-btn" href="https://dvid.vibe1.tinhgon.xyz" target="_blank" class="icon-btn" title="Mở web" style="text-decoration:none;font-size:13px;">🌐</a>
+      <button id="settings-btn" class="icon-btn" title="Cài đặt" data-i18n-title="settings_title">⚙️</button>
+      <a id="open-web-btn" href="https://dvid.vibe1.tinhgon.xyz" target="_blank" class="icon-btn" title="Mở web" data-i18n-title="open_web_title" style="text-decoration:none;font-size:13px;">🌐</a>
     </div>
   </div>
 
   <!-- Settings panel -->
   <div id="settings-panel" class="settings-panel hidden">
-    <div style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:10px;">⚙ Cài đặt Server</div>
+    <div data-i18n="settings_server_title" style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:10px;">⚙ Cài đặt Server</div>
     <div style="font-size:10px;color:#475569;margin-bottom:4px;">Server URL</div>
     <div style="display:flex;gap:6px;margin-bottom:6px;">
       <input id="settings-api-url" type="text" placeholder="https://...">
-      <button id="settings-save" style="padding:6px 12px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;font-weight:700;border:none;cursor:pointer;flex-shrink:0;">Lưu</button>
+      <button id="settings-save" data-i18n="common_save" style="padding:6px 12px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;font-weight:700;border:none;cursor:pointer;flex-shrink:0;">Lưu</button>
     </div>
-    <button id="settings-reset" style="font-size:10px;color:#475569;background:none;border:none;cursor:pointer;">↩ Đặt lại mặc định</button>
+    <button id="settings-reset" data-i18n="settings_reset" style="font-size:10px;color:#475569;background:none;border:none;cursor:pointer;">↩ Đặt lại mặc định</button>
 
     <!-- 5.20.0: file name template. wording: BA review -->
     <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(148,163,184,0.15);">
-      <div style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:6px;">📝 Mẫu tên file</div>
+      <div data-i18n="settings_name_title" style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:6px;">📝 Mẫu tên file</div>
       <div style="display:flex;gap:6px;">
         <input id="settings-name-tpl" type="text" placeholder="{title}">
-        <button id="settings-name-save" style="padding:6px 12px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;font-weight:700;border:none;cursor:pointer;flex-shrink:0;">Lưu</button>
+        <button id="settings-name-save" data-i18n="common_save" style="padding:6px 12px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;font-weight:700;border:none;cursor:pointer;flex-shrink:0;">Lưu</button>
       </div>
-      <div id="settings-name-hint" style="font-size:9px;color:#64748b;margin-top:4px;line-height:1.4;">Dùng {title} {platform} {id} {date} — ví dụ: {platform} - {date} - {title}</div>
+      <div id="settings-name-hint" data-i18n="settings_name_hint" style="font-size:9px;color:#64748b;margin-top:4px;line-height:1.4;">Dùng {title} {platform} {id} {date} — ví dụ: {platform} - {date} - {title}</div>
     </div>
 
     <!-- ── Account bridge ── -->
     <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(148,163,184,0.15);">
-      <div style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:8px;">👤 Tài khoản VidGrab</div>
-      <div id="auth-status-row" style="font-size:10px;color:#64748b;margin-bottom:6px;">Đang kiểm tra...</div>
+      <div data-i18n="settings_account_title" style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:8px;">👤 Tài khoản VidGrab</div>
+      <div id="auth-status-row" data-i18n="health_checking" style="font-size:10px;color:#64748b;margin-bottom:6px;">Đang kiểm tra...</div>
       <button id="auth-connect-btn"
         style="width:100%;padding:7px 10px;border-radius:8px;background:linear-gradient(135deg,#FBBF24,#FB923C);color:#012622;font-size:11px;font-weight:700;border:none;cursor:pointer;">
-        Đăng nhập trên web →
+        <span data-i18n="auth_login_web">Đăng nhập trên web →</span>
       </button>
       <button id="auth-disconnect-btn" style="display:none;width:100%;margin-top:4px;padding:6px 10px;border-radius:8px;background:rgba(239,68,68,0.1);color:#f87171;font-size:10px;font-weight:600;border:1px solid rgba(239,68,68,0.2);cursor:pointer;">
-        Đăng xuất
+        <span data-i18n="auth_logout">Đăng xuất</span>
       </button>
     </div>
   </div>
@@ -517,15 +517,15 @@
   <div class="tab-bar">
     <button id="tab-single" class="tab-btn active">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      Tải Video
+      <span data-i18n="tab_single">Tải Video</span>
     </button>
     <button id="tab-channel" class="tab-btn">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.36 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.08 6.08l1.27-1.34a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-      Kênh
+      <span data-i18n="tab_channel">Kênh</span>
     </button>
     <button id="tab-history" class="tab-btn">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      Lịch sử
+      <span data-i18n="tab_history">Lịch sử</span>
     </button>
   </div>
 
@@ -535,12 +535,12 @@
        wording: BA review -->
   <div id="vg-sniff" style="display:none;margin:10px 14px 0;background:#13151f;border:1px solid #1e2333;border-radius:12px;padding:10px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <div class="card-label" style="margin:0;">Video trên trang này <span id="vg-sniff-count" style="color:#a5b4fc;"></span></div>
-      <button id="vg-sniff-refresh" title="Quét lại" style="background:none;border:none;color:#64748b;font-size:11px;cursor:pointer;">↻</button>
+      <div class="card-label" style="margin:0;"><span data-i18n="sniff_title">Video trên trang này</span> <span id="vg-sniff-count" style="color:#a5b4fc;"></span></div>
+      <button id="vg-sniff-refresh" title="Quét lại" data-i18n-title="sniff_rescan" style="background:none;border:none;color:#64748b;font-size:11px;cursor:pointer;">↻</button>
     </div>
     <div id="vg-sniff-list" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;"></div>
     <div id="vg-sniff-empty" style="display:none;font-size:10px;color:#64748b;line-height:1.5;"></div>
-    <button id="vg-sniff-allow" style="display:none;margin-top:6px;width:100%;background:#1e2333;border:1px solid #2d3348;border-radius:10px;padding:7px;color:#a5b4fc;font-size:11px;font-weight:600;cursor:pointer;">Bắt video trên trang này</button>
+    <button id="vg-sniff-allow" style="display:none;margin-top:6px;width:100%;background:#1e2333;border:1px solid #2d3348;border-radius:10px;padding:7px;color:#a5b4fc;font-size:11px;font-weight:600;cursor:pointer;" data-i18n="sniff_allow_btn">Bắt video trên trang này</button>
     <div id="vg-sniff-msg" style="font-size:10px;color:#64748b;margin-top:4px;min-height:0;"></div>
     <!-- HLS downloads running in this browser (5.13.0) -->
     <div id="vg-hls-jobs" style="display:none;flex-direction:column;gap:6px;margin-top:8px;"></div>
@@ -548,8 +548,8 @@
 
   <!-- YouTube: the extension does not download it (Chrome Web Store policy). -->
   <div id="vg-yt-note" style="display:none;margin:10px 14px 0;background:#1a1420;border:1px solid #3b2140;border-radius:12px;padding:10px;font-size:11px;color:#e2e8f0;line-height:1.5;">
-    Tiện ích không tải video YouTube. Bạn tải video này trên web hoặc app VidGrab cho Windows.
-    <button id="vg-yt-open" style="display:block;margin-top:8px;width:100%;background:#ef4444;border:none;border-radius:10px;padding:7px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;">Mở trên web VidGrab</button>
+    <span data-i18n="yt_note">Tiện ích không tải video YouTube. Bạn tải video này trên web hoặc app VidGrab cho Windows.</span>
+    <button id="vg-yt-open" data-i18n="yt_open_web" style="display:block;margin-top:8px;width:100%;background:#ef4444;border:none;border-radius:10px;padding:7px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;">Mở trên web VidGrab</button>
   </div>
 
   <!-- ══════════════════ SINGLE VIDEO ══════════════════ -->
@@ -561,24 +561,24 @@
          no way to tell it what to fetch. Prefilled from the tab, editable, and
          pasteable in one tap. -->
     <div style="margin-bottom:12px;">
-      <div class="card-label">Link video</div>
+      <div class="card-label" data-i18n="url_label">Link video</div>
       <div style="display:flex;gap:6px;">
         <input id="vg-url-input" type="text" spellcheck="false"
-               placeholder="Dán link video vào đây…"
+               placeholder="Dán link video vào đây…" data-i18n-placeholder="url_placeholder"
                style="flex:1;min-width:0;background:#13151f;border:1px solid #1e2333;
                       border-radius:10px;padding:8px 10px;font-size:11px;color:#e2e8f0;
                       font-family:monospace;outline:none;">
-        <button id="vg-url-paste" title="Dán từ clipboard"
+        <button id="vg-url-paste" title="Dán từ clipboard" data-i18n-title="url_paste_title"
                 style="flex-shrink:0;background:#1e2333;border:1px solid #2d3348;
                        border-radius:10px;padding:0 10px;color:#a5b4fc;font-size:11px;
-                       font-weight:600;cursor:pointer;">Dán</button>
+                       font-weight:600;cursor:pointer;" data-i18n="url_paste_btn">Dán</button>
       </div>
       <div id="vg-url-hint" style="font-size:10px;color:#475569;margin-top:4px;"></div>
     </div>
 
     <!-- Quality selector -->
     <div style="margin-bottom:12px;">
-      <div class="card-label">Chất lượng tải</div>
+      <div class="card-label" data-i18n="quality_label">Chất lượng tải</div>
       <div class="quality-pills">
         <!--
           These used to be HD / 4K / MP3, but HD and 4K were the same button.
@@ -594,13 +594,13 @@
         -->
         <label class="q-pill active">
           <input type="radio" name="quality" value="video" style="display:none">
-          🎬 Tốt nhất
-          <span class="q-sub">Cao nhất có sẵn</span>
+          <span data-i18n="quality_best">🎬 Tốt nhất</span>
+          <span class="q-sub" data-i18n="quality_best_sub">Cao nhất có sẵn</span>
         </label>
         <!-- wording: BA review — 1080p/720p pills removed (#6134): real qualities are listed after the download -->
         <label class="q-pill">
           <input type="radio" name="quality" value="mp3_320" style="display:none">
-          🎵 MP3
+          <span>🎵 MP3</span>
           <span class="q-sub">320kbps</span>
         </label>
       </div>
@@ -610,24 +610,24 @@
          since the pill click handler writes the chosen value into it and the
          download handler reads it back. First option is the default. -->
     <select id="qualitySelect" style="display:none">
-      <option value="video">MP4 (tốt nhất có sẵn)</option>
-      <option value="mp3_320">MP3 (âm thanh 320kbps)</option>
+      <option value="video" data-i18n="opt_mp4">MP4 (tốt nhất có sẵn)</option>
+      <option value="mp3_320" data-i18n="opt_mp3">MP3 (âm thanh 320kbps)</option>
     </select>
 
     <!-- Options -->
     <div class="toggle-row" style="margin-bottom:10px;">
       <label class="toggle-item">
         <input type="checkbox" id="removeWatermark" checked>
-        <span>Bỏ watermark</span>
+        <span data-i18n="opt_remove_wm">Bỏ watermark</span>
         <span id="wm-platform-hint" style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;margin-left:4px;display:none;"></span>
       </label>
     </div>
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:14px;">
-      <label style="font-size:10px;font-weight:600;color:#64748b;min-width:50px;">Phụ đề:</label>
+      <label style="font-size:10px;font-weight:600;color:#64748b;min-width:50px;" data-i18n="subs_label">Phụ đề:</label>
       <select id="subtitleModeSelect" style="font-size:10px;padding:3px 6px;border-radius:6px;background:#0f1923;border:1px solid #1e2333;color:#e2e8f0;cursor:pointer;flex:1;">
-        <option value="off">Không có</option>
-        <option value="file">File .srt rời</option>
-        <option value="burned">Đốt vào video</option>
+        <option value="off" data-i18n="subs_off">Không có</option>
+        <option value="file" data-i18n="subs_file">File .srt rời</option>
+        <option value="burned" data-i18n="subs_burned">Đốt vào video</option>
       </select>
     </div>
 
@@ -635,16 +635,16 @@
     <button id="downloadBtn" class="btn-primary">
       <svg id="icon-download" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       <div id="spinner" class="spinner"></div>
-      <span id="btnText">Tải Video Ngay</span>
+      <span id="btnText" data-i18n="btn_download_video">Tải Video Ngay</span>
     </button>
 
-    <div id="statusMsg" class="status-msg">Tải bằng trình duyệt của bạn · máy chủ VidGrab dự phòng</div><!-- wording: BA review -->
+    <div id="statusMsg" class="status-msg" data-i18n="status_idle">Tải bằng trình duyệt của bạn · máy chủ VidGrab dự phòng</div><!-- wording: BA review -->
 
     <!-- 5.20.0: preview · send to phone · record the tab. wording: BA review -->
     <div id="vg-tools" style="display:flex;gap:6px;margin-top:8px;">
-      <button id="vg-preview-btn" type="button" class="vg-chip" style="flex:1;padding:6px;">👁 Xem trước</button>
-      <button id="vg-qr-btn" type="button" class="vg-chip" style="flex:1;padding:6px;">📱 Gửi sang điện thoại</button>
-      <button id="vg-rec-btn" type="button" class="vg-chip" style="flex:1;padding:6px;">⏺ Quay tab</button>
+      <button id="vg-preview-btn" type="button" class="vg-chip" style="flex:1;padding:6px;" data-i18n="tool_preview">👁 Xem trước</button>
+      <button id="vg-qr-btn" type="button" class="vg-chip" style="flex:1;padding:6px;" data-i18n="tool_qr">📱 Gửi sang điện thoại</button>
+      <button id="vg-rec-btn" type="button" class="vg-chip" style="flex:1;padding:6px;" data-i18n="tool_record">⏺ Quay tab</button>
     </div>
     <div id="vg-preview" class="hidden" style="margin-top:8px;background:#0f1119;border:1px solid #1e2333;border-radius:10px;padding:8px;">
       <video id="vg-preview-video" controls muted playsinline preload="metadata" style="width:100%;max-height:200px;border-radius:8px;background:#000;"></video>
@@ -652,14 +652,14 @@
     </div>
     <div id="vg-qr" class="hidden" style="margin-top:8px;background:#fff;border-radius:10px;padding:10px;text-align:center;">
       <div id="vg-qr-code" style="display:inline-block;"></div>
-      <div style="font-size:10px;color:#334155;margin-top:4px;line-height:1.4;">Quét bằng camera điện thoại — trang VidGrab mở với video này để tải ngay trên điện thoại.</div>
+      <div data-i18n="qr_hint" style="font-size:10px;color:#334155;margin-top:4px;line-height:1.4;">Quét bằng camera điện thoại — trang VidGrab mở với video này để tải ngay trên điện thoại.</div>
     </div>
     <div id="vg-rec" class="hidden" style="margin-top:8px;background:#1f0f13;border:1px solid #7f1d1d;border-radius:10px;padding:8px;font-size:10px;color:#fecaca;line-height:1.5;"></div>
 
     <!-- Error -->
     <div id="error-card" class="error-card hidden">
       <div id="error-text" style="font-size:11px;color:#f87171;margin-bottom:8px;"></div>
-      <button id="retry-btn" style="font-size:10px;padding:5px 14px;border-radius:8px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.25);cursor:pointer;font-weight:700;">🔄 Thử lại</button>
+      <button id="retry-btn" style="font-size:10px;padding:5px 14px;border-radius:8px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.25);cursor:pointer;font-weight:700;" data-i18n="retry_btn">🔄 Thử lại</button>
     </div>
 
     <!-- Success animation -->
@@ -674,16 +674,16 @@
         <span id="preview-duration"></span>
         <span id="preview-size" class="meta-chip"></span>
         <span id="preview-platform"></span>
-        <span id="preview-wm-badge" style="display:none;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.3);">✓ Không WM</span>
+        <span id="preview-wm-badge" style="display:none;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.3);" data-i18n="badge_no_wm">✓ Không WM</span>
       </div>
       <div class="action-row">
-        <button id="action-copy-link" class="btn-secondary">📋 Copy link</button>
-        <button id="action-open-web" class="btn-secondary">🌐 Web</button>
-        <button id="action-dl-thumb" class="btn-secondary">🖼️ Ảnh bìa</button>
+        <button id="action-copy-link" class="btn-secondary" data-i18n="act_copy_link">📋 Copy link</button>
+        <button id="action-open-web" class="btn-secondary" data-i18n="act_web">🌐 Web</button>
+        <button id="action-dl-thumb" class="btn-secondary" data-i18n="act_thumb">🖼️ Ảnh bìa</button>
       </div>
       <div class="action-row" style="margin-top:6px;">
-        <button id="action-ai-analyze" class="btn-secondary hidden">🤖 AI Gợi ý</button>
-        <button id="action-translate-subs" class="btn-secondary">💬 Dịch phụ đề</button>
+        <button id="action-ai-analyze" class="btn-secondary hidden" data-i18n="act_ai">🤖 AI Gợi ý</button>
+        <button id="action-translate-subs" class="btn-secondary" data-i18n="act_translate_subs">💬 Dịch phụ đề</button>
       </div>
       <div id="ai-analyze-results" class="hidden" style="margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);font-size:11px;color:#475569;"></div>
     </div>
@@ -691,7 +691,7 @@
     <!-- Format panel -->
     <div id="formats-panel" class="hidden" style="margin-top:12px;">
       <div class="formats-header">
-        <span class="formats-label">Tất cả chất lượng</span>
+        <span class="formats-label" data-i18n="formats_title">Tất cả chất lượng</span>
         <button id="formats-close" class="formats-close">✕</button>
       </div>
       <div id="quality-note" class="hidden" style="font-size:10px;color:#fbbf24;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.25);border-radius:8px;padding:6px 8px;margin-bottom:8px;"></div>
@@ -701,7 +701,7 @@
     <!-- Download progress -->
     <div id="dl-progress" class="dl-progress-wrap hidden">
       <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:10px;color:#475569;">Đang tải xuống...</span>
+        <span data-i18n="dl_progress_title" style="font-size:10px;color:#475569;">Đang tải xuống...</span>
         <span id="dl-progress-pct" style="font-size:10px;font-weight:700;color:#818cf8;">0%</span>
       </div>
       <div class="dl-progress-track">
@@ -721,26 +721,26 @@
 
       <!-- Channel URL -->
       <div class="ch-url-card">
-        <div class="ch-url-label">Kênh đang mở</div>
+        <div class="ch-url-label" data-i18n="ch_open_label">Kênh đang mở</div>
         <div id="ch-url" class="ch-url-val">—</div>
       </div>
 
       <!-- Qty selector (generic channel) -->
       <div id="ch-count-selector" class="hidden" style="margin-bottom:10px;">
-        <div class="card-label">Số lượng video muốn tải</div>
+        <div class="card-label" data-i18n="ch_qty_label">Số lượng video muốn tải</div>
         <div style="display:flex;gap:6px;margin-bottom:8px;">
           <button class="ch-qty-btn qty-btn active" data-qty="10">10</button>
           <button class="ch-qty-btn qty-btn" data-qty="20">20</button>
           <button class="ch-qty-btn qty-btn" data-qty="50">50</button>
           <button class="ch-qty-btn qty-btn" data-qty="100">100</button>
         </div>
-        <input id="ch-qty-custom" type="number" min="1" max="500" placeholder="Hoặc nhập số tuỳ chỉnh..."
+        <input id="ch-qty-custom" type="number" min="1" max="500" placeholder="Hoặc nhập số tuỳ chỉnh..." data-i18n-placeholder="ch_qty_custom"
           style="width:100%;background:#0c0e14;border:1.5px solid #1e2333;border-radius:9px;padding:7px 12px;font-size:11px;color:#e2e8f0;outline:none;transition:border-color 0.15s;"/>
       </div>
 
       <!-- Collected count -->
       <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:11px;color:#475569;">Video thu thập được</span>
+        <span data-i18n="ch_collected" style="font-size:11px;color:#475569;">Video thu thập được</span>
         <span id="ch-count" style="font-size:22px;font-weight:800;background:linear-gradient(135deg,#818cf8,#a5b4fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">0</span>
       </div>
 
@@ -755,31 +755,31 @@
             </svg>
           </div>
           <div style="text-align:center;">
-            <div style="font-size:12px;font-weight:700;color:#e2e8f0;margin-bottom:4px;">Đang quét danh sách video...</div>
-            <div id="ch-discovery-msg" style="font-size:10px;color:#475569;">Đang kết nối tới server...</div>
+            <div data-i18n="ch_scanning" style="font-size:12px;font-weight:700;color:#e2e8f0;margin-bottom:4px;">Đang quét danh sách video...</div>
+            <div id="ch-discovery-msg" data-i18n="ch_connecting" style="font-size:10px;color:#475569;">Đang kết nối tới server...</div>
           </div>
           <div class="timer-chip">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             <span id="ch-discovery-timer">00:00</span>
           </div>
-          <div style="font-size:10px;color:#374151;text-align:center;">Kênh lớn có thể cần 30–90 giây để tải danh sách</div>
-          <button id="ch-stop-scan" class="ch-stop-btn hidden" type="button" style="margin-top:8px;width:100%;padding:7px 10px;border-radius:10px;border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.08);color:#f87171;font-size:11px;font-weight:700;cursor:pointer;">⏹ Dừng quét kênh</button>
+          <div data-i18n="ch_big_hint" style="font-size:10px;color:#374151;text-align:center;">Kênh lớn có thể cần 30–90 giây để tải danh sách</div>
+          <button id="ch-stop-scan" class="ch-stop-btn hidden" type="button" style="margin-top:8px;width:100%;padding:7px 10px;border-radius:10px;border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.08);color:#f87171;font-size:11px;font-weight:700;cursor:pointer;" data-i18n="ch_stop_scan">⏹ Dừng quét kênh</button>
         </div>
       </div>
 
       <!-- Job results -->
       <div id="ch-results" class="card hidden">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <span style="font-size:11px;color:#475569;">Tiến độ tải xuống</span>
+          <span data-i18n="ch_progress" style="font-size:11px;color:#475569;">Tiến độ tải xuống</span>
           <span id="ch-job-stats" style="font-size:11px;font-weight:700;color:#34d399;">0 / 0</span>
         </div>
         <div class="job-bar-track">
           <div id="ch-job-bar" class="job-bar-fill"></div>
         </div>
         <div id="ch-result-msg" style="font-size:10px;color:#475569;margin-top:6px;text-align:center;"></div>
-        <button id="ch-stop-batch" class="ch-stop-btn hidden" type="button" style="margin-top:8px;width:100%;padding:7px 10px;border-radius:10px;border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.08);color:#f87171;font-size:11px;font-weight:700;cursor:pointer;">⏹ Dừng tải phần còn lại</button>
+        <button id="ch-stop-batch" class="ch-stop-btn hidden" type="button" style="margin-top:8px;width:100%;padding:7px 10px;border-radius:10px;border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.08);color:#f87171;font-size:11px;font-weight:700;cursor:pointer;" data-i18n="ch_stop_batch">⏹ Dừng tải phần còn lại</button>
         <a id="ch-open-web" href="#" target="_blank" class="hidden" style="margin-top:8px;font-size:10px;color:#818cf8;text-align:center;text-decoration:none;font-weight:600;">
-          📂 Xem đầy đủ trên web →
+          <span data-i18n="ch_open_web_full">📂 Xem đầy đủ trên web →</span>
         </a>
       </div>
 
@@ -787,14 +787,14 @@
       <div id="sp-header" class="hidden card" style="flex-direction:row;gap:10px;align-items:center;padding:10px 12px;">
         <img id="sp-thumb" src="" style="width:52px;height:52px;border-radius:10px;object-fit:cover;flex-shrink:0;">
         <div style="flex:1;overflow:hidden;">
-          <div id="sp-type-label" style="font-size:9px;font-weight:700;color:#34d399;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:2px;">PLAYLIST • SPOTIFY</div>
+          <div id="sp-type-label" style="font-size:9px;font-weight:700;color:#34d399;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:2px;" data-i18n="sp_playlist_label">PLAYLIST • SPOTIFY</div>
           <div id="sp-title" style="font-size:12px;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Title</div>
-          <div id="sp-count" style="font-size:10px;color:#475569;margin-top:1px;">0 bài nhạc</div>
+          <div id="sp-count" data-i18n="sp_zero" style="font-size:10px;color:#475569;margin-top:1px;">0 bài nhạc</div>
         </div>
       </div>
 
       <!-- Status text -->
-      <div id="ch-status" style="font-size:11px;color:#475569;text-align:center;margin-bottom:10px;min-height:14px;">
+      <div id="ch-status" data-i18n="ch_panel_open" style="font-size:11px;color:#475569;text-align:center;margin-bottom:10px;min-height:14px;">
         Panel VidGrab đã mở trên trang kênh.
       </div>
 
@@ -802,16 +802,16 @@
       <button id="ch-scrape-btn" class="btn-primary" style="margin-bottom:8px;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <div id="ch-spinner" class="spinner"></div>
-        <span id="ch-btn-text">Bắt đầu Quét Kênh</span>
+        <span id="ch-btn-text" data-i18n="ch_btn_scan">Bắt đầu Quét Kênh</span>
       </button>
 
       <!-- 5.16.0: stop the page's auto-scroll -->
-      <button id="ch-stop-local" class="ch-stop-btn hidden" type="button" style="margin-bottom:8px;width:100%;padding:7px 10px;border-radius:10px;border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.08);color:#f87171;font-size:11px;font-weight:700;cursor:pointer;">⏹ Dừng quét</button>
+      <button id="ch-stop-local" class="ch-stop-btn hidden" type="button" style="margin-bottom:8px;width:100%;padding:7px 10px;border-radius:10px;border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.08);color:#f87171;font-size:11px;font-weight:700;cursor:pointer;" data-i18n="ch_stop_local">⏹ Dừng quét</button>
 
       <!-- Send button (Douyin) -->
       <button id="ch-send-btn" class="btn-green hidden">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        <span id="ch-send-text">Gửi tải xuống server</span>
+        <span id="ch-send-text" data-i18n="ch_send_text">Gửi tải xuống server</span>
       </button>
 
       <div id="ch-batch-info" class="hidden" style="font-size:10px;text-align:center;color:#475569;margin-top:6px;"></div>
@@ -819,26 +819,26 @@
       <!-- 5.16.0: the collected videos, each with its own download button. wording: BA review -->
       <div id="ch-list-wrap" class="hidden" style="margin-top:10px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-          <div class="card-label" style="margin:0;">Danh sách video <span id="ch-list-count" style="color:#a5b4fc;"></span></div>
+          <div class="card-label" style="margin:0;"><span data-i18n="ch_list_title">Danh sách video</span> <span id="ch-list-count" style="color:#a5b4fc;"></span></div>
         </div>
         <!-- 5.17.0: choose videos and download them to this computer. wording: BA review -->
         <div id="ch-pick-bar" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:6px;font-size:10px;">
-          <button id="ch-pick-all" type="button" class="vg-chip">Chọn tất cả</button>
-          <button id="ch-pick-none" type="button" class="vg-chip">Bỏ chọn</button>
-          <button id="ch-pick-10" type="button" class="vg-chip">10 video đầu</button>
+          <button id="ch-pick-all" type="button" class="vg-chip" data-i18n="ch_pick_all">Chọn tất cả</button>
+          <button id="ch-pick-none" type="button" class="vg-chip" data-i18n="ch_pick_none">Bỏ chọn</button>
+          <button id="ch-pick-10" type="button" class="vg-chip" data-i18n="ch_pick_10">10 video đầu</button>
           <span id="ch-pick-count" style="margin-left:auto;color:#94a3b8;"></span>
         </div>
         <div id="ch-list" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;"></div>
         <div id="ch-list-msg" style="font-size:10px;color:#64748b;margin-top:4px;min-height:0;"></div>
         <button id="ch-bulk-btn" type="button" class="btn-primary" style="margin-top:8px;" disabled>
-          <span id="ch-bulk-text">Tải video đã chọn về máy</span>
+          <span id="ch-bulk-text" data-i18n="ch_bulk_default">Tải video đã chọn về máy</span>
         </button>
         <div id="ch-bulk" class="hidden" style="margin-top:8px;background:#0f1119;border:1px solid #1e2333;border-radius:10px;padding:8px;">
           <div style="height:6px;background:#1e2333;border-radius:99px;overflow:hidden;"><div id="ch-bulk-bar" style="height:100%;width:0;background:linear-gradient(90deg,#6366f1,#22c55e);transition:width .3s;"></div></div>
           <div id="ch-bulk-info" style="font-size:10px;color:#cbd5e1;margin-top:6px;"></div>
           <div style="display:flex;gap:6px;margin-top:6px;">
-            <button id="ch-bulk-stop" type="button" class="vg-chip">⏹ Dừng tải</button>
-            <button id="ch-bulk-clear" type="button" class="vg-chip hidden">Xoá kết quả</button>
+            <button id="ch-bulk-stop" type="button" class="vg-chip" data-i18n="ch_bulk_stop">⏹ Dừng tải</button>
+            <button id="ch-bulk-clear" type="button" class="vg-chip hidden" data-i18n="ch_bulk_clear">Xoá kết quả</button>
           </div>
         </div>
       </div>
@@ -847,7 +847,7 @@
       <div id="ch-watch" class="hidden" style="margin-top:10px;">
         <button id="ch-watch-btn" class="btn-primary" type="button">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          <span id="ch-watch-text">Theo dõi kênh này</span>
+          <span id="ch-watch-text" data-i18n="watch_btn">Theo dõi kênh này</span>
         </button>
         <div id="ch-watch-msg" role="status" style="font-size:11px;text-align:center;color:#94a3b8;margin-top:6px;min-height:14px;"></div>
       </div>
@@ -865,22 +865,22 @@
       <div style="display:flex;gap:6px;margin-bottom:10px;">
         <button id="htab-local"
           style="flex:1;padding:5px 0;border-radius:8px;border:1px solid #1e2333;font-size:10px;font-weight:700;cursor:pointer;background:#FBBF24;color:#012622;transition:all 0.15s;">
-          📋 Cục Bộ
+          <span data-i18n="htab_local">📋 Cục Bộ</span>
         </button>
         <button id="htab-archive"
           style="flex:1;padding:5px 0;border-radius:8px;border:1px solid #1e2333;font-size:10px;font-weight:700;cursor:pointer;background:none;color:#64748b;transition:all 0.15s;">
-          🗄 Archive
+          <span>🗄 Archive</span>
         </button>
       </div>
 
       <!-- Local History -->
       <div id="hpanel-local">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span style="font-size:10px;color:#64748b;">Video đã tải gần đây (cục bộ)</span>
-          <button id="clear-history-btn" class="clear-history-btn" style="font-size:10px;font-weight:600;color:#ef4444;background:none;border:none;cursor:pointer;opacity:0.7;">🗑 Xoá</button>
+          <span data-i18n="hist_title" style="font-size:10px;color:#64748b;">Video đã tải gần đây (cục bộ)</span>
+          <button id="clear-history-btn" class="clear-history-btn" style="font-size:10px;font-weight:600;color:#ef4444;background:none;border:none;cursor:pointer;opacity:0.7;" data-i18n="hist_clear">🗑 Xoá</button>
         </div>
         <div id="history-list" style="display:flex;flex-direction:column;gap:5px;max-height:310px;overflow-y:auto;">
-          <div id="history-empty" style="text-align:center;color:#374151;font-size:11px;padding:24px 0;">
+          <div id="history-empty" data-i18n="hist_empty" style="text-align:center;color:#374151;font-size:11px;padding:24px 0;">
             Chưa có lịch sử tải 📭
           </div>
         </div>
@@ -889,15 +889,15 @@
       <!-- Archive (logged in) -->
       <div id="hpanel-archive" style="display:none;">
         <div id="archive-login-prompt" style="display:none;text-align:center;padding:20px 0;">
-          <div style="font-size:11px;color:#64748b;margin-bottom:8px;">Đăng nhập để xem VidGrab Archive</div>
+          <div data-i18n="archive_login" style="font-size:11px;color:#64748b;margin-bottom:8px;">Đăng nhập để xem VidGrab Archive</div>
           <a href="https://dvid.vibe1.tinhgon.xyz" target="_blank"
             style="display:inline-block;padding:6px 16px;background:linear-gradient(to right,#FBBF24,#FB923C);color:#012622;font-size:11px;font-weight:700;border-radius:8px;text-decoration:none;">
-            Đăng nhập
+            <span data-i18n="common_sign_in">Đăng nhập</span>
           </a>
         </div>
         <div id="archive-list" style="display:flex;flex-direction:column;gap:5px;max-height:310px;overflow-y:auto;"></div>
-        <div id="archive-loading" style="text-align:center;color:#64748b;font-size:10px;padding:20px 0;display:none;">Đang tải archive...</div>
-        <div id="archive-empty" style="text-align:center;color:#374151;font-size:11px;padding:24px 0;display:none;">Archive trống 📭</div>
+        <div id="archive-loading" style="text-align:center;color:#64748b;font-size:10px;padding:20px 0;display:none;" data-i18n="archive_loading">Đang tải archive...</div>
+        <div id="archive-empty" style="text-align:center;color:#374151;font-size:11px;padding:24px 0;display:none;" data-i18n="archive_empty">Archive trống 📭</div>
       </div>
     </div>
   </div>
@@ -909,31 +909,31 @@
       <div id="ob-step-1" class="ob-step">
         <div style="text-align:center;margin-bottom:16px;">
           <div style="font-size:32px;margin-bottom:8px;">⬇️</div>
-          <div style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:6px;">Chào mừng đến VidGrab!</div>
-          <div style="font-size:11px;color:#64748b;line-height:1.5;">Tải video từ TikTok, Douyin, Instagram, Facebook và nhiều nền tảng khác — hoặc bắt video ngay trên trang bạn xem.</div>
+          <div data-i18n="ob_welcome" style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:6px;">Chào mừng đến VidGrab!</div>
+          <div data-i18n="ob_intro" style="font-size:11px;color:#64748b;line-height:1.5;">Tải video từ TikTok, Douyin, Instagram, Facebook và nhiều nền tảng khác — hoặc bắt video ngay trên trang bạn xem.</div>
         </div>
-        <button id="ob-next-1" style="width:100%;padding:10px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:12px;font-weight:700;border:none;cursor:pointer;">Tiếp theo →</button>
+        <button id="ob-next-1" data-i18n="ob_next" style="width:100%;padding:10px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:12px;font-weight:700;border:none;cursor:pointer;">Tiếp theo →</button>
         <div style="text-align:center;margin-top:8px;font-size:10px;color:#475569;">1 / 3</div>
       </div>
       <!-- Step 2 -->
       <div id="ob-step-2" class="ob-step" style="display:none;">
         <div style="text-align:center;margin-bottom:16px;">
           <div style="font-size:32px;margin-bottom:8px;">🌐</div>
-          <div style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:6px;">Cách dùng</div>
+          <div data-i18n="ob_how_title" style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:6px;">Cách dùng</div>
           <div style="font-size:11px;color:#64748b;line-height:1.6;text-align:left;">
-            <div style="margin-bottom:6px;">① Mở trang video cần tải (TikTok, Facebook...)</div>
-            <div style="margin-bottom:6px;">② Nhấn icon VidGrab trên thanh công cụ</div>
-            <div>③ Chọn chất lượng → <b style="color:#a5b4fc;">Tải ngay</b></div>
+            <div data-i18n="ob_step_a" style="margin-bottom:6px;">① Mở trang video cần tải (TikTok, Facebook...)</div>
+            <div data-i18n="ob_step_b" style="margin-bottom:6px;">② Nhấn icon VidGrab trên thanh công cụ</div>
+            <div><span data-i18n="ob_step_c1">③ Chọn chất lượng →</span> <b style="color:#a5b4fc;" data-i18n="ob_step_c2">Tải ngay</b></div>
           </div>
         </div>
-        <button id="ob-next-2" style="width:100%;padding:10px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:12px;font-weight:700;border:none;cursor:pointer;">Tiếp theo →</button>
+        <button id="ob-next-2" data-i18n="ob_next" style="width:100%;padding:10px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:12px;font-weight:700;border:none;cursor:pointer;">Tiếp theo →</button>
         <div style="text-align:center;margin-top:8px;font-size:10px;color:#475569;">2 / 3</div>
       </div>
       <!-- Step 3 -->
       <div id="ob-step-3" class="ob-step" style="display:none;">
         <div style="text-align:center;margin-bottom:16px;">
           <div style="font-size:32px;margin-bottom:8px;">✨</div>
-          <div style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:6px;">Nền tảng hỗ trợ</div>
+          <div data-i18n="ob_platforms" style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:6px;">Nền tảng hỗ trợ</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:10px;">
             <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);">TikTok</span>
             <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);">Instagram</span>
@@ -944,7 +944,7 @@
             <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);">Pinterest</span>
           </div>
         </div>
-        <button id="ob-finish" style="width:100%;padding:10px;border-radius:10px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:12px;font-weight:800;border:none;cursor:pointer;">🚀 Bắt đầu tải!</button>
+        <button id="ob-finish" style="width:100%;padding:10px;border-radius:10px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:12px;font-weight:800;border:none;cursor:pointer;" data-i18n="ob_finish">🚀 Bắt đầu tải!</button>
         <div style="text-align:center;margin-top:8px;font-size:10px;color:#475569;">3 / 3</div>
       </div>
     </div>
@@ -953,8 +953,8 @@
   <!-- ── UNSUPPORTED PAGE STATE ── -->
   <div id="unsupported-page-state" style="display:none;padding:20px 16px;text-align:center;">
     <div style="font-size:36px;margin-bottom:10px;">🔍</div>
-    <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:6px;">Trang này không hỗ trợ</div>
-    <div style="font-size:11px;color:#64748b;line-height:1.6;margin-bottom:14px;">VidGrab chỉ tải được từ các trang hỗ trợ. Hãy mở một trong số sau:</div>
+    <div data-i18n="unsup_title" style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:6px;">Trang này không hỗ trợ</div>
+    <div data-i18n="unsup_body" style="font-size:11px;color:#64748b;line-height:1.6;margin-bottom:14px;">VidGrab chỉ tải được từ các trang hỗ trợ. Hãy mở một trong số sau:</div>
     <div style="display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-bottom:14px;">
       <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);">youtube.com</span>
       <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);">tiktok.com</span>
@@ -966,7 +966,7 @@
       <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);">pinterest.com</span>
       <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2);">threads.net</span>
     </div>
-    <a href="https://dvid.vibe1.tinhgon.xyz" target="_blank" style="display:inline-block;padding:8px 20px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;font-weight:700;text-decoration:none;">Mở VidGrab Web →</a>
+    <a href="https://dvid.vibe1.tinhgon.xyz" target="_blank" style="display:inline-block;padding:8px 20px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;font-weight:700;text-decoration:none;" data-i18n="unsup_open_web">Mở VidGrab Web →</a>
   </div>
 
   <!-- ── FOOTER ── -->

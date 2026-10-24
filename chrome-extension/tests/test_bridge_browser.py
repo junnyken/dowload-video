@@ -55,7 +55,7 @@ def main():
                 args=[
                     "--headless=new",
                     f"--disable-extensions-except={EXT}",
-                    f"--load-extension={EXT}",
+                    f"--load-extension={EXT}", "--lang=vi",
                     "--no-sandbox",
                 ],
             )

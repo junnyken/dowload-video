@@ -69,7 +69,7 @@ def main():
             ctx = p.chromium.launch_persistent_context(
                 str(tmp / "profile"), headless=False, executable_path=T.CHROME, locale="vi-VN",
                 viewport={"width": 1280, "height": 900}, accept_downloads=True,
-                args=["--headless=new", f"--disable-extensions-except={T.EXT}", f"--load-extension={T.EXT}", "--no-sandbox"])
+                args=["--headless=new", f"--disable-extensions-except={T.EXT}", f"--load-extension={T.EXT}", "--lang=vi", "--no-sandbox"])
             ctx.route("**/api/v1/client/quota/claim", on_claim)
             ctx.route("**/api/v1/client/quota/settle", on_settle)
             ctx.route("**/api/v1/fetch-link", on_fetch)

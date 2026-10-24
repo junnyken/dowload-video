@@ -1,0 +1,1944 @@
+{
+  "act_ai": {
+    "message": "🤖 AI Gợi ý"
+  },
+  "act_copied": {
+    "message": "✅ Copied!"
+  },
+  "act_copy_link": {
+    "message": "📋 Copy link"
+  },
+  "act_downloading": {
+    "message": "✅ Đang tải"
+  },
+  "act_error": {
+    "message": "❌ Lỗi"
+  },
+  "act_thumb": {
+    "message": "🖼️ Ảnh bìa"
+  },
+  "act_translate_subs": {
+    "message": "💬 Dịch phụ đề"
+  },
+  "act_web": {
+    "message": "🌐 Web"
+  },
+  "ago_day": {
+    "message": "$p1$ ngày trước",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ago_hour": {
+    "message": "$p1$ giờ trước",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ago_min": {
+    "message": "$p1$ phút trước",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ago_now": {
+    "message": "Vừa xong"
+  },
+  "ai_busy_box": {
+    "message": "⏳ Đang phân tích video (có thể mất vài chục giây)..."
+  },
+  "ai_busy_btn": {
+    "message": "⏳ Đang phân tích..."
+  },
+  "ai_clips_best": {
+    "message": "— hay nhất: $p1$ → $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "ai_clips_head": {
+    "message": "🎬 $p1$ đoạn nổi bật",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ai_clips_head_one": {
+    "message": "🎬 $p1$ đoạn nổi bật",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ai_gifs_head": {
+    "message": "🖼️ $p1$ đoạn GIF gợi ý",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ai_gifs_head_one": {
+    "message": "🖼️ $p1$ đoạn GIF gợi ý",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ai_gifs_start": {
+    "message": "— bắt đầu $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ai_no_data": {
+    "message": "Không đủ dữ liệu để phân tích sâu (fallback mode)."
+  },
+  "ai_none": {
+    "message": "Không tìm thấy gợi ý nào đáng chú ý cho video này."
+  },
+  "ai_open_web": {
+    "message": "Xem chi tiết & áp dụng trên Web →"
+  },
+  "ai_result_fail": {
+    "message": "❌ Lỗi khi lấy kết quả phân tích."
+  },
+  "ai_send_fail": {
+    "message": "❌ Không thể gửi yêu cầu phân tích."
+  },
+  "ai_timeout": {
+    "message": "⏱️ Phân tích quá lâu, thử lại sau."
+  },
+  "ai_trim_head": {
+    "message": "✂️ Cắt gợi ý:"
+  },
+  "ai_trim_range": {
+    "message": "$p1$ → $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "archive_empty": {
+    "message": "Archive trống 📭"
+  },
+  "archive_loading": {
+    "message": "Đang tải archive..."
+  },
+  "archive_login": {
+    "message": "Đăng nhập để xem VidGrab Archive"
+  },
+  "archive_need_login": {
+    "message": "Đăng nhập để lưu vào Archive."
+  },
+  "auth_login_web": {
+    "message": "Đăng nhập trên web →"
+  },
+  "auth_logout": {
+    "message": "Đăng xuất"
+  },
+  "auth_signed_in": {
+    "message": "✓ Đã đăng nhập"
+  },
+  "auth_signed_in_email": {
+    "message": "✓ Đã đăng nhập — $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "auth_signed_out": {
+    "message": "Chưa đăng nhập — lịch sử sẽ không được lưu"
+  },
+  "backend_checking": {
+    "message": "kiểm tra..."
+  },
+  "badge_channel": {
+    "message": "📡 Kênh"
+  },
+  "badge_current_video": {
+    "message": "▶ Video đang xem",
+    "description": "wording: BA review"
+  },
+  "badge_detecting": {
+    "message": "Đang nhận diện..."
+  },
+  "badge_generic_channel": {
+    "message": "📺 Kênh / Playlist"
+  },
+  "badge_instagram": {
+    "message": "📸 Instagram"
+  },
+  "badge_no_wm": {
+    "message": "✓ Không WM"
+  },
+  "badge_reload": {
+    "message": "Cần reload trang"
+  },
+  "badge_spotify": {
+    "message": "🎵 Spotify Playlist"
+  },
+  "badge_this_page": {
+    "message": "Trang này",
+    "description": "wording: BA review"
+  },
+  "badge_unsupported": {
+    "message": "Không hỗ trợ"
+  },
+  "badge_video": {
+    "message": "▶ Video / Nhạc"
+  },
+  "batch_done": {
+    "message": "✅ Batch hoàn tất ($p1$ video)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "batch_done_one": {
+    "message": "✅ Batch hoàn tất ($p1$ video)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "batch_partial": {
+    "message": "⚠️ Batch hoàn tất ($p1$/$p2$ thành công)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "batch_stopped": {
+    "message": "⏹ Đã dừng ($p1$/$p2$ video tải được)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "bg_notif_err": {
+    "message": "❌ Lỗi tải video"
+  },
+  "bg_notif_msg": {
+    "message": "VidGrab đã hoàn tất • $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bg_notif_ok": {
+    "message": "✅ $p1$ — đang tải",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bg_notif_processing": {
+    "message": "VidGrab — Đang xử lý..."
+  },
+  "bn_err": {
+    "message": "$p1$ video lỗi",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bn_err_one": {
+    "message": "$p1$ video lỗi",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bn_files_in": {
+    "message": "Tệp nằm trong thư mục Tải xuống / VidGrab."
+  },
+  "bn_skip": {
+    "message": "$p1$ video chưa tải",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bn_skip_one": {
+    "message": "$p1$ video chưa tải",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bn_skip_reason": {
+    "message": "$p1$ video chưa tải ($p2$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "bn_title_done": {
+    "message": "✅ VidGrab — đã tải $p1$/$p2$ video",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "bn_title_stopped": {
+    "message": "VidGrab — đã dừng: $p1$/$p2$ video",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "btn_download_mp3": {
+    "message": "Tải Nhạc MP3 Ngay"
+  },
+  "btn_download_video": {
+    "message": "Tải Video Ngay"
+  },
+  "btn_processing": {
+    "message": "Đang xử lý..."
+  },
+  "bulk_busy": {
+    "message": "Đang có một lượt tải hàng loạt chạy — hãy chờ xong hoặc bấm Dừng.",
+    "description": "wording: BA review"
+  },
+  "bulk_head_done": {
+    "message": "Hoàn tất: $p1$/$p2$ video đã tải về máy",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "bulk_head_stopped": {
+    "message": "Đã dừng: $p1$/$p2$ video đã tải về máy",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "bulk_info_running": {
+    "message": "Đang tải về máy: $p1$/$p2$ xong",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "bulk_info_running_tail": {
+    "message": "đóng cửa sổ này vẫn tải tiếp."
+  },
+  "bulk_none_selected": {
+    "message": "Chưa chọn video nào."
+  },
+  "bulk_part_error": {
+    "message": "$p1$ lỗi",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bulk_part_skipped": {
+    "message": "$p1$ chưa tải",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bulk_part_skipped_reason": {
+    "message": "$p1$ chưa tải ($p2$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "bulk_reason_quota": {
+    "message": "hết lượt tải hôm nay"
+  },
+  "bulk_reason_quota_reset": {
+    "message": "hết lượt tải hôm nay, lượt mới lúc $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bulk_reason_user_stop": {
+    "message": "bạn đã bấm Dừng"
+  },
+  "bulk_st_done": {
+    "message": "✓ Đã tải về máy"
+  },
+  "bulk_st_error": {
+    "message": "Lỗi"
+  },
+  "bulk_st_queued": {
+    "message": "Đang chờ"
+  },
+  "bulk_st_running": {
+    "message": "Đang tải…"
+  },
+  "bulk_st_skipped": {
+    "message": "Chưa tải"
+  },
+  "bulk_start_failed": {
+    "message": "Không bắt đầu được. Hãy thử lại."
+  },
+  "bulk_started": {
+    "message": "Đang tải $p1$ video về máy — có thể đóng cửa sổ này, việc tải vẫn tiếp tục.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bulk_started_later": {
+    "message": "Đang tải $p1$ video về máy. $p2$ video chưa tải vì hết lượt hôm nay.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "bulk_started_later_reset": {
+    "message": "Đang tải $p1$ video về máy. $p2$ video chưa tải vì hết lượt hôm nay — lượt mới lúc $p3$.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      },
+      "p3": {
+        "content": "$3"
+      }
+    }
+  },
+  "bulk_started_one": {
+    "message": "Đang tải $p1$ video về máy — có thể đóng cửa sổ này, việc tải vẫn tiếp tục.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_autoscroll": {
+    "message": "Panel đang auto-scroll và intercept API Douyin..."
+  },
+  "ch_big_hint": {
+    "message": "Kênh lớn có thể cần 30–90 giây để tải danh sách"
+  },
+  "ch_btn_generic": {
+    "message": "Bắt Đầu Tải Kênh"
+  },
+  "ch_btn_scan": {
+    "message": "Bắt đầu Quét Kênh"
+  },
+  "ch_btn_scanning": {
+    "message": "⏳ Đang quét..."
+  },
+  "ch_btn_spotify": {
+    "message": "Lấy danh sách Spotify"
+  },
+  "ch_bulk_checking": {
+    "message": "⏳ Đang kiểm tra lượt tải còn lại..."
+  },
+  "ch_bulk_clear": {
+    "message": "Xoá kết quả"
+  },
+  "ch_bulk_default": {
+    "message": "Tải video đã chọn về máy"
+  },
+  "ch_bulk_n": {
+    "message": "⬇ Tải $p1$ video về máy",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_bulk_n_one": {
+    "message": "⬇ Tải $p1$ video về máy",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_bulk_pick": {
+    "message": "Chọn video để tải về máy"
+  },
+  "ch_bulk_stop": {
+    "message": "⏹ Dừng tải"
+  },
+  "ch_collected": {
+    "message": "Video thu thập được"
+  },
+  "ch_collected_n": {
+    "message": "Đã thu thập $p1$ video. Cuộn thêm hoặc gửi ngay.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_collected_n_one": {
+    "message": "Đã thu thập $p1$ video. Cuộn thêm hoặc gửi ngay.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_connecting": {
+    "message": "Đang kết nối tới server..."
+  },
+  "ch_done": {
+    "message": "✅ Xong: $p1$/$p2$ video tải được.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "ch_done_extra": {
+    "message": "✅ Xong: $p1$/$p2$ video tải được ($p3$).",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      },
+      "p3": {
+        "content": "$3"
+      }
+    }
+  },
+  "ch_list_title": {
+    "message": "Danh sách video"
+  },
+  "ch_live_hint": {
+    "message": "Panel live đang theo dõi DOM — cuộn trang để load video."
+  },
+  "ch_no_videos": {
+    "message": "Chưa có video. Cuộn trang kênh trước."
+  },
+  "ch_open_douyin_first": {
+    "message": "Lỗi: Mở trang kênh Douyin trước rồi thử lại."
+  },
+  "ch_open_label": {
+    "message": "Kênh đang mở"
+  },
+  "ch_open_web_full": {
+    "message": "📂 Xem đầy đủ trên web →"
+  },
+  "ch_panel_open": {
+    "message": "Panel VidGrab đã mở trên trang kênh."
+  },
+  "ch_pick_10": {
+    "message": "10 video đầu"
+  },
+  "ch_pick_all": {
+    "message": "Chọn tất cả"
+  },
+  "ch_pick_none": {
+    "message": "Bỏ chọn"
+  },
+  "ch_pick_this": {
+    "message": "Chọn video này",
+    "description": "wording: BA review"
+  },
+  "ch_picked_count": {
+    "message": "Đã chọn $p1$/$p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "ch_progress": {
+    "message": "Tiến độ tải xuống"
+  },
+  "ch_qty_custom": {
+    "message": "Hoặc nhập số tuỳ chỉnh..."
+  },
+  "ch_qty_label": {
+    "message": "Số lượng video muốn tải"
+  },
+  "ch_queued_n": {
+    "message": "✅ Đã xếp hàng $p1$ video thành công!",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_queued_n_one": {
+    "message": "✅ Đã xếp hàng $p1$ video thành công!",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_retry": {
+    "message": "📤 Thử lại"
+  },
+  "ch_retry_n": {
+    "message": "📤 Thử lại ($p1$ video)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_retry_n_one": {
+    "message": "📤 Thử lại ($p1$ video)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_scanning": {
+    "message": "Đang quét danh sách video..."
+  },
+  "ch_scanning_n": {
+    "message": "🔍 Đang quét $p1$ video từ kênh...",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_scanning_n_one": {
+    "message": "🔍 Đang quét $p1$ video từ kênh...",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_scroll_more": {
+    "message": "Cuộn thêm"
+  },
+  "ch_scrolling": {
+    "message": "Đang cuộn..."
+  },
+  "ch_send_n": {
+    "message": "Gửi tải $p1$ video",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_send_n_one": {
+    "message": "Gửi tải $p1$ video",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_send_text": {
+    "message": "Gửi tải xuống server"
+  },
+  "ch_sending_n": {
+    "message": "⏳ Đang gửi $p1$ video...",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_sending_n_one": {
+    "message": "⏳ Đang gửi $p1$ video...",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_sending_urls": {
+    "message": "Đang gửi $p1$ URL lên server...",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_sending_urls_one": {
+    "message": "Đang gửi $p1$ URL lên server...",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_sent": {
+    "message": "✅ Đã gửi"
+  },
+  "ch_status_generic": {
+    "message": "Chọn số lượng video rồi nhấn bắt đầu."
+  },
+  "ch_status_spotify": {
+    "message": "Nhấn nút để lấy danh sách bài hát từ Spotify."
+  },
+  "ch_stop_batch": {
+    "message": "⏹ Dừng tải phần còn lại"
+  },
+  "ch_stop_local": {
+    "message": "⏹ Dừng quét"
+  },
+  "ch_stop_scan": {
+    "message": "⏹ Dừng quét kênh"
+  },
+  "ch_working": {
+    "message": "⏳ Đang xử lý... ($p1$ còn lại)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ch_working_extra": {
+    "message": "⏳ Đang xử lý... ($p1$ còn lại, $p2$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "common_close": {
+    "message": "Đóng"
+  },
+  "common_save": {
+    "message": "Lưu"
+  },
+  "common_sign_in": {
+    "message": "Đăng nhập"
+  },
+  "ctx_mp3": {
+    "message": "🎵 Tải MP3 với VidGrab"
+  },
+  "ctx_page_media": {
+    "message": "⚡ Tải media từ trang (phiên của bạn)"
+  },
+  "ctx_video": {
+    "message": "⬇ Tải với VidGrab"
+  },
+  "date_locale": {
+    "message": "vi-VN",
+    "description": "Locale tag for dates (not shown)"
+  },
+  "digest_title": {
+    "message": "📋 Thông tin"
+  },
+  "dl_done": {
+    "message": "✅ Xong!"
+  },
+  "dl_notif_ok": {
+    "message": "✅ VidGrab — Tải thành công!"
+  },
+  "dl_progress_title": {
+    "message": "Đang tải xuống..."
+  },
+  "done_mp3": {
+    "message": "✅ Tải nhạc hoàn tất! File MP3 đã lưu vào thư mục VidGrab."
+  },
+  "done_no_wm": {
+    "message": "✅ Đã tải bản không watermark! File đã lưu vào thư mục VidGrab."
+  },
+  "done_video": {
+    "message": "✅ Tải hoàn tất! File đã lưu vào thư mục VidGrab."
+  },
+  "err_120": {
+    "message": "Server xử lý quá 120s. Thử chất lượng thấp hơn hoặc mở web."
+  },
+  "err_bad_link": {
+    "message": "Link không hợp lệ. Cần bắt đầu bằng http:// hoặc https://"
+  },
+  "err_connection": {
+    "message": "Lỗi kết nối"
+  },
+  "err_generic": {
+    "message": "Lỗi"
+  },
+  "err_no_dl_link": {
+    "message": "Không lấy được link tải"
+  },
+  "err_no_tab_link": {
+    "message": "Không lấy được link ở trang này. Hãy dán link video vào ô phía trên."
+  },
+  "err_prefix": {
+    "message": "Lỗi: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "err_prefix_x": {
+    "message": "❌ Lỗi: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "err_server": {
+    "message": "Lỗi server"
+  },
+  "err_server_reported": {
+    "message": "Server báo lỗi"
+  },
+  "err_server_short": {
+    "message": "Server lỗi"
+  },
+  "err_server_slow": {
+    "message": "Máy chủ xử lý quá lâu"
+  },
+  "err_too_long": {
+    "message": "Xử lý quá lâu"
+  },
+  "err_unknown": {
+    "message": "Lỗi không xác định"
+  },
+  "ext_action_title": {
+    "message": "VidGrab Downloader"
+  },
+  "ext_description": {
+    "message": "Tải video từ TikTok, Douyin, Facebook, Instagram, X, Bilibili, Xiaohongshu… và bắt video (MP4, HLS, DASH) ngay trên trang bạn đang xem.",
+    "description": "Chrome limit: 132 characters"
+  },
+  "ext_name": {
+    "message": "VidGrab - Video Downloader",
+    "description": "Store listing name; keep identical in both languages"
+  },
+  "fb_dl": {
+    "message": "✅ Đang tải"
+  },
+  "fb_dl_direct": {
+    "message": "✅ Đang tải (trực tiếp)"
+  },
+  "fb_dl_size": {
+    "message": "✅ Đang tải ($p1$ MB)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "fb_getting": {
+    "message": "Đang lấy link..."
+  },
+  "fb_retry": {
+    "message": "❌ Thử lại"
+  },
+  "fmt_dl": {
+    "message": "⬇ Tải"
+  },
+  "fmt_got": {
+    "message": "Đã tải: $p1$p",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "fmt_got_universal": {
+    "message": "Đã tải: $p1$p · Mọi máy",
+    "description": "wording: BA review",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "fmt_locked_plan": {
+    "message": "Nâng cấp để tải",
+    "description": "wording: BA review"
+  },
+  "fmt_locked_signin": {
+    "message": "Đăng nhập để tải",
+    "description": "wording: BA review"
+  },
+  "fmt_merge": {
+    "message": "GHÉP TỆP"
+  },
+  "fmt_sharper": {
+    "message": "Nét hơn · có thể không mở được trên máy cũ",
+    "description": "wording: BA review"
+  },
+  "formats_title": {
+    "message": "Tất cả chất lượng"
+  },
+  "health_checking": {
+    "message": "Đang kiểm tra..."
+  },
+  "health_checking_server": {
+    "message": "Đang kiểm tra server..."
+  },
+  "health_fail_status": {
+    "message": "⚠ Không kết nối được server"
+  },
+  "health_fail_title": {
+    "message": "Không kết nối được server — kiểm tra lại URL hoặc mạng"
+  },
+  "health_ok": {
+    "message": "Server hoạt động bình thường"
+  },
+  "hint_clip_invalid": {
+    "message": "Clipboard không chứa link hợp lệ."
+  },
+  "hint_copied_link": {
+    "message": "Trang này không phải video — đã lấy link bạn vừa copy."
+  },
+  "hint_link_invalid": {
+    "message": "Link chưa hợp lệ."
+  },
+  "hint_no_clip_perm": {
+    "message": "Chưa cấp quyền đọc clipboard — bấm Ctrl+V để dán vào ô này."
+  },
+  "hint_not_video": {
+    "message": "Trang này không phải video. Dán link vào ô này (Ctrl+V) hoặc bấm Dán."
+  },
+  "hint_pasted": {
+    "message": "Đã dán link từ clipboard."
+  },
+  "hint_using_tab": {
+    "message": "Đang dùng link của tab hiện tại. Dán link khác để thay."
+  },
+  "hint_watching": {
+    "message": "Video đang xem: “$p1$” — bấm Tải để tải video này. Lướt sang video khác rồi mở lại để đổi.",
+    "description": "wording: BA review",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "hint_will_download": {
+    "message": "Sẽ tải link này."
+  },
+  "hist_clear": {
+    "message": "🗑 Xoá"
+  },
+  "hist_empty": {
+    "message": "Chưa có lịch sử tải 📭"
+  },
+  "hist_save_archive": {
+    "message": "Lưu vào Archive"
+  },
+  "hist_title": {
+    "message": "Video đã tải gần đây (cục bộ)"
+  },
+  "hls_cancelled": {
+    "message": "Đã huỷ."
+  },
+  "hls_done_msg": {
+    "message": "$p1$ đã lưu vào thư mục Tải về.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "hls_done_title": {
+    "message": "VidGrab — Đã tải xong"
+  },
+  "hls_empty": {
+    "message": "Danh sách không có đoạn nào."
+  },
+  "hls_encrypted": {
+    "message": "Video được mã hoá — không tải được."
+  },
+  "hls_error": {
+    "message": "Lỗi: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "hls_live": {
+    "message": "Đang phát trực tiếp — chưa hỗ trợ."
+  },
+  "hls_not_hls": {
+    "message": "Không phải danh sách HLS."
+  },
+  "hls_remux_failed": {
+    "message": "Không chuyển được sang MP4."
+  },
+  "hls_save_failed": {
+    "message": "Trình duyệt không lưu được tệp."
+  },
+  "hls_save_interrupted": {
+    "message": "Lưu tệp bị gián đoạn."
+  },
+  "hls_separate_audio": {
+    "message": "Hình và tiếng nằm riêng — hãy dùng \"App\" (app VidGrab trên máy) hoặc \"Qua VidGrab\"."
+  },
+  "hls_too_long": {
+    "message": "Video quá dài để tải trong trình duyệt."
+  },
+  "htab_local": {
+    "message": "📋 Cục Bộ"
+  },
+  "job_n_failed": {
+    "message": "$p1$ lỗi",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "job_n_stopped": {
+    "message": "$p1$ đã dừng",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ob_finish": {
+    "message": "🚀 Bắt đầu tải!"
+  },
+  "ob_how_title": {
+    "message": "Cách dùng"
+  },
+  "ob_intro": {
+    "message": "Tải video từ TikTok, Douyin, Instagram, Facebook và nhiều nền tảng khác — hoặc bắt video ngay trên trang bạn xem."
+  },
+  "ob_next": {
+    "message": "Tiếp theo →"
+  },
+  "ob_platforms": {
+    "message": "Nền tảng hỗ trợ"
+  },
+  "ob_step_a": {
+    "message": "① Mở trang video cần tải (TikTok, Facebook...)"
+  },
+  "ob_step_b": {
+    "message": "② Nhấn icon VidGrab trên thanh công cụ"
+  },
+  "ob_step_c1": {
+    "message": "③ Chọn chất lượng →"
+  },
+  "ob_step_c2": {
+    "message": "Tải ngay"
+  },
+  "ob_welcome": {
+    "message": "Chào mừng đến VidGrab!"
+  },
+  "open_web_title": {
+    "message": "Mở web"
+  },
+  "opt_mp3": {
+    "message": "MP3 (âm thanh 320kbps)"
+  },
+  "opt_mp4": {
+    "message": "MP4 (tốt nhất có sẵn)"
+  },
+  "opt_remove_wm": {
+    "message": "Bỏ watermark"
+  },
+  "pnl_all_sent": {
+    "message": "Đã gửi hết các video đã thu thập. Cuộn thêm để lấy video khác."
+  },
+  "pnl_done": {
+    "message": "Hoàn tất! $p1$ video. Nhấn nút xanh để gửi tải.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_done_one": {
+    "message": "Hoàn tất! $p1$ video. Nhấn nút xanh để gửi tải.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_later": {
+    "message": "✅ Đã gửi $p1$ video. Còn $p2$ video chưa gửi vì hết lượt hôm nay; bấm gửi lại khi có lượt mới.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "pnl_later_reset": {
+    "message": "✅ Đã gửi $p1$ video. Còn $p2$ video chưa gửi vì hết lượt hôm nay — lượt mới lúc $p3$; bấm gửi lại khi có lượt mới.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      },
+      "p3": {
+        "content": "$3"
+      }
+    }
+  },
+  "pnl_live_collected": {
+    "message": "Live: $p1$ video thu thập được. Cuộn thêm hoặc gửi ngay.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_live_collected_one": {
+    "message": "Live: $p1$ video thu thập được. Cuộn thêm hoặc gửi ngay.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_live_dom": {
+    "message": "Live: $p1$ video trong DOM. Cuộn thêm để load thêm.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_live_dom_one": {
+    "message": "Live: $p1$ video trong DOM. Cuộn thêm để load thêm.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_live_initial": {
+    "message": "Live: $p1$ video thu thập được. Cuộn để load thêm.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_live_initial_one": {
+    "message": "Live: $p1$ video thu thập được. Cuộn để load thêm.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_login_wall": {
+    "message": "Douyin yêu cầu đăng nhập mới cho xem hết kênh. Hãy đăng nhập Douyin ngay trong tab này; đăng nhập xong tiện ích tự cuộn tiếp (trang không tự tải lại thì bấm F5)."
+  },
+  "pnl_no_videos": {
+    "message": "Chưa có video — cuộn trang để load thêm."
+  },
+  "pnl_none": {
+    "message": "Không tìm thấy video. Thử đăng nhập $p1$ rồi thử lại.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_queued": {
+    "message": "✅ Đã xếp hàng $p1$ video!",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_queued_one": {
+    "message": "✅ Đã xếp hàng $p1$ video!",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_quota_out": {
+    "message": "Bạn đã hết lượt tải hôm nay. $p1$ video vẫn được giữ ở đây để gửi sau.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_quota_out_one": {
+    "message": "Bạn đã hết lượt tải hôm nay. $p1$ video vẫn được giữ ở đây để gửi sau.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_quota_out_reset": {
+    "message": "Bạn đã hết lượt tải hôm nay — lượt mới lúc $p2$. $p1$ video vẫn được giữ ở đây để gửi sau.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "pnl_retry_n": {
+    "message": "📤 Thử lại ($p1$ video)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_retry_n_one": {
+    "message": "📤 Thử lại ($p1$ video)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_scroll_info": {
+    "message": "Cuộn #$p1$ • $p2$ video • stable $p3$/$p4$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      },
+      "p3": {
+        "content": "$3"
+      },
+      "p4": {
+        "content": "$4"
+      }
+    }
+  },
+  "pnl_scroll_more": {
+    "message": "🔄 Cuộn thêm"
+  },
+  "pnl_scrolling": {
+    "message": "⏳ Đang cuộn..."
+  },
+  "pnl_send_n": {
+    "message": "📤 Gửi tải $p1$ video",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_send_n_one": {
+    "message": "📤 Gửi tải $p1$ video",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_send_rest": {
+    "message": "📤 Gửi tải $p1$ video còn lại",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_send_rest_one": {
+    "message": "📤 Gửi tải $p1$ video còn lại",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_send_server": {
+    "message": "📤 Gửi tải xuống server"
+  },
+  "pnl_sent_all": {
+    "message": "✅ Đã gửi hết"
+  },
+  "pnl_sent_ok": {
+    "message": "✅ Đã gửi thành công"
+  },
+  "pnl_stopped": {
+    "message": "Đã dừng quét — $p1$ video. Bấm \"Cuộn thêm\" để quét tiếp, hoặc gửi tải.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_stopped_one": {
+    "message": "Đã dừng quét — $p1$ video. Bấm \"Cuộn thêm\" để quét tiếp, hoặc gửi tải.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pnl_watching": {
+    "message": "Đang theo dõi trang... cuộn để load thêm video."
+  },
+  "prev_direct": {
+    "message": "$p1$ — tải thẳng về máy bạn.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "prev_direct_best": {
+    "message": "$p1$ — tải thẳng về máy bạn, chất lượng cao nhất trang có.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "prev_no_file": {
+    "message": "Không thấy file video trên trang. Bấm Tải để nhờ máy chủ, hoặc dùng “⏺ Quay tab”."
+  },
+  "prev_not_this_tab": {
+    "message": "Xem trước dùng cho video của tab đang mở. Mở trang video rồi bấm lại."
+  },
+  "prev_searching": {
+    "message": "⏳ Đang tìm video trên trang…"
+  },
+  "prev_server": {
+    "message": "Video này tải qua máy chủ VidGrab (YouTube, TikTok, MP3…) — chọn chất lượng ở trên rồi bấm Tải."
+  },
+  "qr_hint": {
+    "message": "Quét bằng camera điện thoại — trang VidGrab mở với video này để tải ngay trên điện thoại.",
+    "description": "wording: BA review"
+  },
+  "quality_best": {
+    "message": "🎬 Tốt nhất",
+    "description": "wording: BA review"
+  },
+  "quality_best_sub": {
+    "message": "Cao nhất có sẵn",
+    "description": "wording: BA review"
+  },
+  "quality_label": {
+    "message": "Chất lượng tải"
+  },
+  "quota_claim_reset": {
+    "message": "$p1$ — lượt mới lúc $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "quota_out": {
+    "message": "Bạn đã hết lượt tải hôm nay."
+  },
+  "quota_out_reset": {
+    "message": "Bạn đã hết lượt tải hôm nay — lượt mới lúc $p1$.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "rec_intro": {
+    "message": "Chế độ quay dùng khi trang không có file để tải: tiện ích ghi lại hình và tiếng của tab trong lúc video phát. Video có DRM sẽ ra màn hình đen."
+  },
+  "rec_lost": {
+    "message": "Không lưu được bản quay."
+  },
+  "rec_other_tab": {
+    "message": "Đang quay một tab khác — hãy dừng trước."
+  },
+  "rec_running": {
+    "message": "● Đang quay “$p1$” — $p2$:$p3$. Cứ để video chạy hết; đóng cửa sổ này vẫn quay tiếp. Bấm “Dừng quay” để lưu (WebM).",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      },
+      "p3": {
+        "content": "$3"
+      }
+    }
+  },
+  "rec_save_fail": {
+    "message": "Không lưu được."
+  },
+  "rec_saved": {
+    "message": "✅ Đã lưu bản quay ($p1$s, $p2$) vào thư mục VidGrab.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "rec_saving": {
+    "message": "⏳ Đang lưu bản quay…"
+  },
+  "rec_start_fail": {
+    "message": "Không quay được tab này."
+  },
+  "rec_stop": {
+    "message": "⏹ Dừng quay"
+  },
+  "relay_failed": {
+    "message": "Không gửi được danh sách về VidGrab — phiên có thể đã hết hạn. Hãy bấm lấy lại trong ứng dụng / website."
+  },
+  "relay_sent": {
+    "message": "✅ Đã gửi $p1$ video về VidGrab (ứng dụng / website). Bạn có thể đóng tab này.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "relay_sent_one": {
+    "message": "✅ Đã gửi $p1$ video về VidGrab (ứng dụng / website). Bạn có thể đóng tab này.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "relay_waiting": {
+    "message": "VidGrab đang chờ danh sách kênh này — đang tự cuộn hết kênh, đừng đóng tab…",
+    "description": "wording: BA review"
+  },
+  "reload_banner_btn": {
+    "message": "🔄 Reload trang"
+  },
+  "reload_banner_title": {
+    "message": "⚡ VidGrab chưa kích hoạt trên trang này"
+  },
+  "retry_btn": {
+    "message": "🔄 Thử lại"
+  },
+  "row_bg_queued": {
+    "message": "Đang tải nền — sẽ có thông báo khi xong"
+  },
+  "row_download": {
+    "message": "Tải"
+  },
+  "row_error": {
+    "message": "Lỗi: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "row_send_failed": {
+    "message": "Không gửi được, thử lại"
+  },
+  "server_working": {
+    "message": "⏳ Server đang xử lý... $p1$s",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "settings_account_title": {
+    "message": "👤 Tài khoản VidGrab"
+  },
+  "settings_name_hint": {
+    "message": "Dùng {title} {platform} {id} {date} — ví dụ: {platform} - {date} - {title}",
+    "description": "Placeholders in braces are literal template tokens; do not translate"
+  },
+  "settings_name_title": {
+    "message": "📝 Mẫu tên file"
+  },
+  "settings_need_https": {
+    "message": "❌ Cần URL https hợp lệ"
+  },
+  "settings_reset": {
+    "message": "↩ Đặt lại mặc định"
+  },
+  "settings_reset_done": {
+    "message": "✅ Đã reset"
+  },
+  "settings_reset_plain": {
+    "message": "Đặt lại mặc định"
+  },
+  "settings_saved": {
+    "message": "✅ Đã lưu"
+  },
+  "settings_server_title": {
+    "message": "⚙ Cài đặt Server"
+  },
+  "settings_title": {
+    "message": "Cài đặt"
+  },
+  "sniff_aes": {
+    "message": "Video được mã hoá — chưa hỗ trợ",
+    "description": "wording: BA review"
+  },
+  "sniff_allow": {
+    "message": "Cho phép bắt video trên mọi trang",
+    "description": "wording: BA review"
+  },
+  "sniff_allow_btn": {
+    "message": "Bắt video trên trang này"
+  },
+  "sniff_appFailed": {
+    "message": "Không gửi được sang app VidGrab. Hãy mở app rồi thử lại.",
+    "description": "wording: BA review"
+  },
+  "sniff_appHint": {
+    "message": "Cài app VidGrab cho Windows để tải loại video này ngay trên máy.",
+    "description": "wording: BA review"
+  },
+  "sniff_appSent": {
+    "message": "Đã gửi sang app VidGrab trên máy này — app đang tải.",
+    "description": "wording: BA review"
+  },
+  "sniff_ask": {
+    "message": "Cho phép VidGrab nhận ra video trên mọi trang bạn xem (video thường nằm ở máy chủ khác với trang). Danh sách chỉ nằm trong trình duyệt của bạn; thu hồi lúc nào cũng được ở trang quản lý tiện ích.",
+    "description": "wording: BA review"
+  },
+  "sniff_cancel": {
+    "message": "Huỷ",
+    "description": "wording: BA review"
+  },
+  "sniff_copied": {
+    "message": "Đã chép link.",
+    "description": "wording: BA review"
+  },
+  "sniff_copy": {
+    "message": "Chép link",
+    "description": "wording: BA review"
+  },
+  "sniff_denied": {
+    "message": "Bạn chưa cho phép nên VidGrab không bắt được video trên trang này.",
+    "description": "wording: BA review"
+  },
+  "sniff_download": {
+    "message": "Tải",
+    "description": "wording: BA review"
+  },
+  "sniff_drm": {
+    "message": "Có DRM — không tải được",
+    "description": "wording: BA review"
+  },
+  "sniff_empty": {
+    "message": "Chưa thấy video nào. Hãy bấm phát video trên trang rồi mở lại VidGrab.",
+    "description": "wording: BA review"
+  },
+  "sniff_failed": {
+    "message": "Không tải được. Thử \"Tải qua VidGrab\" hoặc chép link.",
+    "description": "wording: BA review"
+  },
+  "sniff_granted": {
+    "message": "Đã cho phép. Tải lại trang rồi phát video, sau đó mở lại VidGrab.",
+    "description": "wording: BA review"
+  },
+  "sniff_jobCancelled": {
+    "message": "Đã huỷ",
+    "description": "wording: BA review"
+  },
+  "sniff_jobDone": {
+    "message": "Đã lưu vào thư mục Tải về",
+    "description": "wording: BA review"
+  },
+  "sniff_jobRunning": {
+    "message": "Đang tải",
+    "description": "wording: BA review"
+  },
+  "sniff_jobSaving": {
+    "message": "Đang lưu tệp…",
+    "description": "wording: BA review"
+  },
+  "sniff_live": {
+    "message": "Đang phát trực tiếp — chưa hỗ trợ",
+    "description": "wording: BA review"
+  },
+  "sniff_local": {
+    "message": "Tải về máy",
+    "description": "wording: BA review"
+  },
+  "sniff_playing": {
+    "message": "▶ Đang phát",
+    "description": "wording: BA review"
+  },
+  "sniff_playing_title": {
+    "message": "▶ Đang phát: $p1$",
+    "description": "wording: BA review",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sniff_reading": {
+    "message": "đang đọc…",
+    "description": "wording: BA review"
+  },
+  "sniff_reload": {
+    "message": "Tải lại trang",
+    "description": "wording: BA review"
+  },
+  "sniff_rescan": {
+    "message": "Quét lại"
+  },
+  "sniff_started": {
+    "message": "Đã bắt đầu tải. Xem tiến độ ở thanh tải về của trình duyệt.",
+    "description": "wording: BA review"
+  },
+  "sniff_started2": {
+    "message": "Đang tải ngay trong trình duyệt — không cần máy chủ.",
+    "description": "wording: BA review"
+  },
+  "sniff_title": {
+    "message": "Video trên trang này"
+  },
+  "sniff_viaApp": {
+    "message": "Tải bằng app",
+    "description": "wording: BA review"
+  },
+  "sniff_viaServer": {
+    "message": "Tải qua VidGrab",
+    "description": "wording: BA review"
+  },
+  "sniff_viaServerShort": {
+    "message": "Qua VidGrab",
+    "description": "wording: BA review"
+  },
+  "sp_album_label": {
+    "message": "ALBUM • SPOTIFY"
+  },
+  "sp_calling": {
+    "message": "Đang gọi API Spotify..."
+  },
+  "sp_getting": {
+    "message": "Đang lấy dữ liệu Spotify..."
+  },
+  "sp_n_tracks": {
+    "message": "$p1$ bài nhạc",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sp_n_tracks_one": {
+    "message": "$p1$ bài nhạc",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sp_not_loaded": {
+    "message": "Chưa lấy danh sách Spotify."
+  },
+  "sp_playlist_label": {
+    "message": "PLAYLIST • SPOTIFY"
+  },
+  "sp_zero": {
+    "message": "0 bài nhạc"
+  },
+  "sp_zip": {
+    "message": "Tải tất cả (.ZIP)"
+  },
+  "star_add": {
+    "message": "Gắn sao"
+  },
+  "star_remove": {
+    "message": "Bỏ gắn sao"
+  },
+  "status_bg": {
+    "message": "⚡ Đang tải nền — có thể đóng popup!"
+  },
+  "status_err": {
+    "message": "❌ $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "status_idle": {
+    "message": "Tải bằng trình duyệt của bạn · máy chủ VidGrab dự phòng",
+    "description": "wording: BA review"
+  },
+  "stopping": {
+    "message": "Đang dừng..."
+  },
+  "stopping_dots": {
+    "message": "⏳ Đang dừng…"
+  },
+  "subs_burned": {
+    "message": "Đốt vào video"
+  },
+  "subs_file": {
+    "message": "File .srt rời"
+  },
+  "subs_label": {
+    "message": "Phụ đề:"
+  },
+  "subs_off": {
+    "message": "Không có"
+  },
+  "tab_channel": {
+    "message": "Kênh"
+  },
+  "tab_history": {
+    "message": "Lịch sử"
+  },
+  "tab_single": {
+    "message": "Tải Video"
+  },
+  "tier_checking": {
+    "message": "Đang kiểm tra quota…"
+  },
+  "tier_guest": {
+    "message": "Khách · 5 lượt/ngày"
+  },
+  "tier_load_fail": {
+    "message": "Không tải được"
+  },
+  "tier_plan": {
+    "message": "Gói"
+  },
+  "tier_quota_today": {
+    "message": "Quota hôm nay"
+  },
+  "tier_upgrade": {
+    "message": "▸ Nâng cấp Pro — batch 100, ZIP, chất lượng cao…"
+  },
+  "toast_direct_interrupted": {
+    "message": "Tải trực tiếp bị gián đoạn — đang thử qua máy chủ VidGrab…"
+  },
+  "toast_dl": {
+    "message": "✅ Đang tải: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "toast_dl_direct": {
+    "message": "✅ Đang tải (trực tiếp): $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "toast_downloading": {
+    "message": "✅ Đang tải xuống!"
+  },
+  "toast_err": {
+    "message": "❌ $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "toast_fallback": {
+    "message": "↪ Không thấy media trực tiếp — đang tải qua VidGrab..."
+  },
+  "toast_page_media_dl": {
+    "message": "✅ Đang tải media từ trang (phiên của bạn)!"
+  },
+  "toast_processing": {
+    "message": "⚡ VidGrab: Đang xử lý..."
+  },
+  "toast_scanning": {
+    "message": "⚡ VidGrab: Đang quét media trên trang..."
+  },
+  "tool_preview": {
+    "message": "👁 Xem trước",
+    "description": "wording: BA review"
+  },
+  "tool_qr": {
+    "message": "📱 Gửi sang điện thoại",
+    "description": "wording: BA review"
+  },
+  "tool_record": {
+    "message": "⏺ Quay tab",
+    "description": "wording: BA review"
+  },
+  "tpl_need_token": {
+    "message": "Mẫu cần có {title} hoặc {id} để các file không trùng tên."
+  },
+  "tpl_saved": {
+    "message": "✓ Đã lưu. Áp dụng cho lần tải tới."
+  },
+  "unsup_body": {
+    "message": "VidGrab chỉ tải được từ các trang hỗ trợ. Hãy mở một trong số sau:"
+  },
+  "unsup_open_web": {
+    "message": "Mở VidGrab Web →"
+  },
+  "unsup_title": {
+    "message": "Trang này không hỗ trợ"
+  },
+  "update_get": {
+    "message": "Tải về",
+    "description": "wording: BA review"
+  },
+  "update_new": {
+    "message": "Có bản tiện ích mới $p1$",
+    "description": "wording: BA review",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "update_outdated": {
+    "message": "Phiên bản tiện ích đã cũ, vui lòng cập nhật",
+    "description": "wording: BA review"
+  },
+  "url_label": {
+    "message": "Link video"
+  },
+  "url_paste_btn": {
+    "message": "Dán"
+  },
+  "url_paste_title": {
+    "message": "Dán từ clipboard"
+  },
+  "url_placeholder": {
+    "message": "Dán link video vào đây…"
+  },
+  "watch_already": {
+    "message": "Bạn đã theo dõi kênh này rồi."
+  },
+  "watch_btn": {
+    "message": "Theo dõi kênh này"
+  },
+  "watch_checking": {
+    "message": "Đang kiểm tra kênh…"
+  },
+  "watch_done": {
+    "message": "Đã theo dõi kênh. Video mới sẽ được báo trong ứng dụng VidGrab và trên web."
+  },
+  "watch_following": {
+    "message": "Đang theo dõi"
+  },
+  "watch_generic": {
+    "message": "Có lỗi xảy ra. Vui lòng thử lại."
+  },
+  "watch_login": {
+    "message": "Đăng nhập để theo dõi kênh."
+  },
+  "watch_offline": {
+    "message": "Không kết nối được máy chủ. Vui lòng thử lại."
+  },
+  "wm_only_tiktok": {
+    "message": "Chỉ TikTok"
+  },
+  "yt_note": {
+    "message": "Tiện ích không tải video YouTube. Bạn tải video này trên web hoặc app VidGrab cho Windows.",
+    "description": "wording: BA review"
+  },
+  "yt_open_web": {
+    "message": "Mở trên web VidGrab"
+  },
+  "yt_text": {
+    "message": "Tiện ích không tải video YouTube. Hãy mở trên web VidGrab.",
+    "description": "wording: BA review"
+  }
+}

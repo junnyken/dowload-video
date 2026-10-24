@@ -236,7 +236,7 @@
       if (writer) await writer.abort();
       jobs.delete(job.id);
       send({ type: 'HLS_FAILED', id: job.id, reason: e.reason || 'error',
-             message: e instanceof JobError ? e.message : `Lỗi: ${String(e && e.message || e).slice(0, 120)}` });
+             message: e instanceof JobError ? e.message : String(e && e.message || e).slice(0, 120) });  // background.js turns the reason into the user's language (no chrome.i18n in this page)
     }
   }
 

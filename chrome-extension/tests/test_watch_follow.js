@@ -21,6 +21,7 @@ function assert(cond, name) {
   else { console.error(`  ✗ ${name}`); failed++; }
 }
 
+const { chromeI18n, T_SOURCE } = require('./_i18n');
 const popup = fs.readFileSync(path.join(__dirname, '..', 'popup.js'), 'utf8');
 const start = popup.indexOf('// ── Channel Watch ("Theo dõi kênh", Phase 33B');
 const end = popup.indexOf('  btn.disabled = false;\n}\n', start);
@@ -57,7 +58,7 @@ function sandbox({ token, routes, throwOn }) {
     console, URL, JSON, Array, Promise,
     DEFAULT_API_BASE: 'https://dvid-api.vibe1.tinhgon.xyz',
     API_BASE: 'https://dvid-api.vibe1.tinhgon.xyz',
-    chrome: { storage: {
+    chrome: { i18n: chromeI18n('vi'), storage: {
       local: { get: async () => (token ? { vg_auth_token: token } : {}) },
       sync: { get: async () => ({}) },
     } },
@@ -73,7 +74,7 @@ function sandbox({ token, routes, throwOn }) {
   };
   vm.createContext(ctx);
   vm.runInContext(
-    [extract(popup, 'normalizeApiBase'), extract(popup, 'migrateLegacyApiBase'), 'const LOCAL_HOSTS = ["localhost"]; const LEGACY_API_HOST = "x.invalid";',
+    [T_SOURCE, extract(popup, 'normalizeApiBase'), extract(popup, 'migrateLegacyApiBase'), 'const LOCAL_HOSTS = ["localhost"]; const LEGACY_API_HOST = "x.invalid";',
      extract(popup, 'vgAuthHeaders'), block,
      'this.initWatchFollow = initWatchFollow; this.vgWatchTarget = vgWatchTarget; this.VG_WATCH_TEXT = VG_WATCH_TEXT;'].join('\n'),
     ctx,

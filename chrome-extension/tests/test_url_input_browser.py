@@ -16,7 +16,7 @@ def main():
             ctx = p.chromium.launch_persistent_context(
                 prof, headless=False, executable_path=CHROME,
                 args=["--headless=new", f"--disable-extensions-except={EXT}",
-                      f"--load-extension={EXT}", "--no-sandbox"])
+                      f"--load-extension={EXT}", "--lang=vi", "--no-sandbox"])
             sw = ctx.service_workers[0] if ctx.service_workers else ctx.wait_for_event("serviceworker", timeout=20000)
             ext_id = sw.url.split("/")[2]
 

@@ -34,7 +34,7 @@ export default function PrivacyPolicy() {
       <div className="mb-10 border-b border-line pb-6">
         <h1 className="text-3xl font-extrabold text-fg mb-2">{t('title')}</h1>
         <p className="text-fg-muted text-sm">
-          {t('subtitle') && `${t('subtitle')} — `}<span className="text-fg-2">{t('updated', { date: '13/10/2026' })}</span>
+          {t('subtitle') && `${t('subtitle')} — `}<span className="text-fg-2">{t('updated', { date: '23/10/2026' })}</span>
         </p>
       </div>
 
@@ -105,12 +105,17 @@ export default function PrivacyPolicy() {
               {t('s4.tabs.text')}
             </Item>
             <Item label={t('s4.cookies.label')}>
-              {t('s4.cookies.text')}
+              {t('s4.cookies.text')} {t('s4.cookiesDomains')}
             </Item>
             <Item label={t('s4.other.label')}>
               {t('s4.other.text')}
             </Item>
+            {/* 23/10: what 5.12–5.20 added (Chrome Web Store review) — wording: BA/legal review */}
+            {['sniffer', 'record', 'optional', 'session', 'quota', 'app'].map((k) => (
+              <Item key={k} label={t(`s4.${k}.label`)}>{t(`s4.${k}.text`)}</Item>
+            ))}
           </ul>
+          <p className="mt-3 text-sm text-fg-2">{t('s4.limitedUse')}</p>
         </Section>
 
         <Section title={t('s5.title')}>

@@ -10,6 +10,23 @@
   if (window.__vidgrab_injected) return;
   window.__vidgrab_injected = true;
 
+  // ── i18n (Chrome built-in; chrome.i18n works in content scripts) ──
+  // t(key, ...subs): one full sentence per message, "$1"-style placeholders.
+  const t = (key, ...subs) => {
+    try { return chrome.i18n.getMessage(key, subs.map((s) => String(s))) || key; } catch { return key; }
+  };
+  const tn = (key, n, ...subs) => {
+    // English singular ("1 video"): <key>_one when the count is 1; Vietnamese has the same text for both.
+    try {
+      if (Number(n) === 1) { const one = chrome.i18n.getMessage(`${key}_one`, [n, ...subs].map((s) => String(s))); if (one) return one; }
+    } catch { /* fall back to the plural form */ }
+    return t(key, n, ...subs);
+  };
+  // Static text of the injected panel: data-i18n (textContent only).
+  function vgApplyI18n(root) {
+    root.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  }
+
   let API_BASE = 'https://dvid-api.vibe1.tinhgon.xyz';
   // Web app (frontend) — separate domain from the API backend. Used only to
   // open the batch-progress page after a bulk send; never for API calls.
@@ -224,7 +241,7 @@
         line-height:1.4;
       ">
         <div style="color:#f1f5f9;font-size:10px;font-weight:600;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;">
-          <span>📋 Thông tin</span>
+          <span>${escapeHtml(t('digest_title'))}</span>
           <span id="vg-digest-toggle" style="cursor:pointer;color:#64748b;font-size:9px;">▲</span>
         </div>
         <div id="vg-digest-body">
@@ -316,8 +333,8 @@
         vgRemember(u, a);
         if (!vgItemMeta.get(u).title) {
           const box = a.closest('ytd-rich-item-renderer, ytd-grid-video-renderer, ytd-reel-item-renderer, ytm-shorts-lockup-view-model, ytd-rich-grid-media');
-          const t = box && box.querySelector('#video-title, h3, [class*="title" i]');
-          if (t && t.textContent.trim()) vgItemMeta.get(u).title = t.textContent.replace(/\s+/g, ' ').trim().slice(0, 200);
+          const tEl = box && box.querySelector('#video-title, h3, [class*="title" i]');
+          if (tEl && tEl.textContent.trim()) vgItemMeta.get(u).title = tEl.textContent.replace(/\s+/g, ' ').trim().slice(0, 200);
         }
         return;
       }
@@ -440,10 +457,10 @@ window.addEventListener('message', (event) => {
     if (n > 0) {
       sendBtn && sendBtn.classList.remove('hidden');
       const left = n - vgSentUrls.size;
-      if (sendText && !(sendBtn && sendBtn.disabled)) sendText.textContent = left > 0 ? `📤 Gửi tải ${left} video` : '✅ Đã gửi hết';
+      if (sendText && !(sendBtn && sendBtn.disabled)) sendText.textContent = left > 0 ? tn('pnl_send_n', left) : t('pnl_sent_all');
       if (statusEl && !statusEl.dataset.locked) {
         statusEl.style.color = '#34d399';
-        statusEl.textContent = `Live: ${n} video thu thập được. Cuộn thêm hoặc gửi ngay.`;
+        statusEl.textContent = tn('pnl_live_collected', n);
       }
     }
   }
@@ -495,7 +512,7 @@ window.addEventListener('message', (event) => {
 
     btn.addEventListener('click', async () => {
       const label = document.getElementById('vg-btn-text');
-      label.textContent = 'Đang lấy link...';
+      label.textContent = t('fb_getting');
       btn.style.opacity = '0.7';
       btn.disabled = true;
 
@@ -509,7 +526,7 @@ window.addEventListener('message', (event) => {
           { type: 'VG_DIRECT_DOWNLOAD', url: dy.url, title: dy.title || `douyin_${dy.id}`, pageUrl: location.href },
           (r) => resolve(!chrome.runtime.lastError && r && r.ok)));
         if (ok) {
-          label.textContent = '✅ Đang tải (trực tiếp)';
+          label.textContent = t('fb_dl_direct');
           btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
           await sleep(4000);
           label.textContent = 'VidGrab';
@@ -534,7 +551,7 @@ window.addEventListener('message', (event) => {
             },
           }, resolve)
         );
-        if (!resp || !resp.ok) throw new Error(resp?.data?.detail || resp?.error || 'Server lỗi');
+        if (!resp || !resp.ok) throw new Error(resp?.data?.detail || resp?.error || t('err_server_short'));
         const data = resp.data;
 
         if (data.success) {
@@ -546,16 +563,15 @@ window.addEventListener('message', (event) => {
           const dlUrl = buildProxyUrl(targetUrl, data.title, ext);
           if (dlUrl) {
             window.open(dlUrl, '_blank');
-            const sizeInfo = data.file_size_mb ? ` (${data.file_size_mb} MB)` : '';
-            label.textContent = `✅ Đang tải${sizeInfo}`;
+            label.textContent = data.file_size_mb ? t('fb_dl_size', data.file_size_mb) : t('fb_dl');
             btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
-          } else throw new Error('Không lấy được link tải');
-        } else throw new Error(data.detail || 'Server báo lỗi');
+          } else throw new Error(t('err_no_dl_link'));
+        } else throw new Error(data.detail || t('err_server_reported'));
       } catch (err) {
-        label.textContent = '❌ Thử lại';
+        label.textContent = t('fb_retry');
         btn.style.background = '#ef4444';
         console.error('[VidGrab]', err.message);
-        showVGToast(`❌ ${err.message}`);
+        showVGToast(t('toast_err', err.message));
       }
 
       await sleep(4000);
@@ -568,7 +584,7 @@ window.addEventListener('message', (event) => {
     // The direct Douyin download was interrupted: run the server path once.
     chrome.runtime.onMessage.addListener((m) => {
       if (m?.type !== 'VG_DIRECT_FAILED') return;
-      showVGToast('Tải trực tiếp bị gián đoạn — đang thử qua máy chủ VidGrab…');
+      showVGToast(t('toast_direct_interrupted'));
       btn.dataset.vgSkipDirect = '1';
       btn.click();
     });
@@ -629,7 +645,7 @@ window.addEventListener('message', (event) => {
       <div style="background:#111827;border-radius:8px;padding:8px 12px;margin-bottom:10px;
                   display:flex;justify-content:space-between;align-items:center">
         <div>
-          <div style="font-size:10px;color:#6b7280;margin-bottom:2px">Video thu thập được</div>
+          <div data-i18n="ch_collected" style="font-size:10px;color:#6b7280;margin-bottom:2px">Video thu thập được</div>
           <div id="vg-ch-count" style="font-size:26px;font-weight:800;color:#f97316;line-height:1">0</div>
         </div>
         <div style="text-align:right">
@@ -640,7 +656,7 @@ window.addEventListener('message', (event) => {
         </div>
       </div>
 
-      <div id="vg-ch-status" style="font-size:11px;color:#9ca3af;margin-bottom:10px;
+      <div id="vg-ch-status" data-i18n="pnl_watching" style="font-size:11px;color:#9ca3af;margin-bottom:10px;
                                     min-height:16px;line-height:1.4">
         Đang theo dõi trang... cuộn để load thêm video.
       </div>
@@ -661,12 +677,12 @@ window.addEventListener('message', (event) => {
 
       <button id="vg-stop-btn" style="width:100%;background:rgba(248,113,113,.12);color:#f87171;font-weight:700;
         border:1px solid rgba(248,113,113,.4);border-radius:8px;padding:8px;cursor:pointer;font-size:12px;
-        margin-bottom:6px;display:none">⏹ Dừng quét</button>
+        margin-bottom:6px;display:none" data-i18n="ch_stop_local">⏹ Dừng quét</button>
 
       <button id="vg-send-btn" style="width:100%;background:#22c55e;color:#fff;font-weight:700;
         border:none;border-radius:8px;padding:9px;cursor:pointer;font-size:12px;
         transition:opacity .2s;display:none">
-        <span id="vg-send-text">📤 Gửi tải xuống server</span>
+        <span id="vg-send-text" data-i18n="pnl_send_server">📤 Gửi tải xuống server</span>
       </button>
 
       <div id="vg-send-result" style="font-size:10px;color:#6b7280;margin-top:6px;
@@ -681,6 +697,7 @@ window.addEventListener('message', (event) => {
       fontFamily: 'system-ui,-apple-system,sans-serif',
     });
 
+    vgApplyI18n(panel);
     document.body.appendChild(panel);
 
     const scrapeBtn  = document.getElementById('vg-scrape-btn');
@@ -693,7 +710,7 @@ window.addEventListener('message', (event) => {
     const statusEl   = document.getElementById('vg-ch-status');
     const relayTok   = vgRelayToken(); // 5.11.0: the app / website waits for this channel
     const stopBtn    = document.getElementById('vg-stop-btn');
-    stopBtn.addEventListener('click', () => { vgStopScroll = true; stopBtn.textContent = '⏳ Đang dừng…'; });
+    stopBtn.addEventListener('click', () => { vgStopScroll = true; stopBtn.textContent = t('stopping_dots'); });
 
     document.getElementById('vg-panel-close').addEventListener('click', () => {
       stopDomObserver();
@@ -713,10 +730,10 @@ window.addEventListener('message', (event) => {
         countEl.textContent = n;
         if (n > 0) {
           sendBtn.style.display = 'block';
-          sendText.textContent = `📤 Gửi tải ${n} video`;
+          sendText.textContent = tn('pnl_send_n', n);
           if (!statusEl.dataset.locked) {
             statusEl.style.color = '#34d399';
-            statusEl.textContent = `Live: ${n} video trong DOM. Cuộn thêm để load thêm.`;
+            statusEl.textContent = tn('pnl_live_dom', n);
           }
         }
       }, 300);
@@ -730,9 +747,9 @@ window.addEventListener('message', (event) => {
     if (initialCount > 0) {
       document.getElementById('vg-ch-count').textContent = initialCount;
       sendBtn.style.display = 'block';
-      sendText.textContent = `📤 Gửi tải ${initialCount} video`;
+      sendText.textContent = tn('pnl_send_n', initialCount);
       statusEl.style.color = '#34d399';
-      statusEl.textContent = `Live: ${initialCount} video thu thập được. Cuộn để load thêm.`;
+      statusEl.textContent = tn('pnl_live_initial', initialCount);
     }
 
     // ── Auto-Scroll button ─────────────────────────────────────────
@@ -742,9 +759,9 @@ window.addEventListener('message', (event) => {
       vgStopScroll = false;
       delete statusEl.dataset.locked;
       stopBtn.style.display = 'block';
-      stopBtn.textContent = '⏹ Dừng quét';
+      stopBtn.textContent = t('ch_stop_local');
       scrapeBtn.style.opacity = '0.5';
-      scrapeBtn.textContent = '⏳ Đang cuộn...';
+      scrapeBtn.textContent = t('pnl_scrolling');
       scrapeBtn.disabled = true;
       scrollWrap.style.display = 'block';
       statusEl.dataset.locked = '1';
@@ -769,7 +786,7 @@ window.addEventListener('message', (event) => {
         const curr = videoSet.size;
         const pct = Math.min(90, Math.round((stable / MAX_STABLE) * 100));
         scrollBar.style.width = pct + '%';
-        scrollInfo.textContent = `Cuộn #${round} • ${curr} video • stable ${stable}/${MAX_STABLE}`;
+        scrollInfo.textContent = t('pnl_scroll_info', round, curr, stable, MAX_STABLE);
         if (relayTok && round % 3 === 0) vgRelaySend(relayTok, false); // progress for the app / website
 
         if (curr === prevCount) stable++;
@@ -785,16 +802,16 @@ window.addEventListener('message', (event) => {
       statusEl.style.color = finalCount > 0 ? '#34d399' : '#9ca3af';
       if (stopped) statusEl.dataset.locked = '1';   // keep "Đã dừng quét", not the live count
       statusEl.textContent = stopped
-        ? `Đã dừng quét — ${finalCount} video. Bấm "Cuộn thêm" để quét tiếp, hoặc gửi tải.`
+        ? tn('pnl_stopped', finalCount)
         : loginWall
-        ? 'Douyin yêu cầu đăng nhập mới cho xem hết kênh. Hãy đăng nhập Douyin ngay trong tab này; đăng nhập xong tiện ích tự cuộn tiếp (trang không tự tải lại thì bấm F5).'
+        ? t('pnl_login_wall')
         : finalCount > 0
-          ? `Hoàn tất! ${finalCount} video. Nhấn nút xanh để gửi tải.`
-          : `Không tìm thấy video. Thử đăng nhập ${/facebook\.com$/i.test(location.hostname) ? 'Facebook' : 'Douyin'} rồi thử lại.`;
+          ? tn('pnl_done', finalCount)
+          : t('pnl_none', /facebook\.com$/i.test(location.hostname) ? 'Facebook' : 'Douyin');
       if (loginWall) statusEl.style.color = '#fbbf24';
 
       scrapeBtn.style.opacity = '1';
-      scrapeBtn.textContent = '🔄 Cuộn thêm';
+      scrapeBtn.textContent = t('pnl_scroll_more');
       scrapeBtn.disabled = false;
       isScraping = false;
 
@@ -808,10 +825,10 @@ window.addEventListener('message', (event) => {
           try { sessionStorage.removeItem(VG_RELAY_KEY); } catch { /* none */ }
           statusEl.dataset.locked = '1';   // the page keeps changing: keep this message, not "Live: N"
           statusEl.style.color = '#34d399';
-          statusEl.textContent = `✅ Đã gửi ${r.data.count} video về VidGrab (ứng dụng / website). Bạn có thể đóng tab này.`;
+          statusEl.textContent = tn('relay_sent', r.data.count);
         } else {
           statusEl.style.color = '#f87171';
-          statusEl.textContent = 'Không gửi được danh sách về VidGrab — phiên có thể đã hết hạn. Hãy bấm lấy lại trong ứng dụng / website.';
+          statusEl.textContent = t('relay_failed');
         }
       }
     });
@@ -819,7 +836,7 @@ window.addEventListener('message', (event) => {
     // 5.11.0: opened by the app / website — scroll the whole channel without a click.
     if (relayTok) {
       statusEl.style.color = '#f97316';
-      statusEl.textContent = 'VidGrab đang chờ danh sách kênh này — đang tự cuộn hết kênh, đừng đóng tab…'; // wording: BA review
+      statusEl.textContent = t('relay_waiting'); // wording: BA review
       setTimeout(() => { if (!isScraping) scrapeBtn.click(); }, 2000);
     }
 
@@ -830,16 +847,16 @@ window.addEventListener('message', (event) => {
     sendBtn.addEventListener('click', async () => {
       const pending = Array.from(videoSet).filter((u) => !vgSentUrls.has(u));
       if (videoSet.size === 0) {
-        statusEl.textContent = 'Chưa có video — cuộn trang để load thêm.';
+        statusEl.textContent = t('pnl_no_videos');
         return;
       }
       if (pending.length === 0) {
-        statusEl.textContent = 'Đã gửi hết các video đã thu thập. Cuộn thêm để lấy video khác.';
+        statusEl.textContent = t('pnl_all_sent');
         return;
       }
 
       sendBtn.disabled = true;
-      sendText.textContent = '⏳ Đang kiểm tra lượt tải còn lại...';
+      sendText.textContent = t('ch_bulk_checking');
       let cap = null;
       let resetVn = '';
       try {
@@ -852,13 +869,13 @@ window.addEventListener('message', (event) => {
       } catch { /* unknown: send all, the server still counts each one */ }
       if (cap === 0) {
         statusEl.style.color = '#fbbf24';
-        statusEl.textContent = `Bạn đã hết lượt tải hôm nay${resetVn ? ` — lượt mới lúc ${resetVn}` : ''}. ${pending.length} video vẫn được giữ ở đây để gửi sau.`;
+        statusEl.textContent = resetVn ? t('pnl_quota_out_reset', pending.length, resetVn) : tn('pnl_quota_out', pending.length);
         sendBtn.disabled = false;
-        sendText.textContent = `📤 Gửi tải ${pending.length} video`;
+        sendText.textContent = tn('pnl_send_n', pending.length);
         return;
       }
       const { now: urls, later } = vgSplitByCap(pending, cap);
-      sendText.textContent = `⏳ Đang gửi ${urls.length} video...`;
+      sendText.textContent = tn('ch_sending_n', urls.length);
 
       try {
         // Gọi API qua background service worker để bypass CORS
@@ -879,23 +896,23 @@ window.addEventListener('message', (event) => {
           statusEl.style.color = '#34d399';
           if (later.length) {
             statusEl.style.color = '#fbbf24';
-            statusEl.textContent = `✅ Đã gửi ${urls.length} video. Còn ${later.length} video chưa gửi vì hết lượt hôm nay${resetVn ? ` — lượt mới lúc ${resetVn}` : ''}; bấm gửi lại khi có lượt mới.`;
+            statusEl.textContent = resetVn ? t('pnl_later_reset', urls.length, later.length, resetVn) : t('pnl_later', urls.length, later.length);
             sendBtn.disabled = false;
-            sendText.textContent = `📤 Gửi tải ${later.length} video còn lại`;
+            sendText.textContent = tn('pnl_send_rest', later.length);
           } else {
-            statusEl.textContent = `✅ Đã xếp hàng ${urls.length} video!`;
+            statusEl.textContent = tn('pnl_queued', urls.length);
             sendBtn.style.background = '#16a34a';
-            sendText.textContent = '✅ Đã gửi thành công';
+            sendText.textContent = t('pnl_sent_ok');
           }
           sendResult.style.display = 'block';
           sendResult.innerHTML = `Batch: <span style="color:#f97316;font-family:monospace">${data.batch_id.slice(0,10)}…</span>`;
           window.open(`${FRONTEND_BASE}?batch=${data.batch_id}`, '_blank');
-        } else throw new Error(data.detail || 'Server lỗi');
+        } else throw new Error(data.detail || t('err_server_short'));
       } catch (err) {
         statusEl.style.color = '#f87171';
-        statusEl.textContent = `❌ Lỗi: ${err.message}`;
+        statusEl.textContent = t('err_prefix_x', err.message);
         sendBtn.disabled = false;
-        sendText.textContent = `📤 Thử lại (${pending.length} video)`;
+        sendText.textContent = tn('pnl_retry_n', pending.length);
       }
     });
   }
@@ -1228,9 +1245,9 @@ window.addEventListener('message', (event) => {
     stopDomObserver();
     videoSet.clear();
     setTimeout(() => {
-      const t = getPageType();
-      // if (t === 'video' || window.location.href.includes('spotify.com')) injectVideoButton();
-      if (t === 'channel' || t === 'spotify_playlist' || t === 'generic_channel') injectChannelPanel();
+      const pt = getPageType();
+      // if (pt === 'video' || window.location.href.includes('spotify.com')) injectVideoButton();
+      if (pt === 'channel' || pt === 'spotify_playlist' || pt === 'generic_channel') injectChannelPanel();
     }, 1200);
   }).observe(document.documentElement, { childList: true, subtree: true });
 

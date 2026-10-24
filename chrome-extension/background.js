@@ -13,6 +13,19 @@
 // Media seen in each tab (5.12.0): HLS / DASH / direct files, listed in the popup.
 importScripts('media-sniffer.js', 'direct-download.js');
 
+// ── i18n (Chrome built-in: _locales/vi + _locales/en, default_locale "en") ──
+// t(key, ...subs): one full sentence per message, "$1"-style placeholders.
+const t = (key, ...subs) => {
+  try { return chrome.i18n.getMessage(key, subs.map((s) => String(s))) || key; } catch { return key; }
+};
+const tn = (key, n, ...subs) => {
+  // English singular ("1 video"): <key>_one when the count is 1; Vietnamese has the same text for both.
+  try {
+    if (Number(n) === 1) { const one = chrome.i18n.getMessage(`${key}_one`, [n, ...subs].map((s) => String(s))); if (one) return one; }
+  } catch { /* fall back to the plural form */ }
+  return t(key, n, ...subs);
+};
+
 const DEFAULT_API_BASE = 'https://dvid-api.vibe1.tinhgon.xyz';
 const STORAGE_KEY = (tabId) => `vg_videos_${tabId}`;
 const HISTORY_KEY = 'vg_download_history';
@@ -363,7 +376,7 @@ async function vgFetchAndSave({ url, quality, remove_watermark, download_subs },
   // "HTTP 500" alone told the user nothing (08/10, task #6134).
   const data = await resp.json().catch(() => null);
   if (!resp.ok) throw Object.assign(new Error(vgServerErrorText(data, resp.status)), { status: resp.status });
-  if (!data?.success) throw new Error(data?.detail || 'Server lỗi');
+  if (!data?.success) throw new Error(data?.detail || t('err_server_short'));
 
   // Resolve download URL (same logic as popup resolveDownloadUrl)
   const ext = (quality || '').includes('mp3') || data.is_audio_only ? 'mp3' : 'mp4';
@@ -371,7 +384,7 @@ async function vgFetchAndSave({ url, quality, remove_watermark, download_subs },
     ? (vgFileId(data.local_mp3_file_id, data.local_mp3_path) || vgFileId(data.local_file_id, data.local_file_path) || data.direct_mp4_url)
     : (data.direct_mp4_url || vgFileId(data.local_file_id, data.local_file_path) || vgFileId(data.local_mp3_file_id, data.local_mp3_path));
 
-  if (!dlUrl) throw new Error('Không lấy được link tải');
+  if (!dlUrl) throw new Error(t('err_no_dl_link'));
 
   const safeName = await vgFileName(data.title || 'video', url);
   const finalExt = (data.is_audio_only || dlUrl.endsWith('.mp3') || dlUrl.endsWith('.m4a')) ? 'mp3' : ext;
@@ -574,13 +587,13 @@ async function vgSaveVideo(payload, signal, pageTabId) {
   }
   const claim = await vgClaim(payload.url);
   if (claim && !claim.allowed) {
-    throw Object.assign(new Error(`${claim.message}${claim.resetTimeVn ? ` — lượt mới lúc ${claim.resetTimeVn}` : ''}`), { status: 429 });
+    throw Object.assign(new Error(claim.resetTimeVn ? t('quota_claim_reset', claim.message, claim.resetTimeVn) : String(claim.message)), { status: 429 });
   }
   let tabId = null, ownTab = false, media = null, helper = null;
   try {
     if (pageTabId != null) {
-      const t = await chrome.tabs.get(pageTabId).catch(() => null);
-      if (t && vgSamePage(t.url || '', payload.url)) tabId = pageTabId;
+      const pageTab = await chrome.tabs.get(pageTabId).catch(() => null);
+      if (pageTab && vgSamePage(pageTab.url || '', payload.url)) tabId = pageTabId;
     }
     if (tabId == null) { helper = await vgHelperTab(payload.url); tabId = helper.tabId; ownTab = true; }
     media = await vgFindMedia(tabId);
@@ -607,8 +620,8 @@ async function vgSaveVideo(payload, signal, pageTabId) {
 // size when the CDN tells it. Only the person's own tab (no extra window).
 async function vgProbe(url, pageTabId) {
   if (!self.vgDirect.directEligible({ url, quality: 'video' })) return { direct: false };
-  const t = pageTabId != null ? await chrome.tabs.get(pageTabId).catch(() => null) : null;
-  if (!t || !vgSamePage(t.url || '', url)) return { direct: true, media: null, reason: 'not_this_tab' };
+  const pageTab = pageTabId != null ? await chrome.tabs.get(pageTabId).catch(() => null) : null;
+  if (!pageTab || !vgSamePage(pageTab.url || '', url)) return { direct: true, media: null, reason: 'not_this_tab' };
   const media = await vgFindMedia(pageTabId);
   if (!media) return { direct: true, media: null };
   // Content-Length is readable across origins (Content-Range usually is not)
@@ -635,12 +648,12 @@ async function vgProbe(url, pageTabId) {
 const VG_REC_KEY = 'vg_rec';
 async function vgRecStart(tabId) {
   const cur = (await chrome.storage.session.get(VG_REC_KEY))[VG_REC_KEY];
-  if (cur && cur.state === 'recording') return { ok: false, error: 'Đang quay một tab khác — hãy dừng trước.' };
+  if (cur && cur.state === 'recording') return { ok: false, error: t('rec_other_tab') };
   const tab = await chrome.tabs.get(tabId);
   const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
   await ensureOffscreen();
   const r = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'REC_START', streamId });
-  if (!r || !r.ok) return { ok: false, error: (r && r.error) || 'Không quay được tab này.' };
+  if (!r || !r.ok) return { ok: false, error: (r && r.error) || t('rec_start_fail') };
   await chrome.storage.session.set({ [VG_REC_KEY]: { state: 'recording', tabId, title: tab.title || 'video', url: tab.url || '', startedAt: Date.now() } });
   chrome.action.setBadgeText({ text: 'REC' }).catch(() => {});
   chrome.action.setBadgeBackgroundColor({ color: '#dc2626' }).catch(() => {});
@@ -652,7 +665,7 @@ async function vgRecStop() {
   await chrome.storage.session.set({ [VG_REC_KEY]: { ...cur, state: 'saving' } });
   const r = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'REC_STOP' }).catch(() => null);
   chrome.action.setBadgeText({ text: '' }).catch(() => {});
-  if (!r || !r.url) { await chrome.storage.session.remove(VG_REC_KEY); return { ok: false, error: 'Không lưu được bản quay.' }; }
+  if (!r || !r.url) { await chrome.storage.session.remove(VG_REC_KEY); return { ok: false, error: t('rec_lost') }; }
   const name = await vgFileName(`${cur.title} (quay)`, cur.url);
   return new Promise((resolve) => chrome.downloads.download({ url: r.url, filename: `VidGrab/${name}.webm`, saveAs: false, conflictAction: 'uniquify' }, (id) => {
     chrome.storage.session.remove(VG_REC_KEY);
@@ -693,6 +706,14 @@ function vgBulkCounts(b) {
   return c;
 }
 
+// The offscreen page cannot use chrome.i18n: it sends a reason code, the text is made here.
+const VG_HLS_REASONS = ['not_hls', 'encrypted', 'live', 'empty', 'too_long', 'separate_audio', 'remux_failed', 'cancelled'];
+function vgHlsMessage(msg) {
+  if (VG_HLS_REASONS.includes(msg.reason)) return t('hls_' + msg.reason);
+  if (msg.reason === 'error') return t('hls_error', msg.message || '');
+  return msg.message || '';
+}
+
 async function vgBulkFinish() {
   const b = _vgBulk;
   if (!b || b.finishedAt) return;
@@ -701,8 +722,8 @@ async function vgBulkFinish() {
   const c = vgBulkCounts(b);
   chrome.notifications.create(`vg-bulk-${b.finishedAt}`, {
     type: 'basic', iconUrl: 'assets/icon.png',
-    title: b.stopped ? `VidGrab — đã dừng: ${c.done}/${c.total} video` : `✅ VidGrab — đã tải ${c.done}/${c.total} video`,
-    message: [c.error && `${c.error} video lỗi`, c.skipped && `${c.skipped} video chưa tải${b.stopReason ? ` (${b.stopReason})` : ''}`].filter(Boolean).join(' · ') || 'Tệp nằm trong thư mục Tải xuống / VidGrab.',
+    title: b.stopped ? t('bn_title_stopped', c.done, c.total) : t('bn_title_done', c.done, c.total),
+    message: [c.error && tn('bn_err', c.error), c.skipped && (b.stopReason ? t('bn_skip_reason', c.skipped, b.stopReason) : tn('bn_skip', c.skipped))].filter(Boolean).join(' · ') || t('bn_files_in'),
     priority: 1,
   });
 }
@@ -726,7 +747,7 @@ async function vgBulkWorker() {
         if (data && data.title) it.title = String(data.title).slice(0, 200);
       } catch (err) {
         it.status = 'error';
-        it.error = err.name === 'AbortError' ? 'Máy chủ xử lý quá lâu' : String(err.message || err).slice(0, 200);
+        it.error = err.name === 'AbortError' ? t('err_server_slow') : String(err.message || err).slice(0, 200);
         if (err.status === 429) {
           // no downloads left today (or too fast): keep the rest for later
           b.stopped = true;
@@ -773,7 +794,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       Object.assign(job, { done: msg.done, total: msg.total, bytes: msg.bytes });
       if (msg.height) job.height = msg.height;
     } else if (msg.type === 'HLS_FAILED') {
-      Object.assign(job, { state: msg.reason === 'cancelled' ? 'cancelled' : 'failed', message: msg.message || '' });
+      Object.assign(job, { state: msg.reason === 'cancelled' ? 'cancelled' : 'failed', message: vgHlsMessage(msg) });
       closeOffscreenIfIdle();
     } else if (msg.type === 'HLS_DONE') {
       Object.assign(job, { state: 'saving', bytes: msg.bytes, done: job.total });
@@ -786,17 +807,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             .catch(() => {}).finally(() => closeOffscreenIfIdle());
           if (state === 'done') {
             chrome.notifications.create(`vg-hls-${job.id}`, {
-              type: 'basic', iconUrl: 'assets/icon.png', title: 'VidGrab — Đã tải xong',
-              message: `${job.title.slice(0, 80)} đã lưu vào thư mục Tải về.`,
+              type: 'basic', iconUrl: 'assets/icon.png', title: t('hls_done_title'),
+              message: t('hls_done_msg', job.title.slice(0, 80)),
             });
           }
         };
-        if (chrome.runtime.lastError || !downloadId) { finish('failed', 'Trình duyệt không lưu được tệp.'); return; }
+        if (chrome.runtime.lastError || !downloadId) { finish('failed', t('hls_save_failed')); return; }
         job.downloadId = downloadId;
         const onChanged = (delta) => {
           if (delta.id !== downloadId || !delta.state) return;
           if (delta.state.current === 'complete') { chrome.downloads.onChanged.removeListener(onChanged); finish('done'); }
-          else if (delta.state.current === 'interrupted') { chrome.downloads.onChanged.removeListener(onChanged); finish('failed', 'Lưu tệp bị gián đoạn.'); }
+          else if (delta.state.current === 'interrupted') { chrome.downloads.onChanged.removeListener(onChanged); finish('failed', t('hls_save_interrupted')); }
         };
         chrome.downloads.onChanged.addListener(onChanged);
       });
@@ -820,9 +841,9 @@ async function vgFindApp(force = false) {
   for (const port of VG_APP_PORTS) {
     try {
       const ctl = new AbortController();
-      const t = setTimeout(() => ctl.abort(), 700);
+      const pingTimer = setTimeout(() => ctl.abort(), 700);
       const r = await fetch(`http://127.0.0.1:${port}/vidgrab/ping`, { signal: ctl.signal, cache: 'no-store' });
-      clearTimeout(t);
+      clearTimeout(pingTimer);
       const j = r.ok ? await r.json() : null;
       if (j && j.app === 'VidGrab') { found = { at: Date.now(), port, version: j.version || null }; break; }
     } catch { /* not this port */ }
@@ -915,7 +936,7 @@ chrome.downloads.onChanged.addListener((delta) => {
     const filename = info.filename?.split('/').pop() || 'Video';
     chrome.notifications.create(`vg-dl-${delta.id}`, {
       type: 'basic', iconUrl: 'assets/icon.png',
-      title: '✅ VidGrab — Tải thành công!', message: filename, priority: 1,
+      title: t('dl_notif_ok'), message: filename, priority: 1,
     });
     chrome.runtime.sendMessage({ type: 'VG_DOWNLOAD_PROGRESS', downloadId: delta.id, state: 'complete', progress: 100 }).catch(() => {});
   }
@@ -1011,8 +1032,8 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       chrome.notifications.create(`vg-batch-${batchId}`, {
         type: 'basic',
         iconUrl: 'assets/icon.png',
-        title: stopped > 0 ? `⏹ Đã dừng (${success}/${total} video tải được)`
-          : failed > 0 ? `⚠️ Batch hoàn tất (${success}/${total} thành công)` : `✅ Batch hoàn tất (${total} video)`,
+        title: stopped > 0 ? t('batch_stopped', success, total)
+          : failed > 0 ? t('batch_partial', success, total) : tn('batch_done', total),
         message: hostname,
         priority: 1,
       });
@@ -1243,7 +1264,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       const cur = await vgBulkLoad();
       if (cur && !cur.finishedAt && cur.items.some((x) => x.status === 'running' || x.status === 'queued')) {
-        sendResponse({ ok: false, error: 'Đang có một lượt tải hàng loạt chạy — hãy chờ xong hoặc bấm Dừng.' }); // wording: BA review
+        sendResponse({ ok: false, error: t('bulk_busy') }); // wording: BA review
         return;
       }
       const seen = new Set();
@@ -1253,7 +1274,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         .map((x) => ({ url: x.url, title: typeof x.title === 'string' ? x.title.slice(0, 200) : '', status: 'queued' }));
       const skipped = (Array.isArray(msg.later) ? msg.later : []).slice(0, 500)
         .map((x) => ({ url: x.url, title: typeof x.title === 'string' ? x.title.slice(0, 200) : '', status: 'skipped' }));
-      if (!items.length) { sendResponse({ ok: false, error: 'Chưa chọn video nào.' }); return; }
+      if (!items.length) { sendResponse({ ok: false, error: t('bulk_none_selected') }); return; }
       _vgBulk = { startedAt: Date.now(), quality: msg.quality === 'mp3' ? 'mp3' : 'video', items: [...items, ...skipped],
                   stopped: false, stopReason: msg.laterReason || null, finishedAt: null };
       await vgBulkSave();
@@ -1267,7 +1288,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const b = await vgBulkLoad();
       if (b && !b.finishedAt) {
         b.stopped = true;
-        b.stopReason = b.stopReason || 'bạn đã bấm Dừng';
+        b.stopReason = b.stopReason || t('bulk_reason_user_stop');
         for (const x of b.items) if (x.status === 'queued') x.status = 'skipped';
         await vgBulkSave();
         if (!b.items.some((x) => x.status === 'running')) await vgBulkFinish();
@@ -1313,7 +1334,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const pendingKey = `vg_dl_pending_${Date.now()}`;
       await chrome.storage.local.set({ [pendingKey]: { url, quality, status: 'processing', startedAt: Date.now() } });
 
-      let notifTitle = 'VidGrab — Đang xử lý...';
+      let notifTitle = t('bg_notif_processing');
       try {
         const controller = new AbortController();
         const abortTimer = setTimeout(() => controller.abort(), 150_000);
@@ -1327,7 +1348,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
         const { data, dlUrl, finalExt, safeName } = await vgSaveVideo({ url, quality, remove_watermark, download_subs }, controller.signal, msg.payload.pageTabId)
           .finally(() => { clearTimeout(abortTimer); clearInterval(pingInterval); });
-        notifTitle = `✅ ${data.title || 'Video'} — đang tải`;
+        notifTitle = t('bg_notif_ok', data.title || 'Video');
 
         // Notify popup (may be closed — fails silently)
         chrome.runtime.sendMessage({ type: 'VG_DOWNLOAD_DONE', data, dlUrl, ext: finalExt, safeName }).catch(() => {});
@@ -1335,7 +1356,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         // Update pending store with success
         await chrome.storage.local.set({ [pendingKey]: { url, quality, status: 'success', title: data.title, thumbnail: data.thumbnail_url, dlUrl, ext: finalExt, safeName, doneAt: Date.now() } });
       } catch (err) {
-        notifTitle = `❌ Lỗi tải video`;
+        notifTitle = t('bg_notif_err');
         chrome.runtime.sendMessage({ type: 'VG_DOWNLOAD_DONE', error: err.message }).catch(() => {});
         await chrome.storage.local.set({ [pendingKey]: { url, quality, status: 'error', error: err.message, doneAt: Date.now() } });
       }
@@ -1344,7 +1365,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       chrome.notifications.create(`vg-bg-${Date.now()}`, {
         type: 'basic', iconUrl: 'assets/icon.png',
         title: notifTitle,
-        message: `VidGrab đã hoàn tất • ${new URL(url).hostname}`,
+        message: t('bg_notif_msg', new URL(url).hostname),
         priority: 1,
       });
 
@@ -1386,7 +1407,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           ok: false,
           timeout: err.name === 'AbortError',
           error: err.name === 'AbortError'
-            ? 'Server xử lý quá 120s. Thử chất lượng thấp hơn hoặc mở web.'
+            ? t('err_120')
             : err.message,
         });
       } finally {
@@ -1546,10 +1567,10 @@ chrome.runtime.onInstalled.addListener((details) => {
     '*://*.tiktok.com/*', '*://*.youtube.com/*', '*://*.facebook.com/*',
     '*://*.douyin.com/*', '*://*.instagram.com/*', '*://open.spotify.com/*',
   ];
-  chrome.contextMenus.create({ id: 'vg-download-video', title: '⬇ Tải với VidGrab', contexts: ['page', 'link', 'video', 'audio'], documentUrlPatterns: patterns });
-  chrome.contextMenus.create({ id: 'vg-download-mp3', title: '🎵 Tải MP3 với VidGrab', contexts: ['page', 'link', 'video', 'audio'], documentUrlPatterns: patterns });
+  chrome.contextMenus.create({ id: 'vg-download-video', title: t('ctx_video'), contexts: ['page', 'link', 'video', 'audio'], documentUrlPatterns: patterns });
+  chrome.contextMenus.create({ id: 'vg-download-mp3', title: t('ctx_mp3'), contexts: ['page', 'link', 'video', 'audio'], documentUrlPatterns: patterns });
   // E2: download media found on the current page using the user's own session/IP
-  chrome.contextMenus.create({ id: 'vg-download-page-media', title: '⚡ Tải media từ trang (phiên của bạn)', contexts: ['page', 'video', 'audio'] });
+  chrome.contextMenus.create({ id: 'vg-download-page-media', title: t('ctx_page_media'), contexts: ['page', 'video', 'audio'] });
 
   // Track first install vs update for onboarding
   if (details.reason === 'install') {
@@ -1563,7 +1584,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   // ── E2: download media captured on the page via the user's own session/IP ──
   if (info.menuItemId === 'vg-download-page-media') {
-    chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '⚡ VidGrab: Đang quét media trên trang...' }).catch(() => {});
+    chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: t('toast_scanning') }).catch(() => {});
     let resp = null;
     try {
       resp = await chrome.tabs.sendMessage(tab.id, { type: 'VG_SCAN_PAGE_MEDIA' });
@@ -1574,27 +1595,27 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     if (media.length) {
       const safeName = ((resp.pageTitle || 'video').replace(/[/\\?%*:|"<>]/g, '-')).slice(0, 80) || 'video';
       smartDownload({ rawUrl: media[0], base, safeName, finalExt: media[0].toLowerCase().includes('.mp3') || media[0].toLowerCase().includes('.m4a') ? 'mp3' : 'mp4', saveAs: true });
-      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '✅ Đang tải media từ trang (phiên của bạn)!' }).catch(() => {});
+      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: t('toast_page_media_dl') }).catch(() => {});
       return;
     }
     // Auto-fallback: no direct media on page → download via the server (VidGrab),
     // same as "Tải với VidGrab". One action that always works.
-    chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '↪ Không thấy media trực tiếp — đang tải qua VidGrab...' }).catch(() => {});
+    chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: t('toast_fallback') }).catch(() => {});
     // fall through to the server download flow below (isMP3 stays false → video)
   }
 
   const targetUrl = info.linkUrl || tab.url;
   const isMP3 = info.menuItemId === 'vg-download-mp3';
-  chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '⚡ VidGrab: Đang xử lý...' }).catch(() => {});
+  chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: t('toast_processing') }).catch(() => {});
 
   // 5.18.4: a video goes the same way as the popup's button — the browser first
   // (the page the person is on), the server when the browser cannot
   if (!isMP3) {
     try {
       const { data, via } = await vgSaveVideo({ url: targetUrl, quality: 'video', remove_watermark: true, download_subs: false }, null, info.linkUrl ? null : tab.id);
-      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: `✅ Đang tải${via && via.startsWith('direct') ? ' (trực tiếp)' : ''}: ${(data && data.title) || 'video'}` }).catch(() => {});
+      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: via && via.startsWith('direct') ? t('toast_dl_direct', (data && data.title) || 'video') : t('toast_dl', (data && data.title) || 'video') }).catch(() => {});
     } catch (err) {
-      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: `❌ ${err.name === 'AbortError' ? 'Xử lý quá lâu' : err.message || 'Lỗi kết nối'}` }).catch(() => {});
+      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: t('toast_err', err.name === 'AbortError' ? t('err_too_long') : err.message || t('err_connection')) }).catch(() => {});
     }
     return;
   }
@@ -1621,18 +1642,18 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       const safeName = (data.title || 'video').replace(/[/\\?%*:|"<>]/g, '-');
 
       if (!targetDlUrl) {
-        chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '❌ Không lấy được link tải' }).catch(() => {});
+        chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: t('toast_err', t('err_no_dl_link')) }).catch(() => {});
         return;
       }
       // E1: prefer direct (user IP), fall back to server proxy on failure
       smartDownload({ rawUrl: targetDlUrl, base, safeName, finalExt: ext, saveAs: true });
       addToHistory({ title: data.title || 'Video', thumbnail: data.thumbnail_url || '', url: targetUrl, quality: isMP3 ? 'MP3' : 'HD', fileSize: data.file_size_mb ? `${data.file_size_mb} MB` : '' });
-      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '✅ Đang tải xuống!' }).catch(() => {});
+      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: t('toast_downloading') }).catch(() => {});
     } else {
-      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: '❌ ' + (resp.ok ? (data.detail || 'Lỗi') : vgServerErrorText(data, resp.status)) }).catch(() => {});
+      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: t('toast_err', resp.ok ? (data.detail || t('err_generic')) : vgServerErrorText(data, resp.status)) }).catch(() => {});
     }
   } catch (err) {
-    const msg = err.name === 'AbortError' ? 'Xử lý quá lâu' : 'Lỗi kết nối';
-    chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: `❌ ${msg}` }).catch(() => {});
+    const msg = err.name === 'AbortError' ? t('err_too_long') : t('err_connection');
+    chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: t('toast_err', msg) }).catch(() => {});
   }
 });

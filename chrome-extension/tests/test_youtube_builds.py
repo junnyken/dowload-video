@@ -27,7 +27,7 @@ def check(name, ok, detail=""):
 def run(p, ext_dir: Path, profile: Path):
     ctx = p.chromium.launch_persistent_context(
         str(profile), headless=False, executable_path=T.CHROME,
-        args=["--headless=new", f"--disable-extensions-except={ext_dir}", f"--load-extension={ext_dir}", "--no-sandbox"])
+        args=["--headless=new", f"--disable-extensions-except={ext_dir}", f"--load-extension={ext_dir}", "--lang=vi", "--no-sandbox"])
     sw = ctx.service_workers[0] if ctx.service_workers else ctx.wait_for_event("serviceworker", timeout=20000)
     ext_id = sw.url.split("/")[2]
     pop = ctx.new_page()

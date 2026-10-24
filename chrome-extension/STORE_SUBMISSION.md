@@ -1,212 +1,83 @@
-# VidGrab Chrome Web Store — Submission Package
+# VidGrab Chrome Web Store - Submission Package
 
-Version: **5.1.2** | Manifest V3 | Last updated: 2026-08-13
+Version: **5.20.0** | Manifest V3 | Last updated: 2026-10-23
 
----
+Listing texts and answers live in `store-assets/`:
+- `listing-en.md`, `listing-vi.md`: name, summary, description, category, single purpose
+- `permissions.md`: justification for every permission / host permission / remote code
+- `privacy-checklist.md`: data-usage questionnaire, every endpoint, policy gaps (TODO)
 
-## 1. Store Listing Copy
-
-### Extension Name (max 45 chars)
-```
-VidGrab - Video Downloader
-```
-
-### Short Description (max 132 chars)
-```
-Download videos from TikTok, Douyin, Instagram, Facebook, X & Reddit, and grab MP4/HLS/DASH from the page you watch.
-```
-*(116 chars — within limit)*
-
-> **No YouTube in the Web Store build.** The Chrome Web Store does not allow extensions that download from YouTube. Since 5.14.1 the build served on the VidGrab website keeps YouTube (owner's decision, 22/10/2026); **upload only the store build**: `python3 scripts/package-extension.py --store` → `chrome-extension/store-assets/VidGrab-store-v<version>.zip` (no YouTube host permission; the popup then refuses YouTube links with a pointer to the VidGrab website). Never upload `backend/extension/VidGrab-extension.zip` to the store. Do not mention YouTube anywhere in the listing or screenshots.
-
-### Long Description
-```
-VidGrab lets you download videos from the most popular platforms with one click — no sign-in required for basic use.
-
-★ SUPPORTED PLATFORMS
-• TikTok / Douyin — removes watermark automatically
-• Instagram — Reels, stories, posts
-• Facebook — public videos
-• Twitter / X — videos and GIFs
-• Reddit — hosted & linked videos
-• Threads — public posts
-• Spotify — playlist / album to MP3 (via search)
-• Pinterest — video pins
-
-★ VIDEO ON THE PAGE
-• Lists the videos the page plays — MP4, HLS (.m3u8) and DASH (.mpd) — with their qualities and length
-• Direct files and HLS streams download straight from your browser (HLS segments fetched in parallel and saved as one MP4); VidGrab's server is used only when that cannot work
-• Works on any site once you allow it ("Allow grabbing videos on every site" — optional, revocable)
-• DRM-protected and encrypted streams are shown as unsupported and never downloaded
-
-★ KEY FEATURES
-• Single video download — click the button, file saves to VidGrab/ folder
-• Channel / playlist bulk download — scrape a full channel or playlist queue
-• Background downloads — download continues even when popup is closed
-• Batch progress tracking — see live job stats for bulk downloads
-• Format chooser — pick 1080p / 4K / 720p / MP3 per video
-• Subtitle download — SRT alongside the video
-• No watermark mode — TikTok / Douyin watermark-free copy
-• Download history — local log of last 100 downloads
-• Archive — save to cloud history when logged in
-• Right-click context menu — download any supported link
-
-★ PRIVACY FIRST
-VidGrab does not collect personal data. All download processing happens on your own backend server (self-hosted) or the VidGrab cloud instance. No browsing history is tracked or sent anywhere. See our Privacy Policy for details.
-
-★ HOW IT WORKS
-The extension sends the current page URL to a VidGrab backend server (configurable in Settings). The server uses yt-dlp to extract and process the video, then the extension downloads the resulting file directly to your computer via Chrome's built-in download manager.
-
-★ SELF-HOSTED FRIENDLY
-Point the extension at your own VidGrab server via Settings → Server URL. The backend is open-source and runs on any Docker host.
-
-★ MANUAL INSTALL
-If you prefer not to use the Chrome Web Store, install from the GitHub releases page (CRX file) or load unpacked from the source ZIP.
-```
-
-### Category
-`Productivity`
-
-### Language
-Primary: English | Secondary: Vietnamese
+The older text in this file (5.1.x listing, permission table) is superseded by those files.
 
 ---
 
-## 2. Permission Justification Table
+## 1. Owner checklist (step by step)
 
-| Permission | Why it's needed | Required? |
-|---|---|---|
-| `activeTab` | Read the URL of the current tab to know what video page the user is on | Required |
-| `tabs` | Listen to tab navigation events (badge update); send messages to content scripts; get active tab info | Required |
-| `downloads` | Trigger file downloads to the user's Downloads folder; track download progress and state | Required |
-| `storage` | Store user settings (API base URL, theme preference, auth token, download history) in sync & local storage | Required |
-| `scripting` | Inject content.js into a page when it hasn't loaded yet (user opens popup before page finishes loading) | Required |
-| `notifications` | Show a Chrome notification when a background download completes (popup may be closed) | Required |
-| `contextMenus` | Add "Download with VidGrab" right-click menu item on supported video pages | Required |
-| `alarms` | Keep the service worker alive during long-running background downloads (MV3 SW can be suspended after ~30s idle) | Required |
-| `webRequest` | (5.12.0) Observe — never block or modify — the responses of the current tab to list the media it plays (content-type, size, URL of .mp4/.m3u8/.mpd). Only on hosts the extension already has, or on every site once the user allows it from the popup. The list stays in `chrome.storage.session` and is deleted with the tab; nothing is sent anywhere | Required |
+1. **Developer account**: https://chrome.google.com/webstore/devcenter , sign in with the Google account that will own the extension, pay the one-time US$5 registration fee, verify the contact email (and the trader/non-trader declaration in Account; INFERRED: required for EU visibility).
+2. **Fix the privacy policy first** (see `privacy-checklist.md` section 5): at least the Limited Use sentence, tabCapture/recording, webRequest, cookies domain list, 30-day session. Then check https://dvid.vibe1.tinhgon.xyz/privacy and /en/privacy return 200 without login.
+3. **Build the store zip** (from the repo root):
+   `python3 scripts/package-extension.py --store`
+   Output: `chrome-extension/store-assets/VidGrab-store-v5.20.0.zip` (manifest without YouTube hosts/matches; the script verifies it). Bump `version` in manifest.json before every resubmission; the store rejects a repeated version.
+   **Upload only `VidGrab-store-v<version>.zip`.** Never upload `backend/extension/VidGrab-extension.zip` (website build, has YouTube) or the old store zips (5.14.1 ... 5.19.0).
+4. Dashboard > **Add new item** > upload the zip.
+5. **Store listing** tab: paste name, summary, description from `listing-en.md` (default language) and add Vietnamese from `listing-vi.md`; category Productivity; upload screenshots (section 3), promo tile `store-assets/promo-tile-440x280.png` (small promo tile 440x280; check it has no YouTube and matches 5.20.0 before using, it dates from 11/08/2026); support URL / website: https://dvid.vibe1.tinhgon.xyz .
+6. **Privacy practices** tab: single purpose, each permission justification, remote code = No, data usage boxes, certifications, privacy policy URL `https://dvid.vibe1.tinhgon.xyz/privacy` (all from `permissions.md` and `privacy-checklist.md`).
+7. **Distribution**: Public (or Unlisted for a first test), all regions, free.
+8. "Notes for reviewer" (section 5 below). Submit for review. Typical wait 1-3 business days, longer with broad host permissions (INFERRED).
+9. After approval: copy the store item ID into the website "install" button and the extension page.
 
-| `offscreen` | (5.13.0) A hidden extension page joins the segments of an HLS stream into one MP4 in the user's browser (reason `BLOBS`): segments are fetched, remuxed with the bundled mux.js (Apache-2.0, `lib/`, no remote code) and written to the extension's private storage, then saved with `chrome.downloads`. Created only while such a download runs | Required |
+## 2. Packaging facts (verified in scripts/package-extension.py)
+- `--store` keeps the same files as the website build (excludes `store-assets/`, `tests/`, `STORE_SUBMISSION.md`, dotfiles) and only rewrites manifest.json: removes `*youtube.com` / `*youtu.be` from `host_permissions` and from every `content_scripts[].matches`. It refuses to finish if a YouTube host remains.
+- Source files are NOT changed for the store build. YouTube strings remain in popup.js/content.js (the popup shows a "use the VidGrab website" note and refuses the link). **Risk**: a reviewer who greps the code finds YouTube names. Mitigation: it is refusal logic only, and the listing never mentions YouTube. If a reviewer objects, strip those branches from the store build.
 
-**Optional host permission `*://*/*` (5.12.0, all sites since 5.13.0):** never granted at install. The popup's "Cho phép bắt video trên mọi trang" (Allow grabbing videos on every site) button calls `chrome.permissions.request` inside the user's click. One site's permission is not enough in practice: the media of a page is served from other hosts (CDNs), and Chrome only shows the extension requests to hosts it may access (measured 22/10/2026). The user can revoke it at any time on chrome://extensions.
+## 3. Screenshots to capture (up to 5, 1280x800 or 640x400, PNG/JPEG, no alpha)
+**Done (24/10/2026):** `store-assets/screenshots-5.20/1-video-on-page.png`, `2-preview.png`, `3-channel-list.png`, `4-progress.png`, `5-send-to-phone.png` — 1280x800 PNG, English UI of 5.20.0, own sample pages/files only, no YouTube, no platform logos. Upload these five; do not upload anything from the old `screenshots/` folder.
 
-### Host Permissions Justification
+The existing `store-assets/screenshots/` (11/08/2026) are outdated: `01-youtube-quality.png` shows YouTube and MUST NOT be used. Capture after the English UI lands, on a clean profile, no personal data, no YouTube anywhere (tabs, bookmarks).
+1. **Video on the page**: popup on a page with an MP4 and an HLS stream listed (quality, length), "download to this computer" button visible.
+2. **Preview before download**: preview/size of the file, file name template visible.
+3. **Channel scan**: Douyin/TikTok channel, scan with Stop, list with checkboxes, "download N videos to this computer".
+4. **Download in progress / HLS joined into MP4** (progress bar) plus finished notification.
+5. **Account and settings**: signed-in state (30-day session), QR code to the phone, DRM/live marked as unsupported (shows the honest limits).
+Use content you own or public-domain/test videos (e.g. a sample MP4 you host); avoid brand logos of platforms in a way that implies endorsement (INFERRED).
 
-| Host Permission | Why it's needed |
+## 4. What reviewers usually reject for downloaders, and how this build avoids it
+| Rejection reason (INFERRED from Web Store policy and common feedback) | This build |
 |---|---|
-| `*://*.tiktok.com/*` | Detect video/channel pages; inject content script; watermark removal |
-| `*://*.facebook.com/*` | Detect video pages; inject content script |
-| `*://*.douyin.com/*` | Detect channel pages; inject interceptor.js in MAIN world to capture API responses |
-| `*://*.instagram.com/*` | Detect Reel/story/post pages; inject content script |
-| `*://open.spotify.com/*` | Detect playlist/album pages; inject content script to gather track list |
-| `*://*.twitter.com/*` | Detect video tweets; inject content script |
-| `*://*.x.com/*` | Twitter/X new domain — same as twitter.com |
-| `*://*.reddit.com/*` | Detect video posts; inject content script |
-| `*://*.pinterest.com/*` | Detect video pins; inject content script |
-| `*://*.threads.com/*` | Detect Threads posts; inject content script |
-| `*://*.threads.net/*` | Threads API subdomain — same content script scope |
-| `*://*.bilibili.com/*` | Detect video pages; inject content script |
-| `*://b23.tv/*` | Bilibili short-link domain — same content script scope |
-| `*://*.xiaohongshu.com/*` | Detect post/video pages; inject content script |
-| `*://*.xhslink.com/*` | Xiaohongshu short-link domain — same content script scope |
-| `*://*.lemon8-app.com/*` | Detect post pages; inject content script |
-| `*://*.lemon8.app/*` | Lemon8 alternate domain — same content script scope |
-| `*://*.snapchat.com/*` | Detect Spotlight/story video pages; inject content script |
-| `*://story.snapchat.com/*` | Snapchat story subdomain — same content script scope |
-| `*://*.vk.com/*` | Detect video pages; inject content script |
-| `*://*.twitch.tv/*` | Detect clip/VOD pages; inject content script |
-| `*://*.rumble.com/*` | Detect video pages; inject content script |
-| `*://*.odysee.com/*` | Detect video pages; inject content script |
-| `*://*.dailymotion.com/*` | Detect video pages; inject content script |
-| `*://*.soundcloud.com/*` | Detect track/playlist pages; inject content script (audio download) |
+| YouTube downloading (explicitly forbidden) | store zip has no YouTube host/matches; listing says it does not support YouTube |
+| Circumventing DRM / "bypass" language | DRM and live are detected, marked and never downloaded; no such wording; recording mode does not avoid DRM (black picture) |
+| Misleading/keyword-stuffed listing, unverifiable claims | no numbers, no "best/fastest", platform list limited to what the manifest covers |
+| Excessive permissions | each permission justified; all-sites is optional, asked at runtime; `tabCapture`/`cookies` are the ones most likely to be questioned (section 6) |
+| Remote code | none; mux.js and qrcode.js bundled with licences |
+| Privacy policy missing/not matching data use | policy URL live; update it per `privacy-checklist.md` before submit |
+| Single purpose unclear | one sentence, all features serve "find the page's video and save it" |
+| Copyright | content-rights statement in the listing; takedown channel exists on the website |
 
-**Note on the backend domain:** the API server (default `https://dvid-api.vibe1.tinhgon.xyz`) is covered by its exact-host entry in `host_permissions`. As of 5.2.4 there is no wildcard or `matbao.ai` host permission.
-
----
-
-## 3. Privacy Policy
-
-**Live, publicly reachable at: https://dvid.vibe1.tinhgon.xyz/privacy** (verified 200 OK — use this exact URL in the Developer Dashboard's Privacy Policy field.)
-
----
-
-**VidGrab Extension — Privacy Policy**
-*Effective date: 2026-06-22*
-
-**Data collected by the extension**
-
-VidGrab does not collect, transmit, or sell any personal data.
-
-- **Browsing history**: Not collected. The extension only reads the URL of the active tab when you click the download button or open the popup, and only on supported platforms.
-- **Media found on a page** (5.12.0): the addresses of the videos a tab plays (on supported platforms, and on every site once you allow it) are kept in `chrome.storage.session` on your device to list them in the popup, and are deleted when you leave the page or close the tab. They are sent to the VidGrab server only when you press "Tải qua VidGrab" / "Qua VidGrab". HLS streams you download with "Tải về máy" never leave your browser.
-- **Video URLs**: Sent to the configured backend server solely to perform the download you requested. Not stored by the extension itself.
-- **Auth token** (optional): If you log in on the VidGrab website, an access token is stored in `chrome.storage.local` on your device only. It is never sent to any third party.
-- **Download history**: Stored locally in `chrome.storage.local` on your device. Not synced or transmitted.
-- **Settings** (API base URL, theme): Stored in `chrome.storage.sync` so they follow you across Chrome devices. Only your VidGrab server URL is stored — never URLs of pages you visited.
-
-**Content scripts**
-
-Content scripts run on supported video platforms to detect the page type and collect video metadata visible in the page DOM. This data is used only to populate the extension popup and is never transmitted anywhere.
-
-The Douyin interceptor (`interceptor.js`) runs in the MAIN world to capture Douyin's API responses for channel scraping. No data is stored or sent outside the VidGrab backend you configure.
-
-**Backend server**
-
-The VidGrab backend server processes download requests. If you use the default cloud server, it is subject to the VidGrab Terms of Service. If you self-host, you control all data. The extension only communicates with the URL you configure in Settings.
-
-**Third parties**
-
-VidGrab does not share data with any third-party analytics, advertising, or tracking services.
-
-**Contact**
-
-Questions: open an issue at the VidGrab GitHub repository or contact the developer via the Chrome Web Store support page.
-
----
-
-## 4. Review Notes (paste into "Notes for reviewer" field)
-
+## 5. Notes for reviewer (paste)
 ```
-This extension downloads publicly accessible videos from supported platforms.
-
-Key implementation details:
-
-1. SERVICE WORKER (background.js):
-   - No eval(), no remote code loading.
-   - Uses chrome.alarms (1-min heartbeat) to prevent MV3 SW suspension during
-     long background downloads.
-   - All fetch() calls are to the user-configured backend (same origin as the
-     host_permissions domain). No third-party data collection.
-
-2. CONTENT SCRIPTS (content.js, interceptor.js):
-   - content.js: runs at document_idle on supported platforms, reads DOM to
-     detect page type (video/channel/playlist) and current URL only.
-   - interceptor.js: runs at document_start in MAIN world on douyin.com ONLY.
-     It patches window.fetch to intercept Douyin's own API responses for
-     channel-mode scraping. This is necessary because Douyin's video list API
-     is called by its own page JS — intercepting fetch is the only reliable way
-     to capture it. No data is exfiltrated; captured video IDs are sent only
-     to the user's configured VidGrab backend.
-
-3. chrome.downloads.download():
-   - All downloads go to the user's VidGrab/ subfolder inside Downloads.
-   - saveAs: false for automated background downloads (standard downloader).
-   - saveAs: true only for format-chooser and right-click context menu.
-
-4. PERMISSIONS:
-   - Every permission is used actively. The permission table is in the
-     submission notes attached to this review.
-   - No permission is requested beyond what is actively used.
-
-5. HOST PERMISSIONS:
-   - Scoped to exact platform domains. No wildcard (*://*/*).
-   - Backend domain is in host_permissions to allow the service worker to
-     fetch from it without CORS restriction (user-configurable in Settings).
+VidGrab detects the video the current page plays and saves it to the user's computer. Test: open any page with a public MP4 (e.g. a sample file), click the icon, the list shows the file; press the download button.
+- Store build has NO YouTube support.
+- DRM/encrypted and live streams are detected and refused.
+- No remote code. Bundled: lib/mux.min.js (mux.js, Apache-2.0), lib/qrcode.js (MIT).
+- webRequest is observe-only (no blocking). The list is kept in chrome.storage.session.
+- *://*/* is optional; requested only when the user clicks "Allow grabbing videos on every site".
+- tabCapture is used only after the user presses "Quay tab" (recording a tab to a local WebM file).
+- cookies: only for the sign-in-gated site the user is downloading from; sent only to VidGrab's own API (https, first-party hosts) for that one extraction.
+- interceptor.js (MAIN world) runs only on the listed social sites to read the page's own video-list responses; nothing is sent to third parties.
+- Sign-in with the VidGrab website is optional. Test account on request: <owner to add credentials if the reviewer needs them>.
 ```
 
+## 6. Policy risks to watch (flagged for the owner)
+1. **cookies + facebook/instagram/x/reddit hosts**: sending the user's session cookies to our server is the most sensitive item (Web Store treats authentication data as sensitive). It is limited to first-party hosts and one-time use; the policy must state it exactly. If review pushes back, make it an explicit opt-in toggle (code change, not done here).
+2. **tabCapture** and **MAIN-world scripts on social sites**: likely to trigger extra review; justification ready.
+3. **Optional `*://*/*`**: may lengthen review; keep optional.
+4. Granting host permissions for 26 platforms at install: expect a "broad host" warning in the install dialog.
+5. Policy page older than the code (13/10/2026) - see TODOs.
+6. popup.html imports Google Fonts: third party contact not covered by the policy.
+
 ---
 
-## 5. Release & Update Strategy
+## 7. Release & Update Strategy
 
 ### Version Numbering
 `MAJOR.MINOR.PATCH` — e.g. `4.9.0`
@@ -226,7 +97,7 @@ The extension Settings panel shows:
 ### Update Flow
 1. Bump version in `manifest.json`
 2. Update this file's version header
-3. Run: `zip -r vidgrab-v4.9.0.zip chrome-extension/ -x "*.DS_Store" -x "*.md"`
+3. Run `python3 scripts/package-extension.py --store` and upload the store zip (section 2)
 4. Upload ZIP to Chrome Web Store Developer Dashboard
 5. Fill "What's new" field with changelog
 6. Submit for review (typically 1–3 business days)
@@ -261,46 +132,10 @@ The `update_url` in manifest.json points to Google's update service — auto-pop
 
 ---
 
-## 6. Review Checklist
-
-### Before submitting
-
-**Code**
-- [x] Version bumped in `manifest.json` (5.1.2)
-- [x] `minimum_chrome_version` set to `"102"`
-- [x] `alarms` permission added (for SW keepalive)
-- [x] No `eval()`, `new Function()`, or `document.write()` in any JS file
-- [x] No remote code loading
-- [x] All permissions used and justified in Section 2
-
-**Store assets**
-- [x] Privacy Policy published at a public URL (https://dvid.vibe1.tinhgon.xyz/privacy)
-- [ ] Privacy Policy URL entered in Developer Dashboard (manual step, do this at submission time)
-- [ ] Screenshots uploaded (min 3 × 1280×800 PNG) — see Section 6.1
-- [ ] Promotional tile uploaded (440×280 PNG)
-- [ ] Store listing description filled (copy from Section 1)
-- [ ] Category: Productivity
-- [ ] Support URL set
-- [ ] "Notes for reviewer" filled (copy from Section 4)
-
-### 6.1 Screenshots to capture
-
-| # | What to show | Resolution |
-|---|---|---|
-| 1 | Popup on a news site with "Video trên trang này" listing an MP4 and an HLS stream (qualities, length) | 1280×800 |
-| 2 | Download in progress (status bar + elapsed timer) | 1280×800 |
-| 3 | Channel bulk mode — TikTok / Douyin channel with video count | 1280×800 |
-| 4 | Settings panel — Server URL + version info + auth status | 1280×800 |
-| 5 | History tab — list of downloaded videos | 640×400 |
-
-### Post-submit watchpoints
-- If rejected for `tabs` permission: cite badge update + content script messaging use case
-- If rejected for MAIN world script: cite Section 4, point 2 (Douyin API interception)
-- If rejected for privacy policy: verify URL is publicly reachable (not behind auth)
 
 ---
 
-## 7. Backward Compatibility Notes
+## 8. Backward Compatibility Notes
 
 ### API contract (extension ↔ backend)
 
@@ -327,12 +162,3 @@ The `connect_extension=1` login flow is opt-in. Extension works without login.
 
 ---
 
-## 8. Remaining Debt (pre-public-launch TODO)
-
-| Item | Priority | Notes |
-|---|---|---|
-| ~~Privacy Policy page not yet live~~ | ~~HIGH~~ | **Resolved 2026-08-13** — live at https://dvid.vibe1.tinhgon.xyz/privacy (verified: real `PrivacyPolicy.jsx` page, not a stub; curl 200) |
-| Screenshots not yet captured | **HIGH** | Still open — needs a real Chrome session (popup UI, live download in progress, bulk mode, settings) to capture; can't be done headlessly from this environment |
-| Promotional tile not created | Medium | Required for featured placement |
-| Download progress setInterval is best-effort in MV3 | Low | Chrome can suspend SW mid-interval; fine progress (500ms) stays as-is — alarm keepalive (1 min) is the practical fix |
-| Offscreen document for persistent SW | Low | Alternative to alarms keepalive; adds `offscreen` permission; defer |

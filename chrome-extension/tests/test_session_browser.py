@@ -66,7 +66,7 @@ def main():
         with sync_playwright() as p:
             ctx = p.chromium.launch_persistent_context(
                 str(tmp / "profile"), headless=False, executable_path=T.CHROME, locale="vi-VN",
-                args=["--headless=new", f"--disable-extensions-except={T.EXT}", f"--load-extension={T.EXT}", "--no-sandbox"])
+                args=["--headless=new", f"--disable-extensions-except={T.EXT}", f"--load-extension={T.EXT}", "--lang=vi", "--no-sandbox"])
             ctx.route(SITE, lambda r: r.fulfill(status=200, content_type="text/html", body=PAGE))
             ctx.route("**/api/v1/extension/session", on_session)
             ctx.route("**/api/v1/client/quota/claim", on_claim)

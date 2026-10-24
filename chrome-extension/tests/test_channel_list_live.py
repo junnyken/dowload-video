@@ -40,7 +40,7 @@ def main():
             ctx = p.chromium.launch_persistent_context(
                 str(tmp / "profile"), headless=False, executable_path=T.CHROME, locale="vi-VN",
                 viewport={"width": 1280, "height": 900},
-                args=["--headless=new", f"--disable-extensions-except={T.EXT}", f"--load-extension={T.EXT}", "--no-sandbox"])
+                args=["--headless=new", f"--disable-extensions-except={T.EXT}", f"--load-extension={T.EXT}", "--lang=vi", "--no-sandbox"])
             ctx.route("**/api/v1/fetch-link", on_fetch)
             # 5.18.0: these checks are about the server path — direct download off, quota API faked
             ctx.route("**/api/v1/client/quota/claim", lambda r: r.fulfill(status=200, content_type="application/json", body='{"allowed":true,"claimId":"testclaim0001"}'))

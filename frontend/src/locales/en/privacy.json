@@ -7,12 +7,30 @@
   "s1": {
     "title": "1. Data we store",
     "intro": "This page lists what VidGrab actually stores when you use the website, the browser extension and the Windows app.",
-    "account": { "label": "Account", "text": "email and sign-in information (through Supabase Auth), plan, quota used." },
-    "history": { "label": "Download history", "text": "video link, title, platform, format and time of download. When the file expires, this information is still kept so that you can look it up again." },
-    "prefs": { "label": "Settings and features you turn on", "text": "default settings, channels you follow, download schedules, collections, notes, webhooks you declare, Telegram link, push notification subscription." },
-    "ip": { "label": "IP address", "text": "used to count quota for guests who are not signed in and to prevent abuse. The IP is stored in its original form in the security log and in quota counters (see section 3). For takedown requests only, the IP is stored as a hash." },
-    "browser": { "label": "Browser information", "text": "browser type (user agent) in the security log." },
-    "stats": { "label": "Usage statistics", "text": "events recording actions on the site, linked to your account or to an anonymous identifier of your browser." }
+    "account": {
+      "label": "Account",
+      "text": "email and sign-in information (through Supabase Auth), plan, quota used."
+    },
+    "history": {
+      "label": "Download history",
+      "text": "video link, title, platform, format and time of download. When the file expires, this information is still kept so that you can look it up again."
+    },
+    "prefs": {
+      "label": "Settings and features you turn on",
+      "text": "default settings, channels you follow, download schedules, collections, notes, webhooks you declare, Telegram link, push notification subscription."
+    },
+    "ip": {
+      "label": "IP address",
+      "text": "used to count quota for guests who are not signed in and to prevent abuse. The IP is stored in its original form in the security log and in quota counters (see section 3). For takedown requests only, the IP is stored as a hash."
+    },
+    "browser": {
+      "label": "Browser information",
+      "text": "browser type (user agent) in the security log."
+    },
+    "stats": {
+      "label": "Usage statistics",
+      "text": "events recording actions on the site, linked to your account or to an anonymous identifier of your browser."
+    }
   },
   "s2": {
     "title": "2. What we do not store",
@@ -22,37 +40,129 @@
   },
   "s3": {
     "title": "3. How long we keep data",
-    "links": { "label": "Download links", "text": "expire about 60 minutes after they are created." },
-    "temp": { "label": "Temporary files on the server", "text": "deleted automatically, by default after 2 hours." },
-    "history": { "label": "Download history", "text": "kept until you delete each item in the \"History\" section." },
-    "counters": { "label": "Quota and anti-abuse counters (with IP, device ID)", "text": "deleted automatically after 1 to 40 days, depending on the type of counter." },
-    "securityLog": { "label": "Security log (with IP, browser)", "text": "there is currently no automatic deletion schedule." },
-    "takedown": { "label": "Takedown requests", "text": "the most recent 1,000 requests are kept. Older requests are deleted when new requests arrive." },
-    "backup": { "label": "Database backups", "text": "kept for 14 days. Data you have deleted may remain in backups until this period ends." },
-    "account": { "label": "Account", "text": "kept until you email us to request deletion. There is currently no button to delete your account yourself." }
+    "links": {
+      "label": "Download links",
+      "text": "expire about 60 minutes after they are created."
+    },
+    "temp": {
+      "label": "Temporary files on the server",
+      "text": "deleted automatically, by default after 2 hours."
+    },
+    "history": {
+      "label": "Download history",
+      "text": "kept until you delete each item in the \"History\" section."
+    },
+    "counters": {
+      "label": "Quota and anti-abuse counters (with IP, device ID)",
+      "text": "deleted automatically after 1 to 40 days, depending on the type of counter."
+    },
+    "securityLog": {
+      "label": "Security log (with IP, browser)",
+      "text": "there is currently no automatic deletion schedule."
+    },
+    "takedown": {
+      "label": "Takedown requests",
+      "text": "the most recent 1,000 requests are kept. Older requests are deleted when new requests arrive."
+    },
+    "backup": {
+      "label": "Database backups",
+      "text": "kept for 14 days. Data you have deleted may remain in backups until this period ends."
+    },
+    "account": {
+      "label": "Account",
+      "text": "kept until you email us to request deletion. There is currently no button to delete your account yourself."
+    }
   },
   "s4": {
     "title": "4. Browser extension (Chrome)",
-    "tabs": { "label": "activeTab, tabs, scripting", "text": "read the address of the page that is open and detect videos on the page." },
-    "cookies": { "label": "cookies", "text": "when you download a video that requires sign-in, the extension reads the cookies of that video site itself and sends them with the download request. The cookies are sent only to the VidGrab server. The server uses the cookies only for that download and then deletes them immediately, without storing them." },
-    "other": { "label": "downloads, storage, notifications, contextMenus, alarms", "text": "save files to your computer, keep your sign-in session and settings in the browser, show notifications, add a right-click menu." }
+    "tabs": {
+      "label": "activeTab, tabs, scripting",
+      "text": "read the address of the page that is open and detect videos on the page."
+    },
+    "cookies": {
+      "label": "cookies",
+      "text": "when you download a video that requires sign-in, the extension reads the cookies of that video site itself and sends them with the download request. The cookies are sent only to the VidGrab server. The server uses the cookies only for that download and then deletes them immediately, without storing them."
+    },
+    "other": {
+      "label": "downloads, storage, notifications, contextMenus, alarms",
+      "text": "save files to your computer, keep your sign-in session and settings in the browser, show notifications, add a right-click menu."
+    },
+    "cookiesDomains": "Cookies are read only on these sites: Facebook, Instagram, X (Twitter), Reddit, Bilibili, Xiaohongshu (RedNote), Lemon8 and Douyin, and only while the extension is connected to VidGrab’s official server.",
+    "sniffer": {
+      "label": "webRequest (finding videos on a page)",
+      "text": "the extension only observes the tab’s network responses to recognise the video files (MP4, HLS, DASH) the page plays; it does not block or change any request. The list stays in the browser’s temporary storage, is cleared when the tab closes and is not sent to VidGrab."
+    },
+    "record": {
+      "label": "tabCapture, offscreen (recording mode)",
+      "text": "only when you press “Quay tab” / “Record tab”, the extension records that tab’s picture and sound inside your browser and saves it as a file on your computer. The recording is not sent to VidGrab. DRM-protected videos are not recorded."
+    },
+    "optional": {
+      "label": "Optional permissions: access to all sites, clipboardRead",
+      "text": "requested only when you press “Find videos on this page” or the Paste button; you can refuse or revoke them at any time in Chrome’s extension settings."
+    },
+    "session": {
+      "label": "The extension’s sign-in session",
+      "text": "when you are signed in on the VidGrab website, the extension receives its own session code, valid for 30 days and stored in your browser. Signing out in the extension or on the website revokes it on the server."
+    },
+    "quota": {
+      "label": "Downloads and direct downloading",
+      "text": "the extension downloads videos with your own browser first. For each download it sends the video page address to the VidGrab server to count the daily allowance (the same allowance as the website and the app); in that case the video file does not pass through the server. When the browser cannot download it, the address is sent so that the server downloads it instead, as before."
+    },
+    "app": {
+      "label": "Connection to the VidGrab Windows app",
+      "text": "if the app is running on your computer, the extension can hand it a video address through the local address 127.0.0.1; this data does not leave your computer."
+    },
+    "limitedUse": "The extension’s use and transfer of data comply with the Chrome Web Store User Data Policy, including the Limited Use requirements."
   },
   "s5": {
     "title": "5. VidGrab Windows app",
-    "cookies": { "label": "Platform sign-in cookies", "text": "stay on your computer, are encrypted using Windows mechanisms, and are not sent to the VidGrab server." },
-    "device": { "label": "Device ID", "text": "the app sends a hash derived from a Windows identifier (the original identifier is not sent), together with the computer name, Windows version and app version. This ID is used to count free downloads. The server also stores the most recent IP address of the device." },
-    "sync": { "label": "History sync", "text": "if you turn it on, the app sends the link, title, format and result of each download. The path of the folder where files are saved on your computer is not sent." }
+    "cookies": {
+      "label": "Platform sign-in cookies",
+      "text": "stay on your computer, are encrypted using Windows mechanisms, and are not sent to the VidGrab server."
+    },
+    "device": {
+      "label": "Device ID",
+      "text": "the app sends a hash derived from a Windows identifier (the original identifier is not sent), together with the computer name, Windows version and app version. This ID is used to count free downloads. The server also stores the most recent IP address of the device."
+    },
+    "sync": {
+      "label": "History sync",
+      "text": "if you turn it on, the app sends the link, title, format and result of each download. The path of the folder where files are saved on your computer is not sent."
+    }
   },
   "s6": {
     "title": "6. Third parties that receive data",
-    "supabase": { "label": "Supabase", "text": "sign-in and database." },
-    "stripe": { "label": "Stripe", "text": "payment. Receives your email when you buy a plan." },
-    "proxy": { "label": "Intermediary download services (such as Apify, ScraperAPI)", "text": "for some platforms, the video link you submit is passed through these services to fetch the video." },
-    "ai": { "label": "AI services (Gemini, OpenAI/Whisper)", "text": "only when you use the transcription, translation or video analysis features. In that case the audio or the text content of the video is sent for processing." },
-    "telegram": { "label": "Telegram and email", "text": "feedback content (name, email, content, IP) and notifications of new takedown requests are sent to the operations team. Feedback is not stored in the database." },
-    "sentry": { "label": "Sentry", "text": "if enabled, receives technical error reports, without personal information." },
-    "fonts": { "label": "Google Fonts", "text": "the website loads fonts from Google, so Google receives your browser's IP address." },
-    "push": { "label": "Browser push notification service", "text": "receives the content of notifications when you turn on push notifications." },
+    "supabase": {
+      "label": "Supabase",
+      "text": "sign-in and database."
+    },
+    "stripe": {
+      "label": "Stripe",
+      "text": "payment. Receives your email when you buy a plan."
+    },
+    "proxy": {
+      "label": "Intermediary download services (such as Apify, ScraperAPI)",
+      "text": "for some platforms, the video link you submit is passed through these services to fetch the video."
+    },
+    "ai": {
+      "label": "AI services (Gemini, OpenAI/Whisper)",
+      "text": "only when you use the transcription, translation or video analysis features. In that case the audio or the text content of the video is sent for processing."
+    },
+    "telegram": {
+      "label": "Telegram and email",
+      "text": "feedback content (name, email, content, IP) and notifications of new takedown requests are sent to the operations team. Feedback is not stored in the database."
+    },
+    "sentry": {
+      "label": "Sentry",
+      "text": "if enabled, receives technical error reports, without personal information."
+    },
+    "fonts": {
+      "label": "Google Fonts",
+      "text": "the website loads fonts from Google, so Google receives your browser's IP address."
+    },
+    "push": {
+      "label": "Browser push notification service",
+      "text": "receives the content of notifications when you turn on push notifications."
+    },
     "noSale": "We do NOT sell, rent or share your data with any third party for advertising purposes."
   },
   "s7": {

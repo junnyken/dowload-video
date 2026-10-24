@@ -1,9 +1,10 @@
 {
   "update_url": "https://clients2.google.com/service/update2/crx",
   "manifest_version": 3,
-  "name": "VidGrab - Video Downloader",
+  "default_locale": "en",
+  "name": "__MSG_ext_name__",
   "version": "5.20.0",
-  "description": "Tải video từ TikTok, Douyin, Facebook, Instagram, X, Bilibili, Xiaohongshu… và bắt video (MP4, HLS, DASH) ngay trên trang bạn đang xem.",
+  "description": "__MSG_ext_description__",
   "minimum_chrome_version": "102",
   "permissions": [
     "activeTab",
@@ -64,7 +65,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "VidGrab Downloader"
+    "default_title": "__MSG_ext_action_title__"
   },
   "icons": {
     "16": "assets/icon16.png",
