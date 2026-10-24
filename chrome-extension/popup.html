@@ -489,6 +489,16 @@
     </div>
     <button id="settings-reset" data-i18n="settings_reset" style="font-size:10px;color:#475569;background:none;border:none;cursor:pointer;">↩ Đặt lại mặc định</button>
 
+    <!-- 5.20.1: sign-in cookies, the person's choice (Web Store build: off by default). wording: BA review -->
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(148,163,184,0.15);">
+      <div style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:6px;" data-i18n="set_cookies_title">🍪 Cookie đăng nhập</div>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:10px;color:#cbd5e1;cursor:pointer;">
+        <input id="settings-send-cookies" type="checkbox" style="margin-top:2px;accent-color:#6366f1;">
+        <span data-i18n="set_cookies_label">Dùng cookie của trình duyệt cho video cần đăng nhập</span>
+      </label>
+      <div style="font-size:9px;color:#64748b;margin-top:4px;line-height:1.4;" data-i18n="set_cookies_hint"></div>
+    </div>
+
     <!-- 5.20.0: file name template. wording: BA review -->
     <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(148,163,184,0.15);">
       <div data-i18n="settings_name_title" style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:6px;">📝 Mẫu tên file</div>
@@ -548,8 +558,7 @@
 
   <!-- YouTube: the extension does not download it (Chrome Web Store policy). -->
   <div id="vg-yt-note" style="display:none;margin:10px 14px 0;background:#1a1420;border:1px solid #3b2140;border-radius:12px;padding:10px;font-size:11px;color:#e2e8f0;line-height:1.5;">
-    <span data-i18n="yt_note">Tiện ích không tải video YouTube. Bạn tải video này trên web hoặc app VidGrab cho Windows.</span>
-    <button id="vg-yt-open" data-i18n="yt_open_web" style="display:block;margin-top:8px;width:100%;background:#ef4444;border:none;border-radius:10px;padding:7px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;">Mở trên web VidGrab</button>
+    <span data-i18n="yt_note">Tiện ích không hỗ trợ tải video YouTube.</span>
   </div>
 
   <!-- ══════════════════ SINGLE VIDEO ══════════════════ -->

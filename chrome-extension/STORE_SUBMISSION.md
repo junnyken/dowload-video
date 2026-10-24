@@ -30,6 +30,12 @@ The older text in this file (5.1.x listing, permission table) is superseded by t
 - `--store` keeps the same files as the website build (excludes `store-assets/`, `tests/`, `STORE_SUBMISSION.md`, dotfiles) and only rewrites manifest.json: removes `*youtube.com` / `*youtu.be` from `host_permissions` and from every `content_scripts[].matches`. It refuses to finish if a YouTube host remains.
 - Source files are NOT changed for the store build. YouTube strings remain in popup.js/content.js (the popup shows a "use the VidGrab website" note and refuses the link). **Risk**: a reviewer who greps the code finds YouTube names. Mitigation: it is refusal logic only, and the listing never mentions YouTube. If a reviewer objects, strip those branches from the store build.
 
+## 2b. Changes in 5.20.1 for the review (24/10/2026)
+- `tabCapture` moved to **optional_permissions**: asked only when the person presses "Record tab" (no install-time warning for it).
+- Sign-in cookies: a **switch in Settings**, **off by default in the Web Store build** (on by default only in the website build). Update the `cookies` justification: "used only if the user turns on 'Use the browser’s cookies for videos that need sign-in'".
+- YouTube: the store build refuses YouTube on every path (popup, list, right-click menu, server fallback) and no longer offers "open on the VidGrab website" for a YouTube link. The remaining "YouTube" strings in the code are this refusal logic.
+- Checked by `chrome-extension/tests/test_store_build.py` (builds and loads the real store zip).
+
 ## 3. Screenshots to capture (up to 5, 1280x800 or 640x400, PNG/JPEG, no alpha)
 **Done (24/10/2026):** `store-assets/screenshots-5.20/1-video-on-page.png`, `2-preview.png`, `3-channel-list.png`, `4-progress.png`, `5-send-to-phone.png` — 1280x800 PNG, English UI of 5.20.0, own sample pages/files only, no YouTube, no platform logos. Upload these five; do not upload anything from the old `screenshots/` folder.
 

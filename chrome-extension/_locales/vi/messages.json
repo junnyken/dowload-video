@@ -1931,14 +1931,27 @@
     "message": "Chỉ TikTok"
   },
   "yt_note": {
-    "message": "Tiện ích không tải video YouTube. Bạn tải video này trên web hoặc app VidGrab cho Windows.",
+    "message": "Tiện ích không hỗ trợ tải video YouTube.",
     "description": "wording: BA review"
   },
-  "yt_open_web": {
-    "message": "Mở trên web VidGrab"
-  },
   "yt_text": {
-    "message": "Tiện ích không tải video YouTube. Hãy mở trên web VidGrab.",
+    "message": "Tiện ích không hỗ trợ tải video YouTube.",
+    "description": "wording: BA review"
+  },
+  "set_cookies_title": {
+    "message": "🍪 Cookie đăng nhập",
+    "description": "wording: BA review"
+  },
+  "set_cookies_label": {
+    "message": "Dùng cookie của trình duyệt cho video cần đăng nhập",
+    "description": "wording: BA review"
+  },
+  "set_cookies_hint": {
+    "message": "Khi bật: với Facebook, Instagram, X, Reddit, Bilibili, Xiaohongshu, Lemon8, Douyin, tiện ích gửi cookie của trang đó kèm yêu cầu tải lên máy chủ VidGrab (dùng cho đúng lần tải đó). Khi tắt: chỉ tải được nội dung công khai.",
+    "description": "wording: BA review"
+  },
+  "rec_perm_denied": {
+    "message": "Cần cấp quyền quay tab để dùng chế độ quay.",
     "description": "wording: BA review"
   }
 }

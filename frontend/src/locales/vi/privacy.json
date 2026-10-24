@@ -86,7 +86,7 @@
       "label": "downloads, storage, notifications, contextMenus, alarms",
       "text": "lưu file về máy, giữ phiên đăng nhập và cài đặt trong trình duyệt, hiện thông báo, thêm menu chuột phải."
     },
-    "cookiesDomains": "Cookie chỉ được đọc trên các trang: Facebook, Instagram, X (Twitter), Reddit, Bilibili, Xiaohongshu (RedNote), Lemon8 và Douyin, và chỉ khi tiện ích đang nối với máy chủ chính thức của VidGrab.",
+    "cookiesDomains": "Cookie chỉ được đọc trên các trang: Facebook, Instagram, X (Twitter), Reddit, Bilibili, Xiaohongshu (RedNote), Lemon8 và Douyin, và chỉ khi tiện ích đang nối với máy chủ chính thức của VidGrab. Bạn có thể tắt việc này trong phần Cài đặt của tiện ích (bản trên Chrome Web Store mặc định tắt).",
     "sniffer": {
       "label": "webRequest (bắt video trên trang)",
       "text": "tiện ích chỉ quan sát các phản hồi mạng của tab để nhận ra file video (MP4, HLS, DASH) mà trang đang phát; không chặn hay sửa yêu cầu nào. Danh sách video nằm trong bộ nhớ tạm của trình duyệt và mất khi đóng tab, không gửi về VidGrab."

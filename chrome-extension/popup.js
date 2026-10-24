@@ -2313,7 +2313,9 @@ if (_activeQPill) {
 // The Chrome Web Store does not allow extensions that download YouTube. The
 // build VidGrab hands out on its own website keeps YouTube (owner, 22/10);
 // the Web Store build (`package-extension.py --store`) drops the YouTube host
-// permission, and then the popup sends YouTube links to the web instead.
+// permission, and then the extension only says it does not support YouTube —
+// 24/10: it no longer offers to open the link on the website (Web Store review:
+// that is still helping to download YouTube).
 // Which build this is = whether the manifest has the YouTube host. wording: BA review
 const VG_YT_TEXT = t('yt_text');
 
@@ -2335,8 +2337,6 @@ function vgShowYouTubeNote(url) {
   const box = document.getElementById('vg-yt-note');
   if (!box) return;
   box.style.display = 'block';
-  const btn = document.getElementById('vg-yt-open');
-  btn.onclick = () => chrome.tabs.create({ url: `${WEB_BASE}/?url=${encodeURIComponent(url)}` });
 }
 
 function vgShowVersion() {
@@ -2704,6 +2704,7 @@ document.getElementById('vg-qr-btn')?.addEventListener('click', async () => {
   if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
   let url;
   try { url = await getTargetUrl(); } catch (e) { setUrlHint(e.message, 'warn'); return; }
+  if (vgYouTubeBlocked(url)) { vgShowYouTubeNote(url); return; } // Web Store build: no YouTube, not even via the phone
   const link = `${WEB_BASE}/share-target?url=${encodeURIComponent(url)}`;
   const qr = qrcode(0, 'M');
   qr.addData(link);
@@ -2747,6 +2748,9 @@ document.getElementById('vg-rec-btn')?.addEventListener('click', async () => {
   }
   if (!_activeTabId) return;
   box.textContent = t('rec_intro');
+  // 5.20.1: tabCapture is optional — asked here, on the person's click, the first time
+  const granted = await new Promise((res) => chrome.permissions.request({ permissions: ['tabCapture'] }, (g) => res(!!g && !chrome.runtime.lastError)));
+  if (!granted) { box.textContent = `❌ ${t('rec_perm_denied')}`; return; }
   const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'VG_REC_START', tabId: _activeTabId }, res));
   if (!r || !r.ok) { box.textContent = t('status_err', (r && r.error) || t('rec_start_fail')); return; }
   vgRecRender();
@@ -2766,4 +2770,17 @@ vgRecRender();
     hint.style.color = '#4ade80';
     hint.textContent = t('tpl_saved');
   });
+})();
+
+
+// 5.20.1: sign-in cookies switch (storage.sync vg_send_cookies). Default: on in the
+// website build, off in the Web Store build (no YouTube host = the store build).
+(async () => {
+  const box = document.getElementById('settings-send-cookies');
+  if (!box) return;
+  const storeBuild = !(chrome.runtime.getManifest().host_permissions || []).some((h) => /youtube\.com/.test(h));
+  let v;
+  try { v = (await chrome.storage.sync.get('vg_send_cookies')).vg_send_cookies; } catch { /* default */ }
+  box.checked = typeof v === 'boolean' ? v : !storeBuild;
+  box.addEventListener('change', () => chrome.storage.sync.set({ vg_send_cookies: box.checked }));
 })();

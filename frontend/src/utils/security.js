@@ -4,10 +4,15 @@
  * Multi-layer frontend protection:
  * 1. Block DevTools (F12, Ctrl+Shift+I/J/C, Ctrl+U)
  * 2. Disable right-click context menu
- * 3. Detect DevTools open via timing/size tricks
  * 4. Prevent text selection & drag on sensitive elements
- * 5. Anti-debugging with debugger traps
  * 6. Console log poisoning
+ *
+ * 24/10/2026 (owner, phone screenshot): the "DevTools detected" overlay is gone.
+ * Its two tricks fired on ordinary visitors — outerHeight - innerHeight > 160
+ * is just the browser's own bars on a phone (and a side panel / zoom on a PC),
+ * and a >100 ms pause around a debugger trap is a slow phone or a tab coming
+ * back from the background. It protected nothing (the site's code is public)
+ * and locked real customers out.
  */
 
 // ── 1. Block Keyboard Shortcuts ─────────────────────────────────────
@@ -60,32 +65,6 @@ function blockContextMenu(e) {
   return false;
 }
 
-// ── 3. DevTools Detection via window size ───────────────────────────
-let devToolsOpen = false;
-const THRESHOLD = 160;
-
-function checkDevTools() {
-  const widthDiff = window.outerWidth - window.innerWidth > THRESHOLD;
-  const heightDiff = window.outerHeight - window.innerHeight > THRESHOLD;
-
-  if (widthDiff || heightDiff) {
-    if (!devToolsOpen) {
-      devToolsOpen = true;
-      onDevToolsDetected();
-    }
-  } else {
-    devToolsOpen = false;
-  }
-}
-
-function onDevToolsDetected() {
-  // Overlay warning
-  const overlay = document.getElementById('security-overlay');
-  if (overlay) {
-    overlay.style.display = 'flex';
-  }
-}
-
 // ── 4. Console Poisoning ────────────────────────────────────────────
 function poisonConsole() {
   const warning = [
@@ -104,21 +83,6 @@ function poisonConsole() {
   } catch {
     // Silently fail
   }
-}
-
-// ── 5. Anti-debugging ───────────────────────────────────────────────
-function antiDebug() {
-  // Periodic debugger check (slows down anyone stepping through code)
-  const check = new Function('debugger');
-  setInterval(() => {
-    const start = performance.now();
-    check();
-    const diff = performance.now() - start;
-    // If debugger paused, diff will be very large
-    if (diff > 100) {
-      onDevToolsDetected();
-    }
-  }, 4000);
 }
 
 // ── 6. Prevent drag & text selection on images ──────────────────────
@@ -160,14 +124,8 @@ export function initSecurityShield() {
   // Block right-click
   document.addEventListener('contextmenu', blockContextMenu);
 
-  // DevTools size detection
-  setInterval(checkDevTools, 1500);
-
   // Console warning
   poisonConsole();
-
-  // Anti-debugger
-  antiDebug();
 
   // Prevent image drag
   preventDrag();

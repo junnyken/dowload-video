@@ -87,7 +87,7 @@
       "label": "downloads, storage, notifications, contextMenus, alarms",
       "text": "save files to your computer, keep your sign-in session and settings in the browser, show notifications, add a right-click menu."
     },
-    "cookiesDomains": "Cookies are read only on these sites: Facebook, Instagram, X (Twitter), Reddit, Bilibili, Xiaohongshu (RedNote), Lemon8 and Douyin, and only while the extension is connected to VidGrab’s official server.",
+    "cookiesDomains": "Cookies are read only on these sites: Facebook, Instagram, X (Twitter), Reddit, Bilibili, Xiaohongshu (RedNote), Lemon8 and Douyin, and only while the extension is connected to VidGrab’s official server. You can turn this off in the extension’s Settings (the Chrome Web Store version has it off by default).",
     "sniffer": {
       "label": "webRequest (finding videos on a page)",
       "text": "the extension only observes the tab’s network responses to recognise the video files (MP4, HLS, DASH) the page plays; it does not block or change any request. The list stays in the browser’s temporary storage, is cleared when the tab closes and is not sent to VidGrab."

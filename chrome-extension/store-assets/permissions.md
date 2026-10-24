@@ -70,3 +70,9 @@ Verified: grep for `eval(`, `new Function`, remote `<script src>` in chrome-exte
 
 ## Data usage certification
 Check the three boxes (no sale, no unrelated use, no creditworthiness use): see privacy-checklist.md.
+
+
+## Update 5.20.1 (24/10/2026)
+- **tabCapture** is now an *optional* permission, requested at runtime only when the user presses "Record tab". Justification unchanged otherwise.
+- **cookies**: used only when the user turns on "Use the browser’s cookies for videos that need sign-in" in Settings — **off by default** in this (Web Store) build. When off, no cookie is read or sent.
+- **YouTube**: not supported; the extension refuses YouTube links on every path and does not redirect them anywhere.

@@ -3,8 +3,9 @@
 website build (chrome-extension/ as is, the zip the VidGrab site serves):
     YouTube links are downloaded like any other.
 Chrome Web Store build (scripts/package-extension.py --store, unzipped):
-    no YouTube host permission; a YouTube link is refused with the
-    "Mở trên web VidGrab" note, other links still work.
+    no YouTube host permission; a YouTube link is refused with a "not
+    supported" note and NO way to the website (5.20.1, Web Store policy),
+    other links still work.
 Run: python3 tests/test_youtube_builds.py
 """
 import os, shutil, subprocess, sys, tempfile, time, zipfile, json
@@ -38,11 +39,12 @@ def run(p, ext_dir: Path, profile: Path):
     pop.fill("#vg-url-input", YT)
     yt = pop.evaluate("() => getTargetUrl().then(v => 'accepted:' + v).catch(e => e.message)")
     note = pop.locator("#vg-yt-note").is_visible()
+    no_web_btn = pop.locator("#vg-yt-open").count() == 0
     pop.fill("#vg-url-input", "https://www.tiktok.com/@a/video/1")
     other = pop.evaluate("() => getTargetUrl().then(v => 'accepted:' + v).catch(e => e.message)")
     hosts = pop.evaluate("() => chrome.runtime.getManifest().host_permissions")
     ctx.close()
-    return yt, note, other, hosts
+    return yt, note, other, hosts, no_web_btn
 
 
 def main():
@@ -59,13 +61,13 @@ def main():
         store_dir = tmp / "store"
         zipfile.ZipFile(store_zip).extractall(store_dir)
         with sync_playwright() as p:
-            yt, note, other, hosts = run(p, Path(T.EXT), tmp / "p1")
+            yt, note, other, hosts, no_web_btn = run(p, Path(T.EXT), tmp / "p1")
             check("website build: YouTube link accepted", yt == f"accepted:{YT}", yt)
             check("website build: no 'use the web' note", note is False)
             check("website build: has the YouTube host permission", "*://*.youtube.com/*" in hosts)
-            yt, note, other, hosts = run(p, store_dir, tmp / "p2")
-            check("store build: YouTube link refused", "không tải video YouTube" in yt, yt)
-            check("store build: note sends to the web", note is True)
+            yt, note, other, hosts, no_web_btn = run(p, store_dir, tmp / "p2")
+            check("store build: YouTube link refused", "không hỗ trợ tải video YouTube" in yt, yt)
+            check("store build: the note shows, with no button to the website", note is True and no_web_btn, f"note={note} no_web_btn={no_web_btn}")
             check("store build: other links still accepted", other == "accepted:https://www.tiktok.com/@a/video/1", other)
             check("store build: no YouTube host permission", not any("yout" in h for h in hosts), str([h for h in hosts if 'yout' in h]))
     finally:

@@ -1931,14 +1931,27 @@
     "message": "TikTok only"
   },
   "yt_note": {
-    "message": "The extension doesn't download YouTube videos. Download this video on the VidGrab website or the VidGrab app for Windows.",
+    "message": "This extension does not download YouTube videos.",
     "description": "wording: BA review"
   },
-  "yt_open_web": {
-    "message": "Open on VidGrab web"
-  },
   "yt_text": {
-    "message": "The extension doesn't download YouTube videos. Open it on the VidGrab website.",
+    "message": "This extension does not download YouTube videos.",
+    "description": "wording: BA review"
+  },
+  "set_cookies_title": {
+    "message": "🍪 Sign-in cookies",
+    "description": "wording: BA review"
+  },
+  "set_cookies_label": {
+    "message": "Use the browser’s cookies for videos that need sign-in",
+    "description": "wording: BA review"
+  },
+  "set_cookies_hint": {
+    "message": "When on: for Facebook, Instagram, X, Reddit, Bilibili, Xiaohongshu, Lemon8 and Douyin, the extension sends that site’s cookies with the download request to the VidGrab server (for that download only). When off: only public content can be downloaded.",
+    "description": "wording: BA review"
+  },
+  "rec_perm_denied": {
+    "message": "Allow tab recording to use recording mode.",
     "description": "wording: BA review"
   }
 }

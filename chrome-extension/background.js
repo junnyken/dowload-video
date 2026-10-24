@@ -163,6 +163,13 @@ async function getEphemeralCookiesB64(pageUrl) {
   const domain = _cookieGatedDomainFor(pageUrl);
   if (!domain) return undefined;
 
+  // 5.20.1: the person's choice (popup settings). Default: on in the website
+  // build, off in the Web Store build (no YouTube host in its manifest).
+  let send;
+  try { send = (await chrome.storage.sync.get('vg_send_cookies')).vg_send_cookies; } catch { /* default */ }
+  if (typeof send !== 'boolean') send = (chrome.runtime.getManifest().host_permissions || []).some((h) => /youtube\.com/.test(h));
+  if (!send) return undefined;
+
   // Hard stop: these are the user's LIVE Facebook/Instagram/X/Reddit session
   // cookies. They only ever go to a first-party endpoint. If someone has
   // pointed the extension at a custom backend, extraction silently falls back
@@ -579,7 +586,15 @@ function vgSamePage(a, b) {
  * download from that page — no extra window). Returns the same shape as
  * vgFetchAndSave plus `via`; throws with .status like it.
  */
+// 24/10: the Web Store build (no YouTube host in the manifest) refuses YouTube on
+// every path — popup, list, right-click, server fallback (Web Store policy).
+function vgYouTubeRefused(url) {
+  if ((chrome.runtime.getManifest().host_permissions || []).some((h) => /youtube\.com/.test(h))) return false;
+  try { return /(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com)$/i.test(new URL(url).hostname); } catch { return false; }
+}
+
 async function vgSaveVideo(payload, signal, pageTabId) {
+  if (vgYouTubeRefused(payload.url)) throw new Error(t('yt_text'));
   // storage.local vg_direct === false: everything through the server (kill switch, tests)
   const off = (await chrome.storage.local.get('vg_direct').catch(() => ({}))).vg_direct === false;
   if (off || !self.vgDirect.directEligible(payload)) {
@@ -1563,10 +1578,11 @@ chrome.tabs.onRemoved.addListener((tabId) => { clearStore(tabId); });
 
 // ── Right-click Context Menu ─────────────────────────────────────
 chrome.runtime.onInstalled.addListener((details) => {
+  const hosts = chrome.runtime.getManifest().host_permissions || [];
   const patterns = [
     '*://*.tiktok.com/*', '*://*.youtube.com/*', '*://*.facebook.com/*',
     '*://*.douyin.com/*', '*://*.instagram.com/*', '*://open.spotify.com/*',
-  ];
+  ].filter((p) => hosts.includes(p)); // the Web Store build has no YouTube host: no menu there
   chrome.contextMenus.create({ id: 'vg-download-video', title: t('ctx_video'), contexts: ['page', 'link', 'video', 'audio'], documentUrlPatterns: patterns });
   chrome.contextMenus.create({ id: 'vg-download-mp3', title: t('ctx_mp3'), contexts: ['page', 'link', 'video', 'audio'], documentUrlPatterns: patterns });
   // E2: download media found on the current page using the user's own session/IP
@@ -1606,6 +1622,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   const targetUrl = info.linkUrl || tab.url;
   const isMP3 = info.menuItemId === 'vg-download-mp3';
+  if (vgYouTubeRefused(targetUrl)) {
+    chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: `❌ ${t('yt_text')}` }).catch(() => {});
+    return;
+  }
   chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: t('toast_processing') }).catch(() => {});
 
   // 5.18.4: a video goes the same way as the popup's button — the browser first
