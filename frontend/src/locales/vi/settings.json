@@ -97,5 +97,29 @@
     "saving": "Đang lưu...",
     "saved": "Đã lưu!",
     "save": "Lưu preferences"
+  },
+  "devices": {
+    "title": "Thiết bị của tôi",
+    "desc": "Tài khoản dùng tối đa {{max}} thiết bị. Website, tiện ích và app trên cùng một máy tính được tính là 1 thiết bị. Khi vượt quá, thiết bị dùng lâu nhất sẽ bị đăng xuất.",
+    "count": "{{n}}/{{max}} thiết bị",
+    "unknown": "Thiết bị không rõ",
+    "kind": {
+      "web": "Website",
+      "extension": "Tiện ích",
+      "app": "App Windows"
+    },
+    "lastSeen": "Lần dùng gần nhất: {{when}}",
+    "justNow": "vừa xong",
+    "current": "Thiết bị này",
+    "signOut": "Đăng xuất",
+    "signingOut": "Đang đăng xuất...",
+    "confirm": "Đăng xuất thiết bị này?",
+    "confirmCurrent": "Đây là thiết bị bạn đang dùng. Đăng xuất sẽ đăng xuất bạn khỏi VidGrab tại đây. Tiếp tục?",
+    "empty": "Chưa có thiết bị nào được ghi nhận. Danh sách cập nhật sau khi bạn dùng VidGrab khi đã đăng nhập.",
+    "loading": "Đang tải...",
+    "error": "Không tải được danh sách thiết bị. Vui lòng thử lại.",
+    "unavailable": "Tính năng quản lý thiết bị tạm thời không khả dụng.",
+    "actionError": "Không đăng xuất được thiết bị. Vui lòng thử lại.",
+    "retry": "Thử lại"
   }
 }

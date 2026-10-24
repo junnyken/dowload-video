@@ -65,7 +65,11 @@ async function vgDeviceId() {
 }
 async function vgDeviceHeader() {
   const id = await vgDeviceId();
-  return id ? { 'X-VG-Device': id } : {};
+  if (!id) return {};
+  // the version tells the server this device entry is the extension ("Thiết bị của tôi")
+  let ver = '';
+  try { ver = chrome.runtime.getManifest().version || ''; } catch { /* tests */ }
+  return ver ? { 'X-VG-Device': id, 'X-VG-Ext-Version': ver } : { 'X-VG-Device': id };
 }
 self.vgDeviceId = vgDeviceId;
 

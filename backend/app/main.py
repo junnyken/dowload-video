@@ -616,6 +616,8 @@ app.include_router(admin_switches_router, prefix="/api/v1/admin", tags=["Admin S
 # Owner 24/10/2026 — device linking (Free 2 / paid 5 devices, shared Free allowance)
 from app.api.admin_device_links import router as admin_device_links_router
 app.include_router(admin_device_links_router, prefix="/api/v1/admin", tags=["Admin Device Links"])
+from app.api.devices import router as devices_router
+app.include_router(devices_router, prefix="/api/v1", tags=["Devices"])
 from app.api.plans import public_router as plans_public, admin_router as plans_admin
 app.include_router(plans_public, prefix="/api/v1", tags=["Plans"])
 app.include_router(plans_admin, prefix="/api/v1/admin", tags=["Plans"])

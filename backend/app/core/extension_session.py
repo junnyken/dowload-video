@@ -18,6 +18,10 @@ So the server gives the extension its own token:
 - `gen`: a per-user counter in Redis (vidgrab:extgen:<uid>). Sign-out from the
   extension or the site bumps it: every older token stops working at once.
   Redis down -> the counter is not checked (the token's own expiry still is).
+- `dev` (24/10/2026): the device it was issued on (X-VG-Device, 32 hex).
+  Sign-out on one device revokes only that device's tokens
+  (vidgrab:extrev:<uid> device -> time); every device was signed out before.
+  A token without `dev` (older, or no header) still falls back to `gen`.
 - The extension renews it (POST /extension/session with the current token)
   while it is used; nothing to do for the person for 30 days at a time.
 - It is a session, not an API key: never metered like one.
@@ -36,6 +40,7 @@ from typing import Any, Dict, Optional
 PREFIX = "vgx_"
 TTL_S = 30 * 24 * 3600
 _GEN_KEY = "vidgrab:extgen:{}"
+_DEV_REV_KEY = "vidgrab:extrev:{}"
 
 
 def _b64(b: bytes) -> str:
@@ -75,8 +80,28 @@ def revoke(user_id: str) -> bool:
         return False
 
 
+def revoke_device(user_id: str, device: str, now: Optional[int] = None) -> bool:
+    """Extension tokens of this user issued on `device` before now stop working;
+    other devices keep theirs."""
+    try:
+        k = _DEV_REV_KEY.format(user_id)
+        _rc().hset(k, device, int(now if now is not None else time.time()))
+        _rc().expire(k, TTL_S + 86400)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _device_revoked_at(user_id: str, device: str) -> Optional[int]:
+    try:
+        v = _rc().hget(_DEV_REV_KEY.format(user_id), device)
+        return int(v) if v else None
+    except Exception:  # noqa: BLE001  Redis down: not checked
+        return None
+
+
 def issue(user_id: str, email: Optional[str], now: Optional[int] = None,
-          email_confirmed_at: Optional[str] = None) -> Optional[Dict[str, Any]]:
+          email_confirmed_at: Optional[str] = None, device: Optional[str] = None) -> Optional[Dict[str, Any]]:
     key = _key()
     if not key or not user_id:
         return None
@@ -84,6 +109,8 @@ def issue(user_id: str, email: Optional[str], now: Optional[int] = None,
     gen = _gen(user_id)
     payload = {"sub": str(user_id), "email": email or None, "ec": email_confirmed_at or None,
                "iat": iat, "exp": iat + TTL_S, "gen": gen or 0}
+    if device:
+        payload["dev"] = str(device)[:32]
     body = _b64(json.dumps(payload, separators=(",", ":")).encode())
     sig = _b64(hmac.new(key, body.encode(), hashlib.sha256).digest())
     return {"token": f"{PREFIX}{body}.{sig}", "expiresAt": payload["exp"]}
@@ -109,4 +136,9 @@ def verify(token: str, now: Optional[int] = None) -> Optional[Dict[str, Any]]:
     gen = _gen(str(p["sub"]))
     if gen is not None and int(p.get("gen") or 0) < gen:
         return None
+    dev = p.get("dev")
+    if dev:
+        rev = _device_revoked_at(str(p["sub"]), str(dev))
+        if rev is not None and int(p.get("iat") or 0) <= rev:
+            return None
     return {"id": str(p["sub"]), "email": p.get("email"), "email_confirmed_at": p.get("ec"), "via_extension": True}

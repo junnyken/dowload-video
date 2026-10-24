@@ -183,3 +183,77 @@ def test_http_extension_session_signed_out_device_gets_401(rc, monkeypatch):  # 
     assert r.status_code == 401 and r.json()["detail"]["error_code"] == "device_signed_out"
     # no header (old client): not linked, works
     assert client.post("/api/v1/extension/session", headers={"Authorization": f"Bearer {tok}"}).status_code == 200
+
+
+def test_extension_sign_out_ends_only_that_device(rc, monkeypatch):  # noqa: F811
+    from app.core import extension_session as xs
+    monkeypatch.setenv("SUPABASE_SERVICE_KEY", "test-service-key")
+    now = int(time.time()) - 100
+    a = xs.issue("u1", "a@x", now=now, device=D[0])["token"]
+    b = xs.issue("u1", "a@x", now=now, device=D[1])["token"]
+    assert xs.revoke_device("u1", D[0])
+    assert xs.verify(a) is None and xs.verify(b)["id"] == "u1"
+    # signed in again on D0 later: a newer token works
+    c = xs.issue("u1", "a@x", now=int(time.time()) + 5, device=D[0])["token"]
+    assert xs.verify(c, now=int(time.time()) + 6)["id"] == "u1"
+
+
+def test_my_devices_and_self_sign_out_any_mode(rc):  # noqa: F811
+    set_mode(rc, "shadow")
+    meta_web = {"kind": "web", "label": "Chrome · Windows"}
+    dl.touch("u1", D[0], jwt(10), tier="free", rc=rc, now=time.time() - 50, meta=meta_web)
+    dl.touch("u1", D[1], jwt(10), tier="free", rc=rc, now=time.time() - 10, meta={"kind": "app", "label": "App VidGrab · Windows"})
+    lst = dl.my_devices("u1", D[1], rc=rc)
+    assert [x["id"] for x in lst] == [D[1][:8], D[0][:8]] and lst[0]["current"] and lst[1]["label"] == "Chrome · Windows"
+    assert lst[0]["kinds"] == ["app"] and lst[1]["kinds"] == ["web"]
+    # the same PC seen from the extension: kinds merge, the browser label stays over the app's
+    dl._touched.clear()
+    dl.touch("u1", D[1], jwt(10), tier="free", rc=rc, meta={"kind": "extension", "label": "Chrome · Windows"})
+    dl._touched.clear()
+    dl.touch("u1", D[1], jwt(10), tier="free", rc=rc, meta={"kind": "app", "label": "App VidGrab · Windows"})
+    first = dl.my_devices("u1", D[1], rc=rc)[0]
+    assert first["kinds"] == ["extension", "app"] and first["label"] == "Chrome · Windows"
+    assert dl.sign_out_device("u1", "zz", rc=rc) is None
+    assert dl.sign_out_device("u1", D[0][:8], rc=rc) == D[0]
+    r = dl.touch("u1", D[0], jwt(10), tier="free", rc=rc)      # shadow mode, still refused: the person did it
+    assert r and r["error_code"] == "device_signed_out"
+    assert dl.touch("u1", D[0], jwt(time.time() + 5), tier="free", rc=rc) is None   # signed in again
+
+
+def test_describe_request():
+    class R:
+        def __init__(self, h): self.headers = h
+    assert dl.describe_request(R({"User-Agent": "Mozilla/5.0 (Windows NT 10.0) Chrome/130 Safari/537"})) == {"kind": "web", "label": "Chrome · Windows"}
+    assert dl.describe_request(R({"X-VG-Client": "0.19.4", "User-Agent": "x Windows"}))["kind"] == "app"
+    assert dl.describe_request(R({"Origin": "chrome-extension://abc", "User-Agent": "Edg/1 Windows"}))["label"] == "Edge · Windows"
+
+
+def test_http_my_devices(rc, monkeypatch):  # noqa: F811
+    from fastapi.testclient import TestClient
+    from app.core import extension_session as xs
+    from app.main import app as fastapi_app
+    monkeypatch.setenv("SUPABASE_SERVICE_KEY", "test-service-key")
+    monkeypatch.setattr(dl, "_tier", lambda uid: "free")
+    set_mode(rc, "shadow")
+    client = TestClient(fastapi_app, raise_server_exceptions=False)
+    tok = xs.issue("22222222-2222-3333-4444-555555555555", "b@x", now=int(time.time()) - 60)["token"]
+    h = {"Authorization": f"Bearer {tok}", "X-VG-Device": D[2] * 2, "User-Agent": "Mozilla Firefox/120 Linux"}
+    r = client.get("/api/v1/devices", headers=h)
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["max_devices"] == 2 and j["devices"][0]["current"] and j["devices"][0]["label"] == "Firefox · Linux"
+    assert client.post("/api/v1/devices/abcdef12/signout", headers=h).status_code == 404
+    r = client.post(f"/api/v1/devices/{D[2][:8]}/signout", headers=h)
+    assert r.status_code == 200 and r.json()["current"] is True
+    assert client.get("/api/v1/devices", headers=h).status_code == 401
+    assert client.get("/api/v1/devices").status_code == 401
+
+
+def test_old_app_not_linked_until_0_19_4():
+    class R:
+        def __init__(self, h): self.headers = h
+    assert dl.counts_as_device(R({})) is True
+    assert dl.counts_as_device(R({"X-VG-Client": "0.19.3"})) is False
+    assert dl.counts_as_device(R({"X-VG-Client": "0.19.4"})) is True
+    assert dl.counts_as_device(R({"X-VG-Client": "0.20.0"})) is True
+    assert dl.counts_as_device(R({"X-VG-Client": "junk"})) is False

@@ -125,7 +125,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    // 24/10: 'local' — only this browser; the default ('global') signed the
+    // account out of every other device and the Windows app as well.
+    await supabase.auth.signOut({ scope: 'local' });
     setPreferences(null);
     // Don't leave a signed-out session live inside the extension.
     window.postMessage(

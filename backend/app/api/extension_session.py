@@ -28,7 +28,9 @@ MSG_OFF = "Máy chủ chưa sẵn sàng cấp phiên cho tiện ích. Hãy thử
 async def create(request: Request, user=Depends(get_optional_user)):
     if not user or user.get("via_api_key"):
         return JSONResponse(status_code=401, content={"detail": MSG_LOGIN, "error_code": "login_required"})
-    out = extension_session.issue(str(user["id"]), user.get("email"), email_confirmed_at=user.get("email_confirmed_at"))
+    from app.core import device_link  # noqa: PLC0415
+    out = extension_session.issue(str(user["id"]), user.get("email"), email_confirmed_at=user.get("email_confirmed_at"),
+                                  device=device_link.device_from_request(request))
     if not out:
         return JSONResponse(status_code=503, content={"detail": MSG_OFF, "error_code": "extension_session_unavailable"})
     return {**out, "email": user.get("email")}
@@ -42,5 +44,7 @@ async def revoke(request: Request, user=Depends(get_optional_user)):
     from app.core import device_link  # noqa: PLC0415
     dev = device_link.device_from_request(request)
     if dev:
-        device_link.forget_device(str(user["id"]), dev)   # signed out here: no longer one of the account's devices
+        # 24/10: only this device signs out (it used to end the extension on every device)
+        device_link.forget_device(str(user["id"]), dev)   # no longer one of the account's devices
+        return {"revoked": extension_session.revoke_device(str(user["id"]), dev)}
     return {"revoked": extension_session.revoke(str(user["id"]))}

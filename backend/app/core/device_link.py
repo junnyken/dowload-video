@@ -26,6 +26,8 @@ Redis
   vidgrab:devlink:d:<device>        zset uid -> last seen (who uses this device)
   vidgrab:devlink:stat:<day>        hash counter -> n (admin stats, 8 days)
   vidgrab:devlink:events            list of the last 200 events (json)
+  vidgrab:devlink:meta:<uid>        hash device -> {"kind", "label"} ("Thiết bị của tôi")
+  vidgrab:devlink:man:<uid>         hash device -> signed out BY THE PERSON at (any mode)
 
 A signed-out device gets 401 device_signed_out until the person signs in
 again there: a session whose sign-in time is newer than the sign-out is
@@ -212,8 +214,84 @@ def signed_out_message(limit: int) -> str:
             "Đăng nhập lại để dùng tiếp — thiết bị dùng lâu nhất sẽ bị đăng xuất thay.")
 
 
+LINKED_APP_MIN = (0, 19, 4)
+
+
+def counts_as_device(request) -> bool:
+    """The Windows app before 0.19.4 cannot share its machine id with the
+    browser (bridge ping without "device"): one PC would count as two devices
+    and a Free account could be signed out unfairly. Such app calls are not
+    linked until the app updates. Other clients always count."""
+    try:
+        v = (request.headers.get("X-VG-Client") or "").strip()
+    except Exception:  # noqa: BLE001
+        return True
+    if not v:
+        return True
+    try:
+        parts = tuple(int(x) for x in v.split("-", 1)[0].split(".")[:3])
+    except ValueError:
+        return False
+    return parts >= LINKED_APP_MIN
+
+
+def describe_request(request) -> Dict[str, str]:
+    """{"kind": web|extension|app, "label": "Chrome · Windows"} from headers
+    only (no fingerprinting beyond the User-Agent family)."""
+    try:
+        h = request.headers
+        ua = (h.get("User-Agent") or "")
+        if h.get("X-VG-Client"):
+            kind = "app"
+        elif h.get("X-VG-Ext-Version") or (h.get("Origin") or "").startswith(("chrome-extension://", "moz-extension://")):
+            kind = "extension"
+        else:
+            kind = "web"
+    except Exception:  # noqa: BLE001
+        return {"kind": "web", "label": ""}
+    browser = next((name for key, name in (("Edg/", "Edge"), ("OPR/", "Opera"), ("CocoaBrowser", "Cốc Cốc"),
+                                           ("coc_coc", "Cốc Cốc"), ("Firefox/", "Firefox"), ("Chrome/", "Chrome"),
+                                           ("Safari/", "Safari")) if key in ua), "")
+    os_name = next((name for key, name in (("Android", "Android"), ("iPhone", "iPhone"), ("iPad", "iPad"),
+                                           ("Windows", "Windows"), ("Mac OS X", "macOS"), ("Linux", "Linux")) if key in ua), "")
+    if kind == "app":
+        browser = "App VidGrab"
+    return {"kind": kind, "label": " · ".join(x for x in (browser, os_name) if x)}
+
+
+def _merge_meta(old_raw, new: Dict[str, str]) -> Dict[str, Any]:
+    """One PC = website + extension + app on one id: keep every kind seen, and
+    the browser's label over the app's."""
+    try:
+        old = json.loads(old_raw) if old_raw else {}
+    except (TypeError, ValueError):
+        old = {}
+    kinds = list(dict.fromkeys([*(old.get("kinds") or ([old["kind"]] if old.get("kind") else [])), new.get("kind") or "web"]))
+    label = new.get("label") or ""
+    if new.get("kind") == "app" and old.get("label") and not old.get("label", "").startswith("App"):
+        label = old["label"]
+    return {"kinds": [k for k in ("web", "extension", "app") if k in kinds], "label": label}
+
+
+def _manual_refusal(rc, uid: str, device: str, token: Optional[str], tier: Optional[str], st) -> Optional[Dict[str, Any]]:
+    """Signed out by the person from "Thiết bị của tôi": refused in every mode
+    until a newer sign-in on that device."""
+    man = rc.hget(f"vidgrab:devlink:man:{uid}", device)
+    if man is None:
+        return None
+    at = session_auth_time(token)
+    if at and at > float(man):
+        rc.hdel(f"vidgrab:devlink:man:{uid}", device)
+        _touched.pop(f"{uid}:{device}", None)
+        return None
+    # wording: BA review
+    return {"error_code": ERR_SIGNED_OUT, "max_devices": max_devices(tier or _tier(uid), st),
+            "user_message": "Thiết bị này đã được đăng xuất từ trang Thiết bị của tôi. Đăng nhập lại để dùng tiếp."}
+
+
 def touch(user_id: str, device: Optional[str], token: Optional[str] = None,
-          tier: Optional[str] = None, rc=None, now: Optional[float] = None) -> Optional[Dict[str, Any]]:
+          tier: Optional[str] = None, rc=None, now: Optional[float] = None,
+          meta: Optional[Dict[str, str]] = None) -> Optional[Dict[str, Any]]:
     """Register (user, device). Returns a refusal {error_code, user_message,
     max_devices} when this device is signed out and the mode is enforce;
     None otherwise. Never raises."""
@@ -227,6 +305,10 @@ def touch(user_id: str, device: Optional[str], token: Optional[str] = None,
         if mode == MODE_OFF:
             return None
         uid = str(user_id)
+        manual = _manual_refusal(rc, uid, device, token, tier, st)
+        if manual:
+            _stat(rc, "blocked_requests", now)
+            return manual
         rev_key = f"vidgrab:devlink:rev:{uid}"
         rev = rc.hget(rev_key, device)
         if rev is not None:
@@ -259,6 +341,10 @@ def touch(user_id: str, device: Optional[str], token: Optional[str] = None,
         pipe.zadd(dkey, {uid: now})
         pipe.zremrangebyscore(dkey, 0, now - STALE_S)
         pipe.expire(dkey, STALE_S * 2)
+        if meta:
+            meta = _merge_meta(rc.hget(f"vidgrab:devlink:meta:{uid}", device), meta)
+            pipe.hset(f"vidgrab:devlink:meta:{uid}", device, json.dumps(meta, ensure_ascii=False))
+            pipe.expire(f"vidgrab:devlink:meta:{uid}", STALE_S * 2)
         pipe.zrange(ukey, 0, -1)
         devices = [d.decode() if isinstance(d, bytes) else d for d in pipe.execute()[-1]]
         if len(devices) <= min(st["free_max"], st["paid_max"]):
@@ -305,6 +391,52 @@ def forget_device(user_id: str, device: str, rc=None) -> None:
         _touched.pop(f"{user_id}:{device}", None)
     except Exception:  # noqa: BLE001
         pass
+
+
+def my_devices(user_id: str, current: Optional[str], rc=None) -> List[Dict[str, Any]]:
+    """The person's own list: newest first, 8-char ids, which one is this device."""
+    rc = rc or _rc()
+    now = time.time()
+    rows = rc.zrevrangebyscore(f"vidgrab:devlink:u:{user_id}", "+inf", now - STALE_S, withscores=True)
+    meta = rc.hgetall(f"vidgrab:devlink:meta:{user_id}") or {}
+    out = []
+    for d, sc in rows:
+        d = d.decode() if isinstance(d, bytes) else d
+        raw = meta.get(d) or meta.get(d.encode()) if meta else None
+        try:
+            m = json.loads(raw) if raw else {}
+        except (TypeError, ValueError):
+            m = {}
+        out.append({"id": d[:8], "kinds": m.get("kinds") or [m.get("kind") or "web"], "label": m.get("label") or "",
+                    "last_seen": int(sc), "current": d == current})
+    return out
+
+
+def sign_out_device(user_id: str, short_id: str, rc=None, now: Optional[float] = None) -> Optional[str]:
+    """The person signs one of their devices out. Returns the full device id,
+    or None when `short_id` matches no device (or more than one)."""
+    rc = rc or _rc()
+    short_id = (short_id or "").lower()
+    if len(short_id) < 6 or not all(c in "0123456789abcdef" for c in short_id):
+        return None
+    ukey = f"vidgrab:devlink:u:{user_id}"
+    devs = [d.decode() if isinstance(d, bytes) else d for d in rc.zrange(ukey, 0, -1)]
+    hits = [d for d in devs if d.startswith(short_id)]
+    if len(hits) != 1:
+        return None
+    dev = hits[0]
+    k = f"vidgrab:devlink:man:{user_id}"
+    rc.hset(k, dev, now or time.time())
+    rc.expire(k, STALE_S)
+    rc.zrem(ukey, dev)
+    _touched.pop(f"{user_id}:{dev}", None)
+    _event(rc, "self_signed_out", effective_mode(rc), uid=str(user_id), dev=dev[:8])
+    try:
+        from app.core import extension_session  # noqa: PLC0415
+        extension_session.revoke_device(str(user_id), dev)
+    except Exception:  # noqa: BLE001
+        pass
+    return dev
 
 
 def user_devices(user_id: str, rc=None) -> List[Dict[str, Any]]:

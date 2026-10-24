@@ -251,8 +251,8 @@ def _link_device(request, user: Dict[str, Any], token: str) -> Dict[str, Any]:
     401 device_signed_out when the account signed this device out."""
     try:
         from app.core import device_link  # noqa: PLC0415
-        dev = device_link.device_from_request(request)
-        refusal = device_link.touch(user["id"], dev, token) if dev else None
+        dev = device_link.device_from_request(request) if device_link.counts_as_device(request) else None
+        refusal = device_link.touch(user["id"], dev, token, meta=device_link.describe_request(request)) if dev else None
     except Exception:  # noqa: BLE001
         refusal = None
     if refusal:

@@ -98,5 +98,29 @@
     "saving": "Saving...",
     "saved": "Saved!",
     "save": "Save preferences"
+  },
+  "devices": {
+    "title": "My devices",
+    "desc": "Your account can be used on up to {{max}} devices. The website, extension and app on the same computer count as 1 device. When the limit is exceeded, the least recently used device is signed out.",
+    "count": "{{n}}/{{max}} devices",
+    "unknown": "Unknown device",
+    "kind": {
+      "web": "Website",
+      "extension": "Extension",
+      "app": "Windows app"
+    },
+    "lastSeen": "Last used: {{when}}",
+    "justNow": "just now",
+    "current": "This device",
+    "signOut": "Sign out",
+    "signingOut": "Signing out...",
+    "confirm": "Sign out this device?",
+    "confirmCurrent": "This is the device you are using. Signing out will also sign you out of VidGrab here. Continue?",
+    "empty": "No devices recorded yet. The list updates after you use VidGrab while signed in.",
+    "loading": "Loading...",
+    "error": "Could not load the device list. Please try again.",
+    "unavailable": "Device management is temporarily unavailable.",
+    "actionError": "Could not sign out the device. Please try again.",
+    "retry": "Retry"
   }
 }

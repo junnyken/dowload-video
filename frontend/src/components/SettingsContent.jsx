@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
 import i18n, { useLocalePath } from '../i18n';
+import DevicesSection from './DevicesSection';
 import { usePlans } from '../lib/usePlans';
 import { getPermission, requestPermission, isSupported } from '../utils/notifications.js';
 
@@ -166,6 +167,9 @@ export default function SettingsContent() {
             )}
           </div>
         </div>
+
+        {/* ── My devices (renders only when signed in) ───── */}
+        <DevicesSection />
 
         {/* ── Data & Retention ───────────────────────────── */}
         <div className="p-6 rounded-2xl bg-surface border border-line shadow-lg">
