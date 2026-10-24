@@ -20,5 +20,7 @@
   "langLabel": "Ngôn ngữ",
   "langSwitchTo": "English",
   "feedbackTitle": "Góp ý & Phản hồi",
-  "feedback": "Góp ý"
+  "feedback": "Góp ý",
+  "deviceSignedOut": "Tài khoản đang dùng trên quá nhiều thiết bị nên bạn đã bị đăng xuất trên thiết bị này. Đăng nhập lại để dùng tiếp — thiết bị dùng lâu nhất sẽ bị đăng xuất thay.",
+  "deviceSignedOutOk": "Đã hiểu"
 }

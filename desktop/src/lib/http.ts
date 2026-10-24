@@ -36,10 +36,26 @@ export async function apiFetch<T = unknown>(
       /* empty or non-JSON body */
     }
     noteApiAnswer(res.status, data); // 426 update_required → blocking screen (PLAN-32E P1)
+    if (res.status === 401) noteSignedOut(data);
     return { status: res.status, data };
   } catch {
     throw { code: 'network', message: 'fetch failed' };
   } finally {
     if (tm) clearTimeout(tm);
   }
+}
+
+/** 0.19.4 device linking (backend app/core/device_link.py): the account is on
+ * more devices than its plan allows (Free 2 / Pro 5) and this one was signed
+ * out — sign out here too and say why. Once per answer burst. */
+let signedOutAt = 0;
+function noteSignedOut(data: unknown) {
+  const d = (data as { detail?: { error_code?: string; user_message?: string } } | null)?.detail;
+  if (!d || d.error_code !== 'device_signed_out' || Date.now() - signedOutAt < 10_000) return;
+  signedOutAt = Date.now();
+  void Promise.all([import('./auth'), import('./ui')]).then(([a, ui]) => {
+    void a.signOut();
+    // wording: BA review
+    ui.toast('error', d.user_message || 'Tài khoản đang dùng trên quá nhiều thiết bị nên máy này đã bị đăng xuất. Đăng nhập lại để dùng tiếp.');
+  });
 }

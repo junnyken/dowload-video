@@ -246,6 +246,21 @@ def _lookup_new_api_key(raw_key: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _link_device(request, user: Dict[str, Any], token: str) -> Dict[str, Any]:
+    """Device linking (app.core.device_link): register this session's device;
+    401 device_signed_out when the account signed this device out."""
+    try:
+        from app.core import device_link  # noqa: PLC0415
+        dev = device_link.device_from_request(request)
+        refusal = device_link.touch(user["id"], dev, token) if dev else None
+    except Exception:  # noqa: BLE001
+        refusal = None
+    if refusal:
+        from fastapi import HTTPException  # noqa: PLC0415
+        raise HTTPException(status_code=401, detail=refusal)
+    return user
+
+
 async def get_optional_user(
     _request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
@@ -294,7 +309,7 @@ async def get_optional_user(
         ext = extension_session.verify(token)
         if ext:
             await _ensure_app_user(ext)
-            return {**ext, "token": token}
+            return _link_device(_request, {**ext, "token": token}, token)
         return None  # expired / revoked: a guest, like a stale web session
 
     # A partner key (vgp_) is not a user credential: refuse it here as a bad
@@ -310,7 +325,7 @@ async def get_optional_user(
     cached = _cached_session(token)
     if cached:
         await _ensure_app_user(cached)
-        return {**cached, "token": token}
+        return _link_device(_request, {**cached, "token": token}, token)
     try:
         import asyncio  # noqa: PLC0415
 
@@ -334,9 +349,13 @@ async def get_optional_user(
             }
             _remember_session(token, user)
             await _ensure_app_user(user)
-            return {**user, "token": token}
+            linked = {**user, "token": token}
+        else:
+            linked = None
     except Exception:
-        pass
+        linked = None
+    if linked:
+        return _link_device(_request, linked, token)
 
     # ── Path 2: Legacy Bearer API key ────────────────────────────────
     legacy = _lookup_api_key(token)

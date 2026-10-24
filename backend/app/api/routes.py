@@ -1489,7 +1489,7 @@ async def bulk_download(
                 safe_max_videos = min(payload.max_videos or 100, 500)
                 scrape_channel_task.apply_async(
                     args=[url, batch_id, channel_job_id, safe_max_videos, payload.min_views, auth_user_id, payload.quality, payload.remove_watermark, payload.download_subs],
-                    kwargs={"_requester": _bulk_req.key},
+                    kwargs={"_requester": _bulk_req.wire()},
                     priority=3,
                 )
                 channel_count += 1
@@ -1539,7 +1539,7 @@ async def bulk_download(
                 if not _dedup_resolved:
                     process_video_task.apply_async(
                         args=[job_id, url, auth_user_id, payload.quality, payload.remove_watermark, payload.download_subs],
-                        kwargs={"_requester": _bulk_req.key, "_quota_precounted": _anon_now},
+                        kwargs={"_requester": _bulk_req.wire(), "_quota_precounted": _anon_now},
                         priority=5,
                     )
                 elif _bulk_req.kind == REQ_USER:

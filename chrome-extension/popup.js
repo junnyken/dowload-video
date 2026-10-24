@@ -35,7 +35,11 @@ async function vgAuthHeaders(extra = {}) {
     let ver = '';
     try { ver = chrome.runtime.getManifest().version || ''; } catch { /* no manifest in tests */ }
     const h = ver ? { ...extra, 'X-VG-Ext-Version': ver } : extra;
-    return r.vg_auth_token ? { ...h, Authorization: `Bearer ${r.vg_auth_token}` } : h;
+    if (!r.vg_auth_token) return h;
+    // 5.21.0: device linking — the same X-VG-Device the worker sends (background.js vgDeviceId)
+    const d = await chrome.storage.local.get('vg_device_id').catch(() => ({}));
+    const dev = /^[0-9a-f]{64}$/.test(d.vg_device_id || '') ? { 'X-VG-Device': d.vg_device_id } : {};
+    return { ...h, ...dev, Authorization: `Bearer ${r.vg_auth_token}` };
   } catch { return extra; }
 }
 
@@ -1187,6 +1191,15 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
         return;
       }
       const data = msg.data;
+      if (data && data.sent_to_app) {
+        // 5.21.0: TikTok / YouTube went to the VidGrab app on this computer
+        statusMsg.textContent = t('sent_to_app');
+        document.getElementById('error-card')?.classList.add('hidden');
+        btn.disabled = false;
+        iconDl.style.display = 'block'; spinner.style.display = 'none';
+        btnText.textContent = t('btn_download_video');
+        return;
+      }
       _lastDownloadData = data;
       if (msg.dlUrl) _lastDownloadData._resolvedUrl = msg.dlUrl;
       showPreviewCard(data, targetUrl);
@@ -1554,7 +1567,7 @@ async function saveToArchive(item) {
   if (!token) { alert(t('archive_need_login')); return false; }
   const r = await fetch(`${API_BASE}/api/v1/archive`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: await vgAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ ...item, platform: detectPlatform(item.original_url || '') }),
   });
   return r.ok;
@@ -1592,7 +1605,7 @@ async function loadArchive() {
 
   try {
     const r = await fetch(`${API_BASE}/api/v1/archive?limit=20&sort=archived_at`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: await vgAuthHeaders(),
     });
     if (!r.ok) throw new Error('Unauthorized');
     const d = await r.json();
@@ -1632,7 +1645,7 @@ async function loadArchive() {
         btn.dataset.starred = isStarred ? '0' : '1';
         await fetch(`${API_BASE}/api/v1/archive/${btn.dataset.id}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          headers: await vgAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ is_starred: !isStarred }),
         });
       });
@@ -1769,6 +1782,7 @@ authDisconnectBtn?.addEventListener('click', () => {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'VG_AUTH_CHANGED') {
     updateAuthUI(!!msg.authenticated, msg.email);
+    if (msg.reason === 'device_signed_out') vgShowSignedOut();
     if (msg.authenticated) loadTierQuota();
     return;
   }
@@ -1799,7 +1813,7 @@ async function loadTierQuota() {
     }
     try {
       const r = await fetch(`${base}/api/v1/user/usage`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: await vgAuthHeaders(),
       });
       if (!r.ok) throw new Error();
       const d = await r.json();
@@ -2784,3 +2798,13 @@ vgRecRender();
   box.checked = typeof v === 'boolean' ? v : !storeBuild;
   box.addEventListener('change', () => chrome.storage.sync.set({ vg_send_cookies: box.checked }));
 })();
+
+// 5.21.0: the account signed this device out (Free 2 / Pro 5 devices).
+async function vgShowSignedOut() {
+  const got = await chrome.storage.local.get('vg_signed_out_msg').catch(() => ({}));
+  if (!got.vg_signed_out_msg) return;
+  setUrlHint(t('device_signed_out') !== 'device_signed_out' ? t('device_signed_out') : got.vg_signed_out_msg, 'warn');
+  chrome.storage.local.remove('vg_signed_out_msg').catch(() => {});
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { vgShowSignedOut(); });
+else vgShowSignedOut();

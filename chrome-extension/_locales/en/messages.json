@@ -1395,7 +1395,7 @@
     "message": "⏳ Looking for the video on the page…"
   },
   "prev_server": {
-    "message": "This video downloads through the VidGrab server (YouTube, TikTok, MP3…) — pick a quality above and click Download."
+    "message": "This video downloads through the VidGrab server (TikTok, MP3…) — pick a quality above and click Download."
   },
   "qr_hint": {
     "message": "Scan with your phone camera — VidGrab opens with this video so you can download it right on your phone.",
@@ -1953,5 +1953,17 @@
   "rec_perm_denied": {
     "message": "Allow tab recording to use recording mode.",
     "description": "wording: BA review"
+  },
+  "device_signed_out": {
+    "message": "This account is used on too many devices, so the extension was signed out. Sign in again on the VidGrab website to continue — the device used longest ago will be signed out instead.",
+    "description": "wording: BA review (5.21.0)"
+  },
+  "sent_to_app": {
+    "message": "Sent to the VidGrab app on this computer — the app downloads it on your machine.",
+    "description": "wording: BA review (5.21.0)"
+  },
+  "sent_to_app_title": {
+    "message": "Sent to the VidGrab app",
+    "description": "wording: BA review (5.21.0)"
   }
 }

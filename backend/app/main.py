@@ -613,6 +613,9 @@ app.include_router(admin_db_migration_router, prefix="/api/v1/admin", tags=["Adm
 # Task #6332 follow-up — emergency switches operable from the admin page
 from app.api.admin_switches import router as admin_switches_router
 app.include_router(admin_switches_router, prefix="/api/v1/admin", tags=["Admin Switches"])
+# Owner 24/10/2026 — device linking (Free 2 / paid 5 devices, shared Free allowance)
+from app.api.admin_device_links import router as admin_device_links_router
+app.include_router(admin_device_links_router, prefix="/api/v1/admin", tags=["Admin Device Links"])
 from app.api.plans import public_router as plans_public, admin_router as plans_admin
 app.include_router(plans_public, prefix="/api/v1", tags=["Plans"])
 app.include_router(plans_admin, prefix="/api/v1/admin", tags=["Plans"])

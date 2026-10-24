@@ -308,12 +308,16 @@ class QuotaRequester:
     """Who a download is counted against. `key` is also the China access
     layer's requester key ("admin" | "user:<id>" | "ip:<ip>")."""
 
-    __slots__ = ("kind", "ident", "_tier")
+    __slots__ = ("kind", "ident", "_tier", "device")
 
-    def __init__(self, kind: str, ident: str = "", tier: Optional[str] = None):
+    def __init__(self, kind: str, ident: str = "", tier: Optional[str] = None,
+                 device: Optional[str] = None):
         self.kind = kind
         self.ident = ident or ""
         self._tier = tier
+        # Signed-in user's device (32 hex, app.core.device_link): Free accounts
+        # on one device share one allowance. Not part of `key`.
+        self.device = device
 
     @property
     def key(self) -> str:
@@ -333,10 +337,20 @@ class QuotaRequester:
             self._tier = _get_tier(self.ident)
         return self._tier
 
+    def wire(self) -> str:
+        """.key plus "@<device>" for a linked user — what Celery kwargs carry."""
+        return f"{self.key}@{self.device}" if self.kind == REQ_USER and self.device else self.key
+
     @classmethod
     def from_key(cls, key: Optional[str]) -> Optional["QuotaRequester"]:
-        """Inverse of .key, for Celery kwargs. None/unknown → None."""
+        """Inverse of .key / .wire(), for Celery kwargs. None/unknown → None."""
         key = (key or "").strip()
+        if "@" in key:
+            key, dev = key.split("@", 1)
+            rq = cls.from_key(key)
+            if rq is not None and rq.kind == REQ_USER and re.fullmatch(r"[0-9a-f]{32}", dev or ""):
+                rq.device = dev
+            return rq
         if key == "admin":
             return cls(REQ_ADMIN)
         if key.startswith("user:") and len(key) > 5:
@@ -361,7 +375,12 @@ def resolve_requester(request=None, user_id: Optional[str] = None,
     if is_admin:
         return QuotaRequester(REQ_ADMIN)
     if user_id:
-        return QuotaRequester(REQ_USER, str(user_id))
+        linked = None
+        try:
+            linked = valid_device_hash(request.headers.get("X-VG-Device")) if request is not None else None
+        except Exception:
+            pass
+        return QuotaRequester(REQ_USER, str(user_id), device=linked[:32] if linked else None)
     dev = valid_device_hash(device_id)
     if dev:
         return QuotaRequester(REQ_DEVICE, dev[:32])
@@ -498,6 +517,97 @@ def bulk_item_quota_message(requester: QuotaRequester, platform: str, limit: int
             f"Lượt mới được cộng lại lúc {reset_time_vn_text()}.")
 
 
+# ── Free accounts sharing one device (owner 24/10/2026, app.core.device_link) ──
+# Every download a FREE account makes on a linked device is also counted in a
+# device bucket; when it reaches the Free limit, any other Free account on
+# that device is refused too (enforce) or only logged (shadow).
+
+def _shared_device(requester: QuotaRequester) -> Optional[str]:
+    if requester.kind != REQ_USER or not requester.device or requester.tier != "free":
+        return None
+    return requester.device
+
+
+def _fdev_key(device: str, platform: str, day: Optional[str] = None) -> str:
+    return f"vidgrab:quota:fdev:{device}:{platform}:{day or _utc_day()}"
+
+
+def _fdev_seen_key(device: str, day: Optional[str] = None) -> str:
+    return f"vidgrab:quota:fdev_seen:{device}:{day or _utc_day()}"
+
+
+def _shared_device_refusal(requester: QuotaRequester, platform: str, url: Optional[str],
+                           limit: int) -> Optional[Dict[str, Any]]:
+    """The refusal fields when the device's shared Free bucket is full and the
+    mode is enforce; None otherwise (shadow only logs)."""
+    dev = _shared_device(requester)
+    if not dev or limit == -1:
+        return None
+    try:
+        from app.core import device_link  # noqa: PLC0415
+        mode = device_link.effective_mode()
+        if mode == device_link.MODE_OFF:
+            return None
+        shared_limit = max(limit, platform_limit_for_tier("free"))
+        used = _redis_count(_fdev_key(dev, _enforced_bucket(platform)))
+        if used < shared_limit:
+            return None
+        fp = _url_fingerprint(platform, url)
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        if fp and get_redis().sismember(_fdev_seen_key(dev), fp):
+            return None
+        device_link.note_shared_refusal(requester.ident, dev, mode, platform)
+        if mode != device_link.MODE_ENFORCE:
+            return None
+        # wording: BA review
+        return {
+            "allowed":    False,
+            "error_code": ERR_QUOTA_DAILY,
+            "reason":     device_link.ERR_DEVICE_SHARED,
+            "message":    (f"Thiết bị này đã dùng hết {shared_limit} lượt miễn phí hôm nay "
+                           f"(lượt Free được tính chung cho mọi tài khoản trên một thiết bị). "
+                           f"Nâng cấp Pro hoặc chờ lượt mới lúc {reset_time_vn_text()}."),
+        }
+    except Exception:
+        return None
+
+
+def _shared_device_record(requester: QuotaRequester, platform: str, url: Optional[str]) -> None:
+    dev = _shared_device(requester)
+    if not dev:
+        return
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        r = get_redis()
+        fp = _url_fingerprint(platform, url)
+        if fp:
+            sk = _fdev_seen_key(dev)
+            added = r.sadd(sk, fp)
+            r.expire(sk, _ttl_to_midnight())
+            if not added:
+                return
+        _redis_incr_until_midnight(_fdev_key(dev, platform))
+        _redis_incr_until_midnight(_fdev_key(dev, _TOTAL_BUCKET))
+    except Exception:
+        pass
+
+
+def _shared_device_refund(requester: QuotaRequester, platform: str, fp: Optional[str]) -> None:
+    dev = _shared_device(requester)
+    if not dev:
+        return
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        r = get_redis()
+        for key in (_fdev_key(dev, platform or "other"), _fdev_key(dev, _TOTAL_BUCKET)):
+            if int(r.get(key) or 0) > 0:
+                r.decr(key)
+        if fp:
+            r.srem(_fdev_seen_key(dev), fp)
+    except Exception:
+        pass
+
+
 def check_platform_quota(requester: QuotaRequester, platform: str,
                          url: Optional[str] = None) -> Dict[str, Any]:
     """Read-only check. Redis errors fail open (as the old counters did).
@@ -520,6 +630,10 @@ def check_platform_quota(requester: QuotaRequester, platform: str,
         "reset_time_vn":   reset_time_vn_text(),
     }
     if limit == -1 or used < limit:
+        if used < limit and not _already_counted(requester, platform, url):
+            shared = _shared_device_refusal(requester, platform, url, limit)
+            if shared:
+                return {**base, **shared}
         return {"allowed": True, **base}
     if _already_counted(requester, platform, url):
         # Same video again today (another quality, a retry): already paid for.
@@ -559,6 +673,7 @@ def record_platform_download(requester: QuotaRequester, platform: str,
                 return False
         _redis_incr_until_midnight(_plat_key(requester, platform))
         _redis_incr_until_midnight(_plat_key(requester, _TOTAL_BUCKET))
+        _shared_device_record(requester, platform, url)
         return True
     except Exception as e:
         print(f"[Quota] record_platform_download failed for {requester.kind}: {type(e).__name__}")
@@ -584,6 +699,7 @@ def refund_platform_download(requester: QuotaRequester, platform: str, fp: Optio
                 r.decr(key)
         if fp:
             r.srem(_seen_key(requester), fp)
+        _shared_device_refund(requester, platform, fp)
         return True
     except Exception as e:
         print(f"[Quota] refund_platform_download failed for {requester.kind}: {type(e).__name__}")
@@ -643,6 +759,7 @@ class BatchAllowance:
         self._used: Dict[str, int] = {}
         self._taken: Dict[str, int] = {}
         self._seen: set = set()
+        self._fdev_used: Dict[str, int] = {}
 
     def remaining(self, platform: str) -> int:
         if self.limit == -1:
@@ -666,10 +783,43 @@ class BatchAllowance:
         if self.remaining(platform) <= 0:
             return bulk_item_quota_message(self.requester, platform, self.limit)
         bucket = _enforced_bucket(platform)
+        shared = self._shared_refusal(platform, bucket, url)
+        if shared:
+            return shared
         self._taken[bucket] = self._taken.get(bucket, 0) + 1
         if fp:
             self._seen.add(fp)
         return None
+
+
+    def _shared_refusal(self, platform: str, bucket: str, url: Optional[str]) -> Optional[str]:
+        """Free accounts sharing one device (see _shared_device_refusal):
+        the items of this batch count toward the device bucket too."""
+        dev = _shared_device(self.requester)
+        if not dev:
+            return None
+        try:
+            from app.core import device_link  # noqa: PLC0415
+            mode = device_link.effective_mode()
+            if mode == device_link.MODE_OFF:
+                return None
+            if bucket not in self._fdev_used:
+                self._fdev_used[bucket] = _redis_count(_fdev_key(dev, bucket))
+            shared_limit = max(self.limit, platform_limit_for_tier("free"))
+            if self._fdev_used[bucket] + self._taken.get(bucket, 0) < shared_limit:
+                return None
+            fp = _url_fingerprint(platform, url)
+            from app.core.redis_client import get_redis  # noqa: PLC0415
+            if fp and get_redis().sismember(_fdev_seen_key(dev), fp):
+                return None
+            device_link.note_shared_refusal(self.requester.ident, dev, mode, platform)
+            if mode != device_link.MODE_ENFORCE:
+                return None
+        except Exception:
+            return None
+        # wording: BA review
+        return (f"Thiết bị này đã dùng hết {shared_limit} lượt miễn phí hôm nay "
+                f"(tính chung cho mọi tài khoản Free trên thiết bị), mục này chưa được tải.")
 
 
 def platform_usage_snapshot(requester: QuotaRequester) -> Dict[str, Any]:

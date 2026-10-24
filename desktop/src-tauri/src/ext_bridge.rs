@@ -6,7 +6,10 @@
 //! yt-dlp + ffmpeg — which this app has. So the extension hands such a link
 //! to the app here, and the app downloads it locally like a pasted link.
 //!
-//!   GET  /vidgrab/ping      -> {"app":"VidGrab","version":"0.19.0"}
+//!   GET  /vidgrab/ping      -> {"app":"VidGrab","version":"0.19.0","device":"<64 hex>"}
+//!                              (0.19.4: the machine id, so the extension and the
+//!                              VidGrab site in this browser count as the same
+//!                              device as the app — device linking, Free 2 / Pro 5)
 //!   POST /vidgrab/download  {"url": "...", "title": "...", "referer": "..."}
 //!                           -> {"ok":true}  (the app queues it)
 //!
@@ -24,6 +27,7 @@
 
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
+use std::sync::OnceLock;
 use std::time::Duration;
 
 pub const PORTS: [u16; 3] = [17325, 17326, 17327];
@@ -31,6 +35,15 @@ const MAX_HEAD: usize = 8 * 1024;
 const MAX_BODY: usize = 16 * 1024;
 const MAX_URL: usize = 4096;
 const IO_TIMEOUT: Duration = Duration::from_secs(5);
+
+static DEVICE: OnceLock<String> = OnceLock::new();
+
+/// The machine id the ping answers with (set once at start; 64 hex only).
+pub fn set_device(hash: &str) {
+    if hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()) {
+        let _ = DEVICE.set(hash.to_ascii_lowercase());
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Job {
@@ -193,7 +206,11 @@ pub fn handle(req: &Request, port: u16, version: &str) -> (u16, Option<String>, 
             if req.origin.is_some() && ext_origin.is_none() {
                 return (403, None, err_json("extensions only"), None);
             }
-            (200, ext_origin, serde_json::json!({ "app": "VidGrab", "version": version }).to_string(), None)
+            let mut body = serde_json::json!({ "app": "VidGrab", "version": version });
+            if let Some(d) = DEVICE.get() {
+                body["device"] = serde_json::Value::String(d.clone());
+            }
+            (200, ext_origin, body.to_string(), None)
         }
         ("POST", "/vidgrab/download") => {
             let Some(o) = ext_origin else {
@@ -267,6 +284,9 @@ mod tests {
         assert_eq!((s, o.as_deref()), (200, EXT));
         assert!(b.contains("\"version\":\"0.19.0\""));
         assert_eq!(handle(&req("GET", "/vidgrab/ping", None, ""), 17325, "x").0, 200);
+        set_device(&"Ab".repeat(32));
+        let (_, _, b, _) = handle(&req("GET", "/vidgrab/ping", None, ""), 17325, "x");
+        assert!(b.contains(&format!("\"device\":\"{}\"", "ab".repeat(32))), "{b}");
         assert_eq!(handle(&req("GET", "/vidgrab/ping", Some("https://evil.example"), ""), 17325, "x").0, 403);
     }
 

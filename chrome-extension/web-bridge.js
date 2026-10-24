@@ -44,12 +44,27 @@
       return;
     }
 
+    if (data.type === 'VG_REQUEST_DEVICE_ID') { postDeviceId(); return; }
+
     if (data.type === 'VG_AUTH_LOGOUT_FROM_WEB') {
       chrome.runtime.sendMessage({ type: 'VG_CLEAR_AUTH_TOKEN' }, () => {
         if (chrome.runtime.lastError) { /* ignore */ }
       });
     }
   });
+
+  // 5.21.0 device linking: the site uses this extension's device id (the
+  // VidGrab app's machine id when the app is installed), so site + extension
+  // + app on this computer are one device for the account (Free 2 / Pro 5).
+  function postDeviceId() {
+    try {
+      chrome.runtime.sendMessage({ type: 'VG_GET_DEVICE_ID' }, (res) => {
+        if (chrome.runtime.lastError || !res || !/^[0-9a-f]{64}$/.test(res.id || '')) return;
+        window.postMessage({ __vg_source: 'extension', type: 'VG_DEVICE_ID', id: res.id }, window.location.origin);
+      });
+    } catch { /* extension reloaded */ }
+  }
+  postDeviceId();
 
   // Tell the page an extension is present, so it can decide whether to show
   // the "connect" affordance at all.

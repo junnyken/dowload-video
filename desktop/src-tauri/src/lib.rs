@@ -1628,6 +1628,8 @@ pub fn run() {
             {
                 let handle = app.handle().clone();
                 let version = handle.package_info().version.to_string();
+                let dir = handle.path().app_data_dir().ok();
+                ext_bridge::set_device(&device::device_info(dir.as_deref()).hash);
                 std::thread::spawn(move || match ext_bridge::bind() {
                     Ok((listener, port)) => {
                         eprintln!("extension bridge on 127.0.0.1:{port}");

@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Globe, Cookie, Network, ListOrdered, Briefcase, ChartColumn,
   HeartPulse, Funnel, Radio, Users, Settings, BookOpen, History, ScrollText,
   Gauge, Siren, Play, Building2, KeyRound, Webhook, Wallet, Sparkles,
-  SlidersHorizontal, Shield, Activity, Mic, CircleDollarSign, MonitorDown, Layers, FileX, Ruler, Power, Stethoscope, Cpu, Database,
+  SlidersHorizontal, Shield, Activity, Mic, CircleDollarSign, MonitorDown, Layers, FileX, Ruler, Power, Stethoscope, Cpu, Database, MonitorSmartphone,
   type LucideIcon,
 } from 'lucide-react'
 import type { AdminRole } from '../types/admin.types'
@@ -37,6 +37,8 @@ const NAV_OVERVIEW: NavItem[] = [
   { href: '/vid-admin', label: 'Overview', icon: LayoutDashboard, minRole: 'viewer' },
   // wording: BA review — task #6332: emergency switches, no redeploy needed
   { href: '/vid-admin/switches', label: 'Công tắc khẩn cấp', icon: Power, minRole: 'admin' },
+  // wording: BA review
+  { href: '/vid-admin/device-links', label: 'Liên kết thiết bị', icon: MonitorSmartphone, minRole: 'admin' },
 ]
 
 const NAV_MONITOR: NavItem[] = [

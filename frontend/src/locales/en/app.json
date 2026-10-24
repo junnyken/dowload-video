@@ -20,5 +20,7 @@
   "langLabel": "Language",
   "langSwitchTo": "Tiếng Việt",
   "feedbackTitle": "Feedback",
-  "feedback": "Feedback"
+  "feedback": "Feedback",
+  "deviceSignedOut": "This account is used on too many devices, so you were signed out on this device. Sign in again to continue — the device used longest ago will be signed out instead.",
+  "deviceSignedOutOk": "OK"
 }

@@ -34,7 +34,7 @@ export default function PrivacyPolicy() {
       <div className="mb-10 border-b border-line pb-6">
         <h1 className="text-3xl font-extrabold text-fg mb-2">{t('title')}</h1>
         <p className="text-fg-muted text-sm">
-          {t('subtitle') && `${t('subtitle')} — `}<span className="text-fg-2">{t('updated', { date: '23/10/2026' })}</span>
+          {t('subtitle') && `${t('subtitle')} — `}<span className="text-fg-2">{t('updated', { date: '24/10/2026' })}</span>
         </p>
       </div>
 
@@ -111,7 +111,7 @@ export default function PrivacyPolicy() {
               {t('s4.other.text')}
             </Item>
             {/* 23/10: what 5.12–5.20 added (Chrome Web Store review) — wording: BA/legal review */}
-            {['sniffer', 'record', 'optional', 'session', 'quota', 'app'].map((k) => (
+            {['sniffer', 'record', 'optional', 'session', 'quota', 'app', 'device'].map((k) => (
               <Item key={k} label={t(`s4.${k}.label`)}>{t(`s4.${k}.text`)}</Item>
             ))}
           </ul>

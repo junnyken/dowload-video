@@ -71,7 +71,9 @@ async function check(fnSrc, fnName, store) {
   const getAuthToken = async () => store.vg_auth_token || null;
   const AUTH_TOKEN_KEY = 'vg_auth_token';
   // eslint-disable-next-line no-new-func
-  const fn = new Function('getAuthToken', 'AUTH_TOKEN_KEY', `${fnSrc}; return ${fnName};`)(getAuthToken, AUTH_TOKEN_KEY);
+  // 5.21.0: signed-in calls also carry the device id (background.js vgDeviceHeader)
+  const vgDeviceHeader = async () => ({});
+  const fn = new Function('getAuthToken', 'AUTH_TOKEN_KEY', 'vgDeviceHeader', `${fnSrc}; return ${fnName};`)(getAuthToken, AUTH_TOKEN_KEY, vgDeviceHeader);
   return fn({ 'Content-Type': 'application/json' });
 }
 function extract(src, fnName) {

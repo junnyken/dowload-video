@@ -43,8 +43,50 @@ async function getAuthToken() {
 async function authHeaders(extra = {}) {
   const token = await getAuthToken();
   if (!token) return extra;
-  return { ...extra, Authorization: `Bearer ${token}` };
+  return { ...extra, ...(await vgDeviceHeader()), Authorization: `Bearer ${token}` };
 }
+
+// ── 5.21.0: device linking (backend app/core/device_link.py) ──────────
+// An account works on a few devices (Free 2, Pro 5); Free accounts on one
+// device share one allowance. A device is X-VG-Device (64 hex), sent only with
+// a signed-in request: the VidGrab app's machine id when the app is on this
+// computer (bridge ping), else this install's own random id. The VidGrab site
+// in this browser gets the same id (web-bridge.js), so one PC = one device.
+const DEVICE_KEY = 'vg_device_id';
+async function vgDeviceId() {
+  try {
+    const got = await chrome.storage.local.get(DEVICE_KEY);
+    if (/^[0-9a-f]{64}$/.test(got[DEVICE_KEY] || '')) return got[DEVICE_KEY];
+    const b = crypto.getRandomValues(new Uint8Array(32));
+    const id = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+    await chrome.storage.local.set({ [DEVICE_KEY]: id });
+    return id;
+  } catch { return null; }
+}
+async function vgDeviceHeader() {
+  const id = await vgDeviceId();
+  return id ? { 'X-VG-Device': id } : {};
+}
+self.vgDeviceId = vgDeviceId;
+
+// The account signed this device out (too many devices): drop the session,
+// tell the popup why. Every API response passes here (fetch wrapper below).
+async function vgMaybeSignedOut(resp) {
+  try {
+    const j = await resp.json();
+    const d = j && j.detail;
+    if (!d || d.error_code !== 'device_signed_out') return;
+    await chrome.storage.local.remove([AUTH_TOKEN_KEY, 'vg_auth_email', 'vg_auth_exp']);
+    await chrome.storage.local.set({ vg_signed_out_msg: String(d.user_message || '') });
+    chrome.runtime.sendMessage({ type: 'VG_AUTH_CHANGED', authenticated: false, reason: 'device_signed_out', message: d.user_message }).catch(() => {});
+  } catch { /* not JSON */ }
+}
+const _vgFetch = self.fetch.bind(self);
+self.fetch = async (input, init) => {
+  const r = await _vgFetch(input, init);
+  if (r.status === 401) vgMaybeSignedOut(r.clone());
+  return r;
+};
 
 // ── API Base (configurable) ───────────────────────────────────────
 // `vg_api_base` is user-writable (Settings) and lives in chrome.storage.sync,
@@ -425,7 +467,7 @@ async function vgFetchAndSave({ url, quality, remove_watermark, download_subs },
 async function vgExtSession(bearer) {
   try {
     const r = await fetch(`${await getApiBase()}/api/v1/extension/session`, {
-      method: 'POST', headers: { Authorization: `Bearer ${bearer}` },
+      method: 'POST', headers: { ...(await vgDeviceHeader()), Authorization: `Bearer ${bearer}` },
     });
     const d = await r.json().catch(() => null);
     return r.ok && d && typeof d.token === 'string' && d.token.startsWith('vgx_') ? d : null;
@@ -593,8 +635,29 @@ function vgYouTubeRefused(url) {
   try { return /(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com)$/i.test(new URL(url).hostname); } catch { return false; }
 }
 
+// 5.21.0 (owner 24/10): TikTok and YouTube need yt-dlp — when the VidGrab app
+// is on this computer, the extension hands the page to the app, which
+// downloads it with the person's own machine (and counts it on its own
+// allowance). The store build still refuses YouTube before getting here.
+// storage.local vg_app_handoff === false turns it off (tests).
+const VG_APP_HANDOFF_RE = /(^|\.)(tiktok\.com|youtube\.com|youtu\.be)$/i;
+async function vgHandToApp(payload) {
+  if (!payload || !payload.url || String(payload.quality || 'video').startsWith('mp3')) return null;
+  let host = '';
+  try { host = new URL(payload.url).hostname; } catch { return null; }
+  if (!VG_APP_HANDOFF_RE.test(host)) return null;
+  if ((await chrome.storage.local.get('vg_app_handoff').catch(() => ({}))).vg_app_handoff === false) return null;
+  const app = await vgFindApp().catch(() => ({ port: null }));
+  if (!app.port) return null;
+  const r = await vgSendToApp({ url: payload.url, title: payload.title || '', pageUrl: payload.url }).catch(() => ({ ok: false }));
+  if (!r.ok) return null;
+  return { data: { success: true, title: payload.title || t('sent_to_app_title'), sent_to_app: true }, via: 'app' };
+}
+
 async function vgSaveVideo(payload, signal, pageTabId) {
   if (vgYouTubeRefused(payload.url)) throw new Error(t('yt_text'));
+  const toApp = await vgHandToApp(payload);
+  if (toApp) return toApp;
   // storage.local vg_direct === false: everything through the server (kill switch, tests)
   const off = (await chrome.storage.local.get('vg_direct').catch(() => ({}))).vg_direct === false;
   if (off || !self.vgDirect.directEligible(payload)) {
@@ -860,7 +923,12 @@ async function vgFindApp(force = false) {
       const r = await fetch(`http://127.0.0.1:${port}/vidgrab/ping`, { signal: ctl.signal, cache: 'no-store' });
       clearTimeout(pingTimer);
       const j = r.ok ? await r.json() : null;
-      if (j && j.app === 'VidGrab') { found = { at: Date.now(), port, version: j.version || null }; break; }
+      if (j && j.app === 'VidGrab') {
+        found = { at: Date.now(), port, version: j.version || null };
+        // app 0.19.4+: its machine id, so the app and this browser are one device
+        if (/^[0-9a-f]{64}$/.test(j.device || '')) chrome.storage.local.set({ [DEVICE_KEY]: j.device }).catch(() => {});
+        break;
+      }
     } catch { /* not this port */ }
   }
   vgAppCache = found;
@@ -1173,12 +1241,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       // sign-out: the extension session stops working on the server too
       const tok = await getAuthToken();
       if (tok && tok.startsWith('vgx_')) {
-        try { await fetch(`${await getApiBase()}/api/v1/extension/session`, { method: 'DELETE', headers: { Authorization: `Bearer ${tok}` } }); } catch { /* offline */ }
+        try { await fetch(`${await getApiBase()}/api/v1/extension/session`, { method: 'DELETE', headers: { ...(await vgDeviceHeader()), Authorization: `Bearer ${tok}` } }); } catch { /* offline */ }
       }
       chrome.storage.local.remove([AUTH_TOKEN_KEY, 'vg_auth_email', 'vg_auth_exp'], () => {
         chrome.runtime.sendMessage({ type: 'VG_AUTH_CHANGED', authenticated: false }).catch(() => {});
         sendResponse({ ok: true });
       });
+    })();
+    return true;
+  }
+  if (msg.type === 'VG_GET_DEVICE_ID') {
+    (async () => {
+      if (!(await _mayWriteAuthAsync())) { sendResponse({ id: null }); return; }
+      await vgFindApp().catch(() => null);   // adopts the app's machine id when the app runs
+      sendResponse({ id: await vgDeviceId() });
     })();
     return true;
   }
@@ -1363,7 +1439,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
         const { data, dlUrl, finalExt, safeName } = await vgSaveVideo({ url, quality, remove_watermark, download_subs }, controller.signal, msg.payload.pageTabId)
           .finally(() => { clearTimeout(abortTimer); clearInterval(pingInterval); });
-        notifTitle = t('bg_notif_ok', data.title || 'Video');
+        notifTitle = data.sent_to_app ? t('sent_to_app') : t('bg_notif_ok', data.title || 'Video');
 
         // Notify popup (may be closed — fails silently)
         chrome.runtime.sendMessage({ type: 'VG_DOWNLOAD_DONE', data, dlUrl, ext: finalExt, safeName }).catch(() => {});
@@ -1633,7 +1709,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!isMP3) {
     try {
       const { data, via } = await vgSaveVideo({ url: targetUrl, quality: 'video', remove_watermark: true, download_subs: false }, null, info.linkUrl ? null : tab.id);
-      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: via && via.startsWith('direct') ? t('toast_dl_direct', (data && data.title) || 'video') : t('toast_dl', (data && data.title) || 'video') }).catch(() => {});
+      chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: via === 'app' ? t('sent_to_app') : via && via.startsWith('direct') ? t('toast_dl_direct', (data && data.title) || 'video') : t('toast_dl', (data && data.title) || 'video') }).catch(() => {});
     } catch (err) {
       chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: t('toast_err', err.name === 'AbortError' ? t('err_too_long') : err.message || t('err_connection')) }).catch(() => {});
     }

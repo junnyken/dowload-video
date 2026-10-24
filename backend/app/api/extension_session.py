@@ -39,4 +39,8 @@ async def create(request: Request, user=Depends(get_optional_user)):
 async def revoke(request: Request, user=Depends(get_optional_user)):
     if not user or user.get("via_api_key"):
         return JSONResponse(status_code=401, content={"detail": MSG_LOGIN, "error_code": "login_required"})
+    from app.core import device_link  # noqa: PLC0415
+    dev = device_link.device_from_request(request)
+    if dev:
+        device_link.forget_device(str(user["id"]), dev)   # signed out here: no longer one of the account's devices
     return {"revoked": extension_session.revoke(str(user["id"]))}

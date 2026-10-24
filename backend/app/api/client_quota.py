@@ -333,7 +333,7 @@ def _claim_one(req: "quotas.QuotaRequester", ip: str, url: str, route: str, retr
     try:
         r = _r()
         r.hset(_claim_key(claim_id), mapping={
-            "req": req.key, "platform": platform, "fp": quotas.url_fingerprint(platform, url) or "",
+            "req": req.wire(), "platform": platform, "fp": quotas.url_fingerprint(platform, url) or "",
             "counted": "1" if counted else "0", "ip": ip, "ts": str(int(time.time())),
             "settled": "0", "route": route,
         })
@@ -438,7 +438,7 @@ async def settle(payload: SettleIn, request: Request, user=Depends(get_optional_
              for k, v in c.items()}
         # Only the requester who claimed may settle it; an unknown or expired
         # claim is a no-op (the app keeps going).
-        if c and c.get("req") == req.key and c.get("settled") == "0":
+        if c and c.get("req") in (req.key, req.wire()) and c.get("settled") == "0":
             r.hset(key, "settled", "1")
             age = time.time() - int(c.get("ts") or 0)
             if (payload.outcome != "completed" and c.get("counted") == "1" and age < REFUND_WINDOW_SEC

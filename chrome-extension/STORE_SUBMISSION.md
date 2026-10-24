@@ -36,6 +36,12 @@ The older text in this file (5.1.x listing, permission table) is superseded by t
 - YouTube: the store build refuses YouTube on every path (popup, list, right-click menu, server fallback) and no longer offers "open on the VidGrab website" for a YouTube link. The remaining "YouTube" strings in the code are this refusal logic.
 - Checked by `chrome-extension/tests/test_store_build.py` (builds and loads the real store zip).
 
+## 2c. Changes in 5.21.0 (24/10/2026) — upload `store-assets/VidGrab-store-v5.21.0.zip`
+- **Device ID** (account sharing / download abuse): a signed-in request carries `X-VG-Device`. This is a random install ID, or the VidGrab Windows app's machine hash when the app runs on the same computer. Guests send nothing. It is used only to limit the devices per account (Free 2, Pro 5) and to share the Free allowance per device. Privacy policy §4 "Device ID and device limit" (dated 24/10/2026) covers it. Data usage form: "Authentication information / device identifier — used for account security, not sold, not shared".
+- **App hand-off**: when the VidGrab app is installed, TikTok links go to the app (local 127.0.0.1, same bridge as 5.14). No new permission. In the store build YouTube is still refused before this step.
+- Wording: the note "downloads through the VidGrab server" no longer names YouTube.
+- No permission changes since 5.20.1.
+
 ## 3. Screenshots to capture (up to 5, 1280x800 or 640x400, PNG/JPEG, no alpha)
 **Done (24/10/2026):** `store-assets/screenshots-5.20/1-video-on-page.png`, `2-preview.png`, `3-channel-list.png`, `4-progress.png`, `5-send-to-phone.png` — 1280x800 PNG, English UI of 5.20.0, own sample pages/files only, no YouTube, no platform logos. Upload these five; do not upload anything from the old `screenshots/` folder.
 

@@ -99,7 +99,7 @@ const PATH_MAP = {
 for (const p of platformPages) PATH_MAP[`/${p.slug}`] = `p:${p.slug}`;
 
 function AppInner() {
-  const { isAuthenticated, loading, withAuth } = useAuth();
+  const { isAuthenticated, loading, withAuth, deviceNotice, clearDeviceNotice } = useAuth();
   // Channel Watch (task #6257): the menu entry exists only when the backend
   // says watching is enabled for this account (404 while the flag is off).
   const [watchStatusOk, setWatchEnabled] = useState(false);
@@ -312,6 +312,13 @@ function AppInner() {
         </div>
       )}
       <ExtensionInstallBanner />
+      {/* ── Device linking: this device was signed out (too many devices) ── */}
+      {deviceNotice && (
+        <div role="alert" className="fixed top-0 inset-x-0 z-[61] bg-surface-2 border-b border-warning/50 flex items-start sm:items-center justify-center gap-3 py-2 px-4 text-sm text-fg">
+          <span className="flex-1 sm:flex-none">{t('deviceSignedOut')}</span>
+          <button onClick={clearDeviceNotice} className="shrink-0 px-2 py-0.5 rounded border border-warning/50 text-xs">{t('deviceSignedOutOk')}</button>
+        </div>
+      )}
       {/* ── SW Update Banner ─────────────────────────────── */}
       {swUpdateReady && (
         <div className="fixed bottom-0 inset-x-0 z-[59] bg-surface-2/95 backdrop-blur-sm border-t border-accent/30 flex items-center justify-center gap-3 py-2 px-4 text-sm text-fg-2">

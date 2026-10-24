@@ -111,7 +111,11 @@
       "label": "Kết nối với ứng dụng VidGrab cho Windows",
       "text": "nếu ứng dụng đang chạy trên máy bạn, tiện ích có thể chuyển đường dẫn video cho ứng dụng qua địa chỉ nội bộ 127.0.0.1; dữ liệu này không rời khỏi máy bạn."
     },
-    "limitedUse": "Việc tiện ích dùng và chuyển dữ liệu tuân thủ Chính sách dữ liệu người dùng của Chrome Web Store, bao gồm các yêu cầu về Sử dụng giới hạn (Limited Use)."
+    "limitedUse": "Việc tiện ích dùng và chuyển dữ liệu tuân thủ Chính sách dữ liệu người dùng của Chrome Web Store, bao gồm các yêu cầu về Sử dụng giới hạn (Limited Use).",
+    "device": {
+      "label": "Mã thiết bị và giới hạn thiết bị",
+      "text": "khi bạn đã đăng nhập, website, tiện ích và ứng dụng gửi kèm một mã thiết bị ngẫu nhiên (với ứng dụng: mã băm của máy; tiện ích và website trên cùng máy dùng chung mã này). Mã chỉ dùng để giới hạn số thiết bị của một tài khoản (Free 2, Pro 5) và tính chung lượt Free cho mọi tài khoản trên một thiết bị, nhằm chống chia sẻ tài khoản và lạm dụng lượt tải. Máy chủ lưu mã cùng thời điểm dùng gần nhất trong tối đa 60 ngày; không gửi cho bên thứ ba."
+    }
   },
   "s5": {
     "title": "5. Ứng dụng VidGrab cho Windows",

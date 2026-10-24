@@ -2,6 +2,9 @@ import { createContext, useContext, useEffect, useState, useCallback } from 'rea
 import { supabase } from '../lib/supabaseClient';
 import { API_BASE } from '../lib/apiBase';
 import { adminSessionToken } from '../lib/adminSession';
+import { installDeviceLink, onSignedOut } from '../lib/deviceLink';
+
+installDeviceLink();
 
 const AuthContext = createContext(null);
 
@@ -10,6 +13,15 @@ export function AuthProvider({ children }) {
   const [session, setSession]         = useState(null);
   const [loading, setLoading]         = useState(true);
   const [preferences, setPreferences] = useState(null);
+  // Server signed this device out (too many devices on the account): message shown once.
+  const [deviceNotice, setDeviceNotice] = useState('');
+
+  useEffect(() => onSignedOut(async (message) => {
+    setDeviceNotice(message || 'signed_out');
+    // 'local': only this browser — the default ('global') would sign the
+    // account out of every other device too.
+    await supabase.auth.signOut({ scope: 'local' });
+  }), []);
 
   // ── Load session on mount + subscribe to changes ─────────────────
   useEffect(() => {
@@ -185,6 +197,8 @@ export function AuthProvider({ children }) {
       refetchPreferences: fetchPreferences,
       withAuth,
       isAuthenticated: !!user,
+      deviceNotice,
+      clearDeviceNotice: () => setDeviceNotice(''),
     }}>
       {children}
     </AuthContext.Provider>

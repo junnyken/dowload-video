@@ -1395,7 +1395,7 @@
     "message": "⏳ Đang tìm video trên trang…"
   },
   "prev_server": {
-    "message": "Video này tải qua máy chủ VidGrab (YouTube, TikTok, MP3…) — chọn chất lượng ở trên rồi bấm Tải."
+    "message": "Video này tải qua máy chủ VidGrab (TikTok, MP3…) — chọn chất lượng ở trên rồi bấm Tải."
   },
   "qr_hint": {
     "message": "Quét bằng camera điện thoại — trang VidGrab mở với video này để tải ngay trên điện thoại.",
@@ -1953,5 +1953,17 @@
   "rec_perm_denied": {
     "message": "Cần cấp quyền quay tab để dùng chế độ quay.",
     "description": "wording: BA review"
+  },
+  "device_signed_out": {
+    "message": "Tài khoản đang dùng trên quá nhiều thiết bị nên tiện ích này đã bị đăng xuất. Đăng nhập lại trên website VidGrab để dùng tiếp — thiết bị dùng lâu nhất sẽ bị đăng xuất thay.",
+    "description": "wording: BA review (5.21.0)"
+  },
+  "sent_to_app": {
+    "message": "Đã giao cho app VidGrab trên máy này — app tự tải bằng máy của bạn.",
+    "description": "wording: BA review (5.21.0)"
+  },
+  "sent_to_app_title": {
+    "message": "Đã giao cho app VidGrab",
+    "description": "wording: BA review (5.21.0)"
   }
 }

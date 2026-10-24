@@ -112,7 +112,11 @@
       "label": "Connection to the VidGrab Windows app",
       "text": "if the app is running on your computer, the extension can hand it a video address through the local address 127.0.0.1; this data does not leave your computer."
     },
-    "limitedUse": "The extension’s use and transfer of data comply with the Chrome Web Store User Data Policy, including the Limited Use requirements."
+    "limitedUse": "The extension’s use and transfer of data comply with the Chrome Web Store User Data Policy, including the Limited Use requirements.",
+    "device": {
+      "label": "Device ID and device limit",
+      "text": "when you are signed in, the website, the extension and the app send a random device ID (for the app: the machine hash; the extension and the website on the same computer share it). It is used only to limit how many devices one account uses (Free 2, Pro 5) and to share the Free allowance among all accounts on one device, against account sharing and download abuse. The server keeps the ID with its last-used time for up to 60 days; it is not shared with third parties."
+    }
   },
   "s5": {
     "title": "5. VidGrab Windows app",
