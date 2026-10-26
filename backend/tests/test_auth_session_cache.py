@@ -46,7 +46,20 @@ def test_a_verified_session_is_remembered_and_never_stores_the_token(rc, monkeyp
     assert _call(tok)["id"] == "u1"
     assert _call(tok) == {"id": "u1", "email": "a@b.c", "email_confirmed_at": None, "token": tok}
     assert len(calls) == 1
-    assert all(tok not in (rc.get(k) or "") and tok not in k for k in rc.keys())
+    def _value(k):   # every key type (device linking keeps sets/zsets/hashes too)
+        t = rc.type(k)
+        if t == "string":
+            return rc.get(k) or ""
+        if t == "set":
+            return " ".join(rc.smembers(k))
+        if t == "zset":
+            return " ".join(rc.zrange(k, 0, -1))
+        if t == "hash":
+            return " ".join(f"{f} {v}" for f, v in rc.hgetall(k).items())
+        if t == "list":
+            return " ".join(rc.lrange(k, 0, -1))
+        return ""
+    assert all(tok not in _value(k) and tok not in k for k in rc.keys())
     assert 0 < rc.ttl(am._session_key(tok)) <= am.SESSION_CACHE_S
 
 

@@ -323,7 +323,10 @@ class TestErrorBoundaryWiring:
 
 class TestExtendedStatusBadges:
     def _src(self):
-        return _src("../frontend/src/components/HistoryContent.jsx")
+        # the badge copy moved to the i18n files (vi/en, 22/10): the component
+        # plus its Vietnamese strings (historyPanel namespace)
+        return (_src("../frontend/src/components/HistoryContent.jsx")
+                + _src("../frontend/src/locales/vi/historyPanel.json"))
 
     def test_cancelled_badge(self):
         assert "Đã hủy" in self._src()

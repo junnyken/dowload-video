@@ -308,7 +308,7 @@ class QuotaRequester:
     """Who a download is counted against. `key` is also the China access
     layer's requester key ("admin" | "user:<id>" | "ip:<ip>")."""
 
-    __slots__ = ("kind", "ident", "_tier", "device")
+    __slots__ = ("kind", "ident", "_tier", "device", "family", "net_extra")
 
     def __init__(self, kind: str, ident: str = "", tier: Optional[str] = None,
                  device: Optional[str] = None):
@@ -318,6 +318,10 @@ class QuotaRequester:
         # Signed-in user's device (32 hex, app.core.device_link): Free accounts
         # on one device share one allowance. Not part of `key`.
         self.device = device
+        # 26/10 bypass guards (device_link): email-alias family shared by
+        # several accounts; network bucket when this Free account is one too many
+        self.family: Optional[str] = None
+        self.net_extra: Optional[str] = None
 
     @property
     def key(self) -> str:
@@ -338,18 +342,30 @@ class QuotaRequester:
         return self._tier
 
     def wire(self) -> str:
-        """.key plus "@<device>" for a linked user — what Celery kwargs carry."""
-        return f"{self.key}@{self.device}" if self.kind == REQ_USER and self.device else self.key
+        """.key plus "@<device>[@<family>@<net_extra>]" for a linked user —
+        what Celery kwargs carry."""
+        if self.kind != REQ_USER or not (self.device or self.family or self.net_extra):
+            return self.key
+        tail = f"@{self.device or ''}"
+        if self.family or self.net_extra:
+            tail += f"@{self.family or ''}@{self.net_extra or ''}"
+        return self.key + tail
 
     @classmethod
     def from_key(cls, key: Optional[str]) -> Optional["QuotaRequester"]:
         """Inverse of .key / .wire(), for Celery kwargs. None/unknown → None."""
         key = (key or "").strip()
         if "@" in key:
-            key, dev = key.split("@", 1)
+            key, *parts = key.split("@")
             rq = cls.from_key(key)
-            if rq is not None and rq.kind == REQ_USER and re.fullmatch(r"[0-9a-f]{32}", dev or ""):
-                rq.device = dev
+            if rq is not None and rq.kind == REQ_USER:
+                dev, fam, net = (parts + ["", "", ""])[:3]
+                if re.fullmatch(r"[0-9a-fnx][0-9a-f]{31}", dev or ""):
+                    rq.device = dev
+                if re.fullmatch(r"[0-9a-f]{16}", fam or ""):
+                    rq.family = fam
+                if re.fullmatch(r"[0-9a-f]{16}", net or ""):
+                    rq.net_extra = net
             return rq
         if key == "admin":
             return cls(REQ_ADMIN)
@@ -375,12 +391,7 @@ def resolve_requester(request=None, user_id: Optional[str] = None,
     if is_admin:
         return QuotaRequester(REQ_ADMIN)
     if user_id:
-        linked = None
-        try:
-            linked = valid_device_hash(request.headers.get("X-VG-Device")) if request is not None else None
-        except Exception:
-            pass
-        return QuotaRequester(REQ_USER, str(user_id), device=linked[:32] if linked else None)
+        return _linked_user(request, str(user_id), ip)
     dev = valid_device_hash(device_id)
     if dev:
         return QuotaRequester(REQ_DEVICE, dev[:32])
@@ -388,6 +399,34 @@ def resolve_requester(request=None, user_id: Optional[str] = None,
         from app.core.client_ip import get_client_ip  # noqa: PLC0415
         ip = get_client_ip(request)
     return QuotaRequester(REQ_ANON, ip or "unknown")
+
+
+def _linked_user(request, user_id: str, ip: Optional[str]) -> QuotaRequester:
+    """A signed-in requester with what device linking knows (device_link):
+    the device (client id, or the guards' split / network pseudo-device), the
+    email family when it has several accounts, the network bucket when this is
+    one Free account too many on the network. Never raises."""
+    rq = QuotaRequester(REQ_USER, user_id)
+    if request is None:
+        return rq
+    try:
+        from app.core import device_link  # noqa: PLC0415
+        if not device_link.counts_as_device(request):
+            linked = valid_device_hash(request.headers.get("X-VG-Device"))
+            rq.device = linked[:32] if linked else None
+            return rq
+        if ip is None:
+            from app.core.client_ip import get_client_ip  # noqa: PLC0415
+            ip = get_client_ip(request)
+        rq.device = device_link.effective_device(user_id, device_link.device_from_request(request), ip)
+        if device_link.extra_mode() != device_link.MODE_OFF and rq.tier == "free":
+            rq.family = device_link.family_of(user_id)
+            net = device_link.net_of(ip)
+            if net and device_link.network_extra(user_id, net):
+                rq.net_extra = net
+    except Exception:
+        pass
+    return rq
 
 
 def platform_limit(requester: QuotaRequester) -> int:
@@ -517,95 +556,138 @@ def bulk_item_quota_message(requester: QuotaRequester, platform: str, limit: int
             f"Lượt mới được cộng lại lúc {reset_time_vn_text()}.")
 
 
-# ── Free accounts sharing one device (owner 24/10/2026, app.core.device_link) ──
-# Every download a FREE account makes on a linked device is also counted in a
-# device bucket; when it reaches the Free limit, any other Free account on
-# that device is refused too (enforce) or only logged (shadow).
+# ── Free accounts sharing one allowance (owner 24/10 + 26/10/2026, app.core.device_link) ──
+# Every download a FREE account makes is also counted in shared buckets; when
+# one is full, the other Free accounts in it are refused too (enforce) or it
+# is only logged (shadow). Buckets:
+#   device   the linked device (several Free accounts on one PC / phone);
+#            also the guards' per-network split of a copied id ("x…") and the
+#            network pseudo-device of a call without id ("n…")
+#   family   accounts on one mailbox (name+1@gmail.com, n.a.m.e@gmail.com)
+#   network  the Free accounts beyond the first few on one network today
+# The device bucket follows the device-linking mode; the others (and the
+# "x"/"n" devices) follow the guards' own mode.
+
+def _shared_buckets(requester: QuotaRequester) -> list:
+    """[(bucket id, reason)] for a Free signed-in requester, else []."""
+    if requester.kind != REQ_USER or requester.tier != "free":
+        return []
+    out = []
+    if requester.device:
+        out.append((requester.device, "device"))
+    if requester.family:
+        out.append((f"fam{requester.family}", "family"))
+    if requester.net_extra:
+        out.append((f"net{requester.net_extra}", "network"))
+    return out
+
 
 def _shared_device(requester: QuotaRequester) -> Optional[str]:
-    if requester.kind != REQ_USER or not requester.device or requester.tier != "free":
+    """Kept for callers/tests of 24/10: the device bucket id, if any."""
+    return next((b for b, why in _shared_buckets(requester) if why == "device"), None)
+
+
+def _bucket_mode(bucket: str, reason: str) -> str:
+    from app.core import device_link  # noqa: PLC0415
+    if reason == "device" and not bucket.startswith(("n", "x")):
+        return device_link.effective_mode()
+    return device_link.extra_mode()
+
+
+def _fdev_key(bucket: str, platform: str, day: Optional[str] = None) -> str:
+    return f"vidgrab:quota:fdev:{bucket}:{platform}:{day or _utc_day()}"
+
+
+def _fdev_seen_key(bucket: str, day: Optional[str] = None) -> str:
+    return f"vidgrab:quota:fdev_seen:{bucket}:{day or _utc_day()}"
+
+
+def _shared_message(reason: str, shared_limit: int, per_item: bool = False) -> str:
+    # wording: BA review
+    why = {
+        "device":  "lượt Free được tính chung cho mọi tài khoản trên một thiết bị",
+        "family":  "các tài khoản dùng chung một hộp thư (ví dụ ten+1@gmail.com, t.e.n@gmail.com) được tính chung lượt Free",
+        "network": "có nhiều tài khoản Free trên cùng một mạng nên các tài khoản thêm được tính chung lượt Free",
+    }[reason]
+    who = "Thiết bị này" if reason == "device" else ("Nhóm tài khoản này" if reason == "family" else "Các tài khoản thêm trên mạng này")
+    if per_item:
+        return f"{who} đã dùng hết {shared_limit} lượt miễn phí hôm nay ({why}), mục này chưa được tải."
+    return (f"{who} đã dùng hết {shared_limit} lượt miễn phí hôm nay ({why}). "
+            f"Nâng cấp Pro hoặc chờ lượt mới lúc {reset_time_vn_text()}.")
+
+
+def _bucket_full(requester: QuotaRequester, bucket: str, reason: str, platform: str, url: Optional[str],
+                 limit: int, extra_taken: int = 0) -> Optional[str]:
+    """Refusal text when this bucket is full and its mode enforces; None
+    otherwise (shadow logs once a day)."""
+    from app.core import device_link  # noqa: PLC0415
+    mode = _bucket_mode(bucket, reason)
+    if mode == device_link.MODE_OFF:
         return None
-    return requester.device
-
-
-def _fdev_key(device: str, platform: str, day: Optional[str] = None) -> str:
-    return f"vidgrab:quota:fdev:{device}:{platform}:{day or _utc_day()}"
-
-
-def _fdev_seen_key(device: str, day: Optional[str] = None) -> str:
-    return f"vidgrab:quota:fdev_seen:{device}:{day or _utc_day()}"
+    shared_limit = max(limit, platform_limit_for_tier("free"))
+    if _redis_count(_fdev_key(bucket, _enforced_bucket(platform))) + extra_taken < shared_limit:
+        return None
+    fp = _url_fingerprint(platform, url)
+    from app.core.redis_client import get_redis  # noqa: PLC0415
+    if fp and get_redis().sismember(_fdev_seen_key(bucket), fp):
+        return None
+    device_link.note_shared_refusal(requester.ident, bucket, mode, platform, reason=reason)
+    if mode != device_link.MODE_ENFORCE:
+        return None
+    return reason
 
 
 def _shared_device_refusal(requester: QuotaRequester, platform: str, url: Optional[str],
                            limit: int) -> Optional[Dict[str, Any]]:
-    """The refusal fields when the device's shared Free bucket is full and the
-    mode is enforce; None otherwise (shadow only logs)."""
-    dev = _shared_device(requester)
-    if not dev or limit == -1:
+    """The refusal fields when a shared bucket is full and enforcing."""
+    if limit == -1:
         return None
     try:
         from app.core import device_link  # noqa: PLC0415
-        mode = device_link.effective_mode()
-        if mode == device_link.MODE_OFF:
-            return None
-        shared_limit = max(limit, platform_limit_for_tier("free"))
-        used = _redis_count(_fdev_key(dev, _enforced_bucket(platform)))
-        if used < shared_limit:
-            return None
-        fp = _url_fingerprint(platform, url)
-        from app.core.redis_client import get_redis  # noqa: PLC0415
-        if fp and get_redis().sismember(_fdev_seen_key(dev), fp):
-            return None
-        device_link.note_shared_refusal(requester.ident, dev, mode, platform)
-        if mode != device_link.MODE_ENFORCE:
-            return None
-        # wording: BA review
-        return {
-            "allowed":    False,
-            "error_code": ERR_QUOTA_DAILY,
-            "reason":     device_link.ERR_DEVICE_SHARED,
-            "message":    (f"Thiết bị này đã dùng hết {shared_limit} lượt miễn phí hôm nay "
-                           f"(lượt Free được tính chung cho mọi tài khoản trên một thiết bị). "
-                           f"Nâng cấp Pro hoặc chờ lượt mới lúc {reset_time_vn_text()}."),
-        }
+        for bucket, reason in _shared_buckets(requester):
+            if _bucket_full(requester, bucket, reason, platform, url, limit):
+                shared_limit = max(limit, platform_limit_for_tier("free"))
+                return {
+                    "allowed":    False,
+                    "error_code": ERR_QUOTA_DAILY,
+                    "reason":     device_link.ERR_DEVICE_SHARED if reason == "device" else f"free_shared_{reason}",
+                    "message":    _shared_message(reason, shared_limit),
+                }
     except Exception:
         return None
+    return None
 
 
 def _shared_device_record(requester: QuotaRequester, platform: str, url: Optional[str]) -> None:
-    dev = _shared_device(requester)
-    if not dev:
-        return
-    try:
-        from app.core.redis_client import get_redis  # noqa: PLC0415
-        r = get_redis()
-        fp = _url_fingerprint(platform, url)
-        if fp:
-            sk = _fdev_seen_key(dev)
-            added = r.sadd(sk, fp)
-            r.expire(sk, _ttl_to_midnight())
-            if not added:
-                return
-        _redis_incr_until_midnight(_fdev_key(dev, platform))
-        _redis_incr_until_midnight(_fdev_key(dev, _TOTAL_BUCKET))
-    except Exception:
-        pass
+    for bucket, _why in _shared_buckets(requester):
+        try:
+            from app.core.redis_client import get_redis  # noqa: PLC0415
+            r = get_redis()
+            fp = _url_fingerprint(platform, url)
+            if fp:
+                sk = _fdev_seen_key(bucket)
+                added = r.sadd(sk, fp)
+                r.expire(sk, _ttl_to_midnight())
+                if not added:
+                    continue
+            _redis_incr_until_midnight(_fdev_key(bucket, platform))
+            _redis_incr_until_midnight(_fdev_key(bucket, _TOTAL_BUCKET))
+        except Exception:
+            pass
 
 
 def _shared_device_refund(requester: QuotaRequester, platform: str, fp: Optional[str]) -> None:
-    dev = _shared_device(requester)
-    if not dev:
-        return
-    try:
-        from app.core.redis_client import get_redis  # noqa: PLC0415
-        r = get_redis()
-        for key in (_fdev_key(dev, platform or "other"), _fdev_key(dev, _TOTAL_BUCKET)):
-            if int(r.get(key) or 0) > 0:
-                r.decr(key)
-        if fp:
-            r.srem(_fdev_seen_key(dev), fp)
-    except Exception:
-        pass
+    for bucket, _why in _shared_buckets(requester):
+        try:
+            from app.core.redis_client import get_redis  # noqa: PLC0415
+            r = get_redis()
+            for key in (_fdev_key(bucket, platform or "other"), _fdev_key(bucket, _TOTAL_BUCKET)):
+                if int(r.get(key) or 0) > 0:
+                    r.decr(key)
+            if fp:
+                r.srem(_fdev_seen_key(bucket), fp)
+        except Exception:
+            pass
 
 
 def check_platform_quota(requester: QuotaRequester, platform: str,
@@ -759,7 +841,6 @@ class BatchAllowance:
         self._used: Dict[str, int] = {}
         self._taken: Dict[str, int] = {}
         self._seen: set = set()
-        self._fdev_used: Dict[str, int] = {}
 
     def remaining(self, platform: str) -> int:
         if self.limit == -1:
@@ -793,33 +874,16 @@ class BatchAllowance:
 
 
     def _shared_refusal(self, platform: str, bucket: str, url: Optional[str]) -> Optional[str]:
-        """Free accounts sharing one device (see _shared_device_refusal):
-        the items of this batch count toward the device bucket too."""
-        dev = _shared_device(self.requester)
-        if not dev:
-            return None
+        """Shared Free buckets (see _shared_device_refusal): the items of this
+        batch count toward them too."""
         try:
-            from app.core import device_link  # noqa: PLC0415
-            mode = device_link.effective_mode()
-            if mode == device_link.MODE_OFF:
-                return None
-            if bucket not in self._fdev_used:
-                self._fdev_used[bucket] = _redis_count(_fdev_key(dev, bucket))
-            shared_limit = max(self.limit, platform_limit_for_tier("free"))
-            if self._fdev_used[bucket] + self._taken.get(bucket, 0) < shared_limit:
-                return None
-            fp = _url_fingerprint(platform, url)
-            from app.core.redis_client import get_redis  # noqa: PLC0415
-            if fp and get_redis().sismember(_fdev_seen_key(dev), fp):
-                return None
-            device_link.note_shared_refusal(self.requester.ident, dev, mode, platform)
-            if mode != device_link.MODE_ENFORCE:
-                return None
+            for sb, reason in _shared_buckets(self.requester):
+                taken = self._taken.get(bucket, 0)
+                if _bucket_full(self.requester, sb, reason, platform, url, self.limit, extra_taken=taken):
+                    return _shared_message(reason, max(self.limit, platform_limit_for_tier("free")), per_item=True)
         except Exception:
             return None
-        # wording: BA review
-        return (f"Thiết bị này đã dùng hết {shared_limit} lượt miễn phí hôm nay "
-                f"(tính chung cho mọi tài khoản Free trên thiết bị), mục này chưa được tải.")
+        return None
 
 
 def platform_usage_snapshot(requester: QuotaRequester) -> Dict[str, Any]:

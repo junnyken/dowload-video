@@ -9,7 +9,9 @@ route, every change audited.
   GET  /admin/device-links/user/{uid}   that account's devices (8-char ids)
   POST /admin/device-links/settings     {"mode"?: off|shadow|enforce,
                                          "enforce_at"?: epoch | null,
-                                         "free_max"?: int, "paid_max"?: int}
+                                         "free_max"?: int, "paid_max"?: int,
+                                         "extra_enforce_at"?: epoch, "clear_extra_enforce_at"?: bool,
+                                         "net_free_accounts"?: int, "clone_networks"?: int}
 """
 from __future__ import annotations
 
@@ -31,6 +33,11 @@ class SettingsBody(BaseModel):
     clear_enforce_at: bool = False
     free_max: Optional[int] = None
     paid_max: Optional[int] = None
+    # 26/10 bypass guards (their own watch period)
+    extra_enforce_at: Optional[int] = None
+    clear_extra_enforce_at: bool = False
+    net_free_accounts: Optional[int] = None
+    clone_networks: Optional[int] = None
 
 
 @router.get("/device-links")
@@ -53,7 +60,12 @@ async def device_links_user(user_id: str, _=Depends(verify_admin)) -> dict:
 @router.post("/device-links/settings")
 async def device_links_settings(body: SettingsBody, request: Request, _=Depends(verify_admin)) -> dict:
     old = device_link.get_settings()
-    kwargs = {"mode": body.mode, "free_max": body.free_max, "paid_max": body.paid_max}
+    kwargs = {"mode": body.mode, "free_max": body.free_max, "paid_max": body.paid_max,
+              "net_free_accounts": body.net_free_accounts, "clone_networks": body.clone_networks}
+    if body.clear_extra_enforce_at:
+        kwargs["extra_enforce_at"] = None
+    elif body.extra_enforce_at is not None:
+        kwargs["extra_enforce_at"] = body.extra_enforce_at
     if body.clear_enforce_at:
         kwargs["enforce_at"] = None
     elif body.enforce_at is not None:

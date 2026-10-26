@@ -9,7 +9,9 @@ python-dotenv==1.2.3  # 1.0.1: PYSEC-2026-2270
 # skipping, Content-Length bound). Patch bump inside 0.0.x; FastAPI imports it
 # via the `multipart` shim it still ships. Task #6398.
 python-multipart==0.0.31
-yt-dlp>=2025.5.1
+# yt-dlp >= 2026.10.21: older releases refuse curl_cffi 0.15 (our floor after
+# PYSEC-2026-2431) and impersonation silently disappears — checked 26/10.
+yt-dlp>=2026.10.21
 yt_dlp_ejs
 bgutil-ytdlp-pot-provider>=1.3.0
 # Upper bound is not cosmetic: yt-dlp loads its impersonate handler only for a

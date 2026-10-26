@@ -251,8 +251,16 @@ def _link_device(request, user: Dict[str, Any], token: str) -> Dict[str, Any]:
     401 device_signed_out when the account signed this device out."""
     try:
         from app.core import device_link  # noqa: PLC0415
-        dev = device_link.device_from_request(request) if device_link.counts_as_device(request) else None
-        refusal = device_link.touch(user["id"], dev, token, meta=device_link.describe_request(request)) if dev else None
+        refusal = None
+        device_link.note_identity(user["id"], user.get("email"))
+        if device_link.counts_as_device(request):
+            from app.core.client_ip import get_client_ip  # noqa: PLC0415
+            # the client's id, or (bypass guards enforcing) a per-network split
+            # of a copied id / a network pseudo-device when there is no id
+            dev = device_link.effective_device(user["id"], device_link.device_from_request(request),
+                                               get_client_ip(request))
+            if dev:
+                refusal = device_link.touch(user["id"], dev, token, meta=device_link.describe_request(request))
     except Exception:  # noqa: BLE001
         refusal = None
     if refusal:

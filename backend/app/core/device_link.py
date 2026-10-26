@@ -49,6 +49,11 @@ MODE_OFF, MODE_SHADOW, MODE_ENFORCE = "off", "shadow", "enforce"
 SHADOW_DAYS = 3
 DEFAULT_FREE_MAX = 2
 DEFAULT_PAID_MAX = 5
+DEFAULT_NET_FREE_ACCOUNTS = 3     # Free accounts per network a day before they share
+DEFAULT_CLONE_NETWORKS = 4        # networks one device id may appear on within an hour
+CLONE_WINDOW_S = 3600
+CLONE_FLAG_S = 86400
+PSEUDO_STALE_S = 86400            # a "no device id" entry stops counting after a day
 STALE_S = 30 * 86400          # a device unused for 30 days no longer counts
 TOUCH_EVERY_S = 60            # last-seen refresh per (user, device) per process
 EVENTS_MAX = 200
@@ -101,27 +106,48 @@ def get_settings(rc=None, now: Optional[float] = None) -> Dict[str, Any]:
         s = {"mode": MODE_SHADOW, "enforce_at": int(now + SHADOW_DAYS * 86400),
              "free_max": DEFAULT_FREE_MAX, "paid_max": DEFAULT_PAID_MAX}
         rc.set(SETTINGS_KEY, json.dumps(s))
+    if "extra_enforce_at" not in s:
+        # 26/10 anti-bypass rules (see "Bypass guards" below): their own 3-day watch
+        s["extra_enforce_at"] = int(now + SHADOW_DAYS * 86400)
+        rc.set(SETTINGS_KEY, json.dumps(s))
     mode = s.get("mode") if s.get("mode") in (MODE_OFF, MODE_SHADOW, MODE_ENFORCE) else MODE_SHADOW
     enforce_at = s.get("enforce_at")
     effective = mode
     if mode == MODE_SHADOW and enforce_at and now >= float(enforce_at):
         effective = MODE_ENFORCE
+    extra_at = s.get("extra_enforce_at")
+    extra = MODE_OFF if effective == MODE_OFF else (
+        MODE_ENFORCE if effective == MODE_ENFORCE and (not extra_at or now >= float(extra_at)) else MODE_SHADOW)
     return {
         "mode": mode,
         "effective_mode": effective,
         "enforce_at": int(enforce_at) if enforce_at else None,
         "free_max": int(s.get("free_max") or DEFAULT_FREE_MAX),
         "paid_max": int(s.get("paid_max") or DEFAULT_PAID_MAX),
+        "extra_mode": extra,
+        "extra_enforce_at": int(extra_at) if extra_at else None,
+        "net_free_accounts": int(s.get("net_free_accounts") or DEFAULT_NET_FREE_ACCOUNTS),
+        "clone_networks": int(s.get("clone_networks") or DEFAULT_CLONE_NETWORKS),
     }
 
 
 def save_settings(*, mode: Optional[str] = None, enforce_at: Any = "keep",
                   free_max: Optional[int] = None, paid_max: Optional[int] = None,
-                  rc=None) -> Dict[str, Any]:
+                  extra_enforce_at: Any = "keep", net_free_accounts: Optional[int] = None,
+                  clone_networks: Optional[int] = None, rc=None) -> Dict[str, Any]:
     rc = rc or _rc()
     cur = get_settings(rc)
     raw = {"mode": cur["mode"], "enforce_at": cur["enforce_at"],
-           "free_max": cur["free_max"], "paid_max": cur["paid_max"]}
+           "free_max": cur["free_max"], "paid_max": cur["paid_max"],
+           "extra_enforce_at": cur["extra_enforce_at"], "net_free_accounts": cur["net_free_accounts"],
+           "clone_networks": cur["clone_networks"]}
+    if extra_enforce_at != "keep":
+        raw["extra_enforce_at"] = int(extra_enforce_at) if extra_enforce_at else None
+    for name, val, lo, hi in (("net_free_accounts", net_free_accounts, 1, 100), ("clone_networks", clone_networks, 2, 50)):
+        if val is not None:
+            if not lo <= int(val) <= hi:
+                raise ValueError(f"{name} phải trong khoảng {lo}–{hi}")
+            raw[name] = int(val)
     if mode is not None:
         if mode not in (MODE_OFF, MODE_SHADOW, MODE_ENFORCE):
             raise ValueError("mode phải là off, shadow hoặc enforce")
@@ -142,6 +168,159 @@ def effective_mode(rc=None) -> str:
         return get_settings(rc)["effective_mode"]
     except Exception:  # noqa: BLE001
         return MODE_OFF
+
+
+def extra_mode(rc=None) -> str:
+    try:
+        return get_settings(rc)["extra_mode"]
+    except Exception:  # noqa: BLE001
+        return MODE_OFF
+
+
+# ── Bypass guards (owner 26/10/2026) ────────────────────────────────────────
+# The device id comes from the client, so on its own it can be copied to many
+# machines, left out, or renewed with a private window. Server-side anchors:
+#
+#   copied id      one (account, device) seen on more than `clone_networks`
+#                  networks within an hour is treated as several devices:
+#                  "x" + hash(device, network) per network (24 h flag).
+#   no id          a signed-in call without X-VG-Device counts as a device of
+#                  its network: "n" + hash(network), stale after a day.
+#   email aliases  name+1@gmail.com, n.a.m.e@gmail.com … share the Free
+#                  allowance (family = normalised address).
+#   many accounts  beyond `net_free_accounts` Free accounts on one network in
+#                  a day, the extra accounts share one Free allowance.
+#
+# Own watch period (extra_enforce_at, 3 days from the first read): until then
+# these only log; the device ids used are the clients' own.
+
+def net_of(ip: Optional[str], wide: bool = False) -> Optional[str]:
+    """16-hex hash of the client's network: the IPv4 address (wide: /16) or the
+    IPv6 /64 (wide: /48). Raw addresses are never stored here."""
+    import hashlib  # noqa: PLC0415
+    import ipaddress  # noqa: PLC0415
+    try:
+        a = ipaddress.ip_address((ip or "").strip())
+    except ValueError:
+        return None
+    if a.version == 4:
+        n = ipaddress.ip_network(f"{a}/{16 if wide else 32}", strict=False)
+    else:
+        n = ipaddress.ip_network(f"{a}/{48 if wide else 64}", strict=False)
+    return hashlib.sha1(f"vgnet:{n}".encode()).hexdigest()[:16]
+
+
+def email_family(email: Optional[str]) -> Optional[str]:
+    """Same mailbox → same family: lower case, "+tag" dropped; Gmail also drops
+    dots (googlemail.com = gmail.com)."""
+    import hashlib  # noqa: PLC0415
+    e = (email or "").strip().lower()
+    if "@" not in e:
+        return None
+    local, domain = e.rsplit("@", 1)
+    local = local.split("+", 1)[0]
+    if domain in ("gmail.com", "googlemail.com"):
+        local, domain = local.replace(".", ""), "gmail.com"
+    if not local:
+        return None
+    return hashlib.sha1(f"vgfam:{local}@{domain}".encode()).hexdigest()[:16]
+
+
+def note_identity(user_id: str, email: Optional[str], rc=None) -> None:
+    """Remember the account's email family (read by quotas). Never raises."""
+    fam = email_family(email)
+    if not user_id or not fam:
+        return
+    tag = f"fam:{user_id}"
+    if time.time() - _touched.get(tag, 0) < 600:
+        return
+    _touched[tag] = time.time()
+    try:
+        rc = rc or _rc()
+        rc.set(f"vidgrab:devlink:fam:{user_id}", fam, ex=STALE_S)
+        rc.sadd(f"vidgrab:devlink:famusers:{fam}", str(user_id))
+        rc.expire(f"vidgrab:devlink:famusers:{fam}", STALE_S)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def family_of(user_id: str, rc=None) -> Optional[str]:
+    """The family only when it has more than one account (else nothing to share)."""
+    try:
+        rc = rc or _rc()
+        fam = rc.get(f"vidgrab:devlink:fam:{user_id}")
+        fam = fam.decode() if isinstance(fam, bytes) else fam
+        if fam and rc.scard(f"vidgrab:devlink:famusers:{fam}") > 1:
+            return fam
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def network_extra(user_id: str, net: Optional[str], rc=None) -> bool:
+    """True when this Free account is beyond the first `net_free_accounts` seen
+    on this network today (the order is first use)."""
+    if not user_id or not net:
+        return False
+    try:
+        rc = rc or _rc()
+        k = f"vidgrab:devlink:netusers:{net}:{_day()}"
+        rc.zadd(k, {str(user_id): time.time()}, nx=True)
+        rc.expire(k, 2 * 86400)
+        rank = rc.zrank(k, str(user_id))
+        return rank is not None and rank >= get_settings(rc)["net_free_accounts"]
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def effective_device(user_id: str, device: Optional[str], ip: Optional[str], rc=None,
+                     now: Optional[float] = None) -> Optional[str]:
+    """The device id the registry and the quotas use: the client's own, or —
+    once the bypass guards enforce — a per-network split of a copied id, or a
+    network pseudo-device when the call has no id. Shadow: logged, the
+    client's id (or None) is returned. Never raises."""
+    try:
+        rc = rc or _rc()
+        now = now or time.time()
+        st = get_settings(rc, now)
+        mode = st["extra_mode"]
+        if mode == MODE_OFF or not user_id:
+            return device
+        import hashlib  # noqa: PLC0415
+        uid = str(user_id)
+        if not device:
+            net = net_of(ip)
+            if not net:
+                return None
+            if mode != MODE_ENFORCE:
+                if _once_today(rc, f"nd:{uid}:{net}"):
+                    _stat(rc, "no_device_would_count", now)
+                return None
+            return "n" + hashlib.sha1(f"{uid}:{net}".encode()).hexdigest()[:31]
+        wide = net_of(ip, wide=True)
+        if not wide:
+            return device
+        k = f"vidgrab:devlink:net:{uid}:{device}"
+        flag = f"vidgrab:devlink:clone:{uid}:{device}"
+        pipe = rc.pipeline()
+        pipe.zadd(k, {wide: now})
+        pipe.zremrangebyscore(k, 0, now - CLONE_WINDOW_S)
+        pipe.expire(k, CLONE_WINDOW_S * 2)
+        pipe.zcard(k)
+        pipe.exists(flag)
+        res = pipe.execute()
+        nets, flagged = int(res[-2]), bool(res[-1])
+        if nets > st["clone_networks"] and not flagged:
+            rc.set(flag, 1, ex=CLONE_FLAG_S)
+            flagged = True
+            _stat(rc, "clone_detected" if mode == MODE_ENFORCE else "clone_would_split", now)
+            _event(rc, "clone_detected" if mode == MODE_ENFORCE else "clone_would_split", mode,
+                   uid=uid, dev=device[:8], networks=nets)
+        if flagged and mode == MODE_ENFORCE:
+            return "x" + hashlib.sha1(f"{device}:{wide}".encode()).hexdigest()[:31]
+        return device
+    except Exception:  # noqa: BLE001
+        return device
 
 
 # ── stats / events ──────────────────────────────────────────────────────────
@@ -218,16 +397,21 @@ LINKED_APP_MIN = (0, 19, 4)
 
 
 def counts_as_device(request) -> bool:
-    """The Windows app before 0.19.4 cannot share its machine id with the
+    """Extensions before 5.21 send no id at all; likewise not linked.
+    The Windows app before 0.19.4 cannot share its machine id with the
     browser (bridge ping without "device"): one PC would count as two devices
     and a Free account could be signed out unfairly. Such app calls are not
     linked until the app updates. Other clients always count."""
     try:
         v = (request.headers.get("X-VG-Client") or "").strip()
+        origin = request.headers.get("Origin") or ""
+        has_id = bool(request.headers.get("X-VG-Device"))
     except Exception:  # noqa: BLE001
         return True
     if not v:
-        return True
+        # extension before 5.21 sends no id: not linked until it updates (it
+        # would otherwise count as a separate "no id" device of its network)
+        return has_id or not origin.startswith(("chrome-extension://", "moz-extension://"))
     try:
         parts = tuple(int(x) for x in v.split("-", 1)[0].split(".")[:3])
     except ValueError:
@@ -345,8 +529,12 @@ def touch(user_id: str, device: Optional[str], token: Optional[str] = None,
             meta = _merge_meta(rc.hget(f"vidgrab:devlink:meta:{uid}", device), meta)
             pipe.hset(f"vidgrab:devlink:meta:{uid}", device, json.dumps(meta, ensure_ascii=False))
             pipe.expire(f"vidgrab:devlink:meta:{uid}", STALE_S * 2)
-        pipe.zrange(ukey, 0, -1)
-        devices = [d.decode() if isinstance(d, bytes) else d for d in pipe.execute()[-1]]
+        pipe.zrange(ukey, 0, -1, withscores=True)
+        rows = [((d.decode() if isinstance(d, bytes) else d), sc) for d, sc in pipe.execute()[-1]]
+        stale_pseudo = [d for d, sc in rows if d.startswith("n") and sc < now - PSEUDO_STALE_S and d != device]
+        if stale_pseudo:
+            rc.zrem(ukey, *stale_pseudo)
+        devices = [d for d, _ in rows if d not in stale_pseudo]
         if len(devices) <= min(st["free_max"], st["paid_max"]):
             return None
         lim = max_devices(tier or _tier(uid), st)
@@ -370,15 +558,16 @@ def touch(user_id: str, device: Optional[str], token: Optional[str] = None,
         return None
 
 
-def note_shared_refusal(user_id: str, device: str, mode: str, platform: str) -> None:
+def note_shared_refusal(user_id: str, device: str, mode: str, platform: str, reason: str = "device") -> None:
     """The device bucket of Free accounts was full (quotas): logged once a day
     per (user, device)."""
     try:
         rc = _rc()
         if _once_today(rc, f"sh:{mode}:{user_id}:{device}"):
-            _stat(rc, "shared_blocked" if mode == MODE_ENFORCE else "shared_would_block")
-            _event(rc, "shared_blocked" if mode == MODE_ENFORCE else "shared_would_block", mode,
-                   uid=str(user_id), dev=device[:8], platform=platform)
+            suffix = "" if reason == "device" else f"_{reason}"
+            name = ("shared_blocked" if mode == MODE_ENFORCE else "shared_would_block") + suffix
+            _stat(rc, name)
+            _event(rc, name, mode, uid=str(user_id), dev=device[:8], platform=platform)
     except Exception:  # noqa: BLE001
         pass
 

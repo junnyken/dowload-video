@@ -257,3 +257,122 @@ def test_old_app_not_linked_until_0_19_4():
     assert dl.counts_as_device(R({"X-VG-Client": "0.19.4"})) is True
     assert dl.counts_as_device(R({"X-VG-Client": "0.20.0"})) is True
     assert dl.counts_as_device(R({"X-VG-Client": "junk"})) is False
+
+
+# ── 26/10 bypass guards ─────────────────────────────────────────────────────
+
+def guards_enforce(rc, **kw):  # noqa: F811
+    dl.save_settings(mode="enforce", extra_enforce_at=None, rc=rc, **kw)
+
+
+def test_guards_have_their_own_watch_period(rc):  # noqa: F811
+    now = 1_800_000_000
+    s = dl.get_settings(rc, now)
+    assert s["extra_enforce_at"] == now + 3 * 86400 and s["extra_mode"] == "shadow"
+    dl.save_settings(mode="enforce", rc=rc)          # devices enforce, guards still watching
+    s = dl.get_settings(rc, now + 86400)
+    assert s["effective_mode"] == "enforce" and s["extra_mode"] == "shadow"
+    assert dl.get_settings(rc, now + 3 * 86400 + 1)["extra_mode"] == "enforce"
+
+
+def test_email_family():
+    f = dl.email_family
+    assert f("Ten+abc@gmail.com") == f("t.e.n@googlemail.com") == f("ten@gmail.com")
+    assert f("ten+1@matbao.com") == f("ten@matbao.com") != f("t.en@matbao.com")
+    assert f("ten@gmail.com") != f("ten2@gmail.com") and f("no-at") is None
+
+
+def test_family_shares_free_allowance(rc):  # noqa: F811
+    guards_enforce(rc)
+    dl.note_identity("a1", "ten@gmail.com", rc=rc)
+    dl._touched.clear()
+    assert dl.family_of("a1", rc=rc) is None                 # one account: nothing to share
+    dl.note_identity("a2", "t.e.n+x@gmail.com", rc=rc)
+    fam = dl.family_of("a1", rc=rc)
+    assert fam and dl.family_of("a2", rc=rc) == fam
+    a = QuotaRequester(REQ_USER, "a1", tier="free"); a.family = fam
+    b = QuotaRequester(REQ_USER, "a2", tier="free"); b.family = fam
+    for i in range(20):
+        quotas.record_platform_download(a, "tiktok", f"https://t/{i}")
+    q = quotas.check_platform_quota(b, "tiktok", "https://t/new")
+    assert q["allowed"] is False and q["reason"] == "free_shared_family" and "hộp thư" in q["message"]
+
+
+def test_extra_free_accounts_on_one_network_share(rc):  # noqa: F811
+    guards_enforce(rc, net_free_accounts=3)
+    net = dl.net_of("203.0.113.9")
+    flags = [dl.network_extra(f"u{i}", net, rc=rc) for i in range(5)]
+    assert flags == [False, False, False, True, True]
+    assert dl.network_extra("u0", net, rc=rc) is False         # order is first use, stable
+    extra = []
+    for i in (3, 4):
+        r = QuotaRequester(REQ_USER, f"u{i}", tier="free"); r.net_extra = net; extra.append(r)
+    for i in range(20):
+        quotas.record_platform_download(extra[0], "tiktok", f"https://t/{i}")
+    q = quotas.check_platform_quota(extra[1], "tiktok", "https://t/new")
+    assert q["allowed"] is False and q["reason"] == "free_shared_network"
+    # the first three accounts are not in that bucket
+    assert quotas.check_platform_quota(QuotaRequester(REQ_USER, "u1", tier="free"), "tiktok", "https://t/new")["allowed"]
+
+
+def test_copied_device_id_splits_per_network(rc):  # noqa: F811
+    guards_enforce(rc, clone_networks=4)
+    dev = D[0]
+    ips = ["198.51.1.1", "198.52.1.1", "198.53.1.1", "198.54.1.1"]
+    outs = [dl.effective_device("u1", dev, ip, rc=rc) for ip in ips]
+    assert outs == [dev] * 4                                  # 4 networks: still one device
+    fifth = dl.effective_device("u1", dev, "198.55.1.1", rc=rc)
+    again = dl.effective_device("u1", dev, "198.51.7.7", rc=rc)   # same /16 as the first
+    assert fifth.startswith("x") and len(fifth) == 32 and fifth != dev
+    assert again.startswith("x") and again != fifth
+    assert dl.stats(rc)["events"][0]["kind"] == "clone_detected"
+
+
+def test_copied_id_shadow_only_logs(rc):  # noqa: F811
+    dl.save_settings(mode="enforce", rc=rc)                   # guards still in their watch period
+    for i in range(6):
+        assert dl.effective_device("u1", D[1], f"10{i}.20.1.1", rc=rc) == D[1]
+    assert dl.stats(rc)["events"][0]["kind"] == "clone_would_split"
+
+
+def test_no_device_id_counts_as_network_device(rc):  # noqa: F811
+    guards_enforce(rc)
+    p1 = dl.effective_device("u1", None, "203.0.113.5", rc=rc)
+    p2 = dl.effective_device("u1", None, "203.0.113.5", rc=rc)
+    p3 = dl.effective_device("u1", None, "203.0.113.6", rc=rc)
+    assert p1 and p1.startswith("n") and p1 == p2 != p3
+    # it takes a device slot: with 2 real devices a stripped call is the third
+    dl.touch("u1", D[0], jwt(1), tier="free", rc=rc, now=time.time() - 30)
+    dl.touch("u1", D[1], jwt(1), tier="free", rc=rc, now=time.time() - 20)
+    dl.touch("u1", p1, jwt(1), tier="free", rc=rc, now=time.time() - 10)
+    assert dl.touch("u1", D[0], jwt(1), tier="free", rc=rc)["error_code"] == "device_signed_out"
+
+
+def test_old_extension_without_id_not_linked():
+    class R:
+        def __init__(self, h): self.headers = h
+    assert dl.counts_as_device(R({"Origin": "chrome-extension://abc"})) is False
+    assert dl.counts_as_device(R({"Origin": "chrome-extension://abc", "X-VG-Device": "a" * 64})) is True
+    assert dl.counts_as_device(R({"Origin": "https://dvid.vibe1.tinhgon.xyz"})) is True
+
+
+def test_wire_carries_family_and_network():
+    rq = QuotaRequester(REQ_USER, "u9", device="n" + "1" * 31)
+    rq.family, rq.net_extra = "a" * 16, "b" * 16
+    back = QuotaRequester.from_key(rq.wire())
+    assert (back.key, back.device, back.family, back.net_extra) == ("user:u9", "n" + "1" * 31, "a" * 16, "b" * 16)
+    assert QuotaRequester.from_key(QuotaRequester(REQ_USER, "u9", device=D[0]).wire()).device == D[0]
+
+
+def test_http_resolve_requester_links_everything(rc, monkeypatch):  # noqa: F811
+    guards_enforce(rc, net_free_accounts=1)
+    monkeypatch.setattr(quotas, "_get_tier", lambda uid: "free")
+    dl.note_identity("f1", "ten@gmail.com", rc=rc)
+    dl._touched.clear()
+    dl.note_identity("f2", "ten+2@gmail.com", rc=rc)
+
+    class Req:
+        def __init__(self, h): self.headers = h
+    dl.network_extra("first", dl.net_of("203.0.113.77"), rc=rc)
+    rq = quotas.resolve_requester(Req({"X-VG-Device": D[3] * 2}), user_id="f2", ip="203.0.113.77", is_admin=False)
+    assert rq.device == D[3] and rq.family == dl.email_family("ten@gmail.com") and rq.net_extra == dl.net_of("203.0.113.77")

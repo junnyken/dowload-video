@@ -22,6 +22,10 @@ const HEX64 = /^[0-9a-f]{64}$/;
 const WAIT_FOR_EXTENSION_MS = 2000;
 
 let deviceId = null;
+let markReady;
+// Signed-in calls wait (at most WAIT_FOR_EXTENSION_MS) until the id is known:
+// a call without it would count as a separate "no id" device of the network.
+const ready = new Promise((resolve) => { markReady = resolve; });
 const listeners = new Set();
 
 function read() {
@@ -29,6 +33,7 @@ function read() {
 }
 function write(v) {
   deviceId = v;
+  markReady();
   try { localStorage.setItem(KEY, v); } catch { /* private mode: kept for this tab */ }
 }
 function randomId() {
@@ -66,6 +71,7 @@ export function installDeviceLink() {
   if (installed || typeof window === 'undefined' || !window.fetch) return;
   installed = true;
   deviceId = read();
+  if (deviceId) markReady();
 
   // The extension's web-bridge.js posts its id (and answers a request for it).
   window.addEventListener('message', (event) => {
@@ -81,6 +87,9 @@ export function installDeviceLink() {
     let opts = init;
     try {
       const url = typeof input === 'string' ? input : (input && input.url) || '';
+      if (isOurApi(url) && hasBearer(init && init.headers)) {
+        if (!deviceId) await Promise.race([ready, new Promise((r) => setTimeout(r, WAIT_FOR_EXTENSION_MS + 200))]);
+      }
       if (deviceId && isOurApi(url) && hasBearer(init && init.headers)) {
         const h = init.headers instanceof Headers ? Object.fromEntries(init.headers.entries()) : { ...init.headers };
         opts = { ...init, headers: { ...h, 'X-VG-Device': deviceId } };

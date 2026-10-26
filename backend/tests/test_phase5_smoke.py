@@ -253,5 +253,9 @@ class TestAppSwUpdate:
         assert "pwaInstallReady" in src
 
     def test_update_banner_vi_copy(self):
-        src = self._read()
-        assert "Phiên bản mới khả dụng" in src
+        # the copy moved to the i18n files (vi/en, 22/10): App.jsx shows t('swNew')
+        import json
+        from pathlib import Path
+        vi = json.loads((Path(__file__).resolve().parents[2] / "frontend/src/locales/vi/app.json").read_text(encoding="utf-8"))
+        assert "t('swNew')" in self._read()
+        assert vi["swNew"] == "Phiên bản mới khả dụng"
