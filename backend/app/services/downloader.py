@@ -466,6 +466,28 @@ def embed_media_metadata(path: str, info: dict) -> dict:
         _sh.rmtree(tmpdir, ignore_errors=True)
 
 
+def _douyin_measure(result: dict, path: str, page_url: str) -> None:
+    """Tag and measure a Douyin file the server copied itself (27/10).
+
+    The extractor's dict has no uploader or date, so only title, link and
+    cover are written. Fills the same result fields as the shared step."""
+    from app.services.format_probe import vcodec_tag
+    tags = embed_media_metadata(path, {
+        "title": result.get("title"), "uploader": result.get("uploader"),
+        "webpage_url": result.get("original_url") or page_url,
+        "thumbnail": result.get("thumbnail_url"),
+    })
+    media = probe_media_file(path)
+    if tags and media.get("measured"):
+        media["tags"] = tags
+    result["downloaded_media"] = media
+    result["file_size_mb"] = round(os.path.getsize(path) / (1024 * 1024), 2)
+    if media.get("measured") and media.get("vcodec"):
+        result["downloaded_height"] = media.get("short_side") or 0
+        result["downloaded_vcodec"] = vcodec_tag(media["vcodec"])
+        result["downloaded_universal"] = media["vcodec"] == "h264"
+
+
 def _video_stream_count(path: str) -> int:
     """How many video streams the file has (the cover goes after them)."""
     import subprocess
@@ -2366,6 +2388,10 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                     result["direct_mp4_url"] = None
                     if ext == "mp3":
                         result["local_mp3_path"] = local_path
+                    # quality #3/#6 (27/10, live find): this path returns before
+                    # the shared tag-and-measure step, so the Douyin file had
+                    # neither. Same two calls, from the extractor's own fields.
+                    _douyin_measure(result, local_path, douyin_input)
                 else:
                     print("[Downloader] Douyin: both direct and CN proxy failed — returning CDN URL")
 
