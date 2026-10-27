@@ -366,6 +366,117 @@ def probe_media_file(path: str) -> dict:
         return {"measured": False}
 
 
+_COVER_MAX = 5 * 1024 * 1024
+_COVER_EXTS = (".mp3", ".m4a", ".mp4")   # ffmpeg attaches a cover to these; .opus/.ogg/.webm get tags only
+
+
+def _ffmeta_escape(v) -> str:
+    return re.sub(r"([=;#\\\n])", r"\\\1", str(v))
+
+
+def _ffmetadata(tags: dict, chapters: list) -> str:
+    """ffmpeg FFMETADATA1 text: global tags + chapters (seconds → ms)."""
+    lines = [";FFMETADATA1"] + [f"{k}={_ffmeta_escape(v)}" for k, v in tags.items() if v]
+    for ch in chapters:
+        try:
+            start, end = int(float(ch["start_time"]) * 1000), int(float(ch["end_time"]) * 1000)
+        except (KeyError, TypeError, ValueError):
+            continue
+        if end > start:
+            lines += ["[CHAPTER]", "TIMEBASE=1/1000", f"START={start}", f"END={end}",
+                      f"title={_ffmeta_escape(ch.get('title') or '')}"]
+    return "\n".join(lines) + "\n"
+
+
+def _fetch_cover(url: str) -> bytes | None:
+    """The thumbnail image, SSRF-guarded on every redirect hop, ≤5 MB, images only."""
+    from app.core.ssrf_guard import assert_safe_url
+    try:
+        with httpx.Client(timeout=10.0, follow_redirects=False) as c:
+            for _ in range(4):
+                assert_safe_url(url)
+                r = c.get(url)
+                if r.status_code in (301, 302, 303, 307, 308) and r.headers.get("location"):
+                    url = str(httpx.URL(url).join(r.headers["location"]))
+                    continue
+                ok = r.status_code == 200 and r.headers.get("content-type", "").startswith("image/")
+                return r.content if ok and len(r.content) <= _COVER_MAX else None
+    except Exception:
+        return None
+    return None
+
+
+def embed_media_metadata(path: str, info: dict) -> dict:
+    """quality #6 (27/10/2026): title / artist / date / source link / chapters,
+    and a cover for MP3, M4A and MP4 — written AFTER the download with one
+    ffmpeg stream copy (no re-encode; only the cover image is converted to
+    JPEG). Never fails the download: any error leaves the file as it was and
+    returns {}. Vietnamese text goes through FFMETADATA as UTF-8; MP3 tags are
+    ID3v2.3 so Windows Explorer shows them. EMBED_METADATA=0 turns it off."""
+    import subprocess
+    import tempfile
+    if os.getenv("EMBED_METADATA", "1").strip().lower() in ("0", "false", "no", "off"):
+        return {}
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in (".mp4", ".m4a", ".mp3", ".webm", ".opus", ".ogg", ".mkv"):
+        return {}
+    date = str(info.get("upload_date") or "")
+    tags = {
+        "title": (info.get("title") or "").strip()[:300],
+        "artist": (info.get("artist") or info.get("uploader") or info.get("channel") or "").strip()[:200],
+        "album": (info.get("album") or "").strip()[:200],
+        "date": f"{date[:4]}-{date[4:6]}-{date[6:8]}" if re.fullmatch(r"\d{8}", date) else "",
+        "comment": (info.get("webpage_url") or info.get("original_url") or "")[:500],
+    }
+    chapters = [c for c in (info.get("chapters") or []) if isinstance(c, dict)] if ext != ".mp3" else []
+    if not any(tags.values()) and not chapters:
+        return {}
+    cover = _fetch_cover(info["thumbnail"]) if ext in _COVER_EXTS and info.get("thumbnail") else None
+    tmpdir = tempfile.mkdtemp(prefix="vgmeta_")
+    out = os.path.join(tmpdir, "out" + ext)
+    try:
+        meta = os.path.join(tmpdir, "meta.txt")
+        with open(meta, "w", encoding="utf-8") as fh:
+            fh.write(_ffmetadata(tags, chapters))
+        cmd = ["ffmpeg", "-v", "error", "-y", "-i", path, "-i", meta]
+        if cover:
+            cov = os.path.join(tmpdir, "cover")
+            with open(cov, "wb") as fh:
+                fh.write(cover)
+            cmd += ["-i", cov, "-map", "0:a" if ext in (".mp3", ".m4a") else "0", "-map", "2:v",
+                    "-c", "copy", "-c:v:0" if ext in (".mp3", ".m4a") else f"-c:v:{_video_stream_count(path)}",
+                    "mjpeg", "-disposition:v:" + ("0" if ext in (".mp3", ".m4a") else str(_video_stream_count(path))),
+                    "attached_pic"]
+        else:
+            cmd += ["-map", "0", "-c", "copy"]
+        cmd += ["-map_metadata", "1", "-map_chapters", "1" if chapters else "-1"]
+        if ext == ".mp3":
+            cmd += ["-id3v2_version", "3"]
+        cmd.append(out)
+        r = subprocess.run(cmd, capture_output=True, timeout=120)
+        if r.returncode != 0 or not os.path.exists(out) or os.path.getsize(out) < os.path.getsize(path) * 0.9:
+            return {}
+        os.replace(out, path)
+        return {"title": bool(tags["title"]), "artist": bool(tags["artist"]),
+                "cover": bool(cover), "chapters": len(chapters)}
+    except Exception:
+        return {}
+    finally:
+        import shutil as _sh
+        _sh.rmtree(tmpdir, ignore_errors=True)
+
+
+def _video_stream_count(path: str) -> int:
+    """How many video streams the file has (the cover goes after them)."""
+    import subprocess
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v", "-show_entries",
+                              "stream=index", "-of", "csv=p=0", path], capture_output=True, text=True, timeout=15)
+        return len([x for x in out.stdout.split() if x.strip()])
+    except Exception:
+        return 1
+
+
 def _file_duration(path: str) -> float:
     import subprocess
     try:
@@ -4068,7 +4179,10 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     # values replace the three fields above; unmeasured leaves them alone.
     if local_path and os.path.exists(local_path):
         from app.services.format_probe import vcodec_tag
+        _tags = embed_media_metadata(local_path, info)   # quality #6, before measuring
         media = probe_media_file(local_path)
+        if _tags and media.get("measured"):
+            media["tags"] = _tags
         result["downloaded_media"] = media
         if media.get("measured") and media.get("vcodec"):
             result["downloaded_height"] = media.get("short_side") or result["downloaded_height"]
