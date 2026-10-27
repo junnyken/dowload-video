@@ -172,7 +172,8 @@ def _with_http(rc, monkeypatch, resp):
 def test_signed_step_maps_detail(rc, monkeypatch):
     _with_http(rc, monkeypatch, _Http(200, json.dumps(DETAIL)))
     r = _run(d._try_signed_web_api("7696039395691101618"))
-    assert r["provider"] == "douyin_signed" and r["direct_mp4_url"] == "https://v/default"
+    # quality #4 (27/10): the sharpest H.264 bit_rate entry by default, not play_addr
+    assert r["provider"] == "douyin_signed" and r["direct_mp4_url"] == "https://v/1080"
     assert r["duration"] == 61 and r["thumbnail_url"] == "https://a/c.jpg" and r["audio_url"] == "https://a/m.mp3"
     assert _run(d._try_signed_web_api("7696039395691101618", "video_4k"))["direct_mp4_url"] == "https://v/1080"
     assert _run(d._try_signed_web_api("7696039395691101618", "mp3_128"))["direct_mp4_url"] == "https://a/m.mp3"

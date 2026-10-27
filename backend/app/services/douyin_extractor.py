@@ -816,9 +816,10 @@ def _slim_aweme(aweme: Dict[str, Any]) -> Dict[str, Any]:
     """The fields _try_signed_web_api reads; a full list item is ~40 KB."""
     video = aweme.get("video") or {}
     music = aweme.get("music") or {}
-    bit_rate = [{"bit_rate": br.get("bit_rate"),
+    bit_rate = [{"bit_rate": br.get("bit_rate"), "is_h265": br.get("is_h265"), "gear_name": br.get("gear_name"),
                  "play_addr": {"url_list": ((br.get("play_addr") or {}).get("url_list") or [])[:2],
-                               "height": (br.get("play_addr") or {}).get("height")}}
+                               "height": (br.get("play_addr") or {}).get("height"),
+                               "width": (br.get("play_addr") or {}).get("width")}}
                 for br in (video.get("bit_rate") or []) if isinstance(br, dict)]
     return {
         "desc": aweme.get("desc") or "",
@@ -970,20 +971,56 @@ def _signed_detail_blocking(video_id: str) -> Tuple[Optional[Dict[str, Any]], st
     return None, "empty"
 
 
+def _no_wm(url: str) -> str:
+    return url.replace("/playwm/", "/play/") if url else ""
+
+
+def _is_h265(br: Dict[str, Any]) -> bool:
+    return bool(br.get("is_h265")) or "265" in str(br.get("gear_name") or "") or "bytevc1" in str(br.get("gear_name") or "")
+
+
+def pick_douyin_stream(video: Dict[str, Any], quality: str = "video") -> Dict[str, Any]:
+    """quality #4 (owner 27/10/2026): the sharpest no-watermark stream, H.264
+    first. play_addr alone was often not the best one. Default: the highest
+    (short side, bitrate) among H.264 bit_rate entries; H.265 only for
+    video_4k and only when it is strictly sharper. video_<N> keeps the
+    sharpest at or below N (else the smallest). Nothing in bit_rate →
+    play_addr_h264 → play_addr. Every URL is the /play/ (no watermark) form.
+    Returns {url, short_side, bit_rate, is_h265, from}; url "" when nothing."""
+    cands = []
+    for br in video.get("bit_rate") or []:
+        pa = (br or {}).get("play_addr") or {}
+        urls = [u for u in (pa.get("url_list") or []) if isinstance(u, str) and u]
+        if not urls:
+            continue
+        h, w = int(pa.get("height") or 0), int(pa.get("width") or 0)
+        cands.append({"url": _no_wm(urls[0]), "short_side": min(h, w) if h and w else h,
+                      "bit_rate": int(br.get("bit_rate") or 0), "is_h265": _is_h265(br), "from": "bit_rate"})
+    cap = None
+    m = re.fullmatch(r"video_(\d+)", quality or "")
+    if m:
+        cap = int(m.group(1))
+    pool = cands
+    if cap:
+        under = [c for c in cands if c["short_side"] <= cap]
+        pool = under or sorted(cands, key=lambda c: (c["short_side"], c["bit_rate"]))[:1]
+    h264 = [c for c in pool if not c["is_h265"]]
+    best = max(h264, key=lambda c: (c["short_side"], c["bit_rate"])) if h264 else None
+    if quality == "video_4k" and pool:
+        top = max(pool, key=lambda c: (c["short_side"], not c["is_h265"], c["bit_rate"]))
+        if not best or top["short_side"] > best["short_side"]:
+            best = top
+    if best:
+        return best
+    for key in ("play_addr_h264", "play_addr"):
+        urls = ((video.get(key) or {}).get("url_list")) or []
+        if urls:
+            return {"url": _no_wm(urls[0]), "short_side": 0, "bit_rate": 0, "is_h265": False, "from": key}
+    return {"url": "", "short_side": 0, "bit_rate": 0, "is_h265": False, "from": ""}
+
+
 def _best_play_url(video: Dict[str, Any], quality: str) -> str:
-    """play_addr by default; the highest bit_rate entry for video_4k."""
-    if quality == "video_4k":
-        best, best_key = "", (-1, -1)
-        for br in video.get("bit_rate") or []:
-            pa = (br or {}).get("play_addr") or {}
-            urls = pa.get("url_list") or []
-            key = (int(pa.get("height") or 0), int(br.get("bit_rate") or 0))
-            if urls and key > best_key:
-                best, best_key = urls[0], key
-        if best:
-            return best
-    urls = ((video.get("play_addr") or {}).get("url_list")) or []
-    return urls[0] if urls else ""
+    return pick_douyin_stream(video, quality)["url"]
 
 
 async def _try_signed_web_api(video_id: str, quality: str = "video") -> Optional[Dict[str, Any]]:

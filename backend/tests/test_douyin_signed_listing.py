@@ -101,7 +101,8 @@ def test_listed_videos_skip_their_own_signed_call(rc, monkeypatch):
     d.signed_profile_listing(SEC, 10)
     V.save_settings(per_min=1, rc=rc)        # the listing used the only slot
     r = _run(d._try_signed_web_api("7004"))
-    assert r["direct_mp4_url"] == "https://v/7004" and r["title"] == "clip 7004" and r["duration"] == 30
+    # quality #4 (27/10): the sharpest H.264 bit_rate entry by default, not play_addr
+    assert r["direct_mp4_url"] == "https://v/hd7004" and r["title"] == "clip 7004" and r["duration"] == 30
     assert _run(d._try_signed_web_api("7004", "video_4k"))["direct_mp4_url"] == "https://v/hd7004"
     assert len(seen) == 1                    # no detail call was made
     assert "uif-secret-1" not in json.dumps({k: rc.get(k) for k in rc.keys("douyin:signed:listed:*")})
