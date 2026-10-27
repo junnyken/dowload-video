@@ -862,7 +862,7 @@ async function vgBulkFinish() {
   await vgBulkSave();
   const c = vgBulkCounts(b);
   chrome.notifications.create(`vg-bulk-${b.finishedAt}`, {
-    type: 'basic', iconUrl: 'assets/icon.png',
+    type: 'basic', iconUrl: 'assets/icon128.png',
     title: b.stopped ? t('bn_title_stopped', c.done, c.total) : t('bn_title_done', c.done, c.total),
     message: [c.error && tn('bn_err', c.error), c.skipped && (b.stopReason ? t('bn_skip_reason', c.skipped, b.stopReason) : tn('bn_skip', c.skipped))].filter(Boolean).join(' · ') || t('bn_files_in'),
     priority: 1,
@@ -948,7 +948,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             .catch(() => {}).finally(() => closeOffscreenIfIdle());
           if (state === 'done') {
             chrome.notifications.create(`vg-hls-${job.id}`, {
-              type: 'basic', iconUrl: 'assets/icon.png', title: t('hls_done_title'),
+              type: 'basic', iconUrl: 'assets/icon128.png', title: t('hls_done_title'),
               message: t('hls_done_msg', job.title.slice(0, 80)),
             });
           }
@@ -1217,7 +1217,7 @@ chrome.downloads.onChanged.addListener((delta) => {
     activeDownloads.delete(delta.id);
     const filename = info.filename?.split('/').pop() || 'Video';
     chrome.notifications.create(`vg-dl-${delta.id}`, {
-      type: 'basic', iconUrl: 'assets/icon.png',
+      type: 'basic', iconUrl: 'assets/icon128.png',
       title: t('dl_notif_ok'), message: filename, priority: 1,
     });
     chrome.runtime.sendMessage({ type: 'VG_DOWNLOAD_PROGRESS', downloadId: delta.id, state: 'complete', progress: 100 }).catch(() => {});
@@ -1313,7 +1313,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       try { if (meta.sourceUrl) hostname = new URL(meta.sourceUrl).hostname; } catch { /* keep default */ }
       chrome.notifications.create(`vg-batch-${batchId}`, {
         type: 'basic',
-        iconUrl: 'assets/icon.png',
+        iconUrl: 'assets/icon128.png',
         title: stopped > 0 ? t('batch_stopped', success, total)
           : failed > 0 ? t('batch_partial', success, total) : tn('batch_done', total),
         message: hostname,
@@ -1658,7 +1658,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       // Show Chrome notification
       chrome.notifications.create(`vg-bg-${Date.now()}`, {
-        type: 'basic', iconUrl: 'assets/icon.png',
+        type: 'basic', iconUrl: 'assets/icon128.png',
         title: notifTitle,
         message: t('bg_notif_msg', new URL(url).hostname),
         priority: 1,

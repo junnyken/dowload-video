@@ -24,6 +24,10 @@ export default defineConfig({
         properties: {
           // Only mangle internal properties (safe)
           regex: /^_/,
+          // NOT internal: the browser extension reads this field off window.postMessage
+          // (web-bridge.js). Mangled to "jn", the site's session never reached the
+          // extension and the device id never came back (owner 27/10).
+          reserved: ['__vg_source'],
         },
       },
       format: {
