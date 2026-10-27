@@ -5,7 +5,10 @@ same video came again ~15 s later through the server. Measured on the owner's li
 v3-web.douyinvod.com file answers 403 without a Referer and 206 video/mp4 with
 "https://www.douyin.com/" — chrome.downloads sends none.
 
-Real Chromium, a local "CDN" that answers 403 unless Referer is https://www.douyin.com/:
+Real Chromium; v3-web.douyinvod.com is mapped to a local "CDN" (--host-resolver-rules) that answers
+403 unless Referer is https://www.douyin.com/ — the real host name, so the SHIPPED rule and the
+manifest's own host permissions are what is tested (5.22.1 passed this test against localhost, which
+the manifest happens to allow, yet had no permission for douyinvod.com: the rule did nothing for users).
   - the shipped rules are installed at start (douyinvod.com and co., extension requests only)
   - chrome.downloads alone never carries it (Chrome refuses the header, its requests pass no rule):
     vgSaveFile fails AND leaves no failed line in Chrome's downloads
@@ -14,9 +17,11 @@ Real Chromium, a local "CDN" that answers 403 unless Referer is https://www.douy
   - vgNeedsReferer: douyinvod.com hosts yes, others no
   - a web page's own request to that host gets no Referer from the extension
 
-Run: python3 tests/test_douyin_referer_browser.py
+Negative control: --no-cdn-permission loads a copy without the Douyin CDN host permissions (= 5.22.1):
+vgSaveViaPage must fail there.
+Run: python3 tests/test_douyin_referer_browser.py [--no-cdn-permission]
 """
-import http.server, os, sys, tempfile, threading
+import http.server, json, os, shutil, sys, tempfile, threading
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -57,15 +62,25 @@ def check(name, ok, detail=""):
 def main():
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), CDN)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    base = f"http://localhost:{srv.server_port}"
+    base = f"http://v3-web.douyinvod.com:{srv.server_port}"
+    weak = sys.argv[1:] == ["--no-cdn-permission"]
     with tempfile.TemporaryDirectory() as tmp, sync_playwright() as p:
         tmp = Path(tmp)
+        ext = T.EXT
+        if weak:
+            ext = tmp / "ext"
+            shutil.copytree(T.EXT, ext, ignore=shutil.ignore_patterns("tests", "store-assets", "__pycache__"))
+            m = json.loads((ext / "manifest.json").read_text(encoding="utf-8"))
+            cdn = ("douyinvod", "douyincdn", "zjcdn", "bytecdn", "amemv", "snssdk")
+            m["host_permissions"] = [h for h in m["host_permissions"] if not any(c in h for c in cdn)]
+            (ext / "manifest.json").write_text(json.dumps(m), encoding="utf-8")
         (tmp / "fonts.conf").write_text(f'<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig>'
                                         f'<dir>/usr/share/fonts</dir><cachedir>{tmp}/fc</cachedir></fontconfig>')
         ctx = p.chromium.launch_persistent_context(
             str(tmp / "profile"), headless=False, executable_path=T.CHROME, accept_downloads=True,
             env={**os.environ, "FONTCONFIG_FILE": f"{tmp}/fonts.conf"},
-            args=["--headless=new", f"--disable-extensions-except={T.EXT}", f"--load-extension={T.EXT}", "--no-sandbox"])
+            args=["--headless=new", f"--disable-extensions-except={ext}", f"--load-extension={ext}", "--no-sandbox",
+                  "--host-resolver-rules=MAP v3-web.douyinvod.com 127.0.0.1"])
         sw = ctx.service_workers[0] if ctx.service_workers else ctx.wait_for_event("serviceworker", timeout=20000)
 
         rules = sw.evaluate("async () => { for (let i = 0; i < 20; i++) { const r = await chrome.declarativeNetRequest.getSessionRules(); if (r.length) return r; await new Promise(z => setTimeout(z, 250)); } return []; }")
@@ -77,14 +92,18 @@ def main():
         nr = sw.evaluate("() => [vgNeedsReferer('https://v3-web.douyinvod.com/x/?a=1'), vgNeedsReferer('https://v26.zjcdn.com/v'), vgNeedsReferer('https://cdn.example/a.mp4'), vgNeedsReferer('https://notdouyinvod.com/a')]")
         check("vgNeedsReferer: Douyin CDN hosts only", nr == [True, True, False, False], str(nr))
 
-        # the same rule, pointed at the local "CDN"
-        sw.evaluate("() => vgRefererRules([{ id: 9101, domains: ['localhost'], referer: 'https://www.douyin.com/' }])")
         ok = sw.evaluate(f"() => vgSaveFile('{base}/v1.mp4', 'plain')")
         left = sw.evaluate("() => new Promise(r => chrome.downloads.search({}, (l) => r(l.map(d => [d.url.split('/').pop(), d.state]))))")
         check("chrome.downloads alone gets no Referer even with the rule (why 5.22.0 failed)", ok is False and (f"/v1.mp4", None) in seen, str(seen[-1:]))
         check("the failed try leaves no line in Chrome's downloads", not any(u == "v1.mp4" for u, _ in left), str(left))
 
         ok = sw.evaluate(f"() => vgSaveViaPage('{base}/v2.mp4', 'via-page')")
+        if weak:
+            check("control: without the CDN host permission (5.22.1) vgSaveViaPage fails", ok is False, str(seen[-1:]))
+            ctx.close()
+            srv.shutdown()
+            print(f"\n{sum(res)}/{len(res)} passed")
+            sys.exit(0 if all(res) else 1)
         # (Playwright names every saved file by a GUID, so the check is on the blob: download, not the name)
         left = sw.evaluate("() => new Promise(r => chrome.downloads.search({}, (l) => r(l.map(d => [d.url.slice(0, 5), d.state, d.fileSize]))))")
         check("vgSaveViaPage: the file arrives (fetched with the Referer, saved from a blob)",
@@ -94,7 +113,7 @@ def main():
         ok = sw.evaluate(f"() => vgSaveViaPage('{base}/v3.mp4', 'no-rule')")
         check("control: without the rule vgSaveViaPage fails (403)", ok is False and (f"/v3.mp4", None) in seen, str(seen[-1:]))
 
-        sw.evaluate("() => vgRefererRules([{ id: 9101, domains: ['localhost'], referer: 'https://www.douyin.com/' }])")
+        sw.evaluate("() => vgRefererRules()")
         page = ctx.new_page()
         page.goto(f"{base}/page")
         page.evaluate(f"() => fetch('{base}/fromtab.mp4').then(r => r.status)")

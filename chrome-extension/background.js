@@ -103,9 +103,11 @@ self.fetch = async (input, init) => {
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 // ── First-party host (keep identical in background.js / popup.js / content.js) ──
 // vibe1.tinhgon.xyz is a SHARED multi-tenant domain: never trust a suffix or a
-// substring of it. Only these two exact hostnames are ours - hostname equality,
+// substring of it. Only these exact hostnames are ours - hostname equality,
+// 5.22.2: + dowloadvideo.io.vn, the site's own domain (owner 27/10: signed in there, the extension
+// never heard of it — web-bridge.js did not run on it and its sender was not trusted),
 // no suffix rule of any kind (the old shared-suffix rule was removed in 5.2.4).
-const FIRST_PARTY_EXACT_HOSTS = ['dvid.vibe1.tinhgon.xyz', 'dvid-api.vibe1.tinhgon.xyz'];
+const FIRST_PARTY_EXACT_HOSTS = ['dvid.vibe1.tinhgon.xyz', 'dvid-api.vibe1.tinhgon.xyz', 'dowloadvideo.io.vn'];
 const LEGACY_API_HOST = 'dvid-api.cmc-1.vibenode.matbao.ai';   // dead host; ONLY used to migrate a stored old base to DEFAULT_API_BASE, never trusted
 function isFirstPartyHost(hostname) {
   const h = String(hostname || '').toLowerCase();

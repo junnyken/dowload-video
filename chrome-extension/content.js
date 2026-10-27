@@ -41,7 +41,7 @@
   // vibe1.tinhgon.xyz is a SHARED multi-tenant domain: never trust a suffix or a
   // substring of it. Only these two exact hostnames are ours - hostname equality,
   // no suffix rule of any kind (the old shared-suffix rule was removed in 5.2.4).
-  const FIRST_PARTY_EXACT_HOSTS = ['dvid.vibe1.tinhgon.xyz', 'dvid-api.vibe1.tinhgon.xyz'];
+  const FIRST_PARTY_EXACT_HOSTS = ['dvid.vibe1.tinhgon.xyz', 'dvid-api.vibe1.tinhgon.xyz', 'dowloadvideo.io.vn'];
   const LEGACY_API_HOST = 'dvid-api.cmc-1.vibenode.matbao.ai';   // dead host; ONLY used to migrate a stored old base to DEFAULT_API_BASE, never trusted
   function isFirstPartyHost(hostname) {
     const h = String(hostname || '').toLowerCase();

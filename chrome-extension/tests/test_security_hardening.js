@@ -91,6 +91,9 @@ assert(isCookieTrustedBase('https://dvid-api.cmc-1.vibenode.matbao.ai') === fals
 
 console.log('\n[2b] isFirstPartyHost / isFirstPartyUrl');
 assert(isFirstPartyHost('dvid.vibe1.tinhgon.xyz') && isFirstPartyHost('dvid-api.vibe1.tinhgon.xyz'), 'exact hosts accepted');
+// 5.22.2: the site's own domain — signed in there, the extension must hear it
+assert(isFirstPartyHost('dowloadvideo.io.vn'), 'dowloadvideo.io.vn accepted');
+assert(!isFirstPartyHost('dowloadvideo.io.vn.evil.com') && !isFirstPartyHost('xdowloadvideo.io.vn'), 'dowloadvideo.io.vn lookalikes rejected');
 assert(isFirstPartyHost('DVID.vibe1.tinhgon.xyz') === true, 'case-insensitive exact match');
 assert(!isFirstPartyHost('evil.vibe1.tinhgon.xyz'), 'evil.vibe1.tinhgon.xyz rejected');
 assert(!isFirstPartyHost('dvid.vibe1.tinhgon.xyz.evil.com'), 'dvid.vibe1.tinhgon.xyz.evil.com rejected');
@@ -170,11 +173,12 @@ assert(popup.includes('escapeHtml(ytdlpVer)'), 'backend-reported version escaped
 console.log('\n[8] web \u21c4 extension auth bridge is wired end-to-end');
 const bridge = fs.readFileSync(path.join(dir, 'web-bridge.js'), 'utf8');
 const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+assert(manifest.content_scripts.some((c) => c.js.includes('web-bridge.js') && c.matches.includes('*://dowloadvideo.io.vn/*')), 'web-bridge.js runs on dowloadvideo.io.vn');
 
 const bridgeEntry = manifest.content_scripts.find(cs => (cs.js || []).includes('web-bridge.js'));
 assert(!!bridgeEntry, 'web-bridge.js is registered as a content script');
 assert(
-  bridgeEntry.matches.every(m => /^\*:\/\/(dvid\.vibe1\.tinhgon\.xyz|localhost|127\.0\.0\.1)\/\*$/.test(m)),
+  bridgeEntry.matches.every(m => /^\*:\/\/(dvid\.vibe1\.tinhgon\.xyz|dowloadvideo\.io\.vn|localhost|127\.0\.0\.1)\/\*$/.test(m)),
   'bridge is scoped to the web app origin only, not the 24 third-party sites'
 );
 assert(!/matbao/i.test(JSON.stringify(manifest)), 'manifest has NO matbao reference at all (host_permissions/content_scripts/WAR)');
@@ -187,7 +191,7 @@ assert(background.includes('_isLocalDevSender') && background.includes('isLocalD
 assert(!JSON.stringify(manifest).includes('cmc-1'), 'manifest has no dead cmc-1 host');
 assert(manifest.host_permissions.includes('*://dvid-api.vibe1.tinhgon.xyz/*') && manifest.host_permissions.includes('*://dvid.vibe1.tinhgon.xyz/*'), 'host_permissions has the two exact new hosts');
 assert(!manifest.host_permissions.concat(...manifest.content_scripts.map(c => c.matches)).some(m => /\*[^/]*tinhgon/.test(m)), 'no wildcard on tinhgon.xyz anywhere in manifest');
-assert(manifest.version === '5.22.1', 'manifest version 5.22.1');
+assert(manifest.version === '5.22.2', 'manifest version 5.22.2');
 assert(bridge.includes('event.source !== window'), 'bridge rejects cross-window messages');
 assert(bridge.includes('event.origin !== window.location.origin'), 'bridge rejects cross-origin messages');
 assert(bridge.includes("VG_SET_AUTH_TOKEN"), 'bridge forwards the token to the service worker directly (popup is closed during login)');

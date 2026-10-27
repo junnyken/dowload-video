@@ -12,7 +12,7 @@ web-bridge content script excludes the site page, so Chrome does not put the bri
   - vgBridgeOpenSiteTabs() (what onInstalled runs) -> the page's session reaches the extension
 
 Negative control: --old runs the same with background.js from git HEAD (no vgBridgeOpenSiteTabs).
-Run: python3 tests/test_bridge_open_tab_browser.py
+Run: python3 tests/test_bridge_open_tab_browser.py [--site=https://dowloadvideo.io.vn/] [--old]
 """
 import json, os, re, shutil, subprocess, sys, tempfile, time
 from pathlib import Path
@@ -21,7 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import test_sniffer_browser as T  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
 
-SITE = "https://dvid.vibe1.tinhgon.xyz/"
+# 5.22.2: also the site's own domain (owner 27/10: signed in on dowloadvideo.io.vn, nothing reached the extension)
+SITE = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--site=")), "https://dvid.vibe1.tinhgon.xyz/")
 # what frontend/src/context/AuthContext.jsx does: send on load and again when the extension says it is there
 PAGE = """<!doctype html><title>site</title><script>
 const send = () => window.postMessage({__vg_source:'webapp', type:'VG_AUTH_TOKEN_FROM_WEB', token:'tok-from-site', email:'a@b.c'}, location.origin);
@@ -63,7 +64,7 @@ def extension_copy(tmp: Path, old: bool) -> Path:
 
 
 def main():
-    old = sys.argv[1:] == ["--old"]
+    old = "--old" in sys.argv[1:]
     src = (Path(T.EXT) / "background.js").read_text(encoding="utf-8")
     hook = re.search(r"chrome\.runtime\.onInstalled\.addListener\(\(details\) => \{(.*?)\n\}\);", src, re.S)
     if not old:
