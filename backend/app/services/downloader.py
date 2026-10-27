@@ -1052,6 +1052,34 @@ def _youtube_proxy_download_enabled() -> bool:
     )
 
 
+def _high_res_prefix(n: int | None) -> str:
+    """quality #1 (27/10/2026): the branches tried FIRST when someone asks for
+    more than 1080p. YouTube has no H.264 above 1080p, so the H.264-first chain
+    below settled on 1080p for every 1440p/2160p/4K request. Above 1080p:
+    VP9 (hardware decode is common) → AV1 → anything, audio AAC so the sound
+    still plays everywhere; merged into .mp4 without re-encoding. n=None is
+    "4K" without an upper bound. Portrait first (n names the SHORT side, see
+    video_<N> below). Nothing above 1080p → these match nothing and the old
+    chain runs unchanged."""
+    if n is not None and n <= 1080:
+        return ""
+    # short side in (1080, n]: yt-dlp filters compare a field with a NUMBER only
+    shapes = ([f"[width>1080][width<={n}][height>{n}]",       # portrait: width is the short side
+               f"[height>1080][height<={n}][width>1080]"]     # landscape / square
+              if n else ["[width>1080][height>1080]"])         # "4K": both sides above 1080
+    out = []
+    for codec in ("[vcodec~='^vp0?9']", "[vcodec^=av01]"):
+        out += [f"bestvideo{sh}{codec}+bestaudio[acodec^=mp4a]" for sh in shapes]
+    out += [f"bestvideo{sh}+bestaudio" for sh in shapes]
+    return "/".join(out) + "/"
+
+
+def _cobalt_high_res(quality: str) -> bool:
+    """video_<N> with N > 1080 (Cobalt needs the vp9 codec for those)."""
+    m = re.fullmatch(r"video_(\d+)", quality or "")
+    return bool(m) and int(m.group(1)) > 1080
+
+
 def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
                    error_sink: list | None = None, force_cookie: bool = False,
                    anon: bool = False) -> dict:
@@ -1076,7 +1104,7 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
         # PRIORITISE H.264 (avc1) + AAC (mp4a) so the merged .mp4 opens in
         # QuickTime / Apple devices. VP9/AV1 (webm) is only a last resort —
         # at 4K it's often the only option, but lower res stays Apple-friendly.
-        fmt = (
+        fmt = _high_res_prefix(None) + (
             "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]"
             "/bestvideo[ext=mp4]+bestaudio[ext=m4a]"
             "/best[ext=mp4]"
@@ -1089,7 +1117,7 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
         # any mp4 at height → progressive mp4 → VP9/webm (last resort).
         try:
             height = int(quality.split("_")[1])
-            fmt = (
+            fmt = _high_res_prefix(height) + (
                 # Portrait first. "1080p" names the SHORTER side — a 1080x1920
                 # Short is what everyone calls a 1080p vertical video, and
                 # yt-dlp labels it that way too. Filtering on height alone is
@@ -1247,7 +1275,7 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
     # YouTube CDN URLs are IP-locked to the proxy exit that extracted them, so
     # the bytes MUST flow through the same residential proxy or YouTube can't
     # work at all. This is gated hard: YOUTUBE_PROXY_DOWNLOAD on + the quality
-    # tier must be proxy-allowed (4K never). Cost/feature/circuit guards live in
+    # tier must be proxy-allowed (height capped per plan in routes: Free YT_MAX_HEIGHT_USER, paid YT_MAX_HEIGHT_PRO). Cost/feature/circuit guards live in
     # routes (youtube_gate.preflight) — this block only attaches the proxy.
     _url_l = url.lower()
     _is_youtube_url = ("youtube.com" in _url_l or "youtu.be" in _url_l
@@ -3548,11 +3576,15 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             if quality.startswith("mp3") or quality.startswith("audio_"):
                 cobalt_resp = fetch_cobalt_stream(url, download_mode="audio", audio_format="mp3", audio_bitrate="128")
                 cobalt_ext = "mp3"
-            elif quality == "video_4k":
-                cobalt_resp = fetch_cobalt_stream(url, video_quality="2160", download_mode="auto")
-                cobalt_ext = "mp4"
+            elif quality == "video_4k" or _cobalt_high_res(quality):
+                # quality #1: Cobalt's default YouTube codec is h264 = 1080p at most;
+                # above that it needs vp9 (a .webm file). Refused → 1080p h264.
+                h = "2160" if quality == "video_4k" else quality.split("_")[1]
+                cobalt_resp = fetch_cobalt_stream(url, video_quality=h, download_mode="auto", youtube_codec="vp9")
+                cobalt_ext = "webm"
                 if cobalt_resp.get("status") == "error":
                     cobalt_resp = fetch_cobalt_stream(url, video_quality="1080", download_mode="auto")
+                    cobalt_ext = "mp4"
             elif quality.startswith("video_") and "_" in quality:
                 try:
                     h = quality.split("_")[1]
@@ -3612,9 +3644,18 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                             "duration": 0,
                             "available_formats": [],
                             "max_merge_height": 0,
-                            "downloaded_height": 1080 if cobalt_ext == "mp4" else 0,
+                            "downloaded_height": 0,
                             "chapters": [],
                         }
+                        # quality #3: what the file is, measured (it used to say 1080 for any video)
+                        if cobalt_ext != "mp3":
+                            from app.services.format_probe import vcodec_tag
+                            _m = probe_media_file(cobalt_path)
+                            _cobalt_result["downloaded_media"] = _m
+                            if _m.get("measured") and _m.get("vcodec"):
+                                _cobalt_result.update(downloaded_height=_m.get("short_side") or 0,
+                                                      downloaded_vcodec=vcodec_tag(_m["vcodec"]),
+                                                      downloaded_universal=_m["vcodec"] == "h264")
                         if cobalt_ext == "mp3":
                             _cobalt_result["local_mp3_path"] = cobalt_path
                         return _cobalt_result

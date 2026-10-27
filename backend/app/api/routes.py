@@ -224,6 +224,19 @@ def lock_rows_above_cap(formats: list, cap: dict | None) -> list:
             for f in formats]
 
 
+def youtube_height_cap(user_id) -> int:
+    """The YouTube height this account may download (0 = no cap).
+    quality #1 (owner 27/10/2026): paid plans get 2K/4K (YT_MAX_HEIGHT_PRO,
+    default 2160), Free keeps YT_MAX_HEIGHT_USER (1080), guests
+    YT_MAX_HEIGHT_ANON (720). Decided by plan NAME, not perms["max_height"]:
+    production raised FREE_MAX_HEIGHT to 4320 for the other platforms."""
+    if not user_id:
+        return int(os.getenv("YT_MAX_HEIGHT_ANON", "720"))
+    from app.core.quotas import get_user_tier
+    paid = (get_user_tier(user_id) or "free") != "free"
+    return int(os.getenv("YT_MAX_HEIGHT_PRO", "2160") if paid else os.getenv("YT_MAX_HEIGHT_USER", "1080"))
+
+
 def quality_note(requested: str | None, delivered: int, formats: list,
                  cap: dict | None = None) -> dict | None:
     """Task #6134: the server never swaps a resolution silently. When a
@@ -806,7 +819,7 @@ async def fetch_link(
         # Phase 8: also clamp to the proxy height ceiling decided by the gate
         # (default 720; 1080 only after confirm) so "best" never pulls 1080/4K
         # bytes through the paid proxy.
-        _cap = int(os.getenv("YT_MAX_HEIGHT_USER", "1080") if user_id else os.getenv("YT_MAX_HEIGHT_ANON", "720"))
+        _cap = youtube_height_cap(user_id)
         _gate_h = _gate.get("effective_height")
         if _cap > 0:   # the ACCOUNT's limit, before the per-request gate height
             _height_cap = {"height": _cap, "reason": "plan" if user_id else "signin"}
