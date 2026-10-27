@@ -29,6 +29,7 @@ def gh(monkeypatch):
     monkeypatch.setenv("DESKTOP_DOWNLOAD_URL", "https://github.com/x/old.exe")
     monkeypatch.setenv("DESKTOP_RELEASE_NOTES", "old notes")
     dr._mem.update(at=0.0, ttl=0, val=None)
+    getattr(dr, "_last_good_mem", {}).clear()
     return rc
 
 
@@ -101,3 +102,34 @@ def test_release_sha256_from_body_reaches_current(gh):
 def test_release_without_checksum_has_no_sha(gh):
     out = dr.current(lambda repo: release(body="- only notes"))
     assert out.get("sha256") is None
+
+
+# 27/10/2026: during an upload GitHub's "latest" has no installer yet, and
+# /client/version answered the env floor (0.9.1) for six minutes.
+@pytest.mark.parametrize("bad", [None, {"tag_name": "v0.11.0", "draft": False, "prerelease": False, "assets": []}])
+def test_mid_upload_or_outage_keeps_the_last_usable_release(gh, bad):
+    assert dr.current(lambda repo: release())["latest"] == "0.10.0"
+    gh.delete(dr.CACHE_KEY)
+    dr._mem.update(at=0.0, ttl=0, val=None)
+    out = dr.current(lambda repo: bad)
+    assert out["latest"] == "0.10.0" and out["source"] == "github" and out["downloadUrl"] == URL_10
+    assert 0 < gh.ttl(dr.CACHE_KEY) <= dr.FAIL_TTL_S          # looks again soon
+
+
+def test_last_good_survives_a_restart_through_redis(gh):
+    dr.current(lambda repo: release())
+    gh.delete(dr.CACHE_KEY)
+    dr._mem.update(at=0.0, ttl=0, val=None)
+    dr._last_good_mem.clear()                                   # new process
+    assert dr.current(lambda repo: None)["latest"] == "0.10.0"
+
+
+def test_a_newer_release_replaces_the_last_good(gh):
+    url_11 = f"https://github.com/{REPO}/releases/download/v0.11.0/VidGrab_0.11.0_x64-setup.exe"
+    dr.current(lambda repo: release())
+    gh.delete(dr.CACHE_KEY)
+    dr._mem.update(at=0.0, ttl=0, val=None)
+    assert dr.current(lambda repo: release(tag="v0.11.0", url=url_11))["latest"] == "0.11.0"
+    gh.delete(dr.CACHE_KEY)
+    dr._mem.update(at=0.0, ttl=0, val=None)
+    assert dr.current(lambda repo: None)["latest"] == "0.11.0"

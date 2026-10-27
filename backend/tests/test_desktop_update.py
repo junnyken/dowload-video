@@ -46,6 +46,7 @@ def gh(monkeypatch):
     monkeypatch.delenv("DESKTOP_RELEASE_REPO", raising=False)
     monkeypatch.delenv("DESKTOP_UPDATER_ENABLED", raising=False)
     dr._mem.update(at=0.0, ttl=0, val=None)
+    dr._last_good_mem.clear()
     return rc
 
 
@@ -151,6 +152,7 @@ def test_repo_override(gh, monkeypatch):
     assert out["url"].startswith("https://github.com/junnyken/vidgrab-releases/releases/download/v0.11.1/")
     # an asset of the OLD repo is not accepted once the repo is switched
     dr._mem.update(at=0.0, ttl=0, val=None)
+    dr._last_good_mem.clear()   # no earlier good release either (it would be answered instead, rightly)
     gh.flushall()
     assert offer(Fake(release(repo=REPO))) is None
 

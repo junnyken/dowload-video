@@ -83,5 +83,6 @@ def _desktop_release_offline(monkeypatch):
     try:
         from app.core import desktop_release
         desktop_release._mem.update(at=0.0, ttl=0, val=None)
+        desktop_release._last_good_mem.clear()
     except Exception:
         pass

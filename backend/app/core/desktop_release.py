@@ -17,6 +17,11 @@ Rules:
     "_x64-setup.exe" is accepted as the download URL.
   * Never raises; one GitHub call per CACHE_TTL_S (Redis, else in-process),
     failures cached for FAIL_TTL_S so an outage is not hammered.
+  * 27/10/2026: while a new release is being uploaded GitHub already calls it
+    "latest" with no installer yet, and /client/version fell back to the env
+    floor (0.9.1) for six minutes. The last usable release is kept
+    (LAST_GOOD_KEY, per repo) and answered instead of the floor whenever
+    GitHub has nothing usable right now.
   * In-app update (task #6205, docs/desktop/UPDATER.md): the same cached
     release also carries the CONTENT of its "<installer>.sig" asset (fetched
     once per cache period); update_offer() turns it into the Tauri updater
@@ -37,6 +42,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_REPO = "junnyken/dowload-video"
 CACHE_KEY = "vidgrab:desktop_release:github"
+LAST_GOOD_KEY = "vidgrab:desktop_release:last_good:{repo}"
+LAST_GOOD_TTL_S = 90 * 86400
 CACHE_TTL_S = 600
 FAIL_TTL_S = 120
 NOTES_MAX = 500
@@ -46,6 +53,7 @@ _VERSION = re.compile(r"^v?(\d{1,4})\.(\d{1,4})\.(\d{1,4})$")
 _RFC3339 = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
 _SHA_RE = re.compile(r"SHA-?256:\s*([0-9a-fA-F]{64})\b")
 _mem: Dict[str, Any] = {"at": 0.0, "ttl": 0, "val": None}
+_last_good_mem: Dict[str, Dict[str, str]] = {}
 
 
 def parse_version(raw: Optional[str]) -> Optional[Tuple[int, int, int]]:
@@ -153,6 +161,28 @@ def _cache_put(val: Optional[Dict[str, str]], ttl: int) -> None:
         pass
 
 
+def _last_good_put(repo: str, val: Dict[str, str]) -> None:
+    _last_good_mem[repo] = val
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        get_redis().setex(LAST_GOOD_KEY.format(repo=repo), LAST_GOOD_TTL_S, json.dumps(val))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _last_good_get(repo: str) -> Optional[Dict[str, str]]:
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        raw = get_redis().get(LAST_GOOD_KEY.format(repo=repo))
+        if raw:
+            val = json.loads(raw if isinstance(raw, str) else raw.decode())
+            if isinstance(val, dict) and parse_version(val.get("version")):
+                return val
+    except Exception:  # noqa: BLE001
+        pass
+    return _last_good_mem.get(repo)
+
+
 def github_latest(fetch=None, fetch_sig=None) -> Optional[Dict[str, str]]:
     """Cached; None when GitHub has nothing usable or cannot be read.
     Carries "signature" (task #6205) when the release has a valid .sig."""
@@ -184,6 +214,14 @@ def github_latest(fetch=None, fetch_sig=None) -> Optional[Dict[str, str]]:
             val["signature"] = sig
         else:
             ttl = FAIL_TTL_S     # the release still counts; retry the .sig soon
+    if val:
+        last = _last_good_get(repo)
+        # keep the signed copy: a later read whose .sig fetch failed must not erase it
+        if val.get("signature") or not (last and last.get("version") == val["version"] and last.get("signature")):
+            _last_good_put(repo, val)
+    else:
+        val = _last_good_get(repo)   # mid-upload / GitHub down: the last usable release, not the env floor
+        ttl = FAIL_TTL_S             # and look again soon
     _cache_put(val, ttl if val else FAIL_TTL_S)
     return val
 
