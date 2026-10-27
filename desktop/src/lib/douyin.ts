@@ -160,6 +160,28 @@ export { toHeaderList } from './cookies-core';
 export const startDouyinRelay = (channelUrl: string) =>
   post<{ token: string; openUrl: string; expiresIn: number }>('/api/v1/channel-relay', { url: channelUrl });
 
+/**
+ * 0.20.0: a channel relay, through the linked extension when there is one
+ * (native messaging, ext_link.rs: the extension opens the channel in its own
+ * browser and the list comes straight back, no server), else the server's.
+ * Signed-in only either way, like POST /channel-relay (owner 21/10).
+ * `browser`: the linked browser's name, null when a link was opened in Chrome
+ * / the default browser.
+ */
+export type RelaySession = { viaChrome: boolean; browser: string | null; poll: () => Promise<RelayDoc | 'expired' | null> };
+
+export async function openRelay(channelUrl: string): Promise<RelaySession> {
+  if (auth.get().status === 'in') {
+    const local = await api.extRelayStart(channelUrl).catch(() => null);
+    if (local) {
+      return { viaChrome: true, browser: local.browser, poll: () => api.extRelayPoll(local.id).then((d) => d ?? 'expired', () => null) };
+    }
+  }
+  const start = await startDouyinRelay(channelUrl);
+  const viaChrome = await api.openInChrome(start.openUrl);
+  return { viaChrome, browser: null, poll: () => pollDouyinRelay(start.token) };
+}
+
 export async function pollDouyinRelay(token: string): Promise<RelayDoc | 'expired' | null> {
   const r = await apiFetch<RelayDoc>(`/api/v1/channel-relay/${encodeURIComponent(token)}`, { timeoutMs: 15_000 }).catch(() => null);
   if (!r) return null;

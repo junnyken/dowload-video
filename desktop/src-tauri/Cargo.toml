@@ -1,6 +1,6 @@
 [package]
 name = "vidgrab-desktop"
-version = "0.19.4"
+version = "0.20.0"
 description = "VidGrab desktop client (Phase 32C, stage C1)"
 edition = "2021"
 rust-version = "1.88"
@@ -41,6 +41,8 @@ base64 = "0.22"
 # (webpki-roots), NOT the Windows store: a CA the user installs for a fake API
 # server (mitmproxy) is trusted by the webview but not here.
 ureq = { version = "3", default-features = false, features = ["rustls"] }
+# Channel relay rules ported from channel_relay.py (ext_link.rs); already in the tree.
+regex = "1"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 # In-app update (task #6205, docs/desktop/UPDATER.md). On by default since
@@ -63,6 +65,8 @@ windows-sys = { version = "0.61", features = [
   "Win32_Security",
   # DPAPI (CryptProtectData) for the saved platform cookies (cookies.rs).
   "Win32_Security_Cryptography",
+  # Which browser started the native messaging host (native_host.rs).
+  "Win32_System_Diagnostics_ToolHelp",
   "Win32_System_JobObjects",
   "Win32_System_Threading",
   "Win32_Storage_FileSystem",

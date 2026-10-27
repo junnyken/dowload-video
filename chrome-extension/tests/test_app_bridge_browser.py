@@ -33,7 +33,7 @@ def build_bridge(tmp: Path) -> Path:
     (crate / "src/main.rs").write_text(
         "mod ext_bridge;\nfn main(){let (l,p)=ext_bridge::bind().expect(\"bind\");eprintln!(\"bridge on {p}\");"
         "ext_bridge::serve(l,p,\"0.19.0\",|j|{println!(\"{}\",serde_json::to_string(&j).unwrap());"
-        "use std::io::Write;std::io::stdout().flush().unwrap();});}\n")
+        "use std::io::Write;std::io::stdout().flush().unwrap();},|_|{});}\n")
     target = Path(os.environ.get("CARGO_TARGET_DIR", tmp / "target"))
     subprocess.run(["cargo", "build", "-q", "--release"], cwd=crate, check=True, timeout=600,
                    env={**os.environ, "CARGO_TARGET_DIR": str(target)})
@@ -87,7 +87,7 @@ def main():
 
             # ── no app ──
             st = pop.evaluate("() => new Promise(r => chrome.runtime.sendMessage({type:'VG_APP_STATUS', force:true}, r))")
-            check("no app found while it is not running", st == {"found": False, "version": None}, str(st))
+            check("no app found while it is not running", st == {"found": False, "version": None, "linked": False}, str(st))
             rows = render()
             dash = rows["/dash/stream.mpd"]
             check("without the app, DASH offers 'Tải qua VidGrab' (with the app hint)",
@@ -99,7 +99,7 @@ def main():
             threading.Thread(target=lambda: [jobs.append(json.loads(l)) for l in bridge.stdout], daemon=True).start()
             time.sleep(0.5)
             st = pop.evaluate("() => new Promise(r => chrome.runtime.sendMessage({type:'VG_APP_STATUS', force:true}, r))")
-            check("app found on 127.0.0.1 with its version", st == {"found": True, "version": "0.19.0"}, str(st))
+            check("app found on 127.0.0.1 with its version", st == {"found": True, "version": "0.19.0", "linked": False}, str(st))
             rows = render()
             dash = rows["/dash/stream.mpd"]
             check("DASH row: 'Tải bằng app' + 'Qua VidGrab'", dash.locator(".vg-sniff-app").inner_text() == "Tải bằng app"

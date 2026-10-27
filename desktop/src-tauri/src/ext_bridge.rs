@@ -12,6 +12,11 @@
 //!                              device as the app — device linking, Free 2 / Pro 5)
 //!   POST /vidgrab/download  {"url": "...", "title": "...", "referer": "..."}
 //!                           -> {"ok":true}  (the app queues it)
+//!   GET  /vidgrab/native    X-VidGrab-Token: <native_reg.rs token>
+//!                           -> 200, then the connection stays open for the
+//!                              native messaging host (native_host.rs ⇄
+//!                              ext_link.rs, 0.20.0). No Origin allowed: a
+//!                              page cannot send the custom header anyway.
 //!
 //! Rules of the listener:
 //! * bound to 127.0.0.1 only, on the first free port of PORTS (the extension
@@ -33,10 +38,16 @@ use std::time::Duration;
 pub const PORTS: [u16; 3] = [17325, 17326, 17327];
 const MAX_HEAD: usize = 8 * 1024;
 const MAX_BODY: usize = 16 * 1024;
-const MAX_URL: usize = 4096;
+pub const MAX_URL: usize = 4096;
 const IO_TIMEOUT: Duration = Duration::from_secs(5);
 
 static DEVICE: OnceLock<String> = OnceLock::new();
+static NATIVE_TOKEN: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// The secret the native host must present (native_reg.rs; set at start).
+pub fn set_native_token(token: &str) {
+    *NATIVE_TOKEN.lock().unwrap() = Some(token.to_string());
+}
 
 /// The machine id the ping answers with (set once at start; 64 hex only).
 pub fn set_device(hash: &str) {
@@ -64,13 +75,32 @@ pub fn bind() -> io::Result<(TcpListener, u16)> {
     Err(last)
 }
 
-/// Serve forever; `on_job` gets each accepted download.
-pub fn serve(listener: TcpListener, port: u16, version: &str, on_job: impl Fn(Job) + Send + 'static) {
+/// Serve forever; `on_job` gets each accepted download, `on_native` each
+/// authenticated native host connection (it must not block this loop).
+pub fn serve(
+    listener: TcpListener,
+    port: u16,
+    version: &str,
+    on_job: impl Fn(Job) + Send + 'static,
+    on_native: impl Fn(TcpStream) + Send + 'static,
+) {
     for stream in listener.incoming() {
         let Ok(mut s) = stream else { continue };
         let _ = s.set_read_timeout(Some(IO_TIMEOUT));
         let _ = s.set_write_timeout(Some(IO_TIMEOUT));
-        let (status, origin, body, job) = match read_request(&mut s) {
+        let req = read_request(&mut s);
+        if let Ok(r) = &req {
+            if r.path == "/vidgrab/native" {
+                if native_ok(r, port) && s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").is_ok() {
+                    let _ = s.set_read_timeout(None);
+                    on_native(s);
+                } else {
+                    let _ = write_response(&mut s, 403, None, &err_json("forbidden"));
+                }
+                continue;
+            }
+        }
+        let (status, origin, body, job) = match req {
             Ok(req) => handle(&req, port, version),
             Err(_) => (400, None, err_json("bad request"), None),
         };
@@ -88,6 +118,7 @@ pub struct Request {
     pub host: Option<String>,
     pub origin: Option<String>,
     pub content_type: Option<String>,
+    pub token: Option<String>,
     pub body: Vec<u8>,
 }
 
@@ -151,6 +182,7 @@ pub fn parse_head(head: &[u8]) -> Option<Request> {
             "host" => req.host = Some(v),
             "origin" => req.origin = Some(v),
             "content-type" => req.content_type = Some(v),
+            "x-vidgrab-token" => req.token = Some(v),
             _ => {}
         }
     }
@@ -169,11 +201,24 @@ fn host_ok(host: Option<&str>, port: u16) -> bool {
     matches!(host, Some(h) if h == format!("127.0.0.1:{port}") || h == format!("localhost:{port}"))
 }
 
+/// The native host's handshake: GET, our Host, no Origin, no body, the token.
+pub fn native_ok(req: &Request, port: u16) -> bool {
+    let guard = NATIVE_TOKEN.lock().unwrap();
+    let Some(want) = guard.as_deref() else { return false };
+    let got = req.token.as_deref().unwrap_or("");
+    req.method == "GET"
+        && host_ok(req.host.as_deref(), port)
+        && req.origin.is_none()
+        && req.body.is_empty()
+        && got.len() == want.len()
+        && got.bytes().zip(want.bytes()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0
+}
+
 fn err_json(msg: &str) -> String {
     serde_json::json!({ "ok": false, "error": msg }).to_string()
 }
 
-fn clean_text(v: Option<&serde_json::Value>, max: usize) -> Option<String> {
+pub fn clean_text(v: Option<&serde_json::Value>, max: usize) -> Option<String> {
     let s = v?.as_str()?.trim();
     if s.is_empty() {
         return None;
@@ -273,6 +318,7 @@ mod tests {
             host: Some("127.0.0.1:17325".into()),
             origin: origin.map(Into::into),
             content_type: Some("application/json".into()),
+            token: None,
             body: body.as_bytes().to_vec(),
         }
     }
@@ -324,6 +370,24 @@ mod tests {
     }
 
     #[test]
+    fn native_handshake_needs_the_token_and_no_origin() {
+        set_native_token(&"7f".repeat(32));
+        let mut r = req("GET", "/vidgrab/native", None, "");
+        assert!(!native_ok(&r, 17325), "no token");
+        r.token = Some("7f".repeat(32));
+        assert!(native_ok(&r, 17325));
+        r.token = Some(format!("{}00", "7f".repeat(31)));
+        assert!(!native_ok(&r, 17325), "wrong token");
+        let mut r = req("GET", "/vidgrab/native", EXT, "");
+        r.token = Some("7f".repeat(32));
+        assert!(!native_ok(&r, 17325), "an Origin (page or extension fetch) is refused");
+        let mut r = req("GET", "/vidgrab/native", None, "");
+        r.token = Some("7f".repeat(32));
+        r.host = Some("evil.example:17325".into());
+        assert!(!native_ok(&r, 17325), "DNS rebinding");
+    }
+
+    #[test]
     fn preflight_only_for_extensions() {
         let (s, o, _, _) = handle(&req("OPTIONS", "/vidgrab/download", EXT, ""), 17325, "x");
         assert_eq!((s, o.as_deref()), (204, EXT));
@@ -336,7 +400,7 @@ mod tests {
         let l = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = l.local_addr().unwrap().port();
         let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || serve(l, port, "0.19.0", move |j| tx.send(j).unwrap()));
+        std::thread::spawn(move || serve(l, port, "0.19.0", move |j| tx.send(j).unwrap(), |_| {}));
         let body = r#"{"url":"https://cdn.x/v.m3u8","title":"T"}"#;
         let mut c = TcpStream::connect(("127.0.0.1", port)).unwrap();
         write!(c, "POST /vidgrab/download HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: chrome-extension://abc\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();

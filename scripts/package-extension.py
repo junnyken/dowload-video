@@ -72,8 +72,12 @@ YOUTUBE = ("youtube.com", "youtu.be")
 
 
 def store_manifest(raw: str) -> str:
-    """The manifest without YouTube (host permissions + content-script matches)."""
+    """The manifest without YouTube (host permissions + content-script matches)
+    and without "key" (5.22.0): the website build pins its id with that key so
+    the app's native messaging host knows it; the Web Store refuses the field
+    and gives the store item its own id (add it to native_reg.rs ALLOWED_IDS)."""
     m = json.loads(raw)
+    m.pop("key", None)
     m["host_permissions"] = [h for h in m.get("host_permissions", []) if not any(y in h for y in YOUTUBE)]
     for cs in m.get("content_scripts", []):
         cs["matches"] = [x for x in cs.get("matches", []) if not any(y in x for y in YOUTUBE)]
@@ -121,6 +125,9 @@ def main() -> int:
             built = built_manifest.get("version")
             if store and any(any(y in h for y in YOUTUBE) for h in built_manifest.get("host_permissions", [])):
                 print(f"ERROR: {dest} still has a YouTube host permission", file=sys.stderr)
+                return 1
+            if store and "key" in built_manifest:
+                print(f"ERROR: {dest} still has the manifest key", file=sys.stderr)
                 return 1
         if built != version:
             print(f"ERROR: {dest} reports v{built}, source says v{version}",

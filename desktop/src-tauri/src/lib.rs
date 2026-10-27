@@ -28,10 +28,13 @@ mod page_listing;
 mod page_window;
 mod engine;
 mod ext_bridge;
+mod ext_link;
 mod error;
 mod formats;
 mod history;
 mod login_window;
+mod native_host;
+mod native_reg;
 mod paths;
 mod proc;
 mod progress;
@@ -1211,14 +1214,38 @@ async fn open_url(url: String) -> CmdResult<()> {
 
 /// 0.18.7: the channel relay page (www.douyin.com/user/…#vg-relay=…) or the
 /// extension page in Chrome when installed, else the default browser.
-/// true = Chrome.
+/// true = Chrome. 0.20.0: a browser that has the extension linked comes first
+/// (Edge as well), since that is where the relay page must land.
 #[tauri::command]
 async fn open_in_chrome(url: String) -> CmdResult<bool> {
     let url = validate::chrome_url(&url).map_err(|e| CommandError::new(Code::InvalidUrl, e))?;
-    tauri::async_runtime::spawn_blocking(move || sys::open_in_chrome(&url))
+    let linked = ext_link::browser_exe();
+    tauri::async_runtime::spawn_blocking(move || sys::open_in_chrome(&url, linked.as_deref()))
         .await
         .map_err(|e| CommandError::unknown(e.to_string()))?
         .map_err(|e| CommandError::unknown(format!("cannot open link: {e}")))
+}
+
+/// 0.20.0: browsers whose VidGrab extension is linked to this app now.
+#[tauri::command]
+fn ext_link_status() -> Vec<ext_link::LinkInfo> {
+    ext_link::status()
+}
+
+/// 0.20.0: the extension opens and scrolls the channel in its own browser;
+/// null = no browser linked / not a link the local relay takes (use the server's).
+#[tauri::command]
+async fn ext_relay_start(url: String) -> CmdResult<Option<ext_link::RelayStarted>> {
+    tauri::async_runtime::spawn_blocking(move || ext_link::relay_start(&url))
+        .await
+        .map_err(|e| CommandError::unknown(e.to_string()))?
+        .map_err(CommandError::unknown)
+}
+
+/// null = expired / unknown, like the server's 404.
+#[tauri::command]
+fn ext_relay_poll(id: u64) -> Option<ext_link::RelayDoc> {
+    ext_link::relay_poll(id)
 }
 
 // ---------------------------------------------------------------- history
@@ -1597,6 +1624,16 @@ async fn tool_versions(app: AppHandle, jobs: State<'_, Jobs>) -> CmdResult<ToolV
 
 // ---------------------------------------------------------------- app
 
+/// Some(origin) when a browser started this exe as the extension's native
+/// messaging host (see main.rs).
+pub fn native_host_origin() -> Option<String> {
+    native_host::launched_origin(std::env::args())
+}
+
+pub fn run_native_host(origin: String) -> i32 {
+    native_host::run(origin)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default();
@@ -1630,14 +1667,35 @@ pub fn run() {
                 let version = handle.package_info().version.to_string();
                 let dir = handle.path().app_data_dir().ok();
                 ext_bridge::set_device(&device::device_info(dir.as_deref()).hash);
-                std::thread::spawn(move || match ext_bridge::bind() {
-                    Ok((listener, port)) => {
-                        eprintln!("extension bridge on 127.0.0.1:{port}");
-                        ext_bridge::serve(listener, port, &version, move |job| {
-                            let _ = handle.emit("ext-download", job);
-                        });
+                std::thread::spawn(move || {
+                    // 0.20.0: the extension's native messaging host (native_reg.rs)
+                    match native_reg::register(&version) {
+                        Ok(token) => ext_bridge::set_native_token(&token),
+                        Err(e) => eprintln!("native host not registered: {e}"),
                     }
-                    Err(e) => eprintln!("extension bridge not started: {e}"),
+                    let h = handle.clone();
+                    ext_link::set_on_job(move |job| {
+                        let _ = h.emit("ext-download", job);
+                    });
+                    match ext_bridge::bind() {
+                        Ok((listener, port)) => {
+                            eprintln!("extension bridge on 127.0.0.1:{port}");
+                            let v = version.clone();
+                            ext_bridge::serve(
+                                listener,
+                                port,
+                                &version,
+                                move |job| {
+                                    let _ = handle.emit("ext-download", job);
+                                },
+                                move |stream| {
+                                    let v = v.clone();
+                                    std::thread::spawn(move || ext_link::accept(stream, &v));
+                                },
+                            );
+                        }
+                        Err(e) => eprintln!("extension bridge not started: {e}"),
+                    }
                 });
             }
             // Feature `updater` (default since 0.11.0, task #6205). The webview
@@ -1762,6 +1820,9 @@ pub fn run() {
             open_path,
             open_url,
             open_in_chrome,
+            ext_link_status,
+            ext_relay_start,
+            ext_relay_poll,
             history_list,
             history_add,
             history_delete,

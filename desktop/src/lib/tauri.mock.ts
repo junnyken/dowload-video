@@ -323,6 +323,9 @@ export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promi
     case 'autostart_get': return autostart;
     case 'autostart_set': autostart = a.enabled as boolean; return null;
     case 'set_close_to_tray': return null;
+    // 0.20.0 extension link: none in the browser preview (the server relay is used)
+    case 'ext_link_status': return [];
+    case 'ext_relay_start': case 'ext_relay_poll': return null;
     case 'get_version': return '0.7.2-dev';
     case 'cookies_login_open': case 'cookies_login_finish': case 'cookies_clear': case 'cookies_status':
       return mockCookieCmd(cmd, (a.platform as string) ?? '');

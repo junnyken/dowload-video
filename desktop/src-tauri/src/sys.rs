@@ -85,16 +85,19 @@ fn chrome_exe() -> Option<std::path::PathBuf> {
         .find(|p| p.is_file())
 }
 
-/// Opens a link (already checked by validate::chrome_url) in Chrome when it
-/// is installed, else in the default browser.
-/// Ok(true) = Chrome.
-pub fn open_in_chrome(url: &str) -> io::Result<bool> {
+/// Opens a link (already checked by validate::chrome_url) in `linked` (a
+/// browser whose extension is connected, ext_link.rs) or Chrome when it is
+/// installed, else in the default browser.
+/// Ok(true) = one of those browsers.
+pub fn open_in_chrome(url: &str, linked: Option<&std::path::Path>) -> io::Result<bool> {
     #[cfg(windows)]
-    if let Some(exe) = chrome_exe() {
+    if let Some(exe) = linked.filter(|p| p.is_file()).map(|p| p.to_path_buf()).or_else(chrome_exe) {
         if std::process::Command::new(exe).arg(url).spawn().is_ok() {
             return Ok(true);
         }
     }
+    #[cfg(not(windows))]
+    let _ = linked;
     open_url(url).map(|_| false)
 }
 

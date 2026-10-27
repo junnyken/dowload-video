@@ -188,7 +188,7 @@ export function ChannelsScreen() {
                   ? (f.relay.state === 'scrolling' ? `Tiện ích VidGrab đang cuộn trang: đã nhận ${f.relay.count} video…`
                     : f.relay.state === 'login' ? `Facebook cần đăng nhập — hãy đăng nhập Facebook trong tab vừa mở (đã nhận ${f.relay.count} video).`
                     : f.relay.state === 'noext' ? `Chưa thấy tiện ích VidGrab trả lời từ ${f.relay.viaChrome ? 'Chrome' : 'trình duyệt vừa mở'}. Hãy cài tiện ích VidGrab (5.16.1 trở lên) rồi tải lại tab trang Facebook (F5). Vẫn đang chờ.`
-                    : `Đã mở trang trong ${f.relay.viaChrome ? 'Chrome' : 'trình duyệt'} — chờ tiện ích VidGrab cuộn hết tab Reels (đừng đóng tab đó)…`)
+                    : `Đã mở trang trong ${f.relay.browser || (f.relay.viaChrome ? 'Chrome' : 'trình duyệt')} — chờ tiện ích VidGrab cuộn hết tab Reels (đừng đóng tab đó)…`)
                   : stage ? STAGE_TEXT[stage] : 'Đang lấy danh sách video…'}</p>
                 <p className="truncate text-xs text-fg-muted">{f.relay ? 'Facebook chỉ cho xem đủ video khi đã đăng nhập, nên ứng dụng nhờ tiện ích VidGrab trong Chrome của bạn lấy danh sách.' : 'Kênh nhiều video có thể mất vài chục giây.'} {f.url}</p>
               </div>

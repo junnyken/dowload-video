@@ -9,7 +9,11 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { DeviceInfo } from './device';
 import type { CookieStatus, DouyinLocal } from './cookies-core';
 import type { InAppOffer, InAppProgress } from './update-core';
+import type { RelayDoc } from './douyin-core';
 import type { Channel, ChannelListing, DoneEvent, HistoryItem, LogEvent, ProbeResult, ProgressEvent, ToolVersions } from './types';
+
+/** A browser whose VidGrab extension is linked to this app (ext_link.rs LinkInfo). */
+export type ExtLinkInfo = { browser: string; browserExe: string | null; extVersion: string | null; connectedAt: number };
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 export const mockMode = import.meta.env.DEV && !inTauri;
@@ -66,6 +70,12 @@ export const api = {
   openUrl: (url: string) => call<null>('open_url', { url }),
   // 0.18.7: a www.douyin.com/user/… page or the extension page in Chrome when installed, else the default browser; true = Chrome.
   openInChrome: (url: string) => call<boolean>('open_in_chrome', { url }),
+  // 0.20.0: the VidGrab extension linked through native messaging (ext_link.rs).
+  extLinkStatus: () => call<ExtLinkInfo[]>('ext_link_status'),
+  // null = no browser linked / a link only the server relay takes
+  extRelayStart: (url: string) => call<{ id: number; browser: string } | null>('ext_relay_start', { url }),
+  // null = expired (like the server's 404)
+  extRelayPoll: (id: number) => call<RelayDoc | null>('ext_relay_poll', { id }),
   historyList: (a: { limit?: number; offset?: number; query?: string } = {}) => call<HistoryItem[]>('history_list', a),
   historyAdd: (item: HistoryItem) => call<null>('history_add', { item }),
   historyDelete: (id: string) => call<null>('history_delete', { id }),

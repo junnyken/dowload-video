@@ -22,6 +22,9 @@ All errors are returned as `{ code: string, message: string }` (serialized
 | `reveal_path` | `{ path }` | `null` | Explorer with the file selected. Only paths this app produced (see below). |
 | `open_path` | `{ path }` | `null` | Default app. Only produced files AND media extensions (mp4, mkv, webm, mov, m4a, mp3, opus, ogg, wav, flac, aac, jpg, png, webp, srt, vtt). |
 | `open_url` | `{ url }` | `null` | Opens the default browser. Only `https` on exactly `dvid.vibe1.tinhgon.xyz` or `dvid-api.vibe1.tinhgon.xyz` (no userinfo/port); else `invalid_url`. For sign-up / password reset / installer download. No opener permission is granted to the webview. |
+| `ext_link_status` | `{}` | `{ browser, browserExe, extVersion, connectedAt }[]` | 0.20.0. Browsers whose VidGrab extension is linked through native messaging now (docs/desktop/EXTENSION-LINK.md); oldest first. |
+| `ext_relay_start` | `{ url }` | `{ id, browser } \| null` | 0.20.0. The linked extension opens the Douyin profile / Facebook Reels page in its own browser and scrolls it (no server). `null`: no browser linked, or a link only the server's `/channel-relay` takes (share text) — use that. Signed-in only, checked by the caller like the server's relay. |
+| `ext_relay_poll` | `{ id }` | `RelayDoc \| null` | 0.20.0. Same shape as `GET /api/v1/channel-relay/{token}`; `null` = expired (30 min). |
 | `history_list` | `{ limit?, offset?, query? }` | `HistoryItem[]` | Local SQLite (rusqlite, bundled) in the app data dir. |
 | `history_add` | `{ item: HistoryItem }` | `null` | Upsert by `id`. |
 | `history_delete` | `{ id }` | `null` | Deletes the record only, never the file. |

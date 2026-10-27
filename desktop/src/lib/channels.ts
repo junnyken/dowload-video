@@ -10,7 +10,7 @@ import { auth } from './auth';
 import { settings } from './settings';
 import { errorMessage, toAppError } from './errors';
 import { newId } from './format';
-import { fetchDouyinListing, fetchXhsListing, pollDouyinRelay, startDouyinRelay } from './douyin';
+import { fetchDouyinListing, fetchXhsListing, openRelay } from './douyin';
 import { facebookRelayListing } from './douyin-core';
 import { isDouyinUrl, isFacebookChannelUrl, isXhsProfileUrl } from './urls';
 import { cookiesUsableFor, planFor, routesFor } from './cookies';
@@ -198,7 +198,7 @@ export type Flow = {
   errorCode?: string;
   more?: boolean; // loading a longer list while the picker stays open
   /** 0.19.3: Facebook through the extension in Chrome — what the relay is doing. */
-  relay?: { state: 'waiting' | 'scrolling' | 'login' | 'noext'; count: number; viaChrome: boolean };
+  relay?: { state: 'waiting' | 'scrolling' | 'login' | 'noext'; count: number; viaChrome: boolean; browser?: string | null };
 };
 export const flow = createStore<Flow>({ phase: 'idle', url: '', limit: 200 });
 let flowToken = 0;
@@ -213,14 +213,14 @@ const RELAY_WAIT_MS = 15 * 60_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function fetchFacebookViaRelay(url: string, limit: number, token: number) {
-  const start = await startDouyinRelay(url);
-  const viaChrome = await api.openInChrome(start.openUrl);
+  const relay = await openRelay(url);
+  const { viaChrome, browser } = relay;
   const opened = Date.now();
-  flow.set({ ...flow.get(), relay: { state: 'waiting', count: 0, viaChrome } });
+  flow.set({ ...flow.get(), relay: { state: 'waiting', count: 0, viaChrome, browser } });
   while (Date.now() - opened < RELAY_WAIT_MS) {
     await sleep(3000);
     if (token !== flowToken) return; // cancelled / another link
-    const doc = await pollDouyinRelay(start.token);
+    const doc = await relay.poll();
     if (doc === 'expired') throw new Error('relay_expired');
     if (!doc) continue;
     if (doc.status === 'done') {
@@ -229,8 +229,8 @@ async function fetchFacebookViaRelay(url: string, limit: number, token: number) 
       toast('success', `Đã lấy ${doc.items.length} video của trang qua tiện ích VidGrab.`); // wording: BA review
       return;
     }
-    const state = doc.status === 'waiting' && Date.now() - opened > 20_000 ? 'noext' : doc.status;
-    flow.set({ ...flow.get(), relay: { state, count: doc.items.length, viaChrome } });
+    const state = doc.status === 'waiting' && !browser && Date.now() - opened > 20_000 ? 'noext' : doc.status;
+    flow.set({ ...flow.get(), relay: { state, count: doc.items.length, viaChrome, browser } });
   }
   throw new Error('relay_timeout');
 }

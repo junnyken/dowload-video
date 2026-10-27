@@ -327,6 +327,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'vg-sw-heartbeat') {
     // Re-warm API cache so it's ready immediately on wake
     getApiBase().then((v) => { _apiBase = v; }).catch(() => {});
+    vgNativeConnect(); // 5.22.0: the app link, when it is not up
   }
 });
 
@@ -929,6 +930,8 @@ async function vgFindApp(force = false) {
       const j = r.ok ? await r.json() : null;
       if (j && j.app === 'VidGrab') {
         found = { at: Date.now(), port, version: j.version || null };
+        // the app runs: its native host is likely registered now (app 0.20.0+)
+        if (!vgNativePort) { vgNativeRetryAt = 0; vgNativeConnect(); }
         // app 0.19.4+: its machine id, so the app and this browser are one device
         if (/^[0-9a-f]{64}$/.test(j.device || '')) chrome.storage.local.set({ [DEVICE_KEY]: j.device }).catch(() => {});
         break;
@@ -940,6 +943,14 @@ async function vgFindApp(force = false) {
 }
 
 async function vgSendToApp(item) {
+  // 5.22.0: over the native link when the app is on it (only the app's own
+  // host can be on that end; the HTTP port stays for apps before 0.20.0)
+  if (vgNativePort && vgNativeApp.up) {
+    try {
+      vgNativePort.postMessage({ t: 'download', url: item.url, title: item.title || '', referer: item.pageUrl || '' });
+      return { ok: true };
+    } catch { /* port just closed: HTTP below */ }
+  }
   const app = await vgFindApp(true);
   if (!app.port) return { ok: false, error: 'no_app' };
   const r = await fetch(`http://127.0.0.1:${app.port}/vidgrab/download`, {
@@ -950,6 +961,132 @@ async function vgSendToApp(item) {
   const j = await r.json().catch(() => null);
   return r.ok && j && j.ok ? { ok: true } : { ok: false, error: (j && j.error) || `HTTP ${r.status}` };
 }
+
+// ── VidGrab app link over native messaging (5.22.0, app 0.20.0) ──
+// The app registers "xyz.tinhgon.vidgrab" for this extension's id only
+// (manifest "key"); Chrome / Edge start that host when we connect and keep
+// it while the port is open (which also keeps this worker alive). Through it
+// the app knows this browser has the extension and asks it for things — the
+// HTTP port above only lets us ask the app. Messages: desktop ext_link.rs.
+const VG_NATIVE_HOST = 'xyz.tinhgon.vidgrab';
+const VG_LOCAL_RELAYS_KEY = 'vg_local_relays'; // storage.session: relay token -> app request id
+let vgNativePort = null;
+let vgNativeApp = { up: false, version: null };
+let vgNativeRetryAt = 0;
+
+function vgBrowserBrand() {
+  const brands = (navigator.userAgentData && navigator.userAgentData.brands) || [];
+  const named = brands.map((b) => b.brand).find((b) => !/chromium|not.?a.?brand/i.test(b));
+  if (named) return named;
+  return /\bEdg\//.test(navigator.userAgent) ? 'Microsoft Edge' : 'Chrome';
+}
+
+function vgNativeConnect() {
+  if (vgNativePort || Date.now() < vgNativeRetryAt) return;
+  let port;
+  try {
+    port = chrome.runtime.connectNative(VG_NATIVE_HOST);
+  } catch {
+    vgNativeRetryAt = Date.now() + 10 * 60_000;
+    return;
+  }
+  vgNativePort = port;
+  port.onMessage.addListener((m) => { vgNativeOnMessage(port, m); });
+  port.onDisconnect.addListener(() => {
+    const why = (chrome.runtime.lastError && chrome.runtime.lastError.message) || '';
+    if (vgNativePort === port) vgNativePort = null;
+    vgNativeApp = { up: false, version: null };
+    // no app installed (host not registered) → much later; the host ended → soon
+    vgNativeRetryAt = Date.now() + (/not found|forbidden/i.test(why) ? 10 * 60_000 : 30_000);
+  });
+  port.postMessage({ t: 'hello', ext: chrome.runtime.getManifest().version, brand: vgBrowserBrand() });
+}
+
+function vgNativeOnMessage(port, m) {
+  if (!m || typeof m !== 'object') return;
+  if (m.t === 'app') {
+    vgNativeApp = { up: !!m.up, version: typeof m.version === 'string' ? m.version.slice(0, 20) : null };
+    return;
+  }
+  if (m.t === 'req' && Number.isSafeInteger(m.id)) {
+    vgNativeRequest(m).then(
+      (data) => { try { port.postMessage({ t: 'res', id: m.id, ok: true, data }); } catch { /* closed */ } },
+      (e) => { try { port.postMessage({ t: 'res', id: m.id, ok: false, error: String((e && e.message) || e).slice(0, 200) }); } catch { /* closed */ } },
+    );
+  }
+}
+
+// Only the channel pages the relay knows (the app checks them too: ext_link.rs clean_profile).
+function vgRelayChannelUrl(raw) {
+  let u;
+  try { u = new URL(String(raw || '')); } catch { return null; }
+  if (u.protocol !== 'https:' || u.hash || u.username || u.password || u.port) return null;
+  if (u.hostname === 'www.douyin.com' && /^\/user\/MS4w[A-Za-z0-9_-]{10,120}$/.test(u.pathname)) return { url: u.href, platform: 'douyin' };
+  if (u.hostname === 'www.facebook.com') return { url: u.href, platform: 'facebook' };
+  return null;
+}
+
+// Signed in to the platform in this browser? Only whether the session cookie exists — never its value.
+async function vgSignedIn(platform) {
+  const c = platform === 'facebook'
+    ? { url: 'https://www.facebook.com/', name: 'c_user' }
+    : { url: 'https://www.douyin.com/', name: 'sessionid' };
+  try { return !!(await chrome.cookies.get(c)); } catch { return null; }
+}
+
+function vgRelayToken() {
+  const b = crypto.getRandomValues(new Uint8Array(24));
+  return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_'); // 32 chars, like the server's
+}
+
+async function vgLocalRelays() {
+  try { return (await chrome.storage.session.get(VG_LOCAL_RELAYS_KEY))[VG_LOCAL_RELAYS_KEY] || {}; } catch { return {}; }
+}
+
+async function vgSetLocalRelay(token, entry) {
+  const all = await vgLocalRelays();
+  const now = Date.now();
+  for (const [k, v] of Object.entries(all)) if (!v || now - v.at > 30 * 60_000) delete all[k];
+  if (entry) all[token] = entry; else delete all[token];
+  try { await chrome.storage.session.set({ [VG_LOCAL_RELAYS_KEY]: all }); } catch { /* none */ }
+}
+
+async function vgNativeRequest(m) {
+  if (m.op === 'open_relay') {
+    const ch = vgRelayChannelUrl(m.url);
+    if (!ch) throw new Error('unsupported_url');
+    const token = vgRelayToken();
+    await vgSetLocalRelay(token, { id: m.id, at: Date.now() });
+    const signedIn = await vgSignedIn(ch.platform);
+    const tab = await chrome.tabs.create({ url: `${ch.url}#vg-relay=${token}`, active: true });
+    if (tab && tab.windowId != null) chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
+    return { signedIn };
+  }
+  throw new Error('unknown_op');
+}
+
+// A relay page's progress (content.js vgRelaySend): to the app when the app
+// opened it over the link, else to the server's /channel-relay like before.
+async function vgRelayPut(token, body) {
+  if (!/^[A-Za-z0-9_-]{32}$/.test(token || '')) return { ok: false, error: 'bad token' };
+  const local = (await vgLocalRelays())[token];
+  if (local) {
+    if (!vgNativePort) return { ok: false, error: 'app_link_lost' };
+    vgNativePort.postMessage({ t: 'evt', id: local.id, data: body });
+    if (body && body.done) await vgSetLocalRelay(token, null);
+    return { ok: true, status: 200, data: { ok: true, count: Array.isArray(body && body.items) ? body.items.length : 0 } };
+  }
+  const base = await getApiBase();
+  const resp = await fetch(`${base}/api/v1/channel-relay/${token}`, {
+    method: 'PUT',
+    headers: await authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body || {}),
+  });
+  const data = await resp.json().catch(() => null);
+  return { ok: resp.ok, status: resp.status, data };
+}
+
+vgNativeConnect();
 
 // ── Badge Count ───────────────────────────────────────────────────
 // Media the sniffer found on the tab win: the badge shows how many.
@@ -1332,7 +1469,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'VG_APP_STATUS') {
-    vgFindApp(!!msg.force).then((a) => sendResponse({ found: !!a.port, version: a.version }));
+    vgFindApp(!!msg.force).then((a) => sendResponse({ found: !!a.port, version: a.version, linked: !!(vgNativePort && vgNativeApp.up) }));
+    return true;
+  }
+  // 5.22.0: a channel relay page's progress (content.js) — to the app over the link, or to the server
+  if (msg.type === 'VG_RELAY_PUT') {
+    vgRelayPut(msg.token, msg.body).then(sendResponse, (e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
     return true;
   }
   if (msg.type === 'VG_APP_SEND') {

@@ -1050,9 +1050,11 @@ window.addEventListener('message', (event) => {
     return { items: items.slice(0, 2000), channelTitle: h1 ? h1.textContent.trim().slice(0, 300) : null, done, skipped, loginWall };
   }
 
+  // 5.22.0: the background sends it to the app when the app opened this page
+  // over the native link (no server), else to /api/v1/channel-relay.
   function vgRelaySend(token, done, loginWall = false) {
     return new Promise((resolve) => chrome.runtime.sendMessage({
-      type: 'VG_API_FETCH', url: `${API_BASE}/api/v1/channel-relay/${token}`, method: 'PUT', body: vgRelayPayload(done, loginWall),
+      type: 'VG_RELAY_PUT', token, body: vgRelayPayload(done, loginWall),
     }, resolve));
   }
 
