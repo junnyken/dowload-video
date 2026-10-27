@@ -909,24 +909,18 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
 def _convert_vtt_to_srt(vtt_path: str, srt_path: str) -> None:
-    """Simple WebVTT → SRT conversion (strips header, converts timestamp format)."""
+    """WebVTT → clean SRT through the shared parser (quality #7): YouTube
+    auto-caption repeats removed, valid timestamps. Nothing usable → no SRT
+    file is written (the caller then reports no subtitles, never a broken file)."""
+    from app.services.subtitle_format import vtt_to_clean_srt
     try:
         with open(vtt_path, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
-        content = re.sub(r'^WEBVTT[^\n]*\n+', '', content)
-        content = re.sub(r'NOTE[^\n]*\n[^\n]*\n+', '', content)
-        content = re.sub(r'(\d{2}:\d{2}:\d{2})\.(\d{3})', r'\1,\2', content)
-        content = re.sub(r'<[^>]+>', '', content)
-        blocks = [b.strip() for b in content.split('\n\n') if b.strip() and '-->' in b]
-        lines: list[str] = []
-        for i, block in enumerate(blocks, 1):
-            lines.append(str(i))
-            lines.append(block)
-            lines.append('')
-        with open(srt_path, "w", encoding="utf-8") as f:
-            f.write('\n'.join(lines))
+            srt = vtt_to_clean_srt(f.read())
+        if srt:
+            with open(srt_path, "w", encoding="utf-8") as f:
+                f.write(srt)
     except Exception as e:
-        print(f"[Subtitles] VTT→SRT conversion failed: {e}")
+        print(f"[Subtitles] VTT→SRT conversion failed: {type(e).__name__}")
 
 
 def _find_subtitle_file(video_path: str) -> str | None:
@@ -3118,6 +3112,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                         _vr_base["writeautomaticsub"] = True
                         _sub_langs = {"vi": ["vi","vi-VN","vi-VIE"], "en": ["en","en-US","en-GB"], "all": None}.get(subtitle_language, ["vi","vi-VN","vi-VIE","en","en-US"])
                         _vr_base["subtitleslangs"] = _sub_langs if _sub_langs else ["all"]
+                        _vr_base["subtitlesformat"] = "srt/vtt/best"
                     # #4: rotate the innertube client across attempts so a block
                     # on one (android_vr) is retried on another (ios/tv) — these
                     # don't need a PO token and often survive when one is flagged.
@@ -3391,6 +3386,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                     dl_opts["writeautomaticsub"] = True
                     _sub_langs = {"vi": ["vi","vi-VN","vi-VIE"], "en": ["en","en-US","en-GB"], "all": None}.get(subtitle_language, ["vi","vi-VN","vi-VIE","en","en-US"])
                     dl_opts["subtitleslangs"] = _sub_langs if _sub_langs else ["all"]
+                    dl_opts["subtitlesformat"] = "srt/vtt/best"   # quality #7: SRT when offered, else VTT → clean SRT
                 # Phase B: prefer DIRECT (free). But when Phase A used the proxy
                 # AND Phase A.5 couldn't re-sign URLs for the Oracle IP, the CDN
                 # URLs only serve to the proxy exit IP — direct would 403. If
@@ -3530,6 +3526,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                     dl_opts["writeautomaticsub"] = True
                     _sub_langs = {"vi": ["vi","vi-VN","vi-VIE"], "en": ["en","en-US","en-GB"], "all": None}.get(subtitle_language, ["vi","vi-VN","vi-VIE","en","en-US"])
                     dl_opts["subtitleslangs"] = _sub_langs if _sub_langs else ["all"]
+                    dl_opts["subtitlesformat"] = "srt/vtt/best"   # quality #7: SRT when offered, else VTT → clean SRT
                 if _progress_hook:
                     dl_opts["progress_hooks"] = [_progress_hook]
                 print(f"[Downloader] {_platform_tag}: CDN download direct (no proxy)")
@@ -3556,6 +3553,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                     dl_opts["writeautomaticsub"] = True
                     _sub_langs = {"vi": ["vi","vi-VN","vi-VIE"], "en": ["en","en-US","en-GB"], "all": None}.get(subtitle_language, ["vi","vi-VN","vi-VIE","en","en-US"])
                     dl_opts["subtitleslangs"] = _sub_langs if _sub_langs else ["all"]
+                    dl_opts["subtitlesformat"] = "srt/vtt/best"   # quality #7: SRT when offered, else VTT → clean SRT
                 if _progress_hook:
                     dl_opts["progress_hooks"] = [_progress_hook]
                 print("[Downloader] generic: metadata via proxy → download direct (0 proxy bandwidth)")

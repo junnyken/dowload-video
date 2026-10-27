@@ -283,3 +283,51 @@ def serialize_vtt(cues: list[Cue]) -> str:
     for cue in cues:
         parts.append(f"{cue.index}\n{cue.start} --> {cue.end}\n{cue.text}")
     return "\n\n".join(parts) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Downloaded captions → clean SRT (quality #7, 27/10/2026)
+# ---------------------------------------------------------------------------
+
+_TAG_RE = re.compile(r"<[^>]*>")
+
+
+def vtt_to_clean_srt(content: str) -> str | None:
+    """
+    A downloaded WebVTT (YouTube auto-captions included) → valid SRT, or None
+    when nothing usable is left. YouTube's automatic captions repeat every
+    line: each cue shows the previous line plus the one being spoken, with
+    <c>/<00:00:01.000> word-timing tags. Here: tags stripped, a line already
+    shown by the previous cue dropped, empty cues dropped, back-to-back cues
+    with the same text merged, timestamps rewritten as HH:MM:SS,mmm and cues
+    renumbered. Output always re-parses with parse_srt.
+    """
+    try:
+        cues = parse_vtt(content)
+    except Exception:
+        return None
+    out: list[list] = []          # [start_s, end_s, text]
+    shown: list[str] = []         # lines of the previous source cue
+    for cue in cues:
+        try:
+            start, end = timestamp_to_seconds(cue.start), timestamp_to_seconds(cue.end)
+        except ValueError:
+            continue
+        lines = [re.sub(r"\s+", " ", _TAG_RE.sub("", ln)).strip() for ln in cue.text.split("\n")]
+        lines = [ln for ln in lines if ln]
+        new = [ln for ln in lines if ln not in shown]
+        shown = lines
+        if not new or end <= start:
+            continue
+        text = "\n".join(new)
+        if out and out[-1][2] == text and start - out[-1][1] <= 0.05:
+            out[-1][1] = max(out[-1][1], end)
+            continue
+        if out and start < out[-1][1]:          # overlapping roll-up: end the previous cue here
+            out[-1][1] = max(out[-1][0] + 0.01, start)
+        out.append([start, end, text])
+    if not out:
+        return None
+    srt = serialize_srt([Cue(i, seconds_to_srt_timestamp(s), seconds_to_srt_timestamp(e), t)
+                         for i, (s, e, t) in enumerate(out, 1)])
+    return srt if parse_srt(srt) else None

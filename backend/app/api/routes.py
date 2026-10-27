@@ -516,13 +516,35 @@ def _burn_subtitle(video_path: str, subtitle_path: str, output_path: str) -> boo
         print(f"[Subtitle] burn failed: {e}")
         return False
 
+_SUB_LANG3 = {"vi": "vie", "en": "eng", "zh": "chi", "ja": "jpn", "ko": "kor", "th": "tha",
+              "fr": "fre", "de": "ger", "es": "spa", "ru": "rus", "id": "ind", "pt": "por"}
+
+
+def _subtitle_lang3(subtitle_path: str) -> str:
+    """ISO 639-2 code from yt-dlp's '<name>.<lang>.srt' file name ('und' when unknown)."""
+    parts = os.path.basename(subtitle_path).split(".")
+    lang = parts[-2].split("-")[0].lower() if len(parts) >= 3 else ""
+    return _SUB_LANG3.get(lang, "und")
+
+
+def _soft_sub_output(video_path: str) -> str:
+    """quality #7: an .mp4 stays an .mp4 (mov_text — plays in QuickTime, Windows,
+    VLC); anything else becomes .mkv (WebM cannot carry SRT)."""
+    base, ext = os.path.splitext(video_path)
+    return base + ("_subbed.mp4" if ext.lower() in (".mp4", ".m4v", ".mov") else "_subbed.mkv")
+
+
 def _mux_subtitle(video_path: str, subtitle_path: str, output_path: str) -> bool:
-    """Mux subtitle as a soft stream into MKV container. Returns True on success."""
+    """Soft subtitle stream, video and audio copied (never re-encoded): mov_text
+    in MP4, srt in MKV. Returns True on success."""
     try:
+        mp4 = output_path.lower().endswith(".mp4")
         result = _subprocess.run(
             ["ffmpeg", "-y", "-i", video_path, "-i", subtitle_path,
-             "-c:v", "copy", "-c:a", "copy", "-c:s", "srt",
-             "-metadata:s:s:0", "language=vie",
+             "-map", "0:v?", "-map", "0:a?", "-map", "1:0",
+             "-c:v", "copy", "-c:a", "copy", "-c:s", "mov_text" if mp4 else "srt",
+             "-metadata:s:s:0", f"language={_subtitle_lang3(subtitle_path)}",
+             *(["-movflags", "+faststart"] if mp4 else []),
              output_path],
             capture_output=True, timeout=300,
         )
@@ -1056,7 +1078,7 @@ async def fetch_link(
                 info["subtitle_error"] = "subtitle_embed_failed"
 
         elif subtitle_mode_actual == "soft" and local_sub and video_path and os.path.exists(local_sub) and os.path.exists(video_path):
-            _muxed_out = os.path.splitext(video_path)[0] + "_subbed.mkv"
+            _muxed_out = _soft_sub_output(video_path)
             if _mux_subtitle(video_path, local_sub, _muxed_out):
                 info["local_file_path"] = _muxed_out
                 delete_local_file.apply_async((_muxed_out,), countdown=_EXPIRY_SECONDS)
