@@ -645,7 +645,7 @@ def _download_path_token(url: str, cookies_file: str | None = None) -> str:
     return hmac.new(_download_path_secret().encode(), material, hashlib.sha256).hexdigest()[:TOKEN_HEX_LEN]
 
 
-def _outtmpl_for(url: str, cookies_file: str | None = None) -> str:
+def _outtmpl_for(url: str, cookies_file: str | None = None, tag: str = "") -> str:
     """
     `<128-bit HMAC token>_<format_id>.<ext>` inside DOWNLOAD_DIR.
 
@@ -654,10 +654,15 @@ def _outtmpl_for(url: str, cookies_file: str | None = None) -> str:
     collide): `%(id)s` used to lead, and for the generic extractor that is
     the URL's last path segment — a title-like, guessable string that could
     even contain `..` and lose its file id.
+
+    `tag` (27/10) separates audio qualities made from the same source stream:
+    mp3_128 and mp3_320_norm both come from format 140 and used to overwrite
+    each other's file.
     """
+    tag = re.sub(r"[^a-z0-9_]", "", tag.lower())
     return os.path.join(
         DOWNLOAD_DIR,
-        f"{_download_path_token(url, cookies_file)}_%(format_id)s.%(ext)s",
+        f"{_download_path_token(url, cookies_file)}_%(format_id)s{'_' + tag if tag else ''}.%(ext)s",
     )
 
 
@@ -665,7 +670,8 @@ def _isolate_outtmpl(opts: dict, url: str, cookies_file: str) -> None:
     """Re-point an opts dict at the cookie-specific path for this URL."""
     if not opts.get("outtmpl"):
         return
-    opts["outtmpl"] = _outtmpl_for(url, cookies_file)
+    m = re.search(r"_%\(format_id\)s_([a-z0-9_]+)\.%\(ext\)s$", opts["outtmpl"])
+    opts["outtmpl"] = _outtmpl_for(url, cookies_file, m.group(1) if m else "")
 
 
 def _get_instagram_cookies_file() -> str | None:
@@ -1395,7 +1401,7 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
         is_tiktok
     )
     if needs_local_download:
-        opts["outtmpl"] = _outtmpl_for(url)
+        opts["outtmpl"] = _outtmpl_for(url, tag=quality if quality.startswith(("mp3", "audio_")) else "")
 
     # ── Proxy: METADATA-ONLY by design (EXCEPT YouTube, see below) ──────
     # The (paid, per-GB) proxy is used ONLY to extract metadata for every other

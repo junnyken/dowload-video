@@ -113,7 +113,9 @@ class TestNameEntropy:
         for q in ("video_1080", "mp3_128", "audio_m4a", "video"):
             tmpl = downloader._get_base_opts("https://example.com/a..b/My Title.mp4", quality=q)["outtmpl"]
             name = os.path.basename(tmpl)
-            assert re.fullmatch(HEX128 + r"_%\(format_id\)s\.%\(ext\)s", name), name
+            # audio adds its own quality (27/10) so two bitrates of one stream never share a file
+            tag = "_" + q if q.startswith(("mp3", "audio_")) else ""
+            assert re.fullmatch(HEX128 + r"_%\(format_id\)s" + tag + r"\.%\(ext\)s", name), name
             assert "%(title)s" not in tmpl and "%(id)s" not in tmpl
 
     def test_trim_gif_watermark_package_merge_names(self, root, video, monkeypatch):
