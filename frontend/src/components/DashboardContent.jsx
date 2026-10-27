@@ -10,7 +10,7 @@ import {
   ClipboardPaste, Play, Pause, Scissors, ImageDown,
   Upload, ExternalLink, SkipBack, SkipForward,
   Clapperboard, List, Sparkles, Eraser, Move, ZoomIn,
-  Layers, Stamp, CalendarClock, Lock
+  Layers, Stamp, CalendarClock, Lock, Languages
 } from 'lucide-react';
 import UpgradeModal from './UpgradeModal';
 import QuickGuideSection from './QuickGuideSection';
@@ -1705,6 +1705,40 @@ export default function DashboardContent() {
     }
   };
 
+  // quality #7: translate the video's subtitles into Vietnamese with the existing
+  // translation jobs (Phụ đề → Dịch): fetch this SRT, hand it to /transcript-translate.
+  const handleTranslateSrt = async (lang) => {
+    if (!lang || srtBusy) return;
+    if (!session?.access_token) { showToast(t('result.translateNeedsLogin')); return; }
+    setSrtBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/process/subtitle`, withAuth({
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_url: videoInfo.original_url || url.trim(), language: lang, format: 'srt',
+                               filename: videoInfo.title || 'subtitle' }),
+      }));
+      const data = await safeJson(res);
+      if (!res.ok || !data.success || !data.download_url) {
+        throw new Error(data?.message || data?.user_message || (typeof data?.detail === 'string' ? data.detail : data?.detail?.message) || '');
+      }
+      const srt = await (await fetch(`${API_BASE}${data.download_url}`)).blob();
+      const form = new FormData();
+      form.append('files', new File([srt], `${(videoInfo.title || 'subtitle').slice(0, 100)}.${lang}.srt`, { type: 'text/plain' }));
+      form.append('target_lang', 'vi');
+      const up = await fetch(`${API_BASE}/api/v1/transcript-translate/upload`, withAuth({ method: 'POST', body: form }));
+      const ud = await safeJson(up);
+      if (!up.ok || !ud.jobs?.length) {
+        throw new Error(ud?.rejected?.[0]?.reason || (typeof ud?.detail === 'string' ? ud.detail : ud?.detail?.message) || '');
+      }
+      showToast(t('result.translateStarted'));
+      window.location.assign('/transcript-translate');
+    } catch (err) {
+      showToast(err.message || t('result.translateFailed'));
+    } finally {
+      setSrtBusy(false);
+    }
+  };
+
   // Measure unknown-height formats once per result. Never blocks downloads;
   // a failed or missing measurement simply shows nothing (no guessed value).
   const probeKey = /tiktok\.com/i.test(videoInfo?.original_url || '')
@@ -2283,6 +2317,16 @@ export default function DashboardContent() {
                   {srtBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                   {srtBusy ? t('toast.subsDownloading') : t('result.downloadSrt')}
                 </button>
+                {(() => {
+                  const langs = videoInfo.available_subtitle_languages;
+                  const lang = srtLang && langs.includes(srtLang) ? srtLang : (['vi', 'en'].find(l => langs.includes(l)) || langs[0]);
+                  return lang && !/^vi/i.test(lang) ? (
+                    <button type="button" onClick={() => handleTranslateSrt(lang)} disabled={srtBusy}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-surface text-fg-2 border border-line hover:border-accent/40 hover:text-accent-text transition-all disabled:opacity-60">
+                      <Languages className="w-3.5 h-3.5" />{t('result.translateToVi')}
+                    </button>
+                  ) : null;
+                })()}
               </div>
             )}
 

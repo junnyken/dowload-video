@@ -345,7 +345,11 @@
     "subtitleLang": "Subtitle language",
     "downloadSrt": "Download subtitles (.srt)",
     "downloadAnother": "Download another video",
-    "modernCodecNote": "Newer codec, sharper picture: older computers or phones may need VLC to play it"
+    "modernCodecNote": "Newer codec, sharper picture: older computers or phones may need VLC to play it",
+    "translateToVi": "Translate to Vietnamese",
+    "translateStarted": "Subtitles sent for translation — opening Subtitles to follow it",
+    "translateFailed": "Could not send the subtitles for translation. Please try again.",
+    "translateNeedsLogin": "Sign in to translate subtitles."
   },
   "tools": {
     "hidePreview": "Hide preview",

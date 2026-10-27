@@ -344,7 +344,11 @@
     "subtitleLang": "Ngôn ngữ phụ đề",
     "downloadSrt": "Tải phụ đề (.srt)",
     "downloadAnother": "Tải video khác",
-    "modernCodecNote": "Codec mới, nét hơn: máy hoặc điện thoại đời cũ có thể cần VLC để mở"
+    "modernCodecNote": "Codec mới, nét hơn: máy hoặc điện thoại đời cũ có thể cần VLC để mở",
+    "translateToVi": "Dịch sang tiếng Việt",
+    "translateStarted": "Đã gửi phụ đề đi dịch — đang mở trang Phụ đề để theo dõi",
+    "translateFailed": "Chưa gửi được phụ đề đi dịch. Hãy thử lại.",
+    "translateNeedsLogin": "Đăng nhập để dịch phụ đề."
   },
   "tools": {
     "hidePreview": "Ẩn xem trước",
