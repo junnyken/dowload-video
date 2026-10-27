@@ -142,6 +142,8 @@ def build_plans() -> Dict[str, Any]:
     guest_h = int(os.getenv("GUEST_MAX_HEIGHT", "1080") or 0)
     yt_anon_h = int(os.getenv("YT_MAX_HEIGHT_ANON", "720"))
     yt_user_h = int(os.getenv("YT_MAX_HEIGHT_USER", "1080"))
+    from app.api.routes import youtube_height_for  # noqa: PLC0415
+    yt_pro_h = youtube_height_for(True)
     anon_ai = sa.anon_limit()
     watch = _watch()
     s = get_settings()
@@ -181,7 +183,7 @@ def build_plans() -> Dict[str, Any]:
             "id": "pro",
             "daily_downloads": q.platform_limit_for_tier("pro"),
             "max_height": pro_p["max_height"] if pro_p["max_height"] >= free_p["max_height"] else free_p["max_height"],
-            "youtube_per_day": yt_quota.YT_QUOTA_USER, "youtube_max_height": yt_user_h,
+            "youtube_per_day": yt_quota.YT_QUOTA_USER, "youtube_max_height": yt_pro_h,
             "batch_links": pro_p["batch_limit"],
             "zip": bool(pro_p["bulk_zip"]), "api_key": bool(pro_p["api_key"]),
             "api_calls_per_month": s["api_calls_month_pro"] if pro_p["api_key"] else 0,

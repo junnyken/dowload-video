@@ -234,7 +234,20 @@ def youtube_height_cap(user_id) -> int:
         return int(os.getenv("YT_MAX_HEIGHT_ANON", "720"))
     from app.core.quotas import get_user_tier
     paid = (get_user_tier(user_id) or "free") != "free"
-    return int(os.getenv("YT_MAX_HEIGHT_PRO", "2160") if paid else os.getenv("YT_MAX_HEIGHT_USER", "1080"))
+    return youtube_height_for(paid)
+
+
+def youtube_height_for(paid: bool) -> int:
+    """Free: YT_MAX_HEIGHT_USER. Paid: YT_MAX_HEIGHT_PRO, never below Free —
+    28/10/2026 production had YT_MAX_HEIGHT_USER=0 (no cap) and no
+    YT_MAX_HEIGHT_PRO, so Pro stopped at 2160 while Free had no limit."""
+    free = int(os.getenv("YT_MAX_HEIGHT_USER", "1080"))
+    if not paid:
+        return free
+    pro = int(os.getenv("YT_MAX_HEIGHT_PRO", "2160"))
+    if free == 0 or pro == 0:
+        return 0
+    return max(pro, free)
 
 
 def quality_note(requested: str | None, delivered: int, formats: list,

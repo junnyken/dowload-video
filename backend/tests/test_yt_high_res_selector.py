@@ -90,6 +90,11 @@ def test_cobalt_high_res_needs_vp9(q, want):
     ("u", "enterprise", {}, 2160),
     ("u", "pro", {"YT_MAX_HEIGHT_PRO": "1440"}, 1440),
     ("u", "free", {"YT_MAX_HEIGHT_USER": "720"}, 720),
+    # production 28/10: Free set to 0 (no cap), Pro unset → Pro must not stop at 2160
+    ("u", "free", {"YT_MAX_HEIGHT_USER": "0"}, 0),
+    ("u", "pro", {"YT_MAX_HEIGHT_USER": "0"}, 0),
+    ("u", "pro", {"YT_MAX_HEIGHT_USER": "4320", "YT_MAX_HEIGHT_PRO": "2160"}, 4320),
+    ("u", "pro", {"YT_MAX_HEIGHT_PRO": "0"}, 0),
 ])
 def test_youtube_cap_is_by_plan(monkeypatch, uid, tier, env, want):
     import app.core.quotas as q
@@ -100,3 +105,21 @@ def test_youtube_cap_is_by_plan(monkeypatch, uid, tier, env, want):
         monkeypatch.setenv(k, v)
     monkeypatch.setattr(q, "_get_tier", lambda _uid: tier)
     assert youtube_height_cap(uid) == want
+
+
+@pytest.mark.parametrize("env,want", [
+    ({}, (1080, 2160)),
+    ({"YT_MAX_HEIGHT_USER": "0"}, (0, 0)),          # production 28/10
+    ({"YT_MAX_HEIGHT_PRO": "1440"}, (1080, 1440)),
+])
+def test_plans_page_shows_the_paid_youtube_cap(monkeypatch, env, want):
+    import fakeredis
+    from app.core import plans
+    r = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(plans, "_r", lambda: r)
+    for k in ("YT_MAX_HEIGHT_PRO", "YT_MAX_HEIGHT_USER"):
+        monkeypatch.delenv(k, raising=False)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    t = {x["id"]: x for x in plans.build_plans()["tiers"]}
+    assert (t["free"]["youtube_max_height"], t["pro"]["youtube_max_height"]) == want
