@@ -221,7 +221,8 @@ async def lifespan(app: FastAPI):
 
     async def _startup_db_checks():
         try:
-            from app.core.database import validate_schema
+            from app.core.database import ensure_columns, validate_schema
+            await _asyncio.wait_for(_asyncio.to_thread(ensure_columns), timeout=60)
             await _asyncio.wait_for(_asyncio.to_thread(validate_schema), timeout=120)
         except Exception as _schema_err:
             print(f"[Startup] Schema validation skipped: {_schema_err}")

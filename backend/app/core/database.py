@@ -141,6 +141,44 @@ _REQUIRED_COLUMNS = {
 }
 
 
+# Additive, idempotent columns the app creates itself on the Vibe Host
+# Postgres (there is no migration runner there; database/migrations/041_*.sql
+# is the same statement for a Supabase backend). Every writer and reader of
+# these columns still works when one is absent.
+_ENSURED_COLUMNS = (
+    ("download_jobs", "downloaded_media", "jsonb"),   # quality #3: ffprobe of the file
+)
+
+
+def ensure_columns() -> None:
+    """ALTER TABLE … ADD COLUMN IF NOT EXISTS for _ENSURED_COLUMNS. Postgres only; never raises."""
+    try:
+        client = get_supabase_client()
+        pool = getattr(client, "_pool", None)
+        if pool is None or not hasattr(client, "run_sql"):
+            return
+        import psycopg2  # noqa: PLC0415
+        for table, col, sql_type in _ENSURED_COLUMNS:
+            # own short-lived connection: the lock timeout must not stick to a pooled one
+            conn = None
+            try:
+                conn = psycopg2.connect(pool.dsn, connect_timeout=10,
+                                        options="-c lock_timeout=3000 -c statement_timeout=15000")
+                conn.autocommit = True
+                with conn.cursor() as cur:
+                    cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {sql_type}")
+                pool.columns.pop(table, None)
+                print(f"[Schema] ✓ {table}.{col}")
+            except Exception as e:
+                # a busy table (lock wait > 3 s) skips this deploy instead of stalling writers
+                print(f"[Schema] ⚠ {table}.{col} not added: {type(e).__name__}")
+            finally:
+                if conn is not None:
+                    conn.close()
+    except Exception as e:
+        print(f"[Schema] ensure_columns skipped: {type(e).__name__}")
+
+
 def validate_schema() -> None:
     """
     Probe Supabase tables for required columns.

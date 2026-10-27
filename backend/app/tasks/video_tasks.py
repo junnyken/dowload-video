@@ -40,6 +40,7 @@ import shutil
 _OPTIONAL_COLS = {
     "auto_retry_status", "retry_count", "last_error",
     "error_type", "completed_at", "job_type", "fallback_quality_used",
+    "downloaded_media",
 }
 _MISSING_COLS: set = set()
 
@@ -457,6 +458,9 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
         }
         if is_local:
             update_data["temp_artifact_path"] = local_path
+        # quality #3: the measurement of the file, kept for the history
+        if (info.get("downloaded_media") or {}).get("measured"):
+            update_data["downloaded_media"] = info["downloaded_media"]
 
         try:
             update_data["file_size_mb"] = info.get("file_size_mb", 0)

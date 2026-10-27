@@ -235,13 +235,14 @@ async def get_user_history(
                     "history_limit": history_cap, "sort_by": sort_by, "active_filters": 0}
         offset = min(offset, max_offset)
 
-    try:
+    def _query(with_media: bool):
         q = (
             supabase.table("download_jobs")
             .select(
                 "id, batch_id, original_url, platform, title, thumbnail_url, "
                 "status, file_size_mb, downloaded_height, is_audio_only, "
                 "selected_quality, source_surface, created_at, error_message, "
+                + ("downloaded_media, " if with_media else "") +
                 "job_metadata(creator_handle, creator_name, duration_seconds, "
                 "view_count, like_count, upload_date, language_detected, hashtags, "
                 "categories, description_snippet, thumbnail_url), "
@@ -266,8 +267,16 @@ async def get_user_history(
             q = q.order("created_at", desc=False)
         else:
             q = q.order("created_at", desc=True)
+        return q
 
-        res = q.execute()
+    try:
+        try:
+            res = _query(True).execute()
+        except Exception as e:
+            # quality #3 column not created yet on this database
+            if "downloaded_media" not in str(e):
+                raise
+            res = _query(False).execute()
         items = res.data or []
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch history: {e}")

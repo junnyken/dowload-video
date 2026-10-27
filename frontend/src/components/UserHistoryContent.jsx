@@ -7,6 +7,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../lib/apiBase';
 import DesktopHistorySection from './DesktopHistorySection';
+import { mediaParts } from '../lib/mediaLabel';
 import { useTranslation, Trans } from 'react-i18next';
 import { useLang } from '../i18n';
 
@@ -430,6 +431,9 @@ function HistoryItem({ item, onDelete, deleting, onTagClick, activeTag, isNotesO
             </span>
             {item.file_size_mb > 0 && (
               <span className="text-[10px] text-fg-muted">{item.file_size_mb.toFixed(1)} MB</span>
+            )}
+            {item.status === 'success' && mediaParts({ ...item, quality: null }).length > 0 && (
+              <span className="text-[10px] text-fg-muted font-mono">{mediaParts({ ...item, quality: null }).join(' · ')}</span>
             )}
             {duration && (
               <span className="text-[10px] text-fg-muted flex items-center gap-0.5">

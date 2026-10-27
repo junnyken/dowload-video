@@ -31,3 +31,10 @@ test('not measured falls back to the old label', () => {
   assert.deepEqual(mediaParts({}), []);
   assert.equal(needsModernPlayer({ downloaded_media: { measured: false } }), false);
 });
+
+test('history row: a requested MP3 kbps is not shown as if measured', () => {
+  const row = { is_audio_only: true, quality: 'mp3_320', selected_quality: 'mp3_320' };
+  assert.deepEqual(mediaParts({ ...row, quality: null }), []);
+  const measured = { ...row, downloaded_media: { measured: true, acodec: 'mp3', audio_bitrate_kbps: 128 } };
+  assert.deepEqual(mediaParts({ ...measured, quality: null }), ['MP3', '128 kbps']);
+});

@@ -1031,7 +1031,7 @@ async def fetch_link(
         if user:
             try:
                 supabase = get_supabase_client()
-                supabase.table("download_jobs").insert({
+                _row = {
                     "batch_id": f"single_{str(uuid.uuid4())}",
                     "original_url": payload.url,
                     "title": info.get("title"),
@@ -1046,7 +1046,18 @@ async def fetch_link(
                     "selected_quality": payload.quality,
                     "source": x_vg_source or "web",
                     "platform": _get_platform_key(payload.url),
-                }).execute()
+                }
+                _media = info.get("downloaded_media") or {}
+                if _media.get("measured"):
+                    _row["downloaded_media"] = _media
+                try:
+                    supabase.table("download_jobs").insert(_row).execute()
+                except Exception as _ins_err:
+                    # column not created yet on this database: keep the history row without it
+                    if "downloaded_media" not in str(_ins_err):
+                        raise
+                    _row.pop("downloaded_media", None)
+                    supabase.table("download_jobs").insert(_row).execute()
             except Exception:
                 pass  # History save failure must never break the download response
 

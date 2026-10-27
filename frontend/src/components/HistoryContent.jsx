@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { useLang } from '../i18n';
 import { localAnyId, localMp3Id, toFileId } from '../lib/localFile';
+import { mediaParts } from '../lib/mediaLabel';
 import {
   History,
   Search,
@@ -507,6 +508,11 @@ export default function HistoryContent() {
                                 {job.file_size_mb > 0 && (
                                   <span className="text-[10px] text-fg-muted font-medium px-1.5 py-0.5 bg-surface rounded inline-block">
                                     {job.file_size_mb} MB
+                                  </span>
+                                )}
+                                {job.status === 'success' && mediaParts({ ...job, quality: null }).length > 0 && (
+                                  <span className="text-[10px] text-fg-muted font-mono px-1.5 py-0.5 bg-surface rounded inline-block">
+                                    {mediaParts({ ...job, quality: null }).join(' · ')}
                                   </span>
                                 )}
                                 {getExpiryBadge(job)}
