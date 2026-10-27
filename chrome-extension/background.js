@@ -271,6 +271,54 @@ function _serverWrap(rawUrl, base, safeName, finalExt) {
   return `${base}/api/v1/proxy-download?url=${encodeURIComponent(rawUrl)}&filename=${encodeURIComponent(safeName)}&ext=${finalExt}`;
 }
 
+// 5.22.1 (owner 27/10): Douyin's CDN answers 403 without a douyin.com Referer (measured: the same
+// v3-web.douyinvod.com link, 403 without, 206 video/mp4 with), and chrome.downloads sends none — so
+// every direct Douyin download failed and went through the server 15 s later. Session rules add it to
+// the extension's own requests (tabId -1: downloads, fetch) for those hosts only; pages are untouched.
+const VG_REFERER_RULES = [
+  { id: 9101, domains: ['douyinvod.com', 'douyincdn.com', 'zjcdn.com', 'bytecdn.cn', 'amemv.com', 'snssdk.com'], referer: 'https://www.douyin.com/' },
+];
+function vgRefererRules(list = VG_REFERER_RULES) {
+  if (!chrome.declarativeNetRequest || !chrome.declarativeNetRequest.updateSessionRules) return Promise.resolve(false);
+  return chrome.declarativeNetRequest.updateSessionRules({
+    removeRuleIds: list.map((r) => r.id),
+    addRules: list.map((r) => ({
+      id: r.id,
+      priority: 1,
+      action: { type: 'modifyHeaders', requestHeaders: [{ header: 'referer', operation: 'set', value: r.referer }] },
+      condition: { requestDomains: r.domains, tabIds: [chrome.tabs.TAB_ID_NONE], resourceTypes: ['other', 'media', 'xmlhttprequest'] },
+    })),
+  }).then(() => true, (e) => { console.warn('[VidGrab] referer rules:', e && e.message); return false; });
+}
+vgRefererRules();
+
+function vgNeedsReferer(url) {
+  let host = '';
+  try { host = new URL(url).hostname; } catch { return false; }
+  return VG_REFERER_RULES.some((r) => r.domains.some((d) => host === d || host.endsWith('.' + d)));
+}
+
+// The file fetched in the offscreen page (which gets the Referer), then saved from a blob: URL.
+let vgBlobSaves = 0;
+async function vgSaveViaPage(url, name) {
+  vgBlobSaves++;
+  let blobUrl = null;
+  try {
+    await ensureOffscreen();
+    const r = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'BLOB_FETCH', url });
+    if (!r || !r.ok) return false;
+    blobUrl = r.url;
+    return await vgSaveFile(blobUrl, name);
+  } catch {
+    return false;
+  } finally {
+    vgBlobSaves--;
+    // the download reads the blob after "complete" is reported on some builds: release a little later
+    if (blobUrl) setTimeout(() => chrome.runtime.sendMessage({ target: 'offscreen', type: 'BLOB_RELEASE', url: blobUrl }).catch(() => {}).finally(() => closeOffscreenIfIdle()), 60_000);
+    else closeOffscreenIfIdle();
+  }
+}
+
 // Download preferring the user's own IP; fall back to the server proxy if the
 // direct download is interrupted (403 / CORS / referer-gated CDN).
 function smartDownload({ rawUrl, base, safeName, finalExt, saveAs }) {
@@ -292,6 +340,7 @@ function smartDownload({ rawUrl, base, safeName, finalExt, saveAs }) {
       if (delta.state.current === 'interrupted') {
         chrome.downloads.onChanged.removeListener(onChanged);
         console.log('[VidGrab] direct download interrupted → server fallback');
+        chrome.downloads.erase({ id: downloadId }, () => { void chrome.runtime.lastError; }); // see vgSaveFile
         chrome.downloads.download({ url: proxyUrl, filename, saveAs });
       } else if (delta.state.current === 'complete') {
         chrome.downloads.onChanged.removeListener(onChanged);
@@ -391,6 +440,7 @@ async function ensureOffscreen() {
   }
 }
 async function closeOffscreenIfIdle() {
+  if (vgBlobSaves > 0) return;
   if ([...hlsJobs.values()].some((j) => j.state === 'running' || j.state === 'saving')) return;
   const rec = (await chrome.storage.session.get('vg_rec').catch(() => ({}))).vg_rec;
   if (rec && (rec.state === 'recording' || rec.state === 'saving')) return;
@@ -572,7 +622,13 @@ async function vgFindMedia(tabId) {
 function vgSaveFile(url, name) {
   return new Promise((resolve) => {
     let id = null;
-    const done = (ok) => { chrome.downloads.onChanged.removeListener(onChanged); clearTimeout(timer); resolve(ok); };
+    const done = (ok) => {
+      chrome.downloads.onChanged.removeListener(onChanged); clearTimeout(timer);
+      // 5.22.1 (owner 27/10): the caller falls back to the server, so the failed try must not stay in
+      // Chrome's downloads as a red "Không thấy tệp trên trang" next to the file that did arrive
+      if (!ok && id != null) chrome.downloads.erase({ id }, () => { void chrome.runtime.lastError; });
+      resolve(ok);
+    };
     const onChanged = (delta) => {
       if (delta.id !== id || !delta.state) return;
       if (delta.state.current === 'complete') {
@@ -685,7 +741,7 @@ async function vgSaveVideo(payload, signal, pageTabId) {
 
   if (media && !(signal && signal.aborted)) {
     const name = await vgFileName(media.title, payload.url);
-    if (await vgSaveFile(media.url, name)) {
+    if (await (vgNeedsReferer(media.url) ? vgSaveViaPage(media.url, name) : vgSaveFile(media.url, name))) {
       if (claim && claim.claimId) vgSettle(claim.claimId, 'completed');
       addToHistory({ title: media.title || 'Video', thumbnail: '', url: payload.url, quality: 'HD', fileSize: '',
                      noWatermark: true, hasSubtitle: false, subtitleLanguages: [], subtitleSource: 'none' });

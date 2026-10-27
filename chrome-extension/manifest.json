@@ -19,7 +19,8 @@
     "cookies",
     "webRequest",
     "offscreen",
-    "nativeMessaging"
+    "nativeMessaging",
+    "declarativeNetRequestWithHostAccess"
   ],
   "optional_permissions": [
     "clipboardRead",
