@@ -16,7 +16,6 @@ import queue as _queue
 import re
 import subprocess
 import threading
-import unicodedata
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -637,8 +636,8 @@ def process_flow_cleanup(
 
         # Slug filename from input base name
         base = os.path.splitext(os.path.basename(input_path))[0]
-        normalized = unicodedata.normalize("NFKD", base).encode("ascii", "ignore").decode("ascii")
-        slug = re.sub(r"[^\w\-]", "_", normalized).strip("_") or "flow_veo"
+        from app.core.local_download import display_name
+        slug = display_name(base, "flow_veo")   # keeps Vietnamese (27/10)
         suffix = "cropped" if method == "crop" else "logo_cleaned"
         output_filename = f"{slug}_{suffix}.mp4"
 

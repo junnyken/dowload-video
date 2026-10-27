@@ -14,7 +14,7 @@ import threading
 import time as _time_mod
 import uuid
 from typing import List, Optional
-from urllib.parse import quote, urlparse
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -1830,15 +1830,10 @@ async def download_thumbnail(request: Request, url: str, filename: str = "thumbn
 
     try:
         import re
-        import unicodedata
 
-        # Sanitize filename
-        normalized = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')
-        cleaned = re.sub(r'[^\w\s-]', '', normalized).strip()
-        slugified = re.sub(r'[\s]+', '-', cleaned)
-        slugified = re.sub(r'-+', '-', slugified)
-        if not slugified:
-            slugified = "thumbnail"
+        # Display name keeps Vietnamese (27/10); the header goes through content_disposition
+        from app.core.local_download import content_disposition, display_name
+        slugified = display_name(filename, "thumbnail")
 
         # Detect image extension from URL
         ext = "jpg"
@@ -1878,7 +1873,7 @@ async def download_thumbnail(request: Request, url: str, filename: str = "thumbn
             stream_image(),
             media_type=content_type,
             headers={
-                "Content-Disposition": f'attachment; filename="{slugified}.{ext}"',
+                "Content-Disposition": content_disposition(f"{slugified}.{ext}"),
                 "Access-Control-Expose-Headers": "Content-Disposition",
             },
         )
@@ -2010,12 +2005,9 @@ async def trim_media(payload: TrimRequest, request: Request):
         from app.tasks.video_tasks import delete_local_file
         delete_local_file.apply_async((output_path,), countdown=15 * 60)
 
-        # Sanitize filename
-        import re
-        import unicodedata
-        normalized = unicodedata.normalize('NFKD', payload.filename).encode('ascii', 'ignore').decode('ascii')
-        cleaned = re.sub(r'[^\w\s-]', '', normalized).strip()
-        slugified = re.sub(r'[\s]+', '-', cleaned) or "trimmed"
+        # Display name keeps Vietnamese (27/10)
+        from app.core.local_download import display_name
+        slugified = display_name(payload.filename, "trimmed")
 
         file_size_mb = round(os.path.getsize(output_path) / (1024 * 1024), 2)
         output_size_ratio = round(file_size_mb / max(os.path.getsize(input_path) / (1024 * 1024), 0.001), 3)
@@ -2142,9 +2134,8 @@ async def convert_to_gif(payload: ToGifRequest, request: Request):
         from app.tasks.video_tasks import delete_local_file
         delete_local_file.apply_async((output_path,), countdown=20 * 60)
 
-        import re as _re, unicodedata as _uni
-        norm = _uni.normalize("NFKD", payload.filename).encode("ascii", "ignore").decode("ascii")
-        slug = _re.sub(r"[\s]+", "-", _re.sub(r"[^\w\s-]", "", norm).strip()) or "animation"
+        from app.core.local_download import display_name
+        slug = display_name(payload.filename, "animation")   # keeps Vietnamese (27/10)
 
         gif_size_mb = round(os.path.getsize(output_path) / (1024 * 1024), 2)
 
@@ -2596,13 +2587,10 @@ async def proxy_download(request: Request, url: str, filename: str = "video", ex
 
     try:
         import re
-        import unicodedata
 
-        # Slugify filename
-        normalized = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')
-        cleaned = re.sub(r'[^\w\s-]', '', normalized).strip()
-        slugified = re.sub(r'[\s]+', '-', cleaned)
-        slugified = re.sub(r'-+', '-', slugified) or "video"
+        # Display name keeps Vietnamese (27/10); header via content_disposition
+        from app.core.local_download import content_disposition, display_name
+        slugified = display_name(filename, "video")
 
         safe_ext = ext if ext in ("mp4", "webm", "m4a", "mp3", "ogg", "wav") else "mp4"
 
@@ -2644,7 +2632,6 @@ async def proxy_download(request: Request, url: str, filename: str = "video", ex
             "ogg": "audio/ogg", "wav": "audio/wav",
         }
         content_type = media_types.get(safe_ext, "application/octet-stream")
-        safe_filename = quote(slugified, safe="")
 
         import re as _re
         _proxy = None
@@ -2686,7 +2673,7 @@ async def proxy_download(request: Request, url: str, filename: str = "video", ex
             stream_video(),
             media_type=content_type,
             headers={
-                "Content-Disposition": f'attachment; filename="{slugified}.{safe_ext}"; filename*=UTF-8\'\'{safe_filename}.{safe_ext}',
+                "Content-Disposition": content_disposition(f"{slugified}.{safe_ext}"),
                 "Access-Control-Expose-Headers": "Content-Disposition",
             },
         )

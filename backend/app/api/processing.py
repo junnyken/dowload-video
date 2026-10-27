@@ -30,7 +30,6 @@ import os
 import re
 import asyncio
 import subprocess
-import unicodedata
 import uuid
 import zipfile
 from datetime import datetime, timezone, timedelta
@@ -88,10 +87,9 @@ def _assert_safe_url(url: str) -> None:
 
 
 def _slugify(name: str, fallback: str = "output") -> str:
-    """Normalise a filename to ASCII slug."""
-    normalized = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
-    cleaned = re.sub(r"[^\w\s-]", "", normalized).strip()
-    return re.sub(r"[\s]+", "-", cleaned) or fallback
+    """The display name of an output file — keeps Vietnamese (27/10), see local_download.display_name."""
+    from app.core.local_download import display_name
+    return display_name(name, fallback)
 
 
 def _schedule_cleanup(output_path: str) -> None:

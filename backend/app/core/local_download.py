@@ -90,12 +90,44 @@ def content_disposition(filename: str, disposition: str = "attachment") -> str:
     Control characters, quotes and backslashes never reach the header.
     """
     name = "".join(ch for ch in (filename or "") if ch >= " " and ch != "\x7f").strip() or "download"
-    ascii_name = unicodedata.normalize("NFKD", name.replace("Đ", "D").replace("đ", "d")).encode("ascii", "ignore").decode("ascii")
+    ascii_name = ascii_fold(name)
     ascii_name = re.sub(r'["\\]', "", ascii_name).strip()
     if not ascii_name or ascii_name.startswith("."):
         ascii_name = "download" + ascii_name
     return (f'{disposition}; filename="{ascii_name}"; '
             f"filename*=UTF-8''{quote(name, safe='')}")
+
+
+_NAME_FORBIDDEN = re.compile(r'[<>:"/\\|?*%\x00-\x1f\x7f]')
+_WIN_RESERVED = re.compile(r"^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$", re.I)
+DISPLAY_NAME_MAX_BYTES = 150
+
+
+def ascii_fold(text: str) -> str:
+    """Vietnamese to plain ASCII the right way: Đ/đ become D/d (NFKD alone drops them)."""
+    return unicodedata.normalize("NFKD", text.replace("Đ", "D").replace("đ", "d")).encode("ascii", "ignore").decode("ascii")
+
+
+def display_name(title: str | None, fallback: str = "video") -> str:
+    """
+    The name a person sees for a downloaded file (no extension), same rules as
+    the Windows app (desktop/src-tauri/src/engine.rs named_template): characters
+    Windows/macOS refuse become spaces, spaces are collapsed, at most 150 bytes
+    without cutting a character, no trailing dot/space, never a reserved
+    Windows name. Vietnamese is kept (owner 27/10: "Đường về nhà đẹp" arrived
+    as "uong-ve-nha-ep"). FILENAME_ASCII_ONLY=1 folds to ASCII (Đ→D) instead.
+    Only for display / Content-Disposition — names on disk stay random tokens.
+    """
+    name = _NAME_FORBIDDEN.sub(" ", unicodedata.normalize("NFC", title or ""))
+    if os.getenv("FILENAME_ASCII_ONLY", "").strip().lower() in ("1", "true", "yes", "on"):
+        name = ascii_fold(name)
+    name = re.sub(r"\s+", " ", name).strip()
+    while len(name.encode("utf-8")) > DISPLAY_NAME_MAX_BYTES:
+        name = name[:-1]
+    name = name.rstrip(" .")
+    if not name.strip(".") or _WIN_RESERVED.match(name):
+        name = fallback
+    return name
 
 
 def expose_legacy_paths() -> bool:
