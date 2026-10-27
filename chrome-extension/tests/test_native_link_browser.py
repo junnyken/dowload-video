@@ -155,7 +155,7 @@ def main():
             st = wait(lambda: (lambda s: s if s and s[0].get("extVersion") else None)(app.cmd("status")))
             info = (st or [{}])[0]
             check("the app sees the browser with no request made (Chromium started the host)",
-                  info.get("extVersion") == "5.22.0" and bool(info.get("browser")), json.dumps(st))
+                  info.get("extVersion") == "5.22.1" and bool(info.get("browser")), json.dumps(st))
             linked = wait(lambda: sw.evaluate("() => !!(vgNativePort && vgNativeApp.up && vgNativeApp.version === '0.20.0')"))
             check("the extension knows the app is on the link", linked)
             hosts = subprocess.run(["pgrep", "-fa", "vidgrab-host-0.20.0.exe"], capture_output=True, text=True).stdout
@@ -196,7 +196,7 @@ def main():
             check("app quit: the extension hears it (host stays)", down and vgport_open(sw))
             app = App(binary, env)
             back = wait(lambda: app.cmd("status"), 20)
-            check("app back: the same host reconnects by itself", bool(back) and back[0].get("extVersion") == "5.22.0", json.dumps(back))
+            check("app back: the same host reconnects by itself", bool(back) and back[0].get("extVersion") == "5.22.1", json.dumps(back))
             ctx.close()
         gone = wait(lambda: not subprocess.run(["pgrep", "-f", "vidgrab-host-0.20.0.exe"], capture_output=True).stdout, 10)
         check("browser closed: the host ends", gone)
