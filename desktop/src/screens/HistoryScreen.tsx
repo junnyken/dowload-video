@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, Cloud, ExternalLink, FolderOpen, History as HistoryIcon, LogIn, RotateCw, Search, Trash2 } from 'lucide-react';
+import { AlertCircle, Cloud, ExternalLink, FolderOpen, History as HistoryIcon, Languages, LogIn, RotateCw, Search, Trash2 } from 'lucide-react';
 import { Badge, Button, EmptyState, IconButton, PlatformBadge, ScreenHeader, Spinner, Tabs } from '../components/ui';
 import { SyncStatus } from '../components/SyncStatus';
 import { api } from '../lib/tauri';
@@ -10,6 +10,7 @@ import { confirmDialog, openSignIn, redownload, toast } from '../lib/ui';
 import { errorMessage, toAppError } from '../lib/errors';
 import { formatBytes, formatDate } from '../lib/format';
 import type { HistoryItem } from '../lib/types';
+import { canTranslate, SubtransError, translateToVi } from '../lib/subtrans';
 
 type Tab = 'local' | 'web';
 
@@ -18,6 +19,7 @@ function LocalTab() {
   const [err, setErr] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [tick, setTick] = useState(0);
+  const [translating, setTranslating] = useState<Record<string, number>>({});
   const finished = queue.use().filter((i) => i.state === 'completed' || i.state === 'failed').length;
 
   useEffect(() => {
@@ -44,6 +46,21 @@ function LocalTab() {
     const ok = await confirmDialog({ title: 'Xoá toàn bộ lịch sử?', text: 'Chỉ xoá danh sách trong ứng dụng. Các tệp đã tải trên máy của bạn được giữ nguyên.', okLabel: 'Xoá lịch sử', danger: true });
     if (!ok) return;
     try { await api.historyClear(); setRows([]); } catch (e) { toast('error', errorMessage(toAppError(e).code)); }
+  }
+  // wording: BA review
+  async function translate(h: HistoryItem) {
+    if (!h.filePath || h.id in translating) return;
+    setTranslating((t) => ({ ...t, [h.id]: 0 }));
+    toast('info', 'Đang dịch phụ đề sang tiếng Việt…');
+    try {
+      await translateToVi(h.filePath, (pct) => setTranslating((t) => (h.id in t ? { ...t, [h.id]: pct } : t)));
+      toast('success', 'Đã lưu phụ đề tiếng Việt (.vi.srt) cạnh video.');
+    } catch (e) {
+      if (e instanceof SubtransError && e.code === 'login') openSignIn();
+      toast('error', e instanceof SubtransError ? e.message : 'Không dịch được phụ đề. Có thể tệp đã bị di chuyển hoặc xoá.');
+    } finally {
+      setTranslating(({ [h.id]: _, ...rest }) => rest);
+    }
   }
   async function act(fn: (p: string) => Promise<unknown>, p: string | null) {
     if (!p) return;
@@ -93,6 +110,11 @@ function LocalTab() {
                     <>
                       <IconButton label="Mở tệp" disabled={!h.filePath} onClick={() => void act(api.openPath, h.filePath)}><ExternalLink size={16} /></IconButton>
                       <IconButton label="Mở thư mục chứa tệp" disabled={!h.filePath} onClick={() => void act(api.revealPath, h.filePath)}><FolderOpen size={16} /></IconButton>
+                      {canTranslate(h.filePath) && (
+                        h.id in translating
+                          ? <span className="flex h-8 items-center gap-1 px-1 text-xs text-fg-muted" aria-live="polite"><Spinner />{translating[h.id] > 0 ? `${Math.round(translating[h.id])}%` : ''}</span>
+                          : <IconButton label="Dịch phụ đề sang tiếng Việt" onClick={() => void translate(h)}><Languages size={16} /></IconButton>
+                      )}
                     </>
                   )}
                   <IconButton label="Tải lại" onClick={() => redownload(h.url)}><RotateCw size={16} /></IconButton>

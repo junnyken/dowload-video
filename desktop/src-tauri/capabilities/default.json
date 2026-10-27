@@ -15,7 +15,7 @@
     "allow-default-download-dir",
     "allow-disk-free",
     "allow-reveal-path",
-    "allow-open-path",
+    "allow-open-path", "allow-subtitle-list", "allow-subtitle-read", "allow-subtitle-write",
     "allow-open-url",
     "allow-open-in-chrome",
     "allow-ext-link-status",

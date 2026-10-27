@@ -40,6 +40,7 @@ mod paths;
 mod proc;
 mod progress;
 mod quota_gate;
+mod subs;
 mod sys;
 mod validate;
 mod ytdlp_choice;
@@ -1214,6 +1215,31 @@ async fn open_path(store: State<'_, Store>, path: String) -> CmdResult<()> {
         .map_err(|e| CommandError::unknown(format!("cannot open file: {e}")))
 }
 
+/// 0.22.0: subtitle languages written beside a finished download (subs.rs).
+#[tauri::command]
+fn subtitle_list(store: State<'_, Store>, path: String) -> CmdResult<Vec<String>> {
+    let canon = produced_or_refuse(&store, &path, true)?;
+    Ok(subs::list(&paths::display_form(&canon)))
+}
+
+#[tauri::command]
+fn subtitle_read(store: State<'_, Store>, path: String, lang: String) -> CmdResult<String> {
+    let canon = produced_or_refuse(&store, &path, true)?;
+    subs::read(&paths::display_form(&canon), &lang).map_err(CommandError::unknown)
+}
+
+/// Saves a translation as `<stem>.<lang>.srt` (never over an existing file);
+/// the new file counts as produced so Open/Reveal accept it.
+#[tauri::command]
+fn subtitle_write(store: State<'_, Store>, path: String, lang: String, content: String) -> CmdResult<String> {
+    let canon = produced_or_refuse(&store, &path, true)?;
+    let written = subs::write(&paths::display_form(&canon), &lang, &content).map_err(CommandError::unknown)?;
+    if let Ok(c) = paths::canonical(&written) {
+        let _ = store.db()?.add_produced(&c, "subtitle");
+    }
+    Ok(written.to_string_lossy().into_owned())
+}
+
 /// Opens one of VidGrab's own web pages in the default browser
 /// (validate::OPEN_URL_HOSTS). The webview has no opener/shell permission.
 #[tauri::command]
@@ -1831,6 +1857,9 @@ pub fn run() {
             disk_free,
             reveal_path,
             open_path,
+            subtitle_list,
+            subtitle_read,
+            subtitle_write,
             open_url,
             open_in_chrome,
             ext_link_status,

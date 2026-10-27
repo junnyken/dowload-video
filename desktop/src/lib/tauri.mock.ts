@@ -274,6 +274,9 @@ export async function mockInvoke(cmd: string, a: Record<string, unknown>): Promi
     case 'default_download_dir': return 'C:\\Users\\demo\\Downloads\\VidGrab';
     case 'disk_free': return 84e9;
     case 'reveal_path': case 'open_path': return null;
+    case 'subtitle_list': return ['en'];
+    case 'subtitle_read': return '1\n00:00:01,000 --> 00:00:02,000\nHello\n';
+    case 'subtitle_write': return 'C:\\Users\\demo\\Videos\\demo.vi.srt';
     case 'history_list': {
       const q = ((a.query as string) ?? '').toLowerCase();
       return history.filter((h) => !q || h.title.toLowerCase().includes(q) || h.url.toLowerCase().includes(q))

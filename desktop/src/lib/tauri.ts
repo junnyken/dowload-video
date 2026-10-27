@@ -68,6 +68,10 @@ export const api = {
   diskFree: (path: string) => call<number>('disk_free', { path }),
   revealPath: (path: string) => call<null>('reveal_path', { path }),
   openPath: (path: string) => call<null>('open_path', { path }),
+  // 0.22.0: `<stem>.<lang>.srt` beside a finished download (subs.rs)
+  subtitleList: (path: string) => call<string[]>('subtitle_list', { path }),
+  subtitleRead: (path: string, lang: string) => call<string>('subtitle_read', { path, lang }),
+  subtitleWrite: (path: string, lang: string, content: string) => call<string>('subtitle_write', { path, lang, content }),
   // Rust allows only https on dvid.vibe1.tinhgon.xyz / dvid-api.vibe1.tinhgon.xyz.
   openUrl: (url: string) => call<null>('open_url', { url }),
   // 0.18.7: a www.douyin.com/user/… page or the extension page in Chrome when installed, else the default browser; true = Chrome.
