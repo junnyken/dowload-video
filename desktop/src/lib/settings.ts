@@ -27,7 +27,16 @@ export type Settings = {
   cleanup: { enabled: boolean; olderThanDays: number | null; minFreeGb: number | null };
   /** 0.21.0 (quality #8): "easy" H.264/AAC up to 1080p (default), "original" = codec yt-dlp picks. */
   codecPref: 'easy' | 'original';
+  /** 0.21.0 (quality #5): MP3 conversion (engine.rs Extras keys). 'best' = VBR (old behaviour), 'orig' = no re-encode. */
+  audioKbps: AudioKbps;
+  /** 0.21.0 (quality #7): uploaded vi/en subtitles as a file or inside the video. */
+  subtitles: SubtitleMode;
 };
+
+export type AudioKbps = 'best' | '320' | '256' | '192' | '128' | 'orig';
+export type SubtitleMode = 'off' | 'file' | 'embed';
+export const AUDIO_KBPS: AudioKbps[] = ['best', '320', '256', '192', '128', 'orig'];
+export const SUBTITLE_MODES: SubtitleMode[] = ['off', 'file', 'embed'];
 
 export type NameStyle = 'title' | 'date_title' | 'date_channel_title';
 export type FolderStyle = 'none' | 'platform' | 'month' | 'platform_month';
@@ -36,7 +45,8 @@ export const FOLDER_STYLES: FolderStyle[] = ['none', 'platform', 'month', 'platf
 
 const KEY = 'vg.settings';
 const DEFAULTS: Settings = { outDir: null, concurrency: 2, defaultQuality: 'best', theme: 'system', autoSync: true, closeToTray: true, douyinDebugWindow: false, clipboardMode: 'ask', platformPresets: {},
-  nameStyle: 'title', folderStyle: 'none', cleanup: { enabled: false, olderThanDays: 30, minFreeGb: null }, codecPref: 'easy' };
+  nameStyle: 'title', folderStyle: 'none', cleanup: { enabled: false, olderThanDays: 30, minFreeGb: null }, codecPref: 'easy',
+  audioKbps: 'best', subtitles: 'off' };
 
 /** Windows paths: case-insensitive, either slash, no trailing separator. */
 export function samePath(a: string, b: string): boolean {
@@ -68,6 +78,8 @@ function load(): Settings {
       if (!FOLDER_STYLES.includes(s.folderStyle)) s.folderStyle = 'none';
       s.cleanup = cleanCleanup(s.cleanup);
       if (s.codecPref !== 'original') s.codecPref = 'easy'; // older settings: the new default
+      if (!AUDIO_KBPS.includes(s.audioKbps)) s.audioKbps = 'best';
+      if (!SUBTITLE_MODES.includes(s.subtitles)) s.subtitles = 'off';
       return s;
     }
   } catch { /* corrupted -> defaults */ }

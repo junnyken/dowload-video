@@ -235,6 +235,94 @@ pub fn download_args(
     a
 }
 
+/// 0.21.0 Settings → audio (quality #5) and subtitles (quality #7). Like the
+/// name presets the UI sends a KEY; nothing typed reaches yt-dlp.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
+pub enum AudioKbps {
+    /// MP3 VBR quality 0 (the old behaviour).
+    #[default]
+    Best,
+    /// MP3 at a fixed bitrate (kbps).
+    Fixed(u16),
+    /// The source's own audio, not re-encoded (opus / m4a as published).
+    Original,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
+pub enum Subtitles {
+    #[default]
+    Off,
+    /// `.srt` next to the video.
+    File,
+    /// Soft subtitles inside the video (yt-dlp converts SRT to mov_text for MP4).
+    Embed,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
+pub struct Extras {
+    pub audio: AudioKbps,
+    pub subtitles: Subtitles,
+}
+
+/// Uploaded subtitles only (no auto captions): Vietnamese and English in any
+/// regional variant. A failed auto-translated caption fetch would fail the job.
+pub const SUB_LANGS: &str = "vi.*,en.*";
+
+impl Extras {
+    /// None for an unknown key; absent keys keep the old behaviour.
+    pub fn from_keys(audio: Option<&str>, subtitles: Option<&str>) -> Option<Extras> {
+        let audio = match audio.unwrap_or("best") {
+            "best" => AudioKbps::Best,
+            "orig" => AudioKbps::Original,
+            k @ ("320" | "256" | "192" | "128") => AudioKbps::Fixed(k.parse().ok()?),
+            _ => return None,
+        };
+        let subtitles = match subtitles.unwrap_or("off") {
+            "off" => Subtitles::Off,
+            "file" => Subtitles::File,
+            "embed" => Subtitles::Embed,
+            _ => return None,
+        };
+        Some(Extras { audio, subtitles })
+    }
+}
+
+/// Applies `extras` to the vector download_args built. The audio setting only
+/// changes an MP3 conversion (an M4A pick stays M4A); subtitles only apply to
+/// video. New flags go before the `--` that ends the options.
+pub fn apply_extras(args: &mut Vec<OsString>, extras: &Extras, audio_only: bool) {
+    if audio_only {
+        let fmt = args.iter().position(|a| a == "--audio-format");
+        let is_mp3 = fmt.is_some_and(|i| args.get(i + 1).is_some_and(|v| v == "mp3"));
+        if let (Some(i), true) = (fmt, is_mp3) {
+            let q = args.iter().position(|a| a == "--audio-quality");
+            match extras.audio {
+                AudioKbps::Best => {}
+                AudioKbps::Fixed(k) => {
+                    if let Some(v) = q.and_then(|q| args.get_mut(q + 1)) {
+                        *v = format!("{k}K").into();
+                    }
+                }
+                AudioKbps::Original => {
+                    args[i + 1] = "best".into();
+                    if let Some(q) = q {
+                        args.drain(q..q + 2);
+                    }
+                }
+            }
+        }
+        return;
+    }
+    let add: &[&str] = match extras.subtitles {
+        Subtitles::Off => return,
+        Subtitles::File => &["--write-subs", "--sub-langs", SUB_LANGS, "--convert-subs", "srt"],
+        // --embed-subs alone: with --write-subs too yt-dlp keeps the .srt next to the video
+        Subtitles::Embed => &["--embed-subs", "--sub-langs", SUB_LANGS, "--convert-subs", "srt"],
+    };
+    let end = args.iter().rposition(|a| a == "--").unwrap_or(args.len());
+    args.splice(end..end, add.iter().map(OsString::from));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -404,5 +492,73 @@ mod tests {
         let s = strs(&a);
         let i = s.iter().position(|x| x == "-o").unwrap();
         assert_eq!(s[i + 1], "X/%(title)s.%(ext)s");
+    }
+
+    fn after_dashdash(s: &[String]) -> Vec<String> {
+        s[s.iter().rposition(|a| a == "--").unwrap()..].to_vec()
+    }
+
+    #[test]
+    fn extras_keys_are_a_closed_list() {
+        assert_eq!(Extras::from_keys(None, None), Some(Extras::default()));
+        assert_eq!(Extras::from_keys(Some("192"), Some("embed")).unwrap(),
+            Extras { audio: AudioKbps::Fixed(192), subtitles: Subtitles::Embed });
+        assert_eq!(Extras::from_keys(Some("orig"), Some("file")).unwrap().audio, AudioKbps::Original);
+        for bad in ["999", "320K", "--exec", ""] {
+            assert_eq!(Extras::from_keys(Some(bad), None), None, "{bad}");
+        }
+        assert_eq!(Extras::from_keys(None, Some("auto")), None);
+    }
+
+    #[test]
+    fn audio_bitrate_and_original() {
+        let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d") };
+        let run = |fmt: Option<&str>, k: &str| {
+            let mut a = download_args(&t, "u", Path::new("/out"), fmt, true, &[], None, None);
+            apply_extras(&mut a, &Extras::from_keys(Some(k), None).unwrap(), true);
+            strs(&a)
+        };
+        let s = run(None, "128");
+        let i = s.iter().position(|a| a == "--audio-quality").unwrap();
+        assert_eq!((s[i - 1].as_str(), s[i + 1].as_str()), ("mp3", "128K"));
+        let s = run(None, "best");
+        let i = s.iter().position(|a| a == "--audio-quality").unwrap();
+        assert_eq!(s[i + 1], "0");
+        let s = run(None, "orig");
+        let i = s.iter().position(|a| a == "--audio-format").unwrap();
+        assert_eq!(s[i + 1], "best");
+        assert!(!s.iter().any(|a| a == "--audio-quality"));
+        // an M4A pick is left alone, and the URL stays last
+        let s = run(Some("ba[ext=m4a]/ba/b"), "orig");
+        let i = s.iter().position(|a| a == "--audio-format").unwrap();
+        assert_eq!(s[i + 1], "m4a");
+        assert_eq!(after_dashdash(&s), vec!["--", "u"]);
+    }
+
+    #[test]
+    fn subtitles_go_before_the_url_and_only_on_video() {
+        let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d") };
+        let mut a = download_args(&t, "https://x/--exec=calc", Path::new("/out"), None, false, &[], None, None);
+        apply_extras(&mut a, &Extras::from_keys(None, Some("embed")).unwrap(), false);
+        let s = strs(&a);
+        assert_eq!(after_dashdash(&s), vec!["--", "https://x/--exec=calc"]);
+        let i = s.iter().position(|a| a == "--sub-langs").unwrap();
+        assert_eq!(s[i + 1], SUB_LANGS);
+        assert!(s.iter().any(|a| a == "--embed-subs") && !s.iter().any(|a| a == "--write-subs"));
+        assert!(!s.iter().any(|a| a == "--write-auto-subs"));
+
+        let mut a = download_args(&t, "u", Path::new("/out"), None, false, &[], None, None);
+        apply_extras(&mut a, &Extras::from_keys(None, Some("file")).unwrap(), false);
+        let s = strs(&a);
+        assert!(s.iter().any(|a| a == "--convert-subs") && !s.iter().any(|a| a == "--embed-subs"));
+
+        let base = strs(&download_args(&t, "u", Path::new("/out"), None, true, &[], None, None));
+        let mut a = download_args(&t, "u", Path::new("/out"), None, true, &[], None, None);
+        apply_extras(&mut a, &Extras::from_keys(None, Some("embed")).unwrap(), true);
+        assert_eq!(strs(&a), base);
+        let mut a = download_args(&t, "u", Path::new("/out"), None, false, &[], None, None);
+        let before = strs(&a);
+        apply_extras(&mut a, &Extras::default(), false);
+        assert_eq!(strs(&a), before);
     }
 }

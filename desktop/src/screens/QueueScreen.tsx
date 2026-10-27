@@ -10,6 +10,7 @@ import { errorAction, errorMessage } from '../lib/errors';
 import { api } from '../lib/tauri';
 import { confirmDialog, go, toast } from '../lib/ui';
 import { routeLabel, type RouteId } from '../lib/routes-core';
+import { needsModernPlayer } from '../lib/media';
 
 /** Route step of the card; queue items saved by 0.7.x only have the old route name. */
 function stepOfItem(it: QueueItem): RouteId | undefined {
@@ -45,6 +46,9 @@ function Row({ it }: { it: QueueItem }) {
           <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-fg select-text" title={it.title}>{it.title}</h3>
           <PlatformBadge platform={it.platform} />
           <Badge tone="neutral">{it.formatLabel}</Badge>
+          {it.state === 'completed' && needsModernPlayer(it.media) && (
+            <span title="Tệp dùng codec mới (VP9/AV1/HEVC). Trình phát cũ có thể không mở được, khi đó hãy dùng VLC hoặc chọn 'Dễ mở' trong Cài đặt."><Badge tone="warning">Cần trình phát mới</Badge></span>
+          )}{/* wording: BA review — quality #3 (0.21.0) */}
           {routeLabel(stepOfItem(it)) && <Badge tone={stepOfItem(it) === 'L1' ? 'accent' : 'neutral'}>{routeLabel(stepOfItem(it))}</Badge>}{/* wording: BA review (routes-core.ts routeLabel) */}
         </div>
 

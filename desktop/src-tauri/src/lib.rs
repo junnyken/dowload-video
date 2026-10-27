@@ -32,6 +32,7 @@ mod ext_link;
 mod error;
 mod formats;
 mod history;
+mod media;
 mod login_window;
 mod native_host;
 mod native_reg;
@@ -181,6 +182,9 @@ struct DoneEvent {
     /// Present (true) when this run used the user's saved cookies.
     #[serde(skip_serializing_if = "Option::is_none")]
     cookies_used: Option<bool>,
+    /// 0.21.0 (quality #3): the finished file measured with ffprobe; absent when it could not be read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    media: Option<media::Media>,
 }
 
 #[derive(Clone, Serialize, Default)]
@@ -951,6 +955,8 @@ async fn start_download(
     claim_token: Option<String>,
     folder_style: Option<String>,
     name_style: Option<String>,
+    audio_kbps: Option<String>,
+    subtitles: Option<String>,
 ) -> CmdResult<()> {
     if !paths::valid_job_id(&job_id) {
         return Err(CommandError::unknown("invalid job id"));
@@ -978,6 +984,9 @@ async fn start_download(
         validate::format_id(f).map_err(CommandError::unknown)?;
     }
     let audio_only = audio_only.unwrap_or(false);
+    // 0.21.0 (quality #5 / #7): keys only, like the name presets; unknown = refused.
+    let extras = engine::Extras::from_keys(audio_kbps.as_deref(), subtitles.as_deref())
+        .ok_or_else(|| CommandError::unknown("unknown audio or subtitle setting"))?;
     if lock(&jobs.downloads).contains_key(&job_id) {
         return Err(CommandError::unknown("this job is already running"));
     }
@@ -1008,10 +1017,12 @@ async fn start_download(
         ck.as_ref().map(RunCookies::path),
     );
     let mut args = args;
+    engine::apply_extras(&mut args, &extras, audio_only);
     if out_name.is_none() && template != engine::OUTPUT_TEMPLATE {
         engine::set_output_template(&mut args, &template);
     }
     let ytdlp = ytdlp_for(&app, &paths[0]).await;
+    let ffprobe = paths[2].clone();
 
     // Insert under the lock right after spawning so a concurrent start with
     // the same id cannot slip in between the check above and here.
@@ -1062,6 +1073,8 @@ async fn start_download(
                     }
                     ev.state = "completed";
                     ev.file_size = std::fs::metadata(&canon).ok().map(|m| m.len());
+                    // the plain form: ffprobe gets C:\..., not the \\?\ path canonical() returns
+                    ev.media = media::probe(&ffprobe, &paths::display_form(&canon));
                     ev.file_path = Some(paths::display_form(&canon).to_string_lossy().into_owned());
                 }
                 _ => {

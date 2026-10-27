@@ -19,6 +19,7 @@ import {
 } from './routes-core';
 import { fetchLink } from './fetchlink';
 import { applyCodecPref, capForGuest } from './quality';
+import { mediaLabel, type Media } from './media';
 import { auth } from './auth';
 import { schedule, scheduleAllows } from './schedule';
 
@@ -63,6 +64,8 @@ export type QueueItem = {
   quality?: string;
   /** The server's own text for this item's error (channel claim-batch refusal); wins over errorMessage(errorCode). */
   errorText?: string | null;
+  /** 0.21.0: what ffprobe measured on the finished file (null = could not be read). */
+  media?: Media | null;
   addedAt: string;
 };
 
@@ -275,7 +278,9 @@ async function start(item: QueueItem) {
     // 0.21.0: then the "Dễ mở / Chất lượng gốc" preference (quality #8)
     const formatId = applyCodecPref(capForGuest(item.formatId, item.audioOnly, auth.get().status !== 'in'), item.audioOnly, st.codecPref);
     const style = { nameStyle: st.nameStyle, folderStyle: st.outDir && samePath(item.outDir, st.outDir) ? st.folderStyle : 'none' };
-    await api.startDownload({ jobId: item.id, url: item.url, outDir: item.outDir, formatId, audioOnly: item.audioOnly, ...style, ...extra });
+    // 0.21.0 audio bitrate / subtitles (quality #5, #7)
+    const extras = { audioKbps: st.audioKbps, subtitles: st.subtitles };
+    await api.startDownload({ jobId: item.id, url: item.url, outDir: item.outDir, formatId, audioOnly: item.audioOnly, ...style, ...extras, ...extra });
   } catch (e) {
     finishFailed(item.id, toAppError(e).code);
   }
@@ -357,8 +362,10 @@ export async function initQueue() {
       case 'completed':
         forget(e.jobId);
         void settle(it.claimId, 'completed');
-        patch(e.jobId, { state: 'completed', percent: 100, stage: null, speedBps: null, etaSec: null, filePath: e.filePath ?? null, fileSize: e.fileSize ?? it.totalBytes, pausing: false });
-        void api.historyAdd(toHistory(it, 'completed', { filePath: e.filePath ?? null, fileSize: e.fileSize ?? it.totalBytes })).then(() => syncSoon()).catch(() => {});
+        // 0.21.0 (quality #3): the measured file replaces the label of what was asked for, in history too
+        const formatLabel = mediaLabel(e.media) ?? it.formatLabel;
+        patch(e.jobId, { state: 'completed', percent: 100, stage: null, speedBps: null, etaSec: null, filePath: e.filePath ?? null, fileSize: e.fileSize ?? it.totalBytes, pausing: false, formatLabel, media: e.media ?? null });
+        void api.historyAdd(toHistory({ ...it, formatLabel }, 'completed', { filePath: e.filePath ?? null, fileSize: e.fileSize ?? it.totalBytes })).then(() => syncSoon()).catch(() => {});
         toast('success', `Đã tải xong: ${it.title}`);
         pump();
         break;

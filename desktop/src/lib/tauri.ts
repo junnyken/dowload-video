@@ -52,6 +52,8 @@ export const api = {
     claimToken?: string;
     // 0.17.0 presets (engine.rs output_template); omitted = the old layout.
     folderStyle?: string; nameStyle?: string;
+    // 0.21.0 Settings keys (engine.rs Extras); omitted = MP3 VBR, no subtitles.
+    audioKbps?: string; subtitles?: string;
   }) =>
     call<null>('start_download', a),
   pauseDownload: (jobId: string) => call<null>('pause_download', { jobId }),

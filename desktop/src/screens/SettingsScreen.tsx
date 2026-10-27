@@ -5,7 +5,7 @@ import { SyncStatus } from '../components/SyncStatus';
 import { deviceInfo, type DeviceInfo } from '../lib/device';
 import { CopyLink } from '../components/CopyLink';
 import { PlatformAccounts } from '../components/PlatformAccounts';
-import { settings, updateSettings, ensureOutDir, cleanCleanup, FOLDER_STYLES, NAME_STYLES, type FolderStyle, type NameStyle, type Quality, type Theme } from '../lib/settings';
+import { settings, updateSettings, ensureOutDir, cleanCleanup, AUDIO_KBPS, FOLDER_STYLES, NAME_STYLES, SUBTITLE_MODES, type AudioKbps, type FolderStyle, type NameStyle, type Quality, type SubtitleMode, type Theme } from '../lib/settings';
 import { cleanupArgs, runCleanup } from '../lib/cleanup';
 import { QUALITY_LABEL } from '../lib/quality';
 import { auth, signOut } from '../lib/auth';
@@ -178,6 +178,31 @@ export function SettingsScreen() {
               <Select label="Kiểu tệp video" value={st.codecPref} onChange={(v) => updateSettings({ codecPref: v === 'original' ? 'original' : 'easy' })} className="w-[170px]">
                 <option value="easy">Dễ mở</option>
                 <option value="original">Chất lượng gốc</option>
+              </Select>
+            </Row>
+            {/* wording: BA review — quality #5 (0.21.0) */}
+            <Row label="Âm thanh khi tải MP3" hint={st.audioKbps === 'orig'
+              ? 'Giữ âm gốc: không chuyển sang MP3, giữ nguyên tệp âm thanh của nguồn (thường là Opus hoặc M4A). Không mất chất lượng.'
+              : st.audioKbps === 'best'
+                ? 'Tốt nhất: MP3 chất lượng cao nhất, dung lượng tự điều chỉnh theo bài.'
+                : `MP3 ${st.audioKbps} kbps cố định. Số càng cao càng hay, tệp càng lớn.`}>
+              <Select label="Âm thanh khi tải MP3" value={st.audioKbps} onChange={(v) => updateSettings({ audioKbps: AUDIO_KBPS.includes(v as AudioKbps) ? (v as AudioKbps) : 'best' })} className="w-[170px]">
+                <option value="best">MP3 tốt nhất</option>
+                <option value="320">MP3 320 kbps</option>
+                <option value="256">MP3 256 kbps</option>
+                <option value="192">MP3 192 kbps</option>
+                <option value="128">MP3 128 kbps</option>
+                <option value="orig">Giữ âm gốc</option>
+              </Select>
+            </Row>
+            {/* wording: BA review — quality #7 (0.21.0) */}
+            <Row label="Phụ đề" hint={st.subtitles === 'off'
+              ? 'Không tải phụ đề.'
+              : `Phụ đề tiếng Việt và tiếng Anh do người đăng tải lên (không lấy phụ đề tự động). ${st.subtitles === 'embed' ? 'Nhúng vào video, bật/tắt được trong trình phát.' : 'Lưu thành tệp .srt cạnh video.'}`}>
+              <Select label="Phụ đề" value={st.subtitles} onChange={(v) => updateSettings({ subtitles: SUBTITLE_MODES.includes(v as SubtitleMode) ? (v as SubtitleMode) : 'off' })} className="w-[170px]">
+                <option value="off">Không tải</option>
+                <option value="file">Tệp .srt riêng</option>
+                <option value="embed">Nhúng vào video</option>
               </Select>
             </Row>
           </Section>

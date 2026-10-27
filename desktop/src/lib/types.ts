@@ -1,4 +1,5 @@
 // Types from docs/desktop/C1-CONTRACT.md (section 1) plus UI-only types.
+import type { Media } from './media';
 
 export type ProbeFormat = {
   id: string;
@@ -61,6 +62,8 @@ export type DoneEvent = {
   errorMessage?: string;
   /** true when the run used the user's saved cookies (PLAN-32D L1). */
   cookiesUsed?: boolean;
+  /** 0.21.0 (quality #3): the file measured with ffprobe; absent when it could not be read. */
+  media?: Media;
 };
 
 export type ToolVersions = {
