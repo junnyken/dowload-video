@@ -25,6 +25,8 @@ export type Settings = {
   folderStyle: FolderStyle;
   /** 0.17.0 auto cleanup to the Recycle Bin (cleanup.rs). null = that trigger is off. */
   cleanup: { enabled: boolean; olderThanDays: number | null; minFreeGb: number | null };
+  /** 0.21.0 (quality #8): "easy" H.264/AAC up to 1080p (default), "original" = codec yt-dlp picks. */
+  codecPref: 'easy' | 'original';
 };
 
 export type NameStyle = 'title' | 'date_title' | 'date_channel_title';
@@ -34,7 +36,7 @@ export const FOLDER_STYLES: FolderStyle[] = ['none', 'platform', 'month', 'platf
 
 const KEY = 'vg.settings';
 const DEFAULTS: Settings = { outDir: null, concurrency: 2, defaultQuality: 'best', theme: 'system', autoSync: true, closeToTray: true, douyinDebugWindow: false, clipboardMode: 'ask', platformPresets: {},
-  nameStyle: 'title', folderStyle: 'none', cleanup: { enabled: false, olderThanDays: 30, minFreeGb: null } };
+  nameStyle: 'title', folderStyle: 'none', cleanup: { enabled: false, olderThanDays: 30, minFreeGb: null }, codecPref: 'easy' };
 
 /** Windows paths: case-insensitive, either slash, no trailing separator. */
 export function samePath(a: string, b: string): boolean {
@@ -65,6 +67,7 @@ function load(): Settings {
       if (!NAME_STYLES.includes(s.nameStyle)) s.nameStyle = 'title';
       if (!FOLDER_STYLES.includes(s.folderStyle)) s.folderStyle = 'none';
       s.cleanup = cleanCleanup(s.cleanup);
+      if (s.codecPref !== 'original') s.codecPref = 'easy'; // older settings: the new default
       return s;
     }
   } catch { /* corrupted -> defaults */ }

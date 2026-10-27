@@ -171,6 +171,15 @@ export function SettingsScreen() {
                 {(Object.keys(QUALITY_LABEL) as Quality[]).map((q) => <option key={q} value={q}>{QUALITY_LABEL[q]}</option>)}
               </Select>
             </Row>
+            {/* wording: BA review — quality #8 (0.21.0) */}
+            <Row label="Kiểu tệp video" hint={st.codecPref === 'easy'
+              ? 'Dễ mở: đến 1080p dùng H.264, mở được bằng trình phát có sẵn của Windows, Mac, iPhone. 2K/4K dùng VP9/AV1 vì nguồn không có H.264 ở mức đó.'
+              : 'Chất lượng gốc: codec tốt nhất nguồn có (VP9/AV1/Opus), tệp nhỏ hơn hoặc nét hơn, máy cũ có thể cần VLC để mở.'}>
+              <Select label="Kiểu tệp video" value={st.codecPref} onChange={(v) => updateSettings({ codecPref: v === 'original' ? 'original' : 'easy' })} className="w-[170px]">
+                <option value="easy">Dễ mở</option>
+                <option value="original">Chất lượng gốc</option>
+              </Select>
+            </Row>
           </Section>
 
           <PlatformPresetsSection />

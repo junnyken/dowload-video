@@ -18,7 +18,7 @@ import {
   claimRoute, currentStep, isLocalStep, legacyRoute, nextRoute, triedBefore, type FetchLinkOutcome, type RouteId,
 } from './routes-core';
 import { fetchLink } from './fetchlink';
-import { capForGuest } from './quality';
+import { applyCodecPref, capForGuest } from './quality';
 import { auth } from './auth';
 import { schedule, scheduleAllows } from './schedule';
 
@@ -270,9 +270,10 @@ async function start(item: QueueItem) {
     }
     if (!queue.get().some((i) => i.id === item.id && i.state === 'running')) return; // cancelled / paused while resolving
     // a guest's local download stops at 1080p (server-route steps override formatId in `extra`)
-    const formatId = capForGuest(item.formatId, item.audioOnly, auth.get().status !== 'in');
     // 0.17.0 names everywhere; sub-folders only in the main folder (a channel's folder is already its own).
     const st = settings.get();
+    // 0.21.0: then the "Dễ mở / Chất lượng gốc" preference (quality #8)
+    const formatId = applyCodecPref(capForGuest(item.formatId, item.audioOnly, auth.get().status !== 'in'), item.audioOnly, st.codecPref);
     const style = { nameStyle: st.nameStyle, folderStyle: st.outDir && samePath(item.outDir, st.outDir) ? st.folderStyle : 'none' };
     await api.startDownload({ jobId: item.id, url: item.url, outDir: item.outDir, formatId, audioOnly: item.audioOnly, ...style, ...extra });
   } catch (e) {

@@ -87,3 +87,37 @@ export function qualityFormat(q: string, guest = false): { formatId?: string; au
 export function capForGuest(formatId: string | undefined, audioOnly: boolean, guest: boolean): string | undefined {
   return guest && !audioOnly && !formatId ? GUEST_FORMAT : formatId;
 }
+
+/** quality #8 (owner 27/10/2026): "Dễ mở" (default) or "Chất lượng gốc". */
+export type CodecPref = 'easy' | 'original';
+
+const AAC = '+ba[acodec^=mp4a]';
+/** Both sides above 1080 = short side above 1080 (a 1080x1920 portrait stays "1080p"). */
+const ABOVE_1080 = '[width>1080][height>1080]';
+
+/** "Dễ mở" selector: up to 1080p H.264 + AAC (opens in the default players of Windows, Mac,
+ *  iPhone); above 1080p VP9 → AV1 (YouTube has no H.264 there), audio AAC first. Same rule as
+ *  the website (backend _high_res_prefix). h = height cap of the preset, null = no cap. */
+export function easyFormat(h: number | null): string {
+  const c = h ? `[height<=${h}]` : '';
+  const hi = !h || h > 1080
+    ? ['vp9', 'vp09', 'av01'].map((v) => `bv*${c}${ABOVE_1080}[vcodec^=${v}]${AAC}`)
+    : [];
+  return [...hi, `bv*${c}[vcodec^=avc1]${AAC}`, `bv*${c}+ba`, ...(c ? [`b${c}`] : []), 'b'].join('/');
+}
+
+export const GUEST_FORMAT_EASY =
+  `bv*[width<=1080][height>1080][vcodec^=avc1]${AAC}/bv*[height<=1080][vcodec^=avc1]${AAC}/${GUEST_FORMAT}`;
+
+const PRESET_RE = /^bv\*\[height<=(\d+)\]\+ba\/b\[height<=\1\]\/b$/;
+
+/** Last step before a LOCAL download: the user's codec preference applied to the selector.
+ *  Audio, a specific format id ("137+140") and direct files (their route overrides formatId) are
+ *  left alone; "Chất lượng gốc" leaves everything as yt-dlp would choose. */
+export function applyCodecPref(formatId: string | undefined, audioOnly: boolean, pref: CodecPref): string | undefined {
+  if (audioOnly || pref !== 'easy') return formatId;
+  if (!formatId) return easyFormat(null);
+  if (formatId === GUEST_FORMAT) return GUEST_FORMAT_EASY;
+  const m = PRESET_RE.exec(formatId);
+  return m ? easyFormat(Number(m[1])) : formatId;
+}

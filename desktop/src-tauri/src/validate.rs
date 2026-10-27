@@ -44,9 +44,12 @@ pub fn media_url(raw: &str) -> Result<String, String> {
 /// Allow that alphabet only; the value is passed as a separate argv item after
 /// `-f`, so it can never be read as another option.
 pub fn format_id(f: &str) -> Result<(), String> {
+    // 0.21.0: up to 512 bytes and `^` (prefix match) for the "Dễ mở" selector
+    // (quality #8, e.g. bv*[height<=2160][width>1080][height>1080][vcodec^=vp9]+ba[acodec^=mp4a]/…).
+    // It is one argv item after -f, never a shell string.
     let ok = !f.is_empty()
-        && f.len() <= 64
-        && f.chars().all(|c| c.is_ascii_alphanumeric() || "+-_/.*[]<>=:,".contains(c));
+        && f.len() <= 512
+        && f.chars().all(|c| c.is_ascii_alphanumeric() || "+-_/.*[]<>=:,^".contains(c));
     if ok { Ok(()) } else { Err("invalid format id".into()) }
 }
 
@@ -239,6 +242,10 @@ mod tests {
         assert!(format_id("bv*[height<=1920]+ba/b[height<=1920]").is_ok());
         assert!(format_id("bv*[height<=2160]+ba/b[height<=2160]/b").is_ok()); // longest preset incl. the /b fallback
         assert!(format_id("a;rm -rf /").is_err());
+        assert!(format_id("bv*[height<=2160][width>1080][height>1080][vcodec^=vp9]+ba[acodec^=mp4a]/b").is_ok());
+        assert!(format_id(&"b/".repeat(257)).is_err()); // > 512
+        assert!(format_id("b[vcodec~='x']").is_err()); // no quotes or regex operator
+        assert!(format_id("b$(x)").is_err());
         assert!(format_id("").is_err());
     }
 }

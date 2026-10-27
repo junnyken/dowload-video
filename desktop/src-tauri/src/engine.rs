@@ -184,6 +184,13 @@ pub fn download_args(
             "--print",
             &format!("after_move:{FILE_MARK}%(filepath)j"),
             "--no-mtime",
+            // 0.21.0 (quality #6): title / artist / date / link and chapters
+            // written into the file (stream copy). No --embed-thumbnail: a
+            // cover that fails to embed fails the whole job in yt-dlp. No
+            // "-id3v2_version 3" either: yt-dlp would pass it to every file
+            // (MP4 too) and that was not testable here.
+            "--embed-metadata",
+            "--embed-chapters",
             "--merge-output-format",
             "mp4/mkv",
             "-o",
@@ -291,6 +298,9 @@ mod tests {
         assert!(s.contains(&"download:VGDL %(progress)j".into()));
         assert!(s.contains(&"postprocess:VGPP %(progress)j".into()));
         assert!(s.contains(&"after_move:VGFILE %(filepath)j".into()));
+        // 0.21.0 (quality #6): metadata + chapters, never a thumbnail embed
+        assert!(s.contains(&"--embed-metadata".into()) && s.contains(&"--embed-chapters".into()));
+        assert!(!s.iter().any(|x| x == "--embed-thumbnail"));
         assert!(!s.contains(&"-x".into()));
         assert!(!s.contains(&"-f".into()));
 
