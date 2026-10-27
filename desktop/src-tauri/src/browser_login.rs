@@ -3,7 +3,7 @@
 //! Sign-up and sign-in are protected by a captcha on the website, which a
 //! direct password sign-in from the app cannot pass. So the app never sees the
 //! password: it listens once on http://127.0.0.1:<random port>/callback,
-//! opens https://dvid.vibe1.tinhgon.xyz/desktop-login?port=<port>&state=<state>
+//! opens https://dowloadvideo.io.vn/desktop-login?port=<port>&state=<state>
 //! in the default browser, and the page (after a normal sign-in there) sends
 //! the browser to
 //!     http://127.0.0.1:<port>/callback?state=<state>&refresh_token=<token>
@@ -29,7 +29,7 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-pub const LOGIN_PAGE: &str = "https://dvid.vibe1.tinhgon.xyz/desktop-login";
+pub const LOGIN_PAGE: &str = "https://dowloadvideo.io.vn/desktop-login";
 pub const TIMEOUT: Duration = Duration::from_secs(5 * 60);
 pub const MAX_REQUESTS: usize = 32;
 const MAX_HEAD: usize = 8 * 1024;
@@ -284,7 +284,7 @@ mod tests {
         assert_ne!(a, b);
         assert_eq!(
             login_url(53682, &a),
-            format!("https://dvid.vibe1.tinhgon.xyz/desktop-login?port=53682&state={a}")
+            format!("https://dowloadvideo.io.vn/desktop-login?port=53682&state={a}")
         );
         assert!(crate::validate::open_url(&login_url(53682, &a)).is_ok());
     }

@@ -9,7 +9,7 @@ import { api } from '../lib/tauri';
 import { toast } from '../lib/ui';
 
 // Same list as src-tauri/src/validate.rs OPEN_URL_HOSTS.
-const OPEN_URL_HOSTS = ['dvid.vibe1.tinhgon.xyz', 'dvid-api.vibe1.tinhgon.xyz'] as const;
+const OPEN_URL_HOSTS = ['dowloadvideo.io.vn', 'dvid.vibe1.tinhgon.xyz', 'dvid-api.vibe1.tinhgon.xyz'] as const;
 
 /** Full-window block while this build is below the server's minimum
  * (PLAN-32E P1 step 3). Only shown when the server says so: GET /client/version

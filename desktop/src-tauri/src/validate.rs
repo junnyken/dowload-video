@@ -85,7 +85,8 @@ pub fn cookie_platform(raw: &str) -> Result<&'static str, String> {
 /// installer download; 0.18.5: a Douyin channel in the user's own browser,
 /// where the VidGrab extension reads the whole list). Exact match, https
 /// only, default port, no userinfo.
-pub const OPEN_URL_HOSTS: &[&str] = &["dvid.vibe1.tinhgon.xyz", "dvid-api.vibe1.tinhgon.xyz", "www.douyin.com", "www.facebook.com"];
+/// 0.20.2: + dowloadvideo.io.vn, the site's own domain (the app now links there).
+pub const OPEN_URL_HOSTS: &[&str] = &["dowloadvideo.io.vn", "dvid.vibe1.tinhgon.xyz", "dvid-api.vibe1.tinhgon.xyz", "www.douyin.com", "www.facebook.com"];
 
 /// 0.18.7: what `open_in_chrome` may hand to chrome.exe as an argument — a
 /// Douyin profile (www.douyin.com/user/…) or the extension install page,
@@ -97,7 +98,7 @@ pub fn chrome_url(raw: &str) -> Result<String, String> {
     let ok = match u.host_str() {
         Some("www.douyin.com") => u.path().starts_with("/user/"),
         Some("www.facebook.com") => u.fragment().is_some_and(|f| f.starts_with("vg-relay=")),
-        Some("dvid.vibe1.tinhgon.xyz") => u.path() == "/extension",
+        Some("dowloadvideo.io.vn" | "dvid.vibe1.tinhgon.xyz") => u.path() == "/extension",
         _ => false,
     };
     if !ok {
@@ -170,6 +171,9 @@ mod tests {
         assert!(open_url("https://www.douyin.com/user/MS4wLjABAAAA_x#vg-relay=abc").is_ok());
         assert!(chrome_url("https://www.douyin.com/user/MS4wLjABAAAA_x#vg-relay=abc").is_ok());
         assert!(chrome_url("https://dvid.vibe1.tinhgon.xyz/extension").is_ok());
+        assert!(chrome_url("https://dowloadvideo.io.vn/extension").is_ok());
+        assert!(open_url("https://dowloadvideo.io.vn/upgrade").is_ok());
+        assert!(open_url("https://dowloadvideo.io.vn.evil.com/").is_err());
         assert!(chrome_url("https://www.facebook.com/profile.php?id=61594798577076&sk=reels_tab#vg-relay=abc").is_ok());
         assert!(chrome_url("https://www.facebook.com/thehecotnhadilam.vn/reels/#vg-relay=abc").is_ok());
         assert!(chrome_url("https://www.facebook.com/thehecotnhadilam.vn/reels/").is_err());

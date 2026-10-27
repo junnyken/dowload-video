@@ -30,7 +30,7 @@
   let API_BASE = 'https://dvid-api.vibe1.tinhgon.xyz';
   // Web app (frontend) — separate domain from the API backend. Used only to
   // open the batch-progress page after a bulk send; never for API calls.
-  const FRONTEND_BASE = 'https://dvid.vibe1.tinhgon.xyz';
+  const FRONTEND_BASE = 'https://dowloadvideo.io.vn';
   // Load custom server URL từ storage (nếu có).
   // Same validation as background.js/popup.js — an unvalidated value here
   // would also desync us from the background worker, whose VG_API_FETCH now

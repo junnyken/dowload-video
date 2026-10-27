@@ -1,5 +1,5 @@
 const DEFAULT_API_BASE = 'https://dvid-api.vibe1.tinhgon.xyz';
-const WEB_BASE = 'https://dvid.vibe1.tinhgon.xyz';
+const WEB_BASE = 'https://dowloadvideo.io.vn'; // 5.22.4 (owner 27/10): the site's own domain; dvid.vibe1 stays trusted
 let API_BASE = DEFAULT_API_BASE;
 
 // ── i18n (Chrome built-in: _locales/vi + _locales/en, default_locale "en") ──

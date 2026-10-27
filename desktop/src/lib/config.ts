@@ -1,6 +1,6 @@
 // Public endpoints/keys. Nothing secret lives here.
 export const API_BASE = 'https://dvid-api.vibe1.tinhgon.xyz';
-export const WEBSITE_URL = 'https://dvid.vibe1.tinhgon.xyz';
+export const WEBSITE_URL = 'https://dowloadvideo.io.vn'; // 0.20.2 (owner 27/10): the site's own domain
 export const SUPABASE_URL = 'https://wtwnbagcqyedindtcadv.supabase.co';
 
 // This is the same public (role: anon) key the website ships in its JS bundle
