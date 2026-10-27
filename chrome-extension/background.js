@@ -1810,6 +1810,11 @@ chrome.runtime.onInstalled.addListener((details) => {
   // E2: download media found on the current page using the user's own session/IP
   chrome.contextMenus.create({ id: 'vg-download-page-media', title: t('ctx_page_media'), contexts: ['page', 'video', 'audio'] });
 
+  // 5.22.1 (owner 27/10): signed in on the site, the freshly loaded extension still said "Chưa đăng
+  // nhập" — Chrome only runs content scripts in pages opened AFTER the install, so the site tab that
+  // was already open never got web-bridge.js and never handed over its session. Put it there now.
+  vgBridgeOpenSiteTabs();
+
   // Track first install vs update for onboarding
   if (details.reason === 'install') {
     chrome.storage.local.set({ vg_onboarding_done: false, vg_install_time: Date.now() });
@@ -1899,3 +1904,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: t('toast_err', msg) }).catch(() => {});
   }
 });
+
+// The VidGrab site tabs already open when the extension is installed or updated (see onInstalled).
+function vgBridgeOpenSiteTabs() {
+  const cs = (chrome.runtime.getManifest().content_scripts || []).find((c) => (c.js || []).includes('web-bridge.js'));
+  if (!cs) return;
+  chrome.tabs.query({ url: cs.matches }, (tabs) => {
+    if (chrome.runtime.lastError) return;
+    for (const tab of tabs || []) {
+      chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['web-bridge.js'] }).catch(() => {}); // no host access (localhost) or tab gone
+    }
+  });
+}

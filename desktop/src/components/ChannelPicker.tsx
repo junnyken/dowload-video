@@ -53,6 +53,8 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
   const saved = channels.use().find((c) => c.id === listing.channelId);
 
   const [sel, setSel] = useState<Set<string>>(() => new Set());
+  // 0.20.1 (owner 27/10): after "Tải" the list stays open; what went to Hàng đợi is marked, not hidden
+  const [queued, setQueued] = useState<Set<string>>(() => new Set());
   const [query, setQuery] = useState('');
   const [since, setSince] = useState('');
   const [page, setPage] = useState(0);
@@ -160,32 +162,39 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
     }
     setBusy(true);
     try {
-      const ch = newChannelFromListing(listing, { mode, quality, outDir: dir, checkEveryHours: every });
-      if (follow && !isEmptyFilter(filter)) ch.filter = filter; else delete ch.filter;
+      // followed by an earlier press on this list: keep that channel as it is, only download
+      const again = !!(follow && saved && queued.size > 0);
+      const ch = again && saved ? { ...saved, quality, outDir: dir } : newChannelFromListing(listing, { mode, quality, outDir: dir, checkEveryHours: every });
+      if (!again) { if (follow && !isEmptyFilter(filter)) ch.filter = filter; else delete ch.filter; }
       const res = k > 0 ? await enqueueWithClaims(toDownload, ch) : { enqueued: [], refused: [] };
       addRefused(res.refused, ch); // each with the server's reason in Hàng đợi → Lỗi
       const added = res.enqueued.length;
       // Everything shown here counts as "seen", so later checks only bring NEW videos.
       const seenIds = follow ? listing.videos.map((v) => v.id) : toDownload.map((v) => v.id);
-      if (follow) {
+      if (again) {
+        // already followed and marked seen
+      } else if (follow) {
         if (seenIds.length) await api.channelSeenAdd(ch.id, seenIds);
         await saveChannel(ch);
       } else if (seenIds.length) {
         await api.channelSeenAdd(ch.id, seenIds).catch(() => {}); // channel not saved: best effort
       }
-      toast('success', follow
+      toast('success', follow && !again
         ? (added > 0 ? `Đã thêm ${added} video vào hàng đợi và bắt đầu theo dõi kênh.` : 'Đã bắt đầu theo dõi kênh.')
         : `Đã thêm ${added} video vào hàng đợi.`);
+      if (added) setQueued((s) => new Set([...s, ...res.enqueued.map((v) => v.id)]));
       if (res.refused.length) toast('error', refusedText(res.refused.length, res.refused[0].detail)); // ONE toast for all refused
       if (later.length) {
         // Over today's downloads: stay here with the rest still selected (wording: BA review).
         const reset = q.snap?.resetTimeVn;
         toast('info', `Còn ${later.length} video đã chọn chưa tải vì hết lượt hôm nay${reset ? ` — lượt mới lúc ${reset}` : ''}. Danh sách vẫn được giữ chọn ở đây.`);
         setSel(new Set(later.map((v) => v.id)));
-        void refreshQuota();
       } else {
-        resetFlow();
+        // stay on the list so more videos can be picked (refused ones stay selected)
+        const refused = new Set(res.refused.map((r) => r.video.id));
+        setSel(new Set(toDownload.filter((v) => refused.has(v.id)).map((v) => v.id)));
       }
+      void refreshQuota();
     } catch (e) {
       toast('error', errorMessage(toAppError(e).code));
     } finally {
@@ -420,6 +429,7 @@ export function ChannelPicker({ listing, more }: { listing: ChannelListing; more
                     <input type="checkbox" checked={sel.has(v.id)} onChange={() => toggle(v.id)} className="h-4 w-4 shrink-0 accent-[var(--vg-accent)]" aria-label={`Chọn ${v.title}`} />
                     <Thumb src={v.thumbnail} className="h-[45px] w-[80px]" />
                     <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg" title={v.title}>{v.title}</span>
+                    {queued.has(v.id) && <Badge tone="success">Đã vào hàng đợi</Badge>}{/* wording: BA review */}
                     {v.viewCount != null && <span className="w-[104px] shrink-0 text-right text-xs tabular-nums text-fg-muted">{compactViews(v.viewCount)} lượt xem</span>}{/* wording: BA review */}
                     <span className="w-14 shrink-0 text-right text-xs tabular-nums text-fg-muted">{formatDuration(v.duration)}</span>
                     <span className="w-[84px] shrink-0 text-right text-xs tabular-nums text-fg-muted">{fmtUploadDate(v.uploadDate)}</span>
