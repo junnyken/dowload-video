@@ -256,6 +256,71 @@ def parse_ffprobe_json(raw: bytes | str, size_bytes: Optional[int] = None) -> di
     }
 
 
+_HDR_TRANSFERS = {"smpte2084", "arib-std-b67"}     # PQ (HDR10/Dolby Vision base) and HLG
+_VCODEC_TAG = {"h264": "avc1", "hevc": "hvc1", "av1": "av01", "vp9": "vp09"}
+
+
+def _fps(rate) -> Optional[float]:
+    """ffprobe "60000/1001" / "30/1" -> 59.94 / 30.0; "0/0" or junk -> None."""
+    try:
+        n, _, d = str(rate or "").partition("/")
+        f = float(n) / float(d or 1)
+        return round(f, 2) if f > 0 else None
+    except (ValueError, ZeroDivisionError):
+        return None
+
+
+def parse_media_json(raw: bytes | str, size_bytes: Optional[int] = None) -> dict:
+    """
+    ffprobe -show_streams -show_format JSON of a WHOLE downloaded file -> what
+    the file really is (quality #3, 27/10/2026). Unlike parse_ffprobe_json
+    (TikWM prefixes, video only) this accepts audio-only files and adds fps,
+    HDR and the audio stream. Every value is measured; unknown stays None.
+    Never raises: anything unreadable -> {"measured": False}.
+    """
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return {"measured": False}
+    streams = data.get("streams") or []
+    fmt = data.get("format") or {}
+    v = next((s for s in streams if s.get("codec_type") == "video"
+              and not (s.get("disposition") or {}).get("attached_pic")), None)
+    a = next((s for s in streams if s.get("codec_type") == "audio"), None)
+    if not v and not a:
+        return {"measured": False}
+    duration = _num(fmt.get("duration")) or _num((v or a or {}).get("duration"))
+    size = size_bytes or _num(fmt.get("size"), int)
+    total = (size * 8 / duration) if size and duration else _num(fmt.get("bit_rate"))
+    out = {
+        "measured": True,
+        "container": (fmt.get("format_name") or "").split(",")[0] or None,
+        "duration": round(duration, 2) if duration else None,
+        "size_bytes": size,
+        "bitrate_kbps": round(total / 1000) if total else None,
+        "width": None, "height": None, "short_side": None, "vcodec": None, "fps": None,
+        "hdr": False, "color_transfer": None,
+        "acodec": a.get("codec_name") if a else None,
+        "audio_bitrate_kbps": round(_num(a.get("bit_rate")) / 1000) if a and _num(a.get("bit_rate")) else None,
+        "sample_rate": _num(a.get("sample_rate"), int) if a else None,
+        "channels": _num(a.get("channels"), int) if a else None,
+    }
+    if v:
+        w, h = _num(v.get("width"), int), _num(v.get("height"), int)
+        transfer = v.get("color_transfer") or None
+        mastering = any("Mastering display" in str((sd or {}).get("side_data_type", ""))
+                        for sd in (v.get("side_data_list") or []))
+        out.update(width=w, height=h, short_side=min(w, h) if w and h else None,
+                   vcodec=v.get("codec_name"), fps=_fps(v.get("avg_frame_rate")) or _fps(v.get("r_frame_rate")),
+                   color_transfer=transfer, hdr=bool(transfer in _HDR_TRANSFERS or mastering))
+    return out
+
+
+def vcodec_tag(codec_name: Optional[str]) -> str:
+    """ffprobe codec name -> the yt-dlp style tag the rest of the code compares (avc1, vp09…)."""
+    return _VCODEC_TAG.get(codec_name or "", codec_name or "")
+
+
 # ── pinned, bounded fetch ─────────────────────────────────────────────
 
 _REDIRECTS = (301, 302, 303, 307, 308)

@@ -350,6 +350,22 @@ def _file_video_stream(path: str) -> dict:
         return {}
 
 
+def probe_media_file(path: str) -> dict:
+    """What a downloaded file really is, measured with ffprobe (quality #3,
+    27/10/2026): resolution, codec, fps, bitrate, HDR, audio. One ffprobe,
+    15 s at most; any failure -> {"measured": False} and nothing is claimed."""
+    import subprocess
+    from app.services.format_probe import parse_media_json
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", path],
+                             capture_output=True, text=True, timeout=15)
+        if out.returncode != 0:
+            return {"measured": False}
+        return parse_media_json(out.stdout, os.path.getsize(path))
+    except Exception:
+        return {"measured": False}
+
+
 def _file_duration(path: str) -> float:
     import subprocess
     try:
@@ -3979,6 +3995,18 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
     result["downloaded_vcodec"] = _dl_vcodec if _dl_vcodec != "none" else ""
     result["downloaded_universal"] = (
         _dl_vcodec.lower().startswith(("avc1", "h264")) if _dl_vcodec and _dl_vcodec != "none" else None)
+
+    # quality #3 (27/10/2026): the file itself, measured — what yt-dlp SAID it
+    # would merge is not proof (the 4K request that delivered 1080p). Measured
+    # values replace the three fields above; unmeasured leaves them alone.
+    if local_path and os.path.exists(local_path):
+        from app.services.format_probe import vcodec_tag
+        media = probe_media_file(local_path)
+        result["downloaded_media"] = media
+        if media.get("measured") and media.get("vcodec"):
+            result["downloaded_height"] = media.get("short_side") or result["downloaded_height"]
+            result["downloaded_vcodec"] = vcodec_tag(media["vcodec"])
+            result["downloaded_universal"] = media["vcodec"] == "h264"
 
     # ── YouTube Chapters ─────────────────────────────────────
     # yt-dlp exposes chapters as a list of {title, start_time, end_time} dicts.

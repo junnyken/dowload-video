@@ -1072,6 +1072,8 @@ async def fetch_link(
             # task #6134: codec of the downloaded file + "not the resolution you asked for"
             "downloaded_vcodec": info.get("downloaded_vcodec") or "",
             "downloaded_universal": info.get("downloaded_universal"),
+            # quality #3: measured from the file (ffprobe); {"measured": false} = say nothing
+            "downloaded_media": info.get("downloaded_media") or {"measured": False},
             "quality_note": info.get("quality_note"),
             "max_allowed_height": _height_cap["height"],
             "height_cap_reason": _height_cap["reason"],

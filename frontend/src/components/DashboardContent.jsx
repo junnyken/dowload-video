@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { mediaParts, needsModernPlayer } from '../lib/mediaLabel';
 import { useTranslation, Trans } from 'react-i18next';
 import i18n, { getLang } from '../i18n';
 import { useAuth } from '../context/AuthContext';
@@ -2234,20 +2235,19 @@ export default function DashboardContent() {
                     </span>
                   )}
                   {(() => {
-                    // Chất lượng đầu ra: chỉ hiện khi backend đã trả giá trị thật.
-                    let label = null;
-                    if (videoInfo.is_audio_only) {
-                      const m = /^mp3_(\d+)$/.exec(String(videoInfo.quality || ''));
-                      if (m) label = `MP3 ${m[1]} kbps`;
-                    } else {
-                      const h = Number(videoInfo.downloaded_height) || 0;
-                      if (h > 0) label = h >= 2160 ? '4K' : h >= 1440 ? '2K' : `${h}p`;
-                    }
-                    return label ? (
-                      <span className="bg-surface border border-line px-3 py-1.5 rounded-lg font-mono">
-                        {label}
-                      </span>
-                    ) : null;
+                    // Chất lượng đầu ra: đo từ chính file (ffprobe, quality #3); không đo được thì nhãn cũ.
+                    const parts = mediaParts(videoInfo);
+                    if (!parts.length) return null;
+                    return (
+                      <>
+                        <span className="bg-surface border border-line px-3 py-1.5 rounded-lg font-mono">
+                          {parts.join(' · ')}
+                        </span>
+                        {needsModernPlayer(videoInfo) && (
+                          <span className="text-fg-2 px-1 py-1.5">{t('result.modernCodecNote')}</span>
+                        )}
+                      </>
+                    );
                   })()}
                 </div>
               </div>

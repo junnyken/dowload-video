@@ -343,7 +343,8 @@
     "subtitles": "Phụ đề",
     "subtitleLang": "Ngôn ngữ phụ đề",
     "downloadSrt": "Tải phụ đề (.srt)",
-    "downloadAnother": "Tải video khác"
+    "downloadAnother": "Tải video khác",
+    "modernCodecNote": "Codec mới, nét hơn: máy hoặc điện thoại đời cũ có thể cần VLC để mở"
   },
   "tools": {
     "hidePreview": "Ẩn xem trước",
