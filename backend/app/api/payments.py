@@ -209,11 +209,11 @@ async def stripe_webhook(request: Request):
     sig_header = request.headers.get("stripe-signature", "")
 
     if not _STRIPE_WEBHOOK_SECRET:
-        # Dev mode: accept without signature (never do this in prod)
-        try:
-            event = json.loads(body)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid JSON")
+        # 27/10/2026: this branch accepted UNSIGNED events in production (the
+        # secret was never set there): anyone could POST checkout.session.completed
+        # with a user id and get Pro, or subscription.deleted and downgrade someone.
+        # No secret = Stripe is not set up = no webhook.
+        raise HTTPException(status_code=404, detail="Not Found")
     else:
         stripe = _stripe()
         try:
