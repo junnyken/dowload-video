@@ -1080,6 +1080,43 @@ def _cobalt_high_res(quality: str) -> bool:
     return bool(m) and int(m.group(1)) > 1080
 
 
+# quality #5 (27/10/2026). Audio quality strings:
+#   mp3_<128|192|256|320>  MP3 at that kbps (re-encoded)
+#   audio_best             the source's own audio, not re-encoded (.m4a / .opus)
+#   audio_m4a / audio_opus copied when the source already is AAC / Opus, else encoded
+#   audio_vorbis           .ogg (always encoded)
+#   audio_webm             old name: a webm audio stream IS Opus → audio_opus
+#   …_norm                 loudness normalised (MP3 only: a copied stream cannot be filtered)
+MP3_KBPS = ("128", "192", "256", "320")
+_AUDIO_CODECS = {"best": "best", "m4a": "m4a", "opus": "opus", "vorbis": "vorbis", "webm": "opus"}
+LOUDNORM = ["-af", "loudnorm=I=-16:TP=-1.5:LRA=11"]   # same as /process/extract-audio
+AUDIO_EXTS = (".mp3", ".m4a", ".opus", ".ogg")
+
+
+def audio_quality_valid(quality: str) -> bool:
+    q = quality[:-5] if quality.endswith("_norm") else quality
+    if quality.endswith("_norm") and not q.startswith("mp3"):
+        return False
+    if q.startswith("audio_"):
+        return q[6:] in _AUDIO_CODECS
+    return True
+
+
+def audio_postprocessing(quality: str) -> tuple[list, dict] | None:
+    """(postprocessors, postprocessor_args) for an audio quality, None for video."""
+    norm = quality.endswith("_norm")
+    q = quality[:-5] if norm else quality
+    if q.startswith("mp3"):
+        kbps = q.split("_", 1)[1] if "_" in q else ""
+        kbps = kbps if kbps in MP3_KBPS else ("320" if "320" in q else "128")
+        pp = {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": kbps}
+        return [pp], ({"extractaudio": list(LOUDNORM)} if norm else {})
+    if q.startswith("audio_"):
+        codec = _AUDIO_CODECS.get(q[6:], "best")
+        return [{"key": "FFmpegExtractAudio", "preferredcodec": codec, "preferredquality": "192"}], {}
+    return None
+
+
 def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
                    error_sink: list | None = None, force_cookie: bool = False,
                    anon: bool = False) -> dict:
@@ -1237,21 +1274,10 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
             "key": "FFmpegVideoConvertor",
             "preferedformat": "mp4",
         }]
-    elif quality.startswith("mp3"):
-        bitrate = "320" if "320" in quality else "128"
-        opts["postprocessors"] = [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": bitrate,
-        }]
-    elif quality.startswith("audio_"):
-        # e.g., audio_m4a, audio_webm
-        codec = quality.split("_")[1]
-        opts["postprocessors"] = [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": codec,
-            "preferredquality": "128",
-        }]
+    elif quality.startswith(("mp3", "audio_")):
+        opts["postprocessors"], _pp_args = audio_postprocessing(quality)
+        if _pp_args:
+            opts["postprocessor_args"] = _pp_args
 
     # Ensure output is saved to temp for server-side download + merge
     # This is needed for ANY quality that requires FFmpeg merging (which is most of them now)
@@ -3982,14 +4008,14 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         # FFmpegExtractAudio converts .m4a/.webm/.opus → .mp3 and deletes the original.
         # The info dict still holds the pre-conversion path, so check for the .mp3 sibling.
         if not os.path.exists(local_path):
-            mp3_path = re.sub(r'\.(m4a|webm|ogg|opus)$', '.mp3', local_path)
-            if os.path.exists(mp3_path):
-                local_path = mp3_path
+            # quality #5: the audio may now end in .m4a / .opus / .ogg too
+            _base = os.path.splitext(local_path)[0]
+            local_path = next((p for p in (_base + e for e in AUDIO_EXTS) if os.path.exists(p)), local_path)
 
     if local_path and os.path.exists(local_path):
         result["local_file_path"] = local_path
         result["file_size_mb"] = round(os.path.getsize(local_path) / (1024 * 1024), 2)
-        if local_path.endswith(".mp3") or local_path.endswith(".m4a"):
+        if local_path.endswith(AUDIO_EXTS):
             result["local_mp3_path"] = local_path
         # Locate subtitle file written by yt-dlp alongside the video
         if download_subs and not quality.startswith("mp3"):

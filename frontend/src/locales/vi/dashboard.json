@@ -403,7 +403,13 @@
     "downloadAudio": "Tải Âm Thanh (MP3 320kbps)",
     "downloadVideoNoLogo": "Tải Video (Không logo)",
     "downloadVideo": "Tải Video",
-    "downloadVideoQuality": "Tải Video ({{quality}})"
+    "downloadVideoQuality": "Tải Video ({{quality}})",
+    "audioConvert": {
+      "title": "Chuyển âm thanh",
+      "original": "Giữ âm gốc",
+      "originalTitle": "Không nén lại: giữ nguyên chất lượng âm thanh của nguồn (M4A hoặc Opus)",
+      "normalize": "Chuẩn hoá âm lượng (chỉ MP3: nghe đều giữa các bài, sẽ nén lại)"
+    }
   },
   "recent": {
     "title": "Tải gần đây",

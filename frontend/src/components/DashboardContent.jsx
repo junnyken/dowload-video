@@ -153,6 +153,7 @@ export default function DashboardContent() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradeErrorCode, setUpgradeErrorCode] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
+  const [normalizeAudio, setNormalizeAudio] = useState(false);   // quality #5 (MP3 only)
   const [formatTab, setFormatTab] = useState('video');
   const [recentDownloads, setRecentDownloads] = useState([]);
   const [toastMessage, setToastMessage] = useState('');
@@ -991,7 +992,7 @@ export default function DashboardContent() {
         showToast(t('toast.thumbDownloading'));
       }
     } else if (quality.startsWith('mp3')) {
-      handleMergeDownload(quality === 'mp3_320' ? 'mp3' : 'ogg');
+      handleMergeDownload(quality);
     } else {
       const h = parseInt(quality);
       handleMergeDownload(h || null);
@@ -1062,11 +1063,14 @@ export default function DashboardContent() {
   // Merge via backend re-fetch (4K, specific resolution, or audio extraction)
   // OPTIMIZATION: If the initial fetch already downloaded at the requested quality (or better),
   // serve the already-downloaded local file instead of making another request.
-  const handleMergeDownload = async (param = null) => {
+  const handleMergeDownload = async (param = null, { normalize = false } = {}) => {
     let qualityReq = 'video_4k';
-    const isAudioParam = param === 'm4a' || param === 'webm' || param === 'mp3' || param === 'ogg';
+    // quality #5: audio is named by its quality string (mp3_192, audio_best…); short names
+    // from older rows still work — 'ogg' used to mean MP3 128, a webm audio row is Opus.
+    const AUDIO_PARAM = { mp3: 'mp3_320', m4a: 'audio_m4a', webm: 'audio_opus', ogg: 'audio_opus', opus: 'audio_opus' };
+    const isAudioParam = typeof param === 'string' && (param in AUDIO_PARAM || /^(mp3_|audio_)/.test(param));
     if (isAudioParam) {
-      qualityReq = param === 'mp3' ? 'mp3_320' : param === 'ogg' ? 'mp3_128' : `audio_${param}`;
+      qualityReq = AUDIO_PARAM[param] || param;
     } else if (param) {
       qualityReq = `video_${param}`;
     }
@@ -1101,6 +1105,7 @@ export default function DashboardContent() {
           url: videoInfo.original_url || url.trim(),
           quality: qualityReq,
           remove_watermark: !isAudioParam && removeWatermark,
+          normalize_audio: normalize && qualityReq.startsWith('mp3'),
           confirmed,
         }),
       }));
@@ -3176,6 +3181,32 @@ export default function DashboardContent() {
 
                   {formatTab === 'audio' && (
                     <>
+                      {/* quality #5: convert to the audio people actually want (wording: BA review) */}
+                      <div className="px-4 py-3.5 rounded-2xl bg-surface border border-line text-fg">
+                        <div className="text-sm font-bold mb-2">{t('format.audioConvert.title')}</div>
+                        <div className="flex flex-wrap gap-2">
+                          {['mp3_128', 'mp3_192', 'mp3_256', 'mp3_320'].map((q) => (
+                            <button key={q} type="button" disabled={!!downloadingId}
+                              onClick={() => handleMergeDownload(q, { normalize: normalizeAudio })}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-surface-2 border border-line hover:border-accent disabled:opacity-60">
+                              {downloadingId === `merge_${q}` ? <Loader2 className="w-3.5 h-3.5 inline animate-spin" /> : `MP3 ${q.slice(4)} kbps`}
+                            </button>
+                          ))}
+                          <button type="button" disabled={!!downloadingId} onClick={() => handleMergeDownload('audio_best')}
+                            title={t('format.audioConvert.originalTitle')}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-surface-2 border border-line hover:border-accent disabled:opacity-60">
+                            {downloadingId === 'merge_audio_best' ? <Loader2 className="w-3.5 h-3.5 inline animate-spin" /> : t('format.audioConvert.original')}
+                          </button>
+                          <button type="button" disabled={!!downloadingId} onClick={() => handleMergeDownload('audio_opus')}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-surface-2 border border-line hover:border-accent disabled:opacity-60">
+                            {downloadingId === 'merge_audio_opus' ? <Loader2 className="w-3.5 h-3.5 inline animate-spin" /> : 'Opus'}
+                          </button>
+                        </div>
+                        <label className="flex items-center gap-2 mt-2.5 text-xs text-fg-2 cursor-pointer">
+                          <input type="checkbox" checked={normalizeAudio} onChange={(e) => setNormalizeAudio(e.target.checked)} className="accent-accent" />
+                          {t('format.audioConvert.normalize')}
+                        </label>
+                      </div>
                       {audioFormats.map((fmt, i) => (
                         <button
                           key={`a-${i}`}

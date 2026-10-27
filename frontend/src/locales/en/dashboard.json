@@ -404,7 +404,13 @@
     "downloadAudio": "Download audio (MP3 320kbps)",
     "downloadVideoNoLogo": "Download video (no logo)",
     "downloadVideo": "Download video",
-    "downloadVideoQuality": "Download video ({{quality}})"
+    "downloadVideoQuality": "Download video ({{quality}})",
+    "audioConvert": {
+      "title": "Convert audio",
+      "original": "Original audio",
+      "originalTitle": "No re-encoding: keeps the source audio exactly (M4A or Opus)",
+      "normalize": "Normalize loudness (MP3 only: even volume across tracks, re-encodes)"
+    }
   },
   "recent": {
     "title": "Recent downloads",

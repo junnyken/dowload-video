@@ -60,7 +60,7 @@ function getNextActions(jobInfo) {
   const { platform, format, duration, quality } = jobInfo;
   const actions = [];
 
-  const isVideo = format && !['mp3', 'm4a', 'wav', 'ogg', 'flac'].includes(format);
+  const isVideo = format && !['mp3', 'm4a', 'wav', 'ogg', 'opus', 'flac'].includes(format);
   const isShort = duration && duration < 90;
 
   if (isVideo && isShort) actions.push('gif');

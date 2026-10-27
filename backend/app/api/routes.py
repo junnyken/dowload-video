@@ -295,6 +295,7 @@ class FetchLinkRequest(BaseModel):
     subtitle_language: Optional[str] = "auto"  # auto | vi | en | all
     user_cookies_b64: Optional[str] = None     # base64-encoded browser cookies for private/members content
     scheduled_at: Optional[str] = None         # ISO-8601 UTC datetime to delay execution
+    normalize_audio: Optional[bool] = False    # quality #5: loudness normalise (MP3 only)
 
 
 class BulkDownloadRequest(BaseModel):
@@ -570,6 +571,19 @@ async def fetch_link(
     # against the internal network (found while live-verifying this release:
     # an internal URL reached the extractor and came back as a generic 500).
     _assert_safe_url(payload.url)
+
+    # quality #5: audio strings are checked here, never left for yt-dlp to choke on
+    from app.services.downloader import audio_quality_valid
+    _q_in = payload.quality or "video"
+    if payload.normalize_audio:
+        if not _q_in.startswith("mp3"):
+            raise HTTPException(status_code=400, detail={"error": "normalize_mp3_only",
+                                "message": "Chuẩn hoá âm lượng chỉ áp dụng cho MP3."})  # wording: BA review
+        if not _q_in.endswith("_norm"):
+            payload.quality = _q_in + "_norm"
+    if not audio_quality_valid(payload.quality or "video"):
+        raise HTTPException(status_code=400, detail={"error": "invalid_quality",
+                            "message": "Định dạng âm thanh không hợp lệ."})  # wording: BA review
 
     # Phase 32B-1: requester/admin context for the China access layer (budget
     # bucket, admin canary). No-op while CHINA_ACCESS_ENABLED is off. Bound
@@ -1814,6 +1828,7 @@ def _local_file_response(filepath: str, filename: str) -> FileResponse:
     ext = os.path.splitext(filepath)[1].lower()
     media_types = {
         ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".mp4": "video/mp4", ".zip": "application/zip",
+        ".opus": "audio/ogg; codecs=opus", ".ogg": "audio/ogg", ".webm": "video/webm",   # quality #1/#5
         ".srt": "text/plain; charset=utf-8", ".vtt": "text/vtt; charset=utf-8",
     }
     media_type = media_types.get(ext, "application/octet-stream")
@@ -2607,7 +2622,7 @@ async def proxy_download(request: Request, url: str, filename: str = "video", ex
         from app.core.local_download import content_disposition, display_name
         slugified = display_name(filename, "video")
 
-        safe_ext = ext if ext in ("mp4", "webm", "m4a", "mp3", "ogg", "wav") else "mp4"
+        safe_ext = ext if ext in ("mp4", "webm", "m4a", "mp3", "ogg", "wav", "opus") else "mp4"
 
         _is_yt_cdn = "googlevideo.com" in url
         if _is_yt_cdn:
@@ -2644,7 +2659,7 @@ async def proxy_download(request: Request, url: str, filename: str = "video", ex
         media_types = {
             "mp4": "video/mp4", "webm": "video/webm",
             "m4a": "audio/mp4", "mp3": "audio/mpeg",
-            "ogg": "audio/ogg", "wav": "audio/wav",
+            "ogg": "audio/ogg", "wav": "audio/wav", "opus": "audio/ogg; codecs=opus",
         }
         content_type = media_types.get(safe_ext, "application/octet-stream")
 
