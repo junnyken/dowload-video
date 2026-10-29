@@ -1965,5 +1965,14 @@
   "sent_to_app_title": {
     "message": "Sent to the VidGrab app",
     "description": "wording: BA review (5.21.0)"
+  },
+  "backend_label": {
+    "message": "Server"
+  },
+  "backend_ok": {
+    "message": "Online"
+  },
+  "backend_down": {
+    "message": "Not responding"
   }
 }

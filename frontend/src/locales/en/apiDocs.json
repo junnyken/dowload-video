@@ -53,7 +53,7 @@
   "guestComment": "guest",
   "searchResultsPlaceholder": "list of matching results",
   "endpoints": {
-    "health": "Liveness + version check. Returns disk, Redis, yt-dlp version, app_version.",
+    "health": "Liveness and version check. Public; returns only status and app_version.",
     "apiInfo": "Public API metadata: endpoints, rate limits, auth guide, error format.",
     "fetchLink": "Download a link and wait for the result: the request stays open until it finishes (synchronous) and returns no token to poll. With an API key it runs under your account (quota and quality follow your plan); without one it runs as a guest. quality defaults to \"video\" (up to 1080p); allowed values: \"video\", \"video_fast\" (faster, lower quality), \"video_4k\" (best available), \"video_<height>\" (for example \"video_720\"), \"mp3_128\", \"mp3_320\". The actual quality is capped by the account's plan. progress_token is optional and chosen by you: send it to follow progress through GET /progress/{token} while the request is running.",
     "progress": "Download progress for the progress_token you sent in POST /fetch-link; only meaningful while that request is still running. An unknown token (or one with no progress yet) returns status \"pending\". Do not use it to get the final result: the result is in the /fetch-link response.",

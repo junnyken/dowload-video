@@ -29,7 +29,7 @@ if _SENTRY_DSN:
 import re
 import uuid
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -123,7 +123,7 @@ from app.api.routes import router as api_router
 
 # Phase 17: structured JSON logging (runs before anything else)
 configure_logging(level=os.getenv("LOG_LEVEL", "INFO"))
-from app.api.admin import router as admin_router
+from app.api.admin import router as admin_router, verify_admin
 from app.api.payments import router as payments_router
 from app.api.user import router as user_router
 from app.api.flow_cleanup import router as flow_cleanup_router
@@ -712,6 +712,23 @@ def _js_runtimes_status() -> dict:
 
 @app.get("/health", tags=["Health"])
 async def health_check():
+    """Public liveness: cheap, no probes, no internals.
+
+    Uptime monitors and the platform health check only need "the process
+    answers". The detailed view (disk, Redis queues, Celery workers, DB job
+    counts, yt-dlp version, circuit breaker, watchdog) used to be served here
+    to anyone; it now lives behind the admin session at /api/v1/admin/health.
+    """
+    return {"status": "ok", "app_version": APP_VERSION}
+
+
+@app.get("/api/v1/admin/health", tags=["Admin"])
+async def admin_health_check(_=Depends(verify_admin)):
+    """Detailed health for admins (the former public /health body)."""
+    return await _detailed_health()
+
+
+async def _detailed_health():
     """Detailed health: disk, Redis, Celery workers, pending jobs, yt-dlp version."""
     import shutil, importlib.metadata
 
@@ -869,7 +886,7 @@ async def api_info():
         },
         "public_endpoints": [
             {"method": "GET",  "path": "/",                            "description": "Basic liveness check"},
-            {"method": "GET",  "path": "/health",                      "description": "Disk, Redis, yt-dlp version, app version"},
+            {"method": "GET",  "path": "/health",                      "description": "Liveness check: status and app version"},
             {"method": "GET",  "path": "/api/v1/api-info",             "description": "This document"},
             {"method": "POST", "path": "/api/v1/fetch-link",           "description": "Download one link and wait: the response carries the result (synchronous)"},
             {"method": "GET",  "path": "/api/v1/progress/{token}",     "description": "Progress of a running /fetch-link that was sent with your own progress_token"},

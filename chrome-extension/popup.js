@@ -1892,8 +1892,8 @@ function showVersionInfo() {
       <span style="color:#818cf8;font-weight:700;font-family:monospace;">v${extVer}</span>
     </div>
     <div id="vg-backend-ver" style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#475569;margin-top:3px;">
-      <span>Backend</span>
-      <span style="color:#374151;font-family:monospace;">${escapeHtml(t('backend_checking'))}</span>
+      <span>${escapeHtml(t('backend_label'))}</span>
+      <span style="color:#374151;">${escapeHtml(t('backend_checking'))}</span>
     </div>
   `;
 
@@ -1904,17 +1904,15 @@ function showVersionInfo() {
       const controller = new AbortController();
       setTimeout(() => controller.abort(), 5000);
       const r = await fetch(`${base}/health`, { signal: controller.signal, cache: 'no-store' });
-      const d = await r.json();
-      const ytdlpVer = d.ytdlp_version || '—';
-      const disk = d.disk?.used_pct != null ? `${d.disk.used_pct}%` : '';
+      // Only up/down is shown: /health no longer publishes tool versions or disk.
+      const d = r.ok ? await r.json() : null;
       const el = document.getElementById('vg-backend-ver');
-      if (el) el.innerHTML = `
-        <span>Backend yt-dlp</span>
-        <span style="color:#34d399;font-weight:700;font-family:monospace;">${escapeHtml(ytdlpVer)}${disk ? ` · disk ${escapeHtml(disk)}` : ''}</span>
-      `;
+      if (el) el.innerHTML = d?.status === 'ok'
+        ? `<span>${escapeHtml(t('backend_label'))}</span><span style="color:#34d399;font-weight:700;">${escapeHtml(t('backend_ok'))}</span>`
+        : `<span>${escapeHtml(t('backend_label'))}</span><span style="color:#ef4444;">${escapeHtml(t('backend_down'))}</span>`;
     } catch {
       const el = document.getElementById('vg-backend-ver');
-      if (el) el.innerHTML = `<span>Backend</span><span style="color:#ef4444;font-family:monospace;">offline</span>`;
+      if (el) el.innerHTML = `<span>${escapeHtml(t('backend_label'))}</span><span style="color:#ef4444;">${escapeHtml(t('backend_down'))}</span>`;
     }
   })();
 }

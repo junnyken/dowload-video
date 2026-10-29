@@ -345,9 +345,8 @@ def call_health() -> dict:
             return {
                 "ok":           True,
                 "status":       data.get("status", "ok"),
-                "redis":        data.get("redis", {}).get("status", "unknown"),
-                "disk_free_gb": data.get("disk", {}).get("free_gb"),
-                "yt_dlp":       data.get("ytdlp_version", ""),
+                # /health is public and only carries status + app_version;
+                # the detailed numbers are behind /api/v1/admin/health.
                 "app_version":  data.get("app_version", ""),
             }
         return {"ok": False, "status": "degraded"}
@@ -703,12 +702,8 @@ def cmd_status(chat_id: int):
     send_chat_action(chat_id, "typing")
     health = call_health()
     if health["ok"]:
-        redis_ok   = health.get("redis") in ("ok", "connected", "healthy")
-        redis_icon = "✅" if redis_ok else "⚠️"
-        disk_line  = f"\n💾 Còn: {health['disk_free_gb']:.1f} GB" if health.get("disk_free_gb") else ""
-        yt_line    = f"\n🔧 yt-dlp: `{health['yt_dlp']}`"         if health.get("yt_dlp") else ""
         ver_line   = f"\n📦 Phiên bản: `{health['app_version']}`" if health.get("app_version") else ""
-        text = f"✅ *Bot & Backend*: Hoạt động tốt\n{redis_icon} Redis: {health.get('redis','ok')}{disk_line}{yt_line}{ver_line}"
+        text = f"✅ *Bot & Backend*: Hoạt động tốt{ver_line}"
     else:
         status = health.get("status", "unknown")
         icons  = {"degraded": "⚠️", "offline": "🔴", "maintenance": "🔧"}

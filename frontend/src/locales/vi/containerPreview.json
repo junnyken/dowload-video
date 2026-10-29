@@ -67,7 +67,7 @@
     "platformFallback": "Nền tảng",
     "cookieUnavailable": {
       "title": "Chưa cấu hình cookie",
-      "body": "{{platform}} yêu cầu cookie đăng nhập nhưng chưa được cấu hình. Liên hệ admin để thêm cookie vào hệ thống (Cài đặt → Cookie)."
+      "body": "{{platform}} cần cookie phiên của chính nền tảng này để xem nội dung đó, nhưng hiện chưa có cookie. Đăng nhập VidGrab không cấp quyền truy cập nguồn. Liên hệ admin để thêm cookie (Cài đặt → Cookie)."
     },
     "cookieExpired": {
       "title": "Cookie đã hết hạn",
@@ -79,21 +79,21 @@
     },
     "cookiePartial": {
       "title": "Nội dung một phần",
-      "body": "Nội dung công khai hiển thị đầy đủ. Một số bài đăng yêu cầu đăng nhập và có thể bị bỏ qua khi queue."
+      "body": "Nội dung công khai hiển thị đầy đủ. Một số bài đăng cần quyền truy cập từ nền tảng nguồn nên có thể bị bỏ qua khi queue."
     },
     "singleDisabled": {
-      "title": "YouTube single video tạm thời không khả dụng",
-      "body": "YouTube download qua server hiện bị bot-block. Thay vào đó, hãy dán link <strong>channel</strong> hoặc <strong>playlist</strong> để dùng tính năng Bulk Browse (cần proxy residential được cấu hình)."
+      "title": "Video YouTube đơn lẻ tạm thời chưa dùng được",
+      "body": "Hiện chưa thể lấy video YouTube đơn lẻ. Bạn có thể thử dán link <strong>channel</strong> hoặc <strong>playlist</strong> để duyệt hàng loạt, nếu tính năng này đang khả dụng. Hãy quay lại sau."
     },
     "proxyBad": {
-      "title": "YouTube proxy hiện không hoạt động",
-      "body": "YTDL_PROXY được cấu hình nhưng không kết nối được. Hệ thống sẽ tự thử lại sau vài phút. Nếu vẫn lỗi, liên hệ admin để kiểm tra proxy."
+      "title": "YouTube tạm thời chưa dùng được",
+      "body": "Hiện chưa thể lấy nội dung từ YouTube. Vui lòng thử lại sau. Nếu tình trạng kéo dài, hãy liên hệ admin."
     },
     "generic": {
-      "cookieTitle": "Cần đăng nhập để dùng tính năng này",
-      "proxyTitle": "Cần proxy để dùng tính năng này",
-      "cookieBody": "{{platform}} yêu cầu cookie phiên đăng nhập. Liên hệ admin để thêm cookie vào hệ thống.",
-      "proxyBody": "YouTube container discovery cần proxy residential. Liên hệ admin để cấu hình YTDL_PROXY."
+      "cookieTitle": "Cần cookie của nền tảng nguồn để dùng tính năng này",
+      "proxyTitle": "YouTube tạm thời chưa dùng được",
+      "cookieBody": "{{platform}} cần cookie phiên của chính nền tảng này. Đăng nhập VidGrab không cấp quyền truy cập nguồn. Liên hệ admin để thêm cookie.",
+      "proxyBody": "Hiện chưa thể quét kênh hoặc playlist YouTube. Vui lòng thử lại sau hoặc liên hệ admin nếu tình trạng kéo dài."
     }
   }
 }

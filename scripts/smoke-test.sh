@@ -127,6 +127,9 @@ echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━
 echo ""
 
 # ─── Check 1: API Health ──────────────────────────────────────────────────────
+# /health is public and only says status + app_version. Redis/worker numbers
+# live at /api/v1/admin/health and need VIDGRAB_ADMIN_TOKEN (X-Admin-Token);
+# without it checks 1b and 7 are SKIPPED, never passed.
 log "Check 1/8: API health endpoint..."
 t0=$(date +%s%N)
 resp=$(safe_curl "${BASE_URL}/health")
@@ -138,15 +141,33 @@ if [[ -z "$body" || "$code" == "000" ]]; then
     record_fail "1. API health" "No response from ${BASE_URL}/health (HTTP ${code})" "$elapsed"
 else
     status=$(json_get "$body" "d.get('status','')")
-    redis_ok=$(json_get "$body" "str(d.get('redis',{}).get('ok',False)).lower()")
-
-    if [[ "$status" == "ok" && "$redis_ok" == "true" ]]; then
-        record_pass "1. API health" "status=ok, redis.ok=true" "$elapsed"
-    elif [[ "$status" == "ok" ]]; then
-        record_fail "1. API health" "status=ok but redis.ok=${redis_ok}" "$elapsed"
+    if [[ "$status" == "ok" ]]; then
+        record_pass "1. API health" "status=ok" "$elapsed"
     else
         record_fail "1. API health" "status='${status}' (expected 'ok')" "$elapsed"
     fi
+fi
+
+admin_body=""
+if [[ -n "${VIDGRAB_ADMIN_TOKEN:-}" ]]; then
+    t0=$(date +%s%N)
+    resp=$(safe_curl -H "X-Admin-Token: ${VIDGRAB_ADMIN_TOKEN}" "${BASE_URL}/api/v1/admin/health")
+    admin_body=$(parse_body "$resp")
+    code=$(parse_code "$resp")
+    elapsed=$(ms_since "$t0")
+    if [[ -z "$admin_body" || "$code" == "000" ]]; then
+        record_fail "1b. Redis" "No response from /api/v1/admin/health (HTTP ${code})" "$elapsed"
+        admin_body=""
+    else
+        redis_ok=$(json_get "$admin_body" "str(d.get('redis',{}).get('ok',False)).lower()")
+        if [[ "$redis_ok" == "true" ]]; then
+            record_pass "1b. Redis" "redis.ok=true" "$elapsed"
+        else
+            record_fail "1b. Redis" "redis.ok=${redis_ok}" "$elapsed"
+        fi
+    fi
+else
+    record_skip "1b. Redis" "VIDGRAB_ADMIN_TOKEN not set"
 fi
 
 # ─── Check 2: YouTube single fetch (preview only — starts a real job) ─────────
@@ -264,13 +285,13 @@ fi
 # ─── Check 7: Queue depth / worker count ─────────────────────────────────────
 log "Check 7/8: Celery worker count..."
 t0=$(date +%s%N)
-resp=$(safe_curl "${BASE_URL}/health")
-body=$(parse_body "$resp")
-code=$(parse_code "$resp")
+body="$admin_body"
 elapsed=$(ms_since "$t0")
 
-if [[ -z "$body" || "$code" == "000" ]]; then
-    record_fail "7. Worker count" "Could not reach /health" "$elapsed"
+if [[ -z "${VIDGRAB_ADMIN_TOKEN:-}" ]]; then
+    record_skip "7. Worker count" "VIDGRAB_ADMIN_TOKEN not set"
+elif [[ -z "$body" ]]; then
+    record_fail "7. Worker count" "Could not read /api/v1/admin/health" "$elapsed"
 else
     worker_count=$(json_get "$body" "d.get('celery',{}).get('worker_count', 0)")
     min_workers=1
@@ -279,7 +300,7 @@ else
     fi
 
     if [[ -z "$worker_count" ]]; then
-        record_fail "7. Worker count" "celery.worker_count missing from /health response" "$elapsed"
+        record_fail "7. Worker count" "celery.worker_count missing from /api/v1/admin/health" "$elapsed"
     elif (( worker_count > min_workers )); then
         record_pass "7. Worker count" "${worker_count} worker(s) online" "$elapsed"
     elif (( worker_count == min_workers && min_workers == 0 )); then

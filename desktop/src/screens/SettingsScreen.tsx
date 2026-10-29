@@ -320,9 +320,14 @@ export function SettingsScreen() {
               </div>
             )}
             {checkMsg && <p className="px-4 py-3 text-[13px] text-fg-muted">Không kiểm tra được bản mới: {checkMsg}</p>}
-            <Row label="yt-dlp"><span className="text-sm text-fg-2">{ytdlpLabel(tools)}</span></Row>
-            <Row label="ffmpeg"><span className="text-sm text-fg-2">{tools?.ffmpeg ?? '—'}</span></Row>
-            <Row label="deno"><span className="text-sm text-fg-2">{tools?.deno ?? '—'}</span></Row>
+            {/* wording: BA review — names and versions remain in diagnostics for support. */}
+            <Row label="Bộ xử lý tải"><span className="text-sm text-fg-2">{tools?.ytdlp ? 'Sẵn sàng' : 'Chưa sẵn sàng'}</span></Row>
+            <Row label="Xử lý âm thanh và video"><span className="text-sm text-fg-2">{tools?.ffmpeg ? 'Sẵn sàng' : 'Chưa sẵn sàng'}</span></Row>
+            <Row label="Hỗ trợ tương thích"><span className="text-sm text-fg-2">{tools?.deno ? 'Sẵn sàng' : 'Chưa sẵn sàng'}</span></Row>
+            <details className="px-4 py-3 text-[13px] text-fg-2">
+              <summary>Thông tin chẩn đoán dành cho hỗ trợ</summary>
+              <p className="mt-2">yt-dlp: {ytdlpLabel(tools)} · ffmpeg: {tools?.ffmpeg ?? '—'} · deno: {tools?.deno ?? '—'}</p>
+            </details>
           </Section>
         </div>
       </div>

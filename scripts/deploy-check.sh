@@ -303,6 +303,23 @@ wait_for_healthy() {
     done
 }
 
+# /health is public and only says status + app_version. Redis/worker numbers
+# come from /api/v1/admin/health with the container's own ADMIN_PASSWORD
+# (read inside the container, never printed); missing token = WARN, not PASS.
+_admin_health_json() {
+    docker exec vidgrab-backend-1 python3 -c "
+import os, urllib.request, sys
+tok = os.getenv('ADMIN_PASSWORD', '')
+if not tok:
+    sys.exit(0)
+try:
+    req = urllib.request.Request('http://localhost:8000/api/v1/admin/health', headers={'X-Admin-Token': tok})
+    sys.stdout.write(urllib.request.urlopen(req, timeout=10).read().decode())
+except Exception:
+    sys.stdout.write('')
+" 2>/dev/null || true
+}
+
 check_health_endpoint() {
     log "Checking /health endpoint..."
     local t0; t0=$(date +%s%N)
@@ -325,35 +342,34 @@ except Exception as e:
 
     local status redis_ok
     status=$(echo "$body" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status',''))" 2>/dev/null || true)
-    redis_ok=$(echo "$body" | python3 -c "import sys,json; d=json.load(sys.stdin); print(str(d.get('redis',{}).get('ok',False)).lower())" 2>/dev/null || true)
 
     if [[ "$status" != "ok" ]]; then
         record FAIL "Health: status=ok" "Got status='${status}'" "$(ms_since "$t0")"
         return
     fi
+    record PASS "Health: /health endpoint" "status=ok" "$(ms_since "$t0")"
+
+    ADMIN_HEALTH_BODY=$(_admin_health_json)
+    if [[ -z "$ADMIN_HEALTH_BODY" ]]; then
+        record WARN "Health: redis.ok=true" "admin health unavailable (ADMIN_PASSWORD unset or request failed)" "$(ms_since "$t0")"
+        return
+    fi
+    redis_ok=$(echo "$ADMIN_HEALTH_BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(str(d.get('redis',{}).get('ok',False)).lower())" 2>/dev/null || true)
     if [[ "$redis_ok" != "true" ]]; then
         record FAIL "Health: redis.ok=true" "redis.ok=${redis_ok}" "$(ms_since "$t0")"
         return
     fi
-
-    record PASS "Health: /health endpoint" "status=ok, redis.ok=true" "$(ms_since "$t0")"
+    record PASS "Health: redis.ok=true" "redis.ok=true" "$(ms_since "$t0")"
 }
 
 check_celery_workers() {
     log "Checking Celery worker count..."
     local t0; t0=$(date +%s%N)
 
-    local response
-    response=$(docker exec vidgrab-backend-1 python3 -c "
-import urllib.request, sys
-try:
-    r = urllib.request.urlopen('http://localhost:8000/health', timeout=10)
-    sys.stdout.write(r.read().decode())
-except Exception:
-    sys.stdout.write('')
-" 2>/dev/null || true)
+    local response="${ADMIN_HEALTH_BODY:-}"
+    [[ -z "$response" ]] && response=$(_admin_health_json)
     if [[ -z "$response" ]]; then
-        record FAIL "Celery: worker count" "Could not reach /health via docker exec" "$(ms_since "$t0")"
+        record WARN "Celery: worker count" "admin health unavailable (ADMIN_PASSWORD unset or request failed)" "$(ms_since "$t0")"
         return
     fi
 

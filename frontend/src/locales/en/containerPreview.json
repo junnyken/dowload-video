@@ -73,7 +73,7 @@
     "platformFallback": "Platform",
     "cookieUnavailable": {
       "title": "Cookie not configured",
-      "body": "{{platform}} requires a login cookie but none is configured. Contact an admin to add one (Settings → Cookie)."
+      "body": "{{platform}} needs a session cookie from that platform itself to view this content, but none is available. Signing in to VidGrab does not grant access to the source. Contact an admin to add one (Settings → Cookie)."
     },
     "cookieExpired": {
       "title": "Cookie expired",
@@ -85,21 +85,21 @@
     },
     "cookiePartial": {
       "title": "Partial content",
-      "body": "Public content is shown in full. Some posts require sign-in and may be skipped when adding to the queue."
+      "body": "Public content is shown in full. Some posts need access from the source platform and may be skipped when adding to the queue."
     },
     "singleDisabled": {
       "title": "Single YouTube videos are temporarily unavailable",
-      "body": "YouTube downloads via the server are currently blocked as bot traffic. Instead, paste a <strong>channel</strong> or <strong>playlist</strong> link to use Bulk Browse (requires a configured residential proxy)."
+      "body": "We can't fetch single YouTube videos right now. You can try pasting a <strong>channel</strong> or <strong>playlist</strong> link to browse in bulk, if that is available. Please check back later."
     },
     "proxyBad": {
-      "title": "YouTube proxy is not working",
-      "body": "YTDL_PROXY is configured but can't connect. The system will retry automatically in a few minutes. If it keeps failing, contact an admin to check the proxy."
+      "title": "YouTube is temporarily unavailable",
+      "body": "We can't fetch content from YouTube right now. Please try again later. If this continues, contact an admin."
     },
     "generic": {
-      "cookieTitle": "Sign-in required to use this feature",
-      "proxyTitle": "A proxy is required to use this feature",
-      "cookieBody": "{{platform}} requires a login session cookie. Contact an admin to add one.",
-      "proxyBody": "YouTube container discovery needs a residential proxy. Contact an admin to configure YTDL_PROXY."
+      "cookieTitle": "A cookie from the source platform is needed for this feature",
+      "proxyTitle": "YouTube is temporarily unavailable",
+      "cookieBody": "{{platform}} needs a session cookie from that platform itself. Signing in to VidGrab does not grant access to the source. Contact an admin to add one.",
+      "proxyBody": "We can't scan YouTube channels or playlists right now. Please try again later, or contact an admin if this continues."
     }
   }
 }

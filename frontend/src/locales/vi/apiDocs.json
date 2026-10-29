@@ -52,7 +52,7 @@
   "guestComment": "khách",
   "searchResultsPlaceholder": "danh sách kết quả khớp",
   "endpoints": {
-    "health": "Liveness + version check. Returns disk, Redis, yt-dlp version, app_version.",
+    "health": "Kiểm tra dịch vụ còn hoạt động và phiên bản. Công khai, chỉ trả status và app_version.",
     "apiInfo": "Public API metadata: endpoints, rate limits, auth guide, error format.",
     "fetchLink": "Tải một link và chờ kết quả: request giữ kết nối cho đến khi xong (đồng bộ), không trả token để poll. Gửi API key thì chạy dưới tài khoản của bạn (hạn mức, chất lượng theo gói); không gửi thì chạy như khách. quality mặc định \"video\" (tối đa 1080p); các giá trị: \"video\", \"video_fast\" (nhanh, chất lượng thấp hơn), \"video_4k\" (tốt nhất có thể), \"video_<chiều cao>\" (ví dụ \"video_720\"), \"mp3_128\", \"mp3_320\". Chất lượng thực tế bị giới hạn theo gói của tài khoản. progress_token là tuỳ chọn do bạn tự đặt: gửi kèm để theo dõi tiến độ qua GET /progress/{token} trong lúc request đang chạy.",
     "progress": "Tiến độ tải theo progress_token bạn đã gửi trong POST /fetch-link, chỉ có ý nghĩa khi request đó còn đang chạy. Token chưa biết (hoặc chưa có tiến độ) trả status \"pending\". Không dùng để lấy kết quả cuối: kết quả nằm trong response của /fetch-link.",

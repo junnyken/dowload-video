@@ -107,8 +107,8 @@ class TestLiveHealthEndpoint:
         assert r.status_code == 200
         body = r.json()
         assert body["status"] == "ok"
-        assert "disk" in body
-        assert "redis" in body
+        assert set(body) == {"status", "app_version"}
+        assert isinstance(body["app_version"], str)
 
     def test_root_returns_ok(self, app):
         r = app.get("/")

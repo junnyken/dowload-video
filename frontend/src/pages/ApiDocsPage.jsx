@@ -13,7 +13,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 const ENDPOINTS = [
   {
     id: 'health', method: 'GET', path: '/health', auth: false,
-    response: `{ "status": "ok", "app_version": "1.6.0", "disk": {...}, "redis": {...}, "ytdlp_version": "..." }`,
+    response: `{ "status": "ok", "app_version": "1.6.0" }`,
   },
   {
     id: 'apiInfo', method: 'GET', path: '/api/v1/api-info', auth: false,

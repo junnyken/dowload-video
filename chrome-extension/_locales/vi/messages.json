@@ -1965,5 +1965,14 @@
   "sent_to_app_title": {
     "message": "Đã giao cho app VidGrab",
     "description": "wording: BA review (5.21.0)"
+  },
+  "backend_label": {
+    "message": "Máy chủ"
+  },
+  "backend_ok": {
+    "message": "Đang hoạt động"
+  },
+  "backend_down": {
+    "message": "Không phản hồi"
   }
 }

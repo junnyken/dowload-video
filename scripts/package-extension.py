@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import subprocess
 import sys
 import zipfile
 
@@ -68,6 +69,28 @@ def collect() -> list[pathlib.Path]:
     return files
 
 
+# Our own scripts ship without comments (internal notes, task numbers, why a
+# workaround exists). Only comments are dropped: names, whitespace and logic
+# stay as written, so the store review still reads normal code. Third-party
+# files under lib/ ship untouched with their license headers.
+TERSER = ROOT / "frontend" / "node_modules" / "terser" / "bin" / "terser"
+
+def strip_comments(path: pathlib.Path) -> bytes:
+    out = subprocess.run(
+        ["node", str(TERSER), str(path), "--beautify", "comments=false", "--comments", "false"],
+        check=True, capture_output=True,
+    ).stdout
+    if not out.strip():
+        raise RuntimeError(f"terser returned nothing for {path}")
+    return out
+
+def ship_bytes(path: pathlib.Path) -> bytes | None:
+    """Bytes to write for a .js file we own, or None to copy the file as-is."""
+    rel = path.relative_to(SOURCE)
+    if path.suffix != ".js" or rel.parts[0] == "lib":
+        return None
+    return strip_comments(path)
+
 YOUTUBE = ("youtube.com", "youtu.be")
 
 
@@ -95,6 +118,10 @@ def main() -> int:
         print("ERROR: manifest.json has no version", file=sys.stderr)
         return 1
 
+    if not TERSER.exists():
+        print(f"ERROR: {TERSER} missing — run npm ci in frontend/ first", file=sys.stderr)
+        return 1
+
     files = collect()
     if manifest_path not in files:
         print("ERROR: manifest.json was excluded — refusing to build", file=sys.stderr)
@@ -104,12 +131,16 @@ def main() -> int:
     dests = [SOURCE / "store-assets" / f"VidGrab-store-v{version}.zip"] if store else DESTINATIONS
     print(f"Packaging extension v{version} — {len(files)} files{' (Chrome Web Store build, no YouTube)' if store else ''}")
 
+    stripped = {p: ship_bytes(p) for p in files}
+
     for dest in dests:
         dest.parent.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as z:
             for path in files:
                 if store and path == manifest_path:
                     z.writestr("manifest.json", store_manifest(path.read_text(encoding="utf-8")))
+                elif stripped[path] is not None:
+                    z.writestr(path.relative_to(SOURCE).as_posix(), stripped[path])
                 else:
                     z.write(path, path.relative_to(SOURCE).as_posix())
 
