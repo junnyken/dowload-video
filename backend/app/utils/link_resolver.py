@@ -331,8 +331,12 @@ def _canonicalize_douyin(raw_url: str) -> str:
     Convert any resolved Douyin URL into the cleanest canonical form.
     If we can extract a video_id, use: https://www.douyin.com/video/<id>
     Otherwise clean tracking params and return as-is.
+
+    Only Douyin hosts are rewritten: TikTok short links share this path and
+    their redirect target (www.tiktok.com/@u/video/<id>) also has a /video/<id>,
+    which used to be turned into a douyin.com URL and fail as Douyin.
     """
-    vid = _extract_video_id(raw_url)
+    vid = _extract_video_id(raw_url) if is_douyin_url(raw_url) else None
     if vid:
         return f"https://www.douyin.com/video/{vid}"
     return _clean_expanded_url(raw_url)
@@ -375,9 +379,25 @@ def extract_video_id_from_url(url: str) -> Optional[str]:
     return _extract_video_id(url)
 
 
+_DOUYIN_HOSTS = ("douyin.com", "iesdouyin.com")
+
+
 def is_douyin_url(url: str) -> bool:
     """
     Check whether a URL belongs to Douyin (any subdomain).
     Covers v.douyin.com, www.douyin.com, iesdouyin.com, etc.
+    Only the host counts — "douyin.com" in a path or query string does not.
+    Share text ("… https://v.douyin.com/x/ 复制此链接…") is judged by its first URL.
     """
-    return bool(re.search(r"(douyin\.com|iesdouyin\.com)", url, re.IGNORECASE))
+    from urllib.parse import urlparse
+
+    text = (url or "").strip()
+    m = re.search(r"https?://\S+", text, re.IGNORECASE)
+    candidate = m.group(0) if m else text
+    if "://" not in candidate:
+        candidate = "//" + candidate
+    try:
+        host = (urlparse(candidate).hostname or "").lower()
+    except ValueError:
+        return False
+    return any(host == h or host.endswith("." + h) for h in _DOUYIN_HOSTS)
