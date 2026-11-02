@@ -31,7 +31,7 @@ from app.core.structured_log import install_secret_redaction, redact_secrets
 
 
 TELEGRAM_URL = (
-    "https://api.telegram.org/bot8534211781:AAFy6EwC9fHD6gRixXhUet70eTlgqwvRVFc/sendMessage"
+    "https://api.telegram.org/bot1234567890:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/sendMessage"
 )
 
 
@@ -39,7 +39,7 @@ class TestTheLeakedShape:
 
     def test_the_telegram_token_is_removed(self):
         out = redact_secrets(f"HTTP Request: POST {TELEGRAM_URL}")
-        assert "AAFy6EwC9fHD6gRixXhUet70eTlgqwvRVFc" not in out
+        assert "AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" not in out
         assert "<redacted>" in out
 
     def test_the_line_stays_useful(self):
@@ -48,7 +48,7 @@ class TestTheLeakedShape:
         out = redact_secrets(f"HTTP Request: POST {TELEGRAM_URL}")
         assert "api.telegram.org" in out
         assert "sendMessage" in out
-        assert "bot8534211781" in out, "the bot id is not the secret; keep it readable"
+        assert "bot1234567890" in out, "the bot id is not the secret; keep it readable"
 
     def test_supabase_diagnostics_survive_untouched(self):
         line = (
@@ -97,7 +97,7 @@ class TestItWorksThroughTheLoggingStack:
             logger.info('HTTP Request: %s %s "%s"', "POST", TELEGRAM_URL, "HTTP/1.1 200 OK")
 
         rendered = caplog.records[-1].getMessage()
-        assert "AAFy6EwC9fHD6gRixXhUet70eTlgqwvRVFc" not in rendered
+        assert "AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" not in rendered
         assert "api.telegram.org" in rendered
 
     def test_the_arg_is_redacted_when_it_is_not_a_string(self, caplog):
@@ -125,7 +125,7 @@ class TestItWorksThroughTheLoggingStack:
             )
 
         rendered = caplog.records[-1].getMessage()
-        assert "AAFy6EwC9fHD6gRixXhUet70eTlgqwvRVFc" not in rendered, (
+        assert "AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" not in rendered, (
             "the URL object slipped through — this is exactly what leaked"
         )
         assert "api.telegram.org" in rendered
@@ -143,7 +143,7 @@ class TestItWorksThroughTheLoggingStack:
         logger = logging.getLogger("anything")
         with caplog.at_level(logging.INFO, logger="anything"):
             logger.info(f"sending via {TELEGRAM_URL}")
-        assert "AAFy6EwC9fHD6gRixXhUet70eTlgqwvRVFc" not in caplog.records[-1].getMessage()
+        assert "AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" not in caplog.records[-1].getMessage()
 
     def test_installing_twice_does_not_stack_factories(self):
         """Called from both configure_logging() and celery_app import."""
@@ -153,7 +153,7 @@ class TestItWorksThroughTheLoggingStack:
         record = logger.makeRecord(
             "dup-check", logging.INFO, __file__, 1, "%s", (TELEGRAM_URL,), None
         )
-        assert "AAFy6EwC9fHD6gRixXhUet70eTlgqwvRVFc" not in record.getMessage()
+        assert "AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" not in record.getMessage()
 
     def test_a_bad_record_does_not_break_logging(self, caplog):
         """A logging hook must never be the reason something fails."""

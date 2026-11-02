@@ -930,11 +930,11 @@ export default function BulkContent() {
     setRenameError('');
     setRenameResult(null);
     try {
-      const res = await fetch(`${API}/bulk-zip-rename`, {
+      const res = await fetch(`${API}/bulk-zip-rename`, withAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ batch_id: batchId, pattern: renamePattern }),
-      });
+      }));
       const data = await res.json();
       if (!res.ok) { setRenameError(data?.detail || t('rename.failed')); return; }
       setRenameResult(data);

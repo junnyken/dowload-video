@@ -24,6 +24,9 @@ Supports:
 import re
 import httpx
 from typing import Optional
+from urllib.parse import urljoin, urlparse
+
+from app.core.ssrf_guard import assert_safe_url
 
 # ── User-Agent: Mobile Safari is treated most leniently ─────────────
 # Douyin's 302-redirect endpoint for share links prefers mobile UAs.
@@ -73,12 +76,55 @@ _TRACKING_PARAMS = {
 
 # ── Timeout for the resolver itself (must be fast) ───────────────────
 _RESOLVE_TIMEOUT = 8.0   # seconds — hard cap per attempt
+# Same cap httpx applied when this used follow_redirects=True.
+_FOLLOW_MAX_REDIRECTS = 20
 
 
 def _is_short_url(url: str) -> bool:
-    """Check if a URL is a known short link that needs unshortening."""
-    url_lower = url.lower()
-    return any(domain in url_lower for domain in _SHORT_LINK_DOMAINS)
+    """Check if a URL's host is a known short-link domain or its subdomain."""
+    try:
+        host = (urlparse((url or "").strip()).hostname or "").rstrip(".").lower()
+    except ValueError:
+        return False
+    return any(host == d or host.endswith("." + d) for d in _SHORT_LINK_DOMAINS)
+
+
+async def _is_safe_url(url: str) -> bool:
+    import asyncio
+    try:
+        await asyncio.wait_for(asyncio.to_thread(assert_safe_url, url), timeout=_RESOLVE_TIMEOUT)
+    except Exception:
+        return False
+    return True
+
+
+async def _pinned_get(client, url: str, headers: dict):
+    """Connect to a validated IP, keeping the source hostname for Host and TLS."""
+    import asyncio
+    import ipaddress
+    from app.core.ssrf_guard import _resolve, ip_is_public
+
+    def target():
+        assert_safe_url(url)
+        parsed = httpx.URL(url)
+        host = parsed.host
+        try:
+            ipaddress.ip_address(host)
+            ips = (host,)
+        except ValueError:
+            ips = _resolve(host)
+        if not ips or not all(ip_is_public(ip) for ip in ips):
+            raise ValueError("URL is not allowed")
+        return parsed, host, ips[0]
+
+    parsed, host, ip = await asyncio.wait_for(asyncio.to_thread(target), timeout=_RESOLVE_TIMEOUT)
+    authority = f"[{host}]" if ":" in host else host
+    default_port = 443 if parsed.scheme == "https" else 80
+    if parsed.port is not None and parsed.port != default_port:
+        authority += f":{parsed.port}"
+    return await client.get(parsed.copy_with(host=ip),
+                            headers={**headers, "Host": authority},
+                            extensions={"sni_hostname": host})
 
 
 def _extract_video_id(url: str) -> Optional[str]:
@@ -165,16 +211,22 @@ async def _try_resolve_302(url: str, user_agent: str) -> Optional[str]:
         "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
     }
+    if not await _is_safe_url(url):
+        return None
     try:
         async with httpx.AsyncClient(
             follow_redirects=False,
+            trust_env=False,
             timeout=_RESOLVE_TIMEOUT,
         ) as client:
-            resp = await client.get(url, headers=headers)
+            resp = await _pinned_get(client, url, headers)
 
             if resp.status_code in (301, 302, 303, 307, 308):
                 location = resp.headers.get("Location", "")
                 if location:
+                    location = urljoin(url, location)
+                    if not await _is_safe_url(location):
+                        return None
                     print(f"[LinkResolver] 302 Location -> {location[:120]}")
                     return location
 
@@ -186,7 +238,7 @@ async def _try_resolve_302(url: str, user_agent: str) -> Optional[str]:
                 meta_match = re.search(
                     r'content=["\']?\d;url=(https?://[^"\'>\s]+)', body, re.IGNORECASE
                 )
-                if meta_match:
+                if meta_match and await _is_safe_url(meta_match.group(1)):
                     return meta_match.group(1)
 
             print(f"[LinkResolver] Unexpected status {resp.status_code} for {url[:60]}")
@@ -212,16 +264,27 @@ async def _try_resolve_follow(url: str, user_agent: str) -> Optional[str]:
     }
     try:
         async with httpx.AsyncClient(
-            follow_redirects=True,
+            follow_redirects=False,
+            trust_env=False,
             timeout=_RESOLVE_TIMEOUT,
             limits=httpx.Limits(max_connections=5),
         ) as client:
-            resp = await client.get(url, headers=headers)
-            if resp.status_code in (403, 503):
+            # Follow manually so every hop clears the SSRF guard.
+            current = url
+            for _ in range(_FOLLOW_MAX_REDIRECTS + 1):
+                if not await _is_safe_url(current):
+                    return None
+                resp = await _pinned_get(client, current, headers)
+                location = resp.headers.get("Location", "")
+                if resp.status_code in (301, 302, 303, 307, 308) and location:
+                    current = urljoin(current, location)
+                    continue
+                if resp.status_code in (403, 503):
+                    return None
+                if current != url:
+                    return current
                 return None
-            expanded = str(resp.url)
-            if expanded != url:
-                return expanded
+            return None
     except httpx.TimeoutException:
         print(f"[LinkResolver] Timeout (follow) with UA: {user_agent[:30]}...")
     except Exception as e:
@@ -250,12 +313,17 @@ async def resolve_douyin_shortlink(url: str) -> Optional[str]:
         "Accept-Language": "zh-CN,zh;q=0.9",
     }
     
+    if not await _is_safe_url(url):
+        return None
     try:
-        async with httpx.AsyncClient(follow_redirects=False, timeout=5.0) as client:
-            resp = await client.get(url, headers=headers)
+        async with httpx.AsyncClient(follow_redirects=False, trust_env=False, timeout=5.0) as client:
+            resp = await _pinned_get(client, url, headers)
             if resp.status_code in (301, 302, 303, 307, 308):
                 location = resp.headers.get("Location", "")
                 if location:
+                    location = urljoin(url, location)
+                    if not await _is_safe_url(location):
+                        return None
                     print(f"[LinkResolver] Layer 1 (WeChat) Success -> {location[:120]}")
                     return _canonicalize_douyin(location)
             elif resp.status_code == 200:

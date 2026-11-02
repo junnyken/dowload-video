@@ -247,6 +247,22 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
     checked before it runs and counted on success, unless
     ``_quota_precounted`` (guest bulk items are counted at dispatch).
     """
+    # Re-check at the worker boundary, before extraction or cache lookup.
+    from app.core.ssrf_guard import assert_safe_url
+    from fastapi import HTTPException
+    try:
+        assert_safe_url(url)
+    except HTTPException:
+        _sb_update(get_supabase_client(), {
+            "status": "failed",
+            "job_stage": "failed",
+            "error_message": "URL is not allowed",
+            "auto_retry_status": "not_applicable",
+            "error_type": "permanent",
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        }, job_id)
+        return
+
     supabase = get_supabase_client()
     task_start = time.time()
     platform = _get_platform(url)

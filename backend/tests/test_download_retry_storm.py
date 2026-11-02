@@ -168,6 +168,9 @@ def worker(monkeypatch, rc):
     calls = {"extract": 0, "dispatched": []}
     db = _JobsDB({"id": "job-1", "status": "pending", "retry_count": 0})
     monkeypatch.setattr(vt, "get_supabase_client", lambda: db)
+    # Offline worker entry guard resolves the URL host; pin it to a public
+    # address so these retry/quota tests do not depend on DNS availability.
+    monkeypatch.setattr("app.core.ssrf_guard._resolve", lambda hostname: ("93.184.216.34",))
     monkeypatch.setattr(vt, "get_cached_result", lambda url: None)
     monkeypatch.setattr(vt, "_platform_sleep", lambda url: None)
     monkeypatch.setattr(platform_lanes, "try_acquire_platform", lambda p: True)

@@ -604,9 +604,15 @@ def scan_stale_jobs() -> None:
 def refresh_job_link(job_id: str, user_id: Optional[str] = None) -> dict:
     """
     Re-extract a job whose download link has expired or is broken.
-    Safe to call on success or failed jobs.
+    Only the job's owner may refresh it: a missing user_id is rejected before
+    any DB access, and the read, the update and the dispatch are all scoped to
+    the owner, so a non-owner can neither reset nor re-enqueue another's job.
     Returns {"success": bool, "message": str}
     """
+    if not user_id:
+        return {"success": False, "message": "Job không tìm thấy"}
+    owner_id = str(user_id)
+
     from app.core.database import get_service_client
     from app.tasks.video_tasks import process_video_task
     supabase = get_service_client()
@@ -614,8 +620,9 @@ def refresh_job_link(job_id: str, user_id: Optional[str] = None) -> dict:
     try:
         res = (
             supabase.table("download_jobs")
-            .select("id, original_url, status, job_stage, recovery_attempts, selected_quality")
+            .select("id, user_id, original_url, status, job_stage, recovery_attempts, selected_quality")
             .eq("id", job_id)
+            .eq("user_id", owner_id)
             .single()
             .execute()
         )
@@ -623,7 +630,7 @@ def refresh_job_link(job_id: str, user_id: Optional[str] = None) -> dict:
     except Exception:
         return {"success": False, "message": "Job không tìm thấy"}
 
-    if not job:
+    if not job or str(job.get("user_id") or "") != owner_id:
         return {"success": False, "message": "Job không tìm thấy"}
 
     url = job.get("original_url", "")
@@ -646,10 +653,11 @@ def refresh_job_link(job_id: str, user_id: Optional[str] = None) -> dict:
             "error_message":     "🔄 Đang làm mới link tải...",
             "recovery_attempts": attempts + 1,
             "last_recovery_at":  datetime.now(timezone.utc).isoformat(),
-        }).eq("id", job_id).execute()
+        }).eq("id", job_id).eq("user_id", owner_id).execute()
 
-        process_video_task.delay(job_id, url, user_id, quality)
+        process_video_task.delay(job_id, url, owner_id, quality)
         _log_recovery("manual_refresh", job_id)
         return {"success": True, "message": "Đang làm mới link, vui lòng chờ..."}
     except Exception as e:
-        return {"success": False, "message": str(e)[:200]}
+        print(f"[Recovery:manual_refresh] {job_id} failed: {type(e).__name__}")
+        return {"success": False, "message": "Không thể làm mới link, vui lòng thử lại"}

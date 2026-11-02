@@ -37,6 +37,9 @@ IG = "https://www.instagram.com/p/{}/"
 
 @pytest.fixture(autouse=True)
 def _default_limits(monkeypatch):
+    # The shared worker fixture enters the same SSRF resolver as production.
+    # Pin its test URLs to a public address so quota assertions stay offline.
+    monkeypatch.setattr("app.core.ssrf_guard._resolve", lambda hostname: ("93.184.216.34",))
     for k in ("PLATFORM_DAILY_LIMIT_ANON", "PLATFORM_DAILY_LIMIT_USER"):
         monkeypatch.delenv(k, raising=False)
     # The tests in this file were written for one allowance PER platform; the

@@ -426,7 +426,7 @@ class TestHealthEndpointShape:
         # in production behind main.py's blanket except. Fixed alongside this test.
         monkeypatch.setattr("app.core.youtube_gate.circuit_state", lambda: "closed")
 
-        from app.main import health_check
+        from app.main import _detailed_health, health_check
         import asyncio
         # asyncio.get_event_loop() is deprecated/fragile in 3.12+: it only
         # auto-creates a loop the FIRST time it's called with none set for
@@ -437,7 +437,12 @@ class TestHealthEndpointShape:
         # test showed intermittently depending on what ran before it in the
         # full suite. asyncio.run() always creates a fresh loop and closes
         # it cleanly, with no dependency on prior thread-local loop state.
-        result = asyncio.run(health_check())
+        result = asyncio.run(_detailed_health())
+
+        # The public /health handler exposes only liveness, nothing operational.
+        public = asyncio.run(health_check())
+        assert set(public) == {"status", "app_version"}
+        assert public["status"] == "ok"
 
         assert "celery" in result
         assert "jobs" in result

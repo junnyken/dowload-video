@@ -466,15 +466,16 @@ class TestRefreshJobLink:
 
     def _sb_with_job(self, status="failed", attempts=0):
         sb = MagicMock()
-        sb.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value.data = {
+        sb.table.return_value.select.return_value.eq.return_value.eq.return_value.single.return_value.execute.return_value.data = {
             "id": "job-rf-1",
+            "user_id": "user-1",
             "original_url": "https://youtu.be/abc",
             "status": status,
             "job_stage": "failed",
             "recovery_attempts": attempts,
             "selected_quality": "video",
         }
-        sb.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock()
+        sb.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock()
         return sb
 
     def test_stale_job_can_be_refreshed(self, monkeypatch):
@@ -497,9 +498,16 @@ class TestRefreshJobLink:
         sb = self._sb_with_job(status="processing")
         with patch("app.core.database.get_service_client", return_value=sb):
             from app.core.recovery import refresh_job_link
-            result = refresh_job_link("job-rf-2")
+            result = refresh_job_link("job-rf-2", "user-1")
         assert result["success"] is False
         assert "xử lý" in result["message"]
+
+    def test_refresh_without_owner_is_rejected_before_db(self):
+        with patch("app.core.database.get_service_client") as get_client:
+            from app.core.recovery import refresh_job_link
+            result = refresh_job_link("job-rf-3")
+        assert result["success"] is False
+        get_client.assert_not_called()
 
 
 # ═══════════════════════════════════════════════════════════════════

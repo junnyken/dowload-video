@@ -4,7 +4,7 @@ Mobile / PWA API
 Lightweight endpoints optimised for mobile clients and PWA shell.
 
 Routes:
-  GET  /api/v1/mobile/recent-jobs           — last N download jobs (no auth, session-based)
+  GET  /api/v1/mobile/recent-jobs           — last N owned jobs (empty for guests)
   GET  /api/v1/mobile/status                — quick health ping
   POST /api/v1/push-subscriptions           — register Web Push subscription
   DELETE /api/v1/push-subscriptions         — unregister subscription
@@ -18,10 +18,10 @@ import datetime
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Request, HTTPException, status
+from fastapi import APIRouter, Depends, Query, Request, HTTPException, status
 from pydantic import BaseModel
 
-from app.core.auth_middleware import get_required_user
+from app.core.auth_middleware import get_optional_user, get_required_user
 from app.core.database import get_service_client
 
 logger = logging.getLogger(__name__)
@@ -83,22 +83,18 @@ class NotificationPreferencesIn(BaseModel):
 
 
 @router.get("/mobile/recent-jobs", response_model=List[RecentJob])
-async def get_recent_jobs(request: Request, limit: int = 5):
+async def get_recent_jobs(
+    request: Request,
+    limit: int = Query(5, ge=1, le=20),
+    user: Optional[Dict[str, Any]] = Depends(get_optional_user),
+):
     """
-    Return the last N download jobs for the current session.
-    No auth required — uses session_id cookie or query param for filtering.
-    Designed to be fast and lightweight for mobile polling.
+    Return the authenticated caller's last N download jobs.
+    Guests get an empty list (download_jobs has no session column, so a guest
+    has nothing that can be scoped to them). Never an unscoped global read.
     """
-    limit = min(limit, 20)  # cap at 20
-    session_id = (
-        request.cookies.get("vg_session_id")
-        or request.query_params.get("session_id")
-    )
-
-    # download_jobs has no session_id column (no migration ever added one), so
-    # a per-session filter can't be applied — return nothing rather than
-    # leaking every user's recent jobs to an unscoped caller.
-    if session_id:
+    user_id = (user or {}).get("id")
+    if not user_id:
         return []
 
     try:
@@ -106,6 +102,7 @@ async def get_recent_jobs(request: Request, limit: int = 5):
         result = (
             db.table("download_jobs")
             .select("id,original_url,title,thumbnail_url,platform,status,created_at")
+            .eq("user_id", str(user_id))
             .order("created_at", desc=True)
             .limit(limit)
             .execute()
@@ -124,7 +121,7 @@ async def get_recent_jobs(request: Request, limit: int = 5):
             for row in rows
         ]
     except Exception as exc:
-        logger.warning("recent-jobs query failed: %s", exc)
+        logger.warning("recent-jobs query failed: %s", type(exc).__name__)
         return []
 
 

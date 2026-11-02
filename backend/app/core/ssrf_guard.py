@@ -94,9 +94,9 @@ def _resolve(hostname: str) -> tuple[str, ...]:
         return hit[1]
     try:
         infos = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
-    except socket.gaierror:
-        # Unresolvable host — let the HTTP client fail naturally rather than
-        # 400-ing a name that may just be a transient DNS blip.
+    except (socket.gaierror, UnicodeError, OSError):
+        # Unresolvable here = unverifiable: the HTTP client could still resolve
+        # it later (retry, other resolver) to an internal address. Fail closed.
         return ()
     addrs = tuple({info[4][0] for info in infos})
     _dns_cache[hostname] = (now, addrs)
@@ -142,8 +142,19 @@ def assert_safe_url(url: str, *, detail_factory=None) -> None:
             _fail(f"URL points at a {reason}")
         return
 
+    # Invalid IDNA labels fail closed instead of escaping as an unexpected error.
+    try:
+        ascii_host = hostname.encode("idna").decode("ascii")
+        if any(not label or len(label) > 63 for label in ascii_host.split(".")):
+            _fail("Invalid URL hostname")
+    except UnicodeError:
+        _fail("Invalid URL hostname")
+
     # Domain name → every resolved address must be public.
-    for raw in _resolve(hostname):
+    resolved = _resolve(hostname)
+    if not resolved:
+        _fail("URL hostname could not be resolved")
+    for raw in resolved:
         try:
             addr = ipaddress.ip_address(raw)
         except ValueError:

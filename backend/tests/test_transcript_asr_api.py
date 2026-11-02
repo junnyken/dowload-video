@@ -122,7 +122,9 @@ def test_download_rejects_not_done():
     assert resp.status_code == 404
 
 
-def test_translate_chains_into_transcript_translation_jobs(tmp_path):
+def test_translate_chains_into_transcript_translation_jobs(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.api.transcript_translate._TRANSCRIPT_JOBS_DIR",
+                        str(tmp_path / "transcript_jobs"))
     srt_path = tmp_path / "asr_result.srt"
     srt_path.write_text("1\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
 

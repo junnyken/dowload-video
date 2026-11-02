@@ -2618,30 +2618,18 @@ def _compute_recovery_state(job: dict, now_utc) -> str:
     return "ok"
 
 
+from app.core.auth_middleware import get_required_user
+
+
 @router.post("/jobs/{job_id}/refresh")
 @limiter.limit("20/minute")
-async def refresh_job_link(job_id: str, request: Request):
-    """Re-extract a job whose download link has expired or failed."""
+async def refresh_job_link(
+    job_id: str, request: Request, user=Depends(get_required_user)
+):
+    """Re-extract an owned job whose download link has expired or failed."""
     from app.core.recovery import refresh_job_link as _refresh
-    from app.core.auth_middleware import get_optional_user
-    from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-    from fastapi import Depends
 
-    user_id = None
-    auth_header = request.headers.get("authorization", "")
-    if auth_header.startswith("Bearer "):
-        try:
-            from app.core.auth_middleware import get_optional_user as _gu
-            # Minimal inline token extraction (avoids circular Depends wiring)
-            token = auth_header.split(" ", 1)[1]
-            sb = get_supabase_client()
-            r = sb.auth.get_user(token)
-            if r and r.user:
-                user_id = str(r.user.id)
-        except Exception:
-            pass
-
-    result = _refresh(job_id, user_id)
+    result = _refresh(job_id, user.get("id"))
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result["message"])
     return result

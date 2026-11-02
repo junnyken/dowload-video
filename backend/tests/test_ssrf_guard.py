@@ -76,9 +76,12 @@ def test_allows_hostname_resolving_public(monkeypatch):
     assert_safe_url("https://example.com/video.mp4")
 
 
-def test_unresolvable_host_is_not_a_hard_error(monkeypatch):
+def test_unresolvable_host_is_rejected(monkeypatch):
+    # Unverifiable here may still resolve later (other resolver, retry) to an
+    # internal address, so an empty DNS answer fails closed.
     monkeypatch.setattr(ssrf_guard, "_resolve", lambda h: ())
-    assert_safe_url("https://nx-domain.invalid/x")
+    with pytest.raises(HTTPException):
+        assert_safe_url("https://nx-domain.invalid/x")
 
 
 # ── Internal service names ───────────────────────────────────────────

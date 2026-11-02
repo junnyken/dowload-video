@@ -405,21 +405,17 @@ class TestDownloadLocal:
         r = client_root.get("/api/v1/download-local", params={"filename": "x"})
         assert r.status_code == 422
 
-    def test_legacy_filepath_links_still_work(self, app):
+    def test_legacy_filepath_links_still_work(self, app, monkeypatch, tmp_path):
         # Links issued before this change carry the absolute path; they stay
         # valid until the file expires (and fetch-link still builds them).
         from app.api import routes
-        base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(routes.__file__))))
-        root = os.path.join(base, "downloads")
-        os.makedirs(root, exist_ok=True)
-        p = os.path.join(root, "legacy_test_9f8e7d6c.srt")
-        with open(p, "w", encoding="utf-8") as f:
-            f.write("legacy")
-        try:
-            r = app.get("/api/v1/download-local", params={"filepath": p, "filename": "a.srt"})
-            assert r.status_code == 200 and r.text == "legacy"
-            r = app.get("/api/v1/download-local",
-                        params={"filepath": "../../../../etc/passwd", "filename": "x"})
-            assert r.status_code == 403
-        finally:
-            os.remove(p)
+        root = tmp_path / "downloads"
+        root.mkdir()
+        monkeypatch.setattr(routes, "_LOCAL_DOWNLOADS_DIR", str(root))
+        p = root / "legacy_test_9f8e7d6c.srt"
+        p.write_text("legacy", encoding="utf-8")
+        r = app.get("/api/v1/download-local", params={"filepath": str(p), "filename": "a.srt"})
+        assert r.status_code == 200 and r.text == "legacy"
+        r = app.get("/api/v1/download-local",
+                    params={"filepath": "../../../../etc/passwd", "filename": "x"})
+        assert r.status_code == 403

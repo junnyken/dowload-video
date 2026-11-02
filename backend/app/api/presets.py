@@ -197,7 +197,8 @@ async def update_preset(request: Request, preset_id: str, body: PresetIn):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.warning("presets operation failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Preset operation failed")
 
     if body.is_default and body.platform:
         try:
@@ -215,7 +216,8 @@ async def update_preset(request: Request, preset_id: str, body: PresetIn):
         }).eq("id", preset_id).eq("user_id", user_id).execute()
         return res.data[0] if res.data else {}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.warning("presets operation failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Preset operation failed")
 
 
 @router.delete("/presets/{preset_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -233,7 +235,8 @@ async def delete_preset(request: Request, preset_id: str):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.warning("presets operation failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Preset operation failed")
 
     db.table("user_presets").delete().eq("id", preset_id).eq("user_id", user_id).execute()
 
@@ -253,7 +256,8 @@ async def set_default_preset(request: Request, preset_id: str):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.warning("presets operation failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Preset operation failed")
 
     platform = preset.get("platform")
     if platform:
@@ -278,7 +282,8 @@ async def create_preset_from_job(request: Request, job_id: str, name: str):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.warning("presets operation failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Preset operation failed")
 
     settings = job.get("download_settings") or {}
     platform = job.get("platform")
@@ -294,7 +299,8 @@ async def create_preset_from_job(request: Request, job_id: str, name: str):
         }).execute()
         return res.data[0] if res.data else {}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.warning("presets operation failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Preset operation failed")
 
 
 # ── Platform preferences (learned behavior) ───────────────────────────────────
@@ -335,4 +341,5 @@ async def update_platform_pref(request: Request, platform: str, body: PlatformPr
         return {"success": True, "platform": platform, "prefs": prefs}
     except Exception as exc:
         logger.error("update_platform_pref error: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.warning("presets operation failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Preset operation failed")

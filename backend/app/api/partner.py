@@ -205,7 +205,21 @@ async def submit_job(
 ):
     """Submit a download job on behalf of a tenant."""
     _require_scope(tenant, "write")
+    # Match /fetch-link: validate and dispatch the extracted share URL.
+    from app.core.url_normalizer import extract_share_url
+    from app.core.ssrf_guard import assert_safe_url
+    body.url = extract_share_url(body.url) or body.url
     _validate_http_url(body.url)
+    # SSRF: every resolved address must be public (same guard as /fetch-link).
+    # Generic message; 422 like the other invalid_url errors in this API.
+    try:
+        import asyncio
+        await asyncio.wait_for(asyncio.to_thread(assert_safe_url, body.url), timeout=8)
+    except (HTTPException, TimeoutError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_url", "message": "URL is not allowed"},
+        ) from exc
     _check_job_quota(tenant)
 
     supabase  = get_service_client()
@@ -233,7 +247,7 @@ async def submit_job(
         _pq.refund(tenant.tenant_id, tenant.api_key_id)
         raise HTTPException(
             status_code=500,
-            detail={"code": "db_error", "message": str(exc)},
+            detail={"code": "db_error", "message": "Database error"},
         ) from exc
 
     # Dispatch to Celery. process_video_task only reads/writes download_jobs
@@ -375,7 +389,7 @@ async def list_jobs(
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail={"code": "db_error", "message": str(exc)},
+            detail={"code": "db_error", "message": "Database error"},
         ) from exc
 
     return [
@@ -448,7 +462,7 @@ async def cancel_job(
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail={"code": "db_error", "message": str(exc)},
+            detail={"code": "db_error", "message": "Database error"},
         ) from exc
 
     return {"id": job_id, "status": "expired", "message": "Job cancelled"}
@@ -576,7 +590,7 @@ async def register_webhook(
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail={"code": "db_error", "message": str(exc)},
+            detail={"code": "db_error", "message": "Database error"},
         ) from exc
 
     return {
@@ -610,7 +624,7 @@ async def list_webhooks(
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail={"code": "db_error", "message": str(exc)},
+            detail={"code": "db_error", "message": "Database error"},
         ) from exc
 
     return {"webhooks": rows}
@@ -653,7 +667,7 @@ async def remove_webhook(
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail={"code": "db_error", "message": str(exc)},
+            detail={"code": "db_error", "message": "Database error"},
         ) from exc
 
     return {"id": webhook_id, "is_active": False, "message": "Webhook deactivated"}
@@ -680,7 +694,7 @@ async def validate_urls(
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail={"code": "validation_error", "message": str(exc)},
+            detail={"code": "validation_error", "message": "Validation failed"},
         ) from exc
 
     return {

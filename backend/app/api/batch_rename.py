@@ -17,6 +17,7 @@ Available pattern tokens:
 """
 import os, re, uuid, zipfile
 from typing import Any, Dict, Optional
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from app.core.auth_middleware import get_optional_user
@@ -24,6 +25,7 @@ from app.core.database import get_service_client
 from app.main import limiter
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 _DOWNLOADS_DIR = os.environ.get("DOWNLOAD_DIR", "/app/downloads")
 _FORBIDDEN = re.compile(r'[/\\:*?"<>|]')
@@ -89,6 +91,8 @@ async def bulk_zip_rename(
     """
     Apply a naming pattern to all successful jobs in a batch, then create a ZIP.
     """
+    if not user or not user.get("id"):
+        raise HTTPException(401, detail="Vui lòng đăng nhập để tạo ZIP đổi tên.")
     pattern = payload.pattern.strip()
     if not pattern:
         raise HTTPException(400, detail="Pattern không được để trống.")
@@ -104,12 +108,12 @@ async def bulk_zip_rename(
             .eq("status", "success")
             .order("created_at")
         )
-        if user:
-            q = q.eq("user_id", user["id"])
+        q = q.eq("user_id", user["id"])
         res = q.execute()
         jobs = res.data or []
     except Exception as e:
-        raise HTTPException(500, detail=f"Không thể tải danh sách job: {e}")
+        logger.warning("API operation failed: %s", type(e).__name__)
+        raise HTTPException(500, detail="Không thể tải danh sách job.")
 
     if not jobs:
         raise HTTPException(404, detail="Không tìm thấy job nào trong batch này.")
@@ -168,7 +172,8 @@ async def bulk_zip_rename(
             for src_path, arc_name in pairs:
                 zf.write(src_path, arc_name)
     except Exception as e:
-        raise HTTPException(500, detail=f"Không thể tạo file ZIP: {e}")
+        logger.warning("API operation failed: %s", type(e).__name__)
+        raise HTTPException(500, detail="Không thể tạo file ZIP.")
 
     # 5. Schedule expiry (60 min)
     try:

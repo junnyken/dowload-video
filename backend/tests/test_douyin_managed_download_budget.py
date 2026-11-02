@@ -25,7 +25,7 @@ class _Recorder:
 
 
 @pytest.fixture
-def slow_cdn(monkeypatch):
+def slow_cdn(monkeypatch, tmp_path):
     """httpx.Client whose stream yields 200 chunks; time advances 1 s per
     chunk, so a 10 s budget stops it long before the end (without the budget
     the download completes and the test fails on local_file_path)."""
@@ -61,6 +61,7 @@ def slow_cdn(monkeypatch):
             return False
 
     monkeypatch.setattr(httpx, "Client", Client)
+    monkeypatch.setattr(downloader, "DOWNLOAD_DIR", str(tmp_path))
     monkeypatch.setattr("app.core.proxy_manager.IPROYAL_PROXY_CN", "http://cn-proxy.invalid:1")
     monkeypatch.setenv("CHINA_ACCESS_MANAGED_SERVER_DOWNLOAD_BUDGET_SEC", "10")
     return rec
