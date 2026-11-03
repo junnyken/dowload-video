@@ -665,3 +665,44 @@ async def get_user_analytics(
         "daily": all_days,
         "platforms": dict(platforms),
     }
+
+
+class PrecheckSignupPayload(BaseModel):
+    email: str
+
+
+@router.post("/precheck-signup")
+async def precheck_signup(payload: PrecheckSignupPayload):
+    """
+    Validate and normalize an email before sign-up:
+      1. Rejects '+' sub-addresses (ten+1@gmail.com)
+      2. Enforces 5-provider whitelist (Gmail, Outlook/Hotmail, iCloud, Yahoo, ProtonMail)
+      3. Normalizes Gmail dots (a.b.c@gmail.com -> abc@gmail.com)
+      4. Checks if another account already exists with the same canonical email
+    """
+    from app.core.email_guard import (
+        validate_and_normalize_email,
+        check_duplicate_canonical_email,
+    )
+
+    ok, normalized, reason = validate_and_normalize_email(payload.email)
+    if not ok:
+        return {
+            "ok": False,
+            "reason": reason or "invalid_format",
+            "normalized_email": "",
+        }
+
+    if check_duplicate_canonical_email(normalized):
+        return {
+            "ok": False,
+            "reason": "duplicate_gmail",
+            "normalized_email": normalized,
+        }
+
+    return {
+        "ok": True,
+        "reason": None,
+        "normalized_email": normalized,
+    }
+

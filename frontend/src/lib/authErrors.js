@@ -9,6 +9,8 @@ export const MSG = {
   get captchaFailed() { return i18n.t('errors.captchaFailed', { ns: 'auth' }); },
   get captchaLoadFailed() { return i18n.t('errors.captchaLoadFailed', { ns: 'auth' }); },
   get disposableEmail() { return i18n.t('errors.disposableEmail', { ns: 'auth' }); },
+  get plusAliasEmail() { return i18n.t('errors.plusAliasEmail', { ns: 'auth' }); },
+  get duplicateGmail() { return i18n.t('errors.duplicateGmail', { ns: 'auth' }); },
   get signupRejected() { return i18n.t('errors.signupRejected', { ns: 'auth' }); },
   get invalidCredentials() { return i18n.t('errors.invalidCredentials', { ns: 'auth' }); },
   get emailNotConfirmed() { return i18n.t('errors.emailNotConfirmed', { ns: 'auth' }); },
@@ -22,9 +24,12 @@ export function authErrorMessage(error) {
   const code = String(error.code || '');
   const msg = String(error.message || '');
   const low = msg.toLowerCase();
+  if (code === 'plus_alias' || low.includes('vidgrab_plus_email')) return MSG.plusAliasEmail;
+  if (code === 'provider_not_allowed' || low.includes('vidgrab_disposable_email')) return MSG.disposableEmail;
+  if (code === 'duplicate_gmail' || low.includes('vidgrab_duplicate_gmail') || low.includes('user already registered')) return MSG.duplicateGmail;
   // GoTrue: 400 captcha_failed "captcha protection: request disallowed (...)"
   if (code === 'captcha_failed' || low.includes('captcha')) return MSG.captchaFailed;
-  // A BEFORE INSERT trigger on auth.users (migration 036) surfaces as
+  // A BEFORE INSERT trigger on auth.users (migration 036/043) surfaces as
   // 500 unexpected_failure "Database error saving new user".
   if (low.includes('database error saving new user')) return MSG.signupRejected;
   if (code === 'invalid_credentials' || low.includes('invalid login credentials')) return MSG.invalidCredentials;

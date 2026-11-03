@@ -243,6 +243,13 @@ async def lifespan(app: FastAPI):
     except Exception as _dbmig_err:
         print(f"[Startup] DB migration probe skipped: {_dbmig_err}")
 
+    try:
+        from app.core.email_guard import ensure_db_email_guard as _ensure_email_guard
+        _eg_res = await _asyncio.to_thread(_ensure_email_guard)
+        print(f"[Startup] Email signup guard (043): {_eg_res}")
+    except Exception as _eg_err:
+        print(f"[Startup] Email signup guard skipped: {_eg_err}")
+
     # JS runtime yt-dlp's iq.com (iQIYI) extractor needs (PhantomJS).
     try:
         import asyncio as _asyncio

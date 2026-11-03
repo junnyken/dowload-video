@@ -4,7 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import TurnstileWidget from './TurnstileWidget';
 import { TURNSTILE_SITE_KEY } from '../../lib/turnstile';
 import { authErrorMessage, MSG } from '../../lib/authErrors';
-import { isDisposableEmail } from '../../lib/disposableEmail';
+import { validateAndNormalizeSignupEmail } from '../../lib/disposableEmail';
+import { API_BASE } from '../../lib/apiBase';
 import { useTranslation } from 'react-i18next';
 
 const VIEWS = { SIGNIN: 'signin', SIGNUP: 'signup', RESET: 'reset' };
@@ -52,14 +53,47 @@ export default function AuthModal({ onClose, initialView = VIEWS.SIGNIN }) {
     e.preventDefault();
     if (password.length < 6) { setError(t('pwMin')); return; }
     setLoading(true); setError('');
-    // Early hint only; the database trigger (migration 036) is the real gate.
-    if (await isDisposableEmail(email)) {
+
+    // 1. Client-side strict 5-provider whitelist + '+' alias block + Gmail dot normalization
+    const check = validateAndNormalizeSignupEmail(email);
+    if (!check.valid) {
       setLoading(false);
-      setError(MSG.disposableEmail);
+      if (check.reason === 'plus_alias') {
+        setError(MSG.plusAliasEmail);
+      } else {
+        setError(MSG.disposableEmail);
+      }
       return;
     }
+
+    const cleanEmail = check.normalizedEmail;
+    if (cleanEmail !== email) {
+      setEmail(cleanEmail);
+    }
+
+    // 2. Backend precheck (catches duplicate canonical Gmail accounts before spending Captcha)
+    try {
+      const preRes = await fetch(`${API_BASE}/api/v1/user/precheck-signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+      if (preRes.ok) {
+        const preData = await preRes.json();
+        if (preData && preData.ok === false) {
+          setLoading(false);
+          if (preData.reason === 'plus_alias') setError(MSG.plusAliasEmail);
+          else if (preData.reason === 'duplicate_gmail') setError(MSG.duplicateGmail);
+          else setError(MSG.disposableEmail);
+          return;
+        }
+      }
+    } catch {
+      /* non-blocking if network hiccup; DB trigger still guards */
+    }
+
     if (!captchaReady()) { setLoading(false); return; }
-    const { error } = await signUp(email, password, name, captcha);
+    const { error } = await signUp(cleanEmail, password, name, captcha);
     setLoading(false);
     spendCaptcha();
     if (error) { setError(authErrorMessage(error)); return; }

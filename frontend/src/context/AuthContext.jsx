@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient';
 import { API_BASE } from '../lib/apiBase';
 import { adminSessionToken } from '../lib/adminSession';
 import { installDeviceLink, onSignedOut } from '../lib/deviceLink';
+import { validateAndNormalizeSignupEmail, normalizeGmailForAuth } from '../lib/disposableEmail';
 
 installDeviceLink();
 
@@ -93,6 +94,14 @@ export function AuthProvider({ children }) {
   // once captcha protection is enabled in the dashboard; until then an absent
   // token is fine. See docs/runbooks/antispam-signup.md.
   const signUp = useCallback(async (email, password, displayName, captchaToken) => {
+    const check = validateAndNormalizeSignupEmail(email);
+    if (!check.valid) {
+      return {
+        data: null,
+        error: { code: check.reason || 'provider_not_allowed', message: check.reason || 'provider_not_allowed' },
+      };
+    }
+    const cleanEmail = check.normalizedEmail;
     // Without emailRedirectTo, Supabase falls back to the project's Site URL.
     // That is still the default http://localhost:3000, so every confirmation
     // email sent to a real user landed on ERR_CONNECTION_REFUSED — the account
@@ -104,7 +113,7 @@ export function AuthProvider({ children }) {
     // silently reverts to the Site URL. Both need to be set for the prod
     // domain — see docs/RUNBOOK.md.
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: cleanEmail,
       password,
       options: {
         data: { display_name: displayName },
@@ -116,11 +125,23 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signIn = useCallback(async (email, password, captchaToken) => {
+    const raw = String(email || '').trim();
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: raw,
       password,
       ...(captchaToken ? { options: { captchaToken } } : {}),
     });
+    // If the user registered with dots in Gmail (which were normalized to abc@gmail.com)
+    // and now types a.b.c@gmail.com at sign-in (and no captcha token was consumed),
+    // transparently retry with the normalized Gmail address.
+    const norm = normalizeGmailForAuth(raw);
+    if (error && !captchaToken && norm && norm !== raw.toLowerCase()) {
+      const retry = await supabase.auth.signInWithPassword({
+        email: norm,
+        password,
+      });
+      if (!retry.error) return retry;
+    }
     return { data, error };
   }, []);
 
