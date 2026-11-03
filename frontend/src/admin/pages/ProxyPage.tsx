@@ -486,7 +486,7 @@ export function ProxyPage() {
              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
             Mua tại DataImpulse <ExternalLink className="h-3 w-3" aria-hidden />
           </a>
-          <a href="https://www.proxy-cheap.com/" target="_blank" rel="noopener noreferrer"
+          <a href="https://app.proxy-cheap.com/" target="_blank" rel="noopener noreferrer"
              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2">
             Mua tại proxy-cheap <ExternalLink className="h-3 w-3" aria-hidden />
           </a>

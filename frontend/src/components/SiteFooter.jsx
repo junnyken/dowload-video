@@ -6,6 +6,7 @@ import { useLocalePath } from '../i18n';
 // wording: BA review (labels: locales/*/footer.json, links.<view>)
 const LINKS = [
   ['pricing', '/pricing'],
+  ['api-docs', '/api-docs'],
   ['terms', '/terms'],
   ['privacy', '/privacy'],
   ['takedown', '/takedown'],

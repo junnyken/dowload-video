@@ -96,6 +96,34 @@ export const seoPages = [
     },
   },
   {
+    path: '/phu-de',
+    priority: '0.7',
+    vi: {
+      title: 'Tải phụ đề, phiên âm và dịch phụ đề video | VidGrab',
+      description: 'Trích xuất phụ đề có sẵn (SRT, VTT), chuyển giọng nói trong video thành văn bản và dịch phụ đề sang ngôn ngữ khác ngay trên trình duyệt.',
+      h1: 'Phụ đề và phiên âm video',
+    },
+    en: {
+      title: 'Download, transcribe and translate video subtitles | VidGrab',
+      description: 'Extract existing subtitles (SRT, VTT), transcribe speech from videos into text, and translate subtitle files into other languages in your browser.',
+      h1: 'Video subtitles and transcription',
+    },
+  },
+  {
+    path: '/api-docs',
+    priority: '0.6',
+    vi: {
+      title: 'Tài liệu Public API & Partner API | VidGrab',
+      description: 'Tài liệu tích hợp VidGrab API cho nhà phát triển: lấy thông tin và tải video, kiểm tra tiến trình, webhook, giới hạn tốc độ và mã lỗi.',
+      h1: 'VidGrab Public API',
+    },
+    en: {
+      title: 'Public API & Partner API documentation | VidGrab',
+      description: 'Developer documentation for integrating the VidGrab API: video extraction and download endpoints, job progress, webhooks, rate limits and error codes.',
+      h1: 'VidGrab Public API',
+    },
+  },
+  {
     path: '/privacy',
     priority: '0.3',
     vi: { title: 'Chính sách bảo mật | VidGrab', description: 'VidGrab thu thập những dữ liệu nào, dùng vào việc gì và bạn có quyền gì với dữ liệu của mình.', h1: 'Chính sách bảo mật' },

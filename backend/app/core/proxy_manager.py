@@ -30,13 +30,18 @@ load_dotenv()
 # concurrent users don't burn/flag one proxy. A single value behaves as before.
 import hashlib as _hashlib
 
-_PROXY_POOL: list = [p.strip() for p in os.getenv("IPROYAL_PROXY", "").split(",") if p.strip()]
+_RAW_PROXY_ENV: str = os.getenv("PROXY_CHEAP_PROXY", "") or os.getenv("IPROYAL_PROXY", "")
+_PROXY_POOL: list = [p.strip() for p in _RAW_PROXY_ENV.split(",") if p.strip()]
 # Keep the legacy single-value symbol = first proxy (other modules import it).
 IPROYAL_PROXY: str = _PROXY_POOL[0] if _PROXY_POOL else ""
-# Douyin requires a Chinese IP. IPROYAL_PROXY_CN uses the same account
-# but with _country-cn appended to the username (IPRoyal country targeting).
-# Falls back to IPROYAL_PROXY if not set.
-IPROYAL_PROXY_CN: str = os.getenv("IPROYAL_PROXY_CN", "") or IPROYAL_PROXY
+PROXY_CHEAP_PROXY: str = IPROYAL_PROXY
+# Douyin requires a Chinese IP. PROXY_CHEAP_PROXY_CN / IPROYAL_PROXY_CN uses
+# country targeting (CN exit IP) and falls back to the main proxy if not set.
+IPROYAL_PROXY_CN: str = (
+    os.getenv("PROXY_CHEAP_PROXY_CN", "")
+    or os.getenv("IPROYAL_PROXY_CN", "")
+    or IPROYAL_PROXY
+)
 
 _PROXY_BAD_TTL = int(os.getenv("PROXY_BAD_TTL", "600"))  # cooldown after a proxy error
 

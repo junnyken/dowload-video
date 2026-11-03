@@ -24,8 +24,8 @@ const TODAY = new Date().toISOString().slice(0, 10);
 
 // Words of the static body. wording: BA review (English drafted with AI).
 const L = {
-  vi: { howTo: (p) => `Cách tải video ${p} bằng ${SITE_NAME}`, faq: 'Câu hỏi thường gặp', more: 'Xem thêm', dl: (p) => `Tải video ${p}`, home: `Trang chủ ${SITE_NAME}`, note: `${COMMON_NOTE} ${QUOTA_NOTE}`, locale: 'vi_VN' },
-  en: { howTo: (p) => `How to download ${p} videos with ${SITE_NAME}`, faq: 'Frequently asked questions', more: 'See also', dl: (p) => `${p} video downloader`, home: `${SITE_NAME} home`, note: `${COMMON_NOTE_EN} ${QUOTA_NOTE_EN}`, locale: 'en_US' },
+  vi: { howTo: (p) => `Cách tải video ${p} bằng ${SITE_NAME}`, faq: 'Câu hỏi thường gặp', more: 'Xem thêm', dl: (p) => `Tải video ${p}`, home: `Trang chủ ${SITE_NAME}`, note: `${COMMON_NOTE} ${QUOTA_NOTE}`, locale: 'vi_VN', noscript: `${SITE_NAME} yêu cầu JavaScript để hoạt động. Vui lòng bật JavaScript trong trình duyệt.` },
+  en: { howTo: (p) => `How to download ${p} videos with ${SITE_NAME}`, faq: 'Frequently asked questions', more: 'See also', dl: (p) => `${p} video downloader`, home: `${SITE_NAME} home`, note: `${COMMON_NOTE_EN} ${QUOTA_NOTE_EN}`, locale: 'en_US', noscript: `${SITE_NAME} requires JavaScript to work. Please enable JavaScript in your browser.` },
 };
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -38,7 +38,11 @@ const jsonLd = (o) =>
 
 const indexPath = join(dist, 'index.html');
 if (!existsSync(indexPath)) throw new Error('dist/index.html not found — run vite build first');
-const template = readFileSync(indexPath, 'utf8');
+const template = readFileSync(indexPath, 'utf8')
+  .replace(/\s*<meta property="og:(url|site_name|locale:alternate)"[^>]*>/g, '')
+  .replace(/\s*<link rel="alternate" hreflang="[^"]*"[^>]*>/g, '')
+  .replace(/\s*<script type="application\/ld\+json">[\s\S]*?<\/script>/g, '')
+  .replace(/<div id="root">[\s\S]*?<\/div>(?=\s*<\/body>)/, '<div id="root"></div>');
 
 const setTag = (html, re, replacement, label) => {
   if (!re.test(html)) throw new Error(`template missing ${label}`);
@@ -101,6 +105,8 @@ function structuredData(page, lang) {
   return [
     { '@context': 'https://schema.org', '@type': 'WebApplication', name: `${SITE_NAME} — ${t.h1}`, url: u, description: t.description,
       applicationCategory: 'MultimediaApplication', operatingSystem: 'Any (web browser)', inLanguage: lang },
+    { '@context': 'https://schema.org', '@type': 'HowTo', name: L[lang].howTo(t.platform), description: t.intro, inLanguage: lang,
+      step: t.steps.map((s, idx) => ({ '@type': 'HowToStep', position: idx + 1, name: s.title, text: s.text })) },
     { '@context': 'https://schema.org', '@type': 'FAQPage', inLanguage: lang,
       mainEntity: t.faq.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })) },
   ];
@@ -129,6 +135,7 @@ function render(page, lang) {
     `<link rel="alternate" hreflang="x-default" href="${url(page.path, 'vi')}" />`,
     ...structuredData(page, lang).map((o) => `<script type="application/ld+json">${jsonLd(o)}</script>`),
   ].join('\n    '), 'canonical');
+  html = setTag(html, /<noscript>[\s\S]*?<\/noscript>/, `<noscript><div style="padding:40px;text-align:center;font-family:sans-serif;color:#1C1917;background:#FAFAF9;min-height:100vh;display:flex;align-items:center;justify-content:center;"><p>${esc(L[lang].noscript)}</p></div></noscript>`, 'noscript');
   html = setTag(html, /<div id="root"><\/div>/, `<div id="root">${bodyHtml(page, lang)}</div>`, '#root');
   return html;
 }
@@ -148,6 +155,7 @@ for (const page of pages) {
 const sitemap = pages.flatMap((page) => LANGS.map((lang) => `  <url>
     <loc>${url(page.path, lang)}</loc>
     <lastmod>${TODAY}</lastmod>
+    <changefreq>${page.kind === 'home' || page.kind === 'platform' ? 'weekly' : 'monthly'}</changefreq>
     <priority>${page.priority}</priority>
     <xhtml:link rel="alternate" hreflang="vi" href="${url(page.path, 'vi')}" />
     <xhtml:link rel="alternate" hreflang="en" href="${url(page.path, 'en')}" />
@@ -155,5 +163,5 @@ const sitemap = pages.flatMap((page) => LANGS.map((lang) => `  <url>
   </url>`));
 writeFileSync(join(dist, 'sitemap.xml'),
   `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${sitemap.join('\n')}\n</urlset>\n`);
-writeFileSync(join(dist, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /vid-admin\n\nSitemap: ${SITE}/sitemap.xml\n`);
+writeFileSync(join(dist, 'robots.txt'), `User-agent: *\nAllow: /\nAllow: /en/\nDisallow: /api/\nDisallow: /vid-admin\n\nSitemap: ${SITE}/sitemap.xml\n`);
 console.log(`[prerender-seo] ${written} pages (${pages.length} × ${LANGS.length} languages), site=${SITE}`);

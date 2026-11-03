@@ -2700,14 +2700,21 @@ async def proxy_download(request: Request, url: str, filename: str = "video", ex
         import re as _re
         _proxy = None
         if _is_yt_cdn:
-            from app.core.proxy_manager import IPROYAL_PROXY
-            if IPROYAL_PROXY:
+            from app.core.proxy_manager import pick_proxy, IPROYAL_PROXY
+            from app.core.proxy_pool import get_proxy_from_pool
+            _yt_proxy = (
+                os.getenv("PROXY_POOL_YT_STATIC", "")
+                or get_proxy_from_pool("youtube")
+                or pick_proxy()
+                or IPROYAL_PROXY
+            )
+            if _yt_proxy:
                 _ip_m = _re.search(r'[?&]ip=([0-9.]+)', url)
                 if _ip_m:
                     _cdn_ip = _ip_m.group(1)
                     _server_ip = os.getenv("SERVER_OUTBOUND_IP", "")
                     if not _server_ip or _cdn_ip != _server_ip:
-                        _proxy = IPROYAL_PROXY
+                        _proxy = _yt_proxy
 
         # Resolve the redirect chain and open the upstream here, not inside the
         # body generator: StreamingResponse locks the status to 200 the moment

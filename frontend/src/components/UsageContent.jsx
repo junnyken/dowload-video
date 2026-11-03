@@ -329,7 +329,7 @@ export default function UsageContent() {
                 <p className="text-fg font-semibold text-sm">{t('proFeature')}</p>
                 <p className="text-fg-muted text-xs mt-1">{t('apiKey.lockedDesc')}</p>
               </div>
-              <button className="mt-1 px-4 py-2 rounded-lg bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition">
+              <button type="button" onClick={goPricing} className="mt-1 px-4 py-2 rounded-lg bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition">
                 {t('upgradeProBtn')}
               </button>
             </div>
@@ -461,7 +461,7 @@ export default function UsageContent() {
                 <p className="text-fg font-semibold text-sm">{t('proFeature')}</p>
                 <p className="text-fg-muted text-xs mt-1">{t('webhook.lockedDesc')}</p>
               </div>
-              <button className="mt-1 px-4 py-2 rounded-lg bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition">
+              <button type="button" onClick={goPricing} className="mt-1 px-4 py-2 rounded-lg bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition">
                 {t('upgradeProBtn')}
               </button>
             </div>

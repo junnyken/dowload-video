@@ -1472,9 +1472,9 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
             from app.core.youtube_gate import tier_decision
             if tier_decision(quality).get("allow"):
                 from app.core.proxy_pool import get_proxy_from_pool
-                from app.core.proxy_manager import IPROYAL_PROXY
+                from app.core.proxy_manager import pick_proxy, IPROYAL_PROXY
                 _yt_static = os.getenv("PROXY_POOL_YT_STATIC", "")
-                proxy = _yt_static or get_proxy_from_pool("youtube") or IPROYAL_PROXY or None
+                proxy = _yt_static or get_proxy_from_pool("youtube") or pick_proxy() or IPROYAL_PROXY or None
                 if proxy:
                     _src = "ISP-static" if _yt_static else "rotating-residential"
                     print(f"[Downloader] YouTube Phase B: bytes via {_src} proxy "

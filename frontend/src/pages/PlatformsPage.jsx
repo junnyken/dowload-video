@@ -6,6 +6,9 @@ import { CheckCircle, Clock, AlertCircle, Lock, Wifi, RefreshCw, Search, X } fro
 // and became a relative (502) URL on the split-domain deploy.
 import { API_BASE } from '../lib/apiBase';
 import { usePlatformHealth } from '../lib/usePlatformHealth';
+import { platformPages } from '../content/platformPages';
+import { useLocalePath } from '../i18n';
+import { spaLink } from '../lib/spaLink';
 
 // Names/domains stay here; descriptions and notes are in locales/*/platforms.json
 // (items.<platformKey(name)>.description / .note). // wording: BA review
@@ -191,6 +194,8 @@ function StatusBadge({ status }) {
 
 function PlatformCard({ platform, liveData, health }) {
   const { t } = useTranslation('platforms');
+  const lp = useLocalePath();
+  const seoPage = platformPages.find(p => p.platform === platform.name);
   const itemKey = platformKey(platform.name);
   const effectiveStatus = health === 'degraded' ? 'degraded'
     : health === 'unknown' ? 'experimental'
@@ -215,7 +220,17 @@ function PlatformCard({ platform, liveData, health }) {
         <span className="text-2xl leading-none flex-shrink-0">{platform.logo}</span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-fg">{platform.name}</span>
+            {seoPage ? (
+              <a
+                href={lp(`/${seoPage.slug}`)}
+                onClick={spaLink(`/${seoPage.slug}`)}
+                className="font-semibold text-fg hover:text-accent-text underline-offset-4 hover:underline transition-colors"
+              >
+                {platform.name}
+              </a>
+            ) : (
+              <span className="font-semibold text-fg">{platform.name}</span>
+            )}
             <StatusBadge status={effectiveStatus} />
             {liveData && health === 'healthy' && (
               <span className="text-[9px] px-1 py-0.5 rounded bg-success-soft text-success border border-success/15">

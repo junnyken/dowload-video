@@ -11,6 +11,7 @@ interface Snapshot {
   enabled?: boolean
   circuit_state?: string
   daily_limit_gb?: number
+  limit_gb?: number
   bytes_today?: number
 }
 
@@ -81,7 +82,7 @@ export default function YouTubeGatePage() {
         <div className="rounded-card border border-line bg-surface shadow-card p-3">
           <div className="text-[10px] uppercase tracking-wide text-fg-muted">Circuit breaker</div>
           <div className={`mt-1 text-xl font-semibold ${
-            circuit === 'open' ? 'text-danger' : circuit === 'half_open' ? 'text-warning' : 'text-success'}`}>
+            circuit === 'open' ? 'text-danger' : (circuit === 'half_open' || circuit === 'half') ? 'text-warning' : 'text-success'}`}>
             {circuit}
           </div>
         </div>
@@ -93,7 +94,10 @@ export default function YouTubeGatePage() {
           <div className="text-[10px] uppercase tracking-wide text-fg-muted">Trần băng thông / ngày</div>
           <div className="mt-1 text-xl font-semibold text-fg">
             {/* wording: BA review */}
-            {snap?.daily_limit_gb != null && Number(snap.daily_limit_gb) > 0 ? `${snap.daily_limit_gb} GB` : 'Không giới hạn'}
+            {(() => {
+              const lim = snap?.limit_gb ?? snap?.daily_limit_gb
+              return lim != null && Number(lim) > 0 ? `${lim} GB` : 'Không giới hạn'
+            })()}
           </div>
         </div>
       </div>

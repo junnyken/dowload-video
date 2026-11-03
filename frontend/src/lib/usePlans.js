@@ -53,6 +53,9 @@ async function load() {
 
 export function formatVnd(n) {
   const v = Number(n) || 0;
+  if (i18n.language === 'en') {
+    return `${v.toLocaleString('en-US')} VND`;
+  }
   return `${v.toLocaleString('vi-VN')}đ`;
 }
 

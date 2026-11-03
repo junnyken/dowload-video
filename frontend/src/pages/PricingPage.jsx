@@ -206,7 +206,7 @@ export default function PricingPage() {
                       </h2>
                       <p className="text-xs text-fg-muted mb-3">{meta.sub}</p>
                       <p>
-                        <span className="text-3xl font-extrabold">{isPro ? formatVnd(price) : '0đ'}</span>
+                        <span className="text-3xl font-extrabold">{isPro ? formatVnd(price) : formatVnd(0)}</span>
                         {isPro && <span className="text-sm text-fg-muted"> / {period === 'year' ? t('perYear') : t('perMonth')}</span>}
                       </p>
                     </div>
