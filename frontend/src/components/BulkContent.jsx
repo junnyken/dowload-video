@@ -255,13 +255,14 @@ export default function BulkContent() {
   const [renameError, setRenameError]     = useState('');
 
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeErrorCode, setUpgradeErrorCode] = useState(null);
   const [discoverElapsed, setDiscoverElapsed] = useState(0);
   const discoverTimerRef = useRef(null);
   const [isZipping, setIsZipping] = useState(false);
   const [organizeByChannel, setOrganizeByChannel] = useState(false);
 
-  // New States
-  const [maxVideos, setMaxVideos] = useState(20);
+  // New States (Free/Guest default to 5 videos so they can test channel scanning immediately)
+  const [maxVideos, setMaxVideos] = useState(5);
   const [customMaxVideos, setCustomMaxVideos] = useState('');
   const [autoDownload, setAutoDownload] = useState(false);
   const [quality, setQuality] = useState('video');
@@ -376,8 +377,9 @@ export default function BulkContent() {
     // sending. Signed in, a Douyin profile is read whole by the server when
     // it has the admin cookie; otherwise by the extension: the tab opens here,
     // inside the click, or the popup blocker stops it.
+    const isProTier = !!(quotaInfo && ['pro', 'vip', 'team', 'enterprise'].includes(quotaInfo.plan));
     if (urlList.length === 1 && isPreviewableChannel(urlList[0])) {
-      const want = channelMode ? (parseInt(customMaxVideos) || parseInt(maxVideos) || 20) : 'all';
+      const want = channelMode ? (parseInt(customMaxVideos) || parseInt(maxVideos) || 5) : (isProTier ? 'all' : 5);
       // Facebook (22/10): only the extension can list it — always the relay tab when signed in.
       const fb = !!session?.access_token && isFacebookChannel(urlList[0]);
       const whole = !!session?.access_token && isDouyinProfile(urlList[0]) && (want === 'all' || want > DOUYIN_SERVER_PAGE);
@@ -438,7 +440,7 @@ export default function BulkContent() {
         withAuth({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
           urls: urlList,
           channel_mode: asChannel,
-          max_videos: parseInt(customMaxVideos) || parseInt(maxVideos) || 20,
+          max_videos: parseInt(customMaxVideos) || parseInt(maxVideos) || 5,
           min_views: 0,
           quality: quality,
           remove_watermark: removeWatermark,
@@ -447,7 +449,10 @@ export default function BulkContent() {
       const data = await safeJson(res);
 
       if (!res.ok) {
-        if (res.status === 403 && data.detail === 'QUOTA_EXCEEDED') {
+        const errCode = data?.detail?.code || data?.detail?.error || data?.code;
+        const TIER_CODES = ['youtube_pro_only', 'quota_exceeded_daily', 'tier_limit_quality', 'tier_limit_batch', 'tier_required_feature', 'spotify_artist_full', 'bulk_zip_pro'];
+        if (res.status === 402 || (res.status === 403 && (data.detail === 'QUOTA_EXCEEDED' || TIER_CODES.includes(errCode)))) {
+          setUpgradeErrorCode(errCode || 'tier_limit_batch');
           setShowUpgradeModal(true);
           return false;
         }
@@ -813,14 +818,21 @@ export default function BulkContent() {
     if (!batchId) return;
     setIsZipping(true);
     try {
-      const res = await fetch(`${API}/bulk-zip`, {
+      const res = await fetch(`${API}/bulk-zip`, withAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ batch_id: batchId, organize_by_channel: organizeByChannel })
-      });
+      }));
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail || `Server error: ${res.status}`);
+        const code = errData?.detail?.error || errData?.detail?.code;
+        if (res.status === 402 || code === 'bulk_zip_pro') {
+          setUpgradeErrorCode('bulk_zip_pro');
+          setShowUpgradeModal(true);
+          return;
+        }
+        const msg = typeof errData?.detail === 'string' ? errData.detail : (errData?.detail?.message || `Server error: ${res.status}`);
+        throw new Error(msg);
       }
       setRefreshTrigger(prev => prev + 1);
     } catch (e) {
@@ -973,7 +985,7 @@ export default function BulkContent() {
 
   return (
     <div className="space-y-8">
-      <UpgradeModal isOpen={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />
+      <UpgradeModal isOpen={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} errorCode={upgradeErrorCode} />
 
       {/* ── Container Preview Panel ─────────────────────── */}
       {containerPanelOpen && (
@@ -1213,25 +1225,37 @@ export default function BulkContent() {
               )}
               <div className="flex flex-wrap gap-2 mb-2">
                 {[
-                  { value: 10, label: '10' },
-                  { value: 20, label: '20' },
-                  { value: 50, label: '50' },
-                  { value: 100, label: '100' },
-                  { value: 200, label: '200' },
-                  { value: 500, label: '500' },
-                ].map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => { setMaxVideos(opt.value); setCustomMaxVideos(''); }}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold border transition-all duration-200 cursor-pointer ${
-                      !customMaxVideos && parseInt(maxVideos) === opt.value
-                        ? 'bg-accent/20 border-accent/40 text-accent-text shadow-sm'
-                        : 'bg-surface border-line text-fg-muted hover:text-fg-2 hover:border-line/80'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+                  { value: 5, label: '5 (Free)' },
+                  { value: 10, label: '10', proOnly: true },
+                  { value: 20, label: '20', proOnly: true },
+                  { value: 50, label: '50', proOnly: true },
+                  { value: 100, label: '100', proOnly: true },
+                  { value: 200, label: '200', proOnly: true },
+                ].map(opt => {
+                  const isProTier = !!(quotaInfo && ['pro', 'vip', 'team', 'enterprise'].includes(quotaInfo.plan));
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => {
+                        if (opt.proOnly && !isProTier) {
+                          setUpgradeErrorCode('tier_limit_batch');
+                          setShowUpgradeModal(true);
+                          return;
+                        }
+                        setMaxVideos(opt.value);
+                        setCustomMaxVideos('');
+                      }}
+                      className={`inline-flex items-center gap-1 px-3.5 py-1.5 rounded-lg text-xs font-bold border transition-all duration-200 cursor-pointer ${
+                        !customMaxVideos && parseInt(maxVideos) === opt.value
+                          ? 'bg-accent/20 border-accent/40 text-accent-text shadow-sm'
+                          : 'bg-surface border-line text-fg-muted hover:text-fg-2 hover:border-line/80'
+                      }`}
+                    >
+                      {opt.label}
+                      {opt.proOnly && !isProTier && <Crown className="w-3 h-3 text-accent-text" />}
+                    </button>
+                  );
+                })}
               </div>
               {(urls.toLowerCase().includes('twitter.com') || urls.toLowerCase().includes('x.com')) && (
                 <p className="text-xs text-fg-2 mt-1 inline-flex items-center gap-1"><AlertTriangle className="w-3 h-3 flex-shrink-0" /> {t('twitterLimit')}</p>

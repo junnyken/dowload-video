@@ -287,7 +287,12 @@ def _lookup_rapidapi_request(request: Request) -> Optional[Dict[str, Any]]:
         _invalid_key(request)
     rapid_user = (request.headers.get("X-RapidAPI-User") or "anonymous").strip()[:64]
     sub = (request.headers.get("X-RapidAPI-Subscription") or "PRO").strip().upper()
-    tier = "team" if sub in ("ULTRA", "MEGA", "CUSTOM") else "pro"
+    if sub == "BASIC":
+        tier = "free"
+    elif sub in ("ULTRA", "MEGA", "CUSTOM"):
+        tier = "team"
+    else:
+        tier = "pro"
     return {
         "id":           f"rapidapi:{rapid_user}",
         "email":        f"{rapid_user}@rapidapi.marketplace",

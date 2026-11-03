@@ -363,7 +363,7 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
             <span className="text-fg-muted">{t('videoCount', { count: items.length })}</span>
             <button type="button" onClick={() => setSel(new Set(items.map((v) => v.id)))} className="px-2 py-1 rounded-lg border border-line text-fg-2 hover:text-fg cursor-pointer">{t('selectAll')}</button>
             <button type="button" onClick={() => setSel(new Set())} disabled={!sel.size} className="px-2 py-1 rounded-lg text-fg-muted hover:text-fg cursor-pointer disabled:opacity-50">{t('deselect')}</button>
-            {[10, 50].map((k) => (
+            {[5, 10, 50].map((k) => (
               <button key={k} type="button" onClick={() => setSel(new Set(items.slice(0, k).map((v) => v.id)))} className="px-2 py-1 rounded-lg border border-line text-fg-2 hover:text-fg cursor-pointer">{t('newestN', { count: k })}</button>
             ))}
             {cap != null && <span className={`ml-auto ${cap === 0 ? 'text-danger' : 'text-fg-muted'}`}>{t('capLeft', { count: cap })}</span>}

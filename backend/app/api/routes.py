@@ -1426,6 +1426,20 @@ async def bulk_download(
                 "tier":      batch_check["tier"],
             }),
         )
+    # When channel_mode is enabled (or URL is a channel), enforce batch_limit on max_videos
+    # so Free/Guest accounts can test up to 5 videos/channel scan, while >5 triggers UpgradeModal.
+    if payload.channel_mode and payload.max_videos and payload.max_videos > batch_check["limit"]:
+        mc_check = check_batch_limit(auth_user_id, payload.max_videos)
+        if not mc_check["allowed"]:
+            raise HTTPException(
+                status_code=403,
+                detail=make_error(ERR_BATCH, extra={
+                    "message":   mc_check["message"],
+                    "limit":     mc_check["limit"],
+                    "requested": mc_check["requested"],
+                    "tier":      mc_check["tier"],
+                }),
+            )
 
     # ── Per-platform daily allowance, per item ──────────────────────
     # Each link counts against its own platform. Links beyond what is left
@@ -1469,12 +1483,11 @@ async def bulk_download(
             detail=make_error(ERR_QUOTA_DAILY, extra=_quota_error_extra(_pq)),
         )
 
-    # Also enforce max_videos per channel against tier limit
-    if payload.channel_mode and auth_user_id:
-        from app.core.quotas import get_tier_permissions, get_user_tier
-        _tier = get_user_tier(auth_user_id)
-        _perms = get_tier_permissions(_tier)
-        payload.max_videos = min(payload.max_videos or 100, _perms["batch_limit"])
+    # Also enforce max_videos per channel against tier limit (including guests)
+    from app.core.quotas import get_tier_permissions, get_user_tier
+    _tier = get_user_tier(auth_user_id) if auth_user_id else "free"
+    _perms = get_tier_permissions(_tier)
+    payload.max_videos = min(payload.max_videos or _perms["batch_limit"], _perms["batch_limit"])
 
     batch_id = str(uuid.uuid4())
     supabase = get_supabase_client()
