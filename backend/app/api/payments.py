@@ -168,20 +168,38 @@ async def create_checkout_session(
     user: Dict[str, Any] = Depends(get_required_user),
 ):
     """
-    Create a Stripe Checkout Session for the Monthly or Yearly Pro plan.
-    Uses configured Stripe Price ID if set, otherwise inline USD price_data
-    ($4.99/month or $49.00/year) so Stripe works immediately with STRIPE_SECRET_KEY.
+    Create an international Checkout Session for the Monthly or Yearly Pro plan.
+    Supports:
+      1. Direct Checkout URLs (Lemon Squeezy / Polar.sh / PayPal) via
+         INTERNATIONAL_CHECKOUT_URL_MONTH / INTERNATIONAL_CHECKOUT_URL_YEAR
+         (recommended for Vietnam accounts using CCCD + VN bank payout).
+      2. Stripe Checkout Session via STRIPE_SECRET_KEY.
     Returns {checkout_url} — redirect user there.
     """
+    is_year = (payload.period or "month").lower() == "year"
+    direct_url = (
+        os.getenv("INTERNATIONAL_CHECKOUT_URL_YEAR", "").strip()
+        if is_year
+        else os.getenv("INTERNATIONAL_CHECKOUT_URL_MONTH", "").strip()
+    ) or os.getenv("INTERNATIONAL_CHECKOUT_URL", "").strip()
+
+    if direct_url:
+        from urllib.parse import urlencode
+        sep = "&" if "?" in direct_url else "?"
+        params = urlencode({
+            "checkout[email]": user.get("email") or "",
+            "checkout[custom][user_id]": user["id"],
+            "checkout[custom][period]": "year" if is_year else "month",
+        })
+        return {"checkout_url": f"{direct_url}{sep}{params}", "session_id": f"ext_{user['id'][:8]}"}
+
     stripe_key = os.getenv("STRIPE_SECRET_KEY", "") or _STRIPE_SECRET_KEY
     if not stripe_key:
-        raise HTTPException(status_code=503, detail="Thanh toán quốc tế (Stripe) chưa được cấu hình. Vui lòng dùng chuyển khoản hoặc liên hệ admin.")
+        raise HTTPException(status_code=503, detail="Thanh toán quốc tế chưa được cấu hình. Vui lòng dùng chuyển khoản hoặc liên hệ admin.")
 
     stripe = _stripe()
     stripe.api_key = stripe_key
     customer_id = _get_or_create_stripe_customer(user["id"], user["email"])
-
-    is_year = (payload.period or "month").lower() == "year"
     price_id = (
         (os.getenv("STRIPE_PRO_YEAR_PRICE_ID", "") or _STRIPE_PRO_YEAR_PRICE_ID)
         if is_year
@@ -225,6 +243,44 @@ async def create_checkout_session(
         raise HTTPException(status_code=500, detail=f"Không tạo được phiên thanh toán: {str(e)[:200]}")
 
     return {"checkout_url": session.url, "session_id": session.id}
+
+
+@router.post("/lemonsqueezy-webhook")
+async def lemonsqueezy_webhook(request: Request):
+    """
+    Receive and verify Lemon Squeezy webhook events (order_created / subscription_created).
+    Verifies HMAC-SHA256 X-Signature against LEMONSQUEEZY_WEBHOOK_SECRET.
+    Automatically activates Pro for 30 or 365 days and rewards referrers.
+    """
+    import hashlib
+    import hmac
+    secret = os.getenv("LEMONSQUEEZY_WEBHOOK_SECRET", "").strip()
+    if not secret:
+        raise HTTPException(status_code=404, detail="Not Found")
+    body = await request.body()
+    sig = (request.headers.get("X-Signature") or "").strip()
+    digest = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    if not sig or not hmac.compare_digest(sig, digest):
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    payload = json.loads(body.decode("utf-8"))
+    meta = payload.get("meta") or {}
+    event_name = meta.get("event_name") or ""
+    custom = meta.get("custom_data") or {}
+    user_id = (custom.get("user_id") or "").strip()
+    period = (custom.get("period") or "month").strip().lower()
+
+    if event_name in ("order_created", "subscription_created", "subscription_payment_success") and user_id:
+        days = 365 if period == "year" else 30
+        exp = int((datetime.now(timezone.utc) + timedelta(days=days)).timestamp())
+        order_id = str((payload.get("data") or {}).get("id") or "ls_order")
+        _upgrade_user(user_id, f"ls_{order_id}", exp)
+        try:
+            from app.api.referrals import reward_referrer_on_pro_upgrade
+            reward_referrer_on_pro_upgrade(user_id)
+        except Exception:
+            pass
+    return {"received": True}
 
 
 # ══════════════════════════════════════════════════════════════════════
