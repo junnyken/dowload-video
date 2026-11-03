@@ -376,3 +376,57 @@ async def admin_activate_order(
         metadata={"reason": payload.reason},
     )
     return {"success": True, "action": msg}
+
+
+@router.post("/admin/orders/{order_id}/simulate-sepay")
+@admin_router.post("/orders/{order_id}/simulate-sepay")
+async def admin_simulate_sepay(
+    order_id: str,
+    request: Request,
+    _=Depends(verify_admin),
+):
+    """Simulate a real HMAC-SHA256 signed SePay webhook for a pending order."""
+    import hashlib
+    import hmac
+    import json
+    import time
+    import uuid
+    from app.core import payment_orders as po  # noqa: PLC0415
+    from app.core import sepay_webhook as sw  # noqa: PLC0415
+    from app.core.audit import log_admin_action  # noqa: PLC0415
+
+    order = po.get_order(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    secret = sw._secret()
+    if not secret:
+        raise HTTPException(status_code=400, detail="Chưa cấu hình SePay Webhook Secret")
+
+    sim_tx_id = f"sim-{uuid.uuid4().hex[:8]}"
+    raw_body = json.dumps({
+        "id": sim_tx_id,
+        "gateway": "ACB",
+        "transactionDate": "2026-11-03 22:30:00",
+        "accountNumber": "12345678",
+        "transferType": "in",
+        "transferAmount": int(order["amount"]),
+        "code": order["code"],
+        "content": f"{order['code']} thanh toan VidGrab Pro",
+        "referenceCode": f"SIM_{sim_tx_id.upper()}",
+    }).encode("utf-8")
+
+    ts = str(int(time.time()))
+    sig = hmac.new(secret.encode("utf-8"), f"{ts}.".encode("utf-8") + raw_body, hashlib.sha256).hexdigest()
+    headers = {
+        "x-sepay-timestamp": ts,
+        "x-sepay-signature": f"sha256={sig}",
+    }
+
+    result = sw.handle(raw_body, headers)
+    log_admin_action(
+        request, "admin.order.simulate_sepay",
+        resource_type="payment_order", resource_id=order_id,
+        metadata={"code": order["code"], "result": result},
+    )
+    return result

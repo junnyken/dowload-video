@@ -78,7 +78,8 @@ def get_settings() -> Dict[str, Any]:
             except (TypeError, ValueError):
                 pass
         elif k in _TEXT_FIELDS:
-            out[k] = v
+            if v or not out.get(k):
+                out[k] = v
     return out
 
 

@@ -339,7 +339,9 @@ def _upgrade_user_pro(user_id: str, days: int, subscription_id: str) -> None:
     fields["tier"] = "pro"
 
     try:
-        db.table("profiles").update(fields).eq("id", user_id).execute()
+        p_res = db.table("profiles").update(fields).eq("id", user_id).execute()
+        if not p_res.data:
+            db.table("profiles").insert({"id": user_id, **fields}).execute()
     except Exception as e:
         print(f"[PaymentOrders] upgrade failed for {user_id}: {e}")
         return

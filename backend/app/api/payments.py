@@ -93,19 +93,49 @@ def _get_or_create_stripe_customer(user_id: str, email: str) -> str:
 
 def _upgrade_user(user_id: str, subscription_id: str, current_period_end: Optional[int] = None) -> None:
     supabase = _supabase()
+    is_one_time = str(subscription_id or "").startswith(("paypal_", "ls_"))
     update: Dict[str, Any] = {
         "tier":                    "pro",
-        "billing_status":          "active",
-        "stripe_subscription_id":  subscription_id,
+        "billing_status":          "manual" if is_one_time else "active",
+        "stripe_subscription_id":  None if is_one_time else subscription_id,
     }
     if current_period_end:
-        update["subscription_expiry"] = datetime.fromtimestamp(
-            current_period_end, tz=timezone.utc
-        ).isoformat()
+        now = datetime.now(timezone.utc)
+        target_dt = datetime.fromtimestamp(current_period_end, tz=timezone.utc)
+        # Extend from existing unexpired manual/active expiry so early renewal never loses days
+        try:
+            row = (supabase.table("profiles").select("billing_status, subscription_expiry")
+                   .eq("id", user_id).single().execute()).data or {}
+            cur = row.get("subscription_expiry")
+            if cur and is_one_time:
+                cur_dt = datetime.fromisoformat(str(cur).replace("Z", "+00:00"))
+                if cur_dt > now:
+                    delta = max(timedelta(days=1), target_dt - now)
+                    target_dt = cur_dt + delta
+        except Exception:
+            pass
+        update["subscription_expiry"] = target_dt.isoformat()
     try:
-        supabase.table("profiles").update(update).eq("id", user_id).execute()
+        p_res = supabase.table("profiles").update(update).eq("id", user_id).execute()
+        if not p_res.data:
+            supabase.table("profiles").insert({"id": user_id, **update}).execute()
     except Exception as e:
         print(f"[Payments] upgrade_user failed for {user_id}: {e}")
+        return
+
+    # Keep user_usage.plan in sync for admin stats
+    try:
+        u_res = supabase.table("user_usage").update({"plan": "pro"}).eq("user_id", user_id).execute()
+        if not u_res.data:
+            supabase.table("user_usage").insert({
+                "user_id": user_id,
+                "plan": "pro",
+                "downloads_today": 0,
+                "downloads_this_month": 0,
+                "last_reset_at": datetime.now(timezone.utc).isoformat(),
+            }).execute()
+    except Exception:
+        pass
 
 
 def _downgrade_user(user_id: str, at_period_end: bool = True, period_end_ts: Optional[int] = None) -> None:
