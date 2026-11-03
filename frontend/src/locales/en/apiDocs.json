@@ -1,6 +1,12 @@
 {
   "_note": "wording: BA review — English drafted with AI",
   "intro": "Reference for external integrations. Covers public and user-facing endpoints only. Admin endpoints are not documented here.",
+  "rapidapi": {
+    "title": "Quick Integration via RapidAPI & OpenAPI",
+    "desc": "Test endpoints live in your browser, grab code snippets in 20+ languages (Python, Node.js, Go, PHP, cURL), or import our OpenAPI 3.0 spec into Postman or RapidAPI Studio.",
+    "hubBtn": "View on RapidAPI Hub",
+    "openApiBtn": "OpenAPI 3.0 JSON"
+  },
   "auth": {
     "title": "Authentication",
     "intro": "Some public endpoints need no key but are limited per IP. Endpoints marked “auth” require a key. For <code>/fetch-link</code> and <code>/history</code> the key is optional: if you send one, the request runs under your account.",

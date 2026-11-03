@@ -278,6 +278,12 @@ def _lookup_rapidapi_request(request: Request) -> Optional[Dict[str, Any]]:
     import hmac
     import os
     expected_secret = os.getenv("RAPIDAPI_PROXY_SECRET", "").strip()
+    if not expected_secret:
+        try:
+            from app.core.plans import get_settings as _get_plan_settings
+            expected_secret = (_get_plan_settings().get("rapidapi_proxy_secret") or "").strip()
+        except Exception:
+            expected_secret = ""
     if not expected_secret or request is None:
         return None
     provided_secret = (request.headers.get("X-RapidAPI-Proxy-Secret") or "").strip()

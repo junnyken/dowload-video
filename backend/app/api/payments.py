@@ -248,8 +248,28 @@ async def create_checkout_session(
             return {"checkout_url": approve_url, "session_id": odata.get("id", "")}
 
     # 2. Simple PayPal.me link (zero API keys needed)
-    paypal_me = os.getenv("PAYPAL_ME_URL", "").strip().rstrip("/")
+    paypal_me = os.getenv("PAYPAL_ME_URL", "").strip()
+    if not paypal_me:
+        try:
+            from app.core.plans import get_settings as _get_plan_settings
+            paypal_me = (_get_plan_settings().get("paypal_me_url") or "").strip()
+        except Exception:
+            paypal_me = ""
     if paypal_me:
+        if "@" in paypal_me and not paypal_me.startswith("http"):
+            # PayPal email entered: use standard PayPal webscr checkout link
+            from urllib.parse import urlencode
+            qs = urlencode({
+                "cmd": "_xclick",
+                "business": paypal_me,
+                "item_name": f"VidGrab Pro ({'Yearly' if is_year else 'Monthly'}) - {user['id'][:8]}",
+                "amount": usd_str,
+                "currency_code": "USD",
+            })
+            return {"checkout_url": f"https://www.paypal.com/cgi-bin/webscr?{qs}", "session_id": f"ppemail_{user['id'][:8]}"}
+        if not paypal_me.startswith("http"):
+            paypal_me = f"https://paypal.me/{paypal_me.lstrip('/')}"
+        paypal_me = paypal_me.rstrip("/")
         amt = "49USD" if is_year else "4.99USD"
         return {"checkout_url": f"{paypal_me}/{amt}", "session_id": f"ppme_{user['id'][:8]}"}
 

@@ -30,8 +30,16 @@ _INT_FIELDS = {
     "api_calls_month_pro": (0, 10_000_000, "Lượt gọi API/tháng phải từ 0 đến 10.000.000"),
     "api_calls_month_team": (0, 10_000_000, "Lượt gọi API/tháng phải từ 0 đến 10.000.000"),
 }
-_TEXT_FIELDS = ("bank_name", "bank_account", "bank_holder", "contact")
-_TEXT_MAX = 120
+_TEXT_FIELDS = (
+    "bank_name",
+    "bank_account",
+    "bank_holder",
+    "contact",
+    "rapidapi_proxy_secret",
+    "rapidapi_url",
+    "paypal_me_url",
+)
+_TEXT_MAX = 240
 
 
 def _r():
@@ -49,6 +57,9 @@ def get_settings() -> Dict[str, Any]:
         "api_calls_month_pro": DEFAULT_API_CALLS_MONTH_PRO,
         "api_calls_month_team": DEFAULT_API_CALLS_MONTH_TEAM,
         **{f: "" for f in _TEXT_FIELDS},
+        "rapidapi_proxy_secret": os.getenv("RAPIDAPI_PROXY_SECRET", "").strip(),
+        "rapidapi_url": os.getenv("RAPIDAPI_HUB_URL", "").strip(),
+        "paypal_me_url": os.getenv("PAYPAL_ME_URL", "").strip(),
     }
     try:
         raw = _r().hgetall(SETTINGS_KEY) or {}
@@ -204,6 +215,7 @@ def build_plans() -> Dict[str, Any]:
     bank_ready = bool(s["bank_name"] and s["bank_account"] and s["bank_holder"])
     stripe_ready = bool(
         (os.getenv("PAYPAL_CLIENT_ID", "").strip() and os.getenv("PAYPAL_CLIENT_SECRET", "").strip())
+        or s.get("paypal_me_url", "").strip()
         or os.getenv("PAYPAL_ME_URL", "").strip()
         or os.getenv("STRIPE_SECRET_KEY", "").strip()
         or os.getenv("INTERNATIONAL_CHECKOUT_URL_MONTH", "").strip()
@@ -218,6 +230,9 @@ def build_plans() -> Dict[str, Any]:
             "stripe_ready": stripe_ready,
             "bank_name": s["bank_name"], "bank_account": s["bank_account"],
             "bank_holder": s["bank_holder"], "contact": s["contact"],
+            "paypal_me_url": s.get("paypal_me_url") or os.getenv("PAYPAL_ME_URL", "").strip(),
+            "rapidapi_url": s.get("rapidapi_url") or os.getenv("RAPIDAPI_HUB_URL", "").strip(),
+            "rapidapi_studio_url": "https://rapidapi.com/studio/api_b8b4154e-99d8-404b-a85c-4ac6e14f63cd/publish/general",
             "activation": "manual",   # an admin turns Pro on after the transfer arrives
         },
         "daily_reset_utc": "00:00",

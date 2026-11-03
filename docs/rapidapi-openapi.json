@@ -9,10 +9,6 @@
     {
       "url": "https://dvid-api.vibe1.tinhgon.xyz",
       "description": "VidGrab Primary API Server"
-    },
-    {
-      "url": "https://dowloadvideo.io.vn",
-      "description": "VidGrab Main Web & API Gateway"
     }
   ],
   "paths": {
@@ -133,6 +129,17 @@
         "responses": {
           "200": {
             "description": "Service is healthy"
+          }
+        }
+      }
+    },
+    "/ping": {
+      "get": {
+        "operationId": "pingCheck",
+        "summary": "API Ping Check",
+        "responses": {
+          "200": {
+            "description": "Pong response"
           }
         }
       }

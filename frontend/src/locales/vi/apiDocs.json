@@ -1,5 +1,11 @@
 {
   "intro": "Tài liệu tham khảo cho các tích hợp bên ngoài. Chỉ bao gồm public + user-facing endpoints. Admin endpoints không được cung cấp tại đây.",
+  "rapidapi": {
+    "title": "Tích hợp nhanh qua RapidAPI & OpenAPI",
+    "desc": "Thử nghiệm trực tiếp trên trình duyệt, lấy code mẫu 20+ ngôn ngữ (Python, Node.js, Go, PHP, cURL) hoặc import file OpenAPI 3.0 vào Postman / RapidAPI Studio.",
+    "hubBtn": "Mở trên chợ RapidAPI",
+    "openApiBtn": "Tải OpenAPI 3.0 JSON"
+  },
   "auth": {
     "title": "Xác thực",
     "intro": "Một số endpoint công khai không cần key nhưng bị giới hạn theo IP. Endpoint ghi “auth” bắt buộc có key. Với <code>/fetch-link</code> và <code>/history</code>, key là tuỳ chọn: gửi key thì request chạy dưới tài khoản của bạn.",

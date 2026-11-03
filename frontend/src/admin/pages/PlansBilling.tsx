@@ -33,7 +33,14 @@ interface PlanSettings {
   bank_account: string
   bank_holder: string
   contact: string
+  rapidapi_proxy_secret: string
+  rapidapi_url: string
+  paypal_me_url: string
 }
+
+const RAPIDAPI_STUDIO_URL = 'https://rapidapi.com/studio/api_b8b4154e-99d8-404b-a85c-4ac6e14f63cd/publish/general'
+const RAPIDAPI_GATEWAY_URL = 'https://rapidapi.com/studio/api_b8b4154e-99d8-404b-a85c-4ac6e14f63cd/publish/gateway?pub_hub=true'
+const OPENAPI_SPEC_URL = 'https://dvid-api.vibe1.tinhgon.xyz/api/v1/rapidapi-openapi.json'
 
 const inputCls = 'min-h-11 w-full rounded-card border border-line bg-surface px-3 text-sm text-fg outline-none focus:border-line-strong'
 
@@ -110,9 +117,79 @@ export function PlansSettingsCard() {
           </label>
         </div>
       )}
+
+      {form && (
+        <div className="mt-4 rounded-card border border-line bg-surface-2/40 p-3.5 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-xs font-semibold text-fg">💳 Thanh toán Quốc tế (PayPal) &amp; Chợ RapidAPI</h3>
+              <p className="text-[11px] text-fg-muted mt-0.5">
+                Cấu hình nhanh PayPal &amp; liên kết chợ RapidAPI. Khi lưu, trang <code className="text-fg">/pricing</code> và <code className="text-fg">/api-docs</code> sẽ tự động cập nhật.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              <a
+                href={RAPIDAPI_STUDIO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2.5 py-1.5 font-medium text-fg hover:border-line-strong"
+              >
+                🚀 Mở RapidAPI Studio ↗
+              </a>
+              <a
+                href={RAPIDAPI_GATEWAY_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2.5 py-1.5 font-medium text-fg-2 hover:border-line-strong"
+              >
+                🛡️ Lấy Proxy Secret ↗
+              </a>
+              <a
+                href={OPENAPI_SPEC_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2.5 py-1.5 font-medium text-fg-2 hover:border-line-strong"
+              >
+                📄 File OpenAPI JSON ↗
+              </a>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs text-fg-2">🛡️ X-RapidAPI-Proxy-Secret
+              <input
+                value={form.rapidapi_proxy_secret || ''}
+                maxLength={240}
+                placeholder="9cb59af0-d757-11f1-..."
+                className={`${inputCls} font-mono`}
+                onChange={e => set('rapidapi_proxy_secret', e.target.value)}
+              />
+            </label>
+            <label className="text-xs text-fg-2">⚡ Link API trên chợ RapidAPI (View in Hub)
+              <input
+                value={form.rapidapi_url || ''}
+                maxLength={240}
+                placeholder="https://rapidapi.com/..."
+                className={inputCls}
+                onChange={e => set('rapidapi_url', e.target.value)}
+              />
+            </label>
+            <label className="text-xs text-fg-2 sm:col-span-2">🅿️ Link PayPal.Me hoặc Email PayPal của bạn
+              <input
+                value={form.paypal_me_url || ''}
+                maxLength={240}
+                placeholder="https://paypal.me/username hoặc email@paypal.com"
+                className={inputCls}
+                onChange={e => set('paypal_me_url', e.target.value)}
+              />
+            </label>
+          </div>
+        </div>
+      )}
+
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <Button variant="primary" size="md" className="min-h-11" disabled={busy || !form} onClick={save}>
-          {busy ? 'Đang lưu…' : 'Lưu cài đặt'}
+          {busy ? 'Đang lưu…' : '💾 Lưu cài đặt (Ngân hàng, PayPal & RapidAPI)'}
         </Button>
         {msg && <span role="status" className={`text-xs ${msg.ok ? 'text-success' : 'text-danger'}`}>{msg.text}</span>}
       </div>

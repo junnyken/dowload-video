@@ -100,9 +100,11 @@ const methodColor = (m) => {
 export default function ApiDocsPage() {
   const [apiVersion, setApiVersion] = useState(null);
   const [expanded, setExpanded] = useState(null);
-  const { free, pro } = usePlans();
+  const { plans, free, pro } = usePlans();
   const { t } = useTranslation('apiDocs');
   const lang = useLang();
+  const rapidApiUrl = plans?.payment?.rapidapi_url || '';
+  const openApiUrl = `${API_BASE || 'https://dvid-api.vibe1.tinhgon.xyz'}/api/v1/rapidapi-openapi.json`;
   // Daily allowance comes from /api/v1/plans; no number when it did not load.
   const dailyText = free && pro
     ? t('rate.daily', { free: free.daily_downloads, pro: pro.daily_downloads })
@@ -148,6 +150,39 @@ export default function ApiDocsPage() {
         <p className="text-sm text-fg-muted ml-13 mt-1">
           {t('intro')}
         </p>
+      </div>
+
+      {/* ── RapidAPI Marketplace & OpenAPI Spec ───────────── */}
+      <div className="p-5 rounded-2xl bg-surface border border-line flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-accent-text" />
+            <h2 className="text-base font-semibold text-fg">{t('rapidapi.title')}</h2>
+          </div>
+          <p className="text-sm text-fg-muted">
+            {t('rapidapi.desc')}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5 flex-shrink-0">
+          {rapidApiUrl && (
+            <a
+              href={rapidApiUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-accent text-accent-fg text-xs font-semibold hover:opacity-90 transition-opacity"
+            >
+              ⚡ {t('rapidapi.hubBtn')} <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          )}
+          <a
+            href={openApiUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-surface-2 border border-line text-fg-2 text-xs font-semibold hover:border-line-strong transition-colors"
+          >
+            📄 {t('rapidapi.openApiBtn')} <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
       </div>
 
       {/* ── Auth ──────────────────────────────────────────── */}

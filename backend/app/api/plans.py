@@ -29,10 +29,15 @@ admin_router = APIRouter()
 class SettingsBody(BaseModel):
     price_month_vnd: Optional[int] = None
     price_year_vnd: Optional[int] = None
+    api_calls_month_pro: Optional[int] = None
+    api_calls_month_team: Optional[int] = None
     bank_name: Optional[str] = None
     bank_account: Optional[str] = None
     bank_holder: Optional[str] = None
     contact: Optional[str] = None
+    rapidapi_proxy_secret: Optional[str] = None
+    rapidapi_url: Optional[str] = None
+    paypal_me_url: Optional[str] = None
 
 
 def _profile(user_id: str) -> Dict[str, Any]:

@@ -726,6 +726,83 @@ async def health_check():
     return {"status": "ok", "app_version": APP_VERSION}
 
 
+@app.get("/ping", tags=["Health"])
+async def root_ping():
+    """Root /ping alias for RapidAPI Health Check compatibility."""
+    return {"status": "ok", "app_version": APP_VERSION}
+
+
+@app.get("/api/v1/rapidapi-openapi.json", tags=["Public API"])
+async def rapidapi_openapi_spec():
+    """Public OpenAPI 3.0.3 specification ready for 1-click import into RapidAPI Studio."""
+    import json as _json
+    from pathlib import Path as _Path
+    for p in (
+        _Path(__file__).resolve().parents[2] / "docs" / "rapidapi-openapi.json",
+        _Path("/app/docs/rapidapi-openapi.json"),
+    ):
+        if p.exists():
+            try:
+                return _json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                break
+    return {
+        "openapi": "3.0.3",
+        "info": {
+            "title": "VidGrab Multi-Platform Video & Audio Downloader API",
+            "version": APP_VERSION,
+            "description": "Extract and download videos, MP3 audio, and subtitles from 20+ platforms.",
+        },
+        "servers": [{"url": "https://dvid-api.vibe1.tinhgon.xyz", "description": "VidGrab API Server"}],
+        "paths": {
+            "/api/v1/fetch-link": {
+                "post": {
+                    "operationId": "fetchVideoLink",
+                    "summary": "Extract & Download Video or Audio from URL",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["url"],
+                                    "properties": {
+                                        "url": {"type": "string", "example": "https://www.tiktok.com/@tiktok/video/7106594312292453675"},
+                                        "quality": {"type": "string", "default": "video"},
+                                        "remove_watermark": {"type": "boolean", "default": True},
+                                    },
+                                }
+                            }
+                        },
+                    },
+                    "responses": {"200": {"description": "Successful extraction"}},
+                }
+            },
+            "/api/v1/platform-status": {
+                "get": {
+                    "operationId": "getPlatformStatus",
+                    "summary": "Get Live Health Status of Supported Platforms",
+                    "responses": {"200": {"description": "Platform health matrix"}},
+                }
+            },
+            "/health": {
+                "get": {
+                    "operationId": "healthCheck",
+                    "summary": "API Liveness Check",
+                    "responses": {"200": {"description": "Service is healthy"}},
+                }
+            },
+            "/ping": {
+                "get": {
+                    "operationId": "pingCheck",
+                    "summary": "API Ping Check",
+                    "responses": {"200": {"description": "Pong response"}},
+                }
+            },
+        },
+    }
+
+
 @app.get("/api/v1/admin/health", tags=["Admin"])
 async def admin_health_check(_=Depends(verify_admin)):
     """Detailed health for admins (the former public /health body)."""
