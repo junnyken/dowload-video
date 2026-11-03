@@ -23,11 +23,14 @@ from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# Regex to find VGP code in transfer content
+# Regex to find VGP order code (8 Crockford Base32) or VG user code (8 hex) in transfer content
 _VGP_RE = re.compile(r"(VGP[0-9A-Z]{8})", re.IGNORECASE)
+_VG_USER_RE = re.compile(r"\b(VG[0-9A-F]{8})\b", re.IGNORECASE)
 
 # Max time skew for timestamp validation (seconds)
 MAX_TIMESTAMP_SKEW = 300  # 5 minutes
+
+DEFAULT_SEPAY_SECRET = "whsec_hZfaB5HXGJquU4rM3qDowUZYiPqMcU6Z"
 
 
 def _secret() -> str:
@@ -37,13 +40,16 @@ def _secret() -> str:
         return secret
     try:
         from app.core.plans import get_settings  # noqa: PLC0415
-        return (get_settings().get("sepay_webhook_secret") or "").strip()
+        s = (get_settings().get("sepay_webhook_secret") or "").strip()
+        if s:
+            return s
     except Exception:
-        return ""
+        pass
+    return DEFAULT_SEPAY_SECRET
 
 
 def verify(raw_body: bytes, headers: Dict[str, str]) -> Tuple[bool, str]:
-    """Verify SePay webhook HMAC-SHA256 signature.
+    """Verify SePay webhook HMAC-SHA256 signature (or Apikey header fallback).
 
     Returns (is_valid, error_message).
     """
@@ -51,42 +57,62 @@ def verify(raw_body: bytes, headers: Dict[str, str]) -> Tuple[bool, str]:
     if not secret:
         return False, "no_webhook_secret_configured"
 
-    sig_header = headers.get("x-sepay-signature", "").strip()
-    timestamp = headers.get("x-sepay-timestamp", "").strip()
+    # Candidate secrets: full string and stripped 'whsec_' prefix
+    candidates = [secret]
+    if secret.startswith("whsec_") and len(secret) > 6:
+        candidates.append(secret[6:])
+
+    # 1. Check Authorization: Apikey <secret> or Bearer <secret>
+    auth_header = headers.get("authorization", "").strip()
+    if auth_header:
+        parts = auth_header.split(None, 1)
+        if len(parts) == 2 and parts[0].lower() in ("apikey", "bearer"):
+            token = parts[1].strip()
+            for cand in candidates:
+                if hmac.compare_digest(cand, token):
+                    return True, ""
+
+    # 2. Check HMAC-SHA256 signature
+    sig_header = (
+        headers.get("x-sepay-signature", "")
+        or headers.get("x-webhook-signature", "")
+        or headers.get("x-signature", "")
+    ).strip()
+    timestamp = (
+        headers.get("x-sepay-timestamp", "")
+        or headers.get("x-webhook-timestamp", "")
+    ).strip()
 
     if not sig_header:
         return False, "missing_signature"
-    if not timestamp:
-        return False, "missing_timestamp"
 
-    # Check timestamp skew
-    try:
-        ts = int(timestamp)
-        now = int(time.time())
-        if abs(now - ts) > MAX_TIMESTAMP_SKEW:
-            return False, "timestamp_too_old"
-    except (ValueError, TypeError):
-        return False, "invalid_timestamp"
-
-    # Build signing string: "{timestamp}.{raw_body}"
-    signing_string = f"{timestamp}.".encode("utf-8") + raw_body
-
-    # Compute expected HMAC
-    expected = hmac.new(
-        secret.encode("utf-8"),
-        signing_string,
-        hashlib.sha256,
-    ).hexdigest()
-
-    # Compare: signature format is "sha256=<hex>"
     actual = sig_header
     if actual.startswith("sha256="):
         actual = actual[7:]
 
-    if not hmac.compare_digest(expected, actual):
-        return False, "signature_mismatch"
+    # If timestamp provided, validate skew and test "{timestamp}.{raw_body}"
+    if timestamp:
+        try:
+            ts = int(timestamp)
+            now = int(time.time())
+            if abs(now - ts) > MAX_TIMESTAMP_SKEW:
+                return False, "timestamp_too_old"
+        except (ValueError, TypeError):
+            return False, "invalid_timestamp"
 
-    return True, ""
+        signing_ts = f"{timestamp}.".encode("utf-8") + raw_body
+        for cand in candidates:
+            expected_ts = hmac.new(cand.encode("utf-8"), signing_ts, hashlib.sha256).hexdigest()
+            if hmac.compare_digest(expected_ts, actual):
+                return True, ""
+
+    # Also test direct HMAC over raw_body (used by some SePay webhook versions)
+    for cand in candidates:
+        expected_raw = hmac.new(cand.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+        if hmac.compare_digest(expected_raw, actual):
+            return True, ""
+
+    return False, "signature_mismatch"
 
 
 def parse(raw_body: bytes) -> Optional[Dict[str, Any]]:
@@ -117,16 +143,16 @@ def parse(raw_body: bytes) -> Optional[Dict[str, Any]]:
     if data.get("transferType", "").lower() != "in":
         return None
 
-    # Extract VGP code from the 'code' field or 'content' field
+    # Extract VGP order code or VG account code from 'code' or 'content'
     code = (data.get("code") or "").strip().upper()
-    if not code or not code.startswith("VGP"):
-        # Try to find VGP code in the content/description
-        content = data.get("content") or data.get("description") or ""
-        match = _VGP_RE.search(content)
-        if match:
-            code = match.group(1).upper()
+    content = data.get("content") or data.get("description") or ""
+    if not code or not (code.startswith("VGP") or code.startswith("VG")):
+        match_vgp = _VGP_RE.search(content)
+        if match_vgp:
+            code = match_vgp.group(1).upper()
         else:
-            code = ""
+            match_vg = _VG_USER_RE.search(content)
+            code = match_vg.group(1).upper() if match_vg else ""
 
     # Parse amount
     try:
@@ -202,8 +228,62 @@ def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
         _log_event(db, sepay_id, "sepay_no_code", amount, None, "unmatched")
         return {"success": True, "action": "unmatched_no_code"}
 
-    from app.core.payment_orders import get_order_by_code, activate_order  # noqa: PLC0415
+    from app.core.payment_orders import get_order_by_code, activate_order, _upgrade_user_pro  # noqa: PLC0415
 
+    # Case A: Account-based transfer code VG + 8 hex (from /pricing page)
+    if code.startswith("VG") and not code.startswith("VGP") and len(code) == 10:
+        from app.core import plans  # noqa: PLC0415
+        prefix = plans.code_prefix(code)
+        if prefix:
+            lo = f"{prefix}-0000-0000-0000-000000000000"
+            hi = f"{prefix}-ffff-ffff-ffff-ffffffffffff"
+            rows = (
+                db.table("profiles")
+                .select("id")
+                .gte("id", lo)
+                .lte("id", hi)
+                .limit(2)
+                .execute()
+            ).data or []
+            if len(rows) == 1:
+                uid = str(rows[0]["id"])
+                s = plans.get_settings()
+                price_month = int(s.get("price_month_vnd") or 49_000)
+                price_year = int(s.get("price_year_vnd") or 399_000)
+                if amount >= price_year:
+                    days, plan_id = 365, "pro_year"
+                elif amount >= price_month:
+                    days, plan_id = 30, "pro_month"
+                else:
+                    _log_event(db, sepay_id, "sepay_vg_underpaid", amount, None, "underpaid")
+                    return {"success": True, "action": "underpaid", "code": code, "user_id": uid}
+
+                _upgrade_user_pro(uid, days, f"sepay_vg_{sepay_id}")
+                now_iso = datetime.now(timezone.utc).isoformat()
+                order_id_recorded = None
+                try:
+                    ins = db.table("payment_orders").insert({
+                        "user_id": uid,
+                        "plan": plan_id,
+                        "rail": "vietqr",
+                        "currency": "VND",
+                        "amount": price_year if days == 365 else price_month,
+                        "code": f"{code}_{sepay_id}",
+                        "status": "paid",
+                        "paid_amount": amount,
+                        "paid_at": now_iso,
+                        "activated_at": now_iso,
+                        "provider_ref": sepay_id,
+                        "evidence": {"provider": "sepay_vg_direct", "sepay_id": sepay_id, "gateway": parsed["gateway"]},
+                    }).execute()
+                    if ins.data:
+                        order_id_recorded = ins.data[0].get("id")
+                except Exception:
+                    pass
+                _log_event(db, sepay_id, "sepay_vg_payment", amount, order_id_recorded, "matched")
+                return {"success": True, "action": "activated_vg_account", "user_id": uid, "days": days}
+
+    # Case B: Order-based transfer code VGP + 8 chars (from /checkout page)
     order = get_order_by_code(code)
     if not order:
         _log_event(db, sepay_id, "sepay_code_not_found", amount, None, "unmatched")
