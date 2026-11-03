@@ -62,7 +62,37 @@ function PaymentSection({ pay, pro, period }) {
   const [err, setErr] = useState('');
   const [stripeLoading, setStripeLoading] = useState(false);
   const [stripeErr, setStripeErr] = useState('');
+  const [stripeSuccess, setStripeSuccess] = useState('');
   const token = session?.access_token;
+
+  // Auto-capture PayPal order when returning from PayPal Checkout (?paypal_capture=1&token=ORDER_ID)
+  useEffect(() => {
+    if (!token) return;
+    const params = new URLSearchParams(window.location.search);
+    const ppOrderId = params.get('token');
+    if (params.get('paypal_capture') !== '1' || !ppOrderId) return;
+    setStripeLoading(true);
+    setStripeErr('');
+    fetch(`${API_BASE}/api/v1/payments/paypal-capture`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ order_id: ppOrderId }),
+    })
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d?.detail || `HTTP ${r.status}`);
+        setStripeSuccess(t('paypalSuccess'));
+        window.history.replaceState({}, '', window.location.pathname);
+        return fetch(`${API_BASE}/api/v1/plans/me`, { headers: { Authorization: `Bearer ${token}` } });
+      })
+      .then((r) => (r && r.ok ? r.json() : null))
+      .then((d) => { if (d) setMe(d); })
+      .catch((e) => setStripeErr(e.message || t('payLoadError')))
+      .finally(() => setStripeLoading(false));
+  }, [token, t]);
 
   const startStripeCheckout = async () => {
     if (!token) {
@@ -123,6 +153,7 @@ function PaymentSection({ pay, pro, period }) {
         {t('stripeTitle')}
       </h3>
       <p className="text-sm text-fg-muted mb-3">{t('stripeIntro')}</p>
+      {stripeSuccess && <p role="status" className="mb-3 rounded-lg bg-success/15 border border-success/30 px-3 py-2 text-sm font-semibold text-success">{stripeSuccess}</p>}
       {stripeErr && <p role="alert" className="mb-3 text-sm text-danger">{stripeErr}</p>}
       <button
         type="button"

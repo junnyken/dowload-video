@@ -39,8 +39,9 @@
   "perYear": "năm",
   "perMonth": "tháng",
   "resetNote": "Số lượt tải được tính lại lúc {{time}} UTC mỗi ngày.",
-  "stripeTitle": "Thanh toán quốc tế qua Stripe (Visa, Mastercard, Apple Pay)",
-  "stripeIntro": "Nâng cấp Pro tự động ngay lập tức bằng thẻ quốc tế. Hỗ trợ hủy gia hạn bất cứ lúc nào.",
-  "stripeBtn": "Thanh toán bằng thẻ quốc tế ({{usd}} / {{period}})",
-  "stripeLoading": "Đang mở cổng thanh toán Stripe…"
+  "stripeTitle": "Thanh toán quốc tế qua PayPal / Thẻ Visa, Mastercard",
+  "stripeIntro": "Nâng cấp Pro nhanh chóng qua PayPal hoặc thẻ quốc tế (USD).",
+  "stripeBtn": "Thanh toán PayPal / Thẻ quốc tế ({{usd}} / {{period}})",
+  "stripeLoading": "Đang mở cổng thanh toán PayPal…",
+  "paypalSuccess": "Thanh toán PayPal thành công! Tài khoản của bạn đã được nâng cấp lên gói Pro."
 }

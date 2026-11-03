@@ -203,7 +203,9 @@ def build_plans() -> Dict[str, Any]:
     ]
     bank_ready = bool(s["bank_name"] and s["bank_account"] and s["bank_holder"])
     stripe_ready = bool(
-        os.getenv("STRIPE_SECRET_KEY", "").strip()
+        (os.getenv("PAYPAL_CLIENT_ID", "").strip() and os.getenv("PAYPAL_CLIENT_SECRET", "").strip())
+        or os.getenv("PAYPAL_ME_URL", "").strip()
+        or os.getenv("STRIPE_SECRET_KEY", "").strip()
         or os.getenv("INTERNATIONAL_CHECKOUT_URL_MONTH", "").strip()
         or os.getenv("INTERNATIONAL_CHECKOUT_URL", "").strip()
     )

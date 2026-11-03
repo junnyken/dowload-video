@@ -162,6 +162,29 @@ class CheckoutRequest(BaseModel):
     cancel_url:  Optional[str] = None
 
 
+class PayPalCaptureRequest(BaseModel):
+    order_id: str
+
+
+def _paypal_base_url() -> str:
+    mode = os.getenv("PAYPAL_MODE", "live").strip().lower()
+    return "https://api-m.sandbox.paypal.com" if mode == "sandbox" else "https://api-m.paypal.com"
+
+
+async def _paypal_access_token(client_id: str, client_secret: str) -> str:
+    import httpx
+    async with httpx.AsyncClient(timeout=20) as client:
+        res = await client.post(
+            f"{_paypal_base_url()}/v1/oauth2/token",
+            auth=(client_id, client_secret),
+            data={"grant_type": "client_credentials"},
+            headers={"Accept": "application/json"},
+        )
+        if res.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"PayPal OAuth failed: {res.text[:160]}")
+        return res.json()["access_token"]
+
+
 @router.post("/create-checkout-session")
 async def create_checkout_session(
     payload: CheckoutRequest,
@@ -170,13 +193,67 @@ async def create_checkout_session(
     """
     Create an international Checkout Session for the Monthly or Yearly Pro plan.
     Supports:
-      1. Direct Checkout URLs (Lemon Squeezy / Polar.sh / PayPal) via
-         INTERNATIONAL_CHECKOUT_URL_MONTH / INTERNATIONAL_CHECKOUT_URL_YEAR
-         (recommended for Vietnam accounts using CCCD + VN bank payout).
-      2. Stripe Checkout Session via STRIPE_SECRET_KEY.
+      1. PayPal REST API Orders v2 (PAYPAL_CLIENT_ID + PAYPAL_CLIENT_SECRET) — automatic Pro activation on return.
+      2. PayPal.me quick link (PAYPAL_ME_URL, e.g. https://paypal.me/yourname).
+      3. Direct Checkout URLs (Lemon Squeezy / Polar.sh) via INTERNATIONAL_CHECKOUT_URL_MONTH / _YEAR.
+      4. Stripe Checkout Session via STRIPE_SECRET_KEY.
     Returns {checkout_url} — redirect user there.
     """
     is_year = (payload.period or "month").lower() == "year"
+    usd_str = f"{(_STRIPE_PRO_YEAR_CENTS if is_year else _STRIPE_PRO_MONTH_CENTS) / 100:.2f}"
+
+    # 1. PayPal Orders v2 REST API (100% automatic verification & upgrade)
+    pp_client_id = os.getenv("PAYPAL_CLIENT_ID", "").strip()
+    pp_secret = os.getenv("PAYPAL_CLIENT_SECRET", "").strip()
+    if pp_client_id and pp_secret:
+        import httpx
+        access_token = await _paypal_access_token(pp_client_id, pp_secret)
+        ret_base = (payload.cancel_url or f"{_FRONTEND_URL}/pricing").split("?")[0]
+        return_url = f"{ret_base}?paypal_capture=1&period={'year' if is_year else 'month'}"
+        cancel_url = f"{ret_base}?canceled=1"
+        order_body = {
+            "intent": "CAPTURE",
+            "purchase_units": [
+                {
+                    "custom_id": f"{user['id']}:{'year' if is_year else 'month'}",
+                    "description": f"VidGrab Pro ({'Yearly - 365 days' if is_year else 'Monthly - 30 days'})",
+                    "amount": {
+                        "currency_code": "USD",
+                        "value": usd_str,
+                    },
+                }
+            ],
+            "application_context": {
+                "brand_name": "VidGrab",
+                "user_action": "PAY_NOW",
+                "return_url": return_url,
+                "cancel_url": cancel_url,
+            },
+        }
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.post(
+                f"{_paypal_base_url()}/v2/checkout/orders",
+                json=order_body,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+            )
+            if r.status_code not in (200, 201):
+                raise HTTPException(status_code=502, detail=f"Không tạo được đơn PayPal: {r.text[:160]}")
+            odata = r.json()
+            approve_url = next((lnk["href"] for lnk in odata.get("links", []) if lnk.get("rel") == "approve"), None)
+            if not approve_url:
+                raise HTTPException(status_code=502, detail="PayPal không trả về đường dẫn thanh toán.")
+            return {"checkout_url": approve_url, "session_id": odata.get("id", "")}
+
+    # 2. Simple PayPal.me link (zero API keys needed)
+    paypal_me = os.getenv("PAYPAL_ME_URL", "").strip().rstrip("/")
+    if paypal_me:
+        amt = "49USD" if is_year else "4.99USD"
+        return {"checkout_url": f"{paypal_me}/{amt}", "session_id": f"ppme_{user['id'][:8]}"}
+
+    # 3. Direct Checkout URL (Lemon Squeezy / Polar.sh)
     direct_url = (
         os.getenv("INTERNATIONAL_CHECKOUT_URL_YEAR", "").strip()
         if is_year
@@ -243,6 +320,69 @@ async def create_checkout_session(
         raise HTTPException(status_code=500, detail=f"Không tạo được phiên thanh toán: {str(e)[:200]}")
 
     return {"checkout_url": session.url, "session_id": session.id}
+
+
+@router.post("/paypal-capture")
+async def paypal_capture(
+    payload: PayPalCaptureRequest,
+    user: Dict[str, Any] = Depends(get_required_user),
+):
+    """
+    Capture an approved PayPal Order on return from PayPal Checkout,
+    verify COMPLETED status, and automatically upgrade the user to Pro.
+    """
+    import httpx
+    pp_client_id = os.getenv("PAYPAL_CLIENT_ID", "").strip()
+    pp_secret = os.getenv("PAYPAL_CLIENT_SECRET", "").strip()
+    if not (pp_client_id and pp_secret):
+        raise HTTPException(status_code=503, detail="PayPal API not configured")
+
+    order_id = (payload.order_id or "").strip()
+    if not order_id:
+        raise HTTPException(status_code=400, detail="Missing order_id")
+
+    access_token = await _paypal_access_token(pp_client_id, pp_secret)
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.post(
+            f"{_paypal_base_url()}/v2/checkout/orders/{order_id}/capture",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+        )
+        if r.status_code not in (200, 201):
+            # Also check if already captured
+            g = await client.get(
+                f"{_paypal_base_url()}/v2/checkout/orders/{order_id}",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            odata = g.json() if g.status_code == 200 else {}
+        else:
+            odata = r.json()
+
+    if odata.get("status") != "COMPLETED":
+        raise HTTPException(status_code=400, detail=f"Thanh toán PayPal chưa hoàn tất (status={odata.get('status')}).")
+
+    units = odata.get("purchase_units") or []
+    custom_id = ""
+    if units:
+        custom_id = units[0].get("custom_id") or ""
+        if not custom_id:
+            captures = ((units[0].get("payments") or {}).get("captures") or [])
+            if captures:
+                custom_id = captures[0].get("custom_id") or ""
+
+    period = "year" if custom_id.endswith(":year") else "month"
+    days = 365 if period == "year" else 30
+    exp = int((datetime.now(timezone.utc) + timedelta(days=days)).timestamp())
+    _upgrade_user(user["id"], f"paypal_{order_id}", exp)
+    try:
+        from app.api.referrals import reward_referrer_on_pro_upgrade
+        reward_referrer_on_pro_upgrade(user["id"])
+    except Exception:
+        pass
+
+    return {"success": True, "tier": "pro", "period": period, "order_id": order_id}
 
 
 @router.post("/lemonsqueezy-webhook")

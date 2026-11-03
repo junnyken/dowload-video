@@ -40,8 +40,9 @@
   "perYear": "year",
   "perMonth": "month",
   "resetNote": "Daily downloads reset at {{time}} UTC.",
-  "stripeTitle": "Pay with Card via Stripe (Visa, Mastercard, Apple Pay)",
-  "stripeIntro": "Instant automatic Pro activation with international cards. Cancel renewal anytime.",
-  "stripeBtn": "Pay with Card (${{usd}} / {{period}})",
-  "stripeLoading": "Redirecting to Stripe Checkout…"
+  "stripeTitle": "Pay with PayPal / International Card (Visa, Mastercard)",
+  "stripeIntro": "Instant Pro upgrade via PayPal or international debit/credit card (USD).",
+  "stripeBtn": "Pay with PayPal / Card (${{usd}} / {{period}})",
+  "stripeLoading": "Opening PayPal Checkout…",
+  "paypalSuccess": "PayPal payment completed! Your account has been upgraded to Pro."
 }
