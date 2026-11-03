@@ -1,0 +1,118 @@
+{
+  "title": "Upgrade to VidGrab Pro",
+  "subtitle": "Choose a plan and payment method that works for you",
+  "back": "Go back",
+
+  "step": {
+    "plan": "Choose Plan",
+    "method": "Payment Method",
+    "payment": "Payment"
+  },
+
+  "plan": {
+    "title": "Choose a Pro plan",
+    "month": {
+      "name": "Pro Monthly",
+      "price": "49,000₫",
+      "period": "/month",
+      "desc": "Try Pro for 30 days"
+    },
+    "year": {
+      "name": "Pro Yearly",
+      "price": "399,000₫",
+      "period": "/year",
+      "desc": "Save 32% — best for long-term users",
+      "badge": "Save 32%"
+    },
+    "features": {
+      "title": "All Pro features",
+      "items": [
+        "Unlimited downloads",
+        "Unlimited AI analysis",
+        "4K / 8K quality",
+        "Playlist & channel downloads",
+        "Priority queue",
+        "Priority support"
+      ]
+    },
+    "continue": "Continue"
+  },
+
+  "method": {
+    "title": "Choose payment method",
+    "vietqr": {
+      "name": "Bank Transfer (VietQR)",
+      "desc": "QR code — Auto-confirmed within minutes",
+      "tag": "Popular"
+    },
+    "paypal": {
+      "name": "PayPal",
+      "desc": "International payment via PayPal",
+      "tag": "International"
+    },
+    "continue": "Pay Now"
+  },
+
+  "vietqr": {
+    "title": "Bank Transfer",
+    "subtitle": "Scan QR code or transfer manually",
+    "scanQr": "Scan QR code to pay",
+    "orManual": "Or transfer manually",
+    "bank": "Bank",
+    "accountNo": "Account number",
+    "accountHolder": "Account holder",
+    "amount": "Amount",
+    "content": "Transfer content",
+    "contentNote": "⚠ Enter the exact content for automatic confirmation",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "waiting": "Waiting for payment...",
+    "waitingDesc": "The system checks automatically every 5 seconds. No further action needed after transferring.",
+    "expires": "Time remaining",
+    "expired": "Order has expired",
+    "expiredDesc": "Please create a new order to continue.",
+    "newOrder": "Create new order",
+    "cancel": "Cancel order",
+    "cancelConfirm": "Are you sure you want to cancel this order?",
+    "canceling": "Canceling..."
+  },
+
+  "paypal": {
+    "redirecting": "Redirecting to PayPal...",
+    "redirectDesc": "You will be redirected to PayPal to complete your payment.",
+    "capturing": "Confirming PayPal payment...",
+    "captureDesc": "Please wait a moment."
+  },
+
+  "success": {
+    "title": "Payment Successful! 🎉",
+    "desc": "Your Pro plan has been activated. Thank you!",
+    "goToBilling": "View your plan",
+    "continue": "Continue browsing"
+  },
+
+  "error": {
+    "loadPlans": "Could not load plans. Please try again.",
+    "createOrder": "Could not create order. Please try again.",
+    "capturePaypal": "Could not confirm PayPal payment.",
+    "cancelOrder": "Could not cancel the order.",
+    "generic": "An error occurred. Please try again."
+  },
+
+  "countdown": {
+    "hours": "h",
+    "minutes": "m",
+    "seconds": "s"
+  },
+
+  "status": {
+    "pending": "Pending payment",
+    "paid": "Paid",
+    "expired": "Expired",
+    "canceled": "Canceled",
+    "underpaid": "Underpaid"
+  },
+
+  "loginRequired": "Please log in to proceed with payment.",
+  "login": "Log in"
+}

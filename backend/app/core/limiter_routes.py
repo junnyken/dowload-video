@@ -57,6 +57,10 @@ EXEMPT_PATHS = [
     (r"^/api/v1/user/usage$", ("GET",), "usage widget per user"),
     (r"^/api/v1/transcript-asr/(jobs|quota)$", ("GET",), "ASR page 2 calls / 5 s per user"),
     (r"^/api/v1/transcript-translate/jobs$", ("GET",), "translate page 1 call / 5 s per user"),
+    # Webhooks: own authentication + idempotency, don't count towards IP limit.
+    (r"^/api/v1/payments/sepay/webhook$", ("POST",), "SePay webhook (HMAC verified)"),
+    (r"^/api/v1/payments/paypal/webhook$", ("POST",), "PayPal webhook (signature verified)"),
+    (r"^/api/v1/payments/webhook$", ("POST",), "Stripe webhook (signature verified)"),
 ]
 _EXEMPT_RE = [(re.compile(p), m) for p, m, _ in EXEMPT_PATHS]
 

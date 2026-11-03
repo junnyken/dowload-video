@@ -42,6 +42,7 @@ import DownloadPage from './pages/DownloadPage';
 import PlatformsPage from './pages/PlatformsPage';
 import PricingPage from './pages/PricingPage';
 import BillingPage from './pages/BillingPage';
+import CheckoutPage from './pages/CheckoutPage';
 import SubtitleHubPage from './pages/SubtitleHubPage';
 import PlatformLandingPage from './pages/PlatformLandingPage';
 import { platformPages } from './content/platformPages';
@@ -91,6 +92,7 @@ const PATH_MAP = {
   '/share-target':        'landing',
   '/pricing':             'pricing',
   '/billing':             'billing',
+  '/checkout':            'checkout',
   '/active':              'active',
   '/search':              'search',
 };
@@ -608,6 +610,7 @@ function AppInner() {
           <PlatformsPage />
         )}
         {view === 'pricing' && <PricingPage />}
+        {view === 'checkout' && <CheckoutPage />}
         {view === 'billing' && (
           <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
             <BillingPage onNavigate={navigateTo} />

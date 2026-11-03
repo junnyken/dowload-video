@@ -3,6 +3,7 @@ import {
   HeartPulse, Funnel, Radio, Users, Settings, BookOpen, History, ScrollText,
   Gauge, Siren, Play, Building2, KeyRound, Webhook, Wallet, Sparkles,
   SlidersHorizontal, Shield, Activity, Mic, CircleDollarSign, MonitorDown, Layers, FileX, Ruler, Power, Stethoscope, Cpu, Database, MonitorSmartphone,
+  CreditCard,
   type LucideIcon,
 } from 'lucide-react'
 import type { AdminRole } from '../types/admin.types'
@@ -80,6 +81,8 @@ const NAV_MANAGE: NavItem[] = [
   { href: '/vid-admin/takedown', label: 'Yêu cầu gỡ nội dung', icon: FileX, minRole: 'operator' },
   { href: '/vid-admin/playbooks', label: 'Playbooks', icon: BookOpen, minRole: 'operator', hidden: true },
   { href: '/vid-admin/automation-history', label: 'Automation', icon: History, minRole: 'viewer' },
+  // wording: BA review — auto checkout orders (VietQR/PayPal)
+  { href: '/vid-admin/orders', label: 'Đơn thanh toán', icon: CreditCard, minRole: 'operator' },
 ]
 
 // The partner/multi-tenant surface. Tenants, API Keys, Webhooks and Usage are

@@ -40,7 +40,8 @@ CACHE_TTL_SEC = 3.0
 WATCH_KILL = "watch_kill_switch"
 DESKTOP_UPDATER = "desktop_updater"
 OVERLOAD_GUARD = "overload_guard"   # task #6397, env OVERLOAD_GUARD_ENABLED
-OVERRIDABLE = frozenset({WATCH_KILL, DESKTOP_UPDATER, OVERLOAD_GUARD})
+PAYMENTS_AUTO = "payments_auto"     # auto VietQR/PayPal checkout, env PAYMENTS_AUTO_ENABLED
+OVERRIDABLE = frozenset({WATCH_KILL, DESKTOP_UPDATER, OVERLOAD_GUARD, PAYMENTS_AUTO})
 
 _MISS = object()
 _cache: dict[str, tuple[float, Optional[bool]]] = {}

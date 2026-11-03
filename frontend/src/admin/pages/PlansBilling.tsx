@@ -36,6 +36,8 @@ interface PlanSettings {
   rapidapi_proxy_secret: string
   rapidapi_url: string
   paypal_me_url: string
+  bank_bin: string
+  sepay_webhook_secret: string
 }
 
 const RAPIDAPI_STUDIO_URL = 'https://rapidapi.com/studio/api_b8b4154e-99d8-404b-a85c-4ac6e14f63cd/publish/general'
@@ -183,6 +185,34 @@ export function PlansSettingsCard() {
                 onChange={e => set('paypal_me_url', e.target.value)}
               />
             </label>
+          </div>
+
+          {/* ── SePay VietQR Tự động ── */}
+          <h4 className="text-sm font-semibold text-fg-1 mt-4 mb-2">🏦 SePay — Tự động xác nhận chuyển khoản VietQR</h4>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs text-fg-2">🏛️ Mã BIN ngân hàng (VietQR)
+              <input
+                value={form.bank_bin || ''}
+                maxLength={20}
+                placeholder="970416 (ACB)"
+                className={inputCls}
+                onChange={e => set('bank_bin', e.target.value)}
+              />
+            </label>
+            <label className="text-xs text-fg-2">🔐 SePay Webhook Secret (HMAC-SHA256)
+              <input
+                value={form.sepay_webhook_secret || ''}
+                maxLength={240}
+                placeholder="Dán secret từ SePay Dashboard"
+                className={inputCls}
+                type="password"
+                onChange={e => set('sepay_webhook_secret', e.target.value)}
+              />
+            </label>
+            <div className="sm:col-span-2 text-xs text-fg-3">
+              <p>📋 Webhook URL cho SePay: <code className="bg-surface-2 px-1 py-0.5 rounded text-fg-2">https://dvid-api.vibe1.tinhgon.xyz/api/v1/payments/sepay/webhook</code></p>
+              <p className="mt-1">Sự kiện: <b>In</b> (tiền vào) · Xác thực: <b>HMAC-SHA256</b> · Lọc nội dung: <b>VGP</b></p>
+            </div>
           </div>
         </div>
       )}

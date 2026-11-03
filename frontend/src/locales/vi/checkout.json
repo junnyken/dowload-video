@@ -1,0 +1,118 @@
+{
+  "title": "Thanh toán VidGrab Pro",
+  "subtitle": "Chọn gói và phương thức thanh toán phù hợp với bạn",
+  "back": "Quay lại",
+
+  "step": {
+    "plan": "Chọn gói",
+    "method": "Phương thức",
+    "payment": "Thanh toán"
+  },
+
+  "plan": {
+    "title": "Chọn gói Pro",
+    "month": {
+      "name": "Pro Tháng",
+      "price": "49.000₫",
+      "period": "/tháng",
+      "desc": "Trải nghiệm Pro trong 30 ngày"
+    },
+    "year": {
+      "name": "Pro Năm",
+      "price": "399.000₫",
+      "period": "/năm",
+      "desc": "Tiết kiệm 32% — tốt nhất cho người dùng lâu dài",
+      "badge": "Tiết kiệm 32%"
+    },
+    "features": {
+      "title": "Tất cả tính năng Pro",
+      "items": [
+        "Download không giới hạn",
+        "Phân tích AI không giới hạn",
+        "Chất lượng 4K / 8K",
+        "Tải playlist & kênh",
+        "Ưu tiên hàng đợi",
+        "Hỗ trợ ưu tiên"
+      ]
+    },
+    "continue": "Tiếp tục"
+  },
+
+  "method": {
+    "title": "Chọn phương thức thanh toán",
+    "vietqr": {
+      "name": "Chuyển khoản ngân hàng",
+      "desc": "QR code — Xác nhận tự động trong vài phút",
+      "tag": "Phổ biến"
+    },
+    "paypal": {
+      "name": "PayPal",
+      "desc": "Thanh toán quốc tế qua PayPal",
+      "tag": "Quốc tế"
+    },
+    "continue": "Thanh toán ngay"
+  },
+
+  "vietqr": {
+    "title": "Chuyển khoản ngân hàng",
+    "subtitle": "Quét mã QR hoặc chuyển khoản thủ công",
+    "scanQr": "Quét mã QR để thanh toán",
+    "orManual": "Hoặc chuyển khoản thủ công",
+    "bank": "Ngân hàng",
+    "accountNo": "Số tài khoản",
+    "accountHolder": "Chủ tài khoản",
+    "amount": "Số tiền",
+    "content": "Nội dung CK",
+    "contentNote": "⚠ Nhập đúng nội dung để hệ thống xác nhận tự động",
+    "copy": "Sao chép",
+    "copied": "Đã sao chép!",
+    "waiting": "Đang chờ thanh toán...",
+    "waitingDesc": "Hệ thống tự động kiểm tra mỗi 5 giây. Bạn không cần làm gì thêm sau khi chuyển khoản.",
+    "expires": "Thời hạn còn",
+    "expired": "Đơn hàng đã hết hạn",
+    "expiredDesc": "Vui lòng tạo đơn mới để tiếp tục.",
+    "newOrder": "Tạo đơn mới",
+    "cancel": "Huỷ đơn",
+    "cancelConfirm": "Bạn có chắc muốn huỷ đơn hàng này?",
+    "canceling": "Đang huỷ..."
+  },
+
+  "paypal": {
+    "redirecting": "Đang chuyển đến PayPal...",
+    "redirectDesc": "Bạn sẽ được chuyển đến PayPal để hoàn tất thanh toán.",
+    "capturing": "Đang xác nhận thanh toán PayPal...",
+    "captureDesc": "Vui lòng chờ trong giây lát."
+  },
+
+  "success": {
+    "title": "Thanh toán thành công! 🎉",
+    "desc": "Gói Pro đã được kích hoạt. Cảm ơn bạn!",
+    "goToBilling": "Xem gói của bạn",
+    "continue": "Tiếp tục sử dụng"
+  },
+
+  "error": {
+    "loadPlans": "Không tải được danh sách gói. Vui lòng thử lại.",
+    "createOrder": "Không tạo được đơn hàng. Vui lòng thử lại.",
+    "capturePaypal": "Không xác nhận được thanh toán PayPal.",
+    "cancelOrder": "Không thể huỷ đơn hàng.",
+    "generic": "Đã xảy ra lỗi. Vui lòng thử lại."
+  },
+
+  "countdown": {
+    "hours": "giờ",
+    "minutes": "phút",
+    "seconds": "giây"
+  },
+
+  "status": {
+    "pending": "Chờ thanh toán",
+    "paid": "Đã thanh toán",
+    "expired": "Hết hạn",
+    "canceled": "Đã huỷ",
+    "underpaid": "Thiếu tiền"
+  },
+
+  "loginRequired": "Bạn cần đăng nhập để thanh toán.",
+  "login": "Đăng nhập"
+}

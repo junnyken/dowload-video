@@ -33,6 +33,7 @@ import DeviceLinksPage from './pages/DeviceLinksPage'
 import PlatformHealthPage from './pages/PlatformHealthPage'
 import CapacityPage from './pages/CapacityPage'
 import DatabasePage from './pages/DatabasePage'
+import OrdersPage from './pages/OrdersPage'
 import { PlatformsHubPage, QueueHubPage, AutomationHubPage } from './pages/MergedPages'
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -71,6 +72,7 @@ export function AdminRoutes() {
       <Route path="/vid-admin/capacity"           element={<Shell><CapacityPage /></Shell>} />
       <Route path="/vid-admin/database"           element={<Shell><DatabasePage /></Shell>} />
       <Route path="/vid-admin/metrics"            element={<Shell><MetricsPage /></Shell>} />
+      <Route path="/vid-admin/orders"             element={<Shell><OrdersPage /></Shell>} />
       <Route path="/vid-admin/audit"     element={<Shell><AuditLogPage /></Shell>} />
 
       {/* Phase 3+ — Analytics now live */}

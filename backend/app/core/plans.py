@@ -38,6 +38,8 @@ _TEXT_FIELDS = (
     "rapidapi_proxy_secret",
     "rapidapi_url",
     "paypal_me_url",
+    "bank_bin",
+    "sepay_webhook_secret",
 )
 _TEXT_MAX = 240
 
@@ -236,4 +238,23 @@ def build_plans() -> Dict[str, Any]:
             "activation": "manual",   # an admin turns Pro on after the transfer arrives
         },
         "daily_reset_utc": "00:00",
+        "auto_checkout": _auto_checkout_info(),
+    }
+
+
+def _auto_checkout_info() -> Dict[str, Any]:
+    """Info about the auto checkout system for the frontend."""
+    from app.core import payments_auto  # noqa: PLC0415
+    if not payments_auto.enabled():
+        return {"enabled": False}
+    s = get_settings()
+    bank_ready = bool(s.get("bank_account"))
+    paypal_ready = bool(
+        os.getenv("PAYPAL_CLIENT_ID", "").strip()
+        and os.getenv("PAYPAL_CLIENT_SECRET", "").strip()
+    )
+    return {
+        "enabled": True,
+        "vietqr": bank_ready,
+        "paypal": paypal_ready,
     }

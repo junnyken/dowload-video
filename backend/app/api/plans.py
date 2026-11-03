@@ -38,6 +38,8 @@ class SettingsBody(BaseModel):
     rapidapi_proxy_secret: Optional[str] = None
     rapidapi_url: Optional[str] = None
     paypal_me_url: Optional[str] = None
+    bank_bin: Optional[str] = None
+    sepay_webhook_secret: Optional[str] = None
 
 
 def _profile(user_id: str) -> Dict[str, Any]:

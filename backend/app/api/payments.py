@@ -533,6 +533,143 @@ async def stripe_webhook(request: Request):
 
 
 # ══════════════════════════════════════════════════════════════════════
+# POST /sepay/webhook  (SePay VietQR bank transfer notifications)
+# ══════════════════════════════════════════════════════════════════════
+
+@router.post("/sepay/webhook")
+async def sepay_webhook(request: Request):
+    """
+    Receive SePay webhook for incoming bank transfers (VietQR/ACB).
+    Verifies HMAC-SHA256 signature, matches VGP code, activates order.
+    Always returns 200 for verified events (SePay retries on non-200).
+    """
+    # Check if SePay is configured
+    from app.core.sepay_webhook import _secret  # noqa: PLC0415
+    if not _secret():
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    body = await request.body()
+    headers = {k.lower(): v for k, v in request.headers.items()}
+
+    from app.core.sepay_webhook import verify, handle  # noqa: PLC0415
+
+    # Quick signature check — reject before parsing
+    valid, err = verify(body, headers)
+    if not valid:
+        if err == "no_webhook_secret_configured":
+            raise HTTPException(status_code=404, detail="Not Found")
+        raise HTTPException(status_code=401, detail=err)
+
+    # Full handling (parse + match + activate)
+    result = handle(body, headers)
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════════
+# POST /paypal/webhook  (PayPal server-to-server webhook)
+# ══════════════════════════════════════════════════════════════════════
+
+@router.post("/paypal/webhook")
+async def paypal_webhook(request: Request):
+    """
+    Receive PayPal webhook events (CHECKOUT.ORDER.COMPLETED,
+    PAYMENT.CAPTURE.COMPLETED). Safety net for users who close browser
+    before returning to the site.
+
+    Verification: calls PayPal API to verify webhook signature.
+    """
+    import httpx
+
+    pp_client_id = os.getenv("PAYPAL_CLIENT_ID", "").strip()
+    pp_secret = os.getenv("PAYPAL_CLIENT_SECRET", "").strip()
+    pp_webhook_id = os.getenv("PAYPAL_WEBHOOK_ID", "").strip()
+
+    if not (pp_client_id and pp_secret and pp_webhook_id):
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    body = await request.body()
+
+    # Verify with PayPal API
+    access_token = await _paypal_access_token(pp_client_id, pp_secret)
+    verify_body = {
+        "auth_algo": request.headers.get("paypal-auth-algo", ""),
+        "cert_url": request.headers.get("paypal-cert-url", ""),
+        "transmission_id": request.headers.get("paypal-transmission-id", ""),
+        "transmission_sig": request.headers.get("paypal-transmission-sig", ""),
+        "transmission_time": request.headers.get("paypal-transmission-time", ""),
+        "webhook_id": pp_webhook_id,
+        "webhook_event": json.loads(body),
+    }
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        vr = await client.post(
+            f"{_paypal_base_url()}/v1/notifications/verify-webhook-signature",
+            json=verify_body,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+        )
+        if vr.status_code != 200:
+            raise HTTPException(status_code=401, detail="PayPal verification failed")
+        vdata = vr.json()
+        if vdata.get("verification_status") != "SUCCESS":
+            raise HTTPException(status_code=401, detail="PayPal signature invalid")
+
+    event = json.loads(body)
+    event_type = event.get("event_type", "")
+    resource = event.get("resource", {})
+
+    # Idempotency
+    event_id = event.get("id", "")
+    is_new = _record_payment_event(event_id, event_type, {"source": "paypal_webhook"})
+    if not is_new:
+        return {"received": True, "duplicate": True}
+
+    if event_type in ("CHECKOUT.ORDER.COMPLETED", "PAYMENT.CAPTURE.COMPLETED"):
+        # Extract custom_id which has format: user_id:order_id:plan_id
+        custom_id = ""
+        if event_type == "CHECKOUT.ORDER.COMPLETED":
+            units = resource.get("purchase_units", [])
+            if units:
+                custom_id = units[0].get("custom_id", "") or ""
+        elif event_type == "PAYMENT.CAPTURE.COMPLETED":
+            custom_id = resource.get("custom_id", "") or ""
+
+        if custom_id and ":" in custom_id:
+            parts = custom_id.split(":")
+            if len(parts) >= 2:
+                user_id = parts[0]
+                order_id = parts[1] if len(parts) > 1 else ""
+
+                if order_id:
+                    # Activate via payment_orders
+                    try:
+                        from app.core.payment_orders import activate_order  # noqa: PLC0415
+                        paid_amount = 0
+                        try:
+                            amt_obj = resource.get("amount", {})
+                            paid_amount = int(float(amt_obj.get("value", "0")) * 100)
+                        except Exception:
+                            paid_amount = 0
+
+                        activate_order(
+                            order_id=order_id,
+                            paid_amount=paid_amount or 99999,  # if can't parse, assume paid
+                            provider_ref=event_id,
+                            evidence={"provider": "paypal_webhook", "event_type": event_type},
+                        )
+                    except Exception as e:
+                        print(f"[PayPal Webhook] activate error: {e}")
+                else:
+                    # Legacy flow: upgrade directly
+                    _upgrade_user(user_id, f"paypal_wh_{event_id}", None)
+
+    _mark_payment_event_done(event_id)
+    return {"received": True, "type": event_type}
+
+
+# ══════════════════════════════════════════════════════════════════════
 # GET /billing-status  (authenticated)
 # ══════════════════════════════════════════════════════════════════════
 
