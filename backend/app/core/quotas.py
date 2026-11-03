@@ -120,6 +120,23 @@ def _today_utc_str() -> str:
 
 def _get_profile(user_id: str) -> Dict[str, Any]:
     """Fetch tier, billing_status, subscription_expiry in one query."""
+    if str(user_id or "").startswith("rapidapi:"):
+        rapid_user = str(user_id)[9:]
+        tier = "pro"
+        try:
+            from app.core.redis_client import get_redis  # noqa: PLC0415
+            cached = get_redis().get(f"rapidapi:tier:{rapid_user}")
+            if cached:
+                tier = cached.decode() if isinstance(cached, bytes) else str(cached)
+        except Exception:
+            pass
+        return {
+            "id": user_id,
+            "tier": tier,
+            "billing_status": "active" if tier != "free" else "none",
+            "subscription_expiry": None,
+            "grace_period_ends_at": None,
+        }
     try:
         supabase = get_supabase_client()
         res = (

@@ -113,57 +113,85 @@ async def create_order(
 async def _create_paypal_order(user: Dict, plan: Dict, order: Dict):
     """Create PayPal Order for the given plan, linking to our payment_order."""
     import httpx
+    from urllib.parse import urlencode
+
+    frontend = os.getenv("FRONTEND_URL", "").split(",")[0].strip().rstrip("/") or "https://dowloadvideo.io.vn"
+    api_base = os.getenv("PUBLIC_API_URL", "").strip().rstrip("/") or "https://dvid-api.vibe1.tinhgon.xyz"
+    return_url = f"{frontend}/checkout?order_id={order['id']}&order={order['id']}&paypal_capture=1"
+    cancel_url = f"{frontend}/checkout?order_id={order['id']}&order={order['id']}&canceled=1"
+    usd_str = f"{plan['usd_cents'] / 100:.2f}"
+    custom_val = f"{user['id']}:{order['id']}:{plan['id']}"
 
     pp_client_id = os.getenv("PAYPAL_CLIENT_ID", "").strip()
     pp_secret = os.getenv("PAYPAL_CLIENT_SECRET", "").strip()
-    if not (pp_client_id and pp_secret):
-        raise HTTPException(status_code=503, detail="PayPal API not configured")
+    if pp_client_id and pp_secret:
+        from app.api.payments import _paypal_base_url, _paypal_access_token  # noqa: PLC0415
 
-    from app.api.payments import _paypal_base_url, _paypal_access_token  # noqa: PLC0415
-
-    access_token = await _paypal_access_token(pp_client_id, pp_secret)
-    usd_str = f"{plan['usd_cents'] / 100:.2f}"
-
-    frontend = os.getenv("FRONTEND_URL", "").split(",")[0].strip().rstrip("/") or "https://dowloadvideo.io.vn"
-    return_url = f"{frontend}/checkout?order_id={order['id']}&order={order['id']}&paypal_capture=1"
-    cancel_url = f"{frontend}/checkout?order_id={order['id']}&order={order['id']}&canceled=1"
-
-    body = {
-        "intent": "CAPTURE",
-        "purchase_units": [{
-            "custom_id": f"{user['id']}:{order['id']}:{plan['id']}",
-            "description": f"VidGrab {plan['name_en']}",
-            "amount": {"currency_code": "USD", "value": usd_str},
-        }],
-        "application_context": {
-            "brand_name": "VidGrab",
-            "user_action": "PAY_NOW",
-            "return_url": return_url,
-            "cancel_url": cancel_url,
-        },
-    }
-
-    async with httpx.AsyncClient(timeout=20) as client:
-        r = await client.post(
-            f"{_paypal_base_url()}/v2/checkout/orders",
-            json=body,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
+        access_token = await _paypal_access_token(pp_client_id, pp_secret)
+        body = {
+            "intent": "CAPTURE",
+            "purchase_units": [{
+                "custom_id": custom_val,
+                "invoice_id": order["code"],
+                "description": f"VidGrab {plan['name_en']} ({order['code']})",
+                "amount": {"currency_code": "USD", "value": usd_str},
+            }],
+            "application_context": {
+                "brand_name": "VidGrab",
+                "user_action": "PAY_NOW",
+                "return_url": return_url,
+                "cancel_url": cancel_url,
             },
-        )
-        if r.status_code not in (200, 201):
-            raise HTTPException(status_code=502, detail=f"PayPal: {r.text[:120]}")
-        odata = r.json()
+        }
 
-    approve_url = next(
-        (lnk["href"] for lnk in odata.get("links", []) if lnk.get("rel") == "approve"),
-        None,
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.post(
+                f"{_paypal_base_url()}/v2/checkout/orders",
+                json=body,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+            )
+            if r.status_code in (200, 201):
+                odata = r.json()
+                approve_url = next(
+                    (lnk["href"] for lnk in odata.get("links", []) if lnk.get("rel") == "approve"),
+                    None,
+                )
+                if approve_url:
+                    return approve_url, odata.get("id", "")
+
+    # Fallback: PayPal Email (Webscr Checkout + IPN auto-upgrade) or PayPal.Me
+    from app.core.plans import get_settings as _get_plan_settings  # noqa: PLC0415
+    paypal_me = (
+        os.getenv("PAYPAL_ME_URL", "").strip()
+        or (_get_plan_settings().get("paypal_me_url") or "").strip()
     )
-    if not approve_url:
-        raise HTTPException(status_code=502, detail="PayPal no approve URL")
+    if not paypal_me:
+        raise HTTPException(status_code=503, detail="PayPal not configured")
 
-    return approve_url, odata.get("id", "")
+    if "@" in paypal_me and not paypal_me.startswith("http"):
+        qs = urlencode({
+            "cmd": "_xclick",
+            "business": paypal_me,
+            "item_name": f"VidGrab {plan['name_en']} - {order['code']}",
+            "item_number": order["code"],
+            "invoice": order["code"],
+            "custom": custom_val,
+            "amount": usd_str,
+            "currency_code": "USD",
+            "no_shipping": "1",
+            "notify_url": f"{api_base}/api/v1/payments/paypal/ipn",
+            "return": f"{frontend}/checkout?order_id={order['id']}&order={order['id']}",
+            "cancel_return": cancel_url,
+        })
+        return f"https://www.paypal.com/cgi-bin/webscr?{qs}", f"ppemail_{order['code']}"
+
+    if not paypal_me.startswith("http"):
+        paypal_me = f"https://paypal.me/{paypal_me.lstrip('/')}"
+    paypal_me = paypal_me.rstrip("/")
+    return f"{paypal_me}/{usd_str}USD", f"ppme_{order['code']}"
 
 
 # ── POST /orders/{id}/capture — PayPal capture khi user quay về ─────

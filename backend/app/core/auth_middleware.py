@@ -299,11 +299,17 @@ def _lookup_rapidapi_request(request: Request) -> Optional[Dict[str, Any]]:
         tier = "team"
     else:
         tier = "pro"
+    uid = f"rapidapi:{rapid_user}"
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        get_redis().setex(f"rapidapi:tier:{rapid_user}", 86400, tier)
+    except Exception:
+        pass
     return {
-        "id":           f"rapidapi:{rapid_user}",
+        "id":           uid,
         "email":        f"{rapid_user}@rapidapi.marketplace",
         "tier":         tier,
-        "token":        f"rapidapi:{rapid_user}",
+        "token":        uid,
         "via_api_key":  True,
         "via_rapidapi": True,
     }

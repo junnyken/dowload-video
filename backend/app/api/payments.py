@@ -287,14 +287,21 @@ async def create_checkout_session(
             paypal_me = ""
     if paypal_me:
         if "@" in paypal_me and not paypal_me.startswith("http"):
-            # PayPal email entered: use standard PayPal webscr checkout link
+            # PayPal email entered: use standard PayPal webscr checkout link + IPN auto-upgrade
             from urllib.parse import urlencode
+            api_base = os.getenv("PUBLIC_API_URL", "").strip().rstrip("/") or "https://dvid-api.vibe1.tinhgon.xyz"
+            plan_code = "pro_year" if is_year else "pro_month"
             qs = urlencode({
                 "cmd": "_xclick",
                 "business": paypal_me,
-                "item_name": f"VidGrab Pro ({'Yearly' if is_year else 'Monthly'}) - {user['id'][:8]}",
+                "item_name": f"VidGrab Pro ({'Yearly - 365 days' if is_year else 'Monthly - 30 days'}) - {user['id'][:8]}",
+                "custom": f"{user['id']}::{plan_code}",
                 "amount": usd_str,
                 "currency_code": "USD",
+                "no_shipping": "1",
+                "notify_url": f"{api_base}/api/v1/payments/paypal/ipn",
+                "return": payload.success_url or f"{_FRONTEND_URL}/billing?success=1",
+                "cancel_return": payload.cancel_url or f"{_FRONTEND_URL}/pricing?canceled=1",
             })
             return {"checkout_url": f"https://www.paypal.com/cgi-bin/webscr?{qs}", "session_id": f"ppemail_{user['id'][:8]}"}
         if not paypal_me.startswith("http"):
@@ -697,6 +704,94 @@ async def paypal_webhook(request: Request):
 
     _mark_payment_event_done(event_id)
     return {"received": True, "type": event_type}
+
+
+# ══════════════════════════════════════════════════════════════════════
+# POST /paypal/ipn  (PayPal Instant Payment Notification for Email Checkout)
+# ══════════════════════════════════════════════════════════════════════
+
+@router.post("/paypal/ipn")
+async def paypal_ipn(request: Request):
+    """
+    Verify PayPal IPN callback with https://ipnpb.paypal.com/cgi-bin/webscr
+    (cmd=_notify-validate) so payments to the configured PayPal email
+    (e.g. thientrieu753@gmail.com) automatically activate Pro without needing
+    PayPal REST API credentials.
+    """
+    import httpx
+    from urllib.parse import parse_qs
+
+    raw_body = await request.body()
+    if not raw_body:
+        raise HTTPException(status_code=400, detail="Empty IPN payload")
+
+    mode = os.getenv("PAYPAL_MODE", "live").strip().lower()
+    ipn_url = (
+        "https://ipnpb.sandbox.paypal.com/cgi-bin/webscr"
+        if mode == "sandbox"
+        else "https://ipnpb.paypal.com/cgi-bin/webscr"
+    )
+    verify_payload = b"cmd=_notify-validate&" + raw_body
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        vr = await client.post(
+            ipn_url,
+            content=verify_payload,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "User-Agent": "VidGrab-IPN-Verification/1.0",
+            },
+        )
+        if vr.status_code != 200 or vr.text.strip() != "VERIFIED":
+            raise HTTPException(status_code=401, detail="IPN not verified by PayPal")
+
+    parsed = {k: v[0] for k, v in parse_qs(raw_body.decode("utf-8", errors="replace")).items() if v}
+    payment_status = (parsed.get("payment_status") or "").strip()
+    txn_id = (parsed.get("txn_id") or "").strip()
+    receiver = (parsed.get("business") or parsed.get("receiver_email") or "").strip().lower()
+    custom = (parsed.get("custom") or "").strip()
+    mc_gross = parsed.get("mc_gross") or parsed.get("payment_gross") or "0"
+
+    # Verify receiver email matches configured PayPal email
+    from app.core.plans import get_settings as _get_plan_settings  # noqa: PLC0415
+    expected_email = (
+        os.getenv("PAYPAL_ME_URL", "").strip()
+        or (_get_plan_settings().get("paypal_me_url") or "").strip()
+    ).lower()
+    if expected_email and "@" in expected_email and receiver and receiver != expected_email:
+        raise HTTPException(status_code=400, detail="Receiver email mismatch")
+
+    if payment_status.lower() != "completed" or not txn_id:
+        return {"received": True, "status": payment_status}
+
+    if not _record_payment_event(f"ipn_{txn_id}", "paypal.ipn.completed", {"txn_id": txn_id}):
+        return {"received": True, "duplicate": True}
+
+    try:
+        paid_cents = int(round(float(mc_gross) * 100))
+    except Exception:
+        paid_cents = 0
+
+    parts = custom.split(":") if ":" in custom else []
+    user_id = parts[0] if len(parts) >= 1 else ""
+    order_id = parts[1] if len(parts) >= 2 else ""
+    plan_id = parts[2] if len(parts) >= 3 else "pro_month"
+
+    from app.core.payment_orders import activate_order, _upgrade_user_pro  # noqa: PLC0415
+
+    if order_id:
+        activate_order(
+            order_id=order_id,
+            paid_amount=paid_cents or 499,
+            provider_ref=txn_id,
+            evidence={"provider": "paypal_ipn", "txn_id": txn_id},
+        )
+    elif user_id:
+        days = 365 if ("year" in plan_id or paid_cents >= 3900) else 30
+        _upgrade_user_pro(user_id, days, f"paypal_ipn_{txn_id}")
+
+    _mark_payment_event_done(f"ipn_{txn_id}")
+    return {"received": True, "verified": True, "txn_id": txn_id}
 
 
 # ══════════════════════════════════════════════════════════════════════

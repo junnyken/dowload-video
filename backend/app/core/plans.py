@@ -253,8 +253,9 @@ def _auto_checkout_info() -> Dict[str, Any]:
     s = get_settings()
     bank_ready = bool(s.get("bank_account"))
     paypal_ready = bool(
-        os.getenv("PAYPAL_CLIENT_ID", "").strip()
-        and os.getenv("PAYPAL_CLIENT_SECRET", "").strip()
+        (os.getenv("PAYPAL_CLIENT_ID", "").strip() and os.getenv("PAYPAL_CLIENT_SECRET", "").strip())
+        or (s.get("paypal_me_url") or "").strip()
+        or os.getenv("PAYPAL_ME_URL", "").strip()
     )
     return {
         "enabled": True,

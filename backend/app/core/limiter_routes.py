@@ -60,6 +60,7 @@ EXEMPT_PATHS = [
     # Webhooks: own authentication + idempotency, don't count towards IP limit.
     (r"^/api/v1/payments/sepay/webhook$", ("POST",), "SePay webhook (HMAC verified)"),
     (r"^/api/v1/payments/paypal/webhook$", ("POST",), "PayPal webhook (signature verified)"),
+    (r"^/api/v1/payments/paypal/ipn$", ("POST",), "PayPal IPN (verified with ipnpb.paypal.com)"),
     (r"^/api/v1/payments/webhook$", ("POST",), "Stripe webhook (signature verified)"),
 ]
 _EXEMPT_RE = [(re.compile(p), m) for p, m, _ in EXEMPT_PATHS]
