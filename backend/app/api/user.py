@@ -162,8 +162,9 @@ async def get_usage(request: Request, user: Dict[str, Any] = Depends(get_require
     except Exception:
         tier = "free"
 
+    from app.core.quotas import platform_limit_for_tier
     perms = get_tier_permissions(tier)
-    daily_limit = perms["daily_limit"]   # 30 free / 200 pro
+    daily_limit = platform_limit_for_tier(tier)   # 20 free / 100 pro
 
     # What actually limits downloads since 2026-10-06: N per PLATFORM per UTC
     # day. `platform_quota` is the full picture; `used`/`limit` are the

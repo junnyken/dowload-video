@@ -197,8 +197,8 @@ def get_tg_user_info(
     except Exception:
         downloads_today = 0
 
-    from app.core.quotas import PRO_DAILY_LIMIT, FREE_DAILY_LIMIT
-    daily_limit = PRO_DAILY_LIMIT if tier == "pro" else FREE_DAILY_LIMIT
+    from app.core.quotas import platform_limit_for_tier
+    daily_limit = platform_limit_for_tier(tier)
 
     return {
         "linked":          True,

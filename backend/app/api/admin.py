@@ -1244,7 +1244,7 @@ async def list_accounts(
             except Exception:
                 pass
 
-        from app.core.quotas import TIER_PERMISSIONS
+        from app.core.quotas import TIER_PERMISSIONS, platform_limit_for_tier
         accounts = [{
             "user_id":         r.get("id"),
             "email":           r.get("email"),
@@ -1255,9 +1255,7 @@ async def list_accounts(
             "plan_name":       r.get("plan_name"),
             "created_at":      r.get("created_at"),
             "downloads_today": usage_by_id.get(r.get("id"), 0),
-            "daily_limit":     TIER_PERMISSIONS.get(
-                                   (r.get("tier") or "free"), TIER_PERMISSIONS["free"]
-                               )["daily_limit"],
+            "daily_limit":     platform_limit_for_tier(r.get("tier") or "free"),
         } for r in rows]
 
         return {
