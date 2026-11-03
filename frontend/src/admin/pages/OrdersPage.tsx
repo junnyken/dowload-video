@@ -490,7 +490,7 @@ export default function OrdersPage() {
       <div className="rounded-card border border-accent/20 bg-accent-soft p-4 space-y-2">
         <h3 className="text-xs font-semibold text-fg flex items-center gap-1.5">📡 Webhook SePay</h3>
         <div className="text-[10px] text-fg-muted space-y-1 font-mono">
-          <p><span className="text-fg-2 font-bold">URL:</span> <code className="bg-surface px-1 rounded">https://dowloadvideo.io.vn/api/v1/payments/sepay/webhook</code></p>
+          <p><span className="text-fg-2 font-bold">URL:</span> <code className="bg-surface px-1 rounded">https://dvid-api.vibe1.tinhgon.xyz/api/v1/payments/sepay/webhook</code></p>
           <p><span className="text-fg-2 font-bold">Method:</span> POST · <span className="text-fg-2 font-bold">Events:</span> In (tiền vào) · <span className="text-fg-2 font-bold">Auth:</span> HMAC-SHA256</p>
           <p><span className="text-fg-2 font-bold">Lọc nội dung:</span> VGP (chỉ nhận giao dịch có mã VGP)</p>
         </div>

@@ -54,7 +54,7 @@ function InfoRow({ label, value, copy }) {
   );
 }
 
-function PaymentSection({ pay, pro, period }) {
+function PaymentSection({ pay, pro, period, autoCheckout }) {
   const { t } = useTranslation('pricing');
   const lang = useLang();
   const { isAuthenticated, session } = useAuth();
@@ -196,8 +196,30 @@ function PaymentSection({ pay, pro, period }) {
   }
 
   const isPro = me?.tier === 'pro';
+  const checkoutHref = `${lang === 'en' ? '/en' : ''}/checkout`;
   return (
     <section className={box} aria-labelledby="pay-h">
+      {autoCheckout?.enabled && (
+        <div className="mb-6 pb-6 border-b border-line flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h3 className="text-base font-bold text-fg flex items-center gap-2 mb-1">
+              ⚡ {lang === 'en' ? 'Instant Automated Checkout (VietQR & PayPal)' : 'Thanh toán tự động bằng QR Code & PayPal'}
+            </h3>
+            <p className="text-sm text-fg-muted">
+              {lang === 'en'
+                ? 'Generate your dynamic VietQR code or pay with PayPal — Pro activates automatically within seconds!'
+                : 'Tạo mã VietQR động hoặc thanh toán qua PayPal — hệ thống tự động nâng cấp Pro ngay khi nhận tiền!'}
+            </p>
+          </div>
+          <a
+            href={checkoutHref}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 min-h-11 rounded-xl bg-accent text-accent-fg text-sm font-semibold hover:opacity-90 transition shrink-0"
+          >
+            <CreditCard className="w-4 h-4" />
+            {lang === 'en' ? 'Go to Auto Checkout →' : 'Mở trang Thanh toán tự động →'}
+          </a>
+        </div>
+      )}
       {stripeBlock}
       <h2 id="pay-h" className="text-lg font-bold text-fg mb-1">{t('payProTitle')}</h2>
       {/* wording: BA review */}
@@ -323,7 +345,7 @@ export default function PricingPage() {
               {t('resetNote', { time: plans.daily_reset_utc || '00:00' })}
             </p>
 
-            <PaymentSection pay={plans.payment} pro={pro} period={period} />
+            <PaymentSection pay={plans.payment} pro={pro} period={period} autoCheckout={plans.auto_checkout} />
           </>
         )}
       </div>
