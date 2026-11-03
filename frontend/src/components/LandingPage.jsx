@@ -3,7 +3,7 @@ import { useTranslation, Trans } from 'react-i18next';
 import { useLocalePath } from '../i18n';
 import {
   Download, Layers, History, Wand2, Lock,
-  Sparkles, Smartphone, X, ShieldCheck, Puzzle, Lightbulb, Code, Building2, ArrowRight
+  Sparkles, Smartphone, X, Puzzle, Lightbulb, Code, Building2, ArrowRight
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { hasUsedBefore } from '../lib/returningUser';
@@ -287,11 +287,6 @@ export default function LandingPage() {
               <History className="w-3 h-3" />
               {t('cueHistory')}
             </button>
-            <span aria-hidden="true" className="hidden sm:inline">·</span>
-            <span className="inline-flex items-center gap-1.5">
-              <ShieldCheck className="w-3 h-3" />
-              {t('cueNoAds')}
-            </span>
           </div>
 
           {/* Everything below is the introduction. A returning visitor has

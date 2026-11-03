@@ -1,7 +1,7 @@
 {
   "name": "VidGrab - Tải Video & Nhạc HD",
   "short_name": "VidGrab",
-  "description": "Tải video và nhạc chất lượng cao từ TikTok, YouTube, Facebook, Instagram, Spotify, Douyin. Không quảng cáo, không watermark.",
+  "description": "Tải video và nhạc chất lượng cao từ TikTok, YouTube, Facebook, Instagram, Spotify, Douyin không watermark.",
   "id": "/",
   "dir": "ltr",
   "start_url": "/",
