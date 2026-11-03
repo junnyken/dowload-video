@@ -286,7 +286,7 @@ export default function CheckoutPage() {
   // ── PayPal capture on return ────────────────────────────────────────
   useEffect(() => {
     const paypalCapture = searchParams.get('paypal_capture');
-    const orderId = searchParams.get('order_id');
+    const orderId = searchParams.get('order_id') || searchParams.get('order');
     if (paypalCapture !== '1' || !orderId) return;
 
     setCapturingPaypal(true);
@@ -295,13 +295,14 @@ export default function CheckoutPage() {
     apiFetch(`/checkout/orders/${orderId}/capture`, { method: 'POST' })
       .then((data) => {
         setOrder(data.order || data);
-        if (data.order?.status === 'paid' || data.status === 'paid') {
+        if (data.success || data.order?.status === 'paid' || data.status === 'paid') {
           handlePaymentSuccess();
         }
         // Clean URL params
         const url = new URL(window.location.href);
         url.searchParams.delete('paypal_capture');
         url.searchParams.delete('order_id');
+        url.searchParams.delete('order');
         url.searchParams.delete('token');
         url.searchParams.delete('PayerID');
         window.history.replaceState({}, '', url.pathname);
@@ -332,8 +333,9 @@ export default function CheckoutPage() {
       } else if (selectedMethod === 'paypal' && data.paypal) {
         setPaypalData(data.paypal);
         // Redirect to PayPal
-        if (data.paypal.approve_url) {
-          window.location.href = data.paypal.approve_url;
+        const redirectUrl = data.paypal.approve_url || data.paypal.checkout_url;
+        if (redirectUrl) {
+          window.location.href = redirectUrl;
           return;
         }
         setStep(2);

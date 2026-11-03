@@ -89,6 +89,20 @@ def _overridable_view(key: str) -> dict:
                             "đang bận kèm số giây nên chờ. Tắt = luôn nhận yêu cầu như trước (có thể chờ lâu rồi lỗi)."),
             "env_name": "OVERLOAD_GUARD_ENABLED",
         }
+    elif key == sw.PAYMENTS_AUTO:
+        env_val = (os.getenv("PAYMENTS_AUTO_ENABLED") or "").strip().lower() in ("1", "true", "on")
+        env_set = bool((os.getenv("PAYMENTS_AUTO_ENABLED") or "").strip())
+        meta = {
+            # wording: BA review
+            "label": "Thanh toán tự động (VietQR SePay & PayPal)",
+            "on_label": "Đang BẬT", "off_label": "Đang TẮT",
+            "danger_state": "off",
+            "description": ("Bật = mở trang /checkout tự động tạo mã VietQR (mã đơn VGPxxxxxxxx) và nhận webhook SePay "
+                            "tự kích hoạt Pro ngay khi tiền vào tài khoản ngân hàng, kèm PayPal Orders v2."),
+            "user_impact": ("Khi bật, khách hàng tạo đơn tại /checkout và được nâng cấp Pro tự động sau vài giây chuyển khoản. "
+                            "Khi tắt, khách dùng luồng chuyển khoản mã VG cố định hoặc admin xem thử."),
+            "env_name": "PAYMENTS_AUTO_ENABLED",
+        }
     else:
         env_val = desktop_release.env_updater_enabled()
         env_set = bool((os.getenv("DESKTOP_UPDATER_ENABLED") or "").strip())
@@ -187,7 +201,7 @@ def _view(key: str) -> dict:
 
 
 def all_keys() -> list[str]:
-    return [sw.OVERLOAD_GUARD, sw.WATCH_KILL, sw.DESKTOP_UPDATER, "china_global",
+    return [sw.PAYMENTS_AUTO, sw.OVERLOAD_GUARD, sw.WATCH_KILL, sw.DESKTOP_UPDATER, "china_global",
             *(f"{CHINA_PREFIX}{p}" for p in CHINA_PLATFORM_POLICIES)]
 
 

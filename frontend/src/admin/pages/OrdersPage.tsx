@@ -201,15 +201,32 @@ export default function OrdersPage() {
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-fg">Đơn hàng Checkout</h1>
           <p className="mt-0.5 text-xs text-fg-muted">
-            Quản lý đơn thanh toán tự động VietQR & PayPal
+            Quản lý đơn thanh toán tự động VietQR & PayPal (bảng payment_orders tự khởi tạo khi truy cập)
           </p>
         </div>
-        <button
-          onClick={() => { fetchOrders(); fetchStats(); }}
-          className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2"
-        >
-          ↺ Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={async () => {
+              try {
+                await adminPost('/checkout/ensure-schema', {})
+                setActionMsg({ id: 'schema', text: '✓ Đã khởi tạo bảng CSDL (Migration 042) thành công!', ok: true })
+                fetchOrders()
+                fetchStats()
+              } catch (e) {
+                setActionMsg({ id: 'schema', text: `✗ ${(e as Error).message}`, ok: false })
+              }
+            }}
+            className="px-3 py-1.5 text-xs rounded-control border border-accent/40 bg-accent-soft font-medium text-accent-text hover:bg-accent/20"
+          >
+            ⚡ Khởi tạo bảng CSDL (Migration 042)
+          </button>
+          <button
+            onClick={() => { fetchOrders(); fetchStats(); }}
+            className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2"
+          >
+            ↺ Refresh
+          </button>
+        </div>
       </div>
 
       {/* Stats cards */}

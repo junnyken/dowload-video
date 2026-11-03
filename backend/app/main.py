@@ -125,7 +125,7 @@ from app.api.routes import router as api_router
 configure_logging(level=os.getenv("LOG_LEVEL", "INFO"))
 from app.api.admin import router as admin_router, verify_admin
 from app.api.payments import router as payments_router
-from app.api.checkout import router as checkout_router
+from app.api.checkout import router as checkout_router, admin_router as checkout_admin_router
 from app.api.user import router as user_router
 from app.api.flow_cleanup import router as flow_cleanup_router
 from app.api import push as push_api
@@ -514,6 +514,7 @@ app.include_router(api_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["Admin"])
 app.include_router(payments_router, prefix="/api/v1/payments", tags=["Payments"])
 app.include_router(checkout_router, prefix="/api/v1/checkout", tags=["Checkout"])
+app.include_router(checkout_admin_router, prefix="/api/v1/admin/checkout", tags=["Admin Checkout"])
 app.include_router(user_router, prefix="/api/v1/user", tags=["User"])
 app.include_router(flow_cleanup_router, prefix="/api/v1/flow-cleanup", tags=["Flow/Veo Cleanup"])
 app.include_router(push_api.router, prefix="/api/v1/push", tags=["push"])

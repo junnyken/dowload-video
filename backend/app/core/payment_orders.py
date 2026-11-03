@@ -83,7 +83,61 @@ def qr_image_url(
 
 # ── DB operations ───────────────────────────────────────────────────
 
+_SCHEMA_ENSURED = False
+
+_MIGRATION_042_SQL = """
+CREATE TABLE IF NOT EXISTS payment_orders (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id          TEXT NOT NULL,
+  plan             TEXT NOT NULL DEFAULT 'pro_month',
+  rail             TEXT NOT NULL DEFAULT 'vietqr',
+  currency         TEXT NOT NULL DEFAULT 'VND',
+  amount           BIGINT NOT NULL,
+  code             TEXT NOT NULL UNIQUE,
+  status           TEXT NOT NULL DEFAULT 'pending',
+  paid_amount      BIGINT DEFAULT 0,
+  paid_at          TIMESTAMPTZ,
+  activated_at     TIMESTAMPTZ,
+  expires_at       TIMESTAMPTZ,
+  provider_ref     TEXT,
+  evidence         JSONB DEFAULT '{}',
+  admin_note       TEXT,
+  created_at       TIMESTAMPTZ DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_payment_orders_user ON payment_orders (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_orders_status ON payment_orders (status, expires_at);
+CREATE INDEX IF NOT EXISTS idx_payment_orders_code ON payment_orders (code);
+ALTER TABLE payment_events
+  ADD COLUMN IF NOT EXISTS order_id    UUID,
+  ADD COLUMN IF NOT EXISTS match_type  TEXT,
+  ADD COLUMN IF NOT EXISTS amount      BIGINT;
+"""
+
+
+def ensure_schema(force: bool = False) -> bool:
+    """Auto-run Migration 042 on Postgres Vibe Host if not yet applied."""
+    global _SCHEMA_ENSURED
+    if _SCHEMA_ENSURED and not force:
+        return True
+    try:
+        from app.core.database import get_service_client  # noqa: PLC0415
+        db = get_service_client()
+        pool = getattr(db, "_pool", None)
+        if pool is not None:
+            pool.run(_MIGRATION_042_SQL, (), fetch=False)
+            pool.columns.pop("payment_orders", None)
+            pool.columns.pop("payment_events", None)
+            pool.pkeys.pop("payment_orders", None)
+        _SCHEMA_ENSURED = True
+        return True
+    except Exception as exc:
+        print(f"[PaymentOrders] ensure_schema warning: {exc}")
+        return False
+
+
 def _db():
+    ensure_schema()
     from app.core.database import get_service_client  # noqa: PLC0415
     return get_service_client()
 
@@ -354,19 +408,57 @@ def admin_list_orders(
     rail: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
-) -> List[Dict[str, Any]]:
-    """List orders for admin dashboard."""
+    q_text: Optional[str] = None,
+) -> Tuple[List[Dict[str, Any]], int]:
+    """List orders for admin dashboard, returns (orders, total_count)."""
     db = _db()
-    q = db.table("payment_orders").select("*")
-    if status:
+    q = db.table("payment_orders").select("*", count="exact")
+    if status and status != "all":
         q = q.eq("status", status)
-    if rail:
+    if rail and rail != "all":
         q = q.eq("rail", rail)
+    if q_text:
+        term = q_text.strip()
+        if term.upper().startswith("VGP"):
+            q = q.ilike("code", f"%{term}%")
+        else:
+            q = q.ilike("user_id", f"%{term}%")
     try:
         res = q.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
-        return res.data or []
+        rows = res.data or []
+        return rows, int(res.count if res.count is not None else len(rows))
     except Exception:
-        return []
+        return [], 0
+
+
+def admin_order_stats() -> Dict[str, Any]:
+    """Aggregate KPI counts for admin OrdersPage."""
+    db = _db()
+    stats = {
+        "total": 0,
+        "pending": 0,
+        "paid": 0,
+        "expired": 0,
+        "canceled": 0,
+        "underpaid": 0,
+        "revenue_vnd": 0,
+    }
+    try:
+        res = db.table("payment_orders").select("status, amount, paid_amount, currency").limit(2000).execute()
+        for r in res.data or []:
+            st = r.get("status") or "pending"
+            stats["total"] += 1
+            if st in stats:
+                stats[st] += 1
+            if st == "paid":
+                amt = int(r.get("paid_amount") or r.get("amount") or 0)
+                if r.get("currency") == "USD":
+                    stats["revenue_vnd"] += amt * 255
+                else:
+                    stats["revenue_vnd"] += amt
+    except Exception:
+        pass
+    return stats
 
 
 def admin_activate_order(order_id: str, admin_note: str = "") -> Tuple[bool, str]:

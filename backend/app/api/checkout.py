@@ -15,9 +15,11 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from app.api.admin import verify_admin
 from app.core.auth_middleware import get_required_user
 
 router = APIRouter()
+admin_router = APIRouter()
 
 
 class CreateOrderRequest(BaseModel):
@@ -91,6 +93,7 @@ async def create_order(
             pp_url, pp_session = await _create_paypal_order(user, plan, order)
             result["paypal"] = {
                 "checkout_url": pp_url,
+                "approve_url": pp_url,
                 "session_id": pp_session,
             }
             # Store PayPal order ID as provider_ref
@@ -122,8 +125,8 @@ async def _create_paypal_order(user: Dict, plan: Dict, order: Dict):
     usd_str = f"{plan['usd_cents'] / 100:.2f}"
 
     frontend = os.getenv("FRONTEND_URL", "").split(",")[0].strip().rstrip("/") or "https://dowloadvideo.io.vn"
-    return_url = f"{frontend}/checkout?order={order['id']}&paypal_capture=1"
-    cancel_url = f"{frontend}/checkout?order={order['id']}&canceled=1"
+    return_url = f"{frontend}/checkout?order_id={order['id']}&order={order['id']}&paypal_capture=1"
+    cancel_url = f"{frontend}/checkout?order_id={order['id']}&order={order['id']}&canceled=1"
 
     body = {
         "intent": "CAPTURE",
@@ -241,8 +244,14 @@ async def capture_paypal_order(
         provider_ref=paypal_order_id,
         evidence=evidence,
     )
-
-    return {"success": ok, "action": msg, "tier": "pro" if ok else None}
+    updated_order = po.get_order(order_id, user["id"])
+    return {
+        "success": ok,
+        "status": "paid" if ok else "pending",
+        "action": msg,
+        "tier": "pro" if ok else None,
+        "order": updated_order,
+    }
 
 
 # ── GET /orders — danh sách đơn ──────────────────────────────────────
@@ -300,21 +309,46 @@ async def get_checkout_plans(request: Request):
 
 # ── Admin endpoints ──────────────────────────────────────────────────
 
+@router.post("/admin/ensure-schema")
+@admin_router.post("/ensure-schema")
+async def admin_ensure_schema(_=Depends(verify_admin)):
+    """Run Migration 042 idempotently on Postgres Vibe Host."""
+    from app.core import payment_orders as po  # noqa: PLC0415
+    ok = po.ensure_schema(force=True)
+    return {"success": ok, "migration": "042_payment_orders"}
+
+
+@router.get("/admin/orders/stats")
+@admin_router.get("/orders/stats")
+async def admin_orders_stats(_=Depends(verify_admin)):
+    from app.core import payment_orders as po  # noqa: PLC0415
+    return po.admin_order_stats()
+
+
 @router.get("/admin/orders")
+@admin_router.get("/orders")
 async def admin_list_orders(
     status: Optional[str] = None,
     rail: Optional[str] = None,
-    limit: int = 50,
-    offset: int = 0,
-    request: Request = None,
-    _=Depends(get_required_user),
+    q: Optional[str] = None,
+    page: int = 1,
+    per_page: int = 20,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+    _=Depends(verify_admin),
 ):
-    from app.core.quotas import is_admin_request  # noqa: PLC0415
-    if not is_admin_request(request):
-        raise HTTPException(status_code=403, detail="Admin only")
-
     from app.core import payment_orders as po  # noqa: PLC0415
-    return {"orders": po.admin_list_orders(status, rail, limit, offset)}
+    actual_limit = limit if limit is not None else max(1, min(per_page, 100))
+    actual_offset = offset if offset is not None else max(0, (page - 1) * actual_limit)
+    orders, total = po.admin_list_orders(status, rail, actual_limit, actual_offset, q)
+    total_pages = max(1, (total + actual_limit - 1) // actual_limit)
+    return {
+        "orders": orders,
+        "total": total,
+        "page": page,
+        "per_page": actual_limit,
+        "total_pages": total_pages,
+    }
 
 
 class AdminActivateRequest(BaseModel):
@@ -322,16 +356,13 @@ class AdminActivateRequest(BaseModel):
 
 
 @router.post("/admin/orders/{order_id}/activate")
+@admin_router.post("/orders/{order_id}/activate")
 async def admin_activate_order(
     order_id: str,
     payload: AdminActivateRequest,
     request: Request,
-    user: Dict[str, Any] = Depends(get_required_user),
+    _=Depends(verify_admin),
 ):
-    from app.core.quotas import is_admin_request  # noqa: PLC0415
-    if not is_admin_request(request):
-        raise HTTPException(status_code=403, detail="Admin only")
-
     from app.core import payment_orders as po  # noqa: PLC0415
     from app.core.audit import log_admin_action  # noqa: PLC0415
 
