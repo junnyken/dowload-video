@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BarChart2, Zap, Calendar, Archive, Crown, RefreshCw, Key, Copy, Trash2, Lock, Webhook, Shield, Clock, HardDrive, Pin } from 'lucide-react';
+import { BarChart2, Zap, Calendar, Archive, Crown, RefreshCw, Key, Copy, Trash2, Lock, Webhook, Shield, Clock, HardDrive, Pin, Gift, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../lib/apiBase';
 import { usePlans } from '../lib/usePlans';
@@ -23,6 +23,8 @@ export default function UsageContent() {
 
   // ── Storage state ─────────────────────────────────────
   const [storageInfo, setStorageInfo] = useState(null);
+  const [referralInfo, setReferralInfo] = useState(null);
+  const [refCopied, setRefCopied] = useState(false);
 
   // ── API Key state ─────────────────────────────────────────
   const [apiKeyStatus, setApiKeyStatus]   = useState(null);  // {has_key, created_at, last_used_at}
@@ -44,12 +46,14 @@ export default function UsageContent() {
     const apiBase = API_BASE;
     const hdrs = { Authorization: `Bearer ${session.access_token}` };
     try {
-      const [usageRes, storageRes] = await Promise.all([
+      const [usageRes, storageRes, refRes] = await Promise.all([
         fetch(`${apiBase}/api/v1/user/usage`, { headers: hdrs }),
         fetch(`${apiBase}/api/v1/storage/info`, { headers: hdrs }),
+        fetch(`${apiBase}/api/v1/referrals/me`, { headers: hdrs }),
       ]);
       if (usageRes.ok) setUsage(await usageRes.json());
       if (storageRes.ok) setStorageInfo(await storageRes.json());
+      if (refRes.ok) setReferralInfo(await refRes.json());
     } catch { /* non-critical */ }
     finally { setLoading(false); }
   };
@@ -286,6 +290,60 @@ export default function UsageContent() {
       {/* ── Storage Section ──────────────────────────────── */}
       {storageInfo && (
         <StorageSection info={storageInfo} isPro={isPro} />
+      )}
+
+      {/* ── Affiliate / Referral Program Section ─────────── */}
+      {referralInfo && (
+        <div className="rounded-xl border border-line overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-3 bg-surface border-b border-line">
+            <Gift className="w-4 h-4 text-accent-text" />
+            <span className="text-fg font-bold text-sm">{t('referral.title')}</span>
+            <span className="ml-auto text-[10px] font-bold text-accent-text bg-accent-soft border border-accent/20 px-2 py-0.5 rounded-full">
+              {t('referral.badge', { days: referralInfo.reward_per_pro_referral_days || 7 })}
+            </span>
+          </div>
+          <div className="p-4 bg-surface-2 space-y-3">
+            <p className="text-fg-muted text-xs">
+              {t('referral.desc', { days: referralInfo.reward_per_pro_referral_days || 7 })}
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={referralInfo.share_url || ''}
+                className="flex-1 bg-surface border border-line rounded-lg px-3 py-2 text-xs font-mono text-fg select-all focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (!referralInfo.share_url) return;
+                  navigator.clipboard.writeText(referralInfo.share_url).then(() => {
+                    setRefCopied(true);
+                    setTimeout(() => setRefCopied(false), 2000);
+                  }).catch(() => {});
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition"
+              >
+                {refCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {refCopied ? t('referral.copied') : t('referral.copyLink')}
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+              <div className="bg-surface border border-line rounded-lg p-2.5">
+                <p className="text-fg font-bold text-base">{referralInfo.clicks ?? 0}</p>
+                <p className="text-fg-muted text-[11px]">{t('referral.clicks')}</p>
+              </div>
+              <div className="bg-surface border border-line rounded-lg p-2.5">
+                <p className="text-fg font-bold text-base">{referralInfo.signups ?? 0}</p>
+                <p className="text-fg-muted text-[11px]">{t('referral.signups')}</p>
+              </div>
+              <div className="bg-surface border border-line rounded-lg p-2.5">
+                <p className="text-accent-text font-bold text-base">+{referralInfo.bonus_days_earned ?? 0}d</p>
+                <p className="text-fg-muted text-[11px]">{t('referral.bonusDays')}</p>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Upgrade CTA for free users */}

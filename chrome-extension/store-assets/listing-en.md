@@ -55,7 +55,7 @@ PRIVACY
 - Page addresses are sent to VidGrab's server only for actions that need it (counting your daily allowance, server fallback, channel following if you ask for it).
 - For sites that require sign-in, the extension can send that site's cookies to VidGrab's own server for that single extraction; the server uses them once and deletes them.
 - Nothing is sold, and nothing is used for advertising.
-Privacy policy: https://dvid.vibe1.tinhgon.xyz/en/privacy
+Privacy policy: https://dowloadvideo.io.vn/en/privacy
 
 PERMISSIONS
 Access to all sites is optional. It is never granted at install; the popup asks for it (Chrome shows its own prompt) and you can revoke it on chrome://extensions.

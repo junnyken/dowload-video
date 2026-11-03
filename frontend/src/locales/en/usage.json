@@ -78,6 +78,16 @@
   "quota": {
     "unlimited": "Unlimited"
   },
+  "referral": {
+    "title": "Refer Friends (Affiliate)",
+    "badge": "+{{days}} Pro days",
+    "desc": "Share your referral link. Every time a friend signs up and upgrades to Pro, you automatically receive +{{days}} bonus Pro days.",
+    "copyLink": "Copy link",
+    "copied": "Copied",
+    "clicks": "Clicks",
+    "signups": "Signups",
+    "bonusDays": "Bonus Pro days"
+  },
   "paywall": {
     "desc": {
       "bulk_zip": "Download many files at once as a ZIP",

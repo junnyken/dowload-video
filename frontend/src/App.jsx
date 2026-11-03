@@ -105,6 +105,34 @@ function AppInner() {
   const [watchStatusOk, setWatchEnabled] = useState(false);
   const watchEnabled = isAuthenticated && watchStatusOk;
   useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const refCode = (params.get('ref') || '').trim().toUpperCase();
+      if (refCode.startsWith('REF') && refCode.length >= 6) {
+        localStorage.setItem('vg_ref_code', refCode);
+        fetch(`${API_BASE}/api/v1/referrals/click`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: refCode }),
+        }).catch(() => {});
+      }
+    } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    try {
+      const refCode = localStorage.getItem('vg_ref_code');
+      if (!refCode) return;
+      fetch(`${API_BASE}/api/v1/referrals/claim`, withAuth({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: refCode }),
+      }))
+        .then(r => { if (r.ok) localStorage.removeItem('vg_ref_code'); })
+        .catch(() => {});
+    } catch { /* ignore */ }
+  }, [isAuthenticated, withAuth]);
+  useEffect(() => {
     if (!isAuthenticated) return undefined;
     let alive = true;
     fetch(`${API_BASE}/api/v1/watch/status`, withAuth())

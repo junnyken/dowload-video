@@ -75,6 +75,16 @@
   "quota": {
     "unlimited": "Không giới hạn"
   },
+  "referral": {
+    "title": "Giới thiệu bạn bè (Affiliate)",
+    "badge": "+{{days}} ngày Pro",
+    "desc": "Chia sẻ liên kết giới thiệu của bạn. Mỗi khi bạn bè đăng ký và nâng cấp gói Pro, bạn được cộng tự động +{{days}} ngày sử dụng Pro.",
+    "copyLink": "Sao chép link",
+    "copied": "Đã chép",
+    "clicks": "Lượt nhấp",
+    "signups": "Đăng ký",
+    "bonusDays": "Ngày Pro thưởng"
+  },
   "paywall": {
     "desc": {
       "bulk_zip": "Tải nhiều file cùng lúc dưới dạng ZIP",

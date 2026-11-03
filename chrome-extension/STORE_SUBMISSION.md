@@ -14,14 +14,14 @@ The older text in this file (5.1.x listing, permission table) is superseded by t
 ## 1. Owner checklist (step by step)
 
 1. **Developer account**: https://chrome.google.com/webstore/devcenter , sign in with the Google account that will own the extension, pay the one-time US$5 registration fee, verify the contact email (and the trader/non-trader declaration in Account; INFERRED: required for EU visibility).
-2. **Fix the privacy policy first** (see `privacy-checklist.md` section 5): at least the Limited Use sentence, tabCapture/recording, webRequest, cookies domain list, 30-day session. Then check https://dvid.vibe1.tinhgon.xyz/privacy and /en/privacy return 200 without login.
+2. **Fix the privacy policy first** (see `privacy-checklist.md` section 5): at least the Limited Use sentence, tabCapture/recording, webRequest, cookies domain list, 30-day session. Then check https://dowloadvideo.io.vn/privacy and https://dowloadvideo.io.vn/en/privacy return 200 without login.
 3. **Build the store zip** (from the repo root):
    `python3 scripts/package-extension.py --store`
-   Output: `chrome-extension/store-assets/VidGrab-store-v5.20.0.zip` (manifest without YouTube hosts/matches; the script verifies it). Bump `version` in manifest.json before every resubmission; the store rejects a repeated version.
+   Output: `chrome-extension/store-assets/VidGrab-store-v5.22.5.zip` (manifest without YouTube hosts/matches; the script verifies it). Bump `version` in manifest.json before every resubmission; the store rejects a repeated version.
    **Upload only `VidGrab-store-v<version>.zip`.** Never upload `backend/extension/VidGrab-extension.zip` (website build, has YouTube) or the old store zips (5.14.1 ... 5.19.0).
 4. Dashboard > **Add new item** > upload the zip.
-5. **Store listing** tab: paste name, summary, description from `listing-en.md` (default language) and add Vietnamese from `listing-vi.md`; category Productivity; upload screenshots (section 3), promo tile `store-assets/promo-tile-440x280.png` (small promo tile 440x280; check it has no YouTube and matches 5.20.0 before using, it dates from 11/08/2026); support URL / website: https://dvid.vibe1.tinhgon.xyz .
-6. **Privacy practices** tab: single purpose, each permission justification, remote code = No, data usage boxes, certifications, privacy policy URL `https://dvid.vibe1.tinhgon.xyz/privacy` (all from `permissions.md` and `privacy-checklist.md`).
+5. **Store listing** tab: paste name, summary, description from `listing-en.md` (default language) and add Vietnamese from `listing-vi.md`; category Productivity; upload screenshots (section 3), promo tile `store-assets/promo-tile-440x280.png` (small promo tile 440x280; check it has no YouTube and matches 5.20.0 before using, it dates from 11/08/2026); support URL / website: https://dowloadvideo.io.vn .
+6. **Privacy practices** tab: single purpose, each permission justification, remote code = No, data usage boxes, certifications, privacy policy URL `https://dowloadvideo.io.vn/privacy` (all from `permissions.md` and `privacy-checklist.md`).
 7. **Distribution**: Public (or Unlisted for a first test), all regions, free.
 8. "Notes for reviewer" (section 5 below). Submit for review. Typical wait 1-3 business days, longer with broad host permissions (INFERRED).
 9. After approval: copy the store item ID into the website "install" button and the extension page.

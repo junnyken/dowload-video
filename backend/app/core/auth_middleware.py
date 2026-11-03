@@ -269,14 +269,44 @@ def _link_device(request, user: Dict[str, Any], token: str) -> Dict[str, Any]:
     return user
 
 
+def _lookup_rapidapi_request(request: Request) -> Optional[Dict[str, Any]]:
+    """
+    Validate requests coming from RapidAPI Marketplace Gateway via X-RapidAPI-Proxy-Secret.
+    When RAPIDAPI_PROXY_SECRET is set and matches the request header (constant-time),
+    identifies the caller by X-RapidAPI-User and maps X-RapidAPI-Subscription to tier.
+    """
+    import hmac
+    import os
+    expected_secret = os.getenv("RAPIDAPI_PROXY_SECRET", "").strip()
+    if not expected_secret or request is None:
+        return None
+    provided_secret = (request.headers.get("X-RapidAPI-Proxy-Secret") or "").strip()
+    if not provided_secret:
+        return None
+    if not hmac.compare_digest(provided_secret.encode("utf-8"), expected_secret.encode("utf-8")):
+        _invalid_key(request)
+    rapid_user = (request.headers.get("X-RapidAPI-User") or "anonymous").strip()[:64]
+    sub = (request.headers.get("X-RapidAPI-Subscription") or "PRO").strip().upper()
+    tier = "team" if sub in ("ULTRA", "MEGA", "CUSTOM") else "pro"
+    return {
+        "id":           f"rapidapi:{rapid_user}",
+        "email":        f"{rapid_user}@rapidapi.marketplace",
+        "tier":         tier,
+        "token":        f"rapidapi:{rapid_user}",
+        "via_api_key":  True,
+        "via_rapidapi": True,
+    }
+
+
 async def get_optional_user(
     _request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
     x_api_key: Optional[str] = Depends(_api_key_hdr),
 ) -> Optional[Dict[str, Any]]:
     """
-    Extract and validate identity from Authorization or X-API-Key headers.
+    Extract and validate identity from Authorization, X-API-Key, or RapidAPI headers.
     Accepts:
+      0. RapidAPI Gateway header (X-RapidAPI-Proxy-Secret)
       1. Supabase JWT Bearer token
       2. Legacy API key Bearer token (user_api_keys table)
       3. X-API-Key header (api_keys table, vidgrab_ prefix)
@@ -285,6 +315,10 @@ async def get_optional_user(
     (X-API-Key, or Bearer vidgrab_/vg_) that does not resolve; no
     credentials or an unusable web session is a guest.
     """
+    # ── Path 0: RapidAPI Gateway (X-RapidAPI-Proxy-Secret) ───────────
+    rapid_user = _lookup_rapidapi_request(_request)
+    if rapid_user:
+        return rapid_user
     # An API key the caller presented and that does not resolve is an error,
     # not a guest (14/10): a mistyped or revoked key used to fall through to
     # the anonymous path, so the developer got guest quotas and odd 400/429s

@@ -32,14 +32,17 @@ from app.core.database import get_service_client as get_supabase_client
 
 router = APIRouter()
 
-_STRIPE_SECRET_KEY     = os.getenv("STRIPE_SECRET_KEY", "")
-_STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
-_STRIPE_PRO_PRICE_ID   = os.getenv("STRIPE_PRO_PRICE_ID", "")
+_STRIPE_SECRET_KEY        = os.getenv("STRIPE_SECRET_KEY", "")
+_STRIPE_WEBHOOK_SECRET    = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+_STRIPE_PRO_PRICE_ID      = os.getenv("STRIPE_PRO_PRICE_ID", "")
+_STRIPE_PRO_YEAR_PRICE_ID = os.getenv("STRIPE_PRO_YEAR_PRICE_ID", "")
+_STRIPE_PRO_MONTH_CENTS   = int(os.getenv("STRIPE_PRO_MONTH_USD_CENTS", "499") or 499)
+_STRIPE_PRO_YEAR_CENTS    = int(os.getenv("STRIPE_PRO_YEAR_USD_CENTS", "4900") or 4900)
 # FRONTEND_URL may list several comma-separated hosts (main.py allows all of
 # them for CORS); redirects go to the first one, the primary domain.
 _FRONTEND_URL          = (
     os.getenv("FRONTEND_URL", "").split(",")[0].strip().rstrip("/")
-    or "https://vidgrab.io"
+    or "https://dowloadvideo.io.vn"
 )
 
 GRACE_PERIOD_DAYS = 3   # keep Pro on payment failure for this many days
@@ -154,6 +157,7 @@ def _user_id_from_customer(customer_id: str) -> Optional[str]:
 # ══════════════════════════════════════════════════════════════════════
 
 class CheckoutRequest(BaseModel):
+    period:      Optional[str] = "month"   # "month" | "year"
     success_url: Optional[str] = None
     cancel_url:  Optional[str] = None
 
@@ -164,28 +168,56 @@ async def create_checkout_session(
     user: Dict[str, Any] = Depends(get_required_user),
 ):
     """
-    Create a Stripe Checkout Session for the monthly Pro plan.
+    Create a Stripe Checkout Session for the Monthly or Yearly Pro plan.
+    Uses configured Stripe Price ID if set, otherwise inline USD price_data
+    ($4.99/month or $49.00/year) so Stripe works immediately with STRIPE_SECRET_KEY.
     Returns {checkout_url} — redirect user there.
     """
-    if not _STRIPE_SECRET_KEY:
-        raise HTTPException(status_code=503, detail="Thanh toán chưa được cấu hình. Vui lòng liên hệ admin.")
-    if not _STRIPE_PRO_PRICE_ID:
-        raise HTTPException(status_code=503, detail="Gói Pro chưa được cấu hình. Vui lòng liên hệ admin.")
+    stripe_key = os.getenv("STRIPE_SECRET_KEY", "") or _STRIPE_SECRET_KEY
+    if not stripe_key:
+        raise HTTPException(status_code=503, detail="Thanh toán quốc tế (Stripe) chưa được cấu hình. Vui lòng dùng chuyển khoản hoặc liên hệ admin.")
 
     stripe = _stripe()
+    stripe.api_key = stripe_key
     customer_id = _get_or_create_stripe_customer(user["id"], user["email"])
 
+    is_year = (payload.period or "month").lower() == "year"
+    price_id = (
+        (os.getenv("STRIPE_PRO_YEAR_PRICE_ID", "") or _STRIPE_PRO_YEAR_PRICE_ID)
+        if is_year
+        else (os.getenv("STRIPE_PRO_PRICE_ID", "") or _STRIPE_PRO_PRICE_ID)
+    )
+
+    if price_id:
+        line_item: Dict[str, Any] = {"price": price_id, "quantity": 1}
+    else:
+        unit_amount = _STRIPE_PRO_YEAR_CENTS if is_year else _STRIPE_PRO_MONTH_CENTS
+        interval = "year" if is_year else "month"
+        plan_name = "VidGrab Pro (Yearly)" if is_year else "VidGrab Pro (Monthly)"
+        line_item = {
+            "price_data": {
+                "currency": "usd",
+                "unit_amount": unit_amount,
+                "recurring": {"interval": interval},
+                "product_data": {
+                    "name": plan_name,
+                    "description": "High-speed video & audio downloads, 4K YouTube, bulk channels & API access",
+                },
+            },
+            "quantity": 1,
+        }
+
     success_url = payload.success_url or f"{_FRONTEND_URL}/billing?success=1"
-    cancel_url  = payload.cancel_url  or f"{_FRONTEND_URL}/billing?canceled=1"
+    cancel_url  = payload.cancel_url  or f"{_FRONTEND_URL}/pricing?canceled=1"
 
     try:
         session = stripe.checkout.Session.create(
             customer=customer_id,
             mode="subscription",
-            line_items=[{"price": _STRIPE_PRO_PRICE_ID, "quantity": 1}],
+            line_items=[line_item],
             success_url=success_url,
             cancel_url=cancel_url,
-            metadata={"user_id": user["id"]},
+            metadata={"user_id": user["id"], "period": "year" if is_year else "month"},
             allow_promotion_codes=True,
             billing_address_collection="auto",
         )
@@ -243,6 +275,11 @@ async def stripe_webhook(request: Request):
             except Exception:
                 period_end = None
             _upgrade_user(user_id, sub_id, period_end)
+            try:
+                from app.api.referrals import reward_referrer_on_pro_upgrade
+                reward_referrer_on_pro_upgrade(user_id)
+            except Exception:
+                pass
             print(f"[Payments] ✅ Upgraded {user_id} to Pro (sub={sub_id})")
 
     # ── customer.subscription.deleted ────────────────────────────────

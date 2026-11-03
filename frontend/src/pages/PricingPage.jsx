@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, X, Crown, Copy, Loader2 } from 'lucide-react';
+import { Check, X, Crown, Copy, Loader2, CreditCard } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../lib/apiBase';
 import { usePlans, formatVnd } from '../lib/usePlans';
@@ -60,7 +60,43 @@ function PaymentSection({ pay, pro, period }) {
   const { isAuthenticated, session } = useAuth();
   const [me, setMe] = useState(null);
   const [err, setErr] = useState('');
+  const [stripeLoading, setStripeLoading] = useState(false);
+  const [stripeErr, setStripeErr] = useState('');
   const token = session?.access_token;
+
+  const startStripeCheckout = async () => {
+    if (!token) {
+      window.dispatchEvent(new Event('vidgrab:open-auth'));
+      return;
+    }
+    setStripeLoading(true);
+    setStripeErr('');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/payments/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          period,
+          success_url: `${window.location.origin}${lang === 'en' ? '/en/billing?success=1' : '/billing?success=1'}`,
+          cancel_url: window.location.href,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.detail?.user_message || data?.detail || `HTTP ${res.status}`);
+      }
+      if (data.checkout_url) {
+        window.location.href = data.checkout_url;
+      }
+    } catch (e) {
+      setStripeErr(e.message || t('payLoadError'));
+    } finally {
+      setStripeLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!token) return undefined;
@@ -73,12 +109,36 @@ function PaymentSection({ pay, pro, period }) {
   }, [token, t]);
 
   const amount = period === 'year' ? pro.price_year_vnd : pro.price_month_vnd;
+  const usdAmount = period === 'year' ? (pro.price_year_usd || 49) : (pro.price_month_usd || 4.99);
   const periodLabel = period === 'year' ? t('days365') : t('days30');
+  const periodShort = period === 'year' ? t('perYear') : t('perMonth');
 
   const box = 'mt-10 rounded-2xl border border-line bg-surface-2 p-5 sm:p-6';
   const openLogin = () => window.dispatchEvent(new Event('vidgrab:open-auth'));
 
-  if (!pay?.ready) {
+  const stripeBlock = pay?.stripe_ready ? (
+    <div className="mb-6 pb-6 border-b border-line">
+      <h3 className="text-base font-bold text-fg flex items-center gap-2 mb-1">
+        <CreditCard className="w-4 h-4 text-accent-text" aria-hidden="true" />
+        {t('stripeTitle')}
+      </h3>
+      <p className="text-sm text-fg-muted mb-3">{t('stripeIntro')}</p>
+      {stripeErr && <p role="alert" className="mb-3 text-sm text-danger">{stripeErr}</p>}
+      <button
+        type="button"
+        onClick={startStripeCheckout}
+        disabled={stripeLoading}
+        className="inline-flex items-center gap-2 px-5 py-2.5 min-h-11 rounded-xl bg-accent text-accent-fg text-sm font-semibold hover:opacity-90 transition disabled:opacity-60 cursor-pointer"
+      >
+        {stripeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+        {stripeLoading
+          ? t('stripeLoading')
+          : t('stripeBtn', { usd: lang === 'en' ? usdAmount : `$${usdAmount}`, period: periodShort })}
+      </button>
+    </div>
+  ) : null;
+
+  if (!pay?.ready && !pay?.stripe_ready) {
     return (
       <section className={box} aria-labelledby="pay-h">
         <h2 id="pay-h" className="text-lg font-bold text-fg mb-2">{t('payTitle')}</h2>
@@ -107,6 +167,7 @@ function PaymentSection({ pay, pro, period }) {
   const isPro = me?.tier === 'pro';
   return (
     <section className={box} aria-labelledby="pay-h">
+      {stripeBlock}
       <h2 id="pay-h" className="text-lg font-bold text-fg mb-1">{t('payProTitle')}</h2>
       {/* wording: BA review */}
       <p className="text-sm text-fg-muted mb-4">

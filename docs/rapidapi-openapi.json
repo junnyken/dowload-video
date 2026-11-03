@@ -1,0 +1,141 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "VidGrab Multi-Platform Video & Audio Downloader API",
+    "version": "1.6.0",
+    "description": "Extract and download videos, MP3 audio, and subtitles from 20+ platforms including TikTok (no watermark), Douyin, YouTube, Instagram, Facebook, X (Twitter), Threads, Pinterest, Reddit, Bilibili, Xiaohongshu, Spotify, and SoundCloud."
+  },
+  "servers": [
+    {
+      "url": "https://dvid-api.vibe1.tinhgon.xyz",
+      "description": "VidGrab Primary API Server"
+    },
+    {
+      "url": "https://dowloadvideo.io.vn",
+      "description": "VidGrab Main Web & API Gateway"
+    }
+  ],
+  "paths": {
+    "/api/v1/fetch-link": {
+      "post": {
+        "operationId": "fetchVideoLink",
+        "summary": "Extract & Download Video or Audio from URL",
+        "description": "Pass any supported video or music URL (TikTok, Douyin, YouTube, Instagram, Facebook, X/Twitter, Reddit, Pinterest, Threads, Bilibili, Spotify, SoundCloud...) to extract metadata, available formats, and direct download URL.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "example": "https://www.tiktok.com/@tiktok/video/7106594312292453675",
+                    "description": "Public URL of the video, post, reel, short, or audio track."
+                  },
+                  "quality": {
+                    "type": "string",
+                    "default": "video",
+                    "enum": ["video", "video_fast", "video_1080", "video_720", "video_480", "mp3_320", "mp3_192", "mp3_128", "audio_m4a"],
+                    "description": "Desired output quality or audio extraction format."
+                  },
+                  "remove_watermark": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Prefer watermark-free stream when supported (TikTok, Douyin)."
+                  },
+                  "download_subs": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Extract available subtitles/captions."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful extraction and download metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "title": { "type": "string", "example": "Sample Video Title" },
+                    "thumbnail_url": { "type": "string" },
+                    "direct_mp4_url": { "type": "string" },
+                    "local_file_id": { "type": "string" },
+                    "duration": { "type": "number", "example": 45 },
+                    "file_size_mb": { "type": "number", "example": 8.4 },
+                    "downloaded_height": { "type": "integer", "example": 1080 },
+                    "available_formats": {
+                      "type": "array",
+                      "items": { "type": "object" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform-status": {
+      "get": {
+        "operationId": "getPlatformStatus",
+        "summary": "Get Live Health Status of Supported Platforms",
+        "description": "Returns the real-time operational health and supported features of all 20+ video/audio platforms.",
+        "responses": {
+          "200": {
+            "description": "Platform health matrix"
+          }
+        }
+      }
+    },
+    "/api/v1/progress/{token}": {
+      "get": {
+        "operationId": "getDownloadProgress",
+        "summary": "Poll Real-Time Download Progress",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Client-supplied progress_token passed to /api/v1/fetch-link"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current percentage, speed, and ETA"
+          }
+        }
+      }
+    },
+    "/api/v1/error-codes": {
+      "get": {
+        "operationId": "listErrorCodes",
+        "summary": "Catalogue of Structured Error Codes",
+        "responses": {
+          "200": {
+            "description": "Map of machine-readable error codes and retry guidance"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "healthCheck",
+        "summary": "API Liveness Check",
+        "responses": {
+          "200": {
+            "description": "Service is healthy"
+          }
+        }
+      }
+    }
+  }
+}

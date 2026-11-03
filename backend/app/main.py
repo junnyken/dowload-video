@@ -695,6 +695,10 @@ app.include_router(resolve_input_api.router, prefix="/api/v1", tags=["Resolve In
 from app.api import format_probe as format_probe_api
 app.include_router(format_probe_api.router, prefix="/api/v1", tags=["Format Probe"])
 
+# Referral & Affiliate program (/api/v1/referrals/*)
+from app.api import referrals as referrals_api
+app.include_router(referrals_api.router, prefix="/api/v1", tags=["Referrals"])
+
 
 # ── Health Check ─────────────────────────────────────────────────────
 @app.get("/", tags=["Health"])

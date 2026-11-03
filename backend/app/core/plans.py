@@ -197,15 +197,19 @@ def build_plans() -> Dict[str, Any]:
             "pins": _PIN_LIMITS["pro"], "pin_days": _PIN_DAYS["pro"],
             "schedules": _SCHEDULE_LIMITS["pro"], "playlists": _PLAYLIST_LIMITS["pro"],
             "price_month_vnd": s["price_month_vnd"], "price_year_vnd": s["price_year_vnd"],
+            "price_month_usd": round(int(os.getenv("STRIPE_PRO_MONTH_USD_CENTS", "499") or 499) / 100, 2),
+            "price_year_usd": round(int(os.getenv("STRIPE_PRO_YEAR_USD_CENTS", "4900") or 4900) / 100, 2),
         },
     ]
     bank_ready = bool(s["bank_name"] and s["bank_account"] and s["bank_holder"])
+    stripe_ready = bool(os.getenv("STRIPE_SECRET_KEY", "").strip())
     return {
         "currency": "VND",
         "tiers": tiers,
         "payment": {
             "method": "bank_transfer",
             "ready": bank_ready,
+            "stripe_ready": stripe_ready,
             "bank_name": s["bank_name"], "bank_account": s["bank_account"],
             "bank_holder": s["bank_holder"], "contact": s["contact"],
             "activation": "manual",   # an admin turns Pro on after the transfer arrives

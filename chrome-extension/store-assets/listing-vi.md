@@ -55,7 +55,7 @@ QUYỀN RIÊNG TƯ
 - Địa chỉ trang chỉ gửi lên máy chủ VidGrab cho thao tác cần đến nó (đếm hạn mức, dự phòng qua máy chủ, theo dõi kênh khi bạn yêu cầu).
 - Với trang cần đăng nhập, tiện ích có thể gửi cookie của chính trang đó tới máy chủ VidGrab cho đúng một lần lấy video; máy chủ dùng một lần rồi xoá.
 - Không bán dữ liệu, không dùng cho quảng cáo.
-Chính sách bảo mật: https://dvid.vibe1.tinhgon.xyz/privacy
+Chính sách bảo mật: https://dowloadvideo.io.vn/privacy
 
 QUYỀN TRUY CẬP
 Quyền truy cập mọi trang là tuỳ chọn. Không cấp khi cài; popup sẽ hỏi (Chrome hiện hộp thoại riêng) và bạn thu hồi được ở chrome://extensions.

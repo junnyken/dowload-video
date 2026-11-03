@@ -39,5 +39,9 @@
   "yearly": "Yearly",
   "perYear": "year",
   "perMonth": "month",
-  "resetNote": "Daily downloads reset at {{time}} UTC."
+  "resetNote": "Daily downloads reset at {{time}} UTC.",
+  "stripeTitle": "Pay with Card via Stripe (Visa, Mastercard, Apple Pay)",
+  "stripeIntro": "Instant automatic Pro activation with international cards. Cancel renewal anytime.",
+  "stripeBtn": "Pay with Card (${{usd}} / {{period}})",
+  "stripeLoading": "Redirecting to Stripe Checkout…"
 }
