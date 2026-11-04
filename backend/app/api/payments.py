@@ -137,6 +137,20 @@ def _upgrade_user(user_id: str, subscription_id: str, current_period_end: Option
     except Exception:
         pass
 
+    # First-time Pro welcome bonus (+500 API calls) & mark first_purchase_done
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        from app.core import api_quota as aq  # noqa: PLC0415
+        rc = get_redis()
+        first_flag = f"api_first_bonus_claimed:{user_id}"
+        done_flag = f"first_purchase_done:{user_id}"
+        if not rc.get(first_flag) and not rc.get(done_flag):
+            rc.set(first_flag, "1")
+            rc.set(f"api_bonus:{user_id}:{aq.month_of()}", 500, ex=40 * 86400)
+        rc.set(done_flag, "1")
+    except Exception:
+        pass
+
 
 def _downgrade_user(user_id: str, at_period_end: bool = True, period_end_ts: Optional[int] = None) -> None:
     """Schedule or immediately apply downgrade."""
@@ -230,7 +244,10 @@ async def create_checkout_session(
     Returns {checkout_url} — redirect user there.
     """
     is_year = (payload.period or "month").lower() == "year"
-    usd_str = f"{(_STRIPE_PRO_YEAR_CENTS if is_year else _STRIPE_PRO_MONTH_CENTS) / 100:.2f}"
+    from app.core import payment_orders as po  # noqa: PLC0415
+    plan_obj = po.plan_by_id("pro_year" if is_year else "pro_month", user_id=str(user["id"]))
+    eff_cents = int(plan_obj["usd_cents"]) if plan_obj else (_STRIPE_PRO_YEAR_CENTS if is_year else _STRIPE_PRO_MONTH_CENTS)
+    usd_str = f"{eff_cents / 100:.2f}"
 
     # 1. PayPal Orders v2 REST API (100% automatic verification & upgrade)
     pp_client_id = os.getenv("PAYPAL_CLIENT_ID", "").strip()

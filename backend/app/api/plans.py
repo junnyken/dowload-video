@@ -55,6 +55,7 @@ async def get_plans():
 @public_router.get("/plans/me")
 async def get_my_plan(user: Dict[str, Any] = Depends(get_required_user)):
     from app.core.entitlements import resolve_effective_tier  # noqa: PLC0415
+    from app.core import payment_orders as po  # noqa: PLC0415
     uid = str(user["id"])
     prof = _profile(uid)
     return {
@@ -62,6 +63,7 @@ async def get_my_plan(user: Dict[str, Any] = Depends(get_required_user)):
         "billing_status": prof.get("billing_status") or "none",
         "expiry": prof.get("subscription_expiry"),
         "transfer_code": plans.transfer_code(uid),
+        "is_first_time_buyer": po.is_first_time_buyer(uid),
     }
 
 

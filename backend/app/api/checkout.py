@@ -44,7 +44,7 @@ async def create_order(
     from app.core import payment_orders as po  # noqa: PLC0415
     from app.core.plans import get_settings  # noqa: PLC0415
 
-    plan = po.plan_by_id(payload.plan)
+    plan = po.plan_by_id(payload.plan, user_id=user["id"])
     if not plan:
         raise HTTPException(status_code=400, detail="plan_not_found")
 
@@ -327,12 +327,19 @@ async def cancel_order_endpoint(
 @router.get("/plans")
 async def get_checkout_plans(request: Request):
     from app.core import payments_auto  # noqa: PLC0415
+    from app.core.auth_middleware import get_optional_user  # noqa: PLC0415
 
     if not payments_auto.visible(request):
         raise HTTPException(status_code=404, detail="Not Found")
 
+    user = await get_optional_user(request)
+    uid = str(user["id"]) if user and user.get("id") else None
+
     from app.core import payment_orders as po  # noqa: PLC0415
-    return {"plans": po.catalog()}
+    return {
+        "plans": po.catalog(user_id=uid),
+        "is_first_time_buyer": po.is_first_time_buyer(uid),
+    }
 
 
 # ── Admin endpoints ──────────────────────────────────────────────────

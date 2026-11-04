@@ -138,8 +138,13 @@ function PaymentSection({ pay, pro, period, autoCheckout }) {
     return () => { alive = false; };
   }, [token, t]);
 
-  const amount = period === 'year' ? pro.price_year_vnd : pro.price_month_vnd;
-  const usdAmount = period === 'year' ? (pro.price_year_usd || 49) : (pro.price_month_usd || 6.99);
+  const isFirstTime = me ? me.is_first_time_buyer !== false : true;
+  const amount = period === 'year'
+    ? (isFirstTime ? pro.price_year_vnd : (pro.regular_year_vnd || 1490000))
+    : (isFirstTime ? pro.price_month_vnd : (pro.regular_month_vnd || 199000));
+  const usdAmount = period === 'year'
+    ? (isFirstTime ? (pro.price_year_usd || 49) : (pro.regular_year_usd || 69))
+    : (isFirstTime ? (pro.price_month_usd || 6.99) : (pro.regular_month_usd || 9.99));
   const periodLabel = period === 'year' ? t('days365') : t('days30');
   const periodShort = period === 'year' ? t('perYear') : t('perMonth');
 
@@ -259,8 +264,26 @@ export default function PricingPage() {
   const { t } = useTranslation('pricing');
   const lang = useLang();
   const lp = useLocalePath();
+  const { session } = useAuth();
   const { ready, plans } = usePlans();
   const [period, setPeriod] = useState('month');
+  const [meInfo, setMeInfo] = useState(null);
+
+  useEffect(() => {
+    const token = session?.access_token;
+    if (!token) {
+      setMeInfo(null);
+      return undefined;
+    }
+    let alive = true;
+    fetch(`${API_BASE}/api/v1/plans/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d) setMeInfo(d); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [session?.access_token]);
+
+  const isFirstTime = meInfo ? meInfo.is_first_time_buyer !== false : true;
 
   // <title> / description: lib/seo.js (per language)
 
@@ -321,21 +344,31 @@ export default function PricingPage() {
               <div className="rounded-xl border border-accent/40 bg-accent-soft px-4 py-3 flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-extrabold text-accent-text">
-                    {lang === 'en'
-                      ? '🎁 FIRST-TIME BUYER OFFER: Save 30% + 500 Bonus API Calls'
-                      : '🎁 ƯU ĐÃI MUA LẦN ĐẦU: Giảm 30% + Tặng thêm 500 lượt gọi API'}
+                    {isFirstTime
+                      ? (lang === 'en'
+                        ? '🎁 FIRST-TIME BUYER OFFER: Save 30% + 500 Bonus API Calls'
+                        : '🎁 ƯU ĐÃI MUA LẦN ĐẦU: Giảm 30% + Tặng thêm 500 lượt gọi API')
+                      : (lang === 'en'
+                        ? '🔄 SUBSCRIPTION RENEWAL: Standard Regular Pricing'
+                        : '🔄 CHẾ ĐỘ GIA HẠN: Áp dụng Bảng giá gốc tiêu chuẩn')}
                   </p>
                   <p className="text-[11px] text-fg-2 mt-0.5">
-                    {lang === 'en'
-                      ? 'Upgrade to Pro today for $6.99/mo (reg. $9.99) & get 3,500 API calls in your first month!'
-                      : 'Nâng cấp Pro hôm nay chỉ $6.99/tháng (giá gốc $9.99) & nhận tổng 3.500 lượt gọi API tháng đầu!'}
+                    {isFirstTime
+                      ? (lang === 'en'
+                        ? '1st purchase only: $6.99/mo + 500 Bonus API calls. Subsequent renewals are billed at regular price ($9.99/mo).'
+                        : 'Chỉ áp dụng mua lần đầu: $6.99/tháng + 500 API. Gia hạn lần sau sẽ tính về giá gốc ($9.99 / 199.000₫).')
+                      : (lang === 'en'
+                        ? 'You have already claimed your first-time welcome discount. Renewals extend your current expiry date at regular rates.'
+                        : 'Tài khoản của bạn đã sử dụng ưu đãi mua lần đầu. Gia hạn tiếp theo sẽ cộng nối thời hạn theo giá gốc.')}
                   </p>
                 </div>
                 <a
                   href={`${lp('/checkout')}?plan=pro_${period}`}
                   className="shrink-0 px-3 py-1.5 rounded-lg bg-accent text-accent-fg text-[11px] font-bold hover:opacity-90 transition"
                 >
-                  {lang === 'en' ? 'Claim Deal →' : 'Nhận ưu đãi →'}
+                  {isFirstTime
+                    ? (lang === 'en' ? 'Claim Deal →' : 'Nhận ưu đãi →')
+                    : (lang === 'en' ? 'Renew Now →' : 'Gia hạn ngay →')}
                 </a>
               </div>
             </div>
@@ -361,13 +394,19 @@ export default function PricingPage() {
                 const isTeam = tier.id === 'team';
                 const isStarter = tier.id === 'starter';
                 const isPaid = isPro || isTeam || isStarter;
-                const priceVnd = isPaid ? (period === 'year' ? tier.price_year_vnd : tier.price_month_vnd) : 0;
-                const priceUsd = isPaid
-                  ? (period === 'year'
-                    ? (tier.price_year_usd || (isTeam ? 149 : isStarter ? 35 : 49))
-                    : (tier.price_month_usd || (isTeam ? 19.99 : isStarter ? 4.99 : 6.99)))
-                  : 0;
-                const origUsd = period === 'year' ? tier.original_year_usd : tier.original_month_usd;
+                const regVnd = period === 'year'
+                  ? (tier.regular_year_vnd || (isTeam ? 4490000 : isPro ? 1490000 : tier.price_year_vnd))
+                  : (tier.regular_month_vnd || (isTeam ? 599000 : isPro ? 199000 : tier.price_month_vnd));
+                const regUsd = period === 'year'
+                  ? (tier.regular_year_usd || (isTeam ? 219 : isPro ? 69 : 35))
+                  : (tier.regular_month_usd || (isTeam ? 29.99 : isPro ? 9.99 : 4.99));
+                const firstVnd = period === 'year' ? tier.price_year_vnd : tier.price_month_vnd;
+                const firstUsd = period === 'year'
+                  ? (tier.price_year_usd || (isTeam ? 149 : isStarter ? 35 : 49))
+                  : (tier.price_month_usd || (isTeam ? 19.99 : isStarter ? 4.99 : 6.99));
+                const priceVnd = isPaid ? (isFirstTime ? firstVnd : regVnd) : 0;
+                const priceUsd = isPaid ? (isFirstTime ? firstUsd : regUsd) : 0;
+                const origUsd = isFirstTime ? (period === 'year' ? tier.original_year_usd : tier.original_month_usd) : null;
                 return (
                   <article key={tier.id}
                     className={`plan-card min-w-0 rounded-2xl border p-5 bg-surface-2 ${isPro ? 'border-accent shadow-lg ring-2 ring-accent/30 relative' : 'border-line'}`}>
@@ -403,22 +442,34 @@ export default function PricingPage() {
                         ) : null}
                         <span className="text-3xl font-extrabold text-fg">{formatUsd(priceUsd)}</span>
                         {isPaid && <span className="text-sm text-fg-muted"> / {period === 'year' ? t('perYear') : t('perMonth')}</span>}
-                        {isPro && period === 'month' && (
+                        {isPro && isFirstTime && period === 'month' && (
                           <span className="ml-1 px-1.5 py-0.5 rounded bg-success/15 text-success text-[10px] font-bold">
-                            {lang === 'en' ? '-30% First-Time' : 'Giảm 30% Lần đầu'}
+                            {lang === 'en' ? '-30% 1st Purchase' : 'Giảm 30% Lần đầu'}
                           </span>
                         )}
-                        {isPro && period === 'year' && (
+                        {isPro && isFirstTime && period === 'year' && (
                           <span className="ml-1 px-1.5 py-0.5 rounded bg-success/15 text-success text-[10px] font-bold">
-                            {lang === 'en' ? 'Save 42% ($4.08/mo)' : 'Tiết kiệm 42% ($4.08/th)'}
+                            {lang === 'en' ? '1st Year Deal ($4.08/mo)' : 'Ưu đãi Năm đầu ($4.08/th)'}
+                          </span>
+                        )}
+                        {(isPro || isTeam) && !isFirstTime && (
+                          <span className="ml-1 px-1.5 py-0.5 rounded bg-surface border border-line text-fg-muted text-[10px] font-semibold">
+                            {lang === 'en' ? 'Regular Renewal' : 'Giá gốc Gia hạn'}
                           </span>
                         )}
                       </p>
-                      {isPro && (
+                      {isPro && isFirstTime && (
                         <p className="text-[11px] font-semibold text-accent-text mt-1">
                           {lang === 'en'
                             ? '🎁 +500 Bonus API Calls on 1st purchase (3,500 total)'
-                            : '🎁 Tặng thêm +500 lượt gọi API cho lần mua đầu (Tổng 3.500 lượt)'}
+                            : '🎁 Tặng +500 lượt gọi API cho lần mua đầu (Tổng 3.500 lượt)'}
+                        </p>
+                      )}
+                      {(isPro || isTeam) && isFirstTime && (
+                        <p className="text-[10px] text-fg-muted mt-0.5">
+                          {lang === 'en'
+                            ? `⚡ 1st purchase only · Renews at $${regUsd}/${period === 'year' ? 'yr' : 'mo'} (${formatVnd(regVnd)})`
+                            : `⚡ Chỉ áp dụng mua lần đầu · Gia hạn lần sau giá gốc $${regUsd} (${formatVnd(regVnd)})`}
                         </p>
                       )}
                       {isPaid && priceVnd > 0 && (
@@ -439,9 +490,13 @@ export default function PricingPage() {
                         >
                           <Zap className="w-3.5 h-3.5" />
                           {isPro
-                            ? (lang === 'en' ? 'Get Pro + 500 Bonus API →' : 'Chọn Gói Pro (+500 API) →')
+                            ? (isFirstTime
+                              ? (lang === 'en' ? 'Get Pro (1st Time Deal) →' : 'Mua Gói Pro (Giá Ưu đãi Lần đầu) →')
+                              : (lang === 'en' ? 'Renew Pro Plan →' : 'Gia hạn Gói Pro (Giá gốc) →'))
                             : isTeam
-                              ? (lang === 'en' ? 'Get Team / 15k API →' : 'Chọn Gói Team (15.000 API) →')
+                              ? (isFirstTime
+                                ? (lang === 'en' ? 'Get Team / 15k API →' : 'Mua Gói Team (15.000 API) →')
+                                : (lang === 'en' ? 'Renew Team Plan →' : 'Gia hạn Gói Team (Giá gốc) →'))
                               : (lang === 'en' ? 'Choose Starter →' : 'Chọn Gói Starter →')}
                         </a>
                       )}

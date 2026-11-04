@@ -288,7 +288,7 @@ export default function CheckoutPage() {
       .then((data) => setPlans(data))
       .catch(() => setError(t('error.loadPlans')))
       .finally(() => setPlansLoading(false));
-  }, [t]);
+  }, [t, isAuthenticated]);
 
   // ── PayPal capture on return ────────────────────────────────────────
   useEffect(() => {
@@ -517,16 +517,27 @@ export default function CheckoutPage() {
             <div className="space-y-3">
               {(() => {
                 const catalog = Array.isArray(plans?.plans) ? plans.plans : [];
+                const isFirstTime = plans?.is_first_time_buyer !== false;
                 const findPlan = (id, defUsd, defVnd) => {
                   const found = catalog.find((p) => p.id === id);
                   return {
                     usd: found?.usd ? `$${found.usd}` : `$${defUsd}`,
                     vnd: found?.vnd ? formatVnd(found.vnd) : formatVnd(defVnd),
+                    regUsd: found?.regular_usd ? `$${found.regular_usd}` : null,
+                    regVnd: found?.regular_vnd ? formatVnd(found.regular_vnd) : null,
                   };
                 };
                 const st = findPlan(`starter_${billingCycle}`, billingCycle === 'year' ? 35 : 4.99, billingCycle === 'year' ? 690000 : 99000);
-                const pr = findPlan(`pro_${billingCycle}`, billingCycle === 'year' ? 49 : 6.99, billingCycle === 'year' ? 990000 : 149000);
-                const tm = findPlan(`team_${billingCycle}`, billingCycle === 'year' ? 149 : 19.99, billingCycle === 'year' ? 2990000 : 449000);
+                const pr = findPlan(
+                  `pro_${billingCycle}`,
+                  billingCycle === 'year' ? (isFirstTime ? 49 : 69) : (isFirstTime ? 6.99 : 9.99),
+                  billingCycle === 'year' ? (isFirstTime ? 990000 : 1490000) : (isFirstTime ? 149000 : 199000),
+                );
+                const tm = findPlan(
+                  `team_${billingCycle}`,
+                  billingCycle === 'year' ? (isFirstTime ? 149 : 219) : (isFirstTime ? 19.99 : 29.99),
+                  billingCycle === 'year' ? (isFirstTime ? 2990000 : 4490000) : (isFirstTime ? 449000 : 599000),
+                );
                 const perText = billingCycle === 'year' ? t('plan.year.period') : t('plan.month.period');
 
                 const tierCards = [
@@ -542,39 +553,70 @@ export default function CheckoutPage() {
                   },
                   {
                     id: `pro_${billingCycle}`,
-                    name: lang === 'en' ? '⭐ Pro — Creator & Dev' : '⭐ Gói Pro — Creator & Dev',
+                    name: lang === 'en'
+                      ? (isFirstTime ? '⭐ Pro — Creator & Dev (1st Purchase Deal)' : '⭐ Pro — Creator & Dev (Renewal)')
+                      : (isFirstTime ? '⭐ Gói Pro — Creator & Dev (Ưu đãi Lần đầu)' : '⭐ Gói Pro — Creator & Dev (Gia hạn Giá gốc)'),
                     price: pr.usd,
                     period: `${perText} (${pr.vnd})`,
-                    desc: lang === 'en'
-                      ? '🎁 First-Time Offer (-30% off $9.99) · 200 downloads/day · 4K/8K + Reup MD5 + Hardsub MP4 + 3,000 API calls/mo (+500 Bonus)'
-                      : '🎁 Ưu đãi mua lần đầu (-30% từ $9.99) · 200 lượt/ngày · Full 4K/8K + Reup MD5 + Hardsub + 3.000 API/tháng (+500 Bonus)',
-                    badge: lang === 'en' ? '⭐ Most Popular · -30% + 500 API Bonus' : '⭐ Đáng mua nhất · -30% + Tặng 500 API',
+                    desc: isFirstTime
+                      ? (lang === 'en'
+                        ? `🎁 1st Purchase Deal (-30% off ${pr.regUsd || '$9.99'}) · 200 downloads/day · 4K/8K + Reup + Hardsub + 3,500 API calls · Renews at ${pr.regUsd || '$9.99'} (${pr.regVnd || '199.000₫'})`
+                        : `🎁 Ưu đãi mua lần đầu (-30% từ ${pr.regUsd || '$9.99'}) · 200 lượt/ngày · Full 4K/8K + Reup + Hardsub + 3.500 API · Gia hạn lần sau giá gốc ${pr.regUsd || '$9.99'} (${pr.regVnd || '199.000₫'})`)
+                      : (lang === 'en'
+                        ? '🔄 Standard Renewal Rate · 200 downloads/day · Full 4K/8K + Reup MD5 + Hardsub MP4 + 3,000 API calls/month'
+                        : '🔄 Giá gốc Gia hạn · 200 lượt/ngày · Full 4K/8K + Làm sạch Reup MD5 + Hardsub MP4 + 3.000 API/tháng'),
+                    badge: isFirstTime
+                      ? (lang === 'en' ? '⭐ 1st Time: -30% + 500 API Bonus' : '⭐ Mua lần đầu: -30% + Tặng 500 API')
+                      : (lang === 'en' ? '🔄 Regular Renewal Price' : '🔄 Giá gốc Gia hạn'),
                   },
                   {
                     id: `team_${billingCycle}`,
-                    name: lang === 'en' ? '🚀 Team / Business API' : '🚀 Gói Team / Business API',
+                    name: lang === 'en'
+                      ? (isFirstTime ? '🚀 Team / Business API (1st Purchase Deal)' : '🚀 Team / Business API (Renewal)')
+                      : (isFirstTime ? '🚀 Gói Team / Business API (Ưu đãi Lần đầu)' : '🚀 Gói Team / Business API (Gia hạn Giá gốc)'),
                     price: tm.usd,
                     period: `${perText} (${tm.vnd})`,
-                    desc: lang === 'en'
-                      ? '500 downloads/day · 15,000 API calls/month · 200 batch links · Priority Queue & Webhooks'
-                      : '500 lượt/ngày · 15.000 lượt gọi API/tháng · Tải 200 link/lần · Hàng đợi ưu tiên & Webhook',
+                    desc: isFirstTime
+                      ? (lang === 'en'
+                        ? `500 downloads/day · 15,000 API calls/mo · 200 batch links · Renews at regular price ${tm.regUsd || '$29.99'} (${tm.regVnd || '599.000₫'})`
+                        : `500 lượt/ngày · 15.000 API/tháng · Tải 200 link/lần · Gia hạn lần sau về giá gốc ${tm.regUsd || '$29.99'} (${tm.regVnd || '599.000₫'})`)
+                      : (lang === 'en'
+                        ? '🔄 Standard Renewal Rate · 500 downloads/day · 15,000 API calls/month · 200 batch links · Priority Queue'
+                        : '🔄 Giá gốc Gia hạn · 500 lượt/ngày · 15.000 lượt gọi API/tháng · Tải 200 link/lần · Hàng đợi ưu tiên'),
                     badge: lang === 'en' ? 'High Volume API' : 'API Doanh nghiệp',
                   },
                 ];
 
-                return tierCards.map((c) => (
-                  <PlanCard
-                    key={c.id}
-                    id={c.id}
-                    name={c.name}
-                    price={c.price}
-                    period={c.period}
-                    desc={c.desc}
-                    badge={c.badge}
-                    selected={selectedPlan === c.id}
-                    onClick={() => setSelectedPlan(c.id)}
-                  />
-                ));
+                return (
+                  <>
+                    <div className={`rounded-xl border px-3.5 py-2.5 text-xs ${
+                      isFirstTime
+                        ? 'border-accent/40 bg-accent-soft text-fg'
+                        : 'border-line bg-surface-2 text-fg-2'
+                    }`}>
+                      {isFirstTime
+                        ? (lang === 'en'
+                          ? '🎁 First-Time Buyer Discount applied! Note: This promotional price applies to your first purchase only; future renewals are billed at the regular rate.'
+                          : '🎁 Đang áp dụng Ưu đãi Mua Lần Đầu (-30% + Tặng 500 API)! Lưu ý: Ưu đãi chỉ áp dụng cho lần đầu, các kỳ gia hạn tiếp theo sẽ tính về giá gốc.')
+                        : (lang === 'en'
+                          ? '🔄 Subscription Renewal: Your account has already used the first-time welcome offer. Standard regular renewal prices are displayed below.'
+                          : '🔄 Gia hạn Gói cước: Tài khoản của bạn đã sử dụng ưu đãi mua lần đầu. Hệ thống tự động áp dụng bảng giá gốc tiêu chuẩn cho lần gia hạn này.')}
+                    </div>
+                    {tierCards.map((c) => (
+                      <PlanCard
+                        key={c.id}
+                        id={c.id}
+                        name={c.name}
+                        price={c.price}
+                        period={c.period}
+                        desc={c.desc}
+                        badge={c.badge}
+                        selected={selectedPlan === c.id}
+                        onClick={() => setSelectedPlan(c.id)}
+                      />
+                    ))}
+                  </>
+                );
               })()}
             </div>
 

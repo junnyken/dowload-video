@@ -19,18 +19,114 @@ _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 ORDER_TTL_HOURS = 24
 MAX_PENDING_ORDERS = 3
 
-# ── Plan catalog ────────────────────────────────────────────────────
+# ── First-time buyer & Plan catalog ─────────────────────────────────
 
-def catalog() -> List[Dict[str, Any]]:
-    """Plans on sale — prices from admin settings."""
+def is_first_time_buyer(user_id: Optional[str]) -> bool:
+    """True only if the user has never completed a paid order or held a paid subscription.
+
+    First-time buyers get the welcome discount ($6.99/mo vs $9.99/mo regular on Pro,
+    $19.99/mo vs $29.99/mo regular on Team) + 500 Bonus API calls.
+    Any subsequent purchase / renewal is charged at the regular price.
+    """
+    if not user_id:
+        return True
+
+    uid = str(user_id).strip()
+    if not uid:
+        return True
+
+    # 1. Fast Redis check
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        rc = get_redis()
+        if rc.get(f"first_purchase_done:{uid}") or rc.get(f"api_first_bonus_claimed:{uid}"):
+            return False
+    except Exception:
+        pass
+
+    # 2. Check payment_orders table for any previously paid order
+    try:
+        db = _db()
+        res = (
+            db.table("payment_orders")
+            .select("id")
+            .eq("user_id", uid)
+            .eq("status", "paid")
+            .limit(1)
+            .execute()
+        )
+        if res.data:
+            try:
+                from app.core.redis_client import get_redis  # noqa: PLC0415
+                get_redis().set(f"first_purchase_done:{uid}", "1")
+            except Exception:
+                pass
+            return False
+    except Exception:
+        pass
+
+    # 3. Check profiles table for any prior or active paid subscription
+    try:
+        db = _db()
+        pres = (
+            db.table("profiles")
+            .select("tier, billing_status, subscription_expiry")
+            .eq("id", uid)
+            .maybe_single()
+            .execute()
+        )
+        prof = pres.data or {}
+        tier = (prof.get("tier") or "free").lower()
+        bstatus = (prof.get("billing_status") or "none").lower()
+        if tier in ("starter", "pro", "team", "enterprise") or bstatus in ("active", "manual", "canceling", "past_due") or prof.get("subscription_expiry"):
+            return False
+    except Exception:
+        pass
+
+    return True
+
+
+def catalog(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Plans on sale — first-time promo price for new buyers, regular price for renewals."""
     from app.core.plans import get_settings  # noqa: PLC0415
     s = get_settings()
+    first_time = is_first_time_buyer(user_id)
+
     st_m_cents = int(s.get("starter_month_usd_cents") or 499)
     st_y_cents = int(s.get("starter_year_usd_cents") or 3500)
-    month_cents = int(s.get("price_month_usd_cents") or os.getenv("STRIPE_PRO_MONTH_USD_CENTS", "699") or 699)
-    year_cents = int(s.get("price_year_usd_cents") or os.getenv("STRIPE_PRO_YEAR_USD_CENTS", "4900") or 4900)
-    tm_m_cents = int(s.get("team_month_usd_cents") or 1999)
-    tm_y_cents = int(s.get("team_year_usd_cents") or 14900)
+
+    # Pro: First-time ($6.99 / 149k, $49 / 990k) vs Regular Renewal ($9.99 / 199k, $69 / 1.490k)
+    pro_first_m_cents = int(s.get("price_month_usd_cents") or os.getenv("STRIPE_PRO_MONTH_USD_CENTS", "699") or 699)
+    pro_first_y_cents = int(s.get("price_year_usd_cents") or os.getenv("STRIPE_PRO_YEAR_USD_CENTS", "4900") or 4900)
+    pro_first_m_vnd = int(s.get("price_month_vnd") or 149_000)
+    pro_first_y_vnd = int(s.get("price_year_vnd") or 990_000)
+
+    pro_reg_m_cents = int(s.get("regular_month_usd_cents") or 999)
+    pro_reg_y_cents = int(s.get("regular_year_usd_cents") or 6900)
+    pro_reg_m_vnd = int(s.get("regular_month_vnd") or 199_000)
+    pro_reg_y_vnd = int(s.get("regular_year_vnd") or 1_490_000)
+
+    # Team: First-time ($19.99 / 449k, $149 / 2.990k) vs Regular Renewal ($29.99 / 599k, $219 / 4.490k)
+    tm_first_m_cents = int(s.get("team_month_usd_cents") or 1999)
+    tm_first_y_cents = int(s.get("team_year_usd_cents") or 14900)
+    tm_first_m_vnd = int(s.get("team_month_vnd") or 449_000)
+    tm_first_y_vnd = int(s.get("team_year_vnd") or 2_990_000)
+
+    tm_reg_m_cents = int(s.get("team_regular_month_usd_cents") or 2999)
+    tm_reg_y_cents = int(s.get("team_regular_year_usd_cents") or 21900)
+    tm_reg_m_vnd = int(s.get("team_regular_month_vnd") or 599_000)
+    tm_reg_y_vnd = int(s.get("team_regular_year_vnd") or 4_490_000)
+
+    eff_pro_m_cents = pro_first_m_cents if first_time else pro_reg_m_cents
+    eff_pro_y_cents = pro_first_y_cents if first_time else pro_reg_y_cents
+    eff_pro_m_vnd = pro_first_m_vnd if first_time else pro_reg_m_vnd
+    eff_pro_y_vnd = pro_first_y_vnd if first_time else pro_reg_y_vnd
+
+    eff_tm_m_cents = tm_first_m_cents if first_time else tm_reg_m_cents
+    eff_tm_y_cents = tm_first_y_cents if first_time else tm_reg_y_cents
+    eff_tm_m_vnd = tm_first_m_vnd if first_time else tm_reg_m_vnd
+    eff_tm_y_vnd = tm_first_y_vnd if first_time else tm_reg_y_vnd
+
     plans = [
         {
             "id": "starter_month",
@@ -40,6 +136,9 @@ def catalog() -> List[Dict[str, Any]]:
             "vnd": s.get("starter_month_vnd", 99_000),
             "usd_cents": st_m_cents,
             "usd": round(st_m_cents / 100, 2),
+            "regular_vnd": s.get("starter_month_vnd", 99_000),
+            "regular_usd": round(st_m_cents / 100, 2),
+            "is_first_time_offer": False,
             "days": 30,
         },
         {
@@ -50,60 +149,83 @@ def catalog() -> List[Dict[str, Any]]:
             "vnd": s.get("starter_year_vnd", 690_000),
             "usd_cents": st_y_cents,
             "usd": round(st_y_cents / 100, 2),
+            "regular_vnd": s.get("starter_year_vnd", 690_000),
+            "regular_usd": round(st_y_cents / 100, 2),
+            "is_first_time_offer": False,
             "days": 365,
         },
         {
             "id": "pro_month",
             "tier": "pro",
-            "name": "Pro Tháng",
-            "name_en": "Pro Monthly",
-            "vnd": s.get("price_month_vnd", 149_000),
-            "usd_cents": month_cents,
-            "usd": round(month_cents / 100, 2),
-            "original_usd": 9.99,
-            "bonus_api_calls": 500,
+            "name": "Pro Tháng" if first_time else "Pro Tháng (Gia hạn)",
+            "name_en": "Pro Monthly" if first_time else "Pro Monthly (Renewal)",
+            "vnd": eff_pro_m_vnd,
+            "usd_cents": eff_pro_m_cents,
+            "usd": round(eff_pro_m_cents / 100, 2),
+            "first_time_vnd": pro_first_m_vnd,
+            "first_time_usd": round(pro_first_m_cents / 100, 2),
+            "regular_vnd": pro_reg_m_vnd,
+            "regular_usd": round(pro_reg_m_cents / 100, 2),
+            "original_usd": round(pro_reg_m_cents / 100, 2),
+            "bonus_api_calls": 500 if first_time else 0,
+            "is_first_time_offer": first_time,
             "days": 30,
         },
         {
             "id": "pro_year",
             "tier": "pro",
-            "name": "Pro Năm",
-            "name_en": "Pro Yearly",
-            "vnd": s.get("price_year_vnd", 990_000),
-            "usd_cents": year_cents,
-            "usd": round(year_cents / 100, 2),
-            "original_usd": 83.88,
-            "bonus_api_calls": 500,
+            "name": "Pro Năm" if first_time else "Pro Năm (Gia hạn)",
+            "name_en": "Pro Yearly" if first_time else "Pro Yearly (Renewal)",
+            "vnd": eff_pro_y_vnd,
+            "usd_cents": eff_pro_y_cents,
+            "usd": round(eff_pro_y_cents / 100, 2),
+            "first_time_vnd": pro_first_y_vnd,
+            "first_time_usd": round(pro_first_y_cents / 100, 2),
+            "regular_vnd": pro_reg_y_vnd,
+            "regular_usd": round(pro_reg_y_cents / 100, 2),
+            "original_usd": round(pro_reg_y_cents / 100, 2),
+            "bonus_api_calls": 500 if first_time else 0,
+            "is_first_time_offer": first_time,
             "days": 365,
         },
         {
             "id": "team_month",
             "tier": "team",
-            "name": "Team / Business API Tháng",
-            "name_en": "Team / Business API Monthly",
-            "vnd": s.get("team_month_vnd", 449_000),
-            "usd_cents": tm_m_cents,
-            "usd": round(tm_m_cents / 100, 2),
-            "original_usd": 29.99,
+            "name": "Team / Business API Tháng" if first_time else "Team / Business API Tháng (Gia hạn)",
+            "name_en": "Team / Business API Monthly" if first_time else "Team / Business API Monthly (Renewal)",
+            "vnd": eff_tm_m_vnd,
+            "usd_cents": eff_tm_m_cents,
+            "usd": round(eff_tm_m_cents / 100, 2),
+            "first_time_vnd": tm_first_m_vnd,
+            "first_time_usd": round(tm_first_m_cents / 100, 2),
+            "regular_vnd": tm_reg_m_vnd,
+            "regular_usd": round(tm_reg_m_cents / 100, 2),
+            "original_usd": round(tm_reg_m_cents / 100, 2),
+            "is_first_time_offer": first_time,
             "days": 30,
         },
         {
             "id": "team_year",
             "tier": "team",
-            "name": "Team / Business API Năm",
-            "name_en": "Team / Business API Yearly",
-            "vnd": s.get("team_year_vnd", 2_990_000),
-            "usd_cents": tm_y_cents,
-            "usd": round(tm_y_cents / 100, 2),
-            "original_usd": 239.88,
+            "name": "Team / Business API Năm" if first_time else "Team / Business API Năm (Gia hạn)",
+            "name_en": "Team / Business API Yearly" if first_time else "Team / Business API Yearly (Renewal)",
+            "vnd": eff_tm_y_vnd,
+            "usd_cents": eff_tm_y_cents,
+            "usd": round(eff_tm_y_cents / 100, 2),
+            "first_time_vnd": tm_first_y_vnd,
+            "first_time_usd": round(tm_first_y_cents / 100, 2),
+            "regular_vnd": tm_reg_y_vnd,
+            "regular_usd": round(tm_reg_y_cents / 100, 2),
+            "original_usd": round(tm_reg_y_cents / 100, 2),
+            "is_first_time_offer": first_time,
             "days": 365,
         },
     ]
     return plans
 
 
-def plan_by_id(plan_id: str) -> Optional[Dict[str, Any]]:
-    for p in catalog():
+def plan_by_id(plan_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    for p in catalog(user_id=user_id):
         if p["id"] == plan_id:
             return p
     return None
@@ -208,7 +330,7 @@ def create_order(
     Returns (order_dict, error_message).
     error_message is None on success.
     """
-    plan = plan_by_id(plan_id)
+    plan = plan_by_id(plan_id, user_id=user_id)
     if not plan:
         return {}, "plan_not_found"
 
@@ -417,18 +539,19 @@ def _upgrade_user_pro(user_id: str, days: int, subscription_id: str, target_tier
     except Exception:
         pass
 
-    # First-time Pro welcome bonus: +500 API calls for current month
-    if (target_tier or "pro") == "pro":
-        try:
-            from app.core.redis_client import get_redis  # noqa: PLC0415
-            from app.core import api_quota as aq  # noqa: PLC0415
-            rc = get_redis()
-            first_flag = f"api_first_bonus_claimed:{user_id}"
-            if not rc.get(first_flag):
-                rc.set(first_flag, "1")
-                rc.set(f"api_bonus:{user_id}:{aq.month_of()}", 500, ex=40 * 86400)
-        except Exception:
-            pass
+    # First-time Pro welcome bonus: +500 API calls ONLY on 1st purchase, then mark first_purchase_done
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        from app.core import api_quota as aq  # noqa: PLC0415
+        rc = get_redis()
+        first_flag = f"api_first_bonus_claimed:{user_id}"
+        done_flag = f"first_purchase_done:{user_id}"
+        if (target_tier or "pro") == "pro" and not rc.get(first_flag) and not rc.get(done_flag):
+            rc.set(first_flag, "1")
+            rc.set(f"api_bonus:{user_id}:{aq.month_of()}", 500, ex=40 * 86400)
+        rc.set(done_flag, "1")
+    except Exception:
+        pass
 
     # Reward referrer
     try:
