@@ -1339,17 +1339,17 @@ export default function DashboardContent() {
   const handleOpenTrimmer = () => {
     const dur = videoInfo?.duration || 0;
     setTrimStart(0);
-    setTrimEnd(Math.min(dur, 30));
+    setTrimEnd(Math.min(dur, isProUser ? 30 : 10));
     setShowTrimmer(true);
   };
 
   const handleTrimDownload = async () => {
     if (!videoInfo) return;
     const clipLen = trimEnd - trimStart;
-    if (clipLen > 30 && !isProUser) {
+    if (clipLen > 10 && !isProUser) {
       setUpgradeErrorCode('tier_required_feature');
       setShowUpgradeModal(true);
-      trackEvent(EVENT.PAYWALL_SEEN, { trigger: 'trim_over_30s' });
+      trackEvent(EVENT.PAYWALL_SEEN, { trigger: 'trim_over_10s' });
       setPaywallTrigger('tier_required_feature');
       return;
     }
@@ -2693,7 +2693,7 @@ export default function DashboardContent() {
                       {t('trim.title')}
                     </h5>
                     <span className="text-[11px] px-2 py-0.5 rounded-full bg-surface-2 border border-line text-fg-muted">
-                      {isEnUi ? 'Free ≤ 30s · Pro up to 10 min' : 'Miễn phí ≤ 30 giây · Gói Pro cắt tới 10 phút'}
+                      {isEnUi ? 'Free ≤ 10s · Pro up to 10 min' : 'Cắt thử tối đa ≤ 10 giây · Gói Pro cắt tới 10 phút'}
                     </span>
                   </div>
                   <button onClick={() => setShowTrimmer(false)} className="text-fg-muted hover:text-fg transition-colors">
@@ -2748,14 +2748,14 @@ export default function DashboardContent() {
 
                 {/* Quick Presets */}
                 <div className="flex flex-wrap gap-2 mb-4">
-                  {[15, 30, 60].map(sec => (
+                  {[10, 30, 60].map(sec => (
                     <button
                       key={sec}
                       onClick={() => { setTrimStart(0); setTrimEnd(Math.min(sec, videoInfo.duration)); }}
                       className="px-3 py-1.5 rounded-lg text-xs font-bold bg-surface-2 text-fg-2 border border-line-strong hover:border-accent/40 hover:text-accent-text transition-all flex items-center gap-1"
                     >
                       {t('trim.firstSec', { sec })}
-                      {sec > 30 && !isProUser && <span className="px-1 py-0.2 rounded text-[9px] bg-accent text-accent-fg font-bold">PRO</span>}
+                      {sec > 10 && !isProUser && <span className="px-1 py-0.2 rounded text-[9px] bg-accent text-accent-fg font-bold">PRO</span>}
                     </button>
                   ))}
                   <button
@@ -2763,7 +2763,7 @@ export default function DashboardContent() {
                     className="px-3 py-1.5 rounded-lg text-xs font-bold bg-surface-2 text-fg-2 border border-line-strong hover:border-success/40 hover:text-success transition-all flex items-center gap-1"
                   >
                     {t('trim.whole')}
-                    {videoInfo.duration > 30 && !isProUser && <span className="px-1 py-0.2 rounded text-[9px] bg-accent text-accent-fg font-bold">PRO</span>}
+                    {videoInfo.duration > 10 && !isProUser && <span className="px-1 py-0.2 rounded text-[9px] bg-accent text-accent-fg font-bold">PRO</span>}
                   </button>
                 </div>
 

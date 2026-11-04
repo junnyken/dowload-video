@@ -24,7 +24,7 @@
     "schedules": "Lịch tải",
     "api": "API key"
   },
-  "trimFree": "Cắt thử ≤ 30 giây",
+  "trimFree": "Cắt thử ≤ 10 giây",
   "trimPro": "Tùy chỉnh đến 10 phút (Full HD/4K)",
   "reupPro": "Xóa sạch thông tin gốc + Đổi MD5 + Lật gương",
   "burnSubFree": "Tải file phụ đề .SRT/.TXT rời",

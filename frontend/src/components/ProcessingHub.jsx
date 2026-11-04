@@ -95,11 +95,12 @@ function ErrorRow({ error }) {
 }
 
 // ── Tab: Trim ──────────────────────────────────────────────────────────────
-function TrimTab({ localPath, sourceUrl, title, duration, processing }) {
-  const [preset, setPreset]     = useState(15);
+function TrimTab({ localPath, sourceUrl, title, duration, processing, userTier, onOpenUpgrade }) {
+  const isPro = ['pro', 'team', 'enterprise', 'api'].includes(userTier);
+  const [preset, setPreset]     = useState(10);
   const [isCustom, setIsCustom] = useState(false);
   const [start, setStart]       = useState(0);
-  const [end, setEnd]           = useState(15);
+  const [end, setEnd]           = useState(10);
   const [isAudio, setIsAudio]   = useState(false);
   const { t } = useTranslation('results');
   const st = processing.getState('trim');
@@ -113,6 +114,10 @@ function TrimTab({ localPath, sourceUrl, title, duration, processing }) {
   };
 
   const handleSubmit = async () => {
+    if ((end - start) > 10 && !isPro) {
+      onOpenUpgrade?.('tier_required_feature');
+      return;
+    }
     const body = {
       start_time: start,
       end_time:   end,
@@ -716,7 +721,7 @@ export default function ProcessingHub({ videoInfo, localPath, sourceUrl, onClose
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
           {activeTab === 'trim' && (
-            <TrimTab localPath={localPath} sourceUrl={sourceUrl} title={title} duration={duration} processing={processing} />
+            <TrimTab localPath={localPath} sourceUrl={sourceUrl} title={title} duration={duration} processing={processing} userTier={userTier} onOpenUpgrade={onOpenUpgrade} />
           )}
           {activeTab === 'reup' && (
             <ReupCleanTab localPath={localPath} sourceUrl={sourceUrl} title={title} processing={processing} userTier={userTier} onOpenUpgrade={onOpenUpgrade} />
