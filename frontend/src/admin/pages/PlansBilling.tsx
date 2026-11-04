@@ -299,3 +299,23 @@ export function TransferCodeFinder() {
     </Card>
   )
 }
+
+export default function PlansBillingPage() {
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Gói &amp; Cổng thanh toán</h1>
+          <p className="text-xs text-fg-muted mt-0.5">
+            Cấu hình bảng giá Pro, ngân hàng nội địa (VietQR + SePay HMAC-SHA256), thanh toán quốc tế (PayPal &amp; RapidAPI) và tra cứu mã chuyển khoản.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2 items-start">
+        <PlansSettingsCard />
+        <TransferCodeFinder />
+      </div>
+    </div>
+  )
+}

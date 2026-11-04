@@ -81,6 +81,8 @@ const NAV_MANAGE: NavItem[] = [
   { href: '/vid-admin/takedown', label: 'Yêu cầu gỡ nội dung', icon: FileX, minRole: 'operator' },
   { href: '/vid-admin/playbooks', label: 'Playbooks', icon: BookOpen, minRole: 'operator', hidden: true },
   { href: '/vid-admin/automation-history', label: 'Automation', icon: History, minRole: 'viewer' },
+  // wording: BA review — plans, pricing, VietQR/SePay & PayPal/RapidAPI settings
+  { href: '/vid-admin/plans', label: 'Gói & Cổng thanh toán', icon: Wallet, minRole: 'operator' },
   // wording: BA review — auto checkout orders (VietQR/PayPal)
   { href: '/vid-admin/orders', label: 'Đơn thanh toán', icon: CreditCard, minRole: 'operator' },
 ]

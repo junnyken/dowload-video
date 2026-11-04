@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { adminFetch, adminPost } from '../utils/adminFetch'
-import { PlansSettingsCard, TransferCodeFinder, grantPro, fmtDate } from './PlansBilling'
+import { grantPro, fmtDate } from './PlansBilling'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -381,12 +381,6 @@ export default function UsersPage() {
           {loading && <span className="text-xs text-fg-muted animate-pulse">Refreshing…</span>}
           {!loading && <span className="text-xs text-fg-muted">Auto-refresh 60s</span>}
         </div>
-      </div>
-
-      {/* Gói & thanh toán: giá, thông tin chuyển khoản, tìm theo mã (wording: BA review) */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <PlansSettingsCard />
-        <TransferCodeFinder />
       </div>
 
       {/* ── Registered accounts ─────────────────────────────────────────
