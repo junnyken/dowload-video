@@ -52,39 +52,38 @@ const NAV_MONITOR: NavItem[] = [
   { href: '/vid-admin/analytics', label: 'Analytics', icon: ChartColumn, minRole: 'viewer' },
   { href: '/vid-admin/probes', label: 'Sức khoẻ nền tảng', icon: HeartPulse, minRole: 'viewer', hidden: true },
   // wording: BA review
-  { href: '/vid-admin/platform-health', label: 'Sức khoẻ nền tảng', icon: Stethoscope, minRole: 'operator' },
+  { href: '/vid-admin/platform-health', label: 'Sức khoẻ nền tảng', icon: Stethoscope, minRole: 'operator', hidden: true },
   // wording: BA review
-  { href: '/vid-admin/capacity', label: 'Tải đồng thời', icon: Cpu, minRole: 'operator' },
-  { href: '/vid-admin/database', label: 'Cơ sở dữ liệu', icon: Database, minRole: 'admin' },
-  { href: '/vid-admin/funnel', label: 'Funnel', icon: Funnel, minRole: 'viewer' },
+  { href: '/vid-admin/capacity', label: 'Tải đồng thời', icon: Cpu, minRole: 'operator', hidden: true },
+  { href: '/vid-admin/database', label: 'Cơ sở dữ liệu', icon: Database, minRole: 'admin', hidden: true },
+  { href: '/vid-admin/funnel', label: 'Funnel', icon: Funnel, minRole: 'viewer', hidden: true },
   // wording: BA review
-  { href: '/vid-admin/metrics', label: 'Đo lường', icon: Ruler, minRole: 'admin' },
-  { href: '/vid-admin/youtube-gate', label: 'YouTube Gate', icon: Play, minRole: 'operator' },
+  { href: '/vid-admin/metrics', label: 'Đo lường', icon: Ruler, minRole: 'admin', hidden: true },
+  { href: '/vid-admin/youtube-gate', label: 'YouTube Gate', icon: Play, minRole: 'operator', hidden: true },
   // Ops Signals is the aggregated "is anything wrong right now" view. Queue
   // Health and Anomalies answer the same question from the same Redis state in
   // a different arrangement, so they are folded behind it rather than listed
   // three times. Queue Health also owns the auto-tune controls — reachable at
   // /vid-admin/queue-health when those are needed.
-  { href: '/vid-admin/ops-signals', label: 'Ops Signals', icon: Radio, minRole: 'viewer' },
+  { href: '/vid-admin/ops-signals', label: 'Ops Signals', icon: Radio, minRole: 'viewer', hidden: true },
   { href: '/vid-admin/queue-health', label: 'Queue Health', icon: Gauge, minRole: 'viewer', hidden: true },
   { href: '/vid-admin/anomalies', label: 'Anomalies', icon: Siren, minRole: 'viewer', hidden: true },
 ]
 
 const NAV_MANAGE: NavItem[] = [
   { href: '/vid-admin/users', label: 'Users', icon: Users, minRole: 'operator' },
-  { href: '/vid-admin/config', label: 'Config', icon: Settings, minRole: 'admin', hidden: true },
-  { href: '/vid-admin/asr', label: 'Phiên âm (ASR)', icon: Mic, minRole: 'operator' },
-  { href: '/vid-admin/apify-costs', label: 'Chi phí Apify', icon: CircleDollarSign, minRole: 'admin' },
-  // wording: BA review
-  { href: '/vid-admin/desktop-app', label: 'App Windows', icon: MonitorDown, minRole: 'admin' },
-  // wording: BA review
-  { href: '/vid-admin/takedown', label: 'Yêu cầu gỡ nội dung', icon: FileX, minRole: 'operator' },
-  { href: '/vid-admin/playbooks', label: 'Playbooks', icon: BookOpen, minRole: 'operator', hidden: true },
-  { href: '/vid-admin/automation-history', label: 'Automation', icon: History, minRole: 'viewer' },
   // wording: BA review — plans, pricing, VietQR/SePay & PayPal/RapidAPI settings
   { href: '/vid-admin/plans', label: 'Gói & Cổng thanh toán', icon: Wallet, minRole: 'operator' },
   // wording: BA review — auto checkout orders (VietQR/PayPal)
   { href: '/vid-admin/orders', label: 'Đơn thanh toán', icon: CreditCard, minRole: 'operator' },
+  { href: '/vid-admin/desktop-app', label: 'App Windows', icon: MonitorDown, minRole: 'admin' },
+  { href: '/vid-admin/config', label: 'Config', icon: Settings, minRole: 'admin', hidden: true },
+  { href: '/vid-admin/asr', label: 'Phiên âm (ASR)', icon: Mic, minRole: 'operator', hidden: true },
+  { href: '/vid-admin/apify-costs', label: 'Chi phí Apify', icon: CircleDollarSign, minRole: 'admin', hidden: true },
+  // wording: BA review
+  { href: '/vid-admin/takedown', label: 'Yêu cầu gỡ nội dung', icon: FileX, minRole: 'operator', hidden: true },
+  { href: '/vid-admin/playbooks', label: 'Playbooks', icon: BookOpen, minRole: 'operator', hidden: true },
+  { href: '/vid-admin/automation-history', label: 'Automation', icon: History, minRole: 'viewer', hidden: true },
 ]
 
 // The partner/multi-tenant surface. Tenants, API Keys, Webhooks and Usage are
@@ -94,10 +93,10 @@ const NAV_MANAGE: NavItem[] = [
 // user_credits, user_presets) — re-list a line the day it has real use.
 const NAV_ENTERPRISE: NavItem[] = [
   // wording: BA review
-  { href: '/vid-admin/tenants',     label: 'Khách Partner',    icon: Building2,  minRole: 'admin' },
-  { href: '/vid-admin/api-keys',    label: 'Partner API Keys', icon: KeyRound,   minRole: 'admin' },
-  { href: '/vid-admin/webhooks',    label: 'Webhook',         icon: Webhook,    minRole: 'admin' },
-  { href: '/vid-admin/usage',       label: 'Lượng sử dụng',            icon: Activity,   minRole: 'admin' },
+  { href: '/vid-admin/tenants',     label: 'Khách Partner',    icon: Building2,  minRole: 'admin', hidden: true },
+  { href: '/vid-admin/api-keys',    label: 'Partner API Keys', icon: KeyRound,   minRole: 'admin', hidden: true },
+  { href: '/vid-admin/webhooks',    label: 'Webhook',         icon: Webhook,    minRole: 'admin', hidden: true },
+  { href: '/vid-admin/usage',       label: 'Lượng sử dụng',            icon: Activity,   minRole: 'admin', hidden: true },
   { href: '/vid-admin/ai-analysis', label: 'AI Analysis', icon: Sparkles,          minRole: 'admin', hidden: true },
   { href: '/vid-admin/billing',     label: 'Billing',     icon: Wallet,            minRole: 'admin', hidden: true },
   { href: '/vid-admin/presets',     label: 'Presets',     icon: SlidersHorizontal, minRole: 'admin', hidden: true },
