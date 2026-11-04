@@ -787,28 +787,52 @@ async def _translate_srt_file_to_vi(srt_path: str) -> None:
 
         translated_lines: List[str] = []
         batch_size = 25
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0"},
+        ) as client:
             for i in range(0, len(text_lines), batch_size):
                 chunk = text_lines[i : i + batch_size]
                 joined = "\n".join(chunk)
-                resp = await client.get(
-                    "https://translate.googleapis.com/translate_a/single",
-                    params={
-                        "client": "gtx",
-                        "sl": "auto",
-                        "tl": "vi",
-                        "dt": "t",
-                        "q": joined,
-                    },
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    merged = "".join(seg[0] for seg in (data[0] or []) if seg and seg[0])
+                merged = ""
+                # Primary: clients5 Chrome extension translate endpoint (high rate limit)
+                try:
+                    r1 = await client.get(
+                        "https://clients5.google.com/translate_a/t",
+                        params={"client": "dict-chrome-ex", "sl": "auto", "tl": "vi", "q": joined},
+                    )
+                    if r1.status_code == 200:
+                        d1 = r1.json()
+                        if isinstance(d1, list) and d1:
+                            first = d1[0]
+                            if isinstance(first, list) and first and isinstance(first[0], str):
+                                merged = first[0]
+                            elif isinstance(first, str):
+                                merged = first
+                except Exception:
+                    merged = ""
+
+                # Fallback: translate.googleapis.com gtx endpoint
+                if not merged:
+                    resp = await client.get(
+                        "https://translate.googleapis.com/translate_a/single",
+                        params={
+                            "client": "gtx",
+                            "sl": "auto",
+                            "tl": "vi",
+                            "dt": "t",
+                            "q": joined,
+                        },
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        merged = "".join(seg[0] for seg in (data[0] or []) if seg and seg[0])
+
+                if merged:
                     parts = [p.strip() for p in merged.split("\n")]
                     if len(parts) == len(chunk):
                         translated_lines.extend(parts)
                     else:
-                        # Pad or trim if newline count shifted slightly
                         for j in range(len(chunk)):
                             translated_lines.append(parts[j] if j < len(parts) and parts[j] else chunk[j])
                 else:
