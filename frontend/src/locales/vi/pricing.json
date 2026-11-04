@@ -2,9 +2,9 @@
   "tier": {
     "guest": { "name": "Khách", "sub": "Chưa đăng nhập" },
     "free": { "name": "Free", "sub": "Có tài khoản, miễn phí" },
-    "starter": { "name": "Starter", "sub": "Tải cơ bản 1080p · Không có Reup & API" },
-    "pro": { "name": "Pro — Creator & Dev", "sub": "Full 4K/8K + Làm sạch Reup + Hardsub + 3.000 API" },
-    "team": { "name": "Team / Business API", "sub": "15.000 lượt gọi API/tháng + Hàng đợi ưu tiên" }
+    "starter": { "name": "Starter", "sub": "50 lượt/ngày · Cơ bản 1080p · Không Reup & API" },
+    "pro": { "name": "Pro — Creator & Dev", "sub": "200 lượt/ngày · Full 4K/8K + Reup + Hardsub + 3.000 API" },
+    "team": { "name": "Team / Business API", "sub": "500 lượt/ngày · 15.000 API/tháng + Hàng đợi ưu tiên" }
   },
   "yes": "Có",
   "no": "Không có",

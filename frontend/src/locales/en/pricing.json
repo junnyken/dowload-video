@@ -3,9 +3,9 @@
   "tier": {
     "guest": { "name": "Guest", "sub": "Not signed in" },
     "free": { "name": "Free", "sub": "Free with an account" },
-    "starter": { "name": "Starter", "sub": "Basic downloads · No Reup / No API" },
-    "pro": { "name": "Pro — Creator & Dev", "sub": "Full 4K/8K + Reup + Hardsub + 3,000 API calls" },
-    "team": { "name": "Team / Business API", "sub": "15,000 API calls/mo + Priority SLA & Webhooks" }
+    "starter": { "name": "Starter", "sub": "50/day · Basic 1080p · No Reup / No API" },
+    "pro": { "name": "Pro — Creator & Dev", "sub": "200/day · Full 4K/8K + Reup + Hardsub + 3,000 API" },
+    "team": { "name": "Team / Business API", "sub": "500/day · 15,000 API calls/mo + Priority SLA & Webhooks" }
   },
   "yes": "Yes",
   "no": "Not included",

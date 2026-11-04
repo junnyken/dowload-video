@@ -31,7 +31,7 @@ from app.core.database import get_supabase_client
 
 # ── Tier limits (env-tunable) ─────────────────────────────────────────
 FREE_DAILY_LIMIT  = int(os.getenv("FREE_DAILY_LIMIT",   "10"))
-PRO_DAILY_LIMIT   = int(os.getenv("PRO_DAILY_LIMIT",   "100"))
+PRO_DAILY_LIMIT   = int(os.getenv("PRO_DAILY_LIMIT",   "200"))
 FREE_BATCH_LIMIT  = int(os.getenv("FREE_BATCH_LIMIT",    "5"))
 PRO_BATCH_LIMIT   = int(os.getenv("PRO_BATCH_LIMIT",   "100"))
 ANON_DAILY_LIMIT  = int(os.getenv("ANON_DAILY_LIMIT",    "5"))

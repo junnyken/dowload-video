@@ -546,8 +546,8 @@ export default function CheckoutPage() {
                     price: pr.usd,
                     period: `${perText} (${pr.vnd})`,
                     desc: lang === 'en'
-                      ? '🎁 First-Time Offer (-30% off $9.99) · 4K/8K + Reup MD5 + Hardsub MP4 + 3,000 API calls/mo (+500 Bonus)'
-                      : '🎁 Ưu đãi mua lần đầu (-30% từ $9.99) · Full 4K/8K + Reup MD5 + Hardsub + 3.000 API/tháng (+500 Bonus)',
+                      ? '🎁 First-Time Offer (-30% off $9.99) · 200 downloads/day · 4K/8K + Reup MD5 + Hardsub MP4 + 3,000 API calls/mo (+500 Bonus)'
+                      : '🎁 Ưu đãi mua lần đầu (-30% từ $9.99) · 200 lượt/ngày · Full 4K/8K + Reup MD5 + Hardsub + 3.000 API/tháng (+500 Bonus)',
                     badge: lang === 'en' ? '⭐ Most Popular · -30% + 500 API Bonus' : '⭐ Đáng mua nhất · -30% + Tặng 500 API',
                   },
                   {

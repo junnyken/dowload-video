@@ -92,7 +92,7 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
     "pro": {
         "name": "Pro",
         "limits": {
-            "downloads_per_day":     int(os.getenv("PRO_DAILY_LIMIT", "100")),
+            "downloads_per_day":     int(os.getenv("PRO_DAILY_LIMIT", "200")),
             "batch_size_max":        100,
             "max_height":            2160,
             "history_days":          90,
