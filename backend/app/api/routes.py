@@ -1166,6 +1166,8 @@ async def fetch_link(
             "has_auto_captions":           info.get("has_auto_captions", False),
             "available_subtitle_languages": info.get("available_subtitle_languages", []),
             "subtitle_source":             info.get("subtitle_source", "none"),
+            "images":                      info.get("images") or [],
+            "audio_url":                   info.get("audio_url") or "",
         }
         # PLAN-32E P3 (task #6172): the app's Rust side lets a direct link
         # through only with a signed token (this download is already counted

@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   X, Download, Scissors, Music, Film, FileText, Package,
-  Loader2, AlertCircle, CheckCircle2, Lock,
+  Loader2, AlertCircle, CheckCircle2, Lock, ShieldCheck, Crown,
 } from 'lucide-react';
 import { useProcessing } from '../hooks/useProcessing';
 import ArtifactExpiry from './ArtifactExpiry';
@@ -25,11 +25,12 @@ const API = import.meta.env.VITE_API_URL || '';
 
 // Tab labels: results.json tabs.<id>
 const TABS = [
-  { id: 'trim',     icon: Scissors },
-  { id: 'audio',    icon: Music    },
-  { id: 'gif',      icon: Film     },
-  { id: 'subtitle', icon: FileText },
-  { id: 'package',  icon: Package  },
+  { id: 'trim',     icon: Scissors    },
+  { id: 'reup',     icon: ShieldCheck, pro: true },
+  { id: 'audio',    icon: Music       },
+  { id: 'gif',      icon: Film        },
+  { id: 'subtitle', icon: FileText    },
+  { id: 'package',  icon: Package     },
 ];
 
 // Quick-trim presets in seconds
@@ -360,12 +361,14 @@ function GifTab({ localPath, sourceUrl, title, duration, processing, userTier })
 }
 
 // ── Tab: Subtitle ──────────────────────────────────────────────────────────
-function SubtitleTab({ videoInfo, sourceUrl, processing, userTier }) {
+function SubtitleTab({ videoInfo, sourceUrl, processing, userTier, onOpenUpgrade }) {
   const langs = videoInfo?.available_subtitle_languages || [];
   const [lang, setLang]     = useState(langs[0] || 'auto');
   const [fmt, setFmt]       = useState('srt');
   const [burn, setBurn]     = useState(false);
-  const { t } = useTranslation('results');
+  const [translateVi, setTranslateVi] = useState(false);
+  const { t, i18n } = useTranslation('results');
+  const isEn = i18n.language === 'en';
   const isPro = ['pro', 'team', 'enterprise', 'api'].includes(userTier);
   const stSub  = processing.getState('subtitle');
   const stBurn = processing.getState('burn');
@@ -374,10 +377,15 @@ function SubtitleTab({ videoInfo, sourceUrl, processing, userTier }) {
   const handleSubmit = async () => {
     try {
       if (burn) {
+        if (!isPro) {
+          onOpenUpgrade?.('tier_required_feature');
+          return;
+        }
         await processing.runBurnSub({
           source_url: sourceUrl,
           video_path: localFileId(videoInfo),
           language:   lang,
+          translate_to_vi: translateVi,
           filename:   videoInfo?.title || 'video',
         });
       } else {
@@ -430,13 +438,38 @@ function SubtitleTab({ videoInfo, sourceUrl, processing, userTier }) {
       </div>
 
       {/* Burn-in toggle */}
-      <label className={`flex items-center gap-2 ${!isPro ? 'opacity-60' : 'cursor-pointer'}`}>
-        <input type="checkbox" checked={burn} disabled={!isPro}
-          onChange={e => setBurn(e.target.checked)}
-          className="w-4 h-4 rounded accent-accent" />
-        <span className="text-sm text-fg-2">{t('subtitle.burn')}</span>
-        {!isPro && <span className="text-[10px] text-accent-text ml-1">Pro</span>}
-      </label>
+      <div className="space-y-2.5 p-3 rounded-xl bg-surface-2 border border-line">
+        <label className="flex items-center justify-between gap-2 cursor-pointer"
+          onClick={(e) => {
+            if (!isPro) {
+              e.preventDefault();
+              onOpenUpgrade?.('tier_required_feature');
+            }
+          }}>
+          <div className="flex items-center gap-2">
+            <input type="checkbox" checked={burn}
+              onChange={e => isPro && setBurn(e.target.checked)}
+              className="w-4 h-4 rounded accent-accent" />
+            <span className="text-sm font-medium text-fg">{t('subtitle.burn')}</span>
+          </div>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent/15 text-accent-text border border-accent/30">
+            <Crown className="w-2.5 h-2.5" /> PRO
+          </span>
+        </label>
+
+        {burn && (
+          <label className="flex items-center gap-2 pl-6 cursor-pointer">
+            <input type="checkbox" checked={translateVi}
+              onChange={e => setTranslateVi(e.target.checked)}
+              className="w-4 h-4 rounded accent-accent" />
+            <span className="text-xs text-fg-2">
+              {isEn
+                ? 'Auto-translate subtitles into Vietnamese before burning (Hardsub VI)'
+                : 'Dịch tự động phụ đề sang Tiếng Việt trước khi ghép cứng (Hardsub Việt hóa)'}
+            </span>
+          </label>
+        )}
+      </div>
 
       <button onClick={handleSubmit} disabled={st.loading}
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-fg font-semibold text-sm transition-colors cursor-pointer">
@@ -445,6 +478,131 @@ function SubtitleTab({ videoInfo, sourceUrl, processing, userTier }) {
       </button>
 
       <ResultRow result={st.result} label={burn ? t('subtitle.resultBurn') : t('subtitle.resultSub', { format: fmt.toUpperCase() })} />
+      <ErrorRow error={st.error} />
+    </div>
+  );
+}
+
+// ── Tab: Reup Clean (Anti-Detect Pro Feature) ──────────────────────────────
+function ReupCleanTab({ localPath, sourceUrl, title, processing, userTier, onOpenUpgrade }) {
+  const [stripMeta, setStripMeta]   = useState(true);
+  const [changeMd5, setChangeMd5]   = useState(true);
+  const [mirrorFlip, setMirrorFlip] = useState(false);
+  const [speed105x, setSpeed105x]   = useState(false);
+  const { i18n } = useTranslation('results');
+  const isEn = i18n.language === 'en';
+  const isPro = ['pro', 'team', 'enterprise', 'api'].includes(userTier);
+  const st = processing.getState('reup');
+
+  const handleSubmit = async () => {
+    if (!isPro) {
+      onOpenUpgrade?.('tier_required_feature');
+      return;
+    }
+    const body = {
+      strip_metadata: stripMeta,
+      change_md5:     changeMd5,
+      mirror_flip:    mirrorFlip,
+      speed_105x:     speed105x,
+      filename:       title || 'video',
+    };
+    if (localPath) body.local_path = localPath;
+    else           body.url        = sourceUrl;
+    try { await processing.runReupClean(body); } catch {}
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="p-3 rounded-xl bg-accent/10 border border-accent/25 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold text-fg flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-accent-text shrink-0" />
+            {isEn ? 'Anti-Detect Video Cleaner for Reup / Affiliate' : 'Làm sạch Video Reup / Affiliate (Chống quét bản quyền)'}
+          </p>
+          <p className="text-[11px] text-fg-muted mt-1">
+            {isEn
+              ? 'Strips hidden platform tracking tags, generates a 100% unique MD5 hash, and optionally flips/shifts frames for TikTok Shop, Reels & Shorts.'
+              : 'Xóa sạch dấu vết nền tảng gốc (EXIF/Metadata), tạo mã băm MD5 hoàn toàn mới và hỗ trợ lật gương / đổi tốc độ giúp đăng lại TikTok, Reels, Shorts an toàn.'}
+          </p>
+        </div>
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent text-accent-fg shrink-0">
+          <Crown className="w-3 h-3" /> PRO
+        </span>
+      </div>
+
+      <div className="space-y-2.5">
+        <label className="flex items-start gap-2.5 p-2.5 rounded-xl bg-surface-2 border border-line cursor-pointer">
+          <input type="checkbox" checked={stripMeta} onChange={e => setStripMeta(e.target.checked)}
+            className="w-4 h-4 mt-0.5 rounded accent-accent" />
+          <div>
+            <p className="text-xs font-semibold text-fg">
+              {isEn ? 'Strip 100% Original Metadata & Chapters' : 'Xóa sạch 100% Metadata & thông tin thiết bị gốc'}
+            </p>
+            <p className="text-[11px] text-fg-muted">
+              {isEn ? 'Removes encoder tags, source IDs & creation timestamps (< 1s, lossless)' : 'Loại bỏ ID nguồn, thiết bị quay, thời gian tạo (< 1 giây, giữ nguyên chất lượng gốc)'}
+            </p>
+          </div>
+        </label>
+
+        <label className="flex items-start gap-2.5 p-2.5 rounded-xl bg-surface-2 border border-line cursor-pointer">
+          <input type="checkbox" checked={changeMd5} onChange={e => setChangeMd5(e.target.checked)}
+            className="w-4 h-4 mt-0.5 rounded accent-accent" />
+          <div>
+            <p className="text-xs font-semibold text-fg">
+              {isEn ? 'Generate Fresh Unique MD5 / SHA256 Hash' : 'Tạo mã băm MD5 / SHA256 mới độc nhất'}
+            </p>
+            <p className="text-[11px] text-fg-muted">
+              {isEn ? 'Prevents duplicate file hash detection across ad accounts' : 'Chống trùng lặp mã file khi đăng lên nhiều tài khoản Affiliate / Ads'}
+            </p>
+          </div>
+        </label>
+
+        <label className="flex items-start gap-2.5 p-2.5 rounded-xl bg-surface-2 border border-line cursor-pointer">
+          <input type="checkbox" checked={mirrorFlip} onChange={e => setMirrorFlip(e.target.checked)}
+            className="w-4 h-4 mt-0.5 rounded accent-accent" />
+          <div>
+            <p className="text-xs font-semibold text-fg">
+              {isEn ? 'Horizontal Mirror Flip (hflip)' : 'Lật ngang khung hình (Mirror Flip)'}
+            </p>
+            <p className="text-[11px] text-fg-muted">
+              {isEn ? 'Flips video horizontally to bypass visual frame matching' : 'Đảo chiều ngang khung hình giúp vượt qua thuật toán quét hình ảnh'}
+            </p>
+          </div>
+        </label>
+
+        <label className="flex items-start gap-2.5 p-2.5 rounded-xl bg-surface-2 border border-line cursor-pointer">
+          <input type="checkbox" checked={speed105x} onChange={e => setSpeed105x(e.target.checked)}
+            className="w-4 h-4 mt-0.5 rounded accent-accent" />
+          <div>
+            <p className="text-xs font-semibold text-fg">
+              {isEn ? 'Micro Speed Shift (1.05x Video + Audio)' : 'Biến thiên tốc độ nhẹ 1.05x (Hình + Tiếng)'}
+            </p>
+            <p className="text-[11px] text-fg-muted">
+              {isEn ? 'Changes duration & audio fingerprint while sounding natural' : 'Thay đổi nhịp thời gian & vân tay âm thanh nhưng người xem không nhận ra'}
+            </p>
+          </div>
+        </label>
+      </div>
+
+      <button
+        onClick={handleSubmit}
+        disabled={st.loading || (!stripMeta && !changeMd5 && !mirrorFlip && !speed105x)}
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent hover:opacity-90 disabled:opacity-50 text-accent-fg font-semibold text-sm transition-colors cursor-pointer"
+      >
+        {st.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+        {!isPro
+          ? (isEn ? 'Unlock Pro to Clean Reup Video' : 'Nâng cấp Pro để Làm sạch Video Reup')
+          : st.loading
+            ? (isEn ? 'Cleaning & generating new MD5...' : 'Đang làm sạch & tạo MD5 mới...')
+            : (isEn ? 'Clean Video & Generate New MD5' : 'Làm sạch Video & Đổi MD5 ngay')}
+      </button>
+
+      {st.result?.md5 && (
+        <div className="px-3 py-2 rounded-lg bg-surface-2 border border-line text-[11px] font-mono text-fg-muted break-all">
+          <span className="font-bold text-success">MD5 mới:</span> {st.result.md5}
+        </div>
+      )}
+      <ResultRow result={st.result} label={isEn ? 'Cleaned Reup Video (New MD5)' : 'Video đã làm sạch Reup (MD5 mới)'} />
       <ErrorRow error={st.error} />
     </div>
   );
@@ -505,9 +663,10 @@ function PackageTab({ videoInfo, sourceUrl }) {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
-export default function ProcessingHub({ videoInfo, localPath, sourceUrl, onClose, userTier = 'free', initialTab = 'trim' }) {
+export default function ProcessingHub({ videoInfo, localPath, sourceUrl, onClose, userTier = 'free', initialTab = 'trim', onOpenUpgrade }) {
   const [activeTab, setActiveTab] = useState(initialTab);
-  const { t } = useTranslation('results');
+  const { t, i18n } = useTranslation('results');
+  const isEn = i18n.language === 'en';
   const processing = useProcessing();
 
   const title    = videoInfo?.title    || '';
@@ -533,7 +692,7 @@ export default function ProcessingHub({ videoInfo, localPath, sourceUrl, onClose
 
         {/* Tabs */}
         <div className="flex gap-0.5 p-2 border-b border-line overflow-x-auto shrink-0">
-          {TABS.map(({ id, icon: Icon }) => (
+          {TABS.map(({ id, icon: Icon, pro }) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
@@ -543,7 +702,10 @@ export default function ProcessingHub({ videoInfo, localPath, sourceUrl, onClose
                   : 'text-fg-muted hover:text-fg-2 hover:bg-surface-2'}`}
             >
               <Icon className="w-3.5 h-3.5" />
-              {t(`tabs.${id}`)}
+              {id === 'reup' ? (isEn ? 'Reup Clean' : 'Làm sạch Reup') : t(`tabs.${id}`)}
+              {pro && (
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-accent/15 text-accent-text">PRO</span>
+              )}
               {id === 'subtitle' && hasSubs && (
                 <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
               )}
@@ -556,6 +718,9 @@ export default function ProcessingHub({ videoInfo, localPath, sourceUrl, onClose
           {activeTab === 'trim' && (
             <TrimTab localPath={localPath} sourceUrl={sourceUrl} title={title} duration={duration} processing={processing} />
           )}
+          {activeTab === 'reup' && (
+            <ReupCleanTab localPath={localPath} sourceUrl={sourceUrl} title={title} processing={processing} userTier={userTier} onOpenUpgrade={onOpenUpgrade} />
+          )}
           {activeTab === 'audio' && (
             <AudioTab localPath={localPath} sourceUrl={sourceUrl} title={title} processing={processing} />
           )}
@@ -563,7 +728,7 @@ export default function ProcessingHub({ videoInfo, localPath, sourceUrl, onClose
             <GifTab localPath={localPath} sourceUrl={sourceUrl} title={title} duration={duration} processing={processing} userTier={userTier} />
           )}
           {activeTab === 'subtitle' && (
-            <SubtitleTab videoInfo={videoInfo} sourceUrl={sourceUrl} processing={processing} userTier={userTier} />
+            <SubtitleTab videoInfo={videoInfo} sourceUrl={sourceUrl} processing={processing} userTier={userTier} onOpenUpgrade={onOpenUpgrade} />
           )}
           {activeTab === 'package' && (
             <PackageTab videoInfo={videoInfo} sourceUrl={sourceUrl} />

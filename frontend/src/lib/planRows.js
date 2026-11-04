@@ -28,6 +28,22 @@ export function buildPlanRows(tiers) {
         : per(t.youtube_per_day, 'videosPerDay')),
     },
     {
+      key: 'trimClip', label: tp('rows.trimClip'),
+      get: (t) => (t.id === 'pro' || t.id === 'team' ? tp('trimPro') : tp('trimFree')),
+    },
+    {
+      key: 'reupClean', label: tp('rows.reupClean'),
+      get: (t) => (t.id === 'pro' || t.id === 'team' ? tp('reupPro') : false),
+    },
+    {
+      key: 'burnSub', label: tp('rows.burnSub'),
+      get: (t) => (t.id === 'pro' || t.id === 'team' ? tp('burnSubPro') : tp('burnSubFree')),
+    },
+    {
+      key: 'photoCarousel', label: tp('rows.photoCarousel'),
+      get: (t) => (t.id === 'pro' || t.id === 'team' ? tp('photoCarouselPro') : tp('photoCarouselFree')),
+    },
+    {
       key: 'batch', label: tp('rows.batch'),
       get: (t) => (t.batch_links > 1 ? tp('batchMax', { n: t.batch_links }) : false),
     },

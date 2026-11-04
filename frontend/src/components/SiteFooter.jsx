@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { API_BASE } from '../lib/apiBase';
 import { useTranslation } from 'react-i18next';
 import { useLocalePath } from '../i18n';
+import { useAuth } from '../context/AuthContext';
 
 // wording: BA review (labels: locales/*/footer.json, links.<view>)
 const LINKS = [
@@ -35,11 +36,13 @@ export default function SiteFooter({ onNavigate }) {
   const statusUrl = useStatusPageUrl();
   const { t } = useTranslation('footer');
   const lp = useLocalePath();
+  const { isAuthenticated } = useAuth();
+  const visibleLinks = LINKS.filter(([view]) => view !== 'pricing' || isAuthenticated);
   return (
     <footer className="mt-12 border-t border-line px-4 py-6 text-xs text-fg-muted">
       <nav aria-label={t('legalNav')}
         className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-2 gap-y-2">
-        {LINKS.map(([view, path], i) => (
+        {visibleLinks.map(([view, path], i) => (
           <span key={view} className="flex items-center gap-2">
             {i > 0 && <span aria-hidden="true">·</span>}
             <a href={lp(path)}

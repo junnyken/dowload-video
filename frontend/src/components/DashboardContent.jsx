@@ -10,7 +10,7 @@ import {
   ClipboardPaste, Play, Pause, Scissors, ImageDown,
   Upload, ExternalLink, SkipBack, SkipForward,
   Clapperboard, List, Sparkles, Eraser, Move, ZoomIn,
-  Layers, Stamp, CalendarClock, Lock, Languages
+  Layers, Stamp, CalendarClock, Lock, Languages, ShieldCheck, Package
 } from 'lucide-react';
 import UpgradeModal from './UpgradeModal';
 import QuickGuideSection from './QuickGuideSection';
@@ -129,6 +129,8 @@ export default function DashboardContent() {
    * profiles through the service role) and caches for 5 minutes.
    */
   const { tier: userTier } = useEntitlement();
+  const isProUser = ['pro', 'team', 'enterprise', 'api'].includes(userTier);
+  const isEnUi = getLang() === 'en';
 
   const _historyAuthHeaders = session?.access_token
     ? { Authorization: `Bearer ${session.access_token}` }
@@ -305,6 +307,9 @@ export default function DashboardContent() {
       const pending = sessionStorage.getItem('vg_pending_share_url');
       if (pending) {
         setUrl(pending);
+        if (/^https?:\/\//i.test(pending.trim())) {
+          setTimeout(() => { handleFetchLink(pending.trim()); }, 150);
+        }
         // Not removed immediately: if a service-worker update reloads the page
         // right after a share, the link must survive that reload.
         setTimeout(() => {
@@ -432,6 +437,10 @@ export default function DashboardContent() {
     setUrl(cleanUrl);
     trackEvent(EVENT.PASTE_URL, { url_length: cleanUrl.length });
     if (cleanUrl !== pasted.trim()) showToast(t('toast.urlExtracted'));
+    // Upgrade #3: Zero-click auto-fetch immediately upon pasting a valid HTTP(S) URL
+    if (/^https?:\/\/[^\s]+\.[^\s]+/i.test(cleanUrl) && !isLoading && !scheduledAt) {
+      setTimeout(() => { handleFetchLink(cleanUrl); }, 80);
+    }
   };
 
   const isSpotifyPlaylistOrAlbum = (u) =>
@@ -1251,6 +1260,52 @@ export default function DashboardContent() {
     showToast(t('toast.coverDownloading'));
   };
 
+  // ── Upgrade #4: TikTok / Douyin Photo Carousel Download ─────
+  const handleSingleSlideDownload = (imgUrl, index) => {
+    const baseTitle = (videoInfo?.title || 'slide').slice(0, 60);
+    const downloadUrl = `${API_BASE}/api/v1/download-thumbnail?url=${encodeURIComponent(imgUrl)}&filename=${encodeURIComponent(`${baseTitle}-${index + 1}`)}`;
+    const a = document.createElement('a');
+    a.href = downloadUrl; a.setAttribute('download', '');
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    showToast(t('toast.downloadStarted'));
+  };
+
+  const handleCarouselZipDownload = async () => {
+    const imgs = videoInfo?.images || [];
+    if (!imgs.length) return;
+    if (!isProUser) {
+      setUpgradeErrorCode('bulk_zip_pro');
+      setShowUpgradeModal(true);
+      trackEvent(EVENT.PAYWALL_SEEN, { trigger: 'photo_carousel_zip' });
+      setPaywallTrigger('bulk_zip_pro');
+      return;
+    }
+    setIsZipping(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/process/package-zip`, withAuth({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_urls: imgs.slice(0, 50),
+          naming_template: '{index:02d}_{title}',
+          titles: imgs.map((_, idx) => `${(videoInfo.title || 'slide').slice(0, 40)}_${idx + 1}`),
+          filename: videoInfo.title || 'photo_album',
+        }),
+      }));
+      const data = await safeJson(res);
+      if (!res.ok || !data.download_url) throw new Error(data.detail || 'ZIP creation failed');
+      const a = document.createElement('a');
+      a.href = data.download_url.startsWith('/') ? `${API_BASE}${data.download_url}` : data.download_url;
+      a.setAttribute('download', '');
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      showToast(isEnUi ? `Downloaded ${imgs.length} photos (.ZIP)` : `Đã tải trọn bộ ${imgs.length} ảnh (.ZIP)`);
+    } catch (err) {
+      showToast(err.message || 'ZIP failed');
+    } finally {
+      setIsZipping(false);
+    }
+  };
+
   // ── Preview Player ───────────────────────────────────────────
   const togglePreview = () => {
     setShowPreview(prev => !prev);
@@ -1290,6 +1345,14 @@ export default function DashboardContent() {
 
   const handleTrimDownload = async () => {
     if (!videoInfo) return;
+    const clipLen = trimEnd - trimStart;
+    if (clipLen > 30 && !isProUser) {
+      setUpgradeErrorCode('tier_required_feature');
+      setShowUpgradeModal(true);
+      trackEvent(EVENT.PAYWALL_SEEN, { trigger: 'trim_over_30s' });
+      setPaywallTrigger('tier_required_feature');
+      return;
+    }
     setIsTrimming(true);
     try {
       // Prefer local file (YouTube merge, TikTok, etc.) served via download-local endpoint
@@ -1834,7 +1897,13 @@ export default function DashboardContent() {
                   onClick={async () => {
                     try {
                       const text = await navigator.clipboard.readText();
-                      if (text) setUrl(text);
+                      if (text) {
+                        const clean = extractUrl(text);
+                        setUrl(clean);
+                        if (/^https?:\/\/[^\s]+\.[^\s]+/i.test(clean) && !isLoading && !scheduledAt) {
+                          setTimeout(() => { handleFetchLink(clean); }, 80);
+                        }
+                      }
                     } catch (err) {
                       console.error("Failed to read clipboard contents: ", err);
                     }
@@ -2327,6 +2396,27 @@ export default function DashboardContent() {
                     </button>
                   ) : null;
                 })()}
+                {localFileId(videoInfo) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isProUser) {
+                        setUpgradeErrorCode('tier_required_feature');
+                        setShowUpgradeModal(true);
+                        trackEvent(EVENT.PAYWALL_SEEN, { trigger: 'hardsub_burn' });
+                        setPaywallTrigger('tier_required_feature');
+                        return;
+                      }
+                      setProcessingHubTab('subtitle');
+                      setShowProcessingHub(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-accent-soft text-accent-text border border-accent/40 hover:border-accent transition-all cursor-pointer"
+                  >
+                    <Clapperboard className="w-3.5 h-3.5" />
+                    {isEnUi ? 'Burn Subtitles into MP4 (Hardsub)' : 'Ghép cứng phụ đề vào MP4 (Hardsub)'}
+                    <span className="bg-accent text-accent-fg text-[10px] px-1.5 py-0.5 rounded font-bold leading-tight">PRO</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -2359,7 +2449,7 @@ export default function DashboardContent() {
               )}
 
               {/* Trim Button */}
-              {videoInfo.duration > 0 && videoInfo.direct_mp4_url && (
+              {videoInfo.duration > 0 && (videoInfo.direct_mp4_url || localFileId(videoInfo)) && (
                 <button
                   onClick={handleOpenTrimmer}
                   className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
@@ -2370,6 +2460,21 @@ export default function DashboardContent() {
                 >
                   <Scissors className="w-3.5 h-3.5" />
                   {t('tools.trim')}
+                </button>
+              )}
+
+              {/* Upgrade #2: Anti-Detect Reup Cleaner Button (Pro Anchor) */}
+              {!videoInfo.is_audio_only && (videoInfo.direct_mp4_url || localFileId(videoInfo)) && (
+                <button
+                  onClick={() => {
+                    setProcessingHubTab('reup');
+                    setShowProcessingHub(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-surface text-fg-2 border border-line hover:border-accent/40 hover:text-accent-text transition-all cursor-pointer"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-accent-text" />
+                  {isEnUi ? 'Clean Reup (Change MD5)' : 'Làm sạch Reup (Đổi MD5)'}
+                  <span className="bg-accent text-accent-fg text-[10px] px-1.5 py-0.5 rounded font-bold leading-tight">PRO</span>
                 </button>
               )}
 
@@ -2483,6 +2588,69 @@ export default function DashboardContent() {
               )}
             </div>
 
+            {/* ── Upgrade #4: TikTok / Douyin Photo Slideshow (Carousel) ── */}
+            {videoInfo.images?.length > 0 && (
+              <div className="mb-6 p-4 rounded-2xl bg-surface border border-line shadow-lg">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                  <div>
+                    <h5 className="text-sm font-bold text-fg flex items-center gap-2">
+                      <ImageDown className="w-4 h-4 text-accent-text" />
+                      {isEnUi
+                        ? `Photo Slideshow (${videoInfo.images.length} HD Photos)`
+                        : `Album ảnh trượt TikTok / Douyin (${videoInfo.images.length} ảnh gốc HD)`}
+                    </h5>
+                    <p className="text-xs text-fg-muted mt-0.5">
+                      {isEnUi
+                        ? 'Download individual photos for free or grab the full album as a single .ZIP file.'
+                        : 'Tải lẻ từng ảnh miễn phí hoặc tải trọn bộ Album nén .ZIP chỉ với 1 chạm.'}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {videoInfo.audio_url && (
+                      <button
+                        type="button"
+                        onClick={() => handleFormatDownload({ url: videoInfo.audio_url, ext: 'mp3', label: 'Music MP3' })}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-surface-2 text-fg-2 border border-line hover:border-accent/40 hover:text-accent-text transition-all cursor-pointer"
+                      >
+                        <Music className="w-3.5 h-3.5 text-accent-text" />
+                        {isEnUi ? 'Download Audio MP3' : 'Tải nhạc nền MP3'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleCarouselZipDownload}
+                      disabled={isZipping}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-accent text-accent-fg shadow hover:opacity-90 transition-all disabled:opacity-60 cursor-pointer"
+                    >
+                      {isZipping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Package className="w-3.5 h-3.5" />}
+                      {isEnUi
+                        ? `Download All ${videoInfo.images.length} Photos (.ZIP)`
+                        : `Tải tất cả ${videoInfo.images.length} ảnh (.ZIP)`}
+                      <span className="bg-black/25 text-accent-fg text-[10px] px-1.5 py-0.5 rounded font-bold leading-tight">PRO</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[420px] overflow-y-auto pr-1">
+                  {videoInfo.images.map((imgUrl, idx) => (
+                    <div key={idx} className="group relative rounded-xl overflow-hidden border border-line bg-surface-2 aspect-[3/4]">
+                      <img src={imgUrl} alt={`Slide ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-black/70 text-white">
+                        #{idx + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleSingleSlideDownload(imgUrl, idx)}
+                        className="absolute inset-x-2 bottom-2 py-1.5 rounded-lg bg-black/75 hover:bg-accent text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        {isEnUi ? 'Save Photo' : 'Tải ảnh'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* ── Preview Player ──────────────────────────────── */}
             {showPreview && getPreviewUrl() && (
               <div className="mb-5 rounded-2xl overflow-hidden bg-black/40 border border-line shadow-lg">
@@ -2519,10 +2687,15 @@ export default function DashboardContent() {
             {showTrimmer && videoInfo.duration > 0 && (
               <div className="mb-5 p-4 rounded-2xl bg-surface border border-accent/30 shadow-lg">
                 <div className="flex items-center justify-between mb-3">
-                  <h5 className="text-fg font-bold text-sm flex items-center gap-2">
-                    <Scissors className="w-4 h-4 text-accent-text" />
-                    {t('trim.title')}
-                  </h5>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h5 className="text-fg font-bold text-sm flex items-center gap-2">
+                      <Scissors className="w-4 h-4 text-accent-text" />
+                      {t('trim.title')}
+                    </h5>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-surface-2 border border-line text-fg-muted">
+                      {isEnUi ? 'Free ≤ 30s · Pro up to 10 min' : 'Miễn phí ≤ 30 giây · Gói Pro cắt tới 10 phút'}
+                    </span>
+                  </div>
                   <button onClick={() => setShowTrimmer(false)} className="text-fg-muted hover:text-fg transition-colors">
                     <X className="w-4 h-4" />
                   </button>
@@ -2579,16 +2752,18 @@ export default function DashboardContent() {
                     <button
                       key={sec}
                       onClick={() => { setTrimStart(0); setTrimEnd(Math.min(sec, videoInfo.duration)); }}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-surface-2 text-fg-2 border border-line-strong hover:border-accent/40 hover:text-accent-text transition-all"
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-surface-2 text-fg-2 border border-line-strong hover:border-accent/40 hover:text-accent-text transition-all flex items-center gap-1"
                     >
                       {t('trim.firstSec', { sec })}
+                      {sec > 30 && !isProUser && <span className="px-1 py-0.2 rounded text-[9px] bg-accent text-accent-fg font-bold">PRO</span>}
                     </button>
                   ))}
                   <button
                     onClick={() => { setTrimStart(0); setTrimEnd(videoInfo.duration); }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-surface-2 text-fg-2 border border-line-strong hover:border-success/40 hover:text-success transition-all"
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-surface-2 text-fg-2 border border-line-strong hover:border-success/40 hover:text-success transition-all flex items-center gap-1"
                   >
                     {t('trim.whole')}
+                    {videoInfo.duration > 30 && !isProUser && <span className="px-1 py-0.2 rounded text-[9px] bg-accent text-accent-fg font-bold">PRO</span>}
                   </button>
                 </div>
 
@@ -3374,6 +3549,11 @@ export default function DashboardContent() {
                 onClose={() => setShowProcessingHub(false)}
                 userTier={userTier}
                 initialTab={processingHubTab}
+                onOpenUpgrade={(code) => {
+                  setShowProcessingHub(false);
+                  setUpgradeErrorCode(code || 'tier_required_feature');
+                  setShowUpgradeModal(true);
+                }}
               />
             )}
 

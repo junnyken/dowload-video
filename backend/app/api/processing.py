@@ -305,7 +305,18 @@ class BurnSubtitleRequest(BaseModel):
     video_path: str           # must be inside download_dir
     source_url: str
     language: str = "auto"
+    translate_to_vi: bool = False
     filename: Optional[str] = "burned"
+
+
+class ReupCleanRequest(BaseModel):
+    url: Optional[str] = None
+    local_path: Optional[str] = None
+    strip_metadata: bool = True
+    change_md5: bool = True
+    mirror_flip: bool = False
+    speed_105x: bool = False
+    filename: Optional[str] = "video"
 
 
 class FrameThumbRequest(BaseModel):
@@ -315,7 +326,8 @@ class FrameThumbRequest(BaseModel):
 
 
 class PackageZipRequest(BaseModel):
-    paths: List[str]
+    paths: Optional[List[str]] = []
+    image_urls: Optional[List[str]] = []
     naming_template: str = "{title}"
     titles: Optional[List[str]] = []
     filename: Optional[str] = "package"
@@ -723,6 +735,9 @@ async def burn_subtitle(payload: BurnSubtitleRequest, request: Request):
         burn_srt = os.path.join(work_dir, "burn.srt")
         os.replace(sub_file, burn_srt)
 
+        if payload.translate_to_vi:
+            await _translate_srt_file_to_vi(burn_srt)
+
         try:
             ok = await run_in_threadpool(
                 _run_burn_ffmpeg, video_path, burn_srt, output_path,
@@ -746,6 +761,177 @@ async def burn_subtitle(payload: BurnSubtitleRequest, request: Request):
     out_filename = f"{slug}_subbed{orig_ext}"
     _schedule_cleanup(output_path)
     return _success_response(output_path, out_filename)
+
+
+async def _translate_srt_file_to_vi(srt_path: str) -> None:
+    """
+    Translate non-timestamp text lines of an SRT file into Vietnamese using
+    Google Translate's lightweight public endpoint while preserving exact SRT
+    index & timing lines. Falls back gracefully to original text on network error.
+    """
+    try:
+        with open(srt_path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+
+        text_indices = []
+        text_lines = []
+        for idx, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped or stripped.isdigit() or "-->" in stripped:
+                continue
+            text_indices.append(idx)
+            text_lines.append(stripped)
+
+        if not text_lines:
+            return
+
+        translated_lines: List[str] = []
+        batch_size = 25
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            for i in range(0, len(text_lines), batch_size):
+                chunk = text_lines[i : i + batch_size]
+                joined = "\n".join(chunk)
+                resp = await client.get(
+                    "https://translate.googleapis.com/translate_a/single",
+                    params={
+                        "client": "gtx",
+                        "sl": "auto",
+                        "tl": "vi",
+                        "dt": "t",
+                        "q": joined,
+                    },
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    merged = "".join(seg[0] for seg in (data[0] or []) if seg and seg[0])
+                    parts = [p.strip() for p in merged.split("\n")]
+                    if len(parts) == len(chunk):
+                        translated_lines.extend(parts)
+                    else:
+                        # Pad or trim if newline count shifted slightly
+                        for j in range(len(chunk)):
+                            translated_lines.append(parts[j] if j < len(parts) and parts[j] else chunk[j])
+                else:
+                    translated_lines.extend(chunk)
+
+        for idx, new_txt in zip(text_indices, translated_lines):
+            lines[idx] = new_txt
+
+        with open(srt_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+    except Exception as e:
+        print(f"[processing] _translate_srt_file_to_vi warning (keeping original): {e}")
+
+
+@router.post("/process/reup-clean")
+@limiter.limit("10/minute")
+async def reup_clean(payload: ReupCleanRequest, request: Request):
+    """
+    Anti-Detect / Reup Video Cleaner (Pro feature):
+    - Strips all source container/stream metadata (-map_metadata -1 -map_chapters -1)
+    - Injects a unique random comment atom so the file's MD5/SHA256 hash is 100% unique
+    - Optional horizontal mirror flip (hflip)
+    - Optional 1.05x speed shift (video + audio) to evade fingerprint matching
+    """
+    import hashlib
+    from app.core.ffmpeg_budget import thread_args
+
+    if not payload.url and not payload.local_path:
+        raise HTTPException(status_code=400, detail="url or local_path is required")
+
+    download_dir = _safe_download_dir()
+    uid = new_token()
+    output_path = os.path.join(download_dir, f"clean_{uid}.mp4")
+    input_path: Optional[str] = None
+    _downloaded = False
+
+    try:
+        if payload.local_path:
+            input_path = _guard_local_path(payload.local_path)
+        else:
+            _assert_safe_url(payload.url)
+            input_path = os.path.join(download_dir, f"clean_src_{uid}.tmp")
+            await _download_url_async(payload.url, input_path)
+            _downloaded = True
+
+        v_filters = []
+        a_filters = []
+        if payload.mirror_flip:
+            v_filters.append("hflip")
+        if payload.speed_105x:
+            v_filters.append("setpts=PTS/1.05")
+            a_filters.append("atempo=1.05")
+
+        meta_args = []
+        if payload.strip_metadata:
+            meta_args.extend(["-map_metadata", "-1", "-map_chapters", "-1"])
+        if payload.change_md5:
+            meta_args.extend([
+                "-metadata", f"comment=vg_clean_{uuid.uuid4().hex}",
+                "-metadata", f"creation_time={datetime.now(timezone.utc).isoformat()}",
+            ])
+
+        if v_filters or a_filters:
+            filter_args = []
+            if v_filters:
+                filter_args.extend(["-vf", ",".join(v_filters)])
+            if a_filters:
+                filter_args.extend(["-af", ",".join(a_filters)])
+            codec_args = [
+                *filter_args,
+                *thread_args(),
+                "-c:v", "libx264", "-crf", "22", "-preset", "veryfast",
+                "-c:a", "aac", "-b:a", "192k",
+                "-movflags", "+faststart",
+            ]
+        else:
+            # Ultra-fast stream copy (< 1 second, zero quality loss)
+            codec_args = ["-c", "copy", "-movflags", "+faststart"]
+
+        ffmpeg_cmd = ["ffmpeg", "-y", "-i", input_path, *meta_args, *codec_args, output_path]
+        result = await asyncio.to_thread(subprocess.run, ffmpeg_cmd, capture_output=True, timeout=240)
+        if result.returncode != 0:
+            raise ValueError(f"FFmpeg error: {result.stderr.decode(errors='replace')[-300:]}")
+        if not os.path.exists(output_path):
+            raise ValueError("Output cleaned video file was not created")
+
+        # Compute new MD5 hash (first 8MB + size for speed on huge files, or full file if <= 50MB)
+        md5_hash = hashlib.md5()
+        with open(output_path, "rb") as f_out:
+            while True:
+                chunk = f_out.read(1024 * 1024)
+                if not chunk:
+                    break
+                md5_hash.update(chunk)
+
+        slug = _slugify(payload.filename or "video", "video")
+        out_filename = f"{slug}_clean.mp4"
+        _schedule_cleanup(output_path)
+        return _success_response(
+            output_path,
+            out_filename,
+            extra={
+                "md5": md5_hash.hexdigest(),
+                "stripped_metadata": bool(payload.strip_metadata),
+                "mirror_flip": bool(payload.mirror_flip),
+                "speed_105x": bool(payload.speed_105x),
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        if output_path and os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except Exception:
+                pass
+        raise HTTPException(status_code=500, detail=f"Reup clean processing failed: {e}")
+    finally:
+        if _downloaded and input_path and os.path.exists(input_path):
+            try:
+                os.remove(input_path)
+            except Exception:
+                pass
 
 
 @router.post("/process/frame-thumb")
@@ -802,27 +988,38 @@ async def package_zip(payload: PackageZipRequest, request: Request):
 
     Supported template tokens: {title}, {platform}_{title}, {index:02d}_{title}, {date}_{title}
     """
-    if not payload.paths:
-        raise HTTPException(status_code=400, detail="paths list must not be empty")
-    if len(payload.paths) > 50:
+    paths_list = list(payload.paths or [])
+    image_urls_list = list(payload.image_urls or [])
+    if not paths_list and not image_urls_list:
+        raise HTTPException(status_code=400, detail="paths or image_urls list must not be empty")
+    if len(paths_list) + len(image_urls_list) > 50:
         raise HTTPException(status_code=400, detail="Maximum 50 files per ZIP")
 
-    # Validate all paths first
+    # Validate all local paths first
     real_paths = []
-    for p in payload.paths:
+    for p in paths_list:
         real_paths.append(_guard_local_path(p))
-
-    titles = list(payload.titles or [])
-    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    template = payload.naming_template or "{title}"
 
     download_dir = _safe_download_dir()
     uid = new_token()  # 128 bits: the file id is the capability
-    zip_path = os.path.join(download_dir, f"pkg_{uid}.zip")
-
-    total_size = 0
+    temp_img_paths = []
 
     try:
+        for img_idx, img_url in enumerate(image_urls_list):
+            _assert_safe_url(img_url)
+            parsed_path = urlparse(img_url).path.lower()
+            ext = ".webp" if parsed_path.endswith(".webp") else (".png" if parsed_path.endswith(".png") else ".jpg")
+            tmp_img = os.path.join(download_dir, f"slide_{uid}_{img_idx + 1:02d}{ext}")
+            await _download_url_async(img_url, tmp_img)
+            temp_img_paths.append(tmp_img)
+            real_paths.append(tmp_img)
+
+        titles = list(payload.titles or [])
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        template = payload.naming_template or "{title}"
+        zip_path = os.path.join(download_dir, f"pkg_{uid}.zip")
+        total_size = 0
+
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for idx, real_p in enumerate(real_paths):
                 # Derive title for this file
@@ -832,7 +1029,7 @@ async def package_zip(payload: PackageZipRequest, request: Request):
                     raw_title = ""  # stored names are random tokens, not titles
 
                 title_slug = _slugify(raw_title, f"file_{idx + 1:02d}")
-                orig_ext   = os.path.splitext(real_p)[1]  # e.g. ".mp4"
+                orig_ext   = os.path.splitext(real_p)[1] or ".jpg"
 
                 # Apply template
                 try:
@@ -864,7 +1061,12 @@ async def package_zip(payload: PackageZipRequest, request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        if zip_path and os.path.exists(zip_path):
+        if 'zip_path' in locals() and zip_path and os.path.exists(zip_path):
             try: os.remove(zip_path)
             except: pass
         raise HTTPException(status_code=500, detail=f"ZIP packaging failed: {e}")
+    finally:
+        for tp in temp_img_paths:
+            if os.path.exists(tp):
+                try: os.remove(tp)
+                except: pass

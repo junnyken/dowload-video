@@ -325,18 +325,26 @@ async def _try_iesdouyin_share_once(video_id: str, quality: str = "video",
                 _safe_print("[iesdouyin] No video item found in _ROUTER_DATA")
                 return None
 
-            # Extract video data
+            # Extract video data + photo slideshow images (图文 / Photo Mode)
             video = item.get("video", {})
             play_addr = video.get("play_addr", {})
             url_list = play_addr.get("url_list", [])
+            images = []
+            for img_obj in (item.get("images") or []):
+                if isinstance(img_obj, dict):
+                    img_urls = img_obj.get("url_list") or []
+                    if img_urls and isinstance(img_urls[0], str):
+                        images.append(img_urls[0])
+                elif isinstance(img_obj, str) and img_obj:
+                    images.append(img_obj)
 
-            if not url_list:
-                _safe_print("[iesdouyin] No play_addr URLs")
+            if not url_list and not images:
+                _safe_print("[iesdouyin] No play_addr URLs or images")
                 return None
 
             # Get watermark URL and convert to no-watermark
-            wm_url = url_list[0]
-            direct_url = wm_url.replace("/playwm/", "/play/")
+            wm_url = url_list[0] if url_list else ""
+            direct_url = wm_url.replace("/playwm/", "/play/") if wm_url else ""
 
             # Title
             title = item.get("desc", "") or "Douyin Video"
@@ -348,6 +356,8 @@ async def _try_iesdouyin_share_once(video_id: str, quality: str = "video",
                 cover_urls = cover.get("url_list", [])
                 if cover_urls:
                     thumbnail = cover_urls[0]
+            if not thumbnail and images:
+                thumbnail = images[0]
 
             # Audio URL
             audio_url = ""
@@ -361,20 +371,23 @@ async def _try_iesdouyin_share_once(video_id: str, quality: str = "video",
                 elif isinstance(music_play, str):
                     audio_url = music_play
 
-            # If MP3 quality requested, switch to audio
-            if quality.startswith("mp3") and audio_url:
+            # If MP3 quality requested or slideshow post with no video stream, fallback to audio/first image
+            if (quality.startswith("mp3") and audio_url) or (not direct_url and audio_url):
                 direct_url = audio_url
+            elif not direct_url and images:
+                direct_url = images[0]
 
             # Duration (usually in ms in Douyin _ROUTER_DATA)
             duration_ms = video.get("duration", 0)
             duration = int(duration_ms / 1000) if duration_ms > 1000 else int(duration_ms)
 
-            _safe_print(f"[iesdouyin] Success: {title[:60]} ({duration}s)")
+            _safe_print(f"[iesdouyin] Success: {title[:60]} ({duration}s, images={len(images)})")
             return {
                 "title": title,
                 "thumbnail_url": thumbnail,
                 "direct_mp4_url": direct_url,
                 "audio_url": audio_url,
+                "images": images,
                 "file_size_mb": 0,
                 "duration": duration,
                 "quality": quality,
@@ -475,18 +488,31 @@ async def _try_tikwm(url: str, quality: str = "video") -> Optional[Dict[str, Any
             if play_url and _is_audio_url(play_url):
                 play_url = ""
 
-            # Pick best video URL based on quality
+            # Pick best video URL based on quality + extract photo slideshow images
+            raw_images = data.get("images") or []
+            images = []
+            for img_u in raw_images:
+                if isinstance(img_u, str) and img_u:
+                    images.append("https:" + img_u if img_u.startswith("//") else img_u)
+                elif isinstance(img_u, dict):
+                    u0 = (img_u.get("url_list") or [img_u.get("url") or ""])[0]
+                    if isinstance(u0, str) and u0:
+                        images.append("https:" + u0 if u0.startswith("//") else u0)
+
             if quality.startswith("mp3"):
                 direct_url = audio_url or play_url
             else:
                 direct_url = hdplay_url or play_url or wmplay_url
 
+            if not direct_url and images:
+                direct_url = audio_url or images[0]
+
             if not direct_url:
-                _safe_print("[TikWM] No video URL in response")
+                _safe_print("[TikWM] No video URL or images in response")
                 return None
 
             title     = data.get("title", "TikTok Video")
-            thumbnail = data.get("cover") or data.get("origin_cover") or ""
+            thumbnail = data.get("cover") or data.get("origin_cover") or (images[0] if images else "")
 
             hd_size = data.get("hd_size", 0)
             size = data.get("size", 0)
@@ -495,7 +521,7 @@ async def _try_tikwm(url: str, quality: str = "video") -> Optional[Dict[str, Any
             size_mb = round(size / (1024 * 1024), 2) if size else 0
             duration     = int(data.get("duration", 0))
 
-            _safe_print(f"[TikWM] Success: {title[:60]} ({duration}s)")
+            _safe_print(f"[TikWM] Success: {title[:60]} ({duration}s, images={len(images)})")
             return {
                 "title":         title,
                 "thumbnail_url": thumbnail,
@@ -504,6 +530,7 @@ async def _try_tikwm(url: str, quality: str = "video") -> Optional[Dict[str, Any
                 "hdplay_url":    hdplay_url,
                 "wmplay_url":    wmplay_url,
                 "audio_url":     audio_url,
+                "images":        images,
                 "file_size_mb":  file_size_mb,
                 "hd_size_mb":    hd_size_mb,
                 "size_mb":       size_mb,

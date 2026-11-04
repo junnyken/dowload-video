@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Video, Languages, Menu, X } from 'lucide-react';
+import { Video, Languages, Menu, X, Crown } from 'lucide-react';
 import SearchPage from './pages/SearchPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WorkspaceProvider } from './context/WorkspaceContext';
@@ -229,9 +229,23 @@ function AppInner() {
   };
 
   useEffect(() => {
-    // "/en/..." routes like its Vietnamese path (i18n/paths.js)
-    const v = PATH_MAP[viewPath(window.location.pathname)] || 'landing';
-    setView(v);
+    // Upgrade #3: URL Prefix Shortcut (e.g. dowloadvideo.io.vn/https://www.tiktok.com/... or /?url=https://...)
+    const rawPath = window.location.pathname || '';
+    const cleanedPath = rawPath.replace(/^\/en(?=\/)/, '');
+    if (/^\/https?:\/\//i.test(cleanedPath)) {
+      const targetUrl = cleanedPath.slice(1) + (window.location.search || '');
+      try { sessionStorage.setItem('vg_pending_share_url', targetUrl); } catch { /* ignore */ }
+      window.history.replaceState({}, '', rawPath.startsWith('/en/') ? '/en' : '/');
+      setView('landing');
+    } else {
+      const qUrl = new URLSearchParams(window.location.search).get('url');
+      if (qUrl && /^https?:\/\//i.test(qUrl.trim()) && viewPath(rawPath) === '/') {
+        try { sessionStorage.setItem('vg_pending_share_url', qUrl.trim()); } catch { /* ignore */ }
+      }
+      // "/en/..." routes like its Vietnamese path (i18n/paths.js)
+      const v = PATH_MAP[viewPath(window.location.pathname)] || 'landing';
+      setView(v);
+    }
 
     const handlePopState = () => {
       const v2 = PATH_MAP[viewPath(window.location.pathname)] || 'landing';
@@ -289,6 +303,7 @@ function AppInner() {
     { key: 'platforms', label: t('navPlatforms'), title: t('navPlatformsTitle'), active: view === 'platforms', onClick: () => goTo('platforms', '/platforms') },
     { key: 'extension', label: t('navExtension'), title: t('navExtensionTitle'), active: view === 'extension', onClick: () => goTo('extension', '/extension') },
     ...(isAuthenticated ? [
+      { key: 'pricing', label: t('navPricing'), title: t('navPricingTitle'), icon: Crown, active: view === 'pricing', onClick: () => goTo('pricing', '/pricing') },
       { key: 'archive', label: t('navArchive'), active: view === 'archive', onClick: () => goTo('archive', '/archive') },
       { key: 'schedule', label: t('navSchedule'), active: view === 'schedule', onClick: () => goTo('schedule', '/schedule') },
       // wording: BA review
