@@ -3,7 +3,9 @@
   "tier": {
     "guest": { "name": "Guest", "sub": "Not signed in" },
     "free": { "name": "Free", "sub": "Free with an account" },
-    "pro": { "name": "Pro", "sub": "For frequent users" }
+    "starter": { "name": "Starter", "sub": "Basic downloads · No Reup / No API" },
+    "pro": { "name": "Pro — Creator & Dev", "sub": "Full 4K/8K + Reup + Hardsub + 3,000 API calls" },
+    "team": { "name": "Team / Business API", "sub": "15,000 API calls/mo + Priority SLA & Webhooks" }
   },
   "yes": "Yes",
   "no": "Not included",

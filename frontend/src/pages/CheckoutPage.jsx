@@ -236,8 +236,15 @@ export default function CheckoutPage() {
   // Steps: 0=plan, 1=method, 2=payment
   const [step, setStep] = useState(0);
 
-  // Selections — default to international payment ('paypal') first
-  const [selectedPlan, setSelectedPlan] = useState('month'); // 'month' | 'year'
+  // Selections — default to 'pro_month' (or ?plan= query param) and international payment ('paypal') first
+  const [selectedPlan, setSelectedPlan] = useState(() => {
+    const qp = searchParams.get('plan');
+    if (qp && ['starter_month', 'starter_year', 'pro_month', 'pro_year', 'team_month', 'team_year'].includes(qp)) {
+      return qp;
+    }
+    return 'pro_month';
+  });
+  const [billingCycle, setBillingCycle] = useState(() => (searchParams.get('plan')?.endsWith('_year') ? 'year' : 'month'));
   const [selectedMethod, setSelectedMethod] = useState('paypal'); // 'paypal' | 'vietqr'
 
   // Order state
@@ -316,10 +323,11 @@ export default function CheckoutPage() {
     setLoading(true);
     setError('');
     try {
+      const planId = selectedPlan.includes('_') ? selectedPlan : (selectedPlan === 'year' ? 'pro_year' : 'pro_month');
       const data = await apiFetch('/checkout/orders', {
         method: 'POST',
         body: {
-          plan: selectedPlan === 'year' ? 'pro_year' : 'pro_month',
+          plan: planId,
           rail: selectedMethod,
           return_url: `${window.location.origin}${lang === 'en' ? '/en' : ''}/checkout?paypal_capture=1`,
         },
@@ -484,40 +492,89 @@ export default function CheckoutPage() {
         {/* ── Step 0: Choose Plan ──────────────────────────────────── */}
         {step === 0 && !orderPaid && (
           <div className="space-y-4">
-            <h2 className="text-lg font-bold text-fg">{t('plan.title')}</h2>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h2 className="text-lg font-bold text-fg">{t('plan.title')}</h2>
+              <div className="inline-flex rounded-xl border border-line bg-surface p-1">
+                {[['month', lang === 'en' ? 'Monthly' : 'Theo tháng'], ['year', lang === 'en' ? 'Yearly (-42%)' : 'Theo năm (-42%)']].map(([cyc, label]) => (
+                  <button
+                    key={cyc}
+                    type="button"
+                    onClick={() => {
+                      setBillingCycle(cyc);
+                      const tierPrefix = selectedPlan.split('_')[0] || 'pro';
+                      setSelectedPlan(`${['starter', 'pro', 'team'].includes(tierPrefix) ? tierPrefix : 'pro'}_${cyc}`);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                      billingCycle === cyc ? 'bg-accent text-accent-fg' : 'text-fg-2 hover:text-fg'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <div className="space-y-3">
               {(() => {
                 const catalog = Array.isArray(plans?.plans) ? plans.plans : [];
-                const mPlan = catalog.find((p) => p.id === 'pro_month');
-                const yPlan = catalog.find((p) => p.id === 'pro_year');
-                const mUsd = mPlan?.usd ? `$${mPlan.usd}` : t('plan.month.price');
-                const yUsd = yPlan?.usd ? `$${yPlan.usd}` : t('plan.year.price');
-                const mVnd = mPlan?.vnd ? formatVnd(mPlan.vnd) : '';
-                const yVnd = yPlan?.vnd ? formatVnd(yPlan.vnd) : '';
-                return (
-                  <>
-                    <PlanCard
-                      id="month"
-                      name={t('plan.month.name')}
-                      price={mUsd}
-                      period={`${t('plan.month.period')}${mVnd ? ` (${mVnd})` : ''}`}
-                      desc={t('plan.month.desc')}
-                      selected={selectedPlan === 'month'}
-                      onClick={() => setSelectedPlan('month')}
-                    />
-                    <PlanCard
-                      id="year"
-                      name={t('plan.year.name')}
-                      price={yUsd}
-                      period={`${t('plan.year.period')}${yVnd ? ` (${yVnd})` : ''}`}
-                      desc={t('plan.year.desc')}
-                      badge={t('plan.year.badge')}
-                      selected={selectedPlan === 'year'}
-                      onClick={() => setSelectedPlan('year')}
-                    />
-                  </>
-                );
+                const findPlan = (id, defUsd, defVnd) => {
+                  const found = catalog.find((p) => p.id === id);
+                  return {
+                    usd: found?.usd ? `$${found.usd}` : `$${defUsd}`,
+                    vnd: found?.vnd ? formatVnd(found.vnd) : formatVnd(defVnd),
+                  };
+                };
+                const st = findPlan(`starter_${billingCycle}`, billingCycle === 'year' ? 35 : 4.99, billingCycle === 'year' ? 690000 : 99000);
+                const pr = findPlan(`pro_${billingCycle}`, billingCycle === 'year' ? 49 : 6.99, billingCycle === 'year' ? 990000 : 149000);
+                const tm = findPlan(`team_${billingCycle}`, billingCycle === 'year' ? 149 : 19.99, billingCycle === 'year' ? 2990000 : 449000);
+                const perText = billingCycle === 'year' ? t('plan.year.period') : t('plan.month.period');
+
+                const tierCards = [
+                  {
+                    id: `starter_${billingCycle}`,
+                    name: lang === 'en' ? 'Starter (Basic)' : 'Gói Starter (Cơ bản)',
+                    price: st.usd,
+                    period: `${perText} (${st.vnd})`,
+                    desc: lang === 'en'
+                      ? '50 downloads/day · 1080p · Clip ≤ 2m · No Reup / No Hardsub / 0 API calls'
+                      : '50 lượt/ngày · 1080p · Cắt ≤ 2 phút · Không có Làm sạch Reup / Hardsub / 0 API',
+                    badge: null,
+                  },
+                  {
+                    id: `pro_${billingCycle}`,
+                    name: lang === 'en' ? '⭐ Pro — Creator & Dev' : '⭐ Gói Pro — Creator & Dev',
+                    price: pr.usd,
+                    period: `${perText} (${pr.vnd})`,
+                    desc: lang === 'en'
+                      ? '🎁 First-Time Offer (-30% off $9.99) · 4K/8K + Reup MD5 + Hardsub MP4 + 3,000 API calls/mo (+500 Bonus)'
+                      : '🎁 Ưu đãi mua lần đầu (-30% từ $9.99) · Full 4K/8K + Reup MD5 + Hardsub + 3.000 API/tháng (+500 Bonus)',
+                    badge: lang === 'en' ? '⭐ Most Popular · -30% + 500 API Bonus' : '⭐ Đáng mua nhất · -30% + Tặng 500 API',
+                  },
+                  {
+                    id: `team_${billingCycle}`,
+                    name: lang === 'en' ? '🚀 Team / Business API' : '🚀 Gói Team / Business API',
+                    price: tm.usd,
+                    period: `${perText} (${tm.vnd})`,
+                    desc: lang === 'en'
+                      ? '500 downloads/day · 15,000 API calls/month · 200 batch links · Priority Queue & Webhooks'
+                      : '500 lượt/ngày · 15.000 lượt gọi API/tháng · Tải 200 link/lần · Hàng đợi ưu tiên & Webhook',
+                    badge: lang === 'en' ? 'High Volume API' : 'API Doanh nghiệp',
+                  },
+                ];
+
+                return tierCards.map((c) => (
+                  <PlanCard
+                    key={c.id}
+                    id={c.id}
+                    name={c.name}
+                    price={c.price}
+                    period={c.period}
+                    desc={c.desc}
+                    badge={c.badge}
+                    selected={selectedPlan === c.id}
+                    onClick={() => setSelectedPlan(c.id)}
+                  />
+                ));
               })()}
             </div>
 

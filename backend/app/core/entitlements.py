@@ -58,6 +58,37 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
         },
         "queue_priority": 10,  # higher = lower priority
     },
+    "starter": {
+        "name": "Starter",
+        "limits": {
+            "downloads_per_day":     int(os.getenv("STARTER_DAILY_LIMIT", "50")),
+            "batch_size_max":        20,
+            "max_height":            1080,
+            "history_days":          30,
+            "history_limit":         100,
+            "ai_analyses_per_day":   10,
+            "concurrent_jobs":       5,
+            "api_calls_per_month":   0,
+            "seats_max":             1,
+        },
+        "features": {
+            "bulk_zip":              False,
+            "youtube_video":         True,
+            "spotify_full":          False,
+            "cloud_save":            True,
+            "chapters":              True,
+            "logo_inpaint":          False,
+            "api_key":               False,
+            "webhook":               False,
+            "ai_tools":              False,
+            "priority_queue":        False,
+            "team_workspace":        False,
+            "partner_api":           False,
+            "sso":                   False,
+            "white_label":           False,
+        },
+        "queue_priority": 6,
+    },
     "pro": {
         "name": "Pro",
         "limits": {
@@ -99,7 +130,7 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
             "history_limit":         None,
             "ai_analyses_per_day":   200,
             "concurrent_jobs":       30,
-            "api_calls_per_month":   10000,
+            "api_calls_per_month":   15000,
             "seats_max":             5,  # default; overridden by profiles.seats_max
         },
         "features": {
@@ -183,7 +214,6 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
         "queue_priority": 1,
     },
     # Tenant-tier aliases → map to closest web-tier equivalent
-    "starter": "free",       # tenants.plan 'starter' → free entitlements
     "growth":  "pro",        # tenants.plan 'growth'  → pro entitlements
 }
 

@@ -25,25 +25,77 @@ def catalog() -> List[Dict[str, Any]]:
     """Plans on sale — prices from admin settings."""
     from app.core.plans import get_settings  # noqa: PLC0415
     s = get_settings()
+    st_m_cents = int(s.get("starter_month_usd_cents") or 499)
+    st_y_cents = int(s.get("starter_year_usd_cents") or 3500)
     month_cents = int(s.get("price_month_usd_cents") or os.getenv("STRIPE_PRO_MONTH_USD_CENTS", "699") or 699)
     year_cents = int(s.get("price_year_usd_cents") or os.getenv("STRIPE_PRO_YEAR_USD_CENTS", "4900") or 4900)
+    tm_m_cents = int(s.get("team_month_usd_cents") or 1999)
+    tm_y_cents = int(s.get("team_year_usd_cents") or 14900)
     plans = [
         {
+            "id": "starter_month",
+            "tier": "starter",
+            "name": "Starter Tháng",
+            "name_en": "Starter Monthly",
+            "vnd": s.get("starter_month_vnd", 99_000),
+            "usd_cents": st_m_cents,
+            "usd": round(st_m_cents / 100, 2),
+            "days": 30,
+        },
+        {
+            "id": "starter_year",
+            "tier": "starter",
+            "name": "Starter Năm",
+            "name_en": "Starter Yearly",
+            "vnd": s.get("starter_year_vnd", 690_000),
+            "usd_cents": st_y_cents,
+            "usd": round(st_y_cents / 100, 2),
+            "days": 365,
+        },
+        {
             "id": "pro_month",
+            "tier": "pro",
             "name": "Pro Tháng",
             "name_en": "Pro Monthly",
             "vnd": s.get("price_month_vnd", 149_000),
             "usd_cents": month_cents,
             "usd": round(month_cents / 100, 2),
+            "original_usd": 9.99,
+            "bonus_api_calls": 500,
             "days": 30,
         },
         {
             "id": "pro_year",
+            "tier": "pro",
             "name": "Pro Năm",
             "name_en": "Pro Yearly",
             "vnd": s.get("price_year_vnd", 990_000),
             "usd_cents": year_cents,
             "usd": round(year_cents / 100, 2),
+            "original_usd": 83.88,
+            "bonus_api_calls": 500,
+            "days": 365,
+        },
+        {
+            "id": "team_month",
+            "tier": "team",
+            "name": "Team / Business API Tháng",
+            "name_en": "Team / Business API Monthly",
+            "vnd": s.get("team_month_vnd", 449_000),
+            "usd_cents": tm_m_cents,
+            "usd": round(tm_m_cents / 100, 2),
+            "original_usd": 29.99,
+            "days": 30,
+        },
+        {
+            "id": "team_year",
+            "tier": "team",
+            "name": "Team / Business API Năm",
+            "name_en": "Team / Business API Yearly",
+            "vnd": s.get("team_year_vnd", 2_990_000),
+            "usd_cents": tm_y_cents,
+            "usd": round(tm_y_cents / 100, 2),
+            "original_usd": 239.88,
             "days": 365,
         },
     ]
@@ -329,18 +381,19 @@ def activate_order(order_id: str, paid_amount: int, provider_ref: str = "",
     # Upgrade user
     plan = plan_by_id(order["plan"])
     days = plan["days"] if plan else 30
-    _upgrade_user_pro(order["user_id"], days, f"order_{order_id}")
+    target_tier = plan.get("tier", "pro") if plan else "pro"
+    _upgrade_user_pro(order["user_id"], days, f"order_{order_id}", target_tier=target_tier)
 
     return True, "activated"
 
 
-def _upgrade_user_pro(user_id: str, days: int, subscription_id: str) -> None:
-    """Upgrade user to Pro for N days using the manual grant flow."""
+def _upgrade_user_pro(user_id: str, days: int, subscription_id: str, target_tier: str = "pro") -> None:
+    """Upgrade user to paid tier (starter/pro/team) for N days using the manual grant flow."""
     db = _db()
     from app.api.admin import _manual_pro_fields  # noqa: PLC0415
 
     fields = _manual_pro_fields(db, user_id, days)
-    fields["tier"] = "pro"
+    fields["tier"] = target_tier or "pro"
 
     try:
         p_res = db.table("profiles").update(fields).eq("id", user_id).execute()
@@ -352,17 +405,30 @@ def _upgrade_user_pro(user_id: str, days: int, subscription_id: str) -> None:
 
     # Sync user_usage.plan
     try:
-        u_res = db.table("user_usage").update({"plan": "pro"}).eq("user_id", user_id).execute()
+        u_res = db.table("user_usage").update({"plan": target_tier or "pro"}).eq("user_id", user_id).execute()
         if not u_res.data:
             db.table("user_usage").insert({
                 "user_id": user_id,
-                "plan": "pro",
+                "plan": target_tier or "pro",
                 "downloads_today": 0,
                 "downloads_this_month": 0,
                 "last_reset_at": datetime.now(timezone.utc).isoformat(),
             }).execute()
     except Exception:
         pass
+
+    # First-time Pro welcome bonus: +500 API calls for current month
+    if (target_tier or "pro") == "pro":
+        try:
+            from app.core.redis_client import get_redis  # noqa: PLC0415
+            from app.core import api_quota as aq  # noqa: PLC0415
+            rc = get_redis()
+            first_flag = f"api_first_bonus_claimed:{user_id}"
+            if not rc.get(first_flag):
+                rc.set(first_flag, "1")
+                rc.set(f"api_bonus:{user_id}:{aq.month_of()}", 500, ex=40 * 86400)
+        except Exception:
+            pass
 
     # Reward referrer
     try:
@@ -495,6 +561,7 @@ def admin_activate_order(order_id: str, admin_note: str = "") -> Tuple[bool, str
 
     plan = plan_by_id(order["plan"])
     days = plan["days"] if plan else 30
-    _upgrade_user_pro(order["user_id"], days, f"admin_order_{order_id}")
+    target_tier = plan.get("tier", "pro") if plan else "pro"
+    _upgrade_user_pro(order["user_id"], days, f"admin_order_{order_id}", target_tier=target_tier)
 
     return True, "activated_by_admin"

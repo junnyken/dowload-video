@@ -59,8 +59,17 @@ def limit_for_tier(tier: str) -> int:
     return 0
 
 
+def _bonus_for_month(user_id: str, now: Optional[datetime] = None) -> int:
+    try:
+        raw = _r().get(f"api_bonus:{user_id}:{month_of(now)}")
+        return int(raw) if raw else 0
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 def usage(user_id: str, tier: str, now: Optional[datetime] = None) -> Dict[str, Any]:
-    lim = limit_for_tier(tier)
+    base_lim = limit_for_tier(tier)
+    lim = base_lim if base_lim in (-1, 0) else base_lim + _bonus_for_month(user_id, now)
     used: Optional[int]
     try:
         raw = _r().get(KEY.format(uid=user_id, month=month_of(now)))
@@ -79,7 +88,8 @@ def usage(user_id: str, tier: str, now: Optional[datetime] = None) -> Dict[str, 
 def consume(user_id: str, tier: str, now: Optional[datetime] = None) -> Dict[str, Any]:
     """Count one call. Returns {allowed, limit, used, remaining, reset_at}.
     Never raises."""
-    lim = limit_for_tier(tier)
+    base_lim = limit_for_tier(tier)
+    lim = base_lim if base_lim in (-1, 0) else base_lim + _bonus_for_month(user_id, now)
     out: Dict[str, Any] = {"limit": lim, "reset_at": reset_at(now).isoformat()}
     if lim == -1:
         out.update(allowed=True, used=None, remaining=None)
