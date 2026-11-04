@@ -29,7 +29,7 @@ export function buildPlanRows(tiers) {
     },
     {
       key: 'trimClip', label: tp('rows.trimClip'),
-      get: (t) => (t.id === 'pro' || t.id === 'team' ? tp('trimPro') : tp('trimFree')),
+      get: (t) => (t.id === 'pro' || t.id === 'team' ? tp('trimPro') : (t.id === 'guest' ? tp('trimGuest') : tp('trimFree'))),
     },
     {
       key: 'reupClean', label: tp('rows.reupClean'),

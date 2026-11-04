@@ -30,6 +30,7 @@
     "schedules": "Scheduled downloads",
     "api": "API key"
   },
+  "trimGuest": "Short clips ≤ 5s",
   "trimFree": "Short clips ≤ 10s",
   "trimPro": "Up to 10 min (Full HD/4K)",
   "reupPro": "Strip metadata + New MD5 + Mirror flip",

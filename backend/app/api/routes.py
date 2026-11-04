@@ -2002,7 +2002,7 @@ class TrimRequest(BaseModel):
 
 @router.post("/trim")
 @limiter.limit("10/minute")
-async def trim_media(payload: TrimRequest, request: Request):
+async def trim_media(payload: TrimRequest, request: Request, user=Depends(get_optional_user)):
     """
     Download a video/audio (or use a local file), trim it using FFmpeg (-ss to -to with -c copy),
     and return the trimmed file for download.
@@ -2012,7 +2012,15 @@ async def trim_media(payload: TrimRequest, request: Request):
         raise HTTPException(status_code=400, detail="url or local_path is required")
     if payload.start_time < 0 or payload.end_time <= payload.start_time:
         raise HTTPException(status_code=400, detail="Invalid time range")
-    if payload.end_time - payload.start_time > 600:
+    clip_dur = payload.end_time - payload.start_time
+    _trim_uid = user["id"] if user else None
+    _trim_tier = _get_tier(_trim_uid) if _trim_uid else "guest"
+    _max_trim_sec = 600 if _trim_tier in ("pro", "team", "enterprise", "api") else (10 if _trim_uid else 5)
+    if clip_dur > _max_trim_sec + 0.5:
+        if _max_trim_sec == 5:
+            raise HTTPException(status_code=402, detail="Guest accounts can trim up to 5 seconds (≤ 5s). Sign in for 10s or upgrade to Pro for 10 minutes.")
+        if _max_trim_sec == 10:
+            raise HTTPException(status_code=402, detail="Free accounts can trim up to 10 seconds (≤ 10s). Upgrade to Pro to trim up to 10 minutes.")
         raise HTTPException(status_code=400, detail="Maximum trim duration is 10 minutes")
 
     try:

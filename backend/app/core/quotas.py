@@ -283,7 +283,7 @@ def platform_limit_anon() -> int:
 
 
 def platform_limit_user() -> int:
-    return _env_limit("PLATFORM_DAILY_LIMIT_USER", 20)
+    return _env_limit("PLATFORM_DAILY_LIMIT_USER", 10)
 
 
 def platform_limit_for_tier(tier: str) -> int:
