@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { History, Settings2, BarChart2, LogOut, ChevronDown, Crown, ListVideo, Archive, Calendar, Building2, Shield, ClipboardCheck, Languages } from 'lucide-react';
+import { History, Settings2, BarChart2, LogOut, ChevronDown, Crown, ListVideo, Archive, Calendar, Building2, Shield, ClipboardCheck, Languages, Key } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { API_BASE } from '../lib/apiBase';
@@ -144,6 +144,8 @@ export default function AccountMenu({ onNavigate }) {
               onClick={() => nav('subtitle-hub', '/phu-de')} />
           </div>
           <div className="py-1 border-t border-line">
+            <MenuItem icon={<Key className="w-4 h-4 text-accent-text" />} label="Developer API Keys (PRO)"
+              onClick={() => nav('api-keys', '/api-keys')} />
             <MenuItem icon={<Settings2 className="w-4 h-4" />} label={t('menu.preferences')}
               onClick={() => nav('preferences', '/preferences')} />
             <MenuItem icon={<BarChart2 className="w-4 h-4" />} label={t('menu.usage')}
@@ -170,7 +172,7 @@ export default function AccountMenu({ onNavigate }) {
           {(!usage || (usage.tier === 'free')) && (
             <div className="px-3 py-2 border-t border-line">
               <button
-                onClick={() => nav('upgrade', '/upgrade')}
+                onClick={() => nav('pricing', '/pricing')}
                 className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg bg-surface-2 border border-accent/20 hover:border-accent/40 transition-colors text-left"
               >
                 <Crown className="w-3.5 h-3.5 text-accent-text" />

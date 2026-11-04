@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Check, X, Crown, Copy, Loader2, CreditCard } from 'lucide-react';
+import { Check, X, Crown, Copy, Loader2, CreditCard, Key, Zap, Globe } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../lib/apiBase';
-import { usePlans, formatVnd } from '../lib/usePlans';
+import { usePlans, formatVnd, formatUsd } from '../lib/usePlans';
 import { buildPlanRows } from '../lib/planRows';
 import { useTranslation } from 'react-i18next';
-import { useLang } from '../i18n';
+import { useLang, useLocalePath } from '../i18n';
 
 // Pricing page — Khách / Free / Pro. Every number comes from GET /api/v1/plans
 // (backend app/core/plans.py); nothing about limits is written in this file.
@@ -139,7 +139,7 @@ function PaymentSection({ pay, pro, period, autoCheckout }) {
   }, [token, t]);
 
   const amount = period === 'year' ? pro.price_year_vnd : pro.price_month_vnd;
-  const usdAmount = period === 'year' ? (pro.price_year_usd || 49) : (pro.price_month_usd || 4.99);
+  const usdAmount = period === 'year' ? (pro.price_year_usd || 49) : (pro.price_month_usd || 6.99);
   const periodLabel = period === 'year' ? t('days365') : t('days30');
   const periodShort = period === 'year' ? t('perYear') : t('perMonth');
 
@@ -257,6 +257,8 @@ function PaymentSection({ pay, pro, period, autoCheckout }) {
 
 export default function PricingPage() {
   const { t } = useTranslation('pricing');
+  const lang = useLang();
+  const lp = useLocalePath();
   const { ready, plans } = usePlans();
   const [period, setPeriod] = useState('month');
 
@@ -270,6 +272,10 @@ export default function PricingPage() {
     <div className="bg-canvas text-fg">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-16">
         <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent-soft border border-accent/30 text-accent-text text-xs font-bold mb-3">
+            <Globe className="w-3.5 h-3.5" />
+            {lang === 'en' ? 'GLOBAL PRICING (USD) · INSTANT ACTIVATION' : 'BẢNG GIÁ QUỐC TẾ (USD) · KÍCH HOẠT TỰ ĐỘNG'}
+          </div>
           <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight mb-3">{t('title')}</h1>
           {/* wording: BA review */}
           <p className="text-fg-muted text-sm sm:text-base max-w-xl mx-auto">
@@ -293,7 +299,7 @@ export default function PricingPage() {
           <>
             <div className="flex justify-center mb-8">
               <div role="group" aria-label={t('billingCycle')} className="inline-flex rounded-xl border border-line bg-surface p-1">
-                {[['month', t('monthly')], ['year', t('yearly')]].map(([k, l]) => (
+                {[['month', t('monthly')], ['year', `${t('yearly')} (-42%)`]].map(([k, l]) => (
                   <button key={k} type="button" aria-pressed={period === k} onClick={() => setPeriod(k)}
                     className={`px-4 py-2 min-h-10 rounded-lg text-sm font-medium transition-colors ${period === k ? 'bg-accent text-accent-fg' : 'text-fg-2 hover:text-fg'}`}>
                     {l}{/* wording: BA review */}
@@ -309,20 +315,49 @@ export default function PricingPage() {
                   ? { name: t(`tier.${tier.id}.name`), sub: t(`tier.${tier.id}.sub`) }
                   : { name: tier.id, sub: '' };
                 const isPro = tier.id === 'pro';
-                const price = isPro ? (period === 'year' ? tier.price_year_vnd : tier.price_month_vnd) : 0;
+                const priceVnd = isPro ? (period === 'year' ? tier.price_year_vnd : tier.price_month_vnd) : 0;
+                const priceUsd = isPro ? (period === 'year' ? (tier.price_year_usd || 49) : (tier.price_month_usd || 6.99)) : 0;
                 return (
                   <article key={tier.id}
-                    className={`plan-card min-w-0 rounded-2xl border p-5 bg-surface-2 ${isPro ? 'border-accent shadow-lg' : 'border-line'}`}>
+                    className={`plan-card min-w-0 rounded-2xl border p-5 bg-surface-2 ${isPro ? 'border-accent shadow-lg ring-1 ring-accent/30' : 'border-line'}`}>
                     <div className="pb-4">
-                      <h2 className="flex items-center gap-2 text-lg font-bold">
-                        {isPro && <Crown className="w-4 h-4 text-accent-text" aria-hidden="true" />}
-                        {meta.name}
-                      </h2>
+                      <div className="flex items-center justify-between gap-2">
+                        <h2 className="flex items-center gap-2 text-lg font-bold">
+                          {isPro && <Crown className="w-4 h-4 text-accent-text" aria-hidden="true" />}
+                          {meta.name}
+                        </h2>
+                        {isPro && (
+                          <span className="px-2 py-0.5 rounded-full bg-accent text-accent-fg text-[10px] font-bold uppercase tracking-wider">
+                            {lang === 'en' ? 'Most Popular' : 'Phổ biến nhất'}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-fg-muted mb-3">{meta.sub}</p>
-                      <p>
-                        <span className="text-3xl font-extrabold">{isPro ? formatVnd(price) : formatVnd(0)}</span>
+                      <p className="flex items-baseline gap-1.5 flex-wrap">
+                        <span className="text-3xl font-extrabold text-fg">{formatUsd(priceUsd)}</span>
                         {isPro && <span className="text-sm text-fg-muted"> / {period === 'year' ? t('perYear') : t('perMonth')}</span>}
+                        {isPro && period === 'year' && (
+                          <span className="ml-1 px-1.5 py-0.5 rounded bg-success/15 text-success text-[10px] font-bold">
+                            {lang === 'en' ? 'Save 42% ($4.08/mo)' : 'Tiết kiệm 42% ($4.08/th)'}
+                          </span>
+                        )}
                       </p>
+                      {isPro && priceVnd > 0 && (
+                        <p className="text-[11px] text-fg-muted mt-1">
+                          {lang === 'en'
+                            ? `PayPal / Visa / Mastercard · or ${formatVnd(priceVnd)} via VietQR`
+                            : `Thanh toán Quốc tế (PayPal/Thẻ) · hoặc ${formatVnd(priceVnd)} qua VietQR`}
+                        </p>
+                      )}
+                      {isPro && (
+                        <a
+                          href={lp('/checkout')}
+                          className="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition shadow-sm"
+                        >
+                          <Zap className="w-3.5 h-3.5" />
+                          {lang === 'en' ? 'Upgrade to Pro Now →' : 'Nâng cấp Pro ngay →'}
+                        </a>
+                      )}
                     </div>
                     {rows.map((r) => {
                       const v = r.get(tier);
@@ -338,6 +373,43 @@ export default function PricingPage() {
                   </article>
                 );
               })}
+            </div>
+
+            {/* Paid-Only Developer API & Commercial Priority Banner */}
+            <div className="mt-8 rounded-2xl border border-accent/30 bg-surface-2 p-5 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="space-y-1.5">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-accent-soft text-accent-text text-[11px] font-bold">
+                    <Key className="w-3.5 h-3.5" />
+                    {lang === 'en' ? 'DEVELOPER & COMMERCIAL REST API (PAID PLANS ONLY)' : 'DEVELOPER & COMMERCIAL REST API (CHỈ DÀNH CHO GÓI TRẢ PHÍ)'}
+                  </div>
+                  <h3 className="text-base sm:text-lg font-bold text-fg">
+                    {lang === 'en'
+                      ? 'Automate Video Extraction, Subtitles & Reup Processing via API'
+                      : 'Tự động hóa Tải Video, Phụ đề & Xử lý Reup qua REST API'}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-fg-muted max-w-2xl">
+                    {lang === 'en'
+                      ? 'API Keys are exclusively unlocked on paid plans. Pro ($6.99/mo) includes 3,000 API calls/month & up to 3 self-service keys. Need higher volume? Team/Business unlocks 15,000+ calls/month or subscribe on RapidAPI Hub.'
+                      : 'Quyền tạo và sử dụng API Key chỉ mở khóa từ gói trả phí. Gói Pro ($6.99/tháng) tặng kèm 3.000 lượt gọi API/tháng & tối đa 3 API key cá nhân. Gói Team/Doanh nghiệp hỗ trợ 15.000+ lượt/tháng hoặc đăng ký qua chợ RapidAPI.'}
+                  </p>
+                </div>
+                <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">
+                  <a
+                    href={lp('/api-keys')}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition"
+                  >
+                    <Key className="w-3.5 h-3.5" />
+                    {lang === 'en' ? 'Manage API Keys (Pro)' : 'Quản lý API Key (Pro)'}
+                  </a>
+                  <a
+                    href={lp('/api-docs')}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl border border-line bg-surface text-fg-2 hover:text-fg text-xs font-semibold transition"
+                  >
+                    {lang === 'en' ? 'View API Documentation →' : 'Xem Tài liệu API →'}
+                  </a>
+                </div>
+              </div>
             </div>
 
             <p className="mt-4 text-xs text-fg-muted text-center">

@@ -20,11 +20,15 @@ import re
 from typing import Any, Dict, List, Optional
 
 SETTINGS_KEY = "plans:settings"
-DEFAULT_PRICE_MONTH_VND = 49_000      # owner 13/10
-DEFAULT_PRICE_YEAR_VND = 399_000      # owner 13/10
-DEFAULT_API_CALLS_MONTH_PRO = 3_000   # owner 14/10 (app.core.api_quota)
-DEFAULT_API_CALLS_MONTH_TEAM = 10_000
+DEFAULT_PRICE_MONTH_USD_CENTS = 699   # $6.99/month (international-first benchmark)
+DEFAULT_PRICE_YEAR_USD_CENTS = 4900   # $49.00/year (~$4.08/mo, save 42%)
+DEFAULT_PRICE_MONTH_VND = 149_000     # ~149,000₫/month
+DEFAULT_PRICE_YEAR_VND = 990_000      # ~990,000₫/year
+DEFAULT_API_CALLS_MONTH_PRO = 3_000   # Paid Pro tier: 3,000 API calls/month
+DEFAULT_API_CALLS_MONTH_TEAM = 15_000 # Paid Team tier: 15,000 API calls/month
 _INT_FIELDS = {
+    "price_month_usd_cents": (100, 500_000, "Giá USD (cents) phải từ 100 ($1.00) đến 500000 ($5,000)"),
+    "price_year_usd_cents": (100, 500_000, "Giá USD (cents) phải từ 100 ($1.00) đến 500000 ($5,000)"),
     "price_month_vnd": (1_000, 50_000_000, "Giá phải từ 1.000đ đến 50.000.000đ"),
     "price_year_vnd": (1_000, 50_000_000, "Giá phải từ 1.000đ đến 50.000.000đ"),
     "api_calls_month_pro": (0, 10_000_000, "Lượt gọi API/tháng phải từ 0 đến 10.000.000"),
@@ -54,6 +58,8 @@ def _r():
 def get_settings() -> Dict[str, Any]:
     """Never raises; defaults when Redis is unreadable."""
     out: Dict[str, Any] = {
+        "price_month_usd_cents": int(os.getenv("STRIPE_PRO_MONTH_USD_CENTS", str(DEFAULT_PRICE_MONTH_USD_CENTS)) or DEFAULT_PRICE_MONTH_USD_CENTS),
+        "price_year_usd_cents": int(os.getenv("STRIPE_PRO_YEAR_USD_CENTS", str(DEFAULT_PRICE_YEAR_USD_CENTS)) or DEFAULT_PRICE_YEAR_USD_CENTS),
         "price_month_vnd": DEFAULT_PRICE_MONTH_VND,
         "price_year_vnd": DEFAULT_PRICE_YEAR_VND,
         "api_calls_month_pro": DEFAULT_API_CALLS_MONTH_PRO,
@@ -213,8 +219,8 @@ def build_plans() -> Dict[str, Any]:
             "pins": _PIN_LIMITS["pro"], "pin_days": _PIN_DAYS["pro"],
             "schedules": _SCHEDULE_LIMITS["pro"], "playlists": _PLAYLIST_LIMITS["pro"],
             "price_month_vnd": s["price_month_vnd"], "price_year_vnd": s["price_year_vnd"],
-            "price_month_usd": round(int(os.getenv("STRIPE_PRO_MONTH_USD_CENTS", "499") or 499) / 100, 2),
-            "price_year_usd": round(int(os.getenv("STRIPE_PRO_YEAR_USD_CENTS", "4900") or 4900) / 100, 2),
+            "price_month_usd": round(int(s.get("price_month_usd_cents") or DEFAULT_PRICE_MONTH_USD_CENTS) / 100, 2),
+            "price_year_usd": round(int(s.get("price_year_usd_cents") or DEFAULT_PRICE_YEAR_USD_CENTS) / 100, 2),
         },
     ]
     bank_ready = bool(s["bank_name"] and s["bank_account"] and s["bank_holder"])
@@ -227,7 +233,7 @@ def build_plans() -> Dict[str, Any]:
         or os.getenv("INTERNATIONAL_CHECKOUT_URL", "").strip()
     )
     return {
-        "currency": "VND",
+        "currency": "USD",
         "tiers": tiers,
         "payment": {
             "method": "bank_transfer",

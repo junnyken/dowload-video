@@ -10,45 +10,45 @@
   },
 
   "plan": {
-    "title": "Choose a Pro plan",
+    "title": "Choose a Pro plan (USD)",
     "month": {
       "name": "Pro Monthly",
-      "price": "49,000₫",
+      "price": "$6.99",
       "period": "/month",
-      "desc": "Try Pro for 30 days"
+      "desc": "Full Pro Studio + 3,000 API calls/month for 30 days"
     },
     "year": {
       "name": "Pro Yearly",
-      "price": "399,000₫",
+      "price": "$49",
       "period": "/year",
-      "desc": "Save 32% — best for long-term users",
-      "badge": "Save 32%"
+      "desc": "Save 42% ($4.08/mo) — best value for creators & developers",
+      "badge": "Save 42%"
     },
     "features": {
-      "title": "All Pro features",
+      "title": "All Pro features unlocked",
       "items": [
-        "Unlimited downloads",
-        "Unlimited AI analysis",
-        "4K / 8K quality",
-        "Playlist & channel downloads",
-        "Priority queue",
-        "Priority support"
+        "100+ downloads/day · 4K/8K Ultra HD",
+        "Developer REST API (3,000 calls/mo)",
+        "Anti-Detect Reup Cleaner (MD5 + Flip)",
+        "Burn-in Subtitles (Hardsub MP4)",
+        "1-Click Photo Carousel & Playlist .ZIP",
+        "Clip Video up to 10 mins (Full HD/4K)"
       ]
     },
-    "continue": "Continue"
+    "continue": "Continue to Payment"
   },
 
   "method": {
     "title": "Choose payment method",
-    "vietqr": {
-      "name": "Bank Transfer (VietQR)",
-      "desc": "QR code — Auto-confirmed within minutes",
-      "tag": "Popular"
-    },
     "paypal": {
-      "name": "PayPal",
-      "desc": "International payment via PayPal",
-      "tag": "International"
+      "name": "PayPal / International Card (USD)",
+      "desc": "Instant global payment via PayPal, Visa, or Mastercard",
+      "tag": "Recommended (Global)"
+    },
+    "vietqr": {
+      "name": "Vietnam Bank Transfer (VietQR)",
+      "desc": "Dynamic QR code (VND) — Auto-confirmed within seconds",
+      "tag": "Vietnam Only"
     },
     "continue": "Pay Now"
   },

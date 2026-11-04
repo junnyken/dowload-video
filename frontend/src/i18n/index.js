@@ -30,12 +30,25 @@ for (const [path, data] of Object.entries(files)) {
   (resources[lang] ||= {})[ns] = data;
 }
 
+/** Resolve active language: English ('en') by default for international-first strategy, unless user explicitly selected 'vi' in localStorage. */
+export function resolveLang(pathname) {
+  if (/^\/en(\/|$)/.test(pathname || '')) return 'en';
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem(PREF_KEY);
+      if (saved === 'vi') return 'vi';
+      if (saved === 'en') return 'en';
+    } catch { /* storage blocked */ }
+  }
+  return 'en';
+}
+
 i18n.use(initReactI18next).init({
   resources,
-  lng: typeof window !== 'undefined' ? langFromPath(window.location.pathname) : DEFAULT_LANG,
-  fallbackLng: DEFAULT_LANG,
+  lng: typeof window !== 'undefined' ? resolveLang(window.location.pathname) : 'en',
+  fallbackLng: 'en',
   supportedLngs: LANGS,
-  ns: Object.keys(resources[DEFAULT_LANG] || {}),
+  ns: Object.keys(resources.en || resources[DEFAULT_LANG] || {}),
   defaultNS: 'app',
   interpolation: { escapeValue: false },   // React escapes
   returnNull: false,
@@ -43,7 +56,7 @@ i18n.use(initReactI18next).init({
 });
 
 export default i18n;
-export const getLang = () => (i18n.language === 'en' ? 'en' : 'vi');
+export const getLang = () => (i18n.language === 'vi' ? 'vi' : 'en');
 
 const rawPush = typeof window !== 'undefined' ? window.history.pushState.bind(window.history) : null;
 const rawReplace = typeof window !== 'undefined' ? window.history.replaceState.bind(window.history) : null;
@@ -67,13 +80,15 @@ export function switchLang(lang) {
   try { localStorage.setItem(PREF_KEY, lang); } catch { /* storage off */ }
   const { pathname, search, hash } = window.location;
   rawPush({}, '', localizePath(pathname, lang) + search + hash);
+  i18n.changeLanguage(lang);
+  document.documentElement.lang = lang;
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
 /** The current language ('vi' | 'en'), re-rendering on change. */
 export function useLang() {
   const { i18n: inst } = useTranslation();
-  return inst.language === 'en' ? 'en' : 'vi';
+  return inst.language === 'vi' ? 'vi' : 'en';
 }
 
 /** Address of a Vietnamese path in the current language, for <a href>. */

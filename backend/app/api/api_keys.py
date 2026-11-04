@@ -56,7 +56,7 @@ def _assert_pro(user_id: str):
             status_code=403,
             detail={
                 "error_code": "tier_required_feature",
-                "user_message": "API key management chỉ dành cho Pro.",
+                "user_message": "Developer API Keys require a paid plan (Pro: 3,000 calls/mo · Team: 15,000 calls/mo). / Quản lý & sử dụng API Key chỉ dành cho gói trả phí (Pro / Team).",
                 "upgrade_url": "/pricing",
             },
         )

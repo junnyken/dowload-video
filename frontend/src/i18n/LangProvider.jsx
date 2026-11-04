@@ -1,12 +1,12 @@
 // Keeps i18next on the language of the address (back / forward, the switch)
 // and <html lang> in step.
 import { useEffect } from 'react';
-import i18n, { langFromPath } from './index';
+import i18n, { resolveLang } from './index';
 
 export default function LangProvider({ children }) {
   useEffect(() => {
     const sync = () => {
-      const lang = langFromPath(window.location.pathname);
+      const lang = resolveLang(window.location.pathname);
       if (i18n.language !== lang) i18n.changeLanguage(lang);
       document.documentElement.lang = lang;
     };

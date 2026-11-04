@@ -51,6 +51,12 @@ async function load() {
 
 // ── formatting helpers shared by the pricing page and the upgrade modal ──
 
+export function formatUsd(n) {
+  const v = Number(n) || 0;
+  if (v === 0) return '$0';
+  return Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`;
+}
+
 export function formatVnd(n) {
   const v = Number(n) || 0;
   if (i18n.language === 'en') {

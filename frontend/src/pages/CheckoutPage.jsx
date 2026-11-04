@@ -236,9 +236,9 @@ export default function CheckoutPage() {
   // Steps: 0=plan, 1=method, 2=payment
   const [step, setStep] = useState(0);
 
-  // Selections
+  // Selections — default to international payment ('paypal') first
   const [selectedPlan, setSelectedPlan] = useState('month'); // 'month' | 'year'
-  const [selectedMethod, setSelectedMethod] = useState(null); // 'vietqr' | 'paypal'
+  const [selectedMethod, setSelectedMethod] = useState('paypal'); // 'paypal' | 'vietqr'
 
   // Order state
   const [order, setOrder] = useState(null);
@@ -487,25 +487,38 @@ export default function CheckoutPage() {
             <h2 className="text-lg font-bold text-fg">{t('plan.title')}</h2>
 
             <div className="space-y-3">
-              <PlanCard
-                id="month"
-                name={t('plan.month.name')}
-                price={t('plan.month.price')}
-                period={t('plan.month.period')}
-                desc={t('plan.month.desc')}
-                selected={selectedPlan === 'month'}
-                onClick={() => setSelectedPlan('month')}
-              />
-              <PlanCard
-                id="year"
-                name={t('plan.year.name')}
-                price={t('plan.year.price')}
-                period={t('plan.year.period')}
-                desc={t('plan.year.desc')}
-                badge={t('plan.year.badge')}
-                selected={selectedPlan === 'year'}
-                onClick={() => setSelectedPlan('year')}
-              />
+              {(() => {
+                const catalog = Array.isArray(plans?.plans) ? plans.plans : [];
+                const mPlan = catalog.find((p) => p.id === 'pro_month');
+                const yPlan = catalog.find((p) => p.id === 'pro_year');
+                const mUsd = mPlan?.usd ? `$${mPlan.usd}` : t('plan.month.price');
+                const yUsd = yPlan?.usd ? `$${yPlan.usd}` : t('plan.year.price');
+                const mVnd = mPlan?.vnd ? formatVnd(mPlan.vnd) : '';
+                const yVnd = yPlan?.vnd ? formatVnd(yPlan.vnd) : '';
+                return (
+                  <>
+                    <PlanCard
+                      id="month"
+                      name={t('plan.month.name')}
+                      price={mUsd}
+                      period={`${t('plan.month.period')}${mVnd ? ` (${mVnd})` : ''}`}
+                      desc={t('plan.month.desc')}
+                      selected={selectedPlan === 'month'}
+                      onClick={() => setSelectedPlan('month')}
+                    />
+                    <PlanCard
+                      id="year"
+                      name={t('plan.year.name')}
+                      price={yUsd}
+                      period={`${t('plan.year.period')}${yVnd ? ` (${yVnd})` : ''}`}
+                      desc={t('plan.year.desc')}
+                      badge={t('plan.year.badge')}
+                      selected={selectedPlan === 'year'}
+                      onClick={() => setSelectedPlan('year')}
+                    />
+                  </>
+                );
+              })()}
             </div>
 
             {/* Features list */}
@@ -549,7 +562,38 @@ export default function CheckoutPage() {
             <h2 className="text-lg font-bold text-fg">{t('method.title')}</h2>
 
             <div className="space-y-3">
-              {/* VietQR option */}
+              {/* PayPal / International Card option — prioritized first */}
+              <button
+                type="button"
+                onClick={() => setSelectedMethod('paypal')}
+                className={`relative w-full text-left rounded-2xl border-2 p-5 transition-all
+                  ${selectedMethod === 'paypal'
+                    ? 'border-accent bg-accent-soft'
+                    : 'border-line bg-surface-2 hover:border-line-strong'
+                  }`}
+              >
+                <div className="flex items-start gap-4">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0
+                    ${selectedMethod === 'paypal' ? 'bg-accent text-accent-fg' : 'bg-surface text-fg-2 border border-line'}`}>
+                    <CreditCard className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-fg">{t('method.paypal.name')}</p>
+                      <span className="px-2 py-0.5 rounded-full bg-accent text-accent-fg text-[10px] font-bold">
+                        {t('method.paypal.tag')}
+                      </span>
+                    </div>
+                    <p className="text-fg-muted text-xs mt-0.5">{t('method.paypal.desc')}</p>
+                  </div>
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5
+                    ${selectedMethod === 'paypal' ? 'border-accent bg-accent' : 'border-line'}`}>
+                    {selectedMethod === 'paypal' && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                </div>
+              </button>
+
+              {/* VietQR option — secondary for Vietnam users */}
               <button
                 type="button"
                 onClick={() => setSelectedMethod('vietqr')}
@@ -576,37 +620,6 @@ export default function CheckoutPage() {
                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5
                     ${selectedMethod === 'vietqr' ? 'border-accent bg-accent' : 'border-line'}`}>
                     {selectedMethod === 'vietqr' && <Check className="w-3 h-3 text-white" />}
-                  </div>
-                </div>
-              </button>
-
-              {/* PayPal option */}
-              <button
-                type="button"
-                onClick={() => setSelectedMethod('paypal')}
-                className={`relative w-full text-left rounded-2xl border-2 p-5 transition-all
-                  ${selectedMethod === 'paypal'
-                    ? 'border-accent bg-accent-soft'
-                    : 'border-line bg-surface-2 hover:border-line-strong'
-                  }`}
-              >
-                <div className="flex items-start gap-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0
-                    ${selectedMethod === 'paypal' ? 'bg-accent text-accent-fg' : 'bg-surface text-fg-2 border border-line'}`}>
-                    <CreditCard className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-bold text-fg">{t('method.paypal.name')}</p>
-                      <span className="px-2 py-0.5 rounded-full bg-accent-soft text-accent-text text-[10px] font-bold">
-                        {t('method.paypal.tag')}
-                      </span>
-                    </div>
-                    <p className="text-fg-muted text-xs mt-0.5">{t('method.paypal.desc')}</p>
-                  </div>
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5
-                    ${selectedMethod === 'paypal' ? 'border-accent bg-accent' : 'border-line'}`}>
-                    {selectedMethod === 'paypal' && <Check className="w-3 h-3 text-white" />}
                   </div>
                 </div>
               </button>

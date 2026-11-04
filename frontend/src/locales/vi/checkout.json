@@ -10,45 +10,45 @@
   },
 
   "plan": {
-    "title": "Chọn gói Pro",
+    "title": "Chọn gói Pro (Ưu tiên Quốc tế USD / VietQR)",
     "month": {
       "name": "Pro Tháng",
-      "price": "49.000₫",
+      "price": "$6.99",
       "period": "/tháng",
-      "desc": "Trải nghiệm Pro trong 30 ngày"
+      "desc": "Full tính năng Pro Studio + 3.000 lượt gọi API/tháng (30 ngày)"
     },
     "year": {
       "name": "Pro Năm",
-      "price": "399.000₫",
+      "price": "$49",
       "period": "/năm",
-      "desc": "Tiết kiệm 32% — tốt nhất cho người dùng lâu dài",
-      "badge": "Tiết kiệm 32%"
+      "desc": "Tiết kiệm 42% ($4.08/tháng) — tối ưu nhất cho Creator & Developer",
+      "badge": "Tiết kiệm 42%"
     },
     "features": {
-      "title": "Tất cả tính năng Pro",
+      "title": "Tất cả tính năng Pro mở khóa",
       "items": [
-        "Download không giới hạn",
-        "Phân tích AI không giới hạn",
-        "Chất lượng 4K / 8K",
-        "Tải playlist & kênh",
-        "Ưu tiên hàng đợi",
-        "Hỗ trợ ưu tiên"
+        "100+ lượt tải/ngày · Chất lượng 4K/8K",
+        "Developer REST API (3.000 lượt/tháng)",
+        "Làm sạch Video Reup (Xoá MD5 + Lật gương)",
+        "Ghép cứng phụ đề vào MP4 (Hardsub)",
+        "Tải trọn bộ Ảnh/Slide & Playlist (.ZIP)",
+        "Cắt đoạn Video dài tới 10 phút (4K)"
       ]
     },
-    "continue": "Tiếp tục"
+    "continue": "Tiếp tục thanh toán"
   },
 
   "method": {
     "title": "Chọn phương thức thanh toán",
-    "vietqr": {
-      "name": "Chuyển khoản ngân hàng",
-      "desc": "QR code — Xác nhận tự động trong vài phút",
-      "tag": "Phổ biến"
-    },
     "paypal": {
-      "name": "PayPal",
-      "desc": "Thanh toán quốc tế qua PayPal",
-      "tag": "Quốc tế"
+      "name": "PayPal / Thẻ Quốc tế Visa, Mastercard (USD)",
+      "desc": "Thanh toán quốc tế kích hoạt tự động tức thì qua PayPal",
+      "tag": "Khuyên dùng (Quốc tế)"
+    },
+    "vietqr": {
+      "name": "Chuyển khoản Ngân hàng Việt Nam (VietQR)",
+      "desc": "Quét mã QR tự động xác nhận trong vài giây (VNĐ)",
+      "tag": "Nội địa VN"
     },
     "continue": "Thanh toán ngay"
   },

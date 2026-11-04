@@ -25,21 +25,25 @@ def catalog() -> List[Dict[str, Any]]:
     """Plans on sale — prices from admin settings."""
     from app.core.plans import get_settings  # noqa: PLC0415
     s = get_settings()
+    month_cents = int(s.get("price_month_usd_cents") or os.getenv("STRIPE_PRO_MONTH_USD_CENTS", "699") or 699)
+    year_cents = int(s.get("price_year_usd_cents") or os.getenv("STRIPE_PRO_YEAR_USD_CENTS", "4900") or 4900)
     plans = [
         {
             "id": "pro_month",
             "name": "Pro Tháng",
             "name_en": "Pro Monthly",
-            "vnd": s.get("price_month_vnd", 49_000),
-            "usd_cents": int(os.getenv("STRIPE_PRO_MONTH_USD_CENTS", "499") or 499),
+            "vnd": s.get("price_month_vnd", 149_000),
+            "usd_cents": month_cents,
+            "usd": round(month_cents / 100, 2),
             "days": 30,
         },
         {
             "id": "pro_year",
             "name": "Pro Năm",
             "name_en": "Pro Yearly",
-            "vnd": s.get("price_year_vnd", 399_000),
-            "usd_cents": int(os.getenv("STRIPE_PRO_YEAR_USD_CENTS", "4900") or 4900),
+            "vnd": s.get("price_year_vnd", 990_000),
+            "usd_cents": year_cents,
+            "usd": round(year_cents / 100, 2),
             "days": 365,
         },
     ]

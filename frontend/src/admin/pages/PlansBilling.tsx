@@ -25,6 +25,8 @@ export async function grantPro(userId: string, days: 30 | 365): Promise<GrantRes
 }
 
 interface PlanSettings {
+  price_month_usd_cents: number
+  price_year_usd_cents: number
   price_month_vnd: number
   price_year_vnd: number
   api_calls_month_pro: number
@@ -88,11 +90,19 @@ export function PlansSettingsCard() {
         <p className="mt-3 text-xs text-fg-muted">{msg ? '' : 'Đang tải…'}</p>
       ) : (
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <label className="text-xs text-fg-2">Giá Pro / tháng (đồng)
+          <label className="text-xs text-fg-2 font-semibold text-accent-text">🌎 Giá Quốc tế Pro / tháng (USD Cents — vd: 699 = $6.99)
+            <input type="number" inputMode="numeric" value={form.price_month_usd_cents ?? 699} className={inputCls}
+              onChange={e => set('price_month_usd_cents', e.target.value)} />
+          </label>
+          <label className="text-xs text-fg-2 font-semibold text-accent-text">🌎 Giá Quốc tế Pro / năm (USD Cents — vd: 4900 = $49.00)
+            <input type="number" inputMode="numeric" value={form.price_year_usd_cents ?? 4900} className={inputCls}
+              onChange={e => set('price_year_usd_cents', e.target.value)} />
+          </label>
+          <label className="text-xs text-fg-2">🇻🇳 Giá Pro / tháng (VNĐ — VietQR)
             <input type="number" inputMode="numeric" value={form.price_month_vnd} className={inputCls}
               onChange={e => set('price_month_vnd', e.target.value)} />
           </label>
-          <label className="text-xs text-fg-2">Giá Pro / năm (đồng)
+          <label className="text-xs text-fg-2">🇻🇳 Giá Pro / năm (VNĐ — VietQR)
             <input type="number" inputMode="numeric" value={form.price_year_vnd} className={inputCls}
               onChange={e => set('price_year_vnd', e.target.value)} />
           </label>

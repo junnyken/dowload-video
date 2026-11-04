@@ -324,13 +324,54 @@ export default function ApiKeysPage() {
       )}
 
       {!loading && error && (
-        <div className="p-4 rounded-xl bg-danger-soft border border-danger/40 text-center">
-          <p className="text-danger text-sm">{error}</p>
-          {error.includes('Pro') && (
-            <a href={lp('/upgrade')} className="inline-block mt-2 text-xs text-fg-2 hover:text-fg-2 underline">
-              {t('upgrade')}
+        <div className="p-6 rounded-2xl bg-surface-2 border border-accent/40 text-center space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-accent-soft border border-accent/30 flex items-center justify-center mx-auto">
+            <Key className="w-6 h-6 text-accent-text" />
+          </div>
+          <div className="space-y-1.5">
+            <span className="inline-block px-2.5 py-0.5 rounded-full bg-accent text-accent-fg text-[10px] font-bold uppercase tracking-wider">
+              {lang === 'en' ? 'PAID PLANS ONLY (PRO / TEAM)' : 'CHỈ DÀNH CHO GÓI TRẢ PHÍ (PRO / TEAM)'}
+            </span>
+            <h2 className="text-fg font-bold text-base">
+              {lang === 'en'
+                ? 'Unlock Developer REST API Keys with VidGrab Pro'
+                : 'Mở khóa Developer REST API Key với gói VidGrab Pro'}
+            </h2>
+            <p className="text-fg-muted text-xs max-w-md mx-auto">
+              {error}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-left max-w-lg mx-auto pt-1">
+            <div className="p-3 rounded-xl bg-canvas border border-line">
+              <p className="text-[11px] font-bold text-fg-muted">Free ($0)</p>
+              <p className="text-sm font-extrabold text-fg mt-0.5">0 API calls</p>
+              <p className="text-[11px] text-fg-muted mt-0.5">{lang === 'en' ? 'Web UI only' : 'Chỉ tải trên Web'}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-accent-soft border border-accent">
+              <p className="text-[11px] font-bold text-accent-text">Pro ($6.99/mo)</p>
+              <p className="text-sm font-extrabold text-fg mt-0.5">3,000 calls/mo</p>
+              <p className="text-[11px] text-fg-2 mt-0.5">{lang === 'en' ? 'Up to 3 API Keys' : 'Tối đa 3 API Key'}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-canvas border border-line">
+              <p className="text-[11px] font-bold text-fg-2">Team / RapidAPI</p>
+              <p className="text-sm font-extrabold text-fg mt-0.5">15,000+ calls/mo</p>
+              <p className="text-[11px] text-fg-muted mt-0.5">{lang === 'en' ? 'High-volume SLA' : 'Hàng đợi ưu tiên'}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+            <a
+              href={lp('/checkout')}
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition shadow-sm"
+            >
+              {lang === 'en' ? 'Upgrade to Pro ($6.99/mo) →' : 'Nâng cấp Pro ($6.99/tháng) →'}
             </a>
-          )}
+            <a
+              href={lp('/pricing')}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-line bg-surface text-fg-2 hover:text-fg text-xs font-semibold transition"
+            >
+              {lang === 'en' ? 'Compare Plans' : 'Xem Bảng giá'}
+            </a>
+          </div>
         </div>
       )}
 
