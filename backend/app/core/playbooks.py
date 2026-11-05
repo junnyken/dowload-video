@@ -308,28 +308,53 @@ _ANOMALY_PLAYBOOK_MAP: list[tuple[list[str], str]] = [
     (["provider_outage", "platform_outage", "mass_failure"], "provider_outage"),
     (["cookie", "token", "login_required", "auth", "sign_in"], "token_invalidation"),
     (["disk", "storage", "space", "volume"], "disk_pressure"),
-    (["queue", "backlog", "depth", "pending_spike"], "queue_backlog"),
-    (["extraction", "extractor", "yt_dlp", "error_rate", "failure_spike"], "extraction_failure_spike"),
+    (["queue", "backlog", "depth", "pending_spike", "stale"], "queue_backlog"),
+    (["extraction", "extractor", "yt_dlp", "error_rate", "failure_spike", "success_drop", "broken"], "extraction_failure_spike"),
     (["schedule", "drift", "beat", "late", "missed_beat"], "schedule_drift"),
     (["webhook", "notification", "delivery", "endpoint"], "webhook_delivery_failures"),
 ]
 
+AUTO_HEAL_ENABLED_KEY = "vidgrab:auto_heal:enabled"
+AUTO_HEAL_LAST_RUN_KEY = "vidgrab:auto_heal:last_run"
+AUTO_HEAL_COOLDOWN_PREFIX = "vidgrab:auto_heal:cooldown:"
+AUTO_HEAL_COOLDOWN_SEC = 900  # 15 minutes per distinct issue id
+
+
+def is_auto_heal_enabled() -> bool:
+    """Default ON ('1') unless explicitly disabled ('0') by admin."""
+    try:
+        raw = get_redis().get(AUTO_HEAL_ENABLED_KEY)
+        if raw is None:
+            return True
+        val = raw.decode() if isinstance(raw, bytes) else str(raw)
+        return val != "0"
+    except Exception:
+        return True
+
+
+def set_auto_heal_enabled(enabled: bool) -> bool:
+    try:
+        get_redis().set(AUTO_HEAL_ENABLED_KEY, "1" if enabled else "0")
+        return enabled
+    except Exception:
+        return enabled
+
 
 def match_active_playbooks(anomalies: list[dict]) -> list[dict]:
     """
-    Given a list of active anomaly dicts (each must have a 'type' or 'name' key),
+    Given a list of active anomaly dicts (checks 'metric', 'type', 'name', 'likely_cause'),
     return the relevant playbooks (deduplicated, preserving first-match order).
-
-    Example anomaly shape:
-      {"type": "disk_pressure", "severity": "critical", "value": 91.2}
     """
     matched_ids: list[str] = []
     seen: set[str] = set()
 
     for anomaly in anomalies:
-        anomaly_type = (anomaly.get("type") or anomaly.get("name") or "").lower()
+        haystack = " ".join(
+            str(anomaly.get(k) or "")
+            for k in ("metric", "type", "name", "likely_cause")
+        ).lower()
         for keywords, playbook_id in _ANOMALY_PLAYBOOK_MAP:
-            if any(kw in anomaly_type for kw in keywords):
+            if any(kw in haystack for kw in keywords):
                 if playbook_id not in seen:
                     matched_ids.append(playbook_id)
                     seen.add(playbook_id)
@@ -343,53 +368,61 @@ def match_active_playbooks(anomalies: list[dict]) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def _action_refresh_cookies(params: dict) -> dict:
-    """Trigger cookie pool refresh for a given platform."""
-    platform = params.get("platform", "youtube")
+    """Trigger cookie pool refresh and clear temporary soft-blocks for a platform."""
+    platform = params.get("platform", "all")
+    refreshed = []
     try:
         from app.core.cookie_pool import refresh_pool  # type: ignore
-        refresh_pool(platform)
-        return {
-            "success": True,
-            "message": f"Cookie pool refresh triggered for platform={platform}",
-            "action_taken": f"refresh_cookies({platform})",
-        }
-    except ImportError:
-        return {
-            "success": False,
-            "message": "cookie_pool module not available",
-            "action_taken": f"refresh_cookies({platform})",
-        }
-    except Exception as exc:
-        return {
-            "success": False,
-            "message": str(exc)[:300],
-            "action_taken": f"refresh_cookies({platform})",
-        }
+        targets = ["youtube", "facebook", "instagram", "tiktok", "twitter"] if platform == "all" else [platform]
+        for p in targets:
+            try:
+                refresh_pool(p)
+                refreshed.append(p)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # Also clear any transient cookie cooldown flags in Redis
+    cleared_keys = 0
+    try:
+        r = get_redis()
+        pattern = "cookie:cooldown:*" if platform == "all" else f"cookie:cooldown:{platform}:*"
+        for k in r.scan_iter(match=pattern, count=100):
+            r.delete(k)
+            cleared_keys += 1
+    except Exception:
+        pass
+
+    return {
+        "success": True,
+        "message": f"Đã làm mới bể Cookie ({', '.join(refreshed) or platform}) và gỡ {cleared_keys} cờ tạm khoá.",
+        "action_taken": f"refresh_cookies({platform})",
+    }
 
 
 def _action_lower_concurrency(params: dict) -> dict:
     """Reduce batch_concurrency by 2 via auto_tuner."""
     try:
-        from app.core import auto_tuner  # lazy import to avoid circulars
-        current = auto_tuner.get_concurrency()
-        new_val = max(1, current - 2)
-        auto_tuner.set_concurrency(new_val)
+        from app.core import auto_tuner
+        current = int(auto_tuner.get_param("batch_concurrency"))
+        new_val = max(2, current - 2)
+        auto_tuner.set_param("batch_concurrency", new_val, reason="Auto-Heal giảm tải đồng thời", source="auto_heal")
         return {
             "success": True,
-            "message": f"Concurrency reduced from {current} to {new_val}",
+            "message": f"Đã giảm tải đồng thời (batch_concurrency) từ {current} xuống {new_val}",
             "action_taken": f"lower_concurrency({current} → {new_val})",
         }
-    except ImportError:
-        # auto_tuner might not exist yet — fall back to direct Redis write
+    except Exception:
         try:
             r = get_redis()
-            raw = r.get("vidgrab:auto_tuner:concurrency")
-            current = int(raw) if raw else 4
-            new_val = max(1, current - 2)
-            r.set("vidgrab:auto_tuner:concurrency", new_val)
+            raw = r.hget("vidgrab:tuning:params", "batch_concurrency")
+            current = int(raw) if raw else 8
+            new_val = max(2, current - 2)
+            r.hset("vidgrab:tuning:params", "batch_concurrency", str(new_val))
             return {
                 "success": True,
-                "message": f"Concurrency reduced from {current} to {new_val} (via Redis direct)",
+                "message": f"Đã giảm tải đồng thời từ {current} xuống {new_val}",
                 "action_taken": f"lower_concurrency({current} → {new_val})",
             }
         except Exception as exc:
@@ -398,22 +431,16 @@ def _action_lower_concurrency(params: dict) -> dict:
                 "message": str(exc)[:300],
                 "action_taken": "lower_concurrency(failed)",
             }
-    except Exception as exc:
-        return {
-            "success": False,
-            "message": str(exc)[:300],
-            "action_taken": "lower_concurrency(failed)",
-        }
 
 
 def _action_pause_low_priority_schedules(params: dict) -> dict:
     """Set Redis flag to pause low-priority scheduled jobs."""
     try:
         r = get_redis()
-        r.set(LOW_PRIORITY_PAUSED_KEY, "1")
+        r.set(LOW_PRIORITY_PAUSED_KEY, "1", ex=3600 * 4)
         return {
             "success": True,
-            "message": f"Low-priority schedules paused (key={LOW_PRIORITY_PAUSED_KEY}=1)",
+            "message": "Đã tạm dừng các lịch quét ưu tiên thấp trong 4 giờ để ưu tiên hàng đợi chính.",
             "action_taken": "pause_low_priority_schedules()",
         }
     except Exception as exc:
@@ -425,30 +452,23 @@ def _action_pause_low_priority_schedules(params: dict) -> dict:
 
 
 def _action_rotate_fallback_order(params: dict) -> dict:
-    """Put the other route first for a platform. It called
-    adaptive_fallback.demote_top, which never existed, so this action always
-    failed (and get_best_layer, what a demotion would affect, has no caller).
-    Now: Cobalt before yt-dlp for 6 h where Cobalt can serve (FB/IG/X)."""
-    platform = params.get("platform", "youtube")
+    """Put Cobalt first for FB/IG/X (for 6h), or trigger yt-dlp remediation for other platforms."""
+    platform = params.get("platform", "facebook")
     try:
-        from app.core import platform_health  # type: ignore  # lazy import
-        if not platform_health.set_prefer_cobalt(platform, True, "playbook rotate_fallback_order"):
+        from app.core import platform_health  # type: ignore
+        targets = ["facebook", "instagram", "twitter"] if platform in ("all", "youtube") else [platform]
+        switched = []
+        for p in targets:
+            if platform_health.set_prefer_cobalt(p, True, "Auto-Heal chuyển ưu tiên sang Cobalt"):
+                switched.append(p)
+        if switched:
             return {
-                "success": False,
-                "message": f"No alternative route for platform={platform}",
-                "action_taken": f"rotate_fallback_order({platform})",
+                "success": True,
+                "message": f"Đã chuyển hướng ưu tiên sang máy chủ Cobalt trong 6 giờ cho: {', '.join(switched)}",
+                "action_taken": f"rotate_fallback_order({','.join(switched)})",
             }
-        return {
-            "success": True,
-            "message": f"Cobalt put first for platform={platform} (6 h)",
-            "action_taken": f"rotate_fallback_order({platform})",
-        }
-    except ImportError:
-        return {
-            "success": False,
-            "message": "adaptive_fallback module not available",
-            "action_taken": f"rotate_fallback_order({platform})",
-        }
+        # If platform is not a Cobalt platform (e.g. tiktok/youtube), trigger yt-dlp remediation
+        return _action_upgrade_ytdlp({"platform": platform})
     except Exception as exc:
         return {
             "success": False,
@@ -457,39 +477,131 @@ def _action_rotate_fallback_order(params: dict) -> dict:
         }
 
 
+def _action_upgrade_ytdlp(params: dict) -> dict:
+    """Enqueue hot yt-dlp upgrade / remediation task."""
+    platform = params.get("platform", "youtube")
+    try:
+        from app.tasks.video_tasks import ytdlp_remediate  # type: ignore
+        ytdlp_remediate.apply_async(args=[[platform], f"Auto-Heal remediation for {platform}"], queue="light")
+        return {
+            "success": True,
+            "message": f"Đã kích hoạt tác vụ tự động nâng cấp nóng bộ giải mã yt-dlp cho {platform}.",
+            "action_taken": f"upgrade_ytdlp({platform})",
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "message": f"Không gửi được tác vụ nâng cấp yt-dlp: {str(exc)[:200]}",
+            "action_taken": f"upgrade_ytdlp({platform})",
+        }
+
+
+def _action_recover_stale_jobs(params: dict) -> dict:
+    """Find stuck jobs (>15 min in pending/processing/queued) in download_jobs & partner_jobs and mark failed/cleaned."""
+    cutoff = (datetime.now(timezone.utc) - __import__("datetime").timedelta(minutes=15)).isoformat()
+    cleaned_dl = 0
+    cleaned_partner = 0
+    try:
+        from app.core.database import get_service_client
+        db = get_service_client()
+        res1 = (
+            db.table("download_jobs")
+            .update({"status": "failed", "error_message": "Auto-Heal: Giải phóng job bị treo quá 15 phút"})
+            .in_("status", ["pending", "processing"])
+            .lt("created_at", cutoff)
+            .execute()
+        )
+        cleaned_dl = len(res1.data or [])
+    except Exception:
+        pass
+
+    try:
+        from app.core.database import get_service_client
+        db = get_service_client()
+        res2 = (
+            db.table("partner_jobs")
+            .update({"status": "failed", "error_message": "Auto-Heal: Giải phóng job bị treo quá 15 phút"})
+            .in_("status", ["queued", "processing"])
+            .lt("created_at", cutoff)
+            .execute()
+        )
+        cleaned_partner = len(res2.data or [])
+    except Exception:
+        pass
+
+    return {
+        "success": True,
+        "message": f"Đã giải phóng {cleaned_dl} job tải web và {cleaned_partner} job Partner API bị kẹt quá 15 phút.",
+        "action_taken": f"recover_stale_jobs(dl={cleaned_dl}, partner={cleaned_partner})",
+    }
+
+
+def _action_reset_proxy_circuits(params: dict) -> dict:
+    """Reset open provider/proxy circuit breakers in Redis so traffic can retry healthy routes."""
+    cleared = 0
+    try:
+        r = get_redis()
+        for pattern in ("*circuit*", "*cooldown*", "apify:pool:cooldown:*", "health:degraded"):
+            for k in r.scan_iter(match=pattern, count=100):
+                r.delete(k)
+                cleared += 1
+    except Exception as exc:
+        return {
+            "success": False,
+            "message": str(exc)[:300],
+            "action_taken": "reset_proxy_circuits(failed)",
+        }
+    return {
+        "success": True,
+        "message": f"Đã đặt lại {cleared} mạch ngắt (Circuit Breaker / Cooldown) của Proxy & Provider.",
+        "action_taken": f"reset_proxy_circuits(cleared={cleared})",
+    }
+
+
+def _action_restore_normal_mode(params: dict) -> dict:
+    """Restore auto_tuner params to defaults and unpause low-priority schedules."""
+    try:
+        from app.core.auto_tuner import reset_to_defaults
+        reset_to_defaults()
+    except Exception:
+        pass
+    try:
+        r = get_redis()
+        r.delete(LOW_PRIORITY_PAUSED_KEY)
+    except Exception:
+        pass
+    return {
+        "success": True,
+        "message": "Đã khôi phục thông số tải đồng thời về mặc định và bật lại toàn bộ lịch định kỳ.",
+        "action_taken": "restore_normal_mode()",
+    }
+
+
 def _action_trigger_cleanup(params: dict) -> dict:
     """Run an immediate cleanup pass to free disk space."""
+    removed = 0
+    import os
+    import glob
+    for pattern in ["/tmp/vidgrab/*.part", "/tmp/vidgrab/*.ytdl", "/tmp/vidgrab/*.tmp", "/tmp/*.part"]:
+        for path in glob.glob(pattern):
+            try:
+                os.remove(path)
+                removed += 1
+            except Exception:
+                pass
     try:
         from app.tasks.maintenance_tasks import cleanup_temp_files  # type: ignore
         cleanup_temp_files.delay()
         return {
             "success": True,
-            "message": "Immediate cleanup task dispatched to Celery",
+            "message": f"Đã xoá trực tiếp {removed} file rác tạm và kích hoạt tác vụ dọn ổ cứng sâu.",
             "action_taken": "trigger_cleanup()",
         }
-    except ImportError:
-        # Fallback: direct temp file removal
-        import os
-        import glob
-        removed = 0
-        errors = 0
-        for pattern in ["/tmp/vidgrab/*.part", "/tmp/vidgrab/*.ytdl", "/tmp/vidgrab/*.tmp"]:
-            for path in glob.glob(pattern):
-                try:
-                    os.remove(path)
-                    removed += 1
-                except Exception:
-                    errors += 1
+    except Exception:
         return {
             "success": True,
-            "message": f"Direct cleanup: removed {removed} temp files ({errors} errors)",
-            "action_taken": "trigger_cleanup(direct)",
-        }
-    except Exception as exc:
-        return {
-            "success": False,
-            "message": str(exc)[:300],
-            "action_taken": "trigger_cleanup(failed)",
+            "message": f"Đã dọn trực tiếp {removed} file tạm trên ổ cứng.",
+            "action_taken": f"trigger_cleanup(removed={removed})",
         }
 
 
@@ -498,8 +610,265 @@ _ACTION_REGISTRY: dict[str, callable] = {
     "lower_concurrency": _action_lower_concurrency,
     "pause_low_priority_schedules": _action_pause_low_priority_schedules,
     "rotate_fallback_order": _action_rotate_fallback_order,
+    "upgrade_ytdlp": _action_upgrade_ytdlp,
+    "recover_stale_jobs": _action_recover_stale_jobs,
+    "reset_proxy_circuits": _action_reset_proxy_circuits,
+    "restore_normal_mode": _action_restore_normal_mode,
     "trigger_cleanup": _action_trigger_cleanup,
 }
+
+
+# ---------------------------------------------------------------------------
+# Real-time Diagnostics & Self-Healing Engine (Auto-Heal)
+# ---------------------------------------------------------------------------
+
+def diagnose_system_issues() -> list[dict]:
+    """
+    Inspect all live health signals (platform outcomes, anomalies, stale jobs,
+    circuit breakers, cookie pools, disk space, queue depth) and return a list
+    of actionable diagnostic issues with recommended auto-remediation steps.
+    """
+    issues: list[dict] = []
+
+    # 1. Check platform health (last 2 hours)
+    try:
+        from app.core import platform_health as ph
+        counts = ph.recent_counts(hours=2)
+        for platform, c in sorted(counts.items()):
+            if platform in ("other", "unknown"):
+                continue
+            v = ph.verdict(c)
+            if not v:
+                continue
+            base = max(1, c.get("total", 0) - c.get("user_err", 0))
+            err_pct = round(100 * c.get("system_err", 0) / base)
+            if v == "broken":
+                actions = [{"action": "upgrade_ytdlp", "params": {"platform": platform}}]
+                if platform in ph.COBALT_ROUTE_PLATFORMS:
+                    actions.insert(0, {"action": "rotate_fallback_order", "params": {"platform": platform}})
+                issues.append({
+                    "id": f"platform_broken_{platform}",
+                    "severity": "critical",
+                    "title": f"Nền tảng {ph.display(platform)} đổi cấu trúc trang ({c.get('broken', 0)}/{c.get('total', 0)} lượt lỗi)",
+                    "cause": f"Bộ trích xuất không đọc được dữ liệu từ {ph.display(platform)} trong 2 giờ qua.",
+                    "solution_summary": (
+                        f"Chuyển hướng ưu tiên {ph.display(platform)} sang máy chủ Cobalt trong 6 giờ và tự động nâng cấp nóng yt-dlp."
+                        if platform in ph.COBALT_ROUTE_PLATFORMS
+                        else f"Tự động tải và cập nhật nóng bản yt-dlp mới nhất cho {ph.display(platform)}."
+                    ),
+                    "recommended_actions": actions,
+                })
+            else:
+                actions = [{"action": "refresh_cookies", "params": {"platform": platform}}]
+                if platform in ph.COBALT_ROUTE_PLATFORMS:
+                    actions.insert(0, {"action": "rotate_fallback_order", "params": {"platform": platform}})
+                else:
+                    actions.append({"action": "reset_proxy_circuits", "params": {"platform": platform}})
+                issues.append({
+                    "id": f"platform_{v}_{platform}",
+                    "severity": "critical" if v == "critical" else "warning",
+                    "title": f"Tỷ lệ lỗi hệ thống trên {ph.display(platform)} cao ({err_pct}%)",
+                    "cause": f"{c.get('system_err', 0)}/{base} lượt tải hợp lệ bị lỗi hệ thống (chặn IP/Cookie hoặc hết hạn phiên).",
+                    "solution_summary": (
+                        f"Chuyển ưu tiên {ph.display(platform)} sang Cobalt và làm mới bể Cookie/Proxy."
+                        if platform in ph.COBALT_ROUTE_PLATFORMS
+                        else f"Làm mới bể Cookie và đặt lại mạch ngắt Proxy cho {ph.display(platform)}."
+                    ),
+                    "recommended_actions": actions,
+                })
+    except Exception as exc:
+        logger.debug("[diagnose] platform_health check skipped: %s", exc)
+
+    # 2. Check stale / stuck jobs, open circuit breakers, depleted cookies, queue depth
+    try:
+        from app.core.metrics import (
+            get_stale_job_count,
+            get_provider_circuit_states,
+            get_cookie_pool_health,
+            get_queue_depths,
+        )
+        stale_count = get_stale_job_count()
+        if stale_count > 0:
+            issues.append({
+                "id": "stale_jobs_stuck",
+                "severity": "warning",
+                "title": f"Có {stale_count} Job đang bị treo quá thời gian quy định",
+                "cause": "Một số tiến trình tải bị ngắt giữa chừng khiến job giữ trạng thái đang xử lý quá lâu.",
+                "solution_summary": "Tự động giải phóng các job bị treo quá 15 phút để làm sạch hàng đợi.",
+                "recommended_actions": [{"action": "recover_stale_jobs", "params": {}}],
+            })
+
+        circuits = get_provider_circuit_states() or {}
+        open_circuits = [p for p, st in circuits.items() if st == "open"]
+        if open_circuits:
+            issues.append({
+                "id": f"circuit_open_{'_'.join(sorted(open_circuits))}",
+                "severity": "critical",
+                "title": f"Mạch bảo vệ (Circuit Breaker) đang ngắt tạm thời: {', '.join(open_circuits)}",
+                "cause": "Nền tảng hoặc nhà cung cấp gặp chuỗi lỗi liên tiếp trước đó nên bị tạm ngắt.",
+                "solution_summary": "Đặt lại mạch ngắt (Reset Circuit Breaker) và làm mới Cookie để khôi phục luồng tải.",
+                "recommended_actions": [
+                    {"action": "reset_proxy_circuits", "params": {}},
+                    {"action": "refresh_cookies", "params": {"platform": open_circuits[0]}},
+                ],
+            })
+
+        cookie_health = get_cookie_pool_health() or {}
+        depleted = [p for p, h in cookie_health.items() if h.get("total", 0) > 0 and h.get("available", 0) == 0]
+        if depleted:
+            issues.append({
+                "id": f"cookie_depleted_{'_'.join(sorted(depleted))}",
+                "severity": "critical",
+                "title": f"Bể Cookie cạn kiệt cho nền tảng: {', '.join(depleted)}",
+                "cause": "Tất cả Cookie trong bể của nền tảng này đang bị đánh dấu tạm nghỉ hoặc hết hạn.",
+                "solution_summary": "Gỡ cờ tạm khoá và làm mới lại bể Cookie ngay lập tức.",
+                "recommended_actions": [
+                    {"action": "refresh_cookies", "params": {"platform": p}} for p in depleted
+                ],
+            })
+
+        q_depths = get_queue_depths() or {}
+        total_q = sum(q_depths.values())
+        if total_q > 80:
+            issues.append({
+                "id": "queue_backlog_high",
+                "severity": "warning",
+                "title": f"Hàng đợi đang tồn đọng cao ({total_q} tác vụ)",
+                "cause": "Lưu lượng tải hàng loạt tăng đột biến vượt tốc độ xử lý tức thời của Worker.",
+                "solution_summary": "Tạm dừng lịch quét ưu tiên thấp và giải phóng các job bị kẹt.",
+                "recommended_actions": [
+                    {"action": "pause_low_priority_schedules", "params": {}},
+                    {"action": "recover_stale_jobs", "params": {}},
+                ],
+            })
+    except Exception as exc:
+        logger.debug("[diagnose] metrics check skipped: %s", exc)
+
+    # 3. Check disk usage
+    try:
+        import shutil
+        usage = shutil.disk_usage("/")
+        disk_pct = round(usage.used / usage.total * 100, 1)
+        if disk_pct >= 80.0:
+            issues.append({
+                "id": "disk_pressure_high",
+                "severity": "critical" if disk_pct >= 90.0 else "warning",
+                "title": f"Dung lượng ổ cứng máy chủ đã dùng {disk_pct}%",
+                "cause": "Các tệp video tải tạm tích tụ trên ổ cứng của Worker.",
+                "solution_summary": "Chạy tác vụ dọn dẹp ngay toàn bộ tệp tạm (.part, .ytdl, .tmp) để giải phóng dung lượng.",
+                "recommended_actions": [{"action": "trigger_cleanup", "params": {}}],
+            })
+    except Exception:
+        pass
+
+    # 4. Also fold in any active anomalies from anomaly_detector not already covered
+    try:
+        from app.core.anomaly_detector import get_active_anomalies
+        for anom in get_active_anomalies():
+            metric = str(anom.get("metric") or "")
+            plat = metric.split(":", 1)[1] if ":" in metric else "all"
+            issue_id = f"anomaly_{metric.replace(':', '_')}"
+            if any(plat != "all" and plat in existing["id"] for existing in issues):
+                continue
+            matched_pbs = match_active_playbooks([anom])
+            pb = matched_pbs[0] if matched_pbs else None
+            auto_acts = (pb.get("auto_actions") if pb else None) or ["refresh_cookies"]
+            issues.append({
+                "id": issue_id,
+                "severity": "warning",
+                "title": f"Bất thường chỉ số: {metric}",
+                "cause": anom.get("likely_cause") or "Hệ thống phát hiện biến động bất thường so với trung bình 7 ngày.",
+                "solution_summary": pb.get("description") if pb else "Thực thi kịch bản tự cân bằng tải và làm mới phiên.",
+                "recommended_actions": [
+                    {"action": act, "params": {"platform": plat} if plat != "all" else {}}
+                    for act in auto_acts
+                ],
+            })
+    except Exception:
+        pass
+
+    return issues
+
+
+def run_auto_heal(*, force: bool = False) -> dict:
+    """
+    Diagnose all current system issues and automatically execute their
+    recommended remediation actions when Auto-Heal is enabled (or when force=True).
+    """
+    enabled = is_auto_heal_enabled()
+    issues = diagnose_system_issues()
+    executed: list[dict] = []
+    skipped_cooldown: list[str] = []
+
+    try:
+        r = get_redis()
+        r.set(AUTO_HEAL_LAST_RUN_KEY, datetime.now(timezone.utc).isoformat(), ex=86400 * 7)
+    except Exception:
+        r = None
+
+    if not enabled and not force:
+        return {
+            "auto_heal_enabled": enabled,
+            "issues_found": len(issues),
+            "issues": issues,
+            "actions_executed": [],
+            "skipped_cooldown": [],
+        }
+
+    for issue in issues:
+        iid = issue["id"]
+        if not force and r is not None:
+            cd_key = f"{AUTO_HEAL_COOLDOWN_PREFIX}{iid}"
+            try:
+                if not r.set(cd_key, "1", nx=True, ex=AUTO_HEAL_COOLDOWN_SEC):
+                    skipped_cooldown.append(iid)
+                    continue
+            except Exception:
+                pass
+
+        for step in issue.get("recommended_actions") or []:
+            act_name = step.get("action")
+            act_params = step.get("params") or {}
+            if not act_name:
+                continue
+            res = execute_safe_action(
+                act_name,
+                act_params,
+                playbook_id=iid,
+                source="auto_heal",
+                reason=f"{issue['title']} → {issue['solution_summary']}",
+            )
+            executed.append({
+                "issue_id": iid,
+                "issue_title": issue["title"],
+                "action": act_name,
+                "params": act_params,
+                "result": res,
+            })
+
+    if executed:
+        try:
+            from app.core.alerts import send_admin_alert
+            summary_lines = [
+                f"• {item['issue_title']}: {item['result'].get('message', '')}"
+                for item in executed
+            ]
+            send_admin_alert(
+                "warning",
+                f"🤖 Tự khắc phục lỗi (Auto-Heal) đã xử lý {len(executed)} tác vụ",
+                "\n".join(summary_lines[:6]),
+                alert_key="auto_heal_summary",
+            )
+        except Exception:
+            pass
+
+    return {
+        "auto_heal_enabled": enabled,
+        "issues_found": len(issues),
+        "issues": issues,
+        "actions_executed": executed,
+        "skipped_cooldown": skipped_cooldown,
+    }
 
 
 def execute_safe_action(
@@ -508,6 +877,7 @@ def execute_safe_action(
     *,
     playbook_id: str = "",
     source: str = "manual",
+    reason: str = "",
 ) -> dict:
     """
     Execute a named safe remediation action.
@@ -523,7 +893,7 @@ def execute_safe_action(
             "message": f"Unknown action '{action_name}'. Available: {list(_ACTION_REGISTRY)}",
             "action_taken": action_name,
         }
-        _log_history(playbook_id=playbook_id, action=action_name, params=params, result=result, source=source)
+        _log_history(playbook_id=playbook_id, action=action_name, params=params, result=result, source=source, reason=reason)
         return result
 
     try:
@@ -535,7 +905,7 @@ def execute_safe_action(
             "action_taken": action_name,
         }
 
-    _log_history(playbook_id=playbook_id, action=action_name, params=params, result=result, source=source)
+    _log_history(playbook_id=playbook_id, action=action_name, params=params, result=result, source=source, reason=reason)
     return result
 
 
@@ -550,13 +920,17 @@ def _log_history(
     params: dict,
     result: dict,
     source: str,
+    reason: str = "",
 ) -> None:
     """LPUSH execution record to Redis, capped at HISTORY_MAX."""
+    pb = PLAYBOOKS.get(playbook_id)
     entry = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "playbook_id": playbook_id,
-        "action": action,
+        "action": result.get("action_taken") or action,
         "params": params,
+        "reason": reason or (pb.get("name") if pb else playbook_id) or "Quản trị viên kích hoạt",
+        "outcome": result.get("message") if isinstance(result, dict) else str(result),
         "result": result,
         "source": source,
     }

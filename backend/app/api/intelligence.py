@@ -225,7 +225,12 @@ async def execute_playbook(body: PlaybookExecuteRequest, request: Request):
 
     await _require_admin(request)
 
-    result = _playbooks.execute_safe_action(body.action, body.params)
+    result = _playbooks.execute_safe_action(
+        body.action,
+        body.params,
+        playbook_id=body.playbook_id or "",
+        source="manual",
+    )
 
     log_from_request(
         request,
@@ -478,18 +483,17 @@ async def dismiss_archive_suggestion(item_id: str, request: Request):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Automation history (aggregated feed)
+# Automation history + Self-Healing (Auto-Heal) Center
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/automation-history")
 async def automation_history(request: Request):
     """
-    Admin only — unified feed of automation events from all intelligence subsystems.
+    Admin only — unified feed of automation events + live self-healing status & diagnostics.
     Sources:
       - vidgrab:tuning:history   (list, auto-tuner actions)
-      - vidgrab:playbooks:history (list, playbook executions)
-      - vidgrab:anomalies:active  (hash, anomaly events)
-    Returns combined list sorted descending by timestamp.
+      - vidgrab:playbooks:history (list, playbook & auto-heal executions)
+      - get_active_anomalies()    (list, anomaly events)
     """
     await _require_admin(request)
 
@@ -507,15 +511,15 @@ async def automation_history(request: Request):
             entry = json.loads(item.decode() if isinstance(item, bytes) else item)
             events.append({
                 "timestamp": entry.get("timestamp") or entry.get("ts", ""),
-                "source": "auto_tuner",
-                "action": entry.get("action") or f"set {entry.get('param', '?')}",
+                "source": entry.get("source") or "auto_tuner",
+                "action": entry.get("action") or f"Điều chỉnh {entry.get('param', '?')}",
                 "reason": entry.get("reason", ""),
-                "outcome": entry.get("outcome") or str(entry.get("new_value", "")),
+                "outcome": str(entry.get("outcome") or f"{entry.get('old_value', '?')} → {entry.get('new_value', '?')}"),
             })
         except Exception:
             continue
 
-    # Playbook execution history (Redis list)
+    # Playbook & Auto-Heal execution history (Redis list)
     try:
         _pb = r.lrange("vidgrab:playbooks:history", 0, 199)
     except Exception as _e:
@@ -524,39 +528,94 @@ async def automation_history(request: Request):
     for item in _pb:
         try:
             entry = json.loads(item.decode() if isinstance(item, bytes) else item)
+            raw_res = entry.get("result")
+            res_msg = (
+                raw_res.get("message", "")
+                if isinstance(raw_res, dict)
+                else str(raw_res or "")
+            )
             events.append({
                 "timestamp": entry.get("timestamp") or entry.get("ts", ""),
-                "source": "playbooks",
+                "source": "auto_heal" if entry.get("source") == "auto_heal" else "playbooks",
                 "action": entry.get("action", ""),
-                "reason": entry.get("reason") or entry.get("trigger", ""),
-                "outcome": entry.get("outcome") or entry.get("result", ""),
+                "reason": entry.get("reason") or entry.get("playbook_id") or entry.get("trigger", ""),
+                "outcome": str(entry.get("outcome") or res_msg),
             })
         except Exception:
             continue
 
-    # Active anomaly events (Redis hash)
+    # Active anomaly events (from anomaly_detector list)
     try:
-        _anom = r.hgetall("vidgrab:anomalies:active") or {}
+        from app.core.anomaly_detector import get_active_anomalies
+        for entry in get_active_anomalies():
+            events.append({
+                "timestamp": entry.get("last_seen") or entry.get("detected_at") or "",
+                "source": "anomaly_detector",
+                "action": f"Phát hiện: {entry.get('metric', 'anomaly')}",
+                "reason": entry.get("likely_cause") or entry.get("reason") or "",
+                "outcome": "Đã tự xử lý" if entry.get("auto_mitigated") else str(entry.get("status") or entry.get("state", "")),
+            })
     except Exception as _e:
         print(f"[automation-history] anomaly feed unavailable: {_e}", flush=True)
-        _anom = {}
-    for _key, val_raw in _anom.items():
-        try:
-            entry = json.loads(val_raw.decode() if isinstance(val_raw, bytes) else val_raw)
-            events.append({
-                "timestamp": entry.get("detected_at") or entry.get("timestamp", ""),
-                "source": "anomaly_detector",
-                "action": f"anomaly.{entry.get('state', 'detected')}",
-                "reason": entry.get("reason") or entry.get("description", ""),
-                "outcome": entry.get("state", ""),
-            })
-        except Exception:
-            continue
 
     # Sort descending by ISO timestamp string
     events.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
 
-    return {"events": events, "count": len(events)}
+    # Live diagnostics + Auto-Heal state
+    from app.core import playbooks as _playbooks
+    auto_heal_enabled = _playbooks.is_auto_heal_enabled()
+    issues = _playbooks.diagnose_system_issues()
+    last_run = None
+    try:
+        raw_lr = r.get(_playbooks.AUTO_HEAL_LAST_RUN_KEY)
+        if raw_lr:
+            last_run = raw_lr.decode() if isinstance(raw_lr, bytes) else str(raw_lr)
+    except Exception:
+        pass
+
+    return {
+        "events": events,
+        "count": len(events),
+        "auto_heal_enabled": auto_heal_enabled,
+        "last_auto_heal_at": last_run,
+        "issues": issues,
+    }
+
+
+@router.post("/auto-heal/toggle")
+async def toggle_auto_heal(request: Request):
+    """Admin only — enable or disable automatic self-healing."""
+    await _require_admin(request)
+    from app.core import playbooks as _playbooks
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    current = _playbooks.is_auto_heal_enabled()
+    target = bool(body["enabled"]) if "enabled" in body else (not current)
+    _playbooks.set_auto_heal_enabled(target)
+    from app.core.audit import log_from_request
+    log_from_request(request, "auto_heal.toggled", metadata={"enabled": target})
+    return {"success": True, "auto_heal_enabled": target}
+
+
+@router.post("/auto-heal/run")
+async def trigger_auto_heal_now(request: Request):
+    """Admin only — immediately scan for issues and execute all recommended remediations."""
+    await _require_admin(request)
+    from app.core import playbooks as _playbooks
+    report = _playbooks.run_auto_heal(force=True)
+    from app.core.audit import log_from_request
+    log_from_request(
+        request,
+        "auto_heal.manual_run",
+        metadata={
+            "issues_found": report.get("issues_found", 0),
+            "actions_executed": len(report.get("actions_executed", [])),
+        },
+    )
+    return report
 
 
 # ══════════════════════════════════════════════════════════════════════════════

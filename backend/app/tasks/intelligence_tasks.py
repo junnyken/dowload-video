@@ -224,6 +224,19 @@ def run_anomaly_detection(self) -> None:
     except Exception as exc:
         logger.exception("[intelligence] adaptive_fallback failed: %s", exc)
 
+    # --- Step 4b: Self-Healing (Auto-Heal) ---
+    try:
+        from app.core.playbooks import run_auto_heal
+        heal_report = run_auto_heal(force=False)
+        findings["auto_heal"] = heal_report.get("actions_executed", [])
+        logger.info(
+            "[intelligence] auto_heal found %d issue(s), executed %d action(s)",
+            heal_report.get("issues_found", 0),
+            len(findings["auto_heal"]),
+        )
+    except Exception as exc:
+        logger.exception("[intelligence] auto_heal failed: %s", exc)
+
     # --- Step 5: Record run timestamp ---
     try:
         r = get_redis()
