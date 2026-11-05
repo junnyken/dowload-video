@@ -1,4 +1,4 @@
-# Chrome Web Store listing - Tiếng Việt (bản 5.20.0, bản store không có YouTube)
+# Chrome Web Store Listing — Tiếng Việt (v5.23.0)
 
 ## Tên
 ```
@@ -7,58 +7,51 @@ VidGrab - Video Downloader
 
 ## Tóm tắt (tối đa 132 ký tự)
 ```
-Bắt video trang đang phát, tải ngay trong trình duyệt: MP4, HLS, quét kênh, xem trước, QR sang điện thoại. Chỉ nội dung của bạn.
+Tải video từ TikTok, Douyin, Facebook, Instagram, X, Bilibili, Xiaohongshu… và bắt luồng MP4, HLS, DASH ngay trên trình duyệt.
 ```
-(đã đếm: dưới 132 ký tự)
+(126 ký tự)
 
 ## Danh mục
-Năng suất (Productivity); phương án khác: Công cụ (Tools). SUY ĐOÁN.
+Năng suất (Productivity) / Công cụ (Tools)
 
 ## Mục đích duy nhất
 ```
-VidGrab tìm video mà trang web bạn đang xem phát và lưu về máy, kể cả các video của kênh/trang cá nhân bạn đang mở.
+VidGrab nhận diện luồng video trên trang web bạn đang xem và lưu về máy tính với tên tệp tuỳ chọn, bao gồm tính năng quét và tải hàng loạt từ trang cá nhân hoặc kênh được hỗ trợ.
 ```
 
 ## Mô tả đầy đủ (văn bản thuần)
 ```
-VidGrab tìm video trên trang bạn đang xem và lưu về máy.
+VidGrab tìm video trên trang bạn đang xem và lưu trực tiếp về máy tính của bạn.
 
 CÁCH HOẠT ĐỘNG
-- Mở trang có video, bấm biểu tượng VidGrab. Tiện ích liệt kê các video trang đang phát (MP4, HLS) kèm chất lượng và thời lượng để bạn chọn.
-- Tệp được tải bằng chính trình duyệt trước. Luồng HLS (.m3u8) được tải song song và ghép thành một tệp MP4 ngay trong trình duyệt.
-- Máy chủ VidGrab chỉ dùng để đếm hạn mức tải mỗi ngày và làm phương án dự phòng khi trình duyệt không tự lấy được tệp.
-- Luồng DASH (.mpd) có thể chuyển cho ứng dụng VidGrab trên Windows nếu bạn đã cài trên cùng máy.
+- Mở trang có video, bấm biểu tượng VidGrab trên thanh công cụ. Tiện ích liệt kê các video trang đang phát (MP4, HLS) kèm chất lượng và thời lượng để bạn chọn.
+- Tệp được tải trực tiếp bằng trình duyệt. Luồng HLS (.m3u8) được tải song song và ghép thành một tệp MP4 ngay trong trình duyệt.
+- Máy chủ VidGrab dùng để đồng bộ hạn mức tải mỗi ngày và hỗ trợ xử lý dự phòng khi trình duyệt không tự lấy được tệp trực tiếp.
+- Luồng DASH (.mpd) có thể chuyển tiếp sang ứng dụng VidGrab trên Windows nếu bạn đã cài đặt trên cùng máy tính.
 
-TÍNH NĂNG
-- Nhận diện video trang đang phát (MP4, HLS, DASH) trên các trang được hỗ trợ, và trên mọi trang khi bạn chọn cho phép.
-- Tải ngay trong trình duyệt, tiếp tục các lượt tải bị gián đoạn.
-- Quét kênh: mở kênh/trang cá nhân trên Douyin, Facebook, TikTok hoặc Instagram, quét (có nút Dừng), tích chọn video trong danh sách rồi bấm "tải N video về máy này".
-- Nhận diện video đang hiện trên màn hình khi cuộn bảng tin.
-- Xem trước khi tải: thấy tệp và dung lượng trước khi lưu.
-- Mã QR: gửi liên kết video sang điện thoại.
-- Mẫu tên tệp: tự chọn cách đặt tên.
-- Chế độ quay (phương án cuối): khi trình phát không có tệp để tải, bấm "Quay tab" để ghi tab thành tệp WebM. Chỉ bắt đầu khi bạn bấm nút.
-- Đồng bộ tài khoản: đăng nhập trên website VidGrab để đồng bộ hạn mức và lịch sử. Tiện ích có phiên riêng 30 ngày, bạn đăng xuất được bất cứ lúc nào.
-- Menu chuột phải và thông báo khi tải xong.
+TÍNH NĂNG NỔI BẬT
+- Nhận diện video trang đang phát (MP4, HLS, DASH) trên các nền tảng mạng xã hội phổ biến và trên mọi trang web khi bạn cấp quyền tuỳ chọn.
+- Tải nhanh ngay trong trình duyệt, hỗ trợ tiếp tục các lượt tải bị gián đoạn.
+- Quét kênh & tải hàng loạt: Mở trang cá nhân trên Douyin, Facebook, TikTok hoặc Instagram, quét danh sách video, tích chọn các video mong muốn và tải về máy.
+- Tự động nhận diện video đang hiển thị trên màn hình khi cuộn bảng tin.
+- Xem trước khi tải: Kiểm tra nội dung và dung lượng tệp trước khi lưu.
+- Mã QR: Gửi nhanh liên kết video sang điện thoại qua camera.
+- Mẫu tên tệp: Tự chọn quy tắc đặt tên tệp ({platform} - {date} - {title}).
+- Chế độ quay tab (Tuỳ chọn): Khi trình phát không cung cấp tệp tải trực tiếp, bấm "Record tab" để ghi lại tab thành tệp WebM cục bộ.
+- Đồng bộ tài khoản: Đăng nhập trên website VidGrab để đồng bộ gói cước, hạn mức và lịch sử tải.
 
-VIDGRAB KHÔNG LÀM GÌ
-- Không tải video bị DRM hoặc mã hoá. Chúng được ghi rõ là không hỗ trợ.
-- Không tải phát trực tiếp (live). Chúng được ghi rõ.
-- Không vượt qua bất kỳ cơ chế bảo vệ nào.
-- Không tải từ YouTube. Ở bản này, liên kết YouTube không được xử lý.
+GIỚI HẠN & TUÂN THỦ
+- Không tải video có bảo vệ bản quyền DRM hoặc luồng bị mã hoá.
+- Không tải luồng phát trực tiếp (Live stream).
+- Không can thiệp hay vượt qua bất kỳ cơ chế bảo vệ kỹ thuật nào.
 
-NỘI DUNG CỦA BẠN, TRÁCH NHIỆM CỦA BẠN
-Chỉ tải nội dung do bạn sở hữu, thuộc phạm vi công cộng, được cấp phép cho phép tải, hoặc bạn có quyền lưu. Bạn chịu trách nhiệm tôn trọng bản quyền và điều khoản sử dụng của từng trang.
+TRÁCH NHIỆM NỘI DUNG
+Chỉ tải nội dung do bạn sở hữu, thuộc phạm vi công cộng, được cấp phép tải xuống hoặc bạn có quyền lưu trữ hợp pháp. Người dùng tự chịu trách nhiệm tuân thủ bản quyền và điều khoản sử dụng của từng trang web.
 
 QUYỀN RIÊNG TƯ
-- Danh sách video tìm thấy trên tab nằm trên máy bạn và bị xoá cùng tab.
-- Địa chỉ trang chỉ gửi lên máy chủ VidGrab cho thao tác cần đến nó (đếm hạn mức, dự phòng qua máy chủ, theo dõi kênh khi bạn yêu cầu).
-- Với trang cần đăng nhập, tiện ích có thể gửi cookie của chính trang đó tới máy chủ VidGrab cho đúng một lần lấy video; máy chủ dùng một lần rồi xoá.
-- Không bán dữ liệu, không dùng cho quảng cáo.
+- Danh sách video phát hiện trên tab chỉ lưu tạm trên thiết bị và tự động xoá khi đóng tab.
+- Không bán dữ liệu, không chia sẻ cho bên thứ ba và không dùng cho quảng cáo.
 Chính sách bảo mật: https://dowloadvideo.io.vn/privacy
 
-QUYỀN TRUY CẬP
-Quyền truy cập mọi trang là tuỳ chọn. Không cấp khi cài; popup sẽ hỏi (Chrome hiện hộp thoại riêng) và bạn thu hồi được ở chrome://extensions.
-
-Các trang hỗ trợ gồm TikTok, Douyin, Facebook, Instagram, X, Reddit, Threads, Pinterest, Bilibili, Xiaohongshu, Snapchat, VK, Twitch, Rumble, Odysee, Dailymotion, SoundCloud. Mức hỗ trợ phụ thuộc từng trang và có thể thay đổi.
+Các nền tảng hỗ trợ gồm TikTok, Douyin, Facebook, Instagram, X, Reddit, Threads, Pinterest, Bilibili, Xiaohongshu, Lemon8, Snapchat, VK, Twitch, Rumble, Odysee, Dailymotion, Spotify và SoundCloud.
 ```

@@ -435,7 +435,6 @@ async function initPopup() {
   initUpdateBanner();   // fire-and-forget: never blocks the popup
   vgShowVersion();
   getActiveTab().then((tb) => {
-    if (tb?.url && vgYouTubeBlocked(tb.url)) vgShowYouTubeNote(tb.url);
     void initSniff(tb);
   }).catch(() => {});
   // Chạy health check song song với page detection
@@ -451,10 +450,18 @@ async function initPopup() {
     catch {
       try { await injectContentScript(tab.id); pageInfo = await tryGetPageInfo(tab.id); }
       catch {
-        showReloadBanner(tab.id);
-        pageBadge.textContent = t('badge_reload');
-        pageBadge.className = 'text-xs px-2 py-0.5 rounded-full bg-yellow-900 text-yellow-400 border border-yellow-700';
-        return;
+        if (tab.url && /^https?:\/\//i.test(tab.url)) {
+          pageInfo = {
+            pageType: /\/watch\?(?:[^#]*&)?v=[\w-]{6,}|\/shorts\/[\w-]{6,}/i.test(tab.url) ? 'video' : null,
+            url: tab.url,
+            title: tab.title || '',
+          };
+        } else {
+          showReloadBanner(tab.id);
+          pageBadge.textContent = t('badge_reload');
+          pageBadge.className = 'text-xs px-2 py-0.5 rounded-full bg-yellow-900 text-yellow-400 border border-yellow-700';
+          return;
+        }
       }
     }
 
@@ -534,11 +541,6 @@ function vgWatchTarget(rawUrl) {
     const m = u.pathname.match(/^\/@([\w.-]+)\/?$/);
     if (u.protocol === 'https:' && (h === 'tiktok.com' || h.endsWith('.tiktok.com')) && m) {
       return { platform: 'tiktok', url: `https://www.tiktok.com/@${m[1]}` };
-    }
-    // YouTube channel (any tab): the server resolves it to the channel id.
-    const yt = u.pathname.match(/^\/(@[\w.-]{1,100}|channel\/UC[\w-]{22}|c\/[\w.-]{1,100}|user\/[\w.-]{1,100})(?:\/[\w]*)?\/?$/);
-    if (u.protocol === 'https:' && ['youtube.com', 'www.youtube.com', 'm.youtube.com'].includes(h) && yt) {
-      return { platform: 'youtube', url: `https://www.youtube.com/${yt[1]}` };
     }
   } catch { /* not a URL */ }
   return null;
@@ -1034,7 +1036,6 @@ async function getTargetUrl() {
   const typed = (urlInput?.value || '').trim();
   if (typed) {
     if (!isHttpUrl(typed)) throw new Error(t('err_bad_link'));
-    if (vgYouTubeBlocked(typed)) { vgShowYouTubeNote(typed); throw new Error(VG_YT_TEXT); }
     return typed;
   }
   const tab = await getActiveTab();
@@ -1044,7 +1045,6 @@ async function getTargetUrl() {
   if (!tab?.url || /^(chrome|chrome-extension|edge|about):/i.test(tab.url)) {
     throw new Error(t('err_no_tab_link'));
   }
-  if (vgYouTubeBlocked(tab.url)) { vgShowYouTubeNote(tab.url); throw new Error(VG_YT_TEXT); }
   return tab.url;
 }
 
@@ -1245,7 +1245,6 @@ document.getElementById('retry-btn')?.addEventListener('click', () => {
 function detectPlatform(url) {
   if (!url) return '';
   if (url.includes('tiktok.com')) return 'TikTok';
-  if (url.includes('youtube.com') || url.includes('youtu.be')) return 'YouTube';
   if (url.includes('facebook.com')) return 'Facebook';
   if (url.includes('instagram.com')) return 'Instagram';
   if (url.includes('douyin.com')) return 'Douyin';
@@ -1574,7 +1573,6 @@ async function saveToArchive(item) {
 }
 
 function detectPlatform(url) {
-  if (/youtube\.com|youtu\.be/.test(url)) return 'youtube';
   if (/tiktok\.com/.test(url)) return 'tiktok';
   if (/facebook\.com|fb\.watch/.test(url)) return 'facebook';
   if (/instagram\.com/.test(url)) return 'instagram';
@@ -2321,39 +2319,13 @@ if (_activeQPill) {
 }
 
 
-// ── YouTube (5.12.0 → 5.14.1) ─────────────────────────────────────
-// The Chrome Web Store does not allow extensions that download YouTube. The
-// build VidGrab hands out on its own website keeps YouTube (owner, 22/10);
-// the Web Store build (`package-extension.py --store`) drops the YouTube host
-// permission, and then the extension only says it does not support YouTube —
-// 24/10: it no longer offers to open the link on the website (Web Store review:
-// that is still helping to download YouTube).
-// Which build this is = whether the manifest has the YouTube host. wording: BA review
-const VG_YT_TEXT = t('yt_text');
-
-function vgIsYouTube(url) {
-  try {
-    const h = new URL(url).hostname.toLowerCase();
-    return /(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com)$/.test(h);
-  } catch { return false; }
-}
-
-function vgYouTubeInBuild() {
-  return (chrome.runtime.getManifest().host_permissions || []).some((h) => /youtube\.com/.test(h));
-}
-function vgYouTubeBlocked(url) {
-  return vgIsYouTube(url) && !vgYouTubeInBuild();
-}
-
-function vgShowYouTubeNote(url) {
-  const box = document.getElementById('vg-yt-note');
-  if (!box) return;
-  box.style.display = 'block';
-}
-
 function vgShowVersion() {
   const el = document.getElementById('footer-version');
   if (el) el.textContent = `v${chrome.runtime.getManifest().version}`;
+}
+
+function vgIsServerStreamUrl(url) {
+  return /\/watch\?(?:[^#]*&)?v=[\w-]{6,}|\/shorts\/[\w-]{6,}/i.test(url || '');
 }
 
 // ── Media found on the page (5.12.0, media-sniffer.js) ────────────
@@ -2417,7 +2389,7 @@ let _vgAppFound = false;   // the VidGrab app answers on this computer
 
 async function initSniff(tab) {
   const box = document.getElementById('vg-sniff');
-  if (!box || !tab?.id || !tab.url || vgIsYouTube(tab.url)) return;
+  if (!box || !tab?.id || !tab.url || vgIsServerStreamUrl(tab.url)) return;
   // Video usually comes from another host than the page (a CDN), and Chrome
   // only shows the extension requests to hosts it may see — so one site's
   // permission lists nothing in practice (measured 22/10). The ask is for
@@ -2716,7 +2688,6 @@ document.getElementById('vg-qr-btn')?.addEventListener('click', async () => {
   if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
   let url;
   try { url = await getTargetUrl(); } catch (e) { setUrlHint(e.message, 'warn'); return; }
-  if (vgYouTubeBlocked(url)) { vgShowYouTubeNote(url); return; } // Web Store build: no YouTube, not even via the phone
   const link = `${WEB_BASE}/share-target?url=${encodeURIComponent(url)}`;
   const qr = qrcode(0, 'M');
   qr.addData(link);
@@ -2786,11 +2757,11 @@ vgRecRender();
 
 
 // 5.20.1: sign-in cookies switch (storage.sync vg_send_cookies). Default: on in the
-// website build, off in the Web Store build (no YouTube host = the store build).
+// website build, off in the Web Store build.
 (async () => {
   const box = document.getElementById('settings-send-cookies');
   if (!box) return;
-  const storeBuild = !(chrome.runtime.getManifest().host_permissions || []).some((h) => /youtube\.com/.test(h));
+  const storeBuild = !chrome.runtime.getManifest().key;
   let v;
   try { v = (await chrome.storage.sync.get('vg_send_cookies')).vg_send_cookies; } catch { /* default */ }
   box.checked = typeof v === 'boolean' ? v : !storeBuild;

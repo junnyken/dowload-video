@@ -886,7 +886,7 @@
     "message": "VidGrab Downloader"
   },
   "ext_description": {
-    "message": "Tải video từ TikTok, Douyin, Facebook, Instagram, X, Bilibili, Xiaohongshu… và bắt video (MP4, HLS, DASH) ngay trên trang bạn đang xem.",
+    "message": "Tải video từ TikTok, Douyin, Facebook, Instagram, X, Bilibili, Xiaohongshu… và bắt luồng MP4, HLS, DASH ngay trên trình duyệt.",
     "description": "Chrome limit: 132 characters"
   },
   "ext_name": {
@@ -1929,14 +1929,6 @@
   },
   "wm_only_tiktok": {
     "message": "Chỉ TikTok"
-  },
-  "yt_note": {
-    "message": "Tiện ích không hỗ trợ tải video YouTube.",
-    "description": "wording: BA review"
-  },
-  "yt_text": {
-    "message": "Tiện ích không hỗ trợ tải video YouTube.",
-    "description": "wording: BA review"
   },
   "set_cookies_title": {
     "message": "🍪 Cookie đăng nhập",

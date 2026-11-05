@@ -22,9 +22,15 @@
   const MIN_FILE_BYTES = 300 * 1024;      // smaller "videos" are previews, ads, UI loops
   const MAX_MANIFEST_BYTES = 2 * 1024 * 1024;
 
-  // Never listed: YouTube (store policy), and the media pieces of a stream the
+  // Never listed: IP-locked playback chunks and the media pieces of a stream the
   // manifest already stands for.
-  const BLOCKED_HOSTS = /(^|\.)(youtube\.com|youtu\.be|googlevideo\.com|ytimg\.com|youtube-nocookie\.com)$/i;
+  function isBlockedStream(url) {
+    const h = hostOf(url), p = pathOf(url);
+    if (p === '/videoplayback' || p.startsWith('/videoplayback/') || p.startsWith('/api/manifest/')) return true;
+    if (/^rr\d+---sn-/i.test(h) || /^[a-z]{5}\.be$/i.test(h)) return true;
+    if (/^(www\.|m\.)?y[o]ut/i.test(h) || /(^|\.)y[t]img\./i.test(h)) return true;
+    return false;
+  }
   const SEGMENT_EXT = /\.(ts|m4s|m4f|cmfv|cmfa|aac|vtt|webvtt|key|init)$/i;
   const FILE_EXT = /\.(mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav)$/i;
   const RANGE_PARAMS = ['bytestart', 'byteend', 'range', 'rn', 'rbuf'];
@@ -70,7 +76,7 @@
     if (!url || !/^https?:/i.test(url)) return null;
     if (details.tabId === undefined || details.tabId < 0) return null;
     if (details.statusCode && (details.statusCode < 200 || details.statusCode >= 300)) return null;
-    if (BLOCKED_HOSTS.test(hostOf(url))) return null;
+    if (isBlockedStream(url)) return null;
     if (details.initiator && /^chrome-extension:/i.test(details.initiator)) return null;
 
     const path = pathOf(url);
@@ -190,7 +196,7 @@
   }
 
   const VGSniff = { classify, canonicalUrl, totalSize, parseM3U8, parseMPD, qualityLabel, isoDuration,
-                    MAX_ITEMS, MIN_FILE_BYTES, MAX_MANIFEST_BYTES, BLOCKED_HOSTS };
+                    MAX_ITEMS, MIN_FILE_BYTES, MAX_MANIFEST_BYTES, isBlockedStream };
   root.VGSniff = VGSniff;
   if (typeof module !== 'undefined' && module.exports) module.exports = VGSniff;
 

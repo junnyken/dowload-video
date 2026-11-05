@@ -886,7 +886,7 @@
     "message": "VidGrab Downloader"
   },
   "ext_description": {
-    "message": "Download videos from TikTok, Douyin, Facebook, Instagram, X, Bilibili, Xiaohongshu… and catch MP4/HLS/DASH video as you browse.",
+    "message": "Save MP4, HLS & DASH videos directly from TikTok, Douyin, Facebook, Instagram, X, Bilibili, Xiaohongshu & more as you browse.",
     "description": "Chrome limit: 132 characters"
   },
   "ext_name": {
@@ -1929,14 +1929,6 @@
   },
   "wm_only_tiktok": {
     "message": "TikTok only"
-  },
-  "yt_note": {
-    "message": "This extension does not download YouTube videos.",
-    "description": "wording: BA review"
-  },
-  "yt_text": {
-    "message": "This extension does not download YouTube videos.",
-    "description": "wording: BA review"
   },
   "set_cookies_title": {
     "message": "🍪 Sign-in cookies",

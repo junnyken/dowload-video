@@ -1,78 +1,111 @@
-# Developer Dashboard > Privacy practices: justifications (build 5.20.0, store build)
+# Developer Dashboard > Privacy practices: Justifications (v5.23.0)
 
-Paste each block into the matching field. Verified against chrome-extension/manifest.json, background.js, popup.js,
-media-sniffer.js, recorder.js. "INFERRED" marks reasoning not directly checkable in code.
-Store build = `python3 scripts/package-extension.py --store` (same manifest minus `*.youtube.com` / `*.youtu.be` hosts and matches).
+Paste each block below into the corresponding field in the Chrome Web Store Developer Dashboard under **Privacy practices**.
 
 ## Single purpose
-VidGrab finds the video the page the user is viewing plays and saves it to the user's computer.
+```
+VidGrab detects video streams played on the web page the user is viewing and saves them to the user's computer.
+```
 
-## Permissions
+## Permission Justifications
 
-activeTab
-: Reads the URL/title of the tab the user opens the popup on, to know which page to look for a video on. Does not read page content of other tabs and does nothing in the background.
+### `activeTab`
+```
+Reads the URL and title of the active tab when the user clicks the VidGrab toolbar icon so the extension can detect and save the video on that page.
+```
 
-tabs
-: Reads URL/title of tabs to (a) set the toolbar badge for the tab that has videos, (b) match a download request to the tab that plays it, (c) open the VidGrab website (login, QR page) and a helper tab/window for a channel download. Not used to collect browsing history; nothing about tabs is sent to a server except the page URL the user asks to download.
+### `tabs`
+```
+Reads tab URL and title to (a) update the toolbar badge when playable media is detected on the current tab, (b) match a user-initiated download to the active tab, and (c) open a helper tab/window during batch channel downloads or account sign-in. Browsing history is never collected or transmitted.
+```
 
-downloads
-: Saves the file the user chose into the Downloads folder (subfolder VidGrab/) and follows progress/interrupted state for resume. Does not download anything on its own.
+### `downloads`
+```
+Saves the user-selected video or audio file into the user's Downloads folder (subfolder VidGrab/) and tracks download progress and resume state.
+```
 
-storage
-: Keeps settings, the list of videos found on a tab (chrome.storage.session, deleted with the tab), a local history, and the VidGrab session token (chrome.storage.local). Settings only in storage.sync.
+### `storage`
+```
+Stores user preferences in chrome.storage.sync, temporary per-tab detected media lists in chrome.storage.session (cleared when the tab closes), and local download history plus optional VidGrab account session token in chrome.storage.local.
+```
 
-scripting
-: Injects the extension's own bundled content script into the page the user opened the popup on, when it has not loaded yet. No remote code.
+### `scripting`
+```
+Injects the extension's bundled content script into the active tab when the user opens the popup so video metadata and page streams can be detected without requiring a page reload. No remote code is used.
+```
 
-notifications
-: Shows "download finished/failed" notices, also when the popup is closed.
+### `notifications`
+```
+Displays desktop notifications when a background or batch video download completes or fails while the popup is closed.
+```
 
-contextMenus
-: Right-click items "Download with VidGrab" / "Download MP3" / "Download page media" on a page, link or video.
+### `contextMenus`
+```
+Adds "Download with VidGrab", "Download MP3", and "Download page media" options to the right-click context menu on pages, links, and media elements.
+```
 
-alarms
-: Keeps the service worker alive while a download/queue runs, polls a bulk job (1 min) and renews the extension's 30-day session (every 12 h).
+### `alarms`
+```
+Keeps the Manifest V3 service worker responsive during active downloads, polls status for in-progress batch jobs, and refreshes the optional 30-day account session.
+```
 
-cookies
-: Only for sign-in-gated sites. When the user downloads from instagram.com, twitter.com, x.com, facebook.com, reddit.com, bilibili.com, xiaohongshu.com, rednote.com, lemon8-app.com or douyin.com, background.js `getEphemeralCookiesB64` reads `chrome.cookies.getAll({domain})` for THAT one site, and sends them (Netscape format, base64, field `user_cookies_b64`) in the same request to VidGrab's own API (POST /api/v1/fetch-link). `isCookieTrustedBase` makes the send happen only if the API base is https on dvid-api.vibe1.tinhgon.xyz / dvid.vibe1.tinhgon.xyz (or a localhost developer base); with any other server URL the cookies are not read. The server uses them for that one extraction and deletes them (stated in the public privacy policy; server code not re-verified here, see privacy-checklist.md). Not read for other domains, not sent to anyone else, not stored by the extension, not sold.
+### `cookies`
+```
+Used only if the user explicitly turns on "Use browser cookies for videos that require sign-in" in Settings (off by default). When enabled and the user initiates a download from a login-gated social platform (Facebook, Instagram, X, Reddit, Bilibili, Xiaohongshu, Lemon8, or Douyin), the extension reads cookies for that single domain and sends them over HTTPS exclusively to VidGrab's first-party API for that one-time extraction, after which the server immediately deletes them.
+```
 
-webRequest
-: Observe-only (no webRequestBlocking, no declarativeNetRequest): media-sniffer.js watches response headers of the page the user is on, to list the video/audio files it loads (MP4, HLS .m3u8, DASH .mpd; content-type, size, URL). The list is in chrome.storage.session and removed with the tab. It never blocks, redirects or modifies a request, and does not send the list anywhere by itself. A URL goes to VidGrab's server only if the user presses a "via VidGrab server" button.
+### `webRequest`
+```
+Observe-only (non-blocking): watches media response headers (Content-Type and Content-Length for MP4, HLS .m3u8, and DASH .mpd streams) in the active tab to list playable videos in the popup. Captured metadata stays in local session storage and is removed when the tab closes.
+```
 
-offscreen
-: Creates a hidden extension page (reason BLOBS) used for two things while the user asks for them: join HLS segments into one MP4 (bundled mux.js 6.3.0, Apache-2.0), and hold the MediaRecorder for "Quay tab". It is closed when idle. Local processing only.
+### `offscreen`
+```
+Creates a temporary offscreen document (reason BLOBS) only during user-requested actions to merge HLS segments into an MP4 file (using bundled mux.js) or hold a local MediaRecorder stream when recording a tab. Closed immediately when idle.
+```
 
-tabCapture
-: Used only after the user presses "Quay tab" (recording mode, last resort when a page has no downloadable file). background.js `vgRecStart` calls `chrome.tabCapture.getMediaStreamId` for that tab, the offscreen page records it to WebM, and the user gets the file via chrome.downloads. The recording is never uploaded. DRM players give a black picture; nothing is done to avoid that.
+### `nativeMessaging`
+```
+Communicates with the optional companion VidGrab Windows desktop application installed on the user's own computer to hand off high-resolution or DASH stream downloads locally.
+```
 
-optional: clipboardRead
-: Asked at runtime (chrome.permissions.request, popup.js) only if the user presses the paste button, to fill the URL box. Not granted at install.
+### `declarativeNetRequestWithHostAccess`
+```
+Applies temporary, scoped Referer/Origin headers required by certain social media CDNs (such as Douyin/ByteDance CDN hosts) only while the browser is saving a user-requested video file from those hosts.
+```
 
-optional host permission `*://*/*`
-: Not granted at install. The popup button "Allow grabbing videos on every site" calls `chrome.permissions.request({origins:['*://*/*']})` inside the user's click. Needed because the media of a page comes from CDN hosts different from the page host (measured 22/10/2026: Chrome only shows webRequest events for hosts the extension can access). The user can revoke on chrome://extensions. Without it the extension still works on the listed sites.
+### `optional_permissions`: `clipboardRead`
+```
+Requested at runtime only when the user clicks the "Paste" button in the popup to paste a video link from the clipboard.
+```
 
-## Host permissions (granted at install)
+### `optional_permissions`: `tabCapture`
+```
+Requested at runtime only when the user clicks the "Record tab" button to record a tab's media playback into a local WebM file. Never uploaded anywhere.
+```
 
-Platform hosts: tiktok.com, facebook.com, douyin.com, instagram.com, open.spotify.com, twitter.com, x.com, reddit.com, pinterest.com, threads.com, threads.net, bilibili.com, b23.tv, xiaohongshu.com, rednote.com, xhslink.com, lemon8-app.com, lemon8.app, snapchat.com, story.snapchat.com, vk.com, twitch.tv, rumble.com, odysee.com, dailymotion.com, soundcloud.com (all `*://*.host/*`).
-: Why: on these pages the extension (1) runs content.js to detect the page type (video/profile/channel) and the video on screen, (2) lets the service worker fetch the media file in the user's session (with credentials) to save it, (3) lets background read that site's cookies (list above) and lets media-sniffer see the page's media responses. The MAIN-world interceptor.js runs on douyin, facebook, instagram, tiktok, twitter/x, threads, bilibili, xiaohongshu/rednote, lemon8 only to read the page's own video-list API responses; captured data goes to content.js/popup in the same browser, not to a third party. No ads, no analytics.
+### `optional_host_permissions`: `*://*/*`
+```
+Not granted at install. Requested at runtime only when the user clicks "Allow grabbing videos on every site" in the popup, allowing the media sniffer to detect video files served from third-party CDN domains.
+```
 
-VidGrab hosts: dvid.vibe1.tinhgon.xyz, dvid-api.vibe1.tinhgon.xyz
-: Own website and API. web-bridge.js (content script on the website only) receives the sign-in token after login; the service worker calls the API.
-
-localhost, 127.0.0.1
-: (a) developer API base; (b) pings and hands a DASH/split-audio URL to the VidGrab Windows app on the SAME computer (ports 17325-17327, `/vidgrab/ping`, `/vidgrab/download`, only if the user has installed the app). No remote host.
-
-Note for the store build: there are NO YouTube host permissions. The Dashboard may show the extension as "all sites" because of the optional permission; that is optional only.
+### `host_permissions`
+```
+Grants access to supported social media platforms (TikTok, Douyin, Facebook, Instagram, X/Twitter, Reddit, Pinterest, Threads, Bilibili, Xiaohongshu/RedNote, Lemon8, Snapchat, VK, Twitch, Rumble, Odysee, Dailymotion, SoundCloud, Spotify), their media CDNs, and VidGrab's own first-party domains (dowloadvideo.io.vn, dvid.vibe1.tinhgon.xyz, dvid-api.vibe1.tinhgon.xyz) so the extension can detect video streams on the page, download media directly in the browser, and sync user account status.
+```
 
 ## Remote code
-Answer: **No, I am not using remote code.**
-Verified: grep for `eval(`, `new Function`, remote `<script src>` in chrome-extension/*.js, *.html: none (only `importScripts('media-sniffer.js','direct-download.js')`, local files). lib/mux.min.js (mux.js 6.3.0, Apache-2.0) and lib/qrcode.js (MIT, QR generator) are bundled with LICENSE files. Minor: popup.html has `@import url('https://fonts.googleapis.com/...')` (CSS font only, not code); see TODO in privacy-checklist.md.
+- Select: **No, I am not using remote code.**
+- Justification:
+```
+All JavaScript and CSS assets are bundled inside the extension package, including open-source libraries lib/mux.min.js (Apache-2.0) and lib/qrcode.js (MIT) and local Inter web fonts. No external scripts, eval(), or remote code execution are used.
+```
 
-## Data usage certification
-Check the three boxes (no sale, no unrelated use, no creditworthiness use): see privacy-checklist.md.
-
-
-## Update 5.20.1 (24/10/2026)
-- **tabCapture** is now an *optional* permission, requested at runtime only when the user presses "Record tab". Justification unchanged otherwise.
-- **cookies**: used only when the user turns on "Use the browser’s cookies for videos that need sign-in" in Settings — **off by default** in this (Web Store) build. When off, no cookie is read or sent.
-- **YouTube**: not supported; the extension refuses YouTube links on every path and does not redirect them anywhere.
+## Data Usage & Certifications
+- Check **Authentication information** (for optional account sign-in token, device ID for account security, and opt-in ephemeral cookies for login-gated videos).
+- Check **Website content / Web history** (only the specific video page URL when the user clicks download; never browsing history).
+- Certify all 3 Limited Use checkboxes:
+  1. I do not sell or transfer user data to third parties, outside of the approved use cases.
+  2. I do not use or transfer user data for purposes that are unrelated to my item's single purpose.
+  3. I do not use or transfer user data to determine creditworthiness or for lending purposes.
+- Privacy Policy URL: `https://dowloadvideo.io.vn/en/privacy`

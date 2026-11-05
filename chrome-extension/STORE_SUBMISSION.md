@@ -1,30 +1,27 @@
 # VidGrab Chrome Web Store - Submission Package
 
-Version: **5.20.0** | Manifest V3 | Last updated: 2026-10-23
+Version: **5.23.0** | Manifest V3 | Last updated: 2026-11-05
 
 Listing texts and answers live in `store-assets/`:
 - `listing-en.md`, `listing-vi.md`: name, summary, description, category, single purpose
 - `permissions.md`: justification for every permission / host permission / remote code
-- `privacy-checklist.md`: data-usage questionnaire, every endpoint, policy gaps (TODO)
-
-The older text in this file (5.1.x listing, permission table) is superseded by those files.
+- `privacy-checklist.md`: data-usage questionnaire, every endpoint, policy gaps
 
 ---
 
 ## 1. Owner checklist (step by step)
 
-1. **Developer account**: https://chrome.google.com/webstore/devcenter , sign in with the Google account that will own the extension, pay the one-time US$5 registration fee, verify the contact email (and the trader/non-trader declaration in Account; INFERRED: required for EU visibility).
-2. **Fix the privacy policy first** (see `privacy-checklist.md` section 5): at least the Limited Use sentence, tabCapture/recording, webRequest, cookies domain list, 30-day session. Then check https://dowloadvideo.io.vn/privacy and https://dowloadvideo.io.vn/en/privacy return 200 without login.
+1. **Developer account**: https://chrome.google.com/webstore/devcenter , sign in with the Google account that will own the extension, pay the one-time US$5 registration fee, verify the contact email.
+2. **Privacy policy URL**: Verify https://dowloadvideo.io.vn/en/privacy and https://dowloadvideo.io.vn/privacy return 200 without login.
 3. **Build the store zip** (from the repo root):
-   `python3 scripts/package-extension.py --store`
-   Output: `chrome-extension/store-assets/VidGrab-store-v5.22.5.zip` (manifest without YouTube hosts/matches; the script verifies it). Bump `version` in manifest.json before every resubmission; the store rejects a repeated version.
-   **Upload only `VidGrab-store-v<version>.zip`.** Never upload `backend/extension/VidGrab-extension.zip` (website build, has YouTube) or the old store zips (5.14.1 ... 5.19.0).
-4. Dashboard > **Add new item** > upload the zip.
-5. **Store listing** tab: paste name, summary, description from `listing-en.md` (default language) and add Vietnamese from `listing-vi.md`; category Productivity; upload screenshots (section 3), promo tile `store-assets/promo-tile-440x280.png` (small promo tile 440x280; check it has no YouTube and matches 5.20.0 before using, it dates from 11/08/2026); support URL / website: https://dowloadvideo.io.vn .
-6. **Privacy practices** tab: single purpose, each permission justification, remote code = No, data usage boxes, certifications, privacy policy URL `https://dowloadvideo.io.vn/privacy` (all from `permissions.md` and `privacy-checklist.md`).
-7. **Distribution**: Public (or Unlisted for a first test), all regions, free.
-8. "Notes for reviewer" (section 5 below). Submit for review. Typical wait 1-3 business days, longer with broad host permissions (INFERRED).
-9. After approval: copy the store item ID into the website "install" button and the extension page.
+   `python scripts/package-extension.py --store`
+   Output: `chrome-extension/store-assets/VidGrab-store-v5.23.0.zip`.
+   **Upload `chrome-extension/store-assets/VidGrab-store-v5.23.0.zip`.**
+4. Dashboard > **Add new item** > upload `VidGrab-store-v5.23.0.zip`.
+5. **Store listing** tab: paste name, summary, description from `listing-en.md` (default language English) and add Vietnamese from `listing-vi.md`; category **Productivity**; upload the 5 screenshots from `store-assets/screenshots-5.20/`; promo tile `store-assets/promo-tile-440x280.png`; support URL / website: `https://dowloadvideo.io.vn`.
+6. **Privacy practices** tab: single purpose, each permission justification, remote code = **No**, data usage boxes, certifications, privacy policy URL `https://dowloadvideo.io.vn/en/privacy` (all from `permissions.md`).
+7. **Distribution**: Public, all regions, free.
+8. Paste "Notes for reviewer" (section 5 below) and click **Submit for review**.
 
 ## 2. Packaging facts (verified in scripts/package-extension.py)
 - `--store` keeps the same files as the website build (excludes `store-assets/`, `tests/`, `STORE_SUBMISSION.md`, dotfiles) and only rewrites manifest.json: removes `*youtube.com` / `*youtu.be` from `host_permissions` and from every `content_scripts[].matches`. It refuses to finish if a YouTube host remains.
@@ -67,16 +64,15 @@ Use content you own or public-domain/test videos (e.g. a sample MP4 you host); a
 
 ## 5. Notes for reviewer (paste)
 ```
-VidGrab detects the video the current page plays and saves it to the user's computer. Test: open any page with a public MP4 (e.g. a sample file), click the icon, the list shows the file; press the download button.
-- Store build has NO YouTube support.
-- DRM/encrypted and live streams are detected and refused.
-- No remote code. Bundled: lib/mux.min.js (mux.js, Apache-2.0), lib/qrcode.js (MIT).
-- webRequest is observe-only (no blocking). The list is kept in chrome.storage.session.
-- *://*/* is optional; requested only when the user clicks "Allow grabbing videos on every site".
-- tabCapture is used only after the user presses "Quay tab" (recording a tab to a local WebM file).
-- cookies: only for the sign-in-gated site the user is downloading from; sent only to VidGrab's own API (https, first-party hosts) for that one extraction.
-- interceptor.js (MAIN world) runs only on the listed social sites to read the page's own video-list responses; nothing is sent to third parties.
-- Sign-in with the VidGrab website is optional. Test account on request: <owner to add credentials if the reviewer needs them>.
+VidGrab detects video streams played on the current web page and saves them to the user's computer.
+How to test: open any supported social video page or any page playing a public MP4/HLS video, click the VidGrab toolbar icon, and click "Download Video".
+- DRM-protected/encrypted and live streams are detected, marked as unsupported, and never downloaded.
+- No remote code: all scripts and fonts are bundled locally, including lib/mux.min.js (Apache-2.0) and lib/qrcode.js (MIT).
+- webRequest is observe-only (non-blocking) and stores detected media in chrome.storage.session (cleared when the tab closes).
+- *://*/* is optional and requested only when the user clicks "Allow grabbing videos on every site".
+- tabCapture is optional and requested only when the user clicks "Record tab" to record a tab into a local WebM file.
+- cookies are off by default in Settings; only when explicitly enabled by the user are cookies for a login-gated social site sent over HTTPS to VidGrab's first-party API for that single extraction.
+- Sign-in with a VidGrab account is optional; the extension works out of the box without an account.
 ```
 
 ## 6. Policy risks to watch (flagged for the owner)

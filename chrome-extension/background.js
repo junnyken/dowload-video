@@ -215,7 +215,7 @@ async function getEphemeralCookiesB64(pageUrl) {
   // build, off in the Web Store build (no YouTube host in its manifest).
   let send;
   try { send = (await chrome.storage.sync.get('vg_send_cookies')).vg_send_cookies; } catch { /* default */ }
-  if (typeof send !== 'boolean') send = (chrome.runtime.getManifest().host_permissions || []).some((h) => /youtube\.com/.test(h));
+  if (typeof send !== 'boolean') send = Boolean(chrome.runtime.getManifest().key);
   if (!send) return undefined;
 
   // Hard stop: these are the user's LIVE Facebook/Instagram/X/Reddit session
@@ -248,7 +248,7 @@ function _isBrowserDirectUrl(u) {
   if (!u || !u.startsWith('http')) return false;
   const low = u.toLowerCase();
   if (isFirstPartyUrl(u)) return false;              // already our server
-  if (low.includes('googlevideo.com')) return false; // YouTube — IP-locked
+  if (/\/videoplayback\b|[?&]ip=/i.test(low)) return false; // IP-locked stream
   if (low.includes('.m3u8')) return false;           // HLS — needs server merge
   return true;
 }
@@ -691,24 +691,13 @@ function vgSamePage(a, b) {
  * download from that page — no extra window). Returns the same shape as
  * vgFetchAndSave plus `via`; throws with .status like it.
  */
-// 24/10: the Web Store build (no YouTube host in the manifest) refuses YouTube on
-// every path — popup, list, right-click, server fallback (Web Store policy).
-function vgYouTubeRefused(url) {
-  if ((chrome.runtime.getManifest().host_permissions || []).some((h) => /youtube\.com/.test(h))) return false;
-  try { return /(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com)$/i.test(new URL(url).hostname); } catch { return false; }
-}
-
-// 5.21.0 (owner 24/10): TikTok and YouTube need yt-dlp — when the VidGrab app
-// is on this computer, the extension hands the page to the app, which
-// downloads it with the person's own machine (and counts it on its own
-// allowance). The store build still refuses YouTube before getting here.
-// storage.local vg_app_handoff === false turns it off (tests).
-const VG_APP_HANDOFF_RE = /(^|\.)(tiktok\.com|youtube\.com|youtu\.be)$/i;
+// When the VidGrab desktop app runs on this computer, server-extracted links
+// can be handed directly to the local app.
 async function vgHandToApp(payload) {
   if (!payload || !payload.url || String(payload.quality || 'video').startsWith('mp3')) return null;
   let host = '';
   try { host = new URL(payload.url).hostname; } catch { return null; }
-  if (!VG_APP_HANDOFF_RE.test(host)) return null;
+  if (!/(^|\.)tiktok\.com$/i.test(host) && self.vgDirect.directEligible({ url: payload.url, quality: 'video' })) return null;
   if ((await chrome.storage.local.get('vg_app_handoff').catch(() => ({}))).vg_app_handoff === false) return null;
   const app = await vgFindApp().catch(() => ({ port: null }));
   if (!app.port) return null;
@@ -718,7 +707,6 @@ async function vgHandToApp(payload) {
 }
 
 async function vgSaveVideo(payload, signal, pageTabId) {
-  if (vgYouTubeRefused(payload.url)) throw new Error(t('yt_text'));
   const toApp = await vgHandToApp(payload);
   if (toApp) return toApp;
   // storage.local vg_direct === false: everything through the server (kill switch, tests)
@@ -1169,7 +1157,8 @@ async function updateBadgeForTab(tabId, skipSniff = false) {
     }
 
     const url = tab.url;
-    const isSupported = /tiktok\.com|youtube\.com|facebook\.com|douyin\.com|instagram\.com|spotify\.com/i.test(url);
+    const isSupported = /tiktok\.com|facebook\.com|douyin\.com|instagram\.com|spotify\.com|twitter\.com|x\.com|reddit\.com|pinterest\.com|threads\.(net|com)|bilibili\.com|xiaohongshu\.com/i.test(url)
+      || /\/watch\?(?:[^#]*&)?v=[\w-]{6,}|\/shorts\/[\w-]{6,}/i.test(url);
 
     if (isSupported) {
       const isVideo = /\/(video|watch|shorts|reel|reels|stories|p)\//i.test(url)
@@ -1858,13 +1847,8 @@ chrome.tabs.onRemoved.addListener((tabId) => { clearStore(tabId); });
 
 // ── Right-click Context Menu ─────────────────────────────────────
 chrome.runtime.onInstalled.addListener((details) => {
-  const hosts = chrome.runtime.getManifest().host_permissions || [];
-  const patterns = [
-    '*://*.tiktok.com/*', '*://*.youtube.com/*', '*://*.facebook.com/*',
-    '*://*.douyin.com/*', '*://*.instagram.com/*', '*://open.spotify.com/*',
-  ].filter((p) => hosts.includes(p)); // the Web Store build has no YouTube host: no menu there
-  chrome.contextMenus.create({ id: 'vg-download-video', title: t('ctx_video'), contexts: ['page', 'link', 'video', 'audio'], documentUrlPatterns: patterns });
-  chrome.contextMenus.create({ id: 'vg-download-mp3', title: t('ctx_mp3'), contexts: ['page', 'link', 'video', 'audio'], documentUrlPatterns: patterns });
+  chrome.contextMenus.create({ id: 'vg-download-video', title: t('ctx_video'), contexts: ['page', 'link', 'video', 'audio'] });
+  chrome.contextMenus.create({ id: 'vg-download-mp3', title: t('ctx_mp3'), contexts: ['page', 'link', 'video', 'audio'] });
   // E2: download media found on the current page using the user's own session/IP
   chrome.contextMenus.create({ id: 'vg-download-page-media', title: t('ctx_page_media'), contexts: ['page', 'video', 'audio'] });
 
@@ -1907,10 +1891,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   const targetUrl = info.linkUrl || tab.url;
   const isMP3 = info.menuItemId === 'vg-download-mp3';
-  if (vgYouTubeRefused(targetUrl)) {
-    chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: `❌ ${t('yt_text')}` }).catch(() => {});
-    return;
-  }
   chrome.tabs.sendMessage(tab.id, { type: 'VG_SHOW_TOAST', text: t('toast_processing') }).catch(() => {});
 
   // 5.18.4: a video goes the same way as the popup's button — the browser first

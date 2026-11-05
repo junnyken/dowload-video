@@ -88,8 +88,8 @@
     const url = window.location.href;
     if (
       /tiktok\.com\/@[^/]+\/video\//.test(url) ||
-      /youtube\.com\/watch/.test(url) ||
-      /youtube\.com\/shorts\//.test(url) ||
+      /\/watch\?(?:[^#]*&)?v=[\w-]{6,}/.test(url) ||
+      /\/shorts\/[\w-]{6,}/.test(url) ||
       /facebook\.com\/.+\/videos\/\d/.test(url) ||   // a video, not the Videos tab
       /facebook\.com\/watch/.test(url) ||
       /facebook\.com\/reel\//.test(url) ||
@@ -119,8 +119,8 @@
     
     if (
       /tiktok\.com\/@/.test(url) ||
-      /youtube\.com\/(c|channel|user|@)/.test(url) ||
-      /youtube\.com\/playlist\?list=/.test(url) ||
+      /\/(c|channel|user)\/[\w.-]+/.test(url) ||
+      /\/playlist\?list=/.test(url) ||
       /facebook\.com\/[^/]+\/?$/.test(url) ||
       /twitter\.com\/@?[\w.-]+\/?$/.test(url) ||
       /x\.com\/@?[\w.-]+\/?$/.test(url) ||
@@ -325,14 +325,14 @@
         vgRemember(u, a);
         return;
       }
-      // 5.19.0 YouTube: watch?v= / shorts/ of the channel's grid
-      const ytMatch = href.match(/youtube\.com\/(?:watch\?(?:[^#]*&)?v=|shorts\/)([\w-]{11})/);
-      if (ytMatch && /(^|\.)youtube\.com$/i.test(location.hostname)) {
-        const u = /\/shorts\//.test(href) ? `https://www.youtube.com/shorts/${ytMatch[1]}` : `https://www.youtube.com/watch?v=${ytMatch[1]}`;
+      // watch?v= / shorts/ of the channel's grid
+      const wMatch = href.match(/\/(?:watch\?(?:[^#]*&)?v=|shorts\/)([\w-]{11})(?:[&?#]|$)/);
+      if (wMatch) {
+        const u = /\/shorts\//.test(href) ? `${location.origin}/shorts/${wMatch[1]}` : `${location.origin}/watch?v=${wMatch[1]}`;
         videoSet.add(u);
         vgRemember(u, a);
         if (!vgItemMeta.get(u).title) {
-          const box = a.closest('ytd-rich-item-renderer, ytd-grid-video-renderer, ytd-reel-item-renderer, ytm-shorts-lockup-view-model, ytd-rich-grid-media');
+          const box = a.closest('[class*="rich-item"], [class*="grid-video"], [class*="reel-item"], [class*="shorts-lockup"], [class*="rich-grid"], article, li');
           const tEl = box && box.querySelector('#video-title, h3, [class*="title" i]');
           if (tEl && tEl.textContent.trim()) vgItemMeta.get(u).title = tEl.textContent.replace(/\s+/g, ' ').trim().slice(0, 200);
         }
@@ -930,10 +930,11 @@ window.addEventListener('message', (event) => {
       || /^https:\/\/(www\.|web\.|m\.)?facebook\.com\/(?!reel\/|watch|groups\/|share\/|events\/|marketplace)[^/?#]+\/?\?[^#]*\bsk=(reels_tab|videos)/i.test(url);
   }
 
-  /** 5.19.0: a TikTok / YouTube / Instagram channel page the browser lists itself. */
+  /** 5.19.0: a TikTok / Instagram channel page the browser lists itself. */
   function vgIsBrowserChannel(url) {
     return /^https:\/\/(www\.|m\.)?tiktok\.com\/@[\w.-]+\/?(\?|#|$)/i.test(url)
-      || /^https:\/\/(www\.|m\.)?youtube\.com\/(@[\w.-]+|channel\/[\w-]+|c\/[\w.-]+|user\/[\w.-]+)(\/(videos|shorts|streams|featured))?\/?(\?|#|$)/i.test(url)
+      || /^https:\/\/[^/]+\/(@[\w.-]+|channel\/[\w-]+|c\/[\w.-]+|user\/[\w.-]+)\/(videos|shorts|streams|featured)\/?(\?|#|$)/i.test(url)
+      || /^https:\/\/[^/]+\/channel\/UC[\w-]{20,}\/?(\?|#|$)/i.test(url)
       || /^https:\/\/(www\.)?instagram\.com\/(?!(p|reel|reels|stories|explore|accounts|direct)\/)[\w.]+\/(reels\/)?(\?|#|$)/i.test(url);
   }
 

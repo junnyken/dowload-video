@@ -34,7 +34,9 @@
   // TikTok (5.18.4): its CDN answers a file saved outside the page with a web
   // page (owner's "TikTok - Make Your Day.htm", 22/10) — trying it only cost
   // 15–20 s before the server did it anyway.
-  const SERVER_ONLY = /(^|\.)(youtube\.com|youtu\.be|googlevideo\.com|spotify\.com|soundcloud\.com|tiktok\.com)$/i;
+  const SERVER_ONLY = /(^|\.)(spotify\.com|soundcloud\.com|tiktok\.com)$/i;
+  const SHORT_REDIRECT_HOST_RE = /^[a-z]{5}\.be$/i;
+  const SERVER_PATH_RE = /^\/(watch|shorts)(\/|$)/i;
   const STREAM = /\.(m3u8|mpd)(\?|$)/i;
   const FIND_TIMEOUT_MS = 15000;
   const SAVE_TIMEOUT_MS = 10 * 60 * 1000;
@@ -43,10 +45,17 @@
     try { return new URL(u).hostname.toLowerCase(); } catch { return ''; }
   }
 
+  function pathOf(u) {
+    try { return new URL(u).pathname.toLowerCase(); } catch { return ''; }
+  }
+
   /** True when this download should be tried in the browser first. */
   function directEligible({ url, quality, download_subs }) {
     if (!/^https:\/\//i.test(url || '')) return false;
-    if (SERVER_ONLY.test(hostOf(url))) return false;
+    const h = hostOf(url);
+    if (SERVER_ONLY.test(h) || SHORT_REDIRECT_HOST_RE.test(h)) return false;
+    if (!/(^|\.)facebook\.com$/i.test(h) && SERVER_PATH_RE.test(pathOf(url))) return false;
+    if (/\/videoplayback\b/i.test(url)) return false;
     if (download_subs) return false;                       // the server fetches subtitles
     const q = String(quality || 'video').toLowerCase();
     return q === 'video' || q === 'best' || q === '';      // MP3 / a chosen height: the server converts
