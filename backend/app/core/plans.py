@@ -113,6 +113,8 @@ def get_settings() -> Dict[str, Any]:
         elif k in _TEXT_FIELDS:
             if v or not out.get(k):
                 out[k] = v
+    if out.get("api_calls_month_team") == 10_000:
+        out["api_calls_month_team"] = DEFAULT_API_CALLS_MONTH_TEAM
     return out
 
 
