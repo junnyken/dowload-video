@@ -1,4 +1,4 @@
-# Chrome Web Store Listing — Tiếng Việt (v5.23.0)
+# Chrome Web Store Listing — Tiếng Việt (v5.23.1)
 
 ## Tên
 ```
@@ -7,9 +7,9 @@ VidGrab - Video Downloader
 
 ## Tóm tắt (tối đa 132 ký tự)
 ```
-Tải video từ TikTok, Douyin, Facebook, Instagram, X, Bilibili, Xiaohongshu… và bắt luồng MP4, HLS, DASH ngay trên trình duyệt.
+Nhận diện và tải luồng video MP4, HLS (.m3u8), DASH từ trang web bạn đang xem ngay trên trình duyệt của bạn.
 ```
-(126 ký tự)
+(108 ký tự)
 
 ## Danh mục
 Năng suất (Productivity) / Công cụ (Tools)
@@ -32,7 +32,7 @@ CÁCH HOẠT ĐỘNG
 TÍNH NĂNG NỔI BẬT
 - Nhận diện video trang đang phát (MP4, HLS, DASH) trên các nền tảng mạng xã hội phổ biến và trên mọi trang web khi bạn cấp quyền tuỳ chọn.
 - Tải nhanh ngay trong trình duyệt, hỗ trợ tiếp tục các lượt tải bị gián đoạn.
-- Quét kênh & tải hàng loạt: Mở trang cá nhân trên Douyin, Facebook, TikTok hoặc Instagram, quét danh sách video, tích chọn các video mong muốn và tải về máy.
+- Quét kênh & tải hàng loạt: Mở trang cá nhân được hỗ trợ, quét danh sách video, tích chọn các video mong muốn và tải về máy.
 - Tự động nhận diện video đang hiển thị trên màn hình khi cuộn bảng tin.
 - Xem trước khi tải: Kiểm tra nội dung và dung lượng tệp trước khi lưu.
 - Mã QR: Gửi nhanh liên kết video sang điện thoại qua camera.
@@ -52,6 +52,4 @@ QUYỀN RIÊNG TƯ
 - Danh sách video phát hiện trên tab chỉ lưu tạm trên thiết bị và tự động xoá khi đóng tab.
 - Không bán dữ liệu, không chia sẻ cho bên thứ ba và không dùng cho quảng cáo.
 Chính sách bảo mật: https://dowloadvideo.io.vn/privacy
-
-Các nền tảng hỗ trợ gồm TikTok, Douyin, Facebook, Instagram, X, Reddit, Threads, Pinterest, Bilibili, Xiaohongshu, Lemon8, Snapchat, VK, Twitch, Rumble, Odysee, Dailymotion, Spotify và SoundCloud.
 ```

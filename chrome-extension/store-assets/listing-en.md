@@ -1,4 +1,4 @@
-# Chrome Web Store Listing — English (v5.23.0)
+# Chrome Web Store Listing — English (v5.23.1)
 
 ## Name (manifest "name" limit 45 chars; dashboard 75)
 ```
@@ -7,9 +7,9 @@ VidGrab - Video Downloader
 
 ## Summary (max 132 chars)
 ```
-Save MP4, HLS & DASH videos directly from TikTok, Douyin, Facebook, Instagram, X, Bilibili, Xiaohongshu & more as you browse.
+Detect and save MP4, HLS (.m3u8) and DASH video streams from the web page you are viewing directly in your browser.
 ```
-(125 chars)
+(115 chars)
 
 ## Category
 Productivity (alternative: Tools)
@@ -30,9 +30,9 @@ HOW IT WORKS
 - DASH streams (.mpd) can be handed off to the companion VidGrab Windows desktop app if installed on your computer.
 
 KEY FEATURES
-- Smart Media Detection: Automatically finds MP4, HLS (.m3u8), and DASH (.mpd) streams on supported platforms, or on any site when you grant optional access.
+- Smart Media Detection: Automatically finds MP4, HLS (.m3u8), and DASH (.mpd) streams on supported video websites, or on any website when you grant optional access.
 - Fast In-Browser Saving: Downloads directly through Chrome with support for resuming interrupted transfers.
-- Profile & Channel Batch Scan: Open a creator profile on TikTok, Douyin, Facebook, or Instagram, scan the video list with a Stop button, select the clips you want, and download them in batch.
+- Profile & Channel Batch Scan: Open a supported creator profile page, scan the video list with a Stop button, select the clips you want, and download them in batch.
 - Feed Video Detection: Automatically identifies the video currently in view while you scroll social feeds.
 - Built-in Preview: Inspect the video and check file size before saving.
 - QR to Phone: Generate an instant QR code to open and save the video on your mobile device.
@@ -51,9 +51,7 @@ Please download only content that you own, that is in the public domain, license
 PRIVACY & PERMISSIONS
 - Detected media lists are stored temporarily in chrome.storage.session and cleared automatically when you close the tab.
 - Page URLs are sent to VidGrab's server only when needed to process a download request, check daily allowance, or follow a channel you explicitly select.
-- Optional sign-in cookies (off by default): If you enable "Use browser cookies for videos that require sign-in" in Settings, cookies for that specific platform are sent over HTTPS to VidGrab's first-party server solely for that single extraction and immediately discarded.
+- Optional sign-in cookies (off by default): If you enable "Use browser cookies for videos that require sign-in" in Settings, cookies for that specific website are sent over HTTPS to VidGrab's first-party server solely for that single extraction and immediately discarded.
 - No personal data is sold, shared with third parties, or used for advertising.
 Privacy Policy: https://dowloadvideo.io.vn/en/privacy
-
-Supported platforms include TikTok, Douyin, Facebook, Instagram, X (Twitter), Reddit, Threads, Pinterest, Bilibili, Xiaohongshu (RedNote), Lemon8, Snapchat, VK, Twitch, Rumble, Odysee, Dailymotion, Spotify, and SoundCloud.
 ```

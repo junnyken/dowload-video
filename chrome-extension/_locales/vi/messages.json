@@ -886,7 +886,7 @@
     "message": "VidGrab Downloader"
   },
   "ext_description": {
-    "message": "Tải video từ TikTok, Douyin, Facebook, Instagram, X, Bilibili, Xiaohongshu… và bắt luồng MP4, HLS, DASH ngay trên trình duyệt.",
+    "message": "Nhận diện và tải luồng video MP4, HLS (.m3u8), DASH từ trang web bạn đang xem ngay trên trình duyệt của bạn.",
     "description": "Chrome limit: 132 characters"
   },
   "ext_name": {
@@ -1086,16 +1086,16 @@
     "message": "Cách dùng"
   },
   "ob_intro": {
-    "message": "Tải video từ TikTok, Douyin, Instagram, Facebook và nhiều nền tảng khác — hoặc bắt video ngay trên trang bạn xem."
+    "message": "Nhận diện và tải luồng video trực tiếp từ trang web bạn đang xem."
   },
   "ob_next": {
     "message": "Tiếp theo →"
   },
   "ob_platforms": {
-    "message": "Nền tảng hỗ trợ"
+    "message": "Định dạng hỗ trợ"
   },
   "ob_step_a": {
-    "message": "① Mở trang video cần tải (TikTok, Facebook...)"
+    "message": "① Mở trang web chứa video bạn cần lưu"
   },
   "ob_step_b": {
     "message": "② Nhấn icon VidGrab trên thanh công cụ"
@@ -1939,7 +1939,7 @@
     "description": "wording: BA review"
   },
   "set_cookies_hint": {
-    "message": "Khi bật: với Facebook, Instagram, X, Reddit, Bilibili, Xiaohongshu, Lemon8, Douyin, tiện ích gửi cookie của trang đó kèm yêu cầu tải lên máy chủ VidGrab (dùng cho đúng lần tải đó). Khi tắt: chỉ tải được nội dung công khai.",
+    "message": "Khi bật: với các trang yêu cầu đăng nhập, tiện ích gửi cookie của trang đó kèm yêu cầu tải lên máy chủ VidGrab (dùng cho đúng lần tải đó). Khi tắt: chỉ tải được nội dung công khai.",
     "description": "wording: BA review"
   },
   "rec_perm_denied": {

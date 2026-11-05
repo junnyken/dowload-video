@@ -886,7 +886,7 @@
     "message": "VidGrab Downloader"
   },
   "ext_description": {
-    "message": "Save MP4, HLS & DASH videos directly from TikTok, Douyin, Facebook, Instagram, X, Bilibili, Xiaohongshu & more as you browse.",
+    "message": "Detect and save MP4, HLS (.m3u8) and DASH video streams from the web page you are viewing directly in your browser.",
     "description": "Chrome limit: 132 characters"
   },
   "ext_name": {
@@ -1086,16 +1086,16 @@
     "message": "How it works"
   },
   "ob_intro": {
-    "message": "Download videos from TikTok, Douyin, Instagram, Facebook and many more platforms — or capture videos right on the page you're watching."
+    "message": "Detect and save video streams directly from the web page you are viewing."
   },
   "ob_next": {
     "message": "Next →"
   },
   "ob_platforms": {
-    "message": "Supported platforms"
+    "message": "Supported formats"
   },
   "ob_step_a": {
-    "message": "① Open the page of the video you want (TikTok, Facebook...)"
+    "message": "① Open the web page with the video you want to save"
   },
   "ob_step_b": {
     "message": "② Click the VidGrab icon in the toolbar"
@@ -1939,7 +1939,7 @@
     "description": "wording: BA review"
   },
   "set_cookies_hint": {
-    "message": "When on: for Facebook, Instagram, X, Reddit, Bilibili, Xiaohongshu, Lemon8 and Douyin, the extension sends that site’s cookies with the download request to the VidGrab server (for that download only). When off: only public content can be downloaded.",
+    "message": "When on: for supported platforms that require sign-in, the extension sends that site’s cookies with the download request to the VidGrab server (for that download only). When off: only public content can be downloaded.",
     "description": "wording: BA review"
   },
   "rec_perm_denied": {
