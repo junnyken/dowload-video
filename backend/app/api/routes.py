@@ -2015,13 +2015,24 @@ async def trim_media(payload: TrimRequest, request: Request, user=Depends(get_op
     clip_dur = payload.end_time - payload.start_time
     _trim_uid = user["id"] if user else None
     _trim_tier = _get_tier(_trim_uid) if _trim_uid else "guest"
-    _max_trim_sec = 600 if _trim_tier in ("pro", "team", "enterprise", "api") else (10 if _trim_uid else 5)
+    if _trim_tier in ("team", "enterprise", "api"):
+        _max_trim_sec = 1800
+    elif _trim_tier == "pro":
+        _max_trim_sec = 600
+    elif _trim_tier == "starter":
+        _max_trim_sec = 120
+    elif _trim_uid:
+        _max_trim_sec = 10
+    else:
+        _max_trim_sec = 5
     if clip_dur > _max_trim_sec + 0.5:
         if _max_trim_sec == 5:
             raise HTTPException(status_code=402, detail="Guest accounts can trim up to 5 seconds (≤ 5s). Sign in for 10s or upgrade to Pro for 10 minutes.")
         if _max_trim_sec == 10:
-            raise HTTPException(status_code=402, detail="Free accounts can trim up to 10 seconds (≤ 10s). Upgrade to Pro to trim up to 10 minutes.")
-        raise HTTPException(status_code=400, detail="Maximum trim duration is 10 minutes")
+            raise HTTPException(status_code=402, detail="Free accounts can trim up to 10 seconds (≤ 10s). Upgrade to Starter (2 min) or Pro (10 min).")
+        if _max_trim_sec == 120:
+            raise HTTPException(status_code=402, detail="Starter accounts can trim up to 2 minutes (≤ 120s). Upgrade to Pro for 10 minutes or Team for 30 minutes.")
+        raise HTTPException(status_code=400, detail=f"Maximum trim duration for your plan is {_max_trim_sec // 60} minutes")
 
     try:
         from app.core.local_download import new_token as _new_token

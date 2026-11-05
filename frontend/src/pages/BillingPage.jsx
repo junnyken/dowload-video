@@ -25,8 +25,9 @@ function formatDate(iso) {
 
 const PLAN_BADGE = {
   free:       { label: 'Free',       color: 'bg-surface-2 text-fg-2' },
+  starter:    { label: 'Starter',    color: 'bg-accent-soft text-accent-text border border-accent/40' },
   pro:        { label: 'Pro',        color: 'bg-success-soft text-success border border-success/50' },
-  team:       { label: 'Team',       color: 'bg-surface-2 text-fg-2 border border-line' },
+  team:       { label: 'Team / Business API', color: 'bg-accent-soft text-accent-text border border-accent/50' },
   enterprise: { label: 'Enterprise', color: 'bg-surface-2 text-fg-2 border border-line' },
 };
 
@@ -48,6 +49,7 @@ function BillingStatusPill({ status, expiryDate }) {
   const { t } = useTranslation('billing');
   const configs = {
     active:    { label: t('status.active'),                                  color: 'bg-success-soft text-success border-success/30' },
+    manual:    { label: t('status.active'),                                  color: 'bg-success-soft text-success border-success/30' },
     past_due:  { label: t('status.pastDue'),             color: 'bg-accent-soft text-accent-text border-accent/30'  },
     canceling: { label: t('status.canceling', { date: formatDate(expiryDate) || '...' }), color: 'bg-warning-soft text-warning border-warning/30' },
     canceled:  { label: t('status.canceled'),                                          color: 'bg-danger-soft text-danger border-danger/30'           },
@@ -274,7 +276,7 @@ export default function BillingPage() {
                 <BillingStatusPill status={billingStatus} expiryDate={expiryDate} />
               </div>
 
-              {expiryDate && billingStatus === 'active' && (
+              {expiryDate && (billingStatus === 'active' || billingStatus === 'manual') && (
                 <p className="text-fg-muted text-sm">
                   {t('nextRenewal')}{' '}
                   <span className="text-fg font-medium">{formatDate(expiryDate)}</span>
@@ -299,7 +301,7 @@ export default function BillingPage() {
                   </button>
                 )}
 
-                {isFree && (
+                {isFree ? (
                   <button
                     onClick={openUpgrade}
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-lg
@@ -312,6 +314,16 @@ export default function BillingPage() {
                     {t('upgrade')}
                     <Zap className="w-3.5 h-3.5" aria-hidden="true" />
                   </button>
+                ) : (
+                  <a
+                    href={`${getLang() === 'en' ? '/en' : ''}/checkout?plan=${['starter', 'pro', 'team'].includes(tier) ? tier : 'pro'}_month`}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg
+                               bg-accent hover:opacity-90 text-sm font-semibold
+                               text-accent-fg transition-colors"
+                  >
+                    <RefreshCw className="w-4 h-4" aria-hidden="true" />
+                    {getLang() === 'en' ? 'Renew / Upgrade Plan (Regular Price)' : 'Gia hạn / Đổi gói cước (Giá gốc)'}
+                  </a>
                 )}
               </div>
 

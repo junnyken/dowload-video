@@ -1337,17 +1337,24 @@ export default function DashboardContent() {
 
   // ── Media Trimmer ────────────────────────────────────────────
   const maxFreeTrimSec = session?.access_token ? 10 : 5;
+  const maxTierTrimSec = ['team', 'enterprise', 'api'].includes(userTier)
+    ? 1800
+    : userTier === 'pro'
+      ? 600
+      : userTier === 'starter'
+        ? 120
+        : maxFreeTrimSec;
   const handleOpenTrimmer = () => {
     const dur = videoInfo?.duration || 0;
     setTrimStart(0);
-    setTrimEnd(Math.min(dur, isProUser ? 30 : maxFreeTrimSec));
+    setTrimEnd(Math.min(dur, isProUser || userTier === 'starter' ? 30 : maxFreeTrimSec));
     setShowTrimmer(true);
   };
 
   const handleTrimDownload = async () => {
     if (!videoInfo) return;
     const clipLen = trimEnd - trimStart;
-    if (clipLen > maxFreeTrimSec && !isProUser) {
+    if (clipLen > maxTierTrimSec) {
       setUpgradeErrorCode('tier_required_feature');
       setShowUpgradeModal(true);
       trackEvent(EVENT.PAYWALL_SEEN, { trigger: session?.access_token ? 'trim_over_10s' : 'trim_over_5s_guest' });
