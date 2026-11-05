@@ -4407,9 +4407,45 @@ async def list_enterprise_api_keys(
     resp = q.order("created_at", desc=True).limit(limit).execute()
     keys = resp.data or []
     from app.core.partner_auth import rpm_stats  # noqa: PLC0415
+    from app.core import partner_quota  # noqa: PLC0415
+
+    # Per-key job status breakdown from partner_jobs
+    job_counts_by_key: dict = {}
+    try:
+        j_q = supabase.table("partner_jobs").select("api_key_id, status")
+        if tenant_id:
+            j_q = j_q.eq("tenant_id", tenant_id)
+        j_resp = j_q.limit(2000).execute()
+        for jr in (j_resp.data or []):
+            kid = jr.get("api_key_id")
+            if not kid:
+                continue
+            bucket = job_counts_by_key.setdefault(kid, {"total": 0, "done": 0, "failed": 0, "queued": 0})
+            bucket["total"] += 1
+            st = jr.get("status")
+            if st == "done":
+                bucket["done"] += 1
+            elif st == "failed":
+                bucket["failed"] += 1
+            else:
+                bucket["queued"] += 1
+    except Exception:
+        pass
+
     for k in keys:
+        kid = str(k.get("id"))
+        tid = str(k.get("tenant_id") or "")
         # requests/minute: now, busiest minute in 24 h, refused (429) in 24 h
-        k["rpm"] = rpm_stats(str(k.get("id")))
+        k["rpm"] = rpm_stats(kid)
+        k["job_counts"] = job_counts_by_key.get(kid, {"total": 0, "done": 0, "failed": 0, "queued": 0})
+        try:
+            q_usage = partner_quota.usage(tid, kid)
+            if q_usage.get("today_key") is not None:
+                k["requests_today"] = max(int(k.get("requests_today") or 0), int(q_usage["today_key"]))
+            if q_usage.get("month") is not None and not k.get("requests_this_month"):
+                k["requests_this_month"] = max(int(k.get("requests_this_month") or 0), int(q_usage["month"]))
+        except Exception:
+            pass
 
     return {
         "api_keys": keys,

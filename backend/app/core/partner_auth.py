@@ -72,7 +72,7 @@ async def _update_key_usage(key_id: str) -> None:
             # Fallback: best-effort read → increment → write
             res = (
                 supabase.table("tenant_api_keys")
-                .select("requests_today, requests_total")
+                .select("requests_today, requests_this_month, requests_total")
                 .eq("id", key_id)
                 .single()
                 .execute()
@@ -80,9 +80,10 @@ async def _update_key_usage(key_id: str) -> None:
             row = res.data or {}
             supabase.table("tenant_api_keys").update(
                 {
-                    "requests_today":  (row.get("requests_today")  or 0) + 1,
-                    "requests_total":  (row.get("requests_total")  or 0) + 1,
-                    "last_used_at":    "now()",
+                    "requests_today":       (row.get("requests_today")       or 0) + 1,
+                    "requests_this_month":  (row.get("requests_this_month")  or 0) + 1,
+                    "requests_total":       (row.get("requests_total")       or 0) + 1,
+                    "last_used_at":         "now()",
                 }
             ).eq("id", key_id).execute()
     except Exception:

@@ -77,9 +77,9 @@ const NAV_MANAGE: NavItem[] = [
   // wording: BA review — auto checkout orders (VietQR/PayPal)
   { href: '/vid-admin/orders', label: 'Đơn thanh toán', icon: CreditCard, minRole: 'operator' },
   { href: '/vid-admin/desktop-app', label: 'App Windows', icon: MonitorDown, minRole: 'admin' },
+  { href: '/vid-admin/apify-costs', label: 'Chi phí Apify', icon: CircleDollarSign, minRole: 'admin' },
+  { href: '/vid-admin/asr', label: 'Phiên âm (ASR)', icon: Mic, minRole: 'operator' },
   { href: '/vid-admin/config', label: 'Config', icon: Settings, minRole: 'admin', hidden: true },
-  { href: '/vid-admin/asr', label: 'Phiên âm (ASR)', icon: Mic, minRole: 'operator', hidden: true },
-  { href: '/vid-admin/apify-costs', label: 'Chi phí Apify', icon: CircleDollarSign, minRole: 'admin', hidden: true },
   // wording: BA review
   { href: '/vid-admin/takedown', label: 'Yêu cầu gỡ nội dung', icon: FileX, minRole: 'operator', hidden: true },
   { href: '/vid-admin/playbooks', label: 'Playbooks', icon: BookOpen, minRole: 'operator', hidden: true },

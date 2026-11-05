@@ -292,3 +292,88 @@ async def delete_partner_tenant(tenant_id: str, request: Request, _=Depends(veri
     get_supabase_client().table("tenants").delete().eq("id", tenant_id).execute()
     log_admin_action(request, "admin.tenant.deleted", resource_type="tenant", resource_id=tenant_id)
     return {"success": True, "tenant_id": tenant_id}
+
+
+@router.get("/enterprise/activity")
+async def get_partner_activity(
+    tenant_id: Optional[str] = None,
+    key_id: Optional[str] = None,
+    limit: int = 100,
+    _=Depends(verify_admin),
+):
+    """Detailed activity view for a partner tenant and/or a specific API key:
+    lists keys with live RPM + job counts and recent partner_jobs with status & errors."""
+    db = get_supabase_client()
+    from app.core.partner_auth import rpm_stats  # noqa: PLC0415
+    from app.core import partner_quota  # noqa: PLC0415
+
+    # 1. Fetch keys for the tenant or specific key
+    kq = db.table("tenant_api_keys").select(
+        "id, tenant_id, key_prefix, label, scopes, rate_limit_per_min, rate_limit_per_day, "
+        "is_active, created_by, last_used_at, requests_today, requests_this_month, "
+        "requests_total, ip_allowlist, expires_at, created_at"
+    )
+    if tenant_id:
+        kq = kq.eq("tenant_id", tenant_id)
+    if key_id:
+        kq = kq.eq("id", key_id)
+    k_resp = kq.order("created_at", desc=True).execute()
+    keys = k_resp.data or []
+    key_map = {str(k["id"]): k for k in keys}
+
+    # 2. Fetch recent partner_jobs for the tenant or key
+    jq = db.table("partner_jobs").select(
+        "id, tenant_id, api_key_id, url, quality, format, priority, status, "
+        "error_message, result, created_at, updated_at"
+    )
+    if tenant_id:
+        jq = jq.eq("tenant_id", tenant_id)
+    if key_id:
+        jq = jq.eq("api_key_id", key_id)
+    j_resp = jq.order("created_at", desc=True).limit(min(max(limit, 1), 300)).execute()
+    jobs = j_resp.data or []
+
+    # 3. Aggregate job counts per key and overall
+    per_key_counts: Dict[str, Dict[str, int]] = {}
+    summary = {"total_jobs": len(jobs), "done_jobs": 0, "failed_jobs": 0, "queued_jobs": 0}
+    for j in jobs:
+        st = j.get("status")
+        if st == "done":
+            summary["done_jobs"] += 1
+        elif st == "failed":
+            summary["failed_jobs"] += 1
+        else:
+            summary["queued_jobs"] += 1
+
+        kid = str(j.get("api_key_id") or "")
+        if kid:
+            c = per_key_counts.setdefault(kid, {"total": 0, "done": 0, "failed": 0, "queued": 0})
+            c["total"] += 1
+            if st == "done":
+                c["done"] += 1
+            elif st == "failed":
+                c["failed"] += 1
+            else:
+                c["queued"] += 1
+            k_info = key_map.get(kid)
+            if k_info:
+                j["key_prefix"] = k_info.get("key_prefix")
+                j["key_label"] = k_info.get("label")
+
+    for k in keys:
+        kid = str(k["id"])
+        tid = str(k.get("tenant_id") or "")
+        k["rpm"] = rpm_stats(kid)
+        k["job_counts"] = per_key_counts.get(kid, {"total": 0, "done": 0, "failed": 0, "queued": 0})
+        try:
+            qu = partner_quota.usage(tid, kid)
+            if qu.get("today_key") is not None:
+                k["requests_today"] = max(int(k.get("requests_today") or 0), int(qu["today_key"]))
+        except Exception:
+            pass
+
+    return {
+        "keys": keys,
+        "jobs": jobs,
+        "summary": summary,
+    }

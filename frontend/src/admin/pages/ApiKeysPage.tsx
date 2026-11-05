@@ -3,7 +3,7 @@ import { adminDelete, adminFetch, adminPatch, adminPost } from '../utils/adminFe
 import { cn } from '../utils/cn'
 import { Button } from '../shared/Button'
 import {
-  FormError, KeyFields, Modal, RawKeyModal, buildKeyPayload, keyFormFromRow,
+  FormError, KeyFields, Modal, PartnerActivityModal, RawKeyModal, buildKeyPayload, keyFormFromRow,
   type KeyFormValues, type PartnerKeyRow,
 } from '../shared/PartnerKeyUi'
 
@@ -33,6 +33,7 @@ interface ApiKey {
   tenants: TenantRef | null
   /** requests/minute: this minute, busiest minute in 24 h, refused (429) in 24 h */
   rpm?: { now: number; peak_24h: number; refused_24h: number }
+  job_counts?: { total: number; done: number; failed: number; queued: number }
 }
 
 /** Warn when the busiest minute reached 80% of the key's limit or anything was refused. */
@@ -238,6 +239,7 @@ export default function ApiKeysPage() {
   const [rotateKey, setRotateKey] = useState<ApiKey | null>(null)
   const [editKey, setEditKey] = useState<ApiKey | null>(null)
   const [deleteKey, setDeleteKey] = useState<ApiKey | null>(null)
+  const [activityKey, setActivityKey] = useState<ApiKey | null>(null)
   // One-time secret: lives only while the reveal modal is open.
   const [revealKey, setRevealKey] = useState<string | null>(null)
 
@@ -304,6 +306,15 @@ export default function ApiKeysPage() {
       )}
       {deleteKey && (
         <DeleteKeyModal k={deleteKey} onClose={() => setDeleteKey(null)} onDeleted={() => { setDeleteKey(null); fetchData() }} />
+      )}
+      {activityKey && (
+        <PartnerActivityModal
+          tenantId={activityKey.tenant_id}
+          keyId={activityKey.id}
+          title={`Lịch sử hoạt động Key — ${activityKey.key_prefix}…`}
+          subtitle={`${activityKey.label} · Khách: ${activityKey.tenants?.name ?? '—'}`}
+          onClose={() => setActivityKey(null)}
+        />
       )}
       {revealKey && (
         // wording: BA review
@@ -412,6 +423,15 @@ export default function ApiKeysPage() {
                     <div>Hôm nay: {k.requests_today.toLocaleString()}</div>
                     <div className="text-fg-muted">Tháng: {k.requests_this_month.toLocaleString()}</div>
                     <div className="text-fg-muted">Tổng: {k.requests_total.toLocaleString()}</div>
+                    {k.job_counts && k.job_counts.total > 0 && (
+                      <div className="mt-0.5 text-[10px]">
+                        <span className="text-success">{k.job_counts.done} xong</span>
+                        {' · '}
+                        <span className={k.job_counts.failed > 0 ? 'text-danger font-semibold' : 'text-fg-muted'}>
+                          {k.job_counts.failed} lỗi
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 font-mono text-fg-muted">
                     <div>{k.rate_limit_per_min}/phút</div>
@@ -435,6 +455,12 @@ export default function ApiKeysPage() {
                     </button>
                     {/* wording: BA review */}
                     <div className="mt-1.5 flex flex-wrap gap-1">
+                      <button
+                        onClick={() => setActivityKey(k)}
+                        className="rounded border border-accent/40 bg-surface px-2 py-1 text-[10px] font-semibold text-accent hover:bg-surface-2"
+                      >
+                        Lịch sử Job
+                      </button>
                       <button
                         onClick={() => setEditKey(k)}
                         className="rounded border border-line bg-surface px-2 py-1 text-[10px] font-medium text-fg hover:border-line-strong hover:bg-surface-2"

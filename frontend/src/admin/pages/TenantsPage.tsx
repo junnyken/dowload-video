@@ -3,7 +3,7 @@ import { adminDelete, adminFetch, adminPost } from '../utils/adminFetch'
 import { cn } from '../utils/cn'
 import { Button } from '../shared/Button'
 import {
-  DEFAULT_KEY_FORM, Field, FormError, KeyFields, Modal, RawKeyModal, buildKeyPayload, inputCls,
+  DEFAULT_KEY_FORM, Field, FormError, KeyFields, Modal, PartnerActivityModal, RawKeyModal, buildKeyPayload, inputCls,
   type KeyFormValues, type PartnerKeyRow,
 } from '../shared/PartnerKeyUi'
 
@@ -303,6 +303,7 @@ export default function TenantsPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [capTenant, setCapTenant] = useState<Tenant | null>(null)
   const [keyTenant, setKeyTenant] = useState<Tenant | null>(null)
+  const [activityTenant, setActivityTenant] = useState<Tenant | null>(null)
   const [deleteTenant, setDeleteTenant] = useState<Tenant | null>(null)
   // One-time secret: lives only while the reveal modal is open.
   const [revealKey, setRevealKey] = useState<string | null>(null)
@@ -386,6 +387,14 @@ export default function TenantsPage() {
       )}
       {deleteTenant && (
         <DeleteTenantModal tenant={deleteTenant} onClose={() => setDeleteTenant(null)} onDeleted={() => { setDeleteTenant(null); fetchData() }} />
+      )}
+      {activityTenant && (
+        <PartnerActivityModal
+          tenantId={activityTenant.id}
+          title={`Hoạt động Key & Job — ${activityTenant.name}`}
+          subtitle={`Gói ${activityTenant.plan.toUpperCase()} · ${formatCap(activityTenant.plan_api_calls_per_month)}`}
+          onClose={() => setActivityTenant(null)}
+        />
       )}
       {revealKey && (
         // wording: BA review
@@ -478,6 +487,12 @@ export default function TenantsPage() {
                   <td className="px-3 py-2.5 font-mono text-fg-muted">{formatDate(t.created_at)}</td>
                   <td className="px-3 py-2.5">
                     <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        onClick={() => setActivityTenant(t)}
+                        className="rounded border border-accent/40 bg-surface px-2 py-1 text-[10px] font-semibold text-accent hover:bg-surface-2"
+                      >
+                        Theo dõi Key & Job
+                      </button>
                       {/* wording: BA review */}
                       <button
                         onClick={() => setKeyTenant(t)}
