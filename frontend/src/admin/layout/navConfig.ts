@@ -79,11 +79,11 @@ const NAV_MANAGE: NavItem[] = [
   { href: '/vid-admin/desktop-app', label: 'App Windows', icon: MonitorDown, minRole: 'admin' },
   { href: '/vid-admin/apify-costs', label: 'Chi phí Apify', icon: CircleDollarSign, minRole: 'admin' },
   { href: '/vid-admin/asr', label: 'Phiên âm (ASR)', icon: Mic, minRole: 'operator' },
+  { href: '/vid-admin/automation-history', label: 'Automation', icon: History, minRole: 'viewer' },
   { href: '/vid-admin/config', label: 'Config', icon: Settings, minRole: 'admin', hidden: true },
   // wording: BA review
   { href: '/vid-admin/takedown', label: 'Yêu cầu gỡ nội dung', icon: FileX, minRole: 'operator', hidden: true },
   { href: '/vid-admin/playbooks', label: 'Playbooks', icon: BookOpen, minRole: 'operator', hidden: true },
-  { href: '/vid-admin/automation-history', label: 'Automation', icon: History, minRole: 'viewer', hidden: true },
 ]
 
 // The partner/multi-tenant surface. Tenants, API Keys, Webhooks and Usage are
