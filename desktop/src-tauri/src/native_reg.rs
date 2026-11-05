@@ -22,7 +22,10 @@ const IDENTIFIER: &str = "xyz.tinhgon.vidgrab";
 /// Extension ids allowed to start the host. The website build pins its id
 /// with the manifest "key" (chrome-extension/manifest.json, 5.22.0); add the
 /// Chrome Web Store item's id here once it is published.
-pub const ALLOWED_IDS: [&str; 1] = ["gkoepflfmpdmkhmccekmajlfdnfklmgi"];
+pub const ALLOWED_IDS: [&str; 2] = [
+    "gkoepflfmpdmkhmccekmajlfdnfklmgi",
+    "lhodalmameagalaociflghencoefpclp",
+];
 
 /// Same folder as Tauri's app_local_data_dir, computed without Tauri (the
 /// host process has none).
