@@ -93,10 +93,10 @@ const NAV_MANAGE: NavItem[] = [
 // user_credits, user_presets) — re-list a line the day it has real use.
 const NAV_ENTERPRISE: NavItem[] = [
   // wording: BA review
-  { href: '/vid-admin/tenants',     label: 'Khách Partner',    icon: Building2,  minRole: 'admin', hidden: true },
-  { href: '/vid-admin/api-keys',    label: 'Partner API Keys', icon: KeyRound,   minRole: 'admin', hidden: true },
-  { href: '/vid-admin/webhooks',    label: 'Webhook',         icon: Webhook,    minRole: 'admin', hidden: true },
-  { href: '/vid-admin/usage',       label: 'Lượng sử dụng',            icon: Activity,   minRole: 'admin', hidden: true },
+  { href: '/vid-admin/tenants',     label: 'Khách Partner',    icon: Building2,  minRole: 'admin' },
+  { href: '/vid-admin/api-keys',    label: 'Partner API Keys', icon: KeyRound,   minRole: 'admin' },
+  { href: '/vid-admin/webhooks',    label: 'Webhook',         icon: Webhook,    minRole: 'admin' },
+  { href: '/vid-admin/usage',       label: 'Lượng sử dụng',            icon: Activity,   minRole: 'admin' },
   { href: '/vid-admin/ai-analysis', label: 'AI Analysis', icon: Sparkles,          minRole: 'admin', hidden: true },
   { href: '/vid-admin/billing',     label: 'Billing',     icon: Wallet,            minRole: 'admin', hidden: true },
   { href: '/vid-admin/presets',     label: 'Presets',     icon: SlidersHorizontal, minRole: 'admin', hidden: true },
