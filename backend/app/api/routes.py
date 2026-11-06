@@ -98,7 +98,7 @@ def _china_channel_guest_refusals(urls: List[str], channel_mode: bool, requester
 # The ceiling itself is app.core.capacity.get_max_concurrent() (admin setting,
 # env MAX_CONCURRENT_DOWNLOADS as fallback) since 2026-10-19; this env value
 # only sizes the per-worker backstop used when Redis is unreachable.
-_MAX_CONCURRENT_DL = int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "10"))
+_MAX_CONCURRENT_DL = int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "16"))
 _ACTIVE_DL_KEY = "vidgrab:active_downloads"
 _ACTIVE_DL_TTL = 600  # auto-expire 10min (crash-safety)
 
@@ -121,7 +121,7 @@ _local_slots = threading.BoundedSemaphore(_MAX_CONCURRENT_DL)
 _local_slot_held = threading.local()
 
 
-def _acquire_download_slot() -> tuple:
+def _acquire_download_slot(record_refusal: bool = True) -> tuple:
     """Atomically INCR slot counter. Returns (acquired: bool, active_count: int)."""
     try:
         from app.core.redis_client import get_redis as _get_redis
@@ -131,7 +131,8 @@ def _acquire_download_slot() -> tuple:
         rc.expire(_ACTIVE_DL_KEY, _ACTIVE_DL_TTL)
         if count > _cap.get_max_concurrent():
             rc.decr(_ACTIVE_DL_KEY)
-            _cap.note_refused()
+            if record_refusal:
+                _cap.note_refused()
             return False, int(count) - 1
         _local_slot_held.redis = True
         _cap.note_acquired(int(count))
@@ -146,6 +147,31 @@ def _acquire_download_slot() -> tuple:
         print("[Concurrency] Redis unavailable and this worker is at its "
               f"local ceiling ({_MAX_CONCURRENT_DL}) — refusing")
         return False, _MAX_CONCURRENT_DL
+
+
+async def _acquire_download_slot_async(is_paid: bool = False) -> tuple:
+    """Graceful wait-queue before returning 429: polls for a free slot up to
+    12s for paid tiers (0.25s steps) or 8s for free/guest tiers (0.4s steps).
+    Since 80%+ of extractions finish in 1-4s, this absorbs concurrent traffic
+    bursts without surfacing transient 429 errors."""
+    import asyncio as _aio
+    acquired, active = _acquire_download_slot(record_refusal=False)
+    if acquired:
+        return True, active
+    max_wait_s = 12.0 if is_paid else 8.0
+    step_s = 0.25 if is_paid else 0.40
+    steps = int(max_wait_s / step_s)
+    for _ in range(steps):
+        await _aio.sleep(step_s)
+        acquired, active = _acquire_download_slot(record_refusal=False)
+        if acquired:
+            return True, active
+    try:
+        from app.core import capacity as _cap
+        _cap.note_refused()
+    except Exception:
+        pass
+    return False, active
 
 
 def _release_download_slot() -> None:
@@ -899,8 +925,9 @@ async def fetch_link(
             if _asks_more:
                 _quality = f"video_{_guest_cap}"
 
-    # Global concurrency guard — prevent CPU/memory overload under burst traffic
-    _acquired, _active = _acquire_download_slot()
+    # Global concurrency guard — graceful wait-queue absorbs burst traffic
+    _is_paid_slot = bool(user_id and (user or {}).get("tier", "free") not in ("free", "guest", ""))
+    _acquired, _active = await _acquire_download_slot_async(is_paid=_is_paid_slot)
     if not _acquired:
         if _yt_quota_id or _yt_global:
             from app.core import yt_quota as _ytq

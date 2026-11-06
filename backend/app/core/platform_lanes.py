@@ -21,19 +21,21 @@ from app.core.redis_client import get_redis
 # Soft splits across the 8-worker pool — generous so normal load is untouched;
 # they only bite under heavy concurrent bursts.
 _LANES = {
-    "youtube":   int(os.getenv("LANE_YOUTUBE",   "4")),
-    "tiktok":    int(os.getenv("LANE_TIKTOK",    "8")),
-    "facebook":  int(os.getenv("LANE_FACEBOOK",  "4")),
-    "instagram": int(os.getenv("LANE_INSTAGRAM", "3")),
-    "spotify":   int(os.getenv("LANE_SPOTIFY",   "4")),
-    "soundcloud":int(os.getenv("LANE_SOUNDCLOUD","6")),
-    "twitter":   int(os.getenv("LANE_TWITTER",   "4")),
-    "threads":   int(os.getenv("LANE_THREADS",   "4")),
-    "douyin":    int(os.getenv("LANE_DOUYIN",    "4")),
-    "pinterest": int(os.getenv("LANE_PINTEREST", "6")),
-    "reddit":    int(os.getenv("LANE_REDDIT",    "5")),
+    "youtube":     int(os.getenv("LANE_YOUTUBE",     "6")),
+    "tiktok":      int(os.getenv("LANE_TIKTOK",      "12")),
+    "facebook":    int(os.getenv("LANE_FACEBOOK",    "6")),
+    "instagram":   int(os.getenv("LANE_INSTAGRAM",   "5")),
+    "spotify":     int(os.getenv("LANE_SPOTIFY",     "6")),
+    "soundcloud":  int(os.getenv("LANE_SOUNDCLOUD",  "8")),
+    "twitter":     int(os.getenv("LANE_TWITTER",     "6")),
+    "threads":     int(os.getenv("LANE_THREADS",     "6")),
+    "douyin":      int(os.getenv("LANE_DOUYIN",      "6")),
+    "xiaohongshu": int(os.getenv("LANE_XIAOHONGSHU", "5")),
+    "bilibili":    int(os.getenv("LANE_BILIBILI",    "6")),
+    "pinterest":   int(os.getenv("LANE_PINTEREST",   "8")),
+    "reddit":      int(os.getenv("LANE_REDDIT",      "6")),
 }
-_DEFAULT_LANE = int(os.getenv("LANE_DEFAULT", "6"))
+_DEFAULT_LANE = int(os.getenv("LANE_DEFAULT", "8"))
 _USER_MAX     = int(os.getenv("USER_MAX_CONCURRENT", "6"))
 _TTL          = int(os.getenv("LANE_TTL", "600"))  # safety auto-release (10 min)
 

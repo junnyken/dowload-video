@@ -4280,11 +4280,90 @@ _CONTENT_MARKERS = ("private", "removed", "deleted", "does not exist", "copyrigh
                     "not found", "404")
 
 
+_COOKIE_ROTATE_MARKERS = (
+    "login", "cookie", "sign in", "đăng nhập", "checkpoint",
+    "rate limit", "429", "tạm chặn", "challenge", "session",
+    "挑战", "验证码", "please wait", "try again later",
+)
+
+_STRIP_QUERY_PARAMS = {
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "fbclid", "igshid", "igsh", "si", "feature", "is_from_webapp",
+    "sender_device", "web_id", "_r", "_t", "checksum", "share_app_id",
+    "share_link_id", "share_item_id", "timestamp", "u_code", "s", "t",
+    "ref", "ref_src", "ref_url", "context", "pp", "ab_channel",
+}
+
+
+def normalize_url_for_cache(raw_url: str) -> str:
+    """Canonicalize a video URL so different users sharing links with mobile/social
+    tracking params hit the exact same Redis cache & singleflight lock."""
+    u = (raw_url or "").strip()
+    if not u or u.lower().startswith(("ytsearch", "scsearch")):
+        return u
+    try:
+        from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+        # Normalize YouTube watch / short / youtu.be links to a single canonical form
+        yt_m = re.search(
+            r"(?:youtube\.com/(?:watch\?.*?v=|shorts/|live/)|youtu\.be/)([A-Za-z0-9_-]{11})",
+            u,
+        )
+        if yt_m:
+            return f"https://www.youtube.com/watch?v={yt_m.group(1)}"
+
+        p = urlparse(u)
+        host = (p.netloc or "").lower()
+        if host.startswith("www."):
+            host = host[4:]
+        elif host.startswith("m.") and host not in ("m.tb.cn",):
+            host = host[2:]
+        path = p.path.rstrip("/") or "/"
+        kept = [
+            (k, v)
+            for k, v in parse_qsl(p.query, keep_blank_values=False)
+            if k.lower() not in _STRIP_QUERY_PARAMS and not k.lower().startswith("utm_")
+        ]
+        kept.sort(key=lambda x: x[0])
+        return urlunparse((p.scheme.lower() or "https", host, path, "", urlencode(kept), ""))
+    except Exception:
+        return u
+
+
 def looks_ip_blocked(err: str) -> bool:
     t = (err or "").lower()
     if any(m in t for m in _CONTENT_MARKERS):
         return False
     return any(m in t for m in _BLOCK_MARKERS)
+
+
+def looks_cookie_or_rate_limited(err: str) -> bool:
+    t = (err or "").lower()
+    if any(m in t for m in _CONTENT_MARKERS):
+        return False
+    return looks_ip_blocked(err) or any(m in t for m in _COOKIE_ROTATE_MARKERS)
+
+
+def _rotate_active_cookie_on_error(url: str) -> bool:
+    """If the platform has a cookie pool with >1 usable cookies, mark the cookie
+    used by this failed attempt with a soft block and return True so the caller
+    can immediately retry with the next healthy cookie in the pool."""
+    try:
+        from app.core.proxy_pool import platform_of_url  # noqa: PLC0415
+        from app.core.cookie_pool import mark_cookie_blocked, get_expiry_report  # noqa: PLC0415
+        plat = platform_of_url(url)
+        if not plat:
+            return False
+        used_b64 = _active_cookie(plat)
+        pool_items = get_expiry_report(plat)
+        usable_count = sum(1 for c in (pool_items or []) if c.get("usable") and not c.get("blocked"))
+        if used_b64 and usable_count >= 2:
+            mark_cookie_blocked(plat, used_b64, hard=False)
+            _reset_request_cookies()
+            print(f"[CookiePool] Soft-rotated failed {plat} cookie; retrying with next pool cookie ({usable_count} usable in pool)")
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def fallback_proxy_for(url: str) -> Optional[str]:
@@ -4307,20 +4386,23 @@ def extract_video_info_sync(url: str, quality: str = "video", remove_watermark: 
         return _extract_video_info_once(url, quality, remove_watermark, download_subs, progress_token,
                                         subtitle_language, user_cookies_file)
     except ValueError as first:
-        if _FALLBACK_PROXY.get() or not looks_ip_blocked(str(first)) or "Quá thời gian chờ" in str(first):
+        if "Quá thời gian chờ" in str(first):
             raise
-        proxy = fallback_proxy_for(url)
-        if not proxy:
+        can_retry_cookie = (not user_cookies_file) and looks_cookie_or_rate_limited(str(first)) and _rotate_active_cookie_on_error(url)
+        proxy = None if _FALLBACK_PROXY.get() else (fallback_proxy_for(url) if looks_ip_blocked(str(first)) else None)
+        if not can_retry_cookie and not proxy:
             raise
-        print("[Downloader] blocked — one retry via the admin 'all' proxy pool")
-        token = _FALLBACK_PROXY.set(proxy)
+        token = _FALLBACK_PROXY.set(proxy) if proxy else None
+        if proxy:
+            print("[Downloader] blocked — one retry via the admin 'all' proxy pool")
         try:
             return _extract_video_info_once(url, quality, remove_watermark, download_subs, progress_token,
                                             subtitle_language, user_cookies_file)
         except Exception:
             raise first
         finally:
-            _FALLBACK_PROXY.reset(token)
+            if token is not None:
+                _FALLBACK_PROXY.reset(token)
 
 
 def _extract_video_info_once(url: str, quality: str = "video", remove_watermark: bool = False, download_subs: bool = False, progress_token: str = "", subtitle_language: str = "auto", user_cookies_file: str = None) -> Dict[str, Any]:
@@ -4378,14 +4460,29 @@ async def extract_video_info(url: str, quality: str = "video", remove_watermark:
         except Exception:
             pass
 
-    _CACHEABLE = quality in ("video_fast",)
+    # Universal Singleflight Deduplication & Multi-Platform Result/File Cache:
+    # Active for all public requests (no user-supplied cookie jar, no custom subtitle burn).
+    # Deduplicates simultaneous requests for the same URL+quality across all 18+ platforms
+    # and serves repeat downloads from Redis/local disk in <5ms.
+    _CACHEABLE = (not user_cookies_file) and (not download_subs)
     _CACHE_TTL = int(os.getenv("VIDEO_INFO_CACHE_TTL", "600"))
+    _FILE_CACHE_TTL = min(int(os.getenv("LOCAL_FILE_TTL_SEC", "7200")) - 300, 5400)
 
     cache_key = None
+    lock_key = None
     lock_acquired = False
 
+    def _is_cached_entry_valid(entry: dict) -> bool:
+        if not isinstance(entry, dict):
+            return False
+        fp = entry.get("local_file_path") or entry.get("local_mp3_path")
+        if fp:
+            return os.path.exists(fp) and os.path.getsize(fp) > 0
+        return bool(entry.get("direct_mp4_url") or entry.get("media_items") or entry.get("available_formats"))
+
     if _CACHEABLE:
-        raw_key = f"vidinfo:{url}:{quality}:{int(remove_watermark)}"
+        canon_url = normalize_url_for_cache(url)
+        raw_key = f"vidinfo:v2:{canon_url}:{quality}:{int(remove_watermark)}"
         cache_key = "vidcache:" + _hashlib.md5(raw_key.encode()).hexdigest()
         lock_key  = f"lock:{cache_key}"
 
@@ -4393,22 +4490,28 @@ async def extract_video_info(url: str, quality: str = "video", remove_watermark:
             rc = get_redis()
             cached = rc.get(cache_key)
             if cached:
-                print(f"[Cache] HIT {cache_key}")
-                return _json.loads(cached)
+                parsed_cache = _json.loads(cached)
+                if _is_cached_entry_valid(parsed_cache):
+                    print(f"[Cache] HIT {cache_key} ({canon_url})")
+                    return parsed_cache
+                rc.delete(cache_key)
 
-            # Try to acquire extraction lock (60s expiry = hard cap)
-            lock_acquired = bool(rc.set(lock_key, "1", nx=True, ex=60))
+            # Try to acquire singleflight extraction lock (90s expiry = hard cap)
+            lock_acquired = bool(rc.set(lock_key, "1", nx=True, ex=90))
             if not lock_acquired:
-                # Another worker is already extracting this URL — wait for result
+                # Another worker is already extracting this exact URL+quality — wait for result
                 print(f"[Dedup] Waiting for in-flight extraction: {cache_key}")
-                for _ in range(60):   # max 30 s
+                for _ in range(90):   # max 45 s
                     await asyncio.sleep(0.5)
                     cached = rc.get(cache_key)
                     if cached:
-                        print(f"[Dedup] Got result from in-flight extraction")
-                        return _json.loads(cached)
-                # Timed out — fall through and extract ourselves (lock may have expired)
-                print(f"[Dedup] Wait timeout; proceeding with own extraction")
+                        parsed_cache = _json.loads(cached)
+                        if _is_cached_entry_valid(parsed_cache):
+                            print(f"[Dedup] Got result from in-flight extraction: {cache_key}")
+                            return parsed_cache
+                    if not rc.exists(lock_key):
+                        break
+                print(f"[Dedup] In-flight wait finished without cache; proceeding with own extraction")
 
         except Exception as _ce:
             print(f"[Cache] Redis unavailable: {_ce}")
@@ -4417,18 +4520,20 @@ async def extract_video_info(url: str, quality: str = "video", remove_watermark:
         result = await asyncio.to_thread(extract_video_info_sync, url, quality, remove_watermark, download_subs, progress_token, subtitle_language, user_cookies_file)
     finally:
         # Always release the lock after extraction (success or failure)
-        if lock_acquired and cache_key:
+        if lock_acquired and lock_key:
             try:
-                get_redis().delete(f"lock:{cache_key}")
+                get_redis().delete(lock_key)
             except Exception:
                 pass
 
     if _CACHEABLE and cache_key and result:
         try:
             rc = get_redis()
-            if not result.get("local_file_path") and not result.get("local_mp3_path"):
-                rc.setex(cache_key, _CACHE_TTL, _json.dumps(result))
-                print(f"[Cache] SET {cache_key} TTL={_CACHE_TTL}s")
+            has_local_file = bool(result.get("local_file_path") or result.get("local_mp3_path"))
+            ttl = max(300, _FILE_CACHE_TTL) if has_local_file else _CACHE_TTL
+            if _is_cached_entry_valid(result):
+                rc.setex(cache_key, ttl, _json.dumps(result, default=str))
+                print(f"[Cache] SET {cache_key} TTL={ttl}s (local_file={has_local_file})")
         except Exception as _ce2:
             print(f"[Cache] Failed to store: {_ce2}")
 

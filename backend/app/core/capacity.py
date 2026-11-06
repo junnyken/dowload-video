@@ -54,9 +54,9 @@ def _r():
 
 def env_default() -> int:
     try:
-        return max(HARD_MIN, min(HARD_MAX, int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "10"))))
+        return max(HARD_MIN, min(HARD_MAX, int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "16"))))
     except ValueError:
-        return 10
+        return 16
 
 
 # ── setting ───────────────────────────────────────────────────────────
