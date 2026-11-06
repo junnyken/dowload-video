@@ -92,13 +92,14 @@ export const PLATFORM_COOKIE_GUIDES: Record<string, PlatformCookieSpec> = {
     lifespanTip:
       '95% video TikTok công khai đã được hệ thống tự động tải qua TikWM/Cobalt mà không tốn cookie. Cookie TikTok chỉ dùng khi tải video giới hạn độ tuổi hoặc kênh khóa. Làm giống hệt YouTube để giữ sessionid sống lâu.',
     gmailTrick:
-      'TikTok cho phép dùng dấu cộng (+) và dấu chấm (.) thoải mái: ten+tt1@gmail.com, ten+tt2@gmail.com, ten+tt3@gmail.com đều nhận mã xác nhận về cùng 1 Gmail.',
+      'LƯU Ý QUAN TRỌNG: TikTok trên Web PC chặn đăng ký bằng dấu (+) và sẽ bắt "Tiếp tục trên ứng dụng TikTok". Hãy tạo nick phụ trong App TikTok trên điện thoại (Hồ sơ -> Tên nick -> Thêm tài khoản) bằng mẹo DẤU CHẤM (t.en@gmail.com, te.n@gmail.com), sau đó lên Web Ẩn danh dùng "Đăng nhập bằng mã QR" để quét!',
     steps: [
-      'Mở Cửa sổ Ẩn danh (Ctrl + Shift + N) -> Đăng nhập tiktok.com bằng email.',
-      'Vượt qua captcha kéo hình (nếu có), sau đó vào https://www.tiktok.com/robots.txt',
-      'Export cookie Netscape (đảm bảo có sessionid hoặc sessionid_ss).',
-      'Đóng cửa sổ Ẩn danh bằng nút (X).',
+      'Trên App TikTok điện thoại: Bấm Hồ sơ -> Tên tài khoản trên cùng -> Thêm tài khoản -> Đăng ký bằng email dấu chấm (t.en@gmail.com, te.n@gmail.com). App TikTok cho lưu sẵn 8 nick.',
+      'Trên máy tính: Mở Cửa sổ Ẩn danh (Ctrl + Shift + N) -> Vào tiktok.com -> Chọn "Sử dụng mã QR" (hoặc đăng nhập email vừa tạo trên app).',
+      'Dùng App TikTok quét mã QR để đăng nhập ngay lập tức (vượt 100% lỗi bắt tải ứng dụng & captcha).',
+      'Vào https://www.tiktok.com/robots.txt -> Export cookie Netscape -> Đóng thẳng cửa sổ Ẩn danh (X).',
     ],
+    warning: 'Không đăng ký nick mới bằng dấu (+) trực tiếp trên Web PC vì TikTok sẽ chặn bắt quét QR tải app.',
   },
   twitter: {
     id: 'twitter',
@@ -301,23 +302,21 @@ export function CookieGuideBanner({ activePlatform, onSelectPlatform }: CookieGu
               </div>
               <div className="space-y-1.5 text-[11px] text-fg-2">
                 <div className="rounded border border-line bg-surface p-2">
-                  <span className="font-semibold text-fg">Cách 1 — Mẹo dấu cộng (+tag) cho Instagram, TikTok, Twitter/X, Reddit:</span>
+                  <span className="font-semibold text-fg">Cách 1 — Mẹo dấu cộng (+tag) cho Instagram, Twitter/X, Reddit:</span>
                   <p className="mt-0.5 text-fg-muted">
                     Từ 1 Gmail <code className="font-mono text-[10px] text-fg">tenban@gmail.com</code>, khi đăng ký nick mới hãy nhập:{' '}
                     <code className="font-mono text-[10px] text-fg">tenban+ig1@gmail.com</code>,{' '}
-                    <code className="font-mono text-[10px] text-fg">tenban+ig2@gmail.com</code>,{' '}
-                    <code className="font-mono text-[10px] text-fg">tenban+tt1@gmail.com</code>,{' '}
-                    <code className="font-mono text-[10px] text-fg">tenban+x1@gmail.com</code>. Nền tảng tính là email mới 100%, nhưng mọi mã OTP đều gửi về hộp thư <code className="font-mono text-[10px]">tenban@gmail.com</code>!
+                    <code className="font-mono text-[10px] text-fg">tenban+x1@gmail.com</code>,{' '}
+                    <code className="font-mono text-[10px] text-fg">tenban+rd1@gmail.com</code>. Mọi mã OTP đều gửi về hộp thư <code className="font-mono text-[10px]">tenban@gmail.com</code>!
                   </p>
                 </div>
                 <div className="rounded border border-line bg-surface p-2">
-                  <span className="font-semibold text-fg">Cách 2 — Mẹo dấu chấm (.) & @googlemail.com (Dành cho Facebook):</span>
+                  <span className="font-semibold text-fg">Cách 2 — Mẹo dấu chấm (.) & tạo trên App (Dành cho TikTok & Facebook):</span>
                   <p className="mt-0.5 text-fg-muted">
-                    Nếu trang chặn dấu <code className="font-mono text-[10px]">+</code>, hãy dịch dấu chấm:{' '}
+                    TikTok Web & Facebook phát hiện dấu <code className="font-mono text-[10px]">+</code> sẽ bắt quét QR bảo mật. Hãy dùng <strong>dấu chấm</strong>:{' '}
                     <code className="font-mono text-[10px] text-fg">t.enban@gmail.com</code>,{' '}
                     <code className="font-mono text-[10px] text-fg">te.nban@gmail.com</code>,{' '}
-                    <code className="font-mono text-[10px] text-fg">ten.ban@gmail.com</code> hoặc đổi đuôi thành{' '}
-                    <code className="font-mono text-[10px] text-fg">tenban@googlemail.com</code>. Tất cả đều về chung 1 Gmail!
+                    <code className="font-mono text-[10px] text-fg">ten.ban@gmail.com</code> (Với TikTok: đăng ký trong App điện thoại mục <em>Hồ sơ → Thêm tài khoản</em> rồi lên Web Ẩn danh quét QR lấy cookie).
                   </p>
                 </div>
                 <div className="rounded border border-line bg-surface p-2">
