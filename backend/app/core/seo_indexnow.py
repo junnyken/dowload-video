@@ -21,7 +21,7 @@ from fastapi import APIRouter
 
 router = APIRouter()
 
-SITE_URL = (os.getenv("FRONTEND_URL") or os.getenv("VIDGRAB_WEB_URL") or "https://dowloadvideo.io.vn").rstrip("/")
+SITE_URL = (os.getenv("VIDGRAB_WEB_URL") or os.getenv("FRONTEND_URL") or "https://dowloadvideo.io.vn").split(",")[0].strip().rstrip("/")
 INDEXNOW_KEY = (os.getenv("INDEXNOW_KEY") or "7b9e4f2a8c1d6e3b5a0f9c8d7e6f5a4b").strip()
 
 # All 62 unique localized SEO landing pages (31 Vietnamese + 31 English)
