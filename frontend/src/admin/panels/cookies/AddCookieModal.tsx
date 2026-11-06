@@ -3,12 +3,13 @@ import { cn } from '../../utils/cn'
 import type { AddCookieFormData, ImportMode } from './cookie.types'
 import { DEFAULT_ADD_FORM } from './cookie.types'
 import { testCookieApi, type TestCookieResponse } from '../../api/cookies'
+import { PLATFORM_COOKIE_GUIDES } from './CookieGuideBanner'
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const PLATFORMS = [
   'youtube', 'instagram', 'tiktok', 'twitter', 'facebook',
-  'bilibili', 'douyin', 'soundcloud', 'pinterest', 'reddit', 'vimeo', 'threads',
+  'douyin', 'xiaohongshu', 'bilibili', 'reddit', 'threads', 'soundcloud', 'pinterest', 'vimeo',
 ]
 
 const IMPORT_MODES: Array<{ value: ImportMode; label: string }> = [
@@ -125,6 +126,7 @@ export function AddCookieModal({ isOpen, onClose, onSave, onTest }: AddCookieMod
 
   const canSubmit = form.platform && form.accountLabel && form.rawCookie
   const hint = FORMAT_HINTS[form.importMode]
+  const platformSpec = form.platform ? PLATFORM_COOKIE_GUIDES[form.platform] : undefined
 
   return (
     <>
@@ -191,6 +193,32 @@ export function AddCookieModal({ isOpen, onClose, onSave, onTest }: AddCookieMod
                 />
               </div>
             </div>
+
+            {/* Platform contextual quick guide */}
+            {platformSpec && (
+              <div className="rounded-control border border-line bg-surface-2/60 p-3 text-[11px] space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <span className="font-semibold text-fg">
+                    📌 Mẹo lấy Cookie {platformSpec.name} lâu chết ({platformSpec.recommendedPool})
+                  </span>
+                  <code className="rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] text-fg">
+                    {platformSpec.robotsUrl}
+                  </code>
+                </div>
+                <p className="text-fg-2 leading-relaxed">
+                  1. Mở <strong>Ẩn danh (Ctrl+Shift+N)</strong> → Đăng nhập → Vào thẳng <strong>{platformSpec.robotsUrl}</strong> → Export Netscape → <strong>Đóng cửa sổ Ẩn danh (X), KHÔNG bấm Đăng xuất</strong>.
+                </p>
+                <p className="text-fg-muted leading-relaxed">
+                  <strong>Khóa bắt buộc:</strong>{' '}
+                  {platformSpec.requiredKeys.map(k => (
+                    <code key={k} className="mr-1 rounded bg-surface px-1 py-0.5 font-mono text-[10px] text-fg">
+                      {k}
+                    </code>
+                  ))}
+                  · <strong>1 Gmail:</strong> {platformSpec.gmailTrick}
+                </p>
+              </div>
+            )}
 
             {/* Import Mode selector */}
             <div>

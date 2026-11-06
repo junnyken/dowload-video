@@ -12,6 +12,7 @@ import {
 } from '../hooks/useAdminCookiePool'
 import { adminKeys } from '../lib/queryKeys'
 import { CookieToolbar, CookieBulkBar, TestAllConfirm, describeStorage, type BatchProgress } from '../panels/cookies/CookieToolbar'
+import { CookieGuideBanner } from '../panels/cookies/CookieGuideBanner'
 import type { CookieItem, CookieAction, AddCookieFormData, LiveTest } from '../panels/cookies/cookie.types'
 import {
   fetchCookieList, retestCookie, setCookieDisabled, encryptAllCookies,
@@ -21,25 +22,28 @@ import {
 // ─── Platform display helpers ──────────────────────────────────────────────────
 
 const PLATFORM_ICONS: Record<string, string> = {
-  youtube:    'YT',
-  tiktok:     'TK',
-  facebook:   'FB',
-  instagram:  'IG',
-  twitter:    'TW',
-  x:          'X',
-  reddit:     'RD',
-  bilibili:   'BL',
-  threads:    'TH',
-  soundcloud: 'SC',
-  spotify:    'SP',
+  youtube:     'YT',
+  tiktok:      'TK',
+  facebook:    'FB',
+  instagram:   'IG',
+  twitter:     'TW',
+  x:           'X',
+  douyin:      'DY',
+  xiaohongshu: 'XH',
+  reddit:      'RD',
+  bilibili:    'BL',
+  threads:     'TH',
+  soundcloud:  'SC',
+  spotify:     'SP',
 }
 
-const DEFAULT_PLATFORMS = ['youtube', 'tiktok', 'facebook', 'instagram']
+const DEFAULT_PLATFORMS = ['youtube', 'tiktok', 'facebook', 'instagram', 'twitter', 'douyin', 'xiaohongshu']
 
 function platformLabel(p: string): string {
   const map: Record<string, string> = {
     youtube: 'YouTube', tiktok: 'TikTok', facebook: 'Facebook',
     instagram: 'Instagram', twitter: 'Twitter/X', x: 'X',
+    douyin: 'Douyin', xiaohongshu: 'Xiaohongshu',
     reddit: 'Reddit', bilibili: 'Bilibili', threads: 'Threads',
     soundcloud: 'SoundCloud', spotify: 'Spotify',
   }
@@ -508,6 +512,11 @@ export function CookiesPage() {
           </p>
         )}
       </div>
+
+      <CookieGuideBanner
+        activePlatform={activePlatform}
+        onSelectPlatform={p => { setActivePlatform(p); setLocalOverrides({}) }}
+      />
 
       {/* Dynamic platform tabs */}
       <div className="flex items-center gap-2 flex-wrap">
