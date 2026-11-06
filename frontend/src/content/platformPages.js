@@ -34,7 +34,7 @@ export const platformPages = [
     slugEn: 'tiktok-video-downloader',
     en: {
       title: "TikTok Video Downloader without Watermark | VidGrab",
-      description: "Paste a TikTok link to save the video to your device, with an option to remove the watermark/logo. Works with tiktok.com and vm.tiktok.com links, right in your browser.",
+      description: "Paste a TikTok link to save the video to your device with watermark/logo removal. Works with tiktok.com and vm.tiktok.com links right in your browser.",
       h1: "Download TikTok videos without watermark",
       intro: "Paste a TikTok video link in the box below, turn on watermark removal and save a clean copy to your device. No app to install.",
       steps: [
@@ -192,7 +192,7 @@ export const platformPages = [
     slugEn: 'douyin-video-downloader',
     en: {
       title: "Douyin Video Downloader without Watermark | VidGrab",
-      description: "Paste a Douyin link to save the video to your device, with an option to remove the watermark/logo. Works with douyin.com and short v.douyin.com links, right in your browser.",
+      description: "Paste a Douyin link to save the video to your device with watermark/logo removal. Works with douyin.com and v.douyin.com links right in your browser.",
       h1: "Download Douyin videos without watermark",
       intro: "Douyin is the Chinese version of TikTok. Paste a Douyin video link in the box below, turn on watermark removal and save a clean copy.",
       steps: [
@@ -620,7 +620,7 @@ export const platformPages = [
     slug: 'tai-video-xiaohongshu',
     slugEn: 'xiaohongshu-video-downloader',
     en: {
-      title: 'Xiaohongshu (RedNote) Video & Photo Downloader without Watermark | VidGrab',
+      title: 'Xiaohongshu (RedNote) Video & Photo Downloader | VidGrab',
       description: 'Paste a Xiaohongshu (RedNote) or xhslink.com link to download public videos and photo carousels without watermark in 1080p MP4 right in your browser.',
       h1: 'Download Xiaohongshu (RedNote) videos & photos',
       intro: 'Paste a public xiaohongshu.com or short xhslink.com post link below to save clean videos or photo slides to your device.',
@@ -636,7 +636,7 @@ export const platformPages = [
       ],
     },
     platform: 'Xiaohongshu',
-    title: 'Tải video Tiểu Hồng Thư (Xiaohongshu / RedNote) không logo | VidGrab',
+    title: 'Tải video Tiểu Hồng Thư (Xiaohongshu) không logo | VidGrab',
     description:
       'Dán link Tiểu Hồng Thư (xiaohongshu.com hoặc xhslink.com) để lưu video MP4 1080p không logo và album ảnh công khai về điện thoại hoặc máy tính.',
     h1: 'Tải video & ảnh Tiểu Hồng Thư (Xiaohongshu)',

@@ -15,13 +15,13 @@ export const seoPages = [
     path: '/',
     priority: '1.0',
     vi: {
-      title: 'VidGrab - Tải video TikTok, Douyin, Facebook, YouTube không logo',
+      title: 'VidGrab - Tải video TikTok, Douyin, YouTube không logo',
       description: 'Dán link để tải video và nhạc từ TikTok, Douyin, Facebook, Instagram, YouTube và nhiều nền tảng khác. Xoá watermark, tải cả kênh, dùng ngay trên trình duyệt.',
       h1: 'Tải video và nhạc từ hơn 20 nền tảng',
     },
     en: {
-      title: 'VidGrab - Download TikTok, Douyin, Facebook & YouTube videos without watermark',
-      description: 'Paste a link to download videos and music from TikTok, Douyin, Facebook, Instagram, YouTube and more. Remove watermarks, grab whole channels, right in your browser.',
+      title: 'VidGrab - Download TikTok, Douyin & YouTube No Watermark',
+      description: 'Paste a link to download videos and music from TikTok, Douyin, Facebook, Instagram, YouTube and more. Remove watermarks and grab whole channels in your browser.',
       h1: 'Download videos and music from 20+ platforms',
     },
   },
@@ -43,13 +43,13 @@ export const seoPages = [
     path: '/extension',
     priority: '0.8',
     vi: {
-      title: 'Tiện ích VidGrab cho Chrome - bắt video trên mọi trang | VidGrab',
+      title: 'Tiện ích VidGrab Chrome - Bắt video mọi trang | VidGrab',
       description: 'Cài tiện ích VidGrab để tải video ngay trên trang đang xem: bắt MP4, HLS, DASH, tải cả kênh Douyin, TikTok, Facebook Reels và gửi sang app VidGrab.',
       h1: 'Tiện ích trình duyệt VidGrab',
     },
     en: {
       title: 'VidGrab Chrome extension - grab videos on any page | VidGrab',
-      description: 'Install the VidGrab extension to download videos on the page you watch: grab MP4, HLS and DASH, collect whole Douyin, TikTok and Facebook Reels channels, and hand them to the VidGrab app.',
+      description: 'Install the VidGrab extension to grab MP4, HLS and DASH streams, collect whole Douyin, TikTok and Facebook Reels channels, and send them to VidGrab.',
       h1: 'VidGrab browser extension',
     },
   },
@@ -63,7 +63,7 @@ export const seoPages = [
     },
     en: {
       title: 'Download VidGrab for Windows | VidGrab',
-      description: 'The VidGrab Windows app downloads videos on your own computer: whole channels, quality choice, scheduling, channel watch, and videos handed over by the browser extension.',
+      description: 'The VidGrab Windows app downloads videos on your PC: whole channels, quality selection, scheduling, channel watch, and browser extension handoff.',
       h1: 'Download VidGrab for Windows',
     },
   },
