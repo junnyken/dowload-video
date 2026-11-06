@@ -268,6 +268,24 @@ async def lifespan(app: FastAPI):
     except Exception as _pt_err:
         print(f"[Startup] proxy test skipped: {type(_pt_err).__name__}")
 
+    # Automatic IndexNow SEO push (Bing, ChatGPT Search, Yandex, Seznam, Naver)
+    # Runs once per 12h in production after 45s delay so frontend key file is live.
+    if os.getenv("ENV", "production").lower() == "production":
+        try:
+            import threading as _threading
+            import time as _time
+            from app.core.seo_indexnow import ping_indexnow as _ping_indexnow
+            def _delayed_seo_ping():
+                _time.sleep(45)
+                try:
+                    res = _ping_indexnow(force=False)
+                    print(f"[SEO-IndexNow] Auto-ping result: {res.get('endpoints')}")
+                except Exception as _seo_e:
+                    print(f"[SEO-IndexNow] Auto-ping skipped: {_seo_e}")
+            _threading.Thread(target=_delayed_seo_ping, name="seo-indexnow", daemon=True).start()
+        except Exception as _seo_err:
+            print(f"[Startup] SEO IndexNow thread skipped: {_seo_err}")
+
     # Send Telegram startup notification (non-blocking, failure is OK)
     try:
         from app.core.notifications import notify_system_startup
@@ -572,6 +590,9 @@ app.include_router(telegram_link_router, prefix="/api/v1/telegram", tags=["Teleg
 
 from app.api.yt_health import router as yt_health_router
 app.include_router(yt_health_router, prefix="/api/v1/admin", tags=["YouTube Health"])
+
+from app.core.seo_indexnow import router as seo_indexnow_router
+app.include_router(seo_indexnow_router, prefix="/api/v1", tags=["SEO & IndexNow"])
 
 from app.api.ops import router as ops_router
 app.include_router(ops_router, prefix="/api/v1/admin", tags=["Ops Signals"])

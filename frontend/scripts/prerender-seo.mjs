@@ -21,6 +21,9 @@ const dist = join(root, 'dist');
 const SITE = (process.env.VITE_SITE_URL || DEFAULT_SITE).replace(/\/+$/, '');
 const LANGS = ['vi', 'en'];
 const TODAY = new Date().toISOString().slice(0, 10);
+const INDEXNOW_KEY = (process.env.VITE_INDEXNOW_KEY || '7b9e4f2a8c1d6e3b5a0f9c8d7e6f5a4b').trim();
+const GOOGLE_VERIFY = (process.env.VITE_GOOGLE_SITE_VERIFICATION || '').trim();
+const BING_VERIFY = (process.env.VITE_BING_SITE_VERIFICATION || '').trim();
 
 // Words of the static body. wording: BA review (English drafted with AI).
 const L = {
@@ -133,6 +136,8 @@ function render(page, lang) {
     `<link rel="alternate" hreflang="vi" href="${url(page.path, 'vi')}" />`,
     `<link rel="alternate" hreflang="en" href="${url(page.path, 'en')}" />`,
     `<link rel="alternate" hreflang="x-default" href="${url(page.path, 'vi')}" />`,
+    ...(GOOGLE_VERIFY ? [`<meta name="google-site-verification" content="${esc(GOOGLE_VERIFY)}" />`] : []),
+    ...(BING_VERIFY ? [`<meta name="msvalidate.01" content="${esc(BING_VERIFY)}" />`] : []),
     ...structuredData(page, lang).map((o) => `<script type="application/ld+json">${jsonLd(o)}</script>`),
   ].join('\n    '), 'canonical');
   html = setTag(html, /<noscript>[\s\S]*?<\/noscript>/, `<noscript><div style="padding:40px;text-align:center;font-family:sans-serif;color:#1C1917;background:#FAFAF9;min-height:100vh;display:flex;align-items:center;justify-content:center;"><p>${esc(L[lang].noscript)}</p></div></noscript>`, 'noscript');
@@ -152,6 +157,7 @@ for (const page of pages) {
   }
 }
 
+const allUrls = pages.flatMap((page) => LANGS.map((lang) => url(page.path, lang)));
 const sitemap = pages.flatMap((page) => LANGS.map((lang) => `  <url>
     <loc>${url(page.path, lang)}</loc>
     <lastmod>${TODAY}</lastmod>
@@ -163,5 +169,74 @@ const sitemap = pages.flatMap((page) => LANGS.map((lang) => `  <url>
   </url>`));
 writeFileSync(join(dist, 'sitemap.xml'),
   `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${sitemap.join('\n')}\n</urlset>\n`);
-writeFileSync(join(dist, 'robots.txt'), `User-agent: *\nAllow: /\nAllow: /en/\nDisallow: /api/\nDisallow: /vid-admin\n\nSitemap: ${SITE}/sitemap.xml\n`);
-console.log(`[prerender-seo] ${written} pages (${pages.length} × ${LANGS.length} languages), site=${SITE}`);
+
+// IndexNow key verification file (Bing, Yandex, Seznam, Naver, ChatGPT Search)
+if (INDEXNOW_KEY) {
+  writeFileSync(join(dist, `${INDEXNOW_KEY}.txt`), INDEXNOW_KEY);
+}
+if (BING_VERIFY) {
+  writeFileSync(join(dist, 'BingSiteAuth.xml'), `<?xml version="1.0"?>\n<users>\n\t<user>${esc(BING_VERIFY)}</user>\n</users>\n`);
+}
+
+// Write SEO manifest for backend IndexNow auto-pinger
+writeFileSync(join(dist, 'seo-manifest.json'), JSON.stringify({
+  site: SITE,
+  generated_at: new Date().toISOString(),
+  indexnow_key: INDEXNOW_KEY,
+  indexnow_key_location: `${SITE}/${INDEXNOW_KEY}.txt`,
+  total_urls: allUrls.length,
+  urls: allUrls,
+}, null, 2));
+
+// Write llms.txt & llms-full.txt for AI Search Engines (ChatGPT Search, Perplexity, Claude, Gemini) & AI Directories
+const enLinks = pages.map((page) => `- [${page.text('en').title}](${url(page.path, 'en')}): ${page.text('en').description}`).join('\n');
+const viLinks = pages.map((page) => `- [${page.text('vi').title}](${url(page.path, 'vi')}): ${page.text('vi').description}`).join('\n');
+const llmsTxt = `# ${SITE_NAME} — Ad-Free 1080p/4K Video Downloader & AI Creator Studio
+
+> ${SITE_NAME} (${SITE}) is an all-in-one, zero-pop-up-ad web video downloader, AI subtitle studio, and developer API supporting 18+ global and Asian platforms including YouTube, TikTok (no watermark), Douyin, Xiaohongshu (RedNote), Bilibili, Kuaishou, Instagram, Facebook, X (Twitter), Threads, Reddit, Pinterest, Vimeo, SoundCloud, and Spotify.
+
+## Core Capabilities & Pricing Tiers
+- **Instant Free 1080p Tier ($0)**:
+  - **Guest (No Login)**: 5 downloads/day in Full HD 1080p (including 2 YouTube 1080p videos/day).
+  - **Free Account**: 10 downloads/day in Full HD 1080p (including 5 YouTube 1080p videos/day) + Batch Download (5 links/batch).
+- **Starter / Pro / Team AI Creator Studio**:
+  - **Ultra HD 2K / 4K / 8K** video & audio extraction.
+  - **TikTok & Douyin Photo Carousel (.ZIP)**: Download full photo slideshows as single images or a packaged ZIP archive.
+  - **AI ASR Speech-to-Subtitle**: Automatically transcribe video audio into timestamped \`.SRT\` / \`.VTT\` subtitles.
+  - **AI Batch Subtitle Translator**: Translate \`.SRT\` and \`.VTT\` subtitle files across languages with AI.
+  - **Smart AI Video Analysis**: Auto-detect highlight clips for Shorts/Reels, generate GIFs, and summarize video content.
+  - **Reup Clean Studio**: Strip metadata, rotate MD5 hash, and apply anti-fingerprint filters for content repurposing.
+  - **Automation & Developer REST API**: Automated channel watch, scheduled downloads, cloud file pinning, and REST API (\`${SITE}/en/api-docs\`).
+
+## English Pages (International)
+${enLinks}
+
+## Vietnamese Pages (Tiếng Việt)
+${viLinks}
+`;
+writeFileSync(join(dist, 'llms.txt'), llmsTxt);
+writeFileSync(join(dist, 'llms-full.txt'), llmsTxt);
+
+writeFileSync(join(dist, 'robots.txt'), [
+  'User-agent: *',
+  'Allow: /',
+  'Allow: /en/',
+  'Disallow: /api/',
+  'Disallow: /vid-admin',
+  '',
+  'User-agent: OAI-SearchBot',
+  'Allow: /',
+  '',
+  'User-agent: ChatGPT-User',
+  'Allow: /',
+  '',
+  'User-agent: PerplexityBot',
+  'Allow: /',
+  '',
+  'User-agent: ClaudeBot',
+  'Allow: /',
+  '',
+  `Sitemap: ${SITE}/sitemap.xml`,
+  '',
+].join('\n'));
+console.log(`[prerender-seo] ${written} pages (${pages.length} × ${LANGS.length} languages), site=${SITE}, indexnow=${INDEXNOW_KEY}`);
