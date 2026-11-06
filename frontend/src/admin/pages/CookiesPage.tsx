@@ -223,7 +223,12 @@ export function CookiesPage() {
   const testOptions = Object.entries(statusData?.pools ?? {})
     .filter(([p, v]) => (v?.total ?? 0) > 0 && isSupported(p))
     .map(([p, v]) => ({ platform: p, label: platformLabel(p), count: v?.total ?? 0 }))
-  const testSelected = (testSel ?? [activePlatform]).filter(p => testOptions.some(o => o.platform === p))
+  const rawTestSelected = (testSel ?? [activePlatform]).filter(p => testOptions.some(o => o.platform === p))
+  const testSelected = rawTestSelected.length > 0
+    ? rawTestSelected
+    : testOptions.some(o => o.platform === activePlatform)
+      ? [activePlatform]
+      : []
   const testCount = testOptions.filter(o => testSelected.includes(o.platform)).reduce((n, o) => n + o.count, 0)
 
   function changeTestSel(next: string[]) {
@@ -243,7 +248,11 @@ export function CookiesPage() {
     setPendingDel(null)
   }
   useEffect(() => () => { if (pendingTimer.current) clearTimeout(pendingTimer.current) }, [])
-  useEffect(() => { setSelected(new Set()); clearPending() }, [activePlatform])
+  useEffect(() => {
+    setSelected(new Set())
+    clearPending()
+    changeTestSel([activePlatform])
+  }, [activePlatform])
 
   function toggleSelect(hash: string) {
     clearPending()

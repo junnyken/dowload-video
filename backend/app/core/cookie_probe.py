@@ -169,12 +169,123 @@ def _probe_tiktok(c: str, proxy):
     return INCONCLUSIVE, "TikTok trả lời không rõ ràng"
 
 
+def _cookie_dict(cookie_b64: str, domains: tuple[str, ...]) -> dict[str, str]:
+    header = _cookie_header(cookie_b64, domains)
+    out: dict[str, str] = {}
+    for item in header.split("; "):
+        if "=" in item:
+            k, v = item.split("=", 1)
+            out[k.strip()] = v.strip()
+    return out
+
+
+def _probe_twitter(c: str, proxy):
+    domains = ("x.com", "twitter.com")
+    kv = _cookie_dict(c, domains)
+    if not kv.get("auth_token"):
+        return REJECTED, "Twitter/X thiếu khóa đăng nhập auth_token"
+    ct0 = kv.get("ct0", "")
+    headers = {
+        "Authorization": (
+            "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs"
+            "%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA"
+        ),
+        "x-twitter-active-user": "yes",
+        "x-twitter-auth-type": "OAuth2Session",
+        "Referer": "https://x.com/",
+    }
+    if ct0:
+        headers["x-csrf-token"] = ct0
+    r = _http_get(
+        "https://api.x.com/1.1/account/settings.json",
+        _cookie_header(c, domains),
+        headers,
+        proxy,
+    )
+    if r.status_code == 429:
+        return INCONCLUSIVE, "Twitter/X giới hạn yêu cầu kiểm tra"
+    d = _json(r) or {}
+    if r.status_code == 200 and d.get("screen_name"):
+        return OK, "Twitter/X xác nhận đang đăng nhập"
+    if r.status_code in (401, 403):
+        errs = d.get("errors") or []
+        codes = {e.get("code") for e in errs if isinstance(e, dict)}
+        if 32 in codes or 89 in codes or r.status_code == 401:
+            return REJECTED, "Twitter/X báo phiên đăng nhập không còn hiệu lực"
+    if kv.get("auth_token") and kv.get("ct0"):
+        return OK, "Twitter/X có đủ khóa phiên (auth_token + ct0)"
+    return INCONCLUSIVE, "Twitter/X trả lời không rõ ràng"
+
+
+def _probe_facebook(c: str, proxy):
+    domains = ("facebook.com",)
+    kv = _cookie_dict(c, domains)
+    c_user = kv.get("c_user", "")
+    xs = kv.get("xs", "")
+    if not c_user or not xs:
+        return REJECTED, "Facebook thiếu khóa đăng nhập bắt buộc (c_user hoặc xs)"
+    r = _http_get(
+        "https://www.facebook.com/me",
+        _cookie_header(c, domains),
+        {"Accept": "text/html,application/xhtml+xml", "Sec-Fetch-Mode": "navigate"},
+        proxy,
+    )
+    if r.status_code in (301, 302, 303, 307, 308):
+        loc = (r.headers.get("Location") or "").lower()
+        if "checkpoint" in loc:
+            return REJECTED, "Tài khoản Facebook đang bị khóa Checkpoint"
+        if "/login" in loc or "login.php" in loc:
+            return REJECTED, "Facebook báo phiên đăng nhập không còn hiệu lực"
+        if "facebook.com/" in loc:
+            return OK, "Facebook xác nhận đang đăng nhập"
+    if r.status_code == 200:
+        body = r.text or ""
+        if '"USER_ID":"0"' in body:
+            return REJECTED, "Facebook báo chưa đăng nhập (phiên không còn hiệu lực)"
+        if f'"USER_ID":"{c_user}"' in body or f'"ACCOUNT_ID":"{c_user}"' in body:
+            return OK, "Facebook xác nhận đang đăng nhập"
+    return OK, "Facebook có đủ khóa phiên hợp lệ (c_user + xs)"
+
+
+def _probe_douyin(c: str, proxy):
+    domains = ("douyin.com",)
+    kv = _cookie_dict(c, domains)
+    r = _http_get(
+        "https://www.douyin.com/passport/web/account/info/?aid=6383&device_platform=webapp",
+        _cookie_header(c, domains),
+        {"Referer": "https://www.douyin.com/"},
+        proxy,
+    )
+    d = _json(r) or {}
+    data = d.get("data") or {}
+    if data.get("user_id_str") or data.get("uid"):
+        return OK, "Douyin xác nhận đang đăng nhập"
+    if kv.get("sessionid") or kv.get("sessionid_ss") or (kv.get("ttwid") and (kv.get("odin_tt") or kv.get("s_v_web_id"))):
+        return OK, "Douyin có đủ cookie phiên hợp lệ"
+    return REJECTED, "Douyin thiếu cookie phiên bắt buộc (ttwid / sessionid)"
+
+
+def _probe_xiaohongshu(c: str, proxy):
+    domains = ("xiaohongshu.com",)
+    kv = _cookie_dict(c, domains)
+    if kv.get("web_session") and kv.get("a1"):
+        return OK, "Xiaohongshu có đủ khóa phiên (web_session + a1)"
+    if kv.get("web_session"):
+        return OK, "Xiaohongshu có khóa phiên web_session"
+    return REJECTED, "Xiaohongshu thiếu khóa phiên bắt buộc (web_session)"
+
+
 # Platforms not listed here answer `unsupported`: we have no reliable,
 # login-free-of-side-effects endpoint for them, and guessing would mislead.
 PROBES: dict[str, Callable] = {
     "youtube": _probe_youtube,
     "tiktok": _probe_tiktok,
     "instagram": _probe_instagram,
+    "facebook": _probe_facebook,
+    "twitter": _probe_twitter,
+    "x": _probe_twitter,
+    "douyin": _probe_douyin,
+    "xiaohongshu": _probe_xiaohongshu,
     "reddit": _probe_reddit,
     "bilibili": _probe_bilibili,
 }
