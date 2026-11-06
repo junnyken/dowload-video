@@ -21,7 +21,7 @@ from pydantic import BaseModel, field_validator
 
 from app.core.auth_middleware import get_optional_user as _auth_optional_user
 
-_PAID_TIERS = ("pro", "team", "enterprise")
+_PAID_TIERS = ("starter", "pro", "team", "enterprise", "api")
 
 logger = logging.getLogger(__name__)
 
@@ -35,24 +35,28 @@ router = APIRouter(tags=["Smart Analysis"])
 # ---------------------------------------------------------------------------
 # Tier gating constants (env-overridable)
 # ---------------------------------------------------------------------------
-FREE_ANALYSES_PER_DAY = int(os.getenv("AI_FREE_ANALYSES_PER_DAY", "5"))
+FREE_ANALYSES_PER_DAY = int(os.getenv("AI_FREE_ANALYSES_PER_DAY", "0"))
+STARTER_ANALYSES_PER_DAY = int(os.getenv("AI_STARTER_ANALYSES_PER_DAY", "10"))
 FREE_CLIP_SUGGESTIONS_MAX = 1   # free gets 1 highlight only
 PRO_ANALYSES_PER_DAY = int(os.getenv("AI_PRO_ANALYSES_PER_DAY", "50"))
 
 
 def anon_limit() -> int:
-    return int(os.environ.get("AI_ANALYSIS_ANON_DAILY_LIMIT", "2"))
+    return int(os.environ.get("AI_ANALYSIS_ANON_DAILY_LIMIT", "0"))
 
 
 def free_limit() -> int:
-    """Never below a guest's: production sets the guest limit to 1000 while
-    Free stayed at 5, so signing in cut the allowance (13/10)."""
-    return max(FREE_ANALYSES_PER_DAY, anon_limit())
+    return FREE_ANALYSES_PER_DAY
+
+
+def starter_limit() -> int:
+    return max(STARTER_ANALYSES_PER_DAY, free_limit())
 
 
 def pro_limit() -> int:
-    return max(PRO_ANALYSES_PER_DAY, free_limit())
+    return max(PRO_ANALYSES_PER_DAY, starter_limit())
 MAX_DURATION_FREE_S = 600.0     # 10 min max for free
+MAX_DURATION_STARTER_S = 1800.0 # 30 min max for Starter
 MAX_DURATION_PRO_S = 3600.0     # 60 min max for Pro
 
 VALID_ANALYSES = {"trim", "gif", "metadata", "clips", "summary"}
@@ -228,15 +232,15 @@ def _check_analysis_quota(
     today_str = date.today().isoformat()
 
     if user is None:
-        # Anonymous — 2/day per IP via Redis
+        guest_limit = anon_limit()
+        if guest_limit <= 0:
+            return False, "Tính năng Phân tích AI thông minh (Smart Analysis) đã bị khóa với Khách chưa đăng nhập. Vui lòng nâng cấp lên Starter / Pro / Team để sử dụng."
         ip = _get_client_ip(request)
         redis = _get_redis()
         if redis is None:
-            # Can't check quota; allow but log
             logger.warning("Redis unavailable — skipping anonymous quota check")
             return True, ""
         key = f"ai_quota:anon:{ip}:{today_str}"
-        guest_limit = anon_limit()
         try:
             count = redis.get(key)
             current = int(count) if count else 0
@@ -252,10 +256,14 @@ def _check_analysis_quota(
     tier = user.get("tier", "free")
     user_id = user.get("id")
 
-    if tier in _PAID_TIERS:
+    if tier == "starter":
+        daily_limit = starter_limit()
+    elif tier in _PAID_TIERS:
         daily_limit = pro_limit()
     else:
         daily_limit = free_limit()
+        if daily_limit <= 0:
+            return False, "Tính năng Phân tích AI thông minh (Smart Analysis) chỉ dành cho gói trả phí (Starter / Pro / Team). Vui lòng nâng cấp gói để sử dụng."
 
     # Check Redis first (fast path)
     redis = _get_redis()
@@ -383,7 +391,13 @@ async def submit_analyze_media(
     """
     # Tier limits
     tier = (user or {}).get("tier", "anonymous" if user is None else "free")
-    max_duration = MAX_DURATION_PRO_S if tier in _PAID_TIERS else MAX_DURATION_FREE_S
+    from app.core.quotas import is_admin_request
+    _is_admin = is_admin_request(request)
+    if not _is_admin and tier not in _PAID_TIERS:
+        allowed_q, reason_q = _check_analysis_quota(user, request)
+        if not allowed_q:
+            raise HTTPException(status_code=402, detail=reason_q)
+    max_duration = MAX_DURATION_STARTER_S if tier == "starter" else (MAX_DURATION_PRO_S if (tier in _PAID_TIERS or _is_admin) else MAX_DURATION_FREE_S)
 
     if body.duration_hint_s is not None and body.duration_hint_s > max_duration:
         raise HTTPException(

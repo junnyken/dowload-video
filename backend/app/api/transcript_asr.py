@@ -169,7 +169,20 @@ async def _create_asr_job(payload: CreateAsrJobRequest, identity, quota_subject)
 
     user_id = identity
     if not user_id:
-        raise HTTPException(status_code=401, detail="Cần đăng nhập để sử dụng tính năng tạo phụ đề tự động.")
+        raise HTTPException(
+            status_code=402,
+            detail="Tính năng Phiên âm AI (ASR - Chuyển giọng nói thành Phụ đề) đã bị khóa với Khách chưa đăng nhập. Vui lòng đăng nhập và nâng cấp gói trả phí để sử dụng.",
+        )
+
+    from app.core.quotas import get_user_tier  # noqa: PLC0415
+    user_tier = get_user_tier(str(user_id)) or "free"
+    if user_tier not in ("starter", "pro", "team", "enterprise", "api"):
+        raise HTTPException(
+            status_code=402,
+            detail="Tính năng Phiên âm AI (ASR - Chuyển giọng nói thành Phụ đề) chỉ dành cho gói trả phí (Starter / Pro / Team). Vui lòng nâng cấp gói để sử dụng.",
+        )
+
+    tier_asr_limit = 30 if user_tier == "starter" else (300 if user_tier in ("team", "enterprise", "api") else _DAILY_MINUTES_LIMIT)
 
     # ASR minutes are billed per minute, so the daily cap cannot hang off a
     # client-supplied X-Session-ID — see resolve_quota_subject.
@@ -202,7 +215,7 @@ async def _create_asr_job(payload: CreateAsrJobRequest, identity, quota_subject)
     try:
         reserve_resp = db.rpc(
             "reserve_transcript_asr_usage",
-            {"p_user_id": quota_key, "p_minutes": duration_minutes, "p_limit": _DAILY_MINUTES_LIMIT},
+            {"p_user_id": quota_key, "p_minutes": duration_minutes, "p_limit": tier_asr_limit},
         ).execute()
         reserved = bool(reserve_resp.data)
     except Exception as exc:
@@ -212,7 +225,7 @@ async def _create_asr_job(payload: CreateAsrJobRequest, identity, quota_subject)
     if not reserved:
         raise HTTPException(
             status_code=422,
-            detail=f"Vượt quá hạn mức tạo phụ đề tự động trong ngày ({_DAILY_MINUTES_LIMIT} phút/ngày).",
+            detail=f"Vượt quá hạn mức tạo phụ đề tự động trong ngày ({tier_asr_limit} phút/ngày).",
         )
 
     provider_name = asr_config.provider_name()
@@ -331,7 +344,14 @@ async def get_asr_quota(
 
     minutes_used: float | None = None
     quota_key = quota_subject or identity
-    if quota_key:
+    from app.core.quotas import get_user_tier  # noqa: PLC0415
+    user_tier = get_user_tier(str(identity)) if identity else "guest"
+    is_paid_asr = user_tier in ("starter", "pro", "team", "enterprise", "api")
+    if not is_paid_asr:
+        enabled = False
+        reason = "tier_locked"
+    effective_limit = 0 if not is_paid_asr else (30 if user_tier == "starter" else (300 if user_tier in ("team", "enterprise", "api") else _DAILY_MINUTES_LIMIT))
+    if quota_key and is_paid_asr:
         try:
             resp = (
                 _get_db().table("transcript_asr_usage")
@@ -350,9 +370,10 @@ async def get_asr_quota(
     return {
         "enabled": enabled,
         "unavailable_reason": reason,
-        "minutes_used": minutes_used,
-        "minutes_limit": _DAILY_MINUTES_LIMIT,
-        "per_job_max_minutes": _MAX_DURATION_MINUTES,
+        "tier_locked": not is_paid_asr,
+        "minutes_used": minutes_used if is_paid_asr else 0.0,
+        "minutes_limit": effective_limit,
+        "per_job_max_minutes": _MAX_DURATION_MINUTES if is_paid_asr else 0,
         "reset_at_utc": reset_at.isoformat(),
     }
 

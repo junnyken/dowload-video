@@ -71,7 +71,7 @@ function ProGate({ feature }) {
   const { t } = useTranslation("results");
   const lp = useLocalePath();
   return (
-    <div className="flex flex-col items-center justify-center py-6 text-center">
+    <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
       <span className="text-2xl mb-2">🔒</span>
       <p className="text-sm font-medium text-fg-muted">
         {t("smart.proGate", { feature })}
@@ -354,8 +354,11 @@ export default function SmartActionsPanel({
   onApplyGif,
   onQueueClips,
   hidePoweredBy = false,
+  userTier = "free",
+  onRequireUpgrade = null,
 }) {
   const { t } = useTranslation("results");
+  const isPaidTier = ["starter", "pro", "team", "enterprise", "api"].includes(userTier);
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -397,7 +400,7 @@ export default function SmartActionsPanel({
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        if (res.status === 429) {
+        if (res.status === 429 || res.status === 402) {
           throw new Error(err.detail || t("smart.quotaReached"));
         }
         throw new Error(err.detail || t("smart.errorStatus", { status: res.status }));
@@ -459,6 +462,11 @@ export default function SmartActionsPanel({
   }
 
   function handleToggle() {
+    if (!isPaidTier) {
+      setExpanded((prev) => !prev);
+      if (onRequireUpgrade) onRequireUpgrade();
+      return;
+    }
     const next = !expanded;
     setExpanded(next);
     if (next && !result && !loading && !error) {
@@ -548,6 +556,11 @@ export default function SmartActionsPanel({
         <div className="flex items-center gap-2">
           <span className="text-base">✨</span>
           <span className="text-sm font-semibold text-fg">Smart Analysis</span>
+          {!isPaidTier && (
+            <span className="text-[10px] font-bold bg-accent text-accent-fg px-1.5 py-0.5 rounded">
+              🔒 PRO
+            </span>
+          )}
           {loading && (
             <span className="text-xs text-fg-muted animate-pulse">{t("smart.analyzing")}</span>
           )}
@@ -563,100 +576,106 @@ export default function SmartActionsPanel({
       {/* Collapsible body */}
       {expanded && (
         <div className="border-t border-line">
-          {/* Loading state */}
-          {loading && !result && (
-            <div className="px-4 pt-3">
-              <p className="text-xs text-fg-muted mb-2 flex items-center gap-1">
-                <span className="inline-block w-4 h-4 border-2 border-line border-t-line rounded-full animate-spin" />
-                {t("smart.analyzingShort")}
-                <span className="animate-pulse">...</span>
-              </p>
-              <LoadingSkeleton />
-            </div>
-          )}
-
-          {/* Error state */}
-          {error && !loading && (
-            <div className="px-4 py-4 text-center">
-              <p className="text-sm text-danger mb-3">{error}</p>
-              <button
-                onClick={startAnalysis}
-                className="text-xs text-fg-2 underline hover:text-fg-2"
-              >
-                {t("smart.retry")}
-              </button>
-              <p className="text-xs text-fg-muted mt-1">
-                {t("smart.manualHint")}
-              </p>
-            </div>
-          )}
-
-          {/* Results */}
-          {result && !loading && (
+          {!isPaidTier ? (
+            <ProGate feature="Smart Analysis AI" />
+          ) : (
             <>
-              {/* Tab bar */}
-              {visibleTabs.length > 0 && (
-                <div className="flex border-b border-line overflow-x-auto">
-                  {visibleTabs.map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`flex-shrink-0 px-3 py-2 text-xs font-medium transition-colors ${
-                        activeTab === tab.id
-                          ? "border-b-2 border-line text-fg-2"
-                          : "text-fg-muted hover:text-fg-muted"
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
+              {/* Loading state */}
+              {loading && !result && (
+                <div className="px-4 pt-3">
+                  <p className="text-xs text-fg-muted mb-2 flex items-center gap-1">
+                    <span className="inline-block w-4 h-4 border-2 border-line border-t-line rounded-full animate-spin" />
+                    {t("smart.analyzingShort")}
+                    <span className="animate-pulse">...</span>
+                  </p>
+                  <LoadingSkeleton />
                 </div>
               )}
 
-              {/* Tab content */}
-              <div className="px-3 py-3">
-                {activeTab === "trim" && (
-                  <TrimTab
-                    suggestions={result.trim_suggestions}
-                    onApplyTrim={handleApplyTrim}
-                  />
-                )}
-                {activeTab === "clips" && (
-                  <HighlightsTab
-                    suggestions={result.clip_suggestions}
-                    onQueueClips={handleQueueClips}
-                    tierFiltered={result.tier_filtered}
-                  />
-                )}
-                {activeTab === "gif" && (
-                  <GifTab
-                    suggestions={result.gif_suggestions}
-                    onApplyGif={handleApplyGif}
-                  />
-                )}
-                {activeTab === "metadata" && (
-                  <MetadataTab suggestions={result.metadata_suggestions} />
-                )}
-              </div>
+              {/* Error state */}
+              {error && !loading && (
+                <div className="px-4 py-4 text-center">
+                  <p className="text-sm text-danger mb-3">{error}</p>
+                  <button
+                    onClick={startAnalysis}
+                    className="text-xs text-fg-2 underline hover:text-fg-2"
+                  >
+                    {t("smart.retry")}
+                  </button>
+                  <p className="text-xs text-fg-muted mt-1">
+                    {t("smart.manualHint")}
+                  </p>
+                </div>
+              )}
 
-              {/* Warnings */}
-              {result.warnings && result.warnings.length > 0 && (
-                <div className="px-3 pb-2">
-                  {result.warnings.map((w, i) => (
-                    <p key={i} className="text-xs text-accent-text">
-                      ⚠ {w}
-                    </p>
-                  ))}
+              {/* Results */}
+              {result && !loading && (
+                <>
+                  {/* Tab bar */}
+                  {visibleTabs.length > 0 && (
+                    <div className="flex border-b border-line overflow-x-auto">
+                      {visibleTabs.map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setActiveTab(tab.id)}
+                          className={`flex-shrink-0 px-3 py-2 text-xs font-medium transition-colors ${
+                            activeTab === tab.id
+                              ? "border-b-2 border-line text-fg-2"
+                              : "text-fg-muted hover:text-fg-muted"
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Tab content */}
+                  <div className="px-3 py-3">
+                    {activeTab === "trim" && (
+                      <TrimTab
+                        suggestions={result.trim_suggestions}
+                        onApplyTrim={handleApplyTrim}
+                      />
+                    )}
+                    {activeTab === "clips" && (
+                      <HighlightsTab
+                        suggestions={result.clip_suggestions}
+                        onQueueClips={handleQueueClips}
+                        tierFiltered={result.tier_filtered}
+                      />
+                    )}
+                    {activeTab === "gif" && (
+                      <GifTab
+                        suggestions={result.gif_suggestions}
+                        onApplyGif={handleApplyGif}
+                      />
+                    )}
+                    {activeTab === "metadata" && (
+                      <MetadataTab suggestions={result.metadata_suggestions} />
+                    )}
+                  </div>
+
+                  {/* Warnings */}
+                  {result.warnings && result.warnings.length > 0 && (
+                    <div className="px-3 pb-2">
+                      {result.warnings.map((w, i) => (
+                        <p key={i} className="text-xs text-accent-text">
+                          ⚠ {w}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Footer */}
+              {!hidePoweredBy && (
+                <div className="px-4 py-2 border-t border-line text-right">
+                  <span className="text-xs text-fg-2">Powered by VidGrab AI</span>
                 </div>
               )}
             </>
-          )}
-
-          {/* Footer */}
-          {!hidePoweredBy && (
-            <div className="px-4 py-2 border-t border-line text-right">
-              <span className="text-xs text-fg-2">Powered by VidGrab AI</span>
-            </div>
           )}
         </div>
       )}

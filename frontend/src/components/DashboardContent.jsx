@@ -1261,7 +1261,15 @@ export default function DashboardContent() {
   };
 
   // ── Upgrade #4: TikTok / Douyin Photo Carousel Download ─────
+  const isPaidUser = ['starter', 'pro', 'team', 'enterprise', 'api'].includes(userTier);
   const handleSingleSlideDownload = (imgUrl, index) => {
+    if (!isPaidUser) {
+      setUpgradeErrorCode('tier_required_feature');
+      setShowUpgradeModal(true);
+      trackEvent(EVENT.PAYWALL_SEEN, { trigger: 'photo_carousel_locked' });
+      setPaywallTrigger('tier_required_feature');
+      return;
+    }
     const baseTitle = (videoInfo?.title || 'slide').slice(0, 60);
     const downloadUrl = `${API_BASE}/api/v1/download-thumbnail?url=${encodeURIComponent(imgUrl)}&filename=${encodeURIComponent(`${baseTitle}-${index + 1}`)}`;
     const a = document.createElement('a');
@@ -1780,6 +1788,13 @@ export default function DashboardContent() {
   // translation jobs (Phụ đề → Dịch): fetch this SRT, hand it to /transcript-translate.
   const handleTranslateSrt = async (lang) => {
     if (!lang || srtBusy) return;
+    if (!isPaidUser) {
+      setUpgradeErrorCode('tier_required_feature');
+      setShowUpgradeModal(true);
+      trackEvent(EVENT.PAYWALL_SEEN, { trigger: 'translate_srt_locked' });
+      setPaywallTrigger('tier_required_feature');
+      return;
+    }
     if (!session?.access_token) { showToast(t('result.translateNeedsLogin')); return; }
     setSrtBusy(true);
     try {
@@ -2026,7 +2041,17 @@ export default function DashboardContent() {
 
             <button
               type="button"
-              onClick={() => { setShowSchedulePicker(v => !v); if (showSchedulePicker) setScheduledAt(''); }}
+              onClick={() => {
+                if (!isPaidUser) {
+                  setUpgradeErrorCode('tier_required_feature');
+                  setShowUpgradeModal(true);
+                  trackEvent(EVENT.PAYWALL_SEEN, { trigger: 'schedule_locked' });
+                  setPaywallTrigger('tier_required_feature');
+                  return;
+                }
+                setShowSchedulePicker(v => !v);
+                if (showSchedulePicker) setScheduledAt('');
+              }}
               className={`flex items-center gap-1.5 text-xs font-medium rounded-full px-3 py-1 transition-colors border cursor-pointer ${
                 showSchedulePicker || scheduledAt
                   ? 'bg-accent-soft text-accent-text border-accent/40'
@@ -2037,6 +2062,9 @@ export default function DashboardContent() {
               {scheduledAt
                 ? t('schedule.scheduledFor', { when: new Date(scheduledAt).toLocaleString(dateLocale(), { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) })
                 : t('schedule.button')}
+              {!isPaidUser && (
+                <span className="bg-accent text-accent-fg text-[10px] px-1.5 py-0.5 rounded font-bold leading-tight">PRO</span>
+              )}
             </button>
 
             <button
@@ -2606,22 +2634,41 @@ export default function DashboardContent() {
                       {isEnUi
                         ? `Photo Slideshow (${videoInfo.images.length} HD Photos)`
                         : `Album ảnh trượt TikTok / Douyin (${videoInfo.images.length} ảnh gốc HD)`}
+                      {!isPaidUser && (
+                        <span className="bg-accent text-accent-fg text-[10px] px-2 py-0.5 rounded-full font-bold">
+                          {isEnUi ? '🔒 Starter / Pro' : '🔒 Gói trả phí'}
+                        </span>
+                      )}
                     </h5>
                     <p className="text-xs text-fg-muted mt-0.5">
-                      {isEnUi
-                        ? 'Download individual photos for free or grab the full album as a single .ZIP file.'
-                        : 'Tải lẻ từng ảnh miễn phí hoặc tải trọn bộ Album nén .ZIP chỉ với 1 chạm.'}
+                      {!isPaidUser
+                        ? (isEnUi
+                          ? 'Photo Slideshow download is locked for Guest & Free accounts. Upgrade to Starter or Pro to download HD photos & .ZIP.'
+                          : 'Tính năng tải Album ảnh trượt TikTok/Douyin đã khóa với Khách & tài khoản Free. Nâng cấp lên Starter hoặc Pro để mở khóa.')
+                        : (isEnUi
+                          ? 'Download individual photos (Starter) or grab the full album as a single .ZIP file (Pro).'
+                          : 'Tải lẻ từng ảnh gốc (Starter) hoặc tải trọn bộ Album nén .ZIP chỉ với 1 chạm (Pro).')}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {videoInfo.audio_url && (
                       <button
                         type="button"
-                        onClick={() => handleFormatDownload({ url: videoInfo.audio_url, ext: 'mp3', label: 'Music MP3' })}
+                        onClick={() => {
+                          if (!isPaidUser) {
+                            setUpgradeErrorCode('tier_required_feature');
+                            setShowUpgradeModal(true);
+                            trackEvent(EVENT.PAYWALL_SEEN, { trigger: 'photo_carousel_audio_locked' });
+                            setPaywallTrigger('tier_required_feature');
+                            return;
+                          }
+                          handleFormatDownload({ url: videoInfo.audio_url, ext: 'mp3', label: 'Music MP3' });
+                        }}
                         className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-surface-2 text-fg-2 border border-line hover:border-accent/40 hover:text-accent-text transition-all cursor-pointer"
                       >
                         <Music className="w-3.5 h-3.5 text-accent-text" />
                         {isEnUi ? 'Download Audio MP3' : 'Tải nhạc nền MP3'}
+                        {!isPaidUser && <Lock className="w-3 h-3 text-fg-muted" />}
                       </button>
                     )}
                     <button
@@ -2641,7 +2688,7 @@ export default function DashboardContent() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[420px] overflow-y-auto pr-1">
                   {videoInfo.images.map((imgUrl, idx) => (
                     <div key={idx} className="group relative rounded-xl overflow-hidden border border-line bg-surface-2 aspect-[3/4]">
-                      <img src={imgUrl} alt={`Slide ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                      <img src={imgUrl} alt={`Slide ${idx + 1}`} className={`w-full h-full object-cover ${!isPaidUser ? 'blur-[1.5px] opacity-80' : ''}`} loading="lazy" />
                       <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-black/70 text-white">
                         #{idx + 1}
                       </span>
@@ -2650,8 +2697,10 @@ export default function DashboardContent() {
                         onClick={() => handleSingleSlideDownload(imgUrl, idx)}
                         className="absolute inset-x-2 bottom-2 py-1.5 rounded-lg bg-black/75 hover:bg-accent text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                       >
-                        <Download className="w-3.5 h-3.5" />
-                        {isEnUi ? 'Save Photo' : 'Tải ảnh'}
+                        {!isPaidUser ? <Lock className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
+                        {!isPaidUser
+                          ? (isEnUi ? 'Unlock Photo' : 'Mở khóa tải ảnh')
+                          : (isEnUi ? 'Save Photo' : 'Tải ảnh')}
                       </button>
                     </div>
                   ))}
@@ -3544,6 +3593,11 @@ export default function DashboardContent() {
                 <SmartActionsPanel
                   videoInfo={videoInfo}
                   mediaUrl={videoInfo?.direct_mp4_url || videoInfo?.original_url}
+                  userTier={userTier}
+                  onRequireUpgrade={() => {
+                    setUpgradeErrorCode('tier_required_feature');
+                    setShowUpgradeModal(true);
+                  }}
                 />
               </div>
             ) : null}

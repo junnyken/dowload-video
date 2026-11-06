@@ -377,6 +377,11 @@ export default function BulkContent() {
     // sending. Signed in, a Douyin profile is read whole by the server when
     // it has the admin cookie; otherwise by the extension: the tab opens here,
     // inside the click, or the popup blocker stops it.
+    if (!session?.access_token) {
+      setUpgradeErrorCode('tier_limit_batch');
+      setShowUpgradeModal(true);
+      return;
+    }
     const isProTier = !!(quotaInfo && ['pro', 'vip', 'team', 'enterprise'].includes(quotaInfo.plan));
     if (urlList.length === 1 && isPreviewableChannel(urlList[0])) {
       const want = channelMode ? (parseInt(customMaxVideos) || parseInt(maxVideos) || 5) : (isProTier ? 'all' : 5);
@@ -1019,6 +1024,34 @@ export default function BulkContent() {
         )}
       </div>
 
+      {/* ── Guest Batch Lock Notice ────────────────────── */}
+      {!session?.access_token && (
+        <div className="p-4 rounded-2xl bg-accent-soft border border-accent/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-extrabold text-accent-text flex items-center gap-1.5">
+              🔒 {i18n.language === 'en'
+                ? 'Batch Download (Bulk Link) is locked for Guest accounts'
+                : 'Tính năng Tải hàng loạt (Batch Link) đã bị khóa với Khách chưa đăng nhập'}
+            </p>
+            <p className="text-xs text-fg-2 mt-0.5">
+              {i18n.language === 'en'
+                ? 'Sign in for free to batch download up to 5 links at once, or upgrade to Starter/Pro/Team for 25–100 links + 1-Click .ZIP.'
+                : 'Đăng nhập tài khoản Miễn phí để tải tối đa 5 link/lần, hoặc nâng cấp gói Starter / Pro / Team để tải 25–100 link/lần kèm nén .ZIP.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setUpgradeErrorCode('tier_limit_batch');
+              setShowUpgradeModal(true);
+            }}
+            className="shrink-0 px-3.5 py-2 rounded-xl bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition cursor-pointer"
+          >
+            {i18n.language === 'en' ? 'Sign In / Upgrade →' : 'Đăng nhập / Nâng cấp →'}
+          </button>
+        </div>
+      )}
+
       {/* ── Input Area ────────────────────────────────── */}
       <div className="p-6 rounded-2xl bg-surface border border-line shadow-lg">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
@@ -1232,12 +1265,12 @@ export default function BulkContent() {
                   { value: 100, label: '100', proOnly: true },
                   { value: 200, label: '200', proOnly: true },
                 ].map(opt => {
-                  const isProTier = !!(quotaInfo && ['pro', 'vip', 'team', 'enterprise'].includes(quotaInfo.plan));
+                  const isProTier = !!(quotaInfo && ['starter', 'pro', 'vip', 'team', 'enterprise'].includes(quotaInfo.plan));
                   return (
                     <button
                       key={opt.value}
                       onClick={() => {
-                        if (opt.proOnly && !isProTier) {
+                        if (!session?.access_token || (opt.proOnly && !isProTier)) {
                           setUpgradeErrorCode('tier_limit_batch');
                           setShowUpgradeModal(true);
                           return;

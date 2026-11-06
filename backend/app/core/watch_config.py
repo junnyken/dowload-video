@@ -54,7 +54,7 @@ IMPLEMENTED_PLATFORMS = frozenset({"tiktok", "youtube", "instagram"})
 # Listed through a PAID provider: Pro / Team / Enterprise (and admins) only.
 PAID_PLATFORMS = frozenset({"instagram"})
 
-PAID_TIERS = ("pro", "team", "enterprise")
+PAID_TIERS = ("starter", "pro", "team", "enterprise")
 
 
 def _flag(name: str, default: bool) -> bool:
@@ -116,9 +116,12 @@ def is_paid(tier: str) -> bool:
 
 
 def max_sources(tier: str) -> int:
-    if is_paid(tier):
+    t = (tier or "free").lower()
+    if t == "starter":
+        return _int("WATCH_STARTER_MAX_SOURCES", 2)
+    if t in ("pro", "team", "enterprise"):
         return _int("WATCH_PRO_MAX_SOURCES", 30)
-    return _int("WATCH_FREE_MAX_SOURCES", 1)
+    return _int("WATCH_FREE_MAX_SOURCES", 0)
 
 
 def min_interval_sec(tier: str) -> int:

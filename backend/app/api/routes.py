@@ -846,10 +846,10 @@ async def fetch_link(
             _yt_quota_id, _ok, _lim = None, True, -1
         else:
             _yt_quota_id = _ytq.yt_identity(user_id, _ip)
-            _ok, _used, _lim = _ytq.reserve(_yt_quota_id, bool(user_id))
+            _ok, _used, _lim = _ytq.reserve(_yt_quota_id, bool(user_id), tier=_quota_req.tier if user_id else None)
         if not _ok:
             _yt_quota_id = None  # nothing to refund
-            _msg = (f"Bạn đã đạt giới hạn {_lim} video YouTube hôm nay."
+            _msg = (f"Bạn đã đạt giới hạn {_lim} video YouTube hôm nay. Nâng cấp Starter/Pro để tải thêm."
                     if user_id else
                     f"Khách tải được {_lim} video YouTube/ngày. Vui lòng đăng nhập để tải nhiều hơn.")
             raise HTTPException(status_code=429, detail={"error": "youtube_quota_exceeded", "message": _msg})
@@ -889,7 +889,7 @@ async def fetch_link(
     # account — free or paid (owner 08/10, task #6134: "để khách phải đăng ký").
     # The rows above stay visible, locked "signin", and the note says why.
     if not user_id:
-        _guest_cap = int(os.getenv("GUEST_MAX_HEIGHT", "1080") or 0)
+        _guest_cap = int(os.getenv("GUEST_MAX_HEIGHT", "720") or 0)
         if _guest_cap > 0:
             if not _height_cap["height"] or _guest_cap < _height_cap["height"]:
                 _height_cap = {"height": _guest_cap, "reason": "signin"}
@@ -1417,31 +1417,34 @@ async def bulk_download(
 
     # ── Tier enforcement: batch size ────────────────────────────────
     auth_user_id = user["id"] if user else None
-    batch_check = check_batch_limit(auth_user_id, len(payload.urls))
-    if not batch_check["allowed"]:
-        raise HTTPException(
-            status_code=403,
-            detail=make_error(ERR_BATCH, extra={
-                "message":   batch_check["message"],
-                "limit":     batch_check["limit"],
-                "requested": batch_check["requested"],
-                "tier":      batch_check["tier"],
-            }),
-        )
-    # When channel_mode is enabled (or URL is a channel), enforce batch_limit on max_videos
-    # so Free/Guest accounts can test up to 5 videos/channel scan, while >5 triggers UpgradeModal.
-    if payload.channel_mode and payload.max_videos and payload.max_videos > batch_check["limit"]:
-        mc_check = check_batch_limit(auth_user_id, payload.max_videos)
-        if not mc_check["allowed"]:
+    from app.core.quotas import is_admin_request
+    _is_admin_bulk = is_admin_request(request)
+    if not _is_admin_bulk:
+        batch_check = check_batch_limit(auth_user_id, len(payload.urls))
+        if not batch_check["allowed"]:
             raise HTTPException(
                 status_code=403,
                 detail=make_error(ERR_BATCH, extra={
-                    "message":   mc_check["message"],
-                    "limit":     mc_check["limit"],
-                    "requested": mc_check["requested"],
-                    "tier":      mc_check["tier"],
+                    "message":   batch_check["message"],
+                    "limit":     batch_check["limit"],
+                    "requested": batch_check["requested"],
+                    "tier":      batch_check["tier"],
                 }),
             )
+        # When channel_mode is enabled (or URL is a channel), enforce batch_limit on max_videos
+        # so Free accounts can test up to 5 videos/channel scan, while >5 triggers UpgradeModal.
+        if payload.channel_mode and payload.max_videos and payload.max_videos > batch_check["limit"]:
+            mc_check = check_batch_limit(auth_user_id, payload.max_videos)
+            if not mc_check["allowed"]:
+                raise HTTPException(
+                    status_code=403,
+                    detail=make_error(ERR_BATCH, extra={
+                        "message":   mc_check["message"],
+                        "limit":     mc_check["limit"],
+                        "requested": mc_check["requested"],
+                        "tier":      mc_check["tier"],
+                    }),
+                )
 
     # ── Per-platform daily allowance, per item ──────────────────────
     # Each link counts against its own platform. Links beyond what is left

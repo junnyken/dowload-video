@@ -21,10 +21,22 @@ from app.core.quotas import get_user_tier
 
 router = APIRouter()
 
-# Pin limits per tier
-_PIN_LIMITS: Dict[str, int] = {"free": 3, "pro": 50}
+# Pin limits per tier (Free is locked = 0; paid tiers unlock cloud pinning)
+_PIN_LIMITS: Dict[str, int] = {
+    "free": 0,
+    "starter": 10,
+    "pro": 50,
+    "team": 500,
+    "enterprise": 500,
+}
 # Pin retention window in days per tier
-_PIN_DAYS: Dict[str, int] = {"free": 7, "pro": 30}
+_PIN_DAYS: Dict[str, int] = {
+    "free": 0,
+    "starter": 14,
+    "pro": 30,
+    "team": 90,
+    "enterprise": 90,
+}
 
 
 def _now() -> datetime:
@@ -42,8 +54,8 @@ async def get_storage_info(user=Depends(get_required_user)):
     supabase = get_service_client()
     user_id  = str(user["id"])
     tier     = get_user_tier(user_id)
-    pin_limit = _PIN_LIMITS.get(tier, 3)
-    pin_days  = _PIN_DAYS.get(tier, 7)
+    pin_limit = _PIN_LIMITS.get(tier, 0)
+    pin_days  = _PIN_DAYS.get(tier, 0)
 
     # Count pinned files
     pinned_res = (
@@ -110,8 +122,15 @@ async def pin_file(job_id: str, user=Depends(get_required_user)):
     supabase = get_service_client()
     user_id  = str(user["id"])
     tier     = get_user_tier(user_id)
-    pin_limit = _PIN_LIMITS.get(tier, 3)
-    pin_days  = _PIN_DAYS.get(tier, 7)
+    pin_limit = _PIN_LIMITS.get(tier, 0)
+    pin_days  = _PIN_DAYS.get(tier, 0)
+
+    if pin_limit <= 0:
+        raise HTTPException(402, detail={
+            "code": "tier_required_feature",
+            "message": "Tính năng Ghim tệp giữ trên Cloud đã bị khóa với gói Miễn phí. Vui lòng nâng cấp lên Starter hoặc Pro để sử dụng.",
+            "limit": 0,
+        })
 
     # Verify job belongs to user
     job_res = (

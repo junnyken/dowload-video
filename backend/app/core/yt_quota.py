@@ -17,7 +17,11 @@ from datetime import datetime, timezone, timedelta
 from app.core.redis_client import get_redis
 
 YT_QUOTA_ANON = int(os.getenv("YT_QUOTA_ANON", "1"))
-YT_QUOTA_USER = int(os.getenv("YT_QUOTA_USER", "5"))
+YT_QUOTA_USER = int(os.getenv("YT_QUOTA_USER", "2"))
+YT_QUOTA_STARTER = int(os.getenv("YT_QUOTA_STARTER", "15"))
+YT_QUOTA_PRO = int(os.getenv("YT_QUOTA_PRO", "50"))
+YT_QUOTA_TEAM = int(os.getenv("YT_QUOTA_TEAM", "150"))
+YT_QUOTA_ENTERPRISE = int(os.getenv("YT_QUOTA_ENTERPRISE", "500"))
 # Site-wide hard ceiling on YouTube proxy downloads/day (budget protector).
 # 0 = unlimited. Counts video-equivalents across ALL users.
 YT_GLOBAL_DAILY_CAP = int(os.getenv("YT_GLOBAL_DAILY_CAP", "300"))
@@ -28,8 +32,19 @@ def yt_identity(user_id, ip) -> str:
     return f"u:{user_id}" if user_id else f"ip:{ip or 'unknown'}"
 
 
-def yt_limit(is_registered: bool) -> int:
-    return YT_QUOTA_USER if is_registered else YT_QUOTA_ANON
+def yt_limit(is_registered: bool, tier: str | None = None) -> int:
+    if not is_registered:
+        return YT_QUOTA_ANON
+    t = (tier or "free").lower()
+    if t == "starter":
+        return YT_QUOTA_STARTER
+    if t == "pro":
+        return YT_QUOTA_PRO
+    if t == "team":
+        return YT_QUOTA_TEAM
+    if t in ("enterprise", "api"):
+        return YT_QUOTA_ENTERPRISE
+    return YT_QUOTA_USER
 
 
 def _key(identity: str) -> str:
@@ -37,9 +52,9 @@ def _key(identity: str) -> str:
     return f"ytq:{identity}:{day}"
 
 
-def reserve(identity: str, is_registered: bool):
+def reserve(identity: str, is_registered: bool, tier: str | None = None):
     """Reserve one daily YouTube slot. Returns (allowed, used, limit)."""
-    limit = yt_limit(is_registered)
+    limit = yt_limit(is_registered, tier=tier)
     try:
         rc = get_redis()
         k = _key(identity)

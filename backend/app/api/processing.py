@@ -37,13 +37,48 @@ from typing import List, Optional
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from app.main import limiter
 from app.core.local_download import new_token
+from app.core.auth_middleware import get_optional_user as _auth_optional_user
 
 router = APIRouter()
+
+
+def _enforce_paid_processing_tier(
+    request: Request,
+    user: Optional[dict],
+    allowed_tiers: tuple[str, ...],
+    feature_label: str,
+) -> str:
+    """Enforce paid tier on Pro/paid processing routes (reup-clean, burn-subtitle, package-zip)."""
+    from app.core.quotas import get_user_tier, is_admin_request  # noqa: PLC0415
+    if is_admin_request(request):
+        return "enterprise"
+    uid = (user or {}).get("id")
+    if not uid:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error_code": "tier_required_feature",
+                "message": f"Tính năng '{feature_label}' đã bị khóa với Khách chưa đăng nhập. Vui lòng đăng nhập và nâng cấp gói để sử dụng.",
+                "required_tier": allowed_tiers[0],
+            },
+        )
+    tier = get_user_tier(str(uid)) or "free"
+    if tier not in allowed_tiers:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error_code": "tier_required_feature",
+                "message": f"Tính năng '{feature_label}' chỉ dành cho gói {' / '.join(t.title() for t in allowed_tiers if t != 'api')}. Vui lòng nâng cấp gói để sử dụng.",
+                "current_tier": tier,
+                "required_tier": allowed_tiers[0],
+            },
+        )
+    return tier
 
 # ── Shared constants ─────────────────────────────────────────────────
 
@@ -696,7 +731,11 @@ async def download_subtitle(payload: SubtitleRequest, request: Request):
 
 @router.post("/process/burn-subtitle")
 @limiter.limit("10/minute")
-async def burn_subtitle(payload: BurnSubtitleRequest, request: Request):
+async def burn_subtitle(
+    payload: BurnSubtitleRequest,
+    request: Request,
+    user: Optional[dict] = Depends(_auth_optional_user),
+):
     """
     Download subtitles from source_url and burn them into an existing local video.
     video_path must be inside the downloads directory (file_id or legacy path).
@@ -710,6 +749,10 @@ async def burn_subtitle(payload: BurnSubtitleRequest, request: Request):
     import tempfile
     from fastapi.concurrency import run_in_threadpool
     from app.core.extraction_errors import ExtractionHTTPException
+
+    _enforce_paid_processing_tier(
+        request, user, ("pro", "team", "enterprise", "api"), "Ghép cứng Phụ đề vào Video (Burn Subtitle)"
+    )
 
     video_path = _guard_local_path(payload.video_path)
     _assert_safe_url(payload.source_url)
@@ -849,7 +892,11 @@ async def _translate_srt_file_to_vi(srt_path: str) -> None:
 
 @router.post("/process/reup-clean")
 @limiter.limit("10/minute")
-async def reup_clean(payload: ReupCleanRequest, request: Request):
+async def reup_clean(
+    payload: ReupCleanRequest,
+    request: Request,
+    user: Optional[dict] = Depends(_auth_optional_user),
+):
     """
     Anti-Detect / Reup Video Cleaner (Pro feature):
     - Strips all source container/stream metadata (-map_metadata -1 -map_chapters -1)
@@ -859,6 +906,10 @@ async def reup_clean(payload: ReupCleanRequest, request: Request):
     """
     import hashlib
     from app.core.ffmpeg_budget import thread_args
+
+    _enforce_paid_processing_tier(
+        request, user, ("pro", "team", "enterprise", "api"), "Reup Anti-Detect Cleaner (Lách bản quyền)"
+    )
 
     if not payload.url and not payload.local_path:
         raise HTTPException(status_code=400, detail="url or local_path is required")
@@ -1004,7 +1055,11 @@ async def frame_thumb(payload: FrameThumbRequest, request: Request):
 
 @router.post("/process/package-zip")
 @limiter.limit("10/minute")
-async def package_zip(payload: PackageZipRequest, request: Request):
+async def package_zip(
+    payload: PackageZipRequest,
+    request: Request,
+    user: Optional[dict] = Depends(_auth_optional_user),
+):
     """
     Package multiple local files into a single ZIP archive.
     Each path must be inside the downloads directory.
@@ -1012,6 +1067,9 @@ async def package_zip(payload: PackageZipRequest, request: Request):
 
     Supported template tokens: {title}, {platform}_{title}, {index:02d}_{title}, {date}_{title}
     """
+    _enforce_paid_processing_tier(
+        request, user, ("pro", "team", "enterprise", "api"), "Đóng gói tải trọn bộ Album/Batch .ZIP"
+    )
     paths_list = list(payload.paths or [])
     image_urls_list = list(payload.image_urls or [])
     if not paths_list and not image_urls_list:

@@ -46,7 +46,29 @@ export function buildPlanRows(tiers) {
     },
     {
       key: 'photoCarousel', label: tp('rows.photoCarousel'),
-      get: (t) => (t.id === 'pro' || t.id === 'team' ? tp('photoCarouselPro') : tp('photoCarouselFree')),
+      get: (t) => {
+        if (t.id === 'pro' || t.id === 'team') return tp('photoCarouselPro');
+        if (t.id === 'starter') return tp('photoCarouselStarter');
+        return false;
+      },
+    },
+    {
+      key: 'asr', label: tp('rows.asr'),
+      get: (t) => {
+        if (t.id === 'team') return tp('asrTeam');
+        if (t.id === 'pro') return tp('asrPro');
+        if (t.id === 'starter') return tp('asrStarter');
+        return false;
+      },
+    },
+    {
+      key: 'translateSub', label: tp('rows.translateSub'),
+      get: (t) => {
+        if (t.id === 'team') return tp('translateTeam');
+        if (t.id === 'pro') return tp('translatePro');
+        if (t.id === 'starter') return tp('translateStarter');
+        return false;
+      },
     },
     {
       key: 'batch', label: tp('rows.batch'),
@@ -82,6 +104,10 @@ export function buildPlanRows(tiers) {
     {
       key: 'schedules', label: tp('rows.schedules'),
       get: (t) => (t.schedules > 0 || t.schedules === -1 ? per(t.schedules, 'schedules') : false),
+    },
+    {
+      key: 'playlists', label: tp('rows.playlists'),
+      get: (t) => (t.playlists > 0 || t.playlists === -1 ? per(t.playlists, 'playlists') : false),
     },
     {
       // owner 14/10: monthly API call quota (backend app/core/api_quota.py)

@@ -35,7 +35,13 @@ except ImportError:
 
 # ── Constants ─────────────────────────────────────────────────────────
 
-_PLAYLIST_LIMITS: Dict[str, int] = {"free": 3, "pro": 20}
+_PLAYLIST_LIMITS: Dict[str, int] = {
+    "free": 0,
+    "starter": 5,
+    "pro": 20,
+    "team": 100,
+    "enterprise": 500,
+}
 
 
 # ── Models ────────────────────────────────────────────────────────────
@@ -93,6 +99,11 @@ async def save_playlist(
     # Determine tier + limit
     tier = get_user_tier(user_id)
     limit = _PLAYLIST_LIMITS.get(tier, _PLAYLIST_LIMITS["free"])
+    if limit <= 0:
+        raise HTTPException(
+            status_code=402,
+            detail="Tính năng Lưu Playlist theo dõi chỉ dành cho gói trả phí (Starter / Pro / Team). Vui lòng nâng cấp gói để sử dụng.",
+        )
 
     # Count existing playlists
     try:
@@ -109,7 +120,7 @@ async def save_playlist(
     if current_count >= limit:
         raise HTTPException(
             status_code=403,
-            detail=f"Bạn đã đạt giới hạn danh sách phát (Free: 3, Pro: 20).",
+            detail=f"Bạn đã đạt giới hạn {limit} danh sách phát cho gói {tier.title()}.",
         )
 
     # Detect platform

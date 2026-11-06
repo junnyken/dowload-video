@@ -63,6 +63,7 @@ SCANNABLE = ("active", "degraded")
 
 _MESSAGES = {
     "login_required": "Vui lòng đăng nhập để theo dõi kênh.",  # wording: BA review
+    "tier_required": "Tính năng Theo dõi Kênh tự động chỉ dành cho gói trả phí (Starter / Pro / Team). Vui lòng nâng cấp gói để sử dụng.",
     "watch_disabled": "Tính năng theo dõi kênh đang tạm tắt.",  # wording: BA review
     "admin_only": "Tính năng theo dõi kênh đang thử nghiệm nội bộ, chưa mở cho tài khoản của bạn.",  # wording: BA review
     "source_limit_reached": "Bạn đã theo dõi tối đa {limit} kênh. Hãy bỏ theo dõi một kênh hoặc nâng cấp Pro để theo dõi thêm.",  # wording: BA review
@@ -1268,6 +1269,8 @@ def add_source(*, user_id: str, tier: str, is_admin: bool, email_verified: Optio
                     "baseline": "done" if existing.get("baseline_completed_at") else "pending"}
 
     limit = cfg.max_sources(eff_tier)
+    if limit <= 0:
+        raise WatchError("tier_required", 402)
     if user_used(sb, user_id) >= limit:
         raise WatchError("source_limit_reached", 403, limit=limit)
 

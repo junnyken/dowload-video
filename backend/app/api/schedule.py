@@ -21,7 +21,13 @@ from app.core.quotas import get_user_tier
 
 router = APIRouter()
 
-_SCHEDULE_LIMITS: Dict[str, int] = {"free": 3, "pro": 20}
+_SCHEDULE_LIMITS: Dict[str, int] = {
+    "free": 0,
+    "starter": 5,
+    "pro": 20,
+    "team": 100,
+    "enterprise": 500,
+}
 
 
 # ── Models ────────────────────────────────────────────────────────────
@@ -77,7 +83,13 @@ def _validate_frequency(schedule_type: str, min_interval_hours: int):
 
 
 def _check_limit(supabase, user_id: str, tier: str):
-    limit = _SCHEDULE_LIMITS.get(tier, 3)
+    limit = _SCHEDULE_LIMITS.get(tier, 0)
+    if limit <= 0:
+        raise HTTPException(402, detail={
+            "code": "tier_required_feature",
+            "message": "Tính năng Hẹn giờ tải tự động chỉ dành cho gói trả phí (Starter / Pro / Team). Vui lòng nâng cấp để sử dụng.",
+            "limit": 0,
+        })
     count_res = (
         supabase.table("scheduled_jobs")
         .select("id", count="exact")
@@ -88,8 +100,7 @@ def _check_limit(supabase, user_id: str, tier: str):
     if count >= limit:
         raise HTTPException(403, detail={
             "code": "schedule_limit",
-            "message": f"{'Free' if tier == 'free' else 'Pro'} plan giới hạn {limit} lịch tải. "
-                       + ("Nâng cấp Pro để tạo thêm." if tier == "free" else ""),
+            "message": f"Gói {tier.title()} giới hạn {limit} lịch tải. Nâng cấp gói để tạo thêm.",
             "limit": limit,
         })
 

@@ -199,6 +199,7 @@ def _load_owned_job(db, job_id: str, user_id: str | None, *, require_done: bool 
 async def upload_transcripts(
     files: list[UploadFile] = File(...),
     target_lang: str = Form(...),
+    user: dict | None = Depends(_auth_get_optional_user),
     identity: str | None = Depends(resolve_identity),
     quota_subject: str | None = Depends(resolve_quota_subject),
 ):
@@ -223,19 +224,23 @@ async def upload_transcripts(
             detail=f"Tối đa {_MAX_FILES_PER_BATCH} file mỗi lần tải lên.",
         )
 
-    user_id = identity
-    if not user_id:
-        # No resolvable identity (not logged in, no X-Session-ID) — refuse
-        # rather than let anonymous requests bypass the daily cue quota below.
+    auth_uid = (user or {}).get("id")
+    if not auth_uid:
         raise HTTPException(
-            status_code=401,
-            detail="Cần đăng nhập để sử dụng tính năng dịch phụ đề.",
+            status_code=402,
+            detail="Tính năng Dịch file Phụ đề hàng loạt bằng AI (.SRT/.VTT) đã bị khóa với Khách chưa đăng nhập. Vui lòng đăng nhập và nâng cấp gói trả phí để sử dụng.",
         )
 
-    # Jobs are owned by `user_id`; the paid-translation quota is charged to
-    # `quota_key`, which is the account for signed-in users and the client IP
-    # otherwise — see resolve_quota_subject.
-    quota_key = quota_subject or user_id
+    from app.core.quotas import get_user_tier  # noqa: PLC0415
+    user_tier = get_user_tier(str(auth_uid)) or "free"
+    if user_tier not in ("starter", "pro", "team", "enterprise", "api"):
+        raise HTTPException(
+            status_code=402,
+            detail="Tính năng Dịch file Phụ đề hàng loạt bằng AI (.SRT/.VTT) chỉ dành cho gói trả phí (Starter / Pro / Team). Vui lòng nâng cấp gói để sử dụng.",
+        )
+
+    user_id = str(auth_uid)
+    quota_key = str(auth_uid)
 
     from app.services.subtitle_format import parse_srt_with_skip_count, parse_vtt_with_skip_count
 

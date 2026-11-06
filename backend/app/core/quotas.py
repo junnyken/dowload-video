@@ -1174,9 +1174,22 @@ def check_youtube_tier(_user_id: Optional[str], _quality_str: str) -> Dict[str, 
 def check_batch_limit(user_id: Optional[str], count: int) -> Dict[str, Any]:
     """
     Check whether the batch size is within the user's tier limit.
-    user_id: None means guest (free tier).
+    user_id: None means guest (batch download locked for guests).
     """
-    tier  = _get_tier(user_id) if user_id else "free"
+    if not user_id:
+        return {
+            "allowed":    False,
+            "error_code": ERR_BATCH,
+            "tier":       "guest",
+            "limit":      0,
+            "requested":  count,
+            "message":    (
+                "Tính năng Tải hàng loạt (Batch Link) đã bị khóa với Khách chưa đăng nhập. "
+                "Vui lòng đăng nhập tài khoản hoặc nâng cấp gói để tải hàng loạt."
+            ),
+        }
+
+    tier  = _get_tier(user_id)
     perms = get_tier_permissions(tier)
     limit = perms["batch_limit"]
 
