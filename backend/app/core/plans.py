@@ -193,8 +193,8 @@ def build_plans() -> Dict[str, Any]:
     starter_p = q.TIER_PERMISSIONS.get("starter", free_p)
     pro_p = q.TIER_PERMISSIONS["pro"]
     team_p = q.TIER_PERMISSIONS.get("team", pro_p)
-    guest_h = int(os.getenv("GUEST_MAX_HEIGHT", "720") or 0)
-    yt_anon_h = int(os.getenv("YT_MAX_HEIGHT_ANON", "720"))
+    guest_h = int(os.getenv("GUEST_MAX_HEIGHT", "1080") or 0)
+    yt_anon_h = int(os.getenv("YT_MAX_HEIGHT_ANON", "1080"))
     yt_user_h = int(os.getenv("YT_MAX_HEIGHT_USER", "1080"))
     from app.api.routes import youtube_height_for  # noqa: PLC0415
     yt_pro_h = youtube_height_for(True)

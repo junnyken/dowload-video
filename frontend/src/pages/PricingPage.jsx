@@ -332,8 +332,8 @@ export default function PricingPage() {
                   </p>
                   <p className="text-[11px] text-fg-muted mt-0.5">
                     {lang === 'en'
-                      ? 'Guest: 5/day (720p), 1 YT/day, No Batch · Free Account: 10/day (1080p), 2 YT/day, 5 links/batch (AI, Photo Album, Cloud Pin, Schedule & Watch locked)'
-                      : 'Khách: 5 lượt/ngày (720p), 1 YT/ngày, Khóa Batch · Tài khoản Free: 10 lượt/ngày (1080p), 2 YT/ngày, 5 link/lần (Đã khóa AI, Album ảnh, Ghim Cloud & Hẹn giờ)'}
+                      ? 'Guest: 5/day (1080p), 2 YT/day, No Batch · Free Account: 10/day (1080p), 5 YT/day, 5 links/batch (AI, Photo Album, Cloud Pin, Schedule & Watch locked)'
+                      : 'Khách: 5 lượt/ngày (1080p), 2 YT/ngày, Khóa Batch · Tài khoản Free: 10 lượt/ngày (1080p), 5 YT/ngày, 5 link/lần (Đã khóa AI, Album ảnh, Ghim Cloud & Hẹn giờ)'}
                   </p>
                 </div>
                 <span className="shrink-0 px-2.5 py-1 rounded-lg bg-canvas border border-line text-[11px] font-bold text-fg-2">

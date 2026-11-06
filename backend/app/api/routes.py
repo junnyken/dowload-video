@@ -231,7 +231,7 @@ def youtube_height_cap(user_id) -> int:
     YT_MAX_HEIGHT_ANON (720). Decided by plan NAME, not perms["max_height"]:
     production raised FREE_MAX_HEIGHT to 4320 for the other platforms."""
     if not user_id:
-        return int(os.getenv("YT_MAX_HEIGHT_ANON", "720"))
+        return int(os.getenv("YT_MAX_HEIGHT_ANON", "1080"))
     from app.core.quotas import get_user_tier
     paid = (get_user_tier(user_id) or "free") != "free"
     return youtube_height_for(paid)
@@ -889,7 +889,7 @@ async def fetch_link(
     # account — free or paid (owner 08/10, task #6134: "để khách phải đăng ký").
     # The rows above stay visible, locked "signin", and the note says why.
     if not user_id:
-        _guest_cap = int(os.getenv("GUEST_MAX_HEIGHT", "720") or 0)
+        _guest_cap = int(os.getenv("GUEST_MAX_HEIGHT", "1080") or 0)
         if _guest_cap > 0:
             if not _height_cap["height"] or _guest_cap < _height_cap["height"]:
                 _height_cap = {"height": _guest_cap, "reason": "signin"}

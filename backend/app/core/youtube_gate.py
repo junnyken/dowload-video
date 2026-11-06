@@ -36,7 +36,7 @@ from app.core.redis_client import get_redis
 # ── Config (ENV-tunable) ─────────────────────────────────────────────
 PROXY_COST_PER_GB        = float(os.getenv("YOUTUBE_PROXY_COST_PER_GB", "1.5"))
 DAILY_LIMIT_GB           = float(os.getenv("YOUTUBE_PROXY_DAILY_LIMIT_GB", "2"))
-MAX_PROXY_HEIGHT         = int(os.getenv("YOUTUBE_MAX_PROXY_HEIGHT", "720"))
+MAX_PROXY_HEIGHT         = int(os.getenv("YOUTUBE_MAX_PROXY_HEIGHT", "1080"))
 # Circuit breaker
 CB_FAIL_THRESHOLD        = int(os.getenv("YOUTUBE_CB_THRESHOLD", "5"))
 CB_FAIL_WINDOW_SEC       = int(os.getenv("YOUTUBE_CB_WINDOW_SEC", "300"))    # 5 min
