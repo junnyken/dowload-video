@@ -8,8 +8,34 @@
   "expand": "Xem bước",
   "single": {
     "label": "Tải 1 video",
-    "title": "Cách tải video hoặc nhạc nhanh",
-    "description": "Dành cho nhu cầu tải từng link riêng lẻ.",
+    "title": "Cách lấy link và tải video xuống trong 3 bước",
+    "description": "Minh họa trực quan quy trình từ lúc lấy link đến khi lưu file về máy.",
+    "visualSteps": [
+      {
+        "badge": "Bước 01",
+        "title": "Sao chép link hoặc mở Tiện ích",
+        "caption": "Trên TikTok, YouTube, Facebook, Douyin... bấm Chia sẻ → Sao chép liên kết (hoặc mở Tiện ích Chrome VidGrab).",
+        "mockShare": "Chia sẻ",
+        "mockCopy": "Sao chép liên kết",
+        "mockExt": "Hoặc bắt link tự động bằng Extension"
+      },
+      {
+        "badge": "Bước 02",
+        "title": "Dán link & Bấm Bóc tách ngay",
+        "caption": "Dán link vào ô nhập phía trên, bật Bỏ logo (TikTok/Douyin) hoặc chọn Phụ đề rồi nhấn Bóc tách ngay.",
+        "mockPlaceholder": "https://www.tiktok.com/@vidgrab/video/742...",
+        "mockBtn": "BÓC TÁCH NGAY",
+        "mockNoWm": "Bỏ logo (TikTok / Douyin)",
+        "mockSub": "Phụ đề: Tự động"
+      },
+      {
+        "badge": "Bước 03",
+        "title": "Chọn chất lượng 1080p / 4K / MP3",
+        "caption": "Xem trước video và bấm Tải về ở định dạng bạn muốn: MP4 Không logo, Full HD 1080p, 4K hoặc nhạc MP3 320kbps.",
+        "mockReady": "Đã bóc tách · Không watermark",
+        "mockSave": "Tải về"
+      }
+    ],
     "steps": [
       "Dán link video hoặc bài nhạc vào ô nhập.",
       "Chọn định dạng: MP4 HD, 4K hoặc MP3.",
@@ -24,6 +50,26 @@
     "label": "Tải hàng loạt",
     "title": "Cách tải nhiều link cùng lúc",
     "description": "Phù hợp khi cần xử lý nhiều URL trong một lần.",
+    "visualSteps": [
+      {
+        "badge": "Bước 01",
+        "title": "Dán danh sách nhiều link",
+        "caption": "Chuyển sang tab Tải Hàng Loạt, dán mỗi dòng 1 link video hoặc tải lên từ file .txt / .csv.",
+        "mockFile": "Nhập file .txt / .csv"
+      },
+      {
+        "badge": "Bước 02",
+        "title": "Chọn định dạng chung & Bắt đầu",
+        "caption": "Chọn chất lượng đầu ra (MP4 1080p, Không logo hoặc MP3 320kbps) cho toàn bộ danh sách rồi bấm Bắt đầu.",
+        "mockBtn": "BẮT ĐẦU TẢI HÀNG LOẠT"
+      },
+      {
+        "badge": "Bước 03",
+        "title": "Tải từng file hoặc đóng gói ZIP",
+        "caption": "Hệ thống tự động xử lý theo đợt. Khi hoàn tất, bạn có thể lưu từng video hoặc tải về 1 file nén .ZIP.",
+        "mockZip": "Tải tất cả (.ZIP)"
+      }
+    ],
     "steps": [
       "Dán nhiều link (mỗi dòng một URL), hoặc từ file .txt/.csv.",
       "Chọn định dạng đầu ra cho toàn bộ danh sách.",
@@ -39,6 +85,26 @@
     "label": "Tải cả kênh",
     "title": "Cách quét và tải video từ kênh",
     "description": "Dùng khi muốn lấy nhiều video từ kênh, profile hoặc playlist.",
+    "visualSteps": [
+      {
+        "badge": "Bước 01",
+        "title": "Dán link Kênh / Profile & Bật Channel Mode",
+        "caption": "Vào tab Tải Hàng Loạt, dán link kênh TikTok, YouTube, Instagram hoặc Playlist và bật công tắc Channel Mode.",
+        "mockToggle": "Quét toàn bộ kênh (Channel Mode)"
+      },
+      {
+        "badge": "Bước 02",
+        "title": "Chọn số lượng video cần lấy",
+        "caption": "Chọn mức quét nhanh 10, 20, 50, 100 video mới nhất của kênh và lọc các video bạn muốn tải.",
+        "mockCount": "Số lượng: 50 video mới nhất"
+      },
+      {
+        "badge": "Bước 03",
+        "title": "Bóc tách theo đợt & Lưu trọn bộ",
+        "caption": "Hệ thống tự động tải lần lượt từng video trong kênh và cho phép đóng gói thành tệp .ZIP tiện lợi.",
+        "mockZip": "Tải trọn bộ kênh (.ZIP)"
+      }
+    ],
     "steps": [
       "Chuyển sang tab \"Tải Hàng Loạt\".",
       "Dán link kênh, profile hoặc playlist vào ô nhập.",

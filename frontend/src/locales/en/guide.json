@@ -9,8 +9,34 @@
   "expand": "Show steps",
   "single": {
     "label": "Single video",
-    "title": "How to download a video or song fast",
-    "description": "For downloading one link at a time.",
+    "title": "How to get a link and download videos in 3 steps",
+    "description": "Visual walkthrough from copying the link to saving the file on your device.",
+    "visualSteps": [
+      {
+        "badge": "Step 01",
+        "title": "Copy link or open Extension",
+        "caption": "On TikTok, YouTube, Facebook, Douyin... tap Share → Copy link (or click the VidGrab Chrome Extension icon).",
+        "mockShare": "Share",
+        "mockCopy": "Copy link",
+        "mockExt": "Or auto-detect via Chrome Extension"
+      },
+      {
+        "badge": "Step 02",
+        "title": "Paste link & Click Extract now",
+        "caption": "Paste the link into the input box above, toggle Remove logo (TikTok/Douyin) or Subtitles, then click Extract now.",
+        "mockPlaceholder": "https://www.tiktok.com/@vidgrab/video/742...",
+        "mockBtn": "EXTRACT NOW",
+        "mockNoWm": "Remove logo (TikTok / Douyin)",
+        "mockSub": "Subtitles: Auto"
+      },
+      {
+        "badge": "Step 03",
+        "title": "Pick 1080p / 4K / MP3 & Save",
+        "caption": "Preview the video and click Download on your preferred format: No-Watermark MP4, Full HD 1080p, 4K, or MP3 320kbps.",
+        "mockReady": "Extracted · No watermark",
+        "mockSave": "Download"
+      }
+    ],
     "steps": [
       "Paste the video or song link into the input box.",
       "Choose a format: MP4 HD, 4K or MP3.",
@@ -25,6 +51,26 @@
     "label": "Bulk download",
     "title": "How to download many links at once",
     "description": "Best when you need to process many URLs in one go.",
+    "visualSteps": [
+      {
+        "badge": "Step 01",
+        "title": "Paste multiple video links",
+        "caption": "Switch to the Bulk · Channels tab, paste one URL per line, or import from a .txt / .csv file.",
+        "mockFile": "Import .txt / .csv"
+      },
+      {
+        "badge": "Step 02",
+        "title": "Pick output format & Start",
+        "caption": "Select your target format (MP4 1080p, No watermark, or MP3 320kbps) for the entire list and click Start.",
+        "mockBtn": "START BULK DOWNLOAD"
+      },
+      {
+        "badge": "Step 03",
+        "title": "Save individual files or ZIP",
+        "caption": "Links are processed automatically in batches. Download videos individually or grab a single .ZIP archive.",
+        "mockZip": "Download all (.ZIP)"
+      }
+    ],
     "steps": [
       "Paste multiple links (one URL per line), or load them from a .txt/.csv file.",
       "Choose the output format for the whole list.",
@@ -40,6 +86,26 @@
     "label": "Whole channel",
     "title": "How to scan and download videos from a channel",
     "description": "Use this to grab many videos from a channel, profile or playlist.",
+    "visualSteps": [
+      {
+        "badge": "Step 01",
+        "title": "Paste Channel URL & Enable Channel Mode",
+        "caption": "Open the Bulk · Channels tab, paste a TikTok, YouTube, Instagram profile or playlist URL, and toggle Channel Mode.",
+        "mockToggle": "Scan full channel (Channel Mode)"
+      },
+      {
+        "badge": "Step 02",
+        "title": "Choose how many videos to fetch",
+        "caption": "Pick 10, 20, 50, or 100 latest videos from the channel and select which ones to include.",
+        "mockCount": "Fetch: Latest 50 videos"
+      },
+      {
+        "badge": "Step 03",
+        "title": "Batch extract & Download all",
+        "caption": "VidGrab processes the channel queue automatically and lets you save all videos or pack them into a .ZIP.",
+        "mockZip": "Download channel (.ZIP)"
+      }
+    ],
     "steps": [
       "Switch to the \"Bulk · Channels\" tab.",
       "Paste the channel, profile or playlist link into the input box.",
