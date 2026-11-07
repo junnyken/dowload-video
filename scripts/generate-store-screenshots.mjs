@@ -1046,6 +1046,240 @@ function buildSlide5(lang) {
   </body></html>`;
 }
 
+function buildSmallPromoTile() {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 440px; height: 280px; overflow: hidden;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Inter, sans-serif;
+      background: #13111c; color: #f8fafc;
+    }
+    .tile {
+      width: 440px; height: 280px;
+      background:
+        radial-gradient(circle at 18% 20%, rgba(234, 88, 12, 0.28) 0%, transparent 50%),
+        radial-gradient(circle at 85% 80%, rgba(124, 58, 237, 0.28) 0%, transparent 52%),
+        linear-gradient(135deg, #13111c 0%, #1b1728 60%, #14121d 100%);
+      padding: 24px 26px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .top {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .badge {
+      width: 38px; height: 38px; border-radius: 11px;
+      background: linear-gradient(135deg, #ea580c, #7c3aed);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 16px; color: #fff;
+      box-shadow: 0 8px 20px rgba(234, 88, 12, 0.35);
+    }
+    .brand {
+      font-size: 26px; font-weight: 900; letter-spacing: -0.02em; color: #fff;
+    }
+    .pill {
+      padding: 4px 10px; border-radius: 999px;
+      background: rgba(16, 185, 129, 0.16); border: 1px solid rgba(16, 185, 129, 0.38);
+      color: #34d399; font-size: 11px; font-weight: 800;
+    }
+    .mid h2 {
+      font-size: 21px; line-height: 1.24; font-weight: 850; color: #fff;
+    }
+    .mid h2 span {
+      background: linear-gradient(90deg, #fb923c, #c084fc);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .mid p {
+      margin-top: 7px; font-size: 12.5px; color: #cbd5e1; line-height: 1.45;
+    }
+    .chips {
+      display: flex; gap: 6px; flex-wrap: wrap;
+    }
+    .chip {
+      padding: 4px 9px; border-radius: 7px;
+      background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.13);
+      font-size: 11px; font-weight: 700; color: #f8fafc;
+    }
+    .chip.hl {
+      background: rgba(234, 88, 12, 0.2); border-color: rgba(234, 88, 12, 0.45); color: #fdba74;
+    }
+  </style></head><body>
+    <div class="tile">
+      <div class="top">
+        <div class="logo">
+          <div class="badge">VG</div>
+          <div class="brand">VidGrab</div>
+        </div>
+        <span class="pill">● No Sign-In Needed</span>
+      </div>
+      <div class="mid">
+        <h2>Save <span>MP4, HLS & No-Logo</span> Videos in 1 Click</h2>
+        <p>Auto-detects playable video streams, merges HLS (.m3u8) to MP4, and scans whole channels.</p>
+      </div>
+      <div class="chips">
+        <span class="chip hl">No Watermark</span>
+        <span class="chip">1080p · 4K · MP3</span>
+        <span class="chip">HLS → MP4</span>
+        <span class="chip">Channel Scan</span>
+      </div>
+    </div>
+  </body></html>`;
+}
+
+function buildMarqueePromoTile() {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 1400px; height: 560px; overflow: hidden;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Inter, sans-serif;
+      background: #13111c; color: #f8fafc;
+    }
+    .marquee {
+      width: 1400px; height: 560px;
+      background:
+        radial-gradient(circle at 15% 22%, rgba(234, 88, 12, 0.25) 0%, transparent 45%),
+        radial-gradient(circle at 82% 75%, rgba(124, 58, 237, 0.28) 0%, transparent 48%),
+        linear-gradient(135deg, #13111c 0%, #191625 55%, #13111b 100%);
+      padding: 46px 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 48px;
+    }
+    .left {
+      width: 600px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .pill {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 7px 15px; border-radius: 999px;
+      background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14);
+      width: fit-content; font-size: 13px; font-weight: 800; color: #fdba74;
+    }
+    .dot {
+      width: 24px; height: 24px; border-radius: 7px;
+      background: linear-gradient(135deg, #ea580c, #7c3aed);
+      color: #fff; display: inline-flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 900;
+    }
+    h1 {
+      font-size: 46px; line-height: 1.12; font-weight: 900; letter-spacing: -0.025em; color: #fff;
+    }
+    h1 span {
+      background: linear-gradient(90deg, #fb923c, #f97316, #a78bfa);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    p {
+      font-size: 17.5px; line-height: 1.5; color: #cbd5e1;
+    }
+    .badges {
+      display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px;
+    }
+    .b {
+      padding: 8px 15px; border-radius: 11px;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.13);
+      font-size: 13.5px; font-weight: 750; color: #f8fafc;
+    }
+    .b.orange {
+      background: rgba(234, 88, 12, 0.2); border-color: #ea580c; color: #fdba74;
+    }
+    .right {
+      flex: 1;
+      display: flex;
+      gap: 20px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .card {
+      width: 340px;
+      background: #171722;
+      border: 1.5px solid rgba(167, 139, 250, 0.38);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 24px 55px rgba(0,0,0,0.65);
+    }
+    .web-mini {
+      width: 320px;
+      background: #fbf9f5;
+      color: #1c1917;
+      border-radius: 18px;
+      border: 1px solid #e5dec9;
+      padding: 18px;
+      box-shadow: 0 22px 50px rgba(0,0,0,0.5);
+    }
+  </style></head><body>
+    <div class="marquee">
+      <div class="left">
+        <div class="pill">
+          <span class="dot">VG</span>
+          <span>VIDGRAB VIDEO DOWNLOADER · EXTENSION + WEB</span>
+        </div>
+        <h1>Download <span>MP4, HLS & No-Watermark</span> Videos Fast</h1>
+        <p>Detect streams playing on any tab, merge HLS (.m3u8) into MP4 in your browser, scan entire creator channels, or send videos to your phone via QR.</p>
+        <div class="badges">
+          <span class="b orange">✓ Clean No-Watermark MP4</span>
+          <span class="b">✓ 1080p Full HD · 4K · MP3 320k</span>
+          <span class="b">✓ HLS (.m3u8) Auto-Merger</span>
+          <span class="b">✓ Whole Channel Scanner</span>
+        </div>
+      </div>
+
+      <div class="right">
+        <div class="web-mini">
+          <div style="font-size:11px;font-weight:800;color:#c2410c;margin-bottom:6px;">★ dowloadvideo.io.vn</div>
+          <div style="font-size:17px;font-weight:850;color:#1c1917;line-height:1.25;">3-Step Web & Extension Video Downloader</div>
+          <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;font-size:12px;">
+            <div style="padding:8px 10px;border-radius:9px;background:#fff;border:1px solid #e5dec9;">
+              <strong style="color:#c2410c;">01.</strong> Open video page or paste URL
+            </div>
+            <div style="padding:8px 10px;border-radius:9px;background:#fff;border:1px solid #e5dec9;">
+              <strong style="color:#c2410c;">02.</strong> Auto-detect MP4 / HLS & Remove Logo
+            </div>
+            <div style="padding:8px 10px;border-radius:9px;background:#fff;border:1px solid #e5dec9;">
+              <strong style="color:#c2410c;">03.</strong> Save 1080p, 4K, MP3 or Batch .ZIP
+            </div>
+          </div>
+          <div style="margin-top:12px;background:#ea580c;color:#fff;text-align:center;padding:9px;border-radius:9px;font-size:12px;font-weight:800;">
+            ⚡ EXTRACT & DOWNLOAD NOW
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.09);">
+            <span style="font-size:14px;font-weight:800;color:#fff;">VidGrab Extension</span>
+            <span style="font-size:11px;color:#34d399;font-weight:700;">● 2 Streams Ready</span>
+          </div>
+          <div style="margin-top:12px;background:#12121b;border:1px solid rgba(255,255,255,0.08);border-radius:11px;padding:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:6px;">
+              <span style="color:#34d399;font-weight:800;">MP4 · 1080p HD</span>
+              <span style="color:#fdba74;font-weight:700;">No Watermark</span>
+            </div>
+            <div style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;text-align:center;padding:7px;border-radius:7px;font-size:11.5px;font-weight:700;">
+              ⬇ Download to computer (18.4 MB)
+            </div>
+          </div>
+          <div style="margin-top:10px;background:#12121b;border:1px solid rgba(255,255,255,0.08);border-radius:11px;padding:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:6px;">
+              <span style="color:#c4b5fd;font-weight:800;">HLS (.m3u8)</span>
+              <span style="color:#cbd5e1;">Auto-merge to MP4</span>
+            </div>
+            <div style="background:linear-gradient(135deg,#ea580c,#c2410c);color:#fff;text-align:center;padding:7px;border-radius:7px;font-size:11.5px;font-weight:800;">
+              ⬇ Merge & Save MP4 / MP3
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body></html>`;
+}
+
 const SLIDES = [
   { file: '1-video-on-page.png', builder: buildSlide1 },
   { file: '2-preview.png',       builder: buildSlide2 },
@@ -1080,4 +1314,9 @@ for (const slide of SLIDES) {
   renderHtmlToPng(slide.builder('vi'), viPath);
 }
 
-console.log('Rendered all 10 slides (EN + VI)!');
+const smallPromoPath = path.join(STORE_ASSETS, 'promo-tile-440x280.png');
+const marqueePromoPath = path.join(STORE_ASSETS, 'marquee-promo-1400x560.png');
+renderHtmlToPng(buildSmallPromoTile(), smallPromoPath, 600, 450);
+renderHtmlToPng(buildMarqueePromoTile(), marqueePromoPath, 1560, 740);
+
+console.log('Rendered all 10 slides + 2 promo tiles (440x280 & 1400x560)!');
