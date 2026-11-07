@@ -1,6 +1,6 @@
 /**
  * Phase 14 — Client-side event tracking utility.
- * Fires events to POST /api/v1/events/track.
+ * Fires events to POST /api/v1/events/track and pushes to Google Tag Manager dataLayer.
  * Fire-and-forget: never throws, never blocks UI.
  */
 
@@ -26,6 +26,13 @@ function getAnonymousId() {
  */
 export async function trackEvent(eventName, properties = {}, source = 'web') {
   try {
+    if (typeof window !== 'undefined' && Array.isArray(window.dataLayer)) {
+      window.dataLayer.push({
+        event: eventName,
+        vg_source: source,
+        ...properties,
+      });
+    }
     const payload = {
       event_name: eventName,
       anonymous_id: getAnonymousId(),
