@@ -1588,6 +1588,32 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
     return opts
 
 
+_PROXY_NET_ERR_KWS = (
+    "402",
+    "407",
+    "payment required",
+    "tunnel connection",
+    "unable to connect to proxy",
+    "proxyerror",
+    "timed out",
+    "timeout",
+    "curl: (28)",
+    "curl: (7)",
+    "curl: (35)",
+    "curl: (56)",
+    "502",
+    "503",
+    "504",
+    "connection refused",
+    "connection reset",
+)
+
+
+def _is_proxy_net_err(err_text: str) -> bool:
+    t = (err_text or "").lower()
+    return any(kw in t for kw in _PROXY_NET_ERR_KWS)
+
+
 def _apply_tiktok_opts(opts: dict, url: str, remove_watermark: bool = True) -> dict:
     """
     Inject TikTok/Douyin-specific options.
@@ -1595,6 +1621,8 @@ def _apply_tiktok_opts(opts: dict, url: str, remove_watermark: bool = True) -> d
     """
     if "tiktok.com" in url.lower() or "douyin.com" in url.lower():
         opts["http_headers"] = {"User-Agent": TIKTOK_USER_AGENT}
+        opts["socket_timeout"] = 12
+        opts["retries"] = 1
         opts["extractor_args"] = {
             "tiktok": {
                 "api_hostname": ["api16-normal-c-useast1a.tiktokv.com"],
@@ -3525,15 +3553,18 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 _pa2_opts["ignoreerrors"] = False
                 _pa2_opts["retries"] = 1
                 _pa2_opts["extractor_retries"] = 1
+                _pa2_opts["socket_timeout"] = 12
                 try:
                     with yt_dlp.YoutubeDL(_pa2_opts) as ydl:
                         info = ydl.extract_info(url, download=False)
                 except Exception as _pa2_err:
                     _pa2_str = str(_pa2_err)
-                    if "402" in _pa2_str or "payment required" in _pa2_str.lower() or "tunnel connection" in _pa2_str.lower():
-                        print(f"[Downloader] {_platform_tag}: proxy unavailable — fallback direct")
+                    if _pa2_opts.get("proxy") and _is_proxy_net_err(_pa2_str + " " + " ".join(_ytdlp_errors)):
+                        print(f"[Downloader] {_platform_tag}: proxy unavailable/timeout — fallback direct")
+                        _ytdlp_errors.clear()
                         _direct_opts2 = opts.copy()
                         _direct_opts2.pop("proxy", None)
+                        _direct_opts2["socket_timeout"] = 12
                         with yt_dlp.YoutubeDL(_direct_opts2) as ydl:
                             info = ydl.extract_info(url, download=False)
                     else:
@@ -3573,6 +3604,14 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
             # fall to the plain branch below.)
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
+            if not info and _is_proxy_net_err(" ".join(_ytdlp_errors)):
+                print("[Downloader] generic: proxy unavailable/timeout — fallback direct")
+                _ytdlp_errors.clear()
+                _direct_generic_opts = opts.copy()
+                _direct_generic_opts.pop("proxy", None)
+                _direct_generic_opts["socket_timeout"] = 12
+                with yt_dlp.YoutubeDL(_direct_generic_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
             if info:
                 dl_opts = _get_base_opts(url, phase="download", quality=quality, error_sink=_ytdlp_errors)
                 dl_opts = _apply_tiktok_opts(dl_opts, url, remove_watermark)
@@ -3598,6 +3637,14 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 opts["progress_hooks"] = [_progress_hook]
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=should_download)
+            if not info and opts.get("proxy") and _is_proxy_net_err(" ".join(_ytdlp_errors)):
+                print("[Downloader] metadata: proxy unavailable/timeout — fallback direct")
+                _ytdlp_errors.clear()
+                _direct_meta_opts = opts.copy()
+                _direct_meta_opts.pop("proxy", None)
+                _direct_meta_opts["socket_timeout"] = 12
+                with yt_dlp.YoutubeDL(_direct_meta_opts) as ydl:
+                    info = ydl.extract_info(url, download=should_download)
         # ytsearch returns a playlist container — unwrap to the actual video entry
         if info and info.get("entries") and not info.get("formats") and not info.get("url"):
             entries = [e for e in info["entries"] if e]
