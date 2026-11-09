@@ -59,16 +59,17 @@ def merge_audio_video_task(cmd: List[str], timeout: int = 300) -> Dict[str, Any]
     return _run_ffmpeg(cmd, timeout)
 
 
-@celery_app.task(name="inpaint_logo_task", bind=True, soft_time_limit=300, time_limit=360)
+@celery_app.task(name="inpaint_logo_task", bind=True, queue="media", soft_time_limit=300, time_limit=360)
 def inpaint_logo_task(self, temp_id: str, job_params: Dict[str, Any]) -> Dict[str, Any]:
     """Execute a Flow/Veo visible-logo cleanup job on the Celery 'media' queue."""
     from celery.exceptions import SoftTimeLimitExceeded
-    from app.api.flow_cleanup import _execute_flow_cleanup_job, _mark_job_failed
+    from app.api.flow_cleanup import _execute_flow_cleanup_job, _mark_job_failed, _remove_partial_outputs, _safe_work_dir
 
     try:
         task_id = getattr(getattr(self, "request", None), "id", None)
         return _execute_flow_cleanup_job(temp_id, job_params, celery_task_id=task_id)
     except SoftTimeLimitExceeded as exc:
+        _remove_partial_outputs(_safe_work_dir(temp_id))
         _mark_job_failed(
             temp_id,
             error="Quá thời gian xử lý video (timeout 300s).",
@@ -76,6 +77,52 @@ def inpaint_logo_task(self, temp_id: str, job_params: Dict[str, Any]) -> Dict[st
             job_params=job_params,
         )
         raise exc
+
+
+@celery_app.task(name="track_watermark_task", bind=True, queue="media", soft_time_limit=120, time_limit=135)
+def track_watermark_task(self, temp_id: str, job_params: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute per-frame watermark tracking on the Celery 'media' queue (timeout <= 120s)."""
+    from celery.exceptions import SoftTimeLimitExceeded
+    from app.api.flow_cleanup import _execute_flow_track_job, _mark_job_failed, _remove_partial_outputs, _safe_work_dir
+
+    try:
+        task_id = getattr(getattr(self, "request", None), "id", None)
+        return _execute_flow_track_job(temp_id, job_params, celery_task_id=task_id)
+    except SoftTimeLimitExceeded as exc:
+        _remove_partial_outputs(_safe_work_dir(temp_id))
+        _mark_job_failed(
+            temp_id,
+            error="Quá thời gian theo vết watermark (timeout 120s).",
+            error_code="processing_timeout",
+            job_params=job_params,
+        )
+        raise exc
+
+
+@celery_app.task(name="preview_clip_task", bind=True, queue="media", soft_time_limit=90, time_limit=105)
+def preview_clip_task(self, temp_id: str, job_params: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute 3–5s preview clip rendering on the Celery 'media' queue (timeout <= 90s)."""
+    from celery.exceptions import SoftTimeLimitExceeded
+    from app.api.flow_cleanup import _execute_flow_preview_clip_job, _mark_job_failed, _remove_partial_outputs, _safe_work_dir
+
+    try:
+        task_id = getattr(getattr(self, "request", None), "id", None)
+        return _execute_flow_preview_clip_job(temp_id, job_params, celery_task_id=task_id)
+    except SoftTimeLimitExceeded as exc:
+        _remove_partial_outputs(_safe_work_dir(temp_id))
+        _mark_job_failed(
+            temp_id,
+            error="Quá thời gian tạo video xem thử (timeout 90s).",
+            error_code="processing_timeout",
+            job_params=job_params,
+        )
+        raise exc
+
+
+# Ensure task_routes includes the P5.2 media queue tasks
+if isinstance(getattr(celery_app.conf, "task_routes", None), dict):
+    celery_app.conf.task_routes.setdefault("track_watermark_task", {"queue": "media"})
+    celery_app.conf.task_routes.setdefault("preview_clip_task", {"queue": "media"})
 
 
 def run_on_worker(task, cmd: List[str], timeout: int = 300) -> Dict[str, Any]:

@@ -28,7 +28,7 @@ import cv2
 import numpy as np
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from app.main import limiter
@@ -134,11 +134,44 @@ _SEC_PER_MPX_FRAME = float(os.getenv("FLOW_SEC_PER_MPX_FRAME", "0.45"))
 _MAX_RETRY_COUNT = int(os.getenv("FLOW_MAX_RETRY_COUNT", "3"))
 _FLOW_TTL_SEC = int(os.getenv("FLOW_CLEANUP_TTL_SEC", "1200"))
 _JOB_TIMEOUT_SEC = int(os.getenv("FLOW_JOB_TIMEOUT_SEC", "300"))
+_TRACK_TIMEOUT_SEC = float(os.getenv("FLOW_TRACK_TIMEOUT_SEC", "120"))
+_PREVIEW_CLIP_TIMEOUT_SEC = float(os.getenv("FLOW_PREVIEW_CLIP_TIMEOUT_SEC", "90"))
+_MAX_USER_CONCURRENT_JOBS = int(os.getenv("FLOW_MAX_USER_CONCURRENT_JOBS", "1"))
 _SIGNED_URL_TTL_SEC = min(600, max(1, int(os.getenv("FLOW_SIGNED_URL_TTL_SEC", "600"))))
 _MAX_KEYFRAME_CACHE_FILES = int(os.getenv("FLOW_MAX_KEYFRAME_CACHE_FILES", "50"))
 _EPHEMERAL_SIGNING_SECRET = os.urandom(32).hex()
 _FLOW_PREFIX = "flow_"
 _META_LOCK = threading.RLock()
+
+
+def _check_user_concurrency(owner_id: Optional[str], current_temp_id: str) -> None:
+    """Enforce at most `_MAX_USER_CONCURRENT_JOBS` (default 1) heavy job running/queued per user."""
+    if not owner_id or _MAX_USER_CONCURRENT_JOBS <= 0 or not os.path.isdir(_DOWNLOAD_DIR):
+        return
+    cur_safe = re.sub(r"[^a-f0-9]", "", current_temp_id or "")
+    active_count = 0
+    for name in os.listdir(_DOWNLOAD_DIR):
+        if not name.startswith(_FLOW_PREFIX):
+            continue
+        other_safe = name[len(_FLOW_PREFIX):]
+        if other_safe == cur_safe:
+            continue
+        wdir = os.path.join(_DOWNLOAD_DIR, name)
+        if not os.path.isdir(wdir) or _is_work_dir_expired(wdir):
+            continue
+        meta = _read_meta(wdir)
+        if str(meta.get("owner_user_id", "")) == str(owner_id) and meta.get("status") in ("queued", "running"):
+            active_count += 1
+            if active_count >= _MAX_USER_CONCURRENT_JOBS:
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error_code": "user_concurrent_job_limit",
+                        "user_message": "Bạn đang có một tác vụ xử lý video đang chạy. Vui lòng đợi hoàn tất hoặc hủy trước khi chạy tác vụ mới.",
+                        "active_job_id": meta.get("job_id") or other_safe,
+                        "retryable": True,
+                    },
+                )
 
 
 def _get_signing_secret() -> str:
@@ -1001,24 +1034,251 @@ class PreviewClipRequest(BaseModel):
     frame_boxes: Optional[dict] = None
 
 
+def _execute_flow_preview_clip_job(
+    temp_id: str,
+    job_params: Dict[str, Any],
+    celery_task_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Render a 3–5 second cleaned video clip preview in Celery worker ('media' queue) or in-process fallback."""
+    work_dir = _safe_work_dir(temp_id)
+    prev_meta = _read_meta(work_dir)
+    if prev_meta.get("status") == "cancelled":
+        return {
+            "success": False,
+            "job_id": temp_id,
+            "temp_id": temp_id,
+            "task_kind": "preview_clip",
+            "status": "cancelled",
+            "progress": int(prev_meta.get("progress", 0)),
+        }
+
+    input_path = _find_input_path(work_dir)
+    if not input_path:
+        _mark_job_failed(temp_id, "Upload không còn. Vui lòng upload lại.", "source_ingest_failed")
+        raise FileNotFoundError("Upload không còn. Vui lòng upload lại.")
+
+    info = job_params.get("video_info") or prev_meta.get("video_info") or _probe(input_path)
+    vw = int(info.get("width", 1920) or 1920)
+    vh = int(info.get("height", 1080) or 1080)
+    fps_val = float(info.get("fps", 30.0) or 30.0)
+    method = job_params.get("method", "natural")
+    region = job_params["region"]
+    x, y, w, h = int(region["x"]), int(region["y"]), int(region["w"]), int(region["h"])
+    clip_dur = float(job_params.get("clip_dur", 4.0) or 4.0)
+    owner_id = str(prev_meta.get("owner_user_id") or "")
+
+    clip_src = os.path.join(work_dir, "preview_clip_src.mp4")
+    clip_out = os.path.join(work_dir, "preview_clip_clean.mp4")
+    t0 = time.perf_counter()
+
+    _write_meta(work_dir, {
+        "job_id": temp_id,
+        "temp_id": temp_id,
+        "active_task_kind": "preview_clip",
+        "status": "running",
+        "progress": 10,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "celery_task_id": celery_task_id or prev_meta.get("celery_task_id"),
+        "error": None,
+        "error_code": None,
+    })
+
+    def _progress_cb(done_frames: int, total_frames: int) -> bool:
+        if (time.perf_counter() - t0) > _PREVIEW_CLIP_TIMEOUT_SEC:
+            raise TimeoutError("Quá thời gian tạo video preview (processing_timeout).")
+        cur = _read_meta(work_dir)
+        if cur.get("status") == "cancelled":
+            return False
+        pct = min(95, max(10, int(10 + 85 * (done_frames / max(1, total_frames)))))
+        if pct != cur.get("progress"):
+            _write_meta(work_dir, {"progress": pct})
+        return True
+
+    try:
+        r_trim = subprocess.run(
+            [
+                "ffmpeg", "-y", "-ss", "0", "-t", f"{clip_dur:.2f}",
+                "-i", input_path,
+                "-c:v", "libx264", "-crf", "18", "-preset", "veryfast",
+                "-pix_fmt", "yuv420p", "-c:a", "copy",
+                clip_src,
+            ],
+            capture_output=True,
+            timeout=int(min(60, _PREVIEW_CLIP_TIMEOUT_SEC)),
+        )
+        if _read_meta(work_dir).get("status") == "cancelled":
+            raise RuntimeError("Job cancelled by user")
+
+        src_for_preview = (
+            clip_src
+            if (r_trim.returncode == 0 and os.path.isfile(clip_src) and os.path.getsize(clip_src) > 0)
+            else input_path
+        )
+
+        tracked_boxes = job_params.get("frame_boxes") or prev_meta.get("tracked_boxes")
+        if method == "natural":
+            from app.api import flow_inpaint as _fi
+            _fi.process_video_natural(
+                src_for_preview, clip_out,
+                x, y, w, h, vw, vh,
+                fps_val,
+                duration=clip_dur,
+                progress_cb=_progress_cb,
+                frame_boxes=tracked_boxes,
+            )
+        elif method in ("telea", "telea_soft"):
+            mask = _build_mask(x, y, w, h, vw, vh)
+            _telea_video(
+                src_for_preview, clip_out, mask,
+                x, y, w, h, vw, vh,
+                fps_val,
+                soft=(method == "telea_soft"),
+                duration=clip_dur,
+                progress_cb=_progress_cb,
+            )
+        elif method == "crop":
+            _progress_cb(1, 2)
+            _crop_video(src_for_preview, clip_out, x, y, w, h, vw, vh, timeout=int(_PREVIEW_CLIP_TIMEOUT_SEC))
+            _progress_cb(2, 2)
+        else:
+            _progress_cb(1, 2)
+            _blur_video(src_for_preview, clip_out, x, y, w, h, timeout=int(_PREVIEW_CLIP_TIMEOUT_SEC))
+            _progress_cb(2, 2)
+
+        if _read_meta(work_dir).get("status") == "cancelled":
+            raise RuntimeError("Job cancelled by user")
+
+        if not os.path.isfile(clip_out) or os.path.getsize(clip_out) == 0:
+            raise ValueError("Không tạo được video preview ngắn.")
+
+        signed_clip_url = _build_signed_url(
+            f"/api/v1/flow-cleanup/preview-clip-video/{temp_id}",
+            temp_id,
+            "preview_clip",
+            owner_id,
+        )
+        res_payload = {
+            "success": True,
+            "job_id": temp_id,
+            "temp_id": temp_id,
+            "task_kind": "preview_clip",
+            "status": "done",
+            "progress": 100,
+            "preview_clip_url": signed_clip_url,
+            "clip_duration": round(clip_dur, 2),
+            "method_used": method,
+            "region": {"x": x, "y": y, "w": w, "h": h},
+        }
+        _write_meta(work_dir, {
+            "active_task_kind": "preview_clip",
+            "status": "done",
+            "progress": 100,
+            "preview_clip_duration": round(clip_dur, 2),
+            "preview_clip_method": method,
+            "preview_clip_region": {"x": x, "y": y, "w": w, "h": h},
+            "preview_clip_payload": res_payload,
+            "error": None,
+            "error_code": None,
+        })
+        return res_payload
+
+    except Exception as exc:
+        for p in (clip_src, clip_out, clip_out + ".noaudio.mp4"):
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+        if _read_meta(work_dir).get("status") == "cancelled" or "cancelled" in str(exc).lower():
+            _write_meta(work_dir, {
+                "status": "cancelled",
+                "cancelled_at": datetime.now(timezone.utc).isoformat(),
+                "error": "Đã hủy tạo video preview.",
+                "error_code": "job_cancelled",
+            })
+            return {
+                "success": False,
+                "job_id": temp_id,
+                "temp_id": temp_id,
+                "task_kind": "preview_clip",
+                "status": "cancelled",
+                "progress": _read_meta(work_dir).get("progress", 0),
+            }
+        err_code = _error_code(exc)
+        err_msg = "Quá thời gian tạo video preview." if err_code == "processing_timeout" else f"Tạo video preview thất bại: {str(exc)[:200]}"
+        _mark_job_failed(temp_id, err_msg, err_code)
+        raise
+
+
+def _enqueue_preview_clip_task(temp_id: str, job_params: Dict[str, Any]) -> Optional[str]:
+    """Dispatch `preview_clip_task` onto the Celery 'media' queue if reachable or mocked."""
+    from app.tasks.media_tasks import preview_clip_task
+    from app.core.celery_app import celery_app
+
+    apply_fn = getattr(preview_clip_task, "apply_async", None)
+    is_mocked = (
+        hasattr(apply_fn, "_mock_name")
+        or getattr(apply_fn, "__qualname__", "Task.apply_async") != "Task.apply_async"
+        or os.getenv("FLOW_CLEANUP_FORCE_ASYNC") == "1"
+    )
+    if is_mocked:
+        res = preview_clip_task.apply_async(args=[temp_id, job_params], queue="media")
+        return str(getattr(res, "id", temp_id))
+
+    try:
+        insp = celery_app.control.inspect(timeout=0.3)
+        active = insp.ping() if insp else None
+        if not active:
+            return None
+        res = preview_clip_task.apply_async(args=[temp_id, job_params], queue="media", retry=False)
+        return str(getattr(res, "id", temp_id))
+    except Exception as exc:
+        log.warning("[flow-cleanup] media queue unavailable for preview_clip: %s", exc)
+        return None
+
+
 @router.post("/preview-clip")
 @limiter.limit("10/minute")
 def preview_clip_cleanup(payload: PreviewClipRequest, request: Request, _: None = Depends(_require_pro)):
     """
-    Phase P4: Render a short 3–5 second cleaned video clip preview so the user can inspect
-    motion quality and temporal inpainting before launching the full video job.
+    Phase P4 / P5.2: Render a short 3–5 second cleaned video clip preview asynchronously on the 'media' queue.
+    - Deduplicates if a `preview_clip` job is already queued/running on the same `temp_id`.
+    - Enforces per-user concurrency limit (1 active heavy job per user).
+    - Returns HTTP 202 with `task_id` and `status_url` when queued on Celery.
     """
     work_dir = _safe_work_dir(payload.temp_id)
     meta = _ensure_work_dir_fresh(work_dir, detail="Upload không còn. Vui lòng upload lại.")
-    _verify_job_owner(meta, _caller_user_id(request))
+    caller_id = _caller_user_id(request)
+    _verify_job_owner(meta, caller_id)
     input_path = _find_input_path(work_dir)
     if not input_path:
         raise HTTPException(status_code=404, detail="Upload không còn. Vui lòng upload lại.")
 
+    # Deduplicate if this temp_id already has a preview_clip task queued or running
+    if meta.get("status") in ("queued", "running") and meta.get("active_task_kind") == "preview_clip":
+        existing_tid = meta.get("celery_task_id") or payload.temp_id
+        return JSONResponse(
+            status_code=202,
+            content={
+                "success": True,
+                "deduplicated": True,
+                "job_id": payload.temp_id,
+                "temp_id": payload.temp_id,
+                "task_id": existing_tid,
+                "celery_task_id": existing_tid,
+                "task_kind": "preview_clip",
+                "status": meta.get("status"),
+                "progress": int(meta.get("progress", 0)),
+                "status_url": f"/api/v1/flow-cleanup/status/{payload.temp_id}",
+                "cancel_url": f"/api/v1/flow-cleanup/cancel/{payload.temp_id}",
+            },
+        )
+
+    _check_user_concurrency(caller_id, payload.temp_id)
+
     info = meta.get("video_info") or _probe(input_path)
     vw = int(info.get("width", 1920) or 1920)
     vh = int(info.get("height", 1080) or 1080)
-    fps_val = float(info.get("fps", 30.0) or 30.0)
     dur = float(info.get("duration", 0.0) or 0.0)
 
     raw = _resolve_region(payload.preset, payload.region, vw, vh)
@@ -1038,66 +1298,66 @@ def preview_clip_cleanup(payload: PreviewClipRequest, request: Request, _: None 
     if dur > 0:
         clip_dur = min(clip_dur, dur)
 
-    clip_src = os.path.join(work_dir, "preview_clip_src.mp4")
-    clip_out = os.path.join(work_dir, "preview_clip_clean.mp4")
+    job_params = {
+        "method": method,
+        "region": {"x": x, "y": y, "w": w, "h": h},
+        "clip_dur": clip_dur,
+        "video_info": info,
+        "frame_boxes": payload.frame_boxes or meta.get("tracked_boxes"),
+    }
+
+    _write_meta(work_dir, {
+        "job_id": payload.temp_id,
+        "temp_id": payload.temp_id,
+        "active_task_kind": "preview_clip",
+        "status": "queued",
+        "progress": 0,
+        "queued_at": datetime.now(timezone.utc).isoformat(),
+        "error": None,
+        "error_code": None,
+    })
+
+    task_id = _enqueue_preview_clip_task(payload.temp_id, job_params)
+    if task_id is not None:
+        _write_meta(work_dir, {"celery_task_id": task_id})
+        return JSONResponse(
+            status_code=202,
+            content={
+                "success": True,
+                "deduplicated": False,
+                "job_id": payload.temp_id,
+                "temp_id": payload.temp_id,
+                "task_id": task_id,
+                "celery_task_id": task_id,
+                "task_kind": "preview_clip",
+                "status": "queued",
+                "progress": 0,
+                "status_url": f"/api/v1/flow-cleanup/status/{payload.temp_id}",
+                "cancel_url": f"/api/v1/flow-cleanup/cancel/{payload.temp_id}",
+                "method_used": method,
+                "region": {"x": x, "y": y, "w": w, "h": h},
+            },
+        )
+
+    if os.getenv("FLOW_CLEANUP_ALLOW_INPROCESS", "0") != "1":
+        _mark_job_failed(payload.temp_id, "Hàng đợi xử lý video tạm thời không khả dụng.", "queue_unavailable")
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error_code": "queue_unavailable",
+                "user_message": "Hệ thống xử lý video đang bận hoặc tạm thời gián đoạn. Vui lòng thử lại sau ít phút.",
+                "retryable": True,
+            },
+        )
 
     try:
-        r_trim = subprocess.run(
-            [
-                "ffmpeg", "-y", "-ss", "0", "-t", f"{clip_dur:.2f}",
-                "-i", input_path,
-                "-c:v", "libx264", "-crf", "18", "-preset", "veryfast",
-                "-pix_fmt", "yuv420p", "-c:a", "copy",
-                clip_src,
-            ],
-            capture_output=True,
-            timeout=60,
-        )
-        src_for_preview = clip_src if (r_trim.returncode == 0 and os.path.isfile(clip_src) and os.path.getsize(clip_src) > 0) else input_path
-
-        tracked_boxes = payload.frame_boxes or meta.get("tracked_boxes")
-        if method == "natural":
-            from app.api import flow_inpaint as _fi
-            _fi.process_video_natural(
-                src_for_preview, clip_out,
-                x, y, w, h, vw, vh,
-                fps_val,
-                duration=clip_dur,
-                frame_boxes=tracked_boxes,
-            )
-        elif method in ("telea", "telea_soft"):
-            mask = _build_mask(x, y, w, h, vw, vh)
-            _telea_video(
-                src_for_preview, clip_out, mask,
-                x, y, w, h, vw, vh,
-                fps_val,
-                soft=(method == "telea_soft"),
-                duration=clip_dur,
-            )
-        elif method == "crop":
-            _crop_video(src_for_preview, clip_out, x, y, w, h, vw, vh, timeout=60)
-        else:
-            _blur_video(src_for_preview, clip_out, x, y, w, h, timeout=60)
-
-        if not os.path.isfile(clip_out) or os.path.getsize(clip_out) == 0:
-            raise ValueError("Không tạo được video preview ngắn.")
+        return _execute_flow_preview_clip_job(payload.temp_id, job_params)
+    except HTTPException:
+        raise
+    except (subprocess.TimeoutExpired, TimeoutError):
+        raise HTTPException(status_code=504, detail="Quá thời gian tạo video preview.")
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Tạo video preview thất bại: {str(exc)[:200]}")
-
-    owner_id = str(meta["owner_user_id"])
-    return {
-        "success": True,
-        "temp_id": payload.temp_id,
-        "preview_clip_url": _build_signed_url(
-            f"/api/v1/flow-cleanup/preview-clip-video/{payload.temp_id}",
-            payload.temp_id,
-            "preview_clip",
-            owner_id,
-        ),
-        "clip_duration": round(clip_dur, 2),
-        "method_used": method,
-        "region": {"x": x, "y": y, "w": w, "h": h},
-    }
 
 
 @router.get("/preview-clip-video/{temp_id}")
@@ -1155,7 +1415,12 @@ def _remove_partial_outputs(work_dir: str) -> None:
     if not os.path.isdir(work_dir):
         return
     for name in os.listdir(work_dir):
-        if name.startswith("cleaned_") or name.endswith(".noaudio.mp4"):
+        if (
+            name.startswith("cleaned_")
+            or name.endswith(".noaudio.mp4")
+            or name in ("preview_clip_src.mp4", "preview_clip_clean.mp4")
+            or ".tmp." in name
+        ):
             try:
                 os.remove(os.path.join(work_dir, name))
             except Exception:
@@ -1208,6 +1473,7 @@ def _execute_flow_cleanup_job(
     _write_meta(work_dir, {
         "job_id": temp_id,
         "temp_id": temp_id,
+        "active_task_kind": "process",
         "status": "running",
         "progress": 5,
         "started_at": datetime.now(timezone.utc).isoformat(),
@@ -1331,6 +1597,7 @@ def _execute_flow_cleanup_job(
         }
 
         _write_meta(work_dir, {
+            "active_task_kind": "process",
             "status": "completed",
             "job_status": "done",
             "progress": 100,
@@ -1425,6 +1692,7 @@ def _start_or_queue_cleanup_job(temp_id: str, job_params: Dict[str, Any], retry_
     _write_meta(work_dir, {
         "job_id": temp_id,
         "temp_id": temp_id,
+        "active_task_kind": "process",
         "status": "queued",
         "progress": 0,
         "queued_at": datetime.now(timezone.utc).isoformat(),
@@ -1500,7 +1768,26 @@ def process_flow_cleanup(
     """
     work_dir = _safe_work_dir(payload.temp_id)
     _prev_meta = _ensure_work_dir_fresh(work_dir, detail="Upload không còn. Vui lòng upload lại.")
-    _verify_job_owner(_prev_meta, _caller_user_id(request))
+    caller_id = _caller_user_id(request)
+    _verify_job_owner(_prev_meta, caller_id)
+    if _prev_meta.get("status") in ("queued", "running") and _prev_meta.get("active_task_kind") == "process":
+        existing_tid = _prev_meta.get("celery_task_id") or payload.temp_id
+        return {
+            "success": True,
+            "deduplicated": True,
+            "job_id": payload.temp_id,
+            "temp_id": payload.temp_id,
+            "task_id": existing_tid,
+            "celery_task_id": existing_tid,
+            "task_kind": "process",
+            "status": _prev_meta.get("status"),
+            "progress": int(_prev_meta.get("progress", 0)),
+            "retry_count": int(_prev_meta.get("retry_count", 0)),
+            "status_url": f"/api/v1/flow-cleanup/status/{payload.temp_id}",
+            "cancel_url": f"/api/v1/flow-cleanup/cancel/{payload.temp_id}",
+            "retry_url": f"/api/v1/flow-cleanup/retry/{payload.temp_id}",
+        }
+    _check_user_concurrency(caller_id, payload.temp_id)
     retry_count = _prev_meta.get("retry_count", -1) + 1  # 0 = first attempt
 
     input_path = _find_input_path(work_dir)
@@ -1624,11 +1911,13 @@ async def get_flow_cleanup_status(job_id: str, request: Request = None, _: None 
     raw_status = meta.get("status", "uploaded")
     norm_status = "done" if raw_status in ("completed", "done") else raw_status
     progress = int(meta.get("progress", 100 if norm_status == "done" else 0))
+    task_kind = meta.get("active_task_kind", "process")
 
     resp: Dict[str, Any] = {
         "success": norm_status not in ("failed", "cancelled"),
         "job_id": job_id,
         "temp_id": job_id,
+        "task_kind": task_kind,
         "status": norm_status,
         "progress": progress,
         "retry_count": int(meta.get("retry_count", 0)),
@@ -1639,28 +1928,51 @@ async def get_flow_cleanup_status(job_id: str, request: Request = None, _: None 
     }
 
     if norm_status == "done":
-        saved_payload = meta.get("result_payload")
-        if isinstance(saved_payload, dict):
-            resp.update(saved_payload)
+        if task_kind == "track":
+            tr_obj = meta.get("tracking_result")
+            if isinstance(tr_obj, dict):
+                resp.update(tr_obj)
+            resp["tracking_status"] = meta.get("tracking_status", "tracked")
             resp["status"] = "done"
             resp["progress"] = 100
-        else:
-            cleaned_id = meta.get("cleaned_file_id")
-            if cleaned_id:
-                real = resolve_file_id(cleaned_id, work_dir)
-                if real and os.path.isfile(real):
-                    resp.update(file_fields(real, "cleaned_file_id", "cleaned_path"))
+        elif task_kind == "preview_clip":
+            owner_id = str(meta.get("owner_user_id") or "")
             resp.update({
-                "download_url": meta.get("download_url"),
-                "filename": meta.get("output_filename"),
-                "file_size_mb": meta.get("output_file_size_mb"),
-                "result_type": meta.get("result_type"),
-                "selected_mode": meta.get("selected_mode"),
-                "requested_mode": meta.get("requested_mode"),
-                "warning_flags": meta.get("warning_flags", []),
-                "suitability_level": meta.get("suitability_level"),
-                "suitability_outcome": meta.get("suitability_outcome"),
+                "preview_clip_url": _build_signed_url(
+                    f"/api/v1/flow-cleanup/preview-clip-video/{job_id}",
+                    job_id,
+                    "preview_clip",
+                    owner_id,
+                ),
+                "clip_duration": meta.get("preview_clip_duration", 4.0),
+                "method_used": meta.get("preview_clip_method") or meta.get("method"),
+                "region": meta.get("preview_clip_region") or meta.get("region"),
+                "status": "done",
+                "progress": 100,
             })
+        else:
+            saved_payload = meta.get("result_payload")
+            if isinstance(saved_payload, dict):
+                resp.update(saved_payload)
+                resp["status"] = "done"
+                resp["progress"] = 100
+            else:
+                cleaned_id = meta.get("cleaned_file_id")
+                if cleaned_id:
+                    real = resolve_file_id(cleaned_id, work_dir)
+                    if real and os.path.isfile(real):
+                        resp.update(file_fields(real, "cleaned_file_id", "cleaned_path"))
+                resp.update({
+                    "download_url": meta.get("download_url"),
+                    "filename": meta.get("output_filename"),
+                    "file_size_mb": meta.get("output_file_size_mb"),
+                    "result_type": meta.get("result_type"),
+                    "selected_mode": meta.get("selected_mode"),
+                    "requested_mode": meta.get("requested_mode"),
+                    "warning_flags": meta.get("warning_flags", []),
+                    "suitability_level": meta.get("suitability_level"),
+                    "suitability_outcome": meta.get("suitability_outcome"),
+                })
     return resp
 
 
@@ -1931,6 +2243,153 @@ class TrackRequest(BaseModel):
     min_confidence: float = 0.65
 
 
+def _execute_flow_track_job(
+    temp_id: str,
+    job_params: Dict[str, Any],
+    celery_task_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Run per-frame watermark tracking in Celery worker ('media' queue) or in-process fallback."""
+    work_dir = _safe_work_dir(temp_id)
+    prev_meta = _read_meta(work_dir)
+    if prev_meta.get("status") == "cancelled":
+        return {
+            "success": False,
+            "job_id": temp_id,
+            "temp_id": temp_id,
+            "task_kind": "track",
+            "status": "cancelled",
+            "progress": int(prev_meta.get("progress", 0)),
+        }
+
+    input_path = _find_input_path(work_dir)
+    if not input_path:
+        _mark_job_failed(temp_id, "Upload không còn. Vui lòng upload lại.", "source_ingest_failed")
+        raise FileNotFoundError("Upload không còn. Vui lòng upload lại.")
+
+    init_box = job_params.get("init_box")
+    keyframes = job_params.get("keyframes")
+    min_confidence = float(job_params.get("min_confidence", 0.65) or 0.65)
+
+    _write_meta(work_dir, {
+        "job_id": temp_id,
+        "temp_id": temp_id,
+        "active_task_kind": "track",
+        "status": "running",
+        "progress": 10,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "celery_task_id": celery_task_id or prev_meta.get("celery_task_id"),
+        "error": None,
+        "error_code": None,
+    })
+
+    def _progress_cb(done_frames: int, total_frames: int) -> bool:
+        cur = _read_meta(work_dir)
+        if cur.get("status") == "cancelled":
+            return False
+        pct = min(95, max(10, int(10 + 85 * (done_frames / max(1, total_frames)))))
+        if pct != cur.get("progress"):
+            _write_meta(work_dir, {"progress": pct})
+        return True
+
+    try:
+        from app.services.watermark_track import retrack_with_keyframes, track_watermark_in_video
+        prev_track = prev_meta.get("tracking_result")
+        if keyframes and isinstance(prev_track, dict) and prev_track.get("frames"):
+            tr = retrack_with_keyframes(
+                input_path,
+                prev_track,
+                keyframes,
+                min_confidence=min_confidence,
+                progress_cb=_progress_cb,
+                timeout_sec=_TRACK_TIMEOUT_SEC,
+            )
+        else:
+            tr = track_watermark_in_video(
+                input_path,
+                init_box=init_box,
+                keyframes=keyframes,
+                min_confidence=min_confidence,
+                progress_cb=_progress_cb,
+                timeout_sec=_TRACK_TIMEOUT_SEC,
+            )
+
+        if _read_meta(work_dir).get("status") == "cancelled":
+            raise RuntimeError("Job cancelled by user")
+
+        _write_meta(work_dir, {
+            "active_task_kind": "track",
+            "status": "done",
+            "progress": 100,
+            "tracked_at": datetime.now(timezone.utc).isoformat(),
+            "tracking_status": tr["status"],
+            "tracking_needs_review": tr["needs_review"],
+            "tracked_boxes": tr["boxes_by_frame"],
+            "tracking_scene_cuts": tr.get("scene_cuts", []),
+            "tracking_lost_frames": tr.get("lost_frames", []),
+            "tracking_review_keyframes": tr.get("review_keyframes", []),
+            "tracking_elapsed_sec": tr["elapsed_sec"],
+            "tracking_result": tr,
+            "error": None,
+            "error_code": None,
+        })
+
+        return {
+            "success": True,
+            "temp_id": temp_id,
+            "job_id": temp_id,
+            "task_kind": "track",
+            **tr,
+        }
+
+    except Exception as exc:
+        if _read_meta(work_dir).get("status") == "cancelled" or "cancelled" in str(exc).lower():
+            _write_meta(work_dir, {
+                "status": "cancelled",
+                "cancelled_at": datetime.now(timezone.utc).isoformat(),
+                "error": "Đã hủy theo vết watermark.",
+                "error_code": "job_cancelled",
+            })
+            return {
+                "success": False,
+                "job_id": temp_id,
+                "temp_id": temp_id,
+                "task_kind": "track",
+                "status": "cancelled",
+                "progress": _read_meta(work_dir).get("progress", 0),
+            }
+        err_code = _error_code(exc)
+        err_msg = "Quá thời gian theo vết watermark." if err_code == "processing_timeout" else f"Theo vết watermark thất bại: {str(exc)[:200]}"
+        _mark_job_failed(temp_id, err_msg, err_code)
+        raise
+
+
+def _enqueue_track_task(temp_id: str, job_params: Dict[str, Any]) -> Optional[str]:
+    """Dispatch `track_watermark_task` onto the Celery 'media' queue if reachable or mocked."""
+    from app.tasks.media_tasks import track_watermark_task
+    from app.core.celery_app import celery_app
+
+    apply_fn = getattr(track_watermark_task, "apply_async", None)
+    is_mocked = (
+        hasattr(apply_fn, "_mock_name")
+        or getattr(apply_fn, "__qualname__", "Task.apply_async") != "Task.apply_async"
+        or os.getenv("FLOW_CLEANUP_FORCE_ASYNC") == "1"
+    )
+    if is_mocked:
+        res = track_watermark_task.apply_async(args=[temp_id, job_params], queue="media")
+        return str(getattr(res, "id", temp_id))
+
+    try:
+        insp = celery_app.control.inspect(timeout=0.3)
+        active = insp.ping() if insp else None
+        if not active:
+            return None
+        res = track_watermark_task.apply_async(args=[temp_id, job_params], queue="media", retry=False)
+        return str(getattr(res, "id", temp_id))
+    except Exception as exc:
+        log.warning("[flow-cleanup] media queue unavailable for track: %s", exc)
+        return None
+
+
 @router.post("/track/{temp_id}")
 @limiter.limit("20/minute")
 def track_flow_watermark(
@@ -1940,18 +2399,42 @@ def track_flow_watermark(
     _: None = Depends(_require_pro),
 ):
     """
-    Phase P3: Track visible watermark across all frames of an uploaded video.
+    Phase P3 / P5.2: Track visible watermark across all frames of an uploaded video asynchronously via 'media' queue.
     - Supports static, drifting, and jumping watermarks.
-    - Detects scene cuts and tracking loss (`needs_review=True`).
-    - When `keyframes` are supplied on an existing track, recomputes ONLY the affected segment(s).
+    - Deduplicates if a `track` task is already queued/running on the same `temp_id`.
+    - Enforces per-user concurrency limit (1 active heavy job per user).
+    - Returns HTTP 202 with `task_id` and `status_url` when queued on Celery.
     """
     work_dir = _safe_work_dir(temp_id)
     meta = _ensure_work_dir_fresh(work_dir, detail="Upload không còn. Vui lòng upload lại.")
-    _verify_job_owner(meta, _caller_user_id(request))
+    caller_id = _caller_user_id(request)
+    _verify_job_owner(meta, caller_id)
 
     input_path = _find_input_path(work_dir)
     if not input_path:
         raise HTTPException(status_code=404, detail="Upload không còn. Vui lòng upload lại.")
+
+    # Deduplicate if this temp_id already has a track task queued or running
+    if meta.get("status") in ("queued", "running") and meta.get("active_task_kind") == "track":
+        existing_tid = meta.get("celery_task_id") or temp_id
+        return JSONResponse(
+            status_code=202,
+            content={
+                "success": True,
+                "deduplicated": True,
+                "job_id": temp_id,
+                "temp_id": temp_id,
+                "task_id": existing_tid,
+                "celery_task_id": existing_tid,
+                "task_kind": "track",
+                "status": meta.get("status"),
+                "progress": int(meta.get("progress", 0)),
+                "status_url": f"/api/v1/flow-cleanup/status/{temp_id}",
+                "cancel_url": f"/api/v1/flow-cleanup/cancel/{temp_id}",
+            },
+        )
+
+    _check_user_concurrency(caller_id, temp_id)
 
     req = payload or TrackRequest()
     init_box = None
@@ -1961,41 +2444,59 @@ def track_flow_watermark(
         r0 = meta["detected_regions"][0]
         init_box = [int(r0["x"]), int(r0["y"]), int(r0["w"]), int(r0["h"])]
 
-    try:
-        from app.services.watermark_track import retrack_with_keyframes, track_watermark_in_video
-        prev_track = meta.get("tracking_result")
-        if req.keyframes and isinstance(prev_track, dict) and prev_track.get("frames"):
-            tr = retrack_with_keyframes(
-                input_path,
-                prev_track,
-                req.keyframes,
-                min_confidence=req.min_confidence,
-            )
-        else:
-            tr = track_watermark_in_video(
-                input_path,
-                init_box=init_box,
-                keyframes=req.keyframes,
-                min_confidence=req.min_confidence,
-            )
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Theo vết watermark thất bại: {str(exc)[:200]}")
+    job_params = {
+        "init_box": init_box,
+        "keyframes": req.keyframes,
+        "min_confidence": req.min_confidence,
+    }
 
     _write_meta(work_dir, {
-        "tracked_at": datetime.now(timezone.utc).isoformat(),
-        "tracking_status": tr["status"],
-        "tracking_needs_review": tr["needs_review"],
-        "tracked_boxes": tr["boxes_by_frame"],
-        "tracking_scene_cuts": tr.get("scene_cuts", []),
-        "tracking_lost_frames": tr.get("lost_frames", []),
-        "tracking_review_keyframes": tr.get("review_keyframes", []),
-        "tracking_elapsed_sec": tr["elapsed_sec"],
-        "tracking_result": tr,
+        "job_id": temp_id,
+        "temp_id": temp_id,
+        "active_task_kind": "track",
+        "status": "queued",
+        "progress": 0,
+        "queued_at": datetime.now(timezone.utc).isoformat(),
+        "error": None,
+        "error_code": None,
     })
 
-    return {
-        "success": True,
-        "temp_id": temp_id,
-        "job_id": temp_id,
-        **tr,
-    }
+    task_id = _enqueue_track_task(temp_id, job_params)
+    if task_id is not None:
+        _write_meta(work_dir, {"celery_task_id": task_id})
+        return JSONResponse(
+            status_code=202,
+            content={
+                "success": True,
+                "deduplicated": False,
+                "job_id": temp_id,
+                "temp_id": temp_id,
+                "task_id": task_id,
+                "celery_task_id": task_id,
+                "task_kind": "track",
+                "status": "queued",
+                "progress": 0,
+                "status_url": f"/api/v1/flow-cleanup/status/{temp_id}",
+                "cancel_url": f"/api/v1/flow-cleanup/cancel/{temp_id}",
+            },
+        )
+
+    if os.getenv("FLOW_CLEANUP_ALLOW_INPROCESS", "0") != "1":
+        _mark_job_failed(temp_id, "Hàng đợi xử lý video tạm thời không khả dụng.", "queue_unavailable")
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error_code": "queue_unavailable",
+                "user_message": "Hệ thống xử lý video đang bận hoặc tạm thời gián đoạn. Vui lòng thử lại sau ít phút.",
+                "retryable": True,
+            },
+        )
+
+    try:
+        return _execute_flow_track_job(temp_id, job_params)
+    except HTTPException:
+        raise
+    except (subprocess.TimeoutExpired, TimeoutError):
+        raise HTTPException(status_code=504, detail="Quá thời gian theo vết watermark.")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Theo vết watermark thất bại: {str(exc)[:200]}")

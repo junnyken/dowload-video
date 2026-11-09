@@ -514,6 +514,10 @@ def _track_segment_frames(
     init_box: Tuple[int, int, int, int],
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
     scales: Sequence[float] = (1.0,),
+    progress_cb: Optional[Callable[[int, int], Optional[bool]]] = None,
+    total_frames: int = 0,
+    t0: Optional[float] = None,
+    timeout_sec: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """
     Track a single watermark across `frames_bgr[start_idx:end_idx]` starting from `init_box`
@@ -547,8 +551,15 @@ def _track_segment_frames(
     cur_anchor = anchor_box
     vx, vy = 0.0, 0.0
     entries: List[Dict[str, Any]] = []
+    tot_n = max(1, total_frames or len(frames_bgr))
 
     for idx in range(start_idx, end_idx):
+        if t0 is not None and timeout_sec is not None and (time.perf_counter() - t0) > timeout_sec:
+            raise TimeoutError("Quá thời gian theo vết watermark (processing_timeout).")
+        if progress_cb is not None and (idx == start_idx or idx % 5 == 0):
+            if progress_cb(idx + 1, tot_n) is False:
+                raise RuntimeError("Job cancelled by user")
+
         if idx == start_idx:
             entries.append({
                 "frame_idx": idx,
@@ -797,6 +808,8 @@ def track_watermark_in_video(
     init_box: Optional[Sequence[int]] = None,
     keyframes: Optional[Sequence[Dict[str, int]]] = None,
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    progress_cb: Optional[Callable[[int, int], Optional[bool]]] = None,
+    timeout_sec: float = 120.0,
 ) -> Dict[str, Any]:
     """
     Main Phase P3 entrypoint: track a visible watermark across every frame of `input_path`.
@@ -813,6 +826,10 @@ def track_watermark_in_video(
         When provided, splits the video at the keyframes and tracks each segment from its keyframe.
     min_confidence : float
         Confidence threshold below which frames are marked `needs_review=True`.
+    progress_cb : Optional[Callable[[int, int], Optional[bool]]]
+        Optional callback `(done_frames, total_frames) -> bool`. Return `False` to cancel.
+    timeout_sec : float
+        Maximum wall-clock time allowed for tracking (default 120s).
     """
     t0 = time.perf_counter()
     frames_bgr, info = decode_all_frames(input_path)
@@ -862,6 +879,10 @@ def track_watermark_in_video(
             end_idx=k_end,
             init_box=k_box,
             min_confidence=min_confidence,
+            progress_cb=progress_cb,
+            total_frames=n_frames,
+            t0=t0,
+            timeout_sec=timeout_sec,
         )
         if keyframes and any(int(kf["frame_idx"]) == k_start for kf in keyframes):
             seg_entries[0]["status"] = "keyframe"
@@ -879,6 +900,8 @@ def retrack_with_keyframes(
     previous_track: Dict[str, Any],
     keyframes: Sequence[Dict[str, int]],
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    progress_cb: Optional[Callable[[int, int], Optional[bool]]] = None,
+    timeout_sec: float = 120.0,
 ) -> Dict[str, Any]:
     """
     Recompute ONLY the segment(s) affected by user keyframe adjustments (`keyframes`),
@@ -887,7 +910,13 @@ def retrack_with_keyframes(
     t0 = time.perf_counter()
     prev_frames: List[Dict[str, Any]] = [dict(e) for e in previous_track.get("frames", [])]
     if not prev_frames:
-        return track_watermark_in_video(input_path, keyframes=keyframes, min_confidence=min_confidence)
+        return track_watermark_in_video(
+            input_path,
+            keyframes=keyframes,
+            min_confidence=min_confidence,
+            progress_cb=progress_cb,
+            timeout_sec=timeout_sec,
+        )
 
     frames_bgr, info = decode_all_frames(input_path)
     vw, vh = int(info["width"]), int(info["height"])
@@ -924,6 +953,10 @@ def retrack_with_keyframes(
             end_idx=k_end,
             init_box=k_box,
             min_confidence=min_confidence,
+            progress_cb=progress_cb,
+            total_frames=n_frames,
+            t0=t0,
+            timeout_sec=timeout_sec,
         )
         if seg_entries:
             seg_entries[0]["status"] = "keyframe"

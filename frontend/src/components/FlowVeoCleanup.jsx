@@ -312,6 +312,7 @@ export default function FlowVeoCleanup() {
   const [detectNeedsReview, setDetectNeedsReview] = useState(false);
   // Phase P3/P4: Tracking & Keyframe Editor state
   const [isTracking, setIsTracking] = useState(false);
+  const [trackProgress, setTrackProgress] = useState(0);
   const [trackResult, setTrackResult] = useState(null);
   const [activeKeyframeIdx, setActiveKeyframeIdx] = useState(0);
   const [keyframeOverrides, setKeyframeOverrides] = useState({}); // { [frameIdx]: { xPct, yPct, wPct, hPct } }
@@ -320,12 +321,14 @@ export default function FlowVeoCleanup() {
   const [abSplitPct, setAbSplitPct] = useState(50);
   const [previewClipUrl, setPreviewClipUrl] = useState(null);
   const [isGeneratingClip, setIsGeneratingClip] = useState(false);
+  const [clipProgress, setClipProgress] = useState(0);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const isProUser = ['pro', 'team', 'enterprise', 'api'].includes(user?.tier) || Boolean(user?.is_pro);
 
   const lastRegionRef = useRef(null); // snapshot at process-start for done-step overlay
   const pollTimerRef = useRef(null);
+  const subTaskCancelRef = useRef(false);
 
   const fileInputRef = useRef(null);
 
@@ -375,6 +378,7 @@ export default function FlowVeoCleanup() {
     setSelectedCandidateIdx(0);
     setDetectNeedsReview(false);
     setIsTracking(false);
+    setTrackProgress(0);
     setTrackResult(null);
     setActiveKeyframeIdx(0);
     setKeyframeOverrides({});
@@ -382,6 +386,8 @@ export default function FlowVeoCleanup() {
     setAbSplitPct(50);
     setPreviewClipUrl(null);
     setIsGeneratingClip(false);
+    setClipProgress(0);
+    subTaskCancelRef.current = true;
     if (pollTimerRef.current) {
       clearInterval(pollTimerRef.current);
       pollTimerRef.current = null;
@@ -432,6 +438,41 @@ export default function FlowVeoCleanup() {
     }
   };
 
+  const pollSubTaskUntilDone = async (tid, onProgress) => {
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      if (subTaskCancelRef.current) return { status: 'cancelled' };
+      await new Promise((r) => setTimeout(r, 1000));
+      if (subTaskCancelRef.current) return { status: 'cancelled' };
+      const stRes = await fetch(`${API_BASE}/api/v1/flow-cleanup/status/${tid}`, withAuth({ method: 'GET' }));
+      if (!stRes.ok) {
+        const body = await stRes.json().catch(() => ({}));
+        throw new Error(errMessage(body.detail, t('errors.processFailed', { status: stRes.status })));
+      }
+      const st = await stRes.json();
+      if (typeof st.progress === 'number' && onProgress) onProgress(st.progress);
+      if (st.status === 'done' || st.status === 'completed') return st;
+      if (st.status === 'failed') {
+        throw new Error(st.error || t('errors.processFailed', { status: 500 }));
+      }
+      if (st.status === 'cancelled') return st;
+    }
+    throw new Error('Quá thời gian xử lý.');
+  };
+
+  const handleCancelSubTask = async () => {
+    subTaskCancelRef.current = true;
+    const targetId = jobId || tempId;
+    if (targetId) {
+      try {
+        await fetch(`${API_BASE}/api/v1/flow-cleanup/cancel/${targetId}`, withAuth({ method: 'POST' }));
+      } catch (_) {}
+    }
+    setIsTracking(false);
+    setTrackProgress(0);
+    setIsGeneratingClip(false);
+    setClipProgress(0);
+  };
+
   const runTracking = async (tid = tempId, customPixelBox = null, vInfo = videoInfo, customKeyframes = null) => {
     if (!tid) return;
     const vw = vInfo?.width || 1920;
@@ -442,7 +483,10 @@ export default function FlowVeoCleanup() {
       w: Math.round(region.wPct * vw),
       h: Math.round(region.hPct * vh),
     } : null);
+    subTaskCancelRef.current = false;
     setIsTracking(true);
+    setTrackProgress(5);
+    setError(null);
     try {
       const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/track/${tid}`, withAuth({
         method: 'POST',
@@ -452,15 +496,25 @@ export default function FlowVeoCleanup() {
           keyframes: customKeyframes,
         }),
       }));
-      if (!res.ok) return;
-      const tr = await res.json();
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(errMessage(body.detail, t('errors.processFailed', { status: res.status })));
+        return;
+      }
+      let tr = await res.json();
+      if (res.status === 202 || tr.status === 'queued' || tr.status === 'running') {
+        tr = await pollSubTaskUntilDone(tid, setTrackProgress);
+        if (!tr || tr.status === 'cancelled') return;
+      }
       setTrackResult(tr);
       if (!tr.needs_review) {
         setRegionAdjusted(true);
       }
-    } catch (_) {
+    } catch (err) {
+      setError(err.message);
     } finally {
       setIsTracking(false);
+      setTrackProgress(0);
     }
   };
 
@@ -520,8 +574,11 @@ export default function FlowVeoCleanup() {
       w: Math.round(region.wPct * vw),
       h: Math.round(region.hPct * vh),
     } : null;
+    subTaskCancelRef.current = false;
     setIsGeneratingClip(true);
+    setClipProgress(5);
     setPreviewClipUrl(null);
+    setError(null);
     try {
       const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/preview-clip`, withAuth({
         method: 'POST',
@@ -536,13 +593,24 @@ export default function FlowVeoCleanup() {
           frame_boxes: trackResult?.boxes_by_frame || null,
         }),
       }));
-      if (res.ok) {
-        const data = await res.json();
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(errMessage(body.detail, t('errors.processFailed', { status: res.status })));
+        return;
+      }
+      let data = await res.json();
+      if (res.status === 202 || data.status === 'queued' || data.status === 'running') {
+        data = await pollSubTaskUntilDone(tempId, setClipProgress);
+        if (!data || data.status === 'cancelled') return;
+      }
+      if (data?.preview_clip_url) {
         setPreviewClipUrl(withCacheBust(data.preview_clip_url));
       }
-    } catch (_) {
+    } catch (err) {
+      setError(err.message);
     } finally {
       setIsGeneratingClip(false);
+      setClipProgress(0);
     }
   };
 
@@ -1099,13 +1167,22 @@ export default function FlowVeoCleanup() {
                   )}
                 </div>
                 <div className="flex items-center gap-1.5">
+                  {isTracking && (
+                    <button
+                      type="button"
+                      onClick={handleCancelSubTask}
+                      className="text-[11px] px-2.5 py-1 rounded-lg font-semibold border border-line bg-surface text-fg-muted hover:text-fg transition-colors cursor-pointer"
+                    >
+                      Huỷ
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => runTracking(tempId, null, videoInfo)}
                     disabled={isTracking}
                     className="text-[11px] px-2.5 py-1 rounded-lg font-semibold border border-accent/40 bg-accent-soft text-accent-text hover:bg-accent/20 transition-colors cursor-pointer"
                   >
-                    {isTracking ? t('track.running') : t('track.button')}
+                    {isTracking ? `${t('track.running')}${trackProgress > 0 ? ` (${trackProgress}%)` : ''}` : t('track.button')}
                   </button>
                 </div>
               </div>
@@ -1529,14 +1606,25 @@ export default function FlowVeoCleanup() {
                     </button>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  onClick={handleGeneratePreviewClip}
-                  disabled={isGeneratingClip}
-                  className="text-[11px] px-3 py-1 rounded-lg font-bold border border-accent/40 bg-accent-soft text-accent-text hover:bg-accent/20 transition-colors cursor-pointer"
-                >
-                  {isGeneratingClip ? t('ab.generatingClip') : t('ab.generateClip')}
-                </button>
+                <div className="flex items-center gap-1.5">
+                  {isGeneratingClip && (
+                    <button
+                      type="button"
+                      onClick={handleCancelSubTask}
+                      className="text-[11px] px-2.5 py-1 rounded-lg font-semibold border border-line bg-surface text-fg-muted hover:text-fg transition-colors cursor-pointer"
+                    >
+                      Huỷ
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleGeneratePreviewClip}
+                    disabled={isGeneratingClip}
+                    className="text-[11px] px-3 py-1 rounded-lg font-bold border border-accent/40 bg-accent-soft text-accent-text hover:bg-accent/20 transition-colors cursor-pointer"
+                  >
+                    {isGeneratingClip ? `${t('ab.generatingClip')}${clipProgress > 0 ? ` (${clipProgress}%)` : ''}` : t('ab.generateClip')}
+                  </button>
+                </div>
               </div>
 
               {abMode === 'split' && (

@@ -1536,6 +1536,7 @@ export default function DashboardContent() {
 
   const handleInpaintTrack = async (tid = inpaintTempId, regionBox = inpaintPixelRegion) => {
     if (!tid) return;
+    inpaintCancelRef.current = false;
     setInpaintTracking(true);
     try {
       const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/track/${tid}`, withAuth({
@@ -1544,7 +1545,22 @@ export default function DashboardContent() {
         body: JSON.stringify({ region: regionBox || null }),
       }));
       if (!res.ok) return;
-      const tr = await safeJson(res);
+      let tr = await safeJson(res);
+      if (res.status === 202 || tr.status === 'queued' || tr.status === 'running') {
+        for (let attempt = 0; attempt < 180; attempt += 1) {
+          if (inpaintCancelRef.current) return;
+          await new Promise((r) => setTimeout(r, 1000));
+          if (inpaintCancelRef.current) return;
+          const stRes = await fetch(`${API_BASE}/api/v1/flow-cleanup/status/${tid}`, withAuth({ method: 'GET' }));
+          const stData = await safeJson(stRes);
+          if (!stRes.ok) break;
+          if (stData.status === 'done' || stData.status === 'completed') {
+            tr = stData;
+            break;
+          }
+          if (stData.status === 'failed' || stData.status === 'cancelled') return;
+        }
+      }
       setInpaintTrackInfo(tr);
       if (!tr.needs_review) setInpaintConfirmed(true);
     } catch (_) {
