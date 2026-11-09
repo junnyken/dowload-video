@@ -121,6 +121,72 @@
 
 ---
 
+## Lần chạy 3 — 09/11/2026 (Phase P1 Queue E2E & Phase P2 Auto-Detect Watermark)
+
+### Môi trường
+- Commit P0 + P1: `04ae43f` (`feat/native-link`)
+- OS / Phần cứng: Windows 10/11 (win32), CPU Intel Core i3-10105 @ 3.70GHz (4 nhân / 8 luồng), RAM 16 GB.
+- FFmpeg/FFprobe: static 7.0.2 (`.tools/`).
+- Detector Engine (P2): `detect_watermark_regions` trong `backend/app/services/watermark_detect.py` + endpoint `POST /api/v1/flow-cleanup/detect/{temp_id}`.
+- Inpaint Engine: giữ nguyên `flow_inpaint.py` (không chỉnh sửa engine trong P2 theo đúng Plan).
+
+### Kiểm chứng E2E Hàng đợi P1 (Celery `media` queue)
+- Trên máy Windows dev hiện không cài binary `redis-server` lắng nghe ở cổng `127.0.0.1:6379` (`Test-NetConnection 127.0.0.1 -Port 6379 -> False`).
+- Đã kiểm chứng luồng bất đồng bộ `FLOW_CLEANUP_ALLOW_INPROCESS=0` qua `test_e2e_celery_worker_media_queue_execution` trong `backend/tests/test_flow_cleanup_p1.py`:
+  - `POST /api/v1/flow-cleanup/process` đẩy job vào queue `media`, trả ngay `status="queued"`, `job_id === temp_id`.
+  - Worker thread tiêu thụ `inpaint_logo_task` từ queue `media`, cập nhật tiến độ `0% -> 50% -> 100%` vào `downloads/flow_<temp_id>/metadata.json` (ghi nguyên tử qua `os.replace`).
+  - `GET /api/v1/flow-cleanup/status/{job_id}` trả `status="done"`, `progress=100`, tải file kết quả qua `/api/v1/flow-cleanup/result/{job_id}/{cleaned_file_id}` thành công (`HTTP 200`).
+  - Khi không có worker và `FLOW_CLEANUP_ALLOW_INPROCESS=0` (mặc định production), API trả ngay `HTTP 503` (`error_code="queue_unavailable"`, `retryable=True`).
+
+### Kết quả P2 Detector theo nhóm (19 video: 16 video có watermark + 3 video âm tính)
+| Nhóm | Số video | Precision (IoU ≥ 0.5) | Recall (IoU ≥ 0.5) | Báo nhầm (False Positive) | IoU trung bình | Thời gian phát hiện TB |
+|---|---:|---:|---:|---:|---:|---:|
+| 1. Logo cố định ở góc (`static_corner_01..03`) | 3 | **1.000** (3/3) | **1.000** (3/3) | 0 (0.0%) | **0.817** | 0.679s |
+| 2. Watermark bán trong suốt (`semi_transparent_01..03`) | 3 | **1.000** (3/3) | **1.000** (3/3) | 0 (0.0%) | **0.823** | 0.755s |
+| 3. Logo/chữ di chuyển (`moving_watermark_01..03`) | 3 | **1.000** (3/3) | **1.000** (3/3) | 0 (0.0%) | **0.822** | 0.981s |
+| 4. Nền chuyển động mạnh, camera rung (`heavy_motion_01..03`) | 3 | **1.000** (3/3) | **1.000** (3/3) | 0 (0.0%) | **0.817** | 0.613s |
+| 5. Có cắt cảnh (`scene_cut_01..03`) | 3 | **1.000** (3/3) | **1.000** (3/3) | 0 (0.0%) | **0.813** | 0.583s |
+| 6. Video thực tế (`253K views · 3.2K reactions...`, 900×720) | 1 | **1.000** (1/1) | **1.000** (1/1) | 0 (0.0%) | **0.777** | 1.447s |
+| 7. Có chữ trong nội dung — không watermark (`content_text_neg_01..03`) | 3 | **1.000** | — | **0 / 3 (0.0%)** | — | 0.968s |
+| **Tổng hợp toàn bộ 19 video** | **19** | **1.0000 (≥ 0.90 ĐẠT)** | **1.0000 (≥ 0.85 ĐẠT)** | **0.0% (≤ 10% ĐẠT)** | **0.816** | **0.799s (max 1.447s ≤ 3s ĐẠT)** |
+
+### Chi tiết Detector trên từng video (19 video)
+| Video | Nhóm | Bbox nhãn chuẩn (`GT`) | Bbox phát hiện (`Pred`) | IoU | Phân loại (`kind`) | Confidence | Báo nhầm | Thời gian |
+|---|---|---|---|---:|---|---:|---|---:|
+| `static_corner_01.mp4` | Logo cố định ở góc | `[480, 290, 136, 48]` | `[478, 286, 142, 56]` | 0.821 | `logo` | 0.98 | Không | 0.629s |
+| `static_corner_02.mp4` | Logo cố định ở góc | `[480, 22, 136, 48]` | `[477, 18, 143, 56]` | 0.815 | `logo` | 0.98 | Không | 0.611s |
+| `static_corner_03.mp4` | Logo cố định ở góc | `[24, 290, 136, 48]` | `[21, 286, 143, 56]` | 0.815 | `logo` | 0.98 | Không | 0.797s |
+| `semi_transparent_01.mp4` | Watermark bán trong suốt | `[476, 286, 140, 50]` | `[473, 282, 147, 58]` | 0.821 | `semi_transparent` | 0.98 | Không | 0.680s |
+| `semi_transparent_02.mp4` | Watermark bán trong suốt | `[240, 286, 160, 50]` | `[237, 282, 167, 58]` | 0.826 | `semi_transparent` | 0.98 | Không | 0.882s |
+| `semi_transparent_03.mp4` | Watermark bán trong suốt | `[24, 24, 140, 50]` | `[21, 20, 147, 58]` | 0.821 | `semi_transparent` | 0.98 | Không | 0.702s |
+| `moving_watermark_01.mp4` | Logo/chữ di chuyển | `[480, 288, 136, 48]` | `[477, 284, 143, 56]` | 0.815 | `moving` | 0.94 | Không | 0.773s |
+| `moving_watermark_02.mp4` | Logo/chữ di chuyển | `[24, 288, 136, 48]` | `[21, 284, 143, 46]` | 0.773 | `moving` | 0.94 | Không | 1.088s |
+| `moving_watermark_03.mp4` | Logo/chữ di chuyển | `[40, 288, 136, 48]` | `[41, 285, 134, 54]` | 0.877 | `moving` | 0.94 | Không | 1.081s |
+| `heavy_motion_01.mp4` | Nền chuyển động mạnh, camera rung | `[480, 288, 136, 48]` | `[478, 284, 142, 56]` | 0.821 | `logo` | 0.98 | Không | 0.444s |
+| `heavy_motion_02.mp4` | Nền chuyển động mạnh, camera rung | `[480, 288, 136, 48]` | `[477, 284, 143, 56]` | 0.815 | `semi_transparent` | 0.98 | Không | 0.739s |
+| `heavy_motion_03.mp4` | Nền chuyển động mạnh, camera rung | `[24, 288, 136, 48]` | `[21, 284, 143, 56]` | 0.815 | `logo` | 0.98 | Không | 0.657s |
+| `scene_cut_01.mp4` | Có cắt cảnh | `[480, 288, 136, 48]` | `[477, 284, 143, 56]` | 0.815 | `logo` | 0.98 | Không | 0.507s |
+| `scene_cut_02.mp4` | Có cắt cảnh | `[480, 24, 136, 48]` | `[477, 20, 143, 56]` | 0.815 | `logo` | 0.98 | Không | 0.511s |
+| `scene_cut_03.mp4` | Có cắt cảnh | `[480, 288, 136, 48]` | `[476, 284, 144, 56]` | 0.810 | `moving` | 0.94 | Không | 0.732s |
+| `253K views...Agency.mp4` | Watermark bán trong suốt (thực tế) | `[250, 480, 420, 130]` | `[264, 495, 372, 114]` | 0.777 | `semi_transparent` | 0.83 | Không | 1.447s |
+| `content_text_neg_01.mp4` | Có chữ trong nội dung (phụ đề thoại) | `None` | `None` (`status="none"`) | — | — | — | **Không (0 FP)** | 0.990s |
+| `content_text_neg_02.mp4` | Có chữ trong nội dung (biển hiệu) | `None` | `None` (`status="none"`) | — | — | — | **Không (0 FP)** | 0.949s |
+| `content_text_neg_03.mp4` | Có chữ trong nội dung (tiêu đề chương) | `None` | `None` (`status="none"`) | — | — | — | **Không (0 FP)** | 0.966s |
+
+### Kết luận Lần chạy 3 (Phase P2)
+- **Đạt toàn bộ tiêu chí nghiệm thu Phase P2**:
+  - **Precision = 1.0000** (mục tiêu `≥ 0.90`).
+  - **Recall = 1.0000** (mục tiêu `≥ 0.85`, tất cả 16/16 video dương tính đều có `IoU ≥ 0.773`, vượt xa ngưỡng `IoU ≥ 0.50`).
+  - **Báo nhầm (False Positive) = 0.0% (0/3)** trên nhóm `content_text_neg_01..03` (mục tiêu `≤ 10%`), đồng thời loại bỏ hoàn toàn thanh tiêu đề tĩnh phía trên (`y < 130`) và tường tĩnh hai bên của video thực tế `253K views...Agency.mp4`.
+  - **Thời gian phát hiện**: trung bình **0.799 giây**, lâu nhất **1.447 giây** trên video 900×720 (mục tiêu `≤ 3 giây`).
+- **Lưu ý quan trọng về phạm vi bộ dữ liệu**:
+  - Kết quả Precision/Recall 100% hiện được đo trên bộ dữ liệu gồm **18/19 video tổng hợp (synthetic)** và **chỉ có 1 mẫu video thực tế** (`253K views · 3.2K reactions _ Sao kỳ dị chờn 🥹 _ Cuộc Sống Agency.mp4`).
+  - 1 mẫu video thực tế chưa đủ để đại diện cho mọi dạng video ngoài thực tế (đa dạng hiệu ứng nén, phông chữ nghệ thuật, logo bán trong suốt rất mờ, hoặc chuyển động phức tạp). Vì vậy hệ thống bắt buộc giữ cơ chế `needs_review=True` khi độ tin cậy thấp (`confidence < 0.75`) và không tự động xử lý nếu người dùng chưa xác nhận vùng chọn.
+- **Việc tiếp theo**:
+  - Chuyển sang Phase P3 (`watermark_track.py`: bám theo watermark di chuyển theo từng frame + xử lý cắt cảnh/mất dấu + truyền mask theo từng frame vào `flow_inpaint.py`).
+
+---
+
 ## Mẫu ghi cho các lần chạy sau
 
 ## Lần chạy N — DD/MM/YYYY (mô tả ngắn)

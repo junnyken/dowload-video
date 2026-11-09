@@ -652,19 +652,166 @@ def run_benchmark() -> List[dict]:
     return results
 
 
+def _box_iou(boxA: Tuple[int, int, int, int], boxB: Tuple[int, int, int, int]) -> float:
+    ax, ay, aw, ah = boxA
+    bx, by, bw, bh = boxB
+    ix0, iy0 = max(ax, bx), max(ay, by)
+    ix1, iy1 = min(ax + aw, bx + bw), min(ay + ah, by + bh)
+    iw, ih = max(0, ix1 - ix0), max(0, iy1 - iy0)
+    inter = float(iw * ih)
+    union = float(aw * ah + bw * bh) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def run_detector_benchmark() -> Dict[str, Any]:
+    """Run Phase P2 detector benchmark across all 19 videos and compute Precision, Recall (IoU >= 0.5), and False Positive rate."""
+    from app.services.watermark_detect import detect_watermark_regions
+
+    rows = []
+    total_tp = 0
+    total_fp = 0
+    total_fn = 0
+    neg_total = 0
+    neg_fp_videos = 0
+
+    for in_path in sorted(INPUT_DIR.glob("*.mp4")):
+        stem = in_path.stem
+        lbl_path = LABELS_DIR / f"{stem}.json"
+        lbl = json.loads(lbl_path.read_text(encoding="utf-8")) if lbl_path.exists() else {}
+        group = lbl.get("group", "Chưa phân nhóm")
+        gt_regions = lbl.get("regions", [])
+
+        det = detect_watermark_regions(str(in_path))
+        preds = det["regions"]
+        elapsed = det["elapsed_sec"]
+
+        if not gt_regions:
+            neg_total += 1
+            fp_c = len(preds)
+            total_fp += fp_c
+            if fp_c > 0:
+                neg_fp_videos += 1
+            rows.append({
+                "video": in_path.name,
+                "stem": stem,
+                "group": group,
+                "has_watermark": False,
+                "gt_box": None,
+                "pred_box": [preds[0]["x"], preds[0]["y"], preds[0]["w"], preds[0]["h"]] if preds else None,
+                "confidence": preds[0]["confidence"] if preds else None,
+                "kind": preds[0]["kind"] if preds else None,
+                "status": det["status"],
+                "iou": None,
+                "tp": 0,
+                "fp": fp_c,
+                "fn": 0,
+                "precision": 1.0 if fp_c == 0 else 0.0,
+                "recall": 1.0,
+                "false_positive": fp_c > 0,
+                "elapsed_sec": elapsed,
+            })
+            print(f"[detect] {stem:28s} | NEGATIVE | preds={len(preds)} | FP={fp_c > 0} | t={elapsed:.3f}s")
+        else:
+            gt_boxes_dict = gt_regions[0].get("boxes", {})
+            gt_box0 = tuple(int(v) for v in (gt_boxes_dict.get("0") or next(iter(gt_boxes_dict.values()))))
+            # Also collect unique GT boxes across clip (for jumping watermarks)
+            unique_gt = []
+            for b in gt_boxes_dict.values():
+                tb = tuple(int(v) for v in b)
+                if not any(_box_iou(tb, u) > 0.8 for u in unique_gt):
+                    unique_gt.append(tb)
+
+            tp_v = 0
+            fp_v = 0
+            best_iou = 0.0
+            for pr in preds:
+                pbox = (pr["x"], pr["y"], pr["w"], pr["h"])
+                iou0 = _box_iou(gt_box0, pbox)
+                iou_any = max((_box_iou(g, pbox) for g in unique_gt), default=0.0)
+                best_iou = max(best_iou, iou0, iou_any)
+                if max(iou0, iou_any) >= 0.50:
+                    tp_v += 1
+                else:
+                    fp_v += 1
+
+            # Ground truth count is 1 primary watermark per positive video
+            tp_video = 1 if tp_v >= 1 else 0
+            fn_video = 0 if tp_v >= 1 else 1
+            total_tp += tp_video
+            total_fp += fp_v
+            total_fn += fn_video
+
+            prec_v = tp_video / float(tp_video + fp_v) if (tp_video + fp_v) > 0 else 0.0
+            rec_v = float(tp_video)
+            rows.append({
+                "video": in_path.name,
+                "stem": stem,
+                "group": group,
+                "has_watermark": True,
+                "gt_box": list(gt_box0),
+                "pred_box": [preds[0]["x"], preds[0]["y"], preds[0]["w"], preds[0]["h"]] if preds else None,
+                "confidence": preds[0]["confidence"] if preds else None,
+                "kind": preds[0]["kind"] if preds else None,
+                "status": det["status"],
+                "iou": round(best_iou, 3),
+                "tp": tp_video,
+                "fp": fp_v,
+                "fn": fn_video,
+                "precision": round(prec_v, 3),
+                "recall": round(rec_v, 3),
+                "false_positive": fp_v > 0,
+                "elapsed_sec": elapsed,
+            })
+            print(
+                f"[detect] {stem[:28]:28s} | GT={list(gt_box0)!s:20s} | "
+                f"Pred={([preds[0]['x'], preds[0]['y'], preds[0]['w'], preds[0]['h']] if preds else None)!s:20s} | "
+                f"IoU={best_iou:.3f} | kind={preds[0]['kind'] if preds else '-':16s} | "
+                f"conf={preds[0]['confidence'] if preds else 0:.2f} | t={elapsed:.3f}s"
+            )
+
+    overall_precision = round(total_tp / float(max(1, total_tp + total_fp)), 4)
+    overall_recall = round(total_tp / float(max(1, total_tp + total_fn)), 4)
+    neg_fp_rate = round(neg_fp_videos / float(max(1, neg_total)), 4)
+    summary = {
+        "total_videos": len(rows),
+        "positive_videos": total_tp + total_fn,
+        "negative_videos": neg_total,
+        "tp": total_tp,
+        "fp": total_fp,
+        "fn": total_fn,
+        "precision": overall_precision,
+        "recall": overall_recall,
+        "negative_fp_rate": neg_fp_rate,
+        "max_elapsed_sec": max((r["elapsed_sec"] for r in rows), default=0.0),
+        "mean_elapsed_sec": round(float(np.mean([r["elapsed_sec"] for r in rows])), 3) if rows else 0.0,
+        "videos": rows,
+    }
+    out_det = RESULTS_DIR / "detector_metrics_p2.json"
+    out_det.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(
+        f"\n[detect summary] Precision={overall_precision:.4f} Recall={overall_recall:.4f} "
+        f"Neg_FP_Rate={neg_fp_rate * 100:.1f}% ({neg_fp_videos}/{neg_total}) "
+        f"mean_time={summary['mean_elapsed_sec']}s max_time={summary['max_elapsed_sec']}s"
+    )
+    return summary
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--generate", action="store_true", help="Generate synthetic benchmark suite (18 video pairs + labels)")
     ap.add_argument("--force", action="store_true", help="Overwrite existing generated benchmark videos")
     ap.add_argument("--run", action="store_true", help="Run baseline benchmark and save results/latest_metrics.json")
+    ap.add_argument("--detect", action="store_true", help="Run Phase P2 watermark detector benchmark")
     args = ap.parse_args()
 
-    if not args.generate and not args.run:
+    if not args.generate and not args.run and not args.detect:
         args.generate = True
         args.run = True
 
     if args.generate:
         generate_benchmark_suite(force=args.force)
+    if args.detect:
+        run_detector_benchmark()
     if args.run:
         run_benchmark()
     return 0

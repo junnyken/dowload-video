@@ -1195,6 +1195,34 @@ def process_flow_cleanup(
     # Reject jobs exceeding file size, resolution, or duration limits BEFORE entering worker
     _validate_job_limits(input_path, info, method=method)
 
+    # Guard: never auto-process when detector is uncertain (needs_review=True or status!="detected")
+    # unless the user explicitly reviewed/adjusted the region (`region_adjusted=True`).
+    det_status = _prev_meta.get("detection_status")
+    det_regions = _prev_meta.get("detected_regions") or []
+    det_needs_review = bool(
+        _prev_meta.get("detection_needs_review")
+        or det_status in ("needs_review", "none")
+        or (det_regions and (det_regions[0].get("needs_review") or float(det_regions[0].get("confidence", 0.0)) < 0.75))
+    )
+    if (payload.preset == "auto" or det_needs_review) and not payload.region_adjusted:
+        if payload.preset == "auto" and not det_needs_review and det_regions and payload.region is None:
+            payload.region = {
+                "x": det_regions[0]["x"],
+                "y": det_regions[0]["y"],
+                "w": det_regions[0]["w"],
+                "h": det_regions[0]["h"],
+            }
+            payload.preset = "custom"
+        elif payload.preset in ("auto", "custom") and det_needs_review:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error_code": "detection_needs_review",
+                    "needs_review": True,
+                    "user_message": "Hệ thống chưa chắc chắn vị trí watermark (độ tin cậy thấp). Vui lòng kiểm tra và chỉnh lại vùng chọn trước khi xử lý.",
+                },
+            )
+
     # Resolve region — shared helper used by /preview-frame and /process
     raw_region = _resolve_region(payload.preset, payload.region, vw, vh)
     x, y, w, h = int(raw_region["x"]), int(raw_region["y"]), int(raw_region["w"]), int(raw_region["h"])
@@ -1479,3 +1507,59 @@ async def record_no_logo(payload: NoLogoRequest):
     except Exception:
         pass
     return {"recorded": True, "result_type": "original_passthrough_no_logo"}
+
+
+@router.post("/detect/{temp_id}")
+@limiter.limit("20/minute")
+def detect_flow_watermark(
+    temp_id: str,
+    request: Request,
+    _: None = Depends(_require_pro),
+):
+    """
+    Phase P2: Auto-detect up to 3 candidate visible watermark/logo regions on an uploaded video.
+    Returns regions with bbox (x, y, w, h), confidence (0-1), kind ('logo'|'text'|'semi_transparent'|'moving'),
+    and needs_review flag for low-confidence detections.
+    """
+    work_dir = _safe_work_dir(temp_id)
+    meta = _ensure_work_dir_fresh(work_dir, detail="Upload không còn. Vui lòng upload lại.")
+    _verify_job_owner(meta, _caller_user_id(request))
+
+    input_path = _find_input_path(work_dir)
+    if not input_path:
+        raise HTTPException(status_code=404, detail="Upload không còn. Vui lòng upload lại.")
+
+    try:
+        from app.services.watermark_detect import detect_watermark_regions
+        det = detect_watermark_regions(input_path, max_candidates=3)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Tự phát hiện watermark thất bại: {str(exc)[:200]}")
+
+    needs_review = bool(
+        det.get("needs_review")
+        or det.get("status") != "detected"
+        or any(r.get("needs_review") or float(r.get("confidence", 0.0)) < 0.75 for r in det.get("regions", []))
+    )
+
+    _write_meta(work_dir, {
+        "detected_at": datetime.now(timezone.utc).isoformat(),
+        "detection_status": det["status"],
+        "detection_needs_review": needs_review,
+        "detected_regions": det["regions"],
+        "scene_cuts": det.get("scene_cuts", []),
+        "detection_elapsed_sec": det["elapsed_sec"],
+    })
+
+    return {
+        "success": True,
+        "temp_id": temp_id,
+        "job_id": temp_id,
+        "status": det["status"],
+        "needs_review": needs_review,
+        "auto_processable": not needs_review,
+        "regions": det["regions"],
+        "scene_cuts": det.get("scene_cuts", []),
+        "sampled_frames": det["sampled_frames"],
+        "elapsed_sec": det["elapsed_sec"],
+        "video_info": det["video_info"],
+    }

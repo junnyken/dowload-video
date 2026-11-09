@@ -1,0 +1,536 @@
+{
+  "total_videos": 19,
+  "positive_videos": 16,
+  "negative_videos": 3,
+  "tp": 16,
+  "fp": 0,
+  "fn": 0,
+  "precision": 1.0,
+  "recall": 1.0,
+  "negative_fp_rate": 0.0,
+  "max_elapsed_sec": 1.447,
+  "mean_elapsed_sec": 0.799,
+  "videos": [
+    {
+      "video": "253K views · 3.2K reactions _ Sao kỳ dị chờn 🥹 _ Cuộc Sống Agency.mp4",
+      "stem": "253K views · 3.2K reactions _ Sao kỳ dị chờn 🥹 _ Cuộc Sống Agency",
+      "group": "Watermark bán trong suốt (video thực tế)",
+      "has_watermark": true,
+      "gt_box": [
+        250,
+        480,
+        420,
+        130
+      ],
+      "pred_box": [
+        264,
+        495,
+        372,
+        114
+      ],
+      "confidence": 0.83,
+      "kind": "semi_transparent",
+      "status": "detected",
+      "iou": 0.777,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 1.447
+    },
+    {
+      "video": "content_text_neg_01.mp4",
+      "stem": "content_text_neg_01",
+      "group": "Có chữ trong nội dung (không watermark)",
+      "has_watermark": false,
+      "gt_box": null,
+      "pred_box": null,
+      "confidence": null,
+      "kind": null,
+      "status": "none",
+      "iou": null,
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 0.99
+    },
+    {
+      "video": "content_text_neg_02.mp4",
+      "stem": "content_text_neg_02",
+      "group": "Có chữ trong nội dung (không watermark)",
+      "has_watermark": false,
+      "gt_box": null,
+      "pred_box": null,
+      "confidence": null,
+      "kind": null,
+      "status": "none",
+      "iou": null,
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 0.949
+    },
+    {
+      "video": "content_text_neg_03.mp4",
+      "stem": "content_text_neg_03",
+      "group": "Có chữ trong nội dung (không watermark)",
+      "has_watermark": false,
+      "gt_box": null,
+      "pred_box": null,
+      "confidence": null,
+      "kind": null,
+      "status": "none",
+      "iou": null,
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 0.966
+    },
+    {
+      "video": "heavy_motion_01.mp4",
+      "stem": "heavy_motion_01",
+      "group": "Nền chuyển động mạnh, camera rung",
+      "has_watermark": true,
+      "gt_box": [
+        480,
+        288,
+        136,
+        48
+      ],
+      "pred_box": [
+        478,
+        284,
+        142,
+        56
+      ],
+      "confidence": 0.98,
+      "kind": "logo",
+      "status": "detected",
+      "iou": 0.821,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 0.444
+    },
+    {
+      "video": "heavy_motion_02.mp4",
+      "stem": "heavy_motion_02",
+      "group": "Nền chuyển động mạnh, camera rung",
+      "has_watermark": true,
+      "gt_box": [
+        480,
+        288,
+        136,
+        48
+      ],
+      "pred_box": [
+        477,
+        284,
+        143,
+        56
+      ],
+      "confidence": 0.98,
+      "kind": "semi_transparent",
+      "status": "detected",
+      "iou": 0.815,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 0.739
+    },
+    {
+      "video": "heavy_motion_03.mp4",
+      "stem": "heavy_motion_03",
+      "group": "Nền chuyển động mạnh, camera rung",
+      "has_watermark": true,
+      "gt_box": [
+        24,
+        288,
+        136,
+        48
+      ],
+      "pred_box": [
+        21,
+        284,
+        143,
+        56
+      ],
+      "confidence": 0.98,
+      "kind": "logo",
+      "status": "detected",
+      "iou": 0.815,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 0.657
+    },
+    {
+      "video": "moving_watermark_01.mp4",
+      "stem": "moving_watermark_01",
+      "group": "Logo/chữ di chuyển",
+      "has_watermark": true,
+      "gt_box": [
+        480,
+        288,
+        136,
+        48
+      ],
+      "pred_box": [
+        477,
+        284,
+        143,
+        56
+      ],
+      "confidence": 0.94,
+      "kind": "moving",
+      "status": "detected",
+      "iou": 0.815,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 0.773
+    },
+    {
+      "video": "moving_watermark_02.mp4",
+      "stem": "moving_watermark_02",
+      "group": "Logo/chữ di chuyển",
+      "has_watermark": true,
+      "gt_box": [
+        24,
+        288,
+        136,
+        48
+      ],
+      "pred_box": [
+        21,
+        284,
+        143,
+        46
+      ],
+      "confidence": 0.94,
+      "kind": "moving",
+      "status": "detected",
+      "iou": 0.773,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 1.088
+    },
+    {
+      "video": "moving_watermark_03.mp4",
+      "stem": "moving_watermark_03",
+      "group": "Logo/chữ di chuyển",
+      "has_watermark": true,
+      "gt_box": [
+        40,
+        288,
+        136,
+        48
+      ],
+      "pred_box": [
+        41,
+        285,
+        134,
+        54
+      ],
+      "confidence": 0.94,
+      "kind": "moving",
+      "status": "detected",
+      "iou": 0.877,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 1.081
+    },
+    {
+      "video": "scene_cut_01.mp4",
+      "stem": "scene_cut_01",
+      "group": "Có cắt cảnh",
+      "has_watermark": true,
+      "gt_box": [
+        480,
+        288,
+        136,
+        48
+      ],
+      "pred_box": [
+        477,
+        284,
+        143,
+        56
+      ],
+      "confidence": 0.98,
+      "kind": "logo",
+      "status": "detected",
+      "iou": 0.815,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 0.507
+    },
+    {
+      "video": "scene_cut_02.mp4",
+      "stem": "scene_cut_02",
+      "group": "Có cắt cảnh",
+      "has_watermark": true,
+      "gt_box": [
+        480,
+        24,
+        136,
+        48
+      ],
+      "pred_box": [
+        477,
+        20,
+        143,
+        56
+      ],
+      "confidence": 0.98,
+      "kind": "logo",
+      "status": "detected",
+      "iou": 0.815,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 0.511
+    },
+    {
+      "video": "scene_cut_03.mp4",
+      "stem": "scene_cut_03",
+      "group": "Có cắt cảnh",
+      "has_watermark": true,
+      "gt_box": [
+        480,
+        288,
+        136,
+        48
+      ],
+      "pred_box": [
+        476,
+        284,
+        144,
+        56
+      ],
+      "confidence": 0.94,
+      "kind": "moving",
+      "status": "detected",
+      "iou": 0.81,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 0.732
+    },
+    {
+      "video": "semi_transparent_01.mp4",
+      "stem": "semi_transparent_01",
+      "group": "Watermark bán trong suốt",
+      "has_watermark": true,
+      "gt_box": [
+        476,
+        286,
+        140,
+        50
+      ],
+      "pred_box": [
+        473,
+        282,
+        147,
+        58
+      ],
+      "confidence": 0.98,
+      "kind": "semi_transparent",
+      "status": "detected",
+      "iou": 0.821,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 0.68
+    },
+    {
+      "video": "semi_transparent_02.mp4",
+      "stem": "semi_transparent_02",
+      "group": "Watermark bán trong suốt",
+      "has_watermark": true,
+      "gt_box": [
+        240,
+        286,
+        160,
+        50
+      ],
+      "pred_box": [
+        237,
+        282,
+        167,
+        58
+      ],
+      "confidence": 0.98,
+      "kind": "semi_transparent",
+      "status": "detected",
+      "iou": 0.826,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 0.882
+    },
+    {
+      "video": "semi_transparent_03.mp4",
+      "stem": "semi_transparent_03",
+      "group": "Watermark bán trong suốt",
+      "has_watermark": true,
+      "gt_box": [
+        24,
+        24,
+        140,
+        50
+      ],
+      "pred_box": [
+        21,
+        20,
+        147,
+        58
+      ],
+      "confidence": 0.98,
+      "kind": "semi_transparent",
+      "status": "detected",
+      "iou": 0.821,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 0.702
+    },
+    {
+      "video": "static_corner_01.mp4",
+      "stem": "static_corner_01",
+      "group": "Logo cố định ở góc",
+      "has_watermark": true,
+      "gt_box": [
+        480,
+        290,
+        136,
+        48
+      ],
+      "pred_box": [
+        478,
+        286,
+        142,
+        56
+      ],
+      "confidence": 0.98,
+      "kind": "logo",
+      "status": "detected",
+      "iou": 0.821,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 0.629
+    },
+    {
+      "video": "static_corner_02.mp4",
+      "stem": "static_corner_02",
+      "group": "Logo cố định ở góc",
+      "has_watermark": true,
+      "gt_box": [
+        480,
+        22,
+        136,
+        48
+      ],
+      "pred_box": [
+        477,
+        18,
+        143,
+        56
+      ],
+      "confidence": 0.98,
+      "kind": "logo",
+      "status": "detected",
+      "iou": 0.815,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 0.611
+    },
+    {
+      "video": "static_corner_03.mp4",
+      "stem": "static_corner_03",
+      "group": "Logo cố định ở góc",
+      "has_watermark": true,
+      "gt_box": [
+        24,
+        290,
+        136,
+        48
+      ],
+      "pred_box": [
+        21,
+        286,
+        143,
+        56
+      ],
+      "confidence": 0.98,
+      "kind": "logo",
+      "status": "detected",
+      "iou": 0.815,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "false_positive": false,
+      "elapsed_sec": 0.797
+    }
+  ]
+}
