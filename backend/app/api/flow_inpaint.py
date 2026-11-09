@@ -163,11 +163,29 @@ def spatial_inpaint(frame: np.ndarray, fill_mask: np.ndarray,
 # ── Temporal motion-compensated fill ─────────────────────────────────
 
 def _detect_orb_features(bgr: np.ndarray, fill_mask: np.ndarray):
-    """Compute ORB keypoints and descriptors outside `fill_mask` once per frame."""
+    """Compute ORB keypoint coordinates `(N, 2)` and descriptors outside `fill_mask` once per frame."""
+    vh, vw = bgr.shape[:2]
     known = cv2.bitwise_not(fill_mask)
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-    orb = cv2.ORB_create(nfeatures=1500)
-    return orb.detectAndCompute(gray, known)
+    max_dim = max(vh, vw)
+    if max_dim > 720:
+        scale = 720.0 / float(max_dim)
+        sw, sh = max(2, int(round(vw * scale))), max(2, int(round(vh * scale)))
+        gray_s = cv2.resize(gray, (sw, sh), interpolation=cv2.INTER_AREA)
+        known_s = cv2.resize(known, (sw, sh), interpolation=cv2.INTER_NEAREST)
+        orb = cv2.ORB_create(nfeatures=900)
+        kps, desc = orb.detectAndCompute(gray_s, known_s)
+        if not kps or desc is None:
+            return None, None
+        inv_scale = 1.0 / scale
+        pts = np.array([kp.pt for kp in kps], dtype=np.float32) * inv_scale
+        return pts, desc
+    orb = cv2.ORB_create(nfeatures=1200)
+    kps, desc = orb.detectAndCompute(gray, known)
+    if not kps or desc is None:
+        return None, None
+    pts = np.array([kp.pt for kp in kps], dtype=np.float32)
+    return pts, desc
 
 
 def _match_homography_from_features(
@@ -187,9 +205,18 @@ def _match_homography_from_features(
     good = [m for m, n in (p for p in raw if len(p) == 2) if m.distance < 0.75 * n.distance]
     if len(good) < _MIN_INLIERS:
         return None
-    pts1 = np.float32([k1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
-    pts2 = np.float32([k2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
-    H, inliers = cv2.findHomography(pts1, pts2, cv2.RANSAC, 3.0)
+    if len(good) > 120:
+        good.sort(key=lambda m: m.distance)
+        good = good[:120]
+    if isinstance(k1, np.ndarray):
+        pts1 = k1[[m.queryIdx for m in good]].reshape(-1, 1, 2)
+    else:
+        pts1 = np.float32([k1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+    if isinstance(k2, np.ndarray):
+        pts2 = k2[[m.trainIdx for m in good]].reshape(-1, 1, 2)
+    else:
+        pts2 = np.float32([k2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+    H, inliers = cv2.findHomography(pts1, pts2, cv2.RANSAC, 3.0, maxIters=250, confidence=0.99)
     if H is None or inliers is None or int(inliers.sum()) < _MIN_INLIERS:
         return None
     if abs(H[0, 2]) > _MAX_TRANSLATION_FRAC * vw or abs(H[1, 2]) > _MAX_TRANSLATION_FRAC * vh:
@@ -217,22 +244,36 @@ def _estimate_homography(
     return _match_homography_from_features(k1, d1, k2, d2, vw, vh)
 
 
-def temporal_fill(cur: np.ndarray, neighbors: list, fill_mask: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def temporal_fill(
+    cur: np.ndarray,
+    neighbors: list,
+    fill_mask: np.ndarray,
+    cur_features: Optional[Tuple[Any, Any]] = None,
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Reconstruct the masked region of `cur` from neighbour frames via motion
-    compensation. Each item in `neighbors` may be:
-      - `nb_frame` (`np.ndarray`), using `fill_mask` as the neighbour's mask,
-      - `(nb_frame, nb_fill_mask)` tuple for per-frame tracked moving watermarks, or
-      - `(nb_frame, nb_fill_mask, k1, d1)` tuple with precomputed ORB features.
+    compensation (ROI-bounded warp for 720p/1080p speed).
     Returns `(filled_region_image, valid_mask)` where `valid_mask` is
     255 where a real pixel was recovered, 0 elsewhere.
     """
     vh, vw = cur.shape[:2]
-    acc = np.zeros_like(cur, dtype=np.float32)
-    cnt = np.zeros((vh, vw), dtype=np.float32)
-    k2, d2 = _detect_orb_features(cur, fill_mask)
+    bx, by, bw, bh = cv2.boundingRect(fill_mask)
+    if bw <= 0 or bh <= 0:
+        return np.zeros_like(cur), np.zeros((vh, vw), dtype=np.uint8)
+
+    if cur_features is not None:
+        k2, d2 = cur_features
+    else:
+        k2, d2 = _detect_orb_features(cur, fill_mask)
     if d2 is None or k2 is None or len(k2) < _MIN_INLIERS:
         return np.zeros_like(cur), np.zeros((vh, vw), dtype=np.uint8)
+
+    acc_roi = np.zeros((bh, bw, 3), dtype=np.float32)
+    cnt_roi = np.zeros((bh, bw), dtype=np.float32)
+    mask_roi = fill_mask[by : by + bh, bx : bx + bw] > 0
+    total_mask_px = max(1, int(mask_roi.sum()))
+    t_roi = np.array([[1.0, 0.0, -float(bx)], [0.0, 1.0, -float(by)], [0.0, 0.0, 1.0]], dtype=np.float64)
+    matched_count = 0
 
     for nb_item in neighbors:
         if isinstance(nb_item, tuple) and len(nb_item) == 4:
@@ -248,17 +289,34 @@ def temporal_fill(cur: np.ndarray, neighbors: list, fill_mask: np.ndarray) -> Tu
             H = _match_homography_from_features(k1, d1, k2, d2, vw, vh)
         if H is None:
             continue
-        warped = cv2.warpPerspective(nb, H, (vw, vh),
-                                     flags=cv2.INTER_LINEAR, borderValue=0)
+        h_roi = t_roi @ H.astype(np.float64)
+        warped_roi = cv2.warpPerspective(
+            nb, h_roi, (bw, bh), flags=cv2.INTER_LINEAR, borderValue=0
+        )
         # The neighbour's own logo region, warped, must NOT be used.
-        nb_logo_warp = cv2.warpPerspective(nb_mask, H, (vw, vh), flags=cv2.INTER_NEAREST)
-        valid = (fill_mask > 0) & (nb_logo_warp == 0) & (warped.sum(axis=2) > 0)
-        acc[valid] += warped[valid]
-        cnt[valid] += 1.0
-    got = cnt > 0
+        nb_logo_warp_roi = cv2.warpPerspective(
+            nb_mask, h_roi, (bw, bh), flags=cv2.INTER_NEAREST
+        )
+        valid_roi = mask_roi & (nb_logo_warp_roi == 0) & (warped_roi.sum(axis=2) > 0)
+        matched_count += 1
+        if bool(valid_roi.any()):
+            acc_roi[valid_roi] += warped_roi[valid_roi]
+            cnt_roi[valid_roi] += 1.0
+            if matched_count >= 2 and int((cnt_roi > 0).sum()) >= int(total_mask_px * 0.98):
+                break
+        if matched_count >= 4:
+            break
+
+    got_roi = cnt_roi > 0
     filled = np.zeros_like(cur)
-    filled[got] = (acc[got] / cnt[got, None]).astype(np.uint8)
-    valid_mask = (got.astype(np.uint8)) * 255
+    valid_mask = np.zeros((vh, vw), dtype=np.uint8)
+    if bool(got_roi.any()):
+        filled_roi = np.zeros((bh, bw, 3), dtype=np.uint8)
+        filled_roi[got_roi] = (acc_roi[got_roi] / cnt_roi[got_roi, None]).astype(np.uint8)
+        filled[by : by + bh, bx : bx + bw] = filled_roi
+        valid_roi_u8 = np.zeros((bh, bw), dtype=np.uint8)
+        valid_roi_u8[got_roi] = 255
+        valid_mask[by : by + bh, bx : bx + bw] = valid_roi_u8
     return filled, valid_mask
 
 
@@ -467,9 +525,9 @@ def process_video_natural(
     # static corner logo and for moving/jumping watermarks).
     global_ref_neighbors: list = []
     if not static_bg and temporal and duration and duration > 0:
-        sample_ts_list = [duration * frac for frac in (0.05, 0.15, 0.28, 0.42, 0.56, 0.70, 0.84, 0.94)]
+        sample_ts_list = [duration * frac for frac in (0.08, 0.25, 0.45, 0.68, 0.88)]
         fps_safe = float(fps or 30.0)
-        for fixed_sec in (0.25, 0.6, 1.1, 1.8, 2.7, 3.8):
+        for fixed_sec in (0.6, 1.8):
             if fixed_sec < duration:
                 sample_ts_list.append(fixed_sec)
         # Also sample frames immediately before and after any bbox jump discontinuity
@@ -581,9 +639,12 @@ def process_video_natural(
                 # Moving scene or dynamic watermark → temporal motion-comp
                 # recovers REAL pixels first; any residual unrecovered pixels
                 # are inpainted directly from the recovered context.
+                fk, fd = (_detect_orb_features(frame, cur_fill) if temporal else (None, None))
                 active_neighbors = neighbors + strided_neighbors + global_ref_neighbors
-                if temporal and active_neighbors:
-                    tfill, tvalid = temporal_fill(frame, active_neighbors, cur_fill)
+                if temporal and active_neighbors and fd is not None:
+                    tfill, tvalid = temporal_fill(
+                        frame, active_neighbors, cur_fill, cur_features=(fk, fd)
+                    )
                     if int(tvalid.sum()) > 0:
                         stats["temporal_frames"] += 1
                         work = frame.copy()
@@ -603,7 +664,6 @@ def process_video_natural(
             write_proc.stdin.write(out.tobytes())  # type: ignore[union-attr]
 
             if not static_bg and temporal:
-                fk, fd = _detect_orb_features(frame, cur_fill)
                 nb_entry = (frame, cur_fill, fk, fd)
                 neighbors.append(nb_entry)
                 if len(neighbors) > n_neighbors:

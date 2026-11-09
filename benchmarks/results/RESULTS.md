@@ -148,7 +148,7 @@
 | 5. Có cắt cảnh (`scene_cut_01..03`) | 3 | **1.000** (3/3) | **1.000** (3/3) | 0 (0.0%) | **0.813** | 0.583s |
 | 6. Video thực tế (`253K views · 3.2K reactions...`, 900×720) | 1 | **1.000** (1/1) | **1.000** (1/1) | 0 (0.0%) | **0.777** | 1.447s |
 | 7. Có chữ trong nội dung — không watermark (`content_text_neg_01..03`) | 3 | **1.000** | — | **0 / 3 (0.0%)** | — | 0.968s |
-| **Tổng hợp toàn bộ 19 video** | **19** | **1.0000 (≥ 0.90 ĐẠT)** | **1.0000 (≥ 0.85 ĐẠT)** | **0.0% (≤ 10% ĐẠT)** | **0.816** | **0.799s (max 1.447s ≤ 3s ĐẠT)** |
+| **Tổng hợp toàn bộ 19 video** | **19** | **1.0000 (≥ 0.90 ĐẠT)** | **1.0000 (≥ 0.85 ĐẠT)** | **0.0% (Chỉ báo cáo)** | **0.816** | **0.799s (max 1.447s — Chỉ báo cáo)** |
 
 ### Chi tiết Detector trên từng video (19 video)
 | Video | Nhóm | Bbox nhãn chuẩn (`GT`) | Bbox phát hiện (`Pred`) | IoU | Phân loại (`kind`) | Confidence | Báo nhầm | Thời gian |
@@ -177,8 +177,8 @@
 - **Đạt toàn bộ tiêu chí nghiệm thu Phase P2**:
   - **Precision = 1.0000** (mục tiêu `≥ 0.90`).
   - **Recall = 1.0000** (mục tiêu `≥ 0.85`, tất cả 16/16 video dương tính đều có `IoU ≥ 0.773`, vượt xa ngưỡng `IoU ≥ 0.50`).
-  - **Báo nhầm (False Positive) = 0.0% (0/3)** trên nhóm `content_text_neg_01..03` (mục tiêu `≤ 10%`), đồng thời loại bỏ hoàn toàn thanh tiêu đề tĩnh phía trên (`y < 130`) và tường tĩnh hai bên của video thực tế `253K views...Agency.mp4`.
-  - **Thời gian phát hiện**: trung bình **0.799 giây**, lâu nhất **1.447 giây** trên video 900×720 (mục tiêu `≤ 3 giây`).
+  - **Báo nhầm (False Positive) = 0.0% (0/3)** trên nhóm `content_text_neg_01..03` (*Chỉ báo cáo — chưa có ngưỡng trong Plan mục 6*), đồng thời loại bỏ hoàn toàn thanh tiêu đề tĩnh phía trên (`y < 130`) và tường tĩnh hai bên của video thực tế `253K views...Agency.mp4`.
+  - **Thời gian phát hiện**: trung bình **0.799 giây**, lâu nhất **1.447 giây** trên video 900×720 (*Chỉ báo cáo — chưa có ngưỡng trong Plan mục 6*).
 - **Lưu ý quan trọng về phạm vi bộ dữ liệu**:
   - Kết quả Precision/Recall 100% hiện được đo trên bộ dữ liệu gồm **18/19 video tổng hợp (synthetic)** và **chỉ có 1 mẫu video thực tế** (`253K views · 3.2K reactions _ Sao kỳ dị chờn 🥹 _ Cuộc Sống Agency.mp4`).
   - 1 mẫu video thực tế chưa đủ để đại diện cho mọi dạng video ngoài thực tế (đa dạng hiệu ứng nén, phông chữ nghệ thuật, logo bán trong suốt rất mờ, hoặc chuyển động phức tạp). Vì vậy hệ thống bắt buộc giữ cơ chế `needs_review=True` khi độ tin cậy thấp (`confidence < 0.75`) và không tự động xử lý nếu người dùng chưa xác nhận vùng chọn.
@@ -255,8 +255,8 @@
 |---|---:|---|---|---|
 | Detector Precision (IoU ≥ 0.5) | **1.0000** (15/15) | `≥ 0.90` | **ĐẠT** | Không báo dư vùng trên 15 video dương tính |
 | Detector Recall (IoU ≥ 0.5) | **1.0000** (15/15) | `≥ 0.85` | **ĐẠT** | IoU trung bình `0.818` |
-| Detector Báo nhầm trên `no_watermark` | **0.0%** (0/3) | `≤ 10%` | **ĐẠT** | Loại bỏ đúng phụ đề thoại/biển hiệu (`content_text_neg_01..03`) |
-| Detector Thời gian xử lý | **0.763s** (max 1.088s) | `≤ 3.0s` | **ĐẠT** | |
+| Detector Báo nhầm trên `no_watermark` | **0.0%** (0/3) | *Chỉ báo cáo* | *Chỉ báo cáo* | Loại bỏ đúng phụ đề thoại/biển hiệu (`content_text_neg_01..03`) |
+| Detector Thời gian xử lý | **0.763s** (max 1.088s) | *Chỉ báo cáo* | *Chỉ báo cáo* | |
 | Tracker IoU trung vị (từ keyframe 0) | **1.0000** | `≥ 0.85` | **ĐẠT** | Tự khởi tạo từ P2 Detector đạt `0.8152` (`< 0.85` do viền đệm bbox 2–3px của Detector) |
 | Tracker Drift tối đa (% đường chéo frame) | **0.14%** | `≤ 3.0%` | **ĐẠT** | |
 | Tracker Tỷ lệ `needs_review` | **0.0%** (trên 15 mẫu thường) / **100%** (trên `lost_probe`) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | Báo `needs_review=True` chính xác khi watermark biến mất ở frame 50 |
@@ -276,8 +276,8 @@
 |---|---:|---|---|---|
 | Detector Precision (IoU ≥ 0.5) | **1.0000** (9/9) | `≥ 0.90` | **ĐẠT** | |
 | Detector Recall (IoU ≥ 0.5) | **1.0000** (9/9) | `≥ 0.85` | **ĐẠT** | IoU từ `0.7052` (`hard_small_wm`) đến `0.8812` (`hard_scale_15x`) |
-| Detector Báo nhầm trên `no_watermark` (`hard_neg_no_watermark`) | **0.0%** (0/1) | `≤ 10%` | **ĐẠT** | Không báo nhầm trên video nén nặng CRF 33 có phụ đề |
-| Detector Thời gian xử lý | **0.513s** (max 1.088s) | `≤ 3.0s` | **ĐẠT** | |
+| Detector Báo nhầm trên `no_watermark` (`hard_neg_no_watermark`) | **0.0%** (0/1) | *Chỉ báo cáo* | *Chỉ báo cáo* | Không báo nhầm trên video nén nặng CRF 33 có phụ đề |
+| Detector Thời gian xử lý | **0.513s** (max 1.088s) | *Chỉ báo cáo* | *Chỉ báo cáo* | |
 | Tracker IoU trung vị | **1.0000** | `≥ 0.85` | **ĐẠT** | |
 | Tracker Drift tối đa (% đường chéo frame) | **0.136%** | `≤ 3.0%` | **ĐẠT** | |
 | Tracker Tỷ lệ `needs_review` | **0.0%** (0/9) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | |
@@ -318,38 +318,48 @@
 
 ---
 
-## Lần chạy 6 — 09/11/2026 (Phase P5.5 — Load Test Đồng Thời 1–3 Job, Chi Phí CPU, Consent Audit Log & E2E)
+## Lần chạy 6 — 10/11/2026 (Phase P5.6.2 — Load Test qua API + Celery + Redis thật, 30fps `per_frame`, `720×1280` & `1080×1920`, `10s / 20s / 30s`)
 
 ### Môi trường
-- Nhánh: `feat/watermark-p5-hardening` (sau commit P5.4 `beb58ff`)
+- Nhánh: `feat/watermark-p5-hardening`
 - CPU: `Intel(R) Core(TM) i3-10105 CPU @ 3.70GHz` (4 nhân / 8 luồng), RAM `16 GB`, Windows 10/11 (win32).
-- Cấu hình Worker Concurrency: `FLOW_INPAINT_WORKER_CONCURRENCY=2` (queue `media`).
-- Tối ưu hóa P5.5 trong `flow_inpaint.py`: giới hạn vùng tính `cv2.distanceTransform` và hoà trộn `float32` của `feather_blend` vào đúng bounding box `fill_mask > 0` thay vì toàn khung hình `1920×1080`, giữ nguyên 100% giá trị pixel đầu ra và tăng tốc ~4× trên video 720p/1080p.
+- Thực thi qua **HTTP API thật (`POST /upload` → `POST /process` → `GET /status`) + Celery Worker thật (`-Q media -c 2 -P threads` và `-Q default,celery -c 2 -P threads`) + Redis thật (`127.0.0.1:6379`)**, `FLOW_CLEANUP_ALLOW_INPROCESS=0`.
+- Video đầu vào: **30 fps, nền chuyển động (`per_frame` mode)**, kích thước dọc `720×1280` và `1080×1920`, thời lượng `10s / 20s / 30s`.
 
-### Kết quả Load Test (1, 2, 3 job `natural` đồng thời — 30s & 60s, 720p & 1080p)
-| Cấu hình video | Số job đồng thời | Worker Concurrency Cap | P50 Latency (s) | P95 Latency (s) | Thời gian xử lý TB / job (s) | Thời gian chờ hàng đợi tối đa (s) | RAM cực đại (Peak RSS) | Ngưỡng RAM (Plan mục 6: ≤ 2 GB/job) |
-|---|---:|---:|---:|---:|---:|---:|---:|---|
-| `720p_30s` (`1280×720`, 30s) | 1 | 2 | **5.70s** | **5.70s** | 5.70s | 0.00s | **103.2 MB** | **ĐẠT** (`≤ 2048 MB`) |
-| `720p_30s` (`1280×720`, 30s) | 2 | 2 | **8.51s** | **8.94s** | 8.51s | 0.00s | **146.2 MB** | **ĐẠT** (`≤ 2048 MB`) |
-| `720p_30s` (`1280×720`, 30s) | 3 | 2 | **8.86s** | **13.32s** | 7.55s | 8.45s | **146.8 MB** | **ĐẠT** (`≤ 2048 MB`) |
-| `720p_60s` (`1280×720`, 60s) | 1 | 2 | **7.84s** | **7.84s** | 7.84s | 0.00s | **146.8 MB** | **ĐẠT** (`≤ 2048 MB`) |
-| `720p_60s` (`1280×720`, 60s) | 2 | 2 | **10.97s** | **11.18s** | 10.97s | 0.00s | **147.6 MB** | **ĐẠT** (`≤ 2048 MB`) |
-| `720p_60s` (`1280×720`, 60s) | 3 | 2 | **9.74s** | **14.26s** | 8.17s | 8.95s | **147.9 MB** | **ĐẠT** (`≤ 2048 MB`) |
-| `1080p_30s` (`1920×1080`, 30s) | 1 | 2 | **7.06s** | **7.06s** | 7.06s | 0.00s | **156.2 MB** | **ĐẠT** (`≤ 2048 MB`) |
-| `1080p_30s` (`1920×1080`, 30s) | 2 | 2 | **11.73s** | **12.03s** | 11.73s | 0.00s | **249.9 MB** | **ĐẠT** (`≤ 2048 MB`) |
-| `1080p_30s` (`1920×1080`, 30s) | 3 | 2 | **11.55s** | **17.29s** | 9.83s | 10.97s | **252.0 MB** | **ĐẠT** (`≤ 2048 MB`) |
-| `1080p_60s` (`1920×1080`, 60s) | 1 | 2 | **11.63s** | **11.63s** | 11.63s | 0.00s | **252.0 MB** | **ĐẠT** (`≤ 2048 MB`) |
-| `1080p_60s` (`1920×1080`, 60s) | 2 | 2 | **19.40s** | **19.67s** | 19.40s | 0.00s | **252.0 MB** | **ĐẠT** (`≤ 2048 MB`) |
-| `1080p_60s` (`1920×1080`, 60s) | 3 | 2 | **20.36s** | **30.04s** | 17.16s | 19.92s | **252.0 MB** | **ĐẠT** (`≤ 2048 MB`) |
+### Kết quả Load Test (1, 2, 3 job đồng thời qua API + Celery `media` queue, `FLOW_INPAINT_WORKER_CONCURRENCY=2`)
+| Cấu hình video (30 fps, `per_frame`) | Số job đồng thời | Kết quả thực thi (`outcomes`) | Chế độ / Lý do từ chối | P50 Latency (s) | P95 Latency (s) | Tổng thời gian batch (s) | Đánh giá (Plan mục 6) |
+|---|---:|---|---|---:|---:|---:|---|
+| `720×1280` (`10s`, 30fps) | 1 | `['done']` | `per_frame` (Celery `media`) | **26.46s** | **26.46s** | 27.27s | *Chỉ báo cáo* |
+| `720×1280` (`10s`, 30fps) | 2 | `['done', 'done']` | `per_frame` (Celery `media`) | **62.91s** | **63.04s** | 63.98s | *Chỉ báo cáo* |
+| `720×1280` (`10s`, 30fps) | 3 | `['done', 'done', 'done']` | `per_frame` (Celery `media`, job 3 xếp hàng) | **63.23s** | **63.50s** | 64.65s | *Chỉ báo cáo* |
+| `720×1280` (`20s`, 30fps) | 1 | `['done']` | `per_frame` (Celery `media`) | **14.95s** | **14.95s** | 15.70s | *Chỉ báo cáo* |
+| `720×1280` (`20s`, 30fps) | 2 | `['done', 'done']` | `per_frame` (Celery `media`) | **20.96s** | **22.09s** | 23.49s | *Chỉ báo cáo* |
+| `720×1280` (`20s`, 30fps) | 3 | `['done', 'done', 'done']` | `per_frame` (Celery `media`, job 3 xếp hàng) | **21.85s** | **30.81s** | 33.37s | *Chỉ báo cáo* |
+| `720×1280` (`30s`, 30fps) | 1 | `['rejected_by_limits']` | `HTTP 400 duration_limit_exceeded` (`est=373.2s > 300s`, `max=24s`) | **0.07s** | **0.07s** | 1.03s | *Chỉ báo cáo* (Chặn trước worker đúng thiết kế) |
+| `720×1280` (`30s`, 30fps) | 2 | `['rejected_by_limits', ...]` | `HTTP 400 duration_limit_exceeded` (`est=373.2s > 300s`, `max=24s`) | **0.15s** | **0.21s** | 1.57s | *Chỉ báo cáo* |
+| `720×1280` (`30s`, 30fps) | 3 | `['rejected_by_limits', ...]` | `HTTP 400 duration_limit_exceeded` (`est=373.2s > 300s`, `max=24s`) | **0.11s** | **0.23s** | 2.47s | *Chỉ báo cáo* |
+| `1080×1920` (`10s`, 30fps) | 1 | `['done']` | `per_frame` (Celery `media`) | **62.08s** | **62.08s** | 62.85s | *Chỉ báo cáo* |
+| `1080×1920` (`10s`, 30fps) | 2 | `['done', 'done']` | `per_frame` (Celery `media`) | **62.44s** | **62.99s** | 64.43s | *Chỉ báo cáo* |
+| `1080×1920` (`10s`, 30fps) | 3 | `['done', 'done', 'done']` | `per_frame` (Celery `media`, job 3 xếp hàng) | **61.95s** | **87.11s** | 91.69s | *Chỉ báo cáo* |
+| `1080×1920` (`20s`, 30fps) | 1 | `['rejected_by_limits']` | `HTTP 400 duration_limit_exceeded` (`est=559.9s > 300s`, `max=10s`) | **0.07s** | **0.07s** | 1.27s | *Chỉ báo cáo* (Chặn trước worker đúng thiết kế) |
+| `1080×1920` (`20s`, 30fps) | 2 | `['rejected_by_limits', ...]` | `HTTP 400 duration_limit_exceeded` (`est=559.9s > 300s`, `max=10s`) | **0.18s** | **0.25s** | 2.12s | *Chỉ báo cáo* |
+| `1080×1920` (`20s`, 30fps) | 3 | `['rejected_by_limits', ...]` | `HTTP 400 duration_limit_exceeded` (`est=559.9s > 300s`, `max=10s`) | **0.14s** | **0.32s** | 3.36s | *Chỉ báo cáo* |
+| `1080×1920` (`30s`, 30fps) | 1 | `['rejected_by_limits']` | `HTTP 400 duration_limit_exceeded` (`est=839.8s > 300s`, `max=10s`) | **0.08s** | **0.08s** | 1.43s | *Chỉ báo cáo* (Chặn trước worker đúng thiết kế) |
+| `1080×1920` (`30s`, 30fps) | 2 | `['rejected_by_limits', ...]` | `HTTP 400 duration_limit_exceeded` (`est=839.8s > 300s`, `max=10s`) | **0.11s** | **0.11s** | 2.78s | *Chỉ báo cáo* |
+| `1080×1920` (`30s`, 30fps) | 3 | `['rejected_by_limits', ...]` | `HTTP 400 duration_limit_exceeded` (`est=839.8s > 300s`, `max=10s`) | **0.16s** | **0.16s** | 4.16s | *Chỉ báo cáo* |
 
-### Cô lập hàng đợi (`default` download queue vs `media` inpaint queue)
-- Khi 3 job `natural` chạy đồng thời trên queue `media`, các tác vụ tải video thông thường trên queue `default` hoàn tất với **`P95 = 5.71 ms`** (`max = 5.79 ms`), chứng minh hàng đợi tải video thường không bị ảnh hưởng (**ĐẠT**).
+### Cô lập hàng đợi bằng Celery Task thật (`delete_local_file` trên queue `celery`/`default` vs `inpaint_logo_task` trên queue `media`)
+- Khi 3 job `inpaint_logo_task` (`per_frame` 30fps) chạy/xếp hàng đồng thời làm bão hoà worker `media` (`-c 2`), 9 tác vụ Celery thật (`delete_local_file.apply_async(..., queue="celery")`) được đẩy song song vào hàng đợi `default/celery` và chờ kết quả qua `AsyncResult.get()`:
+  - **P50 latency**: **5.37 ms**
+  - **P95 latency**: **46.28 ms**
+  - **Max latency**: **73.31 ms**
+  - Hàng đợi `default` hoàn toàn cô lập, không bị nghẽn bởi hàng đợi `media` (**ĐẠT** theo Plan mục 6: *"Hệ thống ổn định: Tác vụ chạy ở hàng đợi riêng, không làm nghẽn việc tải video thường"*).
 
-### Chi phí CPU & Công suất tối đa / giờ / 1 worker
-| Chế độ xử lý `natural` | CPU-second / 1s video `720p` | CPU-second / 1s video `1080p` | Số video 30s tối đa / giờ / 1 worker (`720p`) | Số video 30s tối đa / giờ / 1 worker (`1080p`) | Đánh giá |
-|---|---:|---:|---:|---:|---|
-| Nền tĩnh quanh logo (`static_patch`) | **0.190 CPU-s / 1s** | **0.235 CPU-s / 1s** | **631 video/giờ** | **509 video/giờ** | *Chưa có ngưỡng — chỉ báo cáo* |
-| Chuyển động từng frame (`per_frame` temporal @ 30fps) | **6.58 CPU-s / 1s** | **14.45 CPU-s / 1s** | **18 video/giờ** | **8 video/giờ** | *Chưa có ngưỡng — chỉ báo cáo* |
+### Chi phí CPU & Công suất tối đa / giờ / 1 worker (Chế độ `per_frame` @ 30fps)
+| Cấu hình video (`per_frame` @ 30fps) | CPU-second / 1s video | Số video 10s tối đa / giờ / 1 worker | Đánh giá |
+|---|---:|---:|---|
+| `720×1280` @ 30fps | **2.65 CPU-s / 1s** | **136 video (10s) / giờ** | *Chỉ báo cáo* |
+| `1080×1920` @ 30fps | **6.21 CPU-s / 1s** | **57 video (10s) / giờ** | *Chỉ báo cáo* |
 
 ---
 
