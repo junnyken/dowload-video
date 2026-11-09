@@ -1,0 +1,193 @@
+{
+  "worker_concurrency_default": 2,
+  "download_queue_isolation": {
+    "isolated": true,
+    "tested_during_3_concurrent_media_jobs": true,
+    "download_task_p95_latency_ms": 5.71,
+    "download_task_max_latency_ms": 5.79
+  },
+  "load_matrix": [
+    {
+      "profile": "720p_30s",
+      "resolution": "1280x720",
+      "duration_sec": 30,
+      "fps": 10,
+      "concurrent_jobs": 1,
+      "worker_concurrency_cap": 2,
+      "p50_latency_sec": 5.7,
+      "p95_latency_sec": 5.7,
+      "mean_exec_sec": 5.7,
+      "max_queue_wait_sec": 0.0,
+      "batch_wall_sec": 5.7,
+      "peak_rss_mb": 103.2
+    },
+    {
+      "profile": "720p_30s",
+      "resolution": "1280x720",
+      "duration_sec": 30,
+      "fps": 10,
+      "concurrent_jobs": 2,
+      "worker_concurrency_cap": 2,
+      "p50_latency_sec": 8.51,
+      "p95_latency_sec": 8.94,
+      "mean_exec_sec": 8.51,
+      "max_queue_wait_sec": 0.0,
+      "batch_wall_sec": 8.99,
+      "peak_rss_mb": 146.2
+    },
+    {
+      "profile": "720p_30s",
+      "resolution": "1280x720",
+      "duration_sec": 30,
+      "fps": 10,
+      "concurrent_jobs": 3,
+      "worker_concurrency_cap": 2,
+      "p50_latency_sec": 8.86,
+      "p95_latency_sec": 13.32,
+      "mean_exec_sec": 7.55,
+      "max_queue_wait_sec": 8.45,
+      "batch_wall_sec": 13.81,
+      "peak_rss_mb": 146.8
+    },
+    {
+      "profile": "720p_60s",
+      "resolution": "1280x720",
+      "duration_sec": 60,
+      "fps": 10,
+      "concurrent_jobs": 1,
+      "worker_concurrency_cap": 2,
+      "p50_latency_sec": 7.84,
+      "p95_latency_sec": 7.84,
+      "mean_exec_sec": 7.84,
+      "max_queue_wait_sec": 0.0,
+      "batch_wall_sec": 7.84,
+      "peak_rss_mb": 146.8
+    },
+    {
+      "profile": "720p_60s",
+      "resolution": "1280x720",
+      "duration_sec": 60,
+      "fps": 10,
+      "concurrent_jobs": 2,
+      "worker_concurrency_cap": 2,
+      "p50_latency_sec": 10.97,
+      "p95_latency_sec": 11.18,
+      "mean_exec_sec": 10.97,
+      "max_queue_wait_sec": 0.0,
+      "batch_wall_sec": 11.2,
+      "peak_rss_mb": 147.6
+    },
+    {
+      "profile": "720p_60s",
+      "resolution": "1280x720",
+      "duration_sec": 60,
+      "fps": 10,
+      "concurrent_jobs": 3,
+      "worker_concurrency_cap": 2,
+      "p50_latency_sec": 9.74,
+      "p95_latency_sec": 14.26,
+      "mean_exec_sec": 8.17,
+      "max_queue_wait_sec": 8.95,
+      "batch_wall_sec": 14.76,
+      "peak_rss_mb": 147.9
+    },
+    {
+      "profile": "1080p_30s",
+      "resolution": "1920x1080",
+      "duration_sec": 30,
+      "fps": 10,
+      "concurrent_jobs": 1,
+      "worker_concurrency_cap": 2,
+      "p50_latency_sec": 7.06,
+      "p95_latency_sec": 7.06,
+      "mean_exec_sec": 7.06,
+      "max_queue_wait_sec": 0.0,
+      "batch_wall_sec": 7.06,
+      "peak_rss_mb": 156.2
+    },
+    {
+      "profile": "1080p_30s",
+      "resolution": "1920x1080",
+      "duration_sec": 30,
+      "fps": 10,
+      "concurrent_jobs": 2,
+      "worker_concurrency_cap": 2,
+      "p50_latency_sec": 11.73,
+      "p95_latency_sec": 12.03,
+      "mean_exec_sec": 11.73,
+      "max_queue_wait_sec": 0.0,
+      "batch_wall_sec": 12.06,
+      "peak_rss_mb": 249.9
+    },
+    {
+      "profile": "1080p_30s",
+      "resolution": "1920x1080",
+      "duration_sec": 30,
+      "fps": 10,
+      "concurrent_jobs": 3,
+      "worker_concurrency_cap": 2,
+      "p50_latency_sec": 11.55,
+      "p95_latency_sec": 17.29,
+      "mean_exec_sec": 9.83,
+      "max_queue_wait_sec": 10.97,
+      "batch_wall_sec": 17.93,
+      "peak_rss_mb": 252.0
+    },
+    {
+      "profile": "1080p_60s",
+      "resolution": "1920x1080",
+      "duration_sec": 60,
+      "fps": 10,
+      "concurrent_jobs": 1,
+      "worker_concurrency_cap": 2,
+      "p50_latency_sec": 11.63,
+      "p95_latency_sec": 11.63,
+      "mean_exec_sec": 11.63,
+      "max_queue_wait_sec": 0.0,
+      "batch_wall_sec": 11.63,
+      "peak_rss_mb": 252.0
+    },
+    {
+      "profile": "1080p_60s",
+      "resolution": "1920x1080",
+      "duration_sec": 60,
+      "fps": 10,
+      "concurrent_jobs": 2,
+      "worker_concurrency_cap": 2,
+      "p50_latency_sec": 19.4,
+      "p95_latency_sec": 19.67,
+      "mean_exec_sec": 19.4,
+      "max_queue_wait_sec": 0.0,
+      "batch_wall_sec": 19.7,
+      "peak_rss_mb": 252.0
+    },
+    {
+      "profile": "1080p_60s",
+      "resolution": "1920x1080",
+      "duration_sec": 60,
+      "fps": 10,
+      "concurrent_jobs": 3,
+      "worker_concurrency_cap": 2,
+      "p50_latency_sec": 20.36,
+      "p95_latency_sec": 30.04,
+      "mean_exec_sec": 17.16,
+      "max_queue_wait_sec": 19.92,
+      "batch_wall_sec": 31.12,
+      "peak_rss_mb": 252.0
+    }
+  ],
+  "cpu_cost_and_throughput": {
+    "static_patch_mode": {
+      "cpu_sec_per_1s_720p": 0.19,
+      "cpu_sec_per_1s_1080p": 0.235,
+      "max_30s_720p_videos_per_hour_1worker": 631,
+      "max_30s_1080p_videos_per_hour_1worker": 509
+    },
+    "per_frame_temporal_mode": {
+      "cpu_sec_per_1s_720p_30fps": 6.58,
+      "cpu_sec_per_1s_1080p_30fps": 14.45,
+      "max_30s_720p_videos_per_hour_1worker": 18,
+      "max_30s_1080p_videos_per_hour_1worker": 8
+    }
+  }
+}

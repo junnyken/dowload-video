@@ -76,8 +76,13 @@ def get_peak_rss_mb() -> float:
             ]
         pmc = PROCESS_MEMORY_COUNTERS()
         pmc.cb = ctypes.sizeof(PROCESS_MEMORY_COUNTERS)
-        handle = ctypes.windll.kernel32.GetCurrentProcess()
-        if ctypes.windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(pmc), pmc.cb):
+        GetCurProc = ctypes.windll.kernel32.GetCurrentProcess
+        GetCurProc.restype = wintypes.HANDLE
+        handle = GetCurProc()
+        fn = getattr(ctypes.windll.kernel32, "K32GetProcessMemoryInfo", None) or ctypes.windll.psapi.GetProcessMemoryInfo
+        fn.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESS_MEMORY_COUNTERS), wintypes.DWORD]
+        fn.restype = wintypes.BOOL
+        if fn(handle, ctypes.byref(pmc), pmc.cb) and pmc.PeakWorkingSetSize > 0:
             return round(pmc.PeakWorkingSetSize / (1024.0 * 1024.0), 1)
     else:
         try:

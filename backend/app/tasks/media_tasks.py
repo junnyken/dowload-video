@@ -21,6 +21,7 @@ nothing else.
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 from typing import Any, Dict, List
 
@@ -31,6 +32,7 @@ log = logging.getLogger(__name__)
 # Wait budget for the HTTP request sitting on the result: the task's own ffmpeg
 # timeout plus a grace period for time spent queued behind another encode.
 QUEUE_GRACE_SEC = 30
+FLOW_INPAINT_WORKER_CONCURRENCY = int(os.getenv("FLOW_INPAINT_WORKER_CONCURRENCY", "2"))
 
 
 def _run_ffmpeg(cmd: List[str], timeout: int) -> Dict[str, Any]:

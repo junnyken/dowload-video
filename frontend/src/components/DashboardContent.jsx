@@ -1669,6 +1669,7 @@ export default function DashboardContent() {
         method: 'natural',
         preset: inpaintPreset || 'custom',
         region_adjusted: inpaintConfirmed || true,
+        consent_confirmed: true,
       };
       if (inpaintPixelRegion) { body.preset = 'custom'; body.region = inpaintPixelRegion; }
       if (inpaintTrackInfo?.boxes_by_frame) { body.frame_boxes = inpaintTrackInfo.boxes_by_frame; }

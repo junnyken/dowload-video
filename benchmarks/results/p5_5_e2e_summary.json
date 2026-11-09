@@ -1,0 +1,13 @@
+{
+  "browser": "Microsoft Edge Headless Chromium",
+  "base_url": "http://127.0.0.1:4179",
+  "pro_flow_verified": true,
+  "free_user_upgrade_modal_verified": true,
+  "invalid_file_error_verified": true,
+  "ttl_expiry_404_verified": true,
+  "screenshots": [
+    "01_pro_flow_veo_page.png",
+    "02_free_user_upgrade_gate.png",
+    "03_invalid_file_guard.png"
+  ]
+}

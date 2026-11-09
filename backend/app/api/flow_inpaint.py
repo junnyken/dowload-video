@@ -59,10 +59,22 @@ def _feather_alpha(fill_mask: np.ndarray, feather_px: int) -> np.ndarray:
 
 def feather_blend(orig: np.ndarray, filled: np.ndarray,
                   fill_mask: np.ndarray, feather_px: int = 6) -> np.ndarray:
-    """Blend `filled` into `orig` using a feathered alpha from `fill_mask`."""
-    a = _feather_alpha(fill_mask, feather_px)[:, :, None]
-    out = orig.astype(np.float32) * (1.0 - a) + filled.astype(np.float32) * a
-    return np.clip(out, 0, 255).astype(np.uint8)
+    """Blend `filled` into `orig` using a feathered alpha from `fill_mask` (ROI-bounded for 720p/1080p speed)."""
+    bx, by, bw, bh = cv2.boundingRect(fill_mask)
+    if bw <= 0 or bh <= 0:
+        return orig.copy()
+    vh, vw = orig.shape[:2]
+    x0 = max(0, bx - 2)
+    y0 = max(0, by - 2)
+    x1 = min(vw, bx + bw + 2)
+    y1 = min(vh, by + bh + 2)
+    out = orig.copy()
+    sub_mask = fill_mask[y0:y1, x0:x1]
+    a = _feather_alpha(sub_mask, feather_px)[:, :, None]
+    sub_orig = orig[y0:y1, x0:x1].astype(np.float32)
+    sub_fill = filled[y0:y1, x0:x1].astype(np.float32)
+    out[y0:y1, x0:x1] = np.clip(sub_orig * (1.0 - a) + sub_fill * a, 0, 255).astype(np.uint8)
+    return out
 
 
 # ── Spatial inpaint (crop-local SHIFTMAP, TELEA fallback) ────────────

@@ -138,11 +138,35 @@ _TRACK_TIMEOUT_SEC = float(os.getenv("FLOW_TRACK_TIMEOUT_SEC", "120"))
 _PREVIEW_CLIP_TIMEOUT_SEC = float(os.getenv("FLOW_PREVIEW_CLIP_TIMEOUT_SEC", "90"))
 _MAX_USER_CONCURRENT_JOBS = int(os.getenv("FLOW_MAX_USER_CONCURRENT_JOBS", "1"))
 _DAILY_USER_QUOTA = int(os.getenv("FLOW_DAILY_USER_QUOTA", "20"))
+_WORKER_CONCURRENCY = int(os.getenv("FLOW_INPAINT_WORKER_CONCURRENCY", "2"))
 _SIGNED_URL_TTL_SEC = min(600, max(1, int(os.getenv("FLOW_SIGNED_URL_TTL_SEC", "600"))))
 _MAX_KEYFRAME_CACHE_FILES = int(os.getenv("FLOW_MAX_KEYFRAME_CACHE_FILES", "50"))
 _EPHEMERAL_SIGNING_SECRET = os.urandom(32).hex()
 _FLOW_PREFIX = "flow_"
 _META_LOCK = threading.RLock()
+
+
+def _append_consent_audit_log(user_id: Optional[str], temp_id: str, action: str = "process_confirm") -> dict:
+    """
+    Phase P5.5: Append a privacy-safe consent audit record `(timestamp, user_id, temp_id, action)`
+    to `downloads/flow_consent_audit.jsonl` when the user confirms video processing.
+    Never logs video bytes, filenames, or frame contents.
+    """
+    os.makedirs(_DOWNLOAD_DIR, exist_ok=True)
+    audit_path = os.path.join(_DOWNLOAD_DIR, "flow_consent_audit.jsonl")
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "user_id": str(user_id or "anonymous"),
+        "temp_id": str(temp_id),
+        "action": str(action),
+    }
+    with _META_LOCK:
+        try:
+            with open(audit_path, "a", encoding="utf-8") as af:
+                af.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except Exception as exc:
+            log.warning("[flow-cleanup] failed to write consent audit log: %s", exc)
+    return entry
 
 
 def _check_and_record_daily_quota(owner_id: Optional[str]) -> None:
@@ -1525,6 +1549,7 @@ class ProcessRequest(BaseModel):
     requested_mode: Optional[str] = None       # mode system originally recommended before user override
     keyframes: Optional[List[dict]] = None     # Phase P3: user keyframe overrides [{frame_idx, x, y, w, h}]
     frame_boxes: Optional[dict] = None         # Phase P3: optional per-frame tracked boxes {"0": [x,y,w,h], ...}
+    consent_confirmed: bool = True             # Phase P5.5: user confirms right to edit/process the video
 
 
 def _mark_job_failed(
@@ -1908,6 +1933,15 @@ def process_flow_cleanup(
     _prev_meta = _ensure_work_dir_fresh(work_dir, detail="Upload không còn. Vui lòng upload lại.")
     caller_id = _caller_user_id(request)
     _verify_job_owner(_prev_meta, caller_id)
+    if not payload.consent_confirmed:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error_code": "consent_required",
+                "user_message": "Vui lòng xác nhận bạn có quyền sử dụng và chỉnh sửa video này trước khi xử lý.",
+                "retryable": False,
+            },
+        )
     if _prev_meta.get("status") in ("queued", "running") and _prev_meta.get("active_task_kind") == "process":
         existing_tid = _prev_meta.get("celery_task_id") or payload.temp_id
         return {
@@ -1926,6 +1960,7 @@ def process_flow_cleanup(
             "retry_url": f"/api/v1/flow-cleanup/retry/{payload.temp_id}",
         }
     _check_user_concurrency(caller_id, payload.temp_id)
+    _append_consent_audit_log(caller_id, payload.temp_id, action="process_confirm")
     retry_count = _prev_meta.get("retry_count", -1) + 1  # 0 = first attempt
 
     input_path = _find_input_path(work_dir)

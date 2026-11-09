@@ -462,3 +462,62 @@ Note: The frontend scoring uses internal flag names (`very_long`, `long`, `very_
 `preset` options: `lower-right`, `lower-left`, `upper-right`, `upper-left`, `custom`
 `method` options: `delogo`, `crop`, `blur`
 For `preset=custom`, provide `region: {"x": N, "y": N, "w": N, "h": N}` in pixels.
+
+---
+
+## Section 10 — Phase P5 Hardening, Security, Load Test & CPU Cost Report (09/11/2026)
+
+### 10.1. Bảo mật & Phân quyền (P5.1)
+- **Signed URL (`HMAC-SHA256`, TTL ≤ 10 phút, `hmac.compare_digest`)**:
+  - `GET /api/v1/flow-cleanup/frame/{temp_id}`
+  - `GET /api/v1/flow-cleanup/preview-clean/{temp_id}`
+  - `GET /api/v1/flow-cleanup/preview-clip-video/{temp_id}`
+  - Mọi truy cập không có chữ ký, chữ ký sai, hết hạn hoặc sai owner trả ngay `HTTP 404` (không lộ sự tồn tại của job).
+- **Giới hạn `frame_idx` & LRU Keyframe Cache**:
+  - `frame_idx < 0` hoặc `frame_idx >= total_frames` trả `HTTP 400`.
+  - Tối đa 50 file `frame_<idx>.jpg` mỗi job (`FLOW_MAX_KEYFRAME_CACHE_FILES=50`), tự động xoá file cũ nhất theo LRU.
+- **Fail-closed `_verify_job_owner` & `/no-logo`**:
+  - `POST /api/v1/flow-cleanup/no-logo` bắt buộc `Depends(_require_pro)` và `_verify_job_owner`.
+  - Nếu `metadata.json` thiếu hoặc rỗng `owner_user_id`, từ chối ngay với `HTTP 404`.
+- **Feature Flag**:
+  - `VITE_FEATURE_LOGO_INPAINT` mặc định `OFF` trên production; khi tắt thì ẩn nút hậu kỳ xoá watermark trên kết quả tải video.
+
+### 10.2. Hàng đợi bất đồng bộ Celery `media` cho `/track` và `/preview-clip` (P5.2)
+- `track_watermark_task` (`soft_time_limit=120s`) và `preview_clip_task` (`soft_time_limit=90s`) chạy trên queue `media`.
+- Chống trùng lặp (deduplication) theo `temp_id`: gọi lặp khi đang `queued`/`running` trả lại `task_id` hiện có (`HTTP 202`, `deduplicated=True`), không nhân đôi worker task.
+- Giới hạn tối đa `1` job nặng đang chạy/xếp hàng mỗi user (`FLOW_MAX_USER_CONCURRENT_JOBS=1` → `HTTP 429 user_concurrent_job_limit`).
+- Dọn sạch file tạm (`preview_clip_src.mp4`, `preview_clip_clean.mp4`, `.noaudio.mp4`, `.tmp.*`) khi huỷ hoặc lỗi.
+
+### 10.3. Hardening đầu vào, Codec, Độ phân giải lẻ/xoay & Vòng đời file (P5.3)
+- Hỗ trợ đầy đủ: `H.264/AAC`, `H.265/HEVC`, `VP9/WebM` (tự động chuyển âm thanh Opus sang AAC khi đóng gói MP4), `MOV`, video không có audio, video dọc `720×1280`, kích thước lẻ `721×405` (tự căn chẵn `720×404`), xoay metadata `90°/270°`, và `VFR`.
+- Chặn trước khi vào worker: file `0 byte` (`HTTP 400 empty_file`), file văn bản giả `.mp4` (`HTTP 422 invalid_media_container`), file MP4 cắt cụt/hỏng (`HTTP 422 corrupted_video`), vượt dung lượng/độ phân giải/thời lượng (`HTTP 413`/`400`).
+- Hạn mức mỗi user mỗi ngày: `FLOW_DAILY_USER_QUOTA=20` jobs/ngày (`HTTP 429 daily_quota_exceeded`).
+- Giới hạn retry: `FLOW_MAX_RETRY_COUNT=3` (`HTTP 400 max_retries_exceeded`).
+
+### 10.4. Tải đồng thời, Cô lập hàng đợi, Chi phí CPU & Consent Audit Log (P5.5)
+- **Worker Concurrency**: mặc định `FLOW_INPAINT_WORKER_CONCURRENCY=2` trên queue `media`.
+- **Consent Audit Log**: Khi bấm Xử lý (`consent_confirmed=True`), ghi `(timestamp, user_id, temp_id, action="process_confirm")` vào `downloads/flow_consent_audit.jsonl` (không lưu nội dung hay tên file video). Nếu `consent_confirmed=False`, từ chối với `HTTP 400 consent_required`.
+- **Cô lập hàng đợi (`default` vs `media`)**: Khi 3 job `natural` chạy đồng thời trên queue `media`, các tác vụ tải video thông thường trên queue `default` vẫn hoàn tất với độ trễ `P95 = 5.71 ms` (`max = 5.79 ms`), hoàn toàn không bị nghẽn.
+
+#### Bảng kết quả Load Test (1, 2, 3 job `natural` đồng thời — `FLOW_INPAINT_WORKER_CONCURRENCY=2`)
+| Cấu hình video | Số job đồng thời | P50 Latency (s) | P95 Latency (s) | Thời gian xử lý TB / job (s) | Thời gian chờ hàng đợi tối đa (s) | RAM cực đại (Peak RSS) | Đánh giá RAM (Ngưỡng ≤ 2 GB/job) |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `720p` (`1280×720`, 30s) | 1 | 5.70s | 5.70s | 5.70s | 0.00s | 103.2 MB | **ĐẠT** |
+| `720p` (`1280×720`, 30s) | 2 | 8.51s | 8.94s | 8.51s | 0.00s | 146.2 MB | **ĐẠT** |
+| `720p` (`1280×720`, 30s) | 3 | 8.86s | 13.32s | 7.55s | 8.45s | 146.8 MB | **ĐẠT** |
+| `720p` (`1280×720`, 60s) | 1 | 7.84s | 7.84s | 7.84s | 0.00s | 146.8 MB | **ĐẠT** |
+| `720p` (`1280×720`, 60s) | 2 | 10.97s | 11.18s | 10.97s | 0.00s | 147.6 MB | **ĐẠT** |
+| `720p` (`1280×720`, 60s) | 3 | 9.74s | 14.26s | 8.17s | 8.95s | 147.9 MB | **ĐẠT** |
+| `1080p` (`1920×1080`, 30s) | 1 | 7.06s | 7.06s | 7.06s | 0.00s | 156.2 MB | **ĐẠT** |
+| `1080p` (`1920×1080`, 30s) | 2 | 11.73s | 12.03s | 11.73s | 0.00s | 249.9 MB | **ĐẠT** |
+| `1080p` (`1920×1080`, 30s) | 3 | 11.55s | 17.29s | 9.83s | 10.97s | 252.0 MB | **ĐẠT** |
+| `1080p` (`1920×1080`, 60s) | 1 | 11.63s | 11.63s | 11.63s | 0.00s | 252.0 MB | **ĐẠT** |
+| `1080p` (`1920×1080`, 60s) | 2 | 19.40s | 19.67s | 19.40s | 0.00s | 252.0 MB | **ĐẠT** |
+| `1080p` (`1920×1080`, 60s) | 3 | 20.36s | 30.04s | 17.16s | 19.92s | 252.0 MB | **ĐẠT** |
+
+#### Chi phí CPU & Công suất tối đa / giờ / 1 worker (Intel Core i3-10105 @ 3.70GHz)
+| Chế độ xử lý `natural` | CPU-second / 1s video `720p` | CPU-second / 1s video `1080p` | Số video 30s tối đa / giờ / 1 worker (`720p`) | Số video 30s tối đa / giờ / 1 worker (`1080p`) |
+|---|---:|---:|---:|---:|
+| Nền tĩnh quanh logo (`static_patch`) | **0.190 CPU-s / 1s** | **0.235 CPU-s / 1s** | **~631 video/giờ** | **~509 video/giờ** |
+| Chuyển động từng frame (`per_frame` temporal @ 30fps) | **6.58 CPU-s / 1s** | **14.45 CPU-s / 1s** | **~18 video/giờ** | **~8 video/giờ** |
+

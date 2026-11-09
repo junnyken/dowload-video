@@ -318,6 +318,41 @@
 
 ---
 
+## Lần chạy 6 — 09/11/2026 (Phase P5.5 — Load Test Đồng Thời 1–3 Job, Chi Phí CPU, Consent Audit Log & E2E)
+
+### Môi trường
+- Nhánh: `feat/watermark-p5-hardening` (sau commit P5.4 `beb58ff`)
+- CPU: `Intel(R) Core(TM) i3-10105 CPU @ 3.70GHz` (4 nhân / 8 luồng), RAM `16 GB`, Windows 10/11 (win32).
+- Cấu hình Worker Concurrency: `FLOW_INPAINT_WORKER_CONCURRENCY=2` (queue `media`).
+- Tối ưu hóa P5.5 trong `flow_inpaint.py`: giới hạn vùng tính `cv2.distanceTransform` và hoà trộn `float32` của `feather_blend` vào đúng bounding box `fill_mask > 0` thay vì toàn khung hình `1920×1080`, giữ nguyên 100% giá trị pixel đầu ra và tăng tốc ~4× trên video 720p/1080p.
+
+### Kết quả Load Test (1, 2, 3 job `natural` đồng thời — 30s & 60s, 720p & 1080p)
+| Cấu hình video | Số job đồng thời | Worker Concurrency Cap | P50 Latency (s) | P95 Latency (s) | Thời gian xử lý TB / job (s) | Thời gian chờ hàng đợi tối đa (s) | RAM cực đại (Peak RSS) | Ngưỡng RAM (Plan mục 6: ≤ 2 GB/job) |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| `720p_30s` (`1280×720`, 30s) | 1 | 2 | **5.70s** | **5.70s** | 5.70s | 0.00s | **103.2 MB** | **ĐẠT** (`≤ 2048 MB`) |
+| `720p_30s` (`1280×720`, 30s) | 2 | 2 | **8.51s** | **8.94s** | 8.51s | 0.00s | **146.2 MB** | **ĐẠT** (`≤ 2048 MB`) |
+| `720p_30s` (`1280×720`, 30s) | 3 | 2 | **8.86s** | **13.32s** | 7.55s | 8.45s | **146.8 MB** | **ĐẠT** (`≤ 2048 MB`) |
+| `720p_60s` (`1280×720`, 60s) | 1 | 2 | **7.84s** | **7.84s** | 7.84s | 0.00s | **146.8 MB** | **ĐẠT** (`≤ 2048 MB`) |
+| `720p_60s` (`1280×720`, 60s) | 2 | 2 | **10.97s** | **11.18s** | 10.97s | 0.00s | **147.6 MB** | **ĐẠT** (`≤ 2048 MB`) |
+| `720p_60s` (`1280×720`, 60s) | 3 | 2 | **9.74s** | **14.26s** | 8.17s | 8.95s | **147.9 MB** | **ĐẠT** (`≤ 2048 MB`) |
+| `1080p_30s` (`1920×1080`, 30s) | 1 | 2 | **7.06s** | **7.06s** | 7.06s | 0.00s | **156.2 MB** | **ĐẠT** (`≤ 2048 MB`) |
+| `1080p_30s` (`1920×1080`, 30s) | 2 | 2 | **11.73s** | **12.03s** | 11.73s | 0.00s | **249.9 MB** | **ĐẠT** (`≤ 2048 MB`) |
+| `1080p_30s` (`1920×1080`, 30s) | 3 | 2 | **11.55s** | **17.29s** | 9.83s | 10.97s | **252.0 MB** | **ĐẠT** (`≤ 2048 MB`) |
+| `1080p_60s` (`1920×1080`, 60s) | 1 | 2 | **11.63s** | **11.63s** | 11.63s | 0.00s | **252.0 MB** | **ĐẠT** (`≤ 2048 MB`) |
+| `1080p_60s` (`1920×1080`, 60s) | 2 | 2 | **19.40s** | **19.67s** | 19.40s | 0.00s | **252.0 MB** | **ĐẠT** (`≤ 2048 MB`) |
+| `1080p_60s` (`1920×1080`, 60s) | 3 | 2 | **20.36s** | **30.04s** | 17.16s | 19.92s | **252.0 MB** | **ĐẠT** (`≤ 2048 MB`) |
+
+### Cô lập hàng đợi (`default` download queue vs `media` inpaint queue)
+- Khi 3 job `natural` chạy đồng thời trên queue `media`, các tác vụ tải video thông thường trên queue `default` hoàn tất với **`P95 = 5.71 ms`** (`max = 5.79 ms`), chứng minh hàng đợi tải video thường không bị ảnh hưởng (**ĐẠT**).
+
+### Chi phí CPU & Công suất tối đa / giờ / 1 worker
+| Chế độ xử lý `natural` | CPU-second / 1s video `720p` | CPU-second / 1s video `1080p` | Số video 30s tối đa / giờ / 1 worker (`720p`) | Số video 30s tối đa / giờ / 1 worker (`1080p`) | Đánh giá |
+|---|---:|---:|---:|---:|---|
+| Nền tĩnh quanh logo (`static_patch`) | **0.190 CPU-s / 1s** | **0.235 CPU-s / 1s** | **631 video/giờ** | **509 video/giờ** | *Chưa có ngưỡng — chỉ báo cáo* |
+| Chuyển động từng frame (`per_frame` temporal @ 30fps) | **6.58 CPU-s / 1s** | **14.45 CPU-s / 1s** | **18 video/giờ** | **8 video/giờ** | *Chưa có ngưỡng — chỉ báo cáo* |
+
+---
+
 ## Mẫu ghi cho các lần chạy sau
 
 ## Lần chạy N — DD/MM/YYYY (mô tả ngắn)

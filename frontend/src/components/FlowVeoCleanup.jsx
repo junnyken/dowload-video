@@ -323,6 +323,7 @@ export default function FlowVeoCleanup() {
   const [isGeneratingClip, setIsGeneratingClip] = useState(false);
   const [clipProgress, setClipProgress] = useState(0);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [consentConfirmed, setConsentConfirmed] = useState(true);
 
   const isProUser = ['pro', 'team', 'enterprise', 'api'].includes(user?.tier) || Boolean(user?.is_pro);
 
@@ -843,6 +844,7 @@ export default function FlowVeoCleanup() {
           requested_mode: recommendedMode,
           keyframes: kfPayload.length > 0 ? kfPayload : undefined,
           frame_boxes: trackResult?.boxes_by_frame || undefined,
+          consent_confirmed: Boolean(consentConfirmed),
         }),
       }));
       if (!res.ok) {
@@ -1714,6 +1716,18 @@ export default function FlowVeoCleanup() {
             </div>
           )}
 
+          {/* Phase P5.5: User ownership / permission consent checkbox */}
+          <label className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-surface-2 border border-line text-[11px] text-fg-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              data-testid="consent-checkbox"
+              checked={consentConfirmed}
+              onChange={(e) => setConsentConfirmed(e.target.checked)}
+              className="mt-0.5 accent-accent cursor-pointer"
+            />
+            <span>Tôi xác nhận mình sở hữu hoặc có quyền hợp pháp để chỉnh sửa và xử lý video này.</span>
+          </label>
+
           {/* Actions */}
           {!previewInfo?.recommend_crop && (
             <div className="flex gap-3">
@@ -1725,7 +1739,8 @@ export default function FlowVeoCleanup() {
               </button>
               <button
                 onClick={handleProcess}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-accent text-accent-fg shadow-md transition-all cursor-pointer"
+                disabled={!consentConfirmed}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-accent text-accent-fg shadow-md transition-all cursor-pointer disabled:opacity-50"
               >
                 <Wand2 className="w-4 h-4" />
                 {t('frame.processAll')}

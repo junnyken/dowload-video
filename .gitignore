@@ -26,6 +26,8 @@ benchmarks/hardening/*
 !benchmarks/hardening/.gitkeep
 benchmarks/results/contact-sheets/*.jpg
 benchmarks/results/contact-sheets/*.png
+benchmarks/results/e2e-screenshots/*.png
+benchmarks/results/e2e-screenshots/*.jpg
 
 # Downloaded media files
 backend/downloads/
