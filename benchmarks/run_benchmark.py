@@ -796,15 +796,246 @@ def run_detector_benchmark() -> Dict[str, Any]:
     return summary
 
 
+def run_tracker_benchmark() -> Dict[str, Any]:
+    """
+    Phase P3 Benchmark:
+      1. Evaluates `track_watermark_in_video` across all 16 positive benchmark videos
+         (per-frame IoU, median IoU, max drift %, lost rate, scene cuts, processing time).
+      2. Evaluates a disappearing-watermark probe to verify lost-track & `needs_review` detection.
+      3. Runs `process_video_natural` with tracked `frame_boxes` on the `moving_watermark` group
+         (`moving_watermark_01..03`) and `scene_cut_03`, comparing SSIM in mask against the P0
+         fixed-bbox baseline (`0.4742`).
+    """
+    from app.services.watermark_track import (
+        evaluate_tracking_against_gt,
+        retrack_with_keyframes,
+        track_watermark_in_video,
+    )
+
+    expected_scene_cuts = {
+        "scene_cut_01": [75],
+        "scene_cut_02": [50, 100],
+        "scene_cut_03": [75],
+    }
+
+    tracker_rows = []
+    for in_path in sorted(INPUT_DIR.glob("*.mp4")):
+        stem = in_path.stem
+        lbl_path = LABELS_DIR / f"{stem}.json"
+        if not lbl_path.exists():
+            continue
+        lbl = json.loads(lbl_path.read_text(encoding="utf-8"))
+        regions = lbl.get("regions", [])
+        if not regions:
+            continue
+
+        vw, vh = int(lbl["width"]), int(lbl["height"])
+        gt_boxes = regions[0]["boxes"]
+        box0 = gt_boxes.get("0") or next(iter(gt_boxes.values()))
+
+        # Track starting from frame 0's bbox (keyframe 0) AND starting from P2 auto-detector
+        tr_init = track_watermark_in_video(str(in_path), init_box=box0)
+        ev_init = evaluate_tracking_against_gt(tr_init, gt_boxes, vw, vh)
+
+        tr_auto = track_watermark_in_video(str(in_path), init_box=None)
+        ev_auto = evaluate_tracking_against_gt(tr_auto, gt_boxes, vw, vh)
+
+        gt_cuts = expected_scene_cuts.get(stem, [])
+        pred_cuts = tr_init.get("scene_cuts", [])
+        cut_match = (pred_cuts == gt_cuts)
+
+        row = {
+            "video": in_path.name,
+            "stem": stem,
+            "group": lbl.get("group", ""),
+            "region_type": regions[0].get("type", "static"),
+            "frames": int(lbl.get("frames", 150)),
+            "median_iou": ev_init["median_iou"],
+            "mean_iou": ev_init["mean_iou"],
+            "min_iou": ev_init["min_iou"],
+            "max_drift_pct": ev_init["max_drift_pct"],
+            "mean_drift_pct": ev_init["mean_drift_pct"],
+            "auto_init_median_iou": ev_auto["median_iou"],
+            "auto_init_max_drift_pct": ev_auto["max_drift_pct"],
+            "lost_rate": tr_init["lost_rate"],
+            "lost_frames_count": len(tr_init["lost_frames"]),
+            "gt_scene_cuts": gt_cuts,
+            "pred_scene_cuts": pred_cuts,
+            "scene_cut_exact": cut_match,
+            "status": tr_init["status"],
+            "needs_review": tr_init["needs_review"],
+            "elapsed_sec": tr_init["elapsed_sec"],
+        }
+        tracker_rows.append(row)
+        print(
+            f"[track] {stem[:28]:28s} | medIoU={row['median_iou']:.4f} (auto={row['auto_init_median_iou']:.4f}) | "
+            f"drift={row['max_drift_pct']:.2f}% | cuts={pred_cuts!s:10s} | lost={row['lost_rate']*100:.1f}% | t={row['elapsed_sec']:.2f}s"
+        )
+
+    # Probe lost-track & keyframe retracking on a synthetic disappearing watermark video
+    canvas = _make_base_canvas(VW, VH, 0)
+    lost_probe_frames = []
+    for i in range(90):
+        ox, oy = int(i * 1.5), 40
+        fr = canvas[oy:oy + VH, ox:ox + VW].copy()
+        if i < 50:
+            fr = _draw_watermark_patch(fr, [480, 288, 136, 48], "TEMP WM", alpha=0.88)
+        lost_probe_frames.append(fr)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        probe_mp4 = Path(tmpdir) / "lost_probe.mp4"
+        encode_frames_lossless(lost_probe_frames, probe_mp4, fps=FPS)
+        tr_lost = track_watermark_in_video(str(probe_mp4), init_box=[480, 288, 136, 48])
+        retracked = retrack_with_keyframes(
+            str(probe_mp4),
+            tr_lost,
+            keyframes=[{"frame_idx": 50, "x": 480, "y": 288, "w": 136, "h": 48}],
+        )
+        lost_probe_report = {
+            "total_frames": 90,
+            "watermark_present_frames": "0..49",
+            "watermark_missing_frames": "50..89",
+            "detected_lost_frames_count": len(tr_lost["lost_frames"]),
+            "first_lost_frame": tr_lost["lost_frames"][0] if tr_lost["lost_frames"] else None,
+            "needs_review": tr_lost["needs_review"],
+            "auto_erasable": tr_lost["auto_erasable"],
+            "review_keyframes": tr_lost["review_keyframes"],
+            "retrack_recomputed_ranges": retracked.get("recomputed_ranges", []),
+        }
+        print(
+            f"[track lost-probe] lost_frames={len(tr_lost['lost_frames'])}/40 "
+            f"(first={lost_probe_report['first_lost_frame']}) needs_review={tr_lost['needs_review']} "
+            f"review_keyframes={tr_lost['review_keyframes']}"
+        )
+
+    # Re-run moving_watermark group (+ scene_cut_03) through process_video_natural with tracked frame_boxes
+    p0_baseline_ssim = {
+        "moving_watermark_01": 0.4832,
+        "moving_watermark_02": 0.3694,
+        "moving_watermark_03": 0.5699,
+        "scene_cut_03": 0.4820,
+    }
+    moving_inpaint_rows = []
+    for name in ("moving_watermark_01", "moving_watermark_02", "moving_watermark_03", "scene_cut_03"):
+        in_p = INPUT_DIR / f"{name}.mp4"
+        ref_p = REF_DIR / f"{name}.mp4"
+        lbl_p = LABELS_DIR / f"{name}.json"
+        if not (in_p.exists() and ref_p.exists() and lbl_p.exists()):
+            continue
+        lbl = json.loads(lbl_p.read_text(encoding="utf-8"))
+        vw, vh, fps = int(lbl["width"]), int(lbl["height"]), float(lbl["fps"])
+        gt_boxes = lbl["regions"][0]["boxes"]
+        box0 = gt_boxes["0"]
+
+        tr = track_watermark_in_video(str(in_p), init_box=box0)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_p = Path(tmpdir) / "cleaned_p3.mp4"
+            tracemalloc.start()
+            t0 = time.perf_counter()
+            stats = fi.process_video_natural(
+                str(in_p), str(out_p),
+                box0[0], box0[1], box0[2], box0[3],
+                vw, vh, fps=fps, duration=5.0,
+                frame_boxes=tr["boxes_by_frame"],
+            )
+            elapsed = round(time.perf_counter() - t0, 2)
+            peak_ram = get_peak_rss_mb()
+            tracemalloc.stop()
+
+            cleaned_frames = decode_frames(out_p, vw, vh)
+            ref_frames = decode_frames(ref_p, vw, vh)
+
+            # Re-encode reference with identical libx264 crf 18 yuv420p settings for outside-mask PSNR
+            ref_reencoded = Path(tmpdir) / "ref_crf18.mp4"
+            ref_proc = subprocess.Popen(
+                [
+                    "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                    "-f", "rawvideo", "-pix_fmt", "bgr24",
+                    "-s", f"{vw}x{vh}", "-r", f"{fps:.3f}", "-i", "pipe:0",
+                    "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+                    "-pix_fmt", "yuv420p", "-an", str(ref_reencoded),
+                ],
+                stdin=subprocess.PIPE, stderr=subprocess.PIPE,
+            )
+            for rfr in ref_frames:
+                ref_proc.stdin.write(rfr.tobytes())  # type: ignore[union-attr]
+            ref_proc.stdin.close()  # type: ignore[union-attr]
+            ref_proc.wait(timeout=180)
+            ref_crf18_frames = decode_frames(ref_reencoded, vw, vh)
+
+            union_mask = np.zeros((vh, vw), dtype=np.uint8)
+            for b in gt_boxes.values():
+                bx, by, bw, bh = [int(v) for v in b]
+                union_mask[by:by + bh, bx:bx + bw] = 255
+            outside_bool = fi.dilate_fill_mask(union_mask, 14) == 0
+
+            ssims = []
+            psnrs = []
+            for i in range(min(len(cleaned_frames), len(ref_frames), len(ref_crf18_frames))):
+                bx, by, bw, bh = [int(v) for v in gt_boxes[str(i)]]
+                ssims.append(compute_ssim_patch(cleaned_frames[i][by:by + bh, bx:bx + bw], ref_frames[i][by:by + bh, bx:bx + bw]))
+                psnrs.append(compute_psnr_masked(cleaned_frames[i], ref_crf18_frames[i], outside_bool))
+
+            seam, flicker = compute_seam_and_flicker(cleaned_frames, box0[0], box0[1], box0[2], box0[3])
+            ssim_p3 = round(float(np.mean(ssims)), 4)
+            psnr_p3 = round(float(np.mean(psnrs)), 2)
+            ssim_p0 = p0_baseline_ssim.get(name, 0.0)
+            moving_inpaint_rows.append({
+                "video": in_p.name,
+                "stem": name,
+                "group": lbl.get("group", ""),
+                "ssim_p0_baseline": ssim_p0,
+                "ssim_p3_tracked": ssim_p3,
+                "ssim_gain": round(ssim_p3 - ssim_p0, 4),
+                "psnr_out_mask": psnr_p3,
+                "seam": seam,
+                "flicker": flicker,
+                "temporal_frames": stats["temporal_frames"],
+                "total_frames": stats["total_frames"],
+                "elapsed_sec": elapsed,
+                "peak_ram_mb": peak_ram,
+            })
+            print(
+                f"[inpaint P3 vs P0] {name:22s} | SSIM P0={ssim_p0:.4f} -> P3={ssim_p3:.4f} "
+                f"(+{ssim_p3 - ssim_p0:.4f}) | PSNR_out={psnr_p3:.2f} dB | time={elapsed:.2f}s"
+            )
+
+    moving_3 = [r for r in moving_inpaint_rows if r["stem"].startswith("moving_watermark_")]
+    summary = {
+        "total_tracked_videos": len(tracker_rows),
+        "overall_median_iou": round(float(np.median([r["median_iou"] for r in tracker_rows])), 4) if tracker_rows else 0.0,
+        "overall_auto_init_median_iou": round(float(np.median([r["auto_init_median_iou"] for r in tracker_rows])), 4) if tracker_rows else 0.0,
+        "max_drift_pct": max((r["max_drift_pct"] for r in tracker_rows), default=0.0),
+        "auto_init_max_drift_pct": max((r["auto_init_max_drift_pct"] for r in tracker_rows), default=0.0),
+        "scene_cut_exact_rate": round(sum(1 for r in tracker_rows if r["scene_cut_exact"]) / float(max(1, len(tracker_rows))), 4),
+        "mean_track_elapsed_sec": round(float(np.mean([r["elapsed_sec"] for r in tracker_rows])), 3) if tracker_rows else 0.0,
+        "moving_watermark_ssim_p0": 0.4742,
+        "moving_watermark_ssim_p3": round(float(np.mean([r["ssim_p3_tracked"] for r in moving_3])), 4) if moving_3 else 0.0,
+        "moving_watermark_psnr_out_p3": round(float(np.mean([r["psnr_out_mask"] for r in moving_3])), 2) if moving_3 else 0.0,
+        "lost_track_probe": lost_probe_report,
+        "tracker_videos": tracker_rows,
+        "moving_inpaint_comparison": moving_inpaint_rows,
+    }
+    out_trk = RESULTS_DIR / "tracker_metrics_p3.json"
+    out_trk.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(
+        f"\n[track summary] median_IoU={summary['overall_median_iou']:.4f} (auto={summary['overall_auto_init_median_iou']:.4f}) "
+        f"max_drift={summary['max_drift_pct']:.2f}% scene_cut_acc={summary['scene_cut_exact_rate']*100:.1f}% "
+        f"moving_SSIM: P0={summary['moving_watermark_ssim_p0']:.4f} -> P3={summary['moving_watermark_ssim_p3']:.4f}"
+    )
+    return summary
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--generate", action="store_true", help="Generate synthetic benchmark suite (18 video pairs + labels)")
     ap.add_argument("--force", action="store_true", help="Overwrite existing generated benchmark videos")
     ap.add_argument("--run", action="store_true", help="Run baseline benchmark and save results/latest_metrics.json")
     ap.add_argument("--detect", action="store_true", help="Run Phase P2 watermark detector benchmark")
+    ap.add_argument("--track", action="store_true", help="Run Phase P3 watermark tracker & dynamic inpaint benchmark")
     args = ap.parse_args()
 
-    if not args.generate and not args.run and not args.detect:
+    if not args.generate and not args.run and not args.detect and not args.track:
         args.generate = True
         args.run = True
 
@@ -812,6 +1043,8 @@ def main() -> int:
         generate_benchmark_suite(force=args.force)
     if args.detect:
         run_detector_benchmark()
+    if args.track:
+        run_tracker_benchmark()
     if args.run:
         run_benchmark()
     return 0

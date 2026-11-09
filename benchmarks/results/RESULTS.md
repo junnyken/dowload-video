@@ -187,6 +187,57 @@
 
 ---
 
+## Lần chạy 4 — 09/11/2026 (Phase P3 Tracker & Xoá Watermark Động Theo Từng Frame)
+
+### Môi trường
+- Commit P2: `7b3245f` (`feat/native-link`)
+- OS / Phần cứng: Windows 10/11 (win32), CPU Intel Core i3-10105 @ 3.70GHz (4 nhân / 8 luồng), RAM 16 GB.
+- FFmpeg/FFprobe: static 7.0.2 (`.tools/`).
+- Tracker Engine (P3): `track_watermark_in_video` và `retrack_with_keyframes` trong `backend/app/services/watermark_track.py` + endpoint `POST /api/v1/flow-cleanup/track/{temp_id}`.
+- Inpaint Engine (P3): `process_video_natural` trong `backend/app/api/flow_inpaint.py` hỗ trợ `frame_boxes` / `frame_masks` theo từng frame và bù chuyển động đa bước nhảy (`strided_neighbors` + `global_ref_neighbors` quanh điểm nhảy vị trí watermark), giữ tương thích ngược hoàn toàn với chữ ký `(x, y, w, h)` cũ.
+
+### Kết quả Benchmark Tracker theo từng video (16 video có watermark + 1 probe mất dấu)
+| Video | Nhóm | Loại quỹ đạo | IoU trung vị (từ keyframe 0) | IoU trung vị (từ P2 Auto-Detect) | IoU thấp nhất | Drift tối đa (% đường chéo frame) | Cắt cảnh phát hiện (`GT`) | Mất dấu (`lost_rate`) | Thời gian xử lý |
+|---|---|---|---:|---:|---:|---:|---|---:|---:|
+| `static_corner_01.mp4` | Logo cố định ở góc | `static` | **1.0000** | 0.8209 | 1.0000 | **0.00%** | `[]` (`[]`) | 0.0% | 1.58s |
+| `static_corner_02.mp4` | Logo cố định ở góc | `static` | **1.0000** | 0.8152 | 1.0000 | **0.00%** | `[]` (`[]`) | 0.0% | 1.42s |
+| `static_corner_03.mp4` | Logo cố định ở góc | `static` | **1.0000** | 0.8152 | 1.0000 | **0.00%** | `[]` (`[]`) | 0.0% | 1.39s |
+| `semi_transparent_01.mp4` | Watermark bán trong suốt | `static` | **1.0000** | 0.8210 | 1.0000 | **0.00%** | `[]` (`[]`) | 0.0% | 1.55s |
+| `semi_transparent_02.mp4` | Watermark bán trong suốt | `static` | **1.0000** | 0.8259 | 1.0000 | **0.00%** | `[]` (`[]`) | 0.0% | 1.41s |
+| `semi_transparent_03.mp4` | Watermark bán trong suốt | `static` | **1.0000** | 0.8210 | 1.0000 | **0.00%** | `[]` (`[]`) | 0.0% | 1.48s |
+| `moving_watermark_01.mp4` | Logo/chữ di chuyển | `moving_jump2` | **1.0000** | 0.8152 | 1.0000 | **0.00%** | `[]` (`[]`) | 0.0% | 2.55s |
+| `moving_watermark_02.mp4` | Logo/chữ di chuyển | `moving_jump3` | **1.0000** | 0.7725 | 1.0000 | **0.00%** | `[]` (`[]`) | 0.0% | 2.64s |
+| `moving_watermark_03.mp4` | Logo/chữ di chuyển | `moving_drift` | **1.0000** | 0.8773 | 0.9854 | **0.14%** | `[]` (`[]`) | 0.0% | 2.12s |
+| `heavy_motion_01.mp4` | Nền chuyển động mạnh, camera rung | `static` | **1.0000** | 0.8209 | 1.0000 | **0.00%** | `[]` (`[]`) | 0.0% | 1.58s |
+| `heavy_motion_02.mp4` | Nền chuyển động mạnh, camera rung | `static` | **1.0000** | 0.8152 | 1.0000 | **0.00%** | `[]` (`[]`) | 0.0% | 1.74s |
+| `heavy_motion_03.mp4` | Nền chuyển động mạnh, camera rung | `static` | **1.0000** | 0.8152 | 1.0000 | **0.00%** | `[]` (`[]`) | 0.0% | 1.86s |
+| `scene_cut_01.mp4` | Có cắt cảnh | `static` | **1.0000** | 0.8152 | 1.0000 | **0.00%** | **`[75]`** (`[75]`) | 0.0% | 1.39s |
+| `scene_cut_02.mp4` | Có cắt cảnh | `static` | **1.0000** | 0.8152 | 1.0000 | **0.00%** | **`[50, 100]`** (`[50, 100]`) | 0.0% | 1.50s |
+| `scene_cut_03.mp4` | Có cắt cảnh + nhảy góc | `moving` | **1.0000** | 0.8095 | 1.0000 | **0.00%** | **`[75]`** (`[75]`) | 0.0% | 2.45s |
+| `253K views...Agency.mp4` | Watermark bán trong suốt (thực tế) | `static` | **1.0000** | 0.7767 | 1.0000 | **0.00%** | `[]` (`[]`) | 0.0% | 8.91s |
+| `lost_probe.mp4` (kiểm thử mất dấu) | Watermark biến mất ở frame 50..89 | `disappearing` | — | — | — | — | `[]` | **40/40 frame mất dấu (`first=50`, `needs_review=True`, `review_keyframes=[50]`)** | 0.92s |
+| **Tổng hợp Phase P3 Tracker** | **16 video + 1 probe** | — | **1.0000 (≥ 0.85 ĐẠT)** | **0.8152** | **0.9854** | **0.14% (≤ 3.0% ĐẠT)** | **Chính xác 100% (16/16)** | **Phát hiện 100% mất dấu (40/40)** | **TB 2.22s** |
+
+### So sánh chất lượng xoá nhóm `moving_watermark` & `scene_cut_03`: P0 (bbox cố định) vs P3 (mask theo từng frame)
+| Video | Loại chuyển động watermark | SSIM trong mask (P0 — bbox cố định) | SSIM trong mask (P3 — mask theo frame) | Mức tăng SSIM (`P3 - P0`) | PSNR ngoài mask (P3, dB) | Seam / Flicker (P3) | Thời gian xử lý (P3) | RAM tối đa |
+|---|---|---:|---:|---:|---:|---|---:|---:|
+| `moving_watermark_01.mp4` | Nhảy 2 góc (`frame 0..74` → `75..149`) | 0.4832 | **0.9319** | **+0.4487** | **42.61 dB** | 1.06 / 1.03 | 27.90s | 109.1 MB |
+| `moving_watermark_02.mp4` | Nhảy 3 góc (`0..49` → `50..99` → `100..149`) | 0.3694 | **0.8527** | **+0.4833** | **44.05 dB** | 1.09 / 1.06 | 38.34s | 109.4 MB |
+| `moving_watermark_03.mp4` | Trôi ngang liên tục (`x=40` → `x=420`) | 0.5699 | **0.9417** | **+0.3718** | **47.49 dB** | 1.04 / 1.01 | 32.28s | 109.4 MB |
+| **Trung bình nhóm `moving_watermark`** | **3 video di chuyển/nhảy vị trí** | **0.4742** | **0.9088 (≥ 0.85 ĐẠT)** | **+0.4346** | **44.72 dB (≥ 40 dB ĐẠT)** | **1.06 / 1.03** | **32.84s** | **109.4 MB** |
+| `scene_cut_03.mp4` | Cắt cảnh + nhảy góc tại frame 75 | 0.4820 | **0.8118** | **+0.3298** | **50.32 dB** | 1.08 / 1.05 | 36.13s | 109.4 MB |
+
+### Kết luận Lần chạy 4 (Phase P3)
+- **Đạt toàn bộ tiêu chí nghiệm thu Phase P3**:
+  - **IoU trung vị = 1.0000** trên toàn bộ 16 video khi khởi tạo từ bbox chuẩn ở frame 0 (và **0.8152–0.8773** khi khởi tạo trực tiếp từ bbox của P2 Detector mà chưa chỉnh tay; chênh lệch duy nhất là phần viền padding ~2–3px do Detector mở rộng để bao trọn rìa chữ).
+  - **Độ trôi tối đa (`max_drift_pct`) = 0.14%** kích thước đường chéo frame (mục tiêu `≤ 3.0%`).
+  - **Phát hiện cắt cảnh & mất dấu chính xác 100%**: phát hiện đúng frame cắt cảnh `[75]` ở `scene_cut_01` & `scene_cut_03`, `[50, 100]` ở `scene_cut_02`, không báo nhầm trên nhóm `heavy_motion_01..03`. Khi watermark biến mất (`lost_probe`), báo đúng `40/40` frame mất dấu, bật `needs_review=True`, chặn tự động xoá ở `/process` (`HTTP 400`, `error_code="tracking_needs_review"`), và khi truyền `keyframes` vào `retrack_with_keyframes` chỉ tính lại đúng đoạn `[50, 90)`.
+  - **Chất lượng xoá nhóm `moving_watermark` tăng vọt**: SSIM trong vùng mask tăng từ **0.4742** (baseline P0) lên **0.9088** (`+0.4346`, vượt mục tiêu `≥ 0.85`), PSNR ngoài vùng mask đạt **44.72 dB** (`≥ 40 dB`).
+- **Việc tiếp theo**:
+  - Chuyển sang Phase P4 (Giao diện người dùng tích hợp tự phát hiện, theo vết, chỉnh keyframe, xem trước 3–5s và so sánh A/B) hoặc Phase P5 (Tinh chỉnh chất lượng xoá trên nhóm nền tĩnh/bán trong suốt).
+
+---
+
 ## Mẫu ghi cho các lần chạy sau
 
 ## Lần chạy N — DD/MM/YYYY (mô tả ngắn)

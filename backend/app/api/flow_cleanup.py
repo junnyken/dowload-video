@@ -20,7 +20,7 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -797,13 +797,15 @@ async def get_preview_clean(temp_id: str):
 
 class ProcessRequest(BaseModel):
     temp_id: str
-    preset: Optional[str] = "lower-right"      # lower-right|lower-left|upper-right|upper-left|custom
+    preset: Optional[str] = "lower-right"      # lower-right|lower-left|upper-right|upper-left|custom|auto
     region: Optional[dict] = None              # {x,y,w,h} pixels; used when preset="custom"
     method: str = "telea"                      # telea|telea_soft|crop|blur (delogo|delogo_soft = aliases)
     expand_padding: int = 0                    # px to expand region on all sides
     region_adjusted: bool = False              # user manually dragged the region handles
     suitability_level: Optional[str] = None    # echoed back for traceability
     requested_mode: Optional[str] = None       # mode system originally recommended before user override
+    keyframes: Optional[List[dict]] = None     # Phase P3: user keyframe overrides [{frame_idx, x, y, w, h}]
+    frame_boxes: Optional[dict] = None         # Phase P3: optional per-frame tracked boxes {"0": [x,y,w,h], ...}
 
 
 def _mark_job_failed(
@@ -912,12 +914,14 @@ def _execute_flow_cleanup_job(
             from app.api import flow_inpaint as _fi
             mask = _build_mask(x, y, w, h, vw, vh)
             _save_mask_png(mask, mask_path)
+            tracked_boxes = job_params.get("frame_boxes") or prev_meta.get("tracked_boxes")
             natural_stats = _fi.process_video_natural(
                 input_path, output_path,
                 x, y, w, h, vw, vh,
                 fps_val,
                 duration=dur,
                 progress_cb=_progress_cb,
+                frame_boxes=tracked_boxes,
             )
         elif method in ("telea", "telea_soft"):
             mask = _build_mask(x, y, w, h, vw, vh)
@@ -1223,6 +1227,42 @@ def process_flow_cleanup(
                 },
             )
 
+    # Phase P3 Guard: if user supplied keyframe overrides on /process, recompute affected tracking segment first
+    tracked_boxes = payload.frame_boxes or _prev_meta.get("tracked_boxes")
+    tracking_needs_review = bool(_prev_meta.get("tracking_needs_review"))
+    if payload.keyframes:
+        from app.services.watermark_track import retrack_with_keyframes, track_watermark_in_video
+        prev_track_obj = _prev_meta.get("tracking_result")
+        if isinstance(prev_track_obj, dict) and prev_track_obj.get("frames"):
+            tr_res = retrack_with_keyframes(input_path, prev_track_obj, payload.keyframes)
+        else:
+            tr_res = track_watermark_in_video(input_path, keyframes=payload.keyframes)
+        tracked_boxes = tr_res["boxes_by_frame"]
+        tracking_needs_review = bool(tr_res.get("needs_review"))
+        _write_meta(work_dir, {
+            "tracking_status": tr_res["status"],
+            "tracking_needs_review": tracking_needs_review,
+            "tracked_boxes": tracked_boxes,
+            "tracking_review_keyframes": tr_res.get("review_keyframes", []),
+            "tracking_result": tr_res,
+        })
+        if payload.region is None and "0" in tracked_boxes:
+            b0 = tracked_boxes["0"]
+            payload.region = {"x": b0[0], "y": b0[1], "w": b0[2], "h": b0[3]}
+            payload.preset = "custom"
+
+    # Never auto-erase if tracker lost track or tracking confidence is low without user confirmation
+    if tracking_needs_review and not payload.region_adjusted and not payload.keyframes:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error_code": "tracking_needs_review",
+                "needs_review": True,
+                "review_keyframes": _prev_meta.get("tracking_review_keyframes", []),
+                "user_message": "Theo vết watermark mất dấu hoặc độ tin cậy thấp ở một số frame (needs_review=true). Không tự động xoá — vui lòng chỉnh lại tại keyframe trước khi xử lý.",
+            },
+        )
+
     # Resolve region — shared helper used by /preview-frame and /process
     raw_region = _resolve_region(payload.preset, payload.region, vw, vh)
     x, y, w, h = int(raw_region["x"]), int(raw_region["y"]), int(raw_region["w"]), int(raw_region["h"])
@@ -1246,6 +1286,7 @@ def process_flow_cleanup(
         "suitability_level": payload.suitability_level,
         "requested_mode": payload.requested_mode,
         "video_info": info,
+        "frame_boxes": tracked_boxes,
     }
     return _start_or_queue_cleanup_job(payload.temp_id, job_params, retry_count=retry_count)
 
@@ -1562,4 +1603,80 @@ def detect_flow_watermark(
         "sampled_frames": det["sampled_frames"],
         "elapsed_sec": det["elapsed_sec"],
         "video_info": det["video_info"],
+    }
+
+
+class TrackRequest(BaseModel):
+    region: Optional[dict] = None              # Initial {x,y,w,h} at frame 0 (optional; auto-detects if omitted)
+    keyframes: Optional[List[dict]] = None     # User keyframe overrides [{frame_idx, x, y, w, h}]
+    min_confidence: float = 0.65
+
+
+@router.post("/track/{temp_id}")
+@limiter.limit("20/minute")
+def track_flow_watermark(
+    temp_id: str,
+    payload: Optional[TrackRequest] = None,
+    request: Request = None,
+    _: None = Depends(_require_pro),
+):
+    """
+    Phase P3: Track visible watermark across all frames of an uploaded video.
+    - Supports static, drifting, and jumping watermarks.
+    - Detects scene cuts and tracking loss (`needs_review=True`).
+    - When `keyframes` are supplied on an existing track, recomputes ONLY the affected segment(s).
+    """
+    work_dir = _safe_work_dir(temp_id)
+    meta = _ensure_work_dir_fresh(work_dir, detail="Upload không còn. Vui lòng upload lại.")
+    _verify_job_owner(meta, _caller_user_id(request))
+
+    input_path = _find_input_path(work_dir)
+    if not input_path:
+        raise HTTPException(status_code=404, detail="Upload không còn. Vui lòng upload lại.")
+
+    req = payload or TrackRequest()
+    init_box = None
+    if req.region and all(k in req.region for k in ("x", "y", "w", "h")):
+        init_box = [int(req.region["x"]), int(req.region["y"]), int(req.region["w"]), int(req.region["h"])]
+    elif meta.get("detected_regions"):
+        r0 = meta["detected_regions"][0]
+        init_box = [int(r0["x"]), int(r0["y"]), int(r0["w"]), int(r0["h"])]
+
+    try:
+        from app.services.watermark_track import retrack_with_keyframes, track_watermark_in_video
+        prev_track = meta.get("tracking_result")
+        if req.keyframes and isinstance(prev_track, dict) and prev_track.get("frames"):
+            tr = retrack_with_keyframes(
+                input_path,
+                prev_track,
+                req.keyframes,
+                min_confidence=req.min_confidence,
+            )
+        else:
+            tr = track_watermark_in_video(
+                input_path,
+                init_box=init_box,
+                keyframes=req.keyframes,
+                min_confidence=req.min_confidence,
+            )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Theo vết watermark thất bại: {str(exc)[:200]}")
+
+    _write_meta(work_dir, {
+        "tracked_at": datetime.now(timezone.utc).isoformat(),
+        "tracking_status": tr["status"],
+        "tracking_needs_review": tr["needs_review"],
+        "tracked_boxes": tr["boxes_by_frame"],
+        "tracking_scene_cuts": tr.get("scene_cuts", []),
+        "tracking_lost_frames": tr.get("lost_frames", []),
+        "tracking_review_keyframes": tr.get("review_keyframes", []),
+        "tracking_elapsed_sec": tr["elapsed_sec"],
+        "tracking_result": tr,
+    })
+
+    return {
+        "success": True,
+        "temp_id": temp_id,
+        "job_id": temp_id,
+        **tr,
     }
