@@ -33,9 +33,9 @@
   },
   "synthIdNote": "Only applies to logos <b>visible on the frame</b>. The invisible <b>SynthID</b> watermark is not supported and <b>can't be removed by any tool</b>.",
   "duration": {
-    "title": "⏱ Video too long",
-    "pro": "Video is {{seconds}}s long (Pro limit: 2 minutes). Please trim the video first.",
-    "free": "Video is {{seconds}}s long (free limit: 30 seconds). Upgrade to Pro or trim the video to a shorter length."
+    "title": "⏱ Video exceeds duration limit for this resolution",
+    "pro": "Video is {{seconds}}s at {{width}}×{{height}}@{{fps}}fps (max limit for this profile: {{maxSec}}s). Please trim the video or switch to Crop / Blur.",
+    "free": "Video is {{seconds}}s (max limit for {{width}}×{{height}}@{{fps}}fps: {{maxSec}}s). Upgrade to Pro or trim the video."
   },
   "errors": {
     "unsupportedFormat": "Only MP4, MOV, WebM and MKV are supported.",

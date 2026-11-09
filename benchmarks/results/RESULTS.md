@@ -361,6 +361,29 @@
 | `720×1280` @ 30fps | **2.65 CPU-s / 1s** | **136 video (10s) / giờ** | *Chỉ báo cáo* |
 | `1080×1920` @ 30fps | **6.21 CPU-s / 1s** | **57 video (10s) / giờ** | *Chỉ báo cáo* |
 
+### Giới hạn thời lượng thực tế theo Độ phân giải / FPS (`_validate_job_limits`, P5.6.3)
+Công thức bảo vệ timeout trong `_validate_job_limits` (`_JOB_TIMEOUT_SEC = 300s`, `_SEC_PER_MPX_FRAME = 0.45`, trần cứng Inpaint `60s`, trần Crop/Blur `600s`):
+- `mpx_per_sec = (width * height / 1_000_000) * fps`
+- `estimated_inpaint_sec = dur * mpx_per_sec * 0.45`
+- `effective_max_duration_sec = max(5, int(min(60, 300 / (mpx_per_sec * 0.45))))`
+
+| Độ phân giải | FPS | `mpx_per_sec` | Thời lượng tối đa cho phép (Inpaint `natural`/`telea`/`telea_soft`) | Thời gian ước tính ở mức trần (`est_sec`) | Thời lượng tối đa cho phép (`crop` / `blur`) |
+|---|---:|---:|---:|---:|---:|
+| `640×360` (360p) | 24 fps | 5.53 | **60s** | 149.3s | **600s** |
+| `640×360` (360p) | 30 fps | 6.91 | **60s** | 186.6s | **600s** |
+| `854×480` (480p) | 30 fps | 12.30 | **54s** | 298.8s | **600s** |
+| `1280×720` / `720×1280` (720p) | 24 fps | 22.12 | **30s** | 298.6s | **600s** |
+| `1280×720` / `720×1280` (720p) | 30 fps | 27.65 | **24s** | 298.6s | **600s** |
+| `1280×720` / `720×1280` (720p) | 60 fps | 55.30 | **12s** | 298.6s | **600s** |
+| `1920×1080` / `1080×1920` (1080p) | 24 fps | 49.77 | **13s** | 291.1s | **600s** |
+| `1920×1080` / `1080×1920` (1080p) | 30 fps | 62.21 | **10s** | 279.9s | **600s** |
+| `1920×1080` / `1080×1920` (1080p) | 60 fps | 124.42 | **5s** | 279.9s | **600s** |
+| `3840×2160` (4K UHD) | 30 fps | 248.83 | **2s** (UI báo sàn `5s`, `/process` từ chối ở `> 2.68s`) | 300.0s | **600s** |
+
+**Đề xuất kỹ thuật (không tự tăng timeout trong P5.6)**:
+1. Sau khi tối ưu `temporal_fill` theo vùng ROI + giới hạn mẫu RANSAC ở P5.6.2, tốc độ thực tế trên `720×1280@30fps` là `~1.3–2.6s / 1s video` (`~0.095s / MPx·frame`, thấp hơn nhiều so với hệ số bảo thủ `_SEC_PER_MPX_FRAME = 0.45`).
+2. Nếu muốn hỗ trợ video `720p@30fps` dài `30s–60s` hoặc `1080p@30fps` dài `20s–30s` mà vẫn giữ nguyên `FLOW_JOB_TIMEOUT_SEC = 300s`, có thể giảm `FLOW_EST_SEC_PER_MPX_FRAME` từ `0.45` xuống `0.15` (khi đó `720p@30fps` được phép tới `60s` và `1080p@30fps` được phép tới `32s`).
+
 ---
 
 ## Mẫu ghi cho các lần chạy sau

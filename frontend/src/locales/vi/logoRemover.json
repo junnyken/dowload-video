@@ -32,9 +32,9 @@
   },
   "synthIdNote": "Chỉ áp dụng cho logo <b>hiển thị trên khung hình</b>. Watermark vô hình <b>SynthID</b> không nằm trong phạm vi hỗ trợ và <b>không thể xóa bằng bất kỳ công cụ nào</b>.",
   "duration": {
-    "title": "⏱ Video quá dài",
-    "pro": "Video dài {{seconds}}s (giới hạn Pro: 2 phút). Hãy trim video trước.",
-    "free": "Video dài {{seconds}}s (giới hạn free: 30 giây). Nâng lên Pro hoặc trim video ngắn hơn."
+    "title": "⏱ Video vượt giới hạn thời lượng cho độ phân giải này",
+    "pro": "Video dài {{seconds}}s ở {{width}}×{{height}}@{{fps}}fps (giới hạn tối đa cho cấu hình này: {{maxSec}}s). Hãy cắt ngắn video hoặc chuyển sang Cắt viền / Che mờ.",
+    "free": "Video dài {{seconds}}s (giới hạn tối đa cho cấu hình {{width}}×{{height}}@{{fps}}fps: {{maxSec}}s). Nâng lên Pro hoặc cắt ngắn video."
   },
   "errors": {
     "unsupportedFormat": "Chỉ hỗ trợ MP4, MOV, WebM, MKV.",

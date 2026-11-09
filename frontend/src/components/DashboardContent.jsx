@@ -1608,7 +1608,17 @@ export default function DashboardContent() {
       setInpaintJobId(data.job_id || data.temp_id);
       setInpaintFrameUrl(`${API_BASE}${data.preview_url}`);
       if (data.video_info?.width && data.video_info?.height) {
-        setInpaintVideoDims({ width: data.video_info.width, height: data.video_info.height });
+        const vw = data.video_info.width;
+        const vh = data.video_info.height;
+        const fps = data.video_info.fps || 30;
+        const maxDur = data.video_info.max_inpaint_duration_sec || Math.max(5, Math.floor(Math.min(60, 300 / Math.max(0.05, ((vw * vh) / 1_000_000) * fps * 0.45))));
+        setInpaintVideoDims({
+          width: vw,
+          height: vh,
+          fps: Math.round(fps),
+          duration: data.video_info.duration || 0,
+          maxInpaintDurationSec: maxDur,
+        });
       }
       runInpaintAutoDetect(data.temp_id);
     } catch (err) {
@@ -3083,6 +3093,11 @@ export default function DashboardContent() {
                           className="absolute border-2 border-accent bg-accent/15 pointer-events-none"
                           style={inpaintRegionPct}
                         />
+                      )}
+                      {inpaintVideoDims?.maxInpaintDurationSec && (
+                        <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-fg-muted font-mono">
+                          {inpaintVideoDims.width}×{inpaintVideoDims.height} · {inpaintVideoDims.fps || 30}fps · tối đa {inpaintVideoDims.maxInpaintDurationSec}s
+                        </div>
                       )}
                     </div>
 

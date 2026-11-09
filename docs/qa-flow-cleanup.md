@@ -520,3 +520,22 @@ For `preset=custom`, provide `region: {"x": N, "y": N, "w": N, "h": N}` in pixel
 | `720×1280` @ 30fps | **2.65 CPU-s / 1s** | **~136 video (10s) / giờ** | *Chỉ báo cáo* |
 | `1080×1920` @ 30fps | **6.21 CPU-s / 1s** | **~57 video (10s) / giờ** | *Chỉ báo cáo* |
 
+### 10.5. Giới hạn thời lượng thực tế theo Độ phân giải / FPS (`_validate_job_limits`, P5.6.3)
+- Backend (`_probe`) trả thêm `max_inpaint_duration_sec` và `max_crop_blur_duration_sec` tính trực tiếp từ `_compute_effective_max_duration(width, height, fps, method)`.
+- Giao diện (`FlowVeoCleanup.jsx`, `DashboardContent.jsx`) hiển thị đúng thời lượng tối đa của chính video người dùng đang chọn (`width×height · fps · duration / tối đa <maxSec>s`), không ghi cứng `60 giây`.
+
+| Độ phân giải | FPS | Thời lượng tối đa (`natural`/`telea`/`telea_soft`) | Thời lượng tối đa (`crop`/`blur`) |
+|---|---:|---:|---:|
+| `640×360` | 30 fps | **60s** | **600s** |
+| `854×480` | 30 fps | **54s** | **600s** |
+| `1280×720` / `720×1280` | 24 fps | **30s** | **600s** |
+| `1280×720` / `720×1280` | 30 fps | **24s** | **600s** |
+| `1280×720` / `720×1280` | 60 fps | **12s** | **600s** |
+| `1920×1080` / `1080×1920` | 24 fps | **13s** | **600s** |
+| `1920×1080` / `1080×1920` | 30 fps | **10s** | **600s** |
+| `1920×1080` / `1080×1920` | 60 fps | **5s** | **600s** |
+| `3840×2160` (4K) | 30 fps | **2s** (UI hiển thị sàn `5s`, `/process` chặn `> 2.68s`) | **600s** |
+
+- **Đề xuất hiệu chỉnh**: Hệ số ước tính hiện tại `_SEC_PER_MPX_FRAME = 0.45` được đặt bảo thủ trước khi tối ưu ROI `temporal_fill`. Thực tế đo ở P5.6.2 đạt `~0.095s / MPx·frame`. Nếu giảm `FLOW_EST_SEC_PER_MPX_FRAME` xuống `0.15` (giữ nguyên `FLOW_JOB_TIMEOUT_SEC = 300s`), hệ thống có thể cho phép `720p@30fps` tới `60s` và `1080p@30fps` tới `32s` mà không vượt timeout 300s.
+
+

@@ -366,6 +366,18 @@ def _error_code(e: Exception) -> str:
     return "processing_failed"
 
 
+def _compute_effective_max_duration(vw: int, vh: int, fps: float, method: str = "natural") -> int:
+    """Compute the actual maximum video duration (seconds) allowed by `_validate_job_limits` for `(vw, vh, fps, method)`."""
+    if method not in ("natural", "telea", "telea_soft"):
+        return int(_MAX_VIDEO_DURATION_SEC)
+    vw_safe = max(1, int(vw or 0))
+    vh_safe = max(1, int(vh or 0))
+    fps_safe = max(1.0, float(fps or 30.0))
+    mpx_per_sec = (vw_safe * vh_safe / 1_000_000.0) * fps_safe
+    max_dur_by_timeout = _JOB_TIMEOUT_SEC / max(0.05, mpx_per_sec * _SEC_PER_MPX_FRAME)
+    return max(5, int(min(_MAX_INPAINT_DURATION_SEC, max_dur_by_timeout)))
+
+
 def _validate_job_limits(input_path: str, info: dict, method: str = "natural") -> None:
     """Reject videos that are 0-byte, non-video, corrupted, or exceed size/resolution/duration limits BEFORE worker."""
     if not os.path.isfile(input_path):
@@ -423,8 +435,7 @@ def _validate_job_limits(input_path: str, info: dict, method: str = "natural") -
     if method in ("natural", "telea", "telea_soft"):
         mpx_per_sec = (vw * vh / 1_000_000.0) * max(1.0, fps)
         est_processing_sec = dur * mpx_per_sec * _SEC_PER_MPX_FRAME
-        max_dur_by_timeout = _JOB_TIMEOUT_SEC / max(0.05, mpx_per_sec * _SEC_PER_MPX_FRAME)
-        effective_max_dur = max(5, int(min(_MAX_INPAINT_DURATION_SEC, max_dur_by_timeout)))
+        effective_max_dur = _compute_effective_max_duration(vw, vh, fps, method)
         if dur > _MAX_INPAINT_DURATION_SEC or est_processing_sec > _JOB_TIMEOUT_SEC:
             raise HTTPException(
                 status_code=400,
@@ -619,6 +630,8 @@ def _probe(path: str) -> dict:
                     "duration": round(dur_val, 2),
                     "fps": fps,
                     "nb_frames": nb_frames,
+                    "max_inpaint_duration_sec": _compute_effective_max_duration(vw, vh, fps, "natural"),
+                    "max_crop_blur_duration_sec": int(_MAX_VIDEO_DURATION_SEC),
                 }
     except Exception:
         pass

@@ -49,6 +49,24 @@ const METHODS = [
 
 const ACCEPT = '.mp4,.mov,.webm,.mkv,video/mp4,video/quicktime,video/webm,video/x-matroska';
 
+// Mirror backend `_compute_effective_max_duration` in `flow_cleanup.py`:
+// computes the exact maximum duration (seconds) allowed for `(width, height, fps, method)`.
+export function computeMaxAllowedDurationSec(info, method = 'natural') {
+  if (!info) return method === 'crop' || method === 'blur' ? 600 : 60;
+  if (method === 'crop' || method === 'blur') {
+    return Number(info.max_crop_blur_duration_sec || 600);
+  }
+  if (typeof info.max_inpaint_duration_sec === 'number' && info.max_inpaint_duration_sec > 0) {
+    return info.max_inpaint_duration_sec;
+  }
+  const vw = Math.max(1, Number(info.width || 1920));
+  const vh = Math.max(1, Number(info.height || 1080));
+  const fps = Math.max(1, Number(info.fps || 30));
+  const mpxPerSec = ((vw * vh) / 1_000_000) * fps;
+  const maxByTimeout = 300 / Math.max(0.05, mpxPerSec * 0.45);
+  return Math.max(5, Math.floor(Math.min(60, maxByTimeout)));
+}
+
 // Mirror backend crop logic (percentage coords, not pixels).
 // Returns the surviving frame rect {cx,cy,cw,ch} as 0–1 fractions.
 function computeCropBounds(activePreset) {
@@ -345,22 +363,25 @@ export default function FlowVeoCleanup() {
     };
   }, []);
 
-  // Duration guard (free: 30s, pro: 60s for natural, 120s for crop/blur)
+  // Dynamic duration guard matching backend `_validate_job_limits` for the selected video's resolution/FPS
   useEffect(() => {
     if (!videoInfo) { setDurationWarning(null); return; }
     const duration = videoInfo.duration || 0;
-    const isPro = Boolean(user?.tier === 'pro' || user?.is_pro);
-    const maxSec = isPro ? (method === 'natural' ? 60 : 120) : 30;
+    const isPro = Boolean(isProUser);
+    const maxSec = computeMaxAllowedDurationSec(videoInfo, method);
     if (duration > maxSec) {
       setDurationWarning({
         duration,
         maxSec,
+        width: videoInfo.width || 1920,
+        height: videoInfo.height || 1080,
+        fps: Math.round(videoInfo.fps || 30),
         isPro,
       });
     } else {
       setDurationWarning(null);
     }
-  }, [videoInfo, user, method]);
+  }, [videoInfo, isProUser, method]);
 
   const reset = () => {
     setStep('idle');
@@ -1030,8 +1051,11 @@ export default function FlowVeoCleanup() {
               </>
             )}
             {videoInfo && (
-              <div className={`absolute px-2 py-0.5 rounded-md bg-black/60 text-[10px] text-fg-muted font-mono ${cropBounds ? 'bottom-2 right-2' : 'bottom-2 left-2'}`}>
-                {videoInfo.width}×{videoInfo.height} · {videoInfo.duration}s
+              <div
+                data-testid="video-duration-limit-badge"
+                className={`absolute px-2 py-0.5 rounded-md bg-black/60 text-[10px] text-fg-muted font-mono ${cropBounds ? 'bottom-2 right-2' : 'bottom-2 left-2'}`}
+              >
+                {videoInfo.width}×{videoInfo.height} · {Math.round(videoInfo.fps || 30)}fps · {videoInfo.duration}s / tối đa {computeMaxAllowedDurationSec(videoInfo, method)}s
               </div>
             )}
           </div>
@@ -1426,7 +1450,15 @@ export default function FlowVeoCleanup() {
           {durationWarning && (
             <div style={{background:'var(--vg-accent-soft)', border:'1px solid var(--vg-line-strong)', borderRadius:'10px', padding:'10px 12px', marginBottom:'10px'}}>
               <p style={{fontSize:'11px', fontWeight:700, color:'var(--vg-accent-text)', marginBottom:'4px'}}>{t('duration.title')}</p>
-              <p style={{fontSize:'10px', color:'var(--vg-fg-muted)', lineHeight:1.5}}>{t(durationWarning.isPro ? 'duration.pro' : 'duration.free', { seconds: Math.round(durationWarning.duration) })}</p>
+              <p style={{fontSize:'10px', color:'var(--vg-fg-muted)', lineHeight:1.5}}>
+                {t(durationWarning.isPro ? 'duration.pro' : 'duration.free', {
+                  seconds: Math.round(durationWarning.duration),
+                  maxSec: durationWarning.maxSec,
+                  width: durationWarning.width,
+                  height: durationWarning.height,
+                  fps: durationWarning.fps,
+                })}
+              </p>
             </div>
           )}
 
