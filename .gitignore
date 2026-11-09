@@ -24,6 +24,8 @@ benchmarks/**/*.mov
 benchmarks/**/*.mkv
 benchmarks/hardening/*
 !benchmarks/hardening/.gitkeep
+benchmarks/results/contact-sheets/*.jpg
+benchmarks/results/contact-sheets/*.png
 
 # Downloaded media files
 backend/downloads/

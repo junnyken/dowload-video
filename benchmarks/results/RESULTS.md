@@ -238,6 +238,86 @@
 
 ---
 
+## Lần chạy 5 — 09/11/2026 (Phase P5.4 — Benchmark tách riêng 4 bộ: `synthetic`, `synthetic-hard`, `real-tune`, `real-heldout`)
+
+### Môi trường
+- Commit: `71b50de` (`feat/watermark-p5-hardening`)
+- Hệ điều hành & Phần cứng: Windows 10/11 (win32), CPU `Intel(R) Core(TM) i3-10105 CPU @ 3.70GHz` (4 nhân / 8 luồng), RAM `16 GB`.
+- FFmpeg: `8.1` / static `.tools/`.
+- Engine: Detector `detect_watermark_regions` (P2), Tracker `track_watermark_in_video` (P3), Inpaint `process_video_natural` (P0/P3, `-crf 12`).
+- Contact sheets (6 frame trước/sau mỗi video): xuất tại `benchmarks/results/contact-sheets/`.
+
+---
+
+### Bảng 1 — Bộ `synthetic` (18 video tổng hợp chuẩn: 15 dương tính + 3 âm tính)
+
+| Hạng mục / Chỉ số | Giá trị đo được | Ngưỡng nghiệm thu (Plan mục 6 / Brief) | Đánh giá | Ghi chú / Nguyên nhân |
+|---|---:|---|---|---|
+| Detector Precision (IoU ≥ 0.5) | **1.0000** (15/15) | `≥ 0.90` | **ĐẠT** | Không báo dư vùng trên 15 video dương tính |
+| Detector Recall (IoU ≥ 0.5) | **1.0000** (15/15) | `≥ 0.85` | **ĐẠT** | IoU trung bình `0.818` |
+| Detector Báo nhầm trên `no_watermark` | **0.0%** (0/3) | `≤ 10%` | **ĐẠT** | Loại bỏ đúng phụ đề thoại/biển hiệu (`content_text_neg_01..03`) |
+| Detector Thời gian xử lý | **0.763s** (max 1.088s) | `≤ 3.0s` | **ĐẠT** | |
+| Tracker IoU trung vị (từ keyframe 0) | **1.0000** | `≥ 0.85` | **ĐẠT** | Tự khởi tạo từ P2 Detector đạt `0.8152` (`< 0.85` do viền đệm bbox 2–3px của Detector) |
+| Tracker Drift tối đa (% đường chéo frame) | **0.14%** | `≤ 3.0%` | **ĐẠT** | |
+| Tracker Tỷ lệ `needs_review` | **0.0%** (trên 15 mẫu thường) / **100%** (trên `lost_probe`) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | Báo `needs_review=True` chính xác khi watermark biến mất ở frame 50 |
+| Inpaint SSIM trong mask — Nhóm `moving_watermark` (3 video, P3 tracked) | **0.9088** (`0.8527 – 0.9417`) | `≥ 0.85` | **ĐẠT** | Nhờ watermark nhảy/di chuyển nên frame lân cận lộ nền thật 100% cho `temporal_fill` |
+| Inpaint SSIM trong mask — Nhóm watermark tĩnh (11 video) | **0.7815** (`0.6956 – 0.8745`) | `≥ 0.85` | **CHƯA ĐẠT** | **Nguyên nhân dự đoán**: Khi watermark đứng yên suốt clip và camera pan chậm, vùng nền dưới chữ bị che khuất liên tục; `temporal_fill` không tìm được frame lộ nền sạch hoàn toàn nên phải rơi về nội suy không gian `TELEA`/`SHIFTMAP`, làm mờ chi tiết nền tần số cao (9/11 video tĩnh dưới 0.85). |
+| Inpaint SSIM trong mask — Trung bình toàn bộ 15 video dương tính | **0.8091** | `≥ 0.85` | **CHƯA ĐẠT** | **Nguyên nhân dự đoán**: Kéo xuống bởi nhóm watermark tĩnh (`0.7815`) và `scene_cut_03` (`0.8118`) do giới hạn của thuật toán inpaint cổ điển không dùng mô hình sinh (deep video inpainting). |
+| Inpaint PSNR ngoài mask (so với ref cùng CRF) | **45.28 dB** (`42.42 – 50.91 dB`) | `≥ 40.0 dB` | **ĐẠT** | 15/15 video đều `≥ 42.42 dB` |
+| Inpaint Temporal flicker trong mask | **0.87** (tỷ số so với nền) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | |
+| Tốc độ xử lý (`sec / video_sec`) | **2.31s / 1s video** (`640×360@30fps`) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | Trung bình `11.56s` cho video `5.0s` |
+
+---
+
+### Bảng 2 — Bộ `synthetic-hard` (10 video thử thách: mờ 25–35%, nén CRF 34, scale 0.5×/1.5×, motion blur, dọc 720×1280, nhỏ/lớn, âm tính CRF 33)
+
+#### Bảng tổng hợp `synthetic-hard`
+| Hạng mục / Chỉ số | Giá trị đo được | Ngưỡng nghiệm thu (Plan mục 6 / Brief) | Đánh giá | Ghi chú / Nguyên nhân |
+|---|---:|---|---|---|
+| Detector Precision (IoU ≥ 0.5) | **1.0000** (9/9) | `≥ 0.90` | **ĐẠT** | |
+| Detector Recall (IoU ≥ 0.5) | **1.0000** (9/9) | `≥ 0.85` | **ĐẠT** | IoU từ `0.7052` (`hard_small_wm`) đến `0.8812` (`hard_scale_15x`) |
+| Detector Báo nhầm trên `no_watermark` (`hard_neg_no_watermark`) | **0.0%** (0/1) | `≤ 10%` | **ĐẠT** | Không báo nhầm trên video nén nặng CRF 33 có phụ đề |
+| Detector Thời gian xử lý | **0.513s** (max 1.088s) | `≤ 3.0s` | **ĐẠT** | |
+| Tracker IoU trung vị | **1.0000** | `≥ 0.85` | **ĐẠT** | |
+| Tracker Drift tối đa (% đường chéo frame) | **0.136%** | `≤ 3.0%` | **ĐẠT** | |
+| Tracker Tỷ lệ `needs_review` | **0.0%** (0/9) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | |
+| Inpaint SSIM trong mask (TB 9 video dương tính) | **0.7022** (`0.3874 – 0.9004`) | `≥ 0.85` | **CHƯA ĐẠT** | **Nguyên nhân dự đoán**: Chỉ 2/9 video đạt `≥ 0.85` (`hard_motion_blur_moving` `0.9004`, `hard_scale_15x` `0.8572`). 7/9 video tĩnh dưới `0.85` vì watermark cố định che khuất hoàn toàn nền suốt clip; đặc biệt ở độ phân giải nhỏ `320×180` (`hard_scale_05x`, SSIM `0.3874`) và nén nặng `CRF 34` (`0.6319`), bán kính `dilate_px=12` chiếm tỷ lệ lớn diện tích patch khiến `TELEA` làm bệt hoạ tiết nền. |
+| Inpaint PSNR ngoài mask (output vs input) | **TB 40.42 dB** (`39.31 – 41.03 dB`, 7/9 video `≥ 40 dB`) | `≥ 40.0 dB` | **CHƯA ĐẠT** (trên 2/9 mẫu đơn lẻ) | **Nguyên nhân dự đoán**: Trung bình đạt `40.42 dB`, nhưng 2 mẫu đơn lẻ dưới `40 dB` là `hard_scale_05x` (`39.31 dB`) và `hard_faint_opacity25` (`39.98 dB`). Do vùng biên `dilate_px=12 + feather_px=7 = 19px` lan nhẹ ra ngoài vùng loại trừ `16px` khi đo PSNR trực tiếp so với input, kết hợp sai số tái mã hoá H.264 trên nền tần số cao. |
+| Inpaint Temporal flicker trong mask (`mean(\|frame[t]-frame[t-1]\|)`) | **6.089** (`2.695 – 11.366` / thang 0–255) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | |
+| Tốc độ xử lý (`sec / video_sec`) | **3.50s / 1s video** (`0.92x – 7.29x`) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | Cao nhất trên video dọc `720×1280` (`7.29s / 1s video`) |
+
+#### Chi tiết từng video trong bộ `synthetic-hard`
+| Video | Nhóm thử thách | Det IoU | Trk medIoU | Trk Drift (%) | SSIM trong mask (ngưỡng ≥ 0.85) | PSNR ngoài mask vs input (ngưỡng ≥ 40 dB) | Flicker trong mask (`mean\|Δ\|`) | Tốc độ (`sec/video_sec`) | Contact Sheet |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| `hard_faint_opacity25.mp4` | Watermark mờ (opacity 25%) | 0.8266 | 1.0000 | 0.00% | **0.6200 (CHƯA ĐẠT)** | **39.98 dB (CHƯA ĐẠT)** | 7.321 | 2.39x | `synthetic-hard_hard_faint_opacity25_contact.jpg` |
+| `hard_faint_opacity35.mp4` | Watermark mờ (opacity 35%) | 0.8210 | 1.0000 | 0.00% | **0.7396 (CHƯA ĐẠT)** | 40.57 dB (ĐẠT) | 5.070 | 2.66x | `synthetic-hard_hard_faint_opacity35_contact.jpg` |
+| `hard_crf34_heavy.mp4` | Nén H.264 nặng (CRF 34) | 0.8152 | 1.0000 | 0.00% | **0.6319 (CHƯA ĐẠT)** | 41.03 dB (ĐẠT) | 6.491 | 2.77x | `synthetic-hard_hard_crf34_heavy_contact.jpg` |
+| `hard_scale_05x.mp4` | Đổi tỷ lệ 0.5× (320×180) | 0.7143 | 1.0000 | 0.00% | **0.3874 (CHƯA ĐẠT)** | **39.31 dB (CHƯA ĐẠT)** | 11.366 | 0.92x | `synthetic-hard_hard_scale_05x_contact.jpg` |
+| `hard_scale_15x.mp4` | Đổi tỷ lệ 1.5× (960×540) | 0.8812 | 1.0000 | 0.00% | **0.8572 (ĐẠT)** | 40.75 dB (ĐẠT) | 2.695 | 5.23x | `synthetic-hard_hard_scale_15x_contact.jpg` |
+| `hard_motion_blur_moving.mp4` | Motion blur trên watermark di chuyển | 0.8539 | 1.0000 | 0.136% | **0.9004 (ĐẠT)** | 40.69 dB (ĐẠT) | 5.003 | 4.55x | `synthetic-hard_hard_motion_blur_moving_contact.jpg` |
+| `hard_vertical_720x1280.mp4` | Video dọc 720×1280 | 0.8422 | 1.0000 | 0.00% | **0.8276 (CHƯA ĐẠT)** | 40.17 dB (ĐẠT) | 4.009 | 7.29x | `synthetic-hard_hard_vertical_720x1280_contact.jpg` |
+| `hard_small_wm.mp4` | Watermark kích thước nhỏ (68×28) | 0.7052 | 1.0000 | 0.00% | **0.6539 (CHƯA ĐẠT)** | 40.57 dB (ĐẠT) | 7.650 | 2.72x | `synthetic-hard_hard_small_wm_contact.jpg` |
+| `hard_large_wm.mp4` | Watermark kích thước lớn (224×76) | 0.8773 | 1.0000 | 0.00% | **0.7020 (CHƯA ĐẠT)** | 40.74 dB (ĐẠT) | 5.199 | 2.97x | `synthetic-hard_hard_large_wm_contact.jpg` |
+| `hard_neg_no_watermark.mp4` | Không có watermark (CRF 33 + phụ đề) | — (0 FP) | — | — | — | — | — | — | — |
+
+---
+
+### Bảng 3 — Bộ `real-tune` (`benchmarks/real-tune/`)
+- **Trạng thái**: **CHƯA ĐẠT (0 / 5–10 video)** — Thư mục `benchmarks/real-tune/` hiện trống.
+- Theo đúng quy tắc P5.4 (*"Chủ dự án sẽ cung cấp video có quyền sử dụng. Nếu thư mục trống thì DỪNG bước này và báo lại, không tự tải video từ Internet"*), agent đã dừng bước đo `real-tune/` và không tự tải bất kỳ video nào từ mạng xã hội/Internet.
+- Lưu ý: Trong `benchmarks/watermark-input/` hiện có sẵn 1 mẫu thực tế từ P0 (`253K views · 3.2K reactions _ Sao kỳ dị chờn 🥹 _ Cuộc Sống Agency.mp4`, `900×720@30fps`, `6.17s`):
+  - Detector IoU = `0.777`, confidence = `0.83`, thời gian = `1.447s`
+  - Tracker median IoU = `1.0000` (từ keyframe 0), drift = `0.00%`
+  - Inpaint thời gian = `53.73s` (`8.71s / 1s video`), không có bản sạch cùng độ phân giải nên không tính SSIM trong mask.
+
+---
+
+### Bảng 4 — Bộ `real-heldout` (`benchmarks/real-heldout/`)
+- **Trạng thái**: **CHƯA ĐẠT (0 / 10–15 video)** — Thư mục `benchmarks/real-heldout/` hiện trống.
+- Chờ chủ dự án cung cấp 10–15 video thật có quyền sử dụng kèm nhãn `benchmarks/labels-real/*.json` để chạy đánh giá một lần (one-shot held-out evaluation).
+
+---
+
 ## Mẫu ghi cho các lần chạy sau
 
 ## Lần chạy N — DD/MM/YYYY (mô tả ngắn)

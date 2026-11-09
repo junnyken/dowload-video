@@ -51,6 +51,7 @@ TOOLS_DIR = ROOT_DIR / ".tools"
 if TOOLS_DIR.is_dir():
     os.environ["PATH"] = str(TOOLS_DIR) + os.pathsep + os.environ.get("PATH", "")
 
+sys.path.insert(0, str(ROOT_DIR))
 sys.path.insert(0, str(ROOT_DIR / "backend"))
 from app.api import flow_inpaint as fi  # noqa: E402
 
@@ -1033,9 +1034,10 @@ def main() -> int:
     ap.add_argument("--run", action="store_true", help="Run baseline benchmark and save results/latest_metrics.json")
     ap.add_argument("--detect", action="store_true", help="Run Phase P2 watermark detector benchmark")
     ap.add_argument("--track", action="store_true", help="Run Phase P3 watermark tracker & dynamic inpaint benchmark")
+    ap.add_argument("--hard", action="store_true", help="Run Phase P5.4 synthetic-hard & held-out benchmark")
     args = ap.parse_args()
 
-    if not args.generate and not args.run and not args.detect and not args.track:
+    if not args.generate and not args.run and not args.detect and not args.track and not args.hard:
         args.generate = True
         args.run = True
 
@@ -1045,6 +1047,9 @@ def main() -> int:
         run_detector_benchmark()
     if args.track:
         run_tracker_benchmark()
+    if args.hard:
+        from benchmarks.synthetic_hard_suite import run_all_p5_4_suites
+        run_all_p5_4_suites()
     if args.run:
         run_benchmark()
     return 0
