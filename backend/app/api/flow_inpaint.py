@@ -461,25 +461,30 @@ def process_video_natural(
     if base_filled is None:
         static_bg = False  # SHIFTMAP unavailable/failed → treat as per-frame
 
-    # Pre-sample strided reference frames across the clip when dynamic masks vary
-    # (e.g. jumping or drifting watermarks) so `temporal_fill` has clean unoccluded
-    # reference frames from other segments/positions right from frame 0.
+    # Pre-sample strided reference frames across the clip for ALL moving-background
+    # clips (`not static_bg`) so `temporal_fill` has wider-baseline unoccluded
+    # reference frames right from frame 0 (both for panning backgrounds behind a
+    # static corner logo and for moving/jumping watermarks).
     global_ref_neighbors: list = []
-    if not static_bg and temporal and boxes_vary and duration and duration > 0:
-        sample_ts_list = [duration * frac for frac in (0.05, 0.18, 0.32, 0.46, 0.60, 0.74, 0.88)]
+    if not static_bg and temporal and duration and duration > 0:
+        sample_ts_list = [duration * frac for frac in (0.05, 0.15, 0.28, 0.42, 0.56, 0.70, 0.84, 0.94)]
+        fps_safe = float(fps or 30.0)
+        for fixed_sec in (0.25, 0.6, 1.1, 1.8, 2.7, 3.8):
+            if fixed_sec < duration:
+                sample_ts_list.append(fixed_sec)
         # Also sample frames immediately before and after any bbox jump discontinuity
         # so jumping watermarks recover 100% unoccluded background from 1-2 frames across the jump!
-        fps_safe = float(fps or 30.0)
-        prev_b = None
-        for idx_check in range(total_est):
-            bx, by, bw, bh, _ = _resolve_per_frame_box_and_mask(
-                idx_check, default_box, fill, vw, vh, dilate_px, frame_boxes, frame_masks,
-            )
-            if prev_b is not None and (abs(bx - prev_b[0]) + abs(by - prev_b[1])) > 20:
-                for delta in (-18, -2, 1, 18):
-                    cand_idx = max(0, min(total_est - 1, idx_check + delta))
-                    sample_ts_list.append(cand_idx / fps_safe)
-            prev_b = (bx, by, bw, bh)
+        if boxes_vary:
+            prev_b = None
+            for idx_check in range(total_est):
+                bx, by, bw, bh, _ = _resolve_per_frame_box_and_mask(
+                    idx_check, default_box, fill, vw, vh, dilate_px, frame_boxes, frame_masks,
+                )
+                if prev_b is not None and (abs(bx - prev_b[0]) + abs(by - prev_b[1])) > 20:
+                    for delta in (-18, -2, 1, 18):
+                        cand_idx = max(0, min(total_est - 1, idx_check + delta))
+                        sample_ts_list.append(cand_idx / fps_safe)
+                prev_b = (bx, by, bw, bh)
 
         seen_ref_idxs = set()
         for ts in sample_ts_list:
@@ -573,15 +578,26 @@ def process_video_natural(
                 # Static background → reuse the one natural SHIFTMAP patch.
                 comp = base_filled  # read-only; feather_blend never mutates it
             else:
-                # Moving scene or dynamic watermark → per-frame TELEA base,
-                # with temporal motion-comp recovering REAL pixels on top.
-                comp = _telea_crop(frame, cur_fill, fx, fy, fw, fh)
+                # Moving scene or dynamic watermark → temporal motion-comp
+                # recovers REAL pixels first; any residual unrecovered pixels
+                # are inpainted directly from the recovered context.
                 active_neighbors = neighbors + strided_neighbors + global_ref_neighbors
                 if temporal and active_neighbors:
                     tfill, tvalid = temporal_fill(frame, active_neighbors, cur_fill)
                     if int(tvalid.sum()) > 0:
-                        comp[tvalid > 0] = tfill[tvalid > 0]
                         stats["temporal_frames"] += 1
+                        work = frame.copy()
+                        work[tvalid > 0] = tfill[tvalid > 0]
+                        residual = cv2.bitwise_and(cur_fill, cv2.bitwise_not(tvalid))
+                        if int(residual.sum()) > 0:
+                            res_dil = dilate_fill_mask(residual, 2)
+                            comp = _telea_crop(work, res_dil, fx, fy, fw, fh)
+                        else:
+                            comp = work
+                    else:
+                        comp = _telea_crop(frame, cur_fill, fx, fy, fw, fh)
+                else:
+                    comp = _telea_crop(frame, cur_fill, fx, fy, fw, fh)
 
             out = feather_blend(frame, comp, cur_fill, feather_px)
             write_proc.stdin.write(out.tobytes())  # type: ignore[union-attr]
@@ -713,18 +729,44 @@ def decide_and_preview(input_path: str, x: int, y: int, w: int, h: int,
         filled, fill_method = spatial_inpaint(frame0, fill, x, y, w, h, best=True)
     else:
         strategy, motion = "motion_aware", "moving"
-        # SAME per-frame composite as the moving final: TELEA base + temporal
-        # motion-comp from nearby frames (frame 0's forward neighbours).
-        comp = _telea_crop(frame0, fill, x, y, w, h)
-        neigh = [f for f in (_grab_frame_at(input_path, t, vw, vh)
-                             for t in (2.0 / fps, 4.0 / fps, 6.0 / fps))
+        # Sample both immediate neighbours and wider-baseline frames across the
+        # clip so panning backgrounds behind a static corner logo (as well as
+        # moving scenes) expose the true background to `temporal_fill`.
+        fps_safe = max(1.0, float(fps or 30.0))
+        cand_times = [2.0 / fps_safe, 4.0 / fps_safe, 6.0 / fps_safe]
+        dur_safe = float(duration or 0.0)
+        for sec in (0.25, 0.55, 1.0, 1.8, 2.8, 4.0):
+            if dur_safe <= 0 or sec < dur_safe:
+                cand_times.append(sec)
+        if dur_safe > 0:
+            for frac in (0.15, 0.35, 0.60, 0.85):
+                cand_times.append(dur_safe * frac)
+        seen_t = set()
+        dedup_times = []
+        for t in cand_times:
+            tk = round(t, 2)
+            if tk > 0 and tk not in seen_t:
+                seen_t.add(tk)
+                dedup_times.append(t)
+        neigh = [f for f in (_grab_frame_at(input_path, t, vw, vh) for t in dedup_times)
                  if f is not None and _frame_ok(f)]
         if neigh:
             tfill, tvalid = temporal_fill(frame0, neigh, fill)
             cov = float((tvalid > 0).sum()) / float(max(1, (fill > 0).sum()))
             temporal_cov = cov
             if cov > 0:
-                comp[tvalid > 0] = tfill[tvalid > 0]
+                work = frame0.copy()
+                work[tvalid > 0] = tfill[tvalid > 0]
+                residual = cv2.bitwise_and(fill, cv2.bitwise_not(tvalid))
+                if int(residual.sum()) > 0:
+                    res_dil = dilate_fill_mask(residual, 2)
+                    comp = _telea_crop(work, res_dil, x, y, w, h)
+                else:
+                    comp = work
+            else:
+                comp, _ = spatial_inpaint(frame0, fill, x, y, w, h, best=True)
+        else:
+            comp, _ = spatial_inpaint(frame0, fill, x, y, w, h, best=True)
         filled = comp
         fill_method = "temporal+telea" if temporal_cov > 0 else "telea"
 

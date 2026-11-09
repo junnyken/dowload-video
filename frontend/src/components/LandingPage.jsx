@@ -41,8 +41,11 @@ const platforms = [
 ];
 
 // Owner 15/10: "Xóa Logo Video" is not good enough yet — tab locked, its
-// screen not rendered, until it is rebuilt. Flip to false to reopen.
-const FLOW_LOCKED = true;
+// screen not rendered, until it is rebuilt. Controlled by VITE_FEATURE_LOGO_INPAINT (default OFF).
+const FLOW_LOCKED = !(
+  String(import.meta.env.VITE_FEATURE_LOGO_INPAINT || '').toLowerCase() === 'true' ||
+  import.meta.env.VITE_FEATURE_LOGO_INPAINT === '1'
+);
 
 // Tab text lives in locales/<lang>/landing.json under tabs.<id>.{label,short,title}.
 const tabs = [
@@ -116,6 +119,9 @@ export default function LandingPage() {
 
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
+    if (!FLOW_LOCKED && (params.get('tab') === 'flow' || window.location.pathname.endsWith('/flow-veo'))) {
+      return 'flow';
+    }
     return params.has('batch') ? 'bulk' : 'single';
   });
 

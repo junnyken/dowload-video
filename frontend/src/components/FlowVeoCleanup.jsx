@@ -145,8 +145,12 @@ function CornerZoom({ beforeUrl, afterUrl, region }) {
       const img = new Image();
       img.onload = () => {
         const iw = img.naturalWidth, ih = img.naturalHeight;
-        const rx = Math.round(region.xPct * iw), ry = Math.round(region.yPct * ih);
-        const rw = Math.round(region.wPct * iw), rh = Math.round(region.hPct * ih);
+        const baseW = Math.round(region.wPct * iw), baseH = Math.round(region.hPct * ih);
+        const padX = Math.round(baseW * 0.25), padY = Math.round(baseH * 0.25);
+        const rx = Math.max(0, Math.round(region.xPct * iw) - padX);
+        const ry = Math.max(0, Math.round(region.yPct * ih) - padY);
+        const rw = Math.min(iw - rx, baseW + padX * 2);
+        const rh = Math.min(ih - ry, baseH + padY * 2);
         const c = ref.current;
         c.width  = Math.round(rw * SCALE);
         c.height = Math.round(rh * SCALE);
@@ -325,7 +329,9 @@ export default function FlowVeoCleanup() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [consentConfirmed, setConsentConfirmed] = useState(true);
 
-  const isProUser = ['pro', 'team', 'enterprise', 'api'].includes(user?.tier) || Boolean(user?.is_pro);
+  const isProUser = ['pro', 'team', 'enterprise', 'api'].includes(
+    user?.tier || user?.user_metadata?.tier || user?.app_metadata?.tier
+  ) || Boolean(user?.is_pro || user?.user_metadata?.is_pro);
 
   const lastRegionRef = useRef(null); // snapshot at process-start for done-step overlay
   const pollTimerRef = useRef(null);
@@ -967,6 +973,7 @@ export default function FlowVeoCleanup() {
       )}
       {showUpgradeModal && (
         <UpgradeModal
+          isOpen={showUpgradeModal}
           errorCode="tier_required_feature"
           onClose={() => setShowUpgradeModal(false)}
         />
@@ -1555,9 +1562,9 @@ export default function FlowVeoCleanup() {
                     style={{ left: `${abSplitPct}%` }}
                   />
                 )}
-                {lastRegionRef.current && (
+                {abMode === 'before' && lastRegionRef.current && (
                   <div
-                    className="absolute border-2 border-success/60 pointer-events-none"
+                    className="absolute border-2 border-dashed border-accent/70 pointer-events-none"
                     style={{
                       left:   `${lastRegionRef.current.xPct * 100}%`,
                       top:    `${lastRegionRef.current.yPct * 100}%`,
@@ -1813,28 +1820,19 @@ export default function FlowVeoCleanup() {
           </div>
 
           {/* 2. Preview — method-aware reference visualization */}
-          {previewUrl && (
+          {(framePreviewUrl || previewUrl) && (
             <div className="relative w-full rounded-xl overflow-hidden bg-surface-2 border border-line">
-              <img src={previewUrl} alt={t('done.referenceAlt')} className="w-full h-auto block opacity-75" />
+              <img
+                src={framePreviewUrl && framePreviewUrl !== 'error' && method !== 'crop' ? framePreviewUrl : previewUrl}
+                alt={t('done.referenceAlt')}
+                className="w-full h-auto block"
+              />
               {method !== 'crop' ? (
-                /* Cleanup / blur: emerald box over the exact region that was processed */
-                <>
-                  {lastRegionRef.current && (
-                    <div
-                      className="absolute border-2 border-success bg-success-soft pointer-events-none"
-                      style={{
-                        left:   `${lastRegionRef.current.xPct * 100}%`,
-                        top:    `${lastRegionRef.current.yPct * 100}%`,
-                        width:  `${lastRegionRef.current.wPct * 100}%`,
-                        height: `${lastRegionRef.current.hPct * 100}%`,
-                      }}
-                    />
-                  )}
-                  <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-success font-semibold">
-                    <CheckCircle className="w-3 h-3" />
-                    {t('done.processedRegion')}
-                  </div>
-                </>
+                /* Cleanup / blur: show clean badge without drawing a box over the erased area */
+                <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-success font-semibold">
+                  <CheckCircle className="w-3 h-3" />
+                  {t('done.processedRegion')}
+                </div>
               ) : (
                 /* Crop: shade removed strips, outline surviving frame */
                 cropBounds && (

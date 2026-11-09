@@ -31,13 +31,14 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from app.main import limiter
 from app.core.auth_middleware import get_optional_user
 from app.core.entitlements import get_entitlement, check_feature
 from app.core.local_download import file_fields, file_id_for, new_token, resolve_file_id, resolve_local_input, safe_file_id
 
 router = APIRouter()
 log = logging.getLogger(__name__)
+
+from app.main import limiter
 
 
 async def _require_pro(
@@ -1388,7 +1389,7 @@ def _enqueue_preview_clip_task(temp_id: str, job_params: Dict[str, Any]) -> Opti
         return str(getattr(res, "id", temp_id))
 
     try:
-        insp = celery_app.control.inspect(timeout=0.3)
+        insp = celery_app.control.inspect(timeout=1.5)
         active = insp.ping() if insp else None
         if not active:
             return None
@@ -1835,7 +1836,7 @@ def _enqueue_cleanup_task(temp_id: str, job_params: Dict[str, Any]) -> Optional[
         return str(getattr(res, "id", temp_id))
 
     try:
-        insp = celery_app.control.inspect(timeout=0.3)
+        insp = celery_app.control.inspect(timeout=1.5)
         active = insp.ping() if insp else None
         if not active:
             return None
@@ -2566,7 +2567,7 @@ def _enqueue_track_task(temp_id: str, job_params: Dict[str, Any]) -> Optional[st
         return str(getattr(res, "id", temp_id))
 
     try:
-        insp = celery_app.control.inspect(timeout=0.3)
+        insp = celery_app.control.inspect(timeout=1.5)
         active = insp.ping() if insp else None
         if not active:
             return None
