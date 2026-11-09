@@ -170,72 +170,207 @@ def _append_consent_audit_log(user_id: Optional[str], temp_id: str, action: str 
     return entry
 
 
+class _InMemoryAtomicRedis:
+    """Thread-safe atomic fallback with Redis INCR+EXPIRE and SET NX EX semantics when Redis is unreachable in dev/test."""
+
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self._store: Dict[str, Tuple[Any, Optional[float]]] = {}
+
+    def _purge_if_expired(self, key: str) -> None:
+        item = self._store.get(key)
+        if item is not None and item[1] is not None and time.time() >= item[1]:
+            self._store.pop(key, None)
+
+    def get(self, key: str) -> Optional[str]:
+        with self._lock:
+            self._purge_if_expired(key)
+            item = self._store.get(key)
+            return None if item is None else str(item[0])
+
+    def set(self, key: str, value: Any, nx: bool = False, ex: Optional[int] = None) -> bool:
+        with self._lock:
+            self._purge_if_expired(key)
+            if nx and key in self._store:
+                return False
+            exp_at = (time.time() + float(ex)) if ex is not None else None
+            self._store[key] = (str(value), exp_at)
+            return True
+
+    def incr(self, key: str) -> int:
+        with self._lock:
+            self._purge_if_expired(key)
+            cur, exp_at = self._store.get(key, ("0", None))
+            new_val = int(cur) + 1
+            self._store[key] = (str(new_val), exp_at)
+            return new_val
+
+    def expire(self, key: str, seconds: int) -> bool:
+        with self._lock:
+            self._purge_if_expired(key)
+            if key not in self._store:
+                return False
+            val, _ = self._store[key]
+            self._store[key] = (val, time.time() + float(seconds))
+            return True
+
+    def ttl(self, key: str) -> int:
+        with self._lock:
+            self._purge_if_expired(key)
+            item = self._store.get(key)
+            if item is None:
+                return -2
+            if item[1] is None:
+                return -1
+            return max(0, int(round(item[1] - time.time())))
+
+    def delete(self, key: str) -> int:
+        with self._lock:
+            return 1 if self._store.pop(key, None) is not None else 0
+
+
+_FALLBACK_REDIS = _InMemoryAtomicRedis()
+_REDIS_CLIENT = None
+
+
+def _get_flow_redis():
+    """Return Redis client for atomic daily quota (`INCR`+`EXPIRE`) and per-user job lock (`SET NX EX`)."""
+    global _REDIS_CLIENT
+    if _REDIS_CLIENT is not None:
+        return _REDIS_CLIENT
+    env_url = os.getenv("FLOW_REDIS_URL") or os.getenv("REDIS_URL") or os.getenv("CELERY_BROKER_URL") or ""
+    candidates: List[str] = []
+    if env_url:
+        candidates.append(env_url)
+    if "redis://127.0.0.1:6379/0" not in candidates:
+        candidates.append("redis://127.0.0.1:6379/0")
+    last_exc: Optional[Exception] = None
+    try:
+        import redis
+        for url in candidates:
+            try:
+                client = redis.Redis.from_url(
+                    url,
+                    decode_responses=True,
+                    socket_connect_timeout=0.4,
+                    socket_timeout=0.8,
+                )
+                client.ping()
+                _REDIS_CLIENT = client
+                return _REDIS_CLIENT
+            except Exception as e:
+                last_exc = e
+    except Exception as e:
+        last_exc = e
+
+    if _is_production_env():
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error_code": "redis_unavailable",
+                "user_message": "Hệ thống quản lý hàng đợi đang tạm thời gián đoạn. Vui lòng thử lại sau ít phút.",
+                "retryable": True,
+            },
+        ) from last_exc
+    log.warning("[flow-cleanup] Redis unreachable (%s); using in-process atomic fallback for dev/test", last_exc)
+    _REDIS_CLIENT = _FALLBACK_REDIS
+    return _REDIS_CLIENT
+
+
+def _redis_ns() -> str:
+    """Stable namespace prefix across processes sharing `_DOWNLOAD_DIR`, while isolating `tmp_path` in tests."""
+    custom = os.getenv("FLOW_REDIS_NAMESPACE", "").strip()
+    if custom:
+        return custom
+    return hashlib.sha1(os.path.abspath(_DOWNLOAD_DIR).encode("utf-8")).hexdigest()[:10]
+
+
+def _daily_quota_redis_key(owner_id: str, today_key: Optional[str] = None) -> str:
+    day = today_key or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return f"flow:quota:{_redis_ns()}:{day}:{owner_id}"
+
+
+def _user_active_job_redis_key(owner_id: str) -> str:
+    return f"flow:active_job:{_redis_ns()}:{owner_id}"
+
+
 def _check_and_record_daily_quota(owner_id: Optional[str]) -> None:
-    """Enforce per-user daily quota (`_DAILY_USER_QUOTA`, default 20 jobs/day). Reject with 429 when exceeded."""
+    """Enforce per-user daily quota (`_DAILY_USER_QUOTA`, default 20 jobs/day) via Redis atomic `INCR` + `EXPIRE`."""
     if not owner_id or _DAILY_USER_QUOTA <= 0:
         return
-    os.makedirs(_DOWNLOAD_DIR, exist_ok=True)
-    quota_path = os.path.join(_DOWNLOAD_DIR, "flow_daily_quota.json")
-    today_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     uid = str(owner_id)
-    with _META_LOCK:
-        try:
-            with open(quota_path, "r", encoding="utf-8") as qf:
-                data = json.load(qf)
-        except Exception:
-            data = {}
-        day_bucket = data.get(today_key)
-        if not isinstance(day_bucket, dict):
-            day_bucket = {}
-        cur_count = int(day_bucket.get(uid, 0))
-        if cur_count >= _DAILY_USER_QUOTA:
-            raise HTTPException(
-                status_code=429,
-                detail={
-                    "error_code": "daily_quota_exceeded",
-                    "user_message": f"Bạn đã đạt giới hạn {_DAILY_USER_QUOTA} lần xử lý video trong ngày hôm nay. Vui lòng thử lại vào ngày mai.",
-                    "daily_quota": _DAILY_USER_QUOTA,
-                    "used_today": cur_count,
-                    "retryable": False,
-                },
-            )
-        day_bucket[uid] = cur_count + 1
-        data = {today_key: day_bucket}
-        try:
-            with open(quota_path, "w", encoding="utf-8") as qf:
-                json.dump(data, qf)
-        except Exception:
-            pass
+    r = _get_flow_redis()
+    quota_key = _daily_quota_redis_key(uid)
+    count = int(r.incr(quota_key))
+    if count == 1 or int(r.ttl(quota_key)) < 0:
+        r.expire(quota_key, 90000)  # 25 hours TTL
+    if count > _DAILY_USER_QUOTA:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error_code": "daily_quota_exceeded",
+                "user_message": f"Bạn đã đạt giới hạn {_DAILY_USER_QUOTA} lần xử lý video trong ngày hôm nay. Vui lòng thử lại vào ngày mai.",
+                "daily_quota": _DAILY_USER_QUOTA,
+                "used_today": _DAILY_USER_QUOTA,
+                "retryable": False,
+            },
+        )
+
+
+def _release_user_concurrency(owner_id: Optional[str], temp_id: Optional[str] = None) -> None:
+    """Release the Redis active-job lock for `owner_id` when `temp_id` completes, fails, or is cancelled."""
+    if not owner_id:
+        return
+    try:
+        r = _get_flow_redis()
+        lock_key = _user_active_job_redis_key(str(owner_id))
+        if temp_id:
+            cur_safe = re.sub(r"[^a-f0-9]", "", str(temp_id)) or str(temp_id)
+            held = r.get(lock_key)
+            if held and held != cur_safe:
+                return
+        r.delete(lock_key)
+    except Exception:
+        pass
 
 
 def _check_user_concurrency(owner_id: Optional[str], current_temp_id: str) -> None:
-    """Enforce at most `_MAX_USER_CONCURRENT_JOBS` (default 1) heavy job running/queued per user."""
-    if not owner_id or _MAX_USER_CONCURRENT_JOBS <= 0 or not os.path.isdir(_DOWNLOAD_DIR):
+    """Enforce at most 1 heavy job per user across processes via Redis atomic `SET key val NX EX ttl`."""
+    if not owner_id or _MAX_USER_CONCURRENT_JOBS <= 0:
         return
-    cur_safe = re.sub(r"[^a-f0-9]", "", current_temp_id or "")
-    active_count = 0
-    for name in os.listdir(_DOWNLOAD_DIR):
-        if not name.startswith(_FLOW_PREFIX):
-            continue
-        other_safe = name[len(_FLOW_PREFIX):]
-        if other_safe == cur_safe:
-            continue
-        wdir = os.path.join(_DOWNLOAD_DIR, name)
-        if not os.path.isdir(wdir) or _is_work_dir_expired(wdir):
-            continue
-        meta = _read_meta(wdir)
-        if str(meta.get("owner_user_id", "")) == str(owner_id) and meta.get("status") in ("queued", "running"):
-            active_count += 1
-            if active_count >= _MAX_USER_CONCURRENT_JOBS:
-                raise HTTPException(
-                    status_code=429,
-                    detail={
-                        "error_code": "user_concurrent_job_limit",
-                        "user_message": "Bạn đang có một tác vụ xử lý video đang chạy. Vui lòng đợi hoàn tất hoặc hủy trước khi chạy tác vụ mới.",
-                        "active_job_id": meta.get("job_id") or other_safe,
-                        "retryable": True,
-                    },
-                )
+    uid = str(owner_id)
+    cur_safe = re.sub(r"[^a-f0-9]", "", current_temp_id or "") or str(current_temp_id)
+    lock_key = _user_active_job_redis_key(uid)
+    lock_ttl = max(60, int(_JOB_TIMEOUT_SEC) + 60)
+    r = _get_flow_redis()
+
+    if r.set(lock_key, cur_safe, nx=True, ex=lock_ttl):
+        return
+
+    existing_job = r.get(lock_key) or ""
+    if existing_job and os.path.isdir(_DOWNLOAD_DIR):
+        other_wdir = os.path.join(_DOWNLOAD_DIR, f"{_FLOW_PREFIX}{existing_job}")
+        if os.path.isdir(other_wdir):
+            if _is_work_dir_expired(other_wdir):
+                r.delete(lock_key)
+                if r.set(lock_key, cur_safe, nx=True, ex=lock_ttl):
+                    return
+            else:
+                other_meta = _read_meta(other_wdir)
+                if other_meta.get("status") in ("completed", "done", "failed", "cancelled", "no_visible_logo"):
+                    r.delete(lock_key)
+                    if r.set(lock_key, cur_safe, nx=True, ex=lock_ttl):
+                        return
+
+    raise HTTPException(
+        status_code=429,
+        detail={
+            "error_code": "user_concurrent_job_limit",
+            "user_message": "Bạn đang có một tác vụ xử lý video đang chạy. Vui lòng đợi hoàn tất hoặc hủy trước khi chạy tác vụ mới.",
+            "active_job_id": existing_job or cur_safe,
+            "retryable": True,
+        },
+    )
 
 
 def _is_production_env() -> bool:
@@ -514,6 +649,12 @@ def _write_meta(work_dir: str, updates: dict) -> dict:
                     json.dump(meta, mf)
             except Exception:
                 pass
+        new_status = updates.get("status")
+        if new_status in ("completed", "done", "failed", "cancelled", "no_visible_logo"):
+            _release_user_concurrency(
+                meta.get("owner_user_id"),
+                meta.get("temp_id") or meta.get("job_id"),
+            )
         return meta
 
 
@@ -1472,8 +1613,6 @@ def preview_clip_cleanup(payload: PreviewClipRequest, request: Request, _: None 
             },
         )
 
-    _check_user_concurrency(caller_id, payload.temp_id)
-
     info = meta.get("video_info") or _probe(input_path)
     vw = int(info.get("width", 1920) or 1920)
     vh = int(info.get("height", 1080) or 1080)
@@ -1483,6 +1622,8 @@ def preview_clip_cleanup(payload: PreviewClipRequest, request: Request, _: None 
     x, y, w, h = int(raw["x"]), int(raw["y"]), int(raw["w"]), int(raw["h"])
     if w <= 0 or h <= 0 or x < 0 or y < 0 or x + w > vw or y + h > vh:
         raise HTTPException(status_code=400, detail="Kích thước vùng không hợp lệ.")
+
+    _check_user_concurrency(caller_id, payload.temp_id)
 
     _ALIAS = {"delogo": "natural", "delogo_soft": "natural", "telea": "telea", "telea_soft": "telea_soft"}
     method = payload.method if payload.method in ("natural", "telea", "telea_soft", "crop", "blur") else _ALIAS.get(payload.method, "natural")
@@ -1995,8 +2136,6 @@ def process_flow_cleanup(
             "cancel_url": f"/api/v1/flow-cleanup/cancel/{payload.temp_id}",
             "retry_url": f"/api/v1/flow-cleanup/retry/{payload.temp_id}",
         }
-    _check_user_concurrency(caller_id, payload.temp_id)
-    _append_consent_audit_log(caller_id, payload.temp_id, action="process_confirm")
     retry_count = _prev_meta.get("retry_count", -1) + 1  # 0 = first attempt
 
     input_path = _find_input_path(work_dir)
@@ -2087,6 +2226,9 @@ def process_flow_cleanup(
         raise HTTPException(status_code=400, detail="Kích thước vùng không hợp lệ.")
     if x < 0 or y < 0 or x + w > vw or y + h > vh:
         raise HTTPException(status_code=400, detail="Vùng nằm ngoài khung hình.")
+
+    _check_user_concurrency(caller_id, payload.temp_id)
+    _append_consent_audit_log(caller_id, payload.temp_id, action="process_confirm")
 
     # Expand region by expand_padding (clamp to frame) — not applied to crop
     if payload.expand_padding > 0 and method != "crop":

@@ -104,3 +104,132 @@ class TestP564DedicatedSigningSecret:
         secret = flow_cleanup._get_signing_secret()
         assert secret == "dedicated-flow-signing-secret-32chars!"
 
+
+class TestP565RedisQuotaAndConcurrency:
+    """Verify Redis INCR+EXPIRE daily quota and SET NX+TTL 1-job/user lock under concurrent requests."""
+
+    def test_redis_daily_quota_incr_expire_and_concurrent_requests(self, tmp_path, monkeypatch):
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+
+        dl_dir = tmp_path / "dl_redis_quota"
+        dl_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(flow_cleanup, "_DOWNLOAD_DIR", str(dl_dir))
+        monkeypatch.setattr(flow_cleanup, "_DAILY_USER_QUOTA", 1)
+
+        uid = "pro-user-concurrent-quota"
+        r = flow_cleanup._get_flow_redis()
+        qkey = flow_cleanup._daily_quota_redis_key(uid)
+        r.delete(qkey)
+
+        barrier = threading.Barrier(2)
+
+        def _try_quota(_idx: int) -> int:
+            barrier.wait(timeout=5.0)
+            try:
+                flow_cleanup._check_and_record_daily_quota(uid)
+                return 200
+            except HTTPException as exc:
+                return exc.status_code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            statuses = sorted(list(pool.map(_try_quota, [0, 1])))
+
+        # Exactly 1 request accepted (200) and 1 rejected (429)
+        assert statuses == [200, 429]
+        # Redis key has a positive TTL (EXPIRE set) and no file was created in downloads/
+        assert int(r.ttl(qkey)) > 0
+        assert not (dl_dir / "flow_daily_quota.json").exists()
+
+    def test_two_concurrent_job_requests_only_one_accepted(self, tmp_path, monkeypatch):
+        import subprocess
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+        from datetime import datetime, timezone
+        from unittest.mock import MagicMock
+        import numpy as np
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.core.auth_middleware import get_optional_user
+        from app.tasks import media_tasks
+
+        dl_dir = tmp_path / "dl_redis_conc"
+        dl_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(flow_cleanup, "_DOWNLOAD_DIR", str(dl_dir))
+
+        uid = "pro-user-concurrent-job"
+        r = flow_cleanup._get_flow_redis()
+        lkey = flow_cleanup._user_active_job_redis_key(uid)
+        r.delete(lkey)
+
+        async def _override_pro():
+            return {"id": uid, "email": "conc@example.com", "tier": "pro"}
+
+        app.dependency_overrides[get_optional_user] = _override_pro
+        monkeypatch.setattr(flow_cleanup, "check_feature", lambda tier, feat: True)
+
+        def _create_uploaded_job(tag: str) -> str:
+            tid = f"aa{tag}00112233445566778899aabbccdd"[:32]
+            wdir = dl_dir / f"flow_{tid}"
+            wdir.mkdir(parents=True, exist_ok=True)
+            in_path = wdir / "input.mp4"
+            cmd = [
+                "ffmpeg", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24",
+                "-s", "320x180", "-r", "15", "-i", "pipe:0",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "24", "-preset", "ultrafast",
+                str(in_path),
+            ]
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            frame = np.full((180, 320, 3), 80, dtype=np.uint8)
+            for _ in range(15):
+                proc.stdin.write(frame.tobytes())
+            proc.stdin.close()
+            proc.wait(timeout=20)
+            flow_cleanup._extract_frame(str(in_path), str(wdir / "preview.jpg"))
+            flow_cleanup._write_meta(str(wdir), {
+                "temp_id": tid,
+                "job_id": tid,
+                "owner_user_id": uid,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "status": "uploaded",
+                "progress": 0,
+                "video_info": {"width": 320, "height": 180, "duration": 1.0, "fps": 15.0, "nb_frames": 15},
+            })
+            return tid
+
+        try:
+            tid_a = _create_uploaded_job("aa")
+            tid_b = _create_uploaded_job("bb")
+
+            mock_track_apply = MagicMock(return_value=MagicMock(id="celery-conc-track"))
+            monkeypatch.setattr(media_tasks.track_watermark_task, "apply_async", mock_track_apply)
+
+            barrier = threading.Barrier(2)
+            client = TestClient(app)
+
+            def _fire_track(tid: str) -> int:
+                barrier.wait(timeout=5.0)
+                resp = client.post(
+                    f"/api/v1/flow-cleanup/track/{tid}",
+                    json={"region": {"x": 200, "y": 100, "w": 60, "h": 30}},
+                )
+                return resp.status_code
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                codes = sorted(list(pool.map(_fire_track, [tid_a, tid_b])))
+
+            # Strictly 1 request accepted (202) and 1 rejected (429)
+            assert codes == [202, 429]
+            assert mock_track_apply.call_count == 1
+            assert int(r.ttl(lkey)) > 0
+
+            # Cancelling the accepted job releases the Redis lock immediately
+            active_tid = r.get(lkey)
+            assert active_tid in (tid_a, tid_b)
+            rc = client.post(f"/api/v1/flow-cleanup/cancel/{active_tid}")
+            assert rc.status_code == 200
+            assert r.get(lkey) is None
+        finally:
+            app.dependency_overrides.pop(get_optional_user, None)
+
+
