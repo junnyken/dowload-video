@@ -97,6 +97,7 @@ def sample_session(tmp_path, monkeypatch):
     fc._write_meta(work_dir, {
         "temp_id": temp_id,
         "job_id": temp_id,
+        "owner_user_id": "pro-user-p1",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "status": "uploaded",
         "progress": 0,

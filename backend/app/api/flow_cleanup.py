@@ -9,6 +9,8 @@ SCOPE: visible on-frame logo/watermark only.
 SynthID and other invisible AI watermarks are NOT affected by any operation here.
 """
 
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -110,11 +112,12 @@ def _caller_user_id(request: Optional[Request] = None, user: Optional[Any] = Non
 
 
 def _verify_job_owner(meta: dict, caller_id: Optional[str]) -> None:
-    """Ensure the job belongs to the authenticated user; return 404 to avoid leaking job existence."""
+    """Fail-closed owner check: reject with 404 if job has no owner_user_id or caller does not match."""
+    if not isinstance(meta, dict):
+        raise HTTPException(status_code=404, detail="Job không còn tồn tại hoặc đã hết hạn.")
     owner_id = meta.get("owner_user_id")
-    if owner_id:
-        if not caller_id or str(caller_id) != str(owner_id):
-            raise HTTPException(status_code=404, detail="Job không còn tồn tại hoặc đã hết hạn.")
+    if not owner_id or not caller_id or str(caller_id) != str(owner_id):
+        raise HTTPException(status_code=404, detail="Job không còn tồn tại hoặc đã hết hạn.")
 
 
 _DOWNLOAD_DIR = os.path.join(
@@ -131,8 +134,114 @@ _SEC_PER_MPX_FRAME = float(os.getenv("FLOW_SEC_PER_MPX_FRAME", "0.45"))
 _MAX_RETRY_COUNT = int(os.getenv("FLOW_MAX_RETRY_COUNT", "3"))
 _FLOW_TTL_SEC = int(os.getenv("FLOW_CLEANUP_TTL_SEC", "1200"))
 _JOB_TIMEOUT_SEC = int(os.getenv("FLOW_JOB_TIMEOUT_SEC", "300"))
+_SIGNED_URL_TTL_SEC = min(600, max(1, int(os.getenv("FLOW_SIGNED_URL_TTL_SEC", "600"))))
+_MAX_KEYFRAME_CACHE_FILES = int(os.getenv("FLOW_MAX_KEYFRAME_CACHE_FILES", "50"))
+_EPHEMERAL_SIGNING_SECRET = os.urandom(32).hex()
 _FLOW_PREFIX = "flow_"
 _META_LOCK = threading.RLock()
+
+
+def _get_signing_secret() -> str:
+    """Return HMAC signing secret from environment (or per-process CSPRNG secret if unset)."""
+    for env_key in ("FLOW_URL_SIGNING_SECRET", "JWT_SECRET", "SECRET_KEY"):
+        val = os.getenv(env_key, "").strip()
+        if val:
+            return val
+    return _EPHEMERAL_SIGNING_SECRET
+
+
+def _sign_resource_token(
+    temp_id: str,
+    resource: str,
+    owner_user_id: str,
+    exp: int,
+    frame_idx: Optional[int] = None,
+) -> str:
+    """Compute HMAC-SHA256 over (temp_id, resource, frame_idx if any, owner_user_id, exp)."""
+    secret = _get_signing_secret()
+    f_part = "" if frame_idx is None else str(int(frame_idx))
+    msg = f"{temp_id}:{resource}:{f_part}:{owner_user_id}:{int(exp)}"
+    return hmac.new(secret.encode("utf-8"), msg.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _build_signed_url(
+    path: str,
+    temp_id: str,
+    resource: str,
+    owner_user_id: str,
+    frame_idx: Optional[int] = None,
+    ttl_sec: Optional[int] = None,
+) -> str:
+    """Build a short-lived signed URL (TTL <= 10 minutes) for <img>/<video> endpoints."""
+    ttl = min(600, max(1, int(_SIGNED_URL_TTL_SEC if ttl_sec is None else ttl_sec)))
+    exp = int(time.time()) + ttl
+    sig = _sign_resource_token(temp_id, resource, str(owner_user_id), exp, frame_idx=frame_idx)
+    if frame_idx is not None:
+        return f"{path}?frame_idx={int(frame_idx)}&exp={exp}&sig={sig}"
+    return f"{path}?exp={exp}&sig={sig}"
+
+
+def _verify_signed_resource(
+    temp_id: str,
+    resource: str,
+    meta: dict,
+    exp: Optional[int],
+    sig: Optional[str],
+    frame_idx: Optional[int] = None,
+) -> None:
+    """Verify HMAC-SHA256 signature, expiration (<= 10m), and job owner. Reject with 404 on any mismatch."""
+    if not isinstance(meta, dict):
+        raise HTTPException(status_code=404, detail="Tài nguyên không còn tồn tại hoặc đã hết hạn.")
+    owner_id = meta.get("owner_user_id")
+    if not owner_id:
+        raise HTTPException(status_code=404, detail="Tài nguyên không còn tồn tại hoặc đã hết hạn.")
+    if exp is None or not sig or not isinstance(sig, str):
+        raise HTTPException(status_code=404, detail="Link truy cập không hợp lệ hoặc đã hết hạn.")
+    try:
+        exp_int = int(exp)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=404, detail="Link truy cập không hợp lệ.")
+    now = int(time.time())
+    if exp_int < now or exp_int > now + 605:
+        raise HTTPException(status_code=404, detail="Link truy cập đã hết hạn.")
+    expected = _sign_resource_token(temp_id, resource, str(owner_id), exp_int, frame_idx=frame_idx)
+    if not hmac.compare_digest(sig, expected):
+        raise HTTPException(status_code=404, detail="Link truy cập không hợp lệ.")
+
+
+def _get_total_frames(meta: dict, input_path: Optional[str] = None) -> int:
+    """Compute total frame count for bounds checking frame_idx."""
+    info = (meta.get("video_info") if isinstance(meta, dict) else None) or {}
+    if not info and input_path and os.path.isfile(input_path):
+        info = _probe(input_path)
+    nb = int(info.get("nb_frames", 0) or 0)
+    if nb > 0:
+        return nb
+    dur = float(info.get("duration", 0.0) or 0.0)
+    fps = float(info.get("fps", 30.0) or 30.0)
+    return max(1, int(round(dur * max(1.0, fps))))
+
+
+def _enforce_keyframe_cache_limit(work_dir: str, max_files: Optional[int] = None) -> None:
+    """Keep at most `max_files` (default 50) extracted keyframe JPEGs (`frame_<idx>.jpg`) per job using LRU."""
+    limit = _MAX_KEYFRAME_CACHE_FILES if max_files is None else int(max_files)
+    if limit <= 0 or not os.path.isdir(work_dir):
+        return
+    entries: List[Tuple[float, str]] = []
+    for fname in os.listdir(work_dir):
+        if re.match(r"^frame_\d+\.jpg$", fname):
+            fpath = os.path.join(work_dir, fname)
+            try:
+                entries.append((os.path.getmtime(fpath), fpath))
+            except OSError:
+                pass
+    if len(entries) > limit:
+        entries.sort(key=lambda item: (item[0], item[1]))
+        for _, victim in entries[: len(entries) - limit]:
+            try:
+                os.remove(victim)
+            except OSError:
+                pass
 
 # Maps suitability level → self-documenting outcome label for metadata/admin
 _SUITABILITY_OUTCOME = {
@@ -674,11 +783,16 @@ async def upload_flow_video(request: Request, file: UploadFile = File(...), _: N
 
     file_size_mb = round(written / (1024 * 1024), 2)
 
+    owner_id = _caller_user_id(request)
+    if not owner_id:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        raise HTTPException(status_code=401, detail="Đăng nhập để sử dụng tính năng này.")
+
     # Write initial metadata for admin/QA inspection
     _write_meta(work_dir, {
         "temp_id": temp_id,
         "job_id": temp_id,
-        "owner_user_id": _caller_user_id(request),
+        "owner_user_id": owner_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "status": "uploaded",
         "progress": 0,
@@ -690,22 +804,43 @@ async def upload_flow_video(request: Request, file: UploadFile = File(...), _: N
         "success": True,
         "temp_id": temp_id,
         "job_id": temp_id,
-        "preview_url": f"/api/v1/flow-cleanup/frame/{temp_id}",
+        "preview_url": _build_signed_url(f"/api/v1/flow-cleanup/frame/{temp_id}", temp_id, "frame", owner_id),
         "video_info": info,
         "file_size_mb": file_size_mb,
     }
 
 
 @router.get("/frame/{temp_id}")
-async def get_preview_frame(temp_id: str, frame_idx: Optional[int] = None):
-    """Serve the extracted frame JPEG for the uploaded video (frame 0 by default, or specific frame_idx for keyframe review)."""
+async def get_preview_frame(
+    temp_id: str,
+    frame_idx: Optional[int] = None,
+    exp: Optional[int] = None,
+    sig: Optional[str] = None,
+):
+    """Serve the extracted frame JPEG for the uploaded video (signed URL required; frame_idx bounds-checked & LRU-cached)."""
     work_dir = _safe_work_dir(temp_id)
     meta = _ensure_work_dir_fresh(work_dir, detail="Preview không còn. Upload lại.")
-    if frame_idx is not None and int(frame_idx) > 0:
-        idx = max(0, int(frame_idx))
-        kf_path = os.path.join(work_dir, f"frame_{idx}.jpg")
-        if not os.path.exists(kf_path):
-            input_path = _find_input_path(work_dir)
+    _verify_signed_resource(temp_id, "frame", meta, exp=exp, sig=sig, frame_idx=frame_idx)
+
+    input_path = _find_input_path(work_dir)
+    total_frames = _get_total_frames(meta, input_path)
+
+    if frame_idx is not None:
+        idx = int(frame_idx)
+        if idx < 0 or idx >= total_frames:
+            raise HTTPException(
+                status_code=400,
+                detail=f"frame_idx không hợp lệ ({idx}); phải thuộc khoảng [0, {max(0, total_frames - 1)}].",
+            )
+        if idx > 0:
+            kf_path = os.path.join(work_dir, f"frame_{idx}.jpg")
+            if os.path.isfile(kf_path) and os.path.getsize(kf_path) > 0:
+                try:
+                    os.utime(kf_path, None)
+                except OSError:
+                    pass
+                return FileResponse(kf_path, media_type="image/jpeg")
+
             if not input_path:
                 raise HTTPException(status_code=404, detail="Preview không còn. Upload lại.")
             info = meta.get("video_info") or _probe(input_path)
@@ -715,17 +850,45 @@ async def get_preview_frame(temp_id: str, frame_idx: Optional[int] = None):
             if dur > 0:
                 seek_sec = min(seek_sec, max(0.0, dur - 0.05))
             if not _extract_frame(input_path, kf_path, seek_sec=seek_sec):
-                # Fallback to first frame if seek fails
-                fallback = os.path.join(work_dir, "preview.jpg")
-                if os.path.exists(fallback):
-                    return FileResponse(fallback, media_type="image/jpeg")
                 raise HTTPException(status_code=404, detail="Không thể trích xuất frame tại keyframe này.")
-        return FileResponse(kf_path, media_type="image/jpeg")
+            _enforce_keyframe_cache_limit(work_dir, max_files=_MAX_KEYFRAME_CACHE_FILES)
+            return FileResponse(kf_path, media_type="image/jpeg")
 
     frame_path = os.path.join(work_dir, "preview.jpg")
     if not os.path.exists(frame_path):
         raise HTTPException(status_code=404, detail="Preview không còn. Upload lại.")
     return FileResponse(frame_path, media_type="image/jpeg")
+
+
+@router.get("/frame-url/{temp_id}")
+def get_signed_frame_url(
+    temp_id: str,
+    request: Request,
+    frame_idx: Optional[int] = None,
+    _: None = Depends(_require_pro),
+):
+    """Return a short-lived signed URL for a specific frame_idx (for keyframe editing in UI)."""
+    work_dir = _safe_work_dir(temp_id)
+    meta = _ensure_work_dir_fresh(work_dir, detail="Upload không còn. Vui lòng upload lại.")
+    caller_id = _caller_user_id(request)
+    _verify_job_owner(meta, caller_id)
+    input_path = _find_input_path(work_dir)
+    total_frames = _get_total_frames(meta, input_path)
+    if frame_idx is not None:
+        idx = int(frame_idx)
+        if idx < 0 or idx >= total_frames:
+            raise HTTPException(
+                status_code=400,
+                detail=f"frame_idx không hợp lệ ({idx}); phải thuộc khoảng [0, {max(0, total_frames - 1)}].",
+            )
+    signed = _build_signed_url(
+        f"/api/v1/flow-cleanup/frame/{temp_id}",
+        temp_id,
+        "frame",
+        str(meta["owner_user_id"]),
+        frame_idx=frame_idx if (frame_idx is not None and int(frame_idx) > 0) else None,
+    )
+    return {"success": True, "temp_id": temp_id, "frame_idx": frame_idx, "preview_url": signed}
 
 
 class PreviewFrameRequest(BaseModel):
@@ -799,18 +962,29 @@ async def preview_frame_cleanup(payload: PreviewFrameRequest, request: Request, 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Preview thất bại: {str(e)[:200]}")
 
+    owner_id = str(meta["owner_user_id"])
     return {
-        "preview_clean_url": f"/api/v1/flow-cleanup/preview-clean/{payload.temp_id}",
+        "preview_clean_url": _build_signed_url(
+            f"/api/v1/flow-cleanup/preview-clean/{payload.temp_id}",
+            payload.temp_id,
+            "preview_clean",
+            owner_id,
+        ),
         "region": {"x": x, "y": y, "w": w, "h": h},
         **pinfo,   # strategy, motion, fill_method, quality, recommend_crop, reason
     }
 
 
 @router.get("/preview-clean/{temp_id}")
-async def get_preview_clean(temp_id: str):
-    """Serve the TELEA-cleaned first-frame JPEG for preview-first UX."""
+async def get_preview_clean(
+    temp_id: str,
+    exp: Optional[int] = None,
+    sig: Optional[str] = None,
+):
+    """Serve the TELEA-cleaned first-frame JPEG for preview-first UX (signed URL required)."""
     work_dir = _safe_work_dir(temp_id)
-    _ensure_work_dir_fresh(work_dir, detail="Preview chưa sẵn sàng. Upload và chọn vùng trước.")
+    meta = _ensure_work_dir_fresh(work_dir, detail="Preview chưa sẵn sàng. Upload và chọn vùng trước.")
+    _verify_signed_resource(temp_id, "preview_clean", meta, exp=exp, sig=sig)
     path = os.path.join(work_dir, "preview_clean.jpg")
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Preview chưa sẵn sàng. Upload và chọn vùng trước.")
@@ -910,10 +1084,16 @@ def preview_clip_cleanup(payload: PreviewClipRequest, request: Request, _: None 
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Tạo video preview thất bại: {str(exc)[:200]}")
 
+    owner_id = str(meta["owner_user_id"])
     return {
         "success": True,
         "temp_id": payload.temp_id,
-        "preview_clip_url": f"/api/v1/flow-cleanup/preview-clip-video/{payload.temp_id}?v={int(time.time())}",
+        "preview_clip_url": _build_signed_url(
+            f"/api/v1/flow-cleanup/preview-clip-video/{payload.temp_id}",
+            payload.temp_id,
+            "preview_clip",
+            owner_id,
+        ),
         "clip_duration": round(clip_dur, 2),
         "method_used": method,
         "region": {"x": x, "y": y, "w": w, "h": h},
@@ -921,10 +1101,15 @@ def preview_clip_cleanup(payload: PreviewClipRequest, request: Request, _: None 
 
 
 @router.get("/preview-clip-video/{temp_id}")
-async def get_preview_clip_video(temp_id: str):
-    """Serve the 3–5 second cleaned preview video clip."""
+async def get_preview_clip_video(
+    temp_id: str,
+    exp: Optional[int] = None,
+    sig: Optional[str] = None,
+):
+    """Serve the 3–5 second cleaned preview video clip (signed URL required)."""
     work_dir = _safe_work_dir(temp_id)
-    _ensure_work_dir_fresh(work_dir, detail="Video preview không còn. Vui lòng tạo lại.")
+    meta = _ensure_work_dir_fresh(work_dir, detail="Video preview không còn. Vui lòng tạo lại.")
+    _verify_signed_resource(temp_id, "preview_clip", meta, exp=exp, sig=sig)
     path = os.path.join(work_dir, "preview_clip_clean.mp4")
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Video preview chưa sẵn sàng.")
@@ -1623,10 +1808,15 @@ def cleanup_from_local_path(
     _extract_frame(input_path, frame_path)
     file_size_mb = round(os.path.getsize(input_path) / (1024 * 1024), 2)
 
+    owner_id = _caller_user_id(request)
+    if not owner_id:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        raise HTTPException(status_code=401, detail="Đăng nhập để sử dụng tính năng này.")
+
     _write_meta(work_dir, {
         "temp_id": temp_id,
         "job_id": temp_id,
-        "owner_user_id": _caller_user_id(request),
+        "owner_user_id": owner_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "status": "uploaded",
         "progress": 0,
@@ -1641,7 +1831,7 @@ def cleanup_from_local_path(
         "success": True,
         "temp_id": temp_id,
         "job_id": temp_id,
-        "preview_url": f"/api/v1/flow-cleanup/frame/{temp_id}",
+        "preview_url": _build_signed_url(f"/api/v1/flow-cleanup/frame/{temp_id}", temp_id, "frame", owner_id),
         "video_info": info,
         "file_size_mb": file_size_mb,
     }
@@ -1653,36 +1843,29 @@ class NoLogoRequest(BaseModel):
 
 
 @router.post("/no-logo")
-async def record_no_logo(payload: NoLogoRequest):
+async def record_no_logo(
+    payload: NoLogoRequest,
+    request: Request,
+    _: None = Depends(_require_pro),
+):
     """
     Record that user confirmed no visible on-frame logo was present.
-    Best-effort — never blocks the user flow.
+    Requires Pro authentication and job ownership verification.
 
     SCOPE: visible logo only. Does not imply absence of SynthID or any invisible watermark.
     """
-    try:
-        work_dir = _safe_work_dir(payload.temp_id)
-        if not os.path.isdir(work_dir):
-            return {"recorded": False, "reason": "job_not_found"}
-        meta_path = os.path.join(work_dir, "metadata.json")
-        _meta: dict = {}
-        try:
-            with open(meta_path) as mf:
-                _meta = json.load(mf)
-        except Exception:
-            pass
-        _meta.update({
-            "status": "no_visible_logo",
-            "result_type": "original_passthrough_no_logo",
-            "job_kind": "visible_logo_cleanup",
-            "no_logo_confirmed_at": datetime.now(timezone.utc).isoformat(),
-            "suitability_level": payload.suitability_level,
-            "suitability_outcome": _SUITABILITY_OUTCOME.get(payload.suitability_level or "", None),
-        })
-        with open(meta_path, "w") as mf:
-            json.dump(_meta, mf)
-    except Exception:
-        pass
+    work_dir = _safe_work_dir(payload.temp_id)
+    meta = _ensure_work_dir_fresh(work_dir, detail="Job không còn tồn tại hoặc đã hết hạn.")
+    _verify_job_owner(meta, _caller_user_id(request))
+
+    _write_meta(work_dir, {
+        "status": "no_visible_logo",
+        "result_type": "original_passthrough_no_logo",
+        "job_kind": "visible_logo_cleanup",
+        "no_logo_confirmed_at": datetime.now(timezone.utc).isoformat(),
+        "suitability_level": payload.suitability_level,
+        "suitability_outcome": _SUITABILITY_OUTCOME.get(payload.suitability_level or "", None),
+    })
     return {"recorded": True, "result_type": "original_passthrough_no_logo"}
 
 

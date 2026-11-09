@@ -40,8 +40,11 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 const tr = (key, opts) => i18n.t(key, { ns: 'dashboard', ...opts });
 const dateLocale = () => (getLang() === 'en' ? 'en-US' : 'vi-VN');
 
-// Temporarily hidden result-card tools. Flip to false to bring a tool back.
-const HIDDEN_TOOLS = { inpaint: false, cloud: true };
+// Feature flag VITE_FEATURE_LOGO_INPAINT controls the post-download Logo Inpaint button (default OFF).
+const FEATURE_LOGO_INPAINT =
+  String(import.meta.env.VITE_FEATURE_LOGO_INPAINT || '').toLowerCase() === 'true' ||
+  import.meta.env.VITE_FEATURE_LOGO_INPAINT === '1';
+const HIDDEN_TOOLS = { inpaint: !FEATURE_LOGO_INPAINT, cloud: true };
 
 // Returns true if this URL supports watermark removal (TikTok / Douyin only)
 function isWatermarkPlatform(url = '') {

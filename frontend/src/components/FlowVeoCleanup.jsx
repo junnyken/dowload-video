@@ -6,6 +6,13 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../lib/apiBase';
+import UpgradeModal from './UpgradeModal';
+
+const withCacheBust = (url) => {
+  if (!url) return url;
+  const full = url.startsWith('http') ? url : `${API_BASE}${url}`;
+  return `${full}${full.includes('?') ? '&' : '?'}t=${Date.now()}`;
+};
 
 // A FastAPI HTTPException detail is either a plain string or a structured
 // object. `new Error(object)` stringifies to the literal "[object Object]",
@@ -313,6 +320,9 @@ export default function FlowVeoCleanup() {
   const [abSplitPct, setAbSplitPct] = useState(50);
   const [previewClipUrl, setPreviewClipUrl] = useState(null);
   const [isGeneratingClip, setIsGeneratingClip] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  const isProUser = ['pro', 'team', 'enterprise', 'api'].includes(user?.tier) || Boolean(user?.is_pro);
 
   const lastRegionRef = useRef(null); // snapshot at process-start for done-step overlay
   const pollTimerRef = useRef(null);
@@ -454,11 +464,19 @@ export default function FlowVeoCleanup() {
     }
   };
 
-  const handleSelectKeyframe = (frameIdx) => {
+  const handleSelectKeyframe = async (frameIdx) => {
     setActiveKeyframeIdx(frameIdx);
     if (tempId) {
-      const q = frameIdx > 0 ? `?frame_idx=${frameIdx}&t=${Date.now()}` : `?t=${Date.now()}`;
-      setPreviewUrl(`${API_BASE}/api/v1/flow-cleanup/frame/${tempId}${q}`);
+      try {
+        const q = frameIdx > 0 ? `?frame_idx=${frameIdx}` : '';
+        const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/frame-url/${tempId}${q}`, withAuth({ method: 'GET' }));
+        if (res.ok) {
+          const data = await res.json();
+          if (data.preview_url) {
+            setPreviewUrl(withCacheBust(data.preview_url));
+          }
+        }
+      } catch (_) {}
     }
     const vw = videoInfo?.width || 1920;
     const vh = videoInfo?.height || 1080;
@@ -520,7 +538,7 @@ export default function FlowVeoCleanup() {
       }));
       if (res.ok) {
         const data = await res.json();
-        setPreviewClipUrl(`${API_BASE}${data.preview_clip_url}`);
+        setPreviewClipUrl(withCacheBust(data.preview_clip_url));
       }
     } catch (_) {
     } finally {
@@ -530,6 +548,10 @@ export default function FlowVeoCleanup() {
 
   const handleFile = async (file) => {
     if (!file) return;
+    if (!isProUser) {
+      setShowUpgradeModal(true);
+      return;
+    }
     const ext = (file.name || '').split('.').pop().toLowerCase();
     if (!['mp4', 'mov', 'webm', 'mkv'].includes(ext)) {
       setError(t('errors.unsupportedFormat'));
@@ -555,7 +577,7 @@ export default function FlowVeoCleanup() {
       setTempId(data.temp_id);
       setJobId(data.job_id || data.temp_id);
       setVideoInfo(data.video_info);
-      setPreviewUrl(`${API_BASE}${data.preview_url}?t=${Date.now()}`);
+      setPreviewUrl(withCacheBust(data.preview_url));
       const suit = computeSuitability(data.video_info);
       setSuitability(suit);
       if (suit.level === 'crop') setMethod('crop');
@@ -620,7 +642,7 @@ export default function FlowVeoCleanup() {
       }));
       if (!res.ok) { setFramePreviewUrl('error'); return; }
       const data = await res.json();
-      setFramePreviewUrl(`${API_BASE}${data.preview_clean_url}?t=${Date.now()}`);
+      setFramePreviewUrl(withCacheBust(data.preview_clean_url));
       setPreviewInfo(data);  // { strategy, motion, quality, recommend_crop, reason, ... }
     } catch {
       setFramePreviewUrl('error');
@@ -838,7 +860,13 @@ export default function FlowVeoCleanup() {
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => {
+            if (!isProUser) {
+              setShowUpgradeModal(true);
+              return;
+            }
+            fileInputRef.current?.click();
+          }}
           className={`flex flex-col items-center justify-center gap-4 w-full px-6 py-12 rounded-2xl border-2 border-dashed cursor-pointer transition-all select-none ${
             isDragging
               ? 'border-accent/60 bg-accent-soft'
@@ -849,8 +877,9 @@ export default function FlowVeoCleanup() {
             <Upload className="w-6 h-6 text-accent-text" />
           </div>
           <div className="text-center">
-            <p className="text-base font-bold text-fg mb-1">
-              {t('idle.drop')}
+            <p className="text-base font-bold text-fg mb-1 inline-flex items-center gap-2 justify-center">
+              <span>{t('idle.drop')}</span>
+              <span className="bg-accent text-accent-fg text-[10px] px-1.5 py-0.5 rounded font-bold leading-tight">PRO</span>
             </p>
             <p className="text-xs text-fg-muted mb-1">{t('idle.formats')}</p>
             <p className="text-[11px] text-fg-muted">
@@ -865,6 +894,12 @@ export default function FlowVeoCleanup() {
             onChange={(e) => handleFile(e.target.files?.[0])}
           />
         </div>
+      )}
+      {showUpgradeModal && (
+        <UpgradeModal
+          errorCode="tier_required_feature"
+          onClose={() => setShowUpgradeModal(false)}
+        />
       )}
 
       {/* ── Step: uploading ────────────────────────────────────── */}

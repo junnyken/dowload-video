@@ -109,13 +109,15 @@ def test_frame_endpoint_extracts_specific_keyframe(sample_session_p4):
     tid = sample_session_p4["temp_id"]
     work_dir = sample_session_p4["work_dir"]
 
-    # Default frame 0
-    r0 = client.get(f"/api/v1/flow-cleanup/frame/{tid}")
+    # Default frame 0 (signed URL)
+    url0 = fc._build_signed_url(f"/api/v1/flow-cleanup/frame/{tid}", tid, "frame", "pro-user-p4")
+    r0 = client.get(url0)
     assert r0.status_code == 200
     assert r0.headers["content-type"].startswith("image/jpeg")
 
-    # Keyframe 10
-    r10 = client.get(f"/api/v1/flow-cleanup/frame/{tid}?frame_idx=10")
+    # Keyframe 10 (signed URL)
+    url10 = fc._build_signed_url(f"/api/v1/flow-cleanup/frame/{tid}", tid, "frame", "pro-user-p4", frame_idx=10)
+    r10 = client.get(url10)
     assert r10.status_code == 200
     assert r10.headers["content-type"].startswith("image/jpeg")
     assert os.path.isfile(os.path.join(work_dir, "frame_10.jpg"))
@@ -141,8 +143,8 @@ def test_preview_clip_renders_and_serves_short_video(sample_session_p4, pro_user
     assert data["success"] is True
     assert "preview-clip-video" in data["preview_clip_url"]
 
-    # Fetch the rendered clip
-    clip_res = client.get(f"/api/v1/flow-cleanup/preview-clip-video/{tid}")
+    # Fetch the rendered clip via signed URL returned by POST /preview-clip
+    clip_res = client.get(data["preview_clip_url"])
     assert clip_res.status_code == 200
     assert clip_res.headers["content-type"].startswith("video/mp4")
     assert len(clip_res.content) > 500
