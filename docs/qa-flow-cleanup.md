@@ -488,8 +488,11 @@ For `preset=custom`, provide `region: {"x": N, "y": N, "w": N, "h": N}` in pixel
 - Giới hạn tối đa `1` job nặng đang chạy/xếp hàng mỗi user (`FLOW_MAX_USER_CONCURRENT_JOBS=1` → `HTTP 429 user_concurrent_job_limit`).
 - Dọn sạch file tạm (`preview_clip_src.mp4`, `preview_clip_clean.mp4`, `.noaudio.mp4`, `.tmp.*`) khi huỷ hoặc lỗi.
 
-### 10.3. Hardening đầu vào, Codec, Độ phân giải lẻ/xoay & Vòng đời file (P5.3)
-- Hỗ trợ đầy đủ: `H.264/AAC`, `H.265/HEVC`, `VP9/WebM` (tự động chuyển âm thanh Opus sang AAC khi đóng gói MP4), `MOV`, video không có audio, video dọc `720×1280`, kích thước lẻ `721×405` (tự căn chẵn `720×404`), xoay metadata `90°/270°`, và `VFR`.
+### 10.3. Hardening đầu vào, Codec, Độ phân giải lẻ/xoay & Vòng đời file (P5.3 / P5.6.7)
+- Hỗ trợ đầy đủ: `H.264/AAC`, `H.265/HEVC`, `VP9/WebM` (tự động chuyển âm thanh Opus sang AAC khi đóng gói MP4), `MOV`, video không có audio, video dọc `720×1280`, xoay metadata `90°/270°`, và `VFR`.
+- **Video kích thước lẻ (`odd_721x405.mp4`, `721×405`)**:
+  - Chuyển từ crop/truncate (`720×404`) sang **pad +1px (`pad=722:406:0:0:black`)** để giữ nguyên 100% khung hình gốc `721×405` mà không cắt mất bất kỳ dòng/cột pixel nào.
+  - Đánh giá nghiệm thu độ phân giải cho mẫu `odd_721x405.mp4` (`721×405 → 722×406`): **Lệch có chủ đích** (*do chuẩn nén H.264 `yuv420p` bắt buộc chiều rộng và chiều cao chia hết cho 2; metadata trả kèm `odd_dimension_adjusted=True`, `dimension_adjustment="padded_to_even_for_yuv420p"`*).
 - Chặn trước khi vào worker: file `0 byte` (`HTTP 400 empty_file`), file văn bản giả `.mp4` (`HTTP 422 invalid_media_container`), file MP4 cắt cụt/hỏng (`HTTP 422 corrupted_video`), vượt dung lượng/độ phân giải/thời lượng (`HTTP 413`/`400`).
 - Hạn mức mỗi user mỗi ngày: `FLOW_DAILY_USER_QUOTA=20` jobs/ngày (`HTTP 429 daily_quota_exceeded`).
 - Giới hạn retry: `FLOW_MAX_RETRY_COUNT=3` (`HTTP 400 max_retries_exceeded`).

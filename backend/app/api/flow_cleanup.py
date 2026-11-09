@@ -853,9 +853,10 @@ def _probe(path: str) -> dict:
                 if rotation in (90, 270):
                     raw_w, raw_h = raw_h, raw_w
 
-                # Align display dimensions to even numbers so libx264 yuv420p never fails on odd-dimension inputs
-                vw = max(2, raw_w - (raw_w % 2)) if raw_w > 0 else 0
-                vh = max(2, raw_h - (raw_h % 2)) if raw_h > 0 else 0
+                # Pad odd dimensions UP by 1px (instead of cropping) so libx264 yuv420p preserves 100% of original frame
+                odd_adjusted = bool((raw_w > 0 and (raw_w % 2)) or (raw_h > 0 and (raw_h % 2)))
+                vw = max(2, raw_w + (raw_w % 2)) if raw_w > 0 else 0
+                vh = max(2, raw_h + (raw_h % 2)) if raw_h > 0 else 0
                 dur_val = float(s.get("duration", 0) or 0) or fmt_dur
                 nb_frames = int(s.get("nb_frames", 0) or 0)
                 return {
@@ -863,6 +864,8 @@ def _probe(path: str) -> dict:
                     "height": vh,
                     "raw_width": raw_w,
                     "raw_height": raw_h,
+                    "odd_dimension_adjusted": odd_adjusted,
+                    "dimension_adjustment": "padded_to_even_for_yuv420p" if odd_adjusted else "none",
                     "rotation": rotation,
                     "has_audio": has_audio,
                     "codec_name": s.get("codec_name", ""),
@@ -1145,7 +1148,7 @@ def _blur_video(
         [
             "ffmpeg", "-y", "-i", input_path,
             "-filter_complex",
-            f"[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,split[orig][dup];"
+            f"[0:v]pad=ceil(iw/2)*2:ceil(ih/2)*2:0:0:black,split[orig][dup];"
             f"[dup]crop={w}:{h}:{x}:{y},boxblur={lr}:5:{cr}:5[blurred];"
             f"[orig][blurred]overlay={x}:{y}",
             "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p",

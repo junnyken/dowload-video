@@ -322,18 +322,31 @@ def temporal_fill(
 
 # ── Full video: base SHIFTMAP patch + per-frame temporal fill ────────
 
+def _replicate_padded_odd_border(frame: np.ndarray) -> np.ndarray:
+    """If FFmpeg `pad=vw:vh:0:0:black` added a 1px right/bottom border for an odd-dimension video,
+    replicate the adjacent edge pixel so `yuv420p` 2x2 chroma subsampling has zero black-edge bleeding."""
+    vh, vw = frame.shape[:2]
+    if vw >= 2 and int(frame[:, -1].max()) == 0 and int(frame[:, -2].max()) > 0:
+        frame[:, -1] = frame[:, -2]
+    if vh >= 2 and int(frame[-1, :].max()) == 0 and int(frame[-2, :].max()) > 0:
+        frame[-1, :] = frame[-2, :]
+    return frame
+
+
 def _grab_frame_at(input_path: str, ts: float, vw: int, vh: int) -> Optional[np.ndarray]:
-    vw = max(2, int(vw) - (int(vw) % 2))
-    vh = max(2, int(vh) - (int(vh) % 2))
+    vw = max(2, int(vw) + (int(vw) % 2))
+    vh = max(2, int(vh) + (int(vh) % 2))
     frame_size = vw * vh * 3
+    vf_pad = f"scale='min(iw,{vw})':'min(ih,{vh})',pad={vw}:{vh}:0:0:black"
     r = subprocess.run(
         ["ffmpeg", "-ss", f"{ts:.3f}", "-i", input_path, "-frames:v", "1",
-         "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{vw}x{vh}", "pipe:1"],
+         "-vf", vf_pad, "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"],
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
     )
     if len(r.stdout) < frame_size:
         return None
-    return np.frombuffer(r.stdout[:frame_size], dtype=np.uint8).reshape((vh, vw, 3)).copy()
+    fr = np.frombuffer(r.stdout[:frame_size], dtype=np.uint8).reshape((vh, vw, 3)).copy()
+    return _replicate_padded_odd_border(fr)
 
 
 def _frame_ok(fr: Optional[np.ndarray]) -> bool:
@@ -477,8 +490,8 @@ def process_video_natural(
 
     Returns stats {temporal_frames, total_frames, mode, dynamic_mask} for telemetry.
     """
-    vw = max(2, int(vw) - (int(vw) % 2))
-    vh = max(2, int(vh) - (int(vh) % 2))
+    vw = max(2, int(vw) + (int(vw) % 2))
+    vh = max(2, int(vh) + (int(vh) % 2))
     x = max(0, min(vw - 2, int(x)))
     y = max(0, min(vh - 2, int(y)))
     w = max(2, min(vw - x, int(w)))
@@ -568,9 +581,10 @@ def process_video_natural(
     reader_proc_ref: list = [None]
 
     def _reader() -> None:
+        vf_pad = f"scale='min(iw,{vw})':'min(ih,{vh})',pad={vw}:{vh}:0:0:black"
         proc = subprocess.Popen(
             ["ffmpeg", "-i", input_path,
-             "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{vw}x{vh}", "pipe:1"],
+             "-vf", vf_pad, "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         )
         reader_proc_ref[0] = proc
@@ -616,7 +630,9 @@ def process_video_natural(
             raw = q.get(timeout=120)
             if raw is None:
                 break
-            frame = np.frombuffer(raw, dtype=np.uint8).reshape((vh, vw, 3)).copy()
+            frame = _replicate_padded_odd_border(
+                np.frombuffer(raw, dtype=np.uint8).reshape((vh, vw, 3)).copy()
+            )
             fidx = stats["total_frames"]
             stats["total_frames"] += 1
 

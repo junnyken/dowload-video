@@ -384,6 +384,14 @@ Công thức bảo vệ timeout trong `_validate_job_limits` (`_JOB_TIMEOUT_SEC 
 1. Sau khi tối ưu `temporal_fill` theo vùng ROI + giới hạn mẫu RANSAC ở P5.6.2, tốc độ thực tế trên `720×1280@30fps` là `~1.3–2.6s / 1s video` (`~0.095s / MPx·frame`, thấp hơn nhiều so với hệ số bảo thủ `_SEC_PER_MPX_FRAME = 0.45`).
 2. Nếu muốn hỗ trợ video `720p@30fps` dài `30s–60s` hoặc `1080p@30fps` dài `20s–30s` mà vẫn giữ nguyên `FLOW_JOB_TIMEOUT_SEC = 300s`, có thể giảm `FLOW_EST_SEC_PER_MPX_FRAME` từ `0.45` xuống `0.15` (khi đó `720p@30fps` được phép tới `60s` và `1080p@30fps` được phép tới `32s`).
 
+### Ghi chú Hardening P5.6.7 — Video kích thước lẻ (`odd_721x405.mp4`) & Lịch sử E2E P5.5/P5.6.1
+- **Video kích thước lẻ (`odd_721x405.mp4`, đầu vào `721×405`)**:
+  - Đã chuyển từ cắt/làm tròn xuống (`720×404`) sang **pad +1px (`pad=722:406:0:0:black`)** nhằm giữ nguyên 100% điểm ảnh của khung hình gốc `721×405`.
+  - Kết quả đánh giá tiêu chí giữ nguyên độ phân giải gốc trên `odd_721x405.mp4` (`721×405 → 722×406`): **Lệch có chủ đích** (không ghi `PASS` tuyệt đối, vì định dạng đầu ra H.264 `yuv420p` bắt buộc kích thước chẵn chia hết cho 2; `_probe()` trả rõ `raw_width=721`, `raw_height=405`, `width=722`, `height=406`, `odd_dimension_adjusted=True`, `dimension_adjustment="padded_to_even_for_yuv420p"`).
+- **Ghi nhận về bộ ảnh E2E lần chạy P5.5 trước đó**:
+  - Bộ ảnh E2E lần trước (trước P5.6.1) **KHÔNG hợp lệ** do ảnh `01` và `03` giống hệt nhau và ảnh `02` chụp trang Pricing báo lỗi.
+  - Trong **P5.6.1** (`commit dc61e5f`), toàn bộ 11 bước E2E giao diện thật (`benchmarks/results/e2e-screenshots/01_pro_upload.png` .. `11_invalid_file_error.png`) đã được chạy lại trên trình duyệt thật + Backend + Frontend + Celery + Redis thật, mỗi bước chụp đúng màn hình riêng biệt (11/11 mã băm SHA-256 khác nhau hoàn toàn) và ảnh `05_pro_ab_preview.png` đã xoá sạch hoàn toàn chữ `"VIDGRAB"` bằng `temporal_fill` (`MSE = 10.34`).
+
 ---
 
 ## Mẫu ghi cho các lần chạy sau

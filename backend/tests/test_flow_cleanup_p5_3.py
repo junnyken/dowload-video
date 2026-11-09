@@ -66,16 +66,22 @@ def pro_user():
 
 def _decode_frames(path: str, vw: int, vh: int) -> list[np.ndarray]:
     frame_bytes = vw * vh * 3
+    vf_pad = f"scale='min(iw,{vw})':'min(ih,{vh})',pad={vw}:{vh}:0:0:black"
     r = subprocess.run(
-        ["ffmpeg", "-v", "quiet", "-i", path, "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{vw}x{vh}", "pipe:1"],
+        ["ffmpeg", "-v", "quiet", "-i", path, "-vf", vf_pad, "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"],
         capture_output=True,
         timeout=60,
     )
     n = len(r.stdout) // frame_bytes
-    return [
-        np.frombuffer(r.stdout[i * frame_bytes:(i + 1) * frame_bytes], dtype=np.uint8).reshape((vh, vw, 3))
-        for i in range(n)
-    ]
+    frames = []
+    for i in range(n):
+        fr = np.frombuffer(r.stdout[i * frame_bytes:(i + 1) * frame_bytes], dtype=np.uint8).reshape((vh, vw, 3)).copy()
+        if vw >= 2 and int(fr[:, -1].max()) == 0 and int(fr[:, -2].max()) > 0:
+            fr[:, -1] = fr[:, -2]
+        if vh >= 2 and int(fr[-1, :].max()) == 0 and int(fr[-2, :].max()) > 0:
+            fr[-1, :] = fr[-2, :]
+        frames.append(fr)
+    return frames
 
 
 def _psnr_outside_mask(frames_a: list[np.ndarray], frames_b: list[np.ndarray], box: tuple[int, int, int, int], dilate_px: int = 24) -> float:
@@ -138,10 +144,14 @@ def test_valid_codecs_dimensions_rotation_and_psnr_outside_mask(
     in_info = up_data["video_info"]
     vw, vh = int(in_info["width"]), int(in_info["height"])
 
-    # Odd 721x405 must be even-aligned to 720x404; rotated_90 must have display dims 180x320
+    # Odd 721x405 is padded +1px to 722x406 (intentional deviation for yuv420p, preserving 100% of 721x405 content);
+    # rotated_90 must have display dims 180x320.
     assert vw % 2 == 0 and vh % 2 == 0
     if fixture_key == "odd_721x405":
-        assert (vw, vh) == (720, 404)
+        assert (vw, vh) == (722, 406)
+        assert in_info.get("raw_width") == 721 and in_info.get("raw_height") == 405
+        assert in_info.get("odd_dimension_adjusted") is True
+        assert in_info.get("dimension_adjustment") == "padded_to_even_for_yuv420p"
     elif fixture_key == "rotated_90":
         assert (vw, vh) == (180, 320)
     elif fixture_key == "vertical_720x1280":

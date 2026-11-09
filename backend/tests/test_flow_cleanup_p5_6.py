@@ -11,6 +11,15 @@ from fastapi import HTTPException
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.api import flow_cleanup
+from app.main import app
+
+
+@pytest.fixture(autouse=True)
+def _disable_rate_limiter(monkeypatch):
+    for lim in (getattr(flow_cleanup, "limiter", None), getattr(getattr(app, "state", None), "limiter", None)):
+        if lim is not None and hasattr(lim, "enabled"):
+            monkeypatch.setattr(lim, "enabled", False)
+
 
 
 class TestP563EffectiveMaxDuration:
@@ -274,6 +283,25 @@ class TestP566DatabaseConsentAuditLog:
         assert len(rows) == 1
         assert not (dl_dir / "flow_consent_audit.jsonl").exists()
         assert list(dl_dir.iterdir()) == []
+
+
+class TestP567OddDimensionPadAndIntentionalDeviation:
+    """Verify odd-dimension videos (721x405) pad +1px to 722x406 instead of cropping, and report intentional deviation."""
+
+    def test_odd_721x405_pads_to_722x406_and_preserves_original_pixels(self):
+        from benchmarks.generate_hardening_fixtures import HARDENING_DIR, generate_all_hardening_fixtures
+
+        fixtures = generate_all_hardening_fixtures(HARDENING_DIR)
+        odd_path = fixtures["odd_721x405"]
+        info = flow_cleanup._probe(odd_path)
+
+        assert info["raw_width"] == 721
+        assert info["raw_height"] == 405
+        assert info["width"] == 722
+        assert info["height"] == 406
+        assert info["odd_dimension_adjusted"] is True
+        assert info["dimension_adjustment"] == "padded_to_even_for_yuv420p"
+
 
 
 
