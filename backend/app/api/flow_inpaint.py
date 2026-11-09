@@ -253,6 +253,8 @@ def temporal_fill(cur: np.ndarray, neighbors: list, fill_mask: np.ndarray) -> Tu
 # ── Full video: base SHIFTMAP patch + per-frame temporal fill ────────
 
 def _grab_frame_at(input_path: str, ts: float, vw: int, vh: int) -> Optional[np.ndarray]:
+    vw = max(2, int(vw) - (int(vw) % 2))
+    vh = max(2, int(vh) - (int(vh) % 2))
     frame_size = vw * vh * 3
     r = subprocess.run(
         ["ffmpeg", "-ss", f"{ts:.3f}", "-i", input_path, "-frames:v", "1",
@@ -405,6 +407,12 @@ def process_video_natural(
 
     Returns stats {temporal_frames, total_frames, mode, dynamic_mask} for telemetry.
     """
+    vw = max(2, int(vw) - (int(vw) % 2))
+    vh = max(2, int(vh) - (int(vh) % 2))
+    x = max(0, min(vw - 2, int(x)))
+    y = max(0, min(vh - 2, int(y)))
+    w = max(2, min(vw - x, int(w)))
+    h = max(2, min(vh - y, int(h)))
     default_box = (int(x), int(y), int(w), int(h))
     fill = _build_fill_mask(x, y, w, h, vw, vh)
     fill = dilate_fill_mask(fill, dilate_px)
@@ -511,7 +519,7 @@ def process_video_natural(
         ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
          "-f", "rawvideo", "-pix_fmt", "bgr24",
          "-s", f"{vw}x{vh}", "-r", fps_str, "-i", "pipe:0",
-         "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+         "-c:v", "libx264", "-crf", "12", "-preset", "fast",
          "-pix_fmt", "yuv420p", video_only],
         stdin=subprocess.PIPE, stderr=subprocess.PIPE,
     )
@@ -618,13 +626,20 @@ def process_video_natural(
     if not os.path.isfile(video_only) or os.path.getsize(video_only) == 0:
         raise ValueError(f"Natural inpaint output missing: {video_only}")
 
-    # Mux original audio back in.
+    # Mux original audio back in (transcode non-MP4 audio like Opus/Vorbis to AAC when needed).
     r2 = subprocess.run(
         ["ffmpeg", "-y", "-i", video_only, "-i", input_path,
          "-map", "0:v:0", "-map", "1:a:0?", "-c:v", "copy", "-c:a", "copy",
          "-movflags", "+faststart", output_path],
         capture_output=True, timeout=180,
     )
+    if r2.returncode != 0 or not os.path.isfile(output_path) or os.path.getsize(output_path) == 0:
+        r2 = subprocess.run(
+            ["ffmpeg", "-y", "-i", video_only, "-i", input_path,
+             "-map", "0:v:0", "-map", "1:a:0?", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+             "-movflags", "+faststart", output_path],
+            capture_output=True, timeout=180,
+        )
     try:
         os.remove(video_only)
     except Exception:

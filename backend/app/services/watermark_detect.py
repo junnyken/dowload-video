@@ -25,8 +25,12 @@ import numpy as np
 def _probe_video_basic(input_path: str) -> Dict[str, Any]:
     cap = cv2.VideoCapture(input_path)
     if cap.isOpened():
-        vw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
-        vh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        ret, frame0 = cap.read()
+        if ret and frame0 is not None and frame0.size > 0:
+            vh, vw = frame0.shape[:2]
+        else:
+            vw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+            vh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
         fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
         n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         cap.release()

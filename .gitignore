@@ -19,6 +19,11 @@ dist/
 benchmarks/watermark-input/*.mp4
 benchmarks/watermark-reference/*.mp4
 benchmarks/**/*.mp4
+benchmarks/**/*.webm
+benchmarks/**/*.mov
+benchmarks/**/*.mkv
+benchmarks/hardening/*
+!benchmarks/hardening/.gitkeep
 
 # Downloaded media files
 backend/downloads/

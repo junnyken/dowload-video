@@ -49,7 +49,7 @@ MAX_AUTO_LOST_RATE = 0.05
 
 
 def decode_all_frames(input_path: str) -> Tuple[List[np.ndarray], Dict[str, Any]]:
-    """Decode all frames of `input_path` at native resolution in BGR24 format."""
+    """Decode all frames of `input_path` at native display resolution in BGR24 format."""
     info = _probe_video(input_path)
     vw, vh = int(info["width"]), int(info["height"])
     frame_bytes = vw * vh * 3

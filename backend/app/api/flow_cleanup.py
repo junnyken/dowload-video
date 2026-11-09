@@ -137,11 +137,50 @@ _JOB_TIMEOUT_SEC = int(os.getenv("FLOW_JOB_TIMEOUT_SEC", "300"))
 _TRACK_TIMEOUT_SEC = float(os.getenv("FLOW_TRACK_TIMEOUT_SEC", "120"))
 _PREVIEW_CLIP_TIMEOUT_SEC = float(os.getenv("FLOW_PREVIEW_CLIP_TIMEOUT_SEC", "90"))
 _MAX_USER_CONCURRENT_JOBS = int(os.getenv("FLOW_MAX_USER_CONCURRENT_JOBS", "1"))
+_DAILY_USER_QUOTA = int(os.getenv("FLOW_DAILY_USER_QUOTA", "20"))
 _SIGNED_URL_TTL_SEC = min(600, max(1, int(os.getenv("FLOW_SIGNED_URL_TTL_SEC", "600"))))
 _MAX_KEYFRAME_CACHE_FILES = int(os.getenv("FLOW_MAX_KEYFRAME_CACHE_FILES", "50"))
 _EPHEMERAL_SIGNING_SECRET = os.urandom(32).hex()
 _FLOW_PREFIX = "flow_"
 _META_LOCK = threading.RLock()
+
+
+def _check_and_record_daily_quota(owner_id: Optional[str]) -> None:
+    """Enforce per-user daily quota (`_DAILY_USER_QUOTA`, default 20 jobs/day). Reject with 429 when exceeded."""
+    if not owner_id or _DAILY_USER_QUOTA <= 0:
+        return
+    os.makedirs(_DOWNLOAD_DIR, exist_ok=True)
+    quota_path = os.path.join(_DOWNLOAD_DIR, "flow_daily_quota.json")
+    today_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    uid = str(owner_id)
+    with _META_LOCK:
+        try:
+            with open(quota_path, "r", encoding="utf-8") as qf:
+                data = json.load(qf)
+        except Exception:
+            data = {}
+        day_bucket = data.get(today_key)
+        if not isinstance(day_bucket, dict):
+            day_bucket = {}
+        cur_count = int(day_bucket.get(uid, 0))
+        if cur_count >= _DAILY_USER_QUOTA:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error_code": "daily_quota_exceeded",
+                    "user_message": f"Bạn đã đạt giới hạn {_DAILY_USER_QUOTA} lần xử lý video trong ngày hôm nay. Vui lòng thử lại vào ngày mai.",
+                    "daily_quota": _DAILY_USER_QUOTA,
+                    "used_today": cur_count,
+                    "retryable": False,
+                },
+            )
+        day_bucket[uid] = cur_count + 1
+        data = {today_key: day_bucket}
+        try:
+            with open(quota_path, "w", encoding="utf-8") as qf:
+                json.dump(data, qf)
+        except Exception:
+            pass
 
 
 def _check_user_concurrency(owner_id: Optional[str], current_temp_id: str) -> None:
@@ -303,23 +342,47 @@ def _error_code(e: Exception) -> str:
 
 
 def _validate_job_limits(input_path: str, info: dict, method: str = "natural") -> None:
-    """Reject videos that exceed size, resolution, duration, or estimated processing time BEFORE dispatching to worker."""
-    if os.path.isfile(input_path):
-        size_bytes = os.path.getsize(input_path)
-        if size_bytes > _MAX_UPLOAD_MB * 1024 * 1024:
-            raise HTTPException(
-                status_code=413,
-                detail={
-                    "error_code": "file_too_large",
-                    "user_message": f"File vượt quá {_MAX_UPLOAD_MB}MB.",
-                    "retryable": False,
-                },
-            )
+    """Reject videos that are 0-byte, non-video, corrupted, or exceed size/resolution/duration limits BEFORE worker."""
+    if not os.path.isfile(input_path):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error_code": "empty_file",
+                "user_message": "File tải lên không tồn tại hoặc rỗng (0 byte).",
+                "retryable": False,
+            },
+        )
+    size_bytes = os.path.getsize(input_path)
+    if size_bytes <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error_code": "empty_file",
+                "user_message": "File tải lên rỗng (0 byte). Vui lòng chọn file video hợp lệ.",
+                "retryable": False,
+            },
+        )
+    if size_bytes > _MAX_UPLOAD_MB * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "error_code": "file_too_large",
+                "user_message": f"File vượt quá {_MAX_UPLOAD_MB}MB.",
+                "retryable": False,
+            },
+        )
 
     vw = int(info.get("width", 0) or 0)
     vh = int(info.get("height", 0) or 0)
     if vw <= 0 or vh <= 0:
-        raise HTTPException(status_code=422, detail="Không đọc được video. Kiểm tra lại file.")
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "invalid_media_container",
+                "user_message": "File không phải định dạng video hợp lệ hoặc thiếu luồng hình ảnh (video stream).",
+                "retryable": False,
+            },
+        )
     if vw > _MAX_VIDEO_WIDTH or vh > _MAX_VIDEO_HEIGHT or (vw * vh) > _MAX_VIDEO_PIXELS:
         raise HTTPException(
             status_code=400,
@@ -465,25 +528,72 @@ def _safe_work_dir(temp_id: str) -> str:
 def _probe(path: str) -> dict:
     try:
         r = subprocess.run(
-            ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", path],
+            ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", path],
             capture_output=True,
             timeout=30,
         )
         if r.returncode != 0:
             return {}
-        for s in json.loads(r.stdout).get("streams", []):
+        data = json.loads(r.stdout)
+        fmt_dur = 0.0
+        try:
+            fmt_dur = float((data.get("format") or {}).get("duration", 0) or 0)
+        except Exception:
+            fmt_dur = 0.0
+        streams = data.get("streams", [])
+        has_audio = any(s.get("codec_type") == "audio" for s in streams)
+        for s in streams:
             if s.get("codec_type") == "video":
-                fps_raw = s.get("r_frame_rate", "30/1")
+                fps_raw = s.get("r_frame_rate") or s.get("avg_frame_rate") or "30/1"
                 try:
                     num, den = fps_raw.split("/")
                     fps = round(int(num) / max(int(den), 1), 2)
                 except Exception:
                     fps = 30.0
+                if fps <= 0 or fps > 120:
+                    avg_raw = s.get("avg_frame_rate") or "30/1"
+                    try:
+                        anum, aden = avg_raw.split("/")
+                        fps = round(int(anum) / max(int(aden), 1), 2)
+                    except Exception:
+                        fps = 30.0
+                if fps <= 0 or fps > 240:
+                    fps = 30.0
+
+                raw_w = int(s.get("width", 0) or 0)
+                raw_h = int(s.get("height", 0) or 0)
+                rotation = 0
+                tags = s.get("tags") or {}
+                if "rotate" in tags:
+                    try:
+                        rotation = int(float(tags["rotate"])) % 360
+                    except Exception:
+                        rotation = 0
+                for sd in s.get("side_data_list", []) or []:
+                    if "rotation" in sd:
+                        try:
+                            rotation = int(round(abs(float(sd["rotation"])))) % 360
+                        except Exception:
+                            pass
+                if rotation in (90, 270):
+                    raw_w, raw_h = raw_h, raw_w
+
+                # Align display dimensions to even numbers so libx264 yuv420p never fails on odd-dimension inputs
+                vw = max(2, raw_w - (raw_w % 2)) if raw_w > 0 else 0
+                vh = max(2, raw_h - (raw_h % 2)) if raw_h > 0 else 0
+                dur_val = float(s.get("duration", 0) or 0) or fmt_dur
+                nb_frames = int(s.get("nb_frames", 0) or 0)
                 return {
-                    "width": int(s.get("width", 0)),
-                    "height": int(s.get("height", 0)),
-                    "duration": round(float(s.get("duration", 0)), 2),
+                    "width": vw,
+                    "height": vh,
+                    "raw_width": raw_w,
+                    "raw_height": raw_h,
+                    "rotation": rotation,
+                    "has_audio": has_audio,
+                    "codec_name": s.get("codec_name", ""),
+                    "duration": round(dur_val, 2),
                     "fps": fps,
+                    "nb_frames": nb_frames,
                 }
     except Exception:
         pass
@@ -590,7 +700,7 @@ def _telea_video(
             "-f", "rawvideo", "-pix_fmt", "bgr24",
             "-s", f"{vw}x{vh}", "-r", fps_str,
             "-i", "pipe:0",
-            "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+            "-c:v", "libx264", "-crf", "12", "-preset", "fast",
             "-pix_fmt", "yuv420p",
             video_only,
         ],
@@ -662,7 +772,7 @@ def _telea_video(
     if not os.path.isfile(video_only) or os.path.getsize(video_only) == 0:
         raise ValueError(f"TELEA inpaint output missing: {video_only}")
 
-    # Pass 2: mux original audio stream back in
+    # Pass 2: mux original audio stream back in (fallback to AAC if source audio is Opus/Vorbis)
     r2 = subprocess.run(
         [
             "ffmpeg", "-y",
@@ -676,6 +786,20 @@ def _telea_video(
         capture_output=True,
         timeout=120,
     )
+    if r2.returncode != 0 or not os.path.isfile(output_path) or os.path.getsize(output_path) == 0:
+        r2 = subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-i", video_only,
+                "-i", input_path,
+                "-map", "0:v:0", "-map", "1:a:0?",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                "-movflags", "+faststart",
+                output_path,
+            ],
+            capture_output=True,
+            timeout=120,
+        )
     try:
         os.remove(video_only)
     except Exception:
@@ -719,7 +843,8 @@ def _crop_video(
         [
             "ffmpeg", "-y", "-i", input_path,
             "-vf", f"crop={cw}:{ch}:{int(cx)}:{int(cy)}",
-            "-c:a", "copy", output_path,
+            "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "192k", output_path,
         ],
         capture_output=True,
         timeout=timeout,
@@ -743,10 +868,11 @@ def _blur_video(
         [
             "ffmpeg", "-y", "-i", input_path,
             "-filter_complex",
-            f"[0:v]split[orig][dup];"
+            f"[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,split[orig][dup];"
             f"[dup]crop={w}:{h}:{x}:{y},boxblur={lr}:5:{cr}:5[blurred];"
             f"[orig][blurred]overlay={x}:{y}",
-            "-c:a", "copy", output_path,
+            "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "192k", output_path,
         ],
         capture_output=True,
         timeout=timeout,
@@ -797,11 +923,9 @@ async def upload_flow_video(request: Request, file: UploadFile = File(...), _: N
                     raise HTTPException(status_code=413, detail=f"File vượt quá {_MAX_UPLOAD_MB}MB.")
                 f.write(chunk)
     except HTTPException:
-        import shutil
         shutil.rmtree(work_dir, ignore_errors=True)
         raise
     except Exception as e:
-        import shutil
         shutil.rmtree(work_dir, ignore_errors=True)
         raise HTTPException(status_code=500, detail=f"Upload lỗi: {e}")
 
@@ -812,7 +936,16 @@ async def upload_flow_video(request: Request, file: UploadFile = File(...), _: N
         shutil.rmtree(work_dir, ignore_errors=True)
         raise
 
-    _extract_frame(input_path, frame_path)
+    if not _extract_frame(input_path, frame_path) or not os.path.isfile(frame_path) or os.path.getsize(frame_path) == 0:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "corrupted_video",
+                "user_message": "File video bị hỏng hoặc cắt cụt, không thể giải mã khung hình.",
+                "retryable": False,
+            },
+        )
 
     file_size_mb = round(written / (1024 * 1024), 2)
 
@@ -820,6 +953,11 @@ async def upload_flow_video(request: Request, file: UploadFile = File(...), _: N
     if not owner_id:
         shutil.rmtree(work_dir, ignore_errors=True)
         raise HTTPException(status_code=401, detail="Đăng nhập để sử dụng tính năng này.")
+    try:
+        _check_and_record_daily_quota(owner_id)
+    except HTTPException:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        raise
 
     # Write initial metadata for admin/QA inspection
     _write_meta(work_dir, {
@@ -2117,13 +2255,27 @@ def cleanup_from_local_path(
         shutil.rmtree(work_dir, ignore_errors=True)
         raise
 
-    _extract_frame(input_path, frame_path)
+    if not _extract_frame(input_path, frame_path) or not os.path.isfile(frame_path) or os.path.getsize(frame_path) == 0:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "corrupted_video",
+                "user_message": "File video bị hỏng hoặc cắt cụt, không thể giải mã khung hình.",
+                "retryable": False,
+            },
+        )
     file_size_mb = round(os.path.getsize(input_path) / (1024 * 1024), 2)
 
     owner_id = _caller_user_id(request)
     if not owner_id:
         shutil.rmtree(work_dir, ignore_errors=True)
         raise HTTPException(status_code=401, detail="Đăng nhập để sử dụng tính năng này.")
+    try:
+        _check_and_record_daily_quota(owner_id)
+    except HTTPException:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        raise
 
     _write_meta(work_dir, {
         "temp_id": temp_id,
