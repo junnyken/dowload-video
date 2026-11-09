@@ -276,7 +276,7 @@ function SynthIDNote({ className = '' }) {
 
 export default function FlowVeoCleanup() {
   const { t } = useTranslation('logoRemover');
-  const { withAuth } = useAuth();
+  const { user, withAuth } = useAuth();
   // idle | uploading | preview | no-logo | processing | done | error
   const [step, setStep] = useState('idle');
   const [tempId, setTempId] = useState(null);
@@ -298,6 +298,22 @@ export default function FlowVeoCleanup() {
   const [durationWarning, setDurationWarning] = useState(null);
   const [jobProgress, setJobProgress] = useState(0);
   const [jobStatus, setJobStatus] = useState(null);
+  // Phase P2/P4: Auto-detection state
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [detectedRegions, setDetectedRegions] = useState([]);
+  const [selectedCandidateIdx, setSelectedCandidateIdx] = useState(0);
+  const [detectNeedsReview, setDetectNeedsReview] = useState(false);
+  // Phase P3/P4: Tracking & Keyframe Editor state
+  const [isTracking, setIsTracking] = useState(false);
+  const [trackResult, setTrackResult] = useState(null);
+  const [activeKeyframeIdx, setActiveKeyframeIdx] = useState(0);
+  const [keyframeOverrides, setKeyframeOverrides] = useState({}); // { [frameIdx]: { xPct, yPct, wPct, hPct } }
+  // Phase P4: A/B comparison & 4s preview clip state
+  const [abMode, setAbMode] = useState('after'); // 'after' | 'before' | 'split'
+  const [abSplitPct, setAbSplitPct] = useState(50);
+  const [previewClipUrl, setPreviewClipUrl] = useState(null);
+  const [isGeneratingClip, setIsGeneratingClip] = useState(false);
+
   const lastRegionRef = useRef(null); // snapshot at process-start for done-step overlay
   const pollTimerRef = useRef(null);
 
@@ -309,12 +325,12 @@ export default function FlowVeoCleanup() {
     };
   }, []);
 
-  // Duration guard (free: 30s, pro: 2min)
+  // Duration guard (free: 30s, pro: 60s for natural, 120s for crop/blur)
   useEffect(() => {
     if (!videoInfo) { setDurationWarning(null); return; }
     const duration = videoInfo.duration || 0;
-    const isPro = false; // TODO: wire to auth context if needed
-    const maxSec = isPro ? 120 : 30;
+    const isPro = Boolean(user?.tier === 'pro' || user?.is_pro);
+    const maxSec = isPro ? (method === 'natural' ? 60 : 120) : 30;
     if (duration > maxSec) {
       setDurationWarning({
         duration,
@@ -324,7 +340,7 @@ export default function FlowVeoCleanup() {
     } else {
       setDurationWarning(null);
     }
-  }, [videoInfo]);
+  }, [videoInfo, user, method]);
 
   const reset = () => {
     setStep('idle');
@@ -344,12 +360,172 @@ export default function FlowVeoCleanup() {
     setDurationWarning(null);
     setJobProgress(0);
     setJobStatus(null);
+    setIsDetecting(false);
+    setDetectedRegions([]);
+    setSelectedCandidateIdx(0);
+    setDetectNeedsReview(false);
+    setIsTracking(false);
+    setTrackResult(null);
+    setActiveKeyframeIdx(0);
+    setKeyframeOverrides({});
+    setAbMode('after');
+    setAbSplitPct(50);
+    setPreviewClipUrl(null);
+    setIsGeneratingClip(false);
     if (pollTimerRef.current) {
       clearInterval(pollTimerRef.current);
       pollTimerRef.current = null;
     }
     lastRegionRef.current = null;
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const applyCandidateBox = (cand, vInfo) => {
+    const vw = vInfo?.width || videoInfo?.width || 1920;
+    const vh = vInfo?.height || videoInfo?.height || 1080;
+    if (!cand || !vw || !vh) return;
+    setPreset('custom');
+    setRegion({
+      xPct: Math.max(0, Math.min(0.95, cand.x / vw)),
+      yPct: Math.max(0, Math.min(0.95, cand.y / vh)),
+      wPct: Math.max(0.03, Math.min(1, cand.w / vw)),
+      hPct: Math.max(0.03, Math.min(1, cand.h / vh)),
+    });
+  };
+
+  const runAutoDetect = async (tid, vInfo) => {
+    if (!tid) return;
+    setIsDetecting(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/detect/${tid}`, withAuth({ method: 'POST' }));
+      if (!res.ok) return;
+      const det = await res.json();
+      const regs = Array.isArray(det.regions) ? det.regions : [];
+      setDetectedRegions(regs);
+      setDetectNeedsReview(Boolean(det.needs_review));
+      if (regs.length > 0) {
+        setSelectedCandidateIdx(0);
+        applyCandidateBox(regs[0], vInfo || det.video_info);
+        if (!det.needs_review && regs[0].confidence >= 0.75) {
+          setRegionAdjusted(true);
+        } else {
+          setRegionAdjusted(false);
+        }
+        if (regs[0].kind === 'moving') {
+          runTracking(tid, regs[0], vInfo || det.video_info);
+        }
+      }
+    } catch (_) {
+      // Non-fatal: user can still choose preset or drag manually
+    } finally {
+      setIsDetecting(false);
+    }
+  };
+
+  const runTracking = async (tid = tempId, customPixelBox = null, vInfo = videoInfo, customKeyframes = null) => {
+    if (!tid) return;
+    const vw = vInfo?.width || 1920;
+    const vh = vInfo?.height || 1080;
+    const boxPayload = customPixelBox || (region ? {
+      x: Math.round(region.xPct * vw),
+      y: Math.round(region.yPct * vh),
+      w: Math.round(region.wPct * vw),
+      h: Math.round(region.hPct * vh),
+    } : null);
+    setIsTracking(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/track/${tid}`, withAuth({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          region: boxPayload,
+          keyframes: customKeyframes,
+        }),
+      }));
+      if (!res.ok) return;
+      const tr = await res.json();
+      setTrackResult(tr);
+      if (!tr.needs_review) {
+        setRegionAdjusted(true);
+      }
+    } catch (_) {
+    } finally {
+      setIsTracking(false);
+    }
+  };
+
+  const handleSelectKeyframe = (frameIdx) => {
+    setActiveKeyframeIdx(frameIdx);
+    if (tempId) {
+      const q = frameIdx > 0 ? `?frame_idx=${frameIdx}&t=${Date.now()}` : `?t=${Date.now()}`;
+      setPreviewUrl(`${API_BASE}/api/v1/flow-cleanup/frame/${tempId}${q}`);
+    }
+    const vw = videoInfo?.width || 1920;
+    const vh = videoInfo?.height || 1080;
+    if (keyframeOverrides[frameIdx]) {
+      setRegion(keyframeOverrides[frameIdx]);
+    } else if (trackResult?.boxes_by_frame?.[String(frameIdx)]) {
+      const [bx, by, bw, bh] = trackResult.boxes_by_frame[String(frameIdx)];
+      setRegion({
+        xPct: Math.max(0, Math.min(0.95, bx / vw)),
+        yPct: Math.max(0, Math.min(0.95, by / vh)),
+        wPct: Math.max(0.03, Math.min(1, bw / vw)),
+        hPct: Math.max(0.03, Math.min(1, bh / vh)),
+      });
+    }
+  };
+
+  const handleApplyKeyframeOverride = async () => {
+    if (!tempId || !region) return;
+    const vw = videoInfo?.width || 1920;
+    const vh = videoInfo?.height || 1080;
+    const nextOverrides = { ...keyframeOverrides, [activeKeyframeIdx]: { ...region } };
+    setKeyframeOverrides(nextOverrides);
+    setRegionAdjusted(true);
+    const kfList = Object.entries(nextOverrides).map(([fIdx, r]) => ({
+      frame_idx: Number(fIdx),
+      x: Math.round(r.xPct * vw),
+      y: Math.round(r.yPct * vh),
+      w: Math.round(r.wPct * vw),
+      h: Math.round(r.hPct * vh),
+    }));
+    await runTracking(tempId, null, videoInfo, kfList);
+  };
+
+  const handleGeneratePreviewClip = async () => {
+    if (!tempId || isGeneratingClip) return;
+    const vw = videoInfo?.width || 1920;
+    const vh = videoInfo?.height || 1080;
+    const pixelRegion = region ? {
+      x: Math.round(region.xPct * vw),
+      y: Math.round(region.yPct * vh),
+      w: Math.round(region.wPct * vw),
+      h: Math.round(region.hPct * vh),
+    } : null;
+    setIsGeneratingClip(true);
+    setPreviewClipUrl(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/preview-clip`, withAuth({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          temp_id: tempId,
+          preset: 'custom',
+          region: pixelRegion,
+          method,
+          expand_padding: expandPx,
+          clip_seconds: 4.0,
+          frame_boxes: trackResult?.boxes_by_frame || null,
+        }),
+      }));
+      if (res.ok) {
+        const data = await res.json();
+        setPreviewClipUrl(`${API_BASE}${data.preview_clip_url}`);
+      }
+    } catch (_) {
+    } finally {
+      setIsGeneratingClip(false);
+    }
   };
 
   const handleFile = async (file) => {
@@ -383,11 +559,15 @@ export default function FlowVeoCleanup() {
       const suit = computeSuitability(data.video_info);
       setSuitability(suit);
       if (suit.level === 'crop') setMethod('crop');
-      // Init region editor from the active preset
+      // Init region editor from the active preset first, then auto-detect refines it
       const initP = PRESETS.find((x) => x.id === preset) ?? PRESETS[0];
       setRegion({ xPct: initP.xPct, yPct: initP.yPct, wPct: initP.wPct, hPct: initP.hPct });
       setRegionAdjusted(false);
+      setActiveKeyframeIdx(0);
+      setKeyframeOverrides({});
+      setTrackResult(null);
       setStep('preview');
+      runAutoDetect(data.temp_id, data.video_info);
     } catch (e) {
       setError(e.message);
       setStep('error');
@@ -416,6 +596,8 @@ export default function FlowVeoCleanup() {
     lastRegionRef.current = region ? { ...region } : null;
     setFramePreviewUrl(null);
     setPreviewInfo(null);
+    setPreviewClipUrl(null);
+    setAbMode('after');
     setStep('frame-preview');
     const vw = videoInfo?.width ?? 1920;
     const vh = videoInfo?.height ?? 1080;
@@ -549,6 +731,13 @@ export default function FlowVeoCleanup() {
       h: Math.round(region.hPct * vh),
     } : null;
     const actualMethod = method === 'telea' && delogoVariant === 'soft' ? 'telea_soft' : method;
+    const kfPayload = Object.entries(keyframeOverrides).map(([fIdx, r]) => ({
+      frame_idx: Number(fIdx),
+      x: Math.round(r.xPct * vw),
+      y: Math.round(r.yPct * vh),
+      w: Math.round(r.wPct * vw),
+      h: Math.round(r.hPct * vh),
+    }));
     try {
       const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/process`, withAuth({
         method: 'POST',
@@ -562,6 +751,8 @@ export default function FlowVeoCleanup() {
           region_adjusted: regionAdjusted,
           suitability_level: suitability?.level ?? null,
           requested_mode: recommendedMode,
+          keyframes: kfPayload.length > 0 ? kfPayload : undefined,
+          frame_boxes: trackResult?.boxes_by_frame || undefined,
         }),
       }));
       if (!res.ok) {
@@ -735,6 +926,227 @@ export default function FlowVeoCleanup() {
 
           {/* Suitability assessment — shown when we have a signal */}
           <SuitabilityBanner suitability={suitability} />
+
+          {/* Phase P2/P4: Auto-detected candidate regions + confidence + add/remove/confirm */}
+          <div className="px-3.5 py-3 rounded-xl bg-surface-2 border border-line space-y-2.5">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Wand2 className="w-3.5 h-3.5 text-accent-text" />
+                <span className="text-xs font-bold text-fg">
+                  {isDetecting
+                    ? t('detect.scanning')
+                    : detectedRegions.length > 0
+                    ? t('detect.foundTitle', { count: detectedRegions.length })
+                    : t('detect.noneFound')}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const vw = videoInfo?.width || 1920;
+                    const vh = videoInfo?.height || 1080;
+                    const newCand = {
+                      x: Math.round((region?.xPct ?? 0.4) * vw),
+                      y: Math.round((region?.yPct ?? 0.4) * vh),
+                      w: Math.round((region?.wPct ?? 0.16) * vw),
+                      h: Math.round((region?.hPct ?? 0.10) * vh),
+                      confidence: 1.0,
+                      kind: 'logo',
+                      needs_review: false,
+                    };
+                    const next = [...detectedRegions, newCand];
+                    setDetectedRegions(next);
+                    setSelectedCandidateIdx(next.length - 1);
+                    setRegionAdjusted(true);
+                  }}
+                  className="text-[10px] px-2 py-1 rounded-lg border border-line bg-surface text-fg-muted hover:text-fg hover:border-line-strong transition-colors cursor-pointer"
+                >
+                  {t('detect.addRegion')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => runAutoDetect(tempId, videoInfo)}
+                  disabled={isDetecting}
+                  className="text-[10px] px-2 py-1 rounded-lg border border-line bg-surface text-fg-muted hover:text-fg hover:border-line-strong transition-colors cursor-pointer"
+                >
+                  {t('detect.rescan')}
+                </button>
+              </div>
+            </div>
+
+            {detectedRegions.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {detectedRegions.map((cand, idx) => {
+                  const pct = Math.round((cand.confidence || 0) * 100);
+                  const isActive = selectedCandidateIdx === idx;
+                  const kindLabel = t(`detect.kind.${cand.kind || 'logo'}`, { defaultValue: cand.kind || 'Logo' });
+                  return (
+                    <div key={idx} className="inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCandidateIdx(idx);
+                          applyCandidateBox(cand, videoInfo);
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
+                          isActive
+                            ? 'bg-accent-soft border-accent/50 text-accent-text'
+                            : 'bg-surface border-line text-fg-muted hover:text-fg'
+                        }`}
+                      >
+                        <span>#{idx + 1}</span>
+                        <span>· {pct}%</span>
+                        <span className="text-[10px] opacity-80">({kindLabel})</span>
+                      </button>
+                      {detectedRegions.length > 1 && (
+                        <button
+                          type="button"
+                          title={t('detect.removeRegion')}
+                          onClick={() => {
+                            const next = detectedRegions.filter((_, i) => i !== idx);
+                            setDetectedRegions(next);
+                            const nextIdx = Math.max(0, Math.min(selectedCandidateIdx, next.length - 1));
+                            setSelectedCandidateIdx(nextIdx);
+                            if (next[nextIdx]) applyCandidateBox(next[nextIdx], videoInfo);
+                          }}
+                          className="text-[10px] px-1.5 py-1 rounded-md border border-line text-fg-muted hover:text-danger cursor-pointer"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {(detectNeedsReview || (detectedRegions[selectedCandidateIdx] && detectedRegions[selectedCandidateIdx].confidence < 0.75)) && (
+              <div className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg bg-accent-soft border border-accent/30">
+                <span className="text-[11px] text-accent-text leading-snug">
+                  {t('detect.needsReview', {
+                    pct: Math.round(((detectedRegions[selectedCandidateIdx]?.confidence) || 0.6) * 100),
+                  })}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setRegionAdjusted(true)}
+                  className={`text-[10px] px-2.5 py-1 rounded-md font-bold whitespace-nowrap cursor-pointer border ${
+                    regionAdjusted
+                      ? 'bg-success-soft border-success/40 text-success'
+                      : 'bg-accent text-accent-fg border-transparent'
+                  }`}
+                >
+                  {regionAdjusted ? t('detect.confirmed') : t('detect.confirmRegion')}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Phase P3/P4: Per-frame tracking & Keyframe Editor */}
+          {method !== 'crop' && (
+            <div className="px-3.5 py-3 rounded-xl bg-surface-2 border border-line space-y-2.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-fg">
+                    {isTracking
+                      ? t('track.running')
+                      : trackResult
+                      ? t('track.active', { frames: trackResult.total_frames || 0 })
+                      : t('track.button')}
+                  </span>
+                  {trackResult && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface border border-line text-fg-muted font-mono">
+                      {trackResult.is_moving
+                        ? t('track.movingInfo', { cuts: (trackResult.scene_cuts || []).length })
+                        : t('track.staticInfo', { drift: trackResult.max_drift_pct ?? 0 })}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => runTracking(tempId, null, videoInfo)}
+                    disabled={isTracking}
+                    className="text-[11px] px-2.5 py-1 rounded-lg font-semibold border border-accent/40 bg-accent-soft text-accent-text hover:bg-accent/20 transition-colors cursor-pointer"
+                  >
+                    {isTracking ? t('track.running') : t('track.button')}
+                  </button>
+                </div>
+              </div>
+
+              {trackResult && (
+                <div className="space-y-2">
+                  {trackResult.needs_review && (
+                    <p className="text-[11px] text-accent-text bg-accent-soft border border-accent/25 rounded-lg px-2.5 py-1.5">
+                      {t('track.needsReview', { count: (trackResult.review_keyframes || []).length || 1 })}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] text-fg-muted font-semibold mr-1">
+                      {t('track.keyframesLabel')}
+                    </span>
+                    {Array.from(
+                      new Set([
+                        0,
+                        ...(trackResult.scene_cuts || []),
+                        ...(trackResult.jump_frames || []),
+                        ...(trackResult.review_keyframes || []),
+                        ...Object.keys(keyframeOverrides).map(Number),
+                      ])
+                    )
+                      .sort((a, b) => a - b)
+                      .slice(0, 10)
+                      .map((fIdx) => {
+                        const isCut = (trackResult.scene_cuts || []).includes(fIdx);
+                        const isLost = (trackResult.review_keyframes || []).includes(fIdx);
+                        const isActiveKf = activeKeyframeIdx === fIdx;
+                        return (
+                          <button
+                            key={fIdx}
+                            type="button"
+                            onClick={() => handleSelectKeyframe(fIdx)}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-mono border transition-colors cursor-pointer ${
+                              isActiveKf
+                                ? 'bg-accent text-accent-fg border-accent font-bold'
+                                : isLost
+                                ? 'bg-accent-soft border-accent/40 text-accent-text'
+                                : 'bg-surface border-line text-fg-muted hover:text-fg'
+                            }`}
+                          >
+                            <span>{t('track.frameChip', { idx: fIdx })}</span>
+                            {isCut && <span title={t('track.sceneCutTag')}>✂</span>}
+                            {isLost && <span title={t('track.lostTag')}>⚠</span>}
+                          </button>
+                        );
+                      })}
+                    {trackResult.total_frames > 20 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const mid = Math.floor((trackResult.total_frames || 60) / 2);
+                          handleSelectKeyframe(mid);
+                        }}
+                        className="text-[10px] px-2 py-1 rounded-md border border-dashed border-line text-fg-muted hover:text-fg cursor-pointer"
+                      >
+                        {t('track.addKeyframePrompt', { idx: Math.floor((trackResult.total_frames || 60) / 2) })}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleApplyKeyframeOverride}
+                      disabled={isTracking}
+                      className="ml-auto text-[10px] px-2.5 py-1 rounded-md font-bold bg-success-soft border border-success/30 text-success hover:bg-success/20 transition-colors cursor-pointer"
+                    >
+                      {isTracking
+                        ? t('track.applyingKeyframe')
+                        : t('track.applyKeyframe', { idx: activeKeyframeIdx })}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Eligibility prompt — method-aware guidance */}
           <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-surface-2 border border-line">
@@ -1006,11 +1418,29 @@ export default function FlowVeoCleanup() {
             <p className="text-xs text-fg-muted mt-0.5">{t('frame.subtitle')}</p>
           </div>
 
-          {/* Full cleaned frame with region overlay */}
+          {/* Full cleaned frame with A/B toggle & region overlay */}
           <div className="relative w-full rounded-xl overflow-hidden bg-surface-2 border border-line">
             {framePreviewUrl && framePreviewUrl !== 'error' ? (
               <>
-                <img src={framePreviewUrl} alt={t('frame.processedAlt')} className="w-full h-auto block" />
+                <img
+                  src={abMode === 'before' ? previewUrl : framePreviewUrl}
+                  alt={t('frame.processedAlt')}
+                  className="w-full h-auto block"
+                />
+                {abMode === 'split' && (
+                  <div
+                    className="absolute inset-0 overflow-hidden pointer-events-none"
+                    style={{ clipPath: `inset(0 ${100 - abSplitPct}% 0 0)` }}
+                  >
+                    <img src={previewUrl} alt="Before" className="w-full h-full object-cover block" />
+                  </div>
+                )}
+                {abMode === 'split' && (
+                  <div
+                    className="absolute inset-y-0 w-0.5 bg-accent pointer-events-none"
+                    style={{ left: `${abSplitPct}%` }}
+                  />
+                )}
                 {lastRegionRef.current && (
                   <div
                     className="absolute border-2 border-success/60 pointer-events-none"
@@ -1024,7 +1454,7 @@ export default function FlowVeoCleanup() {
                 )}
                 <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-success font-semibold">
                   <CheckCircle className="w-3 h-3" />
-                  {t('frame.badge')}
+                  {abMode === 'before' ? t('ab.before') : t('frame.badge')}
                 </div>
               </>
             ) : framePreviewUrl === 'error' ? (
@@ -1039,6 +1469,72 @@ export default function FlowVeoCleanup() {
               </div>
             )}
           </div>
+
+          {/* Phase P4: A/B mode switcher + 4s video preview clip */}
+          {framePreviewUrl && framePreviewUrl !== 'error' && (
+            <div className="px-3.5 py-3 rounded-xl bg-surface-2 border border-line space-y-2.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  {[
+                    { id: 'after', label: t('ab.after') },
+                    { id: 'before', label: t('ab.before') },
+                    { id: 'split', label: t('ab.split') },
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setAbMode(m.id)}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-semibold border transition-colors cursor-pointer ${
+                        abMode === m.id
+                          ? 'bg-accent-soft border-accent/50 text-accent-text'
+                          : 'bg-surface border-line text-fg-muted hover:text-fg'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleGeneratePreviewClip}
+                  disabled={isGeneratingClip}
+                  className="text-[11px] px-3 py-1 rounded-lg font-bold border border-accent/40 bg-accent-soft text-accent-text hover:bg-accent/20 transition-colors cursor-pointer"
+                >
+                  {isGeneratingClip ? t('ab.generatingClip') : t('ab.generateClip')}
+                </button>
+              </div>
+
+              {abMode === 'split' && (
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-[10px] text-fg-muted font-mono">{t('ab.before')}</span>
+                  <input
+                    type="range"
+                    min={5}
+                    max={95}
+                    value={abSplitPct}
+                    onChange={(e) => setAbSplitPct(Number(e.target.value))}
+                    className="flex-1 accent-accent cursor-pointer"
+                  />
+                  <span className="text-[10px] text-fg-muted font-mono">{t('ab.after')}</span>
+                </div>
+              )}
+
+              {previewClipUrl && (
+                <div className="space-y-1.5 pt-1">
+                  <p className="text-[11px] font-semibold text-fg-muted">{t('ab.clipReady')}</p>
+                  <video
+                    src={previewClipUrl}
+                    controls
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="w-full rounded-lg border border-line bg-black max-h-64"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Corner zoom — before vs after */}
           {framePreviewUrl && framePreviewUrl !== 'error' && lastRegionRef.current && (

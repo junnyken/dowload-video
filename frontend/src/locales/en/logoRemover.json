@@ -156,5 +156,46 @@
     "tryOther": "Try another area or method",
     "retry": "Retry",
     "changeVideo": "Choose a different video"
+  },
+  "detect": {
+    "scanning": "Scanning for visible on-frame logos/watermarks...",
+    "foundTitle": "Auto-detected candidate regions ({{count}})",
+    "noneFound": "No clear fixed region detected — please select a corner preset or drag a custom box.",
+    "needsReview": "Low confidence ({{pct}}%) — please drag to adjust or click Confirm region before processing.",
+    "confirmRegion": "Reviewed & confirm selected region",
+    "confirmed": "✓ Region confirmed",
+    "addRegion": "+ Add region",
+    "removeRegion": "Remove this region",
+    "rescan": "Rescan",
+    "kind": {
+      "logo": "Corner logo",
+      "text": "Visible text",
+      "semi_transparent": "Semi-transparent",
+      "moving": "Moving"
+    }
+  },
+  "track": {
+    "button": "Track across frames",
+    "running": "Tracking watermark motion across frames...",
+    "active": "Per-frame tracking active ({{frames}} frames)",
+    "staticInfo": "Static logo (drift {{drift}}%)",
+    "movingInfo": "Moving / jumping logo ({{cuts}} scene cuts)",
+    "needsReview": "Tracking lost lock or had low confidence at {{count}} point(s) — please review the keyframes below.",
+    "keyframesLabel": "Keyframes for review & adjustment:",
+    "frameChip": "Frame #{{idx}}",
+    "sceneCutTag": "Scene cut",
+    "lostTag": "Needs review",
+    "applyKeyframe": "Update keyframe #{{idx}}",
+    "applyingKeyframe": "Recomputing keyframe segment...",
+    "addKeyframePrompt": "+ Add keyframe (#{{idx}})"
+  },
+  "ab": {
+    "title": "Before / After Comparison & Motion Preview",
+    "before": "Before (Original)",
+    "after": "After (Cleaned)",
+    "split": "A/B Split View",
+    "generateClip": "Preview 4s video clip",
+    "generatingClip": "Rendering 4s preview clip...",
+    "clipReady": "4-second motion preview clip:"
   }
 }

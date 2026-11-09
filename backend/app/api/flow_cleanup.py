@@ -348,9 +348,10 @@ def _probe(path: str) -> dict:
     return {}
 
 
-def _extract_frame(input_path: str, frame_path: str) -> bool:
+def _extract_frame(input_path: str, frame_path: str, seek_sec: float = 0.0) -> bool:
+    ss_str = f"{max(0.0, float(seek_sec)):.4f}"
     r = subprocess.run(
-        ["ffmpeg", "-y", "-ss", "0", "-i", input_path, "-vframes", "1", "-q:v", "2", frame_path],
+        ["ffmpeg", "-y", "-ss", ss_str, "-i", input_path, "-vframes", "1", "-q:v", "2", frame_path],
         capture_output=True,
         timeout=30,
     )
@@ -696,10 +697,31 @@ async def upload_flow_video(request: Request, file: UploadFile = File(...), _: N
 
 
 @router.get("/frame/{temp_id}")
-async def get_preview_frame(temp_id: str):
-    """Serve the extracted first-frame JPEG for the uploaded video."""
+async def get_preview_frame(temp_id: str, frame_idx: Optional[int] = None):
+    """Serve the extracted frame JPEG for the uploaded video (frame 0 by default, or specific frame_idx for keyframe review)."""
     work_dir = _safe_work_dir(temp_id)
-    _ensure_work_dir_fresh(work_dir, detail="Preview không còn. Upload lại.")
+    meta = _ensure_work_dir_fresh(work_dir, detail="Preview không còn. Upload lại.")
+    if frame_idx is not None and int(frame_idx) > 0:
+        idx = max(0, int(frame_idx))
+        kf_path = os.path.join(work_dir, f"frame_{idx}.jpg")
+        if not os.path.exists(kf_path):
+            input_path = _find_input_path(work_dir)
+            if not input_path:
+                raise HTTPException(status_code=404, detail="Preview không còn. Upload lại.")
+            info = meta.get("video_info") or _probe(input_path)
+            fps = float(info.get("fps", 30.0) or 30.0)
+            dur = float(info.get("duration", 0.0) or 0.0)
+            seek_sec = idx / max(fps, 1.0)
+            if dur > 0:
+                seek_sec = min(seek_sec, max(0.0, dur - 0.05))
+            if not _extract_frame(input_path, kf_path, seek_sec=seek_sec):
+                # Fallback to first frame if seek fails
+                fallback = os.path.join(work_dir, "preview.jpg")
+                if os.path.exists(fallback):
+                    return FileResponse(fallback, media_type="image/jpeg")
+                raise HTTPException(status_code=404, detail="Không thể trích xuất frame tại keyframe này.")
+        return FileResponse(kf_path, media_type="image/jpeg")
+
     frame_path = os.path.join(work_dir, "preview.jpg")
     if not os.path.exists(frame_path):
         raise HTTPException(status_code=404, detail="Preview không còn. Upload lại.")
@@ -793,6 +815,120 @@ async def get_preview_clean(temp_id: str):
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Preview chưa sẵn sàng. Upload và chọn vùng trước.")
     return FileResponse(path, media_type="image/jpeg")
+
+
+class PreviewClipRequest(BaseModel):
+    temp_id: str
+    preset: Optional[str] = "custom"
+    region: Optional[dict] = None
+    method: str = "natural"
+    expand_padding: int = 8
+    clip_seconds: float = 4.0
+    frame_boxes: Optional[dict] = None
+
+
+@router.post("/preview-clip")
+@limiter.limit("10/minute")
+def preview_clip_cleanup(payload: PreviewClipRequest, request: Request, _: None = Depends(_require_pro)):
+    """
+    Phase P4: Render a short 3–5 second cleaned video clip preview so the user can inspect
+    motion quality and temporal inpainting before launching the full video job.
+    """
+    work_dir = _safe_work_dir(payload.temp_id)
+    meta = _ensure_work_dir_fresh(work_dir, detail="Upload không còn. Vui lòng upload lại.")
+    _verify_job_owner(meta, _caller_user_id(request))
+    input_path = _find_input_path(work_dir)
+    if not input_path:
+        raise HTTPException(status_code=404, detail="Upload không còn. Vui lòng upload lại.")
+
+    info = meta.get("video_info") or _probe(input_path)
+    vw = int(info.get("width", 1920) or 1920)
+    vh = int(info.get("height", 1080) or 1080)
+    fps_val = float(info.get("fps", 30.0) or 30.0)
+    dur = float(info.get("duration", 0.0) or 0.0)
+
+    raw = _resolve_region(payload.preset, payload.region, vw, vh)
+    x, y, w, h = int(raw["x"]), int(raw["y"]), int(raw["w"]), int(raw["h"])
+    if w <= 0 or h <= 0 or x < 0 or y < 0 or x + w > vw or y + h > vh:
+        raise HTTPException(status_code=400, detail="Kích thước vùng không hợp lệ.")
+
+    _ALIAS = {"delogo": "natural", "delogo_soft": "natural", "telea": "telea", "telea_soft": "telea_soft"}
+    method = payload.method if payload.method in ("natural", "telea", "telea_soft", "crop", "blur") else _ALIAS.get(payload.method, "natural")
+
+    ep = max(0, int(payload.expand_padding))
+    if ep > 0 and method != "crop":
+        x = max(0, x - ep);  y = max(0, y - ep)
+        w = min(vw - x, w + ep * 2);  h = min(vh - y, h + ep * 2)
+
+    clip_dur = max(1.0, min(float(payload.clip_seconds or 4.0), 5.0))
+    if dur > 0:
+        clip_dur = min(clip_dur, dur)
+
+    clip_src = os.path.join(work_dir, "preview_clip_src.mp4")
+    clip_out = os.path.join(work_dir, "preview_clip_clean.mp4")
+
+    try:
+        r_trim = subprocess.run(
+            [
+                "ffmpeg", "-y", "-ss", "0", "-t", f"{clip_dur:.2f}",
+                "-i", input_path,
+                "-c:v", "libx264", "-crf", "18", "-preset", "veryfast",
+                "-pix_fmt", "yuv420p", "-c:a", "copy",
+                clip_src,
+            ],
+            capture_output=True,
+            timeout=60,
+        )
+        src_for_preview = clip_src if (r_trim.returncode == 0 and os.path.isfile(clip_src) and os.path.getsize(clip_src) > 0) else input_path
+
+        tracked_boxes = payload.frame_boxes or meta.get("tracked_boxes")
+        if method == "natural":
+            from app.api import flow_inpaint as _fi
+            _fi.process_video_natural(
+                src_for_preview, clip_out,
+                x, y, w, h, vw, vh,
+                fps_val,
+                duration=clip_dur,
+                frame_boxes=tracked_boxes,
+            )
+        elif method in ("telea", "telea_soft"):
+            mask = _build_mask(x, y, w, h, vw, vh)
+            _telea_video(
+                src_for_preview, clip_out, mask,
+                x, y, w, h, vw, vh,
+                fps_val,
+                soft=(method == "telea_soft"),
+                duration=clip_dur,
+            )
+        elif method == "crop":
+            _crop_video(src_for_preview, clip_out, x, y, w, h, vw, vh, timeout=60)
+        else:
+            _blur_video(src_for_preview, clip_out, x, y, w, h, timeout=60)
+
+        if not os.path.isfile(clip_out) or os.path.getsize(clip_out) == 0:
+            raise ValueError("Không tạo được video preview ngắn.")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Tạo video preview thất bại: {str(exc)[:200]}")
+
+    return {
+        "success": True,
+        "temp_id": payload.temp_id,
+        "preview_clip_url": f"/api/v1/flow-cleanup/preview-clip-video/{payload.temp_id}?v={int(time.time())}",
+        "clip_duration": round(clip_dur, 2),
+        "method_used": method,
+        "region": {"x": x, "y": y, "w": w, "h": h},
+    }
+
+
+@router.get("/preview-clip-video/{temp_id}")
+async def get_preview_clip_video(temp_id: str):
+    """Serve the 3–5 second cleaned preview video clip."""
+    work_dir = _safe_work_dir(temp_id)
+    _ensure_work_dir_fresh(work_dir, detail="Video preview không còn. Vui lòng tạo lại.")
+    path = os.path.join(work_dir, "preview_clip_clean.mp4")
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Video preview chưa sẵn sàng.")
+    return FileResponse(path, media_type="video/mp4")
 
 
 class ProcessRequest(BaseModel):

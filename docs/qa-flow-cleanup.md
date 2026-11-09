@@ -1,11 +1,20 @@
 # QA / UAT Package — Flow/Veo Visible-Logo Cleanup
 
 **Feature:** Visible on-frame logo removal for Flow/Veo video exports
-**Stack:** React 19 + FastAPI + FFmpeg (synchronous, no Celery for this feature) + Redis + temp files
+**Stack:** React 19 + FastAPI + Celery (`media` queue) + OpenCV/FFmpeg + Redis + temp files
 **Scope:** On-frame visible logo only. SynthID (invisible Google AI watermark) is NOT in scope and must never appear in any pass/fail criterion, copy, or label.
 **Admin/QA tab:** `/vid-admin` → "Flow QA" tab (tab id: `flowqa`)
-**Backend endpoints:** `POST /api/v1/flow-cleanup/upload`, `GET /api/v1/flow-cleanup/frame/{temp_id}`, `POST /api/v1/flow-cleanup/process`
-**Job TTL:** ~20 minutes (temp dirs under `downloads/flow_<hex>/`)
+**Backend endpoints:**
+- `POST /api/v1/flow-cleanup/upload`, `POST /api/v1/flow-cleanup/from-local`
+- `GET /api/v1/flow-cleanup/frame/{temp_id}` (supports optional `?frame_idx=<int>` for keyframe extraction)
+- `POST /api/v1/flow-cleanup/detect/{temp_id}` (Phase P2: auto-detect up to 3 candidate regions + confidence + `needs_review`)
+- `POST /api/v1/flow-cleanup/track/{temp_id}` (Phase P3: per-frame tracking, scene cut detection, keyframe segment recomputation)
+- `POST /api/v1/flow-cleanup/preview-frame`, `GET /api/v1/flow-cleanup/preview-clean/{temp_id}`
+- `POST /api/v1/flow-cleanup/preview-clip`, `GET /api/v1/flow-cleanup/preview-clip-video/{temp_id}` (Phase P4: 3–5s cleaned video clip preview)
+- `POST /api/v1/flow-cleanup/process` (Phase P1: async Celery `media` queue dispatch)
+- `GET /api/v1/flow-cleanup/status/{job_id}`, `POST /api/v1/flow-cleanup/cancel/{job_id}`, `POST /api/v1/flow-cleanup/retry/{job_id}`
+- `GET /api/v1/flow-cleanup/result/{temp_id}/{file_id}`
+**Job TTL:** ~20 minutes (temp dirs under `downloads/flow_<hex>/`, cleaned up on access and via `periodic_cleanup_downloads`)
 **Audience:** QA engineers, developers, product manager
 
 ---
@@ -59,17 +68,17 @@
 - [ ] The secondary nudge button "Vẫn muốn thử lấp pixel thay thế" appears only when suitability=`crop` AND method=`crop` (not in other states)
 - [ ] The secondary nudge button "Dùng cách cắt khung hình thay thế" appears only when suitability=`low`
 
-### D. Manual Region Flow
+### D. Auto-Detection, Tracking & Manual Region Flow (P2 / P3 / P4)
 
-- [ ] All four presets selectable: "Dưới phải" (↘), "Dưới trái" (↙), "Trên phải" (↗), "Trên trái" (↖)
-- [ ] Active preset is highlighted with orange styling (`bg-[#FB923C]/20 border-[#FB923C]/50 text-[#FB923C]`)
-- [ ] Selecting a preset updates the orange bounding box position on the preview frame immediately
-- [ ] Orange box position matches the backend `preset_map` math: lower-right box is at top-right area of lower-right corner, not just any corner area
-- [ ] Preset coordinates sent to backend match the frontend PRESETS constants (verify via admin detail panel: `region.x/y/w/h` match preset math for video dimensions)
-- [ ] Custom region preset (`custom`) is available in the ProcessRequest model; frontend currently uses only the four named presets — if custom UI is not yet exposed, document this as known gap
-- [ ] Region validation: backend rejects w=0 or h=0 with 400 "Kích thước vùng không hợp lệ."
-- [ ] Region validation: backend rejects region extending outside frame bounds with 400 "Vùng nằm ngoài khung hình."
-- [ ] `region_source` in admin metadata is `user_selected` when a named preset is used
+- [ ] On upload completion (`/upload` or `/from-local`), `POST /api/v1/flow-cleanup/detect/{temp_id}` runs automatically and displays up to 3 candidate regions with confidence percentage and kind badge (`Logo góc`, `Chữ hiển thị`, `Bán trong suốt`, `Di chuyển`)
+- [ ] Low-confidence detection (`confidence < 0.75` or `needs_review = true`) displays a review banner and blocks unconfirmed auto-processing (`detection_needs_review`) until the user drags/resizes the box or clicks "Xác nhận vùng chọn"
+- [ ] User can click candidate chips (`#1`, `#2`, `#3`), add a new region (`+ Thêm vùng`), remove a candidate (`×`), or drag/resize the 8-handle `RegionEditor` (`preset = "custom"`)
+- [ ] All four corner presets remain selectable: "Dưới phải" (↘), "Dưới trái" (↙), "Trên phải" (↗), "Trên trái" (↖)
+- [ ] Clicking "Theo vết theo từng frame" calls `POST /api/v1/flow-cleanup/track/{temp_id}` and displays tracking status (`static` vs `moving`, drift %, scene cuts) and keyframe chips (`Frame #0`, `Frame #50 ⚠`, `Frame #75 ✂`)
+- [ ] Clicking any keyframe chip loads `GET /api/v1/flow-cleanup/frame/{temp_id}?frame_idx={k}` and allows dragging `RegionEditor` at that keyframe; clicking "Cập nhật keyframe #{k}" recomputes only the affected tracking segment
+- [ ] When tracking loses lock (`tracking_needs_review`), `/process` rejects unconfirmed jobs with `tracking_needs_review` until the user confirms or updates keyframes
+- [ ] Region validation: backend rejects w=0 or h=0 with 400 "Kích thước vùng không hợp lệ." and out-of-bounds regions with 400 "Vùng nằm ngoài khung hình."
+- [ ] `region_source` in admin metadata is `user_selected` (preset) or `user_adjusted` (dragged/confirmed)
 
 ### E. Crop Fallback Flow
 
@@ -83,17 +92,14 @@
 - [ ] `result_type` in backend metadata and API response = `cropped_export`
 - [ ] `selected_mode` in metadata = `crop_fallback`
 
-### F. Processing States
+### F. Preview (A/B + 4s Clip) & Async Processing States (P1 / P4)
 
-- [ ] Process button triggers `processing` state: spinner shows with method-specific message ("Đang phân tích và lấp vùng logo..." / "Đang tính toán và cắt viền..." / "Đang che mờ vùng logo...")
-- [ ] Process button is not double-submittable — there is no explicit `disabled` attribute on the process button, but React state change to `processing` removes the preview section including the button. Verify no double-submit can occur by rapid clicking
-- [ ] Processing state shows estimated time range "15–90 giây tùy độ dài clip"
-- [ ] FFmpeg failure (e.g. unsupported codec, corrupted input) transitions to `error` state — not stuck in `processing`
-- [ ] Error state message shows the backend error detail (from `body.detail`)
-- [ ] Error state for a processing failure (when `previewUrl` is set) shows "Thử vùng hoặc phương thức khác" with `RotateCcw` icon, returning user to `preview` state
-- [ ] Error state for an upload failure (no `previewUrl`) shows "Thử lại" button, calling `reset()`
-- [ ] No success toast, spinner, or UI element appears after a processing failure
-- [ ] For a 5-minute+ video processed with `delogo`, FFmpeg subprocess has a 300-second timeout — verify error state is reached on timeout, not an uncaught 500
+- [ ] In `frame-preview`, user can toggle A/B comparison modes (`Trước (Gốc)`, `Sau (Làm sạch)`, `Kéo so sánh A/B` slider) and view `CornerZoom`
+- [ ] Clicking "Xem thử video 4 giây" calls `POST /api/v1/flow-cleanup/preview-clip` and plays the 3–5 second cleaned video clip inside `frame-preview`
+- [ ] Process button dispatches job to the Celery `media` queue (`inpaint_logo_task`) and polls `GET /api/v1/flow-cleanup/status/{job_id}` with real-time progress bar (`0–100%`)
+- [ ] Clicking "Hủy xử lý" calls `POST /api/v1/flow-cleanup/cancel/{job_id}`, terminates the worker task, removes partial files, and returns to `preview`
+- [ ] Clicking "Thử lại" after failure/cancellation calls `POST /api/v1/flow-cleanup/retry/{job_id}` (capped at 3 retries, `max_retries_exceeded`)
+- [ ] Owner verification: `/status`, `/cancel`, `/retry`, `/result`, `/detect`, `/track`, `/preview-frame`, and `/preview-clip` verify `owner_user_id` and return 404 to other users (even other Pro users)
 
 ### G. Result Card / Preview
 

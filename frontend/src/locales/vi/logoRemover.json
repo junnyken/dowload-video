@@ -155,5 +155,46 @@
     "tryOther": "Thử vùng hoặc phương thức khác",
     "retry": "Thử lại",
     "changeVideo": "Đổi video khác"
+  },
+  "detect": {
+    "scanning": "Đang tự động quét vùng logo/watermark hiển thị...",
+    "foundTitle": "Vùng gợi ý tự phát hiện ({{count}})",
+    "noneFound": "Không tự phát hiện được vùng cố định rõ ràng — vui lòng chọn góc hoặc kéo khung thủ công.",
+    "needsReview": "Độ tin cậy thấp ({{pct}}%) — vui lòng kéo chỉnh hoặc bấm Xác nhận vùng trước khi xử lý.",
+    "confirmRegion": "Đã kiểm tra & xác nhận vùng chọn",
+    "confirmed": "✓ Đã xác nhận vùng chọn",
+    "addRegion": "+ Thêm vùng",
+    "removeRegion": "Xoá vùng này",
+    "rescan": "Quét lại",
+    "kind": {
+      "logo": "Logo góc",
+      "text": "Chữ hiển thị",
+      "semi_transparent": "Bán trong suốt",
+      "moving": "Di chuyển"
+    }
+  },
+  "track": {
+    "button": "Theo vết theo từng frame",
+    "running": "Đang theo vết chuyển động qua các frame...",
+    "active": "Đã bật theo vết động ({{frames}} frame)",
+    "staticInfo": "Logo đứng yên (drift {{drift}}%)",
+    "movingInfo": "Logo di chuyển / nhảy vị trí ({{cuts}} chuyển cảnh)",
+    "needsReview": "Theo vết mất dấu hoặc độ tin cậy thấp ở {{count}} thời điểm — hãy kiểm tra tại các keyframe bên dưới.",
+    "keyframesLabel": "Keyframe kiểm tra & chỉnh vị trí:",
+    "frameChip": "Frame #{{idx}}",
+    "sceneCutTag": "Chuyển cảnh",
+    "lostTag": "Cần chỉnh",
+    "applyKeyframe": "Cập nhật keyframe #{{idx}}",
+    "applyingKeyframe": "Đang tính lại đoạn keyframe...",
+    "addKeyframePrompt": "+ Thêm frame chỉnh (#{{idx}})"
+  },
+  "ab": {
+    "title": "So sánh Trước / Sau & Xem thử chuyển động",
+    "before": "Trước (Gốc)",
+    "after": "Sau (Làm sạch)",
+    "split": "Kéo so sánh A/B",
+    "generateClip": "Xem thử video 4 giây",
+    "generatingClip": "Đang tạo đoạn video 4s...",
+    "clipReady": "Đoạn xem thử 4 giây (kiểm tra độ mượt chuyển động):"
   }
 }

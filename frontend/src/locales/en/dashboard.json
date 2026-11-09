@@ -203,7 +203,21 @@
     "output": "Output:",
     "outputValue": "logo-free video (a new file; the original is not overwritten)",
     "downloadResult": "Download logo-free video",
-    "removeOther": "Remove another area"
+    "removeOther": "Remove another area",
+    "scanning": "Scanning for visible on-frame logo regions...",
+    "detectedRegions": "Auto-detected regions:",
+    "needsReview": "Low confidence — please confirm or adjust the selected region before processing.",
+    "confirmRegion": "Confirm region",
+    "confirmed": "✓ Region confirmed",
+    "trackMotion": "Track motion",
+    "tracking": "Tracking across frames...",
+    "trackedReady": "Per-frame tracking active ({{frames}} frames)",
+    "previewClipBtn": "Preview 4s clip",
+    "previewClipLoading": "Rendering 4s clip...",
+    "cancel": "Cancel processing",
+    "cancelling": "Cancelling...",
+    "retry": "Retry",
+    "openFullStudio": "Open full studio (drag box / keyframes)"
   },
   "merge": {
     "needTwo": "At least 2 job IDs are needed to merge.",
