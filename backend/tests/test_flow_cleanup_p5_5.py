@@ -83,8 +83,9 @@ def test_process_consent_required_and_audit_log_written(tmp_path, monkeypatch, p
     assert r_deny.status_code == 400
     assert r_deny.json()["detail"]["error_code"] == "consent_required"
     assert not audit_file.exists()
+    assert fc._query_consent_audit_logs(temp_id=tid) == []
 
-    # 2. Confirmed consent -> HTTP 200 and audit log entry written without video filename/bytes
+    # 2. Confirmed consent -> HTTP 200 and audit log entry written to DB table (never in downloads/)
     r_ok = client.post(
         "/api/v1/flow-cleanup/process",
         json={
@@ -97,16 +98,15 @@ def test_process_consent_required_and_audit_log_written(tmp_path, monkeypatch, p
         },
     )
     assert r_ok.status_code == 200
-    assert audit_file.is_file()
+    assert not audit_file.exists()
 
-    lines = [line.strip() for line in audit_file.read_text(encoding="utf-8").splitlines() if line.strip()]
-    assert len(lines) == 1
-    entry = json.loads(lines[0])
-    assert set(entry.keys()) == {"timestamp", "user_id", "temp_id", "action"}
+    rows = fc._query_consent_audit_logs(temp_id=tid)
+    assert len(rows) == 1
+    entry = rows[0]
     assert entry["user_id"] == "pro-user-p55"
     assert entry["temp_id"] == tid
     assert entry["action"] == "process_confirm"
-    assert "secret_clip_name" not in lines[0]
+    assert "secret_clip_name" not in json.dumps(entry)
 
 
 def test_e2e_pro_full_lifecycle_detect_track_keyframe_ab_clip_process_download_and_ttl(tmp_path, monkeypatch, pro_user):

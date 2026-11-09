@@ -145,29 +145,105 @@ _MAX_KEYFRAME_CACHE_FILES = int(os.getenv("FLOW_MAX_KEYFRAME_CACHE_FILES", "50")
 _EPHEMERAL_SIGNING_SECRET = os.urandom(32).hex()
 _FLOW_PREFIX = "flow_"
 _META_LOCK = threading.RLock()
+_CONSENT_AUDIT_SQLITE_CONN = None
+
+
+def _get_consent_audit_sqlite():
+    """Return in-memory SQLite mirror of `flow_consent_audit_logs` table (never writes files into `downloads/`)."""
+    global _CONSENT_AUDIT_SQLITE_CONN
+    with _META_LOCK:
+        if _CONSENT_AUDIT_SQLITE_CONN is None:
+            import sqlite3
+            conn = sqlite3.connect(":memory:", check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS flow_consent_audit_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    temp_id TEXT NOT NULL,
+                    action TEXT NOT NULL DEFAULT 'process_confirm',
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.commit()
+            _CONSENT_AUDIT_SQLITE_CONN = conn
+        return _CONSENT_AUDIT_SQLITE_CONN
+
+
+def _query_consent_audit_logs(
+    temp_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> List[dict]:
+    """Query consent audit rows from the DB table `flow_consent_audit_logs`."""
+    with _META_LOCK:
+        conn = _get_consent_audit_sqlite()
+        clauses: List[str] = []
+        params: List[Any] = []
+        if temp_id is not None:
+            clauses.append("temp_id = ?")
+            params.append(str(temp_id))
+        if user_id is not None:
+            clauses.append("user_id = ?")
+            params.append(str(user_id))
+        where_sql = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        cur = conn.execute(
+            f"SELECT user_id, temp_id, action, created_at FROM flow_consent_audit_logs{where_sql} ORDER BY id ASC",
+            tuple(params),
+        )
+        return [
+            {
+                "user_id": row["user_id"],
+                "temp_id": row["temp_id"],
+                "action": row["action"],
+                "created_at": row["created_at"],
+                "timestamp": row["created_at"],
+            }
+            for row in cur.fetchall()
+        ]
 
 
 def _append_consent_audit_log(user_id: Optional[str], temp_id: str, action: str = "process_confirm") -> dict:
     """
-    Phase P5.5: Append a privacy-safe consent audit record `(timestamp, user_id, temp_id, action)`
-    to `downloads/flow_consent_audit.jsonl` when the user confirms video processing.
-    Never logs video bytes, filenames, or frame contents.
+    Phase P5.6.6: Insert a privacy-safe consent audit record `(user_id, temp_id, action, created_at)`
+    into the DB table `flow_consent_audit_logs` (migration 044).
+    Never stores files in `downloads/` and never logs video bytes, filenames, or frame contents.
     """
-    os.makedirs(_DOWNLOAD_DIR, exist_ok=True)
-    audit_path = os.path.join(_DOWNLOAD_DIR, "flow_consent_audit.jsonl")
-    entry = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+    now_iso = datetime.now(timezone.utc).isoformat()
+    db_row = {
         "user_id": str(user_id or "anonymous"),
         "temp_id": str(temp_id),
         "action": str(action),
+        "created_at": now_iso,
     }
     with _META_LOCK:
         try:
-            with open(audit_path, "a", encoding="utf-8") as af:
-                af.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            conn = _get_consent_audit_sqlite()
+            conn.execute(
+                "INSERT INTO flow_consent_audit_logs (user_id, temp_id, action, created_at) VALUES (?, ?, ?, ?)",
+                (db_row["user_id"], db_row["temp_id"], db_row["action"], db_row["created_at"]),
+            )
+            conn.commit()
         except Exception as exc:
-            log.warning("[flow-cleanup] failed to write consent audit log: %s", exc)
-    return entry
+            log.warning("[flow-cleanup] failed to insert consent audit log into local DB: %s", exc)
+
+    try:
+        from app.core.database import get_service_client
+        supa_url = os.getenv("SUPABASE_URL", "")
+        if supa_url and "your-project-id" not in supa_url:
+            db = get_service_client()
+            db.table("flow_consent_audit_logs").insert(db_row).execute()
+    except Exception as exc:
+        log.warning("[flow-cleanup] failed to insert consent audit log into Supabase DB: %s", exc)
+
+    return {
+        "timestamp": now_iso,
+        "created_at": now_iso,
+        "user_id": db_row["user_id"],
+        "temp_id": db_row["temp_id"],
+        "action": db_row["action"],
+    }
 
 
 class _InMemoryAtomicRedis:

@@ -233,3 +233,47 @@ class TestP565RedisQuotaAndConcurrency:
             app.dependency_overrides.pop(get_optional_user, None)
 
 
+class TestP566DatabaseConsentAuditLog:
+    """Verify consent audit logs are stored in DB table flow_consent_audit_logs (migration 044) and not in downloads/."""
+
+    def test_migration_044_exists_and_audit_log_writes_to_db_not_downloads(self, tmp_path, monkeypatch):
+        from unittest.mock import MagicMock
+        import app.core.database as db_mod
+
+        mig_path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "database", "migrations", "044_flow_consent_audit_logs.sql")
+        )
+        assert os.path.isfile(mig_path)
+        sql_text = open(mig_path, "r", encoding="utf-8").read()
+        assert "CREATE TABLE IF NOT EXISTS flow_consent_audit_logs" in sql_text
+
+        dl_dir = tmp_path / "dl_no_audit_file"
+        dl_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(flow_cleanup, "_DOWNLOAD_DIR", str(dl_dir))
+        monkeypatch.setenv("SUPABASE_URL", "https://example-real-project.supabase.co")
+
+        mock_client = MagicMock()
+        monkeypatch.setattr(db_mod, "get_service_client", lambda: mock_client)
+
+        tid = "auditdb00112233445566778899aabbcc"
+        rec = flow_cleanup._append_consent_audit_log("user-db-99", tid, action="process_confirm")
+        assert rec["user_id"] == "user-db-99"
+        assert rec["temp_id"] == tid
+        assert rec["action"] == "process_confirm"
+
+        # Verify Supabase DB table insert was invoked
+        mock_client.table.assert_called_once_with("flow_consent_audit_logs")
+        inserted_payload = mock_client.table.return_value.insert.call_args.args[0]
+        assert inserted_payload["user_id"] == "user-db-99"
+        assert inserted_payload["temp_id"] == tid
+        assert inserted_payload["action"] == "process_confirm"
+        mock_client.table.return_value.insert.return_value.execute.assert_called_once()
+
+        # Verify SQLite DB mirror also has the row and NO file was written in downloads/
+        rows = flow_cleanup._query_consent_audit_logs(temp_id=tid, user_id="user-db-99")
+        assert len(rows) == 1
+        assert not (dl_dir / "flow_consent_audit.jsonl").exists()
+        assert list(dl_dir.iterdir()) == []
+
+
+
