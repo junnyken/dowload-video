@@ -238,13 +238,35 @@ def _check_user_concurrency(owner_id: Optional[str], current_temp_id: str) -> No
                 )
 
 
+def _is_production_env() -> bool:
+    """Return True when running in production mode (`ENV`/`ENVIRONMENT`/`APP_ENV` in {'production', 'prod'})."""
+    for env_key in ("ENVIRONMENT", "APP_ENV", "ENV"):
+        val = os.getenv(env_key, "").strip().lower()
+        if val in ("production", "prod"):
+            return True
+    return False
+
+
+def _validate_signing_secret_on_startup() -> str:
+    """Require dedicated FLOW_URL_SIGNING_SECRET on production startup; never fall back to JWT_SECRET."""
+    secret = os.getenv("FLOW_URL_SIGNING_SECRET", "").strip()
+    if _is_production_env() and len(secret) < 16:
+        raise RuntimeError(
+            "FLOW_URL_SIGNING_SECRET is required in production (minimum 16 characters) "
+            "and must be a dedicated secret (do not reuse JWT_SECRET)."
+        )
+    return secret
+
+
 def _get_signing_secret() -> str:
-    """Return HMAC signing secret from environment (or per-process CSPRNG secret if unset)."""
-    for env_key in ("FLOW_URL_SIGNING_SECRET", "JWT_SECRET", "SECRET_KEY"):
-        val = os.getenv(env_key, "").strip()
-        if val:
-            return val
+    """Return dedicated HMAC signing secret from FLOW_URL_SIGNING_SECRET (or ephemeral dev/test secret)."""
+    secret = _validate_signing_secret_on_startup()
+    if secret:
+        return secret
     return _EPHEMERAL_SIGNING_SECRET
+
+
+_validate_signing_secret_on_startup()
 
 
 def _sign_resource_token(

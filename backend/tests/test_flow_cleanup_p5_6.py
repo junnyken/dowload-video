@@ -71,3 +71,36 @@ class TestP563EffectiveMaxDuration:
         assert detail["error_code"] == "duration_limit_exceeded"
         assert detail["max_duration_sec"] == 24
         assert "24s" in detail["user_message"]
+
+
+class TestP564DedicatedSigningSecret:
+    """Verify FLOW_URL_SIGNING_SECRET never falls back to JWT_SECRET and fails fast in production."""
+
+    def test_does_not_fallback_to_jwt_secret(self, monkeypatch):
+        monkeypatch.setenv("ENV", "development")
+        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        monkeypatch.delenv("APP_ENV", raising=False)
+        monkeypatch.delenv("FLOW_URL_SIGNING_SECRET", raising=False)
+        monkeypatch.setenv("JWT_SECRET", "super-secret-jwt-key-that-must-not-be-used")
+        monkeypatch.setenv("SECRET_KEY", "another-secret-key-that-must-not-be-used")
+
+        secret = flow_cleanup._get_signing_secret()
+        assert secret != "super-secret-jwt-key-that-must-not-be-used"
+        assert secret != "another-secret-key-that-must-not-be-used"
+        assert secret == flow_cleanup._EPHEMERAL_SIGNING_SECRET
+
+    def test_production_fails_startup_when_signing_secret_missing(self, monkeypatch):
+        monkeypatch.setenv("ENV", "production")
+        monkeypatch.delenv("FLOW_URL_SIGNING_SECRET", raising=False)
+        monkeypatch.setenv("JWT_SECRET", "jwt-secret-should-not-save-production-startup")
+
+        with pytest.raises(RuntimeError, match="FLOW_URL_SIGNING_SECRET is required in production"):
+            flow_cleanup._validate_signing_secret_on_startup()
+
+    def test_production_succeeds_with_dedicated_signing_secret(self, monkeypatch):
+        monkeypatch.setenv("ENV", "production")
+        monkeypatch.setenv("FLOW_URL_SIGNING_SECRET", "dedicated-flow-signing-secret-32chars!")
+
+        secret = flow_cleanup._get_signing_secret()
+        assert secret == "dedicated-flow-signing-secret-32chars!"
+
