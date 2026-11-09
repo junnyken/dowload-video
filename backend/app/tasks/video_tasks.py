@@ -1269,7 +1269,7 @@ def worker_heartbeat_check(self):
 
 
 @celery_app.task(name="periodic_cleanup_downloads", bind=True)
-def periodic_cleanup_downloads(self):
+def periodic_cleanup_downloads(self, max_age_minutes: Optional[int] = None):
     """
     Scan downloads dir: delete files respecting retention_status.
     - DB-driven: delete jobs where file_expires_at has passed (Phase 11)
@@ -1290,7 +1290,8 @@ def periodic_cleanup_downloads(self):
     now_dt    = datetime.now(timezone.utc)
     # Keep files long enough for the shared YouTube cache (A2) to serve hot
     # videos for hours; disk still bounded by the MAX_GB LRU eviction below.
-    expiry    = int(os.getenv("LOCAL_FILE_TTL_SEC", "7200"))  # 2h default
+    expiry    = int(max_age_minutes * 60) if max_age_minutes is not None else int(os.getenv("LOCAL_FILE_TTL_SEC", "7200"))  # 2h default
+    flow_ttl  = int(max_age_minutes * 60) if max_age_minutes is not None else int(os.getenv("FLOW_CLEANUP_TTL_SEC", "1200"))
 
     # Record last cleanup time in Redis for health endpoint
     try:
@@ -1391,7 +1392,19 @@ def periodic_cleanup_downloads(self):
     except Exception as e:
         print(f"[Cron] Could not fetch pinned paths: {e}")
 
-    # Pass 1: delete expired files, skip pinned
+    def _entry_size(p: str) -> int:
+        if os.path.isdir(p):
+            total = 0
+            for root, _, files in os.walk(p):
+                for fn in files:
+                    try:
+                        total += os.path.getsize(os.path.join(root, fn))
+                    except OSError:
+                        pass
+            return total
+        return os.path.getsize(p)
+
+    # Pass 1: delete expired files, skip pinned and active flow_* jobs
     deleted = 0
     deleted_paths: list = []
     for item in os.listdir(DOWNLOAD_DIR):
@@ -1400,6 +1413,13 @@ def periodic_cleanup_downloads(self):
         if norm in pinned_paths:
             continue
         try:
+            if item.startswith("flow_") and os.path.isdir(path):
+                from app.api.flow_cleanup import _is_work_dir_expired
+                if _is_work_dir_expired(path, ttl_sec=flow_ttl):
+                    shutil.rmtree(path, ignore_errors=True)
+                    deleted += 1
+                    deleted_paths.append(norm)
+                continue
             if now - os.path.getmtime(path) > expiry:
                 shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
                 deleted += 1
@@ -1439,7 +1459,11 @@ def periodic_cleanup_downloads(self):
         if os.path.normpath(path) in pinned_paths:
             continue
         try:
-            all_files.append((os.path.getmtime(path), os.path.getsize(path), path))
+            if item.startswith("flow_") and os.path.isdir(path):
+                from app.api.flow_cleanup import _read_meta
+                if _read_meta(path).get("status") in ("queued", "running"):
+                    continue
+            all_files.append((os.path.getmtime(path), _entry_size(path), path))
         except Exception:
             pass
 

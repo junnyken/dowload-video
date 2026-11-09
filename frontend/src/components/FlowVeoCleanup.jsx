@@ -280,6 +280,7 @@ export default function FlowVeoCleanup() {
   // idle | uploading | preview | no-logo | processing | done | error
   const [step, setStep] = useState('idle');
   const [tempId, setTempId] = useState(null);
+  const [jobId, setJobId] = useState(null);
   const [videoInfo, setVideoInfo] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [preset, setPreset] = useState('lower-right');
@@ -295,9 +296,18 @@ export default function FlowVeoCleanup() {
   const [framePreviewUrl, setFramePreviewUrl] = useState(null);  // cleaned first-frame JPEG from /preview-frame
   const [previewInfo, setPreviewInfo] = useState(null);          // decision layer: strategy/quality/recommend_crop
   const [durationWarning, setDurationWarning] = useState(null);
+  const [jobProgress, setJobProgress] = useState(0);
+  const [jobStatus, setJobStatus] = useState(null);
   const lastRegionRef = useRef(null); // snapshot at process-start for done-step overlay
+  const pollTimerRef = useRef(null);
 
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    };
+  }, []);
 
   // Duration guard (free: 30s, pro: 2min)
   useEffect(() => {
@@ -319,6 +329,7 @@ export default function FlowVeoCleanup() {
   const reset = () => {
     setStep('idle');
     setTempId(null);
+    setJobId(null);
     setVideoInfo(null);
     setPreviewUrl(null);
     setResult(null);
@@ -331,6 +342,12 @@ export default function FlowVeoCleanup() {
     setDelogoVariant('standard');
     setFramePreviewUrl(null);
     setDurationWarning(null);
+    setJobProgress(0);
+    setJobStatus(null);
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
     lastRegionRef.current = null;
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -360,6 +377,7 @@ export default function FlowVeoCleanup() {
       }
       const data = await res.json();
       setTempId(data.temp_id);
+      setJobId(data.job_id || data.temp_id);
       setVideoInfo(data.video_info);
       setPreviewUrl(`${API_BASE}${data.preview_url}?t=${Date.now()}`);
       const suit = computeSuitability(data.video_info);
@@ -427,9 +445,98 @@ export default function FlowVeoCleanup() {
     }
   };
 
+  const stopPolling = () => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  };
+
+  const pollJobUntilDone = (jobId) => {
+    stopPolling();
+    pollTimerRef.current = setInterval(async () => {
+      try {
+        const stRes = await fetch(`${API_BASE}/api/v1/flow-cleanup/status/${jobId}`, withAuth({ method: 'GET' }));
+        if (!stRes.ok) {
+          const body = await stRes.json().catch(() => ({}));
+          throw new Error(errMessage(body.detail, t('errors.processFailed', { status: stRes.status })));
+        }
+        const st = await stRes.json();
+        setJobStatus(st.status || 'running');
+        setJobProgress(typeof st.progress === 'number' ? st.progress : 0);
+        if (st.status === 'done' || st.status === 'completed') {
+          stopPolling();
+          setResult(st);
+          setStep('done');
+        } else if (st.status === 'failed') {
+          stopPolling();
+          setError(st.error || t('errors.processFailed', { status: 500 }));
+          setStep('error');
+        } else if (st.status === 'cancelled') {
+          stopPolling();
+          setStep('preview');
+        }
+      } catch (pollErr) {
+        stopPolling();
+        setError(pollErr.message);
+        setStep('error');
+      }
+    }, 1500);
+  };
+
+  const handleCancelJob = async () => {
+    stopPolling();
+    const targetJobId = jobId || tempId;
+    if (targetJobId) {
+      try {
+        await fetch(`${API_BASE}/api/v1/flow-cleanup/cancel/${targetJobId}`, withAuth({ method: 'POST' }));
+      } catch (_) {}
+    }
+    setJobProgress(0);
+    setJobStatus('cancelled');
+    setStep('preview');
+  };
+
+  const handleRetryJob = async () => {
+    const targetJobId = jobId || tempId;
+    if (!targetJobId) {
+      reset();
+      return;
+    }
+    setStep('processing');
+    setError(null);
+    setJobProgress(0);
+    setJobStatus('queued');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/retry/${targetJobId}`, withAuth({ method: 'POST' }));
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(errMessage(body.detail, t('errors.processFailed', { status: res.status })));
+      }
+      const data = await res.json();
+      const nextJobId = data.job_id || targetJobId;
+      setJobId(nextJobId);
+      if (data.download_url || data.status === 'done' || data.status === 'completed') {
+        setJobProgress(100);
+        setJobStatus('done');
+        setResult(data);
+        setStep('done');
+      } else {
+        setJobProgress(typeof data.progress === 'number' ? data.progress : 0);
+        setJobStatus(data.status || 'queued');
+        pollJobUntilDone(nextJobId);
+      }
+    } catch (e) {
+      setError(e.message);
+      setStep('error');
+    }
+  };
+
   const handleProcess = async () => {
     setStep('processing');
     setError(null);
+    setJobProgress(0);
+    setJobStatus('queued');
     // Snapshot region now — used later by the done-step overlay
     lastRegionRef.current = region ? { ...region } : null;
     // Convert pct → pixels for backend
@@ -462,8 +569,18 @@ export default function FlowVeoCleanup() {
         throw new Error(errMessage(body.detail, t('errors.processFailed', { status: res.status })));
       }
       const data = await res.json();
-      setResult(data);
-      setStep('done');
+      const nextJobId = data.job_id || tempId;
+      setJobId(nextJobId);
+      if (data.download_url || data.status === 'done' || data.status === 'completed') {
+        setJobProgress(100);
+        setJobStatus('done');
+        setResult(data);
+        setStep('done');
+      } else {
+        setJobProgress(typeof data.progress === 'number' ? data.progress : 0);
+        setJobStatus(data.status || 'queued');
+        pollJobUntilDone(nextJobId);
+      }
     } catch (e) {
       setError(e.message);
       setStep('error');
@@ -1011,8 +1128,16 @@ export default function FlowVeoCleanup() {
       {step === 'processing' && (
         <div className="flex flex-col items-center gap-4 py-16">
           <Loader2 className="w-8 h-8 text-accent-text animate-spin" />
-          <div className="text-center">
-            <p className="text-sm font-semibold text-fg-2 mb-1">{t('processing.title')}</p>
+          <div className="text-center w-full max-w-xs space-y-2">
+            <p className="text-sm font-semibold text-fg-2 mb-1">
+              {t('processing.title')} {jobProgress > 0 ? `(${jobProgress}%)` : ''}
+            </p>
+            <div className="w-full h-2 rounded-full bg-surface-2 border border-line overflow-hidden">
+              <div
+                className="h-full bg-accent transition-all duration-300"
+                style={{ width: `${Math.max(5, jobProgress)}%` }}
+              />
+            </div>
             <p className="text-xs text-fg-muted">
               {method === 'natural'
                 ? t('processing.natural')
@@ -1021,6 +1146,13 @@ export default function FlowVeoCleanup() {
                 : t('processing.blur')}
               {' '}{t('processing.suffix')}
             </p>
+            <button
+              type="button"
+              onClick={handleCancelJob}
+              className="mt-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-fg-muted border border-line hover:text-fg hover:border-line-strong transition-all cursor-pointer"
+            >
+              Huỷ xử lý
+            </button>
           </div>
         </div>
       )}
@@ -1180,6 +1312,15 @@ export default function FlowVeoCleanup() {
           </div>
 
           <div className="space-y-2">
+            {previewUrl && tempId && (
+              <button
+                onClick={handleRetryJob}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-accent text-accent-fg shadow-md transition-all cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                {t('error.retry')}
+              </button>
+            )}
             {/* Primary: try different region/method if we have a preview (processing error),
                 or upload fresh if the error was during upload */}
             <button

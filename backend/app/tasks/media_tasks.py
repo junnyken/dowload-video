@@ -59,6 +59,25 @@ def merge_audio_video_task(cmd: List[str], timeout: int = 300) -> Dict[str, Any]
     return _run_ffmpeg(cmd, timeout)
 
 
+@celery_app.task(name="inpaint_logo_task", bind=True, soft_time_limit=300, time_limit=360)
+def inpaint_logo_task(self, temp_id: str, job_params: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute a Flow/Veo visible-logo cleanup job on the Celery 'media' queue."""
+    from celery.exceptions import SoftTimeLimitExceeded
+    from app.api.flow_cleanup import _execute_flow_cleanup_job, _mark_job_failed
+
+    try:
+        task_id = getattr(getattr(self, "request", None), "id", None)
+        return _execute_flow_cleanup_job(temp_id, job_params, celery_task_id=task_id)
+    except SoftTimeLimitExceeded as exc:
+        _mark_job_failed(
+            temp_id,
+            error="Quá thời gian xử lý video (timeout 300s).",
+            error_code="processing_timeout",
+            job_params=job_params,
+        )
+        raise exc
+
+
 def run_on_worker(task, cmd: List[str], timeout: int = 300) -> Dict[str, Any]:
     """Run an ffmpeg command on the media worker and wait for its result.
 

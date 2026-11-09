@@ -24,7 +24,7 @@ import os
 import queue as _queue
 import subprocess
 import threading
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -295,6 +295,7 @@ def process_video_natural(
     feather_px: int = 7,   # real background, never on the logo itself
     temporal: bool = True,
     n_neighbors: int = 2,
+    progress_cb: Optional[Callable[[int, int], Optional[bool]]] = None,
 ) -> dict:
     """
     Natural logo removal for video:
@@ -318,6 +319,7 @@ def process_video_natural(
     est_frames = (duration or 0.0) * (fps or 30.0)
     if est_frames > 1200:
         temporal = False
+    total_est = max(1, int(round(est_frames))) if est_frames > 0 else 100
 
     # Base natural patch (SHIFTMAP, once) — only safe to reuse on static clips.
     base_filled = None
@@ -330,9 +332,11 @@ def process_video_natural(
 
     frame_size = vw * vh * 3
     fps_str = f"{fps:.3f}"
+    output_path = os.path.abspath(output_path)
     video_only = output_path + ".noaudio.mp4"
     q: _queue.Queue = _queue.Queue(maxsize=8)
     reader_errors: list = []
+    reader_proc_ref: list = [None]
 
     def _reader() -> None:
         proc = subprocess.Popen(
@@ -340,6 +344,7 @@ def process_video_natural(
              "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{vw}x{vh}", "pipe:1"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         )
+        reader_proc_ref[0] = proc
         try:
             while True:
                 chunk = proc.stdout.read(frame_size)  # type: ignore[union-attr]
@@ -349,12 +354,16 @@ def process_video_natural(
         except Exception as exc:
             reader_errors.append(exc)
         finally:
-            proc.stdout.close()  # type: ignore[union-attr]
+            try:
+                proc.stdout.close()  # type: ignore[union-attr]
+            except Exception:
+                pass
             proc.wait()
             q.put(None)
 
     write_proc = subprocess.Popen(
-        ["ffmpeg", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24",
+        ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+         "-f", "rawvideo", "-pix_fmt", "bgr24",
          "-s", f"{vw}x{vh}", "-r", fps_str, "-i", "pipe:0",
          "-c:v", "libx264", "-crf", "18", "-preset", "fast",
          "-pix_fmt", "yuv420p", video_only],
@@ -375,6 +384,10 @@ def process_video_natural(
                 break
             frame = np.frombuffer(raw, dtype=np.uint8).reshape((vh, vw, 3)).copy()
             stats["total_frames"] += 1
+
+            if progress_cb is not None and (stats["total_frames"] == 1 or stats["total_frames"] % 5 == 0):
+                if progress_cb(stats["total_frames"], max(total_est, stats["total_frames"])) is False:
+                    raise RuntimeError("Job cancelled by user")
 
             if static_bg:
                 # Static background → reuse the one natural SHIFTMAP patch.
@@ -399,18 +412,44 @@ def process_video_natural(
     except Exception as exc:
         write_errors.append(exc)
     finally:
-        write_proc.stdin.close()  # type: ignore[union-attr]
+        try:
+            write_proc.stdin.close()  # type: ignore[union-attr]
+        except Exception:
+            pass
+        if write_errors:
+            if reader_proc_ref[0] is not None:
+                try:
+                    reader_proc_ref[0].terminate()
+                except Exception:
+                    pass
+            try:
+                while not q.empty():
+                    q.get_nowait()
+            except Exception:
+                pass
 
     reader_thread.join(timeout=30)
     write_proc.wait(timeout=300)
 
     if reader_errors:
+        if os.path.exists(video_only):
+            try:
+                os.remove(video_only)
+            except Exception:
+                pass
         raise reader_errors[0]
     if write_errors:
+        if os.path.exists(video_only):
+            try:
+                os.remove(video_only)
+            except Exception:
+                pass
         raise write_errors[0]
     if write_proc.returncode != 0:
         err = write_proc.stderr.read().decode(errors="replace")[-400:]  # type: ignore[union-attr]
         raise ValueError(f"Natural inpaint encode failed: {err}")
+    if not os.path.isfile(video_only) or os.path.getsize(video_only) == 0:
+        raise ValueError(f"Natural inpaint output missing: {video_only}")
 
     # Mux original audio back in.
     r2 = subprocess.run(

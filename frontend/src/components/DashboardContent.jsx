@@ -1571,8 +1571,30 @@ export default function DashboardContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       }));
-      const data = await safeJson(res);
+      let data = await safeJson(res);
       if (!res.ok) throw new Error(data.detail || t('errors.processFailed'));
+
+      if (!data.download_url && (data.status === 'queued' || data.status === 'running' || data.job_id)) {
+        const jobId = data.job_id || inpaintTempId;
+        for (let attempt = 0; attempt < 240; attempt += 1) {
+          await new Promise((r) => setTimeout(r, 1500));
+          const stRes = await fetch(`${API_BASE}/api/v1/flow-cleanup/status/${jobId}`, withAuth({ method: 'GET' }));
+          const stData = await safeJson(stRes);
+          if (!stRes.ok) throw new Error(stData.detail || t('errors.processFailed'));
+          if (stData.status === 'done' || stData.status === 'completed' || stData.download_url) {
+            data = stData;
+            break;
+          }
+          if (stData.status === 'failed') {
+            throw new Error(stData.error || stData.detail || t('errors.processFailed'));
+          }
+          if (stData.status === 'cancelled') {
+            setInpaintStep('preview');
+            return;
+          }
+        }
+      }
+
       if (data.success && data.download_url) {
         const ext = (data.cleaned_file_id || '').split('.').pop() || 'mp4';
         const fname = `${videoInfo?.title || 'cleaned'}_nologin.${ext}`;

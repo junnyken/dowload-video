@@ -3,8 +3,22 @@ dump.rdb
 redis.zip
 redis/
 
-# Python venv
+# Python / Node / Tooling
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+node_modules/
+venv/
+backend/venv/
 .venv/
+dist/
+.tools/
+
+# Benchmark videos (keep scripts, labels/*.json, results/*.md, results/*.json)
+benchmarks/watermark-input/*.mp4
+benchmarks/watermark-reference/*.mp4
+benchmarks/**/*.mp4
 
 # Downloaded media files
 backend/downloads/

@@ -392,3 +392,56 @@ class TestMaskGeometry:
         rng = np.random.default_rng(0)
         textured = rng.integers(40, 200, size=(H, W, 3), dtype=np.uint8)
         assert fi._region_is_clean(textured, cmask), "a good fill was rejected"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# E — extracted crop & blur standalone functions (Phase P1)
+# ═══════════════════════════════════════════════════════════════════
+
+class TestCropAndBlurEngines:
+
+    def test_compute_crop_rect_trims_logo_edge_with_even_dimensions(self):
+        # Lower-right logo: trims right and bottom edges, keeps even width/height
+        cx, cy, cw, ch = fc.compute_crop_rect(X, Y, W, H, VW, VH)
+        assert (cx, cy) == (0, 0)
+        assert cw <= X and ch <= Y
+        assert cw % 2 == 0 and ch % 2 == 0
+
+        # Upper-left logo: shifts cx, cy past the logo
+        cx2, cy2, cw2, ch2 = fc.compute_crop_rect(8, 8, 60, 30, VW, VH)
+        assert cx2 >= 8 + 60
+        assert cy2 >= 8 + 30
+        assert cw2 % 2 == 0 and ch2 % 2 == 0
+        assert cx2 + cw2 <= VW and cy2 + ch2 <= VH
+
+    def test_crop_video_trims_logo_and_outputs_playable_clip(self, static_clip):
+        out = os.path.join(static_clip["dir"], "cropped.mp4")
+        rect = fc._crop_video(static_clip["dirty"], out, X, Y, W, H, VW, VH)
+        assert os.path.isfile(out) and os.path.getsize(out) > 0
+        stream = _probe(out)
+        assert (stream["width"], stream["height"]) == (rect["cw"], rect["ch"])
+        assert stream["width"] < VW and stream["height"] < VH
+
+    def test_blur_video_blurs_only_region_and_preserves_dimensions(self, static_clip):
+        out = os.path.join(static_clip["dir"], "blurred.mp4")
+        # Expand box by 8px so boxblur straddles the sharp logo-to-background boundary
+        bx, by, bw, bh = X - 8, Y - 8, W + 16, H + 16
+        fc._blur_video(static_clip["dirty"], out, bx, by, bw, bh)
+        assert os.path.isfile(out) and os.path.getsize(out) > 0
+        stream = _probe(out)
+        assert (stream["width"], stream["height"]) == (VW, VH)
+        frames_out = _frames(out)
+        frames_in = _frames(static_clip["dirty"])
+        assert len(frames_out) == len(frames_in)
+        # Region inside (bx,by,bw,bh) must be blurred while outside stays untouched
+        inside_diff = float(np.abs(
+            frames_out[0][by:by + bh, bx:bx + bw].astype(np.float32)
+            - frames_in[0][by:by + bh, bx:bx + bw].astype(np.float32)
+        ).mean())
+        outside_diff = float(np.abs(
+            frames_out[0][:by - 10, :bx - 10].astype(np.float32)
+            - frames_in[0][:by - 10, :bx - 10].astype(np.float32)
+        ).mean())
+        assert inside_diff > 5.0, f"blur filter did not blur the logo region (MAE={inside_diff:.2f})"
+        assert outside_diff < 1.0, f"blur filter corrupted pixels outside region (MAE={outside_diff:.2f})"
+
