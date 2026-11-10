@@ -286,7 +286,7 @@ export default function BulkContent() {
   }, []);
 
   useEffect(() => {
-    fetch(`${API}/quota`)
+    fetch(`${API}/quota`, withAuth())
       .then(res => res.json())
       .then(data => {
         if (data.success) {
@@ -294,7 +294,7 @@ export default function BulkContent() {
         }
       })
       .catch(err => console.error(err));
-  }, []);
+  }, [withAuth, session?.access_token]);
 
   // ── URL Cleaner ───────────────────────────────────────────────────
   // Strips tracking query params from Douyin & TikTok profile/user URLs
@@ -382,7 +382,7 @@ export default function BulkContent() {
       setShowUpgradeModal(true);
       return;
     }
-    const isProTier = !!(quotaInfo && ['pro', 'vip', 'team', 'enterprise'].includes(quotaInfo.plan));
+    const isProTier = !!(quotaInfo && ['starter', 'pro', 'vip', 'team', 'enterprise', 'admin'].includes(quotaInfo.plan));
     if (urlList.length === 1 && isPreviewableChannel(urlList[0])) {
       const want = channelMode ? (parseInt(customMaxVideos) || parseInt(maxVideos) || 5) : (isProTier ? 'all' : 5);
       // Facebook (22/10): only the extension can list it — always the relay tab when signed in.
@@ -1016,7 +1016,7 @@ export default function BulkContent() {
             {t('subtitle')}
           </p>
         </div>
-        {quotaInfo && ['pro', 'vip'].includes(quotaInfo.plan) && (
+        {quotaInfo && ['starter', 'pro', 'vip', 'team', 'enterprise', 'admin'].includes(quotaInfo.plan) && (
           <div className="flex items-center gap-2 px-4 py-2 bg-accent-soft border border-accent/30 rounded-xl shadow-lg animate-in fade-in zoom-in slide-in-from-right-8 duration-500">
             <Crown className="w-4 h-4 text-accent-text" />
             <span className="text-xs font-bold text-accent-text uppercase tracking-wider">{quotaInfo.plan} ACTIVE</span>
@@ -1265,7 +1265,7 @@ export default function BulkContent() {
                   { value: 100, label: '100', proOnly: true },
                   { value: 200, label: '200', proOnly: true },
                 ].map(opt => {
-                  const isProTier = !!(quotaInfo && ['starter', 'pro', 'vip', 'team', 'enterprise'].includes(quotaInfo.plan));
+                  const isProTier = !!(quotaInfo && ['starter', 'pro', 'vip', 'team', 'enterprise', 'admin'].includes(quotaInfo.plan));
                   return (
                     <button
                       key={opt.value}

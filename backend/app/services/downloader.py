@@ -737,22 +737,32 @@ class _YTDLPLogger:
         self._verbose = verbose
         self.errors: list = sink if sink is not None else []
 
+    @staticmethod
+    def _safe_print(text: str) -> None:
+        try:
+            print(text)
+        except Exception:
+            try:
+                print(text.encode("ascii", errors="replace").decode("ascii"))
+            except Exception:
+                pass
+
     def debug(self, msg: str) -> None:
         if self._verbose and not msg.startswith("[debug] "):
-            print(f"[yt-dlp{self._prefix}] {msg}")
+            self._safe_print(f"[yt-dlp{self._prefix}] {msg}")
 
     def info(self, msg: str) -> None:
         if self._verbose:
-            print(f"[yt-dlp{self._prefix}] {msg}")
+            self._safe_print(f"[yt-dlp{self._prefix}] {msg}")
 
     def warning(self, msg: str) -> None:
-        print(f"[yt-dlp{self._prefix} WARN] {msg}")
+        self._safe_print(f"[yt-dlp{self._prefix} WARN] {msg}")
 
     def error(self, msg: str) -> None:
         text = str(msg).strip()
         if text:
             self.errors.append(text)
-        print(f"[yt-dlp{self._prefix} ERROR] {msg}")
+        self._safe_print(f"[yt-dlp{self._prefix} ERROR] {msg}")
 
 
 # Platforms whose extraction chatter is worth printing in full. YouTube has
@@ -1041,7 +1051,7 @@ CHANNEL_PATTERNS = [
     # Douyin user profiles
     r"douyin\.com/user/",
     r"iesdouyin\.com/share/user/",
-    r"youtube\.com/(c|channel|user|@)[\w.-]+",
+    r"youtube\.com/(c|channel|user|@)[^\s/?#]+",
     r"youtube\.com/playlist\?list=",
     r"youtu\.be/.*[?&]list=",
     # Instagram profiles (exclude single post/reel/tv but include stories & highlights as "channel" batch)
@@ -4968,11 +4978,12 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 100, min_vi
     # YouTube @handle URLs point to the channel home page which only shows
     # featured/recent videos (often just 2-5). Append /videos to force yt-dlp
     # to enumerate the full Videos tab with all uploads and pagination.
-    _is_yt_handle = re.search(r'youtube\.com/@[\w.-]+/?$', channel_url)
+    _is_yt_handle = re.search(r'youtube\.com/@[^\s/?#]+/?$', channel_url)
     if _is_yt_handle and not channel_url.rstrip('/').endswith('/videos'):
         channel_url = channel_url.rstrip('/') + '/videos'
         print(f"[Downloader] YouTube @handle → redirected to /videos tab: {channel_url}")
 
+    _is_yt_channel = "youtube.com" in channel_url.lower() or "youtu.be" in channel_url.lower()
     opts = _get_base_opts(channel_url, phase="metadata")
     # extract_flat gives us the video list without resolving each video's streams
     opts["extract_flat"] = "in_playlist"
@@ -4980,18 +4991,43 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 100, min_vi
     opts["noplaylist"] = False
     # Limit how many entries yt-dlp fetches to avoid excessive API calls
     # playlistend caps pagination so we don't fetch thousands of videos
-    opts["playlistend"] = max_videos + 50  # fetch extra to allow for view filtering
+    opts["playlistend"] = max_videos + (50 if min_views > 0 else 0)  # fetch extra only when view filtering is active
     opts["ignoreerrors"] = True  # skip private/deleted videos without crashing
     opts = _apply_tiktok_opts(opts, channel_url)
 
     info = None
-    try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            # process=True is CRITICAL: it triggers YouTube InnerTube continuation
-            # token pagination. Without it, only the first ~20 videos are returned.
-            info = ydl.extract_info(channel_url, download=False, process=True)
-    except Exception as extract_err:
-        print(f"[Downloader] Channel extraction error (continuing with partial): {extract_err}")
+    if _is_yt_channel:
+        # Try direct (no proxy, no cookies, no PO-token script) first for YouTube
+        # channel listing: extract_flat=in_playlist only reads the channel's public
+        # browse tab (~1.2s, zero proxy bandwidth), whereas residential proxy often
+        # fails with 407 TRAFFIC_EXHAUSTED or times out after 120s, and bgutilscript
+        # fails on non-ASCII @handles when writing JSON over cp1252 pipes.
+        direct_opts = {
+            k: v for k, v in opts.items()
+            if k not in ("proxy", "cookiefile", "cookiesfrombrowser", "extractor_args")
+        }
+        direct_opts["socket_timeout"] = 20
+        direct_opts["retries"] = 2
+        direct_opts["extractor_retries"] = 2
+        try:
+            with yt_dlp.YoutubeDL(direct_opts) as ydl:
+                info = ydl.extract_info(channel_url, download=False, process=True)
+            if info and info.get("entries"):
+                print(f"[Downloader] YouTube channel listed directly (no proxy): {channel_url}")
+            else:
+                info = None
+        except Exception as direct_err:
+            print(f"[Downloader] Direct YouTube channel listing failed ({direct_err}), trying with proxy opts")
+            info = None
+
+    if info is None:
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                # process=True is CRITICAL: it triggers YouTube InnerTube continuation
+                # token pagination. Without it, only the first ~20 videos are returned.
+                info = ydl.extract_info(channel_url, download=False, process=True)
+        except Exception as extract_err:
+            print(f"[Downloader] Channel extraction error (continuing with partial): {extract_err}")
 
     if info is None:
         import tempfile
@@ -5072,7 +5108,7 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 100, min_vi
             })
             total_queued += 1
 
-    print(f"[Downloader] Channel '{channel_title}': found {total_found} videos, queued {total_queued} (max={max_videos}, min_views={min_views})")
+    _YTDLPLogger._safe_print(f"[Downloader] Channel '{channel_title}': found {total_found} videos, queued {total_queued} (max={max_videos}, min_views={min_views})")
 
     return {
         "channel_title": channel_title,
