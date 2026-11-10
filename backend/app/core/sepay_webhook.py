@@ -248,8 +248,8 @@ def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
             if len(rows) == 1:
                 uid = str(rows[0]["id"])
                 s = plans.get_settings()
-                price_month = int(s.get("price_month_vnd") or 49_000)
-                price_year = int(s.get("price_year_vnd") or 399_000)
+                price_month = int(s.get("price_month_vnd") or 99_000)
+                price_year = int(s.get("price_year_vnd") or 890_000)
                 if amount >= price_year:
                     days, plan_id = 365, "pro_year"
                 elif amount >= price_month:

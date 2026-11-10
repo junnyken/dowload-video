@@ -495,7 +495,7 @@ export default function CheckoutPage() {
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-lg font-bold text-fg">{t('plan.title')}</h2>
               <div className="inline-flex rounded-xl border border-line bg-surface p-1">
-                {[['month', lang === 'en' ? 'Monthly' : 'Theo tháng'], ['year', lang === 'en' ? 'Yearly (-42%)' : 'Theo năm (-42%)']].map(([cyc, label]) => (
+                {[['month', lang === 'en' ? 'Monthly' : 'Theo tháng'], ['year', lang === 'en' ? 'Yearly (-35%)' : 'Theo năm (-35%)']].map(([cyc, label]) => (
                   <button
                     key={cyc}
                     type="button"
@@ -527,29 +527,41 @@ export default function CheckoutPage() {
                     regVnd: found?.regular_vnd ? formatVnd(found.regular_vnd) : null,
                   };
                 };
-                const st = findPlan(`starter_${billingCycle}`, billingCycle === 'year' ? 35 : 4.99, billingCycle === 'year' ? 690000 : 99000);
+                const st = findPlan(
+                  `starter_${billingCycle}`,
+                  billingCycle === 'year' ? 24.99 : (isFirstTime ? 1.99 : 2.99),
+                  billingCycle === 'year' ? 590000 : (isFirstTime ? 49000 : 69000),
+                );
                 const pr = findPlan(
                   `pro_${billingCycle}`,
-                  billingCycle === 'year' ? (isFirstTime ? 49 : 69) : (isFirstTime ? 6.99 : 9.99),
-                  billingCycle === 'year' ? (isFirstTime ? 990000 : 1490000) : (isFirstTime ? 149000 : 199000),
+                  billingCycle === 'year' ? 39 : (isFirstTime ? 3.99 : 5.99),
+                  billingCycle === 'year' ? 890000 : (isFirstTime ? 99000 : 139000),
                 );
                 const tm = findPlan(
                   `team_${billingCycle}`,
-                  billingCycle === 'year' ? (isFirstTime ? 149 : 219) : (isFirstTime ? 19.99 : 29.99),
-                  billingCycle === 'year' ? (isFirstTime ? 2990000 : 4490000) : (isFirstTime ? 449000 : 599000),
+                  billingCycle === 'year' ? 119 : (isFirstTime ? 11.99 : 15.99),
+                  billingCycle === 'year' ? 2790000 : (isFirstTime ? 279000 : 379000),
                 );
                 const perText = billingCycle === 'year' ? t('plan.year.period') : t('plan.month.period');
 
                 const tierCards = [
                   {
                     id: `starter_${billingCycle}`,
-                    name: lang === 'en' ? 'Starter (Basic)' : 'Gói Starter (Cơ bản)',
+                    name: lang === 'en'
+                      ? (isFirstTime && billingCycle === 'month' ? 'Starter — Creator Mini (1st Month Deal)' : 'Starter — Creator Mini')
+                      : (isFirstTime && billingCycle === 'month' ? 'Gói Starter — Creator Mini (Ưu đãi Tháng đầu)' : 'Gói Starter — Creator Mini'),
                     price: st.usd,
                     period: `${perText} (${st.vnd})`,
-                    desc: lang === 'en'
-                      ? '50 downloads/day · 1080p · Clip ≤ 2m · No Reup / No Hardsub / 0 API calls'
-                      : '50 lượt/ngày · 1080p · Cắt ≤ 2 phút · Không có Làm sạch Reup / Hardsub / 0 API',
-                    badge: null,
+                    desc: isFirstTime && billingCycle === 'month'
+                      ? (lang === 'en'
+                        ? `🎁 1st Month $1.99 (renews at ${st.regUsd || '$2.99'} / ${st.regVnd || '69.000₫'}) · 100 downloads/day · Unlock 4K + 20-link Batch (.ZIP) + Photo Album .ZIP + ASR 30m`
+                        : `🎁 Tháng đầu $1.99 / 49k (gia hạn ${st.regUsd || '$2.99'} / ${st.regVnd || '69.000₫'}) · 100 lượt/ngày · Mở khóa 4K + Batch 20 link (.ZIP) + Album ảnh .ZIP + ASR 30p`)
+                      : (lang === 'en'
+                        ? '100 downloads/day · Unlock 4K + 20-link Batch (.ZIP) + Photo Album .ZIP + AI ASR 30m/day (No AI Logo Removal / Reup / API)'
+                        : '100 lượt/ngày · Mở khóa 4K + Batch 20 link (.ZIP) + Album ảnh .ZIP + Phụ đề ASR 30p/ngày (Không gồm Xóa Logo AI / Reup / API)'),
+                    badge: isFirstTime && billingCycle === 'month'
+                      ? (lang === 'en' ? '1st Month -33% ($1.99)' : 'Tháng đầu -33% (49k)')
+                      : null,
                   },
                   {
                     id: `pro_${billingCycle}`,
@@ -560,13 +572,13 @@ export default function CheckoutPage() {
                     period: `${perText} (${pr.vnd})`,
                     desc: isFirstTime
                       ? (lang === 'en'
-                        ? `🎁 1st Purchase Deal (-30% off ${pr.regUsd || '$9.99'}) · 200 downloads/day · 4K/8K + Reup + Hardsub + 3,500 API calls · Renews at ${pr.regUsd || '$9.99'} (${pr.regVnd || '199.000₫'})`
-                        : `🎁 Ưu đãi mua lần đầu (-30% từ ${pr.regUsd || '$9.99'}) · 200 lượt/ngày · Full 4K/8K + Reup + Hardsub + 3.500 API · Gia hạn lần sau giá gốc ${pr.regUsd || '$9.99'} (${pr.regVnd || '199.000₫'})`)
+                        ? `🎁 1st Purchase Deal (-33% off ${pr.regUsd || '$5.99'}) · 300 downloads/day · Full 4K/8K + AI Logo Removal + Reup + Hardsub + 3,500 API calls · Renews at ${pr.regUsd || '$5.99'} (${pr.regVnd || '139.000₫'})`
+                        : `🎁 Ưu đãi mua lần đầu (-33% từ ${pr.regUsd || '$5.99'}) · 300 lượt/ngày · Full 4K/8K + Xóa Logo AI + Làm sạch Reup + Hardsub + 3.500 API · Gia hạn lần sau ${pr.regUsd || '$5.99'} (${pr.regVnd || '139.000₫'})`)
                       : (lang === 'en'
-                        ? '🔄 Standard Renewal Rate · 200 downloads/day · Full 4K/8K + Reup MD5 + Hardsub MP4 + 3,000 API calls/month'
-                        : '🔄 Giá gốc Gia hạn · 200 lượt/ngày · Full 4K/8K + Làm sạch Reup MD5 + Hardsub MP4 + 3.000 API/tháng'),
+                        ? '🔄 Standard Renewal Rate · 300 downloads/day · Full 4K/8K + AI Logo Removal + Reup MD5 + Hardsub MP4 + 3,000 API calls/month'
+                        : '🔄 Giá gốc Gia hạn · 300 lượt/ngày · Full 4K/8K + Xóa Logo AI + Làm sạch Reup MD5 + Hardsub MP4 + 3.000 API/tháng'),
                     badge: isFirstTime
-                      ? (lang === 'en' ? '⭐ 1st Time: -30% + 500 API Bonus' : '⭐ Mua lần đầu: -30% + Tặng 500 API')
+                      ? (lang === 'en' ? '⭐ 1st Time: -33% + 500 API Bonus' : '⭐ Mua lần đầu: -33% + Tặng 500 API')
                       : (lang === 'en' ? '🔄 Regular Renewal Price' : '🔄 Giá gốc Gia hạn'),
                   },
                   {
@@ -578,11 +590,11 @@ export default function CheckoutPage() {
                     period: `${perText} (${tm.vnd})`,
                     desc: isFirstTime
                       ? (lang === 'en'
-                        ? `500 downloads/day · 15,000 API calls/mo · 200 batch links · Renews at regular price ${tm.regUsd || '$29.99'} (${tm.regVnd || '599.000₫'})`
-                        : `500 lượt/ngày · 15.000 API/tháng · Tải 200 link/lần · Gia hạn lần sau về giá gốc ${tm.regUsd || '$29.99'} (${tm.regVnd || '599.000₫'})`)
+                        ? `1,000 downloads/day · 15,000 API calls/mo · 5 seats · 200 batch links · Renews at regular price ${tm.regUsd || '$15.99'} (${tm.regVnd || '379.000₫'})`
+                        : `1.000 lượt/ngày · 15.000 API/tháng · 5 thành viên · Tải 200 link/lần · Gia hạn lần sau về giá gốc ${tm.regUsd || '$15.99'} (${tm.regVnd || '379.000₫'})`)
                       : (lang === 'en'
-                        ? '🔄 Standard Renewal Rate · 500 downloads/day · 15,000 API calls/month · 200 batch links · Priority Queue'
-                        : '🔄 Giá gốc Gia hạn · 500 lượt/ngày · 15.000 lượt gọi API/tháng · Tải 200 link/lần · Hàng đợi ưu tiên'),
+                        ? '🔄 Standard Renewal Rate · 1,000 downloads/day · 15,000 API calls/month · 5 seats · 200 batch links · Priority Queue'
+                        : '🔄 Giá gốc Gia hạn · 1.000 lượt/ngày · 15.000 lượt gọi API/tháng · 5 thành viên · Tải 200 link/lần · Hàng đợi ưu tiên'),
                     badge: lang === 'en' ? 'High Volume API' : 'API Doanh nghiệp',
                   },
                 ];

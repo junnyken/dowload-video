@@ -30,7 +30,7 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
     "free": {
         "name": "Free",
         "limits": {
-            "downloads_per_day":     int(os.getenv("FREE_DAILY_LIMIT", "10")),
+            "downloads_per_day":     int(os.getenv("FREE_DAILY_LIMIT", "20")),
             "batch_size_max":        int(os.getenv("FREE_BATCH_LIMIT", "5")),
             "max_height":            1080,
             "history_days":          7,
@@ -61,9 +61,9 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
     "starter": {
         "name": "Starter",
         "limits": {
-            "downloads_per_day":     int(os.getenv("STARTER_DAILY_LIMIT", "50")),
+            "downloads_per_day":     int(os.getenv("STARTER_DAILY_LIMIT", "100")),
             "batch_size_max":        20,
-            "max_height":            1080,
+            "max_height":            2160,
             "history_days":          30,
             "history_limit":         100,
             "ai_analyses_per_day":   10,
@@ -72,7 +72,7 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
             "seats_max":             1,
         },
         "features": {
-            "bulk_zip":              False,
+            "bulk_zip":              True,
             "youtube_video":         True,
             "spotify_full":          False,
             "cloud_save":            True,
@@ -92,7 +92,7 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
     "pro": {
         "name": "Pro",
         "limits": {
-            "downloads_per_day":     int(os.getenv("PRO_DAILY_LIMIT", "200")),
+            "downloads_per_day":     int(os.getenv("PRO_DAILY_LIMIT", "300")),
             "batch_size_max":        100,
             "max_height":            2160,
             "history_days":          90,
@@ -123,7 +123,7 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
     "team": {
         "name": "Team",
         "limits": {
-            "downloads_per_day":     500,
+            "downloads_per_day":     int(os.getenv("TEAM_DAILY_LIMIT", "1000")),
             "batch_size_max":        200,
             "max_height":            2160,
             "history_days":          90,

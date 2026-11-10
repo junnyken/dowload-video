@@ -1,10 +1,10 @@
 {
   "tier": {
-    "guest": { "name": "Khách", "sub": "Chưa đăng nhập" },
-    "free": { "name": "Free", "sub": "Có tài khoản, miễn phí" },
-    "starter": { "name": "Starter", "sub": "50 lượt/ngày · Cơ bản 1080p · Không Reup & API" },
-    "pro": { "name": "Pro — Creator & Dev", "sub": "200 lượt/ngày · Full 4K/8K + Reup + Hardsub + 3.000 API" },
-    "team": { "name": "Team / Business API", "sub": "500 lượt/ngày · 15.000 API/tháng + Hàng đợi ưu tiên" }
+    "guest": { "name": "Khách", "sub": "Chưa đăng nhập · 5 lượt/ngày (2 YT)" },
+    "free": { "name": "Free", "sub": "Có tài khoản · 20 lượt/ngày (5 YT)" },
+    "starter": { "name": "Starter — Creator Mini", "sub": "100 lượt/ngày · Mở khóa 4K + Batch 20 link (.ZIP) + Album ảnh .ZIP + Phụ đề ASR" },
+    "pro": { "name": "Pro — Creator & Dev", "sub": "300 lượt/ngày · Full 4K/8K + Xóa Logo AI + Làm sạch Reup + Hardsub + 3.000 API" },
+    "team": { "name": "Team / Business API", "sub": "1.000 lượt/ngày · 15.000 API/tháng + 5 thành viên + Hàng đợi ưu tiên" }
   },
   "yes": "Có",
   "no": "Không có",

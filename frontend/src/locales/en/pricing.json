@@ -1,11 +1,11 @@
 {
   "_note": "wording: BA review — English drafted with AI",
   "tier": {
-    "guest": { "name": "Guest", "sub": "Not signed in" },
-    "free": { "name": "Free", "sub": "Free with an account" },
-    "starter": { "name": "Starter", "sub": "50/day · Basic 1080p · No Reup / No API" },
-    "pro": { "name": "Pro — Creator & Dev", "sub": "200/day · Full 4K/8K + Reup + Hardsub + 3,000 API" },
-    "team": { "name": "Team / Business API", "sub": "500/day · 15,000 API calls/mo + Priority SLA & Webhooks" }
+    "guest": { "name": "Guest", "sub": "Not signed in · 5/day (2 YT)" },
+    "free": { "name": "Free", "sub": "Free account · 20/day (5 YT)" },
+    "starter": { "name": "Starter — Creator Mini", "sub": "100/day · Unlock 4K + 20-link Batch (.ZIP) + Photo Album .ZIP + AI ASR" },
+    "pro": { "name": "Pro — Creator & Dev", "sub": "300/day · Full 4K/8K + AI Logo Removal + Reup + Hardsub + 3,000 API" },
+    "team": { "name": "Team / Business API", "sub": "1,000/day · 15,000 API calls/mo + 5 Seats + Priority SLA & Webhooks" }
   },
   "yes": "Yes",
   "no": "Not included",

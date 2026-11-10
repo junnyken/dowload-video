@@ -36,8 +36,8 @@ _STRIPE_SECRET_KEY        = os.getenv("STRIPE_SECRET_KEY", "")
 _STRIPE_WEBHOOK_SECRET    = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 _STRIPE_PRO_PRICE_ID      = os.getenv("STRIPE_PRO_PRICE_ID", "")
 _STRIPE_PRO_YEAR_PRICE_ID = os.getenv("STRIPE_PRO_YEAR_PRICE_ID", "")
-_STRIPE_PRO_MONTH_CENTS   = int(os.getenv("STRIPE_PRO_MONTH_USD_CENTS", "499") or 499)
-_STRIPE_PRO_YEAR_CENTS    = int(os.getenv("STRIPE_PRO_YEAR_USD_CENTS", "4900") or 4900)
+_STRIPE_PRO_MONTH_CENTS   = int(os.getenv("STRIPE_PRO_MONTH_USD_CENTS", "399") or 399)
+_STRIPE_PRO_YEAR_CENTS    = int(os.getenv("STRIPE_PRO_YEAR_USD_CENTS", "3900") or 3900)
 # FRONTEND_URL may list several comma-separated hosts (main.py allows all of
 # them for CORS); redirects go to the first one, the primary domain.
 _FRONTEND_URL          = (

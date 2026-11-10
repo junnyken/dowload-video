@@ -76,7 +76,9 @@ def test_no_unenforced_features_listed(rc):
 
 def test_default_prices(rc):
     s = plans.get_settings()
-    assert (s["price_month_vnd"], s["price_year_vnd"]) == (49_000, 399_000)
+    assert (s["price_month_vnd"], s["price_year_vnd"]) == (99_000, 890_000)
+    assert (s["starter_month_vnd"], s["starter_year_vnd"]) == (49_000, 590_000)
+    assert (s["team_month_vnd"], s["team_year_vnd"]) == (279_000, 2_790_000)
 
 
 def test_set_settings_and_payment_ready(rc):

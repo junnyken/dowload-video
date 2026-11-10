@@ -30,8 +30,10 @@ from typing import Dict, Any, Optional
 from app.core.database import get_supabase_client
 
 # ── Tier limits (env-tunable) ─────────────────────────────────────────
-FREE_DAILY_LIMIT  = int(os.getenv("FREE_DAILY_LIMIT",   "10"))
-PRO_DAILY_LIMIT   = int(os.getenv("PRO_DAILY_LIMIT",   "200"))
+FREE_DAILY_LIMIT  = int(os.getenv("FREE_DAILY_LIMIT",   "20"))
+STARTER_DAILY_LIMIT = int(os.getenv("STARTER_DAILY_LIMIT", "100"))
+PRO_DAILY_LIMIT   = int(os.getenv("PRO_DAILY_LIMIT",   "300"))
+TEAM_DAILY_LIMIT  = int(os.getenv("TEAM_DAILY_LIMIT",  "1000"))
 FREE_BATCH_LIMIT  = int(os.getenv("FREE_BATCH_LIMIT",    "5"))
 PRO_BATCH_LIMIT   = int(os.getenv("PRO_BATCH_LIMIT",   "100"))
 ANON_DAILY_LIMIT  = int(os.getenv("ANON_DAILY_LIMIT",    "5"))
@@ -58,11 +60,11 @@ TIER_PERMISSIONS: Dict[str, Dict[str, Any]] = {
         "api_key":              False,
     },
     "starter": {
-        "daily_limit":          int(os.getenv("STARTER_DAILY_LIMIT", "50")),
+        "daily_limit":          STARTER_DAILY_LIMIT,
         "batch_limit":          20,
-        "max_height":           1080,
+        "max_height":           2160,
         "youtube_download":     "video",
-        "bulk_zip":             False,
+        "bulk_zip":             True,
         "spotify_artist_full":  False,
         "cloud_save":           True,
         "chapters":             True,
@@ -86,7 +88,7 @@ TIER_PERMISSIONS: Dict[str, Dict[str, Any]] = {
         "api_key":              True,
     },
     "team": {
-        "daily_limit":          int(os.getenv("TEAM_DAILY_LIMIT", "500")),
+        "daily_limit":          TEAM_DAILY_LIMIT,
         "batch_limit":          200,
         "max_height":           2160,
         "youtube_download":     "video",
@@ -297,7 +299,7 @@ def platform_limit_anon() -> int:
 
 
 def platform_limit_user() -> int:
-    return _env_limit("PLATFORM_DAILY_LIMIT_USER", 10)
+    return _env_limit("PLATFORM_DAILY_LIMIT_USER", 20)
 
 
 def platform_limit_for_tier(tier: str) -> int:
