@@ -360,3 +360,83 @@ class TestP574UserJobLockQueueAndHeartbeat:
         flow_cleanup._check_user_concurrency(uid, tid_2)
         assert r.get(lkey) == tid_2
         r.delete(lkey)
+
+
+class TestP58PollingRateLimitFiveMinutes:
+    """Verify 1 user polling continuously for 5 minutes across status/track/preview-clip never hits HTTP 429."""
+
+    def test_five_minutes_continuous_polling_across_track_preview_clip_and_process_never_429(self, tmp_path, monkeypatch):
+        import time
+        from fastapi.testclient import TestClient
+
+        dl_dir = tmp_path / "dl_poll_p58"
+        dl_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(flow_cleanup, "_DOWNLOAD_DIR", str(dl_dir))
+
+        uid = "pro-poll-p58-user"
+        tid = "cc11223344556677889900aabbccdd99"
+        wdir = flow_cleanup._safe_work_dir(tid)
+        os.makedirs(wdir, exist_ok=True)
+        monkeypatch.setattr(flow_cleanup, "_REDIS_CLIENT", flow_cleanup._FALLBACK_REDIS)
+
+        from fastapi import Request
+
+        async def _fake_pro(request: Request):
+            request.state.flow_user_id = uid
+            return None
+
+        app.dependency_overrides[flow_cleanup._require_pro] = _fake_pro
+
+        # Enable the real SlowAPI rate limiter (using in-memory storage so the test is self-contained & deterministic)
+        lim = app.state.limiter
+        monkeypatch.setattr(lim, "enabled", True)
+        if getattr(lim, "_in_memory_fallback", None) is not None:
+            monkeypatch.setattr(lim, "_storage", lim._in_memory_fallback)
+        if getattr(lim, "_fallback_limiter", None) is not None:
+            monkeypatch.setattr(lim, "_limiter", lim._fallback_limiter)
+        try:
+            lim.reset()
+        except Exception:
+            pass
+
+        try:
+            client = TestClient(app)
+            headers = {"X-Forwarded-For": "198.51.100.88"}
+
+            # 1. Verify route limit on GET /api/v1/flow-cleanup/status/{job_id} is 600/minute
+            fn_key = f"{flow_cleanup.get_flow_cleanup_status.__module__}.{flow_cleanup.get_flow_cleanup_status.__name__}"
+            route_limits = lim._route_limits.get(fn_key, [])
+            assert any("600" in str(rl.limit) for rl in route_limits), (
+                f"Expected 600/minute rate limit on {fn_key}, found {[str(rl.limit) for rl in route_limits]}"
+            )
+
+            # 2. Simulate 5 minutes (300s) of continuous polling across all 3 polled task states:
+            #    - Track polling: 1000ms interval (60 req/min -> 100 requests for 100s)
+            #    - Preview-clip polling: 1000ms interval (60 req/min -> 100 requests for 100s)
+            #    - Process polling: 1500ms interval (40 req/min -> 100 requests for 150s)
+            #    Total = 300 continuous polls (>= 5 full minutes at the fastest 1000ms frontend poll interval)
+            #    fired in a single burst (strictly harder than 5 real-clock minutes).
+            for task_kind, n_polls in (("track", 100), ("preview_clip", 100), ("process", 100)):
+                flow_cleanup._write_meta(str(wdir), {
+                    "temp_id": tid,
+                    "job_id": tid,
+                    "created_at": time.time(),
+                    "owner_user_id": uid,
+                    "active_task_kind": task_kind,
+                    "status": "running",
+                    "progress": 42,
+                })
+                for i in range(n_polls):
+                    resp = client.get(f"/api/v1/flow-cleanup/status/{tid}", headers=headers)
+                    assert resp.status_code == 200, (
+                        f"Poll #{i + 1} for {task_kind} returned HTTP {resp.status_code} (expected 200): {resp.text}"
+                    )
+                    body = resp.json()
+                    assert body["status"] == "running"
+                    assert body["progress"] == 42
+        finally:
+            app.dependency_overrides.pop(flow_cleanup._require_pro, None)
+            try:
+                lim.reset()
+            except Exception:
+                pass

@@ -2378,6 +2378,7 @@ def process_flow_cleanup(
 
 
 @router.get("/status/{job_id}")
+@limiter.limit("600/minute")
 async def get_flow_cleanup_status(job_id: str, request: Request = None, _: None = Depends(_require_pro)):
     """Return status, progress (0-100), and result fields for a queued/running/done/failed/cancelled job."""
     work_dir = _safe_work_dir(job_id)
