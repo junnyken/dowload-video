@@ -47,8 +47,8 @@ export function buildPlanRows(tiers) {
     {
       key: 'photoCarousel', label: tp('rows.photoCarousel'),
       get: (t) => {
-        if (t.id === 'pro' || t.id === 'team') return tp('photoCarouselPro');
-        if (t.id === 'starter') return tp('photoCarouselStarter');
+        if (t.id === 'starter' || t.id === 'pro' || t.id === 'team') return tp('photoCarouselPro');
+        if (t.id === 'free') return tp('photoCarouselStarter');
         return false;
       },
     },

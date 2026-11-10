@@ -37,7 +37,7 @@
   },
   "trimGuest": "Short clips ≤ 5s",
   "trimFree": "Short clips ≤ 10s",
-  "trimStarter": "Up to 2 min (1080p)",
+  "trimStarter": "Up to 2 min (Full HD/4K)",
   "trimPro": "Up to 10 min (Full HD/4K)",
   "trimTeam": "Up to 30 min (4K/8K)",
   "reupPro": "Strip metadata + New MD5 + Mirror flip",

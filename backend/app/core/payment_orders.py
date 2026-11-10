@@ -92,30 +92,42 @@ def catalog(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
     s = get_settings()
     first_time = is_first_time_buyer(user_id)
 
-    st_m_cents = int(s.get("starter_month_usd_cents") or 499)
-    st_y_cents = int(s.get("starter_year_usd_cents") or 3500)
+    st_first_m_cents = int(s.get("starter_month_usd_cents") or 199)
+    st_first_y_cents = int(s.get("starter_year_usd_cents") or 2499)
+    st_first_m_vnd = int(s.get("starter_month_vnd") or 49_000)
+    st_first_y_vnd = int(s.get("starter_year_vnd") or 590_000)
 
-    # Pro: First-time ($6.99 / 149k, $49 / 990k) vs Regular Renewal ($9.99 / 199k, $69 / 1.490k)
-    pro_first_m_cents = int(s.get("price_month_usd_cents") or os.getenv("STRIPE_PRO_MONTH_USD_CENTS", "699") or 699)
-    pro_first_y_cents = int(s.get("price_year_usd_cents") or os.getenv("STRIPE_PRO_YEAR_USD_CENTS", "4900") or 4900)
-    pro_first_m_vnd = int(s.get("price_month_vnd") or 149_000)
-    pro_first_y_vnd = int(s.get("price_year_vnd") or 990_000)
+    st_reg_m_cents = int(s.get("starter_regular_month_usd_cents") or 299)
+    st_reg_y_cents = int(s.get("starter_regular_year_usd_cents") or 2499)
+    st_reg_m_vnd = int(s.get("starter_regular_month_vnd") or 69_000)
+    st_reg_y_vnd = int(s.get("starter_regular_year_vnd") or 590_000)
 
-    pro_reg_m_cents = int(s.get("regular_month_usd_cents") or 999)
-    pro_reg_y_cents = int(s.get("regular_year_usd_cents") or 6900)
-    pro_reg_m_vnd = int(s.get("regular_month_vnd") or 199_000)
-    pro_reg_y_vnd = int(s.get("regular_year_vnd") or 1_490_000)
+    # Pro: First-time ($3.99 / 99k, $39 / 890k) vs Regular Renewal ($5.99 / 139k, $39 / 890k)
+    pro_first_m_cents = int(s.get("price_month_usd_cents") or os.getenv("STRIPE_PRO_MONTH_USD_CENTS", "399") or 399)
+    pro_first_y_cents = int(s.get("price_year_usd_cents") or os.getenv("STRIPE_PRO_YEAR_USD_CENTS", "3900") or 3900)
+    pro_first_m_vnd = int(s.get("price_month_vnd") or 99_000)
+    pro_first_y_vnd = int(s.get("price_year_vnd") or 890_000)
 
-    # Team: First-time ($19.99 / 449k, $149 / 2.990k) vs Regular Renewal ($29.99 / 599k, $219 / 4.490k)
-    tm_first_m_cents = int(s.get("team_month_usd_cents") or 1999)
-    tm_first_y_cents = int(s.get("team_year_usd_cents") or 14900)
-    tm_first_m_vnd = int(s.get("team_month_vnd") or 449_000)
-    tm_first_y_vnd = int(s.get("team_year_vnd") or 2_990_000)
+    pro_reg_m_cents = int(s.get("regular_month_usd_cents") or 599)
+    pro_reg_y_cents = int(s.get("regular_year_usd_cents") or 3900)
+    pro_reg_m_vnd = int(s.get("regular_month_vnd") or 139_000)
+    pro_reg_y_vnd = int(s.get("regular_year_vnd") or 890_000)
 
-    tm_reg_m_cents = int(s.get("team_regular_month_usd_cents") or 2999)
-    tm_reg_y_cents = int(s.get("team_regular_year_usd_cents") or 21900)
-    tm_reg_m_vnd = int(s.get("team_regular_month_vnd") or 599_000)
-    tm_reg_y_vnd = int(s.get("team_regular_year_vnd") or 4_490_000)
+    # Team: First-time ($11.99 / 279k, $119 / 2.790k) vs Regular Renewal ($15.99 / 379k, $119 / 2.790k)
+    tm_first_m_cents = int(s.get("team_month_usd_cents") or 1199)
+    tm_first_y_cents = int(s.get("team_year_usd_cents") or 11900)
+    tm_first_m_vnd = int(s.get("team_month_vnd") or 279_000)
+    tm_first_y_vnd = int(s.get("team_year_vnd") or 2_790_000)
+
+    tm_reg_m_cents = int(s.get("team_regular_month_usd_cents") or 1599)
+    tm_reg_y_cents = int(s.get("team_regular_year_usd_cents") or 11900)
+    tm_reg_m_vnd = int(s.get("team_regular_month_vnd") or 379_000)
+    tm_reg_y_vnd = int(s.get("team_regular_year_vnd") or 2_790_000)
+
+    eff_st_m_cents = st_first_m_cents if first_time else st_reg_m_cents
+    eff_st_y_cents = st_first_y_cents if first_time else st_reg_y_cents
+    eff_st_m_vnd = st_first_m_vnd if first_time else st_reg_m_vnd
+    eff_st_y_vnd = st_first_y_vnd if first_time else st_reg_y_vnd
 
     eff_pro_m_cents = pro_first_m_cents if first_time else pro_reg_m_cents
     eff_pro_y_cents = pro_first_y_cents if first_time else pro_reg_y_cents
@@ -131,14 +143,17 @@ def catalog(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         {
             "id": "starter_month",
             "tier": "starter",
-            "name": "Starter Tháng",
-            "name_en": "Starter Monthly",
-            "vnd": s.get("starter_month_vnd", 99_000),
-            "usd_cents": st_m_cents,
-            "usd": round(st_m_cents / 100, 2),
-            "regular_vnd": s.get("starter_month_vnd", 99_000),
-            "regular_usd": round(st_m_cents / 100, 2),
-            "is_first_time_offer": False,
+            "name": "Starter Tháng" if first_time else "Starter Tháng (Gia hạn)",
+            "name_en": "Starter Monthly" if first_time else "Starter Monthly (Renewal)",
+            "vnd": eff_st_m_vnd,
+            "usd_cents": eff_st_m_cents,
+            "usd": round(eff_st_m_cents / 100, 2),
+            "first_time_vnd": st_first_m_vnd,
+            "first_time_usd": round(st_first_m_cents / 100, 2),
+            "regular_vnd": st_reg_m_vnd,
+            "regular_usd": round(st_reg_m_cents / 100, 2),
+            "original_usd": round(st_reg_m_cents / 100, 2),
+            "is_first_time_offer": first_time,
             "days": 30,
         },
         {
@@ -146,11 +161,14 @@ def catalog(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
             "tier": "starter",
             "name": "Starter Năm",
             "name_en": "Starter Yearly",
-            "vnd": s.get("starter_year_vnd", 690_000),
-            "usd_cents": st_y_cents,
-            "usd": round(st_y_cents / 100, 2),
-            "regular_vnd": s.get("starter_year_vnd", 690_000),
-            "regular_usd": round(st_y_cents / 100, 2),
+            "vnd": eff_st_y_vnd,
+            "usd_cents": eff_st_y_cents,
+            "usd": round(eff_st_y_cents / 100, 2),
+            "first_time_vnd": st_first_y_vnd,
+            "first_time_usd": round(st_first_y_cents / 100, 2),
+            "regular_vnd": st_reg_y_vnd,
+            "regular_usd": round(st_reg_y_cents / 100, 2),
+            "original_usd": 29.99,
             "is_first_time_offer": False,
             "days": 365,
         },

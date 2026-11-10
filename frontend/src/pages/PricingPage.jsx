@@ -140,11 +140,11 @@ function PaymentSection({ pay, pro, period, autoCheckout }) {
 
   const isFirstTime = me ? me.is_first_time_buyer !== false : true;
   const amount = period === 'year'
-    ? (isFirstTime ? pro.price_year_vnd : (pro.regular_year_vnd || 1490000))
-    : (isFirstTime ? pro.price_month_vnd : (pro.regular_month_vnd || 199000));
+    ? (isFirstTime ? pro.price_year_vnd : (pro.regular_year_vnd || 890000))
+    : (isFirstTime ? pro.price_month_vnd : (pro.regular_month_vnd || 139000));
   const usdAmount = period === 'year'
-    ? (isFirstTime ? (pro.price_year_usd || 49) : (pro.regular_year_usd || 69))
-    : (isFirstTime ? (pro.price_month_usd || 6.99) : (pro.regular_month_usd || 9.99));
+    ? (isFirstTime ? (pro.price_year_usd || 39) : (pro.regular_year_usd || 39))
+    : (isFirstTime ? (pro.price_month_usd || 3.99) : (pro.regular_month_usd || 5.99));
   const periodLabel = period === 'year' ? t('days365') : t('days30');
   const periodShort = period === 'year' ? t('perYear') : t('perMonth');
 
@@ -332,8 +332,8 @@ export default function PricingPage() {
                   </p>
                   <p className="text-[11px] text-fg-muted mt-0.5">
                     {lang === 'en'
-                      ? 'Guest: 5/day (1080p), 2 YT/day, No Batch · Free Account: 10/day (1080p), 5 YT/day, 5 links/batch (AI, Photo Album, Cloud Pin, Schedule & Watch locked)'
-                      : 'Khách: 5 lượt/ngày (1080p), 2 YT/ngày, Khóa Batch · Tài khoản Free: 10 lượt/ngày (1080p), 5 YT/ngày, 5 link/lần (Đã khóa AI, Album ảnh, Ghim Cloud & Hẹn giờ)'}
+                      ? 'Guest: 5/day (1080p), 2 YT/day, No Batch · Free Account: 20/day (1080p), 5 YT/day, 5 links/batch, single photo download'
+                      : 'Khách: 5 lượt/ngày (1080p), 2 YT/ngày, Khóa Batch · Tài khoản Free: 20 lượt/ngày (1080p), 5 YT/ngày, 5 link/lần, tải ảnh lẻ TikTok/Douyin'}
                   </p>
                 </div>
                 <span className="shrink-0 px-2.5 py-1 rounded-lg bg-canvas border border-line text-[11px] font-bold text-fg-2">
@@ -346,8 +346,8 @@ export default function PricingPage() {
                   <p className="text-xs font-extrabold text-accent-text">
                     {isFirstTime
                       ? (lang === 'en'
-                        ? '🎁 FIRST-TIME BUYER OFFER: Save 30% + 500 Bonus API Calls'
-                        : '🎁 ƯU ĐÃI MUA LẦN ĐẦU: Giảm 30% + Tặng thêm 500 lượt gọi API')
+                        ? '🎁 FIRST-TIME BUYER OFFER: Save up to 33% + 500 Bonus API Calls'
+                        : '🎁 ƯU ĐÃI MUA LẦN ĐẦU: Giảm tới 33% + Tặng thêm 500 lượt gọi API')
                       : (lang === 'en'
                         ? '🔄 SUBSCRIPTION RENEWAL: Standard Regular Pricing'
                         : '🔄 CHẾ ĐỘ GIA HẠN: Áp dụng Bảng giá gốc tiêu chuẩn')}
@@ -355,8 +355,8 @@ export default function PricingPage() {
                   <p className="text-[11px] text-fg-2 mt-0.5">
                     {isFirstTime
                       ? (lang === 'en'
-                        ? '1st purchase only: $6.99/mo + 500 Bonus API calls. Subsequent renewals are billed at regular price ($9.99/mo).'
-                        : 'Chỉ áp dụng mua lần đầu: $6.99/tháng + 500 API. Gia hạn lần sau sẽ tính về giá gốc ($9.99 / 199.000₫).')
+                        ? '1st purchase deal: Starter $1.99/mo (renews $2.99) · Pro $3.99/mo + 500 API (renews $5.99) · Team $11.99/mo (renews $15.99).'
+                        : 'Ưu đãi tháng đầu: Starter $1.99 / 49k (gia hạn $2.99 / 69k) · Pro $3.99 / 99k + 500 API (gia hạn $5.99 / 139k) · Team $11.99 / 279k (gia hạn $15.99 / 379k).')
                       : (lang === 'en'
                         ? 'You have already claimed your first-time welcome discount. Renewals extend your current expiry date at regular rates.'
                         : 'Tài khoản của bạn đã sử dụng ưu đãi mua lần đầu. Gia hạn tiếp theo sẽ cộng nối thời hạn theo giá gốc.')}
@@ -375,7 +375,7 @@ export default function PricingPage() {
 
             <div className="flex justify-center mb-8">
               <div role="group" aria-label={t('billingCycle')} className="inline-flex rounded-xl border border-line bg-surface p-1">
-                {[['month', t('monthly')], ['year', `${t('yearly')} (-42%)`]].map(([k, l]) => (
+                {[['month', t('monthly')], ['year', `${t('yearly')} (-35%)`]].map(([k, l]) => (
                   <button key={k} type="button" aria-pressed={period === k} onClick={() => setPeriod(k)}
                     className={`px-4 py-2 min-h-10 rounded-lg text-sm font-medium transition-colors ${period === k ? 'bg-accent text-accent-fg' : 'text-fg-2 hover:text-fg'}`}>
                     {l}{/* wording: BA review */}
@@ -395,15 +395,15 @@ export default function PricingPage() {
                 const isStarter = tier.id === 'starter';
                 const isPaid = isPro || isTeam || isStarter;
                 const regVnd = period === 'year'
-                  ? (tier.regular_year_vnd || (isTeam ? 4490000 : isPro ? 1490000 : tier.price_year_vnd))
-                  : (tier.regular_month_vnd || (isTeam ? 599000 : isPro ? 199000 : tier.price_month_vnd));
+                  ? (tier.regular_year_vnd || (isTeam ? 2790000 : isPro ? 890000 : 590000))
+                  : (tier.regular_month_vnd || (isTeam ? 379000 : isPro ? 139000 : 69000));
                 const regUsd = period === 'year'
-                  ? (tier.regular_year_usd || (isTeam ? 219 : isPro ? 69 : 35))
-                  : (tier.regular_month_usd || (isTeam ? 29.99 : isPro ? 9.99 : 4.99));
+                  ? (tier.regular_year_usd || (isTeam ? 119 : isPro ? 39 : 24.99))
+                  : (tier.regular_month_usd || (isTeam ? 15.99 : isPro ? 5.99 : 2.99));
                 const firstVnd = period === 'year' ? tier.price_year_vnd : tier.price_month_vnd;
                 const firstUsd = period === 'year'
-                  ? (tier.price_year_usd || (isTeam ? 149 : isStarter ? 35 : 49))
-                  : (tier.price_month_usd || (isTeam ? 19.99 : isStarter ? 4.99 : 6.99));
+                  ? (tier.price_year_usd || (isTeam ? 119 : isStarter ? 24.99 : 39))
+                  : (tier.price_month_usd || (isTeam ? 11.99 : isStarter ? 1.99 : 3.99));
                 const priceVnd = isPaid ? (isFirstTime ? firstVnd : regVnd) : 0;
                 const priceUsd = isPaid ? (isFirstTime ? firstUsd : regUsd) : 0;
                 const origUsd = isFirstTime ? (period === 'year' ? tier.original_year_usd : tier.original_month_usd) : null;
@@ -424,7 +424,7 @@ export default function PricingPage() {
                         )}
                         {isStarter && (
                           <span className="px-2 py-0.5 rounded-full bg-surface border border-line text-fg-muted text-[10px] font-semibold">
-                            {lang === 'en' ? 'Basic' : 'Cơ bản'}
+                            {lang === 'en' ? 'Creator Mini' : 'Creator Mini'}
                           </span>
                         )}
                         {isTeam && (
@@ -442,17 +442,19 @@ export default function PricingPage() {
                         ) : null}
                         <span className="text-3xl font-extrabold text-fg">{formatUsd(priceUsd)}</span>
                         {isPaid && <span className="text-sm text-fg-muted"> / {period === 'year' ? t('perYear') : t('perMonth')}</span>}
-                        {isPro && isFirstTime && period === 'month' && (
+                        {isPaid && isFirstTime && period === 'month' && (
                           <span className="ml-1 px-1.5 py-0.5 rounded bg-success/15 text-success text-[10px] font-bold">
-                            {lang === 'en' ? '-30% 1st Purchase' : 'Giảm 30% Lần đầu'}
+                            {lang === 'en'
+                              ? (isPro ? '-33% 1st Month' : isStarter ? '-33% 1st Month' : '-25% 1st Month')
+                              : (isPro ? 'Giảm 33% Tháng đầu' : isStarter ? 'Giảm 33% Tháng đầu' : 'Giảm 25% Tháng đầu')}
                           </span>
                         )}
                         {isPro && isFirstTime && period === 'year' && (
                           <span className="ml-1 px-1.5 py-0.5 rounded bg-success/15 text-success text-[10px] font-bold">
-                            {lang === 'en' ? '1st Year Deal ($4.08/mo)' : 'Ưu đãi Năm đầu ($4.08/th)'}
+                            {lang === 'en' ? 'Best Deal ($3.25/mo)' : 'Tiết kiệm nhất ($3.25/th)'}
                           </span>
                         )}
-                        {(isPro || isTeam) && !isFirstTime && (
+                        {isPaid && !isFirstTime && (
                           <span className="ml-1 px-1.5 py-0.5 rounded bg-surface border border-line text-fg-muted text-[10px] font-semibold">
                             {lang === 'en' ? 'Regular Renewal' : 'Giá gốc Gia hạn'}
                           </span>
@@ -465,11 +467,11 @@ export default function PricingPage() {
                             : '🎁 Tặng +500 lượt gọi API cho lần mua đầu (Tổng 3.500 lượt)'}
                         </p>
                       )}
-                      {(isPro || isTeam) && isFirstTime && (
+                      {isPaid && isFirstTime && period === 'month' && (
                         <p className="text-[10px] text-fg-muted mt-0.5">
                           {lang === 'en'
-                            ? `⚡ 1st purchase only · Renews at $${regUsd}/${period === 'year' ? 'yr' : 'mo'} (${formatVnd(regVnd)})`
-                            : `⚡ Chỉ áp dụng mua lần đầu · Gia hạn lần sau giá gốc $${regUsd} (${formatVnd(regVnd)})`}
+                            ? `⚡ 1st month promo · Renews at $${regUsd}/mo (${formatVnd(regVnd)})`
+                            : `⚡ Ưu đãi tháng đầu · Gia hạn từ tháng sau $${regUsd} (${formatVnd(regVnd)})`}
                         </p>
                       )}
                       {isPaid && priceVnd > 0 && (
@@ -491,13 +493,15 @@ export default function PricingPage() {
                           <Zap className="w-3.5 h-3.5" />
                           {isPro
                             ? (isFirstTime
-                              ? (lang === 'en' ? 'Get Pro (1st Time Deal) →' : 'Mua Gói Pro (Giá Ưu đãi Lần đầu) →')
-                              : (lang === 'en' ? 'Renew Pro Plan →' : 'Gia hạn Gói Pro (Giá gốc) →'))
+                              ? (lang === 'en' ? 'Get Pro ($3.99 1st Mo) →' : 'Mua Gói Pro ($3.99 / 99k Tháng đầu) →')
+                              : (lang === 'en' ? 'Renew Pro Plan →' : 'Gia hạn Gói Pro →'))
                             : isTeam
                               ? (isFirstTime
-                                ? (lang === 'en' ? 'Get Team / 15k API →' : 'Mua Gói Team (15.000 API) →')
-                                : (lang === 'en' ? 'Renew Team Plan →' : 'Gia hạn Gói Team (Giá gốc) →'))
-                              : (lang === 'en' ? 'Choose Starter →' : 'Chọn Gói Starter →')}
+                                ? (lang === 'en' ? 'Get Team ($11.99 1st Mo) →' : 'Mua Gói Team (15.000 API) →')
+                                : (lang === 'en' ? 'Renew Team Plan →' : 'Gia hạn Gói Team →'))
+                              : (isFirstTime
+                                ? (lang === 'en' ? 'Get Starter ($1.99 1st Mo) →' : 'Chọn Starter ($1.99 / 49k Tháng đầu) →')
+                                : (lang === 'en' ? 'Renew Starter Plan →' : 'Gia hạn Gói Starter →'))}
                         </a>
                       )}
                     </div>
@@ -532,8 +536,8 @@ export default function PricingPage() {
                   </h3>
                   <p className="text-xs sm:text-sm text-fg-muted max-w-2xl">
                     {lang === 'en'
-                      ? 'API Keys are exclusively unlocked on paid plans. Pro ($6.99/mo) includes 3,000 API calls/month & up to 3 self-service keys. Need higher volume? Team/Business unlocks 15,000+ calls/month or subscribe on RapidAPI Hub.'
-                      : 'Quyền tạo và sử dụng API Key chỉ mở khóa từ gói trả phí. Gói Pro ($6.99/tháng) tặng kèm 3.000 lượt gọi API/tháng & tối đa 3 API key cá nhân. Gói Team/Doanh nghiệp hỗ trợ 15.000+ lượt/tháng hoặc đăng ký qua chợ RapidAPI.'}
+                      ? 'API Keys are exclusively unlocked on paid plans. Pro ($3.99 1st mo / $5.99 regular) includes 3,000 API calls/month & up to 3 self-service keys. Need higher volume? Team/Business ($11.99 1st mo / $15.99 regular) unlocks 15,000+ calls/month or subscribe on RapidAPI Hub.'
+                      : 'Quyền tạo và sử dụng API Key chỉ mở khóa từ gói trả phí. Gói Pro ($3.99 tháng đầu / $5.99 gia hạn) tặng kèm 3.000 lượt gọi API/tháng & tối đa 3 API key cá nhân. Gói Team/Doanh nghiệp ($11.99 tháng đầu / $15.99 gia hạn) hỗ trợ 15.000+ lượt/tháng hoặc đăng ký qua chợ RapidAPI.'}
                   </p>
                 </div>
                 <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">

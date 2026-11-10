@@ -18,7 +18,7 @@ from app.core.redis_client import get_redis
 
 YT_QUOTA_ANON = int(os.getenv("YT_QUOTA_ANON", "2"))
 YT_QUOTA_USER = int(os.getenv("YT_QUOTA_USER", "5"))
-YT_QUOTA_STARTER = int(os.getenv("YT_QUOTA_STARTER", "15"))
+YT_QUOTA_STARTER = int(os.getenv("YT_QUOTA_STARTER", "20"))
 YT_QUOTA_PRO = int(os.getenv("YT_QUOTA_PRO", "50"))
 YT_QUOTA_TEAM = int(os.getenv("YT_QUOTA_TEAM", "150"))
 YT_QUOTA_ENTERPRISE = int(os.getenv("YT_QUOTA_ENTERPRISE", "500"))

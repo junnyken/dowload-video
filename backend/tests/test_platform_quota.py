@@ -101,17 +101,18 @@ class TestLimits:
         assert quotas.platform_limit(QuotaRequester(REQ_ADMIN)) == -1
 
     def test_paid_tiers_keep_their_larger_limits_and_never_get_less_than_free(self, monkeypatch):
-        assert quotas.platform_limit(user(tier="pro")) == 100       # PRO_DAILY_LIMIT
-        assert quotas.platform_limit(user(tier="team")) == 500      # TEAM_DAILY_LIMIT
+        assert quotas.platform_limit(user(tier="starter")) == 100   # STARTER_DAILY_LIMIT
+        assert quotas.platform_limit(user(tier="pro")) == 300       # PRO_DAILY_LIMIT
+        assert quotas.platform_limit(user(tier="team")) == 1000     # TEAM_DAILY_LIMIT
         assert quotas.platform_limit(user(tier="enterprise")) == -1
-        monkeypatch.setenv("PLATFORM_DAILY_LIMIT_USER", "250")
-        assert quotas.platform_limit(user(tier="pro")) == 250       # never below free
-        assert quotas.platform_limit(user(tier="team")) == 500
+        monkeypatch.setenv("PLATFORM_DAILY_LIMIT_USER", "350")
+        assert quotas.platform_limit(user(tier="pro")) == 350       # never below free
+        assert quotas.platform_limit(user(tier="team")) == 1000
 
     def test_free_daily_limit_1000_on_prod_does_not_leak_into_per_platform(self, monkeypatch):
         monkeypatch.setitem(quotas.TIER_PERMISSIONS["free"], "daily_limit", 1000)
         assert quotas.platform_limit(user()) == 20
-        assert quotas.platform_limit(user(tier="pro")) == 100
+        assert quotas.platform_limit(user(tier="pro")) == 300
 
     def test_unknown_tier_is_free(self):
         assert quotas.platform_limit(user(tier="admin")) == 20

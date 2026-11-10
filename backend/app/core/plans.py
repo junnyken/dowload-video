@@ -20,20 +20,20 @@ import re
 from typing import Any, Dict, List, Optional
 
 SETTINGS_KEY = "plans:settings"
-DEFAULT_STARTER_MONTH_USD_CENTS = 499  # $4.99/month (Decoy tier)
-DEFAULT_STARTER_YEAR_USD_CENTS = 3500  # $35.00/year (~$2.91/mo)
-DEFAULT_STARTER_MONTH_VND = 99_000     # ~99,000₫/month
-DEFAULT_STARTER_YEAR_VND = 690_000     # ~690,000₫/year
+DEFAULT_STARTER_MONTH_USD_CENTS = 199  # $1.99/month first-time (regular $2.99)
+DEFAULT_STARTER_YEAR_USD_CENTS = 2499  # $24.99/year (~$2.08/mo)
+DEFAULT_STARTER_MONTH_VND = 49_000     # ~49,000₫/month first-time (regular 69,000₫)
+DEFAULT_STARTER_YEAR_VND = 590_000     # ~590,000₫/year
 
-DEFAULT_PRICE_MONTH_USD_CENTS = 699    # $6.99/month (Target tier — original anchor $9.99)
-DEFAULT_PRICE_YEAR_USD_CENTS = 4900    # $49.00/year (~$4.08/mo, save 42%)
-DEFAULT_PRICE_MONTH_VND = 149_000      # ~149,000₫/month
-DEFAULT_PRICE_YEAR_VND = 990_000       # ~990,000₫/year
+DEFAULT_PRICE_MONTH_USD_CENTS = 399    # $3.99/month first-time (regular $5.99)
+DEFAULT_PRICE_YEAR_USD_CENTS = 3900    # $39.00/year (~$3.25/mo)
+DEFAULT_PRICE_MONTH_VND = 99_000       # ~99,000₫/month first-time (regular 139,000₫)
+DEFAULT_PRICE_YEAR_VND = 890_000       # ~890,000₫/year
 
-DEFAULT_TEAM_MONTH_USD_CENTS = 1999    # $19.99/month (High anchor — original $29.99)
-DEFAULT_TEAM_YEAR_USD_CENTS = 14900    # $149.00/year (~$12.41/mo)
-DEFAULT_TEAM_MONTH_VND = 449_000       # ~449,000₫/month
-DEFAULT_TEAM_YEAR_VND = 2_990_000      # ~2,990,000₫/year
+DEFAULT_TEAM_MONTH_USD_CENTS = 1199    # $11.99/month first-time (regular $15.99)
+DEFAULT_TEAM_YEAR_USD_CENTS = 11900    # $119.00/year (~$9.91/mo)
+DEFAULT_TEAM_MONTH_VND = 279_000       # ~279,000₫/month first-time (regular 379,000₫)
+DEFAULT_TEAM_YEAR_VND = 2_790_000      # ~2,790,000₫/year
 
 DEFAULT_API_CALLS_MONTH_PRO = 3_000    # Paid Pro tier: 3,000 API calls/month (+500 first-time bonus)
 DEFAULT_API_CALLS_MONTH_TEAM = 15_000  # Paid Team tier: 15,000 API calls/month
@@ -100,6 +100,8 @@ def get_settings() -> Dict[str, Any]:
     }
     try:
         raw = _r().hgetall(SETTINGS_KEY) or {}
+        if isinstance(raw, list):
+            raw = dict(zip(raw[0::2], raw[1::2]))
     except Exception:  # noqa: BLE001
         return out
     for k, v in raw.items():
@@ -233,7 +235,7 @@ def build_plans() -> Dict[str, Any]:
             "smart_analysis_max_min": 0,
             "asr_minutes_per_day": 0,
             "translate_cues_per_day": 0,
-            "photo_carousel": False,
+            "photo_carousel": "single",
             "watch_sources": 0,
             "watch_interval_h": None,
             "pins": _PIN_LIMITS["free"], "pin_days": _PIN_DAYS["free"],
@@ -245,17 +247,23 @@ def build_plans() -> Dict[str, Any]:
             "id": "starter",
             "daily_downloads": q.platform_limit_for_tier("starter"),
             "max_height": starter_p["max_height"],
-            "youtube_per_day": 15, "youtube_max_height": 1080,
+            "youtube_per_day": yt_quota.YT_QUOTA_STARTER, "youtube_max_height": yt_pro_h,
             "batch_links": starter_p["batch_limit"],
-            "zip": False, "api_key": False,
+            "zip": bool(starter_p["bulk_zip"]), "api_key": False,
             "api_calls_per_month": 0,
+            "original_month_usd": 2.99,
+            "original_year_usd": 29.99,
+            "regular_month_usd": 2.99,
+            "regular_year_usd": 24.99,
+            "regular_month_vnd": 69_000,
+            "regular_year_vnd": 590_000,
             "spotify_artist_tracks": sp.ARTIST_CAP_TOP_TRACKS,
             "smart_analysis_per_day": 10,
             "smart_analysis_max_min": 30,
             "asr_minutes_per_day": 30,
             "translate_cues_per_day": 2000,
-            "photo_carousel": "single",
-            "watch_sources": watch.get("starter_sources", 2) if watch.get("available") else 2,
+            "photo_carousel": "zip",
+            "watch_sources": watch.get("starter_sources", 2) if watch.get("available") else 0,
             "watch_interval_h": watch.get("free_interval_h") or 24,
             "pins": 10, "pin_days": 14,
             "schedules": 5, "playlists": 5,
@@ -272,19 +280,19 @@ def build_plans() -> Dict[str, Any]:
             "zip": bool(pro_p["bulk_zip"]), "api_key": bool(pro_p["api_key"]),
             "api_calls_per_month": s["api_calls_month_pro"] if pro_p["api_key"] else 0,
             "first_time_bonus_api": 500,
-            "original_month_usd": 9.99,
-            "original_year_usd": 69.00,
-            "regular_month_usd": 9.99,
-            "regular_year_usd": 69.00,
-            "regular_month_vnd": 199_000,
-            "regular_year_vnd": 1_490_000,
+            "original_month_usd": 5.99,
+            "original_year_usd": 49.00,
+            "regular_month_usd": 5.99,
+            "regular_year_usd": 39.00,
+            "regular_month_vnd": 139_000,
+            "regular_year_vnd": 890_000,
             "spotify_artist_tracks": sp.ARTIST_CAP_ALL_TRACKS,
             "smart_analysis_per_day": sa.pro_limit(),
             "smart_analysis_max_min": int(sa.MAX_DURATION_PRO_S // 60),
             "asr_minutes_per_day": 120,
             "translate_cues_per_day": 6000,
             "photo_carousel": "zip",
-            "watch_sources": watch.get("pro_sources", 30) if watch.get("available") else 30,
+            "watch_sources": watch.get("pro_sources", 30) if watch.get("available") else 0,
             "watch_interval_h": watch.get("pro_interval_h") or 6,
             "watch_instagram": bool(watch.get("available") and watch.get("instagram_pro")),
             "watch_webhook": bool(watch.get("available")),
@@ -302,22 +310,22 @@ def build_plans() -> Dict[str, Any]:
             "batch_links": team_p["batch_limit"],
             "zip": True, "api_key": True,
             "api_calls_per_month": s["api_calls_month_team"],
-            "original_month_usd": 29.99,
-            "original_year_usd": 219.00,
-            "regular_month_usd": 29.99,
-            "regular_year_usd": 219.00,
-            "regular_month_vnd": 599_000,
-            "regular_year_vnd": 4_490_000,
+            "original_month_usd": 15.99,
+            "original_year_usd": 149.00,
+            "regular_month_usd": 15.99,
+            "regular_year_usd": 119.00,
+            "regular_month_vnd": 379_000,
+            "regular_year_vnd": 2_790_000,
             "spotify_artist_tracks": sp.ARTIST_CAP_ALL_TRACKS,
             "smart_analysis_per_day": 200,
             "smart_analysis_max_min": 180,
             "asr_minutes_per_day": 300,
             "translate_cues_per_day": 15000,
             "photo_carousel": "zip",
-            "watch_sources": (watch.get("pro_sources", 30) * 3) if watch.get("available") else 90,
+            "watch_sources": (watch.get("pro_sources", 30) * 3) if watch.get("available") else 0,
             "watch_interval_h": watch.get("pro_interval_h") or 6,
-            "watch_instagram": True,
-            "watch_webhook": True,
+            "watch_instagram": bool(watch.get("available")),
+            "watch_webhook": bool(watch.get("available")),
             "pins": -1, "pin_days": 90,
             "schedules": -1, "playlists": -1,
             "price_month_vnd": s["team_month_vnd"], "price_year_vnd": s["team_year_vnd"],

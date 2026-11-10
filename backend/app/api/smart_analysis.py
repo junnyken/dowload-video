@@ -46,7 +46,7 @@ def anon_limit() -> int:
 
 
 def free_limit() -> int:
-    return FREE_ANALYSES_PER_DAY
+    return max(FREE_ANALYSES_PER_DAY, anon_limit())
 
 
 def starter_limit() -> int:
