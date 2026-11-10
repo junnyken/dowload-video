@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # deploy-vps.sh — Deploy VidGrab lên Oracle VPS (dowloadvideo.io.vn)
 # Usage:
-#   ./deploy-vps.sh                  # full deploy with pre/post checks
-#   ./deploy-vps.sh --dry-run        # pre-checks only, no deploy
-#   ./deploy-vps.sh --no-build       # docker compose up -d without rebuild
-#   ./deploy-vps.sh --skip-pre-check # emergency deploy, skip pre-checks
+#   ./deploy-vps.sh --confirm-migration-044                  # full deploy with pre/post checks
+#   ./deploy-vps.sh --confirm-migration-044 --dry-run        # pre-checks only, no deploy
+#   ./deploy-vps.sh --confirm-migration-044 --no-build       # docker compose up -d without rebuild
+#   ./deploy-vps.sh --confirm-migration-044 --skip-pre-check # emergency deploy, skip pre-checks
 set -euo pipefail
 
 # ── Colours ────────────────────────────────────────────────────────────────────
@@ -22,12 +22,14 @@ DEPLOYMENTS_LOG="$REPO_DIR/deployments.json"
 DRY_RUN=false
 NO_BUILD=false
 SKIP_PRE_CHECK=false
+CONFIRM_MIGRATION_044=false
 
 for arg in "$@"; do
   case "$arg" in
-    --dry-run)        DRY_RUN=true ;;
-    --no-build)       NO_BUILD=true ;;
-    --skip-pre-check) SKIP_PRE_CHECK=true ;;
+    --dry-run)                DRY_RUN=true ;;
+    --no-build)               NO_BUILD=true ;;
+    --skip-pre-check)         SKIP_PRE_CHECK=true ;;
+    --confirm-migration-044)  CONFIRM_MIGRATION_044=true ;;
     *) echo -e "${RED}Unknown flag: $arg${RESET}"; exit 1 ;;
   esac
 done
@@ -56,6 +58,98 @@ PRE_CHECK_RESULT="skipped"
 POST_CHECK_RESULT="skipped"
 
 log "Git: ${BOLD}${GIT_BRANCH}${RESET} @ ${GIT_SHA}"
+
+# ── Step 0: Mandatory preflight guard (migration 044 + read-only VPS .env check) ──
+if ! $CONFIRM_MIGRATION_044; then
+  err "Thiếu cờ xác nhận migration: --confirm-migration-044"
+  echo ""
+  echo -e "${RED}${BOLD}DEPLOY DỪNG LẠI — Chưa xác nhận đã chạy migration 044 trên Supabase.${RESET}"
+  echo -e "  1. Chạy file: ${CYAN}database/migrations/044_flow_consent_audit_logs.sql${RESET} trên Supabase SQL Editor / psql."
+  echo -e "  2. Chạy lại lệnh deploy kèm cờ xác nhận:"
+  echo -e "     ${CYAN}./deploy-vps.sh --confirm-migration-044${RESET}"
+  exit 1
+fi
+ok "Đã xác nhận cờ --confirm-migration-044"
+
+log "Checking VPS .env preflight requirements (read-only via SSH)..."
+if ! ssh "$VPS" "VPS_DIR='$VPS_DIR' bash -s" << 'PREFLIGHT_EOF'
+set -euo pipefail
+ENV_FILE="${VPS_DIR}/.env"
+if [ ! -f "$ENV_FILE" ]; then
+  echo "[PREFLIGHT FAIL] Không tìm thấy file $ENV_FILE trên VPS."
+  exit 1
+fi
+
+# Helper: read raw value of KEY from .env (last occurrence, strip CR and surrounding quotes)
+get_env_val() {
+  local key="$1"
+  local line
+  line=$(grep -E "^[[:space:]]*${key}=" "$ENV_FILE" | tail -n 1 || true)
+  if [ -z "$line" ]; then
+    echo ""
+    return
+  fi
+  local val="${line#*=}"
+  val="${val%$'\r'}"
+  val="${val#\"}"
+  val="${val%\"}"
+  val="${val#\'}"
+  val="${val%\'}"
+  printf '%s' "$val"
+}
+
+FAIL=0
+
+# 1. FLOW_URL_SIGNING_SECRET >= 32 chars (NEVER print the value)
+FLOW_SECRET=$(get_env_val "FLOW_URL_SIGNING_SECRET")
+FLOW_LEN=${#FLOW_SECRET}
+if [ "$FLOW_LEN" -ge 32 ]; then
+  echo "[PREFLIGHT OK]   FLOW_URL_SIGNING_SECRET: có (độ dài = ${FLOW_LEN} ký tự)"
+elif [ "$FLOW_LEN" -gt 0 ]; then
+  echo "[PREFLIGHT FAIL] FLOW_URL_SIGNING_SECRET: có nhưng quá ngắn (độ dài = ${FLOW_LEN} < 32 ký tự)"
+  FAIL=1
+else
+  echo "[PREFLIGHT FAIL] FLOW_URL_SIGNING_SECRET: không (độ dài = 0)"
+  FAIL=1
+fi
+
+# 2. VITE_FEATURE_LOGO_INPAINT must NOT be true or 1
+VITE_FLAG=$(get_env_val "VITE_FEATURE_LOGO_INPAINT")
+VITE_FLAG_LOWER=$(printf '%s' "$VITE_FLAG" | tr '[:upper:]' '[:lower:]')
+if [ "$VITE_FLAG_LOWER" = "true" ] || [ "$VITE_FLAG_LOWER" = "1" ]; then
+  echo "[PREFLIGHT FAIL] VITE_FEATURE_LOGO_INPAINT đang bật (=${VITE_FLAG}) trong $ENV_FILE — phải tắt hoặc xoá trước khi deploy."
+  FAIL=1
+else
+  echo "[PREFLIGHT OK]   VITE_FEATURE_LOGO_INPAINT: không bật"
+fi
+
+# 3. REDIS_URL (or CELERY_BROKER_URL / REDIS_HOST) must exist
+REDIS_VAL=$(get_env_val "REDIS_URL")
+REDIS_VAR_NAME="REDIS_URL"
+if [ -z "$REDIS_VAL" ]; then
+  REDIS_VAL=$(get_env_val "CELERY_BROKER_URL")
+  REDIS_VAR_NAME="CELERY_BROKER_URL"
+fi
+if [ -z "$REDIS_VAL" ]; then
+  REDIS_VAL=$(get_env_val "REDIS_HOST")
+  REDIS_VAR_NAME="REDIS_HOST"
+fi
+if [ -n "$REDIS_VAL" ]; then
+  echo "[PREFLIGHT OK]   Redis biến môi trường (${REDIS_VAR_NAME}): có"
+else
+  echo "[PREFLIGHT FAIL] Thiếu cấu hình Redis (REDIS_URL / CELERY_BROKER_URL / REDIS_HOST) trong $ENV_FILE"
+  FAIL=1
+fi
+
+exit "$FAIL"
+PREFLIGHT_EOF
+then
+  err "VPS .env preflight check FAILED"
+  echo ""
+  echo -e "${RED}${BOLD}DEPLOY DỪNG LẠI — Điều kiện .env trên VPS chưa đạt yêu cầu an toàn.${RESET}"
+  exit 1
+fi
+ok "VPS .env preflight checks passed"
 
 # ── Step 1: Pre-deploy checks ──────────────────────────────────────────────────
 if $SKIP_PRE_CHECK; then
