@@ -10,15 +10,20 @@ Tài liệu này quy định trình tự triển khai (deploy), lệnh kiểm tr
 
 Triển khai theo đúng thứ tự **4 bước tuần tự** dưới đây để không làm gián đoạn dịch vụ tải video hiện có và không gây lỗi khởi động trên môi trường `ENV=production`:
 
-### Bước 1 — Chạy Migration `044` trên Supabase Database
-Bảng `flow_consent_audit_logs` lưu vết xác nhận quyền sử dụng/chỉnh sửa video của người dùng (`user_id`, `temp_id`, `action`, `created_at`) kèm Row Level Security (RLS). Script thiết kế idempotent (`IF NOT EXISTS`), chạy lại nhiều lần không gây lỗi.
+### Bước 1 — Chạy Migration `044` và `045` trên Supabase Database (BẮT BUỘC TRƯỚC KHI DEPLOY)
+- **Migration `044`** (`database/migrations/044_flow_consent_audit_logs.sql`): Bảng `flow_consent_audit_logs` lưu vết xác nhận quyền sử dụng/chỉnh sửa video của người dùng (`user_id`, `temp_id`, `action`, `created_at`) kèm Row Level Security (RLS).
+- **Migration `045`** (`database/migrations/045_payment_webhook_events.sql`): Bảng `payment_webhook_events` lưu các sự kiện webhook thanh toán cần kiểm tra thủ công (`needs_manual_review`), kèm index và RLS chỉ cho phép `service_role`. **Bắt buộc phải chạy Migration `045` trên Supabase TRƯỚC khi deploy nhánh `fix/payments-safety`.**
+
+Cả hai script đều thiết kế idempotent (`IF NOT EXISTS`), chạy lại nhiều lần không gây lỗi:
 
 ```bash
 # Cách 1: Chạy qua psql với chuỗi kết nối Supabase Postgres (Transaction/Session pooler hoặc Direct)
 psql "$SUPABASE_DB_URL" -f database/migrations/044_flow_consent_audit_logs.sql
+psql "$SUPABASE_DB_URL" -f database/migrations/045_payment_webhook_events.sql
 
 # Cách 2: Chạy qua Supabase CLI
 supabase db execute --file database/migrations/044_flow_consent_audit_logs.sql
+supabase db execute --file database/migrations/045_payment_webhook_events.sql
 ```
 
 ### Bước 2 — Cấu hình biến môi trường trên VPS (`.env`)
@@ -68,9 +73,10 @@ Thực hiện lần lượt 6 bước kiểm tra dưới đây ngay sau khi depl
 ### 2.1. Kiểm tra bảng Database & RLS trên Supabase
 ```bash
 psql "$SUPABASE_DB_URL" -c "\d flow_consent_audit_logs"
-psql "$SUPABASE_DB_URL" -c "SELECT policyname, tablename, cmd FROM pg_policies WHERE tablename = 'flow_consent_audit_logs';"
+psql "$SUPABASE_DB_URL" -c "\d payment_webhook_events"
+psql "$SUPABASE_DB_URL" -c "SELECT policyname, tablename, roles, cmd FROM pg_policies WHERE tablename IN ('flow_consent_audit_logs', 'payment_webhook_events');"
 ```
-- **Kỳ vọng**: Bảng có các cột `id, user_id, temp_id, action, created_at` và policy `flow_consent_audit_logs_own` đang bật.
+- **Kỳ vọng**: Bảng `flow_consent_audit_logs` có policy `flow_consent_audit_logs_own`; bảng `payment_webhook_events` có các cột `id, provider, provider_event_id, event_type, user_id, order_id, current_tier, target_tier, amount, status, reason, raw_payload, created_at` và policy `payment_webhook_events_service_role_only` chỉ mở cho `{service_role}`.
 
 ### 2.2. Kiểm tra `backend` khởi động thành công với `FLOW_URL_SIGNING_SECRET`
 ```bash

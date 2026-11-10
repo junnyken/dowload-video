@@ -325,7 +325,7 @@ async def test_stripe_webhook_blocks_downgrade_and_records_manual_review(fake_en
 
 
 @pytest.mark.anyio
-async def test_paypal_webhook_and_ipn_block_downgrade_and_record_manual_review(fake_env, monkeypatch, caplog):
+async def test_paypal_webhook_blocks_downgrade_and_records_manual_review(fake_env, monkeypatch, caplog):
     db, _rc = fake_env
     from app.api import payments as payments_api
 
@@ -362,7 +362,6 @@ async def test_paypal_webhook_and_ipn_block_downgrade_and_record_manual_review(f
 
     monkeypatch.setattr("httpx.AsyncClient", _FakeAsyncClient)
 
-    # 1. PayPal REST webhook with starter_month while user has active Pro
     event_payload = {
         "id": "WH-PP-DOWN-1",
         "event_type": "CHECKOUT.ORDER.COMPLETED",
@@ -381,22 +380,113 @@ async def test_paypal_webhook_and_ipn_block_downgrade_and_record_manual_review(f
     assert res_wh["status"] == "needs_manual_review"
     assert db.tables["profiles"][0]["tier"] == "pro"
     assert db.tables["profiles"][0]["subscription_expiry"] == orig_exp
+    assert db.tables["user_usage"][0]["plan"] == "pro"
+    assert len(db.tables["payment_webhook_events"]) == 1
+    ev = db.tables["payment_webhook_events"][0]
+    assert ev["provider"] == "paypal"
+    assert ev["status"] == "needs_manual_review"
+    assert ev["current_tier"] == "pro"
+    assert ev["target_tier"] == "starter"
 
-    # 2. PayPal IPN with starter_month while user has active Pro
+
+@pytest.mark.anyio
+async def test_paypal_ipn_blocks_downgrade_and_records_manual_review(fake_env, monkeypatch, caplog):
+    db, _rc = fake_env
+    from app.api import payments as payments_api
+
+    uid = "44444444-5555-6666-7777-888888888889"
+    orig_exp = _future_iso(25)
+    db.tables["profiles"].append({
+        "id": uid,
+        "tier": "pro",
+        "billing_status": "manual",
+        "subscription_expiry": orig_exp,
+    })
+    db.tables["user_usage"].append({"user_id": uid, "plan": "pro"})
+
+    class _FakeVerifyResp:
+        status_code = 200
+        text = "VERIFIED"
+
+    class _FakeAsyncClient:
+        def __init__(self, *a, **kw):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *a):
+            pass
+        async def post(self, *a, **kw):
+            return _FakeVerifyResp()
+
+    monkeypatch.setattr("httpx.AsyncClient", _FakeAsyncClient)
+    monkeypatch.setenv("PAYPAL_ME_URL", "merchant@test.com")
+
     ipn_body = f"payment_status=Completed&txn_id=TXN_DOWN_1&receiver_email=merchant@test.com&custom={uid}::starter_month&mc_gross=1.99"
     req_ipn = MagicMock()
     req_ipn.body = AsyncMock(return_value=ipn_body.encode("utf-8"))
-    monkeypatch.setenv("PAYPAL_ME_URL", "merchant@test.com")
 
-    res_ipn = await payments_api.paypal_ipn(req_ipn)
+    with caplog.at_level(logging.WARNING):
+        res_ipn = await payments_api.paypal_ipn(req_ipn)
+
     assert res_ipn["status"] == "needs_manual_review"
     assert db.tables["profiles"][0]["tier"] == "pro"
     assert db.tables["profiles"][0]["subscription_expiry"] == orig_exp
-    assert len(db.tables["payment_webhook_events"]) == 2
-    assert all(e["status"] == "needs_manual_review" for e in db.tables["payment_webhook_events"])
+    assert db.tables["user_usage"][0]["plan"] == "pro"
+    assert len(db.tables["payment_webhook_events"]) == 1
+    ev = db.tables["payment_webhook_events"][0]
+    assert ev["provider"] == "paypal_ipn"
+    assert ev["status"] == "needs_manual_review"
+    assert ev["current_tier"] == "pro"
+    assert ev["target_tier"] == "starter"
 
 
-def test_sepay_webhook_blocks_downgrade_and_records_manual_review(fake_env, monkeypatch, caplog):
+def test_sepay_case_a_blocks_downgrade_and_records_manual_review(fake_env, monkeypatch, caplog):
+    """SePay Case A (VG... code): when user has active Pro and transfers exact Starter price (69,000 VND renewal),
+    it must block downgrade, keep tier & subscription_expiry unchanged, and record needs_manual_review."""
+    db, rc = fake_env
+    from app.core import sepay_webhook
+
+    uid = "55555555-6666-7777-8888-000000000001"
+    rc.set(f"first_purchase_done:{uid}", "1")
+    orig_exp = _future_iso(20)
+    db.tables["profiles"].append({
+        "id": uid,
+        "tier": "pro",
+        "billing_status": "manual",
+        "subscription_expiry": orig_exp,
+    })
+    db.tables["user_usage"].append({"user_id": uid, "plan": "pro"})
+
+    secret = "sepay_test_secret"
+    monkeypatch.setenv("SEPAY_WEBHOOK_SECRET", secret)
+    body = json.dumps({
+        "id": 90000,
+        "gateway": "ACB",
+        "transferType": "in",
+        "transferAmount": 69000,  # Exact Starter renewal price in user's catalog
+        "content": "Chuyen khoan VG55555555",
+    }).encode("utf-8")
+    ts = str(int(time.time()))
+    sig = hmac.new(secret.encode("utf-8"), f"{ts}.".encode("utf-8") + body, hashlib.sha256).hexdigest()
+    headers = {"x-sepay-signature": f"sha256={sig}", "x-sepay-timestamp": ts}
+
+    with caplog.at_level(logging.WARNING):
+        res = sepay_webhook.handle(body, headers)
+
+    assert res["action"] == "needs_manual_review"
+    assert res["status"] == "needs_manual_review"
+    assert db.tables["profiles"][0]["tier"] == "pro"
+    assert db.tables["profiles"][0]["subscription_expiry"] == orig_exp
+    assert db.tables["user_usage"][0]["plan"] == "pro"
+    assert len(db.tables["payment_webhook_events"]) == 1
+    ev = db.tables["payment_webhook_events"][0]
+    assert ev["provider"] == "sepay"
+    assert ev["status"] == "needs_manual_review"
+    assert ev["current_tier"] == "pro"
+    assert ev["target_tier"] == "starter"
+
+
+def test_sepay_case_b_and_activate_order_block_downgrade_and_record_manual_review(fake_env, monkeypatch, caplog):
     db, _rc = fake_env
     from app.core import sepay_webhook
 
@@ -447,6 +537,90 @@ def test_sepay_webhook_blocks_downgrade_and_records_manual_review(fake_env, monk
     assert db.tables["payment_orders"][0]["status"] == "needs_manual_review"
     assert len(db.tables["payment_webhook_events"]) == 1
     assert db.tables["payment_webhook_events"][0]["status"] == "needs_manual_review"
+
+
+@pytest.mark.anyio
+async def test_renew_same_tier_while_active_extends_days_normally(fake_env, monkeypatch):
+    """Buying the SAME tier while active (renewal) must create order and add days on top of existing expiry."""
+    db, _rc = fake_env
+    from app.api import checkout as checkout_api
+    from app.core import payment_orders as po
+    from app.core import payments_auto, plans
+
+    monkeypatch.setattr(payments_auto, "visible", lambda _req=None: True)
+    plans.set_settings({"bank_name": "ACB", "bank_account": "12345678", "bank_holder": "TEST"})
+
+    uid = "66666666-7777-8888-9999-000000000001"
+    orig_dt = datetime.now(timezone.utc) + timedelta(days=20)
+    orig_exp = orig_dt.isoformat()
+    db.tables["profiles"].append({
+        "id": uid,
+        "tier": "pro",
+        "billing_status": "manual",
+        "subscription_expiry": orig_exp,
+    })
+    db.tables["user_usage"].append({"user_id": uid, "plan": "pro"})
+
+    req = MagicMock()
+    res = await checkout_api.create_order(
+        payload=checkout_api.CreateOrderRequest(plan="pro_month", rail="vietqr"),
+        request=req,
+        user={"id": uid, "email": "renew@test.com"},
+    )
+    order = res["order"]
+    assert order["status"] == "pending"
+
+    ok, msg = po.activate_order(order["id"], paid_amount=order["amount"], provider_ref="sepay_renew_1")
+    assert ok is True and msg == "activated"
+
+    prof = db.tables["profiles"][0]
+    assert prof["tier"] == "pro"
+    new_dt = datetime.fromisoformat(prof["subscription_expiry"].replace("Z", "+00:00"))
+    # Expiry must be extended by 30 days on top of the existing 20-day expiry (~50 days from now)
+    assert (new_dt - orig_dt).total_seconds() >= 29.9 * 86400
+    assert db.tables["payment_webhook_events"] == []
+
+
+@pytest.mark.anyio
+async def test_upgrade_to_higher_tier_while_active_upgrades_normally(fake_env, monkeypatch):
+    """Buying a HIGHER tier (e.g. Starter -> Pro or Pro -> Team) while active must succeed and upgrade tier."""
+    db, _rc = fake_env
+    from app.api import checkout as checkout_api
+    from app.core import payment_orders as po
+    from app.core import payments_auto, plans
+
+    monkeypatch.setattr(payments_auto, "visible", lambda _req=None: True)
+    plans.set_settings({"bank_name": "ACB", "bank_account": "12345678", "bank_holder": "TEST"})
+
+    uid = "66666666-7777-8888-9999-000000000002"
+    orig_dt = datetime.now(timezone.utc) + timedelta(days=15)
+    db.tables["profiles"].append({
+        "id": uid,
+        "tier": "starter",
+        "billing_status": "manual",
+        "subscription_expiry": orig_dt.isoformat(),
+    })
+    db.tables["user_usage"].append({"user_id": uid, "plan": "starter"})
+
+    req = MagicMock()
+    res = await checkout_api.create_order(
+        payload=checkout_api.CreateOrderRequest(plan="team_month", rail="vietqr"),
+        request=req,
+        user={"id": uid, "email": "upgrade@test.com"},
+    )
+    order = res["order"]
+    assert order["status"] == "pending"
+
+    ok, msg = po.activate_order(order["id"], paid_amount=order["amount"], provider_ref="sepay_upg_1")
+    assert ok is True and msg == "activated"
+
+    prof = db.tables["profiles"][0]
+    assert prof["tier"] == "team"
+    assert prof["plan_name"] == "Team"
+    assert db.tables["user_usage"][0]["plan"] == "team"
+    new_dt = datetime.fromisoformat(prof["subscription_expiry"].replace("Z", "+00:00"))
+    assert new_dt > orig_dt
+    assert db.tables["payment_webhook_events"] == []
 
 
 # ══════════════════════════════════════════════════════════════════════
