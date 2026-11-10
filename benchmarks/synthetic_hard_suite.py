@@ -556,21 +556,45 @@ def run_all_p5_4_suites() -> Dict[str, Any]:
     res_real_tune = evaluate_suite("real-tune", REAL_TUNE_DIR, None, REAL_LABELS_DIR)
     res_real_heldout = evaluate_suite("real-heldout", REAL_HELDOUT_DIR, None, REAL_LABELS_DIR)
 
-    # Also export contact sheets for the existing synthetic videos if not yet exported
-    for in_p in sorted(INPUT_DIR.glob("*.mp4"))[:6]:
-        cs_file = CONTACT_SHEETS_DIR / f"synthetic_{in_p.stem}_contact.jpg"
-        if not cs_file.exists():
-            ref_p = REF_DIR / in_p.name
-            if ref_p.exists():
-                in_f = decode_frames(in_p, 640, 360)
-                ref_f = decode_frames(ref_p, 640, 360)
-                export_contact_sheet(in_f, ref_f, cs_file, title=f"synthetic: {in_p.stem}")
-
-    combined = {
+    combined: Dict[str, Any] = {
         "synthetic_hard": res_hard,
         "real_tune": res_real_tune,
         "real_heldout": res_real_heldout,
     }
+    latest_p = RESULTS_DIR / "latest_metrics.json"
+    if latest_p.exists():
+        try:
+            syn_rows = json.loads(latest_p.read_text(encoding="utf-8"))
+            pos_syn = [r for r in syn_rows if r.get("has_watermark") and r.get("ssim_in_mask") is not None]
+            static_syn = [r for r in pos_syn if r.get("region_type") == "static"]
+            combined["synthetic"] = {
+                "suite": "synthetic",
+                "status": "completed",
+                "video_count": len(syn_rows),
+                "positive_with_ref_count": len(pos_syn),
+                "static_mean_ssim_in_mask": round(float(np.mean([r["ssim_in_mask"] for r in static_syn])), 4) if static_syn else None,
+                "overall_fixed_box0_mean_ssim_in_mask": round(float(np.mean([r["ssim_in_mask"] for r in pos_syn])), 4) if pos_syn else None,
+                "mean_psnr_out_mask_db": round(float(np.mean([r["psnr_out_mask"] for r in pos_syn])), 2) if pos_syn else None,
+                "mean_flicker": round(float(np.mean([r["flicker"] for r in pos_syn if r.get("flicker") is not None])), 3) if pos_syn else None,
+                "videos": syn_rows,
+            }
+        except Exception:
+            pass
+    trk_p = RESULTS_DIR / "tracker_metrics_p3.json"
+    if trk_p.exists():
+        try:
+            trk_data = json.loads(trk_p.read_text(encoding="utf-8"))
+            combined["tracker_p3"] = {
+                "overall_median_iou": trk_data.get("overall_median_iou"),
+                "overall_auto_init_median_iou": trk_data.get("overall_auto_init_median_iou"),
+                "max_drift_pct": trk_data.get("max_drift_pct"),
+                "moving_watermark_ssim_p0": trk_data.get("moving_watermark_ssim_p0"),
+                "moving_watermark_ssim_p3": trk_data.get("moving_watermark_ssim_p3"),
+                "moving_watermark_psnr_out_p3": trk_data.get("moving_watermark_psnr_out_p3"),
+                "moving_inpaint_comparison": trk_data.get("moving_inpaint_comparison", []),
+            }
+        except Exception:
+            pass
     out_p = RESULTS_DIR / "p5_4_metrics.json"
     out_p.write_text(json.dumps(combined, indent=2, ensure_ascii=False), encoding="utf-8")
     return combined

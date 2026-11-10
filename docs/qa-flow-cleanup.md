@@ -541,4 +541,16 @@ For `preset=custom`, provide `region: {"x": N, "y": N, "w": N, "h": N}` in pixel
 
 - **Đề xuất hiệu chỉnh**: Hệ số ước tính hiện tại `_SEC_PER_MPX_FRAME = 0.45` được đặt bảo thủ trước khi tối ưu ROI `temporal_fill`. Thực tế đo ở P5.6.2 đạt `~0.095s / MPx·frame`. Nếu giảm `FLOW_EST_SEC_PER_MPX_FRAME` xuống `0.15` (giữ nguyên `FLOW_JOB_TIMEOUT_SEC = 300s`), hệ thống có thể cho phép `720p@30fps` tới `60s` và `1080p@30fps` tới `32s` mà không vượt timeout 300s.
 
+### 10.6. Đo lại Benchmark Chất lượng tại HEAD `d938a37` sau thay đổi Engine (`dc61e5f` + `7b8c092`, P5.7.1)
+- Đã chạy lại toàn bộ `synthetic` (18 video tổng hợp + 1 video thực tế), `synthetic-hard` (10 video) và `tracker P3` trên engine hiện tại mà **không sửa thêm `flow_inpaint.py`**, đồng thời tạo mới toàn bộ 25 contact sheets trong `benchmarks/results/contact-sheets/`.
+- **Tổng hợp Trước vs Sau thay đổi engine**:
+  - **`synthetic` — Nhóm watermark tĩnh (11 video)**: SSIM trong mask tăng từ **`0.7815` → `0.8330` (`+0.0515`)**; tất cả **11/11 video đều tăng SSIM** (6/11 video đạt `≥ 0.85`). PSNR ngoài mask đạt `42.57 – 45.99 dB` (tất cả `≥ 40 dB`).
+  - **`synthetic` — Nhóm `moving_watermark` (3 video, P3 tracked)**: SSIM trong mask trung bình đạt **`0.8936`** (trước đó `0.9088`, `Δ = -0.0152`, vẫn **ĐẠT `≥ 0.85`**); thời gian xử lý giảm từ `32.84s` xuống **`6.21s` (nhanh hơn 5.3×)**. Trong đó:
+    - `moving_watermark_02`: `0.8527 → 0.8871` (`+0.0344`)
+    - `moving_watermark_03`: `0.9417 → 0.9599` (`+0.0182`)
+    - `scene_cut_03`: `0.8118 → 0.8318` (`+0.0200`)
+    - **`moving_watermark_01` (⚠️ Giảm chất lượng đơn lẻ)**: SSIM giảm từ **`0.9319` xuống `0.8338` (`-0.0981`)**, flicker tăng từ `1.28` lên `1.72` do điều kiện dừng sớm `matched_count >= 2 & coverage >= 98%` trong `7b8c092` dừng cộng gộp các `global_ref_neighbors` xa điểm nhảy góc.
+  - **`synthetic-hard` (9 video dương tính + 1 âm tính)**: SSIM trong mask trung bình tăng từ **`0.7022` → `0.7846` (`+0.0824`)**; cả **9/9 video đều tăng SSIM** (số video đạt `≥ 0.85` tăng từ 2/9 lên 4/9, gồm thêm `hard_small_wm` `0.6539 → 0.8960` và `hard_vertical_720x1280` `0.8276 → 0.8501`). Flicker trung bình giảm `25.1%` (`6.089 → 4.560`), tốc độ xử lý nhanh hơn `2.63×` (`3.50x → 1.33x`).
+
+
 

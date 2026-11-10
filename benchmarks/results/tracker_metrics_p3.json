@@ -5,10 +5,10 @@
   "max_drift_pct": 0.136,
   "auto_init_max_drift_pct": 1.059,
   "scene_cut_exact_rate": 1.0,
-  "mean_track_elapsed_sec": 2.223,
+  "mean_track_elapsed_sec": 2.067,
   "moving_watermark_ssim_p0": 0.4742,
-  "moving_watermark_ssim_p3": 0.9088,
-  "moving_watermark_psnr_out_p3": 44.72,
+  "moving_watermark_ssim_p3": 0.8936,
+  "moving_watermark_psnr_out_p3": 42.72,
   "lost_track_probe": {
     "total_frames": 90,
     "watermark_present_frames": "0..49",
@@ -48,7 +48,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 8.907
+      "elapsed_sec": 7.285
     },
     {
       "video": "heavy_motion_01.mp4",
@@ -70,7 +70,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.585
+      "elapsed_sec": 1.484
     },
     {
       "video": "heavy_motion_02.mp4",
@@ -92,7 +92,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.743
+      "elapsed_sec": 1.428
     },
     {
       "video": "heavy_motion_03.mp4",
@@ -114,7 +114,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.86
+      "elapsed_sec": 1.709
     },
     {
       "video": "moving_watermark_01.mp4",
@@ -136,7 +136,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 2.553
+      "elapsed_sec": 2.325
     },
     {
       "video": "moving_watermark_02.mp4",
@@ -158,7 +158,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 2.639
+      "elapsed_sec": 2.392
     },
     {
       "video": "moving_watermark_03.mp4",
@@ -180,7 +180,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 2.122
+      "elapsed_sec": 2.233
     },
     {
       "video": "scene_cut_01.mp4",
@@ -206,7 +206,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.391
+      "elapsed_sec": 1.415
     },
     {
       "video": "scene_cut_02.mp4",
@@ -234,7 +234,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.497
+      "elapsed_sec": 1.42
     },
     {
       "video": "scene_cut_03.mp4",
@@ -260,7 +260,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 2.449
+      "elapsed_sec": 2.717
     },
     {
       "video": "semi_transparent_01.mp4",
@@ -282,7 +282,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.552
+      "elapsed_sec": 1.467
     },
     {
       "video": "semi_transparent_02.mp4",
@@ -304,7 +304,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.407
+      "elapsed_sec": 1.474
     },
     {
       "video": "semi_transparent_03.mp4",
@@ -326,7 +326,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.475
+      "elapsed_sec": 1.537
     },
     {
       "video": "static_corner_01.mp4",
@@ -348,7 +348,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.578
+      "elapsed_sec": 1.393
     },
     {
       "video": "static_corner_02.mp4",
@@ -370,7 +370,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.424
+      "elapsed_sec": 1.403
     },
     {
       "video": "static_corner_03.mp4",
@@ -392,7 +392,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.388
+      "elapsed_sec": 1.392
     }
   ],
   "moving_inpaint_comparison": [
@@ -401,60 +401,60 @@
       "stem": "moving_watermark_01",
       "group": "Logo/chữ di chuyển",
       "ssim_p0_baseline": 0.4832,
-      "ssim_p3_tracked": 0.9319,
-      "ssim_gain": 0.4487,
-      "psnr_out_mask": 42.61,
-      "seam": 1.35,
-      "flicker": 1.28,
+      "ssim_p3_tracked": 0.8338,
+      "ssim_gain": 0.3506,
+      "psnr_out_mask": 42.75,
+      "seam": 1.27,
+      "flicker": 1.13,
       "temporal_frames": 150,
       "total_frames": 150,
-      "elapsed_sec": 27.9,
-      "peak_ram_mb": 32.8
+      "elapsed_sec": 5.37,
+      "peak_ram_mb": 2120.4
     },
     {
       "video": "moving_watermark_02.mp4",
       "stem": "moving_watermark_02",
       "group": "Logo/chữ di chuyển",
       "ssim_p0_baseline": 0.3694,
-      "ssim_p3_tracked": 0.8527,
-      "ssim_gain": 0.4833,
-      "psnr_out_mask": 44.05,
-      "seam": 1.46,
-      "flicker": 1.74,
+      "ssim_p3_tracked": 0.8871,
+      "ssim_gain": 0.5177,
+      "psnr_out_mask": 42.46,
+      "seam": 1.32,
+      "flicker": 1.49,
       "temporal_frames": 150,
       "total_frames": 150,
-      "elapsed_sec": 38.34,
-      "peak_ram_mb": 36.3
+      "elapsed_sec": 7.29,
+      "peak_ram_mb": 2120.4
     },
     {
       "video": "moving_watermark_03.mp4",
       "stem": "moving_watermark_03",
       "group": "Logo/chữ di chuyển",
       "ssim_p0_baseline": 0.5699,
-      "ssim_p3_tracked": 0.9417,
-      "ssim_gain": 0.3718,
-      "psnr_out_mask": 47.49,
-      "seam": 1.66,
-      "flicker": 1.91,
+      "ssim_p3_tracked": 0.9599,
+      "ssim_gain": 0.39,
+      "psnr_out_mask": 42.96,
+      "seam": 1.63,
+      "flicker": 1.81,
       "temporal_frames": 150,
       "total_frames": 150,
-      "elapsed_sec": 32.28,
-      "peak_ram_mb": 30.8
+      "elapsed_sec": 5.97,
+      "peak_ram_mb": 2120.4
     },
     {
       "video": "scene_cut_03.mp4",
       "stem": "scene_cut_03",
       "group": "Có cắt cảnh",
       "ssim_p0_baseline": 0.482,
-      "ssim_p3_tracked": 0.8118,
-      "ssim_gain": 0.3298,
-      "psnr_out_mask": 50.32,
-      "seam": 0.83,
-      "flicker": 1.16,
+      "ssim_p3_tracked": 0.8318,
+      "ssim_gain": 0.3498,
+      "psnr_out_mask": 43.54,
+      "seam": 0.8,
+      "flicker": 0.88,
       "temporal_frames": 150,
       "total_frames": 150,
-      "elapsed_sec": 36.13,
-      "peak_ram_mb": 33.2
+      "elapsed_sec": 7.8,
+      "peak_ram_mb": 2120.4
     }
   ]
 }

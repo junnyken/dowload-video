@@ -564,6 +564,13 @@ def run_benchmark() -> List[dict]:
             tracemalloc.stop()
 
             cleaned_frames = decode_frames(out_path, vw, vh)
+            in_frames_for_cs = decode_frames(in_path, vw, vh)
+            try:
+                from benchmarks.synthetic_hard_suite import CONTACT_SHEETS_DIR, export_contact_sheet
+                cs_out = CONTACT_SHEETS_DIR / f"synthetic_{stem}_contact.jpg"
+                export_contact_sheet(in_frames_for_cs, cleaned_frames, cs_out, title=f"synthetic: {stem}")
+            except Exception as cs_exc:
+                print(f"[bench] contact sheet warning for {stem}: {cs_exc}")
             seam, flicker = compute_seam_and_flicker(cleaned_frames, x, y, w, h)
 
             ssim_val: Optional[float] = None
@@ -1048,6 +1055,8 @@ def main() -> int:
 
     if args.generate:
         generate_benchmark_suite(force=args.force)
+    if args.run:
+        run_benchmark()
     if args.detect:
         run_detector_benchmark()
     if args.track:
@@ -1055,8 +1064,6 @@ def main() -> int:
     if args.hard:
         from benchmarks.synthetic_hard_suite import run_all_p5_4_suites
         run_all_p5_4_suites()
-    if args.run:
-        run_benchmark()
     return 0
 
 
