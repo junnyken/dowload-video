@@ -30,6 +30,10 @@ _VG_USER_RE = re.compile(r"\b(VG[0-9A-F]{8})\b", re.IGNORECASE)
 # Max time skew for timestamp validation (seconds)
 MAX_TIMESTAMP_SKEW = 300  # 5 minutes
 
+# Maximum allowed difference (VND) when matching an account-level VG transfer
+# against the user's plan catalog (Case A).
+VG_PRICE_TOLERANCE_VND = 1_000
+
 DEFAULT_SEPAY_SECRET = "whsec_hZfaB5HXGJquU4rM3qDowUZYiPqMcU6Z"
 
 
@@ -256,27 +260,41 @@ def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
                 from app.core.payment_orders import catalog as _po_catalog  # noqa: PLC0415
                 cat = _po_catalog(user_id=uid)
                 matched_plan = None
-                for p in sorted(cat, key=lambda x: int(x.get("vnd") or 0), reverse=True):
-                    if amount >= int(p.get("vnd") or 0) > 0:
+                best_diff: Optional[int] = None
+                for p in cat:
+                    plan_vnd = int(p.get("vnd") or 0)
+                    if plan_vnd <= 0:
+                        continue
+                    diff = abs(amount - plan_vnd)
+                    if diff <= VG_PRICE_TOLERANCE_VND and (best_diff is None or diff < best_diff):
                         matched_plan = p
-                        break
+                        best_diff = diff
 
-                if matched_plan:
-                    days = int(matched_plan.get("days") or 30)
-                    plan_id = str(matched_plan.get("id") or "pro_month")
-                    target_tier = str(matched_plan.get("tier") or "pro")
-                    plan_amount = int(matched_plan.get("vnd") or amount)
-                else:
-                    s = plans.get_settings()
-                    price_month = int(s.get("price_month_vnd") or 99_000)
-                    price_year = int(s.get("price_year_vnd") or 890_000)
-                    if amount >= price_year:
-                        days, plan_id, target_tier, plan_amount = 365, "pro_year", "pro", price_year
-                    elif amount >= price_month:
-                        days, plan_id, target_tier, plan_amount = 30, "pro_month", "pro", price_month
-                    else:
-                        _log_event(db, sepay_id, "sepay_vg_underpaid", amount, None, "underpaid")
-                        return {"success": True, "action": "underpaid", "code": code, "user_id": uid}
+                if not matched_plan:
+                    record_webhook_manual_review(
+                        db,
+                        provider="sepay",
+                        provider_event_id=sepay_id,
+                        event_type="sepay_vg_underpaid",
+                        user_id=uid,
+                        amount=amount,
+                        raw_payload=parsed,
+                        reason="amount_not_matching_user_catalog",
+                        status="needs_manual_review",
+                    )
+                    _log_event(db, sepay_id, "sepay_vg_underpaid", amount, None, "underpaid")
+                    return {
+                        "success": True,
+                        "action": "underpaid",
+                        "status": "needs_manual_review",
+                        "code": code,
+                        "user_id": uid,
+                    }
+
+                days = int(matched_plan.get("days") or 30)
+                plan_id = str(matched_plan.get("id") or "pro_month")
+                target_tier = str(matched_plan.get("tier") or "pro")
+                plan_amount = int(matched_plan.get("vnd") or amount)
 
                 is_down, cur_tier, _exp = check_downgrade_active_subscription(uid, target_tier, db=db)
                 if is_down:

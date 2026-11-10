@@ -447,3 +447,81 @@ def test_sepay_webhook_blocks_downgrade_and_records_manual_review(fake_env, monk
     assert db.tables["payment_orders"][0]["status"] == "needs_manual_review"
     assert len(db.tables["payment_webhook_events"]) == 1
     assert db.tables["payment_webhook_events"][0]["status"] == "needs_manual_review"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Item 3: SePay Case A (VG... code) exact catalog price match (<= 1,000 VND)
+# ══════════════════════════════════════════════════════════════════════
+
+def test_sepay_case_a_99k_when_pro_renewal_is_139k_marks_underpaid_and_keeps_tier(fake_env, monkeypatch):
+    """Paying 99,000 VND via VG code when Pro renewal price is 139,000 VND must NOT
+    auto-select Starter (69,000 VND); it must mark underpaid/needs_manual_review and keep tier unchanged."""
+    db, rc = fake_env
+    from app.core import sepay_webhook
+
+    uid = "a1b2c3d4-1111-2222-3333-444444444444"
+    # Returning buyer (not first-time): Pro renewal is 139,000 VND, Starter renewal is 69,000 VND
+    rc.set(f"first_purchase_done:{uid}", "1")
+    db.tables["profiles"].append({
+        "id": uid,
+        "tier": "free",
+        "billing_status": "canceled",
+        "subscription_expiry": _past_iso(10),
+    })
+    db.tables["user_usage"].append({"user_id": uid, "plan": "free"})
+
+    secret = "sepay_test_secret"
+    monkeypatch.setenv("SEPAY_WEBHOOK_SECRET", secret)
+    body = json.dumps({
+        "id": 91001,
+        "gateway": "ACB",
+        "transferType": "in",
+        "transferAmount": 99000,
+        "content": "Chuyen khoan VGA1B2C3D4 gia han Pro",
+    }).encode("utf-8")
+    ts = str(int(time.time()))
+    sig = hmac.new(secret.encode("utf-8"), f"{ts}.".encode("utf-8") + body, hashlib.sha256).hexdigest()
+    headers = {"x-sepay-signature": f"sha256={sig}", "x-sepay-timestamp": ts}
+
+    res = sepay_webhook.handle(body, headers)
+    assert res["action"] == "underpaid"
+    assert res["status"] == "needs_manual_review"
+    # Tier MUST remain unchanged ('free', NOT downgraded/upgraded to 'starter')
+    assert db.tables["profiles"][0]["tier"] == "free"
+    assert db.tables["user_usage"][0]["plan"] == "free"
+    assert len(db.tables["payment_webhook_events"]) == 1
+    assert db.tables["payment_webhook_events"][0]["status"] == "needs_manual_review"
+
+
+def test_sepay_case_a_exact_and_within_1000_vnd_tolerance_upgrades(fake_env, monkeypatch):
+    """Paying 139,000 VND (or 139,500 VND within 1,000 VND tolerance) for a returning Pro user upgrades to Pro."""
+    db, rc = fake_env
+    from app.core import sepay_webhook
+
+    uid = "b2c3d4e5-1111-2222-3333-444444444444"
+    rc.set(f"first_purchase_done:{uid}", "1")
+    db.tables["profiles"].append({
+        "id": uid,
+        "tier": "free",
+        "billing_status": "canceled",
+        "subscription_expiry": None,
+    })
+
+    secret = "sepay_test_secret"
+    monkeypatch.setenv("SEPAY_WEBHOOK_SECRET", secret)
+    body = json.dumps({
+        "id": 91002,
+        "gateway": "ACB",
+        "transferType": "in",
+        "transferAmount": 139500,  # within +500 VND (<= 1,000 VND) of 139,000 VND
+        "content": "Chuyen khoan VGB2C3D4E5",
+    }).encode("utf-8")
+    ts = str(int(time.time()))
+    sig = hmac.new(secret.encode("utf-8"), f"{ts}.".encode("utf-8") + body, hashlib.sha256).hexdigest()
+    headers = {"x-sepay-signature": f"sha256={sig}", "x-sepay-timestamp": ts}
+
+    res = sepay_webhook.handle(body, headers)
+    assert res["action"] == "activated_vg_account"
+    assert res["tier"] == "pro"
+    assert db.tables["profiles"][0]["tier"] == "pro"
+
