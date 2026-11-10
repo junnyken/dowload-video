@@ -525,3 +525,317 @@ def test_sepay_case_a_exact_and_within_1000_vnd_tolerance_upgrades(fake_env, mon
     assert res["tier"] == "pro"
     assert db.tables["profiles"][0]["tier"] == "pro"
 
+
+# ══════════════════════════════════════════════════════════════════════
+# Item 4: Unit tests for previously untested payment & admin tier flows
+# ══════════════════════════════════════════════════════════════════════
+
+def test_upgrade_user_starter_and_team(fake_env):
+    """_upgrade_user must accurately set tier, plan_name, and user_usage.plan for starter and team."""
+    db, _rc = fake_env
+    from app.api import payments as payments_api
+
+    exp_ts = int((datetime.now(timezone.utc) + timedelta(days=30)).timestamp())
+
+    # 1. Starter upgrade
+    uid_starter = "c1111111-1111-1111-1111-111111111111"
+    db.tables["profiles"].append({"id": uid_starter, "tier": "free", "billing_status": "none"})
+    payments_api._upgrade_user(uid_starter, "sub_starter_01", exp_ts, target_tier="starter")
+
+    prof_s = next(p for p in db.tables["profiles"] if p["id"] == uid_starter)
+    usage_s = next(u for u in db.tables["user_usage"] if u["user_id"] == uid_starter)
+    assert prof_s["tier"] == "starter"
+    assert prof_s["plan_name"] == "Starter"
+    assert prof_s["billing_status"] == "active"
+    assert usage_s["plan"] == "starter"
+
+    # 2. Team upgrade
+    uid_team = "c2222222-2222-2222-2222-222222222222"
+    db.tables["profiles"].append({"id": uid_team, "tier": "free", "billing_status": "none"})
+    payments_api._upgrade_user(uid_team, "sub_team_01", exp_ts, target_tier="team")
+
+    prof_t = next(p for p in db.tables["profiles"] if p["id"] == uid_team)
+    usage_t = next(u for u in db.tables["user_usage"] if u["user_id"] == uid_team)
+    assert prof_t["tier"] == "team"
+    assert prof_t["plan_name"] == "Team"
+    assert prof_t["billing_status"] == "active"
+    assert usage_t["plan"] == "team"
+
+
+@pytest.mark.anyio
+async def test_paypal_webhook_activates_order_and_direct_flow(fake_env, monkeypatch):
+    """paypal_webhook must activate pending payment_orders and also support direct custom_id upgrades."""
+    db, _rc = fake_env
+    from app.api import payments as payments_api
+
+    monkeypatch.setenv("PAYPAL_CLIENT_ID", "pp_id")
+    monkeypatch.setenv("PAYPAL_CLIENT_SECRET", "pp_sec")
+    monkeypatch.setenv("PAYPAL_WEBHOOK_ID", "pp_wh_id")
+    monkeypatch.setattr(payments_api, "_paypal_access_token", AsyncMock(return_value="tok_123"))
+
+    class _FakeVerifyResp:
+        status_code = 200
+        def json(self):
+            return {"verification_status": "SUCCESS"}
+
+    class _FakeAsyncClient:
+        def __init__(self, *a, **kw):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *a):
+            pass
+        async def post(self, *a, **kw):
+            return _FakeVerifyResp()
+
+    monkeypatch.setattr("httpx.AsyncClient", _FakeAsyncClient)
+
+    # Flow A: order-backed PayPal webhook for starter_month
+    uid1 = "d1111111-1111-1111-1111-111111111111"
+    db.tables["profiles"].append({"id": uid1, "tier": "free", "billing_status": "none"})
+    db.tables["payment_orders"].append({
+        "id": "ord-pp-1",
+        "user_id": uid1,
+        "plan": "starter_month",
+        "rail": "paypal",
+        "currency": "USD",
+        "amount": 199,
+        "code": "VGP11112222",
+        "status": "pending",
+        "expires_at": _future_iso(1),
+    })
+
+    req1 = MagicMock()
+    req1.body = AsyncMock(return_value=json.dumps({
+        "id": "WH-PP-OK-1",
+        "event_type": "PAYMENT.CAPTURE.COMPLETED",
+        "resource": {
+            "custom_id": f"{uid1}:ord-pp-1:starter_month",
+            "amount": {"value": "1.99"},
+        },
+    }).encode("utf-8"))
+    req1.headers = {}
+
+    res1 = await payments_api.paypal_webhook(req1)
+    assert res1["received"] is True
+    assert db.tables["payment_orders"][0]["status"] == "paid"
+    assert next(p for p in db.tables["profiles"] if p["id"] == uid1)["tier"] == "starter"
+
+    # Flow B: direct PayPal webhook for team_year
+    uid2 = "d2222222-2222-2222-2222-222222222222"
+    db.tables["profiles"].append({"id": uid2, "tier": "free", "billing_status": "none"})
+    req2 = MagicMock()
+    req2.body = AsyncMock(return_value=json.dumps({
+        "id": "WH-PP-OK-2",
+        "event_type": "CHECKOUT.ORDER.COMPLETED",
+        "resource": {
+            "purchase_units": [{"custom_id": f"{uid2}:year:team_year"}],
+            "amount": {"value": "119.00"},
+        },
+    }).encode("utf-8"))
+    req2.headers = {}
+
+    res2 = await payments_api.paypal_webhook(req2)
+    assert res2["received"] is True
+    assert next(p for p in db.tables["profiles"] if p["id"] == uid2)["tier"] == "team"
+
+
+@pytest.mark.anyio
+async def test_paypal_ipn_activates_order_and_direct_flow(fake_env, monkeypatch):
+    """paypal_ipn must verify with PayPal IPN endpoint, validate receiver email, and activate tier."""
+    db, _rc = fake_env
+    from app.api import payments as payments_api
+
+    monkeypatch.setenv("PAYPAL_ME_URL", "billing@vidgrab.io")
+
+    class _FakeIpnResp:
+        status_code = 200
+        text = "VERIFIED"
+
+    class _FakeAsyncClient:
+        def __init__(self, *a, **kw):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *a):
+            pass
+        async def post(self, *a, **kw):
+            return _FakeIpnResp()
+
+    monkeypatch.setattr("httpx.AsyncClient", _FakeAsyncClient)
+
+    uid = "e1111111-1111-1111-1111-111111111111"
+    db.tables["profiles"].append({"id": uid, "tier": "free", "billing_status": "none"})
+
+    ipn_body = (
+        f"payment_status=Completed&txn_id=IPN_TEAM_01"
+        f"&receiver_email=billing@vidgrab.io&custom={uid}::team_month&mc_gross=11.99"
+    )
+    req = MagicMock()
+    req.body = AsyncMock(return_value=ipn_body.encode("utf-8"))
+
+    res = await payments_api.paypal_ipn(req)
+    assert res["verified"] is True
+    assert db.tables["profiles"][0]["tier"] == "team"
+    assert db.tables["user_usage"][0]["plan"] == "team"
+
+
+def test_sepay_webhook_handle_case_a_and_case_b(fake_env, monkeypatch):
+    """sepay_webhook.handle must support both Case A (VG account code) and Case B (VGP order code)."""
+    db, _rc = fake_env
+    from app.core import sepay_webhook
+
+    secret = "sepay_case_ab_secret"
+    monkeypatch.setenv("SEPAY_WEBHOOK_SECRET", secret)
+
+    def _signed_call(payload_dict: Dict[str, Any]) -> Dict[str, Any]:
+        raw = json.dumps(payload_dict).encode("utf-8")
+        ts = str(int(time.time()))
+        sig = hmac.new(secret.encode("utf-8"), f"{ts}.".encode("utf-8") + raw, hashlib.sha256).hexdigest()
+        return sepay_webhook.handle(raw, {"x-sepay-signature": f"sha256={sig}", "x-sepay-timestamp": ts})
+
+    # Case A: First-time buyer paying 49,000 VND with VG + 8 hex -> starter_month
+    uid_a = "f1a2b3c4-0000-0000-0000-000000000001"
+    db.tables["profiles"].append({"id": uid_a, "tier": "free", "billing_status": "none"})
+    res_a = _signed_call({
+        "id": 92001,
+        "gateway": "ACB",
+        "transferType": "in",
+        "transferAmount": 49000,
+        "content": "Chuyen khoan VGF1A2B3C4",
+    })
+    assert res_a["action"] == "activated_vg_account"
+    assert res_a["tier"] == "starter"
+    assert next(p for p in db.tables["profiles"] if p["id"] == uid_a)["tier"] == "starter"
+
+    # Case B: Pending order VGP33334444 for team_month (279,000 VND)
+    uid_b = "f2b3c4d5-0000-0000-0000-000000000002"
+    db.tables["profiles"].append({"id": uid_b, "tier": "free", "billing_status": "none"})
+    db.tables["payment_orders"].append({
+        "id": "ord-sepay-b1",
+        "user_id": uid_b,
+        "plan": "team_month",
+        "rail": "vietqr",
+        "currency": "VND",
+        "amount": 279000,
+        "code": "VGP33334444",
+        "status": "pending",
+        "expires_at": _future_iso(1),
+    })
+    res_b = _signed_call({
+        "id": 92002,
+        "gateway": "ACB",
+        "transferType": "in",
+        "transferAmount": 279000,
+        "content": "Thanh toan VGP33334444",
+    })
+    assert res_b["action"] == "activated"
+    assert next(p for p in db.tables["profiles"] if p["id"] == uid_b)["tier"] == "team"
+    assert next(o for o in db.tables["payment_orders"] if o["id"] == "ord-sepay-b1")["status"] == "paid"
+
+
+@pytest.mark.anyio
+async def test_webhook_idempotency_sending_same_event_twice(fake_env, monkeypatch):
+    """Sending the exact same webhook event twice must be idempotent across SePay, PayPal, IPN, and Stripe."""
+    db, _rc = fake_env
+    from app.api import payments as payments_api
+    from app.core import sepay_webhook
+
+    uid = "99998888-7777-6666-5555-444433332222"
+    db.tables["profiles"].append({"id": uid, "tier": "free", "billing_status": "none"})
+
+    # 1. SePay idempotency: same sepay_id sent twice
+    secret = "sepay_idem_secret"
+    monkeypatch.setenv("SEPAY_WEBHOOK_SECRET", secret)
+    raw = json.dumps({
+        "id": 95001,
+        "gateway": "ACB",
+        "transferType": "in",
+        "transferAmount": 99000,
+        "content": "Chuyen khoan VG99998888",
+    }).encode("utf-8")
+    ts = str(int(time.time()))
+    sig = hmac.new(secret.encode("utf-8"), f"{ts}.".encode("utf-8") + raw, hashlib.sha256).hexdigest()
+    headers = {"x-sepay-signature": f"sha256={sig}", "x-sepay-timestamp": ts}
+
+    first_sepay = sepay_webhook.handle(raw, headers)
+    assert first_sepay["action"] == "activated_vg_account"
+    exp_after_first = db.tables["profiles"][0]["subscription_expiry"]
+
+    second_sepay = sepay_webhook.handle(raw, headers)
+    assert second_sepay["action"] == "duplicate"
+    # Expiry MUST NOT be extended a second time
+    assert db.tables["profiles"][0]["subscription_expiry"] == exp_after_first
+
+    # 2. PayPal IPN idempotency: same txn_id sent twice
+    monkeypatch.setenv("PAYPAL_ME_URL", "billing@vidgrab.io")
+
+    class _FakeIpnResp:
+        status_code = 200
+        text = "VERIFIED"
+        def json(self):
+            return {"verification_status": "SUCCESS"}
+
+    class _FakeAsyncClient:
+        def __init__(self, *a, **kw):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *a):
+            pass
+        async def post(self, *a, **kw):
+            return _FakeIpnResp()
+
+    monkeypatch.setattr("httpx.AsyncClient", _FakeAsyncClient)
+    ipn_raw = f"payment_status=Completed&txn_id=TXN_IDEM_1&receiver_email=billing@vidgrab.io&custom={uid}::pro_month&mc_gross=3.99".encode("utf-8")
+    req_ipn = MagicMock()
+    req_ipn.body = AsyncMock(return_value=ipn_raw)
+
+    first_ipn = await payments_api.paypal_ipn(req_ipn)
+    assert first_ipn.get("verified") is True
+    exp_after_ipn1 = db.tables["profiles"][0]["subscription_expiry"]
+
+    second_ipn = await payments_api.paypal_ipn(req_ipn)
+    assert second_ipn.get("duplicate") is True
+    assert db.tables["profiles"][0]["subscription_expiry"] == exp_after_ipn1
+
+
+@pytest.mark.anyio
+async def test_admin_update_user_starter_and_team(fake_env, monkeypatch):
+    """admin.update_user must support starter and team tiers and synchronize both profiles and user_usage."""
+    db, _rc = fake_env
+    from app.api import admin as admin_api
+
+    monkeypatch.setattr(admin_api, "get_supabase_client", lambda: db)
+    monkeypatch.setattr(admin_api, "log_admin_action", lambda *a, **kw: None)
+
+    uid = "77776666-5555-4444-3333-222211110000"
+    db.tables["profiles"].append({"id": uid, "tier": "free", "billing_status": "none"})
+
+    req_http = MagicMock()
+
+    # 1. Upgrade to Starter for 30 days
+    res_starter = await admin_api.update_user(
+        admin_api.UpdateUserRequest(user_id=uid, plan="starter", days=30),
+        req_http,
+        _=True,
+    )
+    assert res_starter["success"] is True
+    assert db.tables["profiles"][0]["tier"] == "starter"
+    assert db.tables["profiles"][0]["plan_name"] == "Starter"
+    assert db.tables["profiles"][0]["billing_status"] == "manual"
+    assert db.tables["profiles"][0]["subscription_expiry"] is not None
+    assert db.tables["user_usage"][0]["plan"] == "starter"
+
+    # 2. Upgrade to Team for 365 days
+    res_team = await admin_api.update_user(
+        admin_api.UpdateUserRequest(user_id=uid, plan="team", days=365),
+        req_http,
+        _=True,
+    )
+    assert res_team["success"] is True
+    assert db.tables["profiles"][0]["tier"] == "team"
+    assert db.tables["profiles"][0]["plan_name"] == "Team"
+    assert db.tables["user_usage"][0]["plan"] == "team"
+
+
