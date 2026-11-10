@@ -298,14 +298,14 @@ def temporal_fill(
             nb_mask, h_roi, (bw, bh), flags=cv2.INTER_NEAREST
         )
         valid_roi = mask_roi & (nb_logo_warp_roi == 0) & (warped_roi.sum(axis=2) > 0)
-        matched_count += 1
         if bool(valid_roi.any()):
+            matched_count += 1
             acc_roi[valid_roi] += warped_roi[valid_roi]
             cnt_roi[valid_roi] += 1.0
             if matched_count >= 2 and int((cnt_roi > 0).sum()) >= int(total_mask_px * 0.98):
                 break
-        if matched_count >= 4:
-            break
+            if matched_count >= 4:
+                break
 
     got_roi = cnt_roi > 0
     filled = np.zeros_like(cur)

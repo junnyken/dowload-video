@@ -445,3 +445,53 @@ class TestCropAndBlurEngines:
         assert inside_diff > 5.0, f"blur filter did not blur the logo region (MAE={inside_diff:.2f})"
         assert outside_diff < 1.0, f"blur filter corrupted pixels outside region (MAE={outside_diff:.2f})"
 
+
+class TestContributingNeighboursCount:
+    """Regression test: 4 leading neighbours with overlapping logo must not exhaust matched_count before clean frame 5+."""
+
+    def test_4_overlapping_neighbours_do_not_block_clean_5th_neighbour_and_avoid_telea(self):
+        rng = np.random.default_rng(42)
+        truth = rng.integers(30, 220, size=(VH, VW, 3), dtype=np.uint8)
+        # Put a high-contrast checkerboard inside the logo box (X, Y, W, H) that TELEA cannot reconstruct
+        yy, xx = np.mgrid[0:H, 0:W]
+        checker = (((xx // 4) + (yy // 4)) % 2).astype(np.uint8) * 200 + 25
+        truth[Y:Y + H, X:X + W, 0] = checker
+        truth[Y:Y + H, X:X + W, 1] = 255 - checker
+        truth[Y:Y + H, X:X + W, 2] = checker
+
+        fill_mask = fi._build_fill_mask(X, Y, W, H, VW, VH)
+        cur = truth.copy()
+        cur[Y:Y + H, X:X + W] = (0, 255, 0)  # solid green logo covering the checkerboard
+
+        # First 4 neighbours have the logo at the EXACT SAME position (valid_roi.any() == False)
+        neighbors = []
+        for _ in range(4):
+            nb_same = cur.copy()
+            neighbors.append((nb_same, fill_mask.copy()))
+
+        # 5th and 6th neighbours have the logo jumped to top-left (12, 12, W, H), leaving (X, Y, W, H) clean
+        jumped_mask = fi._build_fill_mask(12, 12, W, H, VW, VH)
+        for _ in range(2):
+            nb_clean = truth.copy()
+            nb_clean[12:12 + H, 12:12 + W] = (0, 255, 0)
+            neighbors.append((nb_clean, jumped_mask.copy()))
+
+        tfill, tvalid = fi.temporal_fill(cur, neighbors, fill_mask)
+
+        # Must recover 100% of the logo mask from the 5th+ neighbours instead of returning empty tvalid (TELEA fallback)
+        assert int((tvalid > 0).sum()) == int((fill_mask > 0).sum()), (
+            f"temporal_fill stopped after 4 non-contributing neighbours and fell back to TELEA "
+            f"(recovered {int((tvalid > 0).sum())} / {int((fill_mask > 0).sum())} pixels)"
+        )
+        recovered_mae = float(np.abs(
+            tfill[Y:Y + H, X:X + W].astype(np.float32) - truth[Y:Y + H, X:X + W].astype(np.float32)
+        ).mean())
+        telea_out = fi._telea_crop(cur, fill_mask, X, Y, W, H)
+        telea_mae = float(np.abs(
+            telea_out[Y:Y + H, X:X + W].astype(np.float32) - truth[Y:Y + H, X:X + W].astype(np.float32)
+        ).mean())
+        assert recovered_mae < 2.0 and recovered_mae < telea_mae * 0.1, (
+            f"Expected clean pixel recovery from 5th+ frame (MAE={recovered_mae:.2f} vs TELEA MAE={telea_mae:.2f})"
+        )
+
+
