@@ -1,0 +1,127 @@
+{
+  "suite": "synthetic-jump-holdout",
+  "git_commit": "5be55fc",
+  "video_count": 6,
+  "mean_ssim_in_mask": 0.9113,
+  "mean_ssim_jumping_only": 0.9193,
+  "static_guard_ssim": 0.8717,
+  "mean_psnr_outside_db": 42.93,
+  "mean_flicker_ratio": 327.15,
+  "mean_elapsed_sec": 8.31,
+  "videos": [
+    {
+      "video": "holdout_jump_f30_pan0.mp4",
+      "stem": "holdout_jump_f30_pan0",
+      "description": "Camera pan 0 px/frame, jump at frame 30 (2 positions)",
+      "pan_x_per_frame": 0.0,
+      "jump_frames": [
+        30
+      ],
+      "region_type": "moving",
+      "ssim_in_mask": 0.9919,
+      "min_ssim_in_mask": 0.9909,
+      "psnr_outside_db": 45.49,
+      "seam_gradient_ratio": 0.71,
+      "flicker_ratio": 263.42,
+      "elapsed_sec": 7.6,
+      "peak_ram_mb": 607.1,
+      "mode": "per_frame",
+      "temporal_frames": 150
+    },
+    {
+      "video": "holdout_jump_f60_pan05.mp4",
+      "stem": "holdout_jump_f60_pan05",
+      "description": "Camera pan 0.5 px/frame, jump at frame 60 (2 positions)",
+      "pan_x_per_frame": 0.5,
+      "jump_frames": [
+        60
+      ],
+      "region_type": "moving",
+      "ssim_in_mask": 0.9243,
+      "min_ssim_in_mask": 0.8601,
+      "psnr_outside_db": 42.38,
+      "seam_gradient_ratio": 0.46,
+      "flicker_ratio": 1686.13,
+      "elapsed_sec": 9.22,
+      "peak_ram_mb": 1019.6,
+      "mode": "per_frame",
+      "temporal_frames": 150
+    },
+    {
+      "video": "holdout_jump_f110_pan3.mp4",
+      "stem": "holdout_jump_f110_pan3",
+      "description": "Camera pan 3.0 px/frame, late jump at frame 110 (2 positions)",
+      "pan_x_per_frame": 3.0,
+      "jump_frames": [
+        110
+      ],
+      "region_type": "moving",
+      "ssim_in_mask": 0.8953,
+      "min_ssim_in_mask": 0.8096,
+      "psnr_outside_db": 42.45,
+      "seam_gradient_ratio": 1.03,
+      "flicker_ratio": 0.85,
+      "elapsed_sec": 5.94,
+      "peak_ram_mb": 1021.3,
+      "mode": "per_frame",
+      "temporal_frames": 150
+    },
+    {
+      "video": "holdout_jump4_pan05.mp4",
+      "stem": "holdout_jump4_pan05",
+      "description": "Camera pan 0.5 px/frame, jumps across 4 positions at frames 30, 60, 110",
+      "pan_x_per_frame": 0.5,
+      "jump_frames": [
+        30,
+        60,
+        110
+      ],
+      "region_type": "moving",
+      "ssim_in_mask": 0.9507,
+      "min_ssim_in_mask": 0.8327,
+      "psnr_outside_db": 42.39,
+      "seam_gradient_ratio": 1.11,
+      "flicker_ratio": 10.13,
+      "elapsed_sec": 6.37,
+      "peak_ram_mb": 1022.8,
+      "mode": "per_frame",
+      "temporal_frames": 150
+    },
+    {
+      "video": "holdout_jump_f60_pan3.mp4",
+      "stem": "holdout_jump_f60_pan3",
+      "description": "Camera pan 3.0 px/frame, jump at frame 60 (2 positions)",
+      "pan_x_per_frame": 3.0,
+      "jump_frames": [
+        60
+      ],
+      "region_type": "moving",
+      "ssim_in_mask": 0.8342,
+      "min_ssim_in_mask": 0.7081,
+      "psnr_outside_db": 42.49,
+      "seam_gradient_ratio": 1.52,
+      "flicker_ratio": 1.31,
+      "elapsed_sec": 9.71,
+      "peak_ram_mb": 1022.8,
+      "mode": "per_frame",
+      "temporal_frames": 150
+    },
+    {
+      "video": "holdout_static_logo_pan3.mp4",
+      "stem": "holdout_static_logo_pan3",
+      "description": "Stationary logo + camera pan 3.0 px/frame (no jump, static-group regression guard)",
+      "pan_x_per_frame": 3.0,
+      "jump_frames": [],
+      "region_type": "static",
+      "ssim_in_mask": 0.8717,
+      "min_ssim_in_mask": 0.8161,
+      "psnr_outside_db": 42.35,
+      "seam_gradient_ratio": 0.97,
+      "flicker_ratio": 1.05,
+      "elapsed_sec": 11.01,
+      "peak_ram_mb": 1022.8,
+      "mode": "per_frame",
+      "temporal_frames": 150
+    }
+  ]
+}
