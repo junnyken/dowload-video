@@ -89,6 +89,7 @@ def env(monkeypatch):
     monkeypatch.setenv("WATCH_ENABLED", "true")
     monkeypatch.setenv("WATCH_PLATFORMS_ENABLED", "tiktok")
     monkeypatch.setenv("WATCH_ADMIN_ONLY", "false")
+    monkeypatch.setenv("WATCH_FREE_MAX_SOURCES", "1")
     return monkeypatch
 
 
@@ -166,7 +167,7 @@ def test_defaults_are_off():
         assert cfg.platforms_enabled() == frozenset()
         assert cfg.scan_batch_per_minute() == 20 and cfg.items_per_scan() == 10
         assert cfg.gap_followup_max_pages() == 2 and cfg.max_interval_sec() == 259200
-        assert (cfg.max_sources("free"), cfg.max_sources("pro"), cfg.max_sources("team")) == (1, 30, 30)
+        assert (cfg.max_sources("free"), cfg.max_sources("starter"), cfg.max_sources("pro"), cfg.max_sources("team")) == (0, 2, 30, 30)
         assert (cfg.min_interval_sec("free"), cfg.min_interval_sec("pro")) == (86400, 21600)
         assert (cfg.replace_cooldown_sec("free"), cfg.replace_cooldown_sec("pro")) == (86400, 3600)
         assert cfg.ip_daily_new_sources() == 3 and cfg.global_free_cap() == 200
@@ -227,9 +228,16 @@ def test_guest_negative_control_same_request_signed_in_stores(app, w, api):
 
 # ── 3. Limits ────────────────────────────────────────────────────────
 
-def test_free_limit_is_one(app, w, api):
+def test_free_limit_is_one(app, w, api, env):
     login(api)
     w.listings[CH], w.listings[CH2] = vids(1), vids(2, user="otherchannel")
+    # Default Free limit is 0 (Phương án 1: Free locked out with 402 tier_required)
+    env.delenv("WATCH_FREE_MAX_SOURCES", raising=False)
+    r0 = post(app)
+    assert r0.status_code == 402 and r0.json()["error_code"] == "tier_required"
+    assert w.rows("watch_subscriptions") == []
+    # When WATCH_FREE_MAX_SOURCES=1 is enabled, Free gets 1 slot and 2nd slot returns 403
+    env.setenv("WATCH_FREE_MAX_SOURCES", "1")
     assert post(app).status_code == 201
     r = post(app, CH2)
     assert r.status_code == 403 and r.json()["error_code"] == "source_limit_reached"
@@ -774,7 +782,8 @@ def test_watch_tasks_registered_and_consumed_in_production(name):
     assert name in celery_app.tasks
     queue = celery_app.amqp.router.route({}, name)["queue"].name
     prod = _queues_in(ROOT / "backend/docker-entrypoint.sh")
-    assert prod and queue in prod[0], f"{name} → {queue} not in production -Q {prod}"
+    all_prod_queues = set().union(*prod) if prod else set()
+    assert prod and queue in all_prod_queues, f"{name} → {queue} not in production -Q {prod}"
     # and every compose file with workers has one consuming it
     for f in ("docker-compose.yml", "docker-compose.small.yml", "docker-compose.satellite.yml"):
         qs = re.findall(r"-Q\s+([\w,]+)", (ROOT / f).read_text())

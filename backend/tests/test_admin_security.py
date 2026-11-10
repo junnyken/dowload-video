@@ -54,8 +54,9 @@ for _mod in (
     sys.modules.setdefault(_mod, MagicMock())
 
 import app.main as _main_stub  # noqa: E402
-_main_stub.limiter = MagicMock()
-_main_stub.limiter.limit = lambda *a, **kw: (lambda f: f)
+if isinstance(_main_stub, MagicMock) or not hasattr(getattr(_main_stub, "limiter", None), "_route_limits"):
+    _main_stub.limiter = MagicMock()
+    _main_stub.limiter.limit = lambda *a, **kw: (lambda f: f)
 
 
 # ═══════════════════════════════════════════════════════════════════

@@ -390,12 +390,18 @@ class TestP58PollingRateLimitFiveMinutes:
         # Enable the real SlowAPI rate limiter (using in-memory storage so the test is self-contained & deterministic)
         lim = app.state.limiter
         monkeypatch.setattr(lim, "enabled", True)
-        if getattr(lim, "_in_memory_fallback", None) is not None:
-            monkeypatch.setattr(lim, "_storage", lim._in_memory_fallback)
+        monkeypatch.setattr(lim, "_storage_dead", False)
         if getattr(lim, "_fallback_limiter", None) is not None:
             monkeypatch.setattr(lim, "_limiter", lim._fallback_limiter)
+            if getattr(lim._fallback_limiter, "storage", None) is not None:
+                monkeypatch.setattr(lim, "_storage", lim._fallback_limiter.storage)
         try:
             lim.reset()
+        except Exception:
+            pass
+        try:
+            if hasattr(flow_cleanup._FALLBACK_REDIS, "_store"):
+                flow_cleanup._FALLBACK_REDIS._store.clear()
         except Exception:
             pass
 

@@ -16,6 +16,7 @@ ffmpeg, Supabase, Celery and the extractor are mocked.
 import asyncio
 import json
 import os
+import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -78,10 +79,33 @@ def root(monkeypatch, tmp_path):
     return d
 
 
+_CACHED_LAVFI_MP4: bytes | None = None
+
+
+def _lavfi_mp4_bytes(tmp_dir) -> bytes:
+    """Generate a real decodable H.264 MP4 via ffmpeg lavfi once per test session."""
+    global _CACHED_LAVFI_MP4
+    if _CACHED_LAVFI_MP4 is None:
+        import subprocess
+        out_mp4 = tmp_dir / "_seed_lavfi.mp4"
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-f", "lavfi", "-i", "color=c=black:s=640x360:d=0.2:r=10",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                str(out_mp4),
+            ],
+            check=True,
+        )
+        _CACHED_LAVFI_MP4 = out_mp4.read_bytes()
+        out_mp4.unlink(missing_ok=True)
+    return _CACHED_LAVFI_MP4
+
+
 @pytest.fixture
-def video(root):
+def video(root, tmp_path):
     p = root / REAL_NAME
-    p.write_bytes(b"\x00" * 64)
+    p.write_bytes(_lavfi_mp4_bytes(tmp_path))
     return p
 
 
@@ -155,7 +179,7 @@ class TestDownloadLocalRealName:
         from app.core.local_download import download_url
         r = app.get(download_url(str(video), "clip.mp4"))
         assert r.status_code == 200
-        assert r.content == b"\x00" * 64
+        assert r.content == video.read_bytes()
 
     def test_unencoded_plus_is_a_space_and_misses(self, app, root, video):
         # Why encoding matters: a raw '+' is a space in a query string.
@@ -209,11 +233,11 @@ def _call_watermark(value):
 
 
 def _call_flow_from_local(value):
+    from types import SimpleNamespace
     from app.api import flow_cleanup
-    with patch.object(flow_cleanup, "_probe", return_value={"width": 64, "height": 64}), \
-         patch.object(flow_cleanup, "_extract_frame", return_value=None):
-        r = flow_cleanup.cleanup_from_local_path.__wrapped__(
-            flow_cleanup.FromLocalRequest(local_path=value), None, None)
+    req = SimpleNamespace(state=SimpleNamespace(flow_user_id=f"u-{uuid.uuid4().hex[:8]}"))
+    r = flow_cleanup.cleanup_from_local_path.__wrapped__(
+        flow_cleanup.FromLocalRequest(local_path=value), req, None)
     return r
 
 
@@ -266,7 +290,7 @@ def test_endpoints_really_route_through_trim_gif_helper(root, video, monkeypatch
     for bad in ("../outside.mp4", str(root.parent / f"{root.name}_x" / "a.mp4")):
         with pytest.raises(HTTPException) as e:
             asyncio.run(routes.trim_media.__wrapped__(
-                routes.TrimRequest(local_path=bad, start_time=0, end_time=1), None))
+                routes.TrimRequest(local_path=bad, start_time=0, end_time=1), None, None))
         assert e.value.status_code == 400
         with pytest.raises(HTTPException) as e:
             asyncio.run(routes.convert_to_gif.__wrapped__(
@@ -354,10 +378,11 @@ class TestResponses:
         if mode == "legacy_off":
             assert_no_server_path(body, root)
 
-    def test_processing_package_zip(self, root, video, legacy_off):
+    def test_processing_package_zip(self, root, video, legacy_off, monkeypatch):
         from app.api import processing
+        monkeypatch.setattr(processing, "_enforce_paid_processing_tier", lambda *a, **k: "pro")
         r = asyncio.run(processing.package_zip.__wrapped__(
-            processing.PackageZipRequest(paths=[REAL_NAME]), None))
+            processing.PackageZipRequest(paths=[REAL_NAME]), None, {"id": "u-1", "tier": "pro"}))
         assert r["file_id"].startswith("pkg_")
         assert_no_server_path(r, root)
 
@@ -399,32 +424,41 @@ class TestResponses:
             assert_no_server_path(r, root)
 
     def test_flow_cleanup_process_and_result_download(self, app, root, video, monkeypatch, mode):
+        from types import SimpleNamespace
         from app.api import flow_cleanup
-        monkeypatch.setattr(flow_cleanup, "_probe",
-                            lambda p: {"width": 640, "height": 360, "duration": 2.0, "fps": 30.0})
-        monkeypatch.setattr(flow_cleanup, "_extract_frame", lambda *a, **k: None)
+        from app.core.auth_middleware import get_optional_user
+        import app.main as main_mod
+        monkeypatch.setenv("FLOW_CLEANUP_ALLOW_INPROCESS", "1")
+        monkeypatch.setattr(flow_cleanup, "_enqueue_cleanup_task", lambda *a, **k: None)
+        uid = f"u-{uuid.uuid4().hex[:8]}"
+        req = SimpleNamespace(state=SimpleNamespace(flow_user_id=uid))
         start = flow_cleanup.cleanup_from_local_path.__wrapped__(
-            flow_cleanup.FromLocalRequest(local_path=REAL_NAME), None, None)
+            flow_cleanup.FromLocalRequest(local_path=REAL_NAME), req, None)
         assert_no_server_path(start, root)
+        monkeypatch.setattr(flow_cleanup, "_probe", lambda p: start["video_info"])
         monkeypatch.setattr(flow_cleanup.subprocess, "run",
                             lambda cmd, **k: (_write_out(cmd), _Ok())[1])
         r = flow_cleanup.process_flow_cleanup.__wrapped__(
-            flow_cleanup.ProcessRequest(temp_id=start["temp_id"], method="crop"), None, None)
+            flow_cleanup.ProcessRequest(temp_id=start["temp_id"], method="crop", consent_confirmed=True), req, None)
         assert r["cleaned_file_id"].startswith("cleaned_")
         if mode == "legacy_off":
             assert "cleaned_path" not in r
             assert_no_server_path(r, root)
-        got = app.get(r["download_url"])
-        assert got.status_code == 200 and got.content == b"out"
-        # The result route only serves cleaned_* of that session.
-        bad = app.get(f"/api/v1/flow-cleanup/result/{start['temp_id']}/input.mp4")
-        assert bad.status_code == 400
+        main_mod.app.dependency_overrides[get_optional_user] = lambda: {"id": uid, "tier": "pro"}
+        try:
+            got = app.get(r["download_url"])
+            assert got.status_code == 200 and got.content == b"out"
+            # The result route only serves cleaned_* of that session.
+            bad = app.get(f"/api/v1/flow-cleanup/result/{start['temp_id']}/input.mp4")
+            assert bad.status_code == 400
+        finally:
+            main_mod.app.dependency_overrides.pop(get_optional_user, None)
 
     def test_trim(self, root, video, monkeypatch, mode):
         from app.api import routes
         monkeypatch.setattr(routes.subprocess, "run", lambda cmd, **k: (_write_out(cmd), _Ok())[1])
         r = asyncio.run(routes.trim_media.__wrapped__(
-            routes.TrimRequest(local_path=REAL_NAME, start_time=0, end_time=1), None))
+            routes.TrimRequest(local_path=REAL_NAME, start_time=0, end_time=1), None, None))
         assert r["trimmed_file_id"].startswith("trim_output_")
         assert "file=" in r["download_url"]
         assert video.exists()  # the caller's file is never removed
@@ -447,6 +481,7 @@ class TestResponses:
         from fastapi.testclient import TestClient
         from app.main import app as fastapi_app
         from app.api.transcript_translate import resolve_identity
+        from app.core.auth_middleware import get_optional_user
         monkeypatch.setenv("ASR_ENABLED", "true")       # Phase 32A: off by default
         monkeypatch.setenv("GEMINI_API_KEY", "test-key")
         task = MagicMock()
@@ -455,16 +490,19 @@ class TestResponses:
         db.rpc.return_value.execute.return_value.data = True
         db.table.return_value.insert.return_value.execute.return_value.data = [{"id": "asr-1"}]
         fastapi_app.dependency_overrides[resolve_identity] = lambda: "user-1"
+        fastapi_app.dependency_overrides[get_optional_user] = lambda: {"id": "user-1", "tier": "pro"}
         ff = MagicMock(returncode=0, stdout="60", stderr="")
         try:
             with patch("subprocess.run", return_value=ff), \
                  patch("app.api.transcript_asr._get_db", return_value=db), \
                  patch("app.api.routes._preflight_disk_check"), \
-                 patch("app.api.transcript_asr._get_transcribe_task", return_value=task):
+                 patch("app.api.transcript_asr._get_transcribe_task", return_value=task), \
+                 patch("app.core.quotas.get_user_tier", return_value="pro"):
                 resp = TestClient(fastapi_app).post(
                     "/api/v1/transcript-asr/jobs", json={"video_local_path": REAL_NAME})
         finally:
             fastapi_app.dependency_overrides.pop(resolve_identity, None)
+            fastapi_app.dependency_overrides.pop(get_optional_user, None)
         assert resp.status_code == 200, resp.text
         assert_no_server_path(resp.json(), root)
         # The validator resolved the id to the real file inside downloads/.
