@@ -443,9 +443,31 @@ Công thức bảo vệ timeout trong `_validate_job_limits` (`_JOB_TIMEOUT_SEC 
 | `1920×1080` / `1080×1920` (1080p) | 60 fps | 124.42 | **5s** | 279.9s | **600s** |
 | `3840×2160` (4K UHD) | 30 fps | 248.83 | **2s** (UI báo sàn `5s`, `/process` từ chối ở `> 2.68s`) | 300.0s | **600s** |
 
-**Đề xuất kỹ thuật (không tự tăng timeout trong P5.6)**:
-1. Sau khi tối ưu `temporal_fill` theo vùng ROI + giới hạn mẫu RANSAC ở P5.6.2, tốc độ thực tế trên `720×1280@30fps` là `~1.3–2.6s / 1s video` (`~0.095s / MPx·frame`, thấp hơn nhiều so với hệ số bảo thủ `_SEC_PER_MPX_FRAME = 0.45`).
-2. Nếu muốn hỗ trợ video `720p@30fps` dài `30s–60s` hoặc `1080p@30fps` dài `20s–30s` mà vẫn giữ nguyên `FLOW_JOB_TIMEOUT_SEC = 300s`, có thể giảm `FLOW_EST_SEC_PER_MPX_FRAME` từ `0.45` xuống `0.15` (khi đó `720p@30fps` được phép tới `60s` và `1080p@30fps` được phép tới `32s`).
+### Đề xuất lại `FLOW_SEC_PER_MPX_FRAME` có hệ số an toàn dựa trên số liệu Load Test P5.7.2 sau sửa (`ced4bcc` — Mục P5.7.3)
+- **Không tự đổi mặc định trong code**: giá trị mặc định `_SEC_PER_MPX_FRAME = 0.45` trong `backend/app/api/flow_cleanup.py` được **giữ nguyên tuyệt đối**.
+- **Số liệu thực tế `sec / (MPx × frame)` đo từ 54 lượt chạy worker sau bản sửa `ced4bcc` (P5.7.2)**:
+  - Ở `conc = 1` (1 job chạy đơn lẻ):
+    - `720×1280` (`10s`, `276.48 MPx·f`): Worker Median = **`0.1275 s/(MPx·f)`** (`0.1236 – 0.1309`)
+    - `720×1280` (`20s`, `552.96 MPx·f`): Worker Median = **`0.1120 s/(MPx·f)`** (`0.1108 – 0.1140`)
+    - `1080×1920` (`10s`, `622.08 MPx·f`): Worker Median = **`0.0722 s/(MPx·f)`** (`0.0709 – 0.0742`)
+    - Trung vị toàn cục `conc = 1`: **`0.1120 s/(MPx·f)`** (tại `7e31a13` là `0.1077 s/(MPx·f)`).
+  - Ở `conc = 2..3` (khi 2 luồng worker chạy song song chia sẻ CPU 4 nhân):
+    - `720×1280` (`10s`, `conc = 2`): Worker Median = **`0.1738 s/(MPx·f)`**, **Max quan sát toàn bộ 54 job = `0.2035 s/(MPx·f)`** (`56.27s` trên `276.48 MPx·f`).
+    - `720×1280` (`20s`, `conc = 2`): Worker Median = **`0.1585 s/(MPx·f)`** (`max = 0.1622`).
+    - `1080×1920` (`10s`, `conc = 2`): Worker Median = **`0.1013 s/(MPx·f)`** (`max = 0.1124`).
+- **Tại sao đề xuất `0.15` ở P5.6 cũ KHÔNG an toàn và bị huỷ bỏ?**
+  - Với `0.15`, hệ thống sẽ cho phép video `720×1280@30fps` dài tới `60s` (`1,658.88 MPx·f`). Ở tải đồng thời `conc = 2` (`0.1585 – 0.2035 s/(MPx·f)`), job `720p 60s` sẽ chạy mất **`262.9s – 337.6s`**, vượt ngưỡng `80% timeout` (`240s`) và có nguy cơ chạm `soft_time_limit = 300s` làm người dùng mất quota mà không nhận được kết quả.
+- **Công thức tính `FLOW_SEC_PER_MPX_FRAME` đề xuất mới (P5.7.3)**:
+  - Điều kiện bắt buộc của brief P5.7.3: **Job dài nhất được nhận phải hoàn tất dưới `80%` của `FLOW_JOB_TIMEOUT_SEC` (`≤ 240s` trên `300s`)** ngay cả ở trường hợp xấu nhất khi 2 job chạy đồng thời (`max_observed_worker_spm = 0.2035 s/(MPx·f)`), cộng thêm **hệ số dự phòng an toàn `1.25×` (`+25%`)**:
+    $$\text{FLOW\_SEC\_PER\_MPX\_FRAME}_{\text{đề xuất}} = \text{spm}_{\max} \times \frac{300}{240} \times 1.25 = 0.2035 \times 1.25 \times 1.25 = 0.3180 \approx \mathbf{0.32}$$
+- **Bảng đối chiếu thời lượng tối đa & thời gian chạy thực tế ở mức trần giữa mặc định `0.45` và mức đề xuất `0.32`**:
+
+| Độ phân giải @ 30fps | `mpx_per_sec` | Thời lượng tối đa hiện tại (`0.45`) | Thời lượng tối đa với đề xuất (`0.32`) | Thời gian chạy thực tế kỳ vọng ở `conc=1` (với trần `0.32`) | Thời gian chạy thực tế xấu nhất ở `conc=2` (`spm_max`, với trần `0.32`) | So với ngưỡng `80% timeout` (`≤ 240s`) |
+|---|---:|---:|---:|---:|---:|---|
+| `640×360` (360p) | 6.91 | **60s** | **60s** | ~46.4s | ~84.4s | **An toàn (`84.4s ≤ 240s`)** |
+| `854×480` (480p) | 12.30 | **54s** | **60s** | ~82.7s | ~150.2s | **An toàn (`150.2s ≤ 240s`)** |
+| `720×1280` / `1280×720` (720p) | 27.65 | **24s** | **33s** (`912.4 MPx·f`) | **~102.2s – 116.3s** | **~185.7s** (với `spm_max = 0.2035`) | **An toàn (`185.7s ≤ 240s`)** |
+| `1080×1920` / `1920×1080` (1080p) | 62.21 | **10s** | **15s** (`933.1 MPx·f`) | **~67.4s** | **~104.9s** (với `spm_max_1080p = 0.1124`) / **~189.9s** (với `0.2035`) | **An toàn (`104.9s – 189.9s ≤ 240s`)** |
 
 ### Ghi chú Hardening P5.6.7 — Video kích thước lẻ (`odd_721x405.mp4`) & Lịch sử E2E P5.5/P5.6.1
 - **Video kích thước lẻ (`odd_721x405.mp4`, đầu vào `721×405`)**:

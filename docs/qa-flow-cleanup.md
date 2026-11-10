@@ -543,7 +543,14 @@ For `preset=custom`, provide `region: {"x": N, "y": N, "w": N, "h": N}` in pixel
 | `1920×1080` / `1080×1920` | 60 fps | **5s** | **600s** |
 | `3840×2160` (4K) | 30 fps | **2s** (UI hiển thị sàn `5s`, `/process` chặn `> 2.68s`) | **600s** |
 
-- **Đề xuất hiệu chỉnh**: Hệ số ước tính hiện tại `_SEC_PER_MPX_FRAME = 0.45` được đặt bảo thủ trước khi tối ưu ROI `temporal_fill`. Thực tế đo ở P5.6.2 đạt `~0.095s / MPx·frame`. Nếu giảm `FLOW_EST_SEC_PER_MPX_FRAME` xuống `0.15` (giữ nguyên `FLOW_JOB_TIMEOUT_SEC = 300s`), hệ thống có thể cho phép `720p@30fps` tới `60s` và `1080p@30fps` tới `32s` mà không vượt timeout 300s.
+- **Đề xuất hiệu chỉnh có hệ số an toàn (P5.7.3 — dựa trên số liệu Load Test P5.7.2 sau sửa `ced4bcc`, KHÔNG tự đổi mặc định `0.45` trong code)**:
+  - Đo thực tế từ 54 job `per_frame` ở P5.7.2: trung vị `conc=1` đạt `0.1120 s/(MPx·frame)` (`720p`: `0.1120–0.1275`, `1080p`: `0.0722`), và mức cao nhất khi 2 job chạy song song (`conc=2`) là `spm_max = 0.2035 s/(MPx·frame)`.
+  - Đề xuất `0.15` ở P5.6 cũ đã bị **huỷ bỏ** vì ở `conc=2` một video `720p 60s` có thể mất `263–338s` (vượt `240s = 80% timeout`).
+  - Áp dụng ràng buộc **job dài nhất được nhận phải hoàn tất `≤ 240s` (`80%` của `300s` timeout)** ngay cả ở `spm_max = 0.2035` kèm **hệ số an toàn `1.25×`**:
+    `FLOW_EST_SEC_PER_MPX_FRAME = 0.2035 × (300 / 240) × 1.25 = 0.3180 ≈ 0.32`.
+  - Khi cấu hình `FLOW_EST_SEC_PER_MPX_FRAME=0.32` qua biến môi trường:
+    - `720p@30fps` tăng giới hạn từ `24s` lên **`33s`** (thời gian chạy thực tế `~102–116s` ở `conc=1`, tối đa `~185.7s ≤ 240s` ở `conc=2`).
+    - `1080p@30fps` tăng giới hạn từ `10s` lên **`15s`** (thời gian chạy thực tế `~67.4s` ở `conc=1`, tối đa `~104.9s–189.9s ≤ 240s` ở `conc=2`).
 
 ### 10.6. Đo lại Benchmark Chất lượng: Mốc duy nhất `7e31a13` → Sau sửa `ced4bcc` (`fix(inpaint): count only contributing neighbours`, P5.7.1)
 - Đã chạy lại toàn bộ `synthetic` (18 video tổng hợp + 1 video thực tế), `synthetic-hard` (10 video) và `tracker P3` sau commit `ced4bcc` (`fix(inpaint): count only contributing neighbours`: chỉ tăng `matched_count` khi `bool(valid_roi.any()) == True`, giữ giới hạn `4` cho mọi trường hợp), đồng thời tạo mới toàn bộ 25 contact sheets trong `benchmarks/results/contact-sheets/`.
