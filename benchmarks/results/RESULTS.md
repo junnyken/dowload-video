@@ -238,86 +238,96 @@
 
 ---
 
-## Lần chạy 5 — 09/11/2026 (Phase P5.4 — Benchmark tách riêng 4 bộ: `synthetic`, `synthetic-hard`, `real-tune`, `real-heldout`)
+## Lần chạy 5 — 10/11/2026 (Phase P5.7.1 — Đo lại Benchmark Chất lượng: Mốc duy nhất `7e31a13` → Sau sửa `ced4bcc`)
 
 ### Môi trường
-- Commit: `71b50de` (`feat/watermark-p5-hardening`)
+- Commit baseline duy nhất trước sửa: `7e31a13` (`test(p5.7.1): re-run full quality benchmark and regenerate contact sheets at HEAD without touching engine`)
+- Commit bản sửa `temporal_fill`: `ced4bcc` (`fix(inpaint): count only contributing neighbours`)
 - Hệ điều hành & Phần cứng: Windows 10/11 (win32), CPU `Intel(R) Core(TM) i3-10105 CPU @ 3.70GHz` (4 nhân / 8 luồng), RAM `16 GB`.
 - FFmpeg: `8.1` / static `.tools/`.
-- Engine: Detector `detect_watermark_regions` (P2), Tracker `track_watermark_in_video` (P3), Inpaint `process_video_natural` (P0/P3, `-crf 12`).
-- Contact sheets (6 frame trước/sau mỗi video): xuất tại `benchmarks/results/contact-sheets/`.
+- Engine: Detector `detect_watermark_regions` (P2), Tracker `track_watermark_in_video` (P3), Inpaint `process_video_natural` (`backend/app/api/flow_inpaint.py`: chỉ tăng `matched_count` khi `bool(valid_roi.any()) == True`, giữ giới hạn `4` cho mọi trường hợp, không dùng `max_matches=8`).
+- Contact sheets (6 frame trước/sau mỗi video, tổng cộng 25 file `.jpg`): đã tạo lại toàn bộ tại `benchmarks/results/contact-sheets/`.
+- **Ghi chú minh bạch về nguồn số liệu lịch sử (Bước C.3)**:
+  - Ba con số `0.9167 / 0.9585 / 0.8280` của `moving_watermark_02`, `moving_watermark_03` và `scene_cut_03` từng xuất hiện ở cột `"Trước P5.6"` trong bản nháp trước được lấy từ file `benchmarks/results/tracker_metrics_p3.json` tại commit `d938a37` (được ghi đè trong commit `967a7e0` — P5.4, mục `moving_inpaint_comparison[*].ssim_p3_tracked`, dòng 398–459), không nằm trong `p5_4_metrics.json` gốc và khác với bảng báo cáo Phase P3 ban đầu (`0.8527 / 0.9417 / 0.8118`).
+  - Theo đúng yêu cầu Bước C.2 & C.3, cột `"Trước P5.6"` đã được **xoá bỏ hoàn toàn** khỏi báo cáo này; **mốc so sánh DUY NHẤT là số liệu đo tại commit `7e31a13`** (`7e31a13 → sau sửa ced4bcc`).
 
 ---
 
-### Bảng 1 — Bộ `synthetic` (18 video tổng hợp chuẩn: 15 dương tính + 3 âm tính — Đo lại tại HEAD `d938a37`, P5.7.1)
+### Bảng 1 — Bộ `synthetic` (18 video tổng hợp chuẩn: 15 dương tính + 3 âm tính — So sánh `7e31a13` → Sau sửa `ced4bcc`)
 
-| Hạng mục / Chỉ số | Trước thay đổi (P5.4) | Sau thay đổi (HEAD `d938a37`) | Ngưỡng nghiệm thu (Plan mục 6 / Brief) | Đánh giá | Ghi chú / Nguyên nhân |
+| Hạng mục / Chỉ số | Tại `7e31a13` | Sau sửa (`ced4bcc`) | Ngưỡng nghiệm thu (Plan mục 6 / Brief) | Đánh giá | Ghi chú / Nguyên nhân |
 |---|---:|---:|---|---|---|
 | Detector Precision (IoU ≥ 0.5) | 1.0000 | **1.0000** (15/15) | `≥ 0.90` | **ĐẠT** | Không báo dư vùng trên 15 video dương tính |
 | Detector Recall (IoU ≥ 0.5) | 1.0000 | **1.0000** (15/15) | `≥ 0.85` | **ĐẠT** | IoU trung bình `0.818` |
 | Detector Báo nhầm trên `no_watermark` | 0.0% (0/3) | **0.0%** (0/3) | *Chỉ báo cáo* | *Chỉ báo cáo* | Loại bỏ đúng phụ đề thoại/biển hiệu (`content_text_neg_01..03`) |
-| Detector Thời gian xử lý | 0.763s | **0.700s** (max 1.349s) | *Chỉ báo cáo* | *Chỉ báo cáo* | |
+| Detector Thời gian xử lý | 0.700s | **0.792s** (max 2.072s) | *Chỉ báo cáo* | *Chỉ báo cáo* | |
 | Tracker IoU trung vị (từ keyframe 0) | 1.0000 | **1.0000** | `≥ 0.85` | **ĐẠT** | Tự khởi tạo từ P2 Detector đạt `0.8152` (`< 0.85` do viền đệm bbox 2–3px của Detector) |
 | Tracker Drift tối đa (% đường chéo frame) | 0.14% | **0.14%** | `≤ 3.0%` | **ĐẠT** | |
 | Tracker Tỷ lệ `needs_review` | 0.0% / 100% (`lost_probe`) | **0.0%** (15 mẫu) / **100%** (`lost_probe`) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | Báo `needs_review=True` chính xác khi watermark biến mất ở frame 50 |
-| Inpaint SSIM trong mask — Nhóm `moving_watermark` (3 video, P3 tracked) | 0.9088 (`0.8527 – 0.9417`) | **0.8936** (`0.8338 – 0.9599`, `Δ = -0.0152`) | `≥ 0.85` | **ĐẠT** (TB nhóm) | TB đạt `0.8936 ≥ 0.85`, nhưng **`moving_watermark_01` giảm từ `0.9319` xuống `0.8338` (`-0.0981`)** do điều kiện dừng sớm `matched_count >= 2 & coverage >= 98%` trong `7b8c092`. |
-| Inpaint SSIM trong mask — Nhóm watermark tĩnh (11 video) | 0.7815 (`0.6956 – 0.8745`) | **0.8330** (`0.7299 – 0.9338`, `Δ = +0.0515`) | `≥ 0.85` | **CHƯA ĐẠT** | Tăng mạnh `+0.0515` (từ 2/11 lên **6/11 video đạt `≥ 0.85`** nhờ lấy mẫu tham chiếu bước dài trong `dc61e5f`), nhưng 5/11 video nền pan chậm vẫn dưới `0.85` (`0.7299 – 0.8297`). |
-| Inpaint SSIM trong mask — Trung bình toàn bộ 15 video dương tính (kèm P3 tracked cho nhóm moving) | 0.8091 | **0.8450** (`Δ = +0.0359`) | `≥ 0.85` | **CHƯA ĐẠT** | Tiến sát ngưỡng `0.85` (`0.8450`), còn thiếu `0.0050` do `static_corner_01` (`0.7299`) và `semi_transparent_01` (`0.7405`). |
-| Inpaint PSNR ngoài mask (so với ref CRF 18) | 45.28 dB | **43.56 dB** (`42.46 – 45.99 dB`) | `≥ 40.0 dB` | **ĐẠT** | 15/15 video đều `≥ 42.46 dB` |
-| Inpaint Temporal flicker trong mask | 0.87 | **1.16** (tỷ số so với nền) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | |
-| Tốc độ xử lý (`sec / video_sec`) | 2.31s / 1s video | **1.46s / 1s video** (`640×360@30fps`) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | Trung bình `7.32s` cho video `5.0s` (nhanh hơn 36.7% nhờ tối ưu ROI `7b8c092`) |
+| Inpaint SSIM trong mask — Nhóm `moving_watermark` (3 video, P3 tracked) | 0.8936 (`0.8338 – 0.9599`) | **0.8938** (`0.8339 – 0.9603`, `Δ = +0.0002`) | `≥ 0.85` | **ĐẠT** (TB nhóm) | Cả 3 video đều tăng nhẹ (`+0.0001` đến `+0.0004`); không có video nào giảm so với `7e31a13`. |
+| Inpaint SSIM trong mask — Nhóm watermark tĩnh (11 video) | 0.8330 (`0.7299 – 0.9338`) | **0.8377** (`0.7303 – 0.9341`, `Δ = +0.0047`) | `≥ 0.85` | **CHƯA ĐẠT** | **11/11 video giữ nguyên hoặc tăng SSIM** (nổi bật `heavy_motion_03`: `0.8641 → 0.8975`, `+0.0334`; `heavy_motion_01`: `0.7989 → 0.8152`, `+0.0163`), vì chỉ đếm láng giềng thực sự đóng góp pixel (`valid_roi.any()`). 5/11 video nền pan chậm vẫn dưới `0.85`. |
+| Inpaint SSIM trong mask — Trung bình toàn bộ 15 video dương tính (kèm P3 tracked cho nhóm moving) | 0.8450 | **0.8486** (`Δ = +0.0036`) | `≥ 0.85` | **CHƯA ĐẠT** | Tăng `+0.0036` (từ `0.8450` lên `0.8486`), không có bất kỳ video nào trong 15 video giảm SSIM so với `7e31a13`. |
+| Inpaint PSNR ngoài mask (so với ref CRF 18) | 43.58 dB | **43.58 dB** (`42.46 – 45.99 dB`) | `≥ 40.0 dB` | **ĐẠT** | 15/15 video đều `≥ 42.46 dB` |
+| Inpaint Temporal flicker trong mask | 1.15 | **1.18** (tỷ số so với nền) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | |
+| Tốc độ xử lý (`sec / video_sec`) | 1.37s / 1s video | **1.66s / 1s video** (`640×360@30fps`) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | Trung bình `8.30s` cho video `5.0s` (so với `6.83s` ở `7e31a13`, chậm hơn `~21.5%` do xét tiếp láng giềng khi các láng giềng đầu chưa đóng góp pixel). |
 
-#### Bảng so sánh Trước vs Sau thay đổi engine (`dc61e5f` + `7b8c092`) trên từng video bộ `synthetic` (15 video có bản sạch tham chiếu)
-| Video | Nhóm / Chế độ bbox | SSIM Trước (P5.4) | SSIM Sau (HEAD `d938a37`) | `Δ SSIM` | PSNR ngoài mask Trước (dB) | PSNR ngoài mask Sau (dB) | `Δ PSNR` (dB) | Flicker Trước | Flicker Sau | `Δ Flicker` | Thời gian Trước → Sau (s) | Ghi chú biến động |
+#### Bảng so sánh từng video bộ `synthetic` (15 video có bản sạch tham chiếu — Mốc duy nhất: `7e31a13` → Sau sửa `ced4bcc`)
+| Video | Nhóm / Chế độ bbox | SSIM tại `7e31a13` | SSIM Sau sửa (`ced4bcc`) | `Δ SSIM` | PSNR ngoài mask `7e31a13` (dB) | PSNR ngoài mask Sau sửa (dB) | `Δ PSNR` (dB) | Flicker `7e31a13` | Flicker Sau sửa | `Δ Flicker` | Thời gian `7e31a13` → Sau sửa (s) | Ghi chú biến động |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `static_corner_01.mp4` | Logo góc tĩnh | 0.6967 | **0.7299** | **+0.0332** | 44.31 | 43.44 | -0.87 | 0.91 | 1.45 | +0.54 | 10.76 → 5.20 | Tăng SSIM, PSNR vẫn ≥ 40 dB |
-| `static_corner_02.mp4` | Logo góc tĩnh | 0.8088 | **0.8734** | **+0.0646** | 44.79 | 42.97 | -1.82 | 0.93 | 1.28 | +0.35 | 11.72 → 7.48 | **Vượt ngưỡng SSIM ≥ 0.85** |
-| `static_corner_03.mp4` | Logo góc tĩnh | 0.8086 | **0.8795** | **+0.0709** | 47.95 | 43.53 | -4.42 | 0.77 | 1.19 | +0.42 | 11.84 → 5.86 | **Vượt ngưỡng SSIM ≥ 0.85** |
-| `semi_transparent_01.mp4` | Bán trong suốt tĩnh | 0.6956 | **0.7405** | **+0.0449** | 43.26 | 43.45 | +0.19 | 0.88 | 1.43 | +0.55 | 9.49 → 6.01 | Tăng cả SSIM và PSNR |
-| `semi_transparent_02.mp4` | Bán trong suốt tĩnh | 0.7901 | **0.8505** | **+0.0604** | 44.66 | 42.99 | -1.67 | 0.74 | 1.12 | +0.38 | 13.00 → 8.25 | **Vượt ngưỡng SSIM ≥ 0.85** |
-| `semi_transparent_03.mp4` | Bán trong suốt tĩnh | 0.8745 | **0.9338** | **+0.0593** | 44.96 | 43.48 | -1.48 | 0.87 | 0.98 | +0.11 | 12.56 → 7.35 | Tăng mạnh SSIM (+0.0593) |
-| `heavy_motion_01.mp4` | Camera rung mạnh | 0.7680 | **0.7989** | **+0.0309** | 45.07 | 44.59 | -0.48 | 0.86 | 0.93 | +0.07 | 10.91 → 6.08 | Tăng SSIM |
-| `heavy_motion_02.mp4` | Camera rung mạnh | 0.7731 | **0.8297** | **+0.0566** | 42.42 | 42.57 | +0.15 | 0.87 | 1.09 | +0.22 | 11.28 → 5.79 | Tăng cả SSIM và PSNR |
-| `heavy_motion_03.mp4` | Camera rung mạnh | 0.8203 | **0.8641** | **+0.0438** | 46.00 | 43.20 | -2.80 | 0.68 | 0.68 | 0.00 | 11.54 → 6.86 | **Vượt ngưỡng SSIM ≥ 0.85** |
-| `scene_cut_01.mp4` | Cắt cảnh (frame 75) | 0.7332 | **0.7943** | **+0.0611** | 50.91 | 45.75 | -5.16 | 0.96 | 0.99 | +0.03 | 11.35 → 7.57 | Tăng SSIM (+0.0611) |
-| `scene_cut_02.mp4` | Cắt cảnh (frame 50, 100) | 0.8273 | **0.8681** | **+0.0408** | 49.00 | 45.99 | -3.01 | 0.84 | 0.81 | -0.03 | 10.16 → 9.56 | **Vượt ngưỡng SSIM ≥ 0.85** |
-| `moving_watermark_01.mp4` | Nhảy 2 góc (P3 tracked) | 0.9319 | **0.8338** | **-0.0981 (⚠️ GIẢM)** | 42.61 | 42.75 | +0.14 | 1.28 | 1.72 | +0.44 | 27.90 → 5.37 | **⚠️ Giảm SSIM (-0.0981)** do dừng sớm ở `matched_count >= 2` (`7b8c092`) |
-| `moving_watermark_02.mp4` | Nhảy 3 góc (P3 tracked) | 0.8527 | **0.8871** | **+0.0344** | 44.05 | 42.46 | -1.59 | 1.74 | 1.78 | +0.04 | 38.34 → 7.29 | Tăng SSIM (+0.0344), nhanh hơn 5.2× |
-| `moving_watermark_03.mp4` | Trôi ngang (P3 tracked) | 0.9417 | **0.9599** | **+0.0182** | 47.49 | 42.96 | -4.53 | 1.91 | 1.15 | -0.76 | 32.28 → 5.97 | Tăng SSIM (+0.0182), giảm flicker |
-| `scene_cut_03.mp4` | Cắt cảnh + nhảy góc (P3 tracked) | 0.8118 | **0.8318** | **+0.0200** | 50.32 | 43.54 | -6.78 | 1.16 | 1.48 | +0.32 | 36.13 → 7.80 | Tăng SSIM (+0.0200), nhanh hơn 4.6× |
+| `static_corner_01.mp4` | Logo góc tĩnh | 0.7299 | **0.7303** | **+0.0004** | 43.44 | 43.44 | 0.00 | 1.45 | 1.49 | +0.04 | 5.20 → 7.83 | Tăng nhẹ SSIM |
+| `static_corner_02.mp4` | Logo góc tĩnh | 0.8734 | **0.8736** | **+0.0002** | 42.97 | 42.97 | 0.00 | 1.28 | 1.32 | +0.04 | 7.48 → 9.82 | Đạt `≥ 0.85`, tăng nhẹ SSIM |
+| `static_corner_03.mp4` | Logo góc tĩnh | 0.8795 | **0.8797** | **+0.0002** | 43.53 | 43.54 | +0.01 | 1.19 | 1.22 | +0.03 | 5.86 → 7.14 | Đạt `≥ 0.85`, tăng nhẹ SSIM |
+| `semi_transparent_01.mp4` | Bán trong suốt tĩnh | 0.7405 | **0.7406** | **+0.0001** | 43.45 | 43.45 | 0.00 | 1.43 | 1.47 | +0.04 | 6.01 → 9.13 | Tăng nhẹ SSIM |
+| `semi_transparent_02.mp4` | Bán trong suốt tĩnh | 0.8505 | **0.8505** | **0.0000** | 42.99 | 42.99 | 0.00 | 1.12 | 1.13 | +0.01 | 8.25 → 8.61 | Đạt `≥ 0.85`, giữ nguyên SSIM |
+| `semi_transparent_03.mp4` | Bán trong suốt tĩnh | 0.9338 | **0.9341** | **+0.0003** | 43.48 | 43.47 | -0.01 | 0.98 | 1.00 | +0.02 | 7.35 → 9.28 | Đạt `≥ 0.85`, tăng nhẹ SSIM |
+| `heavy_motion_01.mp4` | Camera rung mạnh | 0.7989 | **0.8152** | **+0.0163** | 44.59 | 44.58 | -0.01 | 0.93 | 0.98 | +0.05 | 6.08 → 6.66 | **Tăng rõ SSIM (+0.0163)** nhờ bỏ qua láng giềng trùng vị trí logo |
+| `heavy_motion_02.mp4` | Camera rung mạnh | 0.8297 | **0.8300** | **+0.0003** | 42.57 | 42.57 | 0.00 | 1.09 | 1.09 | 0.00 | 5.79 → 5.84 | Tăng nhẹ SSIM |
+| `heavy_motion_03.mp4` | Camera rung mạnh | 0.8641 | **0.8975** | **+0.0334** | 43.20 | 43.20 | 0.00 | 0.68 | 0.74 | +0.06 | 6.86 → 6.97 | **Tăng mạnh SSIM (+0.0334)** nhờ lấy đủ 4 láng giềng thực sự đóng góp pixel |
+| `scene_cut_01.mp4` | Cắt cảnh (frame 75) | 0.7943 | **0.7947** | **+0.0004** | 45.75 | 45.75 | 0.00 | 0.99 | 1.00 | +0.01 | 7.57 → 7.23 | Tăng nhẹ SSIM |
+| `scene_cut_02.mp4` | Cắt cảnh (frame 50, 100) | 0.8681 | **0.8683** | **+0.0002** | 45.99 | 45.99 | 0.00 | 0.81 | 0.83 | +0.02 | 9.56 → 11.58 | Đạt `≥ 0.85`, tăng nhẹ SSIM |
+| `moving_watermark_01.mp4` | Nhảy 2 góc (P3 tracked) | 0.8338 | **0.8339** | **+0.0001** | 42.75 | 42.74 | -0.01 | 1.13 | 1.14 | +0.01 | 5.37 → 7.22 | Tăng nhẹ SSIM (`+0.0001`). Ghi chú: ở `7e31a13` hai `neighbors` liền kề đã lộ viền `1–2px` do nền pan nên đạt `coverage >= 98%` sau 2 láng giềng. |
+| `moving_watermark_02.mp4` | Nhảy 3 góc (P3 tracked) | 0.8871 | **0.8872** | **+0.0001** | 42.46 | 42.46 | 0.00 | 1.49 | 1.50 | +0.01 | 7.29 → 7.81 | Đạt `≥ 0.85`, tăng nhẹ SSIM |
+| `moving_watermark_03.mp4` | Trôi ngang (P3 tracked) | 0.9599 | **0.9603** | **+0.0004** | 42.96 | 42.97 | +0.01 | 1.81 | 1.82 | +0.01 | 5.97 → 11.52 | Đạt `≥ 0.85`, tăng SSIM |
+| `scene_cut_03.mp4` | Cắt cảnh + nhảy góc (P3 tracked) | 0.8318 | **0.8328** | **+0.0010** | 43.54 | 43.53 | -0.01 | 0.88 | 0.90 | +0.02 | 7.80 → 7.90 | Tăng SSIM (`+0.0010`) |
+
+*(Trên cả 15/15 video bộ `synthetic`, **không có video nào bị giảm SSIM** khi so từ `7e31a13` → `ced4bcc`; ngoài ra nếu tính theo bbox cố định frame 0 trong `latest_metrics.json`, cả 4 video `moving_watermark_01..03` và `scene_cut_03` cũng đều tăng từ `+0.0001` đến `+0.0010`).*
 
 ---
 
-### Bảng 2 — Bộ `synthetic-hard` (10 video thử thách: Đo lại tại HEAD `d938a37`, P5.7.1)
+### Bảng 2 — Bộ `synthetic-hard` (10 video thử thách — Mốc duy nhất: `7e31a13` → Sau sửa `ced4bcc`)
 
-#### Bảng tổng hợp `synthetic-hard` (Trước vs Sau)
-| Hạng mục / Chỉ số | Trước thay đổi (P5.4) | Sau thay đổi (HEAD `d938a37`) | Ngưỡng nghiệm thu (Plan mục 6 / Brief) | Đánh giá | Ghi chú / Nguyên nhân |
+#### Bảng tổng hợp `synthetic-hard` (`7e31a13` → Sau sửa `ced4bcc`)
+| Hạng mục / Chỉ số | Tại `7e31a13` | Sau sửa (`ced4bcc`) | Ngưỡng nghiệm thu (Plan mục 6 / Brief) | Đánh giá | Ghi chú / Nguyên nhân |
 |---|---:|---:|---|---|---|
 | Detector Precision (IoU ≥ 0.5) | 1.0000 (9/9) | **1.0000** (9/9) | `≥ 0.90` | **ĐẠT** | |
 | Detector Recall (IoU ≥ 0.5) | 1.0000 (9/9) | **1.0000** (9/9) | `≥ 0.85` | **ĐẠT** | IoU từ `0.7052` (`hard_small_wm`) đến `0.8812` (`hard_scale_15x`) |
 | Detector Báo nhầm trên `no_watermark` (`hard_neg_no_watermark`) | 0.0% (0/1) | **0.0%** (0/1) | *Chỉ báo cáo* | *Chỉ báo cáo* | Không báo nhầm trên video nén nặng CRF 33 có phụ đề |
-| Detector Thời gian xử lý | 0.513s | **0.474s** (max 1.097s) | *Chỉ báo cáo* | *Chỉ báo cáo* | |
+| Detector Thời gian xử lý | 0.474s | **0.501s** | *Chỉ báo cáo* | *Chỉ báo cáo* | |
 | Tracker IoU trung vị | 1.0000 | **1.0000** | `≥ 0.85` | **ĐẠT** | |
 | Tracker Drift tối đa (% đường chéo frame) | 0.136% | **0.136%** | `≤ 3.0%` | **ĐẠT** | |
 | Tracker Tỷ lệ `needs_review` | 0.0% (0/9) | **0.0%** (0/9) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | |
-| Inpaint SSIM trong mask (TB 9 video dương tính) | 0.7022 (`0.3874 – 0.9004`) | **0.7846** (`0.4596 – 0.9017`, `Δ = +0.0824`) | `≥ 0.85` | **CHƯA ĐẠT** | Tăng mạnh `+0.0824` (từ 2/9 lên **4/9 video đạt `≥ 0.85`**: `hard_motion_blur_moving`, `hard_small_wm`, `hard_scale_15x`, `hard_vertical_720x1280`). **9/9 video đều tăng SSIM**, nhưng 5/9 video tĩnh mờ/nén nặng/320×180 vẫn dưới `0.85`. |
-| Inpaint PSNR ngoài mask (output vs input) | TB 40.42 dB (`39.31 – 41.03 dB`) | **TB 40.42 dB** (`39.33 – 41.02 dB`, 7/9 video `≥ 40 dB`) | `≥ 40.0 dB` | **CHƯA ĐẠT** (trên 2/9 mẫu đơn lẻ) | Trung bình giữ nguyên `40.42 dB`; 2 mẫu đơn lẻ dưới `40 dB` là `hard_scale_05x` (`39.33 dB`) và `hard_faint_opacity25` (`39.97 dB`). |
-| Inpaint Temporal flicker trong mask (`mean(\|frame[t]-frame[t-1]\|)`) | 6.089 (`2.695 – 11.366`) | **4.560** (`2.058 – 9.850`, `Δ = -1.529`) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | Nhấp nháy giảm 25.1% |
-| Tốc độ xử lý (`sec / video_sec`) | 3.50s / 1s video (`0.92x – 7.29x`) | **1.33s / 1s video** (`0.73x – 2.16x`) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | Nhanh hơn **2.63×** (video dọc `720×1280` giảm từ `7.29x` xuống `2.16x`) |
+| Inpaint SSIM trong mask (TB 9 video dương tính) | 0.7846 (`0.4596 – 0.9017`) | **0.7846** (`0.4596 – 0.9017`, `Δ = 0.0000`) | `≥ 0.85` | **CHƯA ĐẠT** | Trung bình giữ nguyên `0.7846`. 5/9 video tăng nhẹ (`+0.0001` đến `+0.0005`), 2/9 giữ nguyên (`0.0000`), và **2/9 video giảm cực nhẹ dưới ngưỡng phần nghìn (`-0.0006` và `-0.0007`)** được ghi rõ bên dưới. |
+| Inpaint PSNR ngoài mask (output vs input) | TB 40.42 dB (`39.33 – 41.02 dB`) | **TB 40.42 dB** (`39.34 – 41.02 dB`, 7/9 video `≥ 40 dB`) | `≥ 40.0 dB` | **CHƯA ĐẠT** (trên 2/9 mẫu đơn lẻ) | Trung bình giữ nguyên `40.42 dB`; 2 mẫu đơn lẻ dưới `40 dB` là `hard_scale_05x` (`39.34 dB`) và `hard_faint_opacity25` (`39.97 dB`). |
+| Inpaint Temporal flicker trong mask (`mean(\|frame[t]-frame[t-1]\|)`) | 4.560 (`2.058 – 9.850`) | **4.706** (`2.160 – 10.278`, `Δ = +0.146`) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | |
+| Tốc độ xử lý (`sec / video_sec`) | 1.33s / 1s video (`0.73x – 2.16x`) | **1.39s / 1s video** (`0.81x – 2.12x`) | *Chưa có ngưỡng — chỉ báo cáo* | *Chưa có ngưỡng — chỉ báo cáo* | Chênh lệch nhẹ `+0.06s / 1s video` (`+4.5%`) |
 
-#### Chi tiết từng video trong bộ `synthetic-hard` (So sánh Trước vs Sau thay đổi engine)
-| Video | Nhóm thử thách | SSIM Trước (P5.4) | SSIM Sau (HEAD `d938a37`) | `Δ SSIM` | PSNR Trước (dB) | PSNR Sau (dB) | `Δ PSNR` | Flicker Trước (`mean\|Δ\|`) | Flicker Sau (`mean\|Δ\|`) | `Δ Flicker` | Tốc độ Trước → Sau (`sec/vsec`) | Contact Sheet (đã tạo lại) |
+#### Chi tiết từng video trong bộ `synthetic-hard` (Mốc duy nhất: `7e31a13` → Sau sửa `ced4bcc`)
+| Video | Nhóm thử thách | SSIM tại `7e31a13` | SSIM Sau sửa (`ced4bcc`) | `Δ SSIM` | PSNR `7e31a13` (dB) | PSNR Sau sửa (dB) | `Δ PSNR` | Flicker `7e31a13` (`mean\|Δ\|`) | Flicker Sau sửa (`mean\|Δ\|`) | `Δ Flicker` | Tốc độ `7e31a13` → Sau sửa (`sec/vsec`) | Contact Sheet (đã tạo lại) |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `hard_faint_opacity25.mp4` | Watermark mờ (opacity 25%) | 0.6200 | **0.7462 (CHƯA ĐẠT)** | **+0.1262** | 39.98 | **39.97 (CHƯA ĐẠT)** | -0.01 | 7.321 | **4.182** | -3.139 | 2.39x → 1.10x | `synthetic-hard_hard_faint_opacity25_contact.jpg` |
-| `hard_faint_opacity35.mp4` | Watermark mờ (opacity 35%) | 0.7396 | **0.7678 (CHƯA ĐẠT)** | **+0.0282** | 40.57 | **40.59 (ĐẠT)** | +0.02 | 5.070 | **4.821** | -0.249 | 2.66x → 1.26x | `synthetic-hard_hard_faint_opacity35_contact.jpg` |
-| `hard_crf34_heavy.mp4` | Nén H.264 nặng (CRF 34) | 0.6319 | **0.7577 (CHƯA ĐẠT)** | **+0.1258** | 41.03 | **41.02 (ĐẠT)** | -0.01 | 6.491 | **3.682** | -2.809 | 2.77x → 1.19x | `synthetic-hard_hard_crf34_heavy_contact.jpg` |
-| `hard_scale_05x.mp4` | Đổi tỷ lệ 0.5× (320×180) | 0.3874 | **0.4596 (CHƯA ĐẠT)** | **+0.0722** | 39.31 | **39.33 (CHƯA ĐẠT)** | +0.02 | 11.366 | **9.850** | -1.516 | 0.92x → 0.73x | `synthetic-hard_hard_scale_05x_contact.jpg` |
-| `hard_scale_15x.mp4` | Đổi tỷ lệ 1.5× (960×540) | 0.8572 | **0.8883 (ĐẠT)** | **+0.0311** | 40.75 | **40.75 (ĐẠT)** | 0.00 | 2.695 | **2.562** | -0.133 | 5.23x → 1.84x | `synthetic-hard_hard_scale_15x_contact.jpg` |
-| `hard_motion_blur_moving.mp4` | Motion blur trên watermark di chuyển | 0.9004 | **0.9017 (ĐẠT)** | **+0.0013** | 40.69 | **40.69 (ĐẠT)** | 0.00 | 5.003 | **5.062** | +0.059 | 4.55x → 1.04x | `synthetic-hard_hard_motion_blur_moving_contact.jpg` |
-| `hard_vertical_720x1280.mp4` | Video dọc 720×1280 | 0.8276 | **0.8501 (ĐẠT)** | **+0.0225** | 40.17 | **40.17 (ĐẠT)** | 0.00 | 4.009 | **5.709** | +1.700 | 7.29x → 2.16x | `synthetic-hard_hard_vertical_720x1280_contact.jpg` |
-| `hard_small_wm.mp4` | Watermark kích thước nhỏ (68×28) | 0.6539 | **0.8960 (ĐẠT)** | **+0.2421** | 40.57 | **40.55 (ĐẠT)** | -0.02 | 7.650 | **2.058** | -5.592 | 2.72x → 1.17x | `synthetic-hard_hard_small_wm_contact.jpg` |
-| `hard_large_wm.mp4` | Watermark kích thước lớn (224×76) | 0.7020 | **0.7942 (CHƯA ĐẠT)** | **+0.0922** | 40.74 | **40.73 (ĐẠT)** | -0.01 | 5.199 | **3.118** | -2.081 | 2.97x → 1.49x | `synthetic-hard_hard_large_wm_contact.jpg` |
+| `hard_faint_opacity25.mp4` | Watermark mờ (opacity 25%) | 0.7462 | **0.7463 (CHƯA ĐẠT)** | **+0.0001** | 39.97 | **39.97 (CHƯA ĐẠT)** | 0.00 | 4.182 | **4.305** | +0.123 | 1.10x → 1.05x | `synthetic-hard_hard_faint_opacity25_contact.jpg` |
+| `hard_faint_opacity35.mp4` | Watermark mờ (opacity 35%) | 0.7678 | **0.7682 (CHƯA ĐẠT)** | **+0.0004** | 40.59 | **40.59 (ĐẠT)** | 0.00 | 4.821 | **4.891** | +0.070 | 1.26x → 1.10x | `synthetic-hard_hard_faint_opacity35_contact.jpg` |
+| `hard_crf34_heavy.mp4` | Nén H.264 nặng (CRF 34) | 0.7577 | **0.7582 (CHƯA ĐẠT)** | **+0.0005** | 41.02 | **41.02 (ĐẠT)** | 0.00 | 3.682 | **3.845** | +0.163 | 1.19x → 1.25x | `synthetic-hard_hard_crf34_heavy_contact.jpg` |
+| `hard_scale_05x.mp4` | Đổi tỷ lệ 0.5× (320×180) | 0.4596 | **0.4596 (CHƯA ĐẠT)** | **0.0000** | 39.33 | **39.34 (CHƯA ĐẠT)** | +0.01 | 9.850 | **10.278** | +0.428 | 0.73x → 0.81x | `synthetic-hard_hard_scale_05x_contact.jpg` |
+| `hard_scale_15x.mp4` | Đổi tỷ lệ 1.5× (960×540) | 0.8883 | **0.8876 (ĐẠT)** | **-0.0007 (⚠️ GIẢM NHẸ)** | 40.75 | **40.75 (ĐẠT)** | 0.00 | 2.562 | **2.779** | +0.217 | 1.84x → 1.79x | `synthetic-hard_hard_scale_15x_contact.jpg` |
+| `hard_motion_blur_moving.mp4` | Motion blur trên watermark di chuyển | 0.9017 | **0.9017 (ĐẠT)** | **0.0000** | 40.69 | **40.69 (ĐẠT)** | 0.00 | 5.062 | **5.062** | 0.000 | 1.04x → 1.10x | `synthetic-hard_hard_motion_blur_moving_contact.jpg` |
+| `hard_vertical_720x1280.mp4` | Video dọc 720×1280 | 0.8501 | **0.8495 (⚠️ GIẢM NHẸ)** | **-0.0006 (⚠️ GIẢM NHẸ)** | 40.17 | **40.17 (ĐẠT)** | 0.00 | 5.709 | **5.828** | +0.119 | 2.16x → 2.12x | `synthetic-hard_hard_vertical_720x1280_contact.jpg` |
+| `hard_small_wm.mp4` | Watermark kích thước nhỏ (68×28) | 0.8960 | **0.8961 (ĐẠT)** | **+0.0001** | 40.55 | **40.55 (ĐẠT)** | 0.00 | 2.058 | **2.160** | +0.102 | 1.17x → 1.22x | `synthetic-hard_hard_small_wm_contact.jpg` |
+| `hard_large_wm.mp4` | Watermark kích thước lớn (224×76) | 0.7942 | **0.7945 (CHƯA ĐẠT)** | **+0.0003** | 40.73 | **40.73 (ĐẠT)** | 0.00 | 3.118 | **3.203** | +0.085 | 1.49x → 2.10x | `synthetic-hard_hard_large_wm_contact.jpg` |
 | `hard_neg_no_watermark.mp4` | Không có watermark (CRF 33 + phụ đề) | — (0 FP) | — (0 FP) | — | — | — | — | — | — | — | — | — |
+
+**Ghi rõ 2 video giảm nhẹ trong bộ `synthetic-hard` (`7e31a13 → ced4bcc`)**:
+1. **`hard_scale_15x.mp4`**: SSIM giảm nhẹ từ **`0.8883` xuống `0.8876` (`Δ = -0.0007`)** (vẫn đạt `≥ 0.85`).
+2. **`hard_vertical_720x1280.mp4`**: SSIM giảm nhẹ từ **`0.8501` xuống `0.8495` (`Δ = -0.0006`)** (sát ranh giới `0.85` do thêm 1 láng giềng bước xa `global_ref_neighbors` có sai số nội suy phối cảnh nhỏ trên khung dọc `720×1280`).
 
 ---
 
@@ -325,9 +335,9 @@
 - **Trạng thái**: **CHƯA ĐẠT (0 / 5–10 video)** — Thư mục `benchmarks/real-tune/` hiện trống.
 - Theo đúng quy tắc P5.4 (*"Chủ dự án sẽ cung cấp video có quyền sử dụng. Nếu thư mục trống thì DỪNG bước này và báo lại, không tự tải video từ Internet"*), agent đã dừng bước đo `real-tune/` và không tự tải bất kỳ video nào từ mạng xã hội/Internet.
 - Lưu ý: Trong `benchmarks/watermark-input/` hiện có sẵn 1 mẫu thực tế từ P0 (`253K views · 3.2K reactions _ Sao kỳ dị chờn 🥹 _ Cuộc Sống Agency.mp4`, `900×720@30fps`, `6.17s`):
-  - Detector IoU = `0.777`, confidence = `0.83`, thời gian = `1.447s`
+  - Detector IoU = `0.777`, confidence = `0.83`, thời gian = `1.349s` (`7e31a13`) → `2.072s` (`ced4bcc`)
   - Tracker median IoU = `1.0000` (từ keyframe 0), drift = `0.00%`
-  - Inpaint thời gian = `53.73s` (`8.71s / 1s video`), không có bản sạch cùng độ phân giải nên không tính SSIM trong mask.
+  - Inpaint: seam = `0.87 → 0.87`, flicker = `0.90 → 0.90`, thời gian = `30.28s` (`7e31a13`) → `38.18s` (`ced4bcc`), không có bản sạch cùng độ phân giải nên không tính SSIM trong mask.
 
 ---
 

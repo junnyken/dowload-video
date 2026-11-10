@@ -5,9 +5,9 @@
   "max_drift_pct": 0.136,
   "auto_init_max_drift_pct": 1.059,
   "scene_cut_exact_rate": 1.0,
-  "mean_track_elapsed_sec": 2.067,
+  "mean_track_elapsed_sec": 2.422,
   "moving_watermark_ssim_p0": 0.4742,
-  "moving_watermark_ssim_p3": 0.8936,
+  "moving_watermark_ssim_p3": 0.8938,
   "moving_watermark_psnr_out_p3": 42.72,
   "lost_track_probe": {
     "total_frames": 90,
@@ -48,7 +48,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 7.285
+      "elapsed_sec": 9.893
     },
     {
       "video": "heavy_motion_01.mp4",
@@ -70,7 +70,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.484
+      "elapsed_sec": 1.836
     },
     {
       "video": "heavy_motion_02.mp4",
@@ -92,7 +92,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.428
+      "elapsed_sec": 1.906
     },
     {
       "video": "heavy_motion_03.mp4",
@@ -114,7 +114,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.709
+      "elapsed_sec": 1.576
     },
     {
       "video": "moving_watermark_01.mp4",
@@ -136,7 +136,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 2.325
+      "elapsed_sec": 2.518
     },
     {
       "video": "moving_watermark_02.mp4",
@@ -158,7 +158,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 2.392
+      "elapsed_sec": 2.492
     },
     {
       "video": "moving_watermark_03.mp4",
@@ -180,7 +180,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 2.233
+      "elapsed_sec": 2.318
     },
     {
       "video": "scene_cut_01.mp4",
@@ -206,7 +206,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.415
+      "elapsed_sec": 1.524
     },
     {
       "video": "scene_cut_02.mp4",
@@ -234,7 +234,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.42
+      "elapsed_sec": 1.557
     },
     {
       "video": "scene_cut_03.mp4",
@@ -260,7 +260,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 2.717
+      "elapsed_sec": 2.487
     },
     {
       "video": "semi_transparent_01.mp4",
@@ -282,7 +282,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.467
+      "elapsed_sec": 1.757
     },
     {
       "video": "semi_transparent_02.mp4",
@@ -304,7 +304,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.474
+      "elapsed_sec": 1.912
     },
     {
       "video": "semi_transparent_03.mp4",
@@ -326,7 +326,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.537
+      "elapsed_sec": 2.18
     },
     {
       "video": "static_corner_01.mp4",
@@ -348,7 +348,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.393
+      "elapsed_sec": 1.621
     },
     {
       "video": "static_corner_02.mp4",
@@ -370,7 +370,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.403
+      "elapsed_sec": 1.572
     },
     {
       "video": "static_corner_03.mp4",
@@ -392,7 +392,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.392
+      "elapsed_sec": 1.598
     }
   ],
   "moving_inpaint_comparison": [
@@ -401,60 +401,60 @@
       "stem": "moving_watermark_01",
       "group": "Logo/chữ di chuyển",
       "ssim_p0_baseline": 0.4832,
-      "ssim_p3_tracked": 0.8338,
-      "ssim_gain": 0.3506,
-      "psnr_out_mask": 42.75,
-      "seam": 1.27,
-      "flicker": 1.13,
+      "ssim_p3_tracked": 0.8339,
+      "ssim_gain": 0.3507,
+      "psnr_out_mask": 42.74,
+      "seam": 1.26,
+      "flicker": 1.14,
       "temporal_frames": 150,
       "total_frames": 150,
-      "elapsed_sec": 5.37,
-      "peak_ram_mb": 2120.4
+      "elapsed_sec": 7.22,
+      "peak_ram_mb": 1995.9
     },
     {
       "video": "moving_watermark_02.mp4",
       "stem": "moving_watermark_02",
       "group": "Logo/chữ di chuyển",
       "ssim_p0_baseline": 0.3694,
-      "ssim_p3_tracked": 0.8871,
-      "ssim_gain": 0.5177,
+      "ssim_p3_tracked": 0.8872,
+      "ssim_gain": 0.5178,
       "psnr_out_mask": 42.46,
       "seam": 1.32,
-      "flicker": 1.49,
+      "flicker": 1.5,
       "temporal_frames": 150,
       "total_frames": 150,
-      "elapsed_sec": 7.29,
-      "peak_ram_mb": 2120.4
+      "elapsed_sec": 7.81,
+      "peak_ram_mb": 1995.9
     },
     {
       "video": "moving_watermark_03.mp4",
       "stem": "moving_watermark_03",
       "group": "Logo/chữ di chuyển",
       "ssim_p0_baseline": 0.5699,
-      "ssim_p3_tracked": 0.9599,
-      "ssim_gain": 0.39,
-      "psnr_out_mask": 42.96,
+      "ssim_p3_tracked": 0.9603,
+      "ssim_gain": 0.3904,
+      "psnr_out_mask": 42.97,
       "seam": 1.63,
-      "flicker": 1.81,
+      "flicker": 1.82,
       "temporal_frames": 150,
       "total_frames": 150,
-      "elapsed_sec": 5.97,
-      "peak_ram_mb": 2120.4
+      "elapsed_sec": 11.52,
+      "peak_ram_mb": 1995.9
     },
     {
       "video": "scene_cut_03.mp4",
       "stem": "scene_cut_03",
       "group": "Có cắt cảnh",
       "ssim_p0_baseline": 0.482,
-      "ssim_p3_tracked": 0.8318,
-      "ssim_gain": 0.3498,
-      "psnr_out_mask": 43.54,
+      "ssim_p3_tracked": 0.8328,
+      "ssim_gain": 0.3508,
+      "psnr_out_mask": 43.53,
       "seam": 0.8,
-      "flicker": 0.88,
+      "flicker": 0.9,
       "temporal_frames": 150,
       "total_frames": 150,
-      "elapsed_sec": 7.8,
-      "peak_ram_mb": 2120.4
+      "elapsed_sec": 7.9,
+      "peak_ram_mb": 1995.9
     }
   ]
 }

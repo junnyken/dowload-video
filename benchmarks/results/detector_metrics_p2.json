@@ -8,8 +8,8 @@
   "precision": 1.0,
   "recall": 1.0,
   "negative_fp_rate": 0.0,
-  "max_elapsed_sec": 1.349,
-  "mean_elapsed_sec": 0.7,
+  "max_elapsed_sec": 2.072,
+  "mean_elapsed_sec": 0.792,
   "videos": [
     {
       "video": "253K views · 3.2K reactions _ Sao kỳ dị chờn 🥹 _ Cuộc Sống Agency.mp4",
@@ -38,7 +38,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 1.349
+      "elapsed_sec": 2.072
     },
     {
       "video": "content_text_neg_01.mp4",
@@ -57,7 +57,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.778
+      "elapsed_sec": 1.037
     },
     {
       "video": "content_text_neg_02.mp4",
@@ -76,7 +76,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.746
+      "elapsed_sec": 0.946
     },
     {
       "video": "content_text_neg_03.mp4",
@@ -95,7 +95,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.852
+      "elapsed_sec": 0.973
     },
     {
       "video": "heavy_motion_01.mp4",
@@ -124,7 +124,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.35
+      "elapsed_sec": 0.453
     },
     {
       "video": "heavy_motion_02.mp4",
@@ -153,7 +153,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.636
+      "elapsed_sec": 0.623
     },
     {
       "video": "heavy_motion_03.mp4",
@@ -182,7 +182,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.686
+      "elapsed_sec": 0.756
     },
     {
       "video": "moving_watermark_01.mp4",
@@ -211,7 +211,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.728
+      "elapsed_sec": 0.899
     },
     {
       "video": "moving_watermark_02.mp4",
@@ -240,7 +240,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.972
+      "elapsed_sec": 0.871
     },
     {
       "video": "moving_watermark_03.mp4",
@@ -269,7 +269,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.994
+      "elapsed_sec": 1.099
     },
     {
       "video": "scene_cut_01.mp4",
@@ -298,7 +298,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.334
+      "elapsed_sec": 0.379
     },
     {
       "video": "scene_cut_02.mp4",
@@ -327,7 +327,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.337
+      "elapsed_sec": 0.408
     },
     {
       "video": "scene_cut_03.mp4",
@@ -356,7 +356,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.608
+      "elapsed_sec": 0.657
     },
     {
       "video": "semi_transparent_01.mp4",
@@ -385,7 +385,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.575
+      "elapsed_sec": 0.633
     },
     {
       "video": "semi_transparent_02.mp4",
@@ -414,7 +414,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.546
+      "elapsed_sec": 0.618
     },
     {
       "video": "semi_transparent_03.mp4",
@@ -443,7 +443,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.598
+      "elapsed_sec": 0.674
     },
     {
       "video": "static_corner_01.mp4",
@@ -472,7 +472,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.672
+      "elapsed_sec": 0.66
     },
     {
       "video": "static_corner_02.mp4",
@@ -501,7 +501,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.73
+      "elapsed_sec": 0.64
     },
     {
       "video": "static_corner_03.mp4",
@@ -530,7 +530,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.812
+      "elapsed_sec": 0.655
     }
   ]
 }
