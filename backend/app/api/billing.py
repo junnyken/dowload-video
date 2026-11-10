@@ -122,17 +122,41 @@ class LicenseActivateResponse(BaseModel):
 # =============================================================================
 
 _PLAN_META: Dict[str, Dict[str, Any]] = {
+    "free": {
+        "display_name": "Free",
+        "api_calls_per_month": 0,
+        "seats": 1,
+        "batch_size_max": 5,
+    },
     "starter": {
         "display_name": "Starter",
         "api_calls_per_month": 1_000,
         "seats": 1,
-        "batch_size_max": 10,
+        "batch_size_max": 20,
+    },
+    "pro": {
+        "display_name": "Pro",
+        "api_calls_per_month": 3_000,
+        "seats": 1,
+        "batch_size_max": 100,
     },
     "growth": {
         "display_name": "Growth",
         "api_calls_per_month": 10_000,
         "seats": 5,
         "batch_size_max": 50,
+    },
+    "team": {
+        "display_name": "Team",
+        "api_calls_per_month": 15_000,
+        "seats": 10,
+        "batch_size_max": 200,
+    },
+    "api": {
+        "display_name": "Developer API",
+        "api_calls_per_month": 10_000,
+        "seats": 3,
+        "batch_size_max": 100,
     },
     "enterprise": {
         "display_name": "Enterprise",

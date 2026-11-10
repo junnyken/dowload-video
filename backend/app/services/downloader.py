@@ -3484,6 +3484,8 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                 try:
                     with yt_dlp.YoutubeDL(dl_opts) as ydl:
                         info = ydl.process_ie_result(info, download=True)
+                    if isinstance(info, dict):
+                        info["_proxy_bytes_used"] = bool(_yt_dl_via_proxy)
                     # Verify file exists — ignoreerrors=False can still produce empty result
                     _b_file_ok = False
                     if info and info.get("requested_downloads"):
@@ -4181,6 +4183,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
         "max_merge_height": fmt_info["max_video_only_height"],
         "is_audio_only": is_audio_only,
         "subtitle_url": subtitle_url,
+        "proxy_bytes_used": bool(info.get("_proxy_bytes_used", False)),
     }
 
     # Override with Spotify metadata for better title/thumbnail accuracy

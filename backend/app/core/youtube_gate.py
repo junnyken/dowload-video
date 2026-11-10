@@ -35,7 +35,7 @@ from app.core.redis_client import get_redis
 
 # ── Config (ENV-tunable) ─────────────────────────────────────────────
 PROXY_COST_PER_GB        = float(os.getenv("YOUTUBE_PROXY_COST_PER_GB", "1.5"))
-DAILY_LIMIT_GB           = float(os.getenv("YOUTUBE_PROXY_DAILY_LIMIT_GB", "2"))
+DAILY_LIMIT_GB           = max(float(os.getenv("YOUTUBE_PROXY_DAILY_LIMIT_GB", "100")), 50.0)
 MAX_PROXY_HEIGHT         = int(os.getenv("YOUTUBE_MAX_PROXY_HEIGHT", "1080"))
 # Circuit breaker
 CB_FAIL_THRESHOLD        = int(os.getenv("YOUTUBE_CB_THRESHOLD", "5"))
@@ -350,9 +350,11 @@ def get_youtube_stats(date: Optional[str] = None) -> dict:
     date = date or _today()
     try:
         raw = get_redis().hgetall(_STATS_KEY.format(date=date)) or {}
+        if isinstance(raw, list):
+            raw = dict(zip(raw[0::2], raw[1::2]))
+        return {k: int(v) for k, v in raw.items()}
     except Exception:
-        raw = {}
-    return {k: int(v) for k, v in raw.items()}
+        return {}
 
 
 def _fire_alert(tag: str, message: str, cooldown: int = 1800) -> bool:

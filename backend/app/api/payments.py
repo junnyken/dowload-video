@@ -91,13 +91,23 @@ def _get_or_create_stripe_customer(user_id: str, email: str) -> str:
     return cid
 
 
-def _upgrade_user(user_id: str, subscription_id: str, current_period_end: Optional[int] = None) -> None:
+def _upgrade_user(user_id: str, subscription_id: str, current_period_end: Optional[int] = None, target_tier: str = "pro") -> None:
     supabase = _supabase()
     is_one_time = str(subscription_id or "").startswith(("paypal_", "ls_"))
+    # Resolve tier — accept any tier known to the quota/entitlement system.
+    from app.core.quotas import TIER_PERMISSIONS  # noqa: PLC0415
+    tier = target_tier if target_tier in TIER_PERMISSIONS and target_tier != "free" else "pro"
+    # Resolve human-friendly plan name for the profiles table.
+    try:
+        from app.core.entitlements import get_plan_def  # noqa: PLC0415
+        plan_name = get_plan_def(tier)["name"]
+    except Exception:
+        plan_name = tier.capitalize()
     update: Dict[str, Any] = {
-        "tier":                    "pro",
+        "tier":                    tier,
         "billing_status":          "manual" if is_one_time else "active",
         "stripe_subscription_id":  None if is_one_time else subscription_id,
+        "plan_name":               plan_name,
     }
     if current_period_end:
         now = datetime.now(timezone.utc)
@@ -125,11 +135,11 @@ def _upgrade_user(user_id: str, subscription_id: str, current_period_end: Option
 
     # Keep user_usage.plan in sync for admin stats
     try:
-        u_res = supabase.table("user_usage").update({"plan": "pro"}).eq("user_id", user_id).execute()
+        u_res = supabase.table("user_usage").update({"plan": tier}).eq("user_id", user_id).execute()
         if not u_res.data:
             supabase.table("user_usage").insert({
                 "user_id": user_id,
-                "plan": "pro",
+                "plan": tier,
                 "downloads_today": 0,
                 "downloads_this_month": 0,
                 "last_reset_at": datetime.now(timezone.utc).isoformat(),
@@ -172,6 +182,12 @@ def _downgrade_user(user_id: str, at_period_end: bool = True, period_end_ts: Opt
         supabase.table("profiles").update(update).eq("id", user_id).execute()
     except Exception as e:
         print(f"[Payments] downgrade_user failed for {user_id}: {e}")
+
+    if not (at_period_end and period_end_ts):
+        try:
+            supabase.table("user_usage").update({"plan": "free"}).eq("user_id", user_id).execute()
+        except Exception:
+            pass
 
 
 def _past_due_user(user_id: str) -> None:
@@ -534,7 +550,9 @@ async def stripe_webhook(request: Request):
 
     # ── checkout.session.completed ───────────────────────────────────
     if event_type == "checkout.session.completed":
-        user_id = (data_obj.get("metadata") or {}).get("user_id")
+        meta = data_obj.get("metadata") or {}
+        user_id = meta.get("user_id")
+        plan_tier = (meta.get("plan") or "pro").lower()
         sub_id  = data_obj.get("subscription")
         if user_id and sub_id:
             # Fetch subscription to get period_end
@@ -542,15 +560,18 @@ async def stripe_webhook(request: Request):
                 stripe = _stripe()
                 sub = stripe.Subscription.retrieve(sub_id)
                 period_end = sub.get("current_period_end")
+                sub_meta = sub.get("metadata") or {}
+                if not meta.get("plan") and sub_meta.get("plan"):
+                    plan_tier = str(sub_meta.get("plan")).lower()
             except Exception:
                 period_end = None
-            _upgrade_user(user_id, sub_id, period_end)
+            _upgrade_user(user_id, sub_id, period_end, target_tier=plan_tier)
             try:
                 from app.api.referrals import reward_referrer_on_pro_upgrade
                 reward_referrer_on_pro_upgrade(user_id)
             except Exception:
                 pass
-            print(f"[Payments] ✅ Upgraded {user_id} to Pro (sub={sub_id})")
+            print(f"[Payments] ✅ Upgraded {user_id} to {plan_tier} (sub={sub_id})")
 
     # ── customer.subscription.deleted ────────────────────────────────
     elif event_type == "customer.subscription.deleted":
@@ -567,10 +588,11 @@ async def stripe_webhook(request: Request):
         sub_id      = data_obj.get("id")
         status      = data_obj.get("status")
         period_end  = data_obj.get("current_period_end")
+        plan_tier   = ((data_obj.get("metadata") or {}).get("plan") or "pro").lower()
         user_id     = _user_id_from_customer(customer_id)
         if user_id:
             if status in ("active", "trialing"):
-                _upgrade_user(user_id, sub_id, period_end)
+                _upgrade_user(user_id, sub_id, period_end, target_tier=plan_tier)
             elif status in ("canceled", "unpaid", "paused"):
                 _downgrade_user(user_id, at_period_end=bool(period_end), period_end_ts=period_end)
 
@@ -695,8 +717,9 @@ async def paypal_webhook(request: Request):
             if len(parts) >= 2:
                 user_id = parts[0]
                 order_id = parts[1] if len(parts) > 1 else ""
+                plan_id = parts[2] if len(parts) > 2 else "pro_month"
 
-                if order_id:
+                if order_id and order_id not in ("month", "year"):
                     # Activate via payment_orders
                     try:
                         from app.core.payment_orders import activate_order  # noqa: PLC0415
@@ -707,17 +730,25 @@ async def paypal_webhook(request: Request):
                         except Exception:
                             paid_amount = 0
 
-                        activate_order(
+                        ok, _ = activate_order(
                             order_id=order_id,
                             paid_amount=paid_amount or 99999,  # if can't parse, assume paid
                             provider_ref=event_id,
                             evidence={"provider": "paypal_webhook", "event_type": event_type},
                         )
+                        if not ok:
+                            days = 365 if "year" in plan_id else 30
+                            exp = int((datetime.now(timezone.utc) + timedelta(days=days)).timestamp())
+                            tier_prefix = plan_id.split("_")[0] if "_" in plan_id else "pro"
+                            _upgrade_user(user_id, f"paypal_wh_{event_id}", exp, target_tier=tier_prefix)
                     except Exception as e:
                         print(f"[PayPal Webhook] activate error: {e}")
                 else:
-                    # Legacy flow: upgrade directly
-                    _upgrade_user(user_id, f"paypal_wh_{event_id}", None)
+                    # Direct PayPal Orders v2 flow (custom_id = user_id:month or user_id:year)
+                    days = 365 if (order_id == "year" or "year" in plan_id) else 30
+                    exp = int((datetime.now(timezone.utc) + timedelta(days=days)).timestamp())
+                    tier_prefix = plan_id.split("_")[0] if "_" in plan_id else "pro"
+                    _upgrade_user(user_id, f"paypal_wh_{event_id}", exp, target_tier=tier_prefix)
 
     _mark_payment_event_done(event_id)
     return {"received": True, "type": event_type}
@@ -804,8 +835,11 @@ async def paypal_ipn(request: Request):
             evidence={"provider": "paypal_ipn", "txn_id": txn_id},
         )
     elif user_id:
-        days = 365 if ("year" in plan_id or paid_cents >= 3900) else 30
-        _upgrade_user_pro(user_id, days, f"paypal_ipn_{txn_id}")
+        days = 365 if ("year" in plan_id or paid_cents >= 2400) else 30
+        tier_prefix = plan_id.split("_")[0] if "_" in plan_id else "pro"
+        if tier_prefix not in ("starter", "pro", "team"):
+            tier_prefix = "pro"
+        _upgrade_user_pro(user_id, days, f"paypal_ipn_{txn_id}", target_tier=tier_prefix)
 
     _mark_payment_event_done(f"ipn_{txn_id}")
     return {"received": True, "verified": True, "txn_id": txn_id}
@@ -920,12 +954,14 @@ class CheckoutRequestV2(BaseModel):
 
 _STRIPE_PLAN_PRICES = {
     # (plan, period) → env var name
-    ("pro",  "monthly"): "STRIPE_PRO_PRICE_ID",
-    ("pro",  "yearly"):  "STRIPE_PRO_YEARLY_PRICE_ID",
-    ("team", "monthly"): "STRIPE_TEAM_PRICE_ID",
-    ("team", "yearly"):  "STRIPE_TEAM_YEARLY_PRICE_ID",
-    ("api",  "monthly"): "STRIPE_API_PRICE_ID",
-    ("api",  "yearly"):  "STRIPE_API_YEARLY_PRICE_ID",
+    ("starter", "monthly"): "STRIPE_STARTER_PRICE_ID",
+    ("starter", "yearly"):  "STRIPE_STARTER_YEARLY_PRICE_ID",
+    ("pro",     "monthly"): "STRIPE_PRO_PRICE_ID",
+    ("pro",     "yearly"):  "STRIPE_PRO_YEARLY_PRICE_ID",
+    ("team",    "monthly"): "STRIPE_TEAM_PRICE_ID",
+    ("team",    "yearly"):  "STRIPE_TEAM_YEARLY_PRICE_ID",
+    ("api",     "monthly"): "STRIPE_API_PRICE_ID",
+    ("api",     "yearly"):  "STRIPE_API_YEARLY_PRICE_ID",
 }
 
 

@@ -247,18 +247,32 @@ def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
             ).data or []
             if len(rows) == 1:
                 uid = str(rows[0]["id"])
-                s = plans.get_settings()
-                price_month = int(s.get("price_month_vnd") or 99_000)
-                price_year = int(s.get("price_year_vnd") or 890_000)
-                if amount >= price_year:
-                    days, plan_id = 365, "pro_year"
-                elif amount >= price_month:
-                    days, plan_id = 30, "pro_month"
-                else:
-                    _log_event(db, sepay_id, "sepay_vg_underpaid", amount, None, "underpaid")
-                    return {"success": True, "action": "underpaid", "code": code, "user_id": uid}
+                from app.core.payment_orders import catalog as _po_catalog  # noqa: PLC0415
+                cat = _po_catalog(user_id=uid)
+                matched_plan = None
+                for p in sorted(cat, key=lambda x: int(x.get("vnd") or 0), reverse=True):
+                    if amount >= int(p.get("vnd") or 0) > 0:
+                        matched_plan = p
+                        break
 
-                _upgrade_user_pro(uid, days, f"sepay_vg_{sepay_id}")
+                if matched_plan:
+                    days = int(matched_plan.get("days") or 30)
+                    plan_id = str(matched_plan.get("id") or "pro_month")
+                    target_tier = str(matched_plan.get("tier") or "pro")
+                    plan_amount = int(matched_plan.get("vnd") or amount)
+                else:
+                    s = plans.get_settings()
+                    price_month = int(s.get("price_month_vnd") or 99_000)
+                    price_year = int(s.get("price_year_vnd") or 890_000)
+                    if amount >= price_year:
+                        days, plan_id, target_tier, plan_amount = 365, "pro_year", "pro", price_year
+                    elif amount >= price_month:
+                        days, plan_id, target_tier, plan_amount = 30, "pro_month", "pro", price_month
+                    else:
+                        _log_event(db, sepay_id, "sepay_vg_underpaid", amount, None, "underpaid")
+                        return {"success": True, "action": "underpaid", "code": code, "user_id": uid}
+
+                _upgrade_user_pro(uid, days, f"sepay_vg_{sepay_id}", target_tier=target_tier)
                 now_iso = datetime.now(timezone.utc).isoformat()
                 order_id_recorded = None
                 try:
@@ -267,7 +281,7 @@ def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
                         "plan": plan_id,
                         "rail": "vietqr",
                         "currency": "VND",
-                        "amount": price_year if days == 365 else price_month,
+                        "amount": plan_amount,
                         "code": f"{code}_{sepay_id}",
                         "status": "paid",
                         "paid_amount": amount,
@@ -281,7 +295,7 @@ def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
                 except Exception:
                     pass
                 _log_event(db, sepay_id, "sepay_vg_payment", amount, order_id_recorded, "matched")
-                return {"success": True, "action": "activated_vg_account", "user_id": uid, "days": days}
+                return {"success": True, "action": "activated_vg_account", "user_id": uid, "days": days, "tier": target_tier}
 
     # Case B: Order-based transfer code VGP + 8 chars (from /checkout page)
     order = get_order_by_code(code)

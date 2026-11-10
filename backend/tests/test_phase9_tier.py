@@ -334,13 +334,19 @@ class TestStripeWebhook:
         """Mock that records updates."""
         updates = {}
         mock_sb = MagicMock()
-        def fake_update(payload):
-            updates["payload"] = payload
-            chain = MagicMock()
-            chain.eq.return_value.execute.return_value = MagicMock(data=[{}])
-            return chain
-        mock_sb.table.return_value.update.side_effect = fake_update
-        mock_sb.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(data={"stripe_customer_id": None})
+        def fake_table(name):
+            tbl = MagicMock()
+            def fake_update(payload):
+                if name == "profiles" or "payload" not in updates:
+                    updates["payload"] = payload
+                updates[name] = payload
+                chain = MagicMock()
+                chain.eq.return_value.execute.return_value = MagicMock(data=[{}])
+                return chain
+            tbl.update.side_effect = fake_update
+            tbl.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(data={"stripe_customer_id": None})
+            return tbl
+        mock_sb.table.side_effect = fake_table
         return mock_sb, updates
 
     def test_upgrade_user_sets_tier_pro(self):
