@@ -860,6 +860,12 @@ def _scrape_channel_body(supabase, channel_url, batch_id, channel_job_id, max_vi
                          user_id, quality, remove_watermark, download_subs, _requester, platform,
                          WAVE_SIZE, WAVE_DELAY_SECONDS, _wave_mode,
                          schedule_id=None, schedule_first_run=False):
+    try:
+        max_videos = int(max_videos)
+    except Exception:
+        max_videos = 100
+    if max_videos <= 0:
+        max_videos = 100
     # Douyin with no server-side cookie (and no Apify): every video job would
     # fail with the cookie message, so do not create them. 2026-10-05: a
     # channel/bulk run created ~175 such jobs in one second, 0 succeeded.
