@@ -479,6 +479,106 @@ Công thức bảo vệ timeout trong `_validate_job_limits` (`_JOB_TIMEOUT_SEC 
 
 ---
 
+## Lần chạy 7 — 10/11/2026 (Phase P5.9 — Xếp hạng frame lân cận theo diện tích nền sạch dự kiến: Mốc `ced4bcc` → `P5.9`)
+
+### Môi trường & Commit
+- **Mốc so sánh (`ced4bcc`)**: engine tại commit `ced4bcc` (`fix(inpaint): count only contributing neighbours`).
+- **Bộ kiểm chứng độc lập (`eb08db1`)**: `test(p5.9.1): add synthetic-jump-holdout suite (6 videos) and baseline metrics at HEAD before engine changes` — tạo 6 video `benchmarks/synthetic-jump-holdout/` bằng generator riêng trước khi sửa engine và đo mốc tại `ced4bcc` lưu ở `benchmarks/results/p5_9_jump_holdout_baseline_ced4bcc.json`.
+- **Commit sửa engine (`34e077f`)**: `fix(inpaint): rank neighbours by expected clean coverage`:
+  - Khai báo 2 hằng số ở đầu `backend/app/api/flow_inpaint.py`: `_TEMPORAL_COVERAGE_STOP_FRAC = 0.98` và `_MAX_TEMPORAL_WARP_ATTEMPTS = 8` (không tune riêng cho từng video, không dùng Đề xuất 1 `25%/5%`).
+  - Hàm `_dedup_and_rank_neighbors` khử trùng lặp chỉ số frame (`nb_fidx`) giữa `causal` / `strided` / `global_ref`, và xếp hạng các frame lân cận trước khi warp theo diện tích nền sạch dự kiến (`_estimate_expected_clean_area`: diện tích `mask_roi` nằm trong biên khung hình lân cận đã bù dịch chuyển nền `(est_dx, est_dy)` và không bị bbox logo của frame lân cận che).
+  - Vòng lặp `temporal_fill` dừng khi phủ `>= 98%` mask HOẶC đã thử `8` lần warp có homography hợp lệ (`warp_attempts >= 8`).
+
+### 1. Bộ `synthetic` (15 video có bản sạch tham chiếu — Mốc `ced4bcc` → `P5.9`)
+
+#### 1A. Chế độ Tracker + Inpaint theo từng frame (P3 tracked — 4 video có logo di chuyển/nhảy vị trí)
+| Video | Nhóm | SSIM tại `ced4bcc` | SSIM tại `P5.9` (`34e077f`) | `Δ SSIM` | PSNR ngoài mask `P5.9` (dB) | Thời gian `ced4bcc` → `P5.9` (s) | Đánh giá & Giải thích |
+|---|---|---:|---:|---:|---:|---:|---|
+| `moving_watermark_01.mp4` | Nhảy 2 góc (`frame 75`) | 0.8339 | **0.9570** | **+0.1231** | 42.64 | 7.22 → 3.99 | **Tăng vọt (+0.1231, vượt xa 0.85)**: các frame `global_ref` sau điểm nhảy (`f75..149`, lộ 100% nền sạch) được xếp hạng lên đầu và phủ 100% mask ngay ở lần warp đầu tiên thay vì bị 4 frame liền kề lộ dải hẹp `3px` chặn. |
+| `moving_watermark_02.mp4` | Nhảy 3 góc (`f50, f100`) | 0.8872 | **0.8930** | **+0.0058** | 42.44 | 7.81 → 8.19 | Tăng `+0.0058` (ĐẠT `≥ 0.85`) |
+| `moving_watermark_03.mp4` | Trôi ngang liên tục | 0.9603 | **0.9550** | **-0.0053 (⚠️ GIẢM > 0.005)** | 42.97 | 11.52 → 5.07 | **Vẫn đạt rất cao (`0.9550 ≥ 0.85`)**, thời gian giảm một nửa (`11.52s → 5.07s`). Giải thích chi tiết ở mục giải thích bên dưới. |
+| `scene_cut_03.mp4` | Cắt cảnh + nhảy góc (`f75`) | 0.8328 | **0.9062** | **+0.0734** | 43.54 | 7.90 → 13.92 | **Tăng mạnh (+0.0734, vượt ngưỡng 0.85)** |
+| **Trung bình nhóm `moving_watermark` (3 video)** | — | **0.8938** | **0.9350** | **+0.0412** | **42.68 dB** | **8.85 → 5.75s** | **Tất cả các video đều đạt `≥ 0.8930`** |
+
+#### 1B. Toàn bộ 15 video bộ `synthetic` (chạy với bbox cố định frame 0 trong `latest_metrics.json`, kèm dòng P3 tracked cho nhóm moving)
+| Video | Nhóm | SSIM tại `ced4bcc` | SSIM tại `P5.9` (`34e077f`) | `Δ SSIM` | PSNR ngoài mask `ced4bcc` → `P5.9` (dB) | Flicker `ced4bcc` → `P5.9` | Thời gian `ced4bcc` → `P5.9` (s) | Ghi chú biến động |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| `static_corner_01.mp4` | Logo góc tĩnh | 0.7303 | **0.7756** | **+0.0453** | 43.44 → 43.44 | 1.49 → 2.87 | 7.83 → 5.81 | Tăng mạnh `+0.0453` |
+| `static_corner_02.mp4` | Logo góc tĩnh | 0.8736 | **0.8846** | **+0.0110** | 42.97 → 42.96 | 1.32 → 1.98 | 9.82 → 10.06 | Tăng `+0.0110` (ĐẠT `≥ 0.85`) |
+| `static_corner_03.mp4` | Logo góc tĩnh | 0.8797 | **0.8696** | **-0.0101 (⚠️ GIẢM > 0.005)** | 43.54 → 43.53 | 1.22 → 1.79 | 7.14 → 8.43 | Vẫn ĐẠT `≥ 0.85` (`0.8696`). Giải thích chi tiết bên dưới. |
+| `semi_transparent_01.mp4` | Bán trong suốt tĩnh | 0.7406 | **0.7834** | **+0.0428** | 43.45 → 43.44 | 1.47 → 2.79 | 9.13 → 6.62 | Tăng mạnh `+0.0428` |
+| `semi_transparent_02.mp4` | Bán trong suốt tĩnh | 0.8505 | **0.9094** | **+0.0589** | 42.99 → 43.00 | 1.13 → 1.60 | 8.61 → 8.66 | Tăng mạnh `+0.0589` (ĐẠT `≥ 0.85`) |
+| `semi_transparent_03.mp4` | Bán trong suốt tĩnh | 0.9341 | **0.9568** | **+0.0227** | 43.47 → 43.47 | 1.00 → 1.19 | 9.28 → 7.56 | Tăng `+0.0227` (ĐẠT `≥ 0.85`) |
+| `heavy_motion_01.mp4` | Camera rung mạnh | 0.8152 | **0.9016** | **+0.0864** | 44.58 → 44.59 | 0.98 → 1.29 | 6.66 → 4.88 | Tăng vọt `+0.0864` (vượt ngưỡng `0.85`) |
+| `heavy_motion_02.mp4` | Camera rung mạnh | 0.8300 | **0.8503** | **+0.0203** | 42.57 → 42.54 | 1.09 → 1.26 | 5.84 → 5.35 | Tăng `+0.0203` (vượt ngưỡng `0.85`) |
+| `heavy_motion_03.mp4` | Camera rung mạnh | 0.8975 | **0.8710** | **-0.0265 (⚠️ GIẢM > 0.005)** | 43.20 → 43.20 | 0.74 → 0.97 | 6.97 → 7.75 | Vẫn ĐẠT `≥ 0.85` (`0.8710`, và cao hơn `7e31a13 = 0.8641`). Giải thích chi tiết bên dưới. |
+| `scene_cut_01.mp4` | Cắt cảnh (`f75`) | 0.7947 | **0.8773** | **+0.0826** | 45.75 → 45.77 | 1.00 → 1.36 | 7.23 → 10.87 | Tăng vọt `+0.0826` (vượt ngưỡng `0.85`) |
+| `scene_cut_02.mp4` | Cắt cảnh (`f50, f100`) | 0.8683 | **0.8772** | **+0.0089** | 45.99 → 46.00 | 0.83 → 0.81 | 11.58 → 12.27 | Tăng `+0.0089` (ĐẠT `≥ 0.85`) |
+| `moving_watermark_01.mp4` *(fixed box P0)* | Bbox cố định f0 | 0.5049 | **0.5917** | **+0.0868** | 42.45 → 42.39 | 0.96 → 1.59 | 8.20 → 6.49 | Tăng `+0.0868` (khi dùng P3 tracked đạt **0.9570**, `+0.1231`) |
+| `moving_watermark_02.mp4` *(fixed box P0)* | Bbox cố định f0 | 0.4860 | **0.5050** | **+0.0190** | 42.46 → 42.46 | 1.35 → 1.58 | 7.21 → 8.55 | Tăng `+0.0190` (khi dùng P3 tracked đạt **0.8930**, `+0.0058`) |
+| `moving_watermark_03.mp4` *(fixed box P0)* | Bbox cố định f0 | 0.4336 | **0.4229** | **-0.0107 (⚠️ GIẢM > 0.005)** | 42.89 → 42.90 | 2.09 → 2.63 | 9.09 → 7.79 | Chế độ P0 không dùng tracker (bbox cố định ở `x=40` trong khi logo trôi tới `x=420`). Khi dùng P3 tracker đạt **0.9550**. |
+| `scene_cut_03.mp4` *(fixed box P0)* | Bbox cố định f0 | 0.5700 | **0.6248** | **+0.0548** | 43.54 → 43.54 | 0.72 → 0.94 | 6.80 → 11.62 | Tăng `+0.0548` (khi dùng P3 tracked đạt **0.9062**, `+0.0734`) |
+| **Trung bình 11 video tĩnh** | — | **0.8377** | **0.8690** | **+0.0313** | **43.81 dB** | — | **8.19 → 8.02s** | **Vượt ngưỡng `≥ 0.85` (9/11 video đạt `≥ 0.85`, so với 5/11 ở `ced4bcc`)** |
+| **Trung bình toàn bộ 15 video (kèm P3 tracked cho nhóm moving)** | — | **0.8486** | **0.8848** | **+0.0362** | **43.57 dB** | — | **8.30 → 7.96s** | **Vượt ngưỡng `≥ 0.85` (`0.8486 → 0.8848`)** |
+
+---
+
+### 2. Bộ `synthetic-hard` (9 video thử thách — Mốc `ced4bcc` → `P5.9`)
+| Video | Nhóm thử thách | SSIM tại `ced4bcc` | SSIM tại `P5.9` (`34e077f`) | `Δ SSIM` | PSNR `ced4bcc` → `P5.9` (dB) | Flicker `ced4bcc` → `P5.9` | Speed `ced4bcc` → `P5.9` (`sec/vsec`) | Ghi chú biến động |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| `hard_crf34_heavy.mp4` | Nén H.264 nặng (CRF 34) | 0.7582 | **0.8032** | **+0.0450** | 41.02 → 40.99 | 3.845 → 6.02 | 1.25x → 1.15x | Tăng mạnh `+0.0450` |
+| `hard_faint_opacity25.mp4` | Watermark mờ (opacity 25%) | 0.7463 | **0.7930** | **+0.0467** | 39.97 → 39.97 | 4.305 → 7.67 | 1.05x → 1.00x | Tăng mạnh `+0.0467` |
+| `hard_faint_opacity35.mp4` | Watermark mờ (opacity 35%) | 0.7682 | **0.7890** | **+0.0208** | 40.59 → 40.58 | 4.891 → 7.72 | 1.10x → 1.43x | Tăng `+0.0208` |
+| `hard_large_wm.mp4` | Watermark kích thước lớn (224×76) | 0.7945 | **0.8573** | **+0.0628** | 40.73 → 40.74 | 3.203 → 5.61 | 2.10x → 1.89x | **Tăng mạnh `+0.0628` (vượt ngưỡng `0.85`)** |
+| `hard_motion_blur_moving.mp4` | Motion blur trên watermark di chuyển | 0.9017 | **0.9410** | **+0.0393** | 40.69 → 40.70 | 5.062 → 4.94 | 1.10x → 0.90x | **Tăng mạnh `+0.0393` (ĐẠT `0.9410`)** |
+| `hard_scale_05x.mp4` | Đổi tỷ lệ 0.5× (320×180) | 0.4596 | **0.5879** | **+0.1283** | 39.34 → 39.32 | 10.278 → 11.65 | 0.81x → 0.75x | **Tăng vọt `+0.1283`** |
+| `hard_scale_15x.mp4` | Đổi tỷ lệ 1.5× (960×540) | 0.8876 | **0.9033** | **+0.0157** | 40.75 → 40.75 | 2.779 → 2.72 | 1.79x → 2.39x | Tăng `+0.0157` (ĐẠT `≥ 0.85`) |
+| `hard_small_wm.mp4` | Watermark kích thước nhỏ (68×28) | 0.8961 | **0.8719** | **-0.0242 (⚠️ GIẢM > 0.005)** | 40.55 → 40.56 | 2.160 → 4.03 | 1.22x → 1.04x | Vẫn ĐẠT `≥ 0.85` (`0.8719`). Giải thích chi tiết bên dưới. |
+| `hard_vertical_720x1280.mp4` | Video dọc 720×1280 | 0.8495 | **0.8571** | **+0.0076** | 40.17 → 40.17 | 5.828 → 5.63 | 2.12x → 2.77x | **Tăng `+0.0076` (vượt lại lên trên ngưỡng `0.85`)** |
+| **Trung bình 9 video `synthetic-hard`** | — | **0.7846** | **0.8226** | **+0.0380** | **40.42 → 40.42 dB** | **4.706 → 6.22** | **1.39x → 1.48x** | **8/9 video tăng SSIM, trung bình tăng `+0.0380`** |
+
+---
+
+### 3. Bộ kiểm chứng mới `synthetic-jump-holdout` (6 video — Mốc `ced4bcc` → `P5.9`)
+| Video | Tham số (`pan_vx`, `jump_frames`) | SSIM tại `ced4bcc` (`eb08db1`) | SSIM tại `P5.9` (`34e077f`) | `Δ SSIM` | Min Frame SSIM (`ced4bcc` → `P5.9`) | PSNR ngoài mask `P5.9` (dB) | Thời gian `ced4bcc` → `P5.9` (s) | Ghi chú |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| `holdout_jump_f30_pan0.mp4` | `pan=0.0 px/f`, nhảy tại `[30]` | 0.9919 | **0.9919** | **0.0000** | `0.9909 → 0.9909` | 45.49 | 7.60 → 4.80 | Giữ nguyên `0.9919`, nhanh hơn `36.8%` |
+| `holdout_jump_f60_pan05.mp4` | `pan=0.5 px/f`, nhảy tại `[60]` | 0.9243 | **0.9851** | **+0.0608** | `0.8601 → 0.9765` | 42.50 | 9.22 → 5.67 | **Tăng `+0.0608`**, min frame SSIM tăng `+0.1164` |
+| `holdout_jump_f110_pan3.mp4` | `pan=3.0 px/f`, nhảy tại `[110]` | 0.8953 | **0.9748** | **+0.0795** | `0.8096 → 0.8969` | 42.44 | 5.94 → 4.42 | **Tăng `+0.0795`**, min frame SSIM tăng `+0.0873` |
+| `holdout_jump4_pan05.mp4` | `pan=0.5 px/f`, nhảy 4 vị trí `[30, 60, 110]` | 0.9507 | **0.9816** | **+0.0309** | `0.8327 → 0.9694` | 42.39 | 6.37 → 5.27 | **Tăng `+0.0309`**, min frame SSIM tăng `+0.1367` |
+| `holdout_jump_f60_pan3.mp4` | `pan=3.0 px/f`, nhảy tại `[60]` | 0.8342 | **0.8922** | **+0.0580** | `0.7081 → 0.7777` | 42.50 | 9.71 → 9.52 | **Tăng `+0.0580` (vượt ngưỡng `0.85`)** |
+| `holdout_static_logo_pan3.mp4` | `pan=3.0 px/f`, logo đứng yên `[]` (chặn regression tĩnh) | 0.8717 | **0.9344** | **+0.0627** | `0.8161 → 0.8166` | 42.35 | 11.01 → 11.59 | **Tăng `+0.0627`** (không hề bị regression nhóm tĩnh) |
+| **Trung bình `synthetic-jump-holdout` (6 video)** | — | **0.9113** | **0.9600** | **+0.0487** | — | **42.95 dB** | **8.31 → 6.88s** | **6/6 video giữ nguyên hoặc tăng mạnh SSIM** |
+
+---
+
+### 4. Giải thích chi tiết mọi video có SSIM giảm `> 0.005` so với `ced4bcc` (Mục 3)
+Trong tổng số **30 video** thuộc 3 bộ (`15 synthetic` + `9 synthetic-hard` + `6 synthetic-jump-holdout`), có **26/30 video tăng hoặc giữ nguyên SSIM** và **4 trường hợp giảm `> 0.005`** (tất cả các video có sử dụng tracker chuẩn đều vẫn đạt `≥ 0.8696`, vượt ngưỡng `0.85`):
+
+1. **`moving_watermark_03.mp4` (P3 tracked: `0.9603 → 0.9550`, `Δ = -0.0053`; và chế độ P0 không tracker: `0.4336 → 0.4229`, `Δ = -0.0107`)**:
+   - **Nguyên nhân**: Trong `moving_watermark_03`, logo trôi ngang liên tục `2.5 px/frame` trong khi nền cuộn nhẹ. Ở `ced4bcc`, điều kiện dừng vùng phủ `98%` có kèm ràng buộc `if matched_count >= 2 and coverage >= 98%: break`, buộc `temporal_fill` luôn cộng trung bình tối thiểu **2 frame lân cận** trước khi dừng (làm mượt nhiễu nén H.264 CRF 18). Ở `P5.9`, theo đúng đặc tả Mục 2 (*"Thay điều kiện dừng matched_count >= 4 bằng: dừng khi phủ >= 98% mask HOẶC đã thử 8 lần warp"*), vì logo trôi xa nên ngay frame lân cận xếp hạng `#0` đầu tiên đã lộ `100%` (`>= 98%`) diện tích mask và vòng lặp dừng ngay sau **1 lần warp duy nhất** (`warp_attempts = 1`), không lấy trung bình 2 frame như trước nên SSIM giảm nhẹ `-0.0053` do nhiễu lượng tử hoá H.264 của 1 frame đơn lẻ (nhưng tốc độ xử lý nhanh gấp đôi: `11.52s → 5.07s`, và SSIM vẫn đạt `0.9550`). Còn ở bảng P0 (`0.4336 → 0.4229`), phép đo P0 truyền cứng bbox của frame 0 (`x=40`) cho toàn bộ 150 frame trong khi logo đã trôi sang `x=420` (không phải chế độ chạy thực tế của nhóm moving).
+2. **`static_corner_03.mp4` (`0.8797 → 0.8696`, `Δ = -0.0101`, vẫn đạt `≥ 0.85`)**:
+   - **Nguyên nhân**: Logo nằm ở góc dưới-trái (`[24, 290, 136, 48]`), nền lia ngang. Ở `ced4bcc`, `temporal_fill` duyệt tuần tự 2 frame `causal` (`f-1, f-2`) trước (mỗi frame lộ một dải hẹp `3–6px` sát rìa mới nhất) rồi mới cộng thêm 2 frame `strided` (`f-12, f-24`), nên vùng rìa mask là trung bình của 4 frame gần (`Δf = 1, 2, 12, 24`). Ở `P5.9`, `_dedup_and_rank_neighbors` xếp hạng các frame có `expected_clean_px` đạt `100%` (`Δf >= 48` frame, tức khi toàn bộ chiều ngang `136px` của logo đã trôi qua hết) lên đầu tiên; frame ở khoảng cách `Δf = 48..54` phủ ngay `100% >= 98%` mask ở lần warp đầu tiên (`warp_attempts = 1`) và dừng luôn. Do khoảng cách thời gian `Δf = 48` xa hơn nên sai số nội suy bilinear `warpPerspective` trên nền chuyển động làm SSIM giảm nhẹ `-0.0101` (vẫn đạt `0.8696 ≥ 0.85`).
+3. **`heavy_motion_03.mp4` (`0.8975 → 0.8710`, `Δ = -0.0265`, vẫn đạt `≥ 0.85` và cao hơn `7e31a13 = 0.8641`)**:
+   - **Nguyên nhân**: Tương tự `static_corner_03`, `heavy_motion_03` đặt logo ở góc dưới-trái (`[24, 288, 136, 48]`) trên nền lia nhanh kèm rung lắc camera theo cả trục X và Y (`sin/cos jitter`). Vận tốc nền tức thời `bg_vel` là bộ lọc EMA (`0.7 * prev + 0.3 * inst_v`) nên trên cảnh camera đổi hướng rung liên tục, ước lượng tuyến tính `est_dx = df * bg_vel[0]` cho các frame cách xa (`strided` / `global_ref`) đôi khi dự đoán frame xa lộ 100% mask. Khi frame xa đó được warp đầu tiên và phủ `>= 98%` mask, vòng lặp dừng ngay sau 1 frame thay vì trung bình hoá 4 frame láng giềng như ở `ced4bcc`. Tuy giảm `-0.0265` so với `ced4bcc`, `heavy_motion_03` vẫn đạt **`0.8710`** (vượt ngưỡng `0.85` và cao hơn mốc `7e31a13 = 0.8641`), đồng thời 2 video cùng nhóm là `heavy_motion_01` (`0.8152 → 0.9016`, `+0.0864`) và `heavy_motion_02` (`0.8300 → 0.8503`, `+0.0203`) đều tăng vọt vượt ngưỡng `0.85`.
+4. **`hard_small_wm.mp4` (`0.8961 → 0.8719`, `Δ = -0.0242`, vẫn đạt `≥ 0.85`)**:
+   - **Nguyên nhân**: Watermark có kích thước rất nhỏ (`68×28`, sau dilate là `92×52`). Vì chiều rộng mask nhỏ (`92px`), chỉ cần khoảng cách `Δf ≈ 24–30` frame là toàn bộ vùng mask đã lộ 100% (`expected_clean_px >= stop_px`). Ở `P5.9`, frame ở `Δf = 24..30` được xếp đầu và đạt `100% >= 98%` coverage ngay ở lần warp thứ nhất (`warp_attempts = 1`), dừng sớm mà không cộng trung bình thêm các frame gần hơn (`Δf = 1, 2, 12`), khiến nhiễu nén H.264 không được lấy trung bình đa frame và SSIM giảm `-0.0242` (vẫn đạt `0.8719 ≥ 0.85`, tốc độ xử lý nhanh hơn từ `1.22x` xuống `1.04x`).
+
+---
+
+### 5. Kết quả Load Test Mục 4 (`720×1280 10s` & `1080×1920 10s`, `conc 1` và `2`, `3 lần chạy`) — So sánh `ced4bcc` vs `P5.9` (`34e077f`)
+- **Không đổi `FLOW_SEC_PER_MPX_FRAME`** (giữ nguyên mặc định `0.45` trong code).
+- File kết quả chi tiết: `benchmarks/results/p5_9_load_metrics.json`.
+
+| Cấu hình video (30 fps) | Số job đồng thời | `mode` thật từ job | Worker Exec Median `ced4bcc` (s) | Worker Exec Median `P5.9` (`Min – Max`) (s) | Chênh lệch Worker (`Δ`) | E2E Median `ced4bcc` (s) | E2E Median `P5.9` (`Min – Max`) (s) | `sec/(MPx×f)` Worker `ced4bcc` → `P5.9` | Batch Wall Median `ced4bcc` → `P5.9` (s) |
+|---|---:|---|---:|---:|---:|---:|---:|---:|---:|
+| `720×1280` (`10s`, 30fps) | 1 | `per_frame` (300/300f) | 35.25s | **41.76s** (`36.93 – 45.45s`) | `+6.51s` (`+18.5%`) | 37.64s | **44.10s** (`39.22 – 47.83s`) | `0.1275 → 0.1510` | `38.45 → 44.75s` |
+| `720×1280` (`10s`, 30fps) | 2 | `per_frame` (300/300f) | 48.05s | **46.72s** (`45.14 – 50.85s`) | `-1.33s` (`-2.8%`) | 51.92s | **50.05s** (`47.33 – 53.59s`) | `0.1738 → 0.1690` | `53.51 → 51.92s` |
+| `1080×1920` (`10s`, 30fps) | 1 | `per_frame` (300/300f) | 44.91s | **47.92s** (`47.18 – 49.49s`) | `+3.01s` (`+6.7%`) | 48.27s | **51.68s** (`50.27 – 53.16s`) | `0.0722 → 0.0770` | `49.10 → 52.54s` |
+| `1080×1920` (`10s`, 30fps) | 2 | `per_frame` (300/300f) | 63.00s | **71.88s** (`68.26 – 78.67s`) | `+8.88s` (`+14.1%`) | 68.43s | **75.41s** (`71.56 – 81.06s`) | `0.1013 → 0.1155` | `72.26 → 78.11s` |
+
+---
+
 ## Mẫu ghi cho các lần chạy sau
 
 ## Lần chạy N — DD/MM/YYYY (mô tả ngắn)

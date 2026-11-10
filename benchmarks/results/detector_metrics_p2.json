@@ -1,45 +1,16 @@
 {
-  "total_videos": 19,
-  "positive_videos": 16,
+  "total_videos": 18,
+  "positive_videos": 15,
   "negative_videos": 3,
-  "tp": 16,
+  "tp": 15,
   "fp": 0,
   "fn": 0,
   "precision": 1.0,
   "recall": 1.0,
   "negative_fp_rate": 0.0,
-  "max_elapsed_sec": 2.072,
-  "mean_elapsed_sec": 0.792,
+  "max_elapsed_sec": 0.928,
+  "mean_elapsed_sec": 0.621,
   "videos": [
-    {
-      "video": "253K views · 3.2K reactions _ Sao kỳ dị chờn 🥹 _ Cuộc Sống Agency.mp4",
-      "stem": "253K views · 3.2K reactions _ Sao kỳ dị chờn 🥹 _ Cuộc Sống Agency",
-      "group": "Watermark bán trong suốt (video thực tế)",
-      "has_watermark": true,
-      "gt_box": [
-        250,
-        480,
-        420,
-        130
-      ],
-      "pred_box": [
-        264,
-        495,
-        372,
-        114
-      ],
-      "confidence": 0.83,
-      "kind": "semi_transparent",
-      "status": "detected",
-      "iou": 0.777,
-      "tp": 1,
-      "fp": 0,
-      "fn": 0,
-      "precision": 1.0,
-      "recall": 1.0,
-      "false_positive": false,
-      "elapsed_sec": 2.072
-    },
     {
       "video": "content_text_neg_01.mp4",
       "stem": "content_text_neg_01",
@@ -57,7 +28,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 1.037
+      "elapsed_sec": 0.928
     },
     {
       "video": "content_text_neg_02.mp4",
@@ -76,7 +47,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.946
+      "elapsed_sec": 0.799
     },
     {
       "video": "content_text_neg_03.mp4",
@@ -95,7 +66,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.973
+      "elapsed_sec": 0.872
     },
     {
       "video": "heavy_motion_01.mp4",
@@ -124,7 +95,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.453
+      "elapsed_sec": 0.41
     },
     {
       "video": "heavy_motion_02.mp4",
@@ -153,7 +124,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.623
+      "elapsed_sec": 0.574
     },
     {
       "video": "heavy_motion_03.mp4",
@@ -182,7 +153,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.756
+      "elapsed_sec": 0.569
     },
     {
       "video": "moving_watermark_01.mp4",
@@ -211,7 +182,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.899
+      "elapsed_sec": 0.719
     },
     {
       "video": "moving_watermark_02.mp4",
@@ -240,7 +211,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.871
+      "elapsed_sec": 0.786
     },
     {
       "video": "moving_watermark_03.mp4",
@@ -269,7 +240,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 1.099
+      "elapsed_sec": 0.886
     },
     {
       "video": "scene_cut_01.mp4",
@@ -298,7 +269,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.379
+      "elapsed_sec": 0.337
     },
     {
       "video": "scene_cut_02.mp4",
@@ -327,7 +298,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.408
+      "elapsed_sec": 0.344
     },
     {
       "video": "scene_cut_03.mp4",
@@ -356,7 +327,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.657
+      "elapsed_sec": 0.603
     },
     {
       "video": "semi_transparent_01.mp4",
@@ -385,7 +356,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.633
+      "elapsed_sec": 0.592
     },
     {
       "video": "semi_transparent_02.mp4",
@@ -414,7 +385,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.618
+      "elapsed_sec": 0.524
     },
     {
       "video": "semi_transparent_03.mp4",
@@ -443,7 +414,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.674
+      "elapsed_sec": 0.565
     },
     {
       "video": "static_corner_01.mp4",
@@ -472,7 +443,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.66
+      "elapsed_sec": 0.553
     },
     {
       "video": "static_corner_02.mp4",
@@ -501,7 +472,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.64
+      "elapsed_sec": 0.573
     },
     {
       "video": "static_corner_03.mp4",
@@ -530,7 +501,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "false_positive": false,
-      "elapsed_sec": 0.655
+      "elapsed_sec": 0.538
     }
   ]
 }

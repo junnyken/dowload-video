@@ -566,3 +566,19 @@ For `preset=custom`, provide `region: {"x": N, "y": N, "w": N, "h": N}` in pixel
   - **`synthetic-hard` (9 video dương tính + 1 âm tính)**: SSIM trong mask trung bình giữ nguyên **`0.7846` → `0.7846` (`Δ = 0.0000`)**; 5/9 video tăng nhẹ (`+0.0001` đến `+0.0005`), 2/9 giữ nguyên (`0.0000`), và **2/9 video giảm cực nhẹ dưới ngưỡng phần nghìn** được ghi rõ:
     - `hard_scale_15x.mp4`: `0.8883 → 0.8876` (`Δ = -0.0007`, vẫn đạt `≥ 0.85`)
     - `hard_vertical_720x1280.mp4`: `0.8501 → 0.8495` (`Δ = -0.0006`)
+
+
+### 10.7. Xếp hạng frame lân cận theo diện tích nền sạch dự kiến (`P5.9` — Mốc `ced4bcc` → `34e077f`)
+- **Bộ kiểm chứng mới `benchmarks/synthetic-jump-holdout/` (6 video, commit `eb08db1`)**: tạo độc lập trước khi sửa engine (`pan = 0 / 0.5 / 3 px/frame`, điểm nhảy tại `frame 30 / 60 / 110`, 1 video nhảy 4 vị trí, 1 video logo đứng yên + camera lia).
+- **Bản sửa engine (`34e077f` — `"fix(inpaint): rank neighbours by expected clean coverage"`)**:
+  - Khử trùng lặp chỉ số frame giữa `causal` / `strided` / `global_ref` và xếp hạng trước khi warp theo diện tích nền sạch dự kiến (`_estimate_expected_clean_area`).
+  - Dừng khi phủ `>= 98%` mask (`_TEMPORAL_COVERAGE_STOP_FRAC = 0.98`) HOẶC đã thử `8` lần warp (`_MAX_TEMPORAL_WARP_ATTEMPTS = 8`).
+- **Kết quả đo lại toàn bộ 30 video (`ced4bcc` → `P5.9`)**:
+  - **`synthetic` (15 video)**:
+    - Nhóm `moving_watermark` (P3 tracked): trung bình tăng từ **`0.8938` → `0.9350` (`+0.0412`)** (`moving_watermark_01`: `0.8339 → 0.9570`, `+0.1231`; `moving_watermark_02`: `0.8872 → 0.8930`, `+0.0058`; `moving_watermark_03`: `0.9603 → 0.9550`, `-0.0053`; `scene_cut_03`: `0.8328 → 0.9062`, `+0.0734`).
+    - Nhóm watermark tĩnh (11 video): trung bình tăng từ **`0.8377` → `0.8690` (`+0.0313`, vượt ngưỡng `≥ 0.85`)**; trung bình toàn bộ 15 video (kèm P3 tracked) tăng từ **`0.8486` → `0.8848` (`+0.0362`, ĐẠT `≥ 0.85`)**.
+  - **`synthetic-hard` (9 video)**: trung bình tăng từ **`0.7846` → `0.8226` (`+0.0380`)** (8/9 video tăng SSIM, bao gồm `hard_large_wm`: `0.7945 → 0.8573` và `hard_vertical_720x1280`: `0.8495 → 0.8571`).
+  - **`synthetic-jump-holdout` (6 video)**: trung bình tăng từ **`0.9113` → `0.9600` (`+0.0487`)**; 6/6 video giữ nguyên hoặc tăng mạnh SSIM (`holdout_static_logo_pan3`: `0.8717 → 0.9344`, `+0.0627`).
+- **Load Test Mục 4 (`720×1280 10s` & `1080×1920 10s`, `conc 1` & `2`, `3 lần`, giữ nguyên `FLOW_SEC_PER_MPX_FRAME = 0.45`)**:
+  - `720×1280 10s`: `conc=1` Worker Median `35.25s → 41.76s` (`E2E: 37.64s → 44.10s`); `conc=2` Worker Median `48.05s → 46.72s` (`E2E: 51.92s → 50.05s`).
+  - `1080×1920 10s`: `conc=1` Worker Median `44.91s → 47.92s` (`E2E: 48.27s → 51.68s`); `conc=2` Worker Median `63.00s → 71.88s` (`E2E: 68.43s → 75.41s`).

@@ -1,14 +1,14 @@
 {
-  "total_tracked_videos": 16,
+  "total_tracked_videos": 15,
   "overall_median_iou": 1.0,
   "overall_auto_init_median_iou": 0.8152,
   "max_drift_pct": 0.136,
-  "auto_init_max_drift_pct": 1.059,
+  "auto_init_max_drift_pct": 0.684,
   "scene_cut_exact_rate": 1.0,
-  "mean_track_elapsed_sec": 2.422,
+  "mean_track_elapsed_sec": 1.702,
   "moving_watermark_ssim_p0": 0.4742,
-  "moving_watermark_ssim_p3": 0.8938,
-  "moving_watermark_psnr_out_p3": 42.72,
+  "moving_watermark_ssim_p3": 0.935,
+  "moving_watermark_psnr_out_p3": 42.68,
   "lost_track_probe": {
     "total_frames": 90,
     "watermark_present_frames": "0..49",
@@ -29,28 +29,6 @@
   },
   "tracker_videos": [
     {
-      "video": "253K views · 3.2K reactions _ Sao kỳ dị chờn 🥹 _ Cuộc Sống Agency.mp4",
-      "stem": "253K views · 3.2K reactions _ Sao kỳ dị chờn 🥹 _ Cuộc Sống Agency",
-      "group": "Watermark bán trong suốt (video thực tế)",
-      "region_type": "static",
-      "frames": 185,
-      "median_iou": 1.0,
-      "mean_iou": 1.0,
-      "min_iou": 1.0,
-      "max_drift_pct": 0.0,
-      "mean_drift_pct": 0.0,
-      "auto_init_median_iou": 0.7767,
-      "auto_init_max_drift_pct": 1.059,
-      "lost_rate": 0.0,
-      "lost_frames_count": 0,
-      "gt_scene_cuts": [],
-      "pred_scene_cuts": [],
-      "scene_cut_exact": true,
-      "status": "tracked",
-      "needs_review": false,
-      "elapsed_sec": 9.893
-    },
-    {
       "video": "heavy_motion_01.mp4",
       "stem": "heavy_motion_01",
       "group": "Nền chuyển động mạnh, camera rung",
@@ -70,7 +48,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.836
+      "elapsed_sec": 1.466
     },
     {
       "video": "heavy_motion_02.mp4",
@@ -92,7 +70,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.906
+      "elapsed_sec": 1.475
     },
     {
       "video": "heavy_motion_03.mp4",
@@ -114,7 +92,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.576
+      "elapsed_sec": 1.425
     },
     {
       "video": "moving_watermark_01.mp4",
@@ -136,7 +114,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 2.518
+      "elapsed_sec": 2.581
     },
     {
       "video": "moving_watermark_02.mp4",
@@ -158,7 +136,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 2.492
+      "elapsed_sec": 2.357
     },
     {
       "video": "moving_watermark_03.mp4",
@@ -180,7 +158,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 2.318
+      "elapsed_sec": 2.247
     },
     {
       "video": "scene_cut_01.mp4",
@@ -206,7 +184,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.524
+      "elapsed_sec": 1.821
     },
     {
       "video": "scene_cut_02.mp4",
@@ -234,7 +212,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.557
+      "elapsed_sec": 1.353
     },
     {
       "video": "scene_cut_03.mp4",
@@ -260,7 +238,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 2.487
+      "elapsed_sec": 2.16
     },
     {
       "video": "semi_transparent_01.mp4",
@@ -282,7 +260,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.757
+      "elapsed_sec": 1.498
     },
     {
       "video": "semi_transparent_02.mp4",
@@ -304,7 +282,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.912
+      "elapsed_sec": 1.649
     },
     {
       "video": "semi_transparent_03.mp4",
@@ -326,7 +304,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 2.18
+      "elapsed_sec": 1.349
     },
     {
       "video": "static_corner_01.mp4",
@@ -348,7 +326,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.621
+      "elapsed_sec": 1.367
     },
     {
       "video": "static_corner_02.mp4",
@@ -370,7 +348,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.572
+      "elapsed_sec": 1.372
     },
     {
       "video": "static_corner_03.mp4",
@@ -392,7 +370,7 @@
       "scene_cut_exact": true,
       "status": "tracked",
       "needs_review": false,
-      "elapsed_sec": 1.598
+      "elapsed_sec": 1.407
     }
   ],
   "moving_inpaint_comparison": [
@@ -401,60 +379,60 @@
       "stem": "moving_watermark_01",
       "group": "Logo/chữ di chuyển",
       "ssim_p0_baseline": 0.4832,
-      "ssim_p3_tracked": 0.8339,
-      "ssim_gain": 0.3507,
-      "psnr_out_mask": 42.74,
-      "seam": 1.26,
-      "flicker": 1.14,
+      "ssim_p3_tracked": 0.957,
+      "ssim_gain": 0.4738,
+      "psnr_out_mask": 42.64,
+      "seam": 1.34,
+      "flicker": 1.24,
       "temporal_frames": 150,
       "total_frames": 150,
-      "elapsed_sec": 7.22,
-      "peak_ram_mb": 1995.9
+      "elapsed_sec": 3.99,
+      "peak_ram_mb": 892.0
     },
     {
       "video": "moving_watermark_02.mp4",
       "stem": "moving_watermark_02",
       "group": "Logo/chữ di chuyển",
       "ssim_p0_baseline": 0.3694,
-      "ssim_p3_tracked": 0.8872,
-      "ssim_gain": 0.5178,
-      "psnr_out_mask": 42.46,
-      "seam": 1.32,
-      "flicker": 1.5,
+      "ssim_p3_tracked": 0.893,
+      "ssim_gain": 0.5236,
+      "psnr_out_mask": 42.44,
+      "seam": 1.39,
+      "flicker": 1.68,
       "temporal_frames": 150,
       "total_frames": 150,
-      "elapsed_sec": 7.81,
-      "peak_ram_mb": 1995.9
+      "elapsed_sec": 8.19,
+      "peak_ram_mb": 1118.9
     },
     {
       "video": "moving_watermark_03.mp4",
       "stem": "moving_watermark_03",
       "group": "Logo/chữ di chuyển",
       "ssim_p0_baseline": 0.5699,
-      "ssim_p3_tracked": 0.9603,
-      "ssim_gain": 0.3904,
+      "ssim_p3_tracked": 0.955,
+      "ssim_gain": 0.3851,
       "psnr_out_mask": 42.97,
-      "seam": 1.63,
-      "flicker": 1.82,
+      "seam": 1.66,
+      "flicker": 1.86,
       "temporal_frames": 150,
       "total_frames": 150,
-      "elapsed_sec": 11.52,
-      "peak_ram_mb": 1995.9
+      "elapsed_sec": 5.07,
+      "peak_ram_mb": 1118.9
     },
     {
       "video": "scene_cut_03.mp4",
       "stem": "scene_cut_03",
       "group": "Có cắt cảnh",
       "ssim_p0_baseline": 0.482,
-      "ssim_p3_tracked": 0.8328,
-      "ssim_gain": 0.3508,
-      "psnr_out_mask": 43.53,
-      "seam": 0.8,
-      "flicker": 0.9,
+      "ssim_p3_tracked": 0.9062,
+      "ssim_gain": 0.4242,
+      "psnr_out_mask": 43.54,
+      "seam": 0.82,
+      "flicker": 0.94,
       "temporal_frames": 150,
       "total_frames": 150,
-      "elapsed_sec": 7.9,
-      "peak_ram_mb": 1995.9
+      "elapsed_sec": 13.92,
+      "peak_ram_mb": 1120.1
     }
   ]
 }
