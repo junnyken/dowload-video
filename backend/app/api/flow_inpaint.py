@@ -33,6 +33,8 @@ import numpy as np
 # static patch over a wrong warp that would ghost).
 _MIN_INLIERS = 18
 _MAX_TRANSLATION_FRAC = 0.35   # reject warps that shift > 35% of frame (likely bad match)
+_TEMPORAL_COVERAGE_STOP_FRAC = 0.98
+_MAX_TEMPORAL_WARP_ATTEMPTS = 8
 
 
 # ── Mask helpers ─────────────────────────────────────────────────────
@@ -244,15 +246,158 @@ def _estimate_homography(
     return _match_homography_from_features(k1, d1, k2, d2, vw, vh)
 
 
+def _estimate_expected_clean_area(
+    mask_roi: np.ndarray,
+    bx: int,
+    by: int,
+    bw: int,
+    bh: int,
+    nb_box_dilated: Tuple[int, int, int, int],
+    est_dx: float,
+    est_dy: float,
+    vw: int,
+    vh: int,
+) -> int:
+    """
+    Estimate how many pixels of `mask_roi` will be cleanly exposed (not occluded
+    by the neighbour's logo bbox and within the neighbour's frame bounds) when
+    the neighbour is warped onto the current frame by `(est_dx, est_dy)`.
+    """
+    if abs(est_dx) > _MAX_TRANSLATION_FRAC * vw or abs(est_dy) > _MAX_TRANSLATION_FRAC * vh:
+        return 0
+    dx_i = int(round(est_dx))
+    dy_i = int(round(est_dy))
+
+    rx0 = max(0, max(0, dx_i) - bx)
+    ry0 = max(0, max(0, dy_i) - by)
+    rx1 = min(bw, min(vw, vw + dx_i) - bx)
+    ry1 = min(bh, min(vh, vh + dy_i) - by)
+    if rx1 <= rx0 or ry1 <= ry0:
+        return 0
+
+    in_frame_px = int(mask_roi[ry0:ry1, rx0:rx1].sum())
+    if in_frame_px <= 0:
+        return 0
+
+    nbx, nby, nbw, nbh = nb_box_dilated
+    if nbw <= 0 or nbh <= 0:
+        return in_frame_px
+
+    ox0 = max(rx0, (nbx + dx_i) - bx)
+    oy0 = max(ry0, (nby + dy_i) - by)
+    ox1 = min(rx1, (nbx + nbw + dx_i) - bx)
+    oy1 = min(ry1, (nby + nbh + dy_i) - by)
+    occluded_px = int(mask_roi[oy0:oy1, ox0:ox1].sum()) if (ox1 > ox0 and oy1 > oy0) else 0
+    return max(0, in_frame_px - occluded_px)
+
+
+def _dedup_and_rank_neighbors(
+    neighbors: list,
+    fill_mask: np.ndarray,
+    mask_roi: np.ndarray,
+    bx: int,
+    by: int,
+    bw: int,
+    bh: int,
+    vw: int,
+    vh: int,
+    cur_fidx: Optional[int] = None,
+    bg_vel: Optional[Sequence[float]] = None,
+    dilate_px: int = 12,
+) -> list:
+    """
+    Deduplicate candidate neighbours by frame index and rank them in descending
+    order of expected unoccluded background area (`expected_clean_px`).
+    """
+    seen_fidxs = set()
+    seen_obj_ids = set()
+    candidates = []
+    total_mask_px = max(1, int(mask_roi.sum()))
+    stop_px = int(total_mask_px * _TEMPORAL_COVERAGE_STOP_FRAC)
+
+    for orig_idx, nb_item in enumerate(neighbors):
+        nb_fidx: Optional[int] = None
+        nb_box: Optional[Tuple[int, int, int, int]] = None
+        k1 = d1 = None
+
+        if isinstance(nb_item, tuple):
+            if len(nb_item) >= 6:
+                nb, nb_mask, k1, d1, nb_fidx, nb_box = nb_item[:6]
+            elif len(nb_item) == 5:
+                nb, nb_mask, k1, d1, nb_fidx = nb_item
+            elif len(nb_item) == 4:
+                nb, nb_mask, k1, d1 = nb_item
+            elif len(nb_item) == 2:
+                nb, nb_mask = nb_item
+            else:
+                nb, nb_mask = nb_item[0], fill_mask
+        else:
+            nb, nb_mask = nb_item, fill_mask
+
+        if nb_fidx is not None:
+            if cur_fidx is not None and int(nb_fidx) == int(cur_fidx):
+                continue
+            if int(nb_fidx) in seen_fidxs:
+                continue
+            seen_fidxs.add(int(nb_fidx))
+        else:
+            obj_id = id(nb)
+            if obj_id in seen_obj_ids:
+                continue
+            seen_obj_ids.add(obj_id)
+
+        if nb_box is not None and len(nb_box) >= 4:
+            nx, ny, nw, nh = int(nb_box[0]), int(nb_box[1]), int(nb_box[2]), int(nb_box[3])
+            if nw <= 0 or nh <= 0:
+                nb_box_dilated = (0, 0, 0, 0)
+            else:
+                x0 = max(0, nx - dilate_px)
+                y0 = max(0, ny - dilate_px)
+                x1 = min(vw, nx + nw + dilate_px)
+                y1 = min(vh, ny + nh + dilate_px)
+                nb_box_dilated = (x0, y0, max(0, x1 - x0), max(0, y1 - y0))
+        else:
+            nb_box_dilated = cv2.boundingRect(nb_mask)
+
+        if bg_vel is not None and cur_fidx is not None and nb_fidx is not None:
+            df = float(cur_fidx - int(nb_fidx))
+            est_dx = df * float(bg_vel[0])
+            est_dy = df * float(bg_vel[1])
+        else:
+            est_dx = 0.0
+            est_dy = 0.0
+
+        expected_clean_px = _estimate_expected_clean_area(
+            mask_roi, bx, by, bw, bh, nb_box_dilated, est_dx, est_dy, vw, vh
+        )
+        abs_df = abs(int(cur_fidx) - int(nb_fidx)) if (cur_fidx is not None and nb_fidx is not None) else 0
+        candidates.append((
+            -min(expected_clean_px, stop_px),
+            abs_df,
+            -expected_clean_px,
+            orig_idx,
+            (nb, nb_mask, k1, d1, nb_fidx, nb_box_dilated),
+        ))
+
+    candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
+    return [item[4] for item in candidates]
+
+
 def temporal_fill(
     cur: np.ndarray,
     neighbors: list,
     fill_mask: np.ndarray,
     cur_features: Optional[Tuple[Any, Any]] = None,
+    cur_fidx: Optional[int] = None,
+    bg_vel: Optional[List[float]] = None,
+    dilate_px: int = 12,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Reconstruct the masked region of `cur` from neighbour frames via motion
     compensation (ROI-bounded warp for 720p/1080p speed).
+    Neighbours are deduplicated and ranked pre-warp by expected unoccluded
+    background coverage. Stops when >= `_TEMPORAL_COVERAGE_STOP_FRAC` (98%) of
+    the mask is covered OR after `_MAX_TEMPORAL_WARP_ATTEMPTS` (8) valid warps.
     Returns `(filled_region_image, valid_mask)` where `valid_mask` is
     255 where a real pixel was recovered, 0 elsewhere.
     """
@@ -272,23 +417,43 @@ def temporal_fill(
     cnt_roi = np.zeros((bh, bw), dtype=np.float32)
     mask_roi = fill_mask[by : by + bh, bx : bx + bw] > 0
     total_mask_px = max(1, int(mask_roi.sum()))
+    stop_mask_px = int(total_mask_px * _TEMPORAL_COVERAGE_STOP_FRAC)
     t_roi = np.array([[1.0, 0.0, -float(bx)], [0.0, 1.0, -float(by)], [0.0, 0.0, 1.0]], dtype=np.float64)
-    matched_count = 0
 
-    for nb_item in neighbors:
-        if isinstance(nb_item, tuple) and len(nb_item) == 4:
-            nb, nb_mask, k1, d1 = nb_item
-            H = _match_homography_from_features(k1, d1, k2, d2, vw, vh)
-        elif isinstance(nb_item, tuple) and len(nb_item) == 2:
-            nb, nb_mask = nb_item
+    ranked_neighbors = _dedup_and_rank_neighbors(
+        neighbors, fill_mask, mask_roi, bx, by, bw, bh, vw, vh,
+        cur_fidx=cur_fidx, bg_vel=bg_vel, dilate_px=dilate_px,
+    )
+    warp_attempts = 0
+    vel_updated = False
+
+    for nb, nb_mask, k1, d1, nb_fidx, _ in ranked_neighbors:
+        if k1 is None or d1 is None:
             k1, d1 = _detect_orb_features(nb, nb_mask)
-            H = _match_homography_from_features(k1, d1, k2, d2, vw, vh)
-        else:
-            nb, nb_mask = nb_item, fill_mask
-            k1, d1 = _detect_orb_features(nb, nb_mask)
-            H = _match_homography_from_features(k1, d1, k2, d2, vw, vh)
+        H = _match_homography_from_features(k1, d1, k2, d2, vw, vh)
         if H is None:
             continue
+        warp_attempts += 1
+        if (
+            not vel_updated
+            and bg_vel is not None
+            and isinstance(bg_vel, list)
+            and len(bg_vel) >= 2
+            and cur_fidx is not None
+            and nb_fidx is not None
+            and int(nb_fidx) != int(cur_fidx)
+        ):
+            df = float(int(cur_fidx) - int(nb_fidx))
+            inst_vx = float(H[0, 2]) / df
+            inst_vy = float(H[1, 2]) / df
+            if bg_vel[0] == 0.0 and bg_vel[1] == 0.0:
+                bg_vel[0] = inst_vx
+                bg_vel[1] = inst_vy
+            else:
+                bg_vel[0] = 0.7 * float(bg_vel[0]) + 0.3 * inst_vx
+                bg_vel[1] = 0.7 * float(bg_vel[1]) + 0.3 * inst_vy
+            vel_updated = True
+
         h_roi = t_roi @ H.astype(np.float64)
         warped_roi = cv2.warpPerspective(
             nb, h_roi, (bw, bh), flags=cv2.INTER_LINEAR, borderValue=0
@@ -299,13 +464,12 @@ def temporal_fill(
         )
         valid_roi = mask_roi & (nb_logo_warp_roi == 0) & (warped_roi.sum(axis=2) > 0)
         if bool(valid_roi.any()):
-            matched_count += 1
             acc_roi[valid_roi] += warped_roi[valid_roi]
             cnt_roi[valid_roi] += 1.0
-            if matched_count >= 2 and int((cnt_roi > 0).sum()) >= int(total_mask_px * 0.98):
+            if int((cnt_roi > 0).sum()) >= stop_mask_px:
                 break
-            if matched_count >= 4:
-                break
+        if warp_attempts >= _MAX_TEMPORAL_WARP_ATTEMPTS:
+            break
 
     got_roi = cnt_roi > 0
     filled = np.zeros_like(cur)
@@ -565,12 +729,12 @@ def process_video_natural(
             seen_ref_idxs.add(ref_idx)
             ref_fr = _grab_frame_at(input_path, ts, vw, vh)
             if ref_fr is not None and _frame_ok(ref_fr):
-                _, _, _, _, ref_mask = _resolve_per_frame_box_and_mask(
+                rx, ry, rw, rh, ref_mask = _resolve_per_frame_box_and_mask(
                     ref_idx, default_box, fill, vw, vh, dilate_px, frame_boxes, frame_masks,
                 )
                 rk, rd = _detect_orb_features(ref_fr, ref_mask)
                 if rd is not None and rk is not None and len(rk) >= _MIN_INLIERS:
-                    global_ref_neighbors.append((ref_fr, ref_mask, rk, rd))
+                    global_ref_neighbors.append((ref_fr, ref_mask, rk, rd, ref_idx, (rx, ry, rw, rh)))
 
     frame_size = vw * vh * 3
     fps_str = f"{fps:.3f}"
@@ -618,6 +782,18 @@ def process_video_natural(
 
     neighbors: list = []          # immediate causal window of recent ORIGINAL frames
     strided_neighbors: list = []  # strided past frames (every 12th frame) for wider baseline recovery
+    bg_vel: List[float] = [0.0, 0.0]
+    if len(global_ref_neighbors) >= 2:
+        for gi in range(len(global_ref_neighbors) - 1):
+            _, _, gk1, gd1, gidx1, _ = global_ref_neighbors[gi]
+            _, _, gk2, gd2, gidx2, _ = global_ref_neighbors[gi + 1]
+            gdf = int(gidx2) - int(gidx1)
+            if 0 < abs(gdf) <= 60:
+                gH = _match_homography_from_features(gk1, gd1, gk2, gd2, vw, vh)
+                if gH is not None:
+                    bg_vel[0] = float(gH[0, 2]) / float(gdf)
+                    bg_vel[1] = float(gH[1, 2]) / float(gdf)
+                    break
     stats = {
         "total_frames": 0,
         "temporal_frames": 0,
@@ -656,10 +832,19 @@ def process_video_natural(
                 # recovers REAL pixels first; any residual unrecovered pixels
                 # are inpainted directly from the recovered context.
                 fk, fd = (_detect_orb_features(frame, cur_fill) if temporal else (None, None))
-                active_neighbors = neighbors + strided_neighbors + global_ref_neighbors
+                seen_active_fidxs = {fidx}
+                active_neighbors = []
+                for cand in neighbors + strided_neighbors + global_ref_neighbors:
+                    cand_fidx = cand[4] if (isinstance(cand, tuple) and len(cand) >= 5) else None
+                    if cand_fidx is not None:
+                        if int(cand_fidx) in seen_active_fidxs:
+                            continue
+                        seen_active_fidxs.add(int(cand_fidx))
+                    active_neighbors.append(cand)
                 if temporal and active_neighbors and fd is not None:
                     tfill, tvalid = temporal_fill(
-                        frame, active_neighbors, cur_fill, cur_features=(fk, fd)
+                        frame, active_neighbors, cur_fill, cur_features=(fk, fd),
+                        cur_fidx=fidx, bg_vel=bg_vel, dilate_px=dilate_px,
                     )
                     if int(tvalid.sum()) > 0:
                         stats["temporal_frames"] += 1
@@ -680,7 +865,7 @@ def process_video_natural(
             write_proc.stdin.write(out.tobytes())  # type: ignore[union-attr]
 
             if not static_bg and temporal:
-                nb_entry = (frame, cur_fill, fk, fd)
+                nb_entry = (frame, cur_fill, fk, fd, fidx, (fx, fy, fw, fh))
                 neighbors.append(nb_entry)
                 if len(neighbors) > n_neighbors:
                     neighbors.pop(0)

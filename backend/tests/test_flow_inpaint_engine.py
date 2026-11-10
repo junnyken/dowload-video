@@ -495,3 +495,77 @@ class TestContributingNeighboursCount:
         )
 
 
+class TestRankNeighboursByExpectedCleanCoverage:
+    """P5.9 Mục 2: A clean neighbour placed at the end of the candidate list is ranked and warped first."""
+
+    def test_clean_neighbour_at_end_of_list_is_ranked_and_used_first(self, monkeypatch):
+        assert fi._TEMPORAL_COVERAGE_STOP_FRAC == 0.98
+        assert fi._MAX_TEMPORAL_WARP_ATTEMPTS == 8
+
+        rng = np.random.default_rng(109)
+        truth = rng.integers(30, 220, size=(VH, VW, 3), dtype=np.uint8)
+        yy, xx = np.mgrid[0:H, 0:W]
+        checker = (((xx // 4) + (yy // 4)) % 2).astype(np.uint8) * 200 + 25
+        truth[Y:Y + H, X:X + W, 0] = checker
+        truth[Y:Y + H, X:X + W, 1] = 255 - checker
+        truth[Y:Y + H, X:X + W, 2] = checker
+
+        fill_mask = fi._build_fill_mask(X, Y, W, H, VW, VH)
+        cur = truth.copy()
+        cur[Y:Y + H, X:X + W] = (0, 255, 0)
+
+        # Put 10 occluded/sliver neighbours BEFORE the clean neighbour at the very end (index 10).
+        # Also include duplicate frame indices to verify deduplication across causal/strided/global_ref.
+        neighbors = []
+        for idx in range(10):
+            # Shift logo by 1px so each occluded neighbour exposes only a tiny sliver (< 5% of mask)
+            sliver_x = max(0, X - 1)
+            sliver_mask = fi._build_fill_mask(sliver_x, Y, W, H, VW, VH)
+            nb_sliver = truth.copy()
+            nb_sliver[Y:Y + H, sliver_x:sliver_x + W] = (0, 255, 0)
+            neighbors.append((nb_sliver, sliver_mask, None, None, idx + 1, (sliver_x, Y, W, H)))
+            if idx < 3:
+                # Duplicate fidx (simulating overlap between causal, strided, and global_ref)
+                neighbors.append((nb_sliver, sliver_mask, None, None, idx + 1, (sliver_x, Y, W, H)))
+
+        # Clean neighbour placed at the very end of the list (logo jumped to top-left 10, 10)
+        clean_fidx = 99
+        clean_box = (10, 10, W, H)
+        clean_mask = fi._build_fill_mask(*clean_box, VW, VH)
+        nb_clean = truth.copy()
+        nb_clean[10:10 + H, 10:10 + W] = (0, 255, 0)
+        neighbors.append((nb_clean, clean_mask, None, None, clean_fidx, clean_box))
+
+        bx, by, bw, bh = X - 12, Y - 12, W + 24, H + 24
+        mask_roi = fill_mask[by:by + bh, bx:bx + bw] > 0
+        ranked = fi._dedup_and_rank_neighbors(
+            neighbors, fill_mask, mask_roi, bx, by, bw, bh, VW, VH, cur_fidx=0, bg_vel=[0.0, 0.0]
+        )
+        ranked_fidxs = [item[4] for item in ranked]
+        # Deduplicated: 10 sliver frames + 1 clean frame = 11 unique frames (3 duplicates removed)
+        assert len(ranked_fidxs) == 11
+        # Clean frame from the end of the input list MUST be ranked #0 (first)
+        assert ranked_fidxs[0] == clean_fidx
+
+        warp_call_count = {"n": 0}
+        orig_match = fi._match_homography_from_features
+
+        def _counting_match(*args, **kwargs):
+            warp_call_count["n"] += 1
+            return orig_match(*args, **kwargs)
+
+        monkeypatch.setattr(fi, "_match_homography_from_features", _counting_match)
+
+        tfill, tvalid = fi.temporal_fill(cur, neighbors, fill_mask, cur_fidx=0, bg_vel=[0.0, 0.0])
+
+        # Because the clean frame at the end of the list was ranked first, it covers 100% (>= 98%)
+        # on the very first warp and stops immediately!
+        assert warp_call_count["n"] == 1
+        assert int((tvalid > 0).sum()) == int((fill_mask > 0).sum())
+        recovered_mae = float(np.abs(
+            tfill[Y:Y + H, X:X + W].astype(np.float32) - truth[Y:Y + H, X:X + W].astype(np.float32)
+        ).mean())
+        assert recovered_mae < 2.0
+
+
+
