@@ -712,7 +712,10 @@ def _write_meta(work_dir: str, updates: dict) -> dict:
     meta_path = os.path.join(work_dir, "metadata.json")
     with _META_LOCK:
         meta = _read_meta(work_dir)
+        prev_owner = meta.get("owner_user_id")
         meta.update(updates)
+        if prev_owner and not meta.get("owner_user_id"):
+            meta["owner_user_id"] = prev_owner
         try:
             os.makedirs(work_dir, exist_ok=True)
             tmp_path = f"{meta_path}.tmp.{os.getpid()}.{threading.get_ident()}"
@@ -1492,6 +1495,7 @@ def _execute_flow_preview_clip_job(
     _write_meta(work_dir, {
         "job_id": temp_id,
         "temp_id": temp_id,
+        "owner_user_id": job_params.get("owner_user_id") or prev_meta.get("owner_user_id"),
         "active_task_kind": "preview_clip",
         "status": "running",
         "progress": 10,
@@ -1722,6 +1726,7 @@ def preview_clip_cleanup(payload: PreviewClipRequest, request: Request, _: None 
         "clip_dur": clip_dur,
         "video_info": info,
         "frame_boxes": payload.frame_boxes or meta.get("tracked_boxes"),
+        "owner_user_id": caller_id,
     }
 
     _write_meta(work_dir, {
@@ -1888,10 +1893,12 @@ def _execute_flow_cleanup_job(
     output_path = os.path.join(work_dir, f"cleaned_{uid}.mp4")
     mask_path = os.path.join(work_dir, "mask.png")
     natural_stats = None
+    t_worker_start = time.perf_counter()
 
     _write_meta(work_dir, {
         "job_id": temp_id,
         "temp_id": temp_id,
+        "owner_user_id": job_params.get("owner_user_id") or prev_meta.get("owner_user_id"),
         "active_task_kind": "process",
         "status": "running",
         "progress": 5,
@@ -1990,6 +1997,7 @@ def _execute_flow_cleanup_job(
         ff = file_fields(output_path, "cleaned_file_id", "cleaned_path")
         dl_url = _result_url(temp_id, output_path, output_filename)
 
+        worker_exec_sec = round(time.perf_counter() - t_worker_start, 2)
         result_payload = {
             "success": True,
             "job_id": temp_id,
@@ -2013,6 +2021,8 @@ def _execute_flow_cleanup_job(
             "region": {"x": x, "y": y, "w": w, "h": h},
             "source_type": "flow_veo_cleanup",
             "visible_logo_cleanup": True,
+            "natural_stats": natural_stats,
+            "worker_exec_sec": worker_exec_sec,
         }
 
         _write_meta(work_dir, {
@@ -2325,11 +2335,13 @@ def process_flow_cleanup(
         "requested_mode": payload.requested_mode,
         "video_info": info,
         "frame_boxes": tracked_boxes,
+        "owner_user_id": caller_id,
     }
     return _start_or_queue_cleanup_job(payload.temp_id, job_params, retry_count=retry_count)
 
 
 @router.get("/status/{job_id}")
+@limiter.limit("600/minute")
 async def get_flow_cleanup_status(job_id: str, request: Request = None, _: None = Depends(_require_pro)):
     """Return status, progress (0-100), and result fields for a queued/running/done/failed/cancelled job."""
     work_dir = _safe_work_dir(job_id)
@@ -2384,6 +2396,8 @@ async def get_flow_cleanup_status(job_id: str, request: Request = None, _: None 
             saved_payload = meta.get("result_payload")
             if isinstance(saved_payload, dict):
                 resp.update(saved_payload)
+                if "natural_stats" not in resp and meta.get("natural_stats") is not None:
+                    resp["natural_stats"] = meta.get("natural_stats")
                 resp["status"] = "done"
                 resp["progress"] = 100
             else:
@@ -2717,6 +2731,7 @@ def _execute_flow_track_job(
     _write_meta(work_dir, {
         "job_id": temp_id,
         "temp_id": temp_id,
+        "owner_user_id": job_params.get("owner_user_id") or prev_meta.get("owner_user_id"),
         "active_task_kind": "track",
         "status": "running",
         "progress": 10,
@@ -2892,6 +2907,7 @@ def track_flow_watermark(
         "init_box": init_box,
         "keyframes": req.keyframes,
         "min_confidence": req.min_confidence,
+        "owner_user_id": caller_id,
     }
 
     _write_meta(work_dir, {

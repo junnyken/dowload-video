@@ -497,31 +497,35 @@ For `preset=custom`, provide `region: {"x": N, "y": N, "w": N, "h": N}` in pixel
 - Hạn mức mỗi user mỗi ngày: `FLOW_DAILY_USER_QUOTA=20` jobs/ngày (`HTTP 429 daily_quota_exceeded`).
 - Giới hạn retry: `FLOW_MAX_RETRY_COUNT=3` (`HTTP 400 max_retries_exceeded`).
 
-### 10.4. Tải đồng thời qua API + Celery thật, Cô lập hàng đợi & Chi phí CPU (P5.5 / P5.6.2)
+### 10.4. Tải đồng thời qua API + Celery thật, Cô lập hàng đợi & Chi phí CPU (P5.7.2 — Sau sửa `ced4bcc`)
 - **Worker Concurrency**: mặc định `FLOW_INPAINT_WORKER_CONCURRENCY=2` trên queue `media`.
-- **Cô lập hàng đợi (`default/celery` vs `media`)**: Khi 3 job `inpaint_logo_task` (`per_frame` 30fps) chạy/xếp hàng đồng thời trên queue `media`, 9 tác vụ Celery thật (`delete_local_file.apply_async(..., queue="celery")`) trên queue `default/celery` hoàn tất với độ trễ **`P50 = 5.37 ms`, `P95 = 46.28 ms`, `max = 73.31 ms`**, hoàn toàn không bị nghẽn (**ĐẠT**).
+- **Quy trình đo chuẩn P5.7.2**:
+  - Lấy `mode` thật từ `natural_stats.mode` của job (`assert actual_modes == ["per_frame"]`), có 1 job khởi động (`warmup_720x1280_10s`, `34.48s`) bị loại khỏi kết quả, và chạy lặp **3 lần cho mỗi cấu hình** (`N_RUNS = 3`).
+- **Cô lập hàng đợi (`downloads` vs `media`) bằng job tải/ghép video thật (`merge_audio_video_task`, 4s `720×1280` H.264+AAC, output `1.82 MB`)**:
+  - Khi queue `media` rỗi (3 mẫu): trung vị **`0.64s`** (`0.596 – 0.662s`).
+  - Khi queue `media` bão hoà (`conc = 3`, 9 mẫu): trung vị **`0.75s`** (`0.676 – 0.800s`), không bị chặn bởi hàng đợi `media` (**ĐẠT**).
 
-#### Bảng kết quả Load Test qua HTTP API + Celery + Redis thật (30 fps, `per_frame`, `FLOW_INPAINT_WORKER_CONCURRENCY=2`)
-| Cấu hình video (30 fps, `per_frame`) | Số job đồng thời | Kết quả (`outcomes`) | Chế độ / Lý do từ chối | P50 Latency (s) | P95 Latency (s) | Tổng thời gian batch (s) | Đánh giá |
-|---|---:|---|---|---:|---:|---:|---|
-| `720×1280` (`10s`, 30fps) | 1 | `['done']` | `per_frame` | 26.46s | 26.46s | 27.27s | *Chỉ báo cáo* |
-| `720×1280` (`10s`, 30fps) | 2 | `['done', 'done']` | `per_frame` | 62.91s | 63.04s | 63.98s | *Chỉ báo cáo* |
-| `720×1280` (`10s`, 30fps) | 3 | `['done', 'done', 'done']` | `per_frame` | 63.23s | 63.50s | 64.65s | *Chỉ báo cáo* |
-| `720×1280` (`20s`, 30fps) | 1 | `['done']` | `per_frame` | 14.95s | 14.95s | 15.70s | *Chỉ báo cáo* |
-| `720×1280` (`20s`, 30fps) | 2 | `['done', 'done']` | `per_frame` | 20.96s | 22.09s | 23.49s | *Chỉ báo cáo* |
-| `720×1280` (`20s`, 30fps) | 3 | `['done', 'done', 'done']` | `per_frame` | 21.85s | 30.81s | 33.37s | *Chỉ báo cáo* |
-| `720×1280` (`30s`, 30fps) | 1..3 | `['rejected_by_limits']` | `HTTP 400 duration_limit_exceeded` (`est=373.2s > 300s`, `max=24s`) | 0.07–0.15s | 0.07–0.23s | 1.03–2.47s | *Chỉ báo cáo* |
-| `1080×1920` (`10s`, 30fps) | 1 | `['done']` | `per_frame` | 62.08s | 62.08s | 62.85s | *Chỉ báo cáo* |
-| `1080×1920` (`10s`, 30fps) | 2 | `['done', 'done']` | `per_frame` | 62.44s | 62.99s | 64.43s | *Chỉ báo cáo* |
-| `1080×1920` (`10s`, 30fps) | 3 | `['done', 'done', 'done']` | `per_frame` | 61.95s | 87.11s | 91.69s | *Chỉ báo cáo* |
-| `1080×1920` (`20s`, 30fps) | 1..3 | `['rejected_by_limits']` | `HTTP 400 duration_limit_exceeded` (`est=559.9s > 300s`, `max=10s`) | 0.07–0.18s | 0.07–0.32s | 1.27–3.36s | *Chỉ báo cáo* |
-| `1080×1920` (`30s`, 30fps) | 1..3 | `['rejected_by_limits']` | `HTTP 400 duration_limit_exceeded` (`est=839.8s > 300s`, `max=10s`) | 0.08–0.16s | 0.08–0.16s | 1.43–4.16s | *Chỉ báo cáo* |
+#### Bảng kết quả Load Test qua HTTP API + Celery + Redis thật (30 fps, `per_frame`, 3 lần chạy / cấu hình, sau sửa `ced4bcc`)
+| Cấu hình video (30 fps) | Số job đồng thời | `mode` thật từ job | E2E Median (`Min – Max`) (s) | Wave 1 Median (s) | Job #3 chờ queue Median (s) | Worker Exec Median (`Min – Max`) (s) | `sec / (MPx × frame)` Worker Median (`Min – Max`) | Batch Wall Median (s) |
+|---|---:|---|---:|---:|---:|---:|---:|---:|
+| `720×1280` (`10s`, 30fps) | 1 | `per_frame` | **37.64s** (`37.45–45.55s`) | 37.64s | — | **35.25s** (`34.18–36.20s`) | **0.1275** (`0.1236–0.1309`) | 38.45s |
+| `720×1280` (`10s`, 30fps) | 2 | `per_frame` | **51.92s** (`44.39–59.47s`) | 51.92s | — | **48.05s** (`41.23–56.27s`) | **0.1738** (`0.1491–0.2035`) | 53.51s |
+| `720×1280` (`10s`, 30fps) | 3 | `per_frame` | **47.83s** (`44.27–78.39s`) | **46.65s** | **77.28s** | **42.45s** (`29.55–45.81s`) | **0.1535** (`0.1069–0.1657`) | 78.83s |
+| `720×1280` (`20s`, 30fps) | 1 | `per_frame` | **64.01s** (`63.43–66.75s`) | 64.01s | — | **61.95s** (`61.28–63.05s`) | **0.1120** (`0.1108–0.1140`) | 64.79s |
+| `720×1280` (`20s`, 30fps) | 2 | `per_frame` | **89.85s** (`87.03–93.00s`) | 89.85s | — | **87.63s** (`83.58–89.67s`) | **0.1585** (`0.1512–0.1622`) | 93.54s |
+| `720×1280` (`20s`, 30fps) | 3 | `per_frame` | **91.56s** (`86.42–156.16s`) | **89.00s** | **150.46s** | **84.23s** (`60.07–91.17s`) | **0.1523** (`0.1086–0.1649`) | 152.79s |
+| `720×1280` (`30s`, 30fps) | 1..3 | `rejected_pre_worker` (`max=24s`) | **0.05–0.14s** (`0.05–0.35s`) | — | — | — | — | 1.04–2.70s |
+| `1080×1920` (`10s`, 30fps) | 1 | `per_frame` | **48.27s** (`48.08–50.38s`) | 48.27s | — | **44.91s** (`44.09–46.17s`) | **0.0722** (`0.0709–0.0742`) | 49.10s |
+| `1080×1920` (`10s`, 30fps) | 2 | `per_frame` | **68.43s** (`65.12–71.93s`) | 68.43s | — | **63.00s** (`61.81–69.90s`) | **0.1013** (`0.0994–0.1124`) | 72.26s |
+| `1080×1920` (`10s`, 30fps) | 3 | `per_frame` | **66.30s** (`64.37–111.46s`) | **66.00s** | **110.66s** | **61.88s** (`43.95–64.37s`) | **0.0995** (`0.0707–0.1035`) | 112.80s |
+| `1080×1920` (`20s`, 30fps) | 1..3 | `rejected_pre_worker` (`max=10s`) | **0.06–0.09s** (`0.06–0.36s`) | — | — | — | — | 1.29–3.30s |
+| `1080×1920` (`30s`, 30fps) | 1..3 | `rejected_pre_worker` (`max=10s`) | **0.06–0.23s** (`0.06–0.24s`) | — | — | — | — | 1.80–5.38s |
 
 #### Chi phí CPU & Công suất tối đa / giờ / 1 worker (`per_frame` @ 30fps, Intel Core i3-10105 @ 3.70GHz)
 | Cấu hình video (`per_frame` @ 30fps) | CPU-second / 1s video | Số video 10s tối đa / giờ / 1 worker | Đánh giá |
 |---|---:|---:|---|
-| `720×1280` @ 30fps | **2.65 CPU-s / 1s** | **~136 video (10s) / giờ** | *Chỉ báo cáo* |
-| `1080×1920` @ 30fps | **6.21 CPU-s / 1s** | **~57 video (10s) / giờ** | *Chỉ báo cáo* |
+| `720×1280` @ 30fps (`10s`) | **3.76 CPU-s / 1s** (`worker = 3.53s / 1s`) | **~95 video (10s) / giờ** | *Chỉ báo cáo* |
+| `1080×1920` @ 30fps (`10s`) | **4.83 CPU-s / 1s** (`worker = 4.49s / 1s`) | **~74 video (10s) / giờ** | *Chỉ báo cáo* |
 
 ### 10.5. Giới hạn thời lượng thực tế theo Độ phân giải / FPS (`_validate_job_limits`, P5.6.3)
 - Backend (`_probe`) trả thêm `max_inpaint_duration_sec` và `max_crop_blur_duration_sec` tính trực tiếp từ `_compute_effective_max_duration(width, height, fps, method)`.
