@@ -262,6 +262,18 @@ export default function BillingPage() {
           </button>
         </div>
 
+        {/* ── Pending manual review notice ────────────────────────── */}
+        {billingInfo?.pending_manual_review && (
+          <div className="rounded-2xl border border-warning/40 bg-warning-soft px-5 py-4 text-sm text-warning flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-semibold">
+                {billingInfo.manual_review_message || 'Thanh toán đang được kiểm tra, chúng tôi sẽ liên hệ trong 24h'}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* ── Plan + status card ──────────────────────────────────── */}
         <Card>
           {loadingInfo ? (

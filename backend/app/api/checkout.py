@@ -240,7 +240,14 @@ async def capture_paypal_order(
     if order["rail"] != "paypal":
         raise HTTPException(status_code=400, detail="Not a PayPal order")
     if order["status"] != "pending":
-        return {"success": order["status"] == "paid", "status": order["status"]}
+        is_review = order["status"] in ("needs_manual_review", "underpaid")
+        return {
+            "success": order["status"] == "paid",
+            "status": order["status"],
+            "manual_review": is_review,
+            "user_message": po.MANUAL_REVIEW_USER_MESSAGE if is_review else None,
+            "order": order,
+        }
 
     paypal_order_id = order.get("provider_ref", "").strip()
     if not paypal_order_id:
@@ -302,11 +309,17 @@ async def capture_paypal_order(
         evidence=evidence,
     )
     updated_order = po.get_order(order_id, user["id"])
+    actual_status = (updated_order or {}).get("status") or ("paid" if ok else msg)
+    is_review = actual_status in ("needs_manual_review", "underpaid") or msg == "needs_manual_review"
+    plan_info = po.plan_by_id(order.get("plan", "pro_month"))
+    resolved_tier = (plan_info or {}).get("tier", "pro") if ok else None
     return {
         "success": ok,
-        "status": "paid" if ok else "pending",
+        "status": "paid" if ok else actual_status,
         "action": msg,
-        "tier": "pro" if ok else None,
+        "tier": resolved_tier,
+        "manual_review": is_review,
+        "user_message": po.MANUAL_REVIEW_USER_MESSAGE if is_review else None,
         "order": updated_order,
     }
 
@@ -318,7 +331,12 @@ async def list_orders(
     user: Dict[str, Any] = Depends(get_required_user),
 ):
     from app.core import payment_orders as po  # noqa: PLC0415
-    return {"orders": po.list_orders(user["id"])}
+    pending_review = po.get_user_pending_manual_review(user["id"])
+    return {
+        "orders": po.list_orders(user["id"]),
+        "manual_review": pending_review,
+        "user_message": po.MANUAL_REVIEW_USER_MESSAGE if pending_review else None,
+    }
 
 
 # ── GET /orders/{id} — chi tiết đơn (poll) ──────────────────────────
@@ -333,7 +351,14 @@ async def get_order(
     order = po.get_order(order_id, user["id"])
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
-    return {"order": order}
+    st = order.get("status")
+    is_review = st in ("needs_manual_review", "underpaid")
+    return {
+        "order": order,
+        "status": st,
+        "manual_review": is_review,
+        "user_message": po.MANUAL_REVIEW_USER_MESSAGE if is_review else None,
+    }
 
 
 # ── POST /orders/{id}/cancel — huỷ đơn ──────────────────────────────
@@ -440,6 +465,62 @@ async def admin_activate_order(
         metadata={"reason": payload.reason},
     )
     return {"success": True, "action": msg}
+
+
+class AdminResolveReviewRequest(BaseModel):
+    note: str = ""
+
+
+@router.get("/admin/manual-reviews")
+@admin_router.get("/manual-reviews")
+async def admin_list_manual_reviews(
+    status: Optional[str] = "needs_manual_review",
+    page: int = 1,
+    per_page: int = 20,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+    _=Depends(verify_admin),
+):
+    from app.core import payment_orders as po  # noqa: PLC0415
+
+    actual_limit = limit if limit is not None else max(1, min(per_page, 100))
+    actual_offset = offset if offset is not None else max(0, (page - 1) * actual_limit)
+    events, total = po.admin_list_manual_reviews(status=status, limit=actual_limit, offset=actual_offset)
+    total_pages = max(1, (total + actual_limit - 1) // actual_limit)
+    return {
+        "events": events,
+        "total": total,
+        "page": page,
+        "per_page": actual_limit,
+        "total_pages": total_pages,
+    }
+
+
+@router.post("/admin/manual-reviews/{event_id}/resolve")
+@admin_router.post("/manual-reviews/{event_id}/resolve")
+async def admin_resolve_manual_review(
+    event_id: str,
+    payload: AdminResolveReviewRequest,
+    request: Request,
+    _=Depends(verify_admin),
+):
+    from app.core import payment_orders as po  # noqa: PLC0415
+    from app.core.audit import log_admin_action  # noqa: PLC0415
+
+    ok, msg, ev = po.admin_resolve_manual_review(event_id, payload.note)
+    if not ok:
+        if msg == "not_found":
+            raise HTTPException(status_code=404, detail="Manual review event not found")
+        raise HTTPException(status_code=400, detail=msg)
+
+    log_admin_action(
+        request,
+        "admin.payment_review.resolved",
+        resource_type="payment_webhook_event",
+        resource_id=event_id,
+        metadata={"note": payload.note},
+    )
+    return {"success": True, "action": msg, "event": ev}
 
 
 @router.post("/admin/orders/{order_id}/simulate-sepay")

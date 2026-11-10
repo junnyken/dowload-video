@@ -125,6 +125,39 @@ def downgrade_user_message(current_tier: str, target_tier: str, expiry: Optional
     )
 
 
+MANUAL_REVIEW_USER_MESSAGE = (
+    "Thanh toán đang được kiểm tra, chúng tôi sẽ liên hệ trong 24h"
+)
+
+_SENSITIVE_PAYLOAD_KEYS = {
+    "token",
+    "access_token",
+    "refresh_token",
+    "secret",
+    "client_secret",
+    "webhook_secret",
+    "api_key",
+    "authorization",
+    "signature",
+    "transmission_sig",
+}
+
+
+def _sanitize_raw_payload(payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Strip any secret/token/signature fields from raw_payload before persisting."""
+    if not isinstance(payload, dict):
+        return {}
+    cleaned: Dict[str, Any] = {}
+    for k, v in payload.items():
+        if str(k).strip().lower() in _SENSITIVE_PAYLOAD_KEYS:
+            continue
+        if isinstance(v, dict):
+            cleaned[k] = _sanitize_raw_payload(v)
+        else:
+            cleaned[k] = v
+    return cleaned
+
+
 def record_webhook_manual_review(
     db,
     *,
@@ -136,11 +169,12 @@ def record_webhook_manual_review(
     target_tier: Optional[str] = None,
     amount: Optional[int] = None,
     order_id: Optional[str] = None,
+    order_code: Optional[str] = None,
     reason: str = "downgrade_while_higher_tier_active",
     raw_payload: Optional[Dict[str, Any]] = None,
     status: str = "needs_manual_review",
 ) -> None:
-    """Record a blocked/suspicious webhook payment in payment_webhook_events (and payment_events) for manual review."""
+    """Record a blocked/suspicious webhook payment in payment_webhook_events (and payment_events) for manual review, and alert admin via Telegram."""
     logger.warning(
         "[PaymentsSafety] %s webhook flagged %s: event_id=%s type=%s user=%s current_tier=%s target_tier=%s amount=%s reason=%s",
         provider,
@@ -154,6 +188,10 @@ def record_webhook_manual_review(
         reason,
     )
     client = db if db is not None else _db()
+    safe_payload = _sanitize_raw_payload(raw_payload)
+    if order_code and "order_code" not in safe_payload:
+        safe_payload["order_code"] = str(order_code)
+
     row = {
         "provider": provider,
         "provider_event_id": str(provider_event_id or ""),
@@ -165,7 +203,7 @@ def record_webhook_manual_review(
         "amount": amount,
         "status": status,
         "reason": reason,
-        "raw_payload": raw_payload if isinstance(raw_payload, dict) else {},
+        "raw_payload": safe_payload,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
@@ -183,6 +221,38 @@ def record_webhook_manual_review(
         }).eq("provider_event_id", str(provider_event_id or "")).execute()
     except Exception:
         pass
+
+    # Notify admin via Telegram (never send tokens/secrets; never let errors break webhooks)
+    try:
+        from app.core.notifications import notify_manual_review_payment_sync  # noqa: PLC0415
+
+        code_val = (
+            order_code
+            or safe_payload.get("order_code")
+            or safe_payload.get("code")
+        )
+        if code_val and order_id and str(code_val) != str(order_id):
+            order_ref = f"{code_val} ({order_id})"
+        elif code_val:
+            order_ref = str(code_val)
+        elif order_id:
+            order_ref = str(order_id)
+        elif provider_event_id:
+            order_ref = str(provider_event_id)
+        else:
+            order_ref = "—"
+
+        notify_manual_review_payment_sync(
+            provider=provider,
+            order_ref=order_ref,
+            user_id=str(user_id) if user_id else None,
+            amount=amount,
+            current_tier=current_tier,
+            target_tier=target_tier,
+            reason=reason,
+        )
+    except Exception as exc:
+        logger.warning("[PaymentsSafety] Telegram manual review alert failed (non-fatal): %s", exc)
 
 # ── First-time buyer & Plan catalog ─────────────────────────────────
 
@@ -705,6 +775,7 @@ def activate_order(order_id: str, paid_amount: int, provider_ref: str = "",
             target_tier=target_tier,
             amount=paid_amount,
             order_id=str(order_id),
+            order_code=str(order.get("code") or "") or None,
             reason="downgrade_while_higher_tier_active",
             raw_payload=evidence if isinstance(evidence, dict) else {},
             status="needs_manual_review",
@@ -868,6 +939,68 @@ def admin_list_orders(
         return [], 0
 
 
+def get_user_pending_manual_review(user_id: str, db=None) -> Optional[Dict[str, Any]]:
+    """Return a customer-safe summary if the user has an unresolved blocked/manual-review payment."""
+    if not user_id:
+        return None
+    uid = str(user_id).strip()
+    if not uid:
+        return None
+    client = db if db is not None else _db()
+
+    # 1. Check payment_webhook_events for unresolved needs_manual_review
+    try:
+        res = (
+            client.table("payment_webhook_events")
+            .select("id, provider, order_id, target_tier, amount, status, reason, created_at")
+            .eq("user_id", uid)
+            .eq("status", "needs_manual_review")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        if rows:
+            r = rows[0]
+            return {
+                "event_id": r.get("id"),
+                "order_id": r.get("order_id"),
+                "provider": r.get("provider"),
+                "status": "needs_manual_review",
+                "user_message": MANUAL_REVIEW_USER_MESSAGE,
+                "created_at": r.get("created_at"),
+            }
+    except Exception:
+        pass
+
+    # 2. Check payment_orders for needs_manual_review or underpaid
+    try:
+        ores = (
+            client.table("payment_orders")
+            .select("id, code, plan, rail, status, created_at")
+            .eq("user_id", uid)
+            .in_("status", ["needs_manual_review", "underpaid"])
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        orows = ores.data or []
+        if orows:
+            o = orows[0]
+            return {
+                "order_id": o.get("id"),
+                "code": o.get("code"),
+                "provider": o.get("rail"),
+                "status": o.get("status") or "needs_manual_review",
+                "user_message": MANUAL_REVIEW_USER_MESSAGE,
+                "created_at": o.get("created_at"),
+            }
+    except Exception:
+        pass
+
+    return None
+
+
 def admin_order_stats() -> Dict[str, Any]:
     """Aggregate KPI counts for admin OrdersPage."""
     db = _db()
@@ -878,6 +1011,8 @@ def admin_order_stats() -> Dict[str, Any]:
         "expired": 0,
         "canceled": 0,
         "underpaid": 0,
+        "needs_manual_review": 0,
+        "manual_review_events": 0,
         "revenue_vnd": 0,
     }
     try:
@@ -895,7 +1030,84 @@ def admin_order_stats() -> Dict[str, Any]:
                     stats["revenue_vnd"] += amt
     except Exception:
         pass
+    try:
+        ev_res = (
+            db.table("payment_webhook_events")
+            .select("id", count="exact")
+            .eq("status", "needs_manual_review")
+            .execute()
+        )
+        stats["manual_review_events"] = int(
+            ev_res.count if ev_res.count is not None else len(ev_res.data or [])
+        )
+    except Exception:
+        pass
     return stats
+
+
+def admin_list_manual_reviews(
+    status: Optional[str] = "needs_manual_review",
+    limit: int = 50,
+    offset: int = 0,
+) -> Tuple[List[Dict[str, Any]], int]:
+    """List payment_webhook_events for admin review, returns (events, total_count)."""
+    db = _db()
+    q = db.table("payment_webhook_events").select("*", count="exact")
+    if status and status != "all":
+        q = q.eq("status", status)
+    try:
+        res = q.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+        rows = res.data or []
+        total = int(res.count if res.count is not None else len(rows))
+        return rows, total
+    except Exception:
+        return [], 0
+
+
+def admin_resolve_manual_review(
+    event_id: str,
+    admin_note: str = "",
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """Mark a payment_webhook_events row as resolved (handled by admin)."""
+    db = _db()
+    try:
+        res = db.table("payment_webhook_events").select("*").eq("id", event_id).single().execute()
+        ev = res.data
+    except Exception:
+        return False, "not_found", None
+
+    if not ev:
+        return False, "not_found", None
+    if ev.get("status") == "resolved":
+        return False, "already_resolved", ev
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    raw_payload = dict(ev.get("raw_payload") or {}) if isinstance(ev.get("raw_payload"), dict) else {}
+    raw_payload["resolved_at"] = now_iso
+    if admin_note:
+        raw_payload["admin_note"] = admin_note
+
+    upd = (
+        db.table("payment_webhook_events")
+        .update({"status": "resolved", "raw_payload": raw_payload})
+        .eq("id", event_id)
+        .execute()
+    )
+    updated_row = (upd.data or [None])[0] or {**ev, "status": "resolved", "raw_payload": raw_payload}
+
+    # If linked to a payment_order in needs_manual_review, mark that order resolved too
+    order_id = ev.get("order_id")
+    if order_id:
+        try:
+            db.table("payment_orders").update({
+                "status": "resolved",
+                "admin_note": admin_note or f"Manual review resolved at {now_iso}",
+                "updated_at": now_iso,
+            }).eq("id", str(order_id)).eq("status", "needs_manual_review").execute()
+        except Exception:
+            pass
+
+    return True, "resolved", updated_row
 
 
 def admin_activate_order(order_id: str, admin_note: str = "") -> Tuple[bool, str]:
@@ -923,6 +1135,13 @@ def admin_activate_order(order_id: str, admin_note: str = "") -> Tuple[bool, str
         "admin_note": admin_note or "Admin manual activation",
         "updated_at": now.isoformat(),
     }).eq("id", order_id).execute()
+
+    try:
+        db.table("payment_webhook_events").update({
+            "status": "resolved",
+        }).eq("order_id", str(order_id)).eq("status", "needs_manual_review").execute()
+    except Exception:
+        pass
 
     plan = plan_by_id(order["plan"])
     days = plan["days"] if plan else 30

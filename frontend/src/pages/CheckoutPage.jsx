@@ -13,6 +13,7 @@ import { useLang } from '../i18n';
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const API = `${API_BASE}/api/v1`;
+const MANUAL_REVIEW_FALLBACK_MSG = 'Thanh toán đang được kiểm tra, chúng tôi sẽ liên hệ trong 24h';
 
 async function getToken() {
   const { data: { session } } = await supabase.auth.getSession();
@@ -257,6 +258,8 @@ export default function CheckoutPage() {
   const [error, setError] = useState('');
   const [orderPaid, setOrderPaid] = useState(false);
   const [orderExpired, setOrderExpired] = useState(false);
+  const [orderManualReview, setOrderManualReview] = useState('');
+  const [pendingReviewNotice, setPendingReviewNotice] = useState('');
   const [showConfetti, setShowConfetti] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
 
@@ -290,6 +293,42 @@ export default function CheckoutPage() {
       .finally(() => setPlansLoading(false));
   }, [t, isAuthenticated]);
 
+  // ── Check existing blocked / manual-review payments ──────────────────
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setPendingReviewNotice('');
+      return;
+    }
+    const paypalCapture = searchParams.get('paypal_capture');
+    const returnOrderId = searchParams.get('order_id') || searchParams.get('order');
+    if (returnOrderId && paypalCapture !== '1' && searchParams.get('canceled') !== '1') {
+      apiFetch(`/checkout/orders/${returnOrderId}`)
+        .then((data) => {
+          const ord = data.order || data;
+          const st = ord?.status || data?.status;
+          if (st === 'paid') {
+            setOrder(ord);
+            handlePaymentSuccess();
+          } else if (st === 'needs_manual_review' || st === 'underpaid' || data.manual_review) {
+            setOrder(ord);
+            setStep(2);
+            setOrderManualReview(data.user_message || MANUAL_REVIEW_FALLBACK_MSG);
+          }
+        })
+        .catch(() => {});
+    }
+
+    apiFetch('/checkout/orders')
+      .then((data) => {
+        if (data?.manual_review) {
+          setPendingReviewNotice(data.user_message || MANUAL_REVIEW_FALLBACK_MSG);
+        } else {
+          setPendingReviewNotice('');
+        }
+      })
+      .catch(() => {});
+  }, [isAuthenticated, searchParams]);
+
   // ── PayPal capture on return ────────────────────────────────────────
   useEffect(() => {
     const paypalCapture = searchParams.get('paypal_capture');
@@ -301,9 +340,18 @@ export default function CheckoutPage() {
 
     apiFetch(`/checkout/orders/${orderId}/capture`, { method: 'POST' })
       .then((data) => {
-        setOrder(data.order || data);
-        if (data.success || data.order?.status === 'paid' || data.status === 'paid') {
+        const ord = data.order || data;
+        const st = ord?.status || data?.status;
+        setOrder(ord);
+        if (data.success || st === 'paid') {
           handlePaymentSuccess();
+        } else if (
+          st === 'needs_manual_review' ||
+          st === 'underpaid' ||
+          data.manual_review ||
+          data.action === 'needs_manual_review'
+        ) {
+          setOrderManualReview(data.user_message || MANUAL_REVIEW_FALLBACK_MSG);
         }
         // Clean URL params
         const url = new URL(window.location.href);
@@ -359,19 +407,25 @@ export default function CheckoutPage() {
 
   // ── Poll order status (VietQR) ──────────────────────────────────────
   useEffect(() => {
-    if (!order?.id || orderPaid || orderExpired || selectedMethod !== 'vietqr') {
+    if (!order?.id || orderPaid || orderExpired || orderManualReview || selectedMethod !== 'vietqr') {
       return;
     }
 
     const poll = async () => {
       try {
         const data = await apiFetch(`/checkout/orders/${order.id}`);
-        if (data.status === 'paid') {
-          setOrder(data);
+        const ord = data.order || data;
+        const st = ord?.status || data?.status;
+        if (st === 'paid') {
+          setOrder(ord);
           handlePaymentSuccess();
-        } else if (data.status === 'expired' || data.status === 'canceled') {
-          setOrder(data);
-          if (data.status === 'expired') setOrderExpired(true);
+        } else if (st === 'needs_manual_review' || st === 'underpaid' || data?.manual_review) {
+          setOrder(ord);
+          setOrderManualReview(data?.user_message || MANUAL_REVIEW_FALLBACK_MSG);
+          if (pollRef.current) clearInterval(pollRef.current);
+        } else if (st === 'expired' || st === 'canceled') {
+          setOrder(ord);
+          if (st === 'expired') setOrderExpired(true);
         }
       } catch { /* ignore poll errors */ }
     };
@@ -380,7 +434,7 @@ export default function CheckoutPage() {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [order?.id, orderPaid, orderExpired, selectedMethod]);
+  }, [order?.id, orderPaid, orderExpired, orderManualReview, selectedMethod]);
 
   // ── Handle payment success ──────────────────────────────────────────
   const handlePaymentSuccess = useCallback(() => {
@@ -425,6 +479,7 @@ export default function CheckoutPage() {
     setPaypalData(null);
     setOrderPaid(false);
     setOrderExpired(false);
+    setOrderManualReview('');
     setStep(0);
     setError('');
   }, []);
@@ -477,6 +532,14 @@ export default function CheckoutPage() {
 
         {/* Stepper */}
         {!orderPaid && <Stepper current={step} steps={stepLabels} />}
+
+        {/* Pending manual review banner */}
+        {pendingReviewNotice && !orderManualReview && !orderPaid && (
+          <div className="mb-6 rounded-xl border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning flex items-start gap-2.5">
+            <Clock className="w-4 h-4 shrink-0 mt-0.5" />
+            <span className="flex-1 font-medium">{pendingReviewNotice}</span>
+          </div>
+        )}
 
         {/* Error */}
         {error && (
@@ -758,8 +821,35 @@ export default function CheckoutPage() {
           </div>
         )}
 
+        {/* ── Step 2: Blocked / Manual review screen ──────────────── */}
+        {step === 2 && orderManualReview && !orderPaid && !capturingPaypal && (
+          <div className="rounded-2xl border border-warning/40 bg-warning-soft p-6 text-center space-y-4">
+            <Clock className="w-10 h-10 text-warning mx-auto" />
+            <h2 className="text-lg font-bold text-fg">{orderManualReview}</h2>
+            {order?.code && (
+              <p className="text-xs font-mono text-fg-2">
+                Mã đơn: <span className="font-bold">{order.code}</span>
+              </p>
+            )}
+            <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+              <button
+                onClick={() => navigate(lang === 'en' ? '/en/billing' : '/billing')}
+                className="px-5 py-2.5 rounded-xl bg-accent text-accent-fg text-sm font-semibold hover:opacity-90 transition-colors"
+              >
+                {t('success.goToBilling')}
+              </button>
+              <button
+                onClick={resetOrder}
+                className="px-5 py-2.5 rounded-xl border border-line bg-surface text-fg text-sm font-medium hover:bg-surface-2 transition-colors"
+              >
+                {t('back')}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ── Step 2: VietQR Payment ──────────────────────────────── */}
-        {step === 2 && selectedMethod === 'vietqr' && !orderPaid && !capturingPaypal && (
+        {step === 2 && selectedMethod === 'vietqr' && !orderPaid && !orderManualReview && !capturingPaypal && (
           <div className="space-y-5">
             <button
               onClick={() => { if (!orderExpired) return; resetOrder(); }}
@@ -887,7 +977,7 @@ export default function CheckoutPage() {
         )}
 
         {/* ── Step 2: PayPal redirecting / capturing ──────────────── */}
-        {step === 2 && (selectedMethod === 'paypal' || capturingPaypal) && !orderPaid && (
+        {step === 2 && (selectedMethod === 'paypal' || capturingPaypal) && !orderPaid && !orderManualReview && (
           <div className="text-center py-16 space-y-4">
             <Loader2 className="w-10 h-10 animate-spin text-accent mx-auto" />
             <h2 className="text-lg font-bold text-fg">

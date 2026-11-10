@@ -110,7 +110,8 @@
     "paid": "Đã thanh toán",
     "expired": "Hết hạn",
     "canceled": "Đã huỷ",
-    "underpaid": "Thiếu tiền"
+    "underpaid": "Thiếu tiền",
+    "needs_manual_review": "Thanh toán đang được kiểm tra, chúng tôi sẽ liên hệ trong 24h"
   },
 
   "loginRequired": "Bạn cần đăng nhập để thanh toán.",

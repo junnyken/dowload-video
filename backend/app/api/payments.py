@@ -599,6 +599,8 @@ async def stripe_webhook(request: Request):
             from app.core import payment_orders as po  # noqa: PLC0415
             is_down, cur_tier, _exp = po.check_downgrade_active_subscription(user_id, plan_tier, db=_supabase())
             if is_down:
+                raw_amt = data_obj.get("amount_total")
+                amt_int = int(raw_amt) if isinstance(raw_amt, (int, float)) else None
                 po.record_webhook_manual_review(
                     _supabase(),
                     provider="stripe",
@@ -607,6 +609,7 @@ async def stripe_webhook(request: Request):
                     user_id=str(user_id),
                     current_tier=cur_tier,
                     target_tier=plan_tier,
+                    amount=amt_int,
                     raw_payload=data_obj if isinstance(data_obj, dict) else {},
                     reason="downgrade_while_higher_tier_active",
                     status="needs_manual_review",
@@ -817,7 +820,7 @@ async def paypal_webhook(request: Request):
                                 "action": "needs_manual_review",
                                 "status": "needs_manual_review",
                             }
-                        if not ok:
+                        if not ok and not str(act_msg).startswith("order_already_"):
                             days = 365 if "year" in plan_id else 30
                             exp = int((datetime.now(timezone.utc) + timedelta(days=days)).timestamp())
                             tier_prefix = plan_id.split("_")[0] if "_" in plan_id else "pro"
@@ -858,6 +861,14 @@ async def paypal_webhook(request: Request):
                         user_id, tier_prefix, db=_supabase()
                     )
                     if is_down:
+                        direct_amt = 0
+                        try:
+                            amt_obj = resource.get("amount", {})
+                            if not amt_obj and resource.get("purchase_units"):
+                                amt_obj = (resource.get("purchase_units") or [{}])[0].get("amount", {})
+                            direct_amt = int(round(float(amt_obj.get("value", "0")) * 100))
+                        except Exception:
+                            direct_amt = 0
                         po.record_webhook_manual_review(
                             _supabase(),
                             provider="paypal",
@@ -866,6 +877,7 @@ async def paypal_webhook(request: Request):
                             user_id=str(user_id),
                             current_tier=cur_tier,
                             target_tier=tier_prefix,
+                            amount=direct_amt or None,
                             raw_payload=resource if isinstance(resource, dict) else {},
                             reason="downgrade_while_higher_tier_active",
                             status="needs_manual_review",
@@ -1048,12 +1060,18 @@ async def billing_status(user: Dict[str, Any] = Depends(get_required_user)):
         except Exception:
             pass
 
+    from app.core import payment_orders as po  # noqa: PLC0415
+    pending_review = po.get_user_pending_manual_review(str(user["id"]), db=supabase)
+
     return {
-        "tier":                 tier,
-        "billing_status":       billing_status_,
-        "subscription_expiry":  expiry,
-        "has_payment_method":   bool(profile.get("stripe_customer_id")),
-        "can_manage_billing":   bool(profile.get("stripe_subscription_id")),
+        "tier":                  tier,
+        "billing_status":        billing_status_,
+        "subscription_expiry":   expiry,
+        "has_payment_method":    bool(profile.get("stripe_customer_id")),
+        "can_manage_billing":    bool(profile.get("stripe_subscription_id")),
+        "pending_manual_review": bool(pending_review),
+        "manual_review":         pending_review,
+        "manual_review_message": po.MANUAL_REVIEW_USER_MESSAGE if pending_review else None,
     }
 
 

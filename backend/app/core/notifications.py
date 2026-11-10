@@ -34,6 +34,8 @@ load_dotenv()
 
 TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
+_INITIAL_TELEGRAM_BOT_TOKEN: str = TELEGRAM_BOT_TOKEN
+_INITIAL_TELEGRAM_CHAT_ID: str = TELEGRAM_CHAT_ID
 
 # Thresholds for credit alerts
 CREDITS_WARNING_THRESHOLD: int = 50    # Cảnh báo khi credits < 50
@@ -44,9 +46,25 @@ _last_credit_alert_time: dict = {}
 CREDIT_ALERT_COOLDOWN_SECONDS: int = 3600  # 1 giờ giữa các lần cảnh báo credit
 
 
+def _get_telegram_creds() -> tuple[str, str]:
+    """Return (bot_token, chat_id) respecting runtime env updates and explicit module patches."""
+    if TELEGRAM_BOT_TOKEN != _INITIAL_TELEGRAM_BOT_TOKEN:
+        token = TELEGRAM_BOT_TOKEN.strip()
+    else:
+        token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+
+    if TELEGRAM_CHAT_ID != _INITIAL_TELEGRAM_CHAT_ID:
+        chat_id = TELEGRAM_CHAT_ID.strip()
+    else:
+        chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+
+    return token, chat_id
+
+
 def _is_configured() -> bool:
     """Check if Telegram credentials are configured."""
-    return bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
+    token, chat_id = _get_telegram_creds()
+    return bool(token and chat_id)
 
 
 def _get_timestamp() -> str:
@@ -71,14 +89,15 @@ async def send_telegram_message(message: str, parse_mode: str = "HTML") -> bool:
     Returns:
         True if sent successfully, False otherwise
     """
-    if not _is_configured():
+    token, chat_id = _get_telegram_creds()
+    if not (token and chat_id):
         print("[Telegram] ⚠ Bot token or chat ID not configured, skipping.")
         return False
 
     try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
         payload = {
-            "chat_id": TELEGRAM_CHAT_ID,
+            "chat_id": chat_id,
             "text": message,
             "parse_mode": parse_mode,
             "disable_web_page_preview": True,
@@ -106,15 +125,16 @@ def send_telegram_message_sync(message: str, parse_mode: str = "HTML") -> bool:
     Uses httpx synchronous client instead of asyncio.run() to avoid
     event loop conflicts in Celery workers.
     """
-    if not _is_configured():
+    token, chat_id = _get_telegram_creds()
+    if not (token and chat_id):
         return False
 
     try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
         payload = {
-            "chat_id": TELEGRAM_CHAT_ID,
+            "chat_id": chat_id,
             "text": message,
-            "parse_mode": "HTML",
+            "parse_mode": parse_mode,
             "disable_web_page_preview": True,
         }
 
@@ -532,3 +552,62 @@ def notify_system_startup_sync() -> bool:
     )
 
     return send_telegram_message_sync(message)
+
+
+# ═════════════════════════════════════════════════════════════════════
+# NOTIFICATION TYPES: Payment Manual Review Alerts
+# ═════════════════════════════════════════════════════════════════════
+
+def notify_manual_review_payment_sync(
+    *,
+    provider: str,
+    order_ref: Optional[str] = None,
+    user_id: Optional[str] = None,
+    amount: Optional[int] = None,
+    current_tier: Optional[str] = None,
+    target_tier: Optional[str] = None,
+    reason: str = "",
+) -> bool:
+    """
+    Notify admin via Telegram when a payment webhook event requires manual review.
+    Never includes tokens, secrets, signatures, or raw credentials.
+    Never raises — returns False on any error so webhooks cannot fail.
+    """
+    try:
+        import html
+
+        timestamp = _get_timestamp()
+        prov_clean = (provider or "unknown").strip()
+        prov_lower = prov_clean.lower()
+
+        if amount is None:
+            amount_str = "—"
+        elif prov_lower == "sepay" or "vietqr" in prov_lower:
+            amount_str = f"{int(amount):,}".replace(",", ".") + "₫"
+        elif prov_lower in ("stripe", "paypal", "paypal_ipn", "paypal_webhook"):
+            amount_str = f"${int(amount) / 100:.2f} ({int(amount)} cents)"
+        else:
+            amount_str = f"{int(amount):,}"
+
+        cur_t = html.escape(str(current_tier or "free"))
+        tgt_t = html.escape(str(target_tier or "—"))
+        ord_str = html.escape(str(order_ref or "—"))
+        uid_str = html.escape(str(user_id or "—"))
+        rsn_str = html.escape(str(reason or "needs_manual_review"))
+        prov_str = html.escape(prov_clean)
+
+        message = (
+            f"⚠️ <b>Giao Dịch Cần Duyệt Tay</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🏦 Cổng: <b>{prov_str}</b>\n"
+            f"🧾 Mã đơn: <code>{ord_str}</code>\n"
+            f"👤 User: <code>{uid_str}</code>\n"
+            f"💰 Số tiền: <b>{html.escape(amount_str)}</b>\n"
+            f"📦 Gói: <b>{cur_t} → {tgt_t}</b>\n"
+            f"📌 Lý do: <code>{rsn_str}</code>\n"
+            f"🕐 {timestamp}"
+        )
+        return send_telegram_message_sync(message, parse_mode="HTML")
+    except Exception as exc:
+        print(f"[Telegram] ⚠ Manual review alert failed (non-fatal): {exc}")
+        return False

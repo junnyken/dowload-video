@@ -69,6 +69,10 @@ class _FakeTableQuery:
         self._filters.append(("lt", col, val))
         return self
 
+    def in_(self, col: str, vals: List[Any]):
+        self._filters.append(("in", col, [str(v) for v in vals]))
+        return self
+
     def order(self, *_args, **_kwargs):
         return self
 
@@ -97,6 +101,8 @@ class _FakeTableQuery:
             if kind == "lte" and str(rv or "") > str(val):
                 return False
             if kind == "lt" and str(rv or "") >= str(val):
+                return False
+            if kind == "in" and str(rv) not in val:
                 return False
         return True
 
@@ -161,6 +167,9 @@ def fake_env(monkeypatch):
     monkeypatch.setattr(payments_api, "_supabase", lambda: db)
     monkeypatch.setattr("app.core.database.get_service_client", lambda: db)
     monkeypatch.setattr("app.core.redis_client.get_redis", lambda: rc)
+    # Prevent unit tests from ever hitting real Telegram credentials in local .env
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "")
     return db, rc
 
 
@@ -1011,5 +1020,337 @@ async def test_admin_update_user_starter_and_team(fake_env, monkeypatch):
     assert db.tables["profiles"][0]["tier"] == "team"
     assert db.tables["profiles"][0]["plan_name"] == "Team"
     assert db.tables["user_usage"][0]["plan"] == "team"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Manual Review Notifications (Telegram + Admin UI API + Customer 24h Msg)
+# ══════════════════════════════════════════════════════════════════════
+
+def test_manual_review_sends_telegram_alert_with_required_fields_and_no_secrets(fake_env, monkeypatch):
+    """Every record_webhook_manual_review call must alert admin via Telegram with
+    gateway, order code, user, amount, current -> paid tier, and reason — without leaking secrets."""
+    db, _rc = fake_env
+    from app.core import payment_orders as po
+
+    bot_token = "999888777:AAFakeBotSecretTokenDoNotLeak"
+    chat_id = "-1001234567890"
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", bot_token)
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", chat_id)
+
+    sent_calls: List[Dict[str, Any]] = []
+
+    class _FakeSyncResp:
+        status_code = 200
+
+    class _FakeSyncClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def post(self, url: str, json: Dict[str, Any] = None, **kw):
+            sent_calls.append({"url": url, "json": json or {}})
+            return _FakeSyncResp()
+
+    monkeypatch.setattr("httpx.Client", _FakeSyncClient)
+
+    uid = "12121212-3434-5656-7878-909090909090"
+    po.record_webhook_manual_review(
+        db,
+        provider="sepay",
+        provider_event_id="sepay_tx_777",
+        event_type="sepay.transfer_in",
+        user_id=uid,
+        current_tier="team",
+        target_tier="starter",
+        amount=49000,
+        order_id="ord-uuid-777",
+        order_code="VGP77778888",
+        reason="downgrade_while_higher_tier_active",
+        raw_payload={
+            "gateway": "ACB",
+            "access_token": "tok_top_secret_abc",
+            "webhook_secret": "whsec_top_secret_xyz",
+            "signature": "sig_hmac_secret_999",
+        },
+        status="needs_manual_review",
+    )
+
+    # 1. Telegram message sent once with all required fields
+    assert len(sent_calls) == 1
+    tg_payload = sent_calls[0]["json"]
+    assert tg_payload["chat_id"] == chat_id
+    text = tg_payload["text"]
+    assert "sepay" in text.lower()
+    assert "VGP77778888" in text
+    assert uid in text
+    assert "49.000₫" in text
+    assert "team → starter" in text
+    assert "downgrade_while_higher_tier_active" in text
+
+    # 2. No secrets/tokens in Telegram message body OR persisted raw_payload
+    for secret_str in (bot_token, "tok_top_secret_abc", "whsec_top_secret_xyz", "sig_hmac_secret_999"):
+        assert secret_str not in text
+
+    saved = db.tables["payment_webhook_events"][0]
+    assert saved["raw_payload"].get("order_code") == "VGP77778888"
+    assert "access_token" not in saved["raw_payload"]
+    assert "webhook_secret" not in saved["raw_payload"]
+    assert "signature" not in saved["raw_payload"]
+
+
+@pytest.mark.anyio
+async def test_manual_review_telegram_error_never_breaks_webhook(fake_env, monkeypatch):
+    """If Telegram HTTP fails or raises an exception, SePay and Stripe webhooks must NOT fail."""
+    db, rc = fake_env
+    from app.api import payments as payments_api
+    from app.core import sepay_webhook
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:AA_TEST_TOKEN")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "-100999")
+
+    class _ExplodingSyncClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def post(self, *a, **kw):
+            raise RuntimeError("Telegram network unreachable")
+
+    monkeypatch.setattr("httpx.Client", _ExplodingSyncClient)
+
+    # 1. SePay underpaid VG transfer while Telegram throws RuntimeError
+    uid = "abababab-1111-2222-3333-444444444444"
+    rc.set(f"first_purchase_done:{uid}", "1")
+    db.tables["profiles"].append({
+        "id": uid,
+        "tier": "pro",
+        "billing_status": "manual",
+        "subscription_expiry": _future_iso(20),
+    })
+
+    secret = "sepay_tg_fail_secret"
+    monkeypatch.setenv("SEPAY_WEBHOOK_SECRET", secret)
+    raw = json.dumps({
+        "id": 98001,
+        "gateway": "ACB",
+        "transferType": "in",
+        "transferAmount": 49000,
+        "content": "Chuyen khoan VGABABABAB",
+    }).encode("utf-8")
+    ts = str(int(time.time()))
+    sig = hmac.new(secret.encode("utf-8"), f"{ts}.".encode("utf-8") + raw, hashlib.sha256).hexdigest()
+
+    res_sepay = sepay_webhook.handle(raw, {"x-sepay-signature": f"sha256={sig}", "x-sepay-timestamp": ts})
+    assert res_sepay["success"] is True
+    assert res_sepay["status"] == "needs_manual_review"
+    assert len(db.tables["payment_webhook_events"]) == 1
+
+    # 2. Stripe downgrade webhook while Telegram throws RuntimeError
+    monkeypatch.setattr(payments_api, "_STRIPE_WEBHOOK_SECRET", "whsec_tg_fail")
+    fake_stripe = MagicMock()
+    fake_stripe.Webhook.construct_event.return_value = {
+        "id": "evt_tg_fail_1",
+        "type": "checkout.session.completed",
+        "data": {
+            "object": {
+                "subscription": "sub_tg_fail_1",
+                "amount_total": 199,
+                "metadata": {"user_id": uid, "plan": "starter"},
+            }
+        },
+    }
+    fake_stripe.Subscription.retrieve.return_value = {
+        "current_period_end": int((datetime.now(timezone.utc) + timedelta(days=30)).timestamp()),
+        "metadata": {"plan": "starter"},
+    }
+    monkeypatch.setattr(payments_api, "_stripe", lambda: fake_stripe)
+
+    req_stripe = MagicMock()
+    req_stripe.body = AsyncMock(return_value=b"{}")
+    req_stripe.headers = {"stripe-signature": "t=1,v1=ok"}
+
+    res_stripe = await payments_api.stripe_webhook(req_stripe)
+    assert res_stripe["received"] is True
+    assert res_stripe["status"] == "needs_manual_review"
+    assert len(db.tables["payment_webhook_events"]) == 2
+
+
+@pytest.mark.anyio
+async def test_admin_manual_reviews_auth_list_and_resolve(fake_env, monkeypatch):
+    """Only admin can view/resolve needs_manual_review records; resolving updates status and stats."""
+    db, rc = fake_env
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api import admin as admin_api
+    from app.api import checkout as checkout_api
+    from app.core import payment_orders as po
+
+    monkeypatch.setattr(admin_api, "_redis", lambda: rc)
+    monkeypatch.setattr(admin_api, "_ADMIN_PASSWORD", "super_admin_pw_2026")
+    monkeypatch.setattr(admin_api, "log_access_denied", lambda *a, **kw: None)
+    monkeypatch.setattr("app.core.audit.log_admin_action", lambda *a, **kw: None)
+
+    uid = "34343434-5656-7878-9090-121212121212"
+    db.tables["payment_orders"].append({
+        "id": "ord-rev-1",
+        "user_id": uid,
+        "plan": "starter_month",
+        "rail": "vietqr",
+        "currency": "VND",
+        "amount": 49000,
+        "code": "VGPREV00001",
+        "status": "needs_manual_review",
+        "expires_at": _future_iso(1),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    po.record_webhook_manual_review(
+        db,
+        provider="payment_orders",
+        provider_event_id="sepay_rev_1",
+        event_type="payment_order.activate_blocked",
+        user_id=uid,
+        current_tier="pro",
+        target_tier="starter",
+        amount=49000,
+        order_id="ord-rev-1",
+        order_code="VGPREV00001",
+        reason="downgrade_while_higher_tier_active",
+        status="needs_manual_review",
+    )
+    ev_id = db.tables["payment_webhook_events"][0]["id"]
+
+    mini_app = FastAPI()
+    mini_app.include_router(admin_api.router, prefix="/api/v1/admin")
+    mini_app.include_router(checkout_api.admin_router, prefix="/api/v1/admin/checkout")
+    client = TestClient(mini_app)
+
+    # 1. Unauthenticated & regular user Bearer token -> 401 Unauthorized
+    r_unauth = client.get("/api/v1/admin/checkout/manual-reviews")
+    assert r_unauth.status_code == 401
+
+    r_user_jwt = client.get(
+        "/api/v1/admin/checkout/manual-reviews",
+        headers={"Authorization": "Bearer fake_regular_user_jwt_token"},
+    )
+    assert r_user_jwt.status_code == 401
+
+    r_resolve_unauth = client.post(
+        f"/api/v1/admin/checkout/manual-reviews/{ev_id}/resolve",
+        json={"note": "hack"},
+    )
+    assert r_resolve_unauth.status_code == 401
+
+    # 2. Admin logs in and lists needs_manual_review
+    login_res = client.post("/api/v1/admin/login", json={"password": "super_admin_pw_2026"})
+    assert login_res.status_code == 200
+    admin_token = login_res.json()["session_token"]
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    list_res = client.get("/api/v1/admin/checkout/manual-reviews?status=needs_manual_review", headers=admin_headers)
+    assert list_res.status_code == 200
+    list_body = list_res.json()
+    assert list_body["total"] == 1
+    assert list_body["events"][0]["id"] == ev_id
+    assert list_body["events"][0]["status"] == "needs_manual_review"
+
+    stats_before = client.get("/api/v1/admin/checkout/orders/stats", headers=admin_headers).json()
+    assert stats_before["manual_review_events"] == 1
+
+    # 3. Admin marks record as resolved
+    resolve_res = client.post(
+        f"/api/v1/admin/checkout/manual-reviews/{ev_id}/resolve",
+        headers=admin_headers,
+        json={"note": "Đã hoàn tiền 49k cho khách qua ACB"},
+    )
+    assert resolve_res.status_code == 200
+    assert resolve_res.json()["success"] is True
+    assert resolve_res.json()["event"]["status"] == "resolved"
+    assert resolve_res.json()["event"]["raw_payload"]["admin_note"] == "Đã hoàn tiền 49k cho khách qua ACB"
+
+    # Pending list is now empty; resolved list has 1; linked order also marked resolved
+    after_pending = client.get("/api/v1/admin/checkout/manual-reviews?status=needs_manual_review", headers=admin_headers).json()
+    assert after_pending["total"] == 0
+    after_resolved = client.get("/api/v1/admin/checkout/manual-reviews?status=resolved", headers=admin_headers).json()
+    assert after_resolved["total"] == 1
+    assert db.tables["payment_orders"][0]["status"] == "resolved"
+
+
+@pytest.mark.anyio
+async def test_customer_checkout_and_billing_show_24h_manual_review_message(fake_env):
+    """When a payment is blocked (needs_manual_review / underpaid), customer order/checkout/billing
+    status endpoints must return the exact 24h message instead of staying silent."""
+    db, _rc = fake_env
+    from app.api import checkout as checkout_api
+    from app.api import payments as payments_api
+    from app.core import payment_orders as po
+
+    expected_msg = "Thanh toán đang được kiểm tra, chúng tôi sẽ liên hệ trong 24h"
+    uid = "56565656-7878-9090-1212-343434343434"
+    user_ctx = {"id": uid, "email": "customer@test.com"}
+
+    db.tables["profiles"].append({
+        "id": uid,
+        "tier": "pro",
+        "billing_status": "manual",
+        "subscription_expiry": _future_iso(20),
+    })
+    db.tables["payment_orders"].append({
+        "id": "ord-cust-block-1",
+        "user_id": uid,
+        "plan": "starter_month",
+        "rail": "paypal",
+        "currency": "USD",
+        "amount": 199,
+        "code": "VGPCUST0001",
+        "status": "pending",
+        "expires_at": _future_iso(1),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    # Trigger downgrade block on order activation (simulates webhook arriving while Pro is active)
+    ok, act_msg = po.activate_order("ord-cust-block-1", paid_amount=199, provider_ref="pp_cap_1")
+    assert ok is False and act_msg == "needs_manual_review"
+
+    # 1. GET /checkout/orders/{order_id} (order polling on CheckoutPage)
+    poll_res = await checkout_api.get_order("ord-cust-block-1", user=user_ctx)
+    assert poll_res["status"] == "needs_manual_review"
+    assert poll_res["manual_review"] is True
+    assert poll_res["user_message"] == expected_msg
+
+    # 2. POST /checkout/orders/{order_id}/capture (PayPal return when order already flagged)
+    cap_res = await checkout_api.capture_paypal_order("ord-cust-block-1", request=MagicMock(), user=user_ctx)
+    assert cap_res["success"] is False
+    assert cap_res["manual_review"] is True
+    assert cap_res["user_message"] == expected_msg
+
+    # 3. GET /checkout/orders (checkout order list + top banner)
+    list_res = await checkout_api.list_orders(user=user_ctx)
+    assert list_res["manual_review"] is not None
+    assert list_res["user_message"] == expected_msg
+
+    # 4. GET /payments/billing-status (BillingPage notice)
+    bill_res = await payments_api.billing_status(user=user_ctx)
+    assert bill_res["pending_manual_review"] is True
+    assert bill_res["manual_review_message"] == expected_msg
+
+    # 5. Once admin marks the manual review resolved, customer notice clears
+    ev_id = db.tables["payment_webhook_events"][0]["id"]
+    resolved_ok, _, _ = po.admin_resolve_manual_review(ev_id, "Đã liên hệ khách hàng")
+    assert resolved_ok is True
+
+    bill_after = await payments_api.billing_status(user=user_ctx)
+    assert bill_after["pending_manual_review"] is False
+    assert bill_after["manual_review_message"] is None
+
 
 
