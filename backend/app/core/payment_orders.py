@@ -6,6 +6,7 @@ Một đơn → một gói → một lần kích hoạt (compare-and-set).
 """
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 import string
@@ -13,11 +14,175 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote
 
+logger = logging.getLogger(__name__)
+
 # Crockford Base32 alphabet (no I, L, O, U to avoid confusion)
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 ORDER_TTL_HOURS = 24
 MAX_PENDING_ORDERS = 3
+
+# Strictly ordered paid tier hierarchy used to prevent accidental downgrades
+# while a higher paid tier is still active.
+TIER_RANK: Dict[str, int] = {
+    "free": 0,
+    "starter": 1,
+    "pro": 2,
+    "team": 3,
+    "api": 3,
+    "enterprise": 4,
+}
+
+
+def get_active_paid_profile(user_id: str, db=None) -> Tuple[str, Optional[str]]:
+    """Return (effective_tier, subscription_expiry_iso) if the user currently holds an active paid plan."""
+    if not user_id:
+        return "free", None
+    uid = str(user_id).strip()
+    if not uid:
+        return "free", None
+    try:
+        client = db if db is not None else _db()
+        res = (
+            client.table("profiles")
+            .select("tier, billing_status, subscription_expiry, grace_period_ends_at, stripe_subscription_id")
+            .eq("id", uid)
+            .single()
+            .execute()
+        )
+        profile = res.data if isinstance(getattr(res, "data", None), dict) else {}
+    except Exception:
+        return "free", None
+
+    if not profile or not isinstance(profile, dict):
+        return "free", None
+
+    declared = str(profile.get("tier") or "free").strip().lower()
+    if declared not in TIER_RANK or declared == "free":
+        return "free", None
+
+    exp_raw = profile.get("subscription_expiry")
+    grace_raw = profile.get("grace_period_ends_at")
+    now = datetime.now(timezone.utc)
+
+    def _parse_dt(val: Any) -> Optional[datetime]:
+        if not val or not isinstance(val, str):
+            return None
+        try:
+            return datetime.fromisoformat(val.replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    exp_dt = _parse_dt(exp_raw)
+    grace_dt = _parse_dt(grace_raw)
+
+    # If an explicit expiry is present and already in the past (and not in grace), it is expired.
+    if exp_dt is not None and exp_dt <= now:
+        if not (grace_dt is not None and grace_dt > now):
+            return "free", str(exp_raw) if exp_raw else None
+
+    # Normalize profile for resolve_effective_tier: if a test/DB row has a future subscription_expiry
+    # on a paid tier without billing_status set, treat billing_status as 'manual'.
+    prof_copy = dict(profile)
+    if not prof_copy.get("billing_status") and exp_dt is not None and exp_dt > now:
+        prof_copy["billing_status"] = "manual"
+
+    try:
+        from app.core.entitlements import resolve_effective_tier  # noqa: PLC0415
+        eff = resolve_effective_tier(prof_copy)
+    except Exception:
+        eff = declared if (exp_dt and exp_dt > now) else "free"
+
+    return eff, (str(exp_raw) if exp_raw else None)
+
+
+def check_downgrade_active_subscription(
+    user_id: str,
+    target_tier: str,
+    db=None,
+) -> Tuple[bool, str, Optional[str]]:
+    """Return (is_downgrade, current_active_tier, subscription_expiry) when target_tier < current_active_tier."""
+    cur_tier, exp = get_active_paid_profile(user_id, db=db)
+    cur_rank = TIER_RANK.get((cur_tier or "free").lower(), 0)
+    target_rank = TIER_RANK.get((target_tier or "pro").lower(), 2)
+    if cur_rank > 0 and target_rank < cur_rank:
+        return True, cur_tier, exp
+    return False, cur_tier, exp
+
+
+def downgrade_user_message(current_tier: str, target_tier: str, expiry: Optional[str] = None) -> str:
+    """Human-readable Vietnamese message explaining why a lower-tier checkout is blocked."""
+    cur_label = (current_tier or "Pro").capitalize()
+    tgt_label = (target_tier or "Starter").capitalize()
+    if expiry:
+        return (
+            f"Tài khoản đang sử dụng gói {cur_label} còn hạn (đến {expiry}). "
+            f"Không thể mua hoặc hạ xuống gói {tgt_label} thấp hơn khi gói hiện tại chưa hết hạn."
+        )
+    return (
+        f"Tài khoản đang sử dụng gói {cur_label} còn hiệu lực. "
+        f"Không thể mua hoặc hạ xuống gói {tgt_label} thấp hơn khi gói hiện tại chưa hết hạn."
+    )
+
+
+def record_webhook_manual_review(
+    db,
+    *,
+    provider: str,
+    provider_event_id: str,
+    event_type: str,
+    user_id: Optional[str] = None,
+    current_tier: Optional[str] = None,
+    target_tier: Optional[str] = None,
+    amount: Optional[int] = None,
+    order_id: Optional[str] = None,
+    reason: str = "downgrade_while_higher_tier_active",
+    raw_payload: Optional[Dict[str, Any]] = None,
+    status: str = "needs_manual_review",
+) -> None:
+    """Record a blocked/suspicious webhook payment in payment_webhook_events (and payment_events) for manual review."""
+    logger.warning(
+        "[PaymentsSafety] %s webhook flagged %s: event_id=%s type=%s user=%s current_tier=%s target_tier=%s amount=%s reason=%s",
+        provider,
+        status,
+        provider_event_id,
+        event_type,
+        user_id,
+        current_tier,
+        target_tier,
+        amount,
+        reason,
+    )
+    client = db if db is not None else _db()
+    row = {
+        "provider": provider,
+        "provider_event_id": str(provider_event_id or ""),
+        "event_type": event_type,
+        "user_id": str(user_id) if user_id else None,
+        "order_id": str(order_id) if order_id else None,
+        "current_tier": current_tier,
+        "target_tier": target_tier,
+        "amount": amount,
+        "status": status,
+        "reason": reason,
+        "raw_payload": raw_payload if isinstance(raw_payload, dict) else {},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        client.table("payment_webhook_events").insert(row).execute()
+    except Exception as exc:
+        logger.warning("[PaymentsSafety] payment_webhook_events insert failed: %s", exc)
+
+    # Also update or insert payment_events so existing admin event views see needs_manual_review
+    try:
+        client.table("payment_events").update({
+            "match_type": status,
+            "error": f"{status}:{reason}",
+            "processed": True,
+            "processed_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("provider_event_id", str(provider_event_id or "")).execute()
+    except Exception:
+        pass
 
 # ── First-time buyer & Plan catalog ─────────────────────────────────
 
@@ -307,7 +472,24 @@ CREATE INDEX IF NOT EXISTS idx_payment_orders_code ON payment_orders (code);
 ALTER TABLE payment_events
   ADD COLUMN IF NOT EXISTS order_id    UUID,
   ADD COLUMN IF NOT EXISTS match_type  TEXT,
-  ADD COLUMN IF NOT EXISTS amount      BIGINT;
+  ADD COLUMN IF NOT EXISTS amount      BIGINT,
+  ADD COLUMN IF NOT EXISTS status      TEXT;
+CREATE TABLE IF NOT EXISTS payment_webhook_events (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider          TEXT NOT NULL,
+  provider_event_id TEXT,
+  event_type        TEXT,
+  user_id           TEXT,
+  order_id          TEXT,
+  current_tier      TEXT,
+  target_tier       TEXT,
+  amount            BIGINT,
+  status            TEXT NOT NULL DEFAULT 'needs_manual_review',
+  reason            TEXT,
+  raw_payload       JSONB DEFAULT '{}',
+  created_at        TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_payment_webhook_events_status ON payment_webhook_events (status, created_at DESC);
 """
 
 
@@ -353,6 +535,13 @@ def create_order(
         return {}, "plan_not_found"
 
     db = _db()
+
+    # Block creating an order for a lower tier when a higher paid tier is still active
+    is_down, _cur_tier, _exp = check_downgrade_active_subscription(
+        user_id, str(plan.get("tier") or "pro"), db=db
+    )
+    if is_down:
+        return {}, "cannot_downgrade_active_subscription"
 
     # Check max pending orders
     try:
@@ -503,6 +692,41 @@ def activate_order(order_id: str, paid_amount: int, provider_ref: str = "",
         return False, "underpaid"
 
     now = datetime.now(timezone.utc)
+    plan = plan_by_id(order["plan"], user_id=order.get("user_id"))
+    days = plan["days"] if plan else 30
+    target_tier = plan.get("tier", "pro") if plan else "pro"
+
+    # Block downgrade if user currently holds a higher active paid tier
+    is_down, cur_tier, _exp = check_downgrade_active_subscription(
+        order["user_id"], target_tier, db=db
+    )
+    if is_down:
+        db.table("payment_orders").update({
+            "status": "needs_manual_review",
+            "paid_amount": paid_amount,
+            "paid_at": now.isoformat(),
+            "provider_ref": provider_ref,
+            "evidence": evidence or {},
+            "admin_note": f"Blocked downgrade from active {cur_tier} to {target_tier}",
+            "updated_at": now.isoformat(),
+        }).eq("id", order_id).eq("status", "pending").execute()
+        ev_provider = (evidence or {}).get("provider") or order.get("rail") or "order"
+        ev_type = (evidence or {}).get("event_type") or f"{ev_provider}_order_downgrade"
+        record_webhook_manual_review(
+            db,
+            provider=str(ev_provider),
+            provider_event_id=str(provider_ref or order_id),
+            event_type=str(ev_type),
+            user_id=str(order["user_id"]),
+            current_tier=cur_tier,
+            target_tier=target_tier,
+            amount=paid_amount,
+            order_id=str(order_id),
+            reason="downgrade_while_higher_tier_active",
+            raw_payload=evidence if isinstance(evidence, dict) else {},
+            status="needs_manual_review",
+        )
+        return False, "needs_manual_review"
 
     # Compare-and-set: pending → paid
     update_res = db.table("payment_orders").update({
@@ -519,9 +743,6 @@ def activate_order(order_id: str, paid_amount: int, provider_ref: str = "",
         return False, "concurrent_activation"
 
     # Upgrade user
-    plan = plan_by_id(order["plan"])
-    days = plan["days"] if plan else 30
-    target_tier = plan.get("tier", "pro") if plan else "pro"
     _upgrade_user_pro(order["user_id"], days, f"order_{order_id}", target_tier=target_tier)
 
     return True, "activated"
@@ -533,6 +754,20 @@ def _upgrade_user_pro(user_id: str, days: int, subscription_id: str, target_tier
     from app.api.admin import _manual_pro_fields  # noqa: PLC0415
 
     eff_tier = (target_tier or "pro").lower()
+    is_down, cur_tier, _exp = check_downgrade_active_subscription(user_id, eff_tier, db=db)
+    if is_down:
+        record_webhook_manual_review(
+            db,
+            provider="payment_orders",
+            provider_event_id=str(subscription_id or ""),
+            event_type="upgrade_user_pro_downgrade_blocked",
+            user_id=str(user_id),
+            current_tier=cur_tier,
+            target_tier=eff_tier,
+            reason="downgrade_while_higher_tier_active",
+            status="needs_manual_review",
+        )
+        return
     fields = _manual_pro_fields(db, user_id, days)
     fields["tier"] = eff_tier
     try:

@@ -228,7 +228,13 @@ def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
         _log_event(db, sepay_id, "sepay_no_code", amount, None, "unmatched")
         return {"success": True, "action": "unmatched_no_code"}
 
-    from app.core.payment_orders import get_order_by_code, activate_order, _upgrade_user_pro  # noqa: PLC0415
+    from app.core.payment_orders import (  # noqa: PLC0415
+        get_order_by_code,
+        activate_order,
+        _upgrade_user_pro,
+        check_downgrade_active_subscription,
+        record_webhook_manual_review,
+    )
 
     # Case A: Account-based transfer code VG + 8 hex (from /pricing page)
     if code.startswith("VG") and not code.startswith("VGP") and len(code) == 10:
@@ -271,6 +277,30 @@ def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
                     else:
                         _log_event(db, sepay_id, "sepay_vg_underpaid", amount, None, "underpaid")
                         return {"success": True, "action": "underpaid", "code": code, "user_id": uid}
+
+                is_down, cur_tier, _exp = check_downgrade_active_subscription(uid, target_tier, db=db)
+                if is_down:
+                    record_webhook_manual_review(
+                        db,
+                        provider="sepay",
+                        provider_event_id=sepay_id,
+                        event_type="sepay_vg_downgrade",
+                        user_id=uid,
+                        current_tier=cur_tier,
+                        target_tier=target_tier,
+                        amount=amount,
+                        raw_payload=parsed,
+                        reason="downgrade_while_higher_tier_active",
+                        status="needs_manual_review",
+                    )
+                    _log_event(db, sepay_id, "sepay_vg_downgrade", amount, None, "needs_manual_review")
+                    return {
+                        "success": True,
+                        "action": "needs_manual_review",
+                        "status": "needs_manual_review",
+                        "code": code,
+                        "user_id": uid,
+                    }
 
                 _upgrade_user_pro(uid, days, f"sepay_vg_{sepay_id}", target_tier=target_tier)
                 now_iso = datetime.now(timezone.utc).isoformat()
@@ -330,7 +360,10 @@ def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
         order_id, code, amount, msg,
     )
 
-    return {"success": True, "action": msg, "order_id": str(order_id)}
+    out: Dict[str, Any] = {"success": True, "action": msg, "order_id": str(order_id)}
+    if msg == "needs_manual_review":
+        out["status"] = "needs_manual_review"
+    return out
 
 
 def _log_event(

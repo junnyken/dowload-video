@@ -39,8 +39,30 @@ CREATE INDEX IF NOT EXISTS idx_payment_orders_code
 
 ALTER TABLE payment_events
   ADD COLUMN IF NOT EXISTS order_id    UUID,
-  ADD COLUMN IF NOT EXISTS match_type  TEXT,          -- 'matched','unmatched','duplicate','underpaid','late'
-  ADD COLUMN IF NOT EXISTS amount      BIGINT;
+  ADD COLUMN IF NOT EXISTS match_type  TEXT,          -- 'matched','unmatched','duplicate','underpaid','late','needs_manual_review'
+  ADD COLUMN IF NOT EXISTS amount      BIGINT,
+  ADD COLUMN IF NOT EXISTS status      TEXT;
+
+-- ─── payment_webhook_events (manual review & audit trail) ────
+
+CREATE TABLE IF NOT EXISTS payment_webhook_events (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider          TEXT NOT NULL,
+  provider_event_id TEXT,
+  event_type        TEXT,
+  user_id           TEXT,
+  order_id          TEXT,
+  current_tier      TEXT,
+  target_tier       TEXT,
+  amount            BIGINT,
+  status            TEXT NOT NULL DEFAULT 'needs_manual_review',
+  reason            TEXT,
+  raw_payload       JSONB DEFAULT '{}',
+  created_at        TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_webhook_events_status
+  ON payment_webhook_events (status, created_at DESC);
 
 -- ─── RLS ─────────────────────────────────────────────────────
 

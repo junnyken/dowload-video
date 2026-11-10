@@ -52,9 +52,38 @@ async def create_order(
     if rail not in ("vietqr", "paypal"):
         raise HTTPException(status_code=400, detail="rail must be 'vietqr' or 'paypal'")
 
+    target_tier = str(plan.get("tier") or "pro").lower()
+    is_down, cur_tier, exp = po.check_downgrade_active_subscription(user["id"], target_tier)
+    if is_down:
+        msg = po.downgrade_user_message(cur_tier, target_tier, exp)
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": "cannot_downgrade_active_subscription",
+                "message": msg,
+                "user_message": msg,
+                "current_tier": cur_tier,
+                "target_tier": target_tier,
+                "subscription_expiry": exp,
+            },
+        )
+
     # Create order
     order, err = po.create_order(user["id"], payload.plan, rail)
     if err:
+        if err == "cannot_downgrade_active_subscription":
+            msg = po.downgrade_user_message(cur_tier or "pro", target_tier, exp)
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error_code": "cannot_downgrade_active_subscription",
+                    "message": msg,
+                    "user_message": msg,
+                    "current_tier": cur_tier,
+                    "target_tier": target_tier,
+                    "subscription_expiry": exp,
+                },
+            )
         status = 409 if err == "too_many_pending" else 400
         raise HTTPException(status_code=status, detail=err)
 
