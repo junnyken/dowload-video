@@ -171,7 +171,7 @@ def _get_platform(url: str) -> str:
 
 # Per-platform request delay range (seconds) — prevents triggering rate limits
 _PLATFORM_DELAYS = {
-    "youtube":   (3, 8),
+    "youtube":   (1, 3),
     "facebook":  (5, 12),
     "tiktok":    (1, 4),
     "instagram": (3, 7),
@@ -186,7 +186,7 @@ _PLATFORM_DELAYS = {
 
 # Per-platform wave delay (seconds between waves in bulk download)
 _PLATFORM_WAVE_DELAYS = {
-    "youtube":  5,
+    "youtube":  2,
     "facebook": 8,
     "tiktok":   3,
     "instagram": 5,

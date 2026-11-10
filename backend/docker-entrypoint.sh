@@ -86,18 +86,19 @@ run_once "timeout 150 python -m app.core.ytdlp_channel boot" || \
 # The worker runs in a loop: ytdlp_channel restarts it (SIGTERM, warm
 # shutdown) after promoting a yt-dlp — its pool children are forked from a
 # parent that already imported the old one. A crash restarts it too.
+# Dedicated to user-facing downloads/bulk/media/analysis (default concurrency=4)
+# while periodic maintenance/light tasks run on the second worker below so
+# background probes never block active user downloads.
 run_bg "while true; do celery -A app.core.celery_app worker \
-    -Q downloads,bulk,light,media,analysis,celery \
-    --concurrency=2 \
+    -Q downloads,bulk,media,analysis \
+    --concurrency=${CELERY_CONCURRENCY:-4} \
     --max-tasks-per-child=40 \
     --loglevel=info; echo '[entrypoint] celery worker exited — restarting in 3s'; sleep 3; done"
 
-# Partner API worker (2026-10-19): its own queue so a partner's jobs never
-# wait behind bulk downloads / channel scans on the shared 2-slot worker.
-# Same restart loop (ytdlp_channel signals every celery worker main process).
-# PARTNER_WORKER_CONCURRENCY (default 2) sizes it; each slot is one download.
+# Partner API + background maintenance worker: handles partner queue plus
+# light/celery periodic probes so they never steal slots from bulk downloads.
 run_bg "while true; do celery -A app.core.celery_app worker \
-    -Q partner -n partner@%h \
+    -Q partner,light,celery -n partner@%h \
     --concurrency=${PARTNER_WORKER_CONCURRENCY:-2} \
     --max-tasks-per-child=40 \
     --loglevel=info; echo '[entrypoint] partner worker exited — restarting in 3s'; sleep 3; done"

@@ -1397,7 +1397,7 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
         "fragment_retries": 10,
         "keepvideo": False,
         "nopart": False,          # allow .part files (default)
-        "concurrent_fragment_downloads": 4,  # parallel fragment download — faster
+        "concurrent_fragment_downloads": 8,  # parallel fragment download — faster for long videos
         "noplaylist": True,       # single video only — ignore list=/radio params to prevent OOM
     }
 
@@ -1513,8 +1513,8 @@ def _get_base_opts(url: str, phase: str = "metadata", quality: str = "video",
         opts["remote_components"] = ["ejs:github"]
         # Cache EJS solver + extractor data on disk — avoids re-downloading through proxy each request
         opts["cachedir"] = "/tmp/ytdlp_cache"
-        # Prioritize resolution, then codec compatibility, then bitrate
-        opts["format_sort"] = ["res", "ext:mp4:m4a", "tbr", "vbr", "abr", "asr"]
+        # Prioritize resolution, then direct https stream over 500-segment HLS (m3u8_native), then mp4/m4a
+        opts["format_sort"] = ["res", "proto:https", "ext:mp4:m4a", "tbr", "vbr", "abr", "asr"]
 
         # PO token provider.
         #
@@ -3190,7 +3190,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                     # don't need a PO token and often survive when one is flagged.
                     _YT_CLIENTS = ["android_vr", "ios", "android_vr", "tv", "ios"]
                     _vr_exhausted = False
-                    for _vr_try in range(5):
+                    for _vr_try in range(2):
                         _t = _time.time()
                         _client = _YT_CLIENTS[_vr_try % len(_YT_CLIENTS)]
                         _proxy_a_opts = dict(_vr_base)
@@ -3198,6 +3198,7 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                         _proxy_a_opts["extractor_args"] = {"youtube": {"player_client": [_client]}}
                         _proxy_a_opts["extract_flat"] = False
                         _proxy_a_opts["ignoreerrors"] = False
+                        _proxy_a_opts["socket_timeout"] = 20
                         _proxy_a_opts["extractor_retries"] = 1
                         _proxy_a_opts["retries"] = 1
                         if _combined_dl and _progress_hook:
@@ -3513,10 +3514,11 @@ def _extract_video_info_impl(url: str, quality: str = "video", remove_watermark:
                         try:
                             _rescue_opts = _get_base_opts(url, phase="download", quality=quality, error_sink=_ytdlp_errors)
                             _rescue_opts.pop("proxy", None)
+                            _rescue_opts.pop("cookiefile", None)
+                            _rescue_opts.pop("cookiesfrombrowser", None)
                             _rescue_opts["ignoreerrors"] = False
                             _rescue_opts["extractor_args"] = {
-                                **_rescue_opts.get("extractor_args", {}),
-                                "youtube": {"player_client": ["android_vr"]},
+                                "youtube": {"player_client": [_YT_PRIMARY_CLIENT, "android_vr"]},
                             }
                             if _progress_hook:
                                 _rescue_opts["progress_hooks"] = [_progress_hook]
