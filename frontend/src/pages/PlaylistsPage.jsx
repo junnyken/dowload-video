@@ -146,7 +146,7 @@ export default function PlaylistsPage({ onNavigate }) {
     }
   };
 
-  const isPro = myTier === 'pro';
+  const isPro = ['starter', 'pro', 'vip', 'team', 'enterprise', 'admin'].includes(myTier);
   const tierPlan = myTier ? planOf(myTier) : null;
   const limit = tierPlan ? tierPlan.playlists : null;
 

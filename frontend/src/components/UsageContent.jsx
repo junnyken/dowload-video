@@ -78,7 +78,7 @@ export default function UsageContent() {
   const dailyPct  = dayLimit > 0 ? Math.min(100, (dayUsed / dayLimit) * 100) : 0;
   const usedPlatforms = pq ? pq.platforms.filter(p => p.used > 0) : [];
   const monthPct  = usage.limits.monthly > 0 ? Math.min(100, (usage.downloads_this_month / usage.limits.monthly) * 100) : 0;
-  const isPro     = usage.plan === 'pro';
+  const isPro     = ['starter', 'pro', 'vip', 'team', 'enterprise', 'admin'].includes(usage.plan);
 
   // Fetch API key status when pro tier is confirmed
   useEffect(() => {
