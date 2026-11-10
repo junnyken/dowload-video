@@ -392,3 +392,180 @@ class TestMaskGeometry:
         rng = np.random.default_rng(0)
         textured = rng.integers(40, 200, size=(H, W, 3), dtype=np.uint8)
         assert fi._region_is_clean(textured, cmask), "a good fill was rejected"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# E — extracted crop & blur standalone functions (Phase P1)
+# ═══════════════════════════════════════════════════════════════════
+
+class TestCropAndBlurEngines:
+
+    def test_compute_crop_rect_trims_logo_edge_with_even_dimensions(self):
+        # Lower-right logo: trims right and bottom edges, keeps even width/height
+        cx, cy, cw, ch = fc.compute_crop_rect(X, Y, W, H, VW, VH)
+        assert (cx, cy) == (0, 0)
+        assert cw <= X and ch <= Y
+        assert cw % 2 == 0 and ch % 2 == 0
+
+        # Upper-left logo: shifts cx, cy past the logo
+        cx2, cy2, cw2, ch2 = fc.compute_crop_rect(8, 8, 60, 30, VW, VH)
+        assert cx2 >= 8 + 60
+        assert cy2 >= 8 + 30
+        assert cw2 % 2 == 0 and ch2 % 2 == 0
+        assert cx2 + cw2 <= VW and cy2 + ch2 <= VH
+
+    def test_crop_video_trims_logo_and_outputs_playable_clip(self, static_clip):
+        out = os.path.join(static_clip["dir"], "cropped.mp4")
+        rect = fc._crop_video(static_clip["dirty"], out, X, Y, W, H, VW, VH)
+        assert os.path.isfile(out) and os.path.getsize(out) > 0
+        stream = _probe(out)
+        assert (stream["width"], stream["height"]) == (rect["cw"], rect["ch"])
+        assert stream["width"] < VW and stream["height"] < VH
+
+    def test_blur_video_blurs_only_region_and_preserves_dimensions(self, static_clip):
+        out = os.path.join(static_clip["dir"], "blurred.mp4")
+        # Expand box by 8px so boxblur straddles the sharp logo-to-background boundary
+        bx, by, bw, bh = X - 8, Y - 8, W + 16, H + 16
+        fc._blur_video(static_clip["dirty"], out, bx, by, bw, bh)
+        assert os.path.isfile(out) and os.path.getsize(out) > 0
+        stream = _probe(out)
+        assert (stream["width"], stream["height"]) == (VW, VH)
+        frames_out = _frames(out)
+        frames_in = _frames(static_clip["dirty"])
+        assert len(frames_out) == len(frames_in)
+        # Region inside (bx,by,bw,bh) must be blurred while outside stays untouched
+        inside_diff = float(np.abs(
+            frames_out[0][by:by + bh, bx:bx + bw].astype(np.float32)
+            - frames_in[0][by:by + bh, bx:bx + bw].astype(np.float32)
+        ).mean())
+        outside_diff = float(np.abs(
+            frames_out[0][:by - 10, :bx - 10].astype(np.float32)
+            - frames_in[0][:by - 10, :bx - 10].astype(np.float32)
+        ).mean())
+        assert inside_diff > 5.0, f"blur filter did not blur the logo region (MAE={inside_diff:.2f})"
+        assert outside_diff < 1.0, f"blur filter corrupted pixels outside region (MAE={outside_diff:.2f})"
+
+
+class TestContributingNeighboursCount:
+    """Regression test: 4 leading neighbours with overlapping logo must not exhaust matched_count before clean frame 5+."""
+
+    def test_4_overlapping_neighbours_do_not_block_clean_5th_neighbour_and_avoid_telea(self):
+        rng = np.random.default_rng(42)
+        truth = rng.integers(30, 220, size=(VH, VW, 3), dtype=np.uint8)
+        # Put a high-contrast checkerboard inside the logo box (X, Y, W, H) that TELEA cannot reconstruct
+        yy, xx = np.mgrid[0:H, 0:W]
+        checker = (((xx // 4) + (yy // 4)) % 2).astype(np.uint8) * 200 + 25
+        truth[Y:Y + H, X:X + W, 0] = checker
+        truth[Y:Y + H, X:X + W, 1] = 255 - checker
+        truth[Y:Y + H, X:X + W, 2] = checker
+
+        fill_mask = fi._build_fill_mask(X, Y, W, H, VW, VH)
+        cur = truth.copy()
+        cur[Y:Y + H, X:X + W] = (0, 255, 0)  # solid green logo covering the checkerboard
+
+        # First 4 neighbours have the logo at the EXACT SAME position (valid_roi.any() == False)
+        neighbors = []
+        for _ in range(4):
+            nb_same = cur.copy()
+            neighbors.append((nb_same, fill_mask.copy()))
+
+        # 5th and 6th neighbours have the logo jumped to top-left (12, 12, W, H), leaving (X, Y, W, H) clean
+        jumped_mask = fi._build_fill_mask(12, 12, W, H, VW, VH)
+        for _ in range(2):
+            nb_clean = truth.copy()
+            nb_clean[12:12 + H, 12:12 + W] = (0, 255, 0)
+            neighbors.append((nb_clean, jumped_mask.copy()))
+
+        tfill, tvalid = fi.temporal_fill(cur, neighbors, fill_mask)
+
+        # Must recover 100% of the logo mask from the 5th+ neighbours instead of returning empty tvalid (TELEA fallback)
+        assert int((tvalid > 0).sum()) == int((fill_mask > 0).sum()), (
+            f"temporal_fill stopped after 4 non-contributing neighbours and fell back to TELEA "
+            f"(recovered {int((tvalid > 0).sum())} / {int((fill_mask > 0).sum())} pixels)"
+        )
+        recovered_mae = float(np.abs(
+            tfill[Y:Y + H, X:X + W].astype(np.float32) - truth[Y:Y + H, X:X + W].astype(np.float32)
+        ).mean())
+        telea_out = fi._telea_crop(cur, fill_mask, X, Y, W, H)
+        telea_mae = float(np.abs(
+            telea_out[Y:Y + H, X:X + W].astype(np.float32) - truth[Y:Y + H, X:X + W].astype(np.float32)
+        ).mean())
+        assert recovered_mae < 2.0 and recovered_mae < telea_mae * 0.1, (
+            f"Expected clean pixel recovery from 5th+ frame (MAE={recovered_mae:.2f} vs TELEA MAE={telea_mae:.2f})"
+        )
+
+
+class TestRankNeighboursByExpectedCleanCoverage:
+    """P5.9 Mục 2: A clean neighbour placed at the end of the candidate list is ranked and warped first."""
+
+    def test_clean_neighbour_at_end_of_list_is_ranked_and_used_first(self, monkeypatch):
+        assert fi._TEMPORAL_COVERAGE_STOP_FRAC == 0.98
+        assert fi._MAX_TEMPORAL_WARP_ATTEMPTS == 8
+
+        rng = np.random.default_rng(109)
+        truth = rng.integers(30, 220, size=(VH, VW, 3), dtype=np.uint8)
+        yy, xx = np.mgrid[0:H, 0:W]
+        checker = (((xx // 4) + (yy // 4)) % 2).astype(np.uint8) * 200 + 25
+        truth[Y:Y + H, X:X + W, 0] = checker
+        truth[Y:Y + H, X:X + W, 1] = 255 - checker
+        truth[Y:Y + H, X:X + W, 2] = checker
+
+        fill_mask = fi._build_fill_mask(X, Y, W, H, VW, VH)
+        cur = truth.copy()
+        cur[Y:Y + H, X:X + W] = (0, 255, 0)
+
+        # Put 10 occluded/sliver neighbours BEFORE the clean neighbour at the very end (index 10).
+        # Also include duplicate frame indices to verify deduplication across causal/strided/global_ref.
+        neighbors = []
+        for idx in range(10):
+            # Shift logo by 1px so each occluded neighbour exposes only a tiny sliver (< 5% of mask)
+            sliver_x = max(0, X - 1)
+            sliver_mask = fi._build_fill_mask(sliver_x, Y, W, H, VW, VH)
+            nb_sliver = truth.copy()
+            nb_sliver[Y:Y + H, sliver_x:sliver_x + W] = (0, 255, 0)
+            neighbors.append((nb_sliver, sliver_mask, None, None, idx + 1, (sliver_x, Y, W, H)))
+            if idx < 3:
+                # Duplicate fidx (simulating overlap between causal, strided, and global_ref)
+                neighbors.append((nb_sliver, sliver_mask, None, None, idx + 1, (sliver_x, Y, W, H)))
+
+        # Clean neighbour placed at the very end of the list (logo jumped to top-left 10, 10)
+        clean_fidx = 99
+        clean_box = (10, 10, W, H)
+        clean_mask = fi._build_fill_mask(*clean_box, VW, VH)
+        nb_clean = truth.copy()
+        nb_clean[10:10 + H, 10:10 + W] = (0, 255, 0)
+        neighbors.append((nb_clean, clean_mask, None, None, clean_fidx, clean_box))
+
+        bx, by, bw, bh = X - 12, Y - 12, W + 24, H + 24
+        mask_roi = fill_mask[by:by + bh, bx:bx + bw] > 0
+        ranked = fi._dedup_and_rank_neighbors(
+            neighbors, fill_mask, mask_roi, bx, by, bw, bh, VW, VH, cur_fidx=0, bg_vel=[0.0, 0.0]
+        )
+        ranked_fidxs = [item[4] for item in ranked]
+        # Deduplicated: 10 sliver frames + 1 clean frame = 11 unique frames (3 duplicates removed)
+        assert len(ranked_fidxs) == 11
+        # Clean frame from the end of the input list MUST be ranked #0 (first)
+        assert ranked_fidxs[0] == clean_fidx
+
+        warp_call_count = {"n": 0}
+        orig_match = fi._match_homography_from_features
+
+        def _counting_match(*args, **kwargs):
+            warp_call_count["n"] += 1
+            return orig_match(*args, **kwargs)
+
+        monkeypatch.setattr(fi, "_match_homography_from_features", _counting_match)
+
+        tfill, tvalid = fi.temporal_fill(cur, neighbors, fill_mask, cur_fidx=0, bg_vel=[0.0, 0.0])
+
+        # Because the clean frame at the end of the list was ranked first, it covers 100% (>= 98%)
+        # on the very first warp and stops immediately!
+        assert warp_call_count["n"] == 1
+        assert int((tvalid > 0).sum()) == int((fill_mask > 0).sum())
+        recovered_mae = float(np.abs(
+            tfill[Y:Y + H, X:X + W].astype(np.float32) - truth[Y:Y + H, X:X + W].astype(np.float32)
+        ).mean())
+        assert recovered_mae < 2.0
+
+
+

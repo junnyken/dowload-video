@@ -123,6 +123,8 @@ celery_app.conf.update(
         'trim_video_task': {'queue': 'media'},
         'create_gif_task': {'queue': 'media'},
         'inpaint_logo_task': {'queue': 'media'},
+        'track_watermark_task': {'queue': 'media'},
+        'preview_clip_task': {'queue': 'media'},
         'watermark_task': {'queue': 'media'},
         'merge_audio_video_task': {'queue': 'media'},
         'render_video_task': {'queue': 'media'},

@@ -1,0 +1,67 @@
+{
+  "phase": "P5.6.1",
+  "previous_e2e_commit_9319ad0_valid": false,
+  "previous_e2e_invalid_reason": "Lần chạy E2E ở commit 9319ad0 KHÔNG hợp lệ: dùng msedge --screenshot chụp URL tĩnh khi FLOW_LOCKED=true khiến ảnh 01 và 03 giống hệt nhau (trang chủ tab đơn), và ảnh 02 chụp trang /pricing báo lỗi thay vì UpgradeModal trên luồng xoá logo.",
+  "browser": "Playwright + Microsoft Edge Headless Chromium",
+  "stack": {
+    "redis": "127.0.0.1:6379 (redis-server.exe v5.0.14.1)",
+    "celery_worker": "app.core.celery_app (-Q media,default --concurrency=2)",
+    "backend": "http://127.0.0.1:8001",
+    "frontend": "http://127.0.0.1:4180/flow-veo?tab=flow"
+  },
+  "test_accounts": {
+    "pro": "pro.e2e@vidgrab.test",
+    "free": "free.e2e@vidgrab.test"
+  },
+  "downloaded_mp4_bytes": 594324,
+  "ttl_expired_status_code": 404,
+  "ttl_expired_result_code": 404,
+  "free_user_api_status_code": 402,
+  "unique_screenshots_count": 11,
+  "screenshots": {
+    "01_pro_upload.png": {
+      "bytes": 321224,
+      "sha256": "44d213a8d101be4dde8f6698b790271bce3706597d5d6510375b4de4e539abf8"
+    },
+    "02_pro_detect.png": {
+      "bytes": 319040,
+      "sha256": "ab71f452da5f8d221b2d63b78aa99a029509dcd5b42b27153e58aa46ec493be9"
+    },
+    "03_pro_track.png": {
+      "bytes": 194886,
+      "sha256": "05bcb34a8eb51115ba4cbab50409991e2122b18f3c3e56347306ecdf3e3c58b1"
+    },
+    "04_pro_keyframe_edit.png": {
+      "bytes": 195031,
+      "sha256": "f4922eae8aff34fc56e855b0579279703492e7fba8d477686e776999a8207d57"
+    },
+    "05_pro_ab_preview.png": {
+      "bytes": 410764,
+      "sha256": "7de4194d0d0a1f65597a59ac160d43699c267ae5a1e18be4242eb29968911c41"
+    },
+    "06_pro_preview_clip.png": {
+      "bytes": 495148,
+      "sha256": "6b44ce110d93b263ceabc50261cea7b23472834ee5d4467f2c0d7edf01160d63"
+    },
+    "07_pro_processing.png": {
+      "bytes": 125129,
+      "sha256": "ac16f52e52a0ce68e411894c1574c4ca0723c62ba23b8c9d1998d628fa1be247"
+    },
+    "08_pro_done_download.png": {
+      "bytes": 334401,
+      "sha256": "b9f65ca0ae4da00b9c9dd45e166a059d5c6bc7eba5180dbf1ef4b2b1ebc0ecc6"
+    },
+    "09_pro_ttl_expired_404.png": {
+      "bytes": 260300,
+      "sha256": "c537f3cf80615ab70a37e44f30e5b9a48bbd964fc052fc6049762bd1baa4deb3"
+    },
+    "10_free_upgrade_modal.png": {
+      "bytes": 149073,
+      "sha256": "ccf4fab25e98531bd884cba21385ead70131c08950eefdbe2de60fe629255793"
+    },
+    "11_invalid_file_error.png": {
+      "bytes": 288363,
+      "sha256": "5430d73dec85f7759807482f47dec763aff31228dd3063007c8cea764eb8d975"
+    }
+  }
+}

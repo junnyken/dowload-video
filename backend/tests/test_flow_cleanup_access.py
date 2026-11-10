@@ -346,11 +346,11 @@ class TestEndpointGatingWired:
         assert not _has_dep(get_preview_frame, _require_pro), \
             "get_preview_frame must NOT have Depends(_require_pro)"
 
-    def test_no_logo_no_pro_dep(self):
-        """Record-only endpoint must NOT require Pro."""
+    def test_no_logo_has_require_pro_dep(self):
+        """POST /no-logo must require Pro authentication (P5.1c)."""
         from app.api.flow_cleanup import record_no_logo, _require_pro
-        assert not _has_dep(record_no_logo, _require_pro), \
-            "record_no_logo must NOT have Depends(_require_pro)"
+        assert _has_dep(record_no_logo, _require_pro), \
+            "record_no_logo must have Depends(_require_pro) in its signature"
 
 
 # ═══════════════════════════════════════════════════════════════════

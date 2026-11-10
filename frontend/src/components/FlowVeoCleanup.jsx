@@ -6,6 +6,13 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../lib/apiBase';
+import UpgradeModal from './UpgradeModal';
+
+const withCacheBust = (url) => {
+  if (!url) return url;
+  const full = url.startsWith('http') ? url : `${API_BASE}${url}`;
+  return `${full}${full.includes('?') ? '&' : '?'}t=${Date.now()}`;
+};
 
 // A FastAPI HTTPException detail is either a plain string or a structured
 // object. `new Error(object)` stringifies to the literal "[object Object]",
@@ -41,6 +48,24 @@ const METHODS = [
 ];
 
 const ACCEPT = '.mp4,.mov,.webm,.mkv,video/mp4,video/quicktime,video/webm,video/x-matroska';
+
+// Mirror backend `_compute_effective_max_duration` in `flow_cleanup.py`:
+// computes the exact maximum duration (seconds) allowed for `(width, height, fps, method)`.
+export function computeMaxAllowedDurationSec(info, method = 'natural') {
+  if (!info) return method === 'crop' || method === 'blur' ? 600 : 60;
+  if (method === 'crop' || method === 'blur') {
+    return Number(info.max_crop_blur_duration_sec || 600);
+  }
+  if (typeof info.max_inpaint_duration_sec === 'number' && info.max_inpaint_duration_sec > 0) {
+    return info.max_inpaint_duration_sec;
+  }
+  const vw = Math.max(1, Number(info.width || 1920));
+  const vh = Math.max(1, Number(info.height || 1080));
+  const fps = Math.max(1, Number(info.fps || 30));
+  const mpxPerSec = ((vw * vh) / 1_000_000) * fps;
+  const maxByTimeout = 300 / Math.max(0.05, mpxPerSec * 0.45);
+  return Math.max(5, Math.floor(Math.min(60, maxByTimeout)));
+}
 
 // Mirror backend crop logic (percentage coords, not pixels).
 // Returns the surviving frame rect {cx,cy,cw,ch} as 0–1 fractions.
@@ -138,8 +163,12 @@ function CornerZoom({ beforeUrl, afterUrl, region }) {
       const img = new Image();
       img.onload = () => {
         const iw = img.naturalWidth, ih = img.naturalHeight;
-        const rx = Math.round(region.xPct * iw), ry = Math.round(region.yPct * ih);
-        const rw = Math.round(region.wPct * iw), rh = Math.round(region.hPct * ih);
+        const baseW = Math.round(region.wPct * iw), baseH = Math.round(region.hPct * ih);
+        const padX = Math.round(baseW * 0.25), padY = Math.round(baseH * 0.25);
+        const rx = Math.max(0, Math.round(region.xPct * iw) - padX);
+        const ry = Math.max(0, Math.round(region.yPct * ih) - padY);
+        const rw = Math.min(iw - rx, baseW + padX * 2);
+        const rh = Math.min(ih - ry, baseH + padY * 2);
         const c = ref.current;
         c.width  = Math.round(rw * SCALE);
         c.height = Math.round(rh * SCALE);
@@ -276,10 +305,11 @@ function SynthIDNote({ className = '' }) {
 
 export default function FlowVeoCleanup() {
   const { t } = useTranslation('logoRemover');
-  const { withAuth } = useAuth();
+  const { user, withAuth } = useAuth();
   // idle | uploading | preview | no-logo | processing | done | error
   const [step, setStep] = useState('idle');
   const [tempId, setTempId] = useState(null);
+  const [jobId, setJobId] = useState(null);
   const [videoInfo, setVideoInfo] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [preset, setPreset] = useState('lower-right');
@@ -295,30 +325,68 @@ export default function FlowVeoCleanup() {
   const [framePreviewUrl, setFramePreviewUrl] = useState(null);  // cleaned first-frame JPEG from /preview-frame
   const [previewInfo, setPreviewInfo] = useState(null);          // decision layer: strategy/quality/recommend_crop
   const [durationWarning, setDurationWarning] = useState(null);
+  const [jobProgress, setJobProgress] = useState(0);
+  const [jobStatus, setJobStatus] = useState(null);
+  // Phase P2/P4: Auto-detection state
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [detectedRegions, setDetectedRegions] = useState([]);
+  const [selectedCandidateIdx, setSelectedCandidateIdx] = useState(0);
+  const [detectNeedsReview, setDetectNeedsReview] = useState(false);
+  // Phase P3/P4: Tracking & Keyframe Editor state
+  const [isTracking, setIsTracking] = useState(false);
+  const [trackProgress, setTrackProgress] = useState(0);
+  const [trackResult, setTrackResult] = useState(null);
+  const [activeKeyframeIdx, setActiveKeyframeIdx] = useState(0);
+  const [keyframeOverrides, setKeyframeOverrides] = useState({}); // { [frameIdx]: { xPct, yPct, wPct, hPct } }
+  // Phase P4: A/B comparison & 4s preview clip state
+  const [abMode, setAbMode] = useState('after'); // 'after' | 'before' | 'split'
+  const [abSplitPct, setAbSplitPct] = useState(50);
+  const [previewClipUrl, setPreviewClipUrl] = useState(null);
+  const [isGeneratingClip, setIsGeneratingClip] = useState(false);
+  const [clipProgress, setClipProgress] = useState(0);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [consentConfirmed, setConsentConfirmed] = useState(true);
+
+  const isProUser = ['pro', 'team', 'enterprise', 'api'].includes(
+    user?.tier || user?.user_metadata?.tier || user?.app_metadata?.tier
+  ) || Boolean(user?.is_pro || user?.user_metadata?.is_pro);
+
   const lastRegionRef = useRef(null); // snapshot at process-start for done-step overlay
+  const pollTimerRef = useRef(null);
+  const subTaskCancelRef = useRef(false);
 
   const fileInputRef = useRef(null);
 
-  // Duration guard (free: 30s, pro: 2min)
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    };
+  }, []);
+
+  // Dynamic duration guard matching backend `_validate_job_limits` for the selected video's resolution/FPS
   useEffect(() => {
     if (!videoInfo) { setDurationWarning(null); return; }
     const duration = videoInfo.duration || 0;
-    const isPro = false; // TODO: wire to auth context if needed
-    const maxSec = isPro ? 120 : 30;
+    const isPro = Boolean(isProUser);
+    const maxSec = computeMaxAllowedDurationSec(videoInfo, method);
     if (duration > maxSec) {
       setDurationWarning({
         duration,
         maxSec,
+        width: videoInfo.width || 1920,
+        height: videoInfo.height || 1080,
+        fps: Math.round(videoInfo.fps || 30),
         isPro,
       });
     } else {
       setDurationWarning(null);
     }
-  }, [videoInfo]);
+  }, [videoInfo, isProUser, method]);
 
   const reset = () => {
     setStep('idle');
     setTempId(null);
+    setJobId(null);
     setVideoInfo(null);
     setPreviewUrl(null);
     setResult(null);
@@ -331,12 +399,255 @@ export default function FlowVeoCleanup() {
     setDelogoVariant('standard');
     setFramePreviewUrl(null);
     setDurationWarning(null);
+    setJobProgress(0);
+    setJobStatus(null);
+    setIsDetecting(false);
+    setDetectedRegions([]);
+    setSelectedCandidateIdx(0);
+    setDetectNeedsReview(false);
+    setIsTracking(false);
+    setTrackProgress(0);
+    setTrackResult(null);
+    setActiveKeyframeIdx(0);
+    setKeyframeOverrides({});
+    setAbMode('after');
+    setAbSplitPct(50);
+    setPreviewClipUrl(null);
+    setIsGeneratingClip(false);
+    setClipProgress(0);
+    subTaskCancelRef.current = true;
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
     lastRegionRef.current = null;
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const applyCandidateBox = (cand, vInfo) => {
+    const vw = vInfo?.width || videoInfo?.width || 1920;
+    const vh = vInfo?.height || videoInfo?.height || 1080;
+    if (!cand || !vw || !vh) return;
+    setPreset('custom');
+    setRegion({
+      xPct: Math.max(0, Math.min(0.95, cand.x / vw)),
+      yPct: Math.max(0, Math.min(0.95, cand.y / vh)),
+      wPct: Math.max(0.03, Math.min(1, cand.w / vw)),
+      hPct: Math.max(0.03, Math.min(1, cand.h / vh)),
+    });
+  };
+
+  const runAutoDetect = async (tid, vInfo) => {
+    if (!tid) return;
+    setIsDetecting(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/detect/${tid}`, withAuth({ method: 'POST' }));
+      if (!res.ok) return;
+      const det = await res.json();
+      const regs = Array.isArray(det.regions) ? det.regions : [];
+      setDetectedRegions(regs);
+      setDetectNeedsReview(Boolean(det.needs_review));
+      if (regs.length > 0) {
+        setSelectedCandidateIdx(0);
+        applyCandidateBox(regs[0], vInfo || det.video_info);
+        if (!det.needs_review && regs[0].confidence >= 0.75) {
+          setRegionAdjusted(true);
+        } else {
+          setRegionAdjusted(false);
+        }
+        if (regs[0].kind === 'moving') {
+          runTracking(tid, regs[0], vInfo || det.video_info);
+        }
+      }
+    } catch (_) {
+      // Non-fatal: user can still choose preset or drag manually
+    } finally {
+      setIsDetecting(false);
+    }
+  };
+
+  const pollSubTaskUntilDone = async (tid, onProgress) => {
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      if (subTaskCancelRef.current) return { status: 'cancelled' };
+      await new Promise((r) => setTimeout(r, 1000));
+      if (subTaskCancelRef.current) return { status: 'cancelled' };
+      const stRes = await fetch(`${API_BASE}/api/v1/flow-cleanup/status/${tid}`, withAuth({ method: 'GET' }));
+      if (!stRes.ok) {
+        const body = await stRes.json().catch(() => ({}));
+        throw new Error(errMessage(body.detail, t('errors.processFailed', { status: stRes.status })));
+      }
+      const st = await stRes.json();
+      if (typeof st.progress === 'number' && onProgress) onProgress(st.progress);
+      if (st.status === 'done' || st.status === 'completed') return st;
+      if (st.status === 'failed') {
+        throw new Error(st.error || t('errors.processFailed', { status: 500 }));
+      }
+      if (st.status === 'cancelled') return st;
+    }
+    throw new Error('Quá thời gian xử lý.');
+  };
+
+  const handleCancelSubTask = async () => {
+    subTaskCancelRef.current = true;
+    const targetId = jobId || tempId;
+    if (targetId) {
+      try {
+        await fetch(`${API_BASE}/api/v1/flow-cleanup/cancel/${targetId}`, withAuth({ method: 'POST' }));
+      } catch (_) {}
+    }
+    setIsTracking(false);
+    setTrackProgress(0);
+    setIsGeneratingClip(false);
+    setClipProgress(0);
+  };
+
+  const runTracking = async (tid = tempId, customPixelBox = null, vInfo = videoInfo, customKeyframes = null) => {
+    if (!tid) return;
+    const vw = vInfo?.width || 1920;
+    const vh = vInfo?.height || 1080;
+    const boxPayload = customPixelBox || (region ? {
+      x: Math.round(region.xPct * vw),
+      y: Math.round(region.yPct * vh),
+      w: Math.round(region.wPct * vw),
+      h: Math.round(region.hPct * vh),
+    } : null);
+    subTaskCancelRef.current = false;
+    setIsTracking(true);
+    setTrackProgress(5);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/track/${tid}`, withAuth({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          region: boxPayload,
+          keyframes: customKeyframes,
+        }),
+      }));
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(errMessage(body.detail, t('errors.processFailed', { status: res.status })));
+        return;
+      }
+      let tr = await res.json();
+      if (res.status === 202 || tr.status === 'queued' || tr.status === 'running') {
+        tr = await pollSubTaskUntilDone(tid, setTrackProgress);
+        if (!tr || tr.status === 'cancelled') return;
+      }
+      setTrackResult(tr);
+      if (!tr.needs_review) {
+        setRegionAdjusted(true);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsTracking(false);
+      setTrackProgress(0);
+    }
+  };
+
+  const handleSelectKeyframe = async (frameIdx) => {
+    setActiveKeyframeIdx(frameIdx);
+    if (tempId) {
+      try {
+        const q = frameIdx > 0 ? `?frame_idx=${frameIdx}` : '';
+        const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/frame-url/${tempId}${q}`, withAuth({ method: 'GET' }));
+        if (res.ok) {
+          const data = await res.json();
+          if (data.preview_url) {
+            setPreviewUrl(withCacheBust(data.preview_url));
+          }
+        }
+      } catch (_) {}
+    }
+    const vw = videoInfo?.width || 1920;
+    const vh = videoInfo?.height || 1080;
+    if (keyframeOverrides[frameIdx]) {
+      setRegion(keyframeOverrides[frameIdx]);
+    } else if (trackResult?.boxes_by_frame?.[String(frameIdx)]) {
+      const [bx, by, bw, bh] = trackResult.boxes_by_frame[String(frameIdx)];
+      setRegion({
+        xPct: Math.max(0, Math.min(0.95, bx / vw)),
+        yPct: Math.max(0, Math.min(0.95, by / vh)),
+        wPct: Math.max(0.03, Math.min(1, bw / vw)),
+        hPct: Math.max(0.03, Math.min(1, bh / vh)),
+      });
+    }
+  };
+
+  const handleApplyKeyframeOverride = async () => {
+    if (!tempId || !region) return;
+    const vw = videoInfo?.width || 1920;
+    const vh = videoInfo?.height || 1080;
+    const nextOverrides = { ...keyframeOverrides, [activeKeyframeIdx]: { ...region } };
+    setKeyframeOverrides(nextOverrides);
+    setRegionAdjusted(true);
+    const kfList = Object.entries(nextOverrides).map(([fIdx, r]) => ({
+      frame_idx: Number(fIdx),
+      x: Math.round(r.xPct * vw),
+      y: Math.round(r.yPct * vh),
+      w: Math.round(r.wPct * vw),
+      h: Math.round(r.hPct * vh),
+    }));
+    await runTracking(tempId, null, videoInfo, kfList);
+  };
+
+  const handleGeneratePreviewClip = async () => {
+    if (!tempId || isGeneratingClip) return;
+    const vw = videoInfo?.width || 1920;
+    const vh = videoInfo?.height || 1080;
+    const pixelRegion = region ? {
+      x: Math.round(region.xPct * vw),
+      y: Math.round(region.yPct * vh),
+      w: Math.round(region.wPct * vw),
+      h: Math.round(region.hPct * vh),
+    } : null;
+    subTaskCancelRef.current = false;
+    setIsGeneratingClip(true);
+    setClipProgress(5);
+    setPreviewClipUrl(null);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/preview-clip`, withAuth({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          temp_id: tempId,
+          preset: 'custom',
+          region: pixelRegion,
+          method,
+          expand_padding: expandPx,
+          clip_seconds: 4.0,
+          frame_boxes: trackResult?.boxes_by_frame || null,
+        }),
+      }));
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(errMessage(body.detail, t('errors.processFailed', { status: res.status })));
+        return;
+      }
+      let data = await res.json();
+      if (res.status === 202 || data.status === 'queued' || data.status === 'running') {
+        data = await pollSubTaskUntilDone(tempId, setClipProgress);
+        if (!data || data.status === 'cancelled') return;
+      }
+      if (data?.preview_clip_url) {
+        setPreviewClipUrl(withCacheBust(data.preview_clip_url));
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsGeneratingClip(false);
+      setClipProgress(0);
+    }
+  };
+
   const handleFile = async (file) => {
     if (!file) return;
+    if (!isProUser) {
+      setShowUpgradeModal(true);
+      return;
+    }
     const ext = (file.name || '').split('.').pop().toLowerCase();
     if (!['mp4', 'mov', 'webm', 'mkv'].includes(ext)) {
       setError(t('errors.unsupportedFormat'));
@@ -360,16 +671,21 @@ export default function FlowVeoCleanup() {
       }
       const data = await res.json();
       setTempId(data.temp_id);
+      setJobId(data.job_id || data.temp_id);
       setVideoInfo(data.video_info);
-      setPreviewUrl(`${API_BASE}${data.preview_url}?t=${Date.now()}`);
+      setPreviewUrl(withCacheBust(data.preview_url));
       const suit = computeSuitability(data.video_info);
       setSuitability(suit);
       if (suit.level === 'crop') setMethod('crop');
-      // Init region editor from the active preset
+      // Init region editor from the active preset first, then auto-detect refines it
       const initP = PRESETS.find((x) => x.id === preset) ?? PRESETS[0];
       setRegion({ xPct: initP.xPct, yPct: initP.yPct, wPct: initP.wPct, hPct: initP.hPct });
       setRegionAdjusted(false);
+      setActiveKeyframeIdx(0);
+      setKeyframeOverrides({});
+      setTrackResult(null);
       setStep('preview');
+      runAutoDetect(data.temp_id, data.video_info);
     } catch (e) {
       setError(e.message);
       setStep('error');
@@ -398,6 +714,8 @@ export default function FlowVeoCleanup() {
     lastRegionRef.current = region ? { ...region } : null;
     setFramePreviewUrl(null);
     setPreviewInfo(null);
+    setPreviewClipUrl(null);
+    setAbMode('after');
     setStep('frame-preview');
     const vw = videoInfo?.width ?? 1920;
     const vh = videoInfo?.height ?? 1080;
@@ -420,16 +738,105 @@ export default function FlowVeoCleanup() {
       }));
       if (!res.ok) { setFramePreviewUrl('error'); return; }
       const data = await res.json();
-      setFramePreviewUrl(`${API_BASE}${data.preview_clean_url}?t=${Date.now()}`);
+      setFramePreviewUrl(withCacheBust(data.preview_clean_url));
       setPreviewInfo(data);  // { strategy, motion, quality, recommend_crop, reason, ... }
     } catch {
       setFramePreviewUrl('error');
     }
   };
 
+  const stopPolling = () => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  };
+
+  const pollJobUntilDone = (jobId) => {
+    stopPolling();
+    pollTimerRef.current = setInterval(async () => {
+      try {
+        const stRes = await fetch(`${API_BASE}/api/v1/flow-cleanup/status/${jobId}`, withAuth({ method: 'GET' }));
+        if (!stRes.ok) {
+          const body = await stRes.json().catch(() => ({}));
+          throw new Error(errMessage(body.detail, t('errors.processFailed', { status: stRes.status })));
+        }
+        const st = await stRes.json();
+        setJobStatus(st.status || 'running');
+        setJobProgress(typeof st.progress === 'number' ? st.progress : 0);
+        if (st.status === 'done' || st.status === 'completed') {
+          stopPolling();
+          setResult(st);
+          setStep('done');
+        } else if (st.status === 'failed') {
+          stopPolling();
+          setError(st.error || t('errors.processFailed', { status: 500 }));
+          setStep('error');
+        } else if (st.status === 'cancelled') {
+          stopPolling();
+          setStep('preview');
+        }
+      } catch (pollErr) {
+        stopPolling();
+        setError(pollErr.message);
+        setStep('error');
+      }
+    }, 1500);
+  };
+
+  const handleCancelJob = async () => {
+    stopPolling();
+    const targetJobId = jobId || tempId;
+    if (targetJobId) {
+      try {
+        await fetch(`${API_BASE}/api/v1/flow-cleanup/cancel/${targetJobId}`, withAuth({ method: 'POST' }));
+      } catch (_) {}
+    }
+    setJobProgress(0);
+    setJobStatus('cancelled');
+    setStep('preview');
+  };
+
+  const handleRetryJob = async () => {
+    const targetJobId = jobId || tempId;
+    if (!targetJobId) {
+      reset();
+      return;
+    }
+    setStep('processing');
+    setError(null);
+    setJobProgress(0);
+    setJobStatus('queued');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/retry/${targetJobId}`, withAuth({ method: 'POST' }));
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(errMessage(body.detail, t('errors.processFailed', { status: res.status })));
+      }
+      const data = await res.json();
+      const nextJobId = data.job_id || targetJobId;
+      setJobId(nextJobId);
+      if (data.download_url || data.status === 'done' || data.status === 'completed') {
+        setJobProgress(100);
+        setJobStatus('done');
+        setResult(data);
+        setStep('done');
+      } else {
+        setJobProgress(typeof data.progress === 'number' ? data.progress : 0);
+        setJobStatus(data.status || 'queued');
+        pollJobUntilDone(nextJobId);
+      }
+    } catch (e) {
+      setError(e.message);
+      setStep('error');
+    }
+  };
+
   const handleProcess = async () => {
     setStep('processing');
     setError(null);
+    setJobProgress(0);
+    setJobStatus('queued');
     // Snapshot region now — used later by the done-step overlay
     lastRegionRef.current = region ? { ...region } : null;
     // Convert pct → pixels for backend
@@ -442,6 +849,13 @@ export default function FlowVeoCleanup() {
       h: Math.round(region.hPct * vh),
     } : null;
     const actualMethod = method === 'telea' && delogoVariant === 'soft' ? 'telea_soft' : method;
+    const kfPayload = Object.entries(keyframeOverrides).map(([fIdx, r]) => ({
+      frame_idx: Number(fIdx),
+      x: Math.round(r.xPct * vw),
+      y: Math.round(r.yPct * vh),
+      w: Math.round(r.wPct * vw),
+      h: Math.round(r.hPct * vh),
+    }));
     try {
       const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/process`, withAuth({
         method: 'POST',
@@ -455,6 +869,9 @@ export default function FlowVeoCleanup() {
           region_adjusted: regionAdjusted,
           suitability_level: suitability?.level ?? null,
           requested_mode: recommendedMode,
+          keyframes: kfPayload.length > 0 ? kfPayload : undefined,
+          frame_boxes: trackResult?.boxes_by_frame || undefined,
+          consent_confirmed: Boolean(consentConfirmed),
         }),
       }));
       if (!res.ok) {
@@ -462,8 +879,18 @@ export default function FlowVeoCleanup() {
         throw new Error(errMessage(body.detail, t('errors.processFailed', { status: res.status })));
       }
       const data = await res.json();
-      setResult(data);
-      setStep('done');
+      const nextJobId = data.job_id || tempId;
+      setJobId(nextJobId);
+      if (data.download_url || data.status === 'done' || data.status === 'completed') {
+        setJobProgress(100);
+        setJobStatus('done');
+        setResult(data);
+        setStep('done');
+      } else {
+        setJobProgress(typeof data.progress === 'number' ? data.progress : 0);
+        setJobStatus(data.status || 'queued');
+        pollJobUntilDone(nextJobId);
+      }
     } catch (e) {
       setError(e.message);
       setStep('error');
@@ -530,7 +957,13 @@ export default function FlowVeoCleanup() {
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => {
+            if (!isProUser) {
+              setShowUpgradeModal(true);
+              return;
+            }
+            fileInputRef.current?.click();
+          }}
           className={`flex flex-col items-center justify-center gap-4 w-full px-6 py-12 rounded-2xl border-2 border-dashed cursor-pointer transition-all select-none ${
             isDragging
               ? 'border-accent/60 bg-accent-soft'
@@ -541,8 +974,9 @@ export default function FlowVeoCleanup() {
             <Upload className="w-6 h-6 text-accent-text" />
           </div>
           <div className="text-center">
-            <p className="text-base font-bold text-fg mb-1">
-              {t('idle.drop')}
+            <p className="text-base font-bold text-fg mb-1 inline-flex items-center gap-2 justify-center">
+              <span>{t('idle.drop')}</span>
+              <span className="bg-accent text-accent-fg text-[10px] px-1.5 py-0.5 rounded font-bold leading-tight">PRO</span>
             </p>
             <p className="text-xs text-fg-muted mb-1">{t('idle.formats')}</p>
             <p className="text-[11px] text-fg-muted">
@@ -557,6 +991,13 @@ export default function FlowVeoCleanup() {
             onChange={(e) => handleFile(e.target.files?.[0])}
           />
         </div>
+      )}
+      {showUpgradeModal && (
+        <UpgradeModal
+          isOpen={showUpgradeModal}
+          errorCode="tier_required_feature"
+          onClose={() => setShowUpgradeModal(false)}
+        />
       )}
 
       {/* ── Step: uploading ────────────────────────────────────── */}
@@ -610,14 +1051,247 @@ export default function FlowVeoCleanup() {
               </>
             )}
             {videoInfo && (
-              <div className={`absolute px-2 py-0.5 rounded-md bg-black/60 text-[10px] text-fg-muted font-mono ${cropBounds ? 'bottom-2 right-2' : 'bottom-2 left-2'}`}>
-                {videoInfo.width}×{videoInfo.height} · {videoInfo.duration}s
+              <div
+                data-testid="video-duration-limit-badge"
+                className={`absolute px-2 py-0.5 rounded-md bg-black/60 text-[10px] text-fg-muted font-mono ${cropBounds ? 'bottom-2 right-2' : 'bottom-2 left-2'}`}
+              >
+                {videoInfo.width}×{videoInfo.height} · {Math.round(videoInfo.fps || 30)}fps · {videoInfo.duration}s / tối đa {computeMaxAllowedDurationSec(videoInfo, method)}s
               </div>
             )}
           </div>
 
           {/* Suitability assessment — shown when we have a signal */}
           <SuitabilityBanner suitability={suitability} />
+
+          {/* Phase P2/P4: Auto-detected candidate regions + confidence + add/remove/confirm */}
+          <div className="px-3.5 py-3 rounded-xl bg-surface-2 border border-line space-y-2.5">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Wand2 className="w-3.5 h-3.5 text-accent-text" />
+                <span className="text-xs font-bold text-fg">
+                  {isDetecting
+                    ? t('detect.scanning')
+                    : detectedRegions.length > 0
+                    ? t('detect.foundTitle', { count: detectedRegions.length })
+                    : t('detect.noneFound')}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const vw = videoInfo?.width || 1920;
+                    const vh = videoInfo?.height || 1080;
+                    const newCand = {
+                      x: Math.round((region?.xPct ?? 0.4) * vw),
+                      y: Math.round((region?.yPct ?? 0.4) * vh),
+                      w: Math.round((region?.wPct ?? 0.16) * vw),
+                      h: Math.round((region?.hPct ?? 0.10) * vh),
+                      confidence: 1.0,
+                      kind: 'logo',
+                      needs_review: false,
+                    };
+                    const next = [...detectedRegions, newCand];
+                    setDetectedRegions(next);
+                    setSelectedCandidateIdx(next.length - 1);
+                    setRegionAdjusted(true);
+                  }}
+                  className="text-[10px] px-2 py-1 rounded-lg border border-line bg-surface text-fg-muted hover:text-fg hover:border-line-strong transition-colors cursor-pointer"
+                >
+                  {t('detect.addRegion')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => runAutoDetect(tempId, videoInfo)}
+                  disabled={isDetecting}
+                  className="text-[10px] px-2 py-1 rounded-lg border border-line bg-surface text-fg-muted hover:text-fg hover:border-line-strong transition-colors cursor-pointer"
+                >
+                  {t('detect.rescan')}
+                </button>
+              </div>
+            </div>
+
+            {detectedRegions.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {detectedRegions.map((cand, idx) => {
+                  const pct = Math.round((cand.confidence || 0) * 100);
+                  const isActive = selectedCandidateIdx === idx;
+                  const kindLabel = t(`detect.kind.${cand.kind || 'logo'}`, { defaultValue: cand.kind || 'Logo' });
+                  return (
+                    <div key={idx} className="inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCandidateIdx(idx);
+                          applyCandidateBox(cand, videoInfo);
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
+                          isActive
+                            ? 'bg-accent-soft border-accent/50 text-accent-text'
+                            : 'bg-surface border-line text-fg-muted hover:text-fg'
+                        }`}
+                      >
+                        <span>#{idx + 1}</span>
+                        <span>· {pct}%</span>
+                        <span className="text-[10px] opacity-80">({kindLabel})</span>
+                      </button>
+                      {detectedRegions.length > 1 && (
+                        <button
+                          type="button"
+                          title={t('detect.removeRegion')}
+                          onClick={() => {
+                            const next = detectedRegions.filter((_, i) => i !== idx);
+                            setDetectedRegions(next);
+                            const nextIdx = Math.max(0, Math.min(selectedCandidateIdx, next.length - 1));
+                            setSelectedCandidateIdx(nextIdx);
+                            if (next[nextIdx]) applyCandidateBox(next[nextIdx], videoInfo);
+                          }}
+                          className="text-[10px] px-1.5 py-1 rounded-md border border-line text-fg-muted hover:text-danger cursor-pointer"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {(detectNeedsReview || (detectedRegions[selectedCandidateIdx] && detectedRegions[selectedCandidateIdx].confidence < 0.75)) && (
+              <div className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg bg-accent-soft border border-accent/30">
+                <span className="text-[11px] text-accent-text leading-snug">
+                  {t('detect.needsReview', {
+                    pct: Math.round(((detectedRegions[selectedCandidateIdx]?.confidence) || 0.6) * 100),
+                  })}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setRegionAdjusted(true)}
+                  className={`text-[10px] px-2.5 py-1 rounded-md font-bold whitespace-nowrap cursor-pointer border ${
+                    regionAdjusted
+                      ? 'bg-success-soft border-success/40 text-success'
+                      : 'bg-accent text-accent-fg border-transparent'
+                  }`}
+                >
+                  {regionAdjusted ? t('detect.confirmed') : t('detect.confirmRegion')}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Phase P3/P4: Per-frame tracking & Keyframe Editor */}
+          {method !== 'crop' && (
+            <div className="px-3.5 py-3 rounded-xl bg-surface-2 border border-line space-y-2.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-fg">
+                    {isTracking
+                      ? t('track.running')
+                      : trackResult
+                      ? t('track.active', { frames: trackResult.total_frames || 0 })
+                      : t('track.button')}
+                  </span>
+                  {trackResult && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface border border-line text-fg-muted font-mono">
+                      {trackResult.is_moving
+                        ? t('track.movingInfo', { cuts: (trackResult.scene_cuts || []).length })
+                        : t('track.staticInfo', { drift: trackResult.max_drift_pct ?? 0 })}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {isTracking && (
+                    <button
+                      type="button"
+                      onClick={handleCancelSubTask}
+                      className="text-[11px] px-2.5 py-1 rounded-lg font-semibold border border-line bg-surface text-fg-muted hover:text-fg transition-colors cursor-pointer"
+                    >
+                      Huỷ
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => runTracking(tempId, null, videoInfo)}
+                    disabled={isTracking}
+                    className="text-[11px] px-2.5 py-1 rounded-lg font-semibold border border-accent/40 bg-accent-soft text-accent-text hover:bg-accent/20 transition-colors cursor-pointer"
+                  >
+                    {isTracking ? `${t('track.running')}${trackProgress > 0 ? ` (${trackProgress}%)` : ''}` : t('track.button')}
+                  </button>
+                </div>
+              </div>
+
+              {trackResult && (
+                <div className="space-y-2">
+                  {trackResult.needs_review && (
+                    <p className="text-[11px] text-accent-text bg-accent-soft border border-accent/25 rounded-lg px-2.5 py-1.5">
+                      {t('track.needsReview', { count: (trackResult.review_keyframes || []).length || 1 })}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] text-fg-muted font-semibold mr-1">
+                      {t('track.keyframesLabel')}
+                    </span>
+                    {Array.from(
+                      new Set([
+                        0,
+                        ...(trackResult.scene_cuts || []),
+                        ...(trackResult.jump_frames || []),
+                        ...(trackResult.review_keyframes || []),
+                        ...Object.keys(keyframeOverrides).map(Number),
+                      ])
+                    )
+                      .sort((a, b) => a - b)
+                      .slice(0, 10)
+                      .map((fIdx) => {
+                        const isCut = (trackResult.scene_cuts || []).includes(fIdx);
+                        const isLost = (trackResult.review_keyframes || []).includes(fIdx);
+                        const isActiveKf = activeKeyframeIdx === fIdx;
+                        return (
+                          <button
+                            key={fIdx}
+                            type="button"
+                            onClick={() => handleSelectKeyframe(fIdx)}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-mono border transition-colors cursor-pointer ${
+                              isActiveKf
+                                ? 'bg-accent text-accent-fg border-accent font-bold'
+                                : isLost
+                                ? 'bg-accent-soft border-accent/40 text-accent-text'
+                                : 'bg-surface border-line text-fg-muted hover:text-fg'
+                            }`}
+                          >
+                            <span>{t('track.frameChip', { idx: fIdx })}</span>
+                            {isCut && <span title={t('track.sceneCutTag')}>✂</span>}
+                            {isLost && <span title={t('track.lostTag')}>⚠</span>}
+                          </button>
+                        );
+                      })}
+                    {trackResult.total_frames > 20 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const mid = Math.floor((trackResult.total_frames || 60) / 2);
+                          handleSelectKeyframe(mid);
+                        }}
+                        className="text-[10px] px-2 py-1 rounded-md border border-dashed border-line text-fg-muted hover:text-fg cursor-pointer"
+                      >
+                        {t('track.addKeyframePrompt', { idx: Math.floor((trackResult.total_frames || 60) / 2) })}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleApplyKeyframeOverride}
+                      disabled={isTracking}
+                      className="ml-auto text-[10px] px-2.5 py-1 rounded-md font-bold bg-success-soft border border-success/30 text-success hover:bg-success/20 transition-colors cursor-pointer"
+                    >
+                      {isTracking
+                        ? t('track.applyingKeyframe')
+                        : t('track.applyKeyframe', { idx: activeKeyframeIdx })}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Eligibility prompt — method-aware guidance */}
           <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-surface-2 border border-line">
@@ -776,7 +1450,15 @@ export default function FlowVeoCleanup() {
           {durationWarning && (
             <div style={{background:'var(--vg-accent-soft)', border:'1px solid var(--vg-line-strong)', borderRadius:'10px', padding:'10px 12px', marginBottom:'10px'}}>
               <p style={{fontSize:'11px', fontWeight:700, color:'var(--vg-accent-text)', marginBottom:'4px'}}>{t('duration.title')}</p>
-              <p style={{fontSize:'10px', color:'var(--vg-fg-muted)', lineHeight:1.5}}>{t(durationWarning.isPro ? 'duration.pro' : 'duration.free', { seconds: Math.round(durationWarning.duration) })}</p>
+              <p style={{fontSize:'10px', color:'var(--vg-fg-muted)', lineHeight:1.5}}>
+                {t(durationWarning.isPro ? 'duration.pro' : 'duration.free', {
+                  seconds: Math.round(durationWarning.duration),
+                  maxSec: durationWarning.maxSec,
+                  width: durationWarning.width,
+                  height: durationWarning.height,
+                  fps: durationWarning.fps,
+                })}
+              </p>
             </div>
           )}
 
@@ -889,14 +1571,32 @@ export default function FlowVeoCleanup() {
             <p className="text-xs text-fg-muted mt-0.5">{t('frame.subtitle')}</p>
           </div>
 
-          {/* Full cleaned frame with region overlay */}
+          {/* Full cleaned frame with A/B toggle & region overlay */}
           <div className="relative w-full rounded-xl overflow-hidden bg-surface-2 border border-line">
             {framePreviewUrl && framePreviewUrl !== 'error' ? (
               <>
-                <img src={framePreviewUrl} alt={t('frame.processedAlt')} className="w-full h-auto block" />
-                {lastRegionRef.current && (
+                <img
+                  src={abMode === 'before' ? previewUrl : framePreviewUrl}
+                  alt={t('frame.processedAlt')}
+                  className="w-full h-auto block"
+                />
+                {abMode === 'split' && (
                   <div
-                    className="absolute border-2 border-success/60 pointer-events-none"
+                    className="absolute inset-0 overflow-hidden pointer-events-none"
+                    style={{ clipPath: `inset(0 ${100 - abSplitPct}% 0 0)` }}
+                  >
+                    <img src={previewUrl} alt="Before" className="w-full h-full object-cover block" />
+                  </div>
+                )}
+                {abMode === 'split' && (
+                  <div
+                    className="absolute inset-y-0 w-0.5 bg-accent pointer-events-none"
+                    style={{ left: `${abSplitPct}%` }}
+                  />
+                )}
+                {abMode === 'before' && lastRegionRef.current && (
+                  <div
+                    className="absolute border-2 border-dashed border-accent/70 pointer-events-none"
                     style={{
                       left:   `${lastRegionRef.current.xPct * 100}%`,
                       top:    `${lastRegionRef.current.yPct * 100}%`,
@@ -907,7 +1607,7 @@ export default function FlowVeoCleanup() {
                 )}
                 <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-success font-semibold">
                   <CheckCircle className="w-3 h-3" />
-                  {t('frame.badge')}
+                  {abMode === 'before' ? t('ab.before') : t('frame.badge')}
                 </div>
               </>
             ) : framePreviewUrl === 'error' ? (
@@ -922,6 +1622,83 @@ export default function FlowVeoCleanup() {
               </div>
             )}
           </div>
+
+          {/* Phase P4: A/B mode switcher + 4s video preview clip */}
+          {framePreviewUrl && framePreviewUrl !== 'error' && (
+            <div className="px-3.5 py-3 rounded-xl bg-surface-2 border border-line space-y-2.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  {[
+                    { id: 'after', label: t('ab.after') },
+                    { id: 'before', label: t('ab.before') },
+                    { id: 'split', label: t('ab.split') },
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setAbMode(m.id)}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-semibold border transition-colors cursor-pointer ${
+                        abMode === m.id
+                          ? 'bg-accent-soft border-accent/50 text-accent-text'
+                          : 'bg-surface border-line text-fg-muted hover:text-fg'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {isGeneratingClip && (
+                    <button
+                      type="button"
+                      onClick={handleCancelSubTask}
+                      className="text-[11px] px-2.5 py-1 rounded-lg font-semibold border border-line bg-surface text-fg-muted hover:text-fg transition-colors cursor-pointer"
+                    >
+                      Huỷ
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleGeneratePreviewClip}
+                    disabled={isGeneratingClip}
+                    className="text-[11px] px-3 py-1 rounded-lg font-bold border border-accent/40 bg-accent-soft text-accent-text hover:bg-accent/20 transition-colors cursor-pointer"
+                  >
+                    {isGeneratingClip ? `${t('ab.generatingClip')}${clipProgress > 0 ? ` (${clipProgress}%)` : ''}` : t('ab.generateClip')}
+                  </button>
+                </div>
+              </div>
+
+              {abMode === 'split' && (
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-[10px] text-fg-muted font-mono">{t('ab.before')}</span>
+                  <input
+                    type="range"
+                    min={5}
+                    max={95}
+                    value={abSplitPct}
+                    onChange={(e) => setAbSplitPct(Number(e.target.value))}
+                    className="flex-1 accent-accent cursor-pointer"
+                  />
+                  <span className="text-[10px] text-fg-muted font-mono">{t('ab.after')}</span>
+                </div>
+              )}
+
+              {previewClipUrl && (
+                <div className="space-y-1.5 pt-1">
+                  <p className="text-[11px] font-semibold text-fg-muted">{t('ab.clipReady')}</p>
+                  <video
+                    src={previewClipUrl}
+                    controls
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="w-full rounded-lg border border-line bg-black max-h-64"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Corner zoom — before vs after */}
           {framePreviewUrl && framePreviewUrl !== 'error' && lastRegionRef.current && (
@@ -978,6 +1755,18 @@ export default function FlowVeoCleanup() {
             </div>
           )}
 
+          {/* Phase P5.5: User ownership / permission consent checkbox */}
+          <label className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-surface-2 border border-line text-[11px] text-fg-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              data-testid="consent-checkbox"
+              checked={consentConfirmed}
+              onChange={(e) => setConsentConfirmed(e.target.checked)}
+              className="mt-0.5 accent-accent cursor-pointer"
+            />
+            <span>Tôi xác nhận mình sở hữu hoặc có quyền hợp pháp để chỉnh sửa và xử lý video này.</span>
+          </label>
+
           {/* Actions */}
           {!previewInfo?.recommend_crop && (
             <div className="flex gap-3">
@@ -989,7 +1778,8 @@ export default function FlowVeoCleanup() {
               </button>
               <button
                 onClick={handleProcess}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-accent text-accent-fg shadow-md transition-all cursor-pointer"
+                disabled={!consentConfirmed}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-accent text-accent-fg shadow-md transition-all cursor-pointer disabled:opacity-50"
               >
                 <Wand2 className="w-4 h-4" />
                 {t('frame.processAll')}
@@ -1011,8 +1801,16 @@ export default function FlowVeoCleanup() {
       {step === 'processing' && (
         <div className="flex flex-col items-center gap-4 py-16">
           <Loader2 className="w-8 h-8 text-accent-text animate-spin" />
-          <div className="text-center">
-            <p className="text-sm font-semibold text-fg-2 mb-1">{t('processing.title')}</p>
+          <div className="text-center w-full max-w-xs space-y-2">
+            <p className="text-sm font-semibold text-fg-2 mb-1">
+              {t('processing.title')} {jobProgress > 0 ? `(${jobProgress}%)` : ''}
+            </p>
+            <div className="w-full h-2 rounded-full bg-surface-2 border border-line overflow-hidden">
+              <div
+                className="h-full bg-accent transition-all duration-300"
+                style={{ width: `${Math.max(5, jobProgress)}%` }}
+              />
+            </div>
             <p className="text-xs text-fg-muted">
               {method === 'natural'
                 ? t('processing.natural')
@@ -1021,6 +1819,13 @@ export default function FlowVeoCleanup() {
                 : t('processing.blur')}
               {' '}{t('processing.suffix')}
             </p>
+            <button
+              type="button"
+              onClick={handleCancelJob}
+              className="mt-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-fg-muted border border-line hover:text-fg hover:border-line-strong transition-all cursor-pointer"
+            >
+              Huỷ xử lý
+            </button>
           </div>
         </div>
       )}
@@ -1047,28 +1852,19 @@ export default function FlowVeoCleanup() {
           </div>
 
           {/* 2. Preview — method-aware reference visualization */}
-          {previewUrl && (
+          {(framePreviewUrl || previewUrl) && (
             <div className="relative w-full rounded-xl overflow-hidden bg-surface-2 border border-line">
-              <img src={previewUrl} alt={t('done.referenceAlt')} className="w-full h-auto block opacity-75" />
+              <img
+                src={framePreviewUrl && framePreviewUrl !== 'error' && method !== 'crop' ? framePreviewUrl : previewUrl}
+                alt={t('done.referenceAlt')}
+                className="w-full h-auto block"
+              />
               {method !== 'crop' ? (
-                /* Cleanup / blur: emerald box over the exact region that was processed */
-                <>
-                  {lastRegionRef.current && (
-                    <div
-                      className="absolute border-2 border-success bg-success-soft pointer-events-none"
-                      style={{
-                        left:   `${lastRegionRef.current.xPct * 100}%`,
-                        top:    `${lastRegionRef.current.yPct * 100}%`,
-                        width:  `${lastRegionRef.current.wPct * 100}%`,
-                        height: `${lastRegionRef.current.hPct * 100}%`,
-                      }}
-                    />
-                  )}
-                  <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-success font-semibold">
-                    <CheckCircle className="w-3 h-3" />
-                    {t('done.processedRegion')}
-                  </div>
-                </>
+                /* Cleanup / blur: show clean badge without drawing a box over the erased area */
+                <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-success font-semibold">
+                  <CheckCircle className="w-3 h-3" />
+                  {t('done.processedRegion')}
+                </div>
               ) : (
                 /* Crop: shade removed strips, outline surviving frame */
                 cropBounds && (
@@ -1180,6 +1976,15 @@ export default function FlowVeoCleanup() {
           </div>
 
           <div className="space-y-2">
+            {previewUrl && tempId && (
+              <button
+                onClick={handleRetryJob}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-accent text-accent-fg shadow-md transition-all cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                {t('error.retry')}
+              </button>
+            )}
             {/* Primary: try different region/method if we have a preview (processing error),
                 or upload fresh if the error was during upload */}
             <button

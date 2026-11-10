@@ -40,8 +40,11 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 const tr = (key, opts) => i18n.t(key, { ns: 'dashboard', ...opts });
 const dateLocale = () => (getLang() === 'en' ? 'en-US' : 'vi-VN');
 
-// Temporarily hidden result-card tools. Flip to false to bring a tool back.
-const HIDDEN_TOOLS = { inpaint: true, cloud: true };
+// Feature flag VITE_FEATURE_LOGO_INPAINT controls the post-download Logo Inpaint button (default OFF).
+const FEATURE_LOGO_INPAINT =
+  String(import.meta.env.VITE_FEATURE_LOGO_INPAINT || '').toLowerCase() === 'true' ||
+  import.meta.env.VITE_FEATURE_LOGO_INPAINT === '1';
+const HIDDEN_TOOLS = { inpaint: !FEATURE_LOGO_INPAINT, cloud: true };
 
 // Returns true if this URL supports watermark removal (TikTok / Douyin only)
 function isWatermarkPlatform(url = '') {
@@ -201,14 +204,24 @@ export default function DashboardContent() {
   const [showInpaint, setShowInpaint] = useState(false);
   const [inpaintStep, setInpaintStep] = useState('region'); // 'region' | 'preview' | 'processing' | 'done' | 'error'
   const [inpaintTempId, setInpaintTempId] = useState(null);
+  const [inpaintJobId, setInpaintJobId] = useState(null);
   const [inpaintFrameUrl, setInpaintFrameUrl] = useState(null);
   const [inpaintVideoDims, setInpaintVideoDims] = useState(null); // {width, height} from from-local
   const [inpaintPreset, setInpaintPreset] = useState(null);       // 'lower-right' etc
-  const [inpaintPixelRegion, setInpaintPixelRegion] = useState(null); // {x,y,w,h} pixels after preview
+  const [inpaintPixelRegion, setInpaintPixelRegion] = useState(null); // {x,y,w,h} pixels after preview/detect
   const [inpaintPreviewResult, setInpaintPreviewResult] = useState(null); // preview-frame response
   const [inpaintFinalUrl, setInpaintFinalUrl] = useState(null);
   const [inpaintError, setInpaintError] = useState('');
   const [inpaintLoading, setInpaintLoading] = useState(false);
+  const [inpaintDetecting, setInpaintDetecting] = useState(false);
+  const [inpaintCandidates, setInpaintCandidates] = useState([]);
+  const [inpaintNeedsReview, setInpaintNeedsReview] = useState(false);
+  const [inpaintConfirmed, setInpaintConfirmed] = useState(false);
+  const [inpaintTracking, setInpaintTracking] = useState(false);
+  const [inpaintTrackInfo, setInpaintTrackInfo] = useState(null);
+  const [inpaintProgress, setInpaintProgress] = useState(0);
+  const [inpaintCancelling, setInpaintCancelling] = useState(false);
+  const inpaintCancelRef = useRef(false);
   const [downloadProgress, setDownloadProgress] = useState(null);
   // ── Merge Clips state ────────────────────────────────────
   const [showMerge, setShowMerge] = useState(false);
@@ -1496,8 +1509,67 @@ export default function DashboardContent() {
     { label: t('inpaint.upperLeft'), key: 'upper-left'  },
   ];
 
+  const runInpaintAutoDetect = async (tid) => {
+    if (!tid) return;
+    setInpaintDetecting(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/detect/${tid}`, withAuth({ method: 'POST' }));
+      if (!res.ok) return;
+      const det = await safeJson(res);
+      const regs = Array.isArray(det.regions) ? det.regions : [];
+      setInpaintCandidates(regs);
+      setInpaintNeedsReview(Boolean(det.needs_review));
+      if (regs.length > 0) {
+        const top = regs[0];
+        setInpaintPreset('custom');
+        setInpaintPixelRegion({ x: top.x, y: top.y, w: top.w, h: top.h });
+        setInpaintConfirmed(!det.needs_review && (top.confidence || 0) >= 0.75);
+        if (top.kind === 'moving') {
+          handleInpaintTrack(tid, { x: top.x, y: top.y, w: top.w, h: top.h });
+        }
+      }
+    } catch (_) {
+    } finally {
+      setInpaintDetecting(false);
+    }
+  };
+
+  const handleInpaintTrack = async (tid = inpaintTempId, regionBox = inpaintPixelRegion) => {
+    if (!tid) return;
+    inpaintCancelRef.current = false;
+    setInpaintTracking(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/track/${tid}`, withAuth({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ region: regionBox || null }),
+      }));
+      if (!res.ok) return;
+      let tr = await safeJson(res);
+      if (res.status === 202 || tr.status === 'queued' || tr.status === 'running') {
+        for (let attempt = 0; attempt < 180; attempt += 1) {
+          if (inpaintCancelRef.current) return;
+          await new Promise((r) => setTimeout(r, 1000));
+          if (inpaintCancelRef.current) return;
+          const stRes = await fetch(`${API_BASE}/api/v1/flow-cleanup/status/${tid}`, withAuth({ method: 'GET' }));
+          const stData = await safeJson(stRes);
+          if (!stRes.ok) break;
+          if (stData.status === 'done' || stData.status === 'completed') {
+            tr = stData;
+            break;
+          }
+          if (stData.status === 'failed' || stData.status === 'cancelled') return;
+        }
+      }
+      setInpaintTrackInfo(tr);
+      if (!tr.needs_review) setInpaintConfirmed(true);
+    } catch (_) {
+    } finally {
+      setInpaintTracking(false);
+    }
+  };
+
   const handleOpenInpaint = async () => {
-    
     const isPro = ['pro', 'team', 'enterprise', 'api'].includes(userTier);
     if (!isPro) {
       setUpgradeErrorCode('tier_required_feature');
@@ -1510,6 +1582,7 @@ export default function DashboardContent() {
     setShowInpaint(true);
     setInpaintStep('region');
     setInpaintTempId(null);
+    setInpaintJobId(null);
     setInpaintFrameUrl(null);
     setInpaintVideoDims(null);
     setInpaintPreset(null);
@@ -1517,6 +1590,11 @@ export default function DashboardContent() {
     setInpaintPreviewResult(null);
     setInpaintFinalUrl(null);
     setInpaintError('');
+    setInpaintCandidates([]);
+    setInpaintNeedsReview(false);
+    setInpaintConfirmed(false);
+    setInpaintTrackInfo(null);
+    setInpaintProgress(0);
     setInpaintLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/from-local`, withAuth({
@@ -1525,12 +1603,24 @@ export default function DashboardContent() {
         body: JSON.stringify({ local_path: localPath, title: videoInfo.title || '' }),
       }));
       const data = await safeJson(res);
-      if (!res.ok) throw new Error(data.detail || t('errors.inpaintSession'));
+      if (!res.ok) throw new Error(data.detail?.user_message || data.detail || t('errors.inpaintSession'));
       setInpaintTempId(data.temp_id);
+      setInpaintJobId(data.job_id || data.temp_id);
       setInpaintFrameUrl(`${API_BASE}${data.preview_url}`);
       if (data.video_info?.width && data.video_info?.height) {
-        setInpaintVideoDims({ width: data.video_info.width, height: data.video_info.height });
+        const vw = data.video_info.width;
+        const vh = data.video_info.height;
+        const fps = data.video_info.fps || 30;
+        const maxDur = data.video_info.max_inpaint_duration_sec || Math.max(5, Math.floor(Math.min(60, 300 / Math.max(0.05, ((vw * vh) / 1_000_000) * fps * 0.45))));
+        setInpaintVideoDims({
+          width: vw,
+          height: vh,
+          fps: Math.round(fps),
+          duration: data.video_info.duration || 0,
+          maxInpaintDurationSec: maxDur,
+        });
       }
+      runInpaintAutoDetect(data.temp_id);
     } catch (err) {
       setInpaintError(err.message);
       setInpaintStep('error');
@@ -1538,20 +1628,23 @@ export default function DashboardContent() {
   };
 
   const handleInpaintPreview = async (preset) => {
-    if (!inpaintTempId || !preset) return;
-    setInpaintPreset(preset);
+    const activePreset = preset || inpaintPreset || (inpaintPixelRegion ? 'custom' : null);
+    if (!inpaintTempId || !activePreset) return;
+    setInpaintPreset(activePreset);
     setInpaintLoading(true);
     setInpaintStep('preview');
     try {
+      const reqBody = activePreset === 'custom' && inpaintPixelRegion
+        ? { temp_id: inpaintTempId, preset: 'custom', region: inpaintPixelRegion }
+        : { temp_id: inpaintTempId, preset: activePreset };
       const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/preview-frame`, withAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ temp_id: inpaintTempId, preset }),
+        body: JSON.stringify(reqBody),
       }));
       const data = await safeJson(res);
-      if (!res.ok) throw new Error(data.detail || t('errors.previewFailed'));
+      if (!res.ok) throw new Error(data.detail?.user_message || data.detail || t('errors.previewFailed'));
       setInpaintPreviewResult(data);
-      // Store the pixel region returned by backend for process step
       if (data.region) setInpaintPixelRegion(data.region);
     } catch (err) {
       setInpaintError(err.message);
@@ -1559,31 +1652,80 @@ export default function DashboardContent() {
     } finally { setInpaintLoading(false); }
   };
 
+  const handleInpaintCancel = async () => {
+    inpaintCancelRef.current = true;
+    setInpaintCancelling(true);
+    const targetId = inpaintJobId || inpaintTempId;
+    if (targetId) {
+      try {
+        await fetch(`${API_BASE}/api/v1/flow-cleanup/cancel/${targetId}`, withAuth({ method: 'POST' }));
+      } catch (_) {}
+    }
+    setInpaintCancelling(false);
+    setInpaintLoading(false);
+    setInpaintProgress(0);
+    setInpaintStep('preview');
+  };
+
   const handleInpaintProcess = async () => {
-    if (!inpaintTempId || !inpaintPreset) return;
+    if (!inpaintTempId || (!inpaintPreset && !inpaintPixelRegion)) return;
+    inpaintCancelRef.current = false;
     setInpaintStep('processing');
+    setInpaintProgress(5);
     setInpaintLoading(true);
     try {
-      const body = { temp_id: inpaintTempId, method: 'natural', preset: inpaintPreset };
+      const body = {
+        temp_id: inpaintTempId,
+        method: 'natural',
+        preset: inpaintPreset || 'custom',
+        region_adjusted: inpaintConfirmed || true,
+        consent_confirmed: true,
+      };
       if (inpaintPixelRegion) { body.preset = 'custom'; body.region = inpaintPixelRegion; }
+      if (inpaintTrackInfo?.boxes_by_frame) { body.frame_boxes = inpaintTrackInfo.boxes_by_frame; }
       const res = await fetch(`${API_BASE}/api/v1/flow-cleanup/process`, withAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       }));
-      const data = await safeJson(res);
-      if (!res.ok) throw new Error(data.detail || t('errors.processFailed'));
+      let data = await safeJson(res);
+      if (!res.ok) throw new Error(data.detail?.user_message || data.detail || t('errors.processFailed'));
+
+      if (!data.download_url && (data.status === 'queued' || data.status === 'running' || data.job_id)) {
+        const jobId = data.job_id || inpaintTempId;
+        setInpaintJobId(jobId);
+        for (let attempt = 0; attempt < 240; attempt += 1) {
+          if (inpaintCancelRef.current) return;
+          await new Promise((r) => setTimeout(r, 1500));
+          if (inpaintCancelRef.current) return;
+          const stRes = await fetch(`${API_BASE}/api/v1/flow-cleanup/status/${jobId}`, withAuth({ method: 'GET' }));
+          const stData = await safeJson(stRes);
+          if (!stRes.ok) throw new Error(stData.detail?.user_message || stData.detail || t('errors.processFailed'));
+          if (typeof stData.progress === 'number') setInpaintProgress(stData.progress);
+          if (stData.status === 'done' || stData.status === 'completed' || stData.download_url) {
+            data = stData;
+            setInpaintProgress(100);
+            break;
+          }
+          if (stData.status === 'failed') {
+            throw new Error(stData.error || stData.detail?.user_message || stData.detail || t('errors.processFailed'));
+          }
+          if (stData.status === 'cancelled') {
+            setInpaintStep('preview');
+            return;
+          }
+        }
+      }
+
       if (data.success && data.download_url) {
         const ext = (data.cleaned_file_id || '').split('.').pop() || 'mp4';
         const fname = `${videoInfo?.title || 'cleaned'}_nologin.${ext}`;
-        // The cleaned file lives in the session work dir, so the server
-        // hands back its own link (/flow-cleanup/result/<temp_id>/<file_id>).
         setInpaintFinalUrl(
           `${API_BASE}${data.download_url.split('?')[0]}?filename=${encodeURIComponent(fname)}`
         );
         setInpaintStep('done');
       } else {
-        throw new Error(data.detail || t('errors.noResultFile'));
+        throw new Error(data.detail?.user_message || data.detail || t('errors.noResultFile'));
       }
     } catch (err) {
       setInpaintError(err.message);
@@ -2948,21 +3090,80 @@ export default function DashboardContent() {
                       <img src={inpaintFrameUrl} alt="preview frame" className="w-full max-h-[220px] object-contain" />
                       {inpaintRegionPct && (
                         <div
-                          className="absolute border-2 border-line bg-surface-2 pointer-events-none"
+                          className="absolute border-2 border-accent bg-accent/15 pointer-events-none"
                           style={inpaintRegionPct}
                         />
                       )}
+                      {inpaintVideoDims?.maxInpaintDurationSec && (
+                        <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-fg-muted font-mono">
+                          {inpaintVideoDims.width}×{inpaintVideoDims.height} · {inpaintVideoDims.fps || 30}fps · tối đa {inpaintVideoDims.maxInpaintDurationSec}s
+                        </div>
+                      )}
                     </div>
+
+                    {/* Phase P2/P3/P4: Auto-detected candidates + Tracking */}
+                    <div className="mb-3 px-3 py-2.5 rounded-xl bg-surface-2 border border-line space-y-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-fg-2">
+                          {inpaintDetecting ? t('inpaint.scanning') : t('inpaint.detectedRegions')}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleInpaintTrack(inpaintTempId, inpaintPixelRegion)}
+                          disabled={inpaintTracking || !inpaintTempId}
+                          className="text-[11px] px-2.5 py-1 rounded-lg font-semibold border border-accent/40 bg-accent-soft text-accent-text hover:bg-accent/20 transition-colors"
+                        >
+                          {inpaintTracking
+                            ? t('inpaint.tracking')
+                            : inpaintTrackInfo
+                            ? t('inpaint.trackedReady', { frames: inpaintTrackInfo.total_frames || 0 })
+                            : t('inpaint.trackMotion')}
+                        </button>
+                      </div>
+                      {inpaintCandidates.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {inpaintCandidates.map((cand, idx) => {
+                            const pct = Math.round((cand.confidence || 0) * 100);
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => {
+                                  setInpaintPreset('custom');
+                                  setInpaintPixelRegion({ x: cand.x, y: cand.y, w: cand.w, h: cand.h });
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-surface border border-line-strong text-fg-2 hover:border-accent"
+                              >
+                                <span>#{idx + 1} · {pct}%</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {inpaintNeedsReview && (
+                        <div className="flex items-center justify-between gap-2 pt-1">
+                          <span className="text-[11px] text-accent-text">{t('inpaint.needsReview')}</span>
+                          <button
+                            type="button"
+                            onClick={() => setInpaintConfirmed(true)}
+                            className="text-[10px] px-2.5 py-1 rounded-md font-bold bg-accent text-accent-fg"
+                          >
+                            {inpaintConfirmed ? t('inpaint.confirmed') : t('inpaint.confirmRegion')}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Preset buttons */}
                     <p className="text-xs text-fg-muted mb-2">{t('inpaint.commonPositions')}</p>
                     <div className="grid grid-cols-2 gap-2 mb-3">
                       {INPAINT_PRESETS.map(preset => (
                         <button
                           key={preset.key}
-                          onClick={() => setInpaintPreset(preset.key)}
+                          onClick={() => { setInpaintPreset(preset.key); setInpaintPixelRegion(null); }}
                           className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
                             inpaintPreset === preset.key
-                              ? 'bg-surface-2 border-line text-fg-2'
+                              ? 'bg-accent-soft border-accent/50 text-accent-text'
                               : 'bg-surface-2 border-line-strong text-fg-2 hover:border-line hover:text-fg-2'
                           }`}
                         >
@@ -2972,8 +3173,8 @@ export default function DashboardContent() {
                       ))}
                     </div>
                     <button
-                      onClick={() => inpaintPreset && handleInpaintPreview(inpaintPreset)}
-                      disabled={!inpaintPreset}
+                      onClick={() => (inpaintPreset || inpaintPixelRegion) && handleInpaintPreview(inpaintPreset || 'custom')}
+                      disabled={!inpaintPreset && !inpaintPixelRegion}
                       className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm shadow transition-all active:scale-[0.98] border border-transparent disabled:bg-surface-2 disabled:text-fg-muted disabled:border disabled:border-line disabled:shadow-none disabled:cursor-not-allowed"
                     >
                       <ZoomIn className="w-4 h-4" />
@@ -3029,9 +3230,25 @@ export default function DashboardContent() {
                 {inpaintStep === 'processing' && (
                   <div className="flex flex-col items-center gap-3 py-6">
                     <Loader2 className="w-10 h-10 text-fg-2 animate-spin" />
-                    <p className="text-fg font-semibold text-sm">{t('inpaint.removing')}</p>
+                    <p className="text-fg font-semibold text-sm">
+                      {t('inpaint.removing')} {inpaintProgress > 0 ? `(${inpaintProgress}%)` : ''}
+                    </p>
+                    <div className="w-full max-w-xs h-2 bg-surface-2 rounded-full overflow-hidden border border-line">
+                      <div
+                        className="h-full bg-accent transition-all duration-300"
+                        style={{ width: `${Math.max(5, Math.min(100, inpaintProgress))}%` }}
+                      />
+                    </div>
                     <p className="text-fg-muted text-xs text-center">{t('inpaint.shiftmap')}</p>
                     <p className="text-fg-muted text-xs text-center">{t('inpaint.recommend')}</p>
+                    <button
+                      type="button"
+                      onClick={handleInpaintCancel}
+                      disabled={inpaintCancelling}
+                      className="mt-1 px-4 py-1.5 rounded-xl text-xs font-bold border border-line text-fg-muted hover:text-fg hover:border-line-strong transition-colors"
+                    >
+                      {inpaintCancelling ? t('inpaint.cancelling') : t('inpaint.cancel')}
+                    </button>
                   </div>
                 )}
 

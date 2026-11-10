@@ -24,7 +24,7 @@ import os
 import queue as _queue
 import subprocess
 import threading
-from typing import Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import cv2
 import numpy as np
@@ -33,6 +33,8 @@ import numpy as np
 # static patch over a wrong warp that would ghost).
 _MIN_INLIERS = 18
 _MAX_TRANSLATION_FRAC = 0.35   # reject warps that shift > 35% of frame (likely bad match)
+_TEMPORAL_COVERAGE_STOP_FRAC = 0.98
+_MAX_TEMPORAL_WARP_ATTEMPTS = 8
 
 
 # ── Mask helpers ─────────────────────────────────────────────────────
@@ -59,10 +61,22 @@ def _feather_alpha(fill_mask: np.ndarray, feather_px: int) -> np.ndarray:
 
 def feather_blend(orig: np.ndarray, filled: np.ndarray,
                   fill_mask: np.ndarray, feather_px: int = 6) -> np.ndarray:
-    """Blend `filled` into `orig` using a feathered alpha from `fill_mask`."""
-    a = _feather_alpha(fill_mask, feather_px)[:, :, None]
-    out = orig.astype(np.float32) * (1.0 - a) + filled.astype(np.float32) * a
-    return np.clip(out, 0, 255).astype(np.uint8)
+    """Blend `filled` into `orig` using a feathered alpha from `fill_mask` (ROI-bounded for 720p/1080p speed)."""
+    bx, by, bw, bh = cv2.boundingRect(fill_mask)
+    if bw <= 0 or bh <= 0:
+        return orig.copy()
+    vh, vw = orig.shape[:2]
+    x0 = max(0, bx - 2)
+    y0 = max(0, by - 2)
+    x1 = min(vw, bx + bw + 2)
+    y1 = min(vh, by + bh + 2)
+    out = orig.copy()
+    sub_mask = fill_mask[y0:y1, x0:x1]
+    a = _feather_alpha(sub_mask, feather_px)[:, :, None]
+    sub_orig = orig[y0:y1, x0:x1].astype(np.float32)
+    sub_fill = filled[y0:y1, x0:x1].astype(np.float32)
+    out[y0:y1, x0:x1] = np.clip(sub_orig * (1.0 - a) + sub_fill * a, 0, 255).astype(np.uint8)
+    return out
 
 
 # ── Spatial inpaint (crop-local SHIFTMAP, TELEA fallback) ────────────
@@ -150,77 +164,353 @@ def spatial_inpaint(frame: np.ndarray, fill_mask: np.ndarray,
 
 # ── Temporal motion-compensated fill ─────────────────────────────────
 
-def _estimate_homography(src: np.ndarray, dst: np.ndarray,
-                         fill_mask: np.ndarray) -> Optional[np.ndarray]:
-    """
-    Estimate the homography warping `src` onto `dst`, using features OUTSIDE
-    the logo region only (so the logo itself never drives the alignment).
-    Returns the 3x3 matrix or None when the match is weak/implausible.
-    """
-    known = cv2.bitwise_not(fill_mask)  # 255 where we may detect features
-    g_src = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
-    g_dst = cv2.cvtColor(dst, cv2.COLOR_BGR2GRAY)
-    orb = cv2.ORB_create(nfeatures=1500)
-    k1, d1 = orb.detectAndCompute(g_src, known)
-    k2, d2 = orb.detectAndCompute(g_dst, known)
-    if d1 is None or d2 is None or len(k1) < _MIN_INLIERS or len(k2) < _MIN_INLIERS:
+def _detect_orb_features(bgr: np.ndarray, fill_mask: np.ndarray):
+    """Compute ORB keypoint coordinates `(N, 2)` and descriptors outside `fill_mask` once per frame."""
+    vh, vw = bgr.shape[:2]
+    known = cv2.bitwise_not(fill_mask)
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    max_dim = max(vh, vw)
+    if max_dim > 720:
+        scale = 720.0 / float(max_dim)
+        sw, sh = max(2, int(round(vw * scale))), max(2, int(round(vh * scale)))
+        gray_s = cv2.resize(gray, (sw, sh), interpolation=cv2.INTER_AREA)
+        known_s = cv2.resize(known, (sw, sh), interpolation=cv2.INTER_NEAREST)
+        orb = cv2.ORB_create(nfeatures=900)
+        kps, desc = orb.detectAndCompute(gray_s, known_s)
+        if not kps or desc is None:
+            return None, None
+        inv_scale = 1.0 / scale
+        pts = np.array([kp.pt for kp in kps], dtype=np.float32) * inv_scale
+        return pts, desc
+    orb = cv2.ORB_create(nfeatures=1200)
+    kps, desc = orb.detectAndCompute(gray, known)
+    if not kps or desc is None:
+        return None, None
+    pts = np.array([kp.pt for kp in kps], dtype=np.float32)
+    return pts, desc
+
+
+def _match_homography_from_features(
+    k1,
+    d1,
+    k2,
+    d2,
+    vw: int,
+    vh: int,
+) -> Optional[np.ndarray]:
+    if d1 is None or d2 is None or k1 is None or k2 is None:
+        return None
+    if len(k1) < _MIN_INLIERS or len(k2) < _MIN_INLIERS:
         return None
     matcher = cv2.BFMatcher(cv2.NORM_HAMMING)
     raw = matcher.knnMatch(d1, d2, k=2)
     good = [m for m, n in (p for p in raw if len(p) == 2) if m.distance < 0.75 * n.distance]
     if len(good) < _MIN_INLIERS:
         return None
-    pts1 = np.float32([k1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
-    pts2 = np.float32([k2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
-    H, inliers = cv2.findHomography(pts1, pts2, cv2.RANSAC, 3.0)
+    if len(good) > 120:
+        good.sort(key=lambda m: m.distance)
+        good = good[:120]
+    if isinstance(k1, np.ndarray):
+        pts1 = k1[[m.queryIdx for m in good]].reshape(-1, 1, 2)
+    else:
+        pts1 = np.float32([k1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+    if isinstance(k2, np.ndarray):
+        pts2 = k2[[m.trainIdx for m in good]].reshape(-1, 1, 2)
+    else:
+        pts2 = np.float32([k2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+    H, inliers = cv2.findHomography(pts1, pts2, cv2.RANSAC, 3.0, maxIters=250, confidence=0.99)
     if H is None or inliers is None or int(inliers.sum()) < _MIN_INLIERS:
         return None
-    # Sanity: reject implausible warps (huge translation = bad match).
-    vh, vw = dst.shape[:2]
     if abs(H[0, 2]) > _MAX_TRANSLATION_FRAC * vw or abs(H[1, 2]) > _MAX_TRANSLATION_FRAC * vh:
         return None
     return H
 
 
-def temporal_fill(cur: np.ndarray, neighbors: list, fill_mask: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def _estimate_homography(
+    src: np.ndarray,
+    dst: np.ndarray,
+    fill_mask: np.ndarray,
+    src_mask: Optional[np.ndarray] = None,
+) -> Optional[np.ndarray]:
+    """
+    Estimate the homography warping `src` onto `dst`, using features OUTSIDE
+    the logo region only (so the logo itself never drives the alignment).
+    When `src_mask` is provided (e.g. per-frame tracked watermark mask on `src`),
+    features on `src` are masked by `src_mask` while features on `dst` are masked
+    by `fill_mask`.
+    Returns the 3x3 matrix or None when the match is weak/implausible.
+    """
+    vh, vw = dst.shape[:2]
+    k1, d1 = _detect_orb_features(src, src_mask if src_mask is not None else fill_mask)
+    k2, d2 = _detect_orb_features(dst, fill_mask)
+    return _match_homography_from_features(k1, d1, k2, d2, vw, vh)
+
+
+def _estimate_expected_clean_area(
+    mask_roi: np.ndarray,
+    bx: int,
+    by: int,
+    bw: int,
+    bh: int,
+    nb_box_dilated: Tuple[int, int, int, int],
+    est_dx: float,
+    est_dy: float,
+    vw: int,
+    vh: int,
+) -> int:
+    """
+    Estimate how many pixels of `mask_roi` will be cleanly exposed (not occluded
+    by the neighbour's logo bbox and within the neighbour's frame bounds) when
+    the neighbour is warped onto the current frame by `(est_dx, est_dy)`.
+    """
+    if abs(est_dx) > _MAX_TRANSLATION_FRAC * vw or abs(est_dy) > _MAX_TRANSLATION_FRAC * vh:
+        return 0
+    dx_i = int(round(est_dx))
+    dy_i = int(round(est_dy))
+
+    rx0 = max(0, max(0, dx_i) - bx)
+    ry0 = max(0, max(0, dy_i) - by)
+    rx1 = min(bw, min(vw, vw + dx_i) - bx)
+    ry1 = min(bh, min(vh, vh + dy_i) - by)
+    if rx1 <= rx0 or ry1 <= ry0:
+        return 0
+
+    in_frame_px = int(mask_roi[ry0:ry1, rx0:rx1].sum())
+    if in_frame_px <= 0:
+        return 0
+
+    nbx, nby, nbw, nbh = nb_box_dilated
+    if nbw <= 0 or nbh <= 0:
+        return in_frame_px
+
+    ox0 = max(rx0, (nbx + dx_i) - bx)
+    oy0 = max(ry0, (nby + dy_i) - by)
+    ox1 = min(rx1, (nbx + nbw + dx_i) - bx)
+    oy1 = min(ry1, (nby + nbh + dy_i) - by)
+    occluded_px = int(mask_roi[oy0:oy1, ox0:ox1].sum()) if (ox1 > ox0 and oy1 > oy0) else 0
+    return max(0, in_frame_px - occluded_px)
+
+
+def _dedup_and_rank_neighbors(
+    neighbors: list,
+    fill_mask: np.ndarray,
+    mask_roi: np.ndarray,
+    bx: int,
+    by: int,
+    bw: int,
+    bh: int,
+    vw: int,
+    vh: int,
+    cur_fidx: Optional[int] = None,
+    bg_vel: Optional[Sequence[float]] = None,
+    dilate_px: int = 12,
+) -> list:
+    """
+    Deduplicate candidate neighbours by frame index and rank them in descending
+    order of expected unoccluded background area (`expected_clean_px`).
+    """
+    seen_fidxs = set()
+    seen_obj_ids = set()
+    candidates = []
+    total_mask_px = max(1, int(mask_roi.sum()))
+    stop_px = int(total_mask_px * _TEMPORAL_COVERAGE_STOP_FRAC)
+
+    for orig_idx, nb_item in enumerate(neighbors):
+        nb_fidx: Optional[int] = None
+        nb_box: Optional[Tuple[int, int, int, int]] = None
+        k1 = d1 = None
+
+        if isinstance(nb_item, tuple):
+            if len(nb_item) >= 6:
+                nb, nb_mask, k1, d1, nb_fidx, nb_box = nb_item[:6]
+            elif len(nb_item) == 5:
+                nb, nb_mask, k1, d1, nb_fidx = nb_item
+            elif len(nb_item) == 4:
+                nb, nb_mask, k1, d1 = nb_item
+            elif len(nb_item) == 2:
+                nb, nb_mask = nb_item
+            else:
+                nb, nb_mask = nb_item[0], fill_mask
+        else:
+            nb, nb_mask = nb_item, fill_mask
+
+        if nb_fidx is not None:
+            if cur_fidx is not None and int(nb_fidx) == int(cur_fidx):
+                continue
+            if int(nb_fidx) in seen_fidxs:
+                continue
+            seen_fidxs.add(int(nb_fidx))
+        else:
+            obj_id = id(nb)
+            if obj_id in seen_obj_ids:
+                continue
+            seen_obj_ids.add(obj_id)
+
+        if nb_box is not None and len(nb_box) >= 4:
+            nx, ny, nw, nh = int(nb_box[0]), int(nb_box[1]), int(nb_box[2]), int(nb_box[3])
+            if nw <= 0 or nh <= 0:
+                nb_box_dilated = (0, 0, 0, 0)
+            else:
+                x0 = max(0, nx - dilate_px)
+                y0 = max(0, ny - dilate_px)
+                x1 = min(vw, nx + nw + dilate_px)
+                y1 = min(vh, ny + nh + dilate_px)
+                nb_box_dilated = (x0, y0, max(0, x1 - x0), max(0, y1 - y0))
+        else:
+            nb_box_dilated = cv2.boundingRect(nb_mask)
+
+        if bg_vel is not None and cur_fidx is not None and nb_fidx is not None:
+            df = float(cur_fidx - int(nb_fidx))
+            est_dx = df * float(bg_vel[0])
+            est_dy = df * float(bg_vel[1])
+        else:
+            est_dx = 0.0
+            est_dy = 0.0
+
+        expected_clean_px = _estimate_expected_clean_area(
+            mask_roi, bx, by, bw, bh, nb_box_dilated, est_dx, est_dy, vw, vh
+        )
+        abs_df = abs(int(cur_fidx) - int(nb_fidx)) if (cur_fidx is not None and nb_fidx is not None) else 0
+        candidates.append((
+            -min(expected_clean_px, stop_px),
+            abs_df,
+            -expected_clean_px,
+            orig_idx,
+            (nb, nb_mask, k1, d1, nb_fidx, nb_box_dilated),
+        ))
+
+    candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
+    return [item[4] for item in candidates]
+
+
+def temporal_fill(
+    cur: np.ndarray,
+    neighbors: list,
+    fill_mask: np.ndarray,
+    cur_features: Optional[Tuple[Any, Any]] = None,
+    cur_fidx: Optional[int] = None,
+    bg_vel: Optional[List[float]] = None,
+    dilate_px: int = 12,
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Reconstruct the masked region of `cur` from neighbour frames via motion
-    compensation. Returns (filled_region_image, valid_mask) where valid_mask is
+    compensation (ROI-bounded warp for 720p/1080p speed).
+    Neighbours are deduplicated and ranked pre-warp by expected unoccluded
+    background coverage. Stops when >= `_TEMPORAL_COVERAGE_STOP_FRAC` (98%) of
+    the mask is covered OR after `_MAX_TEMPORAL_WARP_ATTEMPTS` (8) valid warps.
+    Returns `(filled_region_image, valid_mask)` where `valid_mask` is
     255 where a real pixel was recovered, 0 elsewhere.
     """
     vh, vw = cur.shape[:2]
-    acc = np.zeros_like(cur, dtype=np.float32)
-    cnt = np.zeros((vh, vw), dtype=np.float32)
-    for nb in neighbors:
-        H = _estimate_homography(nb, cur, fill_mask)
+    bx, by, bw, bh = cv2.boundingRect(fill_mask)
+    if bw <= 0 or bh <= 0:
+        return np.zeros_like(cur), np.zeros((vh, vw), dtype=np.uint8)
+
+    if cur_features is not None:
+        k2, d2 = cur_features
+    else:
+        k2, d2 = _detect_orb_features(cur, fill_mask)
+    if d2 is None or k2 is None or len(k2) < _MIN_INLIERS:
+        return np.zeros_like(cur), np.zeros((vh, vw), dtype=np.uint8)
+
+    acc_roi = np.zeros((bh, bw, 3), dtype=np.float32)
+    cnt_roi = np.zeros((bh, bw), dtype=np.float32)
+    mask_roi = fill_mask[by : by + bh, bx : bx + bw] > 0
+    total_mask_px = max(1, int(mask_roi.sum()))
+    stop_mask_px = int(total_mask_px * _TEMPORAL_COVERAGE_STOP_FRAC)
+    t_roi = np.array([[1.0, 0.0, -float(bx)], [0.0, 1.0, -float(by)], [0.0, 0.0, 1.0]], dtype=np.float64)
+
+    ranked_neighbors = _dedup_and_rank_neighbors(
+        neighbors, fill_mask, mask_roi, bx, by, bw, bh, vw, vh,
+        cur_fidx=cur_fidx, bg_vel=bg_vel, dilate_px=dilate_px,
+    )
+    warp_attempts = 0
+    vel_updated = False
+
+    for nb, nb_mask, k1, d1, nb_fidx, _ in ranked_neighbors:
+        if k1 is None or d1 is None:
+            k1, d1 = _detect_orb_features(nb, nb_mask)
+        H = _match_homography_from_features(k1, d1, k2, d2, vw, vh)
         if H is None:
             continue
-        warped = cv2.warpPerspective(nb, H, (vw, vh),
-                                     flags=cv2.INTER_LINEAR, borderValue=0)
+        warp_attempts += 1
+        if (
+            not vel_updated
+            and bg_vel is not None
+            and isinstance(bg_vel, list)
+            and len(bg_vel) >= 2
+            and cur_fidx is not None
+            and nb_fidx is not None
+            and int(nb_fidx) != int(cur_fidx)
+        ):
+            df = float(int(cur_fidx) - int(nb_fidx))
+            inst_vx = float(H[0, 2]) / df
+            inst_vy = float(H[1, 2]) / df
+            if bg_vel[0] == 0.0 and bg_vel[1] == 0.0:
+                bg_vel[0] = inst_vx
+                bg_vel[1] = inst_vy
+            else:
+                bg_vel[0] = 0.7 * float(bg_vel[0]) + 0.3 * inst_vx
+                bg_vel[1] = 0.7 * float(bg_vel[1]) + 0.3 * inst_vy
+            vel_updated = True
+
+        h_roi = t_roi @ H.astype(np.float64)
+        warped_roi = cv2.warpPerspective(
+            nb, h_roi, (bw, bh), flags=cv2.INTER_LINEAR, borderValue=0
+        )
         # The neighbour's own logo region, warped, must NOT be used.
-        nb_logo_warp = cv2.warpPerspective(fill_mask, H, (vw, vh), flags=cv2.INTER_NEAREST)
-        valid = (fill_mask > 0) & (nb_logo_warp == 0) & (warped.sum(axis=2) > 0)
-        acc[valid] += warped[valid]
-        cnt[valid] += 1.0
-    got = cnt > 0
+        nb_logo_warp_roi = cv2.warpPerspective(
+            nb_mask, h_roi, (bw, bh), flags=cv2.INTER_NEAREST
+        )
+        valid_roi = mask_roi & (nb_logo_warp_roi == 0) & (warped_roi.sum(axis=2) > 0)
+        if bool(valid_roi.any()):
+            acc_roi[valid_roi] += warped_roi[valid_roi]
+            cnt_roi[valid_roi] += 1.0
+            if int((cnt_roi > 0).sum()) >= stop_mask_px:
+                break
+        if warp_attempts >= _MAX_TEMPORAL_WARP_ATTEMPTS:
+            break
+
+    got_roi = cnt_roi > 0
     filled = np.zeros_like(cur)
-    filled[got] = (acc[got] / cnt[got, None]).astype(np.uint8)
-    valid_mask = (got.astype(np.uint8)) * 255
+    valid_mask = np.zeros((vh, vw), dtype=np.uint8)
+    if bool(got_roi.any()):
+        filled_roi = np.zeros((bh, bw, 3), dtype=np.uint8)
+        filled_roi[got_roi] = (acc_roi[got_roi] / cnt_roi[got_roi, None]).astype(np.uint8)
+        filled[by : by + bh, bx : bx + bw] = filled_roi
+        valid_roi_u8 = np.zeros((bh, bw), dtype=np.uint8)
+        valid_roi_u8[got_roi] = 255
+        valid_mask[by : by + bh, bx : bx + bw] = valid_roi_u8
     return filled, valid_mask
 
 
 # ── Full video: base SHIFTMAP patch + per-frame temporal fill ────────
 
+def _replicate_padded_odd_border(frame: np.ndarray) -> np.ndarray:
+    """If FFmpeg `pad=vw:vh:0:0:black` added a 1px right/bottom border for an odd-dimension video,
+    replicate the adjacent edge pixel so `yuv420p` 2x2 chroma subsampling has zero black-edge bleeding."""
+    vh, vw = frame.shape[:2]
+    if vw >= 2 and int(frame[:, -1].max()) == 0 and int(frame[:, -2].max()) > 0:
+        frame[:, -1] = frame[:, -2]
+    if vh >= 2 and int(frame[-1, :].max()) == 0 and int(frame[-2, :].max()) > 0:
+        frame[-1, :] = frame[-2, :]
+    return frame
+
+
 def _grab_frame_at(input_path: str, ts: float, vw: int, vh: int) -> Optional[np.ndarray]:
+    vw = max(2, int(vw) + (int(vw) % 2))
+    vh = max(2, int(vh) + (int(vh) % 2))
     frame_size = vw * vh * 3
+    vf_pad = f"scale='min(iw,{vw})':'min(ih,{vh})',pad={vw}:{vh}:0:0:black"
     r = subprocess.run(
         ["ffmpeg", "-ss", f"{ts:.3f}", "-i", input_path, "-frames:v", "1",
-         "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{vw}x{vh}", "pipe:1"],
+         "-vf", vf_pad, "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"],
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
     )
     if len(r.stdout) < frame_size:
         return None
-    return np.frombuffer(r.stdout[:frame_size], dtype=np.uint8).reshape((vh, vw, 3)).copy()
+    fr = np.frombuffer(r.stdout[:frame_size], dtype=np.uint8).reshape((vh, vw, 3)).copy()
+    return _replicate_padded_odd_border(fr)
 
 
 def _frame_ok(fr: Optional[np.ndarray]) -> bool:
@@ -284,6 +574,56 @@ def _telea_crop(frame: np.ndarray, fill_mask: np.ndarray,
     return out
 
 
+def _resolve_per_frame_box_and_mask(
+    frame_idx: int,
+    default_box: Tuple[int, int, int, int],
+    default_fill: np.ndarray,
+    vw: int,
+    vh: int,
+    dilate_px: int,
+    frame_boxes: Optional[Union[Sequence[Sequence[int]], Dict[Any, Sequence[int]]]] = None,
+    frame_masks: Optional[Union[Sequence[np.ndarray], Callable[[int], np.ndarray]]] = None,
+) -> Tuple[int, int, int, int, np.ndarray]:
+    """Resolve `(fx, fy, fw, fh, fill_mask)` for frame `frame_idx` (0-indexed)."""
+    if frame_masks is not None:
+        if callable(frame_masks):
+            raw_m = frame_masks(frame_idx)
+        elif 0 <= frame_idx < len(frame_masks):
+            raw_m = frame_masks[frame_idx]
+        else:
+            raw_m = frame_masks[-1] if len(frame_masks) > 0 else default_fill
+        if raw_m is None or raw_m.shape[:2] != (vh, vw):
+            return default_box[0], default_box[1], default_box[2], default_box[3], default_fill
+        m_u8 = (raw_m > 0).astype(np.uint8) * 255
+        if int(m_u8.sum()) == 0:
+            return 0, 0, 0, 0, m_u8
+        bx, by, bw, bh = cv2.boundingRect(m_u8)
+        return int(bx), int(by), int(bw), int(bh), m_u8
+
+    if frame_boxes is not None:
+        b = None
+        if isinstance(frame_boxes, dict):
+            b = frame_boxes.get(str(frame_idx)) or frame_boxes.get(frame_idx)
+            if b is None and frame_boxes:
+                b = frame_boxes.get("0") or next(iter(frame_boxes.values()))
+        elif isinstance(frame_boxes, (list, tuple)) and len(frame_boxes) > 0:
+            b = frame_boxes[min(frame_idx, len(frame_boxes) - 1)]
+        if b is not None and len(b) >= 4:
+            bx, by, bw, bh = [int(round(v)) for v in b[:4]]
+            bx = max(0, min(vw - 2, bx))
+            by = max(0, min(vh - 2, by))
+            bw = max(0, min(vw - bx, bw))
+            bh = max(0, min(vh - by, bh))
+            if bw <= 0 or bh <= 0:
+                return 0, 0, 0, 0, np.zeros((vh, vw), dtype=np.uint8)
+            if (bx, by, bw, bh) == default_box:
+                return bx, by, bw, bh, default_fill
+            m = _build_fill_mask(bx, by, bw, bh, vw, vh)
+            return bx, by, bw, bh, dilate_fill_mask(m, dilate_px)
+
+    return default_box[0], default_box[1], default_box[2], default_box[3], default_fill
+
+
 def process_video_natural(
     input_path: str,
     output_path: str,
@@ -295,22 +635,49 @@ def process_video_natural(
     feather_px: int = 7,   # real background, never on the logo itself
     temporal: bool = True,
     n_neighbors: int = 2,
+    progress_cb: Optional[Callable[[int, int], Optional[bool]]] = None,
+    frame_boxes: Optional[Union[Sequence[Sequence[int]], Dict[Any, Sequence[int]]]] = None,
+    frame_masks: Optional[Union[Sequence[np.ndarray], Callable[[int], np.ndarray]]] = None,
 ) -> dict:
     """
     Natural logo removal for video:
       • base patch = SHIFTMAP inpaint of the region on a middle frame (once),
         the universal fallback (correct for static backgrounds);
       • per frame, temporal motion-compensated fill recovers REAL background
-        from the previous frames where motion exposed it; residual pixels use
-        the base patch; the composite is feather-blended into the frame.
+        from neighbouring/strided frames where motion or watermark movement
+        exposed it; residual pixels use the base patch / TELEA; the composite
+        is feather-blended into the frame.
+      • Phase P3: accepts optional `frame_boxes` (list or dict of `[x, y, w, h]`
+        per frame) or `frame_masks` (sequence or callable returning `(vh, vw)`
+        uint8 mask per frame), while preserving full backward compatibility
+        with fixed `(x, y, w, h)` callers.
 
-    Returns stats {temporal_frames, total_frames} for telemetry.
+    Returns stats {temporal_frames, total_frames, mode, dynamic_mask} for telemetry.
     """
+    vw = max(2, int(vw) + (int(vw) % 2))
+    vh = max(2, int(vh) + (int(vh) % 2))
+    x = max(0, min(vw - 2, int(x)))
+    y = max(0, min(vh - 2, int(y)))
+    w = max(2, min(vw - x, int(w)))
+    h = max(2, min(vh - y, int(h)))
+    default_box = (int(x), int(y), int(w), int(h))
     fill = _build_fill_mask(x, y, w, h, vw, vh)
     fill = dilate_fill_mask(fill, dilate_px)
 
+    has_dynamic_mask = frame_boxes is not None or frame_masks is not None
+    boxes_vary = False
+    if isinstance(frame_boxes, dict) and len(frame_boxes) > 1:
+        first_b = tuple(int(v) for v in next(iter(frame_boxes.values()))[:4])
+        boxes_vary = any(tuple(int(v) for v in b[:4]) != first_b for b in frame_boxes.values() if b)
+    elif isinstance(frame_boxes, (list, tuple)) and len(frame_boxes) > 1:
+        first_b = tuple(int(v) for v in frame_boxes[0][:4])
+        boxes_vary = any(tuple(int(v) for v in b[:4]) != first_b for b in frame_boxes if b)
+    elif frame_masks is not None:
+        boxes_vary = True
+
     # Is the background around the logo static? Decides reuse vs per-frame.
-    static_bg = _is_static_around(input_path, x, y, w, h, vw, vh, duration)
+    # If the watermark itself moves across frames (`boxes_vary`), we must process per-frame.
+    static_bg = (not boxes_vary) and _is_static_around(input_path, x, y, w, h, vw, vh, duration)
 
     # Cap the (expensive) per-frame temporal pass on long clips so a moving
     # clip can't run long enough to trip an upstream gateway timeout. The
@@ -318,6 +685,7 @@ def process_video_natural(
     est_frames = (duration or 0.0) * (fps or 30.0)
     if est_frames > 1200:
         temporal = False
+    total_est = max(1, int(round(est_frames))) if est_frames > 0 else 100
 
     # Base natural patch (SHIFTMAP, once) — only safe to reuse on static clips.
     base_filled = None
@@ -328,18 +696,62 @@ def process_video_natural(
     if base_filled is None:
         static_bg = False  # SHIFTMAP unavailable/failed → treat as per-frame
 
+    # Pre-sample strided reference frames across the clip for ALL moving-background
+    # clips (`not static_bg`) so `temporal_fill` has wider-baseline unoccluded
+    # reference frames right from frame 0 (both for panning backgrounds behind a
+    # static corner logo and for moving/jumping watermarks).
+    global_ref_neighbors: list = []
+    if not static_bg and temporal and duration and duration > 0:
+        sample_ts_list = [duration * frac for frac in (0.08, 0.25, 0.45, 0.68, 0.88)]
+        fps_safe = float(fps or 30.0)
+        for fixed_sec in (0.6, 1.8):
+            if fixed_sec < duration:
+                sample_ts_list.append(fixed_sec)
+        # Also sample frames immediately before and after any bbox jump discontinuity
+        # so jumping watermarks recover 100% unoccluded background from 1-2 frames across the jump!
+        if boxes_vary:
+            prev_b = None
+            for idx_check in range(total_est):
+                bx, by, bw, bh, _ = _resolve_per_frame_box_and_mask(
+                    idx_check, default_box, fill, vw, vh, dilate_px, frame_boxes, frame_masks,
+                )
+                if prev_b is not None and (abs(bx - prev_b[0]) + abs(by - prev_b[1])) > 20:
+                    for delta in (-18, -2, 1, 18):
+                        cand_idx = max(0, min(total_est - 1, idx_check + delta))
+                        sample_ts_list.append(cand_idx / fps_safe)
+                prev_b = (bx, by, bw, bh)
+
+        seen_ref_idxs = set()
+        for ts in sample_ts_list:
+            ref_idx = max(0, int(round(ts * fps_safe)))
+            if ref_idx in seen_ref_idxs:
+                continue
+            seen_ref_idxs.add(ref_idx)
+            ref_fr = _grab_frame_at(input_path, ts, vw, vh)
+            if ref_fr is not None and _frame_ok(ref_fr):
+                rx, ry, rw, rh, ref_mask = _resolve_per_frame_box_and_mask(
+                    ref_idx, default_box, fill, vw, vh, dilate_px, frame_boxes, frame_masks,
+                )
+                rk, rd = _detect_orb_features(ref_fr, ref_mask)
+                if rd is not None and rk is not None and len(rk) >= _MIN_INLIERS:
+                    global_ref_neighbors.append((ref_fr, ref_mask, rk, rd, ref_idx, (rx, ry, rw, rh)))
+
     frame_size = vw * vh * 3
     fps_str = f"{fps:.3f}"
+    output_path = os.path.abspath(output_path)
     video_only = output_path + ".noaudio.mp4"
     q: _queue.Queue = _queue.Queue(maxsize=8)
     reader_errors: list = []
+    reader_proc_ref: list = [None]
 
     def _reader() -> None:
+        vf_pad = f"scale='min(iw,{vw})':'min(ih,{vh})',pad={vw}:{vh}:0:0:black"
         proc = subprocess.Popen(
             ["ffmpeg", "-i", input_path,
-             "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{vw}x{vh}", "pipe:1"],
+             "-vf", vf_pad, "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         )
+        reader_proc_ref[0] = proc
         try:
             while True:
                 chunk = proc.stdout.read(frame_size)  # type: ignore[union-attr]
@@ -349,14 +761,18 @@ def process_video_natural(
         except Exception as exc:
             reader_errors.append(exc)
         finally:
-            proc.stdout.close()  # type: ignore[union-attr]
+            try:
+                proc.stdout.close()  # type: ignore[union-attr]
+            except Exception:
+                pass
             proc.wait()
             q.put(None)
 
     write_proc = subprocess.Popen(
-        ["ffmpeg", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24",
+        ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+         "-f", "rawvideo", "-pix_fmt", "bgr24",
          "-s", f"{vw}x{vh}", "-r", fps_str, "-i", "pipe:0",
-         "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+         "-c:v", "libx264", "-crf", "12", "-preset", "fast",
          "-pix_fmt", "yuv420p", video_only],
         stdin=subprocess.PIPE, stderr=subprocess.PIPE,
     )
@@ -364,61 +780,155 @@ def process_video_natural(
     reader_thread = threading.Thread(target=_reader, daemon=True)
     reader_thread.start()
 
-    neighbors: list = []   # causal window of recent ORIGINAL frames
-    stats = {"total_frames": 0, "temporal_frames": 0,
-             "mode": "static_patch" if static_bg else "per_frame"}
+    neighbors: list = []          # immediate causal window of recent ORIGINAL frames
+    strided_neighbors: list = []  # strided past frames (every 12th frame) for wider baseline recovery
+    bg_vel: List[float] = [0.0, 0.0]
+    if len(global_ref_neighbors) >= 2:
+        for gi in range(len(global_ref_neighbors) - 1):
+            _, _, gk1, gd1, gidx1, _ = global_ref_neighbors[gi]
+            _, _, gk2, gd2, gidx2, _ = global_ref_neighbors[gi + 1]
+            gdf = int(gidx2) - int(gidx1)
+            if 0 < abs(gdf) <= 60:
+                gH = _match_homography_from_features(gk1, gd1, gk2, gd2, vw, vh)
+                if gH is not None:
+                    bg_vel[0] = float(gH[0, 2]) / float(gdf)
+                    bg_vel[1] = float(gH[1, 2]) / float(gdf)
+                    break
+    stats = {
+        "total_frames": 0,
+        "temporal_frames": 0,
+        "mode": "static_patch" if static_bg else "per_frame",
+        "dynamic_mask": has_dynamic_mask,
+    }
     write_errors: list = []
     try:
         while True:
             raw = q.get(timeout=120)
             if raw is None:
                 break
-            frame = np.frombuffer(raw, dtype=np.uint8).reshape((vh, vw, 3)).copy()
+            frame = _replicate_padded_odd_border(
+                np.frombuffer(raw, dtype=np.uint8).reshape((vh, vw, 3)).copy()
+            )
+            fidx = stats["total_frames"]
             stats["total_frames"] += 1
+
+            if progress_cb is not None and (stats["total_frames"] == 1 or stats["total_frames"] % 5 == 0):
+                if progress_cb(stats["total_frames"], max(total_est, stats["total_frames"])) is False:
+                    raise RuntimeError("Job cancelled by user")
+
+            fx, fy, fw, fh, cur_fill = _resolve_per_frame_box_and_mask(
+                fidx, default_box, fill, vw, vh, dilate_px, frame_boxes, frame_masks,
+            )
+
+            if fw <= 0 or fh <= 0 or int(cur_fill.sum()) == 0:
+                write_proc.stdin.write(frame.tobytes())  # type: ignore[union-attr]
+                continue
 
             if static_bg:
                 # Static background → reuse the one natural SHIFTMAP patch.
                 comp = base_filled  # read-only; feather_blend never mutates it
             else:
-                # Moving scene → per-frame TELEA (never worse than before),
-                # with temporal motion-comp recovering REAL pixels on top.
-                comp = _telea_crop(frame, fill, x, y, w, h)
-                if temporal and neighbors:
-                    tfill, tvalid = temporal_fill(frame, neighbors, fill)
+                # Moving scene or dynamic watermark → temporal motion-comp
+                # recovers REAL pixels first; any residual unrecovered pixels
+                # are inpainted directly from the recovered context.
+                fk, fd = (_detect_orb_features(frame, cur_fill) if temporal else (None, None))
+                seen_active_fidxs = {fidx}
+                active_neighbors = []
+                for cand in neighbors + strided_neighbors + global_ref_neighbors:
+                    cand_fidx = cand[4] if (isinstance(cand, tuple) and len(cand) >= 5) else None
+                    if cand_fidx is not None:
+                        if int(cand_fidx) in seen_active_fidxs:
+                            continue
+                        seen_active_fidxs.add(int(cand_fidx))
+                    active_neighbors.append(cand)
+                if temporal and active_neighbors and fd is not None:
+                    tfill, tvalid = temporal_fill(
+                        frame, active_neighbors, cur_fill, cur_features=(fk, fd),
+                        cur_fidx=fidx, bg_vel=bg_vel, dilate_px=dilate_px,
+                    )
                     if int(tvalid.sum()) > 0:
-                        comp[tvalid > 0] = tfill[tvalid > 0]
                         stats["temporal_frames"] += 1
+                        work = frame.copy()
+                        work[tvalid > 0] = tfill[tvalid > 0]
+                        residual = cv2.bitwise_and(cur_fill, cv2.bitwise_not(tvalid))
+                        if int(residual.sum()) > 0:
+                            res_dil = dilate_fill_mask(residual, 2)
+                            comp = _telea_crop(work, res_dil, fx, fy, fw, fh)
+                        else:
+                            comp = work
+                    else:
+                        comp = _telea_crop(frame, cur_fill, fx, fy, fw, fh)
+                else:
+                    comp = _telea_crop(frame, cur_fill, fx, fy, fw, fh)
 
-            out = feather_blend(frame, comp, fill, feather_px)
+            out = feather_blend(frame, comp, cur_fill, feather_px)
             write_proc.stdin.write(out.tobytes())  # type: ignore[union-attr]
 
-            if not static_bg:
-                neighbors.append(frame)
+            if not static_bg and temporal:
+                nb_entry = (frame, cur_fill, fk, fd, fidx, (fx, fy, fw, fh))
+                neighbors.append(nb_entry)
                 if len(neighbors) > n_neighbors:
                     neighbors.pop(0)
+                if fidx % 12 == 0:
+                    strided_neighbors.append(nb_entry)
+                    if len(strided_neighbors) > 4:
+                        strided_neighbors.pop(0)
     except Exception as exc:
         write_errors.append(exc)
     finally:
-        write_proc.stdin.close()  # type: ignore[union-attr]
+        try:
+            write_proc.stdin.close()  # type: ignore[union-attr]
+        except Exception:
+            pass
+        if write_errors:
+            if reader_proc_ref[0] is not None:
+                try:
+                    reader_proc_ref[0].terminate()
+                except Exception:
+                    pass
+            try:
+                while not q.empty():
+                    q.get_nowait()
+            except Exception:
+                pass
 
     reader_thread.join(timeout=30)
     write_proc.wait(timeout=300)
 
     if reader_errors:
+        if os.path.exists(video_only):
+            try:
+                os.remove(video_only)
+            except Exception:
+                pass
         raise reader_errors[0]
     if write_errors:
+        if os.path.exists(video_only):
+            try:
+                os.remove(video_only)
+            except Exception:
+                pass
         raise write_errors[0]
     if write_proc.returncode != 0:
         err = write_proc.stderr.read().decode(errors="replace")[-400:]  # type: ignore[union-attr]
         raise ValueError(f"Natural inpaint encode failed: {err}")
+    if not os.path.isfile(video_only) or os.path.getsize(video_only) == 0:
+        raise ValueError(f"Natural inpaint output missing: {video_only}")
 
-    # Mux original audio back in.
+    # Mux original audio back in (transcode non-MP4 audio like Opus/Vorbis to AAC when needed).
     r2 = subprocess.run(
         ["ffmpeg", "-y", "-i", video_only, "-i", input_path,
          "-map", "0:v:0", "-map", "1:a:0?", "-c:v", "copy", "-c:a", "copy",
          "-movflags", "+faststart", output_path],
         capture_output=True, timeout=180,
     )
+    if r2.returncode != 0 or not os.path.isfile(output_path) or os.path.getsize(output_path) == 0:
+        r2 = subprocess.run(
+            ["ffmpeg", "-y", "-i", video_only, "-i", input_path,
+             "-map", "0:v:0", "-map", "1:a:0?", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+             "-movflags", "+faststart", output_path],
+            capture_output=True, timeout=180,
+        )
     try:
         os.remove(video_only)
     except Exception:
@@ -480,18 +990,44 @@ def decide_and_preview(input_path: str, x: int, y: int, w: int, h: int,
         filled, fill_method = spatial_inpaint(frame0, fill, x, y, w, h, best=True)
     else:
         strategy, motion = "motion_aware", "moving"
-        # SAME per-frame composite as the moving final: TELEA base + temporal
-        # motion-comp from nearby frames (frame 0's forward neighbours).
-        comp = _telea_crop(frame0, fill, x, y, w, h)
-        neigh = [f for f in (_grab_frame_at(input_path, t, vw, vh)
-                             for t in (2.0 / fps, 4.0 / fps, 6.0 / fps))
+        # Sample both immediate neighbours and wider-baseline frames across the
+        # clip so panning backgrounds behind a static corner logo (as well as
+        # moving scenes) expose the true background to `temporal_fill`.
+        fps_safe = max(1.0, float(fps or 30.0))
+        cand_times = [2.0 / fps_safe, 4.0 / fps_safe, 6.0 / fps_safe]
+        dur_safe = float(duration or 0.0)
+        for sec in (0.25, 0.55, 1.0, 1.8, 2.8, 4.0):
+            if dur_safe <= 0 or sec < dur_safe:
+                cand_times.append(sec)
+        if dur_safe > 0:
+            for frac in (0.15, 0.35, 0.60, 0.85):
+                cand_times.append(dur_safe * frac)
+        seen_t = set()
+        dedup_times = []
+        for t in cand_times:
+            tk = round(t, 2)
+            if tk > 0 and tk not in seen_t:
+                seen_t.add(tk)
+                dedup_times.append(t)
+        neigh = [f for f in (_grab_frame_at(input_path, t, vw, vh) for t in dedup_times)
                  if f is not None and _frame_ok(f)]
         if neigh:
             tfill, tvalid = temporal_fill(frame0, neigh, fill)
             cov = float((tvalid > 0).sum()) / float(max(1, (fill > 0).sum()))
             temporal_cov = cov
             if cov > 0:
-                comp[tvalid > 0] = tfill[tvalid > 0]
+                work = frame0.copy()
+                work[tvalid > 0] = tfill[tvalid > 0]
+                residual = cv2.bitwise_and(fill, cv2.bitwise_not(tvalid))
+                if int(residual.sum()) > 0:
+                    res_dil = dilate_fill_mask(residual, 2)
+                    comp = _telea_crop(work, res_dil, x, y, w, h)
+                else:
+                    comp = work
+            else:
+                comp, _ = spatial_inpaint(frame0, fill, x, y, w, h, best=True)
+        else:
+            comp, _ = spatial_inpaint(frame0, fill, x, y, w, h, best=True)
         filled = comp
         fill_method = "temporal+telea" if temporal_cov > 0 else "telea"
 

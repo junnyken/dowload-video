@@ -202,7 +202,21 @@
     "output": "Đầu ra:",
     "outputValue": "video đã xoá logo (file mới, không ghi đè bản gốc)",
     "downloadResult": "Tải video đã xoá logo",
-    "removeOther": "Xoá vùng khác"
+    "removeOther": "Xoá vùng khác",
+    "scanning": "Đang tự phát hiện vùng logo hiển thị...",
+    "detectedRegions": "Vùng tự phát hiện:",
+    "needsReview": "Độ tin cậy thấp — vui lòng xác nhận hoặc chỉnh vùng chọn trước khi xử lý.",
+    "confirmRegion": "Xác nhận vùng chọn",
+    "confirmed": "✓ Đã xác nhận vùng",
+    "trackMotion": "Theo vết chuyển động",
+    "tracking": "Đang theo vết từng frame...",
+    "trackedReady": "Đã theo vết động ({{frames}} frame)",
+    "previewClipBtn": "Xem thử video 4s",
+    "previewClipLoading": "Đang tạo đoạn 4s...",
+    "cancel": "Hủy xử lý",
+    "cancelling": "Đang hủy...",
+    "retry": "Thử lại",
+    "openFullStudio": "Mở trình chỉnh sửa đầy đủ (kéo khung / keyframe)"
   },
   "merge": {
     "needTwo": "Cần ít nhất 2 job ID để ghép.",

@@ -1,11 +1,20 @@
 # QA / UAT Package — Flow/Veo Visible-Logo Cleanup
 
 **Feature:** Visible on-frame logo removal for Flow/Veo video exports
-**Stack:** React 19 + FastAPI + FFmpeg (synchronous, no Celery for this feature) + Redis + temp files
+**Stack:** React 19 + FastAPI + Celery (`media` queue) + OpenCV/FFmpeg + Redis + temp files
 **Scope:** On-frame visible logo only. SynthID (invisible Google AI watermark) is NOT in scope and must never appear in any pass/fail criterion, copy, or label.
 **Admin/QA tab:** `/vid-admin` → "Flow QA" tab (tab id: `flowqa`)
-**Backend endpoints:** `POST /api/v1/flow-cleanup/upload`, `GET /api/v1/flow-cleanup/frame/{temp_id}`, `POST /api/v1/flow-cleanup/process`
-**Job TTL:** ~20 minutes (temp dirs under `downloads/flow_<hex>/`)
+**Backend endpoints:**
+- `POST /api/v1/flow-cleanup/upload`, `POST /api/v1/flow-cleanup/from-local`
+- `GET /api/v1/flow-cleanup/frame/{temp_id}` (supports optional `?frame_idx=<int>` for keyframe extraction)
+- `POST /api/v1/flow-cleanup/detect/{temp_id}` (Phase P2: auto-detect up to 3 candidate regions + confidence + `needs_review`)
+- `POST /api/v1/flow-cleanup/track/{temp_id}` (Phase P3: per-frame tracking, scene cut detection, keyframe segment recomputation)
+- `POST /api/v1/flow-cleanup/preview-frame`, `GET /api/v1/flow-cleanup/preview-clean/{temp_id}`
+- `POST /api/v1/flow-cleanup/preview-clip`, `GET /api/v1/flow-cleanup/preview-clip-video/{temp_id}` (Phase P4: 3–5s cleaned video clip preview)
+- `POST /api/v1/flow-cleanup/process` (Phase P1: async Celery `media` queue dispatch)
+- `GET /api/v1/flow-cleanup/status/{job_id}`, `POST /api/v1/flow-cleanup/cancel/{job_id}`, `POST /api/v1/flow-cleanup/retry/{job_id}`
+- `GET /api/v1/flow-cleanup/result/{temp_id}/{file_id}`
+**Job TTL:** ~20 minutes (temp dirs under `downloads/flow_<hex>/`, cleaned up on access and via `periodic_cleanup_downloads`)
 **Audience:** QA engineers, developers, product manager
 
 ---
@@ -59,17 +68,17 @@
 - [ ] The secondary nudge button "Vẫn muốn thử lấp pixel thay thế" appears only when suitability=`crop` AND method=`crop` (not in other states)
 - [ ] The secondary nudge button "Dùng cách cắt khung hình thay thế" appears only when suitability=`low`
 
-### D. Manual Region Flow
+### D. Auto-Detection, Tracking & Manual Region Flow (P2 / P3 / P4)
 
-- [ ] All four presets selectable: "Dưới phải" (↘), "Dưới trái" (↙), "Trên phải" (↗), "Trên trái" (↖)
-- [ ] Active preset is highlighted with orange styling (`bg-[#FB923C]/20 border-[#FB923C]/50 text-[#FB923C]`)
-- [ ] Selecting a preset updates the orange bounding box position on the preview frame immediately
-- [ ] Orange box position matches the backend `preset_map` math: lower-right box is at top-right area of lower-right corner, not just any corner area
-- [ ] Preset coordinates sent to backend match the frontend PRESETS constants (verify via admin detail panel: `region.x/y/w/h` match preset math for video dimensions)
-- [ ] Custom region preset (`custom`) is available in the ProcessRequest model; frontend currently uses only the four named presets — if custom UI is not yet exposed, document this as known gap
-- [ ] Region validation: backend rejects w=0 or h=0 with 400 "Kích thước vùng không hợp lệ."
-- [ ] Region validation: backend rejects region extending outside frame bounds with 400 "Vùng nằm ngoài khung hình."
-- [ ] `region_source` in admin metadata is `user_selected` when a named preset is used
+- [ ] On upload completion (`/upload` or `/from-local`), `POST /api/v1/flow-cleanup/detect/{temp_id}` runs automatically and displays up to 3 candidate regions with confidence percentage and kind badge (`Logo góc`, `Chữ hiển thị`, `Bán trong suốt`, `Di chuyển`)
+- [ ] Low-confidence detection (`confidence < 0.75` or `needs_review = true`) displays a review banner and blocks unconfirmed auto-processing (`detection_needs_review`) until the user drags/resizes the box or clicks "Xác nhận vùng chọn"
+- [ ] User can click candidate chips (`#1`, `#2`, `#3`), add a new region (`+ Thêm vùng`), remove a candidate (`×`), or drag/resize the 8-handle `RegionEditor` (`preset = "custom"`)
+- [ ] All four corner presets remain selectable: "Dưới phải" (↘), "Dưới trái" (↙), "Trên phải" (↗), "Trên trái" (↖)
+- [ ] Clicking "Theo vết theo từng frame" calls `POST /api/v1/flow-cleanup/track/{temp_id}` and displays tracking status (`static` vs `moving`, drift %, scene cuts) and keyframe chips (`Frame #0`, `Frame #50 ⚠`, `Frame #75 ✂`)
+- [ ] Clicking any keyframe chip loads `GET /api/v1/flow-cleanup/frame/{temp_id}?frame_idx={k}` and allows dragging `RegionEditor` at that keyframe; clicking "Cập nhật keyframe #{k}" recomputes only the affected tracking segment
+- [ ] When tracking loses lock (`tracking_needs_review`), `/process` rejects unconfirmed jobs with `tracking_needs_review` until the user confirms or updates keyframes
+- [ ] Region validation: backend rejects w=0 or h=0 with 400 "Kích thước vùng không hợp lệ." and out-of-bounds regions with 400 "Vùng nằm ngoài khung hình."
+- [ ] `region_source` in admin metadata is `user_selected` (preset) or `user_adjusted` (dragged/confirmed)
 
 ### E. Crop Fallback Flow
 
@@ -83,17 +92,14 @@
 - [ ] `result_type` in backend metadata and API response = `cropped_export`
 - [ ] `selected_mode` in metadata = `crop_fallback`
 
-### F. Processing States
+### F. Preview (A/B + 4s Clip) & Async Processing States (P1 / P4)
 
-- [ ] Process button triggers `processing` state: spinner shows with method-specific message ("Đang phân tích và lấp vùng logo..." / "Đang tính toán và cắt viền..." / "Đang che mờ vùng logo...")
-- [ ] Process button is not double-submittable — there is no explicit `disabled` attribute on the process button, but React state change to `processing` removes the preview section including the button. Verify no double-submit can occur by rapid clicking
-- [ ] Processing state shows estimated time range "15–90 giây tùy độ dài clip"
-- [ ] FFmpeg failure (e.g. unsupported codec, corrupted input) transitions to `error` state — not stuck in `processing`
-- [ ] Error state message shows the backend error detail (from `body.detail`)
-- [ ] Error state for a processing failure (when `previewUrl` is set) shows "Thử vùng hoặc phương thức khác" with `RotateCcw` icon, returning user to `preview` state
-- [ ] Error state for an upload failure (no `previewUrl`) shows "Thử lại" button, calling `reset()`
-- [ ] No success toast, spinner, or UI element appears after a processing failure
-- [ ] For a 5-minute+ video processed with `delogo`, FFmpeg subprocess has a 300-second timeout — verify error state is reached on timeout, not an uncaught 500
+- [ ] In `frame-preview`, user can toggle A/B comparison modes (`Trước (Gốc)`, `Sau (Làm sạch)`, `Kéo so sánh A/B` slider) and view `CornerZoom`
+- [ ] Clicking "Xem thử video 4 giây" calls `POST /api/v1/flow-cleanup/preview-clip` and plays the 3–5 second cleaned video clip inside `frame-preview`
+- [ ] Process button dispatches job to the Celery `media` queue (`inpaint_logo_task`) and polls `GET /api/v1/flow-cleanup/status/{job_id}` with real-time progress bar (`0–100%`)
+- [ ] Clicking "Hủy xử lý" calls `POST /api/v1/flow-cleanup/cancel/{job_id}`, terminates the worker task, removes partial files, and returns to `preview`
+- [ ] Clicking "Thử lại" after failure/cancellation calls `POST /api/v1/flow-cleanup/retry/{job_id}` (capped at 3 retries, `max_retries_exceeded`)
+- [ ] Owner verification: `/status`, `/cancel`, `/retry`, `/result`, `/detect`, `/track`, `/preview-frame`, and `/preview-clip` verify `owner_user_id` and return 404 to other users (even other Pro users)
 
 ### G. Result Card / Preview
 
@@ -456,3 +462,123 @@ Note: The frontend scoring uses internal flag names (`very_long`, `long`, `very_
 `preset` options: `lower-right`, `lower-left`, `upper-right`, `upper-left`, `custom`
 `method` options: `delogo`, `crop`, `blur`
 For `preset=custom`, provide `region: {"x": N, "y": N, "w": N, "h": N}` in pixels.
+
+---
+
+## Section 10 — Phase P5 Hardening, Security, Load Test & CPU Cost Report (09/11/2026)
+
+### 10.1. Bảo mật & Phân quyền (P5.1)
+- **Signed URL (`HMAC-SHA256`, TTL ≤ 10 phút, `hmac.compare_digest`)**:
+  - `GET /api/v1/flow-cleanup/frame/{temp_id}`
+  - `GET /api/v1/flow-cleanup/preview-clean/{temp_id}`
+  - `GET /api/v1/flow-cleanup/preview-clip-video/{temp_id}`
+  - Mọi truy cập không có chữ ký, chữ ký sai, hết hạn hoặc sai owner trả ngay `HTTP 404` (không lộ sự tồn tại của job).
+- **Giới hạn `frame_idx` & LRU Keyframe Cache**:
+  - `frame_idx < 0` hoặc `frame_idx >= total_frames` trả `HTTP 400`.
+  - Tối đa 50 file `frame_<idx>.jpg` mỗi job (`FLOW_MAX_KEYFRAME_CACHE_FILES=50`), tự động xoá file cũ nhất theo LRU.
+- **Fail-closed `_verify_job_owner` & `/no-logo`**:
+  - `POST /api/v1/flow-cleanup/no-logo` bắt buộc `Depends(_require_pro)` và `_verify_job_owner`.
+  - Nếu `metadata.json` thiếu hoặc rỗng `owner_user_id`, từ chối ngay với `HTTP 404`.
+- **Feature Flag**:
+  - `VITE_FEATURE_LOGO_INPAINT` mặc định `OFF` trên production; khi tắt thì ẩn nút hậu kỳ xoá watermark trên kết quả tải video.
+
+### 10.2. Hàng đợi bất đồng bộ Celery `media` cho `/track` và `/preview-clip` (P5.2)
+- `track_watermark_task` (`soft_time_limit=120s`) và `preview_clip_task` (`soft_time_limit=90s`) chạy trên queue `media`.
+- Chống trùng lặp (deduplication) theo `temp_id`: gọi lặp khi đang `queued`/`running` trả lại `task_id` hiện có (`HTTP 202`, `deduplicated=True`), không nhân đôi worker task.
+- Giới hạn tối đa `1` job nặng đang chạy/xếp hàng mỗi user (`FLOW_MAX_USER_CONCURRENT_JOBS=1` → `HTTP 429 user_concurrent_job_limit`).
+- Dọn sạch file tạm (`preview_clip_src.mp4`, `preview_clip_clean.mp4`, `.noaudio.mp4`, `.tmp.*`) khi huỷ hoặc lỗi.
+
+### 10.3. Hardening đầu vào, Codec, Độ phân giải lẻ/xoay & Vòng đời file (P5.3 / P5.6.7)
+- Hỗ trợ đầy đủ: `H.264/AAC`, `H.265/HEVC`, `VP9/WebM` (tự động chuyển âm thanh Opus sang AAC khi đóng gói MP4), `MOV`, video không có audio, video dọc `720×1280`, xoay metadata `90°/270°`, và `VFR`.
+- **Video kích thước lẻ (`odd_721x405.mp4`, `721×405`)**:
+  - Chuyển từ crop/truncate (`720×404`) sang **pad +1px (`pad=722:406:0:0:black`)** để giữ nguyên 100% khung hình gốc `721×405` mà không cắt mất bất kỳ dòng/cột pixel nào.
+  - Đánh giá nghiệm thu độ phân giải cho mẫu `odd_721x405.mp4` (`721×405 → 722×406`): **Lệch có chủ đích** (*do chuẩn nén H.264 `yuv420p` bắt buộc chiều rộng và chiều cao chia hết cho 2; metadata trả kèm `odd_dimension_adjusted=True`, `dimension_adjustment="padded_to_even_for_yuv420p"`*).
+- Chặn trước khi vào worker: file `0 byte` (`HTTP 400 empty_file`), file văn bản giả `.mp4` (`HTTP 422 invalid_media_container`), file MP4 cắt cụt/hỏng (`HTTP 422 corrupted_video`), vượt dung lượng/độ phân giải/thời lượng (`HTTP 413`/`400`).
+- Hạn mức mỗi user mỗi ngày: `FLOW_DAILY_USER_QUOTA=20` jobs/ngày (`HTTP 429 daily_quota_exceeded`).
+- Giới hạn retry: `FLOW_MAX_RETRY_COUNT=3` (`HTTP 400 max_retries_exceeded`).
+
+### 10.4. Tải đồng thời qua API + Celery thật, Cô lập hàng đợi & Chi phí CPU (P5.7.2 — Sau sửa `ced4bcc`)
+- **Worker Concurrency**: mặc định `FLOW_INPAINT_WORKER_CONCURRENCY=2` trên queue `media`.
+- **Quy trình đo chuẩn P5.7.2**:
+  - Lấy `mode` thật từ `natural_stats.mode` của job (`assert actual_modes == ["per_frame"]`), có 1 job khởi động (`warmup_720x1280_10s`, `34.48s`) bị loại khỏi kết quả, và chạy lặp **3 lần cho mỗi cấu hình** (`N_RUNS = 3`).
+- **Cô lập hàng đợi (`downloads` vs `media`) bằng job tải/ghép video thật (`merge_audio_video_task`, 4s `720×1280` H.264+AAC, output `1.82 MB`)**:
+  - Khi queue `media` rỗi (3 mẫu): trung vị **`0.64s`** (`0.596 – 0.662s`).
+  - Khi queue `media` bão hoà (`conc = 3`, 9 mẫu): trung vị **`0.75s`** (`0.676 – 0.800s`), không bị chặn bởi hàng đợi `media` (**ĐẠT**).
+
+#### Bảng kết quả Load Test qua HTTP API + Celery + Redis thật (30 fps, `per_frame`, 3 lần chạy / cấu hình, sau sửa `ced4bcc`)
+| Cấu hình video (30 fps) | Số job đồng thời | `mode` thật từ job | E2E Median (`Min – Max`) (s) | Wave 1 Median (s) | Job #3 chờ queue Median (s) | Worker Exec Median (`Min – Max`) (s) | `sec / (MPx × frame)` Worker Median (`Min – Max`) | Batch Wall Median (s) |
+|---|---:|---|---:|---:|---:|---:|---:|---:|
+| `720×1280` (`10s`, 30fps) | 1 | `per_frame` | **37.64s** (`37.45–45.55s`) | 37.64s | — | **35.25s** (`34.18–36.20s`) | **0.1275** (`0.1236–0.1309`) | 38.45s |
+| `720×1280` (`10s`, 30fps) | 2 | `per_frame` | **51.92s** (`44.39–59.47s`) | 51.92s | — | **48.05s** (`41.23–56.27s`) | **0.1738** (`0.1491–0.2035`) | 53.51s |
+| `720×1280` (`10s`, 30fps) | 3 | `per_frame` | **47.83s** (`44.27–78.39s`) | **46.65s** | **77.28s** | **42.45s** (`29.55–45.81s`) | **0.1535** (`0.1069–0.1657`) | 78.83s |
+| `720×1280` (`20s`, 30fps) | 1 | `per_frame` | **64.01s** (`63.43–66.75s`) | 64.01s | — | **61.95s** (`61.28–63.05s`) | **0.1120** (`0.1108–0.1140`) | 64.79s |
+| `720×1280` (`20s`, 30fps) | 2 | `per_frame` | **89.85s** (`87.03–93.00s`) | 89.85s | — | **87.63s** (`83.58–89.67s`) | **0.1585** (`0.1512–0.1622`) | 93.54s |
+| `720×1280` (`20s`, 30fps) | 3 | `per_frame` | **91.56s** (`86.42–156.16s`) | **89.00s** | **150.46s** | **84.23s** (`60.07–91.17s`) | **0.1523** (`0.1086–0.1649`) | 152.79s |
+| `720×1280` (`30s`, 30fps) | 1..3 | `rejected_pre_worker` (`max=24s`) | **0.05–0.14s** (`0.05–0.35s`) | — | — | — | — | 1.04–2.70s |
+| `1080×1920` (`10s`, 30fps) | 1 | `per_frame` | **48.27s** (`48.08–50.38s`) | 48.27s | — | **44.91s** (`44.09–46.17s`) | **0.0722** (`0.0709–0.0742`) | 49.10s |
+| `1080×1920` (`10s`, 30fps) | 2 | `per_frame` | **68.43s** (`65.12–71.93s`) | 68.43s | — | **63.00s** (`61.81–69.90s`) | **0.1013** (`0.0994–0.1124`) | 72.26s |
+| `1080×1920` (`10s`, 30fps) | 3 | `per_frame` | **66.30s** (`64.37–111.46s`) | **66.00s** | **110.66s** | **61.88s** (`43.95–64.37s`) | **0.0995** (`0.0707–0.1035`) | 112.80s |
+| `1080×1920` (`20s`, 30fps) | 1..3 | `rejected_pre_worker` (`max=10s`) | **0.06–0.09s** (`0.06–0.36s`) | — | — | — | — | 1.29–3.30s |
+| `1080×1920` (`30s`, 30fps) | 1..3 | `rejected_pre_worker` (`max=10s`) | **0.06–0.23s** (`0.06–0.24s`) | — | — | — | — | 1.80–5.38s |
+
+#### Chi phí CPU & Công suất tối đa / giờ / 1 worker (`per_frame` @ 30fps, Intel Core i3-10105 @ 3.70GHz)
+| Cấu hình video (`per_frame` @ 30fps) | CPU-second / 1s video | Số video 10s tối đa / giờ / 1 worker | Đánh giá |
+|---|---:|---:|---|
+| `720×1280` @ 30fps (`10s`) | **3.76 CPU-s / 1s** (`worker = 3.53s / 1s`) | **~95 video (10s) / giờ** | *Chỉ báo cáo* |
+| `1080×1920` @ 30fps (`10s`) | **4.83 CPU-s / 1s** (`worker = 4.49s / 1s`) | **~74 video (10s) / giờ** | *Chỉ báo cáo* |
+
+### 10.5. Giới hạn thời lượng thực tế theo Độ phân giải / FPS (`_validate_job_limits`, P5.6.3)
+- Backend (`_probe`) trả thêm `max_inpaint_duration_sec` và `max_crop_blur_duration_sec` tính trực tiếp từ `_compute_effective_max_duration(width, height, fps, method)`.
+- Giao diện (`FlowVeoCleanup.jsx`, `DashboardContent.jsx`) hiển thị đúng thời lượng tối đa của chính video người dùng đang chọn (`width×height · fps · duration / tối đa <maxSec>s`), không ghi cứng `60 giây`.
+
+| Độ phân giải | FPS | Thời lượng tối đa (`natural`/`telea`/`telea_soft`) | Thời lượng tối đa (`crop`/`blur`) |
+|---|---:|---:|---:|
+| `640×360` | 30 fps | **60s** | **600s** |
+| `854×480` | 30 fps | **54s** | **600s** |
+| `1280×720` / `720×1280` | 24 fps | **30s** | **600s** |
+| `1280×720` / `720×1280` | 30 fps | **24s** | **600s** |
+| `1280×720` / `720×1280` | 60 fps | **12s** | **600s** |
+| `1920×1080` / `1080×1920` | 24 fps | **13s** | **600s** |
+| `1920×1080` / `1080×1920` | 30 fps | **10s** | **600s** |
+| `1920×1080` / `1080×1920` | 60 fps | **5s** | **600s** |
+| `3840×2160` (4K) | 30 fps | **2s** (UI hiển thị sàn `5s`, `/process` chặn `> 2.68s`) | **600s** |
+
+- **Đề xuất hiệu chỉnh có hệ số an toàn (P5.7.3 — dựa trên số liệu Load Test P5.7.2 sau sửa `ced4bcc`, KHÔNG tự đổi mặc định `0.45` trong code)**:
+  - Đo thực tế từ 54 job `per_frame` ở P5.7.2: trung vị `conc=1` đạt `0.1120 s/(MPx·frame)` (`720p`: `0.1120–0.1275`, `1080p`: `0.0722`), và mức cao nhất khi 2 job chạy song song (`conc=2`) là `spm_max = 0.2035 s/(MPx·frame)`.
+  - Đề xuất `0.15` ở P5.6 cũ đã bị **huỷ bỏ** vì ở `conc=2` một video `720p 60s` có thể mất `263–338s` (vượt `240s = 80% timeout`).
+  - Áp dụng ràng buộc **job dài nhất được nhận phải hoàn tất `≤ 240s` (`80%` của `300s` timeout)** ngay cả ở `spm_max = 0.2035` kèm **hệ số an toàn `1.25×`**:
+    `FLOW_EST_SEC_PER_MPX_FRAME = 0.2035 × (300 / 240) × 1.25 = 0.3180 ≈ 0.32`.
+  - Khi cấu hình `FLOW_EST_SEC_PER_MPX_FRAME=0.32` qua biến môi trường:
+    - `720p@30fps` tăng giới hạn từ `24s` lên **`33s`** (thời gian chạy thực tế `~102–116s` ở `conc=1`, tối đa `~185.7s ≤ 240s` ở `conc=2`).
+    - `1080p@30fps` tăng giới hạn từ `10s` lên **`15s`** (thời gian chạy thực tế `~67.4s` ở `conc=1`, tối đa `~104.9s–189.9s ≤ 240s` ở `conc=2`).
+
+### 10.6. Đo lại Benchmark Chất lượng: Mốc duy nhất `7e31a13` → Sau sửa `ced4bcc` (`fix(inpaint): count only contributing neighbours`, P5.7.1)
+- Đã chạy lại toàn bộ `synthetic` (18 video tổng hợp + 1 video thực tế), `synthetic-hard` (10 video) và `tracker P3` sau commit `ced4bcc` (`fix(inpaint): count only contributing neighbours`: chỉ tăng `matched_count` khi `bool(valid_roi.any()) == True`, giữ giới hạn `4` cho mọi trường hợp), đồng thời tạo mới toàn bộ 25 contact sheets trong `benchmarks/results/contact-sheets/`.
+- **Nguồn số liệu lịch sử (Bước C.3)**: Ba con số `0.9167 / 0.9585 / 0.8280` của `moving_watermark_02`, `moving_watermark_03` và `scene_cut_03` từng xuất hiện ở cột `"Trước P5.6"` trong bản nháp trước nằm tại `d938a37:benchmarks/results/tracker_metrics_p3.json` (ghi đè ở commit `967a7e0`), không nằm trong `p5_4_metrics.json` gốc và khác bảng P3 (`0.8527 / 0.9417 / 0.8118`). Cột `"Trước P5.6"` đã được xoá bỏ; **mốc so sánh DUY NHẤT là số liệu đo tại `7e31a13`** (`7e31a13 → sau sửa ced4bcc`).
+- **Tổng hợp `7e31a13` → Sau sửa (`ced4bcc`)**:
+  - **`synthetic` — Nhóm watermark tĩnh (11 video)**: SSIM trong mask tăng từ **`0.8330` → `0.8377` (`+0.0047`)**; cả **11/11 video đều giữ nguyên hoặc tăng SSIM** (nổi bật `heavy_motion_03`: `0.8641 → 0.8975`, `+0.0334`; `heavy_motion_01`: `0.7989 → 0.8152`, `+0.0163`). PSNR ngoài mask đạt `42.57 – 45.99 dB` (tất cả `≥ 40 dB`).
+  - **`synthetic` — Nhóm `moving_watermark` (3 video, P3 tracked)**: SSIM trong mask trung bình tăng nhẹ từ **`0.8936` → `0.8938` (`+0.0002`, ĐẠT `≥ 0.85`)**:
+    - `moving_watermark_01`: `0.8338 → 0.8339` (`+0.0001`)
+    - `moving_watermark_02`: `0.8871 → 0.8872` (`+0.0001`)
+    - `moving_watermark_03`: `0.9599 → 0.9603` (`+0.0004`)
+    - `scene_cut_03`: `0.8318 → 0.8328` (`+0.0010`)
+    - Không có bất kỳ video nào trong 15 video bộ `synthetic` bị giảm SSIM so với `7e31a13`.
+  - **`synthetic-hard` (9 video dương tính + 1 âm tính)**: SSIM trong mask trung bình giữ nguyên **`0.7846` → `0.7846` (`Δ = 0.0000`)**; 5/9 video tăng nhẹ (`+0.0001` đến `+0.0005`), 2/9 giữ nguyên (`0.0000`), và **2/9 video giảm cực nhẹ dưới ngưỡng phần nghìn** được ghi rõ:
+    - `hard_scale_15x.mp4`: `0.8883 → 0.8876` (`Δ = -0.0007`, vẫn đạt `≥ 0.85`)
+    - `hard_vertical_720x1280.mp4`: `0.8501 → 0.8495` (`Δ = -0.0006`)
+
+
+### 10.7. Xếp hạng frame lân cận theo diện tích nền sạch dự kiến (`P5.9` — Mốc `ced4bcc` → `34e077f`)
+- **Bộ kiểm chứng mới `benchmarks/synthetic-jump-holdout/` (6 video, commit `eb08db1`)**: tạo độc lập trước khi sửa engine (`pan = 0 / 0.5 / 3 px/frame`, điểm nhảy tại `frame 30 / 60 / 110`, 1 video nhảy 4 vị trí, 1 video logo đứng yên + camera lia).
+- **Bản sửa engine (`34e077f` — `"fix(inpaint): rank neighbours by expected clean coverage"`)**:
+  - Khử trùng lặp chỉ số frame giữa `causal` / `strided` / `global_ref` và xếp hạng trước khi warp theo diện tích nền sạch dự kiến (`_estimate_expected_clean_area`).
+  - Dừng khi phủ `>= 98%` mask (`_TEMPORAL_COVERAGE_STOP_FRAC = 0.98`) HOẶC đã thử `8` lần warp (`_MAX_TEMPORAL_WARP_ATTEMPTS = 8`).
+- **Kết quả đo lại toàn bộ 30 video (`ced4bcc` → `P5.9`)**:
+  - **`synthetic` (15 video)**:
+    - Nhóm `moving_watermark` (P3 tracked): trung bình tăng từ **`0.8938` → `0.9350` (`+0.0412`)** (`moving_watermark_01`: `0.8339 → 0.9570`, `+0.1231`; `moving_watermark_02`: `0.8872 → 0.8930`, `+0.0058`; `moving_watermark_03`: `0.9603 → 0.9550`, `-0.0053`; `scene_cut_03`: `0.8328 → 0.9062`, `+0.0734`).
+    - Nhóm watermark tĩnh (11 video): trung bình tăng từ **`0.8377` → `0.8690` (`+0.0313`, vượt ngưỡng `≥ 0.85`)**; trung bình toàn bộ 15 video (kèm P3 tracked) tăng từ **`0.8486` → `0.8848` (`+0.0362`, ĐẠT `≥ 0.85`)**.
+  - **`synthetic-hard` (9 video)**: trung bình tăng từ **`0.7846` → `0.8226` (`+0.0380`)** (8/9 video tăng SSIM, bao gồm `hard_large_wm`: `0.7945 → 0.8573` và `hard_vertical_720x1280`: `0.8495 → 0.8571`).
+  - **`synthetic-jump-holdout` (6 video)**: trung bình tăng từ **`0.9113` → `0.9600` (`+0.0487`)**; 6/6 video giữ nguyên hoặc tăng mạnh SSIM (`holdout_static_logo_pan3`: `0.8717 → 0.9344`, `+0.0627`).
+- **Load Test Mục 4 (`720×1280 10s` & `1080×1920 10s`, `conc 1` & `2`, `3 lần`, giữ nguyên `FLOW_SEC_PER_MPX_FRAME = 0.45`)**:
+  - `720×1280 10s`: `conc=1` Worker Median `35.25s → 41.76s` (`E2E: 37.64s → 44.10s`); `conc=2` Worker Median `48.05s → 46.72s` (`E2E: 51.92s → 50.05s`).
+  - `1080×1920 10s`: `conc=1` Worker Median `44.91s → 47.92s` (`E2E: 48.27s → 51.68s`); `conc=2` Worker Median `63.00s → 71.88s` (`E2E: 68.43s → 75.41s`).
