@@ -1460,7 +1460,7 @@ async def bulk_download(
             )
         # When channel_mode is enabled (or URL is a channel), enforce batch_limit on max_videos
         # so Free accounts can test up to 5 videos/channel scan, while >5 triggers UpgradeModal.
-        if payload.channel_mode and payload.max_videos and payload.max_videos > batch_check["limit"]:
+        if payload.channel_mode and payload.max_videos and batch_check["limit"] is not None and batch_check["limit"] >= 0 and payload.max_videos > batch_check["limit"]:
             mc_check = check_batch_limit(auth_user_id, payload.max_videos)
             if not mc_check["allowed"]:
                 raise HTTPException(
@@ -1519,7 +1519,9 @@ async def bulk_download(
     from app.core.quotas import get_tier_permissions, get_user_tier
     _tier = get_user_tier(auth_user_id) if auth_user_id else "free"
     _perms = get_tier_permissions(_tier)
-    payload.max_videos = min(payload.max_videos or _perms["batch_limit"], _perms["batch_limit"])
+    _batch_lim = _perms.get("batch_limit", 100)
+    _req_max = payload.max_videos if (payload.max_videos and payload.max_videos > 0) else (_batch_lim if (_batch_lim and _batch_lim > 0) else 100)
+    payload.max_videos = min(_req_max, _batch_lim) if (_batch_lim is not None and _batch_lim > 0) else _req_max
 
     batch_id = str(uuid.uuid4())
     supabase = get_supabase_client()
@@ -1606,7 +1608,7 @@ async def bulk_download(
 
                 # Dispatch scraping to Celery background
                 # Hard limit max_videos to prevent scraping abuse (max 500)
-                safe_max_videos = min(payload.max_videos or 100, 500)
+                safe_max_videos = min(payload.max_videos if (payload.max_videos and payload.max_videos > 0) else 100, 500)
                 scrape_channel_task.apply_async(
                     args=[url, batch_id, channel_job_id, safe_max_videos, payload.min_views, auth_user_id, payload.quality, payload.remove_watermark, payload.download_subs],
                     kwargs={"_requester": _bulk_req.wire()},

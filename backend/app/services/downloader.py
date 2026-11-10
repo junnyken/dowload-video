@@ -4911,6 +4911,13 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 100, min_vi
     InnerTube continuation token pagination. With process=False, 
     yt-dlp only returns the first ~20 items from the initial page load.
     """
+    try:
+        max_videos = int(max_videos)
+    except Exception:
+        max_videos = 100
+    if max_videos <= 0:
+        max_videos = 100
+
     # ── Step 0: Unshorten short links ────────────────────────
     original_channel_url = channel_url
     channel_url = resolve_short_url(channel_url)
@@ -4995,6 +5002,25 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 100, min_vi
     opts["ignoreerrors"] = True  # skip private/deleted videos without crashing
     opts = _apply_tiktok_opts(opts, channel_url)
 
+    def _flatten_ytdlp_entries(items) -> list:
+        flat = []
+        if not items:
+            return flat
+        if not isinstance(items, list):
+            try:
+                items = list(items)
+            except Exception:
+                return flat
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            nested = item.get("entries")
+            if nested is not None:
+                flat.extend(_flatten_ytdlp_entries(nested))
+            else:
+                flat.append(item)
+        return flat
+
     info = None
     if _is_yt_channel:
         # Try direct (no proxy, no cookies, no PO-token script) first for YouTube
@@ -5012,8 +5038,10 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 100, min_vi
         try:
             with yt_dlp.YoutubeDL(direct_opts) as ydl:
                 info = ydl.extract_info(channel_url, download=False, process=True)
-            if info and info.get("entries"):
-                print(f"[Downloader] YouTube channel listed directly (no proxy): {channel_url}")
+            flat_direct = _flatten_ytdlp_entries(info.get("entries")) if info else []
+            if info and flat_direct:
+                info["entries"] = flat_direct
+                print(f"[Downloader] YouTube channel listed directly (no proxy): {channel_url} ({len(flat_direct)} entries)")
             else:
                 info = None
         except Exception as direct_err:
@@ -5068,10 +5096,7 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 100, min_vi
     channel_title = info.get("title") or info.get("uploader") or "Unknown Channel"
 
     # yt-dlp returns entries as a generator or list depending on process flag
-    raw_entries = info.get("entries", [])
-    # If it's a generator, convert to list (needed for counting)
-    if not isinstance(raw_entries, list):
-        raw_entries = list(raw_entries)
+    raw_entries = _flatten_ytdlp_entries(info.get("entries", []))
 
     total_found = 0
     total_queued = 0
@@ -5095,11 +5120,18 @@ def _scrape_channel_entries_impl(channel_url: str, max_videos: int = 100, min_vi
             continue
 
         video_url = entry.get("url") or entry.get("webpage_url") or ""
+        if not video_url and entry.get("id") and _is_yt_channel:
+            vid_id = str(entry.get("id")).strip()
+            if len(vid_id) == 11:
+                video_url = f"https://www.youtube.com/watch?v={vid_id}"
         video_title = entry.get("title") or "Untitled"
 
         # yt-dlp sometimes returns just the video ID for YouTube
         if video_url and not video_url.startswith("http"):
-            video_url = f"https://www.youtube.com/watch?v={video_url}"
+            if video_url.startswith("/"):
+                video_url = f"https://www.youtube.com{video_url}"
+            else:
+                video_url = f"https://www.youtube.com/watch?v={video_url}"
 
         if video_url:
             entries.append({
