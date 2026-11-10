@@ -1073,7 +1073,7 @@ export default function BulkContent() {
             >
               <option value="video">MP4 Video</option>
               <option value="mp3_128">MP3 Audio (128kbps)</option>
-              {quotaInfo && ['pro', 'vip'].includes(quotaInfo.plan) ? (
+              {quotaInfo && ['starter', 'pro', 'vip', 'team', 'enterprise', 'admin'].includes(quotaInfo.plan) ? (
                  <option value="mp3_320">MP3 Audio (320kbps VIP)</option>
               ) : (
                  <option value="mp3_320" disabled>MP3 Audio (320kbps VIP) - PRO ONLY</option>

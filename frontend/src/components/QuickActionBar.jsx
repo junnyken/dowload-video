@@ -72,7 +72,7 @@ const PLATFORM_ACTIONS = {
   ],
 };
 
-const PRO_PLATFORMS = new Set(['pro', 'team', 'enterprise', 'api']);
+const PRO_PLATFORMS = new Set(['starter', 'pro', 'team', 'enterprise', 'api', 'admin']);
 
 // The no-watermark entries carry labelKey 'noWm' (guide.json quickBar.noWm); other labels are product/format names.
 export default function QuickActionBar({ platform, videoInfo, activePreset, onAction, disabled = false, userTier = 'free' }) {
