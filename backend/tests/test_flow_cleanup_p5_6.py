@@ -303,5 +303,60 @@ class TestP567OddDimensionPadAndIntentionalDeviation:
         assert info["dimension_adjustment"] == "padded_to_even_for_yuv420p"
 
 
+class TestP574UserJobLockQueueAndHeartbeat:
+    """Verify per-user active job Redis lock covers queue wait + job timeout and renews TTL on progress heartbeat."""
 
+    def test_user_job_lock_initial_ttl_covers_queue_plus_timeout_and_heartbeat_renews(self, tmp_path, monkeypatch):
+        dl_dir = tmp_path / "dl_lock_p574"
+        dl_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(flow_cleanup, "_DOWNLOAD_DIR", str(dl_dir))
+        monkeypatch.setattr(flow_cleanup, "_REDIS_CLIENT", flow_cleanup._FALLBACK_REDIS)
 
+        r = flow_cleanup._get_flow_redis()
+        uid = "pro-lock-p574-user"
+        tid_1 = "aa11223344556677889900aabbccdd01"
+        tid_2 = "bb11223344556677889900aabbccdd02"
+        lkey = flow_cleanup._user_active_job_redis_key(uid)
+        r.delete(lkey)
+
+        wdir_1 = dl_dir / f"flow_{tid_1}"
+        wdir_1.mkdir(parents=True, exist_ok=True)
+        flow_cleanup._write_meta(str(wdir_1), {
+            "temp_id": tid_1,
+            "job_id": tid_1,
+            "owner_user_id": uid,
+            "status": "uploaded",
+            "progress": 0,
+        })
+
+        # 1. Acquire lock for job 1 -> initial TTL must cover queue wait + 300s timeout (>= 1020s, not 360s)
+        flow_cleanup._check_user_concurrency(uid, tid_1)
+        initial_ttl = int(r.ttl(lkey))
+        assert initial_ttl >= 900, f"Expected initial lock TTL >= 900s to cover queue + execution, got {initial_ttl}s"
+
+        # 2. Simulate job 1 waiting in queue + running for 350s by artificially lowering remaining TTL to 20s
+        r.expire(lkey, 20)
+        assert int(r.ttl(lkey)) <= 20
+
+        # 3. Worker progress heartbeat via _write_meta(status='running', progress=45) must renew TTL back >= 900s
+        flow_cleanup._write_meta(str(wdir_1), {"status": "running", "progress": 45})
+        renewed_ttl = int(r.ttl(lkey))
+        assert renewed_ttl >= 900, f"Expected heartbeat _write_meta to renew lock TTL >= 900s, got {renewed_ttl}s"
+
+        # 4. Even a progress-only update while status is already 'running' in metadata.json renews TTL
+        r.expire(lkey, 15)
+        flow_cleanup._write_meta(str(wdir_1), {"progress": 70})
+        assert int(r.ttl(lkey)) >= 900
+
+        # 5. Submitting a 2nd job for the same user while job 1 is still queued/running is rejected with HTTP 429
+        with pytest.raises(HTTPException) as exc_info:
+            flow_cleanup._check_user_concurrency(uid, tid_2)
+        assert exc_info.value.status_code == 429
+        assert exc_info.value.detail["error_code"] == "user_concurrent_job_limit"
+
+        # 6. Completing job 1 immediately releases the lock so job 2 can now be accepted
+        flow_cleanup._write_meta(str(wdir_1), {"status": "done", "progress": 100})
+        assert r.get(lkey) is None
+        flow_cleanup._check_user_concurrency(uid, tid_2)
+        assert r.get(lkey) == tid_2
+        r.delete(lkey)

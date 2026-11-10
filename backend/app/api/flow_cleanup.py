@@ -140,6 +140,12 @@ _PREVIEW_CLIP_TIMEOUT_SEC = float(os.getenv("FLOW_PREVIEW_CLIP_TIMEOUT_SEC", "90
 _MAX_USER_CONCURRENT_JOBS = int(os.getenv("FLOW_MAX_USER_CONCURRENT_JOBS", "1"))
 _DAILY_USER_QUOTA = int(os.getenv("FLOW_DAILY_USER_QUOTA", "20"))
 _WORKER_CONCURRENCY = int(os.getenv("FLOW_INPAINT_WORKER_CONCURRENCY", "2"))
+_USER_LOCK_TTL_SEC = int(
+    os.getenv(
+        "FLOW_USER_LOCK_TTL_SEC",
+        str(max(600, (_WORKER_CONCURRENCY + 1) * _JOB_TIMEOUT_SEC + 120)),
+    )
+)
 _SIGNED_URL_TTL_SEC = min(600, max(1, int(os.getenv("FLOW_SIGNED_URL_TTL_SEC", "600"))))
 _MAX_KEYFRAME_CACHE_FILES = int(os.getenv("FLOW_MAX_KEYFRAME_CACHE_FILES", "50"))
 _EPHEMERAL_SIGNING_SECRET = os.urandom(32).hex()
@@ -410,6 +416,32 @@ def _release_user_concurrency(owner_id: Optional[str], temp_id: Optional[str] = 
         pass
 
 
+def _compute_user_lock_ttl_sec() -> int:
+    """Compute Redis per-user job lock TTL covering queue wait (`_WORKER_CONCURRENCY` waves) + `_JOB_TIMEOUT_SEC` + 120s margin."""
+    return max(
+        int(_USER_LOCK_TTL_SEC),
+        (max(1, int(_WORKER_CONCURRENCY)) + 1) * int(_JOB_TIMEOUT_SEC) + 120,
+    )
+
+
+def _refresh_user_concurrency(owner_id: Optional[str], temp_id: Optional[str] = None) -> None:
+    """Heartbeat-extend the Redis active-job lock TTL while `temp_id` is actively queued or running."""
+    if not owner_id or _MAX_USER_CONCURRENT_JOBS <= 0:
+        return
+    try:
+        r = _get_flow_redis()
+        lock_key = _user_active_job_redis_key(str(owner_id))
+        cur_safe = re.sub(r"[^a-f0-9]", "", str(temp_id or "")) or str(temp_id or "")
+        held = r.get(lock_key)
+        lock_ttl = _compute_user_lock_ttl_sec()
+        if held is None and cur_safe:
+            r.set(lock_key, cur_safe, nx=True, ex=lock_ttl)
+        elif held == cur_safe or not cur_safe:
+            r.expire(lock_key, lock_ttl)
+    except Exception:
+        pass
+
+
 def _check_user_concurrency(owner_id: Optional[str], current_temp_id: str) -> None:
     """Enforce at most 1 heavy job per user across processes via Redis atomic `SET key val NX EX ttl`."""
     if not owner_id or _MAX_USER_CONCURRENT_JOBS <= 0:
@@ -417,7 +449,7 @@ def _check_user_concurrency(owner_id: Optional[str], current_temp_id: str) -> No
     uid = str(owner_id)
     cur_safe = re.sub(r"[^a-f0-9]", "", current_temp_id or "") or str(current_temp_id)
     lock_key = _user_active_job_redis_key(uid)
-    lock_ttl = max(60, int(_JOB_TIMEOUT_SEC) + 60)
+    lock_ttl = _compute_user_lock_ttl_sec()
     r = _get_flow_redis()
 
     if r.set(lock_key, cur_safe, nx=True, ex=lock_ttl):
@@ -714,7 +746,7 @@ def _write_meta(work_dir: str, updates: dict) -> dict:
         meta = _read_meta(work_dir)
         prev_owner = meta.get("owner_user_id")
         meta.update(updates)
-        if prev_owner and not meta.get("owner_user_id"):
+        if prev_owner and "owner_user_id" not in updates and not meta.get("owner_user_id"):
             meta["owner_user_id"] = prev_owner
         try:
             os.makedirs(work_dir, exist_ok=True)
@@ -728,9 +760,14 @@ def _write_meta(work_dir: str, updates: dict) -> dict:
                     json.dump(meta, mf)
             except Exception:
                 pass
-        new_status = updates.get("status")
-        if new_status in ("completed", "done", "failed", "cancelled", "no_visible_logo"):
+        effective_status = updates.get("status") or meta.get("status")
+        if effective_status in ("completed", "done", "failed", "cancelled", "no_visible_logo"):
             _release_user_concurrency(
+                meta.get("owner_user_id"),
+                meta.get("temp_id") or meta.get("job_id"),
+            )
+        elif effective_status in ("queued", "running"):
+            _refresh_user_concurrency(
                 meta.get("owner_user_id"),
                 meta.get("temp_id") or meta.get("job_id"),
             )
