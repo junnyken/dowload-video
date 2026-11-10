@@ -500,7 +500,9 @@ def process_video_task(self, job_id: str, url: str, user_id: Optional[str] = Non
         if platform == "youtube":
             try:
                 from app.core import youtube_gate as _ytg
-                _proxy_used = os.getenv("YOUTUBE_PROXY_DOWNLOAD", "0").strip().lower() in ("1", "true", "yes", "on")
+                _proxy_used = bool(info.get("proxy_bytes_used")) if "proxy_bytes_used" in info else (
+                    os.getenv("YOUTUBE_PROXY_DOWNLOAD", "0").strip().lower() in ("1", "true", "yes", "on")
+                )
                 _ytg.record_result(True, info.get("file_size_mb", 0) if _proxy_used else 0)
             except Exception:
                 pass

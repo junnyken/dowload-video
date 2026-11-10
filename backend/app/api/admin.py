@@ -927,12 +927,18 @@ async def update_user(req: UpdateUserRequest, request: Request, _=Depends(verify
     """
     supabase = get_supabase_client()
     try:
-        if req.plan not in ("free", "pro"):
-            raise HTTPException(status_code=400, detail="Invalid plan — must be 'free' or 'pro'")
+        from app.core.quotas import TIER_PERMISSIONS
+        from app.core.entitlements import get_plan_def
+        plan_lower = (req.plan or "").strip().lower()
+        if plan_lower not in TIER_PERMISSIONS:
+            raise HTTPException(status_code=400, detail=f"Invalid plan — must be one of {sorted(TIER_PERMISSIONS)}")
 
         # Primary: update profiles.tier (this is what check_user_quota reads)
-        profile_update: Dict[str, Any] = {"tier": req.plan}
-        if req.plan == "free":
+        profile_update: Dict[str, Any] = {
+            "tier": plan_lower,
+            "plan_name": get_plan_def(plan_lower)["name"],
+        }
+        if plan_lower == "free":
             profile_update.update({
                 "billing_status":          "none",
                 "subscription_expiry":     None,
@@ -948,11 +954,11 @@ async def update_user(req: UpdateUserRequest, request: Request, _=Depends(verify
         p_res = supabase.table("profiles").update(profile_update).eq("id", req.user_id).execute()
 
         # Secondary: keep user_usage.plan in sync (used by admin stats queries)
-        u_res = supabase.table("user_usage").update({"plan": req.plan}).eq("user_id", req.user_id).execute()
+        u_res = supabase.table("user_usage").update({"plan": plan_lower}).eq("user_id", req.user_id).execute()
         if not u_res.data:
             supabase.table("user_usage").insert({
                 "user_id":       req.user_id,
-                "plan":          req.plan,
+                "plan":          plan_lower,
                 "downloads_today":       0,
                 "downloads_this_month":  0,
                 "last_reset_at": datetime.now(timezone.utc).isoformat(),
@@ -3547,6 +3553,20 @@ async def admin_user_action(request: Request, _=Depends(verify_admin)):
                 return {"success": False, "action": "set_tier", "user_id": user_id,
                         "error": (f"Không cập nhật được gói cho user {user_id} — "
                                   "không tìm thấy hồ sơ nào khớp.")}
+
+            # Keep user_usage.plan in sync for admin stats
+            try:
+                u_res = supabase.table("user_usage").update({"plan": tier}).eq("user_id", user_id).execute()
+                if not u_res.data:
+                    supabase.table("user_usage").insert({
+                        "user_id":              user_id,
+                        "plan":                 tier,
+                        "downloads_today":      0,
+                        "downloads_this_month": 0,
+                        "last_reset_at":        _dt.datetime.now(_dt.timezone.utc).isoformat(),
+                    }).execute()
+            except Exception:
+                pass
 
             log_admin_action(request, "admin.user.tier_changed", resource_type="user",
                              resource_id=user_id, metadata={"new_tier": tier})

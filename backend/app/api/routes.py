@@ -1005,7 +1005,9 @@ async def fetch_link(
         # when bytes actually flowed through the paid proxy) + metrics.
         if _get_platform_key(payload.url) == "youtube":
             from app.core import youtube_gate as _ytg
-            _proxy_used = os.getenv("YOUTUBE_PROXY_DOWNLOAD", "0").strip().lower() in ("1", "true", "yes", "on")
+            _proxy_used = bool(info.get("proxy_bytes_used")) if "proxy_bytes_used" in info else (
+                os.getenv("YOUTUBE_PROXY_DOWNLOAD", "0").strip().lower() in ("1", "true", "yes", "on")
+            )
             _ytg.record_result(True, info.get("file_size_mb", 0) if _proxy_used else 0)
 
         # YouTube CDN URLs are signed for the residential-proxy exit IP, so a
@@ -2361,7 +2363,7 @@ async def retry_failed_jobs(batch_id: str, request: Request):
 
     failed_res = (
         supabase.table("download_jobs")
-        .select("id, original_url, status, recovery_attempts")
+        .select("id, original_url, status, recovery_attempts, user_id, selected_quality")
         .eq("batch_id", batch_id)
         .in_("status", list(RETRYABLE_STATES))
         .execute()
@@ -2388,7 +2390,12 @@ async def retry_failed_jobs(batch_id: str, request: Request):
                 "error_message":      None,
                 "recovery_attempts":  attempts + 1,
             }).eq("id", job["id"]).execute()
-            process_video_task.delay(job["id"], job["original_url"], user_id)
+            process_video_task.delay(
+                job["id"],
+                job["original_url"],
+                job.get("user_id") or user_id,
+                job.get("selected_quality") or "video",
+            )
             retried += 1
         except Exception as e:
             print(f"[RetryFailed] Could not re-queue job {job['id']}: {e}")
@@ -2418,7 +2425,7 @@ async def resume_batch(batch_id: str, request: Request):
 
     candidates_res = (
         supabase.table("download_jobs")
-        .select("id, original_url, status, created_at")
+        .select("id, original_url, status, created_at, user_id, selected_quality")
         .eq("batch_id", batch_id)
         .in_("status", ["pending", "processing"])
         .execute()
@@ -2449,7 +2456,12 @@ async def resume_batch(batch_id: str, request: Request):
                 "status": "pending",
                 "error_message": "♻ Đang khởi động lại...",
             }).eq("id", job["id"]).execute()
-            process_video_task.delay(job["id"], job["original_url"], user_id)
+            process_video_task.delay(
+                job["id"],
+                job["original_url"],
+                job.get("user_id") or user_id,
+                job.get("selected_quality") or "video",
+            )
             resumed += 1
         except Exception as e:
             print(f"[ResumeBatch] Could not re-queue job {job['id']}: {e}")

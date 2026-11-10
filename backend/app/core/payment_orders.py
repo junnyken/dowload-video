@@ -532,8 +532,14 @@ def _upgrade_user_pro(user_id: str, days: int, subscription_id: str, target_tier
     db = _db()
     from app.api.admin import _manual_pro_fields  # noqa: PLC0415
 
+    eff_tier = (target_tier or "pro").lower()
     fields = _manual_pro_fields(db, user_id, days)
-    fields["tier"] = target_tier or "pro"
+    fields["tier"] = eff_tier
+    try:
+        from app.core.entitlements import get_plan_def  # noqa: PLC0415
+        fields["plan_name"] = get_plan_def(eff_tier)["name"]
+    except Exception:
+        fields["plan_name"] = eff_tier.capitalize()
 
     try:
         p_res = db.table("profiles").update(fields).eq("id", user_id).execute()
@@ -545,11 +551,11 @@ def _upgrade_user_pro(user_id: str, days: int, subscription_id: str, target_tier
 
     # Sync user_usage.plan
     try:
-        u_res = db.table("user_usage").update({"plan": target_tier or "pro"}).eq("user_id", user_id).execute()
+        u_res = db.table("user_usage").update({"plan": eff_tier}).eq("user_id", user_id).execute()
         if not u_res.data:
             db.table("user_usage").insert({
                 "user_id": user_id,
-                "plan": target_tier or "pro",
+                "plan": eff_tier,
                 "downloads_today": 0,
                 "downloads_this_month": 0,
                 "last_reset_at": datetime.now(timezone.utc).isoformat(),
@@ -557,14 +563,14 @@ def _upgrade_user_pro(user_id: str, days: int, subscription_id: str, target_tier
     except Exception:
         pass
 
-    # First-time Pro welcome bonus: +500 API calls ONLY on 1st purchase, then mark first_purchase_done
+    # First-time Pro/Team welcome bonus: +500 API calls ONLY on 1st purchase, then mark first_purchase_done
     try:
         from app.core.redis_client import get_redis  # noqa: PLC0415
         from app.core import api_quota as aq  # noqa: PLC0415
         rc = get_redis()
         first_flag = f"api_first_bonus_claimed:{user_id}"
         done_flag = f"first_purchase_done:{user_id}"
-        if (target_tier or "pro") == "pro" and not rc.get(first_flag) and not rc.get(done_flag):
+        if eff_tier in ("pro", "team", "enterprise") and not rc.get(first_flag) and not rc.get(done_flag):
             rc.set(first_flag, "1")
             rc.set(f"api_bonus:{user_id}:{aq.month_of()}", 500, ex=40 * 86400)
         rc.set(done_flag, "1")
@@ -578,7 +584,7 @@ def _upgrade_user_pro(user_id: str, days: int, subscription_id: str, target_tier
     except Exception:
         pass
 
-    print(f"[PaymentOrders] ✅ Upgraded {user_id} to Pro ({days}d, ref={subscription_id})")
+    print(f"[PaymentOrders] ✅ Upgraded {user_id} to {eff_tier} ({days}d, ref={subscription_id})")
 
 
 def cancel_order(order_id: str, user_id: str) -> Tuple[bool, str]:
