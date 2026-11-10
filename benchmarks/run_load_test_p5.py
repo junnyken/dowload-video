@@ -216,7 +216,7 @@ def _run_real_video_download_mux_job(
     }
 
 
-def run_p5_7_load_and_cost_benchmark() -> Dict[str, Any]:
+def run_p5_7_load_and_cost_benchmark(p59_subset: bool = False) -> Dict[str, Any]:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     worker_concurrency = 2
 
@@ -316,14 +316,22 @@ def run_p5_7_load_and_cost_benchmark() -> Dict[str, Any]:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
-            specs = [
-                ("720x1280_10s", 720, 1280, 10, 30),
-                ("720x1280_20s", 720, 1280, 20, 30),
-                ("720x1280_30s", 720, 1280, 30, 30),
-                ("1080x1920_10s", 1080, 1920, 10, 30),
-                ("1080x1920_20s", 1080, 1920, 20, 30),
-                ("1080x1920_30s", 1080, 1920, 30, 30),
-            ]
+            if p59_subset:
+                specs = [
+                    ("720x1280_10s", 720, 1280, 10, 30),
+                    ("1080x1920_10s", 1080, 1920, 10, 30),
+                ]
+                concurrencies = (1, 2)
+            else:
+                specs = [
+                    ("720x1280_10s", 720, 1280, 10, 30),
+                    ("720x1280_20s", 720, 1280, 20, 30),
+                    ("720x1280_30s", 720, 1280, 30, 30),
+                    ("1080x1920_10s", 1080, 1920, 10, 30),
+                    ("1080x1920_20s", 1080, 1920, 20, 30),
+                    ("1080x1920_30s", 1080, 1920, 30, 30),
+                ]
+                concurrencies = (1, 2, 3)
             clips: Dict[str, Path] = {}
             for key, vw, vh, dur, fps in specs:
                 p = tmp / f"{key}.mp4"
@@ -461,7 +469,7 @@ def run_p5_7_load_and_cost_benchmark() -> Dict[str, Any]:
 
             for key, vw, vh, dur, fps in specs:
                 in_path = clips[key]
-                for n_concurrent in (1, 2, 3):
+                for n_concurrent in concurrencies:
                     run_batch_walls: List[float] = []
                     all_job_results: List[Dict[str, Any]] = []
                     first_wave_latencies: List[float] = []
@@ -568,7 +576,7 @@ def run_p5_7_load_and_cost_benchmark() -> Dict[str, Any]:
                     )
 
         r_720_10 = next(r for r in load_matrix_rows if r["profile"] == "720x1280_10s" and r["concurrent_jobs"] == 1)
-        r_720_20 = next(r for r in load_matrix_rows if r["profile"] == "720x1280_20s" and r["concurrent_jobs"] == 1)
+        r_720_20 = next((r for r in load_matrix_rows if r["profile"] == "720x1280_20s" and r["concurrent_jobs"] == 1), None)
         r_1080_10 = next(r for r in load_matrix_rows if r["profile"] == "1080x1920_10s" and r["concurrent_jobs"] == 1)
 
         accepted_rows = [r for r in load_matrix_rows if r["actual_mode_from_job"] == "per_frame"]
@@ -587,12 +595,6 @@ def run_p5_7_load_and_cost_benchmark() -> Dict[str, Any]:
         ]
         max_observed_worker_spm = round(max(all_worker_spm), 4) if all_worker_spm else 0.15
         median_conc1_worker_spm = _median4(conc1_worker_spm) if conc1_worker_spm else 0.10
-        # Target: longest accepted job must finish <= 80% of 300s (<= 240s) even at worst-case concurrency
-        # With _validate_job_limits using `est_sec = dur * mpx_per_sec * FLOW_SEC_PER_MPX_FRAME <= 300s`,
-        # the longest accepted job has `dur * mpx_per_sec = 300.0 / FLOW_SEC_PER_MPX_FRAME`.
-        # Its actual worst-case runtime is `(300.0 / FLOW_SEC_PER_MPX_FRAME) * max_observed_worker_spm`.
-        # Requiring actual runtime <= 240s (`0.80 * 300s`) plus an additional 1.25x safety margin:
-        # `FLOW_SEC_PER_MPX_FRAME >= max_observed_worker_spm * (300.0 / 240.0) * 1.25 = max_observed_worker_spm * 1.5625`
         recommended_coeff = round(max(0.18, max_observed_worker_spm * (300.0 / 240.0) * 1.25), 2)
 
         cpu_per_sec_720 = round(r_720_10["latency_median_sec"] / 10.0, 2)
@@ -620,7 +622,7 @@ def run_p5_7_load_and_cost_benchmark() -> Dict[str, Any]:
             "load_matrix": load_matrix_rows,
             "cpu_cost_and_throughput_per_frame_30fps": {
                 "cpu_sec_per_1s_720x1280_30fps": cpu_per_sec_720,
-                "cpu_sec_per_1s_720x1280_20s_30fps": round(r_720_20["latency_median_sec"] / 20.0, 2),
+                "cpu_sec_per_1s_720x1280_20s_30fps": round(r_720_20["latency_median_sec"] / 20.0, 2) if r_720_20 else None,
                 "cpu_sec_per_1s_1080x1920_30fps": cpu_per_sec_1080,
                 "max_10s_720x1280_videos_per_hour_1worker": int(3600 // max(1.0, r_720_10["latency_median_sec"])),
                 "max_10s_1080x1920_videos_per_hour_1worker": int(3600 // max(1.0, r_1080_10["latency_median_sec"])),
@@ -658,7 +660,8 @@ def run_p5_7_load_and_cost_benchmark() -> Dict[str, Any]:
                 ),
             },
         }
-        out_json = RESULTS_DIR / "p5_5_load_metrics.json"
+        out_name = "p5_9_load_metrics.json" if p59_subset else "p5_5_load_metrics.json"
+        out_json = RESULTS_DIR / out_name
         out_json.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
         return report
     finally:
@@ -671,4 +674,4 @@ def run_p5_7_load_and_cost_benchmark() -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    run_p5_7_load_and_cost_benchmark()
+    run_p5_7_load_and_cost_benchmark(p59_subset=("--p59" in sys.argv))
