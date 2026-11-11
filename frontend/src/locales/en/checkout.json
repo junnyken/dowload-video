@@ -110,7 +110,8 @@
     "paid": "Paid",
     "expired": "Expired",
     "canceled": "Canceled",
-    "underpaid": "Underpaid"
+    "underpaid": "Underpaid",
+    "needs_manual_review": "Thanh toán đang được kiểm tra, chúng tôi sẽ liên hệ trong 24h"
   },
 
   "loginRequired": "Please log in to proceed with payment.",

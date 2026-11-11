@@ -35,9 +35,12 @@ def h(monkeypatch):
 
 def _production_queues() -> set[str]:
     entry = Path(__file__).resolve().parents[1] / "docker-entrypoint.sh"
-    m = re.search(r"worker\s*\\?\s*\n?\s*-Q\s+([\w,]+)", entry.read_text())
-    assert m, "worker -Q line not found in docker-entrypoint.sh"
-    return set(m.group(1).split(","))
+    matches = re.findall(r"worker[^\n]*?\\?\s*\n?\s*-Q\s+([\w,]+)", entry.read_text())
+    assert matches, "worker -Q line not found in docker-entrypoint.sh"
+    queues: set[str] = set()
+    for q_csv in matches:
+        queues.update(q_csv.split(","))
+    return queues
 
 
 @pytest.mark.parametrize("name", [

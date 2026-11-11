@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { adminFetch, adminPost } from '../utils/adminFetch'
+import { useAdminAuth } from '../hooks/useAdminAuth'
 import { cn } from '../utils/cn'
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
@@ -10,7 +11,7 @@ interface CheckoutOrder {
   user_email?: string
   plan: string
   rail: 'vietqr' | 'paypal'
-  status: 'pending' | 'paid' | 'expired' | 'canceled' | 'underpaid'
+  status: 'pending' | 'paid' | 'expired' | 'canceled' | 'underpaid' | 'needs_manual_review' | 'resolved'
   amount: number
   currency: string
   code: string
@@ -40,17 +41,45 @@ interface OrderStats {
   expired: number
   canceled: number
   underpaid: number
+  needs_manual_review?: number
+  manual_review_events?: number
   revenue_vnd: number
+}
+
+interface ManualReviewEvent {
+  id: string
+  provider: string
+  provider_event_id?: string | null
+  event_type?: string | null
+  user_id?: string | null
+  order_id?: string | null
+  current_tier?: string | null
+  target_tier?: string | null
+  amount?: number | null
+  status: string
+  reason?: string | null
+  raw_payload?: Record<string, unknown> | null
+  created_at: string
+}
+
+interface ManualReviewsResponse {
+  events: ManualReviewEvent[]
+  total: number
+  page: number
+  per_page: number
+  total_pages: number
 }
 
 /* ── Constants ─────────────────────────────────────────────────────────────── */
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  pending:   { bg: 'bg-warning-soft', text: 'text-warning',  label: 'Chờ TT' },
-  paid:      { bg: 'bg-success/10',   text: 'text-success',  label: 'Đã TT' },
-  expired:   { bg: 'bg-surface-2',    text: 'text-fg-muted', label: 'Hết hạn' },
-  canceled:  { bg: 'bg-surface-2',    text: 'text-fg-muted', label: 'Đã huỷ' },
-  underpaid: { bg: 'bg-danger-soft',  text: 'text-danger',   label: 'Thiếu tiền' },
+  pending:             { bg: 'bg-warning-soft', text: 'text-warning',  label: 'Chờ TT' },
+  paid:                { bg: 'bg-success/10',   text: 'text-success',  label: 'Đã TT' },
+  expired:             { bg: 'bg-surface-2',    text: 'text-fg-muted', label: 'Hết hạn' },
+  canceled:            { bg: 'bg-surface-2',    text: 'text-fg-muted', label: 'Đã huỷ' },
+  underpaid:           { bg: 'bg-danger-soft',  text: 'text-danger',   label: 'Thiếu tiền' },
+  needs_manual_review: { bg: 'bg-warning-soft', text: 'text-warning',  label: 'Cần duyệt tay' },
+  resolved:            { bg: 'bg-surface-2',    text: 'text-fg-2',     label: 'Đã xử lý' },
 }
 
 const RAIL_STYLES: Record<string, { bg: string; text: string; label: string }> = {
@@ -59,8 +88,12 @@ const RAIL_STYLES: Record<string, { bg: string; text: string; label: string }> =
 }
 
 const PLAN_LABELS: Record<string, string> = {
+  starter_month: 'Starter Tháng',
+  starter_year: 'Starter Năm',
   pro_month: 'Pro Tháng',
   pro_year: 'Pro Năm',
+  team_month: 'Team Tháng',
+  team_year: 'Team Năm',
 }
 
 const PER_PAGE_OPTIONS = [20, 50, 100]
@@ -117,11 +150,29 @@ function RailBadge({ rail }: { rail: string }) {
 
 /* ── Component ─────────────────────────────────────────────────────────────── */
 
+function formatReviewAmount(amount: number | null | undefined, provider: string): string {
+  if (amount === null || amount === undefined) return '—'
+  const p = (provider || '').toLowerCase()
+  if (p === 'sepay' || (p === 'payment_orders' && amount >= 10000)) {
+    return formatVnd(amount)
+  }
+  return '$' + (amount / 100).toFixed(2)
+}
+
 export default function OrdersPage() {
+  const { hasRole } = useAdminAuth()
+  const isAdmin = hasRole('admin')
+
   const [orders, setOrders] = useState<CheckoutOrder[]>([])
   const [stats, setStats] = useState<OrderStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Manual review events (admin only)
+  const [reviewEvents, setReviewEvents] = useState<ManualReviewEvent[]>([])
+  const [reviewsLoading, setReviewsLoading] = useState(false)
+  const [reviewFilter, setReviewFilter] = useState<'needs_manual_review' | 'resolved' | 'all'>('needs_manual_review')
+  const [resolvingReviewId, setResolvingReviewId] = useState<string | null>(null)
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -171,8 +222,26 @@ export default function OrdersPage() {
     } catch { /* ignore — stats are optional */ }
   }, [])
 
+  const fetchManualReviews = useCallback(async () => {
+    if (!isAdmin) return
+    setReviewsLoading(true)
+    try {
+      const params = new URLSearchParams({
+        status: reviewFilter,
+        per_page: '50',
+      })
+      const data = await adminFetch<ManualReviewsResponse>(`/checkout/manual-reviews?${params}`)
+      setReviewEvents(data.events || [])
+    } catch {
+      setReviewEvents([])
+    } finally {
+      setReviewsLoading(false)
+    }
+  }, [isAdmin, reviewFilter])
+
   useEffect(() => { fetchOrders() }, [fetchOrders])
   useEffect(() => { fetchStats() }, [fetchStats])
+  useEffect(() => { fetchManualReviews() }, [fetchManualReviews])
 
   // Reset to page 1 when filters change
   useEffect(() => { setPage(1) }, [statusFilter, railFilter, searchQuery, perPage])
@@ -187,12 +256,31 @@ export default function OrdersPage() {
       setActionMsg({ id: orderId, text: '✓ Đã kích hoạt thành công', ok: true })
       fetchOrders()
       fetchStats()
+      fetchManualReviews()
     } catch (e) {
       setActionMsg({ id: orderId, text: `✗ ${(e as Error).message}`, ok: false })
     } finally {
       setActivatingId(null)
     }
-  }, [fetchOrders, fetchStats])
+  }, [fetchOrders, fetchStats, fetchManualReviews])
+
+  const handleResolveReview = useCallback(async (eventId: string) => {
+    const note = prompt('Ghi chú xử lý (ví dụ: Đã hoàn tiền / Đã liên hệ khách — có thể bỏ trống):')
+    if (note === null) return
+    setResolvingReviewId(eventId)
+    setActionMsg(null)
+    try {
+      await adminPost(`/checkout/manual-reviews/${eventId}/resolve`, { note })
+      setActionMsg({ id: eventId, text: '✓ Đã đánh dấu đã xử lý', ok: true })
+      fetchManualReviews()
+      fetchOrders()
+      fetchStats()
+    } catch (e) {
+      setActionMsg({ id: eventId, text: `✗ ${(e as Error).message}`, ok: false })
+    } finally {
+      setResolvingReviewId(null)
+    }
+  }, [fetchManualReviews, fetchOrders, fetchStats])
 
   return (
     <div className="space-y-6">
@@ -221,7 +309,7 @@ export default function OrdersPage() {
             ⚡ Khởi tạo bảng CSDL (Migration 042)
           </button>
           <button
-            onClick={() => { fetchOrders(); fetchStats(); }}
+            onClick={() => { fetchOrders(); fetchStats(); fetchManualReviews(); }}
             className="px-3 py-1.5 text-xs rounded-control border border-line bg-surface font-medium text-fg hover:border-line-strong hover:bg-surface-2"
           >
             ↺ Refresh
@@ -231,21 +319,144 @@ export default function OrdersPage() {
 
       {/* Stats cards */}
       {stats && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
           {[
-            { label: 'Tổng đơn',    value: stats.total.toLocaleString() },
-            { label: 'Chờ TT',      value: stats.pending.toLocaleString(),   color: 'text-warning' },
-            { label: 'Đã TT',       value: stats.paid.toLocaleString(),      color: 'text-success' },
-            { label: 'Hết hạn',     value: stats.expired.toLocaleString() },
-            { label: 'Đã huỷ',      value: stats.canceled.toLocaleString() },
-            { label: 'Thiếu tiền',  value: stats.underpaid.toLocaleString(), color: 'text-danger' },
-            { label: 'Doanh thu',   value: formatVnd(stats.revenue_vnd),     color: 'text-success' },
+            { label: 'Tổng đơn',      value: stats.total.toLocaleString() },
+            { label: 'Chờ TT',        value: stats.pending.toLocaleString(),   color: 'text-warning' },
+            { label: 'Đã TT',         value: stats.paid.toLocaleString(),      color: 'text-success' },
+            { label: 'Hết hạn',       value: stats.expired.toLocaleString() },
+            { label: 'Đã huỷ',        value: stats.canceled.toLocaleString() },
+            { label: 'Thiếu tiền',    value: stats.underpaid.toLocaleString(), color: 'text-danger' },
+            { label: 'Cần duyệt tay', value: (stats.manual_review_events ?? stats.needs_manual_review ?? 0).toLocaleString(), color: 'text-warning' },
+            { label: 'Doanh thu',     value: formatVnd(stats.revenue_vnd),     color: 'text-success' },
           ].map(c => (
             <div key={c.label} className="rounded-card border border-line bg-surface shadow-card p-3">
               <p className="font-mono text-[10px] text-fg-muted uppercase">{c.label}</p>
               <p className={cn('mt-0.5 font-mono text-lg font-bold', c.color || 'text-fg')}>{c.value}</p>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Admin-only manual review section */}
+      {isAdmin && (
+        <div className="rounded-card border border-warning/30 bg-surface shadow-card overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-line bg-warning-soft/40">
+            <div>
+              <h2 className="text-xs font-bold text-fg flex items-center gap-2">
+                <span>⚠ Giao dịch cần duyệt tay (needs_manual_review)</span>
+                {(stats?.manual_review_events ?? 0) > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-warning text-white text-[10px] font-mono">
+                    {stats?.manual_review_events}
+                  </span>
+                )}
+              </h2>
+              <p className="text-[11px] text-fg-muted mt-0.5">
+                Các giao dịch bị chặn tự động (hạ gói khi gói cao còn hạn, chuyển khoản lệch giá gói &gt; 1.000₫) — chỉ Admin xem &amp; xử lý.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={reviewFilter}
+                onChange={e => setReviewFilter(e.target.value as 'needs_manual_review' | 'resolved' | 'all')}
+                className="rounded border border-line bg-surface px-2 py-1 text-xs text-fg-2"
+              >
+                <option value="needs_manual_review">Chưa xử lý (needs_manual_review)</option>
+                <option value="resolved">Đã xử lý (resolved)</option>
+                <option value="all">Tất cả</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-fg-muted font-mono border-b border-line bg-surface-2">
+                  <th className="px-3 py-2 text-left">Thời gian</th>
+                  <th className="px-3 py-2 text-left">Cổng</th>
+                  <th className="px-3 py-2 text-left">Mã đơn / Event</th>
+                  <th className="px-3 py-2 text-left">User</th>
+                  <th className="px-3 py-2 text-right">Số tiền</th>
+                  <th className="px-3 py-2 text-left">Gói (hiện tại → TT)</th>
+                  <th className="px-3 py-2 text-left">Lý do</th>
+                  <th className="px-3 py-2 text-left">Trạng thái</th>
+                  <th className="px-3 py-2 text-center">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reviewsLoading && (
+                  <tr>
+                    <td colSpan={9} className="px-3 py-6 text-center text-fg-muted">
+                      Đang tải danh sách cần duyệt tay...
+                    </td>
+                  </tr>
+                )}
+                {!reviewsLoading && reviewEvents.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-3 py-6 text-center text-fg-muted">
+                      Không có bản ghi cần duyệt tay
+                    </td>
+                  </tr>
+                )}
+                {!reviewsLoading && reviewEvents.map(ev => {
+                  const orderCode = typeof ev.raw_payload?.order_code === 'string' ? ev.raw_payload.order_code : null
+                  const adminNote = typeof ev.raw_payload?.admin_note === 'string' ? ev.raw_payload.admin_note : null
+                  return (
+                    <tr key={ev.id} className="border-b border-line hover:bg-surface-2/40">
+                      <td className="px-3 py-2 text-fg-muted font-mono text-[11px]">
+                        {formatDate(ev.created_at)}
+                      </td>
+                      <td className="px-3 py-2 font-mono font-bold uppercase text-[11px] text-fg">
+                        {ev.provider}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-[11px] text-accent">
+                        {orderCode || ev.order_id || ev.provider_event_id || '—'}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-[10px] text-fg-2" title={ev.user_id || ''}>
+                        {ev.user_id ? (ev.user_id.length > 16 ? ev.user_id.slice(0, 14) + '…' : ev.user_id) : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono font-bold text-fg">
+                        {formatReviewAmount(ev.amount, ev.provider)}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-[11px] text-fg-2">
+                        {(ev.current_tier || 'free').toUpperCase()} → {(ev.target_tier || '—').toUpperCase()}
+                      </td>
+                      <td className="px-3 py-2 text-[11px] text-fg-2">
+                        <span>{ev.reason || '—'}</span>
+                        {adminNote && (
+                          <span className="block text-[10px] text-fg-muted mt-0.5">
+                            Ghi chú: {adminNote}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <StatusBadge status={ev.status} />
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {ev.status !== 'resolved' ? (
+                          <button
+                            onClick={() => handleResolveReview(ev.id)}
+                            disabled={resolvingReviewId === ev.id}
+                            className="rounded-control bg-accent px-2.5 py-1 text-[10px] text-accent-fg font-bold
+                                       hover:opacity-90 disabled:opacity-40 transition-opacity"
+                          >
+                            {resolvingReviewId === ev.id ? 'Đang lưu...' : '✓ Đánh dấu đã xử lý'}
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-success font-mono">✓ Đã xử lý</span>
+                        )}
+                        {actionMsg?.id === ev.id && (
+                          <p className={cn('mt-1 text-[10px] font-mono', actionMsg.ok ? 'text-success' : 'text-danger')}>
+                            {actionMsg.text}
+                          </p>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -272,6 +483,8 @@ export default function OrdersPage() {
           <option value="expired">Hết hạn</option>
           <option value="canceled">Đã huỷ</option>
           <option value="underpaid">Thiếu tiền</option>
+          <option value="needs_manual_review">Cần duyệt tay</option>
+          <option value="resolved">Đã xử lý</option>
         </select>
 
         {/* Rail filter */}

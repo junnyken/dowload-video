@@ -1,3 +1,8 @@
+> [!WARNING]
+> **TÀI LIỆU LỖI THỜI (OBSOLETE — KHÔNG SỬ DỤNG CHO PRODUCTION HIỆN TẠI)**
+> Máy chủ Oracle VPS (`SSH alias vidgrab`, `/home/ubuntu/vidgrab`) đã ngừng tồn tại từ 06/2026. Production hiện chạy trên **Vibe Host (Mắt Bão — cụm `vibe1.tinhgon.xyz`)** và tự động build từ nhánh `github/main`.
+> Xem quy trình triển khai & vận hành hiện hành tại: `docs/DEPLOY-VIBEHOST-2026-11.md` và bối cảnh hạ tầng tại `docs/AI-HANDOFF.md`.
+
 # VidGrab Production Runbook — Phase 17
 
 > Last updated: 2026-06-29

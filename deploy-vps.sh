@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+# ==============================================================================
+# [LỖI THỜI / OBSOLETE — KHÔNG SỬ DỤNG]
+# Script này dành cho máy chủ Oracle VPS cũ (SSH alias `vidgrab`), đã ngừng tồn
+# tại từ 06/2026. Production hiện chạy trên Vibe Host (Mắt Bão — cụm
+# `vibe1.tinhgon.xyz`), tự động build khi push nhánh `github/main`.
+# Tài liệu deploy hiện hành: docs/DEPLOY-VIBEHOST-2026-11.md
+# ==============================================================================
 # deploy-vps.sh — Deploy VidGrab lên Oracle VPS (dowloadvideo.io.vn)
 # Usage:
 #   ./deploy-vps.sh                  # full deploy with pre/post checks

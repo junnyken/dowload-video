@@ -97,6 +97,23 @@ def _upgrade_user(user_id: str, subscription_id: str, current_period_end: Option
     # Resolve tier — accept any tier known to the quota/entitlement system.
     from app.core.quotas import TIER_PERMISSIONS  # noqa: PLC0415
     tier = target_tier if target_tier in TIER_PERMISSIONS and target_tier != "free" else "pro"
+
+    from app.core import payment_orders as po  # noqa: PLC0415
+    is_down, cur_tier, _exp = po.check_downgrade_active_subscription(user_id, tier, db=supabase)
+    if is_down:
+        po.record_webhook_manual_review(
+            supabase,
+            provider="payments",
+            provider_event_id=str(subscription_id or ""),
+            event_type="upgrade_user_downgrade_blocked",
+            user_id=str(user_id),
+            current_tier=cur_tier,
+            target_tier=tier,
+            reason="downgrade_while_higher_tier_active",
+            status="needs_manual_review",
+        )
+        return
+
     # Resolve human-friendly plan name for the profiles table.
     try:
         from app.core.entitlements import get_plan_def  # noqa: PLC0415
@@ -261,6 +278,20 @@ async def create_checkout_session(
     """
     is_year = (payload.period or "month").lower() == "year"
     from app.core import payment_orders as po  # noqa: PLC0415
+    is_down, cur_tier, exp = po.check_downgrade_active_subscription(str(user["id"]), "pro", db=_supabase())
+    if is_down:
+        msg = po.downgrade_user_message(cur_tier, "pro", exp)
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": "cannot_downgrade_active_subscription",
+                "message": msg,
+                "user_message": msg,
+                "current_tier": cur_tier,
+                "target_tier": "pro",
+                "subscription_expiry": exp,
+            },
+        )
     plan_obj = po.plan_by_id("pro_year" if is_year else "pro_month", user_id=str(user["id"]))
     eff_cents = int(plan_obj["usd_cents"]) if plan_obj else (_STRIPE_PRO_YEAR_CENTS if is_year else _STRIPE_PRO_MONTH_CENTS)
     usd_str = f"{eff_cents / 100:.2f}"
@@ -544,7 +575,7 @@ async def stripe_webhook(request: Request):
     data_obj   = event.get("data", {}).get("object", {})
 
     # Idempotency: skip if already processed
-    is_new = _record_payment_event(event_id, event_type, event.get("data", {}))
+    is_new = _record_payment_event(event_id, event_type, event.get("data", {}), provider="stripe")
     if not is_new:
         return {"received": True, "type": event_type, "duplicate": True}
 
@@ -565,6 +596,30 @@ async def stripe_webhook(request: Request):
                     plan_tier = str(sub_meta.get("plan")).lower()
             except Exception:
                 period_end = None
+            from app.core import payment_orders as po  # noqa: PLC0415
+            is_down, cur_tier, _exp = po.check_downgrade_active_subscription(user_id, plan_tier, db=_supabase())
+            if is_down:
+                raw_amt = data_obj.get("amount_total")
+                amt_int = int(raw_amt) if isinstance(raw_amt, (int, float)) else None
+                po.record_webhook_manual_review(
+                    _supabase(),
+                    provider="stripe",
+                    provider_event_id=event_id,
+                    event_type=event_type,
+                    user_id=str(user_id),
+                    current_tier=cur_tier,
+                    target_tier=plan_tier,
+                    amount=amt_int,
+                    raw_payload=data_obj if isinstance(data_obj, dict) else {},
+                    reason="downgrade_while_higher_tier_active",
+                    status="needs_manual_review",
+                )
+                return {
+                    "received": True,
+                    "type": event_type,
+                    "action": "needs_manual_review",
+                    "status": "needs_manual_review",
+                }
             _upgrade_user(user_id, sub_id, period_end, target_tier=plan_tier)
             try:
                 from app.api.referrals import reward_referrer_on_pro_upgrade
@@ -592,6 +647,27 @@ async def stripe_webhook(request: Request):
         user_id     = _user_id_from_customer(customer_id)
         if user_id:
             if status in ("active", "trialing"):
+                from app.core import payment_orders as po  # noqa: PLC0415
+                is_down, cur_tier, _exp = po.check_downgrade_active_subscription(user_id, plan_tier, db=_supabase())
+                if is_down:
+                    po.record_webhook_manual_review(
+                        _supabase(),
+                        provider="stripe",
+                        provider_event_id=event_id,
+                        event_type=event_type,
+                        user_id=str(user_id),
+                        current_tier=cur_tier,
+                        target_tier=plan_tier,
+                        raw_payload=data_obj if isinstance(data_obj, dict) else {},
+                        reason="downgrade_while_higher_tier_active",
+                        status="needs_manual_review",
+                    )
+                    return {
+                        "received": True,
+                        "type": event_type,
+                        "action": "needs_manual_review",
+                        "status": "needs_manual_review",
+                    }
                 _upgrade_user(user_id, sub_id, period_end, target_tier=plan_tier)
             elif status in ("canceled", "unpaid", "paused"):
                 _downgrade_user(user_id, at_period_end=bool(period_end), period_end_ts=period_end)
@@ -604,7 +680,7 @@ async def stripe_webhook(request: Request):
             _past_due_user(user_id)
             print(f"[Payments] ⚠ Payment failed for {user_id} — grace period applied")
 
-    _mark_payment_event_done(event_id)
+    _mark_payment_event_done(event_id, provider="stripe")
     return {"received": True, "type": event_type}
 
 
@@ -698,7 +774,7 @@ async def paypal_webhook(request: Request):
 
     # Idempotency
     event_id = event.get("id", "")
-    is_new = _record_payment_event(event_id, event_type, {"source": "paypal_webhook"})
+    is_new = _record_payment_event(event_id, event_type, {"source": "paypal_webhook"}, provider="paypal_webhook")
     if not is_new:
         return {"received": True, "duplicate": True}
 
@@ -722,6 +798,7 @@ async def paypal_webhook(request: Request):
                 if order_id and order_id not in ("month", "year"):
                     # Activate via payment_orders
                     try:
+                        from app.core import payment_orders as po  # noqa: PLC0415
                         from app.core.payment_orders import activate_order  # noqa: PLC0415
                         paid_amount = 0
                         try:
@@ -730,27 +807,90 @@ async def paypal_webhook(request: Request):
                         except Exception:
                             paid_amount = 0
 
-                        ok, _ = activate_order(
+                        ok, act_msg = activate_order(
                             order_id=order_id,
                             paid_amount=paid_amount or 99999,  # if can't parse, assume paid
                             provider_ref=event_id,
                             evidence={"provider": "paypal_webhook", "event_type": event_type},
                         )
-                        if not ok:
+                        if act_msg == "needs_manual_review":
+                            return {
+                                "received": True,
+                                "type": event_type,
+                                "action": "needs_manual_review",
+                                "status": "needs_manual_review",
+                            }
+                        if not ok and not str(act_msg).startswith("order_already_"):
                             days = 365 if "year" in plan_id else 30
                             exp = int((datetime.now(timezone.utc) + timedelta(days=days)).timestamp())
                             tier_prefix = plan_id.split("_")[0] if "_" in plan_id else "pro"
+                            is_down, cur_tier, _exp = po.check_downgrade_active_subscription(
+                                user_id, tier_prefix, db=_supabase()
+                            )
+                            if is_down:
+                                po.record_webhook_manual_review(
+                                    _supabase(),
+                                    provider="paypal",
+                                    provider_event_id=event_id,
+                                    event_type=event_type,
+                                    user_id=str(user_id),
+                                    current_tier=cur_tier,
+                                    target_tier=tier_prefix,
+                                    amount=paid_amount,
+                                    order_id=str(order_id),
+                                    raw_payload=resource if isinstance(resource, dict) else {},
+                                    reason="downgrade_while_higher_tier_active",
+                                    status="needs_manual_review",
+                                )
+                                return {
+                                    "received": True,
+                                    "type": event_type,
+                                    "action": "needs_manual_review",
+                                    "status": "needs_manual_review",
+                                }
                             _upgrade_user(user_id, f"paypal_wh_{event_id}", exp, target_tier=tier_prefix)
                     except Exception as e:
                         print(f"[PayPal Webhook] activate error: {e}")
                 else:
                     # Direct PayPal Orders v2 flow (custom_id = user_id:month or user_id:year)
+                    from app.core import payment_orders as po  # noqa: PLC0415
                     days = 365 if (order_id == "year" or "year" in plan_id) else 30
                     exp = int((datetime.now(timezone.utc) + timedelta(days=days)).timestamp())
                     tier_prefix = plan_id.split("_")[0] if "_" in plan_id else "pro"
+                    is_down, cur_tier, _exp = po.check_downgrade_active_subscription(
+                        user_id, tier_prefix, db=_supabase()
+                    )
+                    if is_down:
+                        direct_amt = 0
+                        try:
+                            amt_obj = resource.get("amount", {})
+                            if not amt_obj and resource.get("purchase_units"):
+                                amt_obj = (resource.get("purchase_units") or [{}])[0].get("amount", {})
+                            direct_amt = int(round(float(amt_obj.get("value", "0")) * 100))
+                        except Exception:
+                            direct_amt = 0
+                        po.record_webhook_manual_review(
+                            _supabase(),
+                            provider="paypal",
+                            provider_event_id=event_id,
+                            event_type=event_type,
+                            user_id=str(user_id),
+                            current_tier=cur_tier,
+                            target_tier=tier_prefix,
+                            amount=direct_amt or None,
+                            raw_payload=resource if isinstance(resource, dict) else {},
+                            reason="downgrade_while_higher_tier_active",
+                            status="needs_manual_review",
+                        )
+                        return {
+                            "received": True,
+                            "type": event_type,
+                            "action": "needs_manual_review",
+                            "status": "needs_manual_review",
+                        }
                     _upgrade_user(user_id, f"paypal_wh_{event_id}", exp, target_tier=tier_prefix)
 
-    _mark_payment_event_done(event_id)
+    _mark_payment_event_done(event_id, provider="paypal_webhook")
     return {"received": True, "type": event_type}
 
 
@@ -812,7 +952,12 @@ async def paypal_ipn(request: Request):
     if payment_status.lower() != "completed" or not txn_id:
         return {"received": True, "status": payment_status}
 
-    if not _record_payment_event(f"ipn_{txn_id}", "paypal.ipn.completed", {"txn_id": txn_id}):
+    if not _record_payment_event(
+        f"ipn_{txn_id}",
+        "paypal.ipn.completed",
+        {"txn_id": txn_id},
+        provider="paypal_ipn",
+    ):
         return {"received": True, "duplicate": True}
 
     try:
@@ -825,23 +970,56 @@ async def paypal_ipn(request: Request):
     order_id = parts[1] if len(parts) >= 2 else ""
     plan_id = parts[2] if len(parts) >= 3 else "pro_month"
 
+    from app.core import payment_orders as po  # noqa: PLC0415
     from app.core.payment_orders import activate_order, _upgrade_user_pro  # noqa: PLC0415
 
     if order_id:
-        activate_order(
+        _ok, act_msg = activate_order(
             order_id=order_id,
             paid_amount=paid_cents or 499,
             provider_ref=txn_id,
             evidence={"provider": "paypal_ipn", "txn_id": txn_id},
         )
+        if act_msg == "needs_manual_review":
+            return {
+                "received": True,
+                "verified": True,
+                "txn_id": txn_id,
+                "action": "needs_manual_review",
+                "status": "needs_manual_review",
+            }
     elif user_id:
         days = 365 if ("year" in plan_id or paid_cents >= 2400) else 30
         tier_prefix = plan_id.split("_")[0] if "_" in plan_id else "pro"
         if tier_prefix not in ("starter", "pro", "team"):
             tier_prefix = "pro"
+        is_down, cur_tier, _exp = po.check_downgrade_active_subscription(
+            user_id, tier_prefix, db=_supabase()
+        )
+        if is_down:
+            po.record_webhook_manual_review(
+                _supabase(),
+                provider="paypal_ipn",
+                provider_event_id=f"ipn_{txn_id}",
+                event_type="paypal.ipn.completed",
+                user_id=str(user_id),
+                current_tier=cur_tier,
+                target_tier=tier_prefix,
+                amount=paid_cents,
+                raw_payload=parsed if isinstance(parsed, dict) else {},
+                reason="downgrade_while_higher_tier_active",
+                status="needs_manual_review",
+            )
+            return {
+                "received": True,
+                "verified": True,
+                "txn_id": txn_id,
+                "action": "needs_manual_review",
+                "status": "needs_manual_review",
+            }
         _upgrade_user_pro(user_id, days, f"paypal_ipn_{txn_id}", target_tier=tier_prefix)
 
-    _mark_payment_event_done(f"ipn_{txn_id}")
+    _mark_payment_event_done(f"ipn_{txn_id}", provider="paypal_ipn")
     return {"received": True, "verified": True, "txn_id": txn_id}
 
 
@@ -887,12 +1065,18 @@ async def billing_status(user: Dict[str, Any] = Depends(get_required_user)):
         except Exception:
             pass
 
+    from app.core import payment_orders as po  # noqa: PLC0415
+    pending_review = po.get_user_pending_manual_review(str(user["id"]), db=supabase)
+
     return {
-        "tier":                 tier,
-        "billing_status":       billing_status_,
-        "subscription_expiry":  expiry,
-        "has_payment_method":   bool(profile.get("stripe_customer_id")),
-        "can_manage_billing":   bool(profile.get("stripe_subscription_id")),
+        "tier":                  tier,
+        "billing_status":        billing_status_,
+        "subscription_expiry":   expiry,
+        "has_payment_method":    bool(profile.get("stripe_customer_id")),
+        "can_manage_billing":    bool(profile.get("stripe_subscription_id")),
+        "pending_manual_review": bool(pending_review),
+        "manual_review":         pending_review,
+        "manual_review_message": po.MANUAL_REVIEW_USER_MESSAGE if pending_review else None,
     }
 
 
@@ -974,12 +1158,28 @@ async def create_checkout_session_v2(
     Enhanced checkout supporting team plans, yearly billing, and seat selection.
     Falls back to v1 checkout-session for simple Pro monthly.
     """
-    if not _STRIPE_SECRET_KEY:
-        raise HTTPException(status_code=503, detail="Billing not configured")
-
     plan   = payload.plan.lower()
     period = payload.period.lower()
     seats  = max(1, payload.seats or 1)
+
+    from app.core import payment_orders as po  # noqa: PLC0415
+    is_down, cur_tier, exp = po.check_downgrade_active_subscription(str(user["id"]), plan, db=_supabase())
+    if is_down:
+        msg = po.downgrade_user_message(cur_tier, plan, exp)
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": "cannot_downgrade_active_subscription",
+                "message": msg,
+                "user_message": msg,
+                "current_tier": cur_tier,
+                "target_tier": plan,
+                "subscription_expiry": exp,
+            },
+        )
+
+    if not _STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="Billing not configured")
 
     env_key  = _STRIPE_PLAN_PRICES.get((plan, period))
     price_id = os.getenv(env_key or "", "") if env_key else ""
@@ -1018,19 +1218,57 @@ async def create_checkout_session_v2(
 
 # ── Idempotent webhook wrapper ────────────────────────────────────────────────
 
-def _record_payment_event(event_id: str, event_type: str, raw_payload: Any) -> bool:
+def _is_unique_violation(exc: Exception) -> bool:
+    code = str(getattr(exc, "code", "") or "")
+    msg = f"{code} {exc}".lower()
+    return (
+        code == "23505"
+        or "23505" in msg
+        or "duplicate key" in msg
+        or "unique constraint" in msg
+        or "already exists" in msg
+        or "unique" in msg
+    )
+
+
+def _record_payment_event(
+    event_id: str,
+    event_type: str,
+    raw_payload: Any,
+    provider: str = "stripe",
+) -> bool:
     """
-    Insert payment_events row for idempotency.
-    Returns True if new event, False if already processed (duplicate).
+    Insert payment_events row for idempotency (fail-closed).
+    - Checks both `provider` and legacy `"stripe"` on SELECT so events stored
+      before provider separation are still recognized as duplicates.
+    - If INSERT hits UNIQUE (provider, provider_event_id) -> duplicate (False).
+    - Any other DB error -> raises HTTP 503 so Stripe/PayPal retries without
+      processing or mutating tier.
     """
+    if not event_id:
+        raise HTTPException(status_code=400, detail="Missing webhook event id")
+
+    providers_to_check = list(dict.fromkeys([provider, "stripe"]))
     try:
         db = _supabase()
-        res = db.table("payment_events").select("processed").eq("provider_event_id", event_id).maybe_single().execute()
+        res = (
+            db.table("payment_events")
+            .select("id, provider, processed")
+            .eq("provider_event_id", event_id)
+            .in_("provider", providers_to_check)
+            .execute()
+        )
         if res.data:
-            return False  # already handled
+            return False  # already handled (exact provider or legacy "stripe")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"[Payments] payment_events select error ({provider}, {event_id}): {exc}")
+        raise HTTPException(status_code=503, detail="Payment event store unavailable") from exc
 
+    try:
         db.table("payment_events").insert({
-            "provider": "stripe",
+            "provider": provider,
             "provider_event_id": event_id,
             "event_type": event_type,
             "processed": False,
@@ -1038,17 +1276,26 @@ def _record_payment_event(event_id: str, event_type: str, raw_payload: Any) -> b
         }).execute()
         return True
     except Exception as exc:
-        print(f"[Payments] payment_events insert error: {exc}")
-        return True  # allow processing even if log fails
+        if _is_unique_violation(exc):
+            return False
+        print(f"[Payments] payment_events insert error ({provider}, {event_id}): {exc}")
+        raise HTTPException(status_code=503, detail="Payment event store unavailable") from exc
 
 
-def _mark_payment_event_done(event_id: str, error: Optional[str] = None) -> None:
+def _mark_payment_event_done(
+    event_id: str,
+    error: Optional[str] = None,
+    provider: Optional[str] = None,
+) -> None:
     try:
         db = _supabase()
-        db.table("payment_events").update({
+        q = db.table("payment_events").update({
             "processed": error is None,
             "processed_at": datetime.now(timezone.utc).isoformat(),
             "error": error,
-        }).eq("provider_event_id", event_id).execute()
+        }).eq("provider_event_id", event_id)
+        if provider:
+            q = q.eq("provider", provider)
+        q.execute()
     except Exception:
         pass

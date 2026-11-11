@@ -30,6 +30,10 @@ _VG_USER_RE = re.compile(r"\b(VG[0-9A-F]{8})\b", re.IGNORECASE)
 # Max time skew for timestamp validation (seconds)
 MAX_TIMESTAMP_SKEW = 300  # 5 minutes
 
+# Maximum allowed difference (VND) when matching an account-level VG transfer
+# against the user's plan catalog (Case A).
+VG_PRICE_TOLERANCE_VND = 1_000
+
 DEFAULT_SEPAY_SECRET = "whsec_hZfaB5HXGJquU4rM3qDowUZYiPqMcU6Z"
 
 
@@ -185,10 +189,49 @@ def parse(raw_body: bytes) -> Optional[Dict[str, Any]]:
     }
 
 
-def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
-    """Full webhook handler: verify → parse → match order → activate.
+def _is_unique_violation(exc: Exception) -> bool:
+    code = str(getattr(exc, "code", "") or "")
+    msg = f"{code} {exc}".lower()
+    return (
+        code == "23505"
+        or "23505" in msg
+        or "duplicate key" in msg
+        or "unique constraint" in msg
+        or "already exists" in msg
+        or "unique" in msg
+    )
 
-    Always returns 200 with result dict (SePay retries on non-200).
+
+def _claim_event(db, sepay_id: str, amount: int) -> str:
+    """
+    Atomically pre-claim (provider='sepay', provider_event_id=sepay_id) via INSERT
+    on UNIQUE (provider, provider_event_id) BEFORE any tier mutation.
+    Returns 'claimed' or 'duplicate'. Raises HTTP 503 on any non-unique DB error
+    so SePay retries later (fail-closed).
+    """
+    try:
+        db.table("payment_events").insert({
+            "provider": "sepay",
+            "provider_event_id": sepay_id,
+            "event_type": "sepay_claiming",
+            "amount": amount,
+            "match_type": "claiming",
+            "processed": False,
+        }).execute()
+        return "claimed"
+    except Exception as exc:
+        if _is_unique_violation(exc):
+            return "duplicate"
+        logger.error("SePay payment_events pre-claim DB error (sepay_id=%s): %s", sepay_id, exc)
+        from fastapi import HTTPException  # noqa: PLC0415
+        raise HTTPException(status_code=503, detail="Payment event store unavailable") from exc
+
+
+def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
+    """Full webhook handler: verify → parse → pre-claim → match order → activate.
+
+    Returns 200 with result dict for verified & recorded events; raises HTTP 503
+    if payment_events DB pre-claim fails so SePay retries safely.
     """
     from app.core.database import get_service_client  # noqa: PLC0415
 
@@ -207,28 +250,23 @@ def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
     code = parsed["code"]
     amount = parsed["amount"]
 
-    # 3. Record payment event (idempotency)
+    # 3. Pre-claim payment event BEFORE any upgrade or order activation (idempotency via UNIQUE)
     db = get_service_client()
-    try:
-        existing = (
-            db.table("payment_events")
-            .select("id")
-            .eq("provider", "sepay")
-            .eq("provider_event_id", sepay_id)
-            .maybe_single()
-            .execute()
-        )
-        if existing.data:
-            return {"success": True, "action": "duplicate", "sepay_id": sepay_id}
-    except Exception:
-        pass
+    if _claim_event(db, sepay_id, amount) == "duplicate":
+        return {"success": True, "action": "duplicate", "sepay_id": sepay_id}
 
     # 4. Find matching order by code
     if not code:
         _log_event(db, sepay_id, "sepay_no_code", amount, None, "unmatched")
         return {"success": True, "action": "unmatched_no_code"}
 
-    from app.core.payment_orders import get_order_by_code, activate_order, _upgrade_user_pro  # noqa: PLC0415
+    from app.core.payment_orders import (  # noqa: PLC0415
+        get_order_by_code,
+        activate_order,
+        _upgrade_user_pro,
+        check_downgrade_active_subscription,
+        record_webhook_manual_review,
+    )
 
     # Case A: Account-based transfer code VG + 8 hex (from /pricing page)
     if code.startswith("VG") and not code.startswith("VGP") and len(code) == 10:
@@ -250,29 +288,110 @@ def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
                 from app.core.payment_orders import catalog as _po_catalog  # noqa: PLC0415
                 cat = _po_catalog(user_id=uid)
                 matched_plan = None
-                for p in sorted(cat, key=lambda x: int(x.get("vnd") or 0), reverse=True):
-                    if amount >= int(p.get("vnd") or 0) > 0:
+                best_diff: Optional[int] = None
+                for p in cat:
+                    plan_vnd = int(p.get("vnd") or 0)
+                    if plan_vnd <= 0:
+                        continue
+                    diff = abs(amount - plan_vnd)
+                    if diff <= VG_PRICE_TOLERANCE_VND and (best_diff is None or diff < best_diff):
                         matched_plan = p
-                        break
+                        best_diff = diff
 
-                if matched_plan:
-                    days = int(matched_plan.get("days") or 30)
-                    plan_id = str(matched_plan.get("id") or "pro_month")
-                    target_tier = str(matched_plan.get("tier") or "pro")
-                    plan_amount = int(matched_plan.get("vnd") or amount)
-                else:
-                    s = plans.get_settings()
-                    price_month = int(s.get("price_month_vnd") or 99_000)
-                    price_year = int(s.get("price_year_vnd") or 890_000)
-                    if amount >= price_year:
-                        days, plan_id, target_tier, plan_amount = 365, "pro_year", "pro", price_year
-                    elif amount >= price_month:
-                        days, plan_id, target_tier, plan_amount = 30, "pro_month", "pro", price_month
-                    else:
-                        _log_event(db, sepay_id, "sepay_vg_underpaid", amount, None, "underpaid")
-                        return {"success": True, "action": "underpaid", "code": code, "user_id": uid}
+                if not matched_plan:
+                    record_webhook_manual_review(
+                        db,
+                        provider="sepay",
+                        provider_event_id=sepay_id,
+                        event_type="sepay_vg_underpaid",
+                        user_id=uid,
+                        amount=amount,
+                        raw_payload=parsed,
+                        reason="amount_not_matching_user_catalog",
+                        status="needs_manual_review",
+                    )
+                    _log_event(db, sepay_id, "sepay_vg_underpaid", amount, None, "underpaid")
+                    return {
+                        "success": True,
+                        "action": "underpaid",
+                        "status": "needs_manual_review",
+                        "code": code,
+                        "user_id": uid,
+                    }
 
-                _upgrade_user_pro(uid, days, f"sepay_vg_{sepay_id}", target_tier=target_tier)
+                days = int(matched_plan.get("days") or 30)
+                plan_id = str(matched_plan.get("id") or "pro_month")
+                target_tier = str(matched_plan.get("tier") or "pro")
+                plan_amount = int(matched_plan.get("vnd") or amount)
+
+                is_down, cur_tier, _exp = check_downgrade_active_subscription(uid, target_tier, db=db)
+                if is_down:
+                    record_webhook_manual_review(
+                        db,
+                        provider="sepay",
+                        provider_event_id=sepay_id,
+                        event_type="sepay_vg_downgrade",
+                        user_id=uid,
+                        current_tier=cur_tier,
+                        target_tier=target_tier,
+                        amount=amount,
+                        raw_payload=parsed,
+                        reason="downgrade_while_higher_tier_active",
+                        status="needs_manual_review",
+                    )
+                    _log_event(db, sepay_id, "sepay_vg_downgrade", amount, None, "needs_manual_review")
+                    return {
+                        "success": True,
+                        "action": "needs_manual_review",
+                        "status": "needs_manual_review",
+                        "code": code,
+                        "user_id": uid,
+                    }
+
+                try:
+                    _upgrade_user_pro(
+                        uid,
+                        days,
+                        f"sepay_vg_{sepay_id}",
+                        target_tier=target_tier,
+                        raise_on_error=True,
+                    )
+                except Exception as upg_exc:
+                    err_text = str(upg_exc)[:500]
+                    logger.error(
+                        "SePay Case A upgrade failed after pre-claim (sepay_id=%s user=%s): %s",
+                        sepay_id, uid, err_text,
+                    )
+                    record_webhook_manual_review(
+                        db,
+                        provider="sepay",
+                        provider_event_id=sepay_id,
+                        event_type="sepay_vg_upgrade_failed",
+                        user_id=uid,
+                        target_tier=target_tier,
+                        amount=amount,
+                        raw_payload=parsed,
+                        reason=f"upgrade_failed:{type(upg_exc).__name__}",
+                        status="needs_manual_review",
+                    )
+                    _log_event(
+                        db,
+                        sepay_id,
+                        "sepay_vg_upgrade_failed",
+                        amount,
+                        None,
+                        "failed",
+                        processed=False,
+                        error=err_text,
+                    )
+                    return {
+                        "success": True,
+                        "action": "failed",
+                        "status": "failed",
+                        "code": code,
+                        "user_id": uid,
+                    }
+
                 now_iso = datetime.now(timezone.utc).isoformat()
                 order_id_recorded = None
                 try:
@@ -330,26 +449,42 @@ def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
         order_id, code, amount, msg,
     )
 
-    return {"success": True, "action": msg, "order_id": str(order_id)}
+    out: Dict[str, Any] = {"success": True, "action": msg, "order_id": str(order_id)}
+    if msg == "needs_manual_review":
+        out["status"] = "needs_manual_review"
+    return out
 
 
 def _log_event(
     db, sepay_id: str, event_type: str, amount: int,
     order_id: Optional[str], match_type: str,
+    processed: bool = True,
+    error: Optional[str] = None,
 ) -> None:
-    """Record in payment_events for audit trail."""
+    """Finalize pre-claimed row in payment_events for audit trail (or insert if absent)."""
+    fields: Dict[str, Any] = {
+        "event_type": event_type,
+        "amount": amount,
+        "order_id": order_id,
+        "match_type": match_type,
+        "processed": processed,
+        "processed_at": datetime.now(timezone.utc).isoformat() if processed else None,
+        "error": error,
+    }
     try:
-        db.table("payment_events").insert({
-            "provider": "sepay",
-            "provider_event_id": sepay_id,
-            "event_type": event_type,
-            "amount": amount,
-            "order_id": order_id,
-            "match_type": match_type,
-            "processed": True,
-            "processed_at": datetime.now(timezone.utc).isoformat(),
-        }).execute()
+        upd = (
+            db.table("payment_events")
+            .update(fields)
+            .eq("provider", "sepay")
+            .eq("provider_event_id", sepay_id)
+            .execute()
+        )
+        if not upd.data:
+            db.table("payment_events").insert({
+                "provider": "sepay",
+                "provider_event_id": sepay_id,
+                **fields,
+            }).execute()
     except Exception as e:
-        # Duplicate — already recorded
-        if "unique" not in str(e).lower():
-            logger.warning("SePay event log failed: %s", e)
+        if not _is_unique_violation(e):
+            logger.warning("SePay event finalize failed: %s", e)
