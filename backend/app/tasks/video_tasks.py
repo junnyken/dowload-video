@@ -1504,16 +1504,27 @@ def daily_summary_report(self):
     Celery Beat task: Send a daily operations summary to Telegram.
     Runs every day at 23:00 UTC (6:00 AM UTC+7 next day).
     """
+    from app.core.periodic_lock import acquire_daily_lock, release_daily_lock
+
+    acquired, lock_key, lock_token = acquire_daily_lock("daily_summary_report")
+    if not acquired:
+        print("[Cron] Daily summary skipped — already ran today or lock unavailable.")
+        return {"skipped": "duplicate_daily_run"}
+
     print("[Cron] Generating daily summary report...")
     try:
         from app.core.notifications import send_daily_summary_sync
         result = send_daily_summary_sync()
         if result:
             print("[Cron] Daily summary sent to Telegram successfully.")
-        else:
-            print("[Cron] Daily summary failed to send.")
+            return {"sent": True}
+        release_daily_lock(lock_key, lock_token)
+        print("[Cron] Daily summary failed to send.")
+        return {"sent": False}
     except Exception as e:
+        release_daily_lock(lock_key, lock_token)
         print(f"[Cron] Daily summary error: {e}")
+        return {"sent": False, "error": str(e)}
 
 
 # =════════════════════════════════════════════════════════════════════
@@ -1817,6 +1828,12 @@ def check_cookie_expiry(self):
     """
     from app.core.cookie_pool import get_expiry_report
     from app.core.notifications import send_telegram_message_sync
+    from app.core.periodic_lock import acquire_daily_lock, release_daily_lock
+
+    acquired, lock_key, lock_token = acquire_daily_lock("check_cookie_expiry")
+    if not acquired:
+        print("[CookieMonitor] Skipped — already ran today or lock unavailable.")
+        return {"skipped": "duplicate_daily_run"}
 
     # every platform that holds cookies (task #6127), not only the first four
     from app.core.cookie_pool import pooled_platforms
@@ -1849,7 +1866,7 @@ def check_cookie_expiry(self):
 
     if not expired_lines and not critical_lines and not soon_lines:
         print("[CookieMonitor] All cookies healthy — no alerts needed")
-        return
+        return {"sent": False, "healthy": True}
 
     sections = []
     if expired_lines:
@@ -1865,8 +1882,16 @@ def check_cookie_expiry(self):
         + "\n\n".join(sections)
         + "\n\n-> Upload cookie moi: <code>POST /admin/cookies/upload</code>"
     )
-    send_telegram_message_sync(message)
-    print(f"[CookieMonitor] Alert sent: {len(expired_lines)} expired, {len(critical_lines)} critical, {len(soon_lines)} expiring soon")
+    try:
+        sent = send_telegram_message_sync(message)
+        if sent is False:
+            release_daily_lock(lock_key, lock_token)
+        print(f"[CookieMonitor] Alert sent: {len(expired_lines)} expired, {len(critical_lines)} critical, {len(soon_lines)} expiring soon")
+        return {"sent": bool(sent)}
+    except Exception as e:
+        release_daily_lock(lock_key, lock_token)
+        print(f"[CookieMonitor] Telegram alert failed: {e}")
+        return {"sent": False, "error": str(e)}
 
 
 # =════════════════════════════════════════════════════════════════════
@@ -1937,6 +1962,13 @@ def reset_daily_quota(self):
     Also purges anonymous IP quota keys from Redis (they auto-expire anyway,
     but explicit purge makes reset instant after a restart at midnight).
     """
+    from app.core.periodic_lock import acquire_daily_lock, release_daily_lock
+
+    acquired, lock_key, lock_token = acquire_daily_lock("reset_daily_quota")
+    if not acquired:
+        print("[reset_daily_quota] Skipped — already ran today or lock unavailable.")
+        return {"skipped": "duplicate_daily_run"}
+
     try:
         supabase = get_supabase_client()
         today = datetime.now(timezone.utc).replace(
@@ -1961,8 +1993,11 @@ def reset_daily_quota(self):
         except Exception as _re:
             print(f"[reset_daily_quota] Redis cleanup failed (non-fatal): {_re}")
 
+        return {"reset_count": count}
     except Exception as e:
+        release_daily_lock(lock_key, lock_token)
         print(f"[reset_daily_quota] error: {e}")
+        return {"error": str(e)}
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -1974,10 +2009,18 @@ def expire_subscriptions(self):
     """
     Find profiles with billing_status canceling / past_due / manual (admin
     grant after a bank transfer) and subscription_expiry < now.
-    Downgrade them to tier='free' / billing_status='canceled'.
+    Downgrade them to tier='free' / billing_status='canceled' ONLY when the
+    expiry condition still holds inside the UPDATE WHERE clause.
     Runs at 00:30 UTC each day so users who cancelled keep Pro until midnight
     after their billing period ends.
     """
+    from app.core.periodic_lock import acquire_daily_lock, release_daily_lock
+
+    acquired, lock_key, lock_token = acquire_daily_lock("expire_subscriptions")
+    if not acquired:
+        print("[expire_subscriptions] Skipped — already ran today or lock unavailable.")
+        return {"skipped": "duplicate_daily_run"}
+
     try:
         supabase = get_supabase_client()
         now_iso = datetime.now(timezone.utc).isoformat()
@@ -1991,26 +2034,56 @@ def expire_subscriptions(self):
         )
         rows = res.data or []
         if not rows:
-            return
+            return {"processed": 0, "downgraded": 0, "skipped_renewed": 0}
 
+        downgraded = 0
+        skipped_renewed = 0
+        failed = 0
         for row in rows:
             uid = row["id"]
             try:
-                supabase.table("profiles").update({
-                    "tier":                    "free",
-                    "billing_status":          "canceled",
-                    "subscription_expiry":     None,
-                    "stripe_subscription_id":  None,
-                }).eq("id", uid).execute()
-                # Keep user_usage.plan in sync
+                update_now_iso = datetime.now(timezone.utc).isoformat()
+                upd = (
+                    supabase.table("profiles")
+                    .update({
+                        "tier":                   "free",
+                        "billing_status":         "canceled",
+                        "subscription_expiry":    None,
+                        "stripe_subscription_id": None,
+                    })
+                    .eq("id", uid)
+                    .in_("billing_status", ["canceling", "past_due", "manual"])
+                    .lt("subscription_expiry", update_now_iso)
+                    .execute()
+                )
+                if not upd.data:
+                    skipped_renewed += 1
+                    print(f"[expire_subscriptions] Skipped {uid} — condition no longer met at UPDATE")
+                    continue
+                # Keep user_usage.plan in sync only when profile was actually downgraded
                 supabase.table("user_usage").update({"plan": "free"}).eq("user_id", uid).execute()
+                downgraded += 1
                 print(f"[expire_subscriptions] Downgraded {uid}")
             except Exception as _de:
+                failed += 1
                 print(f"[expire_subscriptions] Failed to downgrade {uid}: {_de}")
 
-        print(f"[expire_subscriptions] Processed {len(rows)} expired subscriptions.")
+        if failed and downgraded == 0 and skipped_renewed == 0:
+            release_daily_lock(lock_key, lock_token)
+        print(
+            f"[expire_subscriptions] Processed {len(rows)} expired candidates "
+            f"(downgraded={downgraded}, skipped_renewed={skipped_renewed}, failed={failed})."
+        )
+        return {
+            "processed": len(rows),
+            "downgraded": downgraded,
+            "skipped_renewed": skipped_renewed,
+            "failed": failed,
+        }
     except Exception as e:
+        release_daily_lock(lock_key, lock_token)
         print(f"[expire_subscriptions] error: {e}")
+        return {"error": str(e)}
 
 
 # ── Phase 25: Container Discovery Task ───────────────────────────────────────

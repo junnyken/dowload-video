@@ -12,18 +12,46 @@ from app.core.celery_app import celery_app
 
 
 # ── Flush Redis event buffer → Supabase ──────────────────────────────
+_EVENT_BUFFER_KEY = "vg:events:buffer"
+_EVENT_BATCH_SIZE = 500
+
+
+def _pop_event_batch(rc, key: str = _EVENT_BUFFER_KEY, batch_size: int = _EVENT_BATCH_SIZE) -> list[str]:
+    """Atomically pop up to `batch_size` events from Redis list `key`.
+
+    Prefers `LPOP key count` (single atomic command on Redis >= 6.2) and falls
+    back to a transactional `MULTI/EXEC` pipeline (`LRANGE` + `LTRIM`) when the
+    client or Redis server does not support `LPOP` with `count`.
+    """
+    try:
+        popped = rc.lpop(key, batch_size)
+        if popped is None:
+            return []
+        if isinstance(popped, list):
+            return popped
+        return [popped]
+    except Exception as exc:
+        if not isinstance(exc, TypeError) and "wrong number of arguments" not in str(exc).lower():
+            raise
+        pipe = rc.pipeline(transaction=True)
+        pipe.lrange(key, 0, batch_size - 1)
+        pipe.ltrim(key, batch_size, -1)
+        raw, _ = pipe.execute()
+        return list(raw or [])
+
+
 @celery_app.task(name="flush_event_buffer", ignore_result=True)
 def flush_event_buffer():
     import json, os, time
     from datetime import datetime, timezone
+    rc = None
+    raw: list[str] = []
     try:
         import redis as _redis
         rc = _redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True)
-        BATCH = 500
-        raw = rc.lrange("vg:events:buffer", 0, BATCH - 1)
+        raw = _pop_event_batch(rc, _EVENT_BUFFER_KEY, _EVENT_BATCH_SIZE)
         if not raw:
             return
-        rc.ltrim("vg:events:buffer", BATCH, -1)
 
         from app.core.database import get_supabase_client
         sb = get_supabase_client()
@@ -46,6 +74,11 @@ def flush_event_buffer():
             sb.table("analytics_events").insert(rows).execute()
             print(f"[Analytics] Flushed {len(rows)} events to Supabase")
     except Exception as ex:
+        if rc is not None and raw:
+            try:
+                rc.lpush(_EVENT_BUFFER_KEY, *reversed(raw))
+            except Exception:
+                pass
         print(f"[Analytics] flush_event_buffer error: {ex}")
 
 
@@ -122,6 +155,13 @@ def flush_analytics_daily():
 def send_phase14_daily_digest():
     """Enhanced daily digest: downloads + sources + conversion signals + top errors."""
     from datetime import datetime, timezone, timedelta
+    from app.core.periodic_lock import acquire_daily_lock, release_daily_lock
+
+    acquired, lock_key, lock_token = acquire_daily_lock("send_phase14_daily_digest")
+    if not acquired:
+        print("[Digest] send_phase14_daily_digest skipped — already ran today or lock unavailable.")
+        return {"skipped": "duplicate_daily_run"}
+
     try:
         from app.core.database import get_supabase_client
         from app.core.notifications import send_telegram_message_sync
@@ -174,9 +214,14 @@ def send_phase14_daily_digest():
             f"🔒 <b>Paywall hits:</b> {paywall_hits}\n\n"
             f"⚠️ <b>Top lỗi:</b>\n{err_lines}"
         )
-        send_telegram_message_sync(msg)
+        sent = send_telegram_message_sync(msg)
+        if sent is False:
+            release_daily_lock(lock_key, lock_token)
+        return {"sent": bool(sent)}
     except Exception as e:
+        release_daily_lock(lock_key, lock_token)
         print(f"[Digest] send_phase14_daily_digest error: {e}")
+        return {"sent": False, "error": str(e)}
 
 
 # ── Phase 34C weekly metrics report ──────────────────────────────────
@@ -185,9 +230,21 @@ def send_weekly_metrics_report():
     """Monday 08:00 Asia/Ho_Chi_Minh (beat entry at 01:00 UTC — the Celery app
     runs on UTC). Does nothing unless the admin flag
     admin:config:metrics_weekly_report_enabled is on; once per ISO week."""
+    from app.core.periodic_lock import acquire_daily_lock, release_daily_lock
+
+    acquired, lock_key, lock_token = acquire_daily_lock("send_weekly_metrics_report")
+    if not acquired:
+        print("[Metrics] weekly report skipped — already ran today or lock unavailable.")
+        return {"sent": False, "skipped": "duplicate_daily_run"}
+
     try:
         from app.services.unit_metrics import send_weekly_report
         res = send_weekly_report(force=False)
+        if not res.get("sent") and res.get("skipped") not in ("already_sent",):
+            release_daily_lock(lock_key, lock_token)
         print(f"[Metrics] weekly report: sent={res.get('sent')} skipped={res.get('skipped')}")
+        return res
     except Exception as e:
+        release_daily_lock(lock_key, lock_token)
         print(f"[Metrics] weekly report error: {e}")
+        return {"sent": False, "error": str(e)}
