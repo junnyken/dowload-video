@@ -802,7 +802,13 @@ def activate_order(order_id: str, paid_amount: int, provider_ref: str = "",
     return True, "activated"
 
 
-def _upgrade_user_pro(user_id: str, days: int, subscription_id: str, target_tier: str = "pro") -> None:
+def _upgrade_user_pro(
+    user_id: str,
+    days: int,
+    subscription_id: str,
+    target_tier: str = "pro",
+    raise_on_error: bool = False,
+) -> None:
     """Upgrade user to paid tier (starter/pro/team) for N days using the manual grant flow."""
     db = _db()
     from app.api.admin import _manual_pro_fields  # noqa: PLC0415
@@ -836,6 +842,8 @@ def _upgrade_user_pro(user_id: str, days: int, subscription_id: str, target_tier
             db.table("profiles").insert({"id": user_id, **fields}).execute()
     except Exception as e:
         print(f"[PaymentOrders] upgrade failed for {user_id}: {e}")
+        if raise_on_error:
+            raise
         return
 
     # Sync user_usage.plan

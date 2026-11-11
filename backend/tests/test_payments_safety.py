@@ -10,9 +10,10 @@ import hashlib
 import hmac
 import json
 import logging
+import threading
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import fakeredis
@@ -27,9 +28,17 @@ class _FakeResult:
 
 
 class _FakeTableQuery:
-    def __init__(self, store: Dict[str, List[Dict[str, Any]]], table_name: str):
+    def __init__(
+        self,
+        store: Dict[str, List[Dict[str, Any]]],
+        table_name: str,
+        lock: threading.RLock,
+        before_execute_hook: Optional[Callable[[str, str, Any], None]] = None,
+    ):
         self._store = store
         self._table = table_name
+        self._lock = lock
+        self._before_execute_hook = before_execute_hook
         self._op = "select"
         self._payload: Any = None
         self._filters: List[Any] = []
@@ -107,39 +116,58 @@ class _FakeTableQuery:
         return True
 
     def execute(self) -> _FakeResult:
-        rows = self._store.setdefault(self._table, [])
-        if self._op == "insert":
-            items = self._payload if isinstance(self._payload, list) else [self._payload]
-            inserted = []
-            for item in items:
-                row = dict(item)
-                if "id" not in row:
-                    row["id"] = f"{self._table}-{len(rows) + 1}"
-                rows.append(row)
-                inserted.append(dict(row))
-            return _FakeResult(data=inserted, count=len(inserted))
+        if self._before_execute_hook is not None:
+            self._before_execute_hook(self._table, self._op, self._payload)
+        with self._lock:
+            rows = self._store.setdefault(self._table, [])
+            if self._op == "insert":
+                items = self._payload if isinstance(self._payload, list) else [self._payload]
+                inserted = []
+                for item in items:
+                    row = dict(item)
+                    if self._table == "payment_events":
+                        prov = str(row.get("provider") or "stripe")
+                        peid = str(row.get("provider_event_id") or "")
+                        for existing in rows:
+                            if (
+                                str(existing.get("provider") or "stripe") == prov
+                                and str(existing.get("provider_event_id") or "") == peid
+                            ):
+                                err = RuntimeError(
+                                    'duplicate key value violates unique constraint '
+                                    '"payment_events_provider_provider_event_id_key" (23505)'
+                                )
+                                setattr(err, "code", "23505")
+                                raise err
+                    if "id" not in row:
+                        row["id"] = f"{self._table}-{len(rows) + 1}"
+                    rows.append(row)
+                    inserted.append(dict(row))
+                return _FakeResult(data=inserted, count=len(inserted))
 
-        matched = [r for r in rows if self._matches(r)]
-        if self._op == "update":
-            updated = []
-            for r in matched:
-                r.update(self._payload)
-                updated.append(dict(r))
-            return _FakeResult(data=updated, count=len(updated))
+            matched = [r for r in rows if self._matches(r)]
+            if self._op == "update":
+                updated = []
+                for r in matched:
+                    r.update(self._payload)
+                    updated.append(dict(r))
+                return _FakeResult(data=updated, count=len(updated))
 
-        if self._limit is not None:
-            matched = matched[: self._limit]
-        if self._single:
-            if not matched:
-                raise RuntimeError("No rows found for single()")
-            return _FakeResult(data=dict(matched[0]), count=1)
-        if self._maybe_single:
-            return _FakeResult(data=dict(matched[0]) if matched else None, count=1 if matched else 0)
-        return _FakeResult(data=[dict(r) for r in matched], count=len(matched))
+            if self._limit is not None:
+                matched = matched[: self._limit]
+            if self._single:
+                if not matched:
+                    raise RuntimeError("No rows found for single()")
+                return _FakeResult(data=dict(matched[0]), count=1)
+            if self._maybe_single:
+                return _FakeResult(data=dict(matched[0]) if matched else None, count=1 if matched else 0)
+            return _FakeResult(data=[dict(r) for r in matched], count=len(matched))
 
 
 class FakeSupabaseDB:
     def __init__(self):
+        self._lock = threading.RLock()
+        self.before_execute_hook: Optional[Callable[[str, str, Any], None]] = None
         self.tables: Dict[str, List[Dict[str, Any]]] = {
             "profiles": [],
             "user_usage": [],
@@ -149,7 +177,7 @@ class FakeSupabaseDB:
         }
 
     def table(self, name: str) -> _FakeTableQuery:
-        return _FakeTableQuery(self.tables, name)
+        return _FakeTableQuery(self.tables, name, self._lock, self.before_execute_hook)
 
 
 @pytest.fixture()
@@ -1354,3 +1382,404 @@ async def test_customer_checkout_and_billing_show_24h_manual_review_message(fake
 
 
 
+# ══════════════════════════════════════════════════════════════════════
+# Fail-Closed Idempotency, Pre-Claim Race Protection & DB Error 5xx
+# ══════════════════════════════════════════════════════════════════════
+
+
+def test_concurrent_same_sepay_id_extends_days_only_once(fake_env, monkeypatch):
+    """2 concurrent SePay Case A requests with the same sepay_id (synchronized with
+    threading.Barrier) must pre-claim via payment_events UNIQUE and extend days ONLY ONCE."""
+    db, rc = fake_env
+    from app.core import sepay_webhook
+
+    uid = "a1b2c3d4-1111-2222-3333-444455556666"
+    rc.set(f"first_purchase_done:{uid}", "1")
+    base_dt = datetime.now(timezone.utc) + timedelta(days=10)
+    db.tables["profiles"].append({
+        "id": uid,
+        "tier": "pro",
+        "billing_status": "manual",
+        "subscription_expiry": base_dt.isoformat(),
+    })
+
+    secret = "sepay_barrier_secret"
+    monkeypatch.setenv("SEPAY_WEBHOOK_SECRET", secret)
+    raw = json.dumps({
+        "id": 777001,
+        "gateway": "ACB",
+        "transferType": "in",
+        "transferAmount": 139000,  # Exact Pro renewal price
+        "content": "Chuyen khoan VGA1B2C3D4",
+    }).encode("utf-8")
+    ts = str(int(time.time()))
+    sig = hmac.new(secret.encode("utf-8"), f"{ts}.".encode("utf-8") + raw, hashlib.sha256).hexdigest()
+    headers = {"x-sepay-signature": f"sha256={sig}", "x-sepay-timestamp": ts}
+
+    barrier = threading.Barrier(2)
+
+    def _hook(table: str, op: str, _payload: Any) -> None:
+        if table == "payment_events" and op == "insert":
+            try:
+                barrier.wait(timeout=5)
+            except threading.BrokenBarrierError:
+                pass
+
+    db.before_execute_hook = _hook
+
+    results: List[Dict[str, Any]] = []
+    errors: List[Exception] = []
+
+    def _worker() -> None:
+        try:
+            results.append(sepay_webhook.handle(raw, headers))
+        except Exception as exc:  # pragma: no cover
+            errors.append(exc)
+
+    t1 = threading.Thread(target=_worker)
+    t2 = threading.Thread(target=_worker)
+    t1.start()
+    t2.start()
+    t1.join(timeout=10)
+    t2.join(timeout=10)
+    db.before_execute_hook = None
+
+    assert not errors
+    actions = sorted(r["action"] for r in results)
+    assert actions == ["activated_vg_account", "duplicate"]
+
+    new_dt = datetime.fromisoformat(db.tables["profiles"][0]["subscription_expiry"].replace("Z", "+00:00"))
+    added_days = (new_dt - base_dt).total_seconds() / 86400.0
+    # Must add 30 days ONCE (~30.0 days), never 60 days
+    assert 29.5 <= added_days <= 30.5
+    assert len([e for e in db.tables["payment_events"] if e["provider"] == "sepay" and e["provider_event_id"] == "777001"]) == 1
+
+
+def test_concurrent_same_event_id_paypal_ipn_extends_days_only_once(fake_env, monkeypatch):
+    """2 concurrent webhook requests with the same event_id (synchronized after SELECT via
+    threading.Barrier so both attempt INSERT simultaneously) must extend days ONLY ONCE."""
+    import asyncio
+    db, _rc = fake_env
+    from app.api import payments as payments_api
+
+    monkeypatch.setenv("PAYPAL_ME_URL", "billing@vidgrab.io")
+
+    class _FakeIpnResp:
+        status_code = 200
+        text = "VERIFIED"
+
+    class _FakeAsyncClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            pass
+
+        async def post(self, *a, **kw):
+            return _FakeIpnResp()
+
+    monkeypatch.setattr("httpx.AsyncClient", _FakeAsyncClient)
+
+    uid = "b2c3d4e5-1111-2222-3333-444455556666"
+    base_dt = datetime.now(timezone.utc) + timedelta(days=15)
+    db.tables["profiles"].append({
+        "id": uid,
+        "tier": "pro",
+        "billing_status": "manual",
+        "subscription_expiry": base_dt.isoformat(),
+    })
+
+    ipn_raw = (
+        f"payment_status=Completed&txn_id=TXN_RACE_99"
+        f"&receiver_email=billing@vidgrab.io&custom={uid}::pro_month&mc_gross=3.99"
+    ).encode("utf-8")
+
+    # Synchronize both threads right before INSERT so both see empty SELECT and collide on UNIQUE
+    barrier = threading.Barrier(2)
+
+    def _hook(table: str, op: str, _payload: Any) -> None:
+        if table == "payment_events" and op == "insert":
+            try:
+                barrier.wait(timeout=5)
+            except threading.BrokenBarrierError:
+                pass
+
+    db.before_execute_hook = _hook
+
+    results: List[Dict[str, Any]] = []
+    errors: List[Exception] = []
+
+    def _worker() -> None:
+        req = MagicMock()
+        req.body = AsyncMock(return_value=ipn_raw)
+        try:
+            results.append(asyncio.run(payments_api.paypal_ipn(req)))
+        except Exception as exc:  # pragma: no cover
+            errors.append(exc)
+
+    t1 = threading.Thread(target=_worker)
+    t2 = threading.Thread(target=_worker)
+    t1.start()
+    t2.start()
+    t1.join(timeout=10)
+    t2.join(timeout=10)
+    db.before_execute_hook = None
+
+    assert not errors
+    dup_flags = sorted(bool(r.get("duplicate")) for r in results)
+    assert dup_flags == [False, True]
+
+    new_dt = datetime.fromisoformat(db.tables["profiles"][0]["subscription_expiry"].replace("Z", "+00:00"))
+    added_days = (new_dt - base_dt).total_seconds() / 86400.0
+    assert 29.5 <= added_days <= 30.5
+
+    recorded = [
+        e for e in db.tables["payment_events"]
+        if e["provider_event_id"] == "ipn_TXN_RACE_99"
+    ]
+    assert len(recorded) == 1
+    assert recorded[0]["provider"] == "paypal_ipn"
+
+
+@pytest.mark.anyio
+async def test_payment_events_records_exact_provider_and_recognizes_legacy_stripe_rows(fake_env, monkeypatch):
+    """_record_payment_event must write exact provider ('stripe', 'paypal_webhook', 'paypal_ipn')
+    AND recognize legacy PayPal events previously stored with provider='stripe'."""
+    db, _rc = fake_env
+    from app.api import payments as payments_api
+
+    uid = "c3d4e5f6-1111-2222-3333-444455556666"
+    db.tables["profiles"].append({"id": uid, "tier": "free", "billing_status": "none"})
+
+    # 1. Seed legacy PayPal Webhook and PayPal IPN events stored under provider='stripe'
+    db.tables["payment_events"].append({
+        "id": "legacy-1",
+        "provider": "stripe",
+        "provider_event_id": "WH-LEGACY-PP-001",
+        "event_type": "CHECKOUT.ORDER.COMPLETED",
+        "processed": True,
+    })
+    db.tables["payment_events"].append({
+        "id": "legacy-2",
+        "provider": "stripe",
+        "provider_event_id": "ipn_LEGACY_TXN_001",
+        "event_type": "paypal.ipn.completed",
+        "processed": True,
+    })
+
+    monkeypatch.setenv("PAYPAL_CLIENT_ID", "pp_id")
+    monkeypatch.setenv("PAYPAL_CLIENT_SECRET", "pp_sec")
+    monkeypatch.setenv("PAYPAL_WEBHOOK_ID", "pp_wh_id")
+    monkeypatch.setenv("PAYPAL_ME_URL", "billing@vidgrab.io")
+    monkeypatch.setattr(payments_api, "_paypal_access_token", AsyncMock(return_value="tok_123"))
+
+    class _FakeResp:
+        status_code = 200
+        text = "VERIFIED"
+
+        def json(self):
+            return {"verification_status": "SUCCESS"}
+
+    class _FakeAsyncClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            pass
+
+        async def post(self, *a, **kw):
+            return _FakeResp()
+
+    monkeypatch.setattr("httpx.AsyncClient", _FakeAsyncClient)
+
+    # Replay legacy PayPal webhook -> must be detected as duplicate, tier stays 'free'
+    req_legacy_wh = MagicMock()
+    req_legacy_wh.body = AsyncMock(return_value=json.dumps({
+        "id": "WH-LEGACY-PP-001",
+        "event_type": "CHECKOUT.ORDER.COMPLETED",
+        "resource": {"purchase_units": [{"custom_id": f"{uid}:month:pro_month"}]},
+    }).encode("utf-8"))
+    req_legacy_wh.headers = {}
+    res_legacy_wh = await payments_api.paypal_webhook(req_legacy_wh)
+    assert res_legacy_wh.get("duplicate") is True
+    assert db.tables["profiles"][0]["tier"] == "free"
+
+    # Replay legacy PayPal IPN -> must be detected as duplicate, tier stays 'free'
+    req_legacy_ipn = MagicMock()
+    req_legacy_ipn.body = AsyncMock(
+        return_value=f"payment_status=Completed&txn_id=LEGACY_TXN_001&receiver_email=billing@vidgrab.io&custom={uid}::pro_month&mc_gross=3.99".encode("utf-8")
+    )
+    res_legacy_ipn = await payments_api.paypal_ipn(req_legacy_ipn)
+    assert res_legacy_ipn.get("duplicate") is True
+    assert db.tables["profiles"][0]["tier"] == "free"
+
+    # New events record accurate provider names: 'paypal_webhook', 'paypal_ipn', 'stripe'
+    assert payments_api._record_payment_event("WH-NEW-PP-1", "CHECKOUT.ORDER.COMPLETED", {}, provider="paypal_webhook") is True
+    assert payments_api._record_payment_event("ipn_NEW_1", "paypal.ipn.completed", {}, provider="paypal_ipn") is True
+    assert payments_api._record_payment_event("evt_new_stripe_1", "checkout.session.completed", {}, provider="stripe") is True
+
+    by_id = {e["provider_event_id"]: e["provider"] for e in db.tables["payment_events"]}
+    assert by_id["WH-NEW-PP-1"] == "paypal_webhook"
+    assert by_id["ipn_NEW_1"] == "paypal_ipn"
+    assert by_id["evt_new_stripe_1"] == "stripe"
+
+
+@pytest.mark.anyio
+async def test_webhook_db_failure_returns_5xx_and_does_not_change_tier(fake_env, monkeypatch):
+    """When payment_events DB fails (non-unique error), Stripe, PayPal Webhook, PayPal IPN,
+    and SePay webhooks must fail-closed with HTTP 5xx and NEVER mutate user tier."""
+    db, _rc = fake_env
+    from app.api import payments as payments_api
+
+    uid = "d4e5f6a7-1111-2222-3333-444455556666"
+    db.tables["profiles"].append({"id": uid, "tier": "free", "billing_status": "none"})
+
+    def _boom_on_payment_events(table: str, _op: str, _payload: Any) -> None:
+        if table == "payment_events":
+            raise ConnectionError("Supabase PostgREST connection timeout")
+
+    db.before_execute_hook = _boom_on_payment_events
+
+    try:
+        # 1. Stripe webhook -> 5xx, tier unchanged
+        monkeypatch.setattr(payments_api, "_STRIPE_WEBHOOK_SECRET", "whsec_db_err")
+        fake_stripe = MagicMock()
+        fake_stripe.Webhook.construct_event.return_value = {
+            "id": "evt_db_down_1",
+            "type": "checkout.session.completed",
+            "data": {"object": {"metadata": {"user_id": uid, "plan": "pro"}, "subscription": "sub_1"}},
+        }
+        monkeypatch.setattr(payments_api, "_stripe", lambda: fake_stripe)
+        req_stripe = MagicMock()
+        req_stripe.body = AsyncMock(return_value=b"{}")
+        req_stripe.headers = {"stripe-signature": "t=1,v1=ok"}
+        with pytest.raises(HTTPException) as exc_stripe:
+            await payments_api.stripe_webhook(req_stripe)
+        assert 500 <= exc_stripe.value.status_code < 600
+        assert db.tables["profiles"][0]["tier"] == "free"
+
+        # 2. PayPal webhook -> 5xx, tier unchanged
+        monkeypatch.setenv("PAYPAL_CLIENT_ID", "pp_id")
+        monkeypatch.setenv("PAYPAL_CLIENT_SECRET", "pp_sec")
+        monkeypatch.setenv("PAYPAL_WEBHOOK_ID", "pp_wh_id")
+        monkeypatch.setattr(payments_api, "_paypal_access_token", AsyncMock(return_value="tok_123"))
+
+        class _FakeResp:
+            status_code = 200
+            text = "VERIFIED"
+
+            def json(self):
+                return {"verification_status": "SUCCESS"}
+
+        class _FakeAsyncClient:
+            def __init__(self, *a, **kw):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                pass
+
+            async def post(self, *a, **kw):
+                return _FakeResp()
+
+        monkeypatch.setattr("httpx.AsyncClient", _FakeAsyncClient)
+        req_pp = MagicMock()
+        req_pp.body = AsyncMock(return_value=json.dumps({
+            "id": "WH-DB-DOWN-1",
+            "event_type": "CHECKOUT.ORDER.COMPLETED",
+            "resource": {"purchase_units": [{"custom_id": f"{uid}:month:pro_month"}]},
+        }).encode("utf-8"))
+        req_pp.headers = {}
+        with pytest.raises(HTTPException) as exc_pp:
+            await payments_api.paypal_webhook(req_pp)
+        assert 500 <= exc_pp.value.status_code < 600
+        assert db.tables["profiles"][0]["tier"] == "free"
+
+        # 3. PayPal IPN -> 5xx, tier unchanged
+        monkeypatch.setenv("PAYPAL_ME_URL", "billing@vidgrab.io")
+        req_ipn = MagicMock()
+        req_ipn.body = AsyncMock(
+            return_value=f"payment_status=Completed&txn_id=IPN_DB_DOWN_1&receiver_email=billing@vidgrab.io&custom={uid}::pro_month&mc_gross=3.99".encode("utf-8")
+        )
+        with pytest.raises(HTTPException) as exc_ipn:
+            await payments_api.paypal_ipn(req_ipn)
+        assert 500 <= exc_ipn.value.status_code < 600
+        assert db.tables["profiles"][0]["tier"] == "free"
+
+        # 4. SePay webhook -> 5xx, tier unchanged
+        secret = "sepay_db_down_secret"
+        monkeypatch.setenv("SEPAY_WEBHOOK_SECRET", secret)
+        raw_sepay = json.dumps({
+            "id": 888001,
+            "gateway": "ACB",
+            "transferType": "in",
+            "transferAmount": 49000,
+            "content": "Chuyen khoan VGD4E5F6A7",
+        }).encode("utf-8")
+        ts = str(int(time.time()))
+        sig = hmac.new(secret.encode("utf-8"), f"{ts}.".encode("utf-8") + raw_sepay, hashlib.sha256).hexdigest()
+        req_sepay = MagicMock()
+        req_sepay.body = AsyncMock(return_value=raw_sepay)
+        req_sepay.headers = {"x-sepay-signature": f"sha256={sig}", "x-sepay-timestamp": ts}
+        with pytest.raises(HTTPException) as exc_sepay:
+            await payments_api.sepay_webhook(req_sepay)
+        assert 500 <= exc_sepay.value.status_code < 600
+        assert db.tables["profiles"][0]["tier"] == "free"
+    finally:
+        db.before_execute_hook = None
+
+
+def test_sepay_case_a_upgrade_failure_updates_payment_event_to_failed(fake_env, monkeypatch):
+    """If SePay Case A pre-claims payment_events and _upgrade_user_pro subsequently fails,
+    the claimed payment_events row must be updated to match_type='failed' (processed=False)
+    and recorded for manual review."""
+    db, _rc = fake_env
+    from app.core import payment_orders as po
+    from app.core import sepay_webhook
+
+    uid = "e5f6a7b8-1111-2222-3333-444455556666"
+    db.tables["profiles"].append({"id": uid, "tier": "free", "billing_status": "none"})
+
+    def _failing_upgrade(*_a, **_kw):
+        raise RuntimeError("profiles write failed mid-upgrade")
+
+    monkeypatch.setattr(po, "_upgrade_user_pro", _failing_upgrade)
+
+    secret = "sepay_upg_fail_secret"
+    monkeypatch.setenv("SEPAY_WEBHOOK_SECRET", secret)
+    raw = json.dumps({
+        "id": 990077,
+        "gateway": "ACB",
+        "transferType": "in",
+        "transferAmount": 49000,
+        "content": "Chuyen khoan VGE5F6A7B8",
+    }).encode("utf-8")
+    ts = str(int(time.time()))
+    sig = hmac.new(secret.encode("utf-8"), f"{ts}.".encode("utf-8") + raw, hashlib.sha256).hexdigest()
+    headers = {"x-sepay-signature": f"sha256={sig}", "x-sepay-timestamp": ts}
+
+    res = sepay_webhook.handle(raw, headers)
+    assert res["action"] == "failed"
+    assert res["status"] == "failed"
+    assert db.tables["profiles"][0]["tier"] == "free"
+
+    ev_rows = [
+        e for e in db.tables["payment_events"]
+        if e["provider"] == "sepay" and e["provider_event_id"] == "990077"
+    ]
+    assert len(ev_rows) == 1
+    assert ev_rows[0]["match_type"] == "failed"
+    assert ev_rows[0]["processed"] is False
+    assert "profiles write failed" in (ev_rows[0].get("error") or "")
+
+    assert len(db.tables["payment_webhook_events"]) == 1
+    assert db.tables["payment_webhook_events"][0]["status"] == "needs_manual_review"
+    assert "upgrade_failed" in db.tables["payment_webhook_events"][0]["reason"]

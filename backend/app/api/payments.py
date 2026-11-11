@@ -575,7 +575,7 @@ async def stripe_webhook(request: Request):
     data_obj   = event.get("data", {}).get("object", {})
 
     # Idempotency: skip if already processed
-    is_new = _record_payment_event(event_id, event_type, event.get("data", {}))
+    is_new = _record_payment_event(event_id, event_type, event.get("data", {}), provider="stripe")
     if not is_new:
         return {"received": True, "type": event_type, "duplicate": True}
 
@@ -680,7 +680,7 @@ async def stripe_webhook(request: Request):
             _past_due_user(user_id)
             print(f"[Payments] ⚠ Payment failed for {user_id} — grace period applied")
 
-    _mark_payment_event_done(event_id)
+    _mark_payment_event_done(event_id, provider="stripe")
     return {"received": True, "type": event_type}
 
 
@@ -774,7 +774,7 @@ async def paypal_webhook(request: Request):
 
     # Idempotency
     event_id = event.get("id", "")
-    is_new = _record_payment_event(event_id, event_type, {"source": "paypal_webhook"})
+    is_new = _record_payment_event(event_id, event_type, {"source": "paypal_webhook"}, provider="paypal_webhook")
     if not is_new:
         return {"received": True, "duplicate": True}
 
@@ -890,7 +890,7 @@ async def paypal_webhook(request: Request):
                         }
                     _upgrade_user(user_id, f"paypal_wh_{event_id}", exp, target_tier=tier_prefix)
 
-    _mark_payment_event_done(event_id)
+    _mark_payment_event_done(event_id, provider="paypal_webhook")
     return {"received": True, "type": event_type}
 
 
@@ -952,7 +952,12 @@ async def paypal_ipn(request: Request):
     if payment_status.lower() != "completed" or not txn_id:
         return {"received": True, "status": payment_status}
 
-    if not _record_payment_event(f"ipn_{txn_id}", "paypal.ipn.completed", {"txn_id": txn_id}):
+    if not _record_payment_event(
+        f"ipn_{txn_id}",
+        "paypal.ipn.completed",
+        {"txn_id": txn_id},
+        provider="paypal_ipn",
+    ):
         return {"received": True, "duplicate": True}
 
     try:
@@ -1014,7 +1019,7 @@ async def paypal_ipn(request: Request):
             }
         _upgrade_user_pro(user_id, days, f"paypal_ipn_{txn_id}", target_tier=tier_prefix)
 
-    _mark_payment_event_done(f"ipn_{txn_id}")
+    _mark_payment_event_done(f"ipn_{txn_id}", provider="paypal_ipn")
     return {"received": True, "verified": True, "txn_id": txn_id}
 
 
@@ -1213,19 +1218,57 @@ async def create_checkout_session_v2(
 
 # ── Idempotent webhook wrapper ────────────────────────────────────────────────
 
-def _record_payment_event(event_id: str, event_type: str, raw_payload: Any) -> bool:
+def _is_unique_violation(exc: Exception) -> bool:
+    code = str(getattr(exc, "code", "") or "")
+    msg = f"{code} {exc}".lower()
+    return (
+        code == "23505"
+        or "23505" in msg
+        or "duplicate key" in msg
+        or "unique constraint" in msg
+        or "already exists" in msg
+        or "unique" in msg
+    )
+
+
+def _record_payment_event(
+    event_id: str,
+    event_type: str,
+    raw_payload: Any,
+    provider: str = "stripe",
+) -> bool:
     """
-    Insert payment_events row for idempotency.
-    Returns True if new event, False if already processed (duplicate).
+    Insert payment_events row for idempotency (fail-closed).
+    - Checks both `provider` and legacy `"stripe"` on SELECT so events stored
+      before provider separation are still recognized as duplicates.
+    - If INSERT hits UNIQUE (provider, provider_event_id) -> duplicate (False).
+    - Any other DB error -> raises HTTP 503 so Stripe/PayPal retries without
+      processing or mutating tier.
     """
+    if not event_id:
+        raise HTTPException(status_code=400, detail="Missing webhook event id")
+
+    providers_to_check = list(dict.fromkeys([provider, "stripe"]))
     try:
         db = _supabase()
-        res = db.table("payment_events").select("processed").eq("provider_event_id", event_id).maybe_single().execute()
+        res = (
+            db.table("payment_events")
+            .select("id, provider, processed")
+            .eq("provider_event_id", event_id)
+            .in_("provider", providers_to_check)
+            .execute()
+        )
         if res.data:
-            return False  # already handled
+            return False  # already handled (exact provider or legacy "stripe")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"[Payments] payment_events select error ({provider}, {event_id}): {exc}")
+        raise HTTPException(status_code=503, detail="Payment event store unavailable") from exc
 
+    try:
         db.table("payment_events").insert({
-            "provider": "stripe",
+            "provider": provider,
             "provider_event_id": event_id,
             "event_type": event_type,
             "processed": False,
@@ -1233,17 +1276,26 @@ def _record_payment_event(event_id: str, event_type: str, raw_payload: Any) -> b
         }).execute()
         return True
     except Exception as exc:
-        print(f"[Payments] payment_events insert error: {exc}")
-        return True  # allow processing even if log fails
+        if _is_unique_violation(exc):
+            return False
+        print(f"[Payments] payment_events insert error ({provider}, {event_id}): {exc}")
+        raise HTTPException(status_code=503, detail="Payment event store unavailable") from exc
 
 
-def _mark_payment_event_done(event_id: str, error: Optional[str] = None) -> None:
+def _mark_payment_event_done(
+    event_id: str,
+    error: Optional[str] = None,
+    provider: Optional[str] = None,
+) -> None:
     try:
         db = _supabase()
-        db.table("payment_events").update({
+        q = db.table("payment_events").update({
             "processed": error is None,
             "processed_at": datetime.now(timezone.utc).isoformat(),
             "error": error,
-        }).eq("provider_event_id", event_id).execute()
+        }).eq("provider_event_id", event_id)
+        if provider:
+            q = q.eq("provider", provider)
+        q.execute()
     except Exception:
         pass
