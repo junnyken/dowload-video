@@ -246,9 +246,9 @@ async def lifespan(app: FastAPI):
     try:
         from app.core.email_guard import ensure_db_email_guard as _ensure_email_guard
         _eg_res = await _asyncio.to_thread(_ensure_email_guard)
-        print(f"[Startup] Email signup guard (043): {_eg_res}")
+        print(f"[Startup] Email signup guard (043): {_eg_res}", flush=True)
     except Exception as _eg_err:
-        print(f"[Startup] Email signup guard skipped: {_eg_err}")
+        print(f"[Startup] Email signup guard skipped: {_eg_err}", flush=True)
 
     try:
         from app.core.migrations_044_045 import ensure_044_045_once_on_startup as _ensure_044_045

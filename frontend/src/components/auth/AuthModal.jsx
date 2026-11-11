@@ -5,6 +5,7 @@ import TurnstileWidget from './TurnstileWidget';
 import { TURNSTILE_SITE_KEY } from '../../lib/turnstile';
 import { authErrorMessage, MSG } from '../../lib/authErrors';
 import { validateAndNormalizeSignupEmail } from '../../lib/disposableEmail';
+import { isSignupPasswordValid } from '../../lib/signupPassword';
 import { API_BASE } from '../../lib/apiBase';
 import { useTranslation } from 'react-i18next';
 
@@ -51,7 +52,7 @@ export default function AuthModal({ onClose, initialView = VIEWS.SIGNIN }) {
 
   const handleSignUp = async (e) => {
     e.preventDefault();
-    if (password.length < 6) { setError(t('pwMin')); return; }
+    if (!isSignupPasswordValid(password)) { setError(t('pwMin')); return; }
     setLoading(true); setError('');
 
     // 1. Client-side strict 5-provider whitelist + '+' alias block + Gmail dot normalization

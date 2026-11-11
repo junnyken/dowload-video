@@ -16,9 +16,16 @@ Enforces:
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger("app.email_guard")
+
+STARTUP_EMAIL_GUARD_LOCK_KEY = "startup:email_guard"
+STARTUP_EMAIL_GUARD_LOCK_TTL_SEC = 120
+
+# Optional pre-existing pool for SUPABASE_DB_URL if configured by host runtime.
+_SOURCE_POOL: Any = None
 
 ALLOWED_EMAIL_DOMAINS = frozenset({
     # Gmail
@@ -45,6 +52,8 @@ ALLOWED_EMAIL_DOMAINS = frozenset({
     "protonmail.com",
     "pm.me",
 })
+
+_DROP_TRIGGER_SQL = "DROP TRIGGER IF EXISTS on_auth_user_block_disposable ON auth.users;"
 
 _TRIGGER_INSTALL_SQL = """
 CREATE TABLE IF NOT EXISTS public.signup_email_allowlist (
@@ -174,52 +183,133 @@ def check_duplicate_canonical_email(normalized_email: str) -> bool:
     """
     Check if any existing user in auth.users already has the same canonical email
     (specifically catching older Gmail accounts registered with dots before normalization).
+    Queries SUPABASE_DB_URL (real auth.users, connect_timeout=5) when configured,
+    falling back to the app Postgres DB otherwise. Returns False and logs a warning on error.
     """
     try:
-        from app.core.database import using_postgres, get_service_client  # noqa: PLC0415
-        if not using_postgres():
-            return False
         local, domain = normalized_email.split("@", 1)
-        pg = get_service_client()
         if domain == "gmail.com":
-            rows = pg.run_sql(
-                """
+            sql = """
                 SELECT 1
                   FROM auth.users
                  WHERE email IS NOT NULL
                    AND rtrim(split_part(lower(email), '@', 2), '.') IN ('gmail.com', 'googlemail.com')
                    AND replace(split_part(split_part(lower(email), '@', 1), '+', 1), '.', '') = %s
                  LIMIT 1
-                """,
-                (local,),
-            )
-            return bool(rows)
-        rows = pg.run_sql(
-            "SELECT 1 FROM auth.users WHERE lower(btrim(email)) = %s LIMIT 1",
-            (normalized_email,),
-        )
+            """
+            params: Tuple[Any, ...] = (local,)
+        else:
+            sql = "SELECT 1 FROM auth.users WHERE lower(btrim(email)) = %s LIMIT 1"
+            params = (normalized_email,)
+
+        from app.core.database import get_service_client, using_postgres  # noqa: PLC0415
+        from app.core.db_migration import source_dsn  # noqa: PLC0415
+
+        s_dsn = source_dsn()
+        if s_dsn:
+            # Reuse an existing pool if one is already open for s_dsn; never create a new pool per request.
+            if _SOURCE_POOL is not None:
+                if hasattr(_SOURCE_POOL, "run_sql"):
+                    return bool(_SOURCE_POOL.run_sql(sql, params))
+                conn = _SOURCE_POOL.getconn()
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(sql, params)
+                        return cur.fetchone() is not None
+                finally:
+                    _SOURCE_POOL.putconn(conn)
+
+            if using_postgres():
+                pg_existing = get_service_client()
+                pg_pool = getattr(pg_existing, "_pool", None)
+                if pg_pool is not None and getattr(pg_pool, "_pool", None) is not None and getattr(pg_pool, "dsn", None) == s_dsn:
+                    return bool(pg_existing.run_sql(sql, params))
+
+            import psycopg2  # noqa: PLC0415
+            conn = psycopg2.connect(s_dsn, connect_timeout=5)
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(sql, params)
+                    return cur.fetchone() is not None
+            finally:
+                conn.close()
+
+        if not using_postgres():
+            return False
+        pg = get_service_client()
+        rows = pg.run_sql(sql, params)
         return bool(rows)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("check_duplicate_canonical_email failed: %s", exc)
+        logger.warning("check_duplicate_canonical_email failed: %s", type(exc).__name__)
         return False
 
 
-def ensure_db_email_guard() -> Dict[str, Any]:
+def ensure_db_email_guard(rc: Any = None) -> Dict[str, Any]:
     """
-    Install Migration 043 trigger on both Vibe Host Postgres (target_dsn)
-    and Supabase Postgres (source_dsn, if configured).
-    Safe and idempotent.
+    Once per container startup (guarded by Redis `startup:email_guard`, SET NX EX 120):
+      - On Vibe Host app Postgres (`target_dsn`): DROP trigger `on_auth_user_block_disposable`
+        (keep function & allowlist table) -> `'dropped'`, so `ensure_app_user` can sync legacy
+        custom-domain accounts without firing BEFORE INSERT before ON CONFLICT.
+      - On Supabase Postgres (`source_dsn`): INSTALL trigger 043 -> `'installed'`.
+        Logs a clear warning when `SUPABASE_DB_URL` is missing.
     """
+    redis_client = rc
+    try:
+        if redis_client is None:
+            from app.core.redis_client import get_redis  # noqa: PLC0415
+            redis_client = get_redis()
+        got = redis_client.set(
+            STARTUP_EMAIL_GUARD_LOCK_KEY,
+            str(os.getpid()),
+            nx=True,
+            ex=STARTUP_EMAIL_GUARD_LOCK_TTL_SEC,
+        )
+        if not got:
+            return {"status": "skipped_locked"}
+    except Exception as redis_exc:  # noqa: BLE001
+        logger.warning(
+            "Email signup guard Redis lock unavailable (%s); continuing without lock",
+            type(redis_exc).__name__,
+        )
+
     import psycopg2  # noqa: PLC0415
     from app.core.db_migration import source_dsn, target_dsn  # noqa: PLC0415
 
     results: Dict[str, Any] = {}
-    for label, dsn in (("target_postgres", target_dsn()), ("supabase_postgres", source_dsn())):
-        if not dsn:
-            results[label] = "skipped_no_dsn"
-            continue
+
+    # 1. Target app DB (vidgrab-backup): drop the trigger only (keep function & allowlist table)
+    t_dsn = target_dsn()
+    if not t_dsn:
+        results["target_postgres"] = "skipped_no_dsn"
+    else:
         try:
-            conn = psycopg2.connect(dsn, connect_timeout=10)
+            conn = psycopg2.connect(t_dsn, connect_timeout=10)
+            try:
+                conn.autocommit = True
+                with conn.cursor() as cur:
+                    cur.execute("SELECT to_regclass('auth.users') IS NOT NULL")
+                    has_auth = bool(cur.fetchone()[0])
+                    if has_auth:
+                        cur.execute(_DROP_TRIGGER_SQL)
+                        results["target_postgres"] = "dropped"
+                    else:
+                        results["target_postgres"] = "no_auth_users_table"
+            finally:
+                conn.close()
+        except Exception as exc:  # noqa: BLE001
+            results["target_postgres"] = f"error: {type(exc).__name__}"
+
+    # 2. Source DB (Supabase): install trigger 043; warn clearly if SUPABASE_DB_URL is missing
+    s_dsn = source_dsn()
+    if not s_dsn:
+        logger.warning(
+            "[EmailGuard] SUPABASE_DB_URL is not configured — trigger on_auth_user_block_disposable "
+            "(043) could NOT be verified or installed on Supabase auth.users!"
+        )
+        results["supabase_postgres"] = "skipped_no_dsn"
+    else:
+        try:
+            conn = psycopg2.connect(s_dsn, connect_timeout=10)
             try:
                 conn.autocommit = True
                 with conn.cursor() as cur:
@@ -227,11 +317,13 @@ def ensure_db_email_guard() -> Dict[str, Any]:
                     has_auth = bool(cur.fetchone()[0])
                     if has_auth:
                         cur.execute(_TRIGGER_INSTALL_SQL)
-                        results[label] = "installed"
+                        results["supabase_postgres"] = "installed"
                     else:
-                        results[label] = "no_auth_users_table"
+                        results["supabase_postgres"] = "no_auth_users_table"
             finally:
                 conn.close()
         except Exception as exc:  # noqa: BLE001
-            results[label] = f"error: {type(exc).__name__}"
+            logger.warning("Email signup guard install failed on supabase_postgres: %s", type(exc).__name__)
+            results["supabase_postgres"] = f"error: {type(exc).__name__}"
+
     return results
