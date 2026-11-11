@@ -250,6 +250,13 @@ async def lifespan(app: FastAPI):
     except Exception as _eg_err:
         print(f"[Startup] Email signup guard skipped: {_eg_err}")
 
+    try:
+        from app.core.migrations_044_045 import ensure_044_045_once_on_startup as _ensure_044_045
+        _m044_res = await _asyncio.to_thread(_ensure_044_045)
+        print(f"[Startup] Migrations 044/045 ensure: {_m044_res}", flush=True)
+    except Exception as _m044_err:
+        print(f"[Startup] Migrations 044/045 ensure skipped: {_m044_err}", flush=True)
+
     # JS runtime yt-dlp's iq.com (iQIYI) extractor needs (PhantomJS).
     try:
         import asyncio as _asyncio
@@ -289,9 +296,10 @@ async def lifespan(app: FastAPI):
     # Send Telegram startup notification (non-blocking, failure is OK)
     try:
         from app.core.notifications import notify_system_startup
-        await notify_system_startup()
+        _tg_sent = await notify_system_startup()
+        print(f"[Startup] Telegram notification: {'sent' if _tg_sent else 'skipped_or_failed'}", flush=True)
     except Exception as e:
-        print(f"[Startup] Telegram notification failed (non-critical): {e}")
+        print(f"[Startup] Telegram notification failed (non-critical): {e}", flush=True)
 
     # Worker liveness watchdog.
     #

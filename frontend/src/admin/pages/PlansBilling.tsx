@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { adminFetch, adminPost } from '../utils/adminFetch'
+import {
+  type PlanSettings,
+  NUMERIC_PLAN_KEYS,
+  buildPlanSettingsPayload,
+  findMismatchedPlanFields,
+  findSameCycleDuplicateVndWarnings,
+} from '../utils/planSettingsValidation'
 import { Card } from '../shared/Card'
 import { Button } from '../shared/Button'
 
 /**
- * Gói & thanh toán (owner 13/10): Pro price + bank-transfer details, and the
- * "who paid?" lookup by transfer code. Backend: app/api/plans.py.
- * Payment is a manual bank transfer; the admin grants Pro for 30/365 days.
+ * Gói & thanh toán (owner 13/10): Starter / Pro / Team prices + bank-transfer
+ * details, and the "who paid?" lookup by transfer code. Backend: app/api/plans.py.
  */
 // wording: BA review
 
@@ -22,24 +28,6 @@ export async function grantPro(userId: string, days: 30 | 365): Promise<GrantRes
   const res = await adminPost<GrantResult>('/update-user', { user_id: userId, plan: 'pro', days })
   if (res && res.success === false) throw new Error(res.message ?? 'Cấp Pro không thành công')
   return res
-}
-
-interface PlanSettings {
-  price_month_usd_cents: number
-  price_year_usd_cents: number
-  price_month_vnd: number
-  price_year_vnd: number
-  api_calls_month_pro: number
-  api_calls_month_team: number
-  bank_name: string
-  bank_account: string
-  bank_holder: string
-  contact: string
-  rapidapi_proxy_secret: string
-  rapidapi_url: string
-  paypal_me_url: string
-  bank_bin: string
-  sepay_webhook_secret: string
 }
 
 const RAPIDAPI_STUDIO_URL = 'https://rapidapi.com/studio/api_b8b4154e-99d8-404b-a85c-4ac6e14f63cd/publish/general'
@@ -63,16 +51,29 @@ export function PlansSettingsCard() {
   useEffect(() => { load() }, [load])
 
   const set = (k: keyof PlanSettings, v: string) =>
-    setForm(f => (f ? { ...f, [k]: (k.startsWith('price_') || k.startsWith('api_calls_')) ? (v === '' ? 0 : Number(v)) : v } : f))
+    setForm(f => (f ? { ...f, [k]: NUMERIC_PLAN_KEYS.has(k) ? (v === '' ? 0 : Number(v)) : v } : f))
+
+  const duplicateWarnings = useMemo(
+    () => findSameCycleDuplicateVndWarnings(form),
+    [form],
+  )
 
   async function save() {
     if (!form) return
     setBusy(true); setMsg(null)
     try {
-      // A 422 puts the Vietnamese reason in `detail`; adminFetch throws it as the message.
-      const saved = await adminPost<PlanSettings>('/plans/settings', form)
+      const payload = buildPlanSettingsPayload(form)
+      const saved = await adminPost<PlanSettings>('/plans/settings', payload)
+      const mismatches = findMismatchedPlanFields(payload, saved)
       setForm(saved)
-      setMsg({ ok: true, text: 'Đã lưu. Trang bảng giá cập nhật sau tối đa vài phút.' })
+      if (mismatches.length > 0) {
+        setMsg({
+          ok: false,
+          text: `Không lưu được đúng giá trị ở trường: ${mismatches.join('; ')}`,
+        })
+      } else {
+        setMsg({ ok: true, text: 'Đã lưu. Trang bảng giá cập nhật ngay.' })
+      }
     } catch (e) {
       setMsg({ ok: false, text: `Không lưu được: ${(e as Error).message}` })
     } finally {
@@ -84,49 +85,118 @@ export function PlansSettingsCard() {
     <Card padding="md" as="section">
       <h2 className="text-sm font-semibold text-fg">Gói &amp; thanh toán</h2>
       <p className="mt-1 text-[11px] text-fg-muted">
-        Giá Pro và thông tin chuyển khoản hiển thị ở trang /pricing. Chưa điền đủ ngân hàng, số tài khoản, chủ tài khoản thì trang giá chỉ hiện thông tin liên hệ.
+        Giá Starter / Pro / Team và thông tin chuyển khoản hiển thị ở trang /pricing. Chưa điền đủ ngân hàng, số tài khoản, chủ tài khoản thì trang giá chỉ hiện thông tin liên hệ.
       </p>
+
+      {duplicateWarnings.length > 0 && (
+        <div
+          role="alert"
+          className="mt-3 rounded-card border border-danger/50 bg-danger/10 p-3 text-xs text-danger space-y-1"
+        >
+          <p className="font-semibold">⚠️ Cảnh báo trùng / sát giá VNĐ cùng kỳ thanh toán</p>
+          {duplicateWarnings.map((w, idx) => (
+            <p key={idx}>{w}</p>
+          ))}
+        </div>
+      )}
+
       {!form ? (
         <p className="mt-3 text-xs text-fg-muted">{msg ? '' : 'Đang tải…'}</p>
       ) : (
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <label className="text-xs text-fg-2 font-semibold text-accent-text">🌎 Giá Quốc tế Pro / tháng (USD Cents — vd: 699 = $6.99)
-            <input type="number" inputMode="numeric" value={form.price_month_usd_cents ?? 699} className={inputCls}
-              onChange={e => set('price_month_usd_cents', e.target.value)} />
-          </label>
-          <label className="text-xs text-fg-2 font-semibold text-accent-text">🌎 Giá Quốc tế Pro / năm (USD Cents — vd: 4900 = $49.00)
-            <input type="number" inputMode="numeric" value={form.price_year_usd_cents ?? 4900} className={inputCls}
-              onChange={e => set('price_year_usd_cents', e.target.value)} />
-          </label>
-          <label className="text-xs text-fg-2">🇻🇳 Giá Pro / tháng (VNĐ — VietQR)
-            <input type="number" inputMode="numeric" value={form.price_month_vnd} className={inputCls}
-              onChange={e => set('price_month_vnd', e.target.value)} />
-          </label>
-          <label className="text-xs text-fg-2">🇻🇳 Giá Pro / năm (VNĐ — VietQR)
-            <input type="number" inputMode="numeric" value={form.price_year_vnd} className={inputCls}
-              onChange={e => set('price_year_vnd', e.target.value)} />
-          </label>
-          {/* wording: BA review — owner 14/10 monthly API quota */}
-          <label className="text-xs text-fg-2">Lượt gọi API / tháng — Pro
-            <input type="number" inputMode="numeric" value={form.api_calls_month_pro} className={inputCls}
-              onChange={e => set('api_calls_month_pro', e.target.value)} />
-          </label>
-          <label className="text-xs text-fg-2">Lượt gọi API / tháng — Team
-            <input type="number" inputMode="numeric" value={form.api_calls_month_team} className={inputCls}
-              onChange={e => set('api_calls_month_team', e.target.value)} />
-          </label>
-          <label className="text-xs text-fg-2">Ngân hàng
-            <input value={form.bank_name} maxLength={120} className={inputCls} onChange={e => set('bank_name', e.target.value)} />
-          </label>
-          <label className="text-xs text-fg-2">Số tài khoản
-            <input value={form.bank_account} maxLength={120} className={inputCls} onChange={e => set('bank_account', e.target.value)} />
-          </label>
-          <label className="text-xs text-fg-2">Chủ tài khoản
-            <input value={form.bank_holder} maxLength={120} className={inputCls} onChange={e => set('bank_holder', e.target.value)} />
-          </label>
-          <label className="text-xs text-fg-2">Liên hệ (hiện khi chưa đủ thông tin ngân hàng)
-            <input value={form.contact} maxLength={120} className={inputCls} onChange={e => set('contact', e.target.value)} />
-          </label>
+        <div className="mt-3 space-y-4">
+          {/* ── Gói Starter ── */}
+          <div className="rounded-card border border-line bg-surface-2/30 p-3 space-y-2.5">
+            <h3 className="text-xs font-semibold text-fg">🌱 Gói Starter (mua lần đầu / niêm yết)</h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-xs text-fg-2">🇻🇳 Giá Starter / tháng (VNĐ — VietQR)
+                <input type="number" inputMode="numeric" value={form.starter_month_vnd ?? 49000} className={inputCls}
+                  onChange={e => set('starter_month_vnd', e.target.value)} />
+              </label>
+              <label className="text-xs text-fg-2">🇻🇳 Giá Starter / năm (VNĐ — VietQR)
+                <input type="number" inputMode="numeric" value={form.starter_year_vnd ?? 590000} className={inputCls}
+                  onChange={e => set('starter_year_vnd', e.target.value)} />
+              </label>
+              <label className="text-xs text-fg-2">🌎 Giá Starter / tháng (USD Cents — vd: 199 = $1.99)
+                <input type="number" inputMode="numeric" value={form.starter_month_usd_cents ?? 199} className={inputCls}
+                  onChange={e => set('starter_month_usd_cents', e.target.value)} />
+              </label>
+              <label className="text-xs text-fg-2">🌎 Giá Starter / năm (USD Cents — vd: 2499 = $24.99)
+                <input type="number" inputMode="numeric" value={form.starter_year_usd_cents ?? 2499} className={inputCls}
+                  onChange={e => set('starter_year_usd_cents', e.target.value)} />
+              </label>
+            </div>
+          </div>
+
+          {/* ── Gói Pro ── */}
+          <div className="rounded-card border border-line bg-surface-2/30 p-3 space-y-2.5">
+            <h3 className="text-xs font-semibold text-fg">⭐ Gói Pro (mua lần đầu / niêm yết)</h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-xs text-fg-2">🇻🇳 Giá Pro / tháng (VNĐ — VietQR)
+                <input type="number" inputMode="numeric" value={form.price_month_vnd} className={inputCls}
+                  onChange={e => set('price_month_vnd', e.target.value)} />
+              </label>
+              <label className="text-xs text-fg-2">🇻🇳 Giá Pro / năm (VNĐ — VietQR)
+                <input type="number" inputMode="numeric" value={form.price_year_vnd} className={inputCls}
+                  onChange={e => set('price_year_vnd', e.target.value)} />
+              </label>
+              <label className="text-xs text-fg-2 font-semibold text-accent-text">🌎 Giá Quốc tế Pro / tháng (USD Cents — vd: 399 = $3.99)
+                <input type="number" inputMode="numeric" value={form.price_month_usd_cents ?? 399} className={inputCls}
+                  onChange={e => set('price_month_usd_cents', e.target.value)} />
+              </label>
+              <label className="text-xs text-fg-2 font-semibold text-accent-text">🌎 Giá Quốc tế Pro / năm (USD Cents — vd: 3900 = $39.00)
+                <input type="number" inputMode="numeric" value={form.price_year_usd_cents ?? 3900} className={inputCls}
+                  onChange={e => set('price_year_usd_cents', e.target.value)} />
+              </label>
+            </div>
+          </div>
+
+          {/* ── Gói Team ── */}
+          <div className="rounded-card border border-line bg-surface-2/30 p-3 space-y-2.5">
+            <h3 className="text-xs font-semibold text-fg">🏢 Gói Team (mua lần đầu / niêm yết)</h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-xs text-fg-2">🇻🇳 Giá Team / tháng (VNĐ — VietQR)
+                <input type="number" inputMode="numeric" value={form.team_month_vnd ?? 279000} className={inputCls}
+                  onChange={e => set('team_month_vnd', e.target.value)} />
+              </label>
+              <label className="text-xs text-fg-2">🇻🇳 Giá Team / năm (VNĐ — VietQR)
+                <input type="number" inputMode="numeric" value={form.team_year_vnd ?? 2790000} className={inputCls}
+                  onChange={e => set('team_year_vnd', e.target.value)} />
+              </label>
+              <label className="text-xs text-fg-2">🌎 Giá Team / tháng (USD Cents — vd: 1199 = $11.99)
+                <input type="number" inputMode="numeric" value={form.team_month_usd_cents ?? 1199} className={inputCls}
+                  onChange={e => set('team_month_usd_cents', e.target.value)} />
+              </label>
+              <label className="text-xs text-fg-2">🌎 Giá Team / năm (USD Cents — vd: 11900 = $119.00)
+                <input type="number" inputMode="numeric" value={form.team_year_usd_cents ?? 11900} className={inputCls}
+                  onChange={e => set('team_year_usd_cents', e.target.value)} />
+              </label>
+            </div>
+          </div>
+
+          {/* ── Hạn mức API & Tài khoản ngân hàng ── */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {/* wording: BA review — owner 14/10 monthly API quota */}
+            <label className="text-xs text-fg-2">Lượt gọi API / tháng — Pro
+              <input type="number" inputMode="numeric" value={form.api_calls_month_pro} className={inputCls}
+                onChange={e => set('api_calls_month_pro', e.target.value)} />
+            </label>
+            <label className="text-xs text-fg-2">Lượt gọi API / tháng — Team
+              <input type="number" inputMode="numeric" value={form.api_calls_month_team} className={inputCls}
+                onChange={e => set('api_calls_month_team', e.target.value)} />
+            </label>
+            <label className="text-xs text-fg-2">Ngân hàng
+              <input value={form.bank_name} maxLength={120} className={inputCls} onChange={e => set('bank_name', e.target.value)} />
+            </label>
+            <label className="text-xs text-fg-2">Số tài khoản
+              <input value={form.bank_account} maxLength={120} className={inputCls} onChange={e => set('bank_account', e.target.value)} />
+            </label>
+            <label className="text-xs text-fg-2">Chủ tài khoản
+              <input value={form.bank_holder} maxLength={120} className={inputCls} onChange={e => set('bank_holder', e.target.value)} />
+            </label>
+            <label className="text-xs text-fg-2">Liên hệ (hiện khi chưa đủ thông tin ngân hàng)
+              <input value={form.contact} maxLength={120} className={inputCls} onChange={e => set('contact', e.target.value)} />
+            </label>
+          </div>
         </div>
       )}
 
@@ -229,9 +299,16 @@ export function PlansSettingsCard() {
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <Button variant="primary" size="md" className="min-h-11" disabled={busy || !form} onClick={save}>
-          {busy ? 'Đang lưu…' : '💾 Lưu cài đặt (Ngân hàng, PayPal & RapidAPI)'}
+          {busy ? 'Đang lưu…' : '💾 Lưu cài đặt (Giá gói, Ngân hàng, PayPal & RapidAPI)'}
         </Button>
-        {msg && <span role="status" className={`text-xs ${msg.ok ? 'text-success' : 'text-danger'}`}>{msg.text}</span>}
+        {msg && (
+          <span
+            role={msg.ok ? 'status' : 'alert'}
+            className={`text-xs ${msg.ok ? 'text-success font-medium' : 'text-danger font-semibold'}`}
+          >
+            {msg.text}
+          </span>
+        )}
       </div>
     </Card>
   )
@@ -317,7 +394,7 @@ export default function PlansBillingPage() {
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-fg">Gói &amp; Cổng thanh toán</h1>
           <p className="text-xs text-fg-muted mt-0.5">
-            Cấu hình bảng giá Pro, ngân hàng nội địa (VietQR + SePay HMAC-SHA256), thanh toán quốc tế (PayPal &amp; RapidAPI) và tra cứu mã chuyển khoản.
+            Cấu hình bảng giá Starter / Pro / Team, ngân hàng nội địa (VietQR + SePay HMAC-SHA256), thanh toán quốc tế (PayPal &amp; RapidAPI) và tra cứu mã chuyển khoản.
           </p>
         </div>
       </div>
