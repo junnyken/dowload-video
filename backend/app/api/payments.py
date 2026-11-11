@@ -21,6 +21,8 @@ Webhook events handled:
 
 import os
 import json
+import logging
+from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional
 
@@ -30,6 +32,7 @@ from pydantic import BaseModel
 from app.core.auth_middleware import get_required_user
 from app.core.database import get_service_client as get_supabase_client
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _STRIPE_SECRET_KEY        = os.getenv("STRIPE_SECRET_KEY", "")
@@ -63,6 +66,47 @@ def _stripe():
 
 def _supabase():
     return get_supabase_client()
+
+
+def parse_usd_cents_decimal(raw_val: Any) -> Optional[int]:
+    """Parse a positive USD string/number into exact integer cents via Decimal.
+
+    Returns None when missing, non-numeric, <= 0, non-finite, or fractional cents.
+    """
+    if raw_val is None or isinstance(raw_val, bool):
+        return None
+    s = str(raw_val).strip()
+    if not s:
+        return None
+    try:
+        dec = Decimal(s)
+    except (InvalidOperation, ValueError):
+        return None
+    if not dec.is_finite() or dec <= Decimal("0"):
+        return None
+    cents_dec = dec * Decimal("100")
+    if cents_dec != cents_dec.to_integral_value():
+        return None
+    return int(cents_dec)
+
+
+def _expected_paypal_receiver_email() -> str:
+    """Return configured merchant PayPal receiver email (lowercased), or '' if not configured."""
+    candidates = [
+        os.getenv("PAYPAL_RECEIVER_EMAIL", "").strip(),
+        os.getenv("PAYPAL_BUSINESS_EMAIL", "").strip(),
+        os.getenv("PAYPAL_MERCHANT_EMAIL", "").strip(),
+        os.getenv("PAYPAL_ME_URL", "").strip(),
+    ]
+    try:
+        from app.core.plans import get_settings as _get_plan_settings  # noqa: PLC0415
+        candidates.append((_get_plan_settings().get("paypal_me_url") or "").strip())
+    except Exception:
+        pass
+    for c in candidates:
+        if c and "@" in c and not c.lower().startswith("http"):
+            return c.lower()
+    return ""
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -296,52 +340,9 @@ async def create_checkout_session(
     eff_cents = int(plan_obj["usd_cents"]) if plan_obj else (_STRIPE_PRO_YEAR_CENTS if is_year else _STRIPE_PRO_MONTH_CENTS)
     usd_str = f"{eff_cents / 100:.2f}"
 
-    # 1. PayPal Orders v2 REST API (100% automatic verification & upgrade)
+    # 1. PayPal Orders v2 REST API or PayPal Email IPN — always backed by internal payment_orders
     pp_client_id = os.getenv("PAYPAL_CLIENT_ID", "").strip()
     pp_secret = os.getenv("PAYPAL_CLIENT_SECRET", "").strip()
-    if pp_client_id and pp_secret:
-        import httpx
-        access_token = await _paypal_access_token(pp_client_id, pp_secret)
-        ret_base = (payload.cancel_url or f"{_FRONTEND_URL}/pricing").split("?")[0]
-        return_url = f"{ret_base}?paypal_capture=1&period={'year' if is_year else 'month'}"
-        cancel_url = f"{ret_base}?canceled=1"
-        order_body = {
-            "intent": "CAPTURE",
-            "purchase_units": [
-                {
-                    "custom_id": f"{user['id']}:{'year' if is_year else 'month'}",
-                    "description": f"VidGrab Pro ({'Yearly - 365 days' if is_year else 'Monthly - 30 days'})",
-                    "amount": {
-                        "currency_code": "USD",
-                        "value": usd_str,
-                    },
-                }
-            ],
-            "application_context": {
-                "brand_name": "VidGrab",
-                "user_action": "PAY_NOW",
-                "return_url": return_url,
-                "cancel_url": cancel_url,
-            },
-        }
-        async with httpx.AsyncClient(timeout=20) as client:
-            r = await client.post(
-                f"{_paypal_base_url()}/v2/checkout/orders",
-                json=order_body,
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json",
-                },
-            )
-            if r.status_code not in (200, 201):
-                raise HTTPException(status_code=502, detail=f"Không tạo được đơn PayPal: {r.text[:160]}")
-            odata = r.json()
-            approve_url = next((lnk["href"] for lnk in odata.get("links", []) if lnk.get("rel") == "approve"), None)
-            if not approve_url:
-                raise HTTPException(status_code=502, detail="PayPal không trả về đường dẫn thanh toán.")
-            return {"checkout_url": approve_url, "session_id": odata.get("id", "")}
-
-    # 2. Simple PayPal.me link (zero API keys needed)
     paypal_me = os.getenv("PAYPAL_ME_URL", "").strip()
     if not paypal_me:
         try:
@@ -349,29 +350,26 @@ async def create_checkout_session(
             paypal_me = (_get_plan_settings().get("paypal_me_url") or "").strip()
         except Exception:
             paypal_me = ""
+
+    plan_code = "pro_year" if is_year else "pro_month"
+    if (pp_client_id and pp_secret) or (paypal_me and "@" in paypal_me and not paypal_me.startswith("http")):
+        from app.api.checkout import _create_paypal_order  # noqa: PLC0415
+        order, err = po.create_order(str(user["id"]), plan_code, rail="paypal")
+        if err:
+            status_code = 409 if err in ("too_many_pending", "cannot_downgrade_active_subscription") else 400
+            raise HTTPException(status_code=status_code, detail=err)
+        if not plan_obj:
+            plan_obj = {"id": plan_code, "name_en": "Pro Yearly" if is_year else "Pro Monthly", "usd_cents": eff_cents}
+        pp_url, pp_session = await _create_paypal_order(user, plan_obj, order, return_path="/pricing")
+        _supabase().table("payment_orders").update({"provider_ref": pp_session}).eq("id", order["id"]).execute()
+        return {"checkout_url": pp_url, "session_id": pp_session, "order_id": order["id"]}
+
+    # 2. Simple PayPal.me link (manual review link)
     if paypal_me:
-        if "@" in paypal_me and not paypal_me.startswith("http"):
-            # PayPal email entered: use standard PayPal webscr checkout link + IPN auto-upgrade
-            from urllib.parse import urlencode
-            api_base = os.getenv("PUBLIC_API_URL", "").strip().rstrip("/") or "https://dvid-api.vibe1.tinhgon.xyz"
-            plan_code = "pro_year" if is_year else "pro_month"
-            qs = urlencode({
-                "cmd": "_xclick",
-                "business": paypal_me,
-                "item_name": f"VidGrab Pro ({'Yearly - 365 days' if is_year else 'Monthly - 30 days'}) - {user['id'][:8]}",
-                "custom": f"{user['id']}::{plan_code}",
-                "amount": usd_str,
-                "currency_code": "USD",
-                "no_shipping": "1",
-                "notify_url": f"{api_base}/api/v1/payments/paypal/ipn",
-                "return": payload.success_url or f"{_FRONTEND_URL}/billing?success=1",
-                "cancel_return": payload.cancel_url or f"{_FRONTEND_URL}/pricing?canceled=1",
-            })
-            return {"checkout_url": f"https://www.paypal.com/cgi-bin/webscr?{qs}", "session_id": f"ppemail_{user['id'][:8]}"}
         if not paypal_me.startswith("http"):
             paypal_me = f"https://paypal.me/{paypal_me.lstrip('/')}"
         paypal_me = paypal_me.rstrip("/")
-        amt = "49USD" if is_year else "4.99USD"
+        amt = f"{usd_str}USD"
         return {"checkout_url": f"{paypal_me}/{amt}", "session_id": f"ppme_{user['id'][:8]}"}
 
     # 3. Direct Checkout URL (Lemon Squeezy / Polar.sh)
@@ -444,66 +442,12 @@ async def create_checkout_session(
 
 
 @router.post("/paypal-capture")
-async def paypal_capture(
-    payload: PayPalCaptureRequest,
-    user: Dict[str, Any] = Depends(get_required_user),
-):
-    """
-    Capture an approved PayPal Order on return from PayPal Checkout,
-    verify COMPLETED status, and automatically upgrade the user to Pro.
-    """
-    import httpx
-    pp_client_id = os.getenv("PAYPAL_CLIENT_ID", "").strip()
-    pp_secret = os.getenv("PAYPAL_CLIENT_SECRET", "").strip()
-    if not (pp_client_id and pp_secret):
-        raise HTTPException(status_code=503, detail="PayPal API not configured")
-
-    order_id = (payload.order_id or "").strip()
-    if not order_id:
-        raise HTTPException(status_code=400, detail="Missing order_id")
-
-    access_token = await _paypal_access_token(pp_client_id, pp_secret)
-    async with httpx.AsyncClient(timeout=20) as client:
-        r = await client.post(
-            f"{_paypal_base_url()}/v2/checkout/orders/{order_id}/capture",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-            },
-        )
-        if r.status_code not in (200, 201):
-            # Also check if already captured
-            g = await client.get(
-                f"{_paypal_base_url()}/v2/checkout/orders/{order_id}",
-                headers={"Authorization": f"Bearer {access_token}"},
-            )
-            odata = g.json() if g.status_code == 200 else {}
-        else:
-            odata = r.json()
-
-    if odata.get("status") != "COMPLETED":
-        raise HTTPException(status_code=400, detail=f"Thanh toán PayPal chưa hoàn tất (status={odata.get('status')}).")
-
-    units = odata.get("purchase_units") or []
-    custom_id = ""
-    if units:
-        custom_id = units[0].get("custom_id") or ""
-        if not custom_id:
-            captures = ((units[0].get("payments") or {}).get("captures") or [])
-            if captures:
-                custom_id = captures[0].get("custom_id") or ""
-
-    period = "year" if custom_id.endswith(":year") else "month"
-    days = 365 if period == "year" else 30
-    exp = int((datetime.now(timezone.utc) + timedelta(days=days)).timestamp())
-    _upgrade_user(user["id"], f"paypal_{order_id}", exp)
-    try:
-        from app.api.referrals import reward_referrer_on_pro_upgrade
-        reward_referrer_on_pro_upgrade(user["id"])
-    except Exception:
-        pass
-
-    return {"success": True, "tier": "pro", "period": period, "order_id": order_id}
+async def paypal_capture(request: Request = None):
+    """Removed legacy PayPal capture endpoint — use POST /api/v1/checkout/orders/{order_id}/capture."""
+    raise HTTPException(
+        status_code=410,
+        detail="Endpoint /api/v1/payments/paypal-capture has been removed. Use POST /api/v1/checkout/orders/{order_id}/capture.",
+    )
 
 
 @router.post("/lemonsqueezy-webhook")
@@ -698,7 +642,8 @@ async def sepay_webhook(request: Request):
     # Check if SePay is configured
     from app.core.sepay_webhook import _secret  # noqa: PLC0415
     if not _secret():
-        raise HTTPException(status_code=404, detail="Not Found")
+        logger.error("SePay webhook rejected: SEPAY_WEBHOOK_SECRET is not configured")
+        raise HTTPException(status_code=503, detail="SePay webhook secret not configured")
 
     body = await request.body()
     headers = {k.lower(): v for k, v in request.headers.items()}
@@ -709,7 +654,8 @@ async def sepay_webhook(request: Request):
     valid, err = verify(body, headers)
     if not valid:
         if err == "no_webhook_secret_configured":
-            raise HTTPException(status_code=404, detail="Not Found")
+            logger.error("SePay webhook rejected: SEPAY_WEBHOOK_SECRET is not configured")
+            raise HTTPException(status_code=503, detail="SePay webhook secret not configured")
         raise HTTPException(status_code=401, detail=err)
 
     # Full handling (parse + match + activate)
@@ -902,9 +848,8 @@ async def paypal_webhook(request: Request):
 async def paypal_ipn(request: Request):
     """
     Verify PayPal IPN callback with https://ipnpb.paypal.com/cgi-bin/webscr
-    (cmd=_notify-validate) so payments to the configured PayPal email
-    (e.g. thientrieu753@gmail.com) automatically activate Pro without needing
-    PayPal REST API credentials.
+    (cmd=_notify-validate) and activate ONLY server-created internal orders
+    after verifying merchant receiver email, currency, and Decimal amount.
     """
     import httpx
     from urllib.parse import parse_qs
@@ -912,6 +857,12 @@ async def paypal_ipn(request: Request):
     raw_body = await request.body()
     if not raw_body:
         raise HTTPException(status_code=400, detail="Empty IPN payload")
+
+    # Mandatory receiver email configuration check (never skip when missing)
+    expected_email = _expected_paypal_receiver_email()
+    if not expected_email:
+        logger.error("PayPal IPN rejected: merchant receiver email is not configured")
+        raise HTTPException(status_code=503, detail="PayPal receiver email not configured")
 
     mode = os.getenv("PAYPAL_MODE", "live").strip().lower()
     ipn_url = (
@@ -936,17 +887,27 @@ async def paypal_ipn(request: Request):
     parsed = {k: v[0] for k, v in parse_qs(raw_body.decode("utf-8", errors="replace")).items() if v}
     payment_status = (parsed.get("payment_status") or "").strip()
     txn_id = (parsed.get("txn_id") or "").strip()
-    receiver = (parsed.get("business") or parsed.get("receiver_email") or "").strip().lower()
+    rec_email = (parsed.get("receiver_email") or "").strip().lower()
+    biz_email = (parsed.get("business") or "").strip().lower()
+    receiver = rec_email if rec_email else biz_email
     custom = (parsed.get("custom") or "").strip()
-    mc_gross = parsed.get("mc_gross") or parsed.get("payment_gross") or "0"
+    mc_currency = (parsed.get("mc_currency") or "").strip().upper()
+    raw_gross = parsed.get("mc_gross") if "mc_gross" in parsed else parsed.get("payment_gross")
 
-    # Verify receiver email matches configured PayPal email
-    from app.core.plans import get_settings as _get_plan_settings  # noqa: PLC0415
-    expected_email = (
-        os.getenv("PAYPAL_ME_URL", "").strip()
-        or (_get_plan_settings().get("paypal_me_url") or "").strip()
-    ).lower()
-    if expected_email and "@" in expected_email and receiver and receiver != expected_email:
+    from app.core import payment_orders as po  # noqa: PLC0415
+    from app.core.payment_orders import activate_order  # noqa: PLC0415
+
+    # Receiver email must strictly match configured merchant email
+    if not receiver or receiver != expected_email:
+        po.record_webhook_manual_review(
+            _supabase(),
+            provider="paypal_ipn",
+            provider_event_id=f"ipn_{txn_id or 'unmatched_receiver'}",
+            event_type="paypal.ipn.receiver_mismatch",
+            raw_payload=parsed,
+            reason="receiver_email_mismatch",
+            status="needs_manual_review",
+        )
         raise HTTPException(status_code=400, detail="Receiver email mismatch")
 
     if payment_status.lower() != "completed" or not txn_id:
@@ -960,64 +921,130 @@ async def paypal_ipn(request: Request):
     ):
         return {"received": True, "duplicate": True}
 
-    try:
-        paid_cents = int(round(float(mc_gross) * 100))
-    except Exception:
-        paid_cents = 0
+    # Only activate when `custom` references a server-created internal order owned by matching user
+    if ":" in custom:
+        parts = custom.split(":")
+        custom_user_id = parts[0].strip()
+        order_id = parts[1].strip() if len(parts) >= 2 else ""
+        order = po.get_order(order_id) if (custom_user_id and order_id) else None
+        owner_ok = bool(order and str(order.get("user_id") or "") == custom_user_id)
+    else:
+        custom_user_id = ""
+        order_id = custom.strip()
+        order = po.get_order(order_id) if order_id else None
+        owner_ok = bool(order)
 
-    parts = custom.split(":") if ":" in custom else []
-    user_id = parts[0] if len(parts) >= 1 else ""
-    order_id = parts[1] if len(parts) >= 2 else ""
-    plan_id = parts[2] if len(parts) >= 3 else "pro_month"
-
-    from app.core import payment_orders as po  # noqa: PLC0415
-    from app.core.payment_orders import activate_order, _upgrade_user_pro  # noqa: PLC0415
-
-    if order_id:
-        _ok, act_msg = activate_order(
-            order_id=order_id,
-            paid_amount=paid_cents or 499,
-            provider_ref=txn_id,
-            evidence={"provider": "paypal_ipn", "txn_id": txn_id},
+    if not order or not owner_ok:
+        po.record_webhook_manual_review(
+            _supabase(),
+            provider="paypal_ipn",
+            provider_event_id=f"ipn_{txn_id}",
+            event_type="paypal.ipn.invalid_order",
+            user_id=custom_user_id or (str(order["user_id"]) if order else None),
+            order_id=str(order["id"]) if order else (order_id or None),
+            raw_payload=parsed,
+            reason="order_not_found_or_user_mismatch",
+            status="needs_manual_review",
         )
-        if act_msg == "needs_manual_review":
-            return {
-                "received": True,
-                "verified": True,
-                "txn_id": txn_id,
-                "action": "needs_manual_review",
+        _mark_payment_event_done(f"ipn_{txn_id}", error="order_not_found_or_user_mismatch", provider="paypal_ipn")
+        raise HTTPException(status_code=400, detail="Invalid or unmatched internal order in IPN custom")
+
+    expected_currency = str(order.get("currency") or "USD").strip().upper()
+    if mc_currency != expected_currency:
+        if order.get("status") == "pending":
+            _supabase().table("payment_orders").update({
                 "status": "needs_manual_review",
-            }
-    elif user_id:
-        days = 365 if ("year" in plan_id or paid_cents >= 2400) else 30
-        tier_prefix = plan_id.split("_")[0] if "_" in plan_id else "pro"
-        if tier_prefix not in ("starter", "pro", "team"):
-            tier_prefix = "pro"
-        is_down, cur_tier, _exp = po.check_downgrade_active_subscription(
-            user_id, tier_prefix, db=_supabase()
+                "provider_ref": txn_id,
+                "admin_note": f"IPN currency mismatch: {mc_currency or 'missing'} != {expected_currency}",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", str(order["id"])).eq("status", "pending").execute()
+        po.record_webhook_manual_review(
+            _supabase(),
+            provider="paypal_ipn",
+            provider_event_id=f"ipn_{txn_id}",
+            event_type="paypal.ipn.currency_mismatch",
+            user_id=str(order["user_id"]),
+            order_id=str(order["id"]),
+            order_code=str(order.get("code") or "") or None,
+            raw_payload=parsed,
+            reason=f"currency_mismatch:{mc_currency or 'missing'}!={expected_currency}",
+            status="needs_manual_review",
         )
-        if is_down:
+        _mark_payment_event_done(f"ipn_{txn_id}", error="currency_mismatch", provider="paypal_ipn")
+        raise HTTPException(status_code=400, detail="IPN currency mismatch")
+
+    paid_cents = parse_usd_cents_decimal(raw_gross)
+    if paid_cents is None:
+        if order.get("status") == "pending":
+            _supabase().table("payment_orders").update({
+                "status": "needs_manual_review",
+                "provider_ref": txn_id,
+                "admin_note": f"IPN invalid/zero amount: {raw_gross!r}",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", str(order["id"])).eq("status", "pending").execute()
+        po.record_webhook_manual_review(
+            _supabase(),
+            provider="paypal_ipn",
+            provider_event_id=f"ipn_{txn_id}",
+            event_type="paypal.ipn.invalid_amount",
+            user_id=str(order["user_id"]),
+            order_id=str(order["id"]),
+            order_code=str(order.get("code") or "") or None,
+            raw_payload=parsed,
+            reason="invalid_or_zero_amount",
+            status="needs_manual_review",
+        )
+        _mark_payment_event_done(f"ipn_{txn_id}", error="invalid_or_zero_amount", provider="paypal_ipn")
+        raise HTTPException(status_code=400, detail="Invalid or zero IPN payment amount")
+
+    _ok, act_msg = activate_order(
+        order_id=str(order["id"]),
+        paid_amount=paid_cents,
+        provider_ref=txn_id,
+        evidence={"provider": "paypal_ipn", "txn_id": txn_id, "mc_currency": mc_currency, "mc_gross": str(raw_gross)},
+    )
+    if act_msg == "underpaid":
+        existing_rev = (
+            _supabase()
+            .table("payment_webhook_events")
+            .select("id")
+            .in_("provider_event_id", [txn_id, f"ipn_{txn_id}"])
+            .limit(1)
+            .execute()
+        ).data or []
+        if not existing_rev:
+            plan_info = po.plan_by_id(order.get("plan", "pro_month"), user_id=order.get("user_id"))
             po.record_webhook_manual_review(
                 _supabase(),
                 provider="paypal_ipn",
                 provider_event_id=f"ipn_{txn_id}",
-                event_type="paypal.ipn.completed",
-                user_id=str(user_id),
-                current_tier=cur_tier,
-                target_tier=tier_prefix,
+                event_type="paypal.ipn.underpaid",
+                user_id=str(order["user_id"]),
+                target_tier=(plan_info or {}).get("tier", "pro"),
                 amount=paid_cents,
-                raw_payload=parsed if isinstance(parsed, dict) else {},
-                reason="downgrade_while_higher_tier_active",
+                order_id=str(order["id"]),
+                order_code=str(order.get("code") or "") or None,
+                raw_payload=parsed,
+                reason=f"underpaid:{paid_cents}<{order['amount']}",
                 status="needs_manual_review",
             )
-            return {
-                "received": True,
-                "verified": True,
-                "txn_id": txn_id,
-                "action": "needs_manual_review",
-                "status": "needs_manual_review",
-            }
-        _upgrade_user_pro(user_id, days, f"paypal_ipn_{txn_id}", target_tier=tier_prefix)
+        _mark_payment_event_done(f"ipn_{txn_id}", provider="paypal_ipn")
+        return {
+            "received": True,
+            "verified": True,
+            "txn_id": txn_id,
+            "action": "underpaid",
+            "status": "needs_manual_review",
+        }
+    if act_msg == "needs_manual_review":
+        _mark_payment_event_done(f"ipn_{txn_id}", provider="paypal_ipn")
+        return {
+            "received": True,
+            "verified": True,
+            "txn_id": txn_id,
+            "action": "needs_manual_review",
+            "status": "needs_manual_review",
+        }
 
     _mark_payment_event_done(f"ipn_{txn_id}", provider="paypal_ipn")
     return {"received": True, "verified": True, "txn_id": txn_id}

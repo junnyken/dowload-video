@@ -34,8 +34,6 @@ MAX_TIMESTAMP_SKEW = 300  # 5 minutes
 # against the user's plan catalog (Case A).
 VG_PRICE_TOLERANCE_VND = 1_000
 
-DEFAULT_SEPAY_SECRET = "whsec_hZfaB5HXGJquU4rM3qDowUZYiPqMcU6Z"
-
 
 def _secret() -> str:
     """Get SePay webhook secret from env or admin settings."""
@@ -49,7 +47,7 @@ def _secret() -> str:
             return s
     except Exception:
         pass
-    return DEFAULT_SEPAY_SECRET
+    return ""
 
 
 def verify(raw_body: bytes, headers: Dict[str, str]) -> Tuple[bool, str]:
@@ -59,6 +57,7 @@ def verify(raw_body: bytes, headers: Dict[str, str]) -> Tuple[bool, str]:
     """
     secret = _secret()
     if not secret:
+        logger.error("SePay webhook verification rejected: SEPAY_WEBHOOK_SECRET is not configured")
         return False, "no_webhook_secret_configured"
 
     # Candidate secrets: full string and stripped 'whsec_' prefix

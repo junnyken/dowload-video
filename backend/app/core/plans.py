@@ -96,7 +96,7 @@ def get_settings(*, strict: bool = False) -> Dict[str, Any]:
         "rapidapi_url": os.getenv("RAPIDAPI_HUB_URL", "").strip(),
         "paypal_me_url": os.getenv("PAYPAL_ME_URL", "").strip(),
         "bank_bin": os.getenv("BANK_BIN", "970416").strip() or "970416",
-        "sepay_webhook_secret": os.getenv("SEPAY_WEBHOOK_SECRET", "whsec_hZfaB5HXGJquU4rM3qDowUZYiPqMcU6Z").strip(),
+        "sepay_webhook_secret": os.getenv("SEPAY_WEBHOOK_SECRET", "").strip(),
     }
     try:
         raw = _r().hgetall(SETTINGS_KEY) or {}

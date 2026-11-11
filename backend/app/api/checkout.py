@@ -25,6 +25,8 @@ admin_router = APIRouter()
 class CreateOrderRequest(BaseModel):
     plan: str = "pro_month"        # 'pro_month' | 'pro_year'
     rail: str = "vietqr"           # 'vietqr' | 'paypal'
+    return_path: Optional[str] = None
+    return_url: Optional[str] = None
 
 
 # ── POST /orders — tạo đơn ──────────────────────────────────────────
@@ -119,7 +121,9 @@ async def create_order(
     elif rail == "paypal":
         # Create PayPal checkout via existing flow
         try:
-            pp_url, pp_session = await _create_paypal_order(user, plan, order)
+            pp_url, pp_session = await _create_paypal_order(
+                user, plan, order, return_path=payload.return_path
+            )
             result["paypal"] = {
                 "checkout_url": pp_url,
                 "approve_url": pp_url,
@@ -139,15 +143,24 @@ async def create_order(
     return result
 
 
-async def _create_paypal_order(user: Dict, plan: Dict, order: Dict):
+_ALLOWED_RETURN_PATHS = {"/checkout", "/en/checkout", "/pricing", "/en/pricing"}
+
+
+async def _create_paypal_order(
+    user: Dict,
+    plan: Dict,
+    order: Dict,
+    return_path: Optional[str] = None,
+):
     """Create PayPal Order for the given plan, linking to our payment_order."""
     import httpx
     from urllib.parse import urlencode
 
     frontend = os.getenv("FRONTEND_URL", "").split(",")[0].strip().rstrip("/") or "https://dowloadvideo.io.vn"
     api_base = os.getenv("PUBLIC_API_URL", "").strip().rstrip("/") or "https://dvid-api.vibe1.tinhgon.xyz"
-    return_url = f"{frontend}/checkout?order_id={order['id']}&order={order['id']}&paypal_capture=1"
-    cancel_url = f"{frontend}/checkout?order_id={order['id']}&order={order['id']}&canceled=1"
+    safe_path = return_path if return_path in _ALLOWED_RETURN_PATHS else "/checkout"
+    return_url = f"{frontend}{safe_path}?order_id={order['id']}&order={order['id']}&paypal_capture=1"
+    cancel_url = f"{frontend}{safe_path}?order_id={order['id']}&order={order['id']}&canceled=1"
     usd_str = f"{plan['usd_cents'] / 100:.2f}"
     custom_val = f"{user['id']}:{order['id']}:{plan['id']}"
 
@@ -254,12 +267,25 @@ async def capture_paypal_order(
         raise HTTPException(status_code=400, detail="No PayPal reference")
 
     import httpx
-    from app.api.payments import _paypal_base_url, _paypal_access_token  # noqa: PLC0415
+    from datetime import datetime, timezone
+    from app.api.payments import (  # noqa: PLC0415
+        _expected_paypal_receiver_email,
+        _is_unique_violation,
+        _paypal_access_token,
+        _paypal_base_url,
+        _supabase,
+        parse_usd_cents_decimal,
+    )
 
     pp_client_id = os.getenv("PAYPAL_CLIENT_ID", "").strip()
     pp_secret = os.getenv("PAYPAL_CLIENT_SECRET", "").strip()
     if not (pp_client_id and pp_secret):
         raise HTTPException(status_code=503, detail="PayPal not configured")
+
+    expected_email = _expected_paypal_receiver_email()
+    expected_merchant_id = os.getenv("PAYPAL_MERCHANT_ID", "").strip()
+    if not (expected_email or expected_merchant_id):
+        raise HTTPException(status_code=503, detail="PayPal merchant identity not configured")
 
     access_token = await _paypal_access_token(pp_client_id, pp_secret)
 
@@ -283,31 +309,181 @@ async def capture_paypal_order(
     if odata.get("status") != "COMPLETED":
         raise HTTPException(status_code=400, detail=f"PayPal not completed: {odata.get('status')}")
 
-    # Get actual paid amount in cents
-    captures = []
-    for pu in odata.get("purchase_units", []):
-        for cap in (pu.get("payments") or {}).get("captures", []):
-            captures.append(cap)
+    db = _supabase()
+    purchase_units = odata.get("purchase_units") or []
+    captures = [
+        cap
+        for pu in purchase_units
+        for cap in ((pu.get("payments") or {}).get("captures") or [])
+    ]
+    if not purchase_units or not captures:
+        po.record_webhook_manual_review(
+            db,
+            provider="paypal_capture",
+            provider_event_id=paypal_order_id,
+            event_type="paypal.capture.missing_captures",
+            user_id=str(user["id"]),
+            order_id=str(order_id),
+            order_code=str(order.get("code") or "") or None,
+            raw_payload=odata if isinstance(odata, dict) else {},
+            reason="missing_paypal_captures",
+            status="needs_manual_review",
+        )
+        raise HTTPException(status_code=400, detail="Missing completed PayPal capture")
 
-    paid_cents = order["amount"]  # default to expected
-    if captures:
-        try:
-            paid_cents = int(float(captures[0].get("amount", {}).get("value", "0")) * 100)
-        except Exception:
-            pass
+    pu0 = purchase_units[0]
+    cap = captures[0]
+    cap_status = str(cap.get("status") or "COMPLETED").strip().upper()
+    capture_id = str(cap.get("id") or "").strip()
+    if cap_status != "COMPLETED" or not capture_id:
+        po.record_webhook_manual_review(
+            db,
+            provider="paypal_capture",
+            provider_event_id=capture_id or paypal_order_id,
+            event_type="paypal.capture.not_completed",
+            user_id=str(user["id"]),
+            order_id=str(order_id),
+            order_code=str(order.get("code") or "") or None,
+            raw_payload=odata if isinstance(odata, dict) else {},
+            reason="capture_incomplete_or_missing_id",
+            status="needs_manual_review",
+        )
+        raise HTTPException(status_code=400, detail="PayPal capture incomplete or missing capture id")
+
+    # 1. Verify custom_id matches internal order_id (and user_id when colon-delimited)
+    custom_id = str(pu0.get("custom_id") or cap.get("custom_id") or "").strip()
+    expected_oid = str(order["id"])
+    expected_uid = str(order["user_id"])
+    if custom_id == expected_oid:
+        custom_ok = True
+    elif ":" in custom_id:
+        c_parts = custom_id.split(":")
+        custom_ok = len(c_parts) >= 2 and c_parts[0].strip() == expected_uid and c_parts[1].strip() == expected_oid
+    else:
+        custom_ok = False
+
+    if not custom_ok:
+        po.record_webhook_manual_review(
+            db,
+            provider="paypal_capture",
+            provider_event_id=capture_id,
+            event_type="paypal.capture.custom_id_mismatch",
+            user_id=str(user["id"]),
+            order_id=str(order_id),
+            order_code=str(order.get("code") or "") or None,
+            raw_payload=odata if isinstance(odata, dict) else {},
+            reason="custom_id_mismatch",
+            status="needs_manual_review",
+        )
+        raise HTTPException(status_code=400, detail="PayPal custom_id does not match internal order")
+
+    # 2. Verify payee merchant matches configured merchant email / merchant_id
+    payee = pu0.get("payee") or cap.get("payee") or {}
+    payee_email = str(payee.get("email_address") or "").strip().lower()
+    payee_merchant_id = str(payee.get("merchant_id") or "").strip()
+
+    email_ok = bool(expected_email and payee_email and payee_email == expected_email)
+    mid_ok = bool(expected_merchant_id and payee_merchant_id and payee_merchant_id == expected_merchant_id)
+    email_conflict = bool(expected_email and payee_email and payee_email != expected_email)
+    mid_conflict = bool(expected_merchant_id and payee_merchant_id and payee_merchant_id != expected_merchant_id)
+
+    if (not (email_ok or mid_ok)) or email_conflict or mid_conflict:
+        po.record_webhook_manual_review(
+            db,
+            provider="paypal_capture",
+            provider_event_id=capture_id,
+            event_type="paypal.capture.payee_mismatch",
+            user_id=str(user["id"]),
+            order_id=str(order_id),
+            order_code=str(order.get("code") or "") or None,
+            raw_payload=odata if isinstance(odata, dict) else {},
+            reason="payee_merchant_mismatch",
+            status="needs_manual_review",
+        )
+        raise HTTPException(status_code=400, detail="PayPal payee merchant mismatch")
+
+    # 3. Verify currency_code matches order currency
+    amt_obj = cap.get("amount") or {}
+    currency_code = str(amt_obj.get("currency_code") or "").strip().upper()
+    expected_currency = str(order.get("currency") or "USD").strip().upper()
+    if currency_code != expected_currency:
+        po.record_webhook_manual_review(
+            db,
+            provider="paypal_capture",
+            provider_event_id=capture_id,
+            event_type="paypal.capture.currency_mismatch",
+            user_id=str(user["id"]),
+            order_id=str(order_id),
+            order_code=str(order.get("code") or "") or None,
+            raw_payload=odata if isinstance(odata, dict) else {},
+            reason=f"currency_mismatch:{currency_code or 'missing'}!={expected_currency}",
+            status="needs_manual_review",
+        )
+        raise HTTPException(status_code=400, detail="PayPal currency mismatch")
+
+    # 4. Parse amount via Decimal -> exact integer cents (never float, never default to order["amount"])
+    paid_cents = parse_usd_cents_decimal(amt_obj.get("value"))
+    if paid_cents is None:
+        po.record_webhook_manual_review(
+            db,
+            provider="paypal_capture",
+            provider_event_id=capture_id,
+            event_type="paypal.capture.invalid_amount",
+            user_id=str(user["id"]),
+            order_id=str(order_id),
+            order_code=str(order.get("code") or "") or None,
+            raw_payload=odata if isinstance(odata, dict) else {},
+            reason="invalid_or_zero_capture_amount",
+            status="needs_manual_review",
+        )
+        raise HTTPException(status_code=400, detail="Invalid PayPal capture amount")
+
+    # 5. Idempotency by capture_id via payment_events UNIQUE (provider='paypal_capture', provider_event_id=capture_id)
+    try:
+        db.table("payment_events").insert({
+            "provider": "paypal_capture",
+            "provider_event_id": capture_id,
+            "event_type": "paypal.order.captured",
+            "order_id": str(order_id),
+            "amount": paid_cents,
+            "match_type": "claiming",
+            "processed": False,
+            "raw_payload": {"paypal_order_id": paypal_order_id, "capture_id": capture_id},
+        }).execute()
+    except Exception as exc:
+        if _is_unique_violation(exc):
+            return {
+                "success": False,
+                "duplicate": True,
+                "status": order["status"],
+                "action": "duplicate_capture",
+                "order": order,
+            }
+        raise HTTPException(status_code=503, detail="Payment event store unavailable") from exc
 
     evidence = {
         "provider": "paypal",
         "paypal_order_id": paypal_order_id,
+        "capture_id": capture_id,
+        "currency_code": currency_code,
         "status": odata.get("status"),
     }
 
     ok, msg = po.activate_order(
         order_id=order_id,
         paid_amount=paid_cents,
-        provider_ref=paypal_order_id,
+        provider_ref=capture_id,
         evidence=evidence,
     )
+    try:
+        db.table("payment_events").update({
+            "match_type": "matched" if ok else msg,
+            "processed": True,
+            "processed_at": datetime.now(timezone.utc).isoformat(),
+            "error": None if ok else msg,
+        }).eq("provider", "paypal_capture").eq("provider_event_id", capture_id).execute()
+    except Exception:
+        pass
     updated_order = po.get_order(order_id, user["id"])
     actual_status = (updated_order or {}).get("status") or ("paid" if ok else msg)
     is_review = actual_status in ("needs_manual_review", "underpaid") or msg == "needs_manual_review"

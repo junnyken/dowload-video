@@ -457,8 +457,19 @@ async def test_paypal_ipn_blocks_downgrade_and_records_manual_review(fake_env, m
 
     monkeypatch.setattr("httpx.AsyncClient", _FakeAsyncClient)
     monkeypatch.setenv("PAYPAL_ME_URL", "merchant@test.com")
+    db.tables["payment_orders"].append({
+        "id": "ord-ipn-down-1",
+        "user_id": uid,
+        "plan": "starter_month",
+        "rail": "paypal",
+        "currency": "USD",
+        "amount": 199,
+        "code": "VGPIPNDOWN1",
+        "status": "pending",
+        "expires_at": _future_iso(1),
+    })
 
-    ipn_body = f"payment_status=Completed&txn_id=TXN_DOWN_1&receiver_email=merchant@test.com&custom={uid}::starter_month&mc_gross=1.99"
+    ipn_body = f"payment_status=Completed&txn_id=TXN_DOWN_1&receiver_email=merchant@test.com&custom={uid}:ord-ipn-down-1:starter_month&mc_gross=1.99&mc_currency=USD"
     req_ipn = MagicMock()
     req_ipn.body = AsyncMock(return_value=ipn_body.encode("utf-8"))
 
@@ -877,10 +888,21 @@ async def test_paypal_ipn_activates_order_and_direct_flow(fake_env, monkeypatch)
 
     uid = "e1111111-1111-1111-1111-111111111111"
     db.tables["profiles"].append({"id": uid, "tier": "free", "billing_status": "none"})
+    db.tables["payment_orders"].append({
+        "id": "ord-ipn-team-01",
+        "user_id": uid,
+        "plan": "team_month",
+        "rail": "paypal",
+        "currency": "USD",
+        "amount": 1199,
+        "code": "VGPIPNTEAM1",
+        "status": "pending",
+        "expires_at": _future_iso(1),
+    })
 
     ipn_body = (
         f"payment_status=Completed&txn_id=IPN_TEAM_01"
-        f"&receiver_email=billing@vidgrab.io&custom={uid}::team_month&mc_gross=11.99"
+        f"&receiver_email=billing@vidgrab.io&custom={uid}:ord-ipn-team-01:team_month&mc_gross=11.99&mc_currency=USD"
     )
     req = MagicMock()
     req.body = AsyncMock(return_value=ipn_body.encode("utf-8"))
@@ -998,7 +1020,18 @@ async def test_webhook_idempotency_sending_same_event_twice(fake_env, monkeypatc
             return _FakeIpnResp()
 
     monkeypatch.setattr("httpx.AsyncClient", _FakeAsyncClient)
-    ipn_raw = f"payment_status=Completed&txn_id=TXN_IDEM_1&receiver_email=billing@vidgrab.io&custom={uid}::pro_month&mc_gross=3.99".encode("utf-8")
+    db.tables["payment_orders"].append({
+        "id": "ord-ipn-idem-1",
+        "user_id": uid,
+        "plan": "pro_month",
+        "rail": "paypal",
+        "currency": "USD",
+        "amount": 599,
+        "code": "VGPIPNIDEM1",
+        "status": "pending",
+        "expires_at": _future_iso(1),
+    })
+    ipn_raw = f"payment_status=Completed&txn_id=TXN_IDEM_1&receiver_email=billing@vidgrab.io&custom={uid}:ord-ipn-idem-1:pro_month&mc_gross=5.99&mc_currency=USD".encode("utf-8")
     req_ipn = MagicMock()
     req_ipn.body = AsyncMock(return_value=ipn_raw)
 
@@ -1491,10 +1524,21 @@ def test_concurrent_same_event_id_paypal_ipn_extends_days_only_once(fake_env, mo
         "billing_status": "manual",
         "subscription_expiry": base_dt.isoformat(),
     })
+    db.tables["payment_orders"].append({
+        "id": "ord-ipn-race-99",
+        "user_id": uid,
+        "plan": "pro_month",
+        "rail": "paypal",
+        "currency": "USD",
+        "amount": 599,
+        "code": "VGPIPNRACE9",
+        "status": "pending",
+        "expires_at": _future_iso(1),
+    })
 
     ipn_raw = (
         f"payment_status=Completed&txn_id=TXN_RACE_99"
-        f"&receiver_email=billing@vidgrab.io&custom={uid}::pro_month&mc_gross=3.99"
+        f"&receiver_email=billing@vidgrab.io&custom={uid}:ord-ipn-race-99:pro_month&mc_gross=5.99&mc_currency=USD"
     ).encode("utf-8")
 
     # Synchronize both threads right before INSERT so both see empty SELECT and collide on UNIQUE
