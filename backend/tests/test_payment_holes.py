@@ -866,3 +866,151 @@ async def test_sepay_webhook_returns_503_and_logs_error_when_secret_unconfigured
     assert exc.value.status_code == 503
     assert any(r.levelno >= logging.ERROR and "sepay" in r.message.lower() for r in caplog.records)
 
+
+# ══════════════════════════════════════════════════════════════════════
+# 4. Secondary Bugs (`activate_order`, SePay Case B unmatched, `is_first_time_buyer`)
+# ══════════════════════════════════════════════════════════════════════
+
+
+def test_activate_order_expired_and_underpaid_record_manual_review_and_alert(fake_env, monkeypatch):
+    """`activate_order` on expired or underpaid orders must record `needs_manual_review` and send Telegram alerts."""
+    db, _rc = fake_env
+    from app.core import payment_orders as po
+
+    alerts = _capture_telegram_alerts(monkeypatch)
+    uid = "40000000-0000-0000-0000-000000000001"
+    db.tables["profiles"].append({"id": uid, "tier": "free", "billing_status": "none"})
+    db.tables["payment_orders"].append({
+        "id": "ord-exp-001",
+        "user_id": uid,
+        "plan": "pro_month",
+        "rail": "vietqr",
+        "currency": "VND",
+        "amount": 99000,
+        "code": "VGPEXP00001",
+        "status": "pending",
+        "expires_at": _past_iso(1),
+    })
+    db.tables["payment_orders"].append({
+        "id": "ord-und-001",
+        "user_id": uid,
+        "plan": "pro_month",
+        "rail": "vietqr",
+        "currency": "VND",
+        "amount": 99000,
+        "code": "VGPUND00001",
+        "status": "pending",
+        "expires_at": _future_iso(1),
+    })
+
+    ok_exp, msg_exp = po.activate_order("ord-exp-001", paid_amount=99000, provider_ref="sepay_exp_1")
+    assert ok_exp is False and msg_exp == "order_expired_late_payment"
+
+    ok_und, msg_und = po.activate_order("ord-und-001", paid_amount=50000, provider_ref="sepay_und_1")
+    assert ok_und is False and msg_und == "underpaid"
+
+    assert len(db.tables["payment_webhook_events"]) == 2
+    assert all(ev["status"] == "needs_manual_review" for ev in db.tables["payment_webhook_events"])
+    assert len(alerts) == 2
+
+
+def test_sepay_case_b_no_code_and_unknown_code_record_manual_review_and_alert(fake_env, monkeypatch):
+    """SePay incoming transfer with missing code or unknown code must record manual review + send Telegram alert."""
+    db, _rc = fake_env
+    from app.core import sepay_webhook
+
+    alerts = _capture_telegram_alerts(monkeypatch)
+    secret = "sepay_case_b_secret"
+    monkeypatch.setenv("SEPAY_WEBHOOK_SECRET", secret)
+
+    def _send(sepay_id: int, content: str) -> Dict[str, Any]:
+        raw = json.dumps({
+            "id": sepay_id,
+            "gateway": "ACB",
+            "transferType": "in",
+            "transferAmount": 99000,
+            "content": content,
+        }).encode("utf-8")
+        ts = str(int(time.time()))
+        sig = hmac.new(secret.encode("utf-8"), f"{ts}.".encode("utf-8") + raw, hashlib.sha256).hexdigest()
+        return sepay_webhook.handle(raw, {"x-sepay-signature": f"sha256={sig}", "x-sepay-timestamp": ts})
+
+    res_no_code = _send(70001, "Chuyen khoan nang cap tai khoan")
+    assert res_no_code["action"] == "unmatched_no_code"
+
+    res_not_found = _send(70002, "Thanh toan VGP99998888")
+    assert res_not_found["action"] == "unmatched_code_not_found"
+
+    assert len(db.tables["payment_webhook_events"]) == 2
+    assert all(ev["status"] == "needs_manual_review" for ev in db.tables["payment_webhook_events"])
+    assert len(alerts) == 2
+
+
+def test_activate_order_upgrade_error_after_cas_marks_needs_manual_review_and_alerts(fake_env, monkeypatch):
+    """If `_upgrade_user_pro(..., raise_on_error=True)` fails after CAS `paid`, order must become `needs_manual_review` + alert."""
+    db, _rc = fake_env
+    from app.core import payment_orders as po
+
+    alerts = _capture_telegram_alerts(monkeypatch)
+    uid = "40000000-0000-0000-0000-000000000002"
+    db.tables["profiles"].append({"id": uid, "tier": "free", "billing_status": "none"})
+    db.tables["payment_orders"].append({
+        "id": "ord-upg-err-1",
+        "user_id": uid,
+        "plan": "pro_month",
+        "rail": "vietqr",
+        "currency": "VND",
+        "amount": 99000,
+        "code": "VGPUPGERR01",
+        "status": "pending",
+        "expires_at": _future_iso(1),
+    })
+
+    def _fail_profile_write(table: str, op: str, _payload: Any) -> None:
+        if table == "profiles" and op in ("update", "insert"):
+            raise RuntimeError("Simulated profiles write failure")
+
+    db.before_execute_hook = _fail_profile_write
+    try:
+        ok, msg = po.activate_order("ord-upg-err-1", paid_amount=99000, provider_ref="sepay_upg_err_1")
+    finally:
+        db.before_execute_hook = None
+
+    assert ok is False
+    assert msg == "needs_manual_review"
+    assert db.tables["payment_orders"][0]["status"] == "needs_manual_review"
+    assert db.tables["profiles"][0]["tier"] == "free"
+    assert len(db.tables["payment_webhook_events"]) == 1
+    assert db.tables["payment_webhook_events"][0]["status"] == "needs_manual_review"
+    assert len(alerts) == 1
+
+
+def test_is_first_time_buyer_db_is_source_of_truth_and_redis_is_only_cache(fake_env):
+    """DB is the source of truth for `is_first_time_buyer`; Redis is only a bounded-TTL cache."""
+    db, rc = fake_env
+    from app.core import payment_orders as po
+
+    # 1. User had a canceled subscription in DB (`subscription_expiry=None`), Redis flushed -> MUST be False + cached with TTL
+    uid_returning = "40000000-0000-0000-0000-000000000003"
+    db.tables["profiles"].append({
+        "id": uid_returning,
+        "tier": "free",
+        "billing_status": "canceled",
+        "subscription_expiry": None,
+    })
+    rc.flushall()
+    assert po.is_first_time_buyer(uid_returning) is False
+    cache_keys = rc.keys(f"*{uid_returning}*")
+    assert cache_keys and all(rc.ttl(k) > 0 for k in cache_keys)
+
+    # 2. Brand-new user in DB (`free`/`none`, no paid orders), even if legacy Redis flag exists -> DB wins (`True`)
+    uid_new = "40000000-0000-0000-0000-000000000004"
+    db.tables["profiles"].append({
+        "id": uid_new,
+        "tier": "free",
+        "billing_status": "none",
+        "subscription_expiry": None,
+    })
+    rc.set(f"first_purchase_done:{uid_new}", "1")
+    assert po.is_first_time_buyer(uid_new) is True
+

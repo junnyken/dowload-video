@@ -254,11 +254,6 @@ def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
     if _claim_event(db, sepay_id, amount) == "duplicate":
         return {"success": True, "action": "duplicate", "sepay_id": sepay_id}
 
-    # 4. Find matching order by code
-    if not code:
-        _log_event(db, sepay_id, "sepay_no_code", amount, None, "unmatched")
-        return {"success": True, "action": "unmatched_no_code"}
-
     from app.core.payment_orders import (  # noqa: PLC0415
         get_order_by_code,
         activate_order,
@@ -266,6 +261,21 @@ def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
         check_downgrade_active_subscription,
         record_webhook_manual_review,
     )
+
+    # 4. Find matching order by code
+    if not code:
+        record_webhook_manual_review(
+            db,
+            provider="sepay",
+            provider_event_id=sepay_id,
+            event_type="sepay_no_code",
+            amount=amount,
+            raw_payload=parsed,
+            reason="unmatched_no_code",
+            status="needs_manual_review",
+        )
+        _log_event(db, sepay_id, "sepay_no_code", amount, None, "needs_manual_review")
+        return {"success": True, "action": "unmatched_no_code", "status": "needs_manual_review"}
 
     # Case A: Account-based transfer code VG + 8 hex (from /pricing page)
     if code.startswith("VG") and not code.startswith("VGP") and len(code) == 10:
@@ -418,9 +428,37 @@ def handle(raw_body: bytes, headers: Dict[str, str]) -> Dict[str, Any]:
     # Case B: Order-based transfer code VGP + 8 chars (from /checkout page)
     order = get_order_by_code(code)
     if not order:
-        _log_event(db, sepay_id, "sepay_code_not_found", amount, None, "unmatched")
-        logger.info("SePay: code %s not found in pending orders", code)
-        return {"success": True, "action": "unmatched_code_not_found", "code": code}
+        non_pending_uid: Optional[str] = None
+        non_pending_oid: Optional[str] = None
+        try:
+            any_ord = (
+                db.table("payment_orders")
+                .select("id, user_id, status")
+                .eq("code", code.upper().strip())
+                .limit(1)
+                .execute()
+            ).data or []
+            if any_ord:
+                non_pending_oid = str(any_ord[0].get("id") or "") or None
+                non_pending_uid = str(any_ord[0].get("user_id") or "") or None
+        except Exception:
+            pass
+        record_webhook_manual_review(
+            db,
+            provider="sepay",
+            provider_event_id=sepay_id,
+            event_type="sepay_code_not_found",
+            user_id=non_pending_uid,
+            order_id=non_pending_oid,
+            order_code=code,
+            amount=amount,
+            raw_payload=parsed,
+            reason="unmatched_code_not_found",
+            status="needs_manual_review",
+        )
+        _log_event(db, sepay_id, "sepay_code_not_found", amount, non_pending_oid, "needs_manual_review")
+        logger.info("SePay: code %s not found in pending orders -> manual review", code)
+        return {"success": True, "action": "unmatched_code_not_found", "status": "needs_manual_review", "code": code}
 
     order_id = order["id"]
 

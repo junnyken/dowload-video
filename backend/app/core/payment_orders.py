@@ -256,12 +256,25 @@ def record_webhook_manual_review(
 
 # ── First-time buyer & Plan catalog ─────────────────────────────────
 
-def is_first_time_buyer(user_id: Optional[str]) -> bool:
-    """True only if the user has never completed a paid order or held a paid subscription.
+FIRST_TIME_BUYER_CACHE_PREFIX = "first_time_buyer_cache:"
+FIRST_TIME_CACHE_TTL_TRUE_SEC = 300
+FIRST_TIME_CACHE_TTL_FALSE_SEC = 3600
 
-    First-time buyers get the welcome discount ($6.99/mo vs $9.99/mo regular on Pro,
-    $19.99/mo vs $29.99/mo regular on Team) + 500 Bonus API calls.
-    Any subsequent purchase / renewal is charged at the regular price.
+
+def _cache_first_time_buyer(uid: str, is_first: bool) -> None:
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        ttl = FIRST_TIME_CACHE_TTL_TRUE_SEC if is_first else FIRST_TIME_CACHE_TTL_FALSE_SEC
+        get_redis().set(f"{FIRST_TIME_BUYER_CACHE_PREFIX}{uid}", "1" if is_first else "0", ex=ttl)
+    except Exception:
+        pass
+
+
+def is_first_time_buyer(user_id: Optional[str]) -> bool:
+    """True only if the user has never completed a paid order or held a paid subscription in DB.
+
+    DB (`payment_orders` + `profiles`) is the single source of truth; Redis (`first_time_buyer_cache:{uid}`)
+    is strictly a bounded-TTL read-through cache.
     """
     if not user_id:
         return True
@@ -270,16 +283,18 @@ def is_first_time_buyer(user_id: Optional[str]) -> bool:
     if not uid:
         return True
 
-    # 1. Fast Redis check
+    # 1. Read-through bounded-TTL Redis cache
     try:
         from app.core.redis_client import get_redis  # noqa: PLC0415
-        rc = get_redis()
-        if rc.get(f"first_purchase_done:{uid}") or rc.get(f"api_first_bonus_claimed:{uid}"):
+        cached = get_redis().get(f"{FIRST_TIME_BUYER_CACHE_PREFIX}{uid}")
+        if cached == "0":
             return False
+        if cached == "1":
+            return True
     except Exception:
         pass
 
-    # 2. Check payment_orders table for any previously paid order
+    # 2. Authoritative DB check: payment_orders (any previously paid order)
     try:
         db = _db()
         res = (
@@ -291,21 +306,13 @@ def is_first_time_buyer(user_id: Optional[str]) -> bool:
             .execute()
         )
         if res.data:
-            try:
-                from app.core.redis_client import get_redis  # noqa: PLC0415
-                get_redis().set(f"first_purchase_done:{uid}", "1")
-            except Exception:
-                pass
+            _cache_first_time_buyer(uid, False)
             return False
-    except Exception:
-        pass
 
-    # 3. Check profiles table for any prior or active paid subscription
-    try:
-        db = _db()
+        # 3. Authoritative DB check: profiles (any active or historical/canceled paid subscription)
         pres = (
             db.table("profiles")
-            .select("tier, billing_status, subscription_expiry")
+            .select("tier, billing_status, subscription_expiry, stripe_subscription_id")
             .eq("id", uid)
             .maybe_single()
             .execute()
@@ -313,11 +320,19 @@ def is_first_time_buyer(user_id: Optional[str]) -> bool:
         prof = pres.data or {}
         tier = (prof.get("tier") or "free").lower()
         bstatus = (prof.get("billing_status") or "none").lower()
-        if tier in ("starter", "pro", "team", "enterprise") or bstatus in ("active", "manual", "canceling", "past_due") or prof.get("subscription_expiry"):
+        if (
+            tier in ("starter", "pro", "team", "enterprise")
+            or bstatus in ("active", "manual", "canceling", "past_due", "canceled")
+            or bool(prof.get("subscription_expiry"))
+            or bool(prof.get("stripe_subscription_id"))
+        ):
+            _cache_first_time_buyer(uid, False)
             return False
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("[PaymentOrders] is_first_time_buyer DB check failed for %s: %s", uid, exc)
+        return False
 
+    _cache_first_time_buyer(uid, True)
     return True
 
 
@@ -713,21 +728,41 @@ def activate_order(order_id: str, paid_amount: int, provider_ref: str = "",
     if order["status"] != "pending":
         return False, f"order_already_{order['status']}"
 
+    now = datetime.now(timezone.utc)
+    plan = plan_by_id(order["plan"], user_id=order.get("user_id"))
+    days = plan["days"] if plan else 30
+    target_tier = plan.get("tier", "pro") if plan else "pro"
+    ev_provider = str((evidence or {}).get("provider") or order.get("rail") or "order")
+
     # Check if expired
     exp = order.get("expires_at")
     if exp:
         try:
             exp_dt = datetime.fromisoformat(str(exp).replace("Z", "+00:00"))
-            if exp_dt < datetime.now(timezone.utc):
-                # Late payment
+            if exp_dt < now:
+                # Late payment -> mark expired + record manual review + send Telegram alert
                 db.table("payment_orders").update({
                     "status": "expired",
                     "paid_amount": paid_amount,
-                    "paid_at": datetime.now(timezone.utc).isoformat(),
+                    "paid_at": now.isoformat(),
                     "provider_ref": provider_ref,
                     "evidence": evidence or {},
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": now.isoformat(),
                 }).eq("id", order_id).eq("status", "pending").execute()
+                record_webhook_manual_review(
+                    db,
+                    provider=ev_provider,
+                    provider_event_id=str(provider_ref or order_id),
+                    event_type=str((evidence or {}).get("event_type") or f"{ev_provider}_order_expired_late_payment"),
+                    user_id=str(order["user_id"]),
+                    target_tier=target_tier,
+                    amount=paid_amount,
+                    order_id=str(order_id),
+                    order_code=str(order.get("code") or "") or None,
+                    reason="order_expired_late_payment",
+                    raw_payload=evidence if isinstance(evidence, dict) else {},
+                    status="needs_manual_review",
+                )
                 return False, "order_expired_late_payment"
         except Exception:
             pass
@@ -737,17 +772,26 @@ def activate_order(order_id: str, paid_amount: int, provider_ref: str = "",
         db.table("payment_orders").update({
             "status": "underpaid",
             "paid_amount": paid_amount,
-            "paid_at": datetime.now(timezone.utc).isoformat(),
+            "paid_at": now.isoformat(),
             "provider_ref": provider_ref,
             "evidence": evidence or {},
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": now.isoformat(),
         }).eq("id", order_id).eq("status", "pending").execute()
+        record_webhook_manual_review(
+            db,
+            provider=ev_provider,
+            provider_event_id=str(provider_ref or order_id),
+            event_type=str((evidence or {}).get("event_type") or f"{ev_provider}_order_underpaid"),
+            user_id=str(order["user_id"]),
+            target_tier=target_tier,
+            amount=paid_amount,
+            order_id=str(order_id),
+            order_code=str(order.get("code") or "") or None,
+            reason=f"underpaid:{paid_amount}<{order['amount']}",
+            raw_payload=evidence if isinstance(evidence, dict) else {},
+            status="needs_manual_review",
+        )
         return False, "underpaid"
-
-    now = datetime.now(timezone.utc)
-    plan = plan_by_id(order["plan"], user_id=order.get("user_id"))
-    days = plan["days"] if plan else 30
-    target_tier = plan.get("tier", "pro") if plan else "pro"
 
     # Block downgrade if user currently holds a higher active paid tier
     is_down, cur_tier, _exp = check_downgrade_active_subscription(
@@ -763,11 +807,10 @@ def activate_order(order_id: str, paid_amount: int, provider_ref: str = "",
             "admin_note": f"Blocked downgrade from active {cur_tier} to {target_tier}",
             "updated_at": now.isoformat(),
         }).eq("id", order_id).eq("status", "pending").execute()
-        ev_provider = (evidence or {}).get("provider") or order.get("rail") or "order"
         ev_type = (evidence or {}).get("event_type") or f"{ev_provider}_order_downgrade"
         record_webhook_manual_review(
             db,
-            provider=str(ev_provider),
+            provider=ev_provider,
             provider_event_id=str(provider_ref or order_id),
             event_type=str(ev_type),
             user_id=str(order["user_id"]),
@@ -796,8 +839,46 @@ def activate_order(order_id: str, paid_amount: int, provider_ref: str = "",
     if not update_res.data:
         return False, "concurrent_activation"
 
-    # Upgrade user
-    _upgrade_user_pro(order["user_id"], days, f"order_{order_id}", target_tier=target_tier)
+    # Upgrade user (fail-safe after CAS paid: on error -> needs_manual_review + alert)
+    try:
+        _upgrade_user_pro(
+            order["user_id"],
+            days,
+            f"order_{order_id}",
+            target_tier=target_tier,
+            raise_on_error=True,
+        )
+    except Exception as upg_exc:
+        err_text = str(upg_exc)[:500]
+        logger.error(
+            "[PaymentOrders] _upgrade_user_pro failed after CAS paid (order=%s user=%s): %s",
+            order_id, order["user_id"], err_text,
+        )
+        fail_iso = datetime.now(timezone.utc).isoformat()
+        try:
+            db.table("payment_orders").update({
+                "status": "needs_manual_review",
+                "activated_at": None,
+                "admin_note": f"Upgrade failed after payment: {type(upg_exc).__name__}: {err_text[:200]}",
+                "updated_at": fail_iso,
+            }).eq("id", order_id).execute()
+        except Exception as revert_exc:
+            logger.error("[PaymentOrders] Failed to update order %s to needs_manual_review: %s", order_id, revert_exc)
+        record_webhook_manual_review(
+            db,
+            provider=ev_provider,
+            provider_event_id=str(provider_ref or order_id),
+            event_type=str((evidence or {}).get("event_type") or f"{ev_provider}_order_upgrade_failed"),
+            user_id=str(order["user_id"]),
+            target_tier=target_tier,
+            amount=paid_amount,
+            order_id=str(order_id),
+            order_code=str(order.get("code") or "") or None,
+            reason=f"upgrade_failed:{type(upg_exc).__name__}",
+            raw_payload=evidence if isinstance(evidence, dict) else {},
+            status="needs_manual_review",
+        )
+        return False, "needs_manual_review"
 
     return True, "activated"
 
@@ -828,6 +909,7 @@ def _upgrade_user_pro(
             status="needs_manual_review",
         )
         return
+    was_first_time = is_first_time_buyer(user_id)
     fields = _manual_pro_fields(db, user_id, days)
     fields["tier"] = eff_tier
     try:
@@ -860,17 +942,16 @@ def _upgrade_user_pro(
     except Exception:
         pass
 
-    # First-time Pro/Team welcome bonus: +500 API calls ONLY on 1st purchase, then mark first_purchase_done
+    # First-time Pro/Team welcome bonus: +500 API calls ONLY on 1st DB-verified purchase, then update Redis cache
+    _cache_first_time_buyer(str(user_id), False)
     try:
         from app.core.redis_client import get_redis  # noqa: PLC0415
         from app.core import api_quota as aq  # noqa: PLC0415
         rc = get_redis()
         first_flag = f"api_first_bonus_claimed:{user_id}"
-        done_flag = f"first_purchase_done:{user_id}"
-        if eff_tier in ("pro", "team", "enterprise") and not rc.get(first_flag) and not rc.get(done_flag):
-            rc.set(first_flag, "1")
+        if was_first_time and eff_tier in ("pro", "team", "enterprise") and not rc.get(first_flag):
+            rc.set(first_flag, "1", ex=40 * 86400)
             rc.set(f"api_bonus:{user_id}:{aq.month_of()}", 500, ex=40 * 86400)
-        rc.set(done_flag, "1")
     except Exception:
         pass
 
