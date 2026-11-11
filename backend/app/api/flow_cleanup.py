@@ -235,13 +235,13 @@ def _append_consent_audit_log(user_id: Optional[str], temp_id: str, action: str 
             log.warning("[flow-cleanup] failed to insert consent audit log into local DB: %s", exc)
 
     try:
-        from app.core.database import get_service_client
+        from app.core.database import get_service_client, using_postgres
         supa_url = os.getenv("SUPABASE_URL", "")
-        if supa_url and "your-project-id" not in supa_url:
+        if using_postgres() or (supa_url and "your-project-id" not in supa_url):
             db = get_service_client()
             db.table("flow_consent_audit_logs").insert(db_row).execute()
     except Exception as exc:
-        log.warning("[flow-cleanup] failed to insert consent audit log into Supabase DB: %s", exc)
+        log.warning("[flow-cleanup] failed to insert consent audit log into DB: %s", exc)
 
     return {
         "timestamp": now_iso,

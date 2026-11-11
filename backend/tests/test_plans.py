@@ -185,3 +185,103 @@ def test_smart_analysis_signed_in_never_below_guest(rc, monkeypatch):
     assert sa.free_limit() == 1000 and sa.pro_limit() >= 1000
     t = {x["id"]: x for x in plans.build_plans()["tiers"]}
     assert t["guest"]["smart_analysis_per_day"] <= t["free"]["smart_analysis_per_day"] <= t["pro"]["smart_analysis_per_day"]
+
+
+# ── admin /api/v1/admin/plans/settings full-field & strict Redis readback ───
+
+def test_settings_body_covers_all_plan_settings_keys(rc):
+    from app.api.plans import SettingsBody
+    assert set(SettingsBody.model_fields.keys()) == set(plans.get_settings().keys())
+
+
+def test_admin_plans_settings_saves_all_tiers_and_rejects_unknown_fields(rc):
+    from fastapi.testclient import TestClient
+    from app.api.admin import verify_admin
+    from app.main import app as fastapi_app
+
+    client = TestClient(fastapi_app, raise_server_exceptions=False)
+    fastapi_app.dependency_overrides[verify_admin] = lambda: None
+    try:
+        full_payload = {
+            "starter_month_usd_cents": 249,
+            "starter_year_usd_cents": 2599,
+            "starter_month_vnd": 55_000,
+            "starter_year_vnd": 550_000,
+            "price_month_usd_cents": 499,
+            "price_year_usd_cents": 4500,
+            "price_month_vnd": 99_000,
+            "price_year_vnd": 890_000,
+            "team_month_usd_cents": 1299,
+            "team_year_usd_cents": 12900,
+            "team_month_vnd": 299_000,
+            "team_year_vnd": 2_990_000,
+            "api_calls_month_pro": 3_500,
+            "api_calls_month_team": 20_000,
+            "bank_name": "ACB",
+            "bank_account": "0766223536",
+            "bank_holder": "NGUYEN THIEN TRIEU",
+            "contact": "support@dowloadvideo.io.vn",
+            "rapidapi_proxy_secret": "rp-secret",
+            "rapidapi_url": "https://rapidapi.com/hub",
+            "paypal_me_url": "https://paypal.me/vidgrab",
+            "bank_bin": "970416",
+            "sepay_webhook_secret": "whsec_test_123",
+        }
+        res = client.post("/api/v1/admin/plans/settings", json=full_payload)
+        assert res.status_code == 200, res.text
+        saved = res.json()
+        for k, v in full_payload.items():
+            assert saved[k] == v, f"Field {k} mismatch: {saved.get(k)} != {v}"
+
+        # Verify values are truly read from Redis hash `plans:settings` and visible on GET /api/v1/plans
+        raw_redis = rc.hgetall(plans.SETTINGS_KEY)
+        if isinstance(raw_redis, list):
+            raw_redis = dict(zip(raw_redis[0::2], raw_redis[1::2]))
+        assert raw_redis["price_month_vnd"] == "99000"
+        assert raw_redis["price_year_vnd"] == "890000"
+        assert raw_redis["price_month_usd_cents"] == "499"
+        assert raw_redis["starter_month_vnd"] == "55000"
+        assert raw_redis["team_month_vnd"] == "299000"
+
+        pub = client.get("/api/v1/plans").json()
+        tiers = {t["id"]: t for t in pub["tiers"]}
+        assert tiers["starter"]["price_month_vnd"] == 55_000
+        assert tiers["starter"]["price_month_usd"] == 2.49
+        assert tiers["pro"]["price_month_vnd"] == 99_000
+        assert tiers["pro"]["price_year_vnd"] == 890_000
+        assert tiers["pro"]["price_month_usd"] == 4.99
+        assert tiers["pro"]["price_year_usd"] == 45.0
+        assert tiers["team"]["price_month_vnd"] == 299_000
+        assert tiers["team"]["price_year_usd"] == 129.0
+
+        # Unknown field -> HTTP 422 clearly naming the unknown field (never silently ignored)
+        bad_res = client.post(
+            "/api/v1/admin/plans/settings",
+            json={"price_month_vnd": 99_000, "typo_price_field": 123_000},
+        )
+        assert bad_res.status_code == 422
+        assert "typo_price_field" in bad_res.text
+    finally:
+        fastapi_app.dependency_overrides.pop(verify_admin, None)
+
+
+def test_admin_plans_settings_returns_503_when_redis_unwritable(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.api.admin import verify_admin
+    from app.main import app as fastapi_app
+
+    class _DeadRedis:
+        def hgetall(self, *_a, **_kw):
+            raise ConnectionError("redis down")
+
+        def hset(self, *_a, **_kw):
+            raise ConnectionError("redis down")
+
+    monkeypatch.setattr(plans, "_r", lambda: _DeadRedis())
+    client = TestClient(fastapi_app, raise_server_exceptions=False)
+    fastapi_app.dependency_overrides[verify_admin] = lambda: None
+    try:
+        res = client.post("/api/v1/admin/plans/settings", json={"price_month_vnd": 99_000})
+        assert res.status_code == 503
+    finally:
+        fastapi_app.dependency_overrides.pop(verify_admin, None)

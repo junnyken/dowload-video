@@ -83,6 +83,8 @@ def _inspect(dsn: str, *, with_auth: bool) -> Dict[str, Any]:
                               "rows_est": int(r[2]), "size_kb": int(r[3] // 1024)} for r in cur.fetchall()]
             cur.execute("SELECT extname FROM pg_extension ORDER BY 1")
             out["extensions"] = [r[0] for r in cur.fetchall()]
+            from app.core.migrations_044_045 import inspect_044_045_with_cursor  # noqa: PLC0415
+            out["migrations_044_045"] = inspect_044_045_with_cursor(cur)
             if with_auth:
                 cur.execute("SELECT to_regclass('auth.users') IS NOT NULL")
                 if cur.fetchone()[0]:

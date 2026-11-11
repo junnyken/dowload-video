@@ -74,8 +74,8 @@ def _r():
 
 # ── settings ────────────────────────────────────────────────────────────────
 
-def get_settings() -> Dict[str, Any]:
-    """Never raises; defaults when Redis is unreadable."""
+def get_settings(*, strict: bool = False) -> Dict[str, Any]:
+    """Never raises unless strict=True; defaults when Redis is unreadable."""
     out: Dict[str, Any] = {
         "starter_month_usd_cents": DEFAULT_STARTER_MONTH_USD_CENTS,
         "starter_year_usd_cents": DEFAULT_STARTER_YEAR_USD_CENTS,
@@ -103,6 +103,8 @@ def get_settings() -> Dict[str, Any]:
         if isinstance(raw, list):
             raw = dict(zip(raw[0::2], raw[1::2]))
     except Exception:  # noqa: BLE001
+        if strict:
+            raise
         return out
     for k, v in raw.items():
         k = k.decode() if isinstance(k, bytes) else k
@@ -121,8 +123,13 @@ def get_settings() -> Dict[str, Any]:
 
 
 def set_settings(patch: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate and store the given fields. Raises ValueError (Vietnamese
-    message) on a bad value."""
+    """Validate and store the given fields in Redis, then read back the real
+    persisted settings from Redis (`strict=True`). Raises ValueError
+    (Vietnamese message) on a bad value."""
+    unknown = sorted(k for k in patch.keys() if k not in _INT_FIELDS and k not in _TEXT_FIELDS)
+    if unknown:
+        raise ValueError(f"Trường cài đặt không hợp lệ: {', '.join(unknown)}")
+
     clean: Dict[str, str] = {}
     for k, (lo, hi, msg) in _INT_FIELDS.items():
         if k in patch and patch[k] is not None:
@@ -141,7 +148,7 @@ def set_settings(patch: Dict[str, Any]) -> Dict[str, Any]:
             clean[k] = v
     if clean:
         _r().hset(SETTINGS_KEY, mapping=clean)
-    return get_settings()
+    return get_settings(strict=True)
 
 
 # ── transfer code ───────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.api.admin import verify_admin
 from app.core import plans
@@ -27,8 +27,20 @@ admin_router = APIRouter()
 
 
 class SettingsBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    starter_month_usd_cents: Optional[int] = None
+    starter_year_usd_cents: Optional[int] = None
+    starter_month_vnd: Optional[int] = None
+    starter_year_vnd: Optional[int] = None
+    price_month_usd_cents: Optional[int] = None
+    price_year_usd_cents: Optional[int] = None
     price_month_vnd: Optional[int] = None
     price_year_vnd: Optional[int] = None
+    team_month_usd_cents: Optional[int] = None
+    team_year_usd_cents: Optional[int] = None
+    team_month_vnd: Optional[int] = None
+    team_year_vnd: Optional[int] = None
     api_calls_month_pro: Optional[int] = None
     api_calls_month_team: Optional[int] = None
     bank_name: Optional[str] = None
@@ -40,6 +52,16 @@ class SettingsBody(BaseModel):
     paypal_me_url: Optional[str] = None
     bank_bin: Optional[str] = None
     sepay_webhook_secret: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_unknown_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            allowed = set(cls.model_fields.keys())
+            unknown = sorted(str(k) for k in data.keys() if k not in allowed)
+            if unknown:
+                raise ValueError(f"Trường không hợp lệ: {', '.join(unknown)}")
+        return data
 
 
 def _profile(user_id: str) -> Dict[str, Any]:
@@ -79,6 +101,11 @@ async def admin_set_settings(body: SettingsBody, request: Request, _=Depends(ver
         new = plans.set_settings(body.model_dump(exclude_none=True))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=503,
+            detail=f"Không thể ghi/đọc lại cài đặt gói từ Redis ({type(exc).__name__})",
+        )
     changed = {k: {"old": old.get(k), "new": v} for k, v in new.items() if old.get(k) != v}
     try:
         log_admin_action(request, "admin.plans.settings", resource_type="plans",

@@ -43,6 +43,14 @@ async def db_migration_probe(request: Request, _=Depends(verify_admin)) -> dict:
     return {"source_set": bool(M.source_dsn()), "target_set": bool(M.target_dsn()), "probe": report}
 
 
+@router.get("/db-migration/tables-044-045")
+async def db_migration_tables_044_045(_=Depends(verify_admin)) -> dict:
+    """Read-only check of flow_consent_audit_logs (044) and payment_webhook_events (045):
+    exists, index_count, rls_enabled, policies."""
+    from app.core.migrations_044_045 import probe_044_045_tables  # noqa: PLC0415
+    return await asyncio.wait_for(asyncio.to_thread(probe_044_045_tables), timeout=20)
+
+
 @router.get("/db-migration/copy")
 async def db_migration_copy_status(_=Depends(verify_admin)) -> dict:
     from app.core import db_migration as M  # noqa: PLC0415
