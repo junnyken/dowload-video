@@ -14,6 +14,7 @@ export function AuthProvider({ children }) {
   const [session, setSession]         = useState(null);
   const [loading, setLoading]         = useState(true);
   const [preferences, setPreferences] = useState(null);
+  const [profile, setProfile]         = useState(null);
   // Server signed this device out (too many devices on the account): message shown once.
   const [deviceNotice, setDeviceNotice] = useState('');
 
@@ -42,11 +43,37 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── Load preferences when user logs in ───────────────────────────
+  // ── Load preferences + server-verified profile when user logs in ─
+  const fetchProfile = useCallback(async () => {
+    if (!session?.access_token) {
+      setProfile(null);
+      return;
+    }
+    try {
+      // Strictly use the authenticated user JWT (never localStorage or X-Admin-Token)
+      // so `is_admin` reflects only server-verified DB role/tier.
+      const res = await fetch(`${API_BASE}/api/v1/user/me`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (res.ok) {
+        setProfile(await res.json());
+      } else {
+        setProfile(null);
+      }
+    } catch {
+      setProfile(null);
+    }
+  }, [session?.access_token]);
+
   useEffect(() => {
-    if (!user) { setPreferences(null); return; }
+    if (!user || !session?.access_token) {
+      setPreferences(null);
+      setProfile(null);
+      return;
+    }
     fetchPreferences();
-  }, [user]);
+    fetchProfile();
+  }, [user, session?.access_token, fetchProfile]);
 
   // ── Hand the session to the VidGrab browser extension ────────────
   // 22/10 (owner): signed in on the site, the extension still said "Khách"
@@ -150,6 +177,7 @@ export function AuthProvider({ children }) {
     // account out of every other device and the Windows app as well.
     await supabase.auth.signOut({ scope: 'local' });
     setPreferences(null);
+    setProfile(null);
     // Don't leave a signed-out session live inside the extension.
     window.postMessage(
       { __vg_source: 'webapp', type: 'VG_AUTH_LOGOUT_FROM_WEB' },
@@ -211,6 +239,9 @@ export function AuthProvider({ children }) {
       session,
       loading,
       preferences,
+      profile,
+      isAdmin: Boolean(profile?.is_admin),
+      flowAccessMode: profile?.flow_access_mode || 'off',
       signUp,
       signIn,
       signOut,
@@ -218,6 +249,7 @@ export function AuthProvider({ children }) {
       updatePassword,
       savePreferences,
       refetchPreferences: fetchPreferences,
+      refetchProfile: fetchProfile,
       withAuth,
       isAuthenticated: !!user,
       deviceNotice,

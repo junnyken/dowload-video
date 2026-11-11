@@ -5,8 +5,13 @@ import {
   CheckCircle, Loader2, RotateCcw, Info, Eye,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useEntitlement } from '../hooks/useEntitlement';
 import { API_BASE } from '../lib/apiBase';
 import UpgradeModal from './UpgradeModal';
+
+const FEATURE_LOGO_INPAINT =
+  String(import.meta.env.VITE_FEATURE_LOGO_INPAINT || '').toLowerCase() === 'true' ||
+  import.meta.env.VITE_FEATURE_LOGO_INPAINT === '1';
 
 const withCacheBust = (url) => {
   if (!url) return url;
@@ -303,9 +308,11 @@ function SynthIDNote({ className = '' }) {
   );
 }
 
-export default function FlowVeoCleanup() {
+export default function FlowVeoCleanup({ isAdminPreview: isAdminPreviewProp } = {}) {
   const { t } = useTranslation('logoRemover');
-  const { user, withAuth } = useAuth();
+  const { user, profile, isAdmin, withAuth } = useAuth();
+  const { tier: entitlementTier } = useEntitlement();
+  const isAdminPreview = isAdminPreviewProp ?? (!FEATURE_LOGO_INPAINT && Boolean(isAdmin));
   // idle | uploading | preview | no-logo | processing | done | error
   const [step, setStep] = useState('idle');
   const [tempId, setTempId] = useState(null);
@@ -346,9 +353,10 @@ export default function FlowVeoCleanup() {
   const [clipProgress, setClipProgress] = useState(0);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [consentConfirmed, setConsentConfirmed] = useState(true);
+  const [isDownloadingResult, setIsDownloadingResult] = useState(false);
 
-  const isProUser = ['pro', 'team', 'enterprise', 'api'].includes(
-    user?.tier || user?.user_metadata?.tier || user?.app_metadata?.tier
+  const isProUser = Boolean(isAdmin) || ['pro', 'team', 'enterprise', 'admin', 'api'].includes(
+    entitlementTier || profile?.tier || user?.tier || user?.user_metadata?.tier || user?.app_metadata?.tier
   ) || Boolean(user?.is_pro || user?.user_metadata?.is_pro);
 
   const lastRegionRef = useRef(null); // snapshot at process-start for done-step overlay
@@ -928,6 +936,41 @@ export default function FlowVeoCleanup() {
   // Header shown in idle/uploading/preview — hidden in step-specific states that carry their own context
   const showHeader = ['idle', 'uploading', 'preview', 'frame-preview'].includes(step);
 
+  if (!FEATURE_LOGO_INPAINT && !isAdmin) {
+    return null;
+  }
+
+  const handleDownloadResult = async (e) => {
+    e.preventDefault();
+    if (!result?.download_url || isDownloadingResult) return;
+    setIsDownloadingResult(true);
+    setError(null);
+    try {
+      const dlUrl = result.download_url.startsWith('http')
+        ? result.download_url
+        : `${API_BASE}${result.download_url}`;
+      const res = await fetch(dlUrl, withAuth({ method: 'GET' }));
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(errMessage(body.detail, t('errors.processFailed', { status: res.status })));
+      }
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = result.filename || 'cleaned.mp4';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(objUrl), 5000);
+    } catch (dlErr) {
+      setError(dlErr.message);
+      setStep('error');
+    } finally {
+      setIsDownloadingResult(false);
+    }
+  };
+
   return (
     <div className="w-full max-w-3xl mx-auto px-4">
 
@@ -937,11 +980,23 @@ export default function FlowVeoCleanup() {
           <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-4 rounded-full bg-surface border border-line text-xs font-mono text-fg-2 tracking-wide">
             <Wand2 className="w-3 h-3" />
             <span>{t('header.badge')}</span>
+            {isAdminPreview && (
+              <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent-text border border-accent/40 text-[10px] font-semibold">
+                Admin preview
+              </span>
+            )}
           </div>
           <h2 className="text-2xl sm:text-3xl font-black text-fg tracking-tight mb-2">
             {t('header.title')}
-            <span style={{fontSize:'9px', fontWeight:800, padding:'2px 6px', borderRadius:'4px', background:'var(--vg-accent-soft)', color:'var(--vg-accent-text)', border:'1px solid var(--vg-line-strong)', marginLeft:'6px', letterSpacing:'0.05em', verticalAlign:'middle'}}>EXPERIMENTAL</span>
+            <span style={{fontSize:'9px', fontWeight:800, padding:'2px 6px', borderRadius:'4px', background:'var(--vg-accent-soft)', color:'var(--vg-accent-text)', border:'1px solid var(--vg-line-strong)', marginLeft:'6px', letterSpacing:'0.05em', verticalAlign:'middle'}}>
+              {isAdminPreview ? 'ADMIN PREVIEW' : 'EXPERIMENTAL'}
+            </span>
           </h2>
+          {isAdminPreview && (
+            <p className="text-[11px] font-mono text-accent-text mb-2">
+              Giới hạn Admin preview: 1080p ≤ 15s · ≤ 720p ≤ 30s · tối đa 1 job chạy cùng lúc
+            </p>
+          )}
           <p className="text-sm text-fg-muted max-w-md mx-auto mb-3">
             <Trans t={t} i18nKey="header.subtitle" components={{ b: <strong className="text-fg-2" /> }} />
           </p>
@@ -1916,14 +1971,15 @@ export default function FlowVeoCleanup() {
           </div>
 
           {/* 4. Primary CTA */}
-          <a
-            href={`${API_BASE}${result.download_url}`}
-            download={result.filename}
-            className="flex items-center justify-center gap-2.5 w-full px-5 py-4 rounded-xl text-base font-bold bg-accent text-accent-fg shadow-md transition-all"
+          <button
+            type="button"
+            onClick={handleDownloadResult}
+            disabled={isDownloadingResult}
+            className="flex items-center justify-center gap-2.5 w-full px-5 py-4 rounded-xl text-base font-bold bg-accent text-accent-fg shadow-md transition-all cursor-pointer disabled:opacity-70"
           >
-            <Download className="w-5 h-5" />
+            {isDownloadingResult ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
             {t('done.download')}
-          </a>
+          </button>
 
           {/* 5. Secondary actions */}
           <div className="flex gap-2">

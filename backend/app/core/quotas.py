@@ -115,6 +115,20 @@ TIER_PERMISSIONS: Dict[str, Dict[str, Any]] = {
         "history_days":         -1,
         "api_key":              True,
     },
+    "admin": {
+        "daily_limit":          -1,        # unlimited
+        "batch_limit":          -1,
+        "max_height":           2160,
+        "youtube_download":     "video",
+        "bulk_zip":             True,
+        "spotify_artist_full":  True,
+        "cloud_save":           True,
+        "chapters":             True,
+        "logo_inpaint":         True,
+        "history_limit":        None,
+        "history_days":         -1,
+        "api_key":              True,
+    },
 }
 
 # ── Error codes ───────────────────────────────────────────────────────
