@@ -65,26 +65,29 @@ function PaymentSection({ pay, pro, period, autoCheckout }) {
   const [stripeSuccess, setStripeSuccess] = useState('');
   const token = session?.access_token;
 
-  // Auto-capture PayPal order when returning from PayPal Checkout (?paypal_capture=1&token=ORDER_ID)
+  // Auto-capture internal PayPal order when returning from PayPal Checkout (?paypal_capture=1&order_id=INTERNAL_ORDER_ID)
   useEffect(() => {
     if (!token) return;
     const params = new URLSearchParams(window.location.search);
-    const ppOrderId = params.get('token');
-    if (params.get('paypal_capture') !== '1' || !ppOrderId) return;
+    const internalOrderId = params.get('order_id') || params.get('order');
+    if (params.get('paypal_capture') !== '1' || !internalOrderId) return;
     setStripeLoading(true);
     setStripeErr('');
-    fetch(`${API_BASE}/api/v1/payments/paypal-capture`, {
+    fetch(`${API_BASE}/api/v1/checkout/orders/${encodeURIComponent(internalOrderId)}/capture`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ order_id: ppOrderId }),
     })
       .then(async (r) => {
         const d = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(d?.detail || `HTTP ${r.status}`);
-        setStripeSuccess(t('paypalSuccess'));
+        if (!r.ok) throw new Error(d?.detail?.user_message || d?.detail || `HTTP ${r.status}`);
+        if (d?.manual_review || d?.status === 'needs_manual_review' || d?.status === 'underpaid') {
+          setStripeErr(d?.user_message || 'Thanh toán đang được kiểm tra, chúng tôi sẽ liên hệ trong 24h');
+        } else {
+          setStripeSuccess(t('paypalSuccess'));
+        }
         window.history.replaceState({}, '', window.location.pathname);
         return fetch(`${API_BASE}/api/v1/plans/me`, { headers: { Authorization: `Bearer ${token}` } });
       })
@@ -102,6 +105,32 @@ function PaymentSection({ pay, pro, period, autoCheckout }) {
     setStripeLoading(true);
     setStripeErr('');
     try {
+      const planId = period === 'year' ? 'pro_year' : 'pro_month';
+      const returnPath = `${lang === 'en' ? '/en' : ''}/pricing`;
+      if (autoCheckout?.enabled && autoCheckout?.paypal) {
+        const res = await fetch(`${API_BASE}/api/v1/checkout/orders`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            plan: planId,
+            rail: 'paypal',
+            return_path: returnPath,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data?.detail?.user_message || data?.detail || `HTTP ${res.status}`);
+        }
+        const redirectUrl = data?.paypal?.approve_url || data?.paypal?.checkout_url;
+        if (redirectUrl) {
+          window.location.href = redirectUrl;
+          return;
+        }
+      }
+
       const res = await fetch(`${API_BASE}/api/v1/payments/create-checkout-session`, {
         method: 'POST',
         headers: {
