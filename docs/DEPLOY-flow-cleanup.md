@@ -1,3 +1,8 @@
+> [!WARNING]
+> **TÀI LIỆU LỖI THỜI (OBSOLETE — KHÔNG SỬ DỤNG)**
+> Tài liệu này viết cho mô hình VPS `.env` + `docker compose` cũ (`deploy-vps.sh`), không khớp với hạ tầng production thật trên **Vibe Host (Mắt Bão — cụm `vibe1.tinhgon.xyz`)**.
+> Vui lòng sử dụng quy trình deploy hiện hành tại: **`docs/DEPLOY-VIBEHOST-2026-11.md`**.
+
 # Hướng dẫn Triển khai & Vận hành Production — Flow/Veo Visible-Logo Cleanup (`flow-cleanup`)
 
 Tài liệu này quy định trình tự triển khai (deploy), lệnh kiểm tra sau triển khai (post-deploy verification) và quy trình hoàn tác (rollback) cho tính năng xoá watermark/logo hiển thị (`flow-cleanup` — Phase P5).
