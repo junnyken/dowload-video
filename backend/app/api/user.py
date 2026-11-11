@@ -55,13 +55,26 @@ async def get_me(user: Dict[str, Any] = Depends(get_required_user)):
     except Exception:
         profile = {}
 
+    from app.core.entitlements import is_user_admin_db  # noqa: PLC0415
+    from app.api.flow_cleanup import _get_flow_access_mode  # noqa: PLC0415
+
+    is_admin_flag = is_user_admin_db(
+        user.get("id"),
+        email=user.get("email"),
+        db=supabase,
+        raise_on_error=False,
+    )
+    flow_mode = _get_flow_access_mode()
+
     return {
-        "id":           user["id"],
-        "email":        user["email"],
-        "display_name": profile.get("display_name") or user["email"].split("@")[0],
-        "avatar_url":   profile.get("avatar_url"),
-        "tier":         profile.get("tier", "free"),
-        "created_at":   profile.get("created_at"),
+        "id":               user["id"],
+        "email":            user["email"],
+        "display_name":     profile.get("display_name") or user["email"].split("@")[0],
+        "avatar_url":       profile.get("avatar_url"),
+        "tier":             profile.get("tier", "free"),
+        "is_admin":         is_admin_flag,
+        "flow_access_mode": flow_mode,
+        "created_at":       profile.get("created_at"),
     }
 
 

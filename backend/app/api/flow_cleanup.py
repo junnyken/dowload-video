@@ -32,7 +32,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from app.core.auth_middleware import get_optional_user
-from app.core.entitlements import get_entitlement, check_feature
+from app.core.entitlements import get_entitlement, check_feature, is_user_admin_db
 from app.core.local_download import file_fields, file_id_for, new_token, resolve_file_id, resolve_local_input, safe_file_id
 
 router = APIRouter()
@@ -41,15 +41,92 @@ log = logging.getLogger(__name__)
 from app.main import limiter
 
 
+def _get_flow_access_mode() -> str:
+    """Return active access mode for `/api/v1/flow-cleanup/*`: `'off'` (default) | `'admin'` | `'pro'`."""
+    raw = (os.getenv("FLOW_ACCESS_MODE") or "off").strip().lower()
+    if raw in ("off", "admin", "pro"):
+        return raw
+    return "off"
+
+
+def _ensure_flow_mode_enabled() -> str:
+    """Raise 403 immediately when `FLOW_ACCESS_MODE` is `'off'` (fail-closed default)."""
+    mode = _get_flow_access_mode()
+    if mode == "off":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error_code": "flow_cleanup_disabled",
+                "user_message": "Tính năng xoá logo hiện đang tạm tắt.",
+                "retryable": False,
+            },
+        )
+    return mode
+
+
+def _verify_admin_mode_user(user_id: Optional[str], email: Optional[str] = None) -> None:
+    """Verify `user_id` is an admin in the server DB; raise 503 on DB outage, 403 if non-admin."""
+    if not user_id or str(user_id).startswith("rapidapi:"):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error_code": "admin_only_feature",
+                "user_message": "Tính năng xoá logo đang ở chế độ thử nghiệm nội bộ (Admin preview).",
+                "retryable": False,
+            },
+        )
+    try:
+        ok = is_user_admin_db(user_id, email=email, raise_on_error=True)
+    except Exception as exc:
+        log.warning("[flow-cleanup] admin DB check failed for user %s: %s", user_id, exc)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error_code": "entitlement_check_failed",
+                "user_message": "Chưa kiểm tra được quyền tài khoản. Vui lòng thử lại sau ít phút.",
+                "retryable": True,
+            },
+        ) from exc
+    if not ok:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error_code": "admin_only_feature",
+                "user_message": "Tính năng xoá logo đang ở chế độ thử nghiệm nội bộ (Admin preview).",
+                "retryable": False,
+            },
+        )
+
+
 async def _require_pro(
     _request: Request,
     user=Depends(get_optional_user),
 ) -> None:
-    """FastAPI dependency: gate logo_inpaint behind Pro tier."""
+    """FastAPI dependency: enforce `FLOW_ACCESS_MODE` (`off` | `admin` | `pro`) across flow-cleanup endpoints."""
+    mode = _ensure_flow_mode_enabled()
+
     if user is None:
         raise HTTPException(status_code=401, detail="Đăng nhập để sử dụng tính năng này.")
 
-    # API key users already have tier resolved; JWT users need a DB lookup.
+    if mode == "admin":
+        if user.get("via_rapidapi"):
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error_code": "admin_only_feature",
+                    "user_message": "Tính năng xoá logo đang ở chế độ thử nghiệm nội bộ (Admin preview).",
+                    "retryable": False,
+                },
+            )
+        _verify_admin_mode_user(user.get("id"), email=user.get("email"))
+        try:
+            if _request is not None and hasattr(_request, "state"):
+                _request.state.flow_user_id = user.get("id")
+        except Exception:
+            pass
+        return
+
+    # mode == "pro": API key users already have tier resolved; JWT users need a DB lookup.
     tier = user.get("tier")
     if not tier:
         try:
@@ -376,6 +453,84 @@ def _user_active_job_redis_key(owner_id: str) -> str:
     return f"flow:active_job:{_redis_ns()}:{owner_id}"
 
 
+def _global_active_job_redis_key() -> str:
+    return f"flow:global_active_job:{_redis_ns()}"
+
+
+def _release_global_concurrency(temp_id: Optional[str] = None) -> None:
+    """Release the system-wide 1-job Redis lock when `temp_id` completes, fails, or is cancelled."""
+    try:
+        r = _get_flow_redis()
+        lock_key = _global_active_job_redis_key()
+        if temp_id:
+            cur_safe = re.sub(r"[^a-f0-9]", "", str(temp_id)) or str(temp_id)
+            held = r.get(lock_key)
+            if held and held != cur_safe:
+                return
+        r.delete(lock_key)
+    except Exception:
+        pass
+
+
+def _refresh_global_concurrency(temp_id: Optional[str] = None) -> None:
+    """Heartbeat-extend the system-wide 1-job Redis lock while `temp_id` is queued or running in admin mode."""
+    if _get_flow_access_mode() != "admin":
+        return
+    try:
+        r = _get_flow_redis()
+        lock_key = _global_active_job_redis_key()
+        cur_safe = re.sub(r"[^a-f0-9]", "", str(temp_id or "")) or str(temp_id or "")
+        held = r.get(lock_key)
+        lock_ttl = _compute_user_lock_ttl_sec()
+        if held is None and cur_safe:
+            r.set(lock_key, cur_safe, nx=True, ex=lock_ttl)
+        elif held == cur_safe or not cur_safe:
+            r.expire(lock_key, lock_ttl)
+    except Exception:
+        pass
+
+
+def _check_global_concurrency(current_temp_id: str) -> None:
+    """In `admin` mode, enforce at most 1 logo-cleanup job system-wide via Redis `SET NX EX`."""
+    if _get_flow_access_mode() != "admin":
+        return
+    cur_safe = re.sub(r"[^a-f0-9]", "", current_temp_id or "") or str(current_temp_id)
+    lock_key = _global_active_job_redis_key()
+    lock_ttl = _compute_user_lock_ttl_sec()
+    r = _get_flow_redis()
+
+    if r.set(lock_key, cur_safe, nx=True, ex=lock_ttl):
+        return
+
+    existing_job = r.get(lock_key) or ""
+    if existing_job == cur_safe:
+        r.expire(lock_key, lock_ttl)
+        return
+
+    if existing_job and os.path.isdir(_DOWNLOAD_DIR):
+        other_wdir = os.path.join(_DOWNLOAD_DIR, f"{_FLOW_PREFIX}{existing_job}")
+        if not os.path.isdir(other_wdir) or _is_work_dir_expired(other_wdir):
+            r.delete(lock_key)
+            if r.set(lock_key, cur_safe, nx=True, ex=lock_ttl):
+                return
+        else:
+            other_meta = _read_meta(other_wdir)
+            if other_meta.get("status") not in ("queued", "running"):
+                r.delete(lock_key)
+                if r.set(lock_key, cur_safe, nx=True, ex=lock_ttl):
+                    return
+
+    raise HTTPException(
+        status_code=429,
+        detail={
+            "error_code": "system_busy",
+            "user_message": "Hệ thống xoá logo đang bận, vui lòng thử lại sau.",
+            "active_job_id": existing_job or cur_safe,
+            "retryable": True,
+        },
+    )
+
+
 def _check_and_record_daily_quota(owner_id: Optional[str]) -> None:
     """Enforce per-user daily quota (`_DAILY_USER_QUOTA`, default 20 jobs/day) via Redis atomic `INCR` + `EXPIRE`."""
     if not owner_id or _DAILY_USER_QUOTA <= 0:
@@ -551,12 +706,15 @@ def _verify_signed_resource(
     sig: Optional[str],
     frame_idx: Optional[int] = None,
 ) -> None:
-    """Verify HMAC-SHA256 signature, expiration (<= 10m), and job owner. Reject with 404 on any mismatch."""
+    """Verify access mode, HMAC-SHA256 signature, expiration (<= 10m), and job owner."""
+    mode = _ensure_flow_mode_enabled()
     if not isinstance(meta, dict):
         raise HTTPException(status_code=404, detail="Tài nguyên không còn tồn tại hoặc đã hết hạn.")
     owner_id = meta.get("owner_user_id")
     if not owner_id:
         raise HTTPException(status_code=404, detail="Tài nguyên không còn tồn tại hoặc đã hết hạn.")
+    if mode == "admin":
+        _verify_admin_mode_user(str(owner_id))
     if exp is None or not sig or not isinstance(sig, str):
         raise HTTPException(status_code=404, detail="Link truy cập không hợp lệ hoặc đã hết hạn.")
     try:
@@ -631,8 +789,30 @@ def _error_code(e: Exception) -> str:
     return "processing_failed"
 
 
+def _admin_mode_max_duration_sec(vw: int, vh: int) -> Optional[float]:
+    """
+    Return the admin-preview duration cap (seconds) for `(vw, vh)`, or `None` if resolution exceeds 1080p:
+      - `<= 720p` (`short_side <= 720` and `long_side <= 1280`): `30.0`s
+      - `1080p` (`short_side <= 1080` and `long_side <= 1920` and `vw * vh <= 1920 * 1080`): `15.0`s
+      - `> 1080p`: `None` (not allowed in admin preview mode)
+    """
+    vw_safe = max(1, int(vw or 0))
+    vh_safe = max(1, int(vh or 0))
+    short_side = min(vw_safe, vh_safe)
+    long_side = max(vw_safe, vh_safe)
+    if short_side > 1080 or long_side > 1920 or (vw_safe * vh_safe) > (1920 * 1080):
+        return None
+    if short_side <= 720 and long_side <= 1280:
+        return 30.0
+    return 15.0
+
+
 def _compute_effective_max_duration(vw: int, vh: int, fps: float, method: str = "natural") -> int:
     """Compute the actual maximum video duration (seconds) allowed by `_validate_job_limits` for `(vw, vh, fps, method)`."""
+    if _get_flow_access_mode() == "admin":
+        adm_sec = _admin_mode_max_duration_sec(vw, vh)
+        return 0 if adm_sec is None else int(adm_sec)
+
     if method not in ("natural", "telea", "telea_soft"):
         return int(_MAX_VIDEO_DURATION_SEC)
     vw_safe = max(1, int(vw or 0))
@@ -697,6 +877,33 @@ def _validate_job_limits(input_path: str, info: dict, method: str = "natural") -
 
     dur = float(info.get("duration", 0.0) or 0.0)
     fps = float(info.get("fps", 30.0) or 30.0)
+
+    if _get_flow_access_mode() == "admin":
+        admin_max_dur = _admin_mode_max_duration_sec(vw, vh)
+        if admin_max_dur is None:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error_code": "resolution_limit_exceeded",
+                    "user_message": "Ở chế độ Admin preview, chỉ hỗ trợ video tối đa 1080p (1920×1080).",
+                    "retryable": False,
+                },
+            )
+        if dur > admin_max_dur:
+            res_label = "≤ 720p" if admin_max_dur >= 30.0 else "1080p"
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error_code": "duration_limit_exceeded",
+                    "user_message": (
+                        f"Ở chế độ Admin preview, video {res_label} giới hạn tối đa "
+                        f"{int(admin_max_dur)} giây (video hiện tại: {dur:.1f}s)."
+                    ),
+                    "max_duration_sec": int(admin_max_dur),
+                    "retryable": False,
+                },
+            )
+        return
     if method in ("natural", "telea", "telea_soft"):
         mpx_per_sec = (vw * vh / 1_000_000.0) * max(1.0, fps)
         est_processing_sec = dur * mpx_per_sec * _SEC_PER_MPX_FRAME
@@ -761,16 +968,13 @@ def _write_meta(work_dir: str, updates: dict) -> dict:
             except Exception:
                 pass
         effective_status = updates.get("status") or meta.get("status")
+        tid_val = meta.get("temp_id") or meta.get("job_id")
         if effective_status in ("completed", "done", "failed", "cancelled", "no_visible_logo"):
-            _release_user_concurrency(
-                meta.get("owner_user_id"),
-                meta.get("temp_id") or meta.get("job_id"),
-            )
+            _release_user_concurrency(meta.get("owner_user_id"), tid_val)
+            _release_global_concurrency(tid_val)
         elif effective_status in ("queued", "running"):
-            _refresh_user_concurrency(
-                meta.get("owner_user_id"),
-                meta.get("temp_id") or meta.get("job_id"),
-            )
+            _refresh_user_concurrency(meta.get("owner_user_id"), tid_val)
+            _refresh_global_concurrency(tid_val)
         return meta
 
 
@@ -913,7 +1117,7 @@ def _probe(path: str) -> dict:
                     "fps": fps,
                     "nb_frames": nb_frames,
                     "max_inpaint_duration_sec": _compute_effective_max_duration(vw, vh, fps, "natural"),
-                    "max_crop_blur_duration_sec": int(_MAX_VIDEO_DURATION_SEC),
+                    "max_crop_blur_duration_sec": _compute_effective_max_duration(vw, vh, fps, "crop"),
                 }
     except Exception:
         pass
@@ -1309,6 +1513,7 @@ async def get_preview_frame(
     sig: Optional[str] = None,
 ):
     """Serve the extracted frame JPEG for the uploaded video (signed URL required; frame_idx bounds-checked & LRU-cached)."""
+    _ensure_flow_mode_enabled()
     work_dir = _safe_work_dir(temp_id)
     meta = _ensure_work_dir_fresh(work_dir, detail="Preview không còn. Upload lại.")
     _verify_signed_resource(temp_id, "frame", meta, exp=exp, sig=sig, frame_idx=frame_idx)
@@ -1473,6 +1678,7 @@ async def get_preview_clean(
     sig: Optional[str] = None,
 ):
     """Serve the TELEA-cleaned first-frame JPEG for preview-first UX (signed URL required)."""
+    _ensure_flow_mode_enabled()
     work_dir = _safe_work_dir(temp_id)
     meta = _ensure_work_dir_fresh(work_dir, detail="Preview chưa sẵn sàng. Upload và chọn vùng trước.")
     _verify_signed_resource(temp_id, "preview_clean", meta, exp=exp, sig=sig)
@@ -1743,7 +1949,12 @@ def preview_clip_cleanup(payload: PreviewClipRequest, request: Request, _: None 
     if w <= 0 or h <= 0 or x < 0 or y < 0 or x + w > vw or y + h > vh:
         raise HTTPException(status_code=400, detail="Kích thước vùng không hợp lệ.")
 
-    _check_user_concurrency(caller_id, payload.temp_id)
+    _check_global_concurrency(payload.temp_id)
+    try:
+        _check_user_concurrency(caller_id, payload.temp_id)
+    except HTTPException:
+        _release_global_concurrency(payload.temp_id)
+        raise
 
     _ALIAS = {"delogo": "natural", "delogo_soft": "natural", "telea": "telea", "telea_soft": "telea_soft"}
     method = payload.method if payload.method in ("natural", "telea", "telea_soft", "crop", "blur") else _ALIAS.get(payload.method, "natural")
@@ -1827,6 +2038,7 @@ async def get_preview_clip_video(
     sig: Optional[str] = None,
 ):
     """Serve the 3–5 second cleaned preview video clip (signed URL required)."""
+    _ensure_flow_mode_enabled()
     work_dir = _safe_work_dir(temp_id)
     meta = _ensure_work_dir_fresh(work_dir, detail="Video preview không còn. Vui lòng tạo lại.")
     _verify_signed_resource(temp_id, "preview_clip", meta, exp=exp, sig=sig)
@@ -2353,7 +2565,12 @@ def process_flow_cleanup(
     if x < 0 or y < 0 or x + w > vw or y + h > vh:
         raise HTTPException(status_code=400, detail="Vùng nằm ngoài khung hình.")
 
-    _check_user_concurrency(caller_id, payload.temp_id)
+    _check_global_concurrency(payload.temp_id)
+    try:
+        _check_user_concurrency(caller_id, payload.temp_id)
+    except HTTPException:
+        _release_global_concurrency(payload.temp_id)
+        raise
     _append_consent_audit_log(caller_id, payload.temp_id, action="process_confirm")
 
     # Expand region by expand_padding (clamp to frame) — not applied to crop
@@ -2521,6 +2738,14 @@ def retry_flow_cleanup_job(job_id: str, request: Request, _: None = Depends(_req
     info = job_params.get("video_info") or _probe(input_path)
     _validate_job_limits(input_path, info, method=job_params.get("method", "natural"))
 
+    caller_id = _caller_user_id(request)
+    _check_global_concurrency(job_id)
+    try:
+        _check_user_concurrency(caller_id, job_id)
+    except HTTPException:
+        _release_global_concurrency(job_id)
+        raise
+
     retry_count = current_retries + 1
     return _start_or_queue_cleanup_job(job_id, job_params, retry_count=retry_count)
 
@@ -2534,9 +2759,15 @@ async def get_cleaned_result(
     user=Depends(get_optional_user),
 ):
     """Serve a cleaned output of a session by its file id (cleaned_*.mp4)."""
+    mode = _ensure_flow_mode_enabled()
+    caller_id = _caller_user_id(request, user)
+    if mode == "admin":
+        if not caller_id:
+            raise HTTPException(status_code=401, detail="Đăng nhập để sử dụng tính năng này.")
+        _verify_admin_mode_user(caller_id, email=(user or {}).get("email") if isinstance(user, dict) else None)
     work_dir = _safe_work_dir(temp_id)
     meta = _ensure_work_dir_fresh(work_dir, detail="File không còn tồn tại hoặc đã hết hạn.")
-    _verify_job_owner(meta, _caller_user_id(request, user))
+    _verify_job_owner(meta, caller_id)
     if not file_id.startswith("cleaned_"):
         raise HTTPException(status_code=400, detail="Invalid file.")
     real = resolve_file_id(file_id, work_dir)
@@ -2930,7 +3161,12 @@ def track_flow_watermark(
             },
         )
 
-    _check_user_concurrency(caller_id, temp_id)
+    _check_global_concurrency(temp_id)
+    try:
+        _check_user_concurrency(caller_id, temp_id)
+    except HTTPException:
+        _release_global_concurrency(temp_id)
+        raise
 
     req = payload or TrackRequest()
     init_box = None

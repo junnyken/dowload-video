@@ -118,7 +118,10 @@ const CODEC_NAMES = { h264: 'H.264', hevc: 'H.265', h265: 'H.265', av1: 'AV1', v
 
 export default function DashboardContent() {
   const { t } = useTranslation('dashboard');
-  const { withAuth, session } = useAuth();
+  const { withAuth, session, isAdmin, profile } = useAuth();
+  const adminFlowUnlocked = Boolean(isAdmin) && profile?.flow_access_mode !== 'off';
+  const canShowLogoInpaint = FEATURE_LOGO_INPAINT || adminFlowUnlocked;
+  const isLogoAdminPreview = !FEATURE_LOGO_INPAINT && adminFlowUnlocked;
 
   /**
    * Every tier check on this screen read `session.user.user_metadata.tier`.
@@ -1570,7 +1573,7 @@ export default function DashboardContent() {
   };
 
   const handleOpenInpaint = async () => {
-    const isPro = ['pro', 'team', 'enterprise', 'api'].includes(userTier);
+    const isPro = Boolean(isAdmin) || ['pro', 'team', 'enterprise', 'admin', 'api'].includes(userTier);
     if (!isPro) {
       setUpgradeErrorCode('tier_required_feature');
       setShowUpgradeModal(true);
@@ -1733,13 +1736,28 @@ export default function DashboardContent() {
     } finally { setInpaintLoading(false); }
   };
 
-  const handleInpaintDownload = () => {
+  const handleInpaintDownload = async () => {
     if (!inpaintFinalUrl) return;
-    const a = document.createElement('a');
-    a.href = inpaintFinalUrl;
-    a.setAttribute('download', '');
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    showToast(t('toast.inpaintDownloading'));
+    try {
+      const res = await fetch(inpaintFinalUrl, withAuth({ method: 'GET' }));
+      if (!res.ok) {
+        const errBody = await safeJson(res).catch(() => ({}));
+        throw new Error(errBody.detail?.user_message || errBody.detail || t('errors.processFailed'));
+      }
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.setAttribute('download', `${videoInfo?.title || 'cleaned'}_nologo.mp4`);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(objUrl), 5000);
+      showToast(t('toast.inpaintDownloading'));
+    } catch (err) {
+      setInpaintError(err.message);
+      setInpaintStep('error');
+    }
   };
 
   // ── Merge Clips ──────────────────────────────────────────────
@@ -2672,7 +2690,7 @@ export default function DashboardContent() {
               )}
 
               {/* Logo Inpaint */}
-              {!HIDDEN_TOOLS.inpaint && localFileId(videoInfo) && !videoInfo.is_audio_only && (
+              {canShowLogoInpaint && localFileId(videoInfo) && !videoInfo.is_audio_only && (
                 <button
                   onClick={handleOpenInpaint}
                   className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
@@ -2683,7 +2701,13 @@ export default function DashboardContent() {
                 >
                   <Eraser className="w-3.5 h-3.5" />
                   {t('tools.removeLogo')}
-                  <span className="bg-accent text-accent-fg text-xs px-1 rounded font-bold leading-tight">PRO</span>
+                  {isLogoAdminPreview ? (
+                    <span className="bg-accent-soft text-accent-text border border-accent/40 text-[10px] font-mono px-1.5 py-0.5 rounded font-semibold leading-tight">
+                      Admin preview
+                    </span>
+                  ) : (
+                    <span className="bg-accent text-accent-fg text-xs px-1 rounded font-bold leading-tight">PRO</span>
+                  )}
                 </button>
               )}
 
@@ -3047,12 +3071,17 @@ export default function DashboardContent() {
             )}
 
             {/* ── Logo Inpaint Panel ──────────────────────────── */}
-            {showInpaint && (
+            {canShowLogoInpaint && showInpaint && (
               <div className="mb-5 p-4 rounded-2xl bg-surface border border-line shadow-lg">
                 <div className="flex items-center justify-between mb-3">
-                  <h5 className="text-fg font-bold text-sm flex items-center gap-2">
+                  <h5 className="text-fg font-bold text-sm flex items-center gap-2 flex-wrap">
                     <Eraser className="w-4 h-4 text-fg-2" />
                     Logo Inpaint
+                    {isLogoAdminPreview && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-accent-soft text-accent-text border border-accent/40 font-semibold">
+                        Admin preview
+                      </span>
+                    )}
                     <span className="px-2 py-0.5 rounded-full text-xs bg-surface-2 text-fg-2 border border-line font-semibold">{t('inpaint.experimental')}</span>
                     <span className="px-1.5 py-0.5 rounded text-[10px] bg-surface-2 text-fg-muted border border-line-strong font-medium">{t('inpaint.webOnly')}</span>
                   </h5>

@@ -12,6 +12,7 @@ os.environ.setdefault("SUPABASE_KEY", "test-anon-key")
 os.environ.setdefault("REDIS_URL",    "redis://localhost:6379/15")  # db 15 = isolated
 os.environ.setdefault("ENV",          "test")
 os.environ.setdefault("FLOW_CLEANUP_ALLOW_INPROCESS", "1")
+os.environ.setdefault("FLOW_ACCESS_MODE", "pro")
 # Never the developer's real keys (backend/.env is loaded by the app with
 # load_dotenv, which does not override what is already set): with
 # SUPABASE_SERVICE_KEY from .env the cookie store switched to encryption and

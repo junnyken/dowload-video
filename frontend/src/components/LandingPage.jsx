@@ -40,12 +40,12 @@ const platforms = [
   { icon: PinterestIcon, label: 'Pinterest', bg: 'bg-surface-2 text-fg-2 border-line', ic: 'text-[#E60023]' },
 ];
 
-// Owner 15/10: "Xóa Logo Video" is not good enough yet — tab locked, its
-// screen not rendered, until it is rebuilt. Controlled by VITE_FEATURE_LOGO_INPAINT (default OFF).
-const FLOW_LOCKED = !(
+// Owner 15/10: "Xóa Logo Video" is locked for regular users until ready,
+// unless VITE_FEATURE_LOGO_INPAINT is enabled OR backend /api/v1/user/me
+// verifies the current signed-in user is an Admin ("Admin preview").
+const FEATURE_LOGO_INPAINT =
   String(import.meta.env.VITE_FEATURE_LOGO_INPAINT || '').toLowerCase() === 'true' ||
-  import.meta.env.VITE_FEATURE_LOGO_INPAINT === '1'
-);
+  import.meta.env.VITE_FEATURE_LOGO_INPAINT === '1';
 
 // Tab text lives in locales/<lang>/landing.json under tabs.<id>.{label,short,title}.
 const tabs = [
@@ -57,7 +57,7 @@ const tabs = [
 
 // Segmented pill row: surface-2 track, active = surface + fg. Scrolls
 // horizontally on narrow screens instead of clipping labels.
-function ModeTabs({ activeTab, onChange }) {
+function ModeTabs({ activeTab, onChange, flowLocked, isAdminPreview }) {
   const { t } = useTranslation('landing');
   return (
     <div className="grid grid-cols-4 gap-1 p-1 rounded-control bg-surface-2 border border-line w-full sm:w-fit sm:inline-flex sm:items-center">
@@ -65,7 +65,7 @@ function ModeTabs({ activeTab, onChange }) {
         const Icon = tab.icon;
         const isActive = activeTab === tab.id;
         const isFlow = tab.id === 'flow';
-        const locked = isFlow && FLOW_LOCKED;
+        const locked = isFlow && flowLocked;
         return (
           <button
             key={tab.id}
@@ -87,9 +87,10 @@ function ModeTabs({ activeTab, onChange }) {
             <span className="hidden sm:inline">{t(`tabs.${tab.id}.label`)}</span>
             <span className="sm:hidden">{t(`tabs.${tab.id}.short`)}</span>
             {isFlow && (
-              // wording: BA review — owner 15/10: logo removal locked until it is reworked
-              <span className={`${isActive ? 'invisible ' : ''}absolute top-0.5 right-0.5 sm:static text-[9px] font-mono font-semibold px-1 py-0.5 rounded leading-none ${locked ? 'bg-surface text-fg-muted border border-line' : 'bg-accent-soft text-accent-text'}`}>
-                {locked ? t('tabs.soon') : t('tabs.new')}
+              // wording: BA review — owner 15/10: logo removal locked for customers ("Coming soon");
+              // shows "Admin preview" when unlocked exclusively for verified Admin.
+              <span className={`${isActive && !isAdminPreview ? 'invisible ' : ''}absolute top-0.5 right-0.5 sm:static text-[9px] font-mono font-semibold px-1 py-0.5 rounded leading-none ${locked ? 'bg-surface text-fg-muted border border-line' : 'bg-accent-soft text-accent-text border border-accent/30'}`}>
+                {locked ? t('tabs.soon') : (isAdminPreview ? 'Admin preview' : t('tabs.new'))}
               </span>
             )}
           </button>
@@ -109,8 +110,13 @@ export default function LandingPage() {
     trackEvent(EVENT.LANDING_PAGE_VIEW, { returning: hasUsedBefore() });
   }, []);
 
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isAdmin, profile } = useAuth();
   const { classify } = usePlatformHealth();
+
+  const adminFlowUnlocked = Boolean(isAdmin) && profile?.flow_access_mode !== 'off';
+  const canUseFlowCleanup = FEATURE_LOGO_INPAINT || adminFlowUnlocked;
+  const flowLocked = !canUseFlowCleanup;
+  const isAdminPreview = !FEATURE_LOGO_INPAINT && adminFlowUnlocked;
 
   // Read once, at mount: this must not flip mid-session and reflow the page
   // under someone who is reading it.
@@ -119,11 +125,22 @@ export default function LandingPage() {
 
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    if (!FLOW_LOCKED && (params.get('tab') === 'flow' || window.location.pathname.endsWith('/flow-veo'))) {
+    if (FEATURE_LOGO_INPAINT && (params.get('tab') === 'flow' || window.location.pathname.endsWith('/flow-veo'))) {
       return 'flow';
     }
     return params.has('batch') ? 'bulk' : 'single';
   });
+
+  useEffect(() => {
+    if (canUseFlowCleanup) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('tab') === 'flow' || window.location.pathname.endsWith('/flow-veo')) {
+        setActiveTab('flow');
+      }
+    } else if (activeTab === 'flow') {
+      setActiveTab('single');
+    }
+  }, [canUseFlowCleanup, activeTab]);
 
   // ── PWA Install Prompt ────────────────────────────────────
   const [showInstall, setShowInstall] = useState(false);
@@ -181,7 +198,14 @@ export default function LandingPage() {
     localStorage.setItem('pwa-install-dismissed-at', Date.now().toString());
   };
 
-  const modeTabs = <ModeTabs activeTab={activeTab} onChange={setActiveTab} />;
+  const modeTabs = (
+    <ModeTabs
+      activeTab={activeTab}
+      onChange={setActiveTab}
+      flowLocked={flowLocked}
+      isAdminPreview={isAdminPreview}
+    />
+  );
 
   return (
     <div className="min-h-screen relative overflow-hidden pb-44 md:pb-24">
@@ -355,7 +379,7 @@ export default function LandingPage() {
         <div className="w-full">
           {activeTab === 'single'  && <DashboardContent />}
           {activeTab === 'bulk'    && <BulkContent />}
-          {activeTab === 'flow'    && !FLOW_LOCKED && <FlowVeoCleanup />}
+          {activeTab === 'flow'    && !flowLocked && <FlowVeoCleanup isAdminPreview={isAdminPreview} />}
           {activeTab === 'history' && <HistoryContent />}
         </div>
 

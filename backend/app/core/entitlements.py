@@ -213,6 +213,37 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
         },
         "queue_priority": 1,
     },
+    "admin": {
+        "name": "Admin",
+        "limits": {
+            "downloads_per_day":     -1,
+            "batch_size_max":        -1,
+            "max_height":            2160,
+            "history_days":          -1,
+            "history_limit":         None,
+            "ai_analyses_per_day":   -1,
+            "concurrent_jobs":       -1,
+            "api_calls_per_month":   -1,
+            "seats_max":             -1,
+        },
+        "features": {
+            "bulk_zip":              True,
+            "youtube_video":         True,
+            "spotify_full":          True,
+            "cloud_save":            True,
+            "chapters":              True,
+            "logo_inpaint":          True,
+            "api_key":               True,
+            "webhook":               True,
+            "ai_tools":              True,
+            "priority_queue":        True,
+            "team_workspace":        True,
+            "partner_api":           True,
+            "sso":                   True,
+            "white_label":           True,
+        },
+        "queue_priority": 1,
+    },
     # Tenant-tier aliases → map to closest web-tier equivalent
     "growth":  "pro",        # tenants.plan 'growth'  → pro entitlements
 }
@@ -299,6 +330,8 @@ def resolve_effective_tier(profile: Dict[str, Any]) -> str:
     expiry = _dt(profile.get("subscription_expiry"))
     grace_end = _dt(profile.get("grace_period_ends_at"))
 
+    if declared == "admin":
+        return "admin"
     if status == "canceled":
         return "free"
     if status == "manual":
@@ -425,3 +458,78 @@ def require_feature(feature: str):
                 },
             )
     return _dep
+
+
+def is_user_admin_db(
+    user_id: Optional[str],
+    email: Optional[str] = None,
+    db: Any = None,
+    *,
+    raise_on_error: bool = False,
+) -> bool:
+    """
+    Verify server-side whether `user_id` has admin privileges in the database.
+    NEVER trusts client headers (`X-Admin-Token`, `X-Is-Admin`) or client storage.
+
+    Returns True iff `user_id` belongs to a real DB user (not RapidAPI synthetic) AND:
+      1. `profiles.is_admin is True` or `profiles.role` in `('admin', 'superadmin')`, OR
+      2. `resolve_effective_tier(profile)` in `('admin', 'enterprise')`, OR
+      3. User's DB-verified email exists in `admin_users` (`is_active=True`, `role` in `('admin', 'superadmin')`), OR
+      4. User's DB-verified email matches `FLOW_ADMIN_EMAILS` env var (if configured).
+    """
+    import os  # noqa: PLC0415
+
+    uid = str(user_id or "").strip()
+    if not uid or uid.startswith("rapidapi:"):
+        return False
+
+    try:
+        if db is None:
+            from app.core.database import get_service_client  # noqa: PLC0415
+            db = get_service_client()
+        res = db.table("profiles").select("*").eq("id", uid).limit(1).execute()
+        profile = res.data[0] if (res and res.data) else {}
+    except Exception:
+        if raise_on_error:
+            raise
+        return False
+
+    if not isinstance(profile, dict):
+        profile = {}
+
+    if profile.get("is_admin") is True:
+        return True
+
+    role_val = str(profile.get("role") or "").strip().lower()
+    if role_val in ("admin", "superadmin"):
+        return True
+
+    if profile and resolve_effective_tier(profile) in ("admin", "enterprise"):
+        return True
+
+    db_email = str(profile.get("email") or email or "").strip().lower()
+    if db_email:
+        env_emails = {
+            e.strip().lower()
+            for e in (os.getenv("FLOW_ADMIN_EMAILS") or "").split(",")
+            if e.strip()
+        }
+        if db_email in env_emails:
+            return True
+        try:
+            adm_res = (
+                db.table("admin_users")
+                .select("*")
+                .eq("email", db_email)
+                .eq("is_active", True)
+                .limit(1)
+                .execute()
+            )
+            if adm_res and adm_res.data:
+                adm_role = str(adm_res.data[0].get("role") or "").strip().lower()
+                if adm_role in ("admin", "superadmin"):
+                    return True
+        except Exception:
+            pass
+
+    return False
