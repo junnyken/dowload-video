@@ -517,6 +517,13 @@ def backup_database_daily() -> dict[str, Any]:
         print(f"[Backup] missing credential {exc}; skipped")
         return {"ok": False, "error": f"missing {exc}"}
 
+    from app.core.periodic_lock import acquire_daily_lock, release_daily_lock  # noqa: PLC0415
+
+    acquired, lock_key, lock_token = acquire_daily_lock("backup-database-daily", now=started)
+    if not acquired:
+        print("[Backup] backup_database_daily skipped — already ran today or lock unavailable")
+        return {"ok": True, "skipped": "duplicate_daily_run"}
+
     warnings: list[str] = []
     counts: dict[str, int] = {}
 
@@ -618,6 +625,7 @@ def backup_database_daily() -> dict[str, Any]:
                 "warnings": warnings}
 
     except Exception as exc:  # noqa: BLE001
+        release_daily_lock(lock_key, lock_token)
         print(f"[Backup] FAILED: {exc}")
         try:
             from app.core.notifications import send_telegram_message_sync
