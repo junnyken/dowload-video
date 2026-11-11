@@ -3,7 +3,9 @@ Regression tests for docker-compose.yml environment variable pass-through.
 
 Services in docker-compose.yml declare an explicit `environment:` list without
 `env_file:`. Any runtime secret or config variable omitted from `environment:`
-never reaches the container even when configured in `.env` or Coolify.
+never reaches the container under `docker compose`, while any `${VAR}` written
+without a `:-` default causes Vibe Host's static compose scanner to block
+deploys with `ENV_REQUIRED`.
 """
 
 from __future__ import annotations
@@ -204,8 +206,91 @@ def test_every_service_importing_flow_cleanup_passes_signing_secret():
             f"FLOW_URL_SIGNING_SECRET in docker-compose.yml environment"
         )
         assert "${FLOW_URL_SIGNING_SECRET" in env["FLOW_URL_SIGNING_SECRET"], (
-            f"Service '{svc_name}' must interpolate FLOW_URL_SIGNING_SECRET from host/Coolify env"
+            f"Service '{svc_name}' must interpolate FLOW_URL_SIGNING_SECRET from host environment"
         )
+        assert env["FLOW_URL_SIGNING_SECRET"] == "${FLOW_URL_SIGNING_SECRET}", (
+            f"Service '{svc_name}' must require FLOW_URL_SIGNING_SECRET without a fallback default"
+        )
+
+
+def test_only_expected_mandatory_vars_lack_defaults_in_compose():
+    """
+    Vibe Host scans docker-compose.yml and raises ENV_REQUIRED for any `${VAR}`
+    without a `:-` default. Only true secrets/endpoints may omit defaults; all
+    optional FLOW_* and TELEGRAM_* knobs must use `${VAR:-<default matching code>}`.
+    """
+    raw_text = COMPOSE_PATH.read_text(encoding="utf-8")
+    # Match ${VAR_NAME} or ${VAR_NAME:-default} (ignore $$HOSTNAME escaped shell vars)
+    exprs = re.findall(r"(?<!\$)\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:-)([^}]*))?\}", raw_text)
+    assert exprs, "Expected variable interpolations in docker-compose.yml"
+
+    no_default_vars = {name for name, sep, _ in exprs if sep != ":-"}
+    expected_mandatory = {
+        "FLOW_URL_SIGNING_SECRET",
+        "SUPABASE_URL",
+        "SUPABASE_KEY",
+        "TELEGRAM_DIST_BOT_TOKEN",
+        "VITE_SUPABASE_URL",
+        "VITE_SUPABASE_ANON_KEY",
+    }
+    assert no_default_vars == expected_mandatory, (
+        f"Unexpected mandatory vars without defaults in docker-compose.yml: "
+        f"extra={sorted(no_default_vars - expected_mandatory)}, "
+        f"missing={sorted(expected_mandatory - no_default_vars)}"
+    )
+
+
+def test_compose_defaults_match_code_and_do_not_crash_startup(monkeypatch):
+    """
+    Ensure every `${VAR:-default}` on backend / worker services evaluates to a
+    valid value (never an empty string on int()/float()-parsed FLOW_* vars) so
+    importing app.api.flow_cleanup in production mode succeeds when optional
+    vars are unset on the host.
+    """
+    import importlib
+    import app.api.flow_cleanup as fc
+
+    compose = _load_compose()
+    services = compose["services"]
+
+    mandatory_host_env = {
+        "FLOW_URL_SIGNING_SECRET": "a" * 64,
+        "SUPABASE_URL": "https://example.supabase.co",
+        "SUPABASE_KEY": "anon-test-key",
+    }
+
+    def _resolve_expr(val: str) -> str:
+        def _sub(match: re.Match) -> str:
+            var_name = match.group(1)
+            has_def = match.group(2) == ":-"
+            default_val = match.group(3) or ""
+            host_val = mandatory_host_env.get(var_name, "")
+            if host_val:
+                return host_val
+            if has_def:
+                return default_val
+            raise AssertionError(f"Unset mandatory var ${{{var_name}}} in compose simulation")
+
+        return re.sub(r"(?<!\$)\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:-)([^}]*))?\}", _sub, val)
+
+    for svc_name in ("backend", "celery-light", "celery-media"):
+        env_cfg = _env_map(services[svc_name])
+        with monkeypatch.context() as mp:
+            # Clear all FLOW_* and TELEGRAM_* from test process first
+            for k in list(fc.os.environ.keys()):
+                if k.startswith("FLOW_") or k.startswith("TELEGRAM_"):
+                    mp.delenv(k, raising=False)
+            for k, raw_v in env_cfg.items():
+                mp.setenv(k, _resolve_expr(raw_v))
+            reloaded = importlib.reload(fc)
+            assert reloaded._WORKER_CONCURRENCY == 2
+            assert reloaded._DAILY_USER_QUOTA == 20
+            assert reloaded._JOB_TIMEOUT_SEC == 300
+            assert reloaded._USER_LOCK_TTL_SEC == 1020
+            assert reloaded._FLOW_TTL_SEC == 1200
+
+    # Restore module with test-suite environment
+    importlib.reload(fc)
 
 
 def test_flow_runtime_and_telegram_alert_vars_passed_to_app_services():
