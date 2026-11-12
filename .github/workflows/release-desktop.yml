@@ -51,6 +51,24 @@ jobs:
             Write-Error ("Thiếu GitHub Actions Secrets bắt buộc:`n - " + ($missing -join "`n - "))
             exit 1
           }
+          if ($env:PUBLISH_FLAG -eq 'true') {
+            $headers = @{
+              Authorization = "Bearer $($env:RELEASES_PAT.Trim())"
+              Accept = "application/vnd.github+json"
+              "User-Agent" = "vidgrab-release-preflight"
+            }
+            try {
+              $repoInfo = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/junnyken/vidgrab-releases"
+            } catch {
+              Write-Error "VIDGRAB_RELEASES_PAT không đọc được kho junnyken/vidgrab-releases: $($_.Exception.Message)"
+              exit 1
+            }
+            if (-not $repoInfo.permissions -or -not $repoInfo.permissions.push) {
+              Write-Error "VIDGRAB_RELEASES_PAT chưa có quyền GHI (push=false) trên junnyken/vidgrab-releases! Hãy dùng Classic Token có tick 'public_repo' hoặc Fine-grained Token chọn 'Only select repositories -> junnyken/vidgrab-releases' kèm 'Contents: Read and write'."
+              exit 1
+            }
+            Write-Host "Preflight OK: VIDGRAB_RELEASES_PAT có quyền ghi trên junnyken/vidgrab-releases."
+          }
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -71,6 +89,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "desktop/src-tauri -> target"
+          cache-on-failure: "true"
 
       - name: Cache pinned sidecar archives (yt-dlp, ffmpeg, ffprobe, deno)
         uses: actions/cache@v4
@@ -147,6 +166,7 @@ jobs:
         with:
           name: VidGrab-${{ steps.meta.outputs.version }}-windows-x64
           if-no-files-found: error
+          overwrite: true
           retention-days: 30
           path: |
             ${{ steps.verify.outputs.exe_path }}
