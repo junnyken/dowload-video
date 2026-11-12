@@ -13,6 +13,7 @@ User API Router
 /api/v1/user/api-key/status      GET    — Pro: check if key exists
 """
 
+import asyncio
 import csv
 import io
 import secrets
@@ -712,7 +713,7 @@ async def precheck_signup(request: Request, payload: PrecheckSignupPayload):
             "normalized_email": "",
         }
 
-    if check_duplicate_canonical_email(normalized):
+    if await asyncio.to_thread(check_duplicate_canonical_email, normalized):
         return {
             "ok": False,
             "reason": "duplicate_gmail",

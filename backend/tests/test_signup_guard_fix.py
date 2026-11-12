@@ -423,3 +423,43 @@ def test_precheck_signup_rate_limited_10_per_minute_per_ip(monkeypatch):
         headers={"x-forwarded-for": ip2},
     )
     assert r_other.status_code == 200
+
+
+def test_precheck_signup_offloads_duplicate_check_to_worker_thread(monkeypatch):
+    import asyncio
+    import threading
+    import app.main as m
+    from app.core import email_guard
+
+    seen_threads = []
+    loop_threads = []
+
+    orig_to_thread = asyncio.to_thread
+
+    async def spy_to_thread(func, /, *args, **kwargs):
+        loop_threads.append(threading.get_ident())
+        return await orig_to_thread(func, *args, **kwargs)
+
+    def fake_dup(norm_email: str) -> bool:
+        seen_threads.append((norm_email, threading.get_ident()))
+        return True
+
+    monkeypatch.setattr(asyncio, "to_thread", spy_to_thread)
+    monkeypatch.setattr(email_guard, "check_duplicate_canonical_email", fake_dup)
+
+    client = TestClient(m.app)
+    resp = client.post(
+        "/api/v1/user/precheck-signup",
+        json={"email": "a.b.c@gmail.com"},
+        headers={"x-forwarded-for": "198.51.100.203"},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "ok": False,
+        "reason": "duplicate_gmail",
+        "normalized_email": "abc@gmail.com",
+    }
+    assert len(loop_threads) == 1
+    assert len(seen_threads) == 1
+    assert seen_threads[0][0] == "abc@gmail.com"
+    assert seen_threads[0][1] != loop_threads[0]
