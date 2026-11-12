@@ -1,0 +1,3 @@
+- Theo dõi kênh: thêm chế độ Tự động tải về thư mục riêng của từng kênh khi ứng dụng đang mở.
+- Tự động tải bù video mới khi mở lại ứng dụng và bấm thông báo để mở thẳng thư mục kênh.
+- Hiển thị nhãn Mới kèm giờ đăng và giờ phát hiện cho từng video mới.

@@ -99,6 +99,28 @@ Apps **older than 0.11.0 cannot update themselves**: they keep showing the
 manual link (they have no updater). Everyone on 0.10.x must install 0.11.0 by
 hand once.
 
+### 4b. Automated release via GitHub Actions (`.github/workflows/release-desktop.yml`)
+
+Instead of building locally, `.github/workflows/release-desktop.yml` builds on
+`windows-latest` (Node 22 + Rust MSVC + NSIS), runs `npm test`, verifies sidecar
+SHA-256 hashes, signs `.sig`, verifies `.sig` against `tauri.conf.json` via
+`desktop/scripts/verify-update-sig.mjs`, uploads the installer artifact, and
+atomically publishes `v<version>` (draft → upload `.exe` + `.sig` → publish
+`latest`) to `junnyken/vidgrab-releases`.
+
+One-time Repository Secrets on `junnyken/dowload-video` (`Settings → Secrets and variables → Actions`):
+
+| Secret | Value |
+|---|---|
+| `TAURI_SIGNING_PRIVATE_KEY` | Full content of `~/.config/vidgrab-updater.key` (key id `F84D51CB22023463`) |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Content of `~/.config/vidgrab-updater.key.password` (leave empty only if key has no password) |
+| `VIDGRAB_CLAIM_PUBKEYS` | `k1:<base64 public key>` matching `CLIENT_QUOTA_SIGNING_KEY` (`P3-KEY-ROTATION.md`) |
+| `VIDGRAB_RELEASES_PAT` | Fine-grained PAT scoped to `junnyken/vidgrab-releases` with `Contents: Read and write` |
+
+Trigger a release:
+* **GitHub UI:** `Actions → Release Desktop (Windows) → Run workflow` (uses `desktop/RELEASE_NOTES.md` when `release_notes` input is left empty), or
+* **Git tag:** `git tag desktop-v<version> && git push github desktop-v<version>`.
+
 **Pull a bad release:** admin → **Công tắc khẩn cấp** → "Tự cập nhật app
 Windows" → stop offering (takes effect within seconds, no redeploy; audited).
 The env `DESKTOP_UPDATER_ENABLED=0` still works when no admin override is set

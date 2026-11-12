@@ -1,0 +1,207 @@
+name: Release Desktop (Windows)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_notes:
+        description: "Ghi chú phát hành tùy chỉnh (ngăn cách nhiều ý bằng ' | '; để trống sẽ lấy từ desktop/RELEASE_NOTES.md)"
+        required: false
+        type: string
+        default: ""
+      publish_to_releases:
+        description: "Đăng trực tiếp lên junnyken/vidgrab-releases sau khi kiểm chữ ký (.sig)"
+        required: false
+        type: boolean
+        default: true
+  push:
+    tags:
+      - "desktop-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-release:
+    name: Build, Sign & Publish Windows Installer
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Validate required GitHub Secrets
+        env:
+          SIGN_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          CLAIM_PUBKEYS: ${{ secrets.VIDGRAB_CLAIM_PUBKEYS }}
+          RELEASES_PAT: ${{ secrets.VIDGRAB_RELEASES_PAT }}
+          PUBLISH_FLAG: ${{ github.event_name == 'push' || inputs.publish_to_releases }}
+        run: |
+          $missing = @()
+          if ([string]::IsNullOrWhiteSpace($env:SIGN_KEY)) {
+            $missing += "TAURI_SIGNING_PRIVATE_KEY (nội dung file ~/.config/vidgrab-updater.key)"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:CLAIM_PUBKEYS)) {
+            $missing += "VIDGRAB_CLAIM_PUBKEYS (ví dụ: k1:<base64_public_key>)"
+          }
+          if ($env:PUBLISH_FLAG -eq 'true' -and [string]::IsNullOrWhiteSpace($env:RELEASES_PAT)) {
+            $missing += "VIDGRAB_RELEASES_PAT (GitHub PAT có quyền Contents Read & Write trên junnyken/vidgrab-releases)"
+          }
+          if ($missing.Count -gt 0) {
+            Write-Error ("Thiếu GitHub Actions Secrets bắt buộc:`n - " + ($missing -join "`n - "))
+            exit 1
+          }
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Setup Rust stable (MSVC x64)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "desktop/src-tauri -> target"
+
+      - name: Cache pinned sidecar archives (yt-dlp, ffmpeg, ffprobe, deno)
+        uses: actions/cache@v4
+        with:
+          path: desktop/.cache/binaries
+          key: desktop-sidecars-${{ hashFiles('desktop/binaries.lock.json') }}
+
+      - name: Check version sync across package.json, tauri.conf.json & Cargo.toml
+        id: meta
+        working-directory: desktop
+        run: |
+          $pkg = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tauri = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $cargoMatch = Select-String -Path src-tauri/Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+          $cargo = $cargoMatch.Matches[0].Groups[1].Value
+          if ($pkg -ne $tauri -or $tauri -ne $cargo) {
+            Write-Error "Lệch version giữa package.json ($pkg), tauri.conf.json ($tauri), Cargo.toml ($cargo)"
+            exit 1
+          }
+          Write-Host "Building VidGrab Desktop v$tauri"
+          "version=$tauri" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Install JS dependencies & run unit tests
+        working-directory: desktop
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Fetch & SHA-256 verify sidecar binaries
+        working-directory: desktop
+        run: |
+          node scripts/fetch-binaries.mjs --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build signed NSIS installer & updater .sig
+        working-directory: desktop
+        env:
+          VIDGRAB_CLAIM_PUBKEYS: ${{ secrets.VIDGRAB_CLAIM_PUBKEYS }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          npm run tauri -- build --target x86_64-pc-windows-msvc --bundles nsis
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify updater signature (.sig) & compute SHA-256
+        id: verify
+        working-directory: desktop
+        run: |
+          $ver = "${{ steps.meta.outputs.version }}"
+          $dir = "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
+          $exe = Join-Path $dir "VidGrab_${ver}_x64-setup.exe"
+          $sig = "${exe}.sig"
+          if (-not (Test-Path $exe)) { Write-Error "Không tìm thấy bộ cài: $exe"; exit 1 }
+          if (-not (Test-Path $sig)) { Write-Error "Không tìm thấy chữ ký updater: $sig"; exit 1 }
+
+          node scripts/verify-update-sig.mjs $exe $sig
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Chữ ký .sig không khớp khóa công khai trong tauri.conf.json!"
+            exit 1
+          }
+
+          $sha = (Get-FileHash -Algorithm SHA256 $exe).Hash.ToLower()
+          "$sha  VidGrab_${ver}_x64-setup.exe" | Set-Content -Path (Join-Path $dir "SHA256SUMS.txt") -Encoding utf8
+          Write-Host "SHA-256: $sha"
+          "sha256=$sha" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "exe_path=desktop/$exe" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "sig_path=desktop/$sig" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "sum_path=desktop/$dir/SHA256SUMS.txt" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Upload installer & signature to Actions Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: VidGrab-${{ steps.meta.outputs.version }}-windows-x64
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ${{ steps.verify.outputs.exe_path }}
+            ${{ steps.verify.outputs.sig_path }}
+            ${{ steps.verify.outputs.sum_path }}
+
+      - name: Publish atomic release to junnyken/vidgrab-releases
+        if: ${{ github.event_name == 'push' || inputs.publish_to_releases }}
+        env:
+          GH_TOKEN: ${{ secrets.VIDGRAB_RELEASES_PAT }}
+          RAW_NOTES: ${{ inputs.release_notes }}
+          TARGET_REPO: "junnyken/vidgrab-releases"
+        run: |
+          $ver = "${{ steps.meta.outputs.version }}"
+          $tag = "v$ver"
+          $sha = "${{ steps.verify.outputs.sha256 }}"
+          $exe = "${{ steps.verify.outputs.exe_path }}"
+          $sig = "${{ steps.verify.outputs.sig_path }}"
+
+          $notes = ""
+          if (-not [string]::IsNullOrWhiteSpace($env:RAW_NOTES)) {
+            $lines = $env:RAW_NOTES -split '\s*\|\s*' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+            $notes = ($lines | ForEach-Object {
+              $line = $_.Trim()
+              if ($line.StartsWith("- ")) { $line } else { "- $line" }
+            }) -join "`n"
+          } elseif (Test-Path "desktop/RELEASE_NOTES.md") {
+            $notes = (Get-Content "desktop/RELEASE_NOTES.md" -Raw).Trim()
+          }
+          if ([string]::IsNullOrWhiteSpace($notes)) {
+            $notes = "- Bản cập nhật VidGrab $ver cho Windows."
+          }
+
+          $body = $notes + "`n`nSHA-256: $sha`n"
+          $bodyFile = Join-Path $env:RUNNER_TEMP "release-body.md"
+          Set-Content -Path $bodyFile -Value $body -Encoding utf8
+
+          # Upload as draft first so both .exe and .sig exist before marking latest (see desktop_release.py)
+          $prevEap = $ErrorActionPreference
+          $ErrorActionPreference = "Continue"
+          gh release view $tag --repo $env:TARGET_REPO *> $null
+          $exists = ($LASTEXITCODE -eq 0)
+          $ErrorActionPreference = $prevEap
+
+          if ($exists) {
+            Write-Host "Release $tag đã tồn tại trên $env:TARGET_REPO — cập nhật assets và nội dung..."
+            gh release upload $tag $exe $sig --repo $env:TARGET_REPO --clobber
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            gh release edit $tag --repo $env:TARGET_REPO --title "VidGrab $ver" --notes-file $bodyFile --draft=false --latest
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } else {
+            Write-Host "Tạo draft release $tag kèm .exe + .sig rồi mở công khai..."
+            gh release create $tag $exe $sig --repo $env:TARGET_REPO --title "VidGrab $ver" --notes-file $bodyFile --draft
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            gh release edit $tag --repo $env:TARGET_REPO --draft=false --latest
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          Write-Host "Đã phát hành thành công https://github.com/$env:TARGET_REPO/releases/tag/$tag"
